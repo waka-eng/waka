@@ -2631,12 +2631,8 @@ function HomeExperience(): JSX.Element {
     let travelDest = 0;
     let travelAt = 0;
     let travelFromX = 0; /* where the layout's slide profile eases from */
-    let charOff = 0; /* the traveler's screen lead, px */
-    let charLead = 0;
-    let charFrom = 0; /* where the lead ramp starts — no pops on re-travel */
     let dragLeadOn = false; /* a held horizontal drag: the companion walks */
     let dragLeadTarget = 0;
-    let bobPh = 0; /* the hover-bob's own phase: it quickens into a walk */
     let travelYaw = false; /* holding the quarter-turn toward the edge */
     let awaitingWake = false; /* arrived in a room whose data is late */
     let inspCol = 0; /* whose orbs the companion's glow reads */
@@ -2727,7 +2723,6 @@ function HomeExperience(): JSX.Element {
      */
     let mech = 0;
     /* the eased body-turn toward whatever it is attending to */
-    let attendHold = 0;
     const mechAt = (x: number): number => {
       const here = x / Math.max(view.w, 1);
       let best = 0;
@@ -2821,67 +2816,100 @@ function HomeExperience(): JSX.Element {
       sparkR[i] = 0.7 + Math.random() * 1.1;
       sparkA[i] = 0.05 + Math.random() * 0.07;
     }
-    /* The companion. `insp` is real: the mean aliveness of the eight most
-       alive bubbles at the current dial time. It is why the character dims
-       as you scrub back into a quiet stretch and brightens over a live one. */
-    let insp = 0;
-    let inspNow = 0;
-    let flare = 0;
-    /** Something was captured today: a steady lift, never a pulse. */
-    let freshLit = 0;
-    let charY = 0;
-    let charSize = 110;
-    /* The companion is the thing the dial turns. `yawTarget` is a POSITION,
-       mapped from the dial's own 0→1; the drawn angle eases toward it, so a
-       fast drag and a slow drag of the same distance turn it the same amount.
-       Let go and it unwinds to front-facing. */
-    let yawTarget = 0;
-    let yaw = 0;
-    let unwindFrom = 0;
-    let unwindAt = 0;
-    let eyeX = 0;
-    let eyeY = 0;
-    let eyeTX = 0;
-    let eyeTY = 0;
-    /* ATTENTION HAS A DURATION. While this is in the future the eyes belong
-       to the thing that was tapped and the pointer cannot take them back —
-       otherwise the smallest mouse drift would yank the gaze home and the
-       look would read as a twitch rather than as noticing something. */
-    let attendUntil = 0;
-    let attendLean = 0;
     /**
-     * The vertical half of the traveler. `pitch` is where the world is going
-     * (−1 rising … +1 descending), eased; `charLift` is how far the companion
-     * leads it in screen pixels. Both are written from the camera's own
-     * motion, so they answer a drag, a wheel, a key and a programmatic glide
-     * identically — the character responds to THE WORLD MOVING, never to a
-     * particular input device.
+     * THE COMPANION — everything the character is doing right now.
+     *
+     * Thirty-three variables, and they were spread over three separate blocks
+     * two hundred lines apart: the walk lived up in the travel declarations
+     * because that is where travel needed it, the lean lived beside the
+     * pointer state, and the rest were here. Nothing said they were one thing,
+     * so reading "what is the character doing" meant finding all three.
+     *
+     * They are one thing. Every field is some part of one body's posture at
+     * one instant — where it is, which way it faces, what it is looking at,
+     * how lit it is — and they are only ever coherent together: `yaw` without
+     * `yawTarget` is a heading with nothing to ease toward, and `eyeX` without
+     * `eyeTX` is a gaze with no subject.
      */
-    let pitch = 0;
-    let charLift = 0;
-    let camYPrev = 0;
-    let blinkAt = 0;
-    let blink = 0;
+    const companion = {
+      /* `insp` is real: the mean aliveness of the eight most alive bubbles at
+         the current dial time. It is why the character dims as you scrub back
+         into a quiet stretch and brightens over a live one. */
+      insp: 0,
+      inspNow: 0,
+      flare: 0,
+      /** Something was captured today: a steady lift, never a pulse. */
+      freshLit: 0,
+      freshToday: false,
+      y: 0,
+      size: 110,
+
+      /* WHERE IT IS ON ITS WALK. `off` is the traveler's screen lead in px,
+         `lead` the eased ramp toward it, `from` where that ramp starts so a
+         re-travel does not pop, and `bobPh` the hover-bob's own phase, which
+         quickens into a walk. */
+      off: 0,
+      lead: 0,
+      from: 0,
+      bobPh: 0,
+
+      /* The companion is the thing the dial turns. `yawTarget` is a POSITION,
+         mapped from the dial's own 0→1; the drawn angle eases toward it, so a
+         fast drag and a slow drag of the same distance turn it the same amount.
+         Let go and it unwinds to front-facing. */
+      yawTarget: 0,
+      yaw: 0,
+      unwindFrom: 0,
+      unwindAt: 0,
+
+      eyeX: 0,
+      eyeY: 0,
+      eyeTX: 0,
+      eyeTY: 0,
+      /* ATTENTION HAS A DURATION. While `attendUntil` is in the future the
+         eyes belong to the thing that was tapped and the pointer cannot take
+         them back — otherwise the smallest mouse drift would yank the gaze
+         home and the look would read as a twitch rather than as noticing
+         something. */
+      attendUntil: 0,
+      attendLean: 0,
+      attendHold: 0,
+
+      /**
+       * The vertical half of the traveler. `pitch` is where the world is going
+       * (−1 rising … +1 descending), eased; `lift` is how far the companion
+       * leads it in screen pixels. Both are written from the camera's own
+       * motion, so they answer a drag, a wheel, a key and a programmatic glide
+       * identically — the character responds to THE WORLD MOVING, never to a
+       * particular input device.
+       */
+      pitch: 0,
+      lift: 0,
+      camYPrev: 0,
+
+      blinkAt: 0,
+      blink: 0,
+      /** The occasional clock: a look-around every 30–60s, on any archive. */
+      idleAt: 0,
+      /** The last thing it said, so it never says the same thing twice running. */
+      lastSaid: "",
+      /** the pairable set as a string, so React only hears about real changes */
+      pairSig: "",
+      /* The companion is the messenger: while something is forming above, it
+         glances up now and then and lets a mote go toward the sky. */
+      glanceAt: 0,
+      glanceUntil: 0,
+      riseAt: 0,
+    };
+
     /* motes rising off the aura when the companion is genuinely inspired */
     const upX = new Float32Array(10);
     const upY = new Float32Array(10);
     const upA = new Float32Array(10);
-    /* The companion is the messenger: while something is forming above, it
-       glances up now and then and lets a mote go toward the sky. */
-    /** The occasional clock: a look-around every 30–60s, on any archive. */
-    let idleAt = 0;
-    /** The last thing it said, so it never says the same thing twice running. */
-    let lastSaid = "";
-    /** the pairable set as a string, so React only hears about real changes */
-    let pairSig = "";
-    let glanceAt = 0;
-    let glanceUntil = 0;
-    let riseAt = 0;
     const riseX = new Float32Array(4);
     const riseY = new Float32Array(4);
     const riseA = new Float32Array(4);
     const inspTop = new Float32Array(8);
-    let freshToday = false;
 
     /* Painter's order for the shadow+body pass: bottom-most orb first, so an
        orb's contact shadow lands ON whatever it is resting against and is
@@ -3081,7 +3109,7 @@ function HomeExperience(): JSX.Element {
            displaced orb re-scatters into whichever side band it was already
            nearer, through the same collision-aware scatter as everything else
            — which is what keeps them off each other. */
-        const keep = charSize * 0.72 + b.r;
+        const keep = companion.size * 0.72 + b.r;
         if (Math.abs(x - view.w / 2) < keep) {
           const leftLo = spanL + b.r;
           const leftHi = view.w / 2 - keep;
@@ -3432,7 +3460,7 @@ function HomeExperience(): JSX.Element {
            re-time it — but nothing in this block reaches the screen. */
         res.greetUntil = performance.now() + (view.reduced ? 0 : 1500);
       }
-      flare = Math.max(flare, view.reduced ? 0 : 0.35);
+      companion.flare = Math.max(companion.flare, view.reduced ? 0 : 0.35);
       wake();
     }
 
@@ -3450,7 +3478,7 @@ function HomeExperience(): JSX.Element {
       /* it looks around whatever it has just walked into */
       simApiRef.current?.acknowledge("arrived");
       travelYaw = false;
-      unwindAt = 0; /* the unwind branch turns it back front, the short way */
+      companion.unwindAt = 0; /* the unwind branch turns it back front, the short way */
       wheelXUntil = performance.now() + 120;
       pushArrivedRef.current(curWall());
       headingRef.current = null; /* landed; there is nowhere still to get to */
@@ -3531,10 +3559,10 @@ function HomeExperience(): JSX.Element {
         camXTarget = back * view.w;
         travelFromX = camX;
         travelAt = performance.now();
-        charFrom = charOff;
-        charLead = dir * Math.min(view.w * TRAVEL_LEAD_X, 190);
-        yawTarget = dir * (TAU / 4);
-        unwindAt = 0;
+        companion.from = companion.off;
+        companion.lead = dir * Math.min(view.w * TRAVEL_LEAD_X, 190);
+        companion.yawTarget = dir * (TAU / 4);
+        companion.unwindAt = 0;
         awaitingWake = false;
         wake();
         return;
@@ -3553,7 +3581,7 @@ function HomeExperience(): JSX.Element {
       if (view.reduced) {
         col = dest;
         camX = camXTarget;
-        charOff = 0;
+        companion.off = 0;
         arriveColumn();
         wake();
         return;
@@ -3562,11 +3590,11 @@ function HomeExperience(): JSX.Element {
       travelMs = TRAVEL_MS;
       travelAt = performance.now();
       travelFromX = camX;
-      charLead = travelDir * Math.min(view.w * TRAVEL_LEAD_X, 190);
-      charFrom = charOff;
+      companion.lead = travelDir * Math.min(view.w * TRAVEL_LEAD_X, 190);
+      companion.from = companion.off;
       travelYaw = true;
-      yawTarget = travelDir * (TAU / 4);
-      unwindAt = 0;
+      companion.yawTarget = travelDir * (TAU / 4);
+      companion.unwindAt = 0;
       wake();
     }
 
@@ -4644,21 +4672,21 @@ function HomeExperience(): JSX.Element {
          line of typing wrapped, and the layout moves only when you move it. */
       const seam = view.layout.fieldTop - MOUTH_H;
       const avail = seam - hqH - gap * 2;
-      charSize = clamp(view.h * 0.14, 84, 150);
+      companion.size = clamp(view.h * 0.14, 84, 150);
       /* The floor yields to the room before the room yields to the floor. The
          shrink must NOT be gated on `room > 0`: a section whose poster already
          fills it has negative room, which is exactly the case that most needs
          the companion small, and skipping the shrink there put the body back
          across the peek line. Below CHAR_MIN the body stops reading as a body,
          so that is where it stops. */
-      if (charSize > avail) charSize = Math.max(Math.min(avail, charSize), CHAR_MIN);
-      const lo = hqH + charSize * 0.5 + gap;
-      const hi = seam - charSize * 0.5 - gap;
+      if (companion.size > avail) companion.size = Math.max(Math.min(avail, companion.size), CHAR_MIN);
+      const lo = hqH + companion.size * 0.5 + gap;
+      const hi = seam - companion.size * 0.5 - gap;
       /* If even 32px cannot fit, `hi` is still below `lo`; split the
          difference rather than always resolving downward into the dial. */
-      charY = hi >= lo ? clamp((hqH + seam) / 2, lo, hi) : (lo + hi) / 2;
+      companion.y = hi >= lo ? clamp((hqH + seam) / 2, lo, hi) : (lo + hi) / 2;
       const say = charSayRef.current;
-      if (say) say.style.top = `${Math.round(charY + charSize * 0.62)}px`;
+      if (say) say.style.top = `${Math.round(companion.y + companion.size * 0.62)}px`;
       /* the columns' DOM measures itself off these — one write per resize */
       root!.style.setProperty("--jar-vw", `${Math.round(view.w)}px`);
       root!.style.setProperty("--jar-vh", `${Math.round(view.h)}px`);
@@ -4987,12 +5015,12 @@ function HomeExperience(): JSX.Element {
       const k = Math.min(8, Math.max(n, 1));
       let sum = 0;
       for (let i = 0; i < k; i++) sum += top[i];
-      insp = clamp01(sum / k);
+      companion.insp = clamp01(sum / k);
       const dayStart = TRef.current - DAY_MS;
-      freshToday = false;
+      companion.freshToday = false;
       for (const b of list) {
         if (b.active && !b.leaving && b.capturedMs >= dayStart) {
-          freshToday = true;
+          companion.freshToday = true;
           break;
         }
       }
@@ -5019,9 +5047,9 @@ function HomeExperience(): JSX.Element {
     function sayLine(): string {
       if (scrubbingRef.current) return `As it was in ${monthTag(TRef.current)}`;
       const pick = (opts: string[]): string => {
-        const fresh = opts.filter((o) => o !== lastSaid);
+        const fresh = opts.filter((o) => o !== companion.lastSaid);
         const s = (fresh.length ? fresh : opts)[Math.floor(Math.random() * (fresh.length || opts.length))];
-        lastSaid = s;
+        companion.lastSaid = s;
         return s;
       };
       /* An empty archive is the one state every single person passes through,
@@ -5057,8 +5085,8 @@ function HomeExperience(): JSX.Element {
           "A few so far. Say more and I will start to see it",
           "Not enough yet to see a shape",
         ]);
-      if (insp > 0.55) return "";
-      if (insp > 0.22)
+      if (companion.insp > 0.55) return "";
+      if (companion.insp > 0.22)
         return pick([
           "Something is still warm from last week",
           "Last week is still holding on",
@@ -5184,7 +5212,7 @@ function HomeExperience(): JSX.Element {
         const mx = moteX[i] + Math.sin(t * 0.5 + moteP[i]) * 9;
         /* every third mote thins away as the camera climbs into the sky */
         ctx!.globalAlpha =
-          moteA[i] * (i % 3 === 0 ? 1 - thin * 0.85 : 1) * lerp(0.6, 1.15, inspNow);
+          moteA[i] * (i % 3 === 0 ? 1 - thin * 0.85 : 1) * lerp(0.6, 1.15, companion.inspNow);
         ctx!.drawImage(pal.mote, mx + camX - mr * 3, moteY[i] + camY - mr * 3, mr * 6, mr * 6);
       }
 
@@ -5445,46 +5473,46 @@ function HomeExperience(): JSX.Element {
        * throws light across the room. What changed is what it can see, not
        * whether it is alive.
        */
-      const lit = clamp01(inspNow + flare * 0.5 + freshLit);
+      const lit = clamp01(companion.inspNow + companion.flare * 0.5 + companion.freshLit);
       const bodyLit = clamp01(0.55 + lit * 0.45);
       /* Whose form it is wearing where the camera is right now — the body, the
          silhouette its features clip to, and the halo, all from one place so
          they can never disagree about which being is on screen. */
       const wear = worn(pal);
-      if (charY - camY > -charSize * 2 && charY - camY < view.h + charSize * 2) {
+      if (companion.y - camY > -companion.size * 2 && companion.y - camY < view.h + companion.size * 2) {
         /* the bob rides its own integrated phase: while the companion leads
            it quickens toward a walk, and at rest it is the hover it was */
         /* THE FLOAT BECOMES A TICK. A sine is how something alive hovers; a
            machine's body arrives on frames. Same amplitude, same rate — only
            the resolution of the movement changes, which is the whole idea. */
-        const bobRaw = view.reduced ? 0 : Math.sin(bobPh) * 4 * stir.amp;
+        const bobRaw = view.reduced ? 0 : Math.sin(companion.bobPh) * 4 * stir.amp;
         /* the step grows with how far into the machine's mind we are: one
            pixel of quantisation at the boundary, four at the far side */
         const bobStep = 1 + mech * 3;
         const bob = mech < 0.02 ? bobRaw : Math.round(bobRaw / bobStep) * bobStep;
         /* it rides ahead of the world vertically as well as horizontally */
-        const cyC = charY + bob + charLift;
+        const cyC = companion.y + bob + companion.lift;
         /* THE TRAVELER'S PLACE. The companion is screen-anchored — it is the
            one who travels, so the layout slides under it — and during a
            transition it rides ahead of centre by charOff, near the leading
            third of the screen, still bobbing. */
-        const charSX = camX + view.w / 2 + charOff;
+        const charSX = camX + view.w / 2 + companion.off;
         /* Squash-stretch coupled to the bob — and to the climb. Ascending it
            stretches a few percent and descending it compresses, which is the
            character's own response to being moved and not decoration on top
            of it. (Its LIGHT still obeys the rule that juice lives in the
            bloom; this is the body, and a body may act.) */
-        const sq = view.reduced ? 0 : Math.sin(bobPh + 1.5) * 0.022 - pitch * PITCH_STRETCH;
-        const bw = charSize * (1 + sq);
-        const bh = charSize * (1 - sq);
+        const sq = view.reduced ? 0 : Math.sin(companion.bobPh + 1.5) * 0.022 - companion.pitch * PITCH_STRETCH;
+        const bw = companion.size * (1 + sq);
+        const bh = companion.size * (1 - sq);
 
         /* the aura: layered pastel blooms at different radii, drifting on
            slow independent orbits. Additive, so it reads as emitted light. */
         ctx!.globalCompositeOperation = "lighter";
-        const auraR = charSize * lerp(1.25, 2.1, lit) * (1 + flare * 0.25);
+        const auraR = companion.size * lerp(1.25, 2.1, lit) * (1 + companion.flare * 0.25);
         for (let i = 0; i < 4; i++) {
           const ph = t * (0.16 + i * 0.05) + i * 1.9;
-          const off = view.reduced ? 0 : charSize * 0.08;
+          const off = view.reduced ? 0 : companion.size * 0.08;
           const rr = auraR * (0.72 + i * 0.11);
           /* multiply on paper tints rather than emits, so it needs more of the
              halo to carry the same reading of "inspired" */
@@ -5525,7 +5553,7 @@ function HomeExperience(): JSX.Element {
            while its cos is positive (the hemisphere facing you), and it
            foreshortens as it approaches the edge. The aura stayed outside
            this frame: emitted light is not part of the form. */
-        const cosY = Math.cos(yaw);
+        const cosY = Math.cos(companion.yaw);
         ctx!.save();
         ctx!.translate(charSX, cyC);
         /* leading, it leans a couple of degrees into the direction — the
@@ -5539,9 +5567,9 @@ function HomeExperience(): JSX.Element {
            than as a snap to a target. */
         const lean = view.reduced
           ? 0
-          : clamp(charOff / DRAG_LEAD_PX, -1, 1) * 0.045 +
-            clamp(pitch, -1, 1) * 0.02 +
-            attendHold;
+          : clamp(companion.off / DRAG_LEAD_PX, -1, 1) * 0.045 +
+            clamp(companion.pitch, -1, 1) * 0.02 +
+            companion.attendHold;
         if (lean !== 0) ctx!.rotate(lean);
 
         /* The two soft nubs: not limbs — they swell with the glow, and they
@@ -5568,7 +5596,7 @@ function HomeExperience(): JSX.Element {
          * mean — an inflection, not an existence test.
          */
         const nubOn = true;
-        const nubR = charSize * lerp(0.062, 0.1, bodyLit);
+        const nubR = companion.size * lerp(0.062, 0.1, bodyLit);
         /* the colour work is skipped outright when there is no nub to paint —
            it used to allocate five arrays and two strings every frame,
            including on every frame where `nubOn` was false */
@@ -5578,7 +5606,7 @@ function HomeExperience(): JSX.Element {
         const nubBack = nubRgb ? rgbCss(mix(nubRgb, [0, 0, 0], 0.15), 1) : "";
         const drawNub = (lon: number, behind: boolean) => {
           if (!nubOn) return;
-          const a = yaw + lon;
+          const a = companion.yaw + lon;
           if (Math.cos(a) < 0 !== behind) return;
           const s = Math.sin(a);
           /* pointing at or away from you, a nub reads smaller */
@@ -5618,7 +5646,7 @@ function HomeExperience(): JSX.Element {
           ctx!.globalAlpha = seamA;
           ctx!.drawImage(
             pal.seam,
-            Math.sin(yaw + Math.PI) * bw * 0.25 - seamW / 2,
+            Math.sin(companion.yaw + Math.PI) * bw * 0.25 - seamW / 2,
             -bh / 2,
             seamW,
             bh,
@@ -5630,25 +5658,25 @@ function HomeExperience(): JSX.Element {
            foreshortens, and fades out over the last quarter-radian rather
            than popping off the edge. */
         ctx!.fillStyle = "#2b2822";
-        const er = charSize * 0.038;
+        const er = companion.size * 0.038;
         /* THE LOOK, AS LATITUDE. The eyes sit on the surface of a turning
            form, so looking up or down is a latitude offset in exactly the way
            the yaw is a longitude one: it moves them across the face, and it
            foreshortens as it approaches the pole. Independent of the yaw
            term, so a diagonal composes rather than fights. */
-        const lat = clamp(-pitch * PITCH_LOOK + eyeY * 0.06, -0.9, 0.9);
+        const lat = clamp(-companion.pitch * PITCH_LOOK + companion.eyeY * 0.06, -0.9, 0.9);
         const cosLat = Math.cos(lat);
-        const eyY = -bh * 0.06 + Math.sin(lat) * bh * FACE_R + eyeY;
+        const eyY = -bh * 0.06 + Math.sin(lat) * bh * FACE_R + companion.eyeY;
         for (const lon of [-EYE_LON, EYE_LON]) {
-          const a = yaw + lon;
+          const a = companion.yaw + lon;
           const ca = Math.cos(a);
           if (ca <= 0) continue;
           /* at the edge a blink is a flicker, so it is suppressed there */
-          const eh = ca < 0.3 ? 1 : Math.max(0.12, 1 - blink);
+          const eh = ca < 0.3 ? 1 : Math.max(0.12, 1 - companion.blink);
           ctx!.globalAlpha = clamp01(ca / Math.sin(0.25));
           ctx!.beginPath();
           ctx!.ellipse(
-            Math.sin(a) * bw * FACE_R * cosLat + eyeX * ca,
+            Math.sin(a) * bw * FACE_R * cosLat + companion.eyeX * ca,
             eyY,
             er * Math.max(ca * cosLat, 0.2),
             er * eh * Math.max(cosLat, 0.35),
@@ -5818,7 +5846,7 @@ function HomeExperience(): JSX.Element {
          an exponential tail asymptote while input sits dead. */
       if (travelActive) {
         const u = clamp01((now - travelAt) / TRAVEL_LEAD_MS);
-        charOff = lerp(charFrom, charLead, u * u);
+        companion.off = lerp(companion.from, companion.lead, u * u);
         const wt = clamp01((now - travelAt - TRAVEL_LAG_MS) / travelMs);
         if (wt > 0) {
           const e = 1 - Math.pow(1 - wt, 3);
@@ -5837,11 +5865,11 @@ function HomeExperience(): JSX.Element {
         if (dragLeadOn) {
           /* the companion sets off with the first centimetres of a held
              drag: it walks toward where the finger says the page is going */
-          charOff = lerp(charOff, dragLeadTarget, 1 - Math.pow(0.003, dt));
+          companion.off = lerp(companion.off, dragLeadTarget, 1 - Math.pow(0.003, dt));
           clock.lastActive = now;
-        } else if (charOff !== 0) {
+        } else if (companion.off !== 0) {
           /* arrival (or a released drag): it decelerates back to centre */
-          charOff = Math.abs(charOff) < 0.4 ? 0 : lerp(charOff, 0, 1 - Math.pow(0.01, dt));
+          companion.off = Math.abs(companion.off) < 0.4 ? 0 : lerp(companion.off, 0, 1 - Math.pow(0.01, dt));
           clock.lastActive = now;
         }
         if (camXBack) {
@@ -5857,8 +5885,8 @@ function HomeExperience(): JSX.Element {
            through the same spring, so noticing and losing interest are the
            same motion played in opposite directions. rps=0.02 is τ≈256ms:
            quick enough to read as reacting, slow enough to be a turn. */
-        const attendWant = performance.now() < attendUntil ? attendLean : 0;
-        attendHold = view.reduced ? attendWant : lerp(attendHold, attendWant, kd(2e-2, dt));
+        const attendWant = performance.now() < companion.attendUntil ? companion.attendLean : 0;
+        companion.attendHold = view.reduced ? attendWant : lerp(companion.attendHold, attendWant, kd(2e-2, dt));
           if (Math.abs(camX - camXTarget) < 0.6) {
             camX = camXTarget;
             camXBack = false;
@@ -5870,14 +5898,14 @@ function HomeExperience(): JSX.Element {
          input: a drag, a flick, the wheel, an arrow key and the forming
          line's glide into the sky all move the layout, and the companion
          answers the layout. */
-      const camVY = dt > 0 ? (camY - camYPrev) / dt : 0;
-      camYPrev = camY;
+      const camVY = dt > 0 ? (camY - companion.camYPrev) / dt : 0;
+      companion.camYPrev = camY;
       const wantPitch = view.reduced ? 0 : clamp(camVY / PITCH_FULL, -1, 1);
-      pitch = Math.abs(pitch - wantPitch) < 0.002 ? wantPitch : lerp(pitch, wantPitch, kd(2e-3, dt));
+      companion.pitch = Math.abs(companion.pitch - wantPitch) < 0.002 ? wantPitch : lerp(companion.pitch, wantPitch, kd(2e-3, dt));
       /* it leads the world the same way it leads a room transition: up first,
          then the layout follows it up */
-      const wantLift = view.reduced ? 0 : -pitch * PITCH_LEAD_PX;
-      charLift = Math.abs(charLift - wantLift) < 0.2 ? wantLift : lerp(charLift, wantLift, kd(6e-3, dt));
+      const wantLift = view.reduced ? 0 : -companion.pitch * PITCH_LEAD_PX;
+      companion.lift = Math.abs(companion.lift - wantLift) < 0.2 ? wantLift : lerp(companion.lift, wantLift, kd(6e-3, dt));
       /* the hover-bob quickens toward a WALK while the companion leads, and
          relaxes back to a hover at rest — one integrated phase, no jumps.
          Rising it LENGTHENS (buoyant), descending it quickens (settling). */
@@ -5886,11 +5914,11 @@ function HomeExperience(): JSX.Element {
          companion in the layout bobbed at exactly 1.4 and blinked on the same
          distribution. For a product whose thesis is a companion with a
          character, the individuality was authored and thrown away. */
-      bobPh +=
+      companion.bobPh +=
         dt *
         wornBeing().bobRate *
-        (1 + 0.6 * clamp01(Math.abs(charOff) / DRAG_LEAD_PX)) *
-        (1 + 0.45 * pitch);
+        (1 + 0.6 * clamp01(Math.abs(companion.off) / DRAG_LEAD_PX)) *
+        (1 + 0.45 * companion.pitch);
       /* arrived before the data: the wall holds still until it can wake whole */
       if (awaitingWake && !travelActive) tryWakeWall();
 
@@ -5922,7 +5950,7 @@ function HomeExperience(): JSX.Element {
          up. Bloom eases in over ~300ms — light blooms, it does not pop. The
          orb's scale rides nothing: selection never touches geometry. */
       /* a vertical move in progress is motion, so the loop stays awake for it */
-      let easing = Math.abs(pitch) > 0.01 || Math.abs(charLift) > 0.4;
+      let easing = Math.abs(companion.pitch) > 0.01 || Math.abs(companion.lift) > 0.4;
       allBalls((arr) => {
         for (const b of arr) {
           /* SEARCHING USES THE FOCUS LAW IT ALREADY HAS. A search is the same
@@ -5972,38 +6000,38 @@ function HomeExperience(): JSX.Element {
          unwinds the short way round, so it always comes to rest facing
          forward however many turns it was wound. */
       if (view.reduced) {
-        yaw = 0;
-        yawTarget = 0;
-        unwindAt = 0;
+        companion.yaw = 0;
+        companion.yawTarget = 0;
+        companion.unwindAt = 0;
       } else if (scrubbingRef.current) {
-        unwindAt = 0;
-        yaw = lerp(yaw, yawTarget, kd(EASE_YAW_SCRUB, dt));
+        companion.unwindAt = 0;
+        companion.yaw = lerp(companion.yaw, companion.yawTarget, kd(EASE_YAW_SCRUB, dt));
         easing = true;
       } else if (travelYaw) {
         /* the traveler's turnaround: the same planet turn, held at a quarter
            toward the edge for the whole slide — profile view, facing where
            it is going. Arrival clears this and the unwind brings it back. */
-        unwindAt = 0;
-        yaw = lerp(yaw, yawTarget, kd(EASE_YAW_TRAVEL, dt));
+        companion.unwindAt = 0;
+        companion.yaw = lerp(companion.yaw, companion.yawTarget, kd(EASE_YAW_TRAVEL, dt));
         easing = true;
-      } else if (unwindAt > 0 || yaw !== 0 || yawTarget !== 0) {
-        if (unwindAt === 0) {
+      } else if (companion.unwindAt > 0 || companion.yaw !== 0 || companion.yawTarget !== 0) {
+        if (companion.unwindAt === 0) {
           /* drop whole turns first — turning 360° is turning nowhere */
-          let a = yaw % TAU;
+          let a = companion.yaw % TAU;
           if (a > Math.PI) a -= TAU;
           else if (a < -Math.PI) a += TAU;
-          unwindFrom = a;
-          yaw = a;
-          yawTarget = 0;
-          unwindAt = now;
+          companion.unwindFrom = a;
+          companion.yaw = a;
+          companion.yawTarget = 0;
+          companion.unwindAt = now;
         }
-        const u = clamp01((now - unwindAt) / UNWIND_MS);
-        yaw = unwindFrom * Math.pow(1 - u, 3);
+        const u = clamp01((now - companion.unwindAt) / UNWIND_MS);
+        companion.yaw = companion.unwindFrom * Math.pow(1 - u, 3);
         easing = true;
         if (u >= 1) {
-          yaw = 0;
-          unwindFrom = 0;
-          unwindAt = 0;
+          companion.yaw = 0;
+          companion.unwindFrom = 0;
+          companion.unwindAt = 0;
         }
       }
 
@@ -6028,9 +6056,9 @@ function HomeExperience(): JSX.Element {
 
       /* the companion. Its glow eases toward the real signal; its flare
          decays; it blinks; and when it is genuinely inspired, motes rise. */
-      inspNow = view.reduced ? insp : lerp(inspNow, insp, 1 - Math.pow(0.02, dt));
-      if (flare > 0) {
-        flare = Math.max(0, flare - dt / 0.7);
+      companion.inspNow = view.reduced ? companion.insp : lerp(companion.inspNow, companion.insp, 1 - Math.pow(0.02, dt));
+      if (companion.flare > 0) {
+        companion.flare = Math.max(0, companion.flare - dt / 0.7);
         easing = true;
       }
       /* Something was captured today. That is a STATE, and states render —
@@ -6038,7 +6066,7 @@ function HomeExperience(): JSX.Element {
          (It used to flash every six seconds: the layout brightening itself
          some six hundred times an hour with no hand involved anywhere, which
          is the same crime as a camera move on panel-open.) */
-      freshLit = freshToday ? 0.12 : 0;
+      companion.freshLit = companion.freshToday ? 0.12 : 0;
       if (!view.reduced) {
         /* Something is forming above: every nine seconds or so it looks up,
            and every fourteen it sends a mote that way. The companion is how
@@ -6050,33 +6078,33 @@ function HomeExperience(): JSX.Element {
            about ninety seconds, which is well inside a session. This is that
            third clock, and it runs on an empty archive too: the creature's
            aliveness is its own, not a readout of yours. */
-        if (idleAt === 0) idleAt = now + 22000 + Math.random() * 14000;
-        if (now >= idleAt) {
-          idleAt = now + 30000 + Math.random() * 30000;
-          glanceUntil = now + 900;
+        if (companion.idleAt === 0) companion.idleAt = now + 22000 + Math.random() * 14000;
+        if (now >= companion.idleAt) {
+          companion.idleAt = now + 30000 + Math.random() * 30000;
+          companion.glanceUntil = now + 900;
           /* it looks somewhere of its own choosing, not at you */
-          eyeTX = (Math.random() - 0.5) * 1.6;
+          companion.eyeTX = (Math.random() - 0.5) * 1.6;
         }
         const forming = sky.nebs.length > 0;
         if (forming) {
-          if (glanceAt === 0) glanceAt = now + 4000;
-          if (now >= glanceAt) {
-            glanceAt = now + 9000;
-            glanceUntil = now + 1200;
+          if (companion.glanceAt === 0) companion.glanceAt = now + 4000;
+          if (now >= companion.glanceAt) {
+            companion.glanceAt = now + 9000;
+            companion.glanceUntil = now + 1200;
           }
-          if (riseAt === 0) riseAt = now + 7000;
-          if (now >= riseAt) {
-            riseAt = now + 14000;
+          if (companion.riseAt === 0) companion.riseAt = now + 7000;
+          if (now >= companion.riseAt) {
+            companion.riseAt = now + 14000;
             for (let i = 0; i < 4; i++)
               if (riseA[i] <= 0) {
-                riseX[i] = (Math.random() - 0.5) * charSize * 0.5;
-                riseY[i] = -charSize * 0.45;
+                riseX[i] = (Math.random() - 0.5) * companion.size * 0.5;
+                riseY[i] = -companion.size * 0.45;
                 riseA[i] = 0.85;
                 break;
               }
           }
         } else {
-          glanceUntil = 0;
+          companion.glanceUntil = 0;
         }
         for (let i = 0; i < 4; i++) {
           if (riseA[i] <= 0) continue;
@@ -6085,9 +6113,9 @@ function HomeExperience(): JSX.Element {
           easing = true;
         }
         /* presence, not cartoon tracking: at most a couple of pixels */
-        const glanceY = now < glanceUntil ? -2 : eyeTY;
-        eyeX = lerp(eyeX, eyeTX, 1 - Math.pow(0.05, dt));
-        eyeY = lerp(eyeY, glanceY, 1 - Math.pow(0.05, dt));
+        const glanceY = now < companion.glanceUntil ? -2 : companion.eyeTY;
+        companion.eyeX = lerp(companion.eyeX, companion.eyeTX, 1 - Math.pow(0.05, dt));
+        companion.eyeY = lerp(companion.eyeY, glanceY, 1 - Math.pow(0.05, dt));
         /* RHYTHM, THE THIRD THING THE CROSSING QUANTIZES.
            Position was quantized, then the float became a tick — but the eyes
            still slid smoothly and the blink still fell at a human's uneven
@@ -6101,28 +6129,28 @@ function HomeExperience(): JSX.Element {
            the only sentence this layout knows how to say about machines. */
         if (mech >= 0.02) {
           const eyeStep = 0.35 + mech * 0.85;
-          eyeX = Math.round(eyeX / eyeStep) * eyeStep;
-          eyeY = Math.round(eyeY / eyeStep) * eyeStep;
+          companion.eyeX = Math.round(companion.eyeX / eyeStep) * eyeStep;
+          companion.eyeY = Math.round(companion.eyeY / eyeStep) * eyeStep;
         }
-        if (now >= blinkAt) {
+        if (now >= companion.blinkAt) {
           /* its own blink interval, +/- 40%, instead of everyone's 5-9s —
              and on a machine's wall the jitter is quantized out of it, so the
              blink arrives on a beat rather than whenever. A metronome is what
              a clock looks like from the outside. */
           const base = wornBeing().blinkMs;
           const jitter = 0.8 + Math.random() * 0.4;
-          blinkAt = now + base * lerp(jitter, 1, clamp01(mech));
-          blink = 1;
+          companion.blinkAt = now + base * lerp(jitter, 1, clamp01(mech));
+          companion.blink = 1;
         }
-        if (blink > 0) blink = Math.max(0, blink - dt / 0.12);
-        const strong = clamp01(inspNow + flare * 0.5) > 0.55;
+        if (companion.blink > 0) companion.blink = Math.max(0, companion.blink - dt / 0.12);
+        const strong = clamp01(companion.inspNow + companion.flare * 0.5) > 0.55;
         for (let i = 0; i < 10; i++) {
           if (upA[i] > 0) {
             upY[i] -= dt * 26;
             upA[i] -= dt * 0.55;
           } else if (strong && Math.random() < dt * 2.2) {
-            upX[i] = (Math.random() - 0.5) * charSize * 1.1;
-            upY[i] = charSize * 0.3;
+            upX[i] = (Math.random() - 0.5) * companion.size * 1.1;
+            upY[i] = companion.size * 0.3;
             upA[i] = 0.8;
           }
         }
@@ -6138,7 +6166,7 @@ function HomeExperience(): JSX.Element {
            objects — but air can carry it: a dead archive has still air, a live
            one has moving air. Same scalar the companion reads, on the one
            layer that is already continuous and asks for no attention. */
-        const rate = lerp(1, 1.6, up) * lerp(0.55, 1.35, inspNow);
+        const rate = lerp(1, 1.6, up) * lerp(0.55, 1.35, companion.inspNow);
         for (let i = 0; i < MOTES; i++) {
           moteY[i] -= moteS[i] * rate * stir.amp * dt;
           if (moteY[i] < -8) {
@@ -6153,8 +6181,8 @@ function HomeExperience(): JSX.Element {
       {
         let sig = "";
         for (const n of sky.nebs) if (n.pairable) sig += n.id + "|";
-        if (sig !== pairSig) {
-          pairSig = sig;
+        if (sig !== companion.pairSig) {
+          companion.pairSig = sig;
           setPairableIds(new Set(sky.nebs.filter((n) => n.pairable).map((n) => n.id)));
         }
       }
@@ -6302,7 +6330,7 @@ function HomeExperience(): JSX.Element {
       b.hold = 1;
       sky.heldBall = b;
       /* the companion brightens in sympathy with an alive bubble */
-      if (b.alive > 0.55) flare = Math.max(flare, 0.6);
+      if (b.alive > 0.55) companion.flare = Math.max(companion.flare, 0.6);
       /* Its kin are NOT lit and NOT moved. Exactly one thing on screen is
          lit; the connections belong in the panel as text, never in the jar. */
       wake();
@@ -6329,16 +6357,16 @@ function HomeExperience(): JSX.Element {
       if (b) {
         b.hold = 1;
         sky.heldBall = b;
-        if (b.alive > 0.55) flare = Math.max(flare, 0.6);
+        if (b.alive > 0.55) companion.flare = Math.max(companion.flare, 0.6);
       }
       wake();
     }
 
     /** Is the pointer over the companion? It sits in front of the field. */
     function overChar(cx: number, wy: number): boolean {
-      const dx = cx - (view.w / 2 + charOff);
-      const dy = wy - charY;
-      const r = charSize * 0.55;
+      const dx = cx - (view.w / 2 + companion.off);
+      const dy = wy - companion.y;
+      const r = companion.size * 0.55;
       return dx * dx + dy * dy <= r * r;
     }
 
@@ -6423,7 +6451,7 @@ function HomeExperience(): JSX.Element {
       if (travelActive) return;
       /* the companion answers first: it sits in front of the field */
       if (overChar(cx, cy + camY)) {
-        flare = 1;
+        companion.flare = 1;
         setCharSay(sayLine());
         wake();
         return;
@@ -6601,25 +6629,25 @@ function HomeExperience(): JSX.Element {
      */
     function attendTo(wx: number, wy: number) {
       const dx = wx - (camX + view.w / 2);
-      const dy = wy - charY;
+      const dy = wy - companion.y;
       const d = Math.hypot(dx, dy) || 1;
       /* overshoot: it commits to the direction before it has finished moving */
-      eyeTX = clamp((dx / d) * 2.6, -2.4, 2.4);
-      eyeTY = clamp((dy / d) * 1.6, -1.6, 1.6);
-      attendUntil = performance.now() + 2600;
+      companion.eyeTX = clamp((dx / d) * 2.6, -2.4, 2.4);
+      companion.eyeTY = clamp((dy / d) * 1.6, -1.6, 1.6);
+      companion.attendUntil = performance.now() + 2600;
       /* and the body leans after the eyes, not with them */
-      attendLean = clamp(dx / Math.max(view.w * 0.5, 1), -1, 1) * 0.05;
+      companion.attendLean = clamp(dx / Math.max(view.w * 0.5, 1), -1, 1) * 0.05;
       wake();
     }
 
     const onHover = (e: PointerEvent) => {
       /* presence: the eyes drift a couple of pixels toward the last touch */
       const dx = e.clientX - view.w / 2;
-      const dy = e.clientY + camY - charY;
+      const dy = e.clientY + camY - companion.y;
       const d = Math.hypot(dx, dy) || 1;
-      if (performance.now() < attendUntil) return; /* it is looking at something */
-      eyeTX = clamp((dx / d) * 2, -2, 2);
-      eyeTY = clamp((dy / d) * 2, -2, 2);
+      if (performance.now() < companion.attendUntil) return; /* it is looking at something */
+      companion.eyeTX = clamp((dx / d) * 2, -2, 2);
+      companion.eyeTY = clamp((dy / d) * 2, -2, 2);
       /* which cloud the pointer rests on: a clustered member's whispered
          sentence rises back to full while it is touched */
       sky.hoverNeb = camY < view.layout.minCam * 0.3 ? nebAt(e.clientX, e.clientY) : null;
@@ -6702,8 +6730,8 @@ function HomeExperience(): JSX.Element {
           dragLeadTarget = clamp(disp / (view.w * 0.14), -1, 1) * DRAG_LEAD_PX;
           if (Math.abs(dragLeadTarget) > 4) {
             travelYaw = true;
-            yawTarget = (dragLeadTarget > 0 ? 1 : -1) * (TAU / 4);
-            unwindAt = 0;
+            companion.yawTarget = (dragLeadTarget > 0 ? 1 : -1) * (TAU / 4);
+            companion.unwindAt = 0;
           }
         }
         /* travel toward a room begins at swipe start: fetch it now */
@@ -6794,7 +6822,7 @@ function HomeExperience(): JSX.Element {
           /* it changed its mind with you: turns back and eases home while
              the layout springs back under it */
           travelYaw = false;
-          unwindAt = 0;
+          companion.unwindAt = 0;
         }
         wake();
         return;
@@ -6856,7 +6884,7 @@ function HomeExperience(): JSX.Element {
         camXBack = true;
         dragLeadOn = false;
         travelYaw = false;
-        unwindAt = 0;
+        companion.unwindAt = 0;
       } else if (dragging || interruptedSnap) {
         /* cancelled mid-drag, or cancelled on a press that had interrupted a
            move: either way the layout is owed a resting place */
@@ -7068,8 +7096,8 @@ function HomeExperience(): JSX.Element {
         TRef.current = T;
         /* the dial's position IS the companion's yaw: today (the right-hand
            end) is front-facing, and winding back turns it away from you */
-        yawTarget = view.reduced ? 0 : (pos - 1) * TAU * SPIN_TURNS;
-        unwindAt = 0;
+        companion.yawTarget = view.reduced ? 0 : (pos - 1) * TAU * SPIN_TURNS;
+        companion.unwindAt = 0;
         if (selectedIdRef.current) release();
         pour.scrubDirty = true;
         wake();
@@ -7098,56 +7126,56 @@ function HomeExperience(): JSX.Element {
             /* SOMETHING NEW EXISTS. The biggest flare in the world, and the
                eyes go DOWN to the ground where it landed — the creature looks
                at what was just made rather than at you making it. */
-            flare = Math.max(flare, 0.95);
-            eyeTX = 0;
-            eyeTY = 1.5;
-            attendUntil = performance.now() + 1500;
-            attendLean = 0;
+            companion.flare = Math.max(companion.flare, 0.95);
+            companion.eyeTX = 0;
+            companion.eyeTY = 1.5;
+            companion.attendUntil = performance.now() + 1500;
+            companion.attendLean = 0;
             break;
           case "answered":
             /* YOU TOLD IT SOMETHING TRUE ABOUT YOURSELF. It looks UP at the
                sky it read you from, and holds longer than anything else here:
                this is the slow one, because being understood is not a ping. */
-            flare = Math.max(flare, 0.72);
-            eyeTX = 0;
-            eyeTY = -1.6;
-            attendUntil = performance.now() + 2800;
-            attendLean = 0;
+            companion.flare = Math.max(companion.flare, 0.72);
+            companion.eyeTX = 0;
+            companion.eyeTY = -1.6;
+            companion.attendUntil = performance.now() + 2800;
+            companion.attendLean = 0;
             break;
           case "arrived":
             /* A NEW WALL. It looks around the room it just walked into — the
                glance system already does this on its own, so this simply asks
                for one now, with a modest flare. Arriving is not an
                achievement and must not be lit like one. */
-            flare = Math.max(flare, 0.5);
-            glanceAt = performance.now();
-            eyeTY = -0.5;
-            attendUntil = performance.now() + 1200;
+            companion.flare = Math.max(companion.flare, 0.5);
+            companion.glanceAt = performance.now();
+            companion.eyeTY = -0.5;
+            companion.attendUntil = performance.now() + 1200;
             break;
           case "shared":
             /* IT WENT OUT TO PEOPLE. The eyes go sideways, the way the world
                is laid out — the rooms are over there, and that is where the
                statement just went. */
-            flare = Math.max(flare, 0.6);
-            eyeTX = 2.2;
-            eyeTY = 0;
-            attendUntil = performance.now() + 1600;
-            attendLean = 0.04;
+            companion.flare = Math.max(companion.flare, 0.6);
+            companion.eyeTX = 2.2;
+            companion.eyeTY = 0;
+            companion.attendUntil = performance.now() + 1600;
+            companion.attendLean = 0.04;
             break;
           case "let-go":
             /* SOMETHING WAS RELEASED. The one moment with NO flare: light
                rising as a memory leaves would be the creature congratulating
                you for it. It looks down and away instead, and dims a touch.
                Fading never deletes, and letting go is not a win. */
-            flare = Math.min(flare, 0.1);
-            eyeTX = -1.4;
-            eyeTY = 1.2;
-            attendUntil = performance.now() + 1900;
-            attendLean = -0.03;
+            companion.flare = Math.min(companion.flare, 0.1);
+            companion.eyeTX = -1.4;
+            companion.eyeTY = 1.2;
+            companion.attendUntil = performance.now() + 1900;
+            companion.attendLean = -0.03;
             break;
           default:
             /* the plain acknowledgment: a tap was heard */
-            flare = Math.max(flare, 0.42);
+            companion.flare = Math.max(companion.flare, 0.42);
         }
         wake();
       },
@@ -7204,11 +7232,11 @@ function HomeExperience(): JSX.Element {
         const M = 20; /* never closer than this to an edge */
         const w = Math.min(Math.max(360, Math.min(view.w * 0.3, 500)), view.w - 48);
         const cx = view.w / 2; /* the companion holds the middle of the frame */
-        const cy = charY - camY;
+        const cy = companion.y - camY;
         /* which side is the memory on? the words go to the other one */
         const orbX = b ? b.x - camX : cx;
         const wantRight = orbX <= cx;
-        const gap = charSize * 0.72;
+        const gap = companion.size * 0.72;
         let left = wantRight ? cx + gap : cx - gap - w;
         /* if that side cannot hold it, take the other; if neither can, the
            frame is too narrow for beside-anything and it becomes a sheet */
@@ -7220,7 +7248,7 @@ function HomeExperience(): JSX.Element {
         }
         /* vertically it meets the companion at the shoulder and reads
            downward, clamped so a long memory never leaves the frame */
-        const top = clamp(cy - charSize * 0.34, 56, Math.max(56, view.h * 0.52));
+        const top = clamp(cy - companion.size * 0.34, 56, Math.max(56, view.h * 0.52));
         return { left: Math.round(left), top: Math.round(top), bottom: null };
       },
       toTop: () => {
@@ -7275,7 +7303,7 @@ function HomeExperience(): JSX.Element {
           b.alive = b.aliveTo;
           b.alivePow = Math.pow(b.aliveTo, 1.4);
         }
-        flare = Math.max(flare, 0.9);
+        companion.flare = Math.max(companion.flare, 0.9);
         wake();
       },
       /**
@@ -7336,7 +7364,7 @@ function HomeExperience(): JSX.Element {
         }
         computeInspiration();
         /* the companion answers a keep as it answers a reflection */
-        flare = Math.max(flare, view.reduced ? 0 : 0.9);
+        companion.flare = Math.max(companion.flare, view.reduced ? 0 : 0.9);
         wake();
       },
       identify: (id: string, sigId: string) => {
@@ -7444,7 +7472,7 @@ function HomeExperience(): JSX.Element {
           if (view.reduced) {
             col = dest;
             camX = camXTarget;
-            charOff = 0;
+            companion.off = 0;
             arriveColumn();
             wake();
             return;
@@ -7468,11 +7496,11 @@ function HomeExperience(): JSX.Element {
              single-wall lead: past that it stops reading as running and
              starts reading as the character having come loose. */
           const urgency = Math.min(2.15, Math.sqrt(Math.max(1, span)));
-          charLead = dir * Math.min(view.w * TRAVEL_LEAD_X, 190) * urgency;
-          charFrom = charOff;
+          companion.lead = dir * Math.min(view.w * TRAVEL_LEAD_X, 190) * urgency;
+          companion.from = companion.off;
           travelYaw = true;
-          yawTarget = dir * (TAU / 4);
-          unwindAt = 0;
+          companion.yawTarget = dir * (TAU / 4);
+          companion.unwindAt = 0;
           wake();
         };
         /* travel needs the camera parked; take it home first */
@@ -7508,7 +7536,7 @@ function HomeExperience(): JSX.Element {
         n.haloX = n.x;
         n.haloY = n.y;
         n.pinned = true;
-        flare = Math.max(flare, view.reduced ? 0 : 0.4);
+        companion.flare = Math.max(companion.flare, view.reduced ? 0 : 0.4);
         wake();
       },
       condense: (id: string) => {
@@ -7519,7 +7547,7 @@ function HomeExperience(): JSX.Element {
            to nearly full and changed nothing; adopting an ambition — the
            rarest and least reversible act here — changed everything and
            produced no light at all. */
-        flare = 1;
+        companion.flare = 1;
         /* its satellites spiral in with it, so nothing is left to read beside */
         if (sky.selSat && n.sats.includes(sky.selSat)) release();
         wake();
