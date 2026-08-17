@@ -47,7 +47,7 @@
 import type { Adopted, Provenance } from "../../space/top-of-mind/board";
 import type { Inspiration, Signal, Evidence, Entry } from "../data";
 import { DAY_MS } from "../num";
-import { showsDebug } from "../dev-build";
+import { inventedDataAllowed } from "../dev-build";
 import { daysAgo } from "./clock";
 
 /** Everything the world is built from, when it is built from nothing. */
@@ -184,11 +184,16 @@ function offlineReading(
  * lengths, and Hangul throughout, because the archive this is standing in for
  * is majority Korean and Korean text is what has found the layout bugs.
  *
- * Returns null outside dev — and then the page's own failure line stands, as
- * it did before any of this existed.
+ * Returns null outside a dev build — and then the page's own failure line
+ * stands, as it did before any of this existed.
+ *
+ * This used to ask `showsDebug()`, which also honours VITE_SHOW_INTERNAL, so a
+ * production build made with that flag showed these invented memories to real
+ * signed-out visitors. `inventedDataAllowed()` is `DEV` alone and exists so the
+ * two rules cannot be confused again.
  */
 export function offlineHome(): OfflineHome | null {
-  if (!showsDebug()) return null;
+  if (!inventedDataAllowed()) return null;
 
   /**
    * THE LINE THAT WOULD HAVE CAUGHT IT.

@@ -379,8 +379,10 @@ verified by opening the file.
   the one that matters.
 - `pnpm --filter @waka/web dev` — Vite alone. Without a session the canvas
   renders a dev-only fixture, which is how wall-specific behaviour gets looked
-  at at all. It is gated on `import.meta.env.DEV`, which is statically false in
-  a production build, so the invented rows are dead code the bundler drops.
+  at at all. Both fixture entry points are gated on `inventedDataAllowed()`,
+  which is `import.meta.env.DEV` and nothing else — statically false in a
+  production build, so the gate folds to `return false` in the emitted bundle.
+  Checkable rather than promised: build with the flag set and read it back.
 
   That guarantee is one line deep and was broken until this branch. The gate
   used to read `DEV === true || VITE_SHOW_INTERNAL === "1"`, borrowed from

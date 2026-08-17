@@ -74,7 +74,9 @@ import { daysAgo } from "./clock";
  * data is dead code the bundler drops — the guarantee is structural rather than
  * a promise someone has to keep.
  */
-export const MOCK_AGENTS = import.meta.env.DEV === true;
+import { inventedDataAllowed } from "../dev-build";
+
+export const MOCK_AGENTS = inventedDataAllowed();
 
 function mockSignal(
   agentId: string,

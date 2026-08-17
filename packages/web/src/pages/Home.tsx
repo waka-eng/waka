@@ -1672,8 +1672,15 @@ function HomeExperience(): JSX.Element {
            In dev, where a fixture exists, the fixture wins instead: that is
            the only way the whole layout — every wall, every room, the hues,
            the legend — can be LOOKED AT without a session, which is what it
-           is for. `offlineHome()` is null outside dev, so a real visitor
-           still gets the door. */
+           is for. `offlineHome()` is null outside a dev build, so a real
+           visitor still gets the door.
+
+           That sentence was FALSE for a while and this is the line it was
+           false at: the fixture asked `showsDebug()`, which also honours
+           VITE_SHOW_INTERNAL, so a production build made with that flag
+           answered a real visitor's 401 with two dozen invented memories
+           painted as their own world. It now asks `inventedDataAllowed()`,
+           which is DEV alone. */
         if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
           if (!layout) {
             navigate("/login", { replace: true });

@@ -82,18 +82,81 @@ describe("the offline fixture", () => {
  * — green, and blind, which is the failure this repo keeps finding.
  */
 describe("invented data cannot reach a production build", () => {
-  it("gates the agent-wall fixture on DEV alone, never on a build flag", async () => {
-    const { readFileSync } = await import("node:fs");
-    const src = readFileSync(
-      new URL("../src/lib/fixture/agent-walls.ts", import.meta.url),
-      "utf8",
-    );
-    const gate = src.match(/export const MOCK_AGENTS\s*=\s*([^;]+);/);
-    expect(gate, "MOCK_AGENTS declaration not found — did it move?").not.toBeNull();
+  /**
+   * WHY THIS SCANS THE DIRECTORY INSTEAD OF NAMING A FILE.
+   *
+   * The first version of this test read ONE declaration in ONE file. It was
+   * written the day `MOCK_AGENTS` was found gated on `showsDebug()` — which
+   * honours `VITE_SHOW_INTERNAL`, a build-time flag Vite inlines — and it
+   * pinned that one line.
+   *
+   * Its sibling `offlineHome()` was calling `showsDebug()` the whole time and
+   * this test could not see it, because it was not looking there. A reviewer
+   * ran `VITE_SHOW_INTERNAL=1 vite build` and read the fixture back out of the
+   * compiled bundle: a signed-out visitor, on any 401, was shown two dozen
+   * invented memories painted as their own world instead of the door.
+   *
+   * So the instance was fixed and the class was left open, and the test that
+   * was supposed to hold the line was green throughout. It now walks every
+   * file under `src/lib/fixture/` and asserts about all of them, so a new
+   * fixture is covered the moment it exists rather than the moment somebody
+   * remembers to add it here.
+   */
+  const fixtureDir = new URL("../src/lib/fixture/", import.meta.url);
 
-    const condition = gate![1]!.trim();
-    expect(condition).toBe("import.meta.env.DEV === true");
-    /* Named explicitly: this is the exact flag that reopened it before. */
-    expect(condition).not.toContain("VITE_SHOW_INTERNAL");
+  /** The one predicate a fixture may gate on. `DEV` is statically false in a
+      production build, so the invented rows become dead code the bundler
+      drops — a structural guarantee rather than a promise. */
+  const ALLOWED_GATE = "inventedDataAllowed";
+  /** The wider rule. Correct for a debug pill, never for invented data. */
+  const FORBIDDEN_GATE = "showsDebug";
+
+  const fixtureFiles = async () => {
+    const { readdirSync } = await import("node:fs");
+    return readdirSync(fixtureDir).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"));
+  };
+
+  it("finds fixture files to check — 'nothing to check' is not a pass", async () => {
+    /* The conditional-assertion trap this repo has hit before: a scan whose
+       assertions all sit behind a match silently passes when it matches
+       nothing. Assert the subject exists first. */
+    expect((await fixtureFiles()).length).toBeGreaterThan(1);
+  });
+
+  it("gates every fixture on DEV alone, never on a flag a build can set", async () => {
+    const { readFileSync } = await import("node:fs");
+    const offenders: string[] = [];
+
+    for (const file of await fixtureFiles()) {
+      const src = readFileSync(new URL(file, fixtureDir), "utf8");
+      /* Comments legitimately DISCUSS showsDebug — both files explain why they
+         do not use it — so only code is judged. Block and line comments out. */
+      const code = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+      if (code.includes(FORBIDDEN_GATE)) offenders.push(`${file} calls ${FORBIDDEN_GATE}()`);
+      if (code.includes("VITE_SHOW_INTERNAL")) offenders.push(`${file} reads VITE_SHOW_INTERNAL`);
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
+  it("keeps the two known fixture entry points on the narrow gate", async () => {
+    /* Named explicitly as well as scanned, so that deleting a gate outright —
+       which the scan above would read as clean — still fails. */
+    const { readFileSync } = await import("node:fs");
+    const agents = readFileSync(new URL("agent-walls.ts", fixtureDir), "utf8");
+    const offline = readFileSync(new URL("offline-home.ts", fixtureDir), "utf8");
+
+    expect(agents).toMatch(new RegExp(`MOCK_AGENTS\\s*=\\s*${ALLOWED_GATE}\\(\\)`));
+    expect(offline).toMatch(new RegExp(`if\\s*\\(!${ALLOWED_GATE}\\(\\)\\)\\s*return null`));
+  });
+
+  it("defines the narrow gate as DEV and nothing else", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync(new URL("../src/lib/dev-build.ts", import.meta.url), "utf8");
+    const body = src.match(
+      new RegExp(`export function ${ALLOWED_GATE}\\(\\): boolean \\{([^}]*)\\}`),
+    );
+    expect(body, `${ALLOWED_GATE} not found — did it move?`).not.toBeNull();
+    expect(body![1]!.trim()).toBe("return import.meta.env.DEV === true;");
   });
 });

@@ -29,3 +29,29 @@ export function showsDebug(): boolean {
   const env = import.meta.env as Record<string, unknown>;
   return env.DEV === true || env.VITE_SHOW_INTERNAL === "1";
 }
+
+/**
+ * MAY INVENTED DATA EXIST IN THIS BUILD? `DEV` alone, and never `showsDebug()`.
+ *
+ * These are two rules that look alike and are not one rule. "Show me the
+ * internals" is reasonable on a staging build, so `showsDebug()` honours
+ * `VITE_SHOW_INTERNAL`. "Invent memories that nobody wrote" is not reasonable
+ * anywhere a real person can reach, so this one does not.
+ *
+ * THE FIRST FIX WAS THE INSTANCE, NOT THE CLASS, AND THAT IS WHY THIS EXISTS.
+ * `MOCK_AGENTS` in `fixture/agent-walls.ts` was found gated on the wider rule
+ * and changed to `DEV` alone. `offlineHome()` in `fixture/offline-home.ts` was
+ * calling `showsDebug()` and was missed — so `VITE_SHOW_INTERNAL=1 vite build`
+ * still produced a bundle where a signed-out visitor, on any 401, was shown
+ * two dozen invented memories painted as their own world instead of being sent
+ * to the door. A reviewer reproduced it from the compiled output.
+ *
+ * Aliasing does not escape it: Vite injects `import.meta.env` as a whole
+ * object, so `const env = import.meta.env` is inlined complete, flag and all.
+ *
+ * One predicate, so the next fixture cannot be gated on the wrong rule by
+ * copying a neighbour. `test/fixture-says-so.test.ts` asserts every caller.
+ */
+export function inventedDataAllowed(): boolean {
+  return import.meta.env.DEV === true;
+}
