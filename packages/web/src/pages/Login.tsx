@@ -16,18 +16,39 @@
  * Post-auth redirect logic respects `location.state.from` (set by future
  * route-guard redirects, e.g. when an anonymous visitor hits a protected
  * URL and gets bounced here). When absent we default to "/".
+ *
+ * TWO THINGS THIS PAGE NO LONGER HOLDS, and where to find them.
+ *
+ *   - `components/GoogleSignIn.tsx` — the other way in. It is a departure
+ *     rather than a form: the browser leaves for Google and comes back with
+ *     a session or an error code, so the URL that starts it, the button, and
+ *     the table of what can come back broken live together there.
+ *   - `lib/sign-in-destination.ts` — where a visitor lands afterwards, and
+ *     why some answers to that question are refused. It moved because it is
+ *     the one rule on this page with security consequences and it needs to
+ *     be somewhere a test can execute it.
+ *
+ * WHAT STAYED, AND WHY IT IS ONE THING. The two forms and the tab toggle
+ * read as one flow: the footer link flips the tab, the tab swaps the form,
+ * and the two forms deliberately validate DIFFERENTLY — signup enforces the
+ * password floor, login refuses to, so that an account created under an
+ * older policy can still sign in. That asymmetry is the kind a reader only
+ * notices when both rules are twenty lines apart. Splitting the forms into
+ * separate files would hide it and invite someone to "de-duplicate" two
+ * shapes that are alike by coincidence and different on purpose.
  */
 
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import type { Location } from "react-router-dom";
 
-import { ApiError, apiPath } from "../lib/api";
+import { GoogleSignInButton, oauthErrorMessageKey } from "../components/GoogleSignIn";
+import { ApiError } from "../lib/api";
 import type { LoginFieldErrors, SignupFieldErrors } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { formatMessage, normalizeSupportedLocale, readStoredLocale, supportedLocales, t, writeStoredLocale } from "../lib/locales";
-import type { MessageKey, SupportedLocale } from "../lib/locales";
+import type { SupportedLocale } from "../lib/locales";
+import { resolveRedirect } from "../lib/sign-in-destination";
 
 // ---------------------------------------------------------------------------
 // Shared constants
@@ -42,81 +63,6 @@ import type { MessageKey, SupportedLocale } from "../lib/locales";
  * inverse (loose client, strict server) would be the dangerous direction.
  */
 const MIN_PASSWORD_LENGTH = 8;
-
-const DEFAULT_REDIRECT = "/";
-
-function safeInAppPath(value: unknown): string | null {
-  if (typeof value !== "string" || !value.startsWith("/") || value.length > 2_048) {
-    return null;
-  }
-  try {
-    const internalOrigin = "https://waka.invalid";
-    const target = new URL(value, internalOrigin);
-    if (target.origin !== internalOrigin || target.pathname === "/login") return null;
-    return `${target.pathname}${target.search}${target.hash}`;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Build the absolute (or relative) URL the browser should navigate to in
- * order to start the Google OAuth flow.
- *
- * - In same-origin mode this navigates to `/api/auth/google/login`.
- * - When `VITE_API_URL` points at a different API origin, `apiPath` prefixes
- *   that origin while still targeting the API's `/api` route namespace.
- *
- * Centralised here (rather than inlined in JSX) so the same helper can be
- * unit-tested and reused if a future page adds a "Re-authenticate with
- * Google" affordance.
- */
-function googleLoginUrl(returnTo: string): string {
-  const params = new URLSearchParams({ returnTo });
-  return `${apiPath("/auth/google/login")}?${params.toString()}`;
-}
-
-/**
- * Human-readable copy for the OAuth error codes the API redirects back
- * with on `/login?error=...`. Keeping this map next to the page that
- * renders it (rather than baked into the API) means the API is free to
- * stay terse and machine-friendly while the UI can evolve its language.
- *
- * Unknown codes degrade to a generic banner instead of crashing — useful
- * if the API adds a new failure mode before the SPA learns about it.
- */
-const OAUTH_ERROR_KEYS = {
-  oauth_denied: "oauthDenied",
-  state_expired: "oauthExpired",
-  state_mismatch: "oauthMismatch",
-  missing_code: "oauthMissingCode",
-  token_exchange_failed: "oauthExchangeFailed",
-  invalid_id_token: "oauthInvalidToken",
-  account_conflict: "oauthAccountConflict",
-  upsert_failed: "oauthUpsertFailed",
-} as const satisfies Record<string, MessageKey>;
-
-function oauthErrorMessageKey(code: string | null): MessageKey | null {
-  if (!code) return null;
-  return OAUTH_ERROR_KEYS[code as keyof typeof OAUTH_ERROR_KEYS] ?? "oauthFallback";
-}
-
-/**
- * Resolve the post-auth destination. Honours `location.state.from` if it
- * looks like an in-app path the route-guard set when bouncing the user to
- * /login; otherwise falls back to the home route. We refuse anything that
- * doesn't start with "/" so a malicious referrer cannot steer the user to
- * an external site after they sign in.
- */
-function resolveRedirect(location: Location): string {
-  const state = location.state as { from?: unknown } | null;
-  const from = safeInAppPath(state?.from);
-  if (from) return from;
-  const queryReturnTo = new URLSearchParams(location.search).get("returnTo");
-  const returnTo = safeInAppPath(queryReturnTo);
-  if (returnTo) return returnTo;
-  return DEFAULT_REDIRECT;
-}
 
 // ---------------------------------------------------------------------------
 // Signup form
@@ -501,90 +447,8 @@ export function LoginForm(): JSX.Element {
 }
 
 // ---------------------------------------------------------------------------
-// Google sign-in button
+// The seam between the two ways in
 // ---------------------------------------------------------------------------
-
-/**
- * Full-page navigation to the API's `/api/auth/google/login` endpoint, which
- * sets the OAuth `state`/PKCE cookies and 302-redirects to Google's consent
- * screen. We deliberately use `window.location.assign` (not `fetch`) because:
- *
- *   1. The OAuth dance involves cross-origin redirects — Google → API
- *      callback → SPA — that the fetch transport cannot follow without
- *      losing the session cookie that the API's callback writes.
- *   2. The state/PKCE cookies are httpOnly: the browser must own them, not
- *      JS, and `fetch` would never expose them anyway. A top-level nav is
- *      the only transport that lets the cookies survive the round-trip.
- *
- * The button is rendered identically in both "login" and "signup" tabs
- * because the API's callback already handles upsert-or-link semantics: a
- * Google identity that we've never seen before becomes a brand-new user
- * row, and one that matches an existing email gets linked to that account.
- * Splitting the affordance into "Sign up with Google" vs "Sign in with
- * Google" would imply a behavioural difference that isn't there.
- */
-function GoogleSignInButton({
-  disabled = false,
-  locale = readStoredLocale(),
-  returnTo = DEFAULT_REDIRECT,
-}: {
-  disabled?: boolean;
-  locale?: SupportedLocale;
-  returnTo?: string;
-}): JSX.Element {
-  function handleClick(): void {
-    if (disabled) return;
-    // assign() (vs href= or replace()) keeps the /login entry in browser
-    // history so the user can hit "Back" from Google's consent page and
-    // land where they were. replace() would silently swallow that history
-    // entry, which is hostile to users who change their mind.
-    window.location.assign(googleLoginUrl(returnTo));
-  }
-
-  return (
-    <button
-      type="button"
-      className="btn-google"
-      onClick={handleClick}
-      disabled={disabled}
-      aria-label={t(locale, "loginGoogleContinue")}
-    >
-      {/*
-        Inline SVG (rather than an <img>) so the icon ships with the JS
-        bundle, has zero extra network requests, and inherits the button's
-        focus/hover state via currentColor where helpful. The four-color
-        Google "G" is not recolored — Google's brand guidelines require
-        the original palette on the official sign-in mark.
-      */}
-      <svg
-        className="btn-google__icon"
-        width="18"
-        height="18"
-        viewBox="0 0 18 18"
-        aria-hidden="true"
-        focusable="false"
-      >
-        <path
-          fill="#4285F4"
-          d="M17.64 9.2045c0-.6381-.0573-1.2518-.1636-1.8409H9v3.4814h4.8436c-.2086 1.125-.8427 2.0782-1.7959 2.7164v2.2581h2.9087c1.7018-1.5668 2.6836-3.8741 2.6836-6.615z"
-        />
-        <path
-          fill="#34A853"
-          d="M9 18c2.43 0 4.4673-.806 5.9564-2.1805l-2.9087-2.2581c-.8059.54-1.8368.8595-3.0477.8595-2.344 0-4.3282-1.5831-5.0359-3.7104H.9573v2.3318C2.4382 15.9831 5.4818 18 9 18z"
-        />
-        <path
-          fill="#FBBC05"
-          d="M3.9641 10.71c-.18-.54-.2823-1.1168-.2823-1.71s.1023-1.17.2823-1.71V4.9582H.9573A8.9965 8.9965 0 0 0 0 9c0 1.4523.3477 2.8268.9573 4.0418L3.9641 10.71z"
-        />
-        <path
-          fill="#EA4335"
-          d="M9 3.5795c1.3214 0 2.5077.4541 3.4405 1.346l2.5813-2.5814C13.4632.8918 11.426 0 9 0 5.4818 0 2.4382 2.0168.9573 4.9582L3.9641 7.29C4.6718 5.1627 6.656 3.5795 9 3.5795z"
-        />
-      </svg>
-      <span>{t(locale, "loginGoogleContinue")}</span>
-    </button>
-  );
-}
 
 /**
  * Visual divider between the OAuth button and the email/password form. A
