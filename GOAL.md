@@ -132,7 +132,13 @@ The server has the pieces and the world has almost none of them:
 
 ## Non-negotiables
 
-- Everything stays local. No PRs, no pushes to GitHub.
+- Nothing merges. No PRs, nothing into `dev` or `main` until this is done.
+  **Amended 2026-08-16:** the branch itself IS pushed — `origin/world/three-layers`
+  is a backup, not a proposal. The original rule said "no pushes to GitHub",
+  which conflated *merging* with *having a copy*, and by then this branch was
+  ~20k lines of unreproducible work living on one laptop. Pushing a branch
+  nobody has opened a PR against gives up nothing the rule was protecting, and
+  it runs CI, which is how we find out it is green.
 - Evidence never crosses an account boundary, whatever a capture's visibility
   says.
 - Nothing is deleted for being wrong about itself: a signal that loses its
