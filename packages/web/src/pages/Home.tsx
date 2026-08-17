@@ -8,13 +8,13 @@
  * THE THREE LAYERS ARE THE THREE SECTIONS. `docs/data-model.md` is the
  * vocabulary of record and this page is its picture, top to bottom:
  *
- *   the sky            LAYER 2 — signals: evidence-backed patterns. What is
+ *   the sky            LAYER 2 — signals: evidence-backed signals. What is
  *                      `emerging` hangs overhead with the memories it cites
  *                      orbiting it, which is where a pattern's "why" is
  *                      finally readable.
  *   headquarters       LAYER 3 — the one top-of-mind artifact. Exactly one
  *                      per profile, so the poster is never one of several;
- *                      beneath it, the patterns it stands on.
+ *                      beneath it, the signals it stands on.
  *   the field          LAYER 1 — inspirations: every capture this profile
  *                      owns, one orb each, always the whole set.
  *
@@ -22,7 +22,7 @@
  * you at the origin, rooms to the right. The field never changes with it: the
  * ground is always your own archive ("3번째 섹션에서는 양옆 못 움직여야 해").
  *
- * A room is a wall of STATEMENTS. Members share signals, never captures, so
+ * A room is a wall of STATEMENTS. Members share signals, never inspirations, so
  * another person's raw memories never appear here — not as orbs, not as
  * quotes, not in an orbit.
  *
@@ -698,7 +698,7 @@ function markPassages(
 // ---------------------------------------------------------------------------
 
 /** One deduped evidence signal: a save this room's readings cited. */
-interface RoomEvidence {
+interface GroupEvidence {
   signalId: string;
   textPreview: string;
   quote: string | null;
@@ -711,8 +711,8 @@ interface RoomEvidence {
 }
 
 /** Everything a room needs before it is allowed to wake. Cached per session. */
-interface RoomData {
-  evidence: RoomEvidence[];
+interface GroupData {
+  evidence: GroupEvidence[];
   top: ApiGroupTopOfMind | null;
 }
 
@@ -731,7 +731,7 @@ interface RoomData {
  * `citedBy` names the readings this member contributed to — attribution by
  * person, which is the finest grain the room is allowed to know.
  */
-function roomWallOrbs(wall: ApiGroupWallSignal[], top: ApiGroupTopOfMind | null): RoomEvidence[] {
+function groupWallOrbs(wall: ApiGroupWallSignal[], top: ApiGroupTopOfMind | null): GroupEvidence[] {
   const fedBy = new Map<string, string[]>();
   for (const entry of top?.entries ?? []) {
     for (const c of entry.contributors) {
@@ -741,7 +741,7 @@ function roomWallOrbs(wall: ApiGroupWallSignal[], top: ApiGroupTopOfMind | null)
       } else fedBy.set(c.profileId, [entry.body]);
     }
   }
-  const seen = new Map<string, RoomEvidence>();
+  const seen = new Map<string, GroupEvidence>();
   for (const s of wall) {
     if (seen.has(s.signalId)) continue;
     seen.set(s.signalId, {
@@ -764,8 +764,8 @@ function roomWallOrbs(wall: ApiGroupWallSignal[], top: ApiGroupTopOfMind | null)
  * note boosts are omitted because the payload cannot know them. Tint hashes
  * the signal id — evidence previews carry no theme terms.
  */
-function makeRoomBall(
-  ev: RoomEvidence,
+function makeGroupBall(
+  ev: GroupEvidence,
   groupId: string,
   colIdx: number,
   viewerId: string | null,
@@ -845,11 +845,11 @@ function makeRoomBall(
  * its lead entry — pinned first, otherwise the top of the order — and there is
  * no generated stand-in when there is none.
  */
-function deriveRoomChrome(
+function deriveGroupChrome(
   name: string,
   top: ApiGroupTopOfMind,
   openProposalMs: number | null,
-  evidence: RoomEvidence[],
+  evidence: GroupEvidence[],
   company: string | null,
 ): WallChrome {
   const lead = top.entries.find((e) => e.pinnedAt) ?? top.entries[0] ?? null;
@@ -860,8 +860,8 @@ function deriveRoomChrome(
     awayFrom: null,
     formingAlt: ambition ? null : "Forming — nothing read together yet",
     asOf: null,
-    /* A room forms through proposals, not through patterns overhead: members'
-       patterns stay on their own walls, so an open proposal is the only thing
+    /* A room forms through proposals, not through signals overhead: members'
+       signals stay on their own walls, so an open proposal is the only thing
        a room has that is on its way to becoming what it believes. */
     forming: formingWords(Date.now(), openProposalMs, null),
     empty: evidence.length === 0,
@@ -898,7 +898,7 @@ function deriveAgentChrome(a: AgentBundle, T: number, nowMs: number): WallChrome
     isProvisional: n.isProvisional === true,
     createdMs: Date.parse(n.createdAt) || nowMs,
   }));
-  const empty = a.captures.length === 0;
+  const empty = a.inspirations.length === 0;
   return {
     eyebrow: a.agent.name,
     text: held?.ambition ?? null,
@@ -1002,13 +1002,13 @@ async function loadAgentWalls(): Promise<AgentBundle[]> {
     /* ITS OWN MEMORY, NOT A VIEW OF MINE.
        Every layer endpoint takes `?profile=`, and a human-profile session is
        admin over every profile in its account — so an agent's wall is built
-       from the agent's OWN captures, its OWN patterns and its OWN top of mind.
+       from the agent's OWN inspirations, its OWN signals and its OWN top of mind.
        The database has kept them separate all along; nothing is merged with
        the owner's, and a wall whose fetch fails stands empty rather than
        borrowing anything to fill itself. */
     return Promise.all(
       real.map(async (p) => {
-        const [captures, patterns, tom] = await Promise.all([
+        const [inspirations, signals, tom] = await Promise.all([
           loadInspirations(p.id).catch(() => [] as Inspiration[]),
           loadSignals(p.id).catch(() => [] as Signal[]),
           loadTopOfMind(p.id).catch(() => null),
@@ -1019,7 +1019,7 @@ async function loadAgentWalls(): Promise<AgentBundle[]> {
         const reading = (e: Entry) => ({
           ambition: e.body,
           awayFrom: null,
-          /* what the claim rests on: the patterns it cites, which is what an
+          /* what the claim rests on: the signals it cites, which is what an
              entry cites under the canon — never straight down at raw memories */
           groundedIn: e.citedSignals.map((c) => c.id),
           createdAt: iso(e.createdMs),
@@ -1032,8 +1032,8 @@ async function loadAgentWalls(): Promise<AgentBundle[]> {
             /* the profile row carries no creation time; its oldest memory is
                the honest stand-in, and an agent that has kept nothing has no
                date because it has no history yet */
-            createdAt: captures.length
-              ? iso(Math.min(...captures.map((c) => c.capturedMs)))
+            createdAt: inspirations.length
+              ? iso(Math.min(...inspirations.map((c) => c.capturedMs)))
               : "",
           },
           /* THE DIAL NEEDS REAL DATES OR IT SCRUBS NOTHING. Each entry of the
@@ -1042,7 +1042,7 @@ async function loadAgentWalls(): Promise<AgentBundle[]> {
           direction: { current: lead ? reading(lead) : null, history: entries.map(reading) },
           /* its sky: what it is still forming and has not adopted */
           topOfMind: {
-            notes: patterns
+            notes: signals
               .filter((s) => s.status === "emerging")
               .map((s) => ({
                 id: s.id,
@@ -1052,7 +1052,7 @@ async function loadAgentWalls(): Promise<AgentBundle[]> {
                 evidenceSignalIds: [],
               })),
           },
-          captures: captures.map((c) => ({
+          inspirations: inspirations.map((c) => ({
             id: c.id,
             agentId: p.id,
             /* the canon's own distinction: content the agent initiated versus
@@ -2210,7 +2210,7 @@ interface SimApi {
   identify: (id: string, sigId: string) => void;
   /** The keep did not land: the newborn fades out in place and leaves. */
   unborn: (id: string) => void;
-  /** The captures the ambition was built from — the peek row is made of these. */
+  /** The inspirations the ambition was built from — the peek row is made of these. */
   /** What each wall's claim rests on, keyed by wall. The peek row reads it. */
   setProvenance: (byWall: Map<string, Provenance>) => void;
   /**
@@ -2285,7 +2285,7 @@ function WorldExperience(): JSX.Element {
    * working", and that moment had no design at all: the world simply rendered,
    * fuller than before, with nothing to say which part was new.
    *
-   * The answer is not a digest. Announcing "3 new patterns" before the world
+   * The answer is not a digest. Announcing "3 new signals" before the world
    * draws converts the discovery into a receipt — the reward for opening it
    * was seeing, and telling first spends that. Animal Crossing greets a
    * two-month absence with no summary screen at all; it just gives you a
@@ -2303,14 +2303,14 @@ function WorldExperience(): JSX.Element {
     }
   }
   const offlineRef = useRef(false);
-  const [captures, setCaptures] = useState<Inspiration[] | null>(null);
+  const [inspirations, setInspirations] = useState<Inspiration[] | null>(null);
   const [notes, setNotes] = useState<JarNote[] | null>(null);
   /**
    * THE SKY, IN THE CANON'S SENSE — layer 2. Each is an evidence-backed
    * pattern: `emerging` is still forming overhead, `active` is what
    * headquarters stands on, `retired` has sunk. Null until the answer is in.
    */
-  const [patterns, setPatterns] = useState<Signal[] | null>(null);
+  const [signals, setSignals] = useState<Signal[] | null>(null);
   /**
    * WHICH PATTERNS REST ON WHICH MEMORY — built from the sky, consumed by the
    * field. A capture under the canon knows nothing about its own meaning, so
@@ -2351,7 +2351,7 @@ function WorldExperience(): JSX.Element {
   readSkyRef.current = async () => {
     const rows = await loadSignals();
     if (offlineRef.current) return;
-    setPatterns(rows);
+    setSignals(rows);
     const index = new Map<string, Evidence[]>();
     for (const p of rows) {
       if (offlineRef.current) return;
@@ -2458,7 +2458,7 @@ function WorldExperience(): JSX.Element {
    * READ EVERYTHING AGAIN.
    *
    * Regeneration is the only verb that reaches all the way down: it rebuilds
-   * the artifact from the patterns as they now stand, so every "yes" and
+   * the artifact from the signals as they now stand, so every "yes" and
    * "not true" said in the sky finally arrives somewhere visible. Without it
    * answering a pattern was a row in a table nobody would ever see again.
    *
@@ -2543,17 +2543,17 @@ function WorldExperience(): JSX.Element {
   const [groups, setGroups] = useState<ApiGroupSummary[]>([]);
   /**
    * The agents: the columns to the LEFT. Mock until the endpoints land.
-   * Null until the answer is in — the field is built from the owner's captures
+   * Null until the answer is in — the field is built from the owner's inspirations
    * AND the agents' kept memories together, and it is built once, whole.
    */
   const [agents, setAgents] = useState<AgentBundle[] | null>(null);
   /** Rooms that have woken this session: their words exist, whole. */
-  const [wokenRooms, setWokenRooms] = useState<ReadonlySet<string>>(() => new Set());
+  const [wokenGroups, setWokenGroups] = useState<ReadonlySet<string>>(() => new Set());
   /* the ref's change signal: the ball list is rebuilt when a room's ground lands */
-  const [roomFieldTick, setRoomFieldTick] = useState(0);
+  const [groupFieldTick, setGroupFieldTick] = useState(0);
   const setMembersRef = useRef<(m: Map<string, ApiGroupMember[]>) => void>(() => {});
   /** Rooms whose data could not be fetched: the column says so, quietly. */
-  const [failedRooms, setFailedRooms] = useState<ReadonlySet<string>>(() => new Set());
+  const [failedGroups, setFailedGroups] = useState<ReadonlySet<string>>(() => new Set());
   /** Which wall the camera is standing on. Discrete, pushed from the loop. */
   const [atWall, setAtWall] = useState<Space>({ kind: "self", id: "", name: "Waka", col: 0 });
   /** The camera is over a wall that has no dial: the dial fades, as in the sky. */
@@ -2718,16 +2718,16 @@ function WorldExperience(): JSX.Element {
    */
   const wallProvRef = useRef<Map<string, Provenance>>(new Map());
   /** Per-session room data: fetched once, when travel toward it begins. */
-  const roomCacheRef = useRef<
-    Map<string, { status: "pending" | "ready" | "failed"; data: RoomData | null }>
+  const groupCacheRef = useRef<
+    Map<string, { status: "pending" | "ready" | "failed"; data: GroupData | null }>
   >(new Map());
-  const roomChromeRef = useRef<Map<string, WallChrome>>(new Map());
+  const groupChromeRef = useRef<Map<string, WallChrome>>(new Map());
   /* a room's ground, by group id, filled when the room wakes */
-  const roomFieldRef = useRef<Map<string, ApiGroupFieldCapture[]>>(new Map());
+  const groupFieldRef = useRef<Map<string, ApiGroupFieldCapture[]>>(new Map());
   /** Namespaced room-orb id → ball, for the panel and relight lookups. */
-  const roomBallsRef = useRef<Map<string, Ball>>(new Map());
+  const groupBallsRef = useRef<Map<string, Ball>>(new Map());
   /** Rooms whose orbs have already poured this session: no re-pour on return. */
-  const roomVisitedRef = useRef<Set<string>>(new Set());
+  const groupVisitedRef = useRef<Set<string>>(new Set());
 
   /**
    * Fetch one room's jar — its readings' evidence plus its direction —
@@ -2736,12 +2736,12 @@ function WorldExperience(): JSX.Element {
    * resolved: a room never renders half-poured. Cached for the session; a
    * failure clears itself so the next travel toward it tries again.
    */
-  const loadRoom = useCallback((groupId: string) => {
-    const cache = roomCacheRef.current;
+  const loadGroup = useCallback((groupId: string) => {
+    const cache = groupCacheRef.current;
     const got = cache.get(groupId);
     if (got && got.status !== "failed") return;
     cache.set(groupId, { status: "pending", data: null });
-    setFailedRooms((prev) => {
+    setFailedGroups((prev) => {
       if (!prev.has(groupId)) return prev;
       const next = new Set(prev);
       next.delete(groupId);
@@ -2760,27 +2760,27 @@ function WorldExperience(): JSX.Element {
     ])
       .then(([top, wall, proposals, field]) => {
         wallSignalsRef.current.set(groupId, wall);
-        roomFieldRef.current.set(groupId, field);
-        setRoomFieldTick((n) => n + 1);
-        const evidence = roomWallOrbs(wall, top);
+        groupFieldRef.current.set(groupId, field);
+        setGroupFieldTick((n) => n + 1);
+        const evidence = groupWallOrbs(wall, top);
         const name = groupsRef.current.find((g) => g.id === groupId)?.name ?? "";
         const open = proposals.find((p) => p.status === "open");
         const openMs = open ? Date.parse(open.createdAt) || 0 : null;
-        roomChromeRef.current.set(
+        groupChromeRef.current.set(
           groupId,
-          deriveRoomChrome(name, top, openMs, evidence, groupCompany(membersRef.current.get(groupId))),
+          deriveGroupChrome(name, top, openMs, evidence, groupCompany(membersRef.current.get(groupId))),
         );
         cache.set(groupId, { status: "ready", data: { evidence, top } });
         simApiRef.current?.wake();
       })
       .catch(() => {
         cache.set(groupId, { status: "failed", data: null });
-        setFailedRooms((prev) => new Set(prev).add(groupId));
+        setFailedGroups((prev) => new Set(prev).add(groupId));
         simApiRef.current?.wake();
       });
   }, []);
-  const loadRoomRef = useRef(loadRoom);
-  loadRoomRef.current = loadRoom;
+  const loadGroupRef = useRef(loadGroup);
+  loadGroupRef.current = loadGroup;
 
   /**
    * Warm a wall, whatever kind it is. A room fetches; an agent already has
@@ -2790,9 +2790,9 @@ function WorldExperience(): JSX.Element {
    */
   const loadWall = useCallback(
     (w: Space) => {
-      if (w.kind === "group") loadRoom(w.id);
+      if (w.kind === "group") loadGroup(w.id);
     },
-    [loadRoom],
+    [loadGroup],
   );
   const loadWallRef = useRef(loadWall);
   loadWallRef.current = loadWall;
@@ -2806,7 +2806,7 @@ function WorldExperience(): JSX.Element {
 
   /** A room woke: its words may exist now. Discrete, pushed from the loop. */
   const pushWoken = useCallback((groupId: string) => {
-    setWokenRooms((prev) => (prev.has(groupId) ? prev : new Set(prev).add(groupId)));
+    setWokenGroups((prev) => (prev.has(groupId) ? prev : new Set(prev).add(groupId)));
   }, []);
   const pushWokenRef = useRef(pushWoken);
   pushWokenRef.current = pushWoken;
@@ -2828,7 +2828,7 @@ function WorldExperience(): JSX.Element {
       offlineRef.current = true;
       setOffline(true);
       setNotes(world.notes);
-      setPatterns(world.patterns);
+      setSignals(world.signals);
       setCitations(world.citations);
       setTopOfMind(null);
       /* THE FIXTURE DESCRIBES THE WHOLE WORLD, NOT JUST YOUR WALL.
@@ -2846,7 +2846,7 @@ function WorldExperience(): JSX.Element {
          visitor. Its purpose is that the world can be LOOKED AT without a
          session. */
       const iso = (t: number) => new Date(t).toISOString();
-      const fixtureRooms: ApiGroupSummary[] = [
+      const fixtureGroups: ApiGroupSummary[] = [
         { id: "fx-alone", name: "Just me", joinCode: "FIXTURE1", role: "owner", memberCount: 1, createdAt: iso(Date.now()) },
         { id: "fx-pair", name: "Me and my agent", joinCode: "FIXTURE2", role: "owner", memberCount: 2, createdAt: iso(Date.now()) },
         { id: "fx-people", name: "The four of us", joinCode: "FIXTURE3", role: "member", memberCount: 5, createdAt: iso(Date.now()) },
@@ -2882,7 +2882,7 @@ function WorldExperience(): JSX.Element {
       );
       /* each room's ground: the members' public memories, so the hues, the
          legend and the pixelated agent orbs all have something to render */
-      for (const room of fixtureRooms) {
+      for (const room of fixtureGroups) {
         const who =
           room.id === "fx-alone"
             ? [you]
@@ -2904,14 +2904,14 @@ function WorldExperience(): JSX.Element {
             ownerType: m.type,
           })),
         );
-        roomFieldRef.current.set(room.id, field);
+        groupFieldRef.current.set(room.id, field);
       }
-      setRoomFieldTick((n) => n + 1);
-      setGroups(fixtureRooms);
+      setGroupFieldTick((n) => n + 1);
+      setGroups(fixtureGroups);
       setProposal(null);
       setAdopted(world.adopted);
       setProvenance(world.provenance);
-      setCaptures(world.captures);
+      setInspirations(world.inspirations);
       setPhase("ready");
     };
     /* LAYER 1 — the field. The archive is the spine, so its answer alone
@@ -2919,7 +2919,7 @@ function WorldExperience(): JSX.Element {
     loadInspirations()
       .then((rows) => {
         if (dead || offlineRef.current) return;
-        setCaptures(rows);
+        setInspirations(rows);
         setPhase("ready");
       })
       .catch((err: unknown) => {
@@ -2976,13 +2976,13 @@ function WorldExperience(): JSX.Element {
        the orbit draws its satellites from. One request per pattern, off the
        critical path, so nothing overhead delays the pour below.
 
-       Retired patterns are kept. Nothing that exists pops out of existence —
+       Retired signals are kept. Nothing that exists pops out of existence —
        a pattern that lost its evidence sinks and cools, it is not deleted. */
     readSkyRef
       .current()
       .catch(() => {
         /* an empty sky is a real state: nothing has been distilled yet */
-        if (!dead && !offlineRef.current) setPatterns([]);
+        if (!dead && !offlineRef.current) setSignals([]);
       });
     /* LAYER 3 — headquarters. Exactly one artifact per profile, so this is a
        single object and null is a real state rather than an error. */
@@ -2999,7 +2999,7 @@ function WorldExperience(): JSX.Element {
         /* WHAT THE POSTER RESTS ON — TWO HOPS DOWN, NOT ONE.
            An entry cites PATTERNS, and a pattern cites MEMORIES. The peek row
            beneath the ambition is made of orbs, so it needs the far end of
-           that chain: the memories the patterns under this statement were
+           that chain: the memories the signals under this statement were
            drawn from. Keyed by pattern id it matched nothing and the row fell
            back to "the newest few", which is the one thing it must never be —
            the row is what LED HERE, not what happened lately.
@@ -3026,8 +3026,8 @@ function WorldExperience(): JSX.Element {
         if (!dead) setAgents([]);
       });
     /* THE ROOMS — the columns to the RIGHT.
-       A room is a WALL OF STATEMENTS. Members share signals, never captures,
-       so what hangs on a room's wall is other people's patterns with their
+       A room is a WALL OF STATEMENTS. Members share signals, never inspirations,
+       so what hangs on a room's wall is other people's signals with their
        names on them; the raw memories behind them never leave the account
        they were saved in. That is the canon's privacy line and it is why a
        room's orbit can say WHO fed an entry but never WHICH memory did. */
@@ -3046,8 +3046,8 @@ function WorldExperience(): JSX.Element {
       for (const g of rows) {
         if (offlineRef.current || dead) return;
         try {
-          /* A room's board is NOT fetched here. `loadRoom` fetches it on
-             arrival and stores it per room in `roomChromeRef`, which is where
+          /* A room's board is NOT fetched here. `loadGroup` fetches it on
+             arrival and stores it per room in `groupChromeRef`, which is where
              `wallChromeNow` reads a room's poster from. Fetching it at boot
              too was one request per room for a value nothing read. */
           const [wall, proposals] = await Promise.all([
@@ -3091,7 +3091,7 @@ function WorldExperience(): JSX.Element {
              This block used to take the first room that had a board and call
              `setAdopted` with it. `adopted` is read in exactly one place —
              `wallChromeNow`'s `else` branch, which is YOUR wall (a room reads
-             `roomChromeRef`, an agent reads `deriveAgentChrome`). So a room's
+             `groupChromeRef`, an agent reads `deriveAgentChrome`). So a room's
              sentence, carrying the room's name as its eyebrow, landed on the
              poster over your own headquarters. It won every time rather than
              only when yours was missing, because this loop awaits
@@ -3160,7 +3160,7 @@ function WorldExperience(): JSX.Element {
          business making three requests that will all 401 */
       if (offlineRef.current) return;
       void Promise.allSettled([
-        loadInspirations().then((rows) => setCaptures(rows)),
+        loadInspirations().then((rows) => setInspirations(rows)),
         loadAgentWalls().then((rows) => setAgents(rows)),
         readSkyRef.current(),
       ]);
@@ -3205,7 +3205,7 @@ function WorldExperience(): JSX.Element {
    * whole thing is silent, which is most days.
    */
   useEffect(() => {
-    if (!captures || phase !== "ready" || offlineRef.current) return undefined;
+    if (!inspirations || phase !== "ready" || offlineRef.current) return undefined;
     const since = lastSeenRef.current;
     const stamp = () => {
       try {
@@ -3220,7 +3220,7 @@ function WorldExperience(): JSX.Element {
       stamp();
       return undefined;
     }
-    const fresh = captures.filter((c) => c.capturedMs > since);
+    const fresh = inspirations.filter((c) => c.capturedMs > since);
     if (fresh.length === 0) {
       stamp();
       return undefined;
@@ -3239,13 +3239,13 @@ function WorldExperience(): JSX.Element {
       stamp();
     }, 1400);
     return () => window.clearTimeout(t);
-  }, [captures, phase]);
+  }, [inspirations, phase]);
 
   /* ------------- the background sweep: newest first, four at a time -------------
      The peek orbs are the likeliest first tap, so the newest are fetched
      first. Four in flight keeps it off the critical path of the pour. */
   useEffect(() => {
-    if (!captures) return undefined;
+    if (!inspirations) return undefined;
     /* There is no reading behind a fixture memory and there is no server to
        ask for one. Every word of it is already here — the same fact a memory
        kept at the mouth carries — so the sweep would be twenty-four requests
@@ -3253,7 +3253,7 @@ function WorldExperience(): JSX.Element {
        content that is not degraded. */
     if (offlineRef.current) return undefined;
     let dead = false;
-    const queue = [...captures].sort((a, b) => b.capturedMs - a.capturedMs).map((s) => s.id);
+    const queue = [...inspirations].sort((a, b) => b.capturedMs - a.capturedMs).map((s) => s.id);
     let next = 0;
     const pump = (): Promise<void> => {
       if (dead || next >= queue.length) return Promise.resolve();
@@ -3275,7 +3275,7 @@ function WorldExperience(): JSX.Element {
       dead = true;
       window.clearTimeout(start);
     };
-  }, [captures, loadDetail]);
+  }, [inspirations, loadDetail]);
 
   /* ------------- derived data (changes only when data changes) ------------- */
 
@@ -3289,11 +3289,11 @@ function WorldExperience(): JSX.Element {
    * image on the same beat its words arrive rather than in a later flash.
    */
   const urlById = useMemo(() => {
-    void captures;
+    void inspirations;
     const m = new Map<string, string>();
     for (const d of detailsRef.current.values()) if (d.imageUrl) m.set(d.id, d.imageUrl);
     return m;
-  }, [captures, sweepDone]);
+  }, [inspirations, sweepDone]);
 
   /**
    * The personal capture set, by id. A pattern's evidence is resolved against
@@ -3303,14 +3303,14 @@ function WorldExperience(): JSX.Element {
    */
   const signalById = useMemo(() => {
     const m = new Map<string, Inspiration>();
-    for (const s of captures ?? []) m.set(s.id, s);
+    for (const s of inspirations ?? []) m.set(s.id, s);
     return m;
-  }, [captures]);
+  }, [inspirations]);
 
   const dial = useMemo(() => {
-    if (!captures || captures.length === 0) return null;
+    if (!inspirations || inspirations.length === 0) return null;
     let earliest = Infinity;
-    for (const s of captures) {
+    for (const s of inspirations) {
       const ms = s.capturedMs;
       if (Number.isFinite(ms) && ms > 0 && ms < earliest) earliest = ms;
     }
@@ -3332,7 +3332,7 @@ function WorldExperience(): JSX.Element {
       cursor.setMonth(cursor.getMonth() + 1);
     }
     return { start, end, span, majors };
-  }, [captures, clockMs]);
+  }, [inspirations, clockMs]);
 
   /* ------------- palette: resolve vars once, re-raster sprites ------------- */
   useEffect(() => {
@@ -3406,16 +3406,16 @@ function WorldExperience(): JSX.Element {
        sim effect below re-invokes it right after creating a fresh bag, so
        the two fetches' resolution order no longer matters. */
     loadSpritesRef.current();
-  }, [urlById, captures]);
+  }, [urlById, inspirations]);
 
-  /** THE SKY, AS THE FORMING LINE COUNTS IT: the patterns still emerging,
+  /** THE SKY, AS THE FORMING LINE COUNTS IT: the signals still emerging,
       each with the moment it first appeared so the dial can wind past it. */
   const emerging = useMemo(
     () =>
-      (patterns ?? [])
+      (signals ?? [])
         .filter((p) => p.status === "emerging")
         .map((p) => ({ createdMs: p.createdMs })),
-    [patterns],
+    [signals],
   );
 
   /* ------------- HQ chrome derived from time T (discrete facts only) ------------- */
@@ -3432,7 +3432,7 @@ function WorldExperience(): JSX.Element {
                 agent: { id: atWall.id, name: atWall.name, kind: "agent", createdAt: "" },
                 direction: { current: null, history: [] },
                 topOfMind: { notes: [] },
-                captures: [],
+                inspirations: [],
               },
               T,
               nowMs,
@@ -3445,14 +3445,14 @@ function WorldExperience(): JSX.Element {
                writing the room's sentence into your slot — which is why
                deleting it left the room blank. The cover-up and the hole were
                one bug wearing two faces.
-               `roomChromeRef` is the same map `wallChromeNow` reads for every
-               room you are NOT standing on, filled by `loadRoom` on arrival,
+               `groupChromeRef` is the same map `wallChromeNow` reads for every
+               room you are NOT standing on, filled by `loadGroup` on arrival,
                so this makes the wall you are on agree with the walls beside
                it instead of borrowing from you. Until it arrives the room is
                honestly blank — it says its own name and nothing else, rather
                than showing someone else's ambition under it. */
             atWall.kind === "group"
-            ? roomChromeRef.current.get(atWall.id) ?? {
+            ? groupChromeRef.current.get(atWall.id) ?? {
                 text: null,
                 eyebrow: atWall.name,
                 awayFrom: null,
@@ -3475,14 +3475,14 @@ function WorldExperience(): JSX.Element {
                     ? monthTag(T)
                     : null,
                 /* WHAT IS OVERHEAD, IN WORDS. The forming line counts the sky
-                   — the patterns still emerging — because that is now what is
+                   — the signals still emerging — because that is now what is
                    literally above the poster. It is time-aware too: scrub back
                    past a pattern and it reports what existed then, or says
                    nothing at all. */
                 forming: formingWords(T, proposal ? proposal.createdMs : null, emerging),
                 /* Nothing synthesized and nothing kept: the honest empty, and
                    it is the artifact's absence that says so, not a guess. */
-                empty: topOfMind === null && (captures?.length ?? 0) === 0,
+                empty: topOfMind === null && (inspirations?.length ?? 0) === 0,
                 prevText: null,
               };
             })();
@@ -3500,13 +3500,13 @@ function WorldExperience(): JSX.Element {
             { ...next, prevText: prev.text },
       );
     },
-    /* `wokenRooms` is here because a room's board arrives asynchronously into
-       `roomChromeRef`, which is a ref and so cannot itself trigger anything.
-       `loadRoom` adds the room to this set in the same breath as filling that
+    /* `wokenGroups` is here because a room's board arrives asynchronously into
+       `groupChromeRef`, which is a ref and so cannot itself trigger anything.
+       `loadGroup` adds the room to this set in the same breath as filling that
        map, so depending on it is what makes the poster appear on arrival
        rather than at whatever unrelated render happens next. `wallChromeNow`
        already depends on it for the same reason. */
-    [dial, adopted, notes, proposal, atWall, agents, emerging, topOfMind, captures, wokenRooms],
+    [dial, adopted, notes, proposal, atWall, agents, emerging, topOfMind, inspirations, wokenGroups],
   );
   /* The fallback chain's provenance: when the poster is showing an entry of
      the board rather than a room's, that entry's own citations are what led to
@@ -3519,7 +3519,7 @@ function WorldExperience(): JSX.Element {
     if (!best) for (const n of notes) if (!best || n.sortOrder < best.sortOrder) best = n;
     if (!best) return;
     const prov: Provenance = new Map();
-    /* the same two hops: entry → its patterns → the memories they were drawn
+    /* the same two hops: entry → its signals → the memories they were drawn
        from, which is what the row beneath the poster is actually made of */
     for (const c of best.citedSignals)
       for (const e of evidenceByPatternRef.current.get(c.id) ?? [])
@@ -3543,7 +3543,7 @@ function WorldExperience(): JSX.Element {
    * that went blank the moment you stepped off it would be a thing popping
    * out of existence.
    *
-   * Rooms come from the ref the fetch fills; `wokenRooms` is in the deps
+   * Rooms come from the ref the fetch fills; `wokenGroups` is in the deps
    * precisely so that this re-derives on the render where a room wakes, and
    * the read is therefore never stale.
    */
@@ -3555,7 +3555,7 @@ function WorldExperience(): JSX.Element {
         const a = (agents ?? []).find((x) => x.agent.id === w.id);
         if (a) m.set(spaceKey(w), deriveAgentChrome(a, nowMs, nowMs));
       } else if (w.kind === "group") {
-        const rc = roomChromeRef.current.get(w.id);
+        const rc = groupChromeRef.current.get(w.id);
         if (rc) m.set(spaceKey(w), rc);
       } else {
         const at = deriveAmbition(nowMs, adopted, notes);
@@ -3566,13 +3566,13 @@ function WorldExperience(): JSX.Element {
           formingAlt: null,
           asOf: null,
           forming: formingWords(nowMs, proposal ? proposal.createdMs : null, emerging),
-          empty: topOfMind === null && (captures?.length ?? 0) === 0,
+          empty: topOfMind === null && (inspirations?.length ?? 0) === 0,
           prevText: null,
         });
       }
     }
     return m;
-  }, [walls, agents, wokenRooms, dial, adopted, notes, proposal, emerging, topOfMind, captures]);
+  }, [walls, agents, wokenGroups, dial, adopted, notes, proposal, emerging, topOfMind, inspirations]);
 
   /**
    * WHAT EACH WALL'S CLAIM RESTS ON.
@@ -3587,7 +3587,7 @@ function WorldExperience(): JSX.Element {
     m.set("self:", provenance);
     for (const a of agents ?? []) {
       const prov: Provenance = new Map();
-      const byId = new Map(a.captures.map((s) => [s.id, s] as const));
+      const byId = new Map(a.inspirations.map((s) => [s.id, s] as const));
       const held = a.direction.current;
       for (const id of held?.groundedIn ?? []) {
         const s = byId.get(id);
@@ -3603,7 +3603,7 @@ function WorldExperience(): JSX.Element {
        claim rests on), applied to the material a room actually has. */
     for (const w of walls) {
       if (w.kind !== "group") continue;
-      const room = roomCacheRef.current.get(w.id);
+      const room = groupCacheRef.current.get(w.id);
       const lead = room?.data?.top?.entries?.[0];
       const prov: Provenance = new Map();
       if (lead)
@@ -3613,7 +3613,7 @@ function WorldExperience(): JSX.Element {
     }
     wallProvRef.current = m;
     simApiRef.current?.setProvenance(m);
-  }, [provenance, agents, captures, walls, wokenRooms]);
+  }, [provenance, agents, inspirations, walls, wokenGroups]);
 
   /* The field's own invariant, reachable from the console — see SimApi.audit
      for why counting it beats looking at it. Dev-gated with the page itself. */
@@ -3630,7 +3630,7 @@ function WorldExperience(): JSX.Element {
   useEffect(() => {
     const root = rootRef.current;
     const canvas = canvasRef.current;
-    if (!root || !canvas || !captures || !agents) return undefined;
+    if (!root || !canvas || !inspirations || !agents) return undefined;
     const ctx = canvas.getContext("2d");
     if (!ctx) return undefined;
 
@@ -3652,13 +3652,13 @@ function WorldExperience(): JSX.Element {
        having an agent arrive would make your own memory vanish. Anything the
        archive has already fetched back under either id wins, so a reload can
        never double it. */
-    const fetched = new Set(captures.map((s) => s.id));
+    const fetched = new Set(inspirations.map((s) => s.id));
     const kept = bornRef.current.filter(
       (s) => !fetched.has(s.id) && !(s.sigId !== undefined && fetched.has(s.sigId)),
     );
-    const patternById = new Map((patterns ?? []).map((p) => [p.id, p] as const));
+    const signalById = new Map((signals ?? []).map((p) => [p.id, p] as const));
     /* EVERY WALL'S GROUND, NOT ONLY YOURS.
-       The field held your captures and nothing else — `makeAgentBall` was
+       The field held your inspirations and nothing else — `makeAgentBall` was
        exported and never called, so an agent's memories were fetched into
        memory and then dropped, and a room's were never fetched at all. Three
        symptoms came out of that one gap: agent walls read as having signals
@@ -3670,15 +3670,15 @@ function WorldExperience(): JSX.Element {
        field does not slide sideways when you travel; what changes is which
        of these are standing on the ground in front of you. */
     const agentBalls = (agents ?? []).flatMap((a) =>
-      a.captures.map((cap) => makeAgentBall(cap)),
+      a.inspirations.map((cap) => makeAgentBall(cap)),
     );
     /* A room's ground is its members' PUBLIC memories, each still owned by
        the person who kept it — `ownerProfileId` is what the per-member hue
        will read, and it is carried from here rather than re-derived. */
-    const roomBalls = walls
+    const groupBalls = walls
       .filter((w) => w.kind === "group")
       .flatMap((w) =>
-        (roomFieldRef.current.get(w.id) ?? []).map((cap) =>
+        (groupFieldRef.current.get(w.id) ?? []).map((cap) =>
           makeAgentBall({
             id: cap.id,
             agentId: w.id,
@@ -3705,20 +3705,20 @@ function WorldExperience(): JSX.Element {
     for (const w of walls) {
       if (w.kind !== "group") continue;
       let next = 0;
-      for (const cap of roomFieldRef.current.get(w.id) ?? []) {
+      for (const cap of groupFieldRef.current.get(w.id) ?? []) {
         if (cap.ownerProfileId === viewerIdRef.current) continue;
         if (hueOf.has(cap.ownerProfileId)) continue;
         hueOf.set(cap.ownerProfileId, next++);
       }
     }
     hueByOwnerRef.current = hueOf;
-    for (const b of roomBalls) {
+    for (const b of groupBalls) {
       b.hue = b.ownerProfileId ? hueOf.get(b.ownerProfileId) ?? -1 : -1;
     }
     const list = [
-      ...captures.map((c) => makeBall(seedOf(c, citations, patternById))),
+      ...inspirations.map((c) => makeBall(seedOf(c, citations, signalById))),
       ...agentBalls,
-      ...roomBalls,
+      ...groupBalls,
       ...kept.map(bornBall),
     ].sort((a, b) => a.capturedMs - b.capturedMs);
     const byId = new Map(list.map((b) => [b.id, b] as const));
@@ -4101,7 +4101,7 @@ function WorldExperience(): JSX.Element {
     /**
      * WHICH MEMORIES THIS WALL'S CLAIM RESTS ON, and where they rise to.
      *
-     * These are the orbs that LED TO THE AMBITION — the raw captures its
+     * These are the orbs that LED TO THE AMBITION — the raw inspirations its
      * readings were grounded in — so what peeks under the poster is its
      * provenance, not merely what is newest. When the provenance is unknown
      * (nothing adopted yet, or none of its evidence is in this archive) it
@@ -4345,7 +4345,7 @@ function WorldExperience(): JSX.Element {
     };
 
     function findBall(id: string): Ball | undefined {
-      return byId.get(id) ?? roomBallsRef.current.get(id);
+      return byId.get(id) ?? groupBallsRef.current.get(id);
     }
 
     /**
@@ -4480,15 +4480,15 @@ function WorldExperience(): JSX.Element {
       if (travelActive) return;
       const w = curWall();
       if (w.kind === "group") {
-        const entry = roomCacheRef.current.get(w.id);
+        const entry = groupCacheRef.current.get(w.id);
         if (!entry || entry.status === "pending") {
           awaitingWake = true;
           return;
         }
         awaitingWake = false;
         if (entry.status === "failed" || !entry.data) return; /* React whispers it */
-        if (!roomVisitedRef.current.has(w.id)) {
-          roomVisitedRef.current.add(w.id);
+        if (!groupVisitedRef.current.has(w.id)) {
+          groupVisitedRef.current.add(w.id);
           pushWokenRef.current(w.id);
         }
       } else {
@@ -4727,9 +4727,9 @@ function WorldExperience(): JSX.Element {
       } else if (e.groupId) {
         id = `${e.groupId}:${e.signalId}`;
         /* a room column already built has the real record; never overwrite it */
-        let rb = roomBallsRef.current.get(id);
+        let rb = groupBallsRef.current.get(id);
         if (!rb) {
-          rb = makeRoomBall(
+          rb = makeGroupBall(
             {
               signalId: e.signalId,
               textPreview: e.textPreview,
@@ -4745,7 +4745,7 @@ function WorldExperience(): JSX.Element {
             viewerIdRef.current,
           );
           rb.noDate = !e.dated;
-          roomBallsRef.current.set(id, rb);
+          groupBallsRef.current.set(id, rb);
         }
         src = rb;
       } else {
@@ -5138,7 +5138,7 @@ function WorldExperience(): JSX.Element {
         perCol.set(c.col, taken + 1);
         const had = prev.get(c.id);
         if (had) {
-          /* the sky cannot exist before the captures do, so this is never a
+          /* the sky cannot exist before the inspirations do, so this is never a
              late arrival — it is a candidate whose evidence genuinely
              changed (a draft re-drafted), re-solved once. Phases are hashed
              per candidate-and-memory, so every surviving satellite keeps the
@@ -5338,7 +5338,7 @@ function WorldExperience(): JSX.Element {
       /**
        * WHAT THIS ONE WOULD JOIN IF YOU LET GO NOW.
        *
-       * Nothing on screen said that dragging two patterns together does
+       * Nothing on screen said that dragging two signals together does
        * anything — the founder could not tell it was possible, which means
        * the sky's one act of meaning-making was invisible. So the world
        * answers in the only channel it has: lift a pattern and the one it is
@@ -5360,7 +5360,7 @@ function WorldExperience(): JSX.Element {
        *
        * This is that layer, and it obeys the world's law that nothing moves
        * unless you moved it: no drift, no pulse, no demonstration playing
-       * itself. Two patterns near enough to be joined simply lean into each
+       * itself. Two signals near enough to be joined simply lean into each
        * other's light while sitting perfectly still.
        */
       for (const n of nebs) n.pairable = false;
@@ -7179,7 +7179,7 @@ function WorldExperience(): JSX.Element {
         }
       }
 
-      /* which patterns could be joined — recomputed only when the set itself
+      /* which signals could be joined — recomputed only when the set itself
          changes, so a still sky costs nothing */
       {
         let sig = "";
@@ -7205,13 +7205,13 @@ function WorldExperience(): JSX.Element {
          HORIZONTAL means "whose wall", and the dial means "when". Two
          different horizontal meanings on the same edge, and the bottom edge
          belongs to the axis. There is also nothing up here to wind: the sky
-         holds patterns that are still forming and headquarters holds one
+         holds signals that are still forming and headquarters holds one
          sentence, neither of which has a history to scrub. So it comes up
          with the field and goes away with it. */
       const inField = camY > world.fieldTop * 0.5;
       /* THE LEGEND BELONGS TO THE GROUND IT EXPLAINS.
          It is a key to the orbs, so it exists where the orbs are. Standing at
-         headquarters reading one sentence, or up in the sky among patterns,
+         headquarters reading one sentence, or up in the sky among signals,
          a list of whose-colour-is-whose answers a question nobody is asking —
          it was just chrome in the corner. It comes up with the field and goes
          away with it, exactly as the timeline does. */
@@ -7739,9 +7739,9 @@ function WorldExperience(): JSX.Element {
         }
         /* travel toward a room begins at swipe start: fetch it now */
         if (off > 20 && hasNext && groupsRef.current[col])
-          loadRoomRef.current(groupsRef.current[col].id);
+          loadGroupRef.current(groupsRef.current[col].id);
         else if (off < -20 && col - 1 > 0 && groupsRef.current[col - 2])
-          loadRoomRef.current(groupsRef.current[col - 2].id);
+          loadGroupRef.current(groupsRef.current[col - 2].id);
         lastT = nowT;
         wake();
         return;
@@ -8387,7 +8387,7 @@ function WorldExperience(): JSX.Element {
        *
        * Every function that works by dragging needs a route that does not
        * require dragging — a hard accessibility requirement, and combining
-       * two patterns was the one drag-only act in this world. Travel and the
+       * two signals was the one drag-only act in this world. Travel and the
        * descent already have arrow keys; this is the gesture that had nothing.
        *
        * It is also the discoverability fix in disguise. The word only appears
@@ -8588,11 +8588,11 @@ function WorldExperience(): JSX.Element {
       simApiRef.current = null;
       ballsRef.current = null;
       /* room orbs belong to this run of the loop; the DATA cache stays */
-      roomBallsRef.current.clear();
+      groupBallsRef.current.clear();
     };
     /* The field is what you kept AND what your agents kept, so the loop waits
        for both before it builds anything — one pour, never a second one. */
-  }, [captures, agents, walls, roomFieldTick]);
+  }, [inspirations, agents, walls, groupFieldTick]);
 
   /* ---------------- dial scrubbing (writes refs, not state) ---------------- */
 
@@ -8685,8 +8685,8 @@ function WorldExperience(): JSX.Element {
     /* A room orb that belongs to another member: the 180ch preview/quote is
        the WHOLE panel — the full text of someone else's save is not ours to
        fetch, so nothing is missing and nothing loads. One appearance. */
-    const roomBall = roomBallsRef.current.get(selectedId);
-    if (roomBall && !roomBall.own) {
+    const groupBall = groupBallsRef.current.get(selectedId);
+    if (groupBall && !groupBall.own) {
       setPanel({ id: selectedId, detail: null, partial: false });
       setPanelOpen(true);
       return undefined;
@@ -8713,7 +8713,7 @@ function WorldExperience(): JSX.Element {
     }
     /* the viewer's OWN save seen in a room fetches by its real signal id —
        and so does one kept here, whose ball keeps the id it was born under */
-    const fetchId = roomBall?.sigId ?? ownBall?.sigId ?? selectedId;
+    const fetchId = groupBall?.sigId ?? ownBall?.sigId ?? selectedId;
     /* Already in hand (the background sweep, or the warm-up fired on
        pointerdown): the panel appears in the same commit as the selection —
        no wait at all, and still one single appearance. */
@@ -8808,7 +8808,7 @@ function WorldExperience(): JSX.Element {
    */
   const legend = useMemo<Array<{ id: string; name: string; hue: number; agent: boolean }>>(() => {
     if (atWall.kind !== "group") return [];
-    const caps = roomFieldRef.current.get(atWall.id) ?? [];
+    const caps = groupFieldRef.current.get(atWall.id) ?? [];
     const seen = new Map<string, { id: string; name: string; hue: number; agent: boolean }>();
     for (const c of caps) {
       if (seen.has(c.ownerProfileId)) continue;
@@ -8823,7 +8823,7 @@ function WorldExperience(): JSX.Element {
     /* one owner is not a legend, it is a label nobody asked for */
     if (rows.length < 2) return [];
     return rows.sort((a, b) => (a.hue < 0 ? -1 : b.hue < 0 ? 1 : a.hue - b.hue));
-  }, [atWall, roomFieldTick, wokenRooms]);
+  }, [atWall, groupFieldTick, wokenGroups]);
   /**
    * WHAT THE POSTER RESTS ON — THE SAME QUESTION, ONE LAYER UP.
    *
@@ -8833,10 +8833,10 @@ function WorldExperience(): JSX.Element {
    * pattern in the sky but not the sentence the whole wall is built around,
    * which is exactly backwards.
    *
-   * The chain runs entry → the patterns it cites → the memories those
-   * patterns were read from. Deduplicated by memory, because the interesting
+   * The chain runs entry → the signals it cites → the memories those
+   * signals were read from. Deduplicated by memory, because the interesting
    * fact is "four memories produced this", not "one memory was counted twice
-   * through two patterns"; the first quote wins, since that is the span the
+   * through two signals"; the first quote wins, since that is the span the
    * first citing pattern actually read.
    *
    * An agent's wall answers the same question from its own stack: its board
@@ -8847,7 +8847,7 @@ function WorldExperience(): JSX.Element {
     const seen = new Set<string>();
     if (atWall.kind === "agent") {
       const a = (agents ?? []).find((x) => x.agent.id === atWall.id);
-      const byId = new Map((a?.captures ?? []).map((cap) => [cap.id, cap] as const));
+      const byId = new Map((a?.inspirations ?? []).map((cap) => [cap.id, cap] as const));
       for (const id of a?.direction.current?.groundedIn ?? []) {
         const cap = byId.get(id);
         if (!cap || seen.has(id)) continue;
@@ -8872,7 +8872,7 @@ function WorldExperience(): JSX.Element {
          boundary rendered as a shorter chain, not a missing feature: a room
          that could show you the memories behind someone else's statement
          would be breaking the promise the share note makes. */
-      const room = roomCacheRef.current.get(atWall.id);
+      const room = groupCacheRef.current.get(atWall.id);
       const lead = room?.data?.top?.entries?.[0];
       if (!lead) return out;
       for (const ev of room?.data?.evidence ?? []) {
@@ -8901,7 +8901,7 @@ function WorldExperience(): JSX.Element {
         out.push(e);
       }
     return out;
-  }, [atWall, agents, notes, provTick, wokenRooms]);
+  }, [atWall, agents, notes, provTick, wokenGroups]);
 
   /**
    * The evidence under a pattern. Candidates are a union — a server pattern, a
@@ -9002,14 +9002,14 @@ function WorldExperience(): JSX.Element {
         originIds: [],
       });
     }
-    /* THE SKY IS LAYER 2 — the patterns still forming.
+    /* THE SKY IS LAYER 2 — the signals still forming.
        A pattern that is `active` is what headquarters already stands on and a
        `retired` one has sunk; what is overhead is what is EMERGING: something
        the archive is saying about this person that has not become what they
        hold yet. Each one's satellites are the memories it cites, resolved
        against the field in hand — an id with nothing behind it is skipped,
        never invented, so every satellite stands for a memory that exists. */
-    for (const p of patterns ?? []) {
+    for (const p of signals ?? []) {
       if (p.status !== "emerging") continue;
       const evidence = new Map<string, EvidenceRef>();
       for (const e of evidenceByPatternRef.current.get(p.id) ?? []) {
@@ -9083,7 +9083,7 @@ function WorldExperience(): JSX.Element {
     for (const a of agents ?? []) {
       const col = walls.find((w) => w.kind === "agent" && w.id === a.agent.id)?.col;
       if (col === undefined) continue;
-      const byId = new Map(a.captures.map((s) => [s.id, s] as const));
+      const byId = new Map(a.inspirations.map((s) => [s.id, s] as const));
       for (const n of a.topOfMind.notes) {
         if (!n.isProvisional) continue;
         const evidence: EvidenceRef[] = [];
@@ -9119,14 +9119,14 @@ function WorldExperience(): JSX.Element {
       }
     }
     return [...out, ...drafts];
-  /* `patterns` for your own sky, `groups` and `wokenRooms` for a room's — the
+  /* `signals` for your own sky, `groups` and `wokenGroups` for a room's — the
      shared statements arrive with the wall's wake, so the memo has to re-run
      on it or a room's sky stays empty until something else moves */
-  }, [proposal, notes, drafts, signalById, agents, walls, patterns, groups, wokenRooms]);
+  }, [proposal, notes, drafts, signalById, agents, walls, signals, groups, wokenGroups]);
 
   useEffect(() => {
     simApiRef.current?.syncSky(candidates);
-  }, [candidates, captures]);
+  }, [candidates, inspirations]);
 
   const byCandidateId = useMemo(() => {
     const m = new Map<string, Candidate>();
@@ -9262,7 +9262,7 @@ function WorldExperience(): JSX.Element {
        than it looked: the server fetches that page at capture time and feeds
        what it reads to pattern extraction. Left as bare text the extraction
        never sees the page, so the archive quietly learns less from exactly the
-       captures that carry the most — and nothing on screen says so. */
+       inspirations that carry the most — and nothing on screen says so. */
     const links = Array.from(new Set(text.match(/https?:\/\/[^\s<>"')]+/g) ?? []));
     const atMs = Date.now();
     const seed: BornSeed = {
@@ -9277,7 +9277,7 @@ function WorldExperience(): JSX.Element {
          distillation is a background pass on the server, so a memory a second
          old is genuinely uncited and is drawn that way. */
       cited: false,
-      inRoom: false,
+      inGroup: false,
       terms: [],
     };
     bornRef.current = [...bornRef.current, seed];
@@ -9314,15 +9314,15 @@ function WorldExperience(): JSX.Element {
         simApiRef.current?.identify(seed.id, made.id);
         /* AND IT JOINS THE ARCHIVE, NOT ONLY THE GROUND.
            The orb was born on the canvas and the row was written on the
-           server, and `captures` — the list every other part of the page
+           server, and `inspirations` — the list every other part of the page
            reads — was told about neither. So headquarters kept computing
-           `empty` as `topOfMind === null && captures.length === 0` and kept
+           `empty` as `topOfMind === null && inspirations.length === 0` and kept
            drawing the three-slot first-run scaffold, including the row
            labelled "everything you keep" with an empty circle beside it,
            while the thing just kept glowed underneath it.
            `forgetIt` and `togglePublic` already keep this list honest on
            their own success; keeping does now too. */
-        setCaptures((prev) =>
+        setInspirations((prev) =>
           prev
             ? [
                 ...prev,
@@ -9423,12 +9423,12 @@ function WorldExperience(): JSX.Element {
   }, [mouthOpen]);
 
   const panelBall = panelId
-    ? ballsRef.current?.byId.get(panelId) ?? roomBallsRef.current.get(panelId) ?? null
+    ? ballsRef.current?.byId.get(panelId) ?? groupBallsRef.current.get(panelId) ?? null
     : null;
   /** A room orb's panel: whisper attribution, cited-by, and — for another
       member's save — no reflect action at all. */
-  const panelIsRoom = panelBall !== null && panelBall.col !== undefined;
-  const panelCanReflect = !panelIsRoom || panelBall?.own === true;
+  const panelIsGroup = panelBall !== null && panelBall.col !== undefined;
+  const panelCanReflect = !panelIsGroup || panelBall?.own === true;
 
   /* ---------------- reflect ----------------
      The panel is the memory and ONE action. Reflecting happens here rather
@@ -9486,7 +9486,7 @@ function WorldExperience(): JSX.Element {
     if (offlineRef.current) return;
     deleteSignal(id)
       .then(() => {
-        setPatterns((prev) => (prev ? prev.filter((p) => p.id !== id) : prev));
+        setSignals((prev) => (prev ? prev.filter((p) => p.id !== id) : prev));
       })
       .catch(() => {
         setVerdicts((prev) => {
@@ -9531,12 +9531,12 @@ function WorldExperience(): JSX.Element {
    *
    * Per-signal, per-room, and reversible. The statement appears on that
    * room's wall with your name on it; the memories it rests on stay here.
-   * Members see the pattern, never the captures.
+   * Members see the pattern, never the inspirations.
    */
   const shareTo = useCallback((signalId: string, groupId: string, on: boolean) => {
     /* only on the way out — taking a statement back is not an announcement */
     if (on) simApiRef.current?.acknowledge("shared");
-    setPatterns((prev) =>
+    setSignals((prev) =>
       prev
         ? prev.map((p) =>
             p.id === signalId
@@ -9554,7 +9554,7 @@ function WorldExperience(): JSX.Element {
     const call = on ? shareSignal(signalId, groupId) : unshareSignal(signalId, groupId);
     call.catch(() => {
       /* it did not land, so the pattern must not claim it is out loud */
-      setPatterns((prev) =>
+      setSignals((prev) =>
         prev
           ? prev.map((p) =>
               p.id === signalId
@@ -9572,27 +9572,27 @@ function WorldExperience(): JSX.Element {
   }, []);
 
   /** Making a room, joining one, and the state of asking about either. */
-  const [roomForm, setRoomForm] = useState<{
+  const [groupForm, setGroupForm] = useState<{
     mode: "make" | "join";
     text: string;
     busy: boolean;
     error: string | null;
   } | null>(null);
 
-  const submitRoom = useCallback(() => {
-    if (!roomForm || roomForm.busy) return;
-    const text = roomForm.text.trim();
+  const submitGroup = useCallback(() => {
+    if (!groupForm || groupForm.busy) return;
+    const text = groupForm.text.trim();
     if (text === "") return;
-    setRoomForm({ ...roomForm, busy: true, error: null });
+    setGroupForm({ ...groupForm, busy: true, error: null });
     const landed = (g: ApiGroupSummary) => {
       /* newest room first, which is where the axis puts it: a new column
          appears to the right and the traveller can walk to it immediately */
       setGroups((prev) => [g, ...prev.filter((x) => x.id !== g.id)]);
-      setRoomForm(null);
+      setGroupForm(null);
     };
     const failed = (m: string) =>
-      setRoomForm((f) => (f ? { ...f, busy: false, error: m } : f));
-    if (roomForm.mode === "make") {
+      setGroupForm((f) => (f ? { ...f, busy: false, error: m } : f));
+    if (groupForm.mode === "make") {
       createGroup(text)
         .then(landed)
         .catch(() => failed("That room could not be made. Try another name."));
@@ -9604,7 +9604,7 @@ function WorldExperience(): JSX.Element {
         .then((r) => landed(r.group))
         .catch(() => failed("No room answered to that. Check the link."));
     }
-  }, [roomForm]);
+  }, [groupForm]);
 
   /**
    * WHO IS IN HERE — and it is the same act as inviting.
@@ -9634,8 +9634,8 @@ function WorldExperience(): JSX.Element {
    * counting yourself would mean no room could ever read as a machine's. What
    * decides a room's character is who ELSE is standing in it.
    */
-  const machineRoomsRef = useRef<Set<string>>(new Set());
-  const machineRooms = useMemo(() => {
+  const machineGroupsRef = useRef<Set<string>>(new Set());
+  const machineGroups = useMemo(() => {
     const out = new Set<string>();
     for (const [groupId, list] of members) {
       const others = list.filter((m) => m.profileId !== viewerIdRef.current);
@@ -9643,8 +9643,8 @@ function WorldExperience(): JSX.Element {
     }
     return out;
   }, [members]);
-  machineRoomsRef.current = machineRooms;
-  const [roomPanel, setRoomPanel] = useState<string | null>(null);
+  machineGroupsRef.current = machineGroups;
+  const [groupPanel, setGroupPanel] = useState<string | null>(null);
 
   /**
    * THIS SPACE'S SETTINGS — keyed by the space, opened from its name.
@@ -9704,7 +9704,7 @@ function WorldExperience(): JSX.Element {
           setPropose(null);
           /* the room's forming line will report that something is on its way;
              nothing is claimed as agreed until the room says so */
-          roomCacheRef.current.delete(groupId);
+          groupCacheRef.current.delete(groupId);
         })
         .catch(() => setPropose((p) => (p ? { ...p, busy: false } : p)));
     },
@@ -9751,7 +9751,7 @@ function WorldExperience(): JSX.Element {
       .then(() => {
         /* the room's own board may have moved; it is refetched rather than
            guessed, because what a group believes is not ours to assume */
-        roomCacheRef.current.delete(groupId);
+        groupCacheRef.current.delete(groupId);
         simApiRef.current?.wake();
       })
       .catch(() => undefined);
@@ -9759,11 +9759,11 @@ function WorldExperience(): JSX.Element {
 
   /** Leaving is destructive and irreversible, so it asks once, in words. */
   const [leaving, setLeaving] = useState<string | null>(null);
-  const leaveRoom = useCallback((groupId: string) => {
+  const leaveThisGroup = useCallback((groupId: string) => {
     leaveGroup(groupId)
       .then(() => {
         setGroups((prev) => prev.filter((g) => g.id !== groupId));
-        setRoomPanel(null);
+        setGroupPanel(null);
         setLeaving(null);
         simApiRef.current?.travel(-1);
       })
@@ -9785,7 +9785,7 @@ function WorldExperience(): JSX.Element {
    * not go out until the database has agreed, which is the same rule the
    * memory panel's delete already follows.
    */
-  const renameRoom = useCallback((groupId: string, name: string) => {
+  const renameThisGroup = useCallback((groupId: string, name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
     setRenaming((cur) => (cur ? { ...cur, busy: true } : cur));
@@ -9797,7 +9797,7 @@ function WorldExperience(): JSX.Element {
       .catch(() => setRenaming((cur) => (cur ? { ...cur, busy: false } : cur)));
   }, []);
 
-  const closeRoom = useCallback((groupId: string) => {
+  const closeThisGroup = useCallback((groupId: string) => {
     deleteGroup(groupId)
       .then(() => {
         setGroups((prev) => prev.filter((g) => g.id !== groupId));
@@ -9854,7 +9854,7 @@ function WorldExperience(): JSX.Element {
             agent: { id: p.id, name: p.name, kind: "agent" as const, createdAt: "" },
             direction: { current: null, history: [] },
             topOfMind: { notes: [] },
-            captures: [],
+            inspirations: [],
           },
         ]);
         setAgentName(null);
@@ -10040,7 +10040,7 @@ function WorldExperience(): JSX.Element {
     if (edit.kind === "memory") {
       updateInspiration(edit.id, { text })
         .then(() => {
-          setCaptures((prev) =>
+          setInspirations((prev) =>
             prev ? prev.map((c) => (c.id === edit.id ? { ...c, preview: text } : c)) : prev,
           );
           detailsRef.current.delete(edit.id);
@@ -10051,7 +10051,7 @@ function WorldExperience(): JSX.Element {
     } else if (edit.kind === "pattern") {
       updateSignal(edit.id, { statement: text })
         .then(() => {
-          setPatterns((prev) =>
+          setSignals((prev) =>
             prev ? prev.map((p) => (p.id === edit.id ? { ...p, statement: text, locked: true } : p)) : prev,
           );
           done();
@@ -10094,7 +10094,7 @@ function WorldExperience(): JSX.Element {
      copy carries it, so the word is right from the first frame it is shown */
   const panelIsPublic =
     panel?.detail?.isPublic ??
-    (captures ?? []).find((c) => c.id === (panelBall?.sigId ?? panelId))?.isPublic ??
+    (inspirations ?? []).find((c) => c.id === (panelBall?.sigId ?? panelId))?.isPublic ??
     false;
   const [publishing, setPublishing] = useState(false);
   const togglePublic = useCallback(() => {
@@ -10104,7 +10104,7 @@ function WorldExperience(): JSX.Element {
     setPublishing(true);
     updateInspiration(id, { visibility: next })
       .then(() => {
-        setCaptures((cur) =>
+        setInspirations((cur) =>
           (cur ?? []).map((c) => (c.id === id ? { ...c, isPublic: next === "public" } : c)),
         );
         /* it went out to people, or it came home */
@@ -10134,7 +10134,7 @@ function WorldExperience(): JSX.Element {
         setSelectedId(null);
         simApiRef.current?.unborn(id);
         bornRef.current = bornRef.current.filter((s) => s.id !== id && s.sigId !== serverId);
-        setCaptures((prev) =>
+        setInspirations((prev) =>
           prev ? prev.filter((c) => c.id !== id && c.id !== serverId) : prev,
         );
         setForget({ id: null, step: "rest" });
@@ -10251,7 +10251,7 @@ function WorldExperience(): JSX.Element {
             /* the wall you are standing on is the one the dial winds; every
                other wall shows what it holds NOW */
             const c = here ? chrome : wallChromeNow.get(key) ?? null;
-            const ready = w.kind !== "group" || wokenRooms.has(w.id);
+            const ready = w.kind !== "group" || wokenGroups.has(w.id);
             return (
               <div
                 key={key}
@@ -10260,7 +10260,7 @@ function WorldExperience(): JSX.Element {
                    typography and the body must never disagree about what
                    kind of mind you are standing in */
                 data-kind={
-                  w.kind === "group" && machineRooms.has(w.id) ? "agent" : w.kind
+                  w.kind === "group" && machineGroups.has(w.id) ? "agent" : w.kind
                 }
                 style={{ left: `calc(var(--jar-vw, 100vw) * ${w.col})` }}
               >
@@ -10441,7 +10441,7 @@ function WorldExperience(): JSX.Element {
                                 previews the consequence at the moment of the
                                 vote, and that is the whole difference in how
                                 fair the two feel. Regeneration rewrites the
-                                board from the patterns as they now stand, so
+                                board from the signals as they now stand, so
                                 the sentence names exactly that. */}
                             <span className="jar-board-warn">
                               Reading everything again. What it says may change.
@@ -10530,7 +10530,7 @@ function WorldExperience(): JSX.Element {
                   <p className="jar-sky-empty jar-label">
                     {w.kind === "agent"
                       ? "Nothing forming yet"
-                      : (captures?.length ?? 0) === 0
+                      : (inspirations?.length ?? 0) === 0
                         ? "Nothing is forming yet"
                         : "Patterns come from what repeats — nothing has, yet"}
                   </p>
@@ -10590,7 +10590,7 @@ function WorldExperience(): JSX.Element {
                     </p>
                   )
                 ) : null}
-                {w.kind === "group" && failedRooms.has(w.id) && !ready ? (
+                {w.kind === "group" && failedGroups.has(w.id) && !ready ? (
                   <p className="jar-wall-hold jar-label">Couldn’t reach this room</p>
                 ) : null}
                 {/* THE EDGE OF THE WORLD, AND WHAT IS BEYOND IT.
@@ -10619,7 +10619,7 @@ function WorldExperience(): JSX.Element {
                       className="jar-edge jar-edge--r jar-label"
                       data-jar-chrome="1"
                       onClick={() =>
-                        setRoomForm({ mode: "make", text: "", busy: false, error: null })
+                        setGroupForm({ mode: "make", text: "", busy: false, error: null })
                       }
                     >
                       Make a room
@@ -10876,7 +10876,7 @@ function WorldExperience(): JSX.Element {
                 {atWall.kind === "self" && groups.length > 0 ? (
                   <>
                     <button type="button" onClick={() => setSharing(sharing === c.id ? null : c.id)}>
-                      {(patterns ?? []).find((p) => p.id === c.id)?.sharedGroupIds.length
+                      {(signals ?? []).find((p) => p.id === c.id)?.sharedGroupIds.length
                         ? "out loud in"
                         : "say out loud"}
                     </button>
@@ -10933,7 +10933,7 @@ function WorldExperience(): JSX.Element {
             {sharing === c.id ? (
               <div className="jar-share">
                 {groups.map((g) => {
-                  const on = (patterns ?? []).find((p) => p.id === c.id)?.sharedGroupIds.includes(g.id) ?? false;
+                  const on = (signals ?? []).find((p) => p.id === c.id)?.sharedGroupIds.includes(g.id) ?? false;
                   return (
                     <button
                       key={g.id}
@@ -11010,7 +11010,7 @@ function WorldExperience(): JSX.Element {
           role="dialog"
           aria-label="a saved inspiration"
         >
-          {panelIsRoom ? (
+          {panelIsGroup ? (
             /* whisper attribution: whose save this is, and when — where the
                evidence named no date of its own, who alone. Leaving a fact
                out is honest; guessing at it is not. */
@@ -11035,7 +11035,7 @@ function WorldExperience(): JSX.Element {
           {panel.partial ? (
             <p className="jar-panel-note">Couldn’t load the rest.</p>
           ) : null}
-          {panelIsRoom && panelBall.citedBy && panelBall.citedBy.length > 0 ? (
+          {panelIsGroup && panelBall.citedBy && panelBall.citedBy.length > 0 ? (
             /* the collapsed links sentence, adapted: what read this save */
             <p className="jar-panel-cited jar-label">{citedWords(panelBall.citedBy)}</p>
           ) : null}
@@ -11050,7 +11050,7 @@ function WorldExperience(): JSX.Element {
               Three answers, no deletion: removing it would be editing
               someone else's mind, and the room's own board moves by proposal
               and affirmation instead (founder ruling). */}
-          {panelIsRoom && !panelBall.own && panelBall.sigId ? (
+          {panelIsGroup && !panelBall.own && panelBall.sigId ? (
             /* keyed by the SIGNAL's id, which is what the feedback was filed
                against — the ball's own id is namespaced per room and would
                read back empty every time */
@@ -11145,9 +11145,9 @@ function WorldExperience(): JSX.Element {
               It asks once, in place, because there is no undo behind it. */}
           {/* EDITING THE MEMORY ITSELF — the last thing the archive could do
               that this world could not. Editing a capture re-derives the
-              patterns resting on it, which is why it belongs here beside the
+              signals resting on it, which is why it belongs here beside the
               words rather than on a settings screen somewhere. */}
-          {panelCanReflect && !panelIsRoom && edit?.id === panelId ? (
+          {panelCanReflect && !panelIsGroup && edit?.id === panelId ? (
             <div className="jar-reflect">
               <textarea
                 className="jar-reflect-box"
@@ -11187,7 +11187,7 @@ function WorldExperience(): JSX.Element {
               <button type="button" onClick={askToReflect}>
                 reflect on this
               </button>
-              {!panelIsRoom ? (
+              {!panelIsGroup ? (
                 <>
                   <span aria-hidden="true"> · </span>
                   <button type="button" onClick={() => setMore(true)}>
@@ -11197,7 +11197,7 @@ function WorldExperience(): JSX.Element {
               ) : null}
             </p>
           ) : null}
-          {panelCanReflect && !panelIsRoom && reflect.step === "rest" && !edit && more ? (
+          {panelCanReflect && !panelIsGroup && reflect.step === "rest" && !edit && more ? (
             <p className="jar-neb-ask jar-neb-ask--after">
               <button
                 type="button"
@@ -11216,7 +11216,7 @@ function WorldExperience(): JSX.Element {
               {/* THE PICTURE GOES INSIDE THE GLASS. A memory that carries an
                   image is drawn with it, which is the thing this world was
                   first sketched around — and the server reads the picture at
-                  capture time, so it feeds the patterns too. */}
+                  capture time, so it feeds the signals too. */}
               <label className="jar-attach">
                 {attaching ? "keeping the picture…" : "add a picture"}
                 <input
@@ -11536,20 +11536,20 @@ function WorldExperience(): JSX.Element {
           reachable by keyboard, and none of that survives being painted into
           the world. So it is DOM, it sits over the world rather than inside
           it, and the world holds perfectly still behind it. */}
-      {roomForm ? (
+      {groupForm ? (
         <div className="jar-roomform" data-jar-chrome="1">
           <div className="jar-roomform-tabs jar-label">
             <button
               type="button"
-              className={roomForm.mode === "make" ? "is-on" : undefined}
-              onClick={() => setRoomForm({ ...roomForm, mode: "make", error: null })}
+              className={groupForm.mode === "make" ? "is-on" : undefined}
+              onClick={() => setGroupForm({ ...groupForm, mode: "make", error: null })}
             >
               Make a room
             </button>
             <button
               type="button"
-              className={roomForm.mode === "join" ? "is-on" : undefined}
-              onClick={() => setRoomForm({ ...roomForm, mode: "join", error: null })}
+              className={groupForm.mode === "join" ? "is-on" : undefined}
+              onClick={() => setGroupForm({ ...groupForm, mode: "join", error: null })}
             >
               Join with a link
             </button>
@@ -11557,21 +11557,21 @@ function WorldExperience(): JSX.Element {
           <input
             className="jar-roomform-box"
             autoFocus
-            value={roomForm.text}
-            placeholder={roomForm.mode === "make" ? "What is it about?" : "Paste the link"}
-            onChange={(e) => setRoomForm({ ...roomForm, text: e.target.value })}
+            value={groupForm.text}
+            placeholder={groupForm.mode === "make" ? "What is it about?" : "Paste the link"}
+            onChange={(e) => setGroupForm({ ...groupForm, text: e.target.value })}
             onKeyDown={(e) => {
-              if (e.key === "Enter") submitRoom();
-              if (e.key === "Escape") setRoomForm(null);
+              if (e.key === "Enter") submitGroup();
+              if (e.key === "Escape") setGroupForm(null);
             }}
           />
-          {roomForm.error ? <p className="jar-roomform-err">{roomForm.error}</p> : null}
+          {groupForm.error ? <p className="jar-roomform-err">{groupForm.error}</p> : null}
           <p className="jar-neb-ask">
-            <button type="button" onClick={submitRoom} disabled={roomForm.busy}>
-              {roomForm.busy ? "…" : roomForm.mode === "make" ? "make it" : "go in"}
+            <button type="button" onClick={submitGroup} disabled={groupForm.busy}>
+              {groupForm.busy ? "…" : groupForm.mode === "make" ? "make it" : "go in"}
             </button>
             <span aria-hidden="true"> · </span>
-            <button type="button" onClick={() => setRoomForm(null)}>
+            <button type="button" onClick={() => setGroupForm(null)}>
               not now
             </button>
           </p>
@@ -11598,13 +11598,13 @@ function WorldExperience(): JSX.Element {
       {/* THE ROOM, OPENED. Who is in it, how to bring somebody, what you can
           put to them, and the way out — one surface, because they are all the
           same question: who is this with and what do we say together. */}
-      {roomPanel && atWall.kind === "group" && atWall.id === roomPanel ? (
+      {groupPanel && atWall.kind === "group" && atWall.id === groupPanel ? (
         <div className="jar-roomform" data-jar-chrome="1">
           <div className="jar-label" style={{ marginBottom: 14 }}>
             {atWall.name}
           </div>
           <div className="jar-share">
-            {(members.get(roomPanel) ?? []).map((m) => (
+            {(members.get(groupPanel) ?? []).map((m) => (
               <span key={m.profileId} className="jar-share-row">
                 {m.name}
                 {m.role === "owner" ? <span className="jar-share-hint">made it</span> : null}
@@ -11615,18 +11615,18 @@ function WorldExperience(): JSX.Element {
             <button
               type="button"
               onClick={() => {
-                const g = groups.find((x) => x.id === roomPanel);
+                const g = groups.find((x) => x.id === groupPanel);
                 if (g) copyInvite(g);
               }}
             >
-              {copied === roomPanel ? "link copied" : "copy the invite link"}
+              {copied === groupPanel ? "link copied" : "copy the invite link"}
             </button>
           </p>
 
           {/* WHAT IS BEING ASKED OF THIS ROOM. Each one is somebody's sentence
               waiting on the rest of you — read it, say yes or say no, and the
               board moves when the room agrees rather than when you press. */}
-          {(openProposals.get(roomPanel) ?? []).map((p) => (
+          {(openProposals.get(groupPanel) ?? []).map((p) => (
             <div key={p.id} className="jar-proposal">
               <p className="jar-proposal-body">{p.body}</p>
               {/* THE WHOLE ROOM, NOT THE PART THAT AGREED.
@@ -11641,7 +11641,7 @@ function WorldExperience(): JSX.Element {
                   which is the only way this world is allowed to say a number —
                   and you can see at a glance whether the missing one is you. */}
               <p className="jar-proposal-who jar-label">
-                {(members.get(roomPanel) ?? []).map((m, i) => {
+                {(members.get(groupPanel) ?? []).map((m, i) => {
                   const said = p.affirmations.some((a) => a.profileId === m.profileId);
                   return (
                     <span
@@ -11661,11 +11661,11 @@ function WorldExperience(): JSX.Element {
                 </p>
               ) : (
                 <p className="jar-neb-ask">
-                  <button type="button" onClick={() => answerProposal(roomPanel, p.id, true)}>
+                  <button type="button" onClick={() => answerProposal(groupPanel, p.id, true)}>
                     yes, that is us
                   </button>
                   <span aria-hidden="true"> · </span>
-                  <button type="button" onClick={() => answerProposal(roomPanel, p.id, false)}>
+                  <button type="button" onClick={() => answerProposal(groupPanel, p.id, false)}>
                     not us
                   </button>
                 </p>
@@ -11687,7 +11687,7 @@ function WorldExperience(): JSX.Element {
                 onChange={(e) => setPropose({ ...propose, text: e.target.value })}
               />
               <p className="jar-neb-ask">
-                <button type="button" disabled={propose.busy} onClick={() => sendProposal(roomPanel)}>
+                <button type="button" disabled={propose.busy} onClick={() => sendProposal(groupPanel)}>
                   {propose.busy ? "…" : "put it to them"}
                 </button>
                 <span aria-hidden="true"> · </span>
@@ -11705,9 +11705,9 @@ function WorldExperience(): JSX.Element {
           )}
 
           <p className="jar-neb-ask jar-neb-ask--after">
-            {leaving === roomPanel ? (
+            {leaving === groupPanel ? (
               <>
-                <button type="button" onClick={() => leaveRoom(roomPanel)}>
+                <button type="button" onClick={() => leaveThisGroup(groupPanel)}>
                   leave — your statements come down
                 </button>
                 <span aria-hidden="true"> · </span>
@@ -11716,13 +11716,13 @@ function WorldExperience(): JSX.Element {
                 </button>
               </>
             ) : (
-              <button type="button" onClick={() => setLeaving(roomPanel)}>
+              <button type="button" onClick={() => setLeaving(groupPanel)}>
                 leave this room
               </button>
             )}
           </p>
           <p className="jar-neb-ask" style={{ marginTop: 10 }}>
-            <button type="button" onClick={() => setRoomPanel(null)}>
+            <button type="button" onClick={() => setGroupPanel(null)}>
               close
             </button>
           </p>
@@ -11817,7 +11817,7 @@ function WorldExperience(): JSX.Element {
                       className="jar-settings-rename"
                       onSubmit={(e) => {
                         e.preventDefault();
-                        renameRoom(gid, renaming.text);
+                        renameThisGroup(gid, renaming.text);
                       }}
                     >
                       <input
@@ -11911,7 +11911,7 @@ function WorldExperience(): JSX.Element {
                   <p className="jar-neb-ask jar-neb-ask--after">
                     {leaving === gid ? (
                       <>
-                        <button type="button" onClick={() => leaveRoom(gid)}>
+                        <button type="button" onClick={() => leaveThisGroup(gid)}>
                           leave — your statements come down
                         </button>
                         <span aria-hidden="true"> · </span>
@@ -11933,7 +11933,7 @@ function WorldExperience(): JSX.Element {
                           <button
                             type="button"
                             className="jar-settings-danger"
-                            onClick={() => closeRoom(gid)}
+                            onClick={() => closeThisGroup(gid)}
                           >
                             close it for everyone — what the room decided goes too
                           </button>

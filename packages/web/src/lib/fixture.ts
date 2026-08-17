@@ -40,7 +40,7 @@ export function showsDebug(): boolean {
  *   GET /api/agents                  → ApiAgentSummary[]
  *   GET /api/agents/:id/direction    → ApiAgentDirection   (current + history[])
  *   GET /api/agents/:id/top-of-mind  → ApiAgentTopOfMind   (its sky)
- *   GET /api/agents/:id/captures      → ApiAgentSignal[]    (origin, producedBy)
+ *   GET /api/agents/:id/inspirations      → ApiAgentSignal[]    (origin, producedBy)
  *
  * Set this to false and every agent wall disappears, along with the lens (which
  * has only one origin left to show) — the page is exactly what it was.
@@ -128,7 +128,7 @@ export interface AgentBundle {
   agent: ApiAgentSummary;
   direction: ApiAgentDirection;
   topOfMind: ApiAgentTopOfMind;
-  captures: ApiAgentSignal[];
+  inspirations: ApiAgentSignal[];
 }
 
 export const daysAgo = (d: number): string => new Date(Date.now() - d * DAY_MS).toISOString();
@@ -232,7 +232,7 @@ export const MOCK_AGENT_BUNDLES: AgentBundle[] = [
         },
       ],
     },
-    captures: [
+    inspirations: [
       mockSignal(
         "ouroboros-maintainer",
         1,
@@ -397,7 +397,7 @@ export const MOCK_AGENT_BUNDLES: AgentBundle[] = [
         },
       ],
     },
-    captures: [
+    inspirations: [
       mockSignal(
         "course-marketing",
         1,
@@ -522,10 +522,10 @@ import type { Inspiration, Signal, Evidence, Entry } from "./data";
 /** Everything the world is built from, when it is built from nothing. */
 export interface OfflineWorld {
   /** The ground: the field is made of these, and of nothing else. */
-  captures: Inspiration[];
-  /** The sky: patterns still forming, each citing memories that exist. */
-  patterns: Signal[];
-  /** Which patterns rest on which memory — the field reads its meaning here. */
+  inspirations: Inspiration[];
+  /** The sky: signals still forming, each citing memories that exist. */
+  signals: Signal[];
+  /** Which signals rest on which memory — the field reads its meaning here. */
   citations: Map<string, Evidence[]>;
   /** The board headquarters stands on. */
   notes: Entry[];
@@ -548,7 +548,7 @@ export function offlineSignal(
     /** The words a pattern carried out of it. Verbatim inside `text`, or the
         panel simply does not mark them — see markPassages. */
     quote?: string;
-    /** The patterns this memory fed. Real statements, and its light reads them. */
+    /** The signals this memory fed. Real statements, and its light reads them. */
     fed?: string[];
     reflections?: number;
     /** Returned to since: an old memory that is honestly warm again. */
@@ -649,7 +649,7 @@ export function offlineWorld(): OfflineWorld | null {
   const R3 = "I trust a surface more once I have watched it fail.";
   const R4 = "What I call taste is mostly a list of things I refuse to ship.";
 
-  const captures: Inspiration[] = [
+  const inspirations: Inspiration[] = [
     offlineSignal(
       1,
       0,
@@ -798,7 +798,7 @@ export function offlineWorld(): OfflineWorld | null {
   ];
 
   /* WHICH PATTERNS REST ON WHICH MEMORY, built the same way the real sky
-     builds it: from the patterns' own evidence, never declared per memory. */
+     builds it: from the signals' own evidence, never declared per memory. */
   const citations = new Map<string, Evidence[]>();
   for (const r of readings) {
     for (const e of r.evidence) {
@@ -811,7 +811,7 @@ export function offlineWorld(): OfflineWorld | null {
   }
 
   /* The board headquarters stands on: one artifact, and its entries cite the
-     patterns beneath them — layer 3 pointing at layer 2, never at memories. */
+     signals beneath them — layer 3 pointing at layer 2, never at memories. */
   const boardMs = Date.now() - 9 * DAY_MS;
   const notes: Entry[] = readings.map((r, i) => ({
     id: `offline-e${i + 1}`,
@@ -827,7 +827,7 @@ export function offlineWorld(): OfflineWorld | null {
     createdMs: boardMs,
   }));
 
-  /* What the poster rests on: the patterns under it, in their own words. This
+  /* What the poster rests on: the signals under it, in their own words. This
      is the peek row — not the newest few, but what led to what you are
      reading. It points at layer 2 because that is what an entry cites. */
   const provenance: Provenance = new Map(
@@ -835,8 +835,8 @@ export function offlineWorld(): OfflineWorld | null {
   );
 
   return {
-    captures,
-    patterns: readings.map((r) => r.pattern),
+    inspirations,
+    signals: readings.map((r) => r.pattern),
     citations,
     notes,
     adopted: {

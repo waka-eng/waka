@@ -232,7 +232,7 @@ export interface SignalSeed {
   cited: boolean;
   /** True when a pattern citing it is shared to a room. Captures themselves
       never cross an account boundary — only the patterns above them do. */
-  inRoom: boolean;
+  inGroup: boolean;
   /** The words a pattern quoted from this memory, when one named them. */
   quote: string | null;
   /** The statements that rest on this memory, in the server's words. */
@@ -286,7 +286,7 @@ export function seedOf(
     /* A memory is never in a room. What can be is a PATTERN resting on it —
        so this says "something you shared out loud stands on this", which is
        true, without the memory itself having gone anywhere. */
-    inRoom: above.some((p) => p.sharedGroupIds.length > 0),
+    inGroup: above.some((p) => p.sharedGroupIds.length > 0),
     quote: cites.find((e) => e.quote)?.quote ?? null,
     terms: above.map((p) => p.statement),
   };
@@ -305,7 +305,7 @@ export function makeBall(s: SignalSeed, agentId = ""): Ball {
     reflections: s.reflectionCount,
     hasNotes: s.cited,
     frontier: false,
-    hasGroup: s.inRoom,
+    hasGroup: s.inGroup,
     textPreview: s.textPreview,
     kind: s.kind,
     quote: s.quote ?? null,
