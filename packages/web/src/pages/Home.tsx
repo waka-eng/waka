@@ -64,16 +64,6 @@ import {
 } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-import {
-  FIELD_CITED_LIFT,
-  FIELD_DECAY_HALF_LIFE_DAYS,
-  FIELD_FLOOR_ANSWERED,
-  FIELD_FLOOR_CITED,
-  FIELD_FLOOR_IN_GROUP,
-  FIELD_FRONTIER_DAYS,
-  FIELD_REFLECTION_SATURATION,
-  FIELD_REFLECTION_WEIGHT,
-} from "../lib/aliveness";
 import { hueCss, type Ramp } from "../lib/appearance";
 import { clamp, clamp01, DAY_MS, easeOut, hashStr, kd, lerp, TAU } from "../lib/num";
 import {
@@ -101,22 +91,45 @@ import {
   rasterOrb,
   rgbCss,
 } from "../canvas/sprites";
+import {
+  dedupeEvidence,
+  readSkyLayout,
+  writeSkyLayout,
+  SAT_MAX,
+  type Candidate,
+  type Neb,
+  type Sat,
+} from "../space/signal/sky";
+import { deriveAgentChrome } from "../space-kinds/agent";
+import {
+  deriveGroupChrome,
+  groupWallOrbs,
+  makeGroupBall,
+  type GroupData,
+} from "../space-kinds/group";
 import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
 import { agentBeing, OWNER_BEING, unit, type Being } from "../character/body";
+import { posterWords } from "../space/top-of-mind/poster";
 import {
   deriveAmbition,
   formingWords,
   type Adopted,
   type JarNote,
   type Proposal,
+  type WallChrome,
   type Provenance,
   type ReflectState,
 } from "../space/top-of-mind/board";
 import {
+  colorBall,
+  fitField,
+  scatterX,
+  tierOf,
+} from "../space/inspiration/field";
+import {
   bornBall,
   makeAgentBall,
   makeBall,
-  scatterSeed,
   seedOf,
   type Ball,
   type BornSeed,
@@ -127,7 +140,6 @@ import {
   showsDebug,
   MOCK_AGENT_BUNDLES,
   type AgentBundle,
-  type ApiAgentDirectionReading,
   type OfflineWorld,
 } from "../lib/fixture";
 import {
@@ -181,7 +193,6 @@ import {
   type ApiGroupProposal,
   type ApiGroupMember,
   type ApiGroupSummary,
-  type ApiGroupTopOfMind,
   type ApiGroupFieldCapture,
   type ApiGroupWallSignal,
   type ApiTopOfMindVersion,
@@ -283,8 +294,6 @@ const PEEK_ORBS = 5;
  * are evidence, and forty are inventory.
  */
 const PEEK_MAX = 8;
-/** However crowded the field gets, an orb never shrinks past this. */
-const ORB_R_MIN = 6;
 /**
  * A flick faster than this always commits to the next section. Lowered from
  * 500 once the snap started INHERITING the flick's speed: at 500 a genuine
@@ -457,12 +466,6 @@ const PITCH_FULL = 1400;
  */
 const SAT_R = 0.72;
 /**
- * At most this many memories orbit one candidate. Past that the highest
- * resonances stay and the rest are simply not drawn — a cloud is a claim, not
- * an inventory, and "and N more" would put a number on the page.
- */
-const SAT_MAX = 8;
-/**
  * Air between a satellite and the name of whoever saved it — and the least the
  * name is ever left from the edge of the sky, which clips.
  */
@@ -572,36 +575,6 @@ const SKY_PAD_Y = 0.42;
 /** The least of the viewport an orbit is ever left clear of an edge. */
 const SKY_EDGE = 12;
 
-/**
- * Sky layout persistence, tier ONE: the personal sky's nebula positions,
- * local to this browser, written through on drag end and pruned to the
- * candidates that still exist. Tier TWO is SHARED per-room persistence,
- * which needs a backend endpoint (coming separately) — the storage shape
- * {candidateId: {x, y}} is chosen so the server version can adopt it
- * unchanged.
- */
-const SKY_LAYOUT_KEY = "waka.sky.layout.v1";
-
-function readSkyLayout(): Record<string, { x: number; y: number }> {
-  try {
-    const raw = window.localStorage.getItem(SKY_LAYOUT_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as unknown;
-    return parsed && typeof parsed === "object"
-      ? (parsed as Record<string, { x: number; y: number }>)
-      : {};
-  } catch {
-    return {};
-  }
-}
-
-function writeSkyLayout(layout: Record<string, { x: number; y: number }>): void {
-  try {
-    window.localStorage.setItem(SKY_LAYOUT_KEY, JSON.stringify(layout));
-  } catch {
-    /* storage unavailable (private mode, quota): the sky still works */
-  }
-}
 
 // ---------------------------------------------------------------------------
 // THE SPECIES: one companion, many beings
@@ -693,271 +666,8 @@ function markPassages(
   return <>{out}</>;
 }
 
-// ---------------------------------------------------------------------------
-// Rooms: side-by-side jars on the horizontal axis (v8)
-// ---------------------------------------------------------------------------
 
-/** One deduped evidence signal: a save this room's readings cited. */
-interface GroupEvidence {
-  signalId: string;
-  textPreview: string;
-  quote: string | null;
-  kind: string | null;
-  createdMs: number;
-  authorUserId: string;
-  authorName: string;
-  /** Every reading of the room's that cited it — the panel's links sentence. */
-  citedBy: string[];
-}
 
-/** Everything a room needs before it is allowed to wake. Cached per session. */
-interface GroupData {
-  evidence: GroupEvidence[];
-  top: ApiGroupTopOfMind | null;
-}
-
-/**
- * A ROOM IS A WALL OF STATEMENTS, AND EVERYTHING ELSE STAYS HOME.
- *
- * This used to build a room's orbs out of the evidence its readings cited —
- * other people's raw memories, previewed and quoted. The canon closed that:
- * sharing is a per-signal choice, an inspiration never crosses an account
- * boundary, and "a member may see that someone's shared signal fed an entry,
- * never which one".
- *
- * So a room's orbs are the shared PATTERNS themselves. Each carries whose it
- * is, and what it says. There is no quote, because the words behind it were
- * never sent and inventing one here would be the leak the canon forbids.
- * `citedBy` names the readings this member contributed to — attribution by
- * person, which is the finest grain the room is allowed to know.
- */
-function groupWallOrbs(wall: ApiGroupWallSignal[], top: ApiGroupTopOfMind | null): GroupEvidence[] {
-  const fedBy = new Map<string, string[]>();
-  for (const entry of top?.entries ?? []) {
-    for (const c of entry.contributors) {
-      const got = fedBy.get(c.profileId);
-      if (got) {
-        if (!got.includes(entry.body)) got.push(entry.body);
-      } else fedBy.set(c.profileId, [entry.body]);
-    }
-  }
-  const seen = new Map<string, GroupEvidence>();
-  for (const s of wall) {
-    if (seen.has(s.signalId)) continue;
-    seen.set(s.signalId, {
-      signalId: s.signalId,
-      textPreview: s.statement,
-      quote: null,
-      kind: null,
-      createdMs: Date.parse(s.sharedAt) || Date.now(),
-      authorUserId: s.ownerProfileId,
-      authorName: s.ownerName,
-      citedBy: fedBy.get(s.ownerProfileId) ?? [],
-    });
-  }
-  return [...seen.values()];
-}
-
-/**
- * A room orb: the same ball, built from an evidence preview. Aliveness decays
- * from `createdAt` on the personal jar's own half-life; the reflection and
- * note boosts are omitted because the payload cannot know them. Tint hashes
- * the signal id — evidence previews carry no theme terms.
- */
-function makeGroupBall(
-  ev: GroupEvidence,
-  groupId: string,
-  colIdx: number,
-  viewerId: string | null,
-): Ball {
-  const r = 24 + ((hashStr(ev.signalId + "r") % 1000) / 1000) * 8;
-  const b: Ball = {
-    id: `${groupId}:${ev.signalId}`,
-    capturedMs: ev.createdMs,
-    updatedMs: ev.createdMs,
-    reflections: 0,
-    hasNotes: false,
-    frontier: false,
-    hasGroup: false,
-    textPreview: ev.textPreview,
-    kind: ev.kind,
-    quote: ev.quote,
-    terms: [],
-    r,
-    rBase: r,
-    sizeIdx: r < 26.5 ? 0 : r < 29.8 ? 1 : 2,
-    frac: (hashStr(ev.signalId) % 1000) / 1000,
-    scat: scatterSeed(ev.signalId),
-    x: 0,
-    y: 0,
-    homeX: 0,
-    homeY: 0,
-    peekX: 0,
-    peekY: 0,
-    ampX: 10 + Math.random() * 8,
-    ampY: 10 + Math.random() * 8,
-    ampBaseX: 0,
-    ampBaseY: 0,
-    rateX: TAU / (7 + Math.random() * 6),
-    rateY: TAU / (7 + Math.random() * 6),
-    phX: Math.random() * TAU,
-    phY: Math.random() * TAU,
-    arrive: 1,
-    entryH: 0,
-    active: false,
-    leaving: false,
-    gone: 0,
-    spawnAt: -1,
-    peek: false,
-    relightAt: 0,
-    relight: 0,
-    aliveFrom: 0,
-    aliveTo: 0,
-    alive: 0,
-    alivePow: 0,
-    breathRate: 0.9 + Math.random() * 0.5,
-    breathPhase: Math.random() * TAU,
-    hold: 0,
-    dim: 0,
-    glow: 0,
-    press: 0,
-    img: null,
-    imgUrl: null,
-    col: colIdx,
-    sigId: ev.signalId,
-    authorName: ev.authorName,
-    own: viewerId !== null && ev.authorUserId === viewerId,
-    citedBy: ev.citedBy,
-    origin: "human",
-    lens: 0,
-  };
-  b.ampBaseX = b.ampX;
-  b.ampBaseY = b.ampY;
-  colorBall(b, Date.now());
-  return b;
-}
-
-/**
- * What the room's HQ will say, resolved before the room may wake.
- *
- * A group's artifact is the same one-artifact shape as a person's: entries,
- * pinned or in order, changed together through proposals. The room's poster is
- * its lead entry — pinned first, otherwise the top of the order — and there is
- * no generated stand-in when there is none.
- */
-function deriveGroupChrome(
-  name: string,
-  top: ApiGroupTopOfMind,
-  openProposalMs: number | null,
-  evidence: GroupEvidence[],
-  company: string | null,
-): WallChrome {
-  const lead = top.entries.find((e) => e.pinnedAt) ?? top.entries[0] ?? null;
-  const ambition = lead?.body ?? null;
-  return {
-    eyebrow: company ? `${name} \u00b7 ${company}` : name,
-    text: ambition,
-    awayFrom: null,
-    formingAlt: ambition ? null : "Forming — nothing read together yet",
-    asOf: null,
-    /* A room forms through proposals, not through signals overhead: members'
-       signals stay on their own walls, so an open proposal is the only thing
-       a room has that is on its way to becoming what it believes. */
-    forming: formingWords(Date.now(), openProposalMs, null),
-    empty: evidence.length === 0,
-    prevText: null,
-  };
-}
-
-/**
- * WHAT AN AGENT'S HEADQUARTERS SAYS, AT A MOMENT.
- *
- * The dial is the history and there is no second surface for it, so this takes
- * a time: wind back and the poster becomes the identity the agent held then,
- * and an agent that rewrites itself weekly STUTTERS under your thumb while one
- * that has held a line for a season is a long quiet slide with one change in
- * it. Frequency of change becomes a kinetic quality rather than a version list.
- *
- * There is no generated placeholder here and there never will be. Fabricating
- * an ambition for an agent that has not worked yet is the worst thing this
- * product could ship: it would teach the reader that the poster is generated
- * copy, and destroy the credibility of every wall they read afterwards.
- */
-function deriveAgentChrome(a: AgentBundle, T: number, nowMs: number): WallChrome {
-  const at = (t: number): ApiAgentDirectionReading | null => {
-    let best: ApiAgentDirectionReading | null = null;
-    for (const h of a.direction.history) {
-      const ms = Date.parse(h.createdAt) || 0;
-      if (ms <= t && (!best || ms > (Date.parse(best.createdAt) || 0))) best = h;
-    }
-    return best;
-  };
-  const held = at(T);
-  const heldNow = at(nowMs);
-  const notes = a.topOfMind.notes.map((n) => ({
-    isProvisional: n.isProvisional === true,
-    createdMs: Date.parse(n.createdAt) || nowMs,
-  }));
-  const empty = a.inspirations.length === 0;
-  return {
-    eyebrow: a.agent.name,
-    text: held?.ambition ?? null,
-    awayFrom: held?.awayFrom ?? null,
-    /* An agent that has not worked yet says so, in its own voice, once. */
-    formingAlt: held ? null : "I haven’t formed anything yet",
-    asOf:
-      held && heldNow && held.ambition !== heldNow.ambition && nowMs - T > 60_000
-        ? monthTag(T)
-        : null,
-    forming: formingWords(T, null, notes),
-    empty,
-    prevText: null,
-  };
-}
-
-/**
- * THE POSTER, AND WHICH OF ITS WORDS ARE NEW.
- *
- * Every poster used to replay every word on every change, which is beautiful
- * once and useless afterwards: scrubbing a wall's history was a stream of
- * identical assemblies, and the one question a person actually has about a
- * self-description — HAS THIS BEEN THE SAME THING? — had no answer on screen.
- *
- * So a word that survived the rewrite stays lit and still, and only new words
- * arrive. The spine of an identity is the text that does not move; the drift
- * is the flicker. That is a drift readout with no numerals, no timeline and no
- * diff view, and it answers the question better than a version list could.
- *
- * Matching is a multiset, not a diff: a word that was in the previous sentence
- * is a word that survived, wherever it moved to. Order changes are not drift.
- *
- * Reduced motion keeps the distinction — it just spends the world's own
- * channel on it instead of movement (see jar.css): a new word arrives as a
- * step in luminance, a carried one is simply already lit.
- */
-function posterWords(text: string, prev: string | null): JSX.Element[] {
-  const words = text.split(/\s+/);
-  const pool = new Map<string, number>();
-  if (prev) for (const w of prev.split(/\s+/)) pool.set(w, (pool.get(w) ?? 0) + 1);
-  let arriving = 0;
-  return words.map((word, i) => {
-    const have = pool.get(word) ?? 0;
-    const carried = have > 0;
-    if (carried) pool.set(word, have - 1);
-    return (
-      /* the space lives OUTSIDE the inline-block, or it collapses and the
-         whole ambition runs together */
-      <Fragment key={`${i}-${word}`}>
-        <span
-          className={carried ? "jar-word jar-word--held" : "jar-word"}
-          style={carried ? undefined : { animationDelay: `${arriving++ * 28}ms` }}
-        >
-          {word}
-        </span>{" "}
-      </Fragment>
-    );
-  });
-}
 
 // ---------------------------------------------------------------------------
 // Walls: the horizontal axis, and what stands on it (v10)
@@ -1075,199 +785,6 @@ async function loadAgentWalls(): Promise<AgentBundle[]> {
   return MOCK_AGENT_BUNDLES;
 }
 
-/**
- * A candidate for the ambition: something that has formed but has not been
- * adopted. Either the room's pending PROPOSAL (a whole rewrite, adoptable) or
- * a provisional top-of-mind reading (a machine claim, not adoptable yet), or
- * a DRAFT the person assembled up in the sky.
- */
-interface Candidate {
-  id: string;
-  kind: "proposal" | "reading" | "draft";
-  /**
-   * WHOSE SKY THIS IS. Every wall that has a sky has its own — an agent's
-   * forming candidates are the things it is distilling and has not adopted,
-   * which is the same relationship your own sky has to your own ambition.
-   * Rooms have no sky, so nothing is ever built at their column.
-   */
-  col: number;
-  text: string;
-  /** The memories it is made of. Each one ORBITS it, as a satellite. */
-  evidence: EvidenceRef[];
-  /**
-   * The evidence span the server declared, where it knows it better than the
-   * satellites do: a room's proposal carries a span but no per-save dates.
-   * The orbit takes the WIDER of this and what the satellites measure.
-   */
-  spanMs: number | null;
-  /** Only the room's real proposal can be adopted; the rest are honest about it. */
-  adopt: { groupId: string; proposalId: string } | null;
-  /** A draft is born between the nebulae it was drawn from. */
-  originIds: string[];
-}
-
-
-/** One memory, once, however many candidates cited it — strongest first. */
-function dedupeEvidence(all: EvidenceRef[]): EvidenceRef[] {
-  const seen = new Map<string, EvidenceRef>();
-  for (const e of all) {
-    const key = e.groupId ? `${e.groupId}:${e.signalId}` : e.signalId;
-    const got = seen.get(key);
-    if (!got || e.resonance > got.resonance) seen.set(key, e);
-  }
-  return [...seen.values()].sort((a, b) => b.resonance - a.resonance).slice(0, SAT_MAX);
-}
-
-/**
- * A SATELLITE: one evidence memory, in orbit around the candidate it is
- * evidence FOR. It is a reference, never a second memory — the very sprite the
- * field draws, at SAT_R of the radius, so provenance is legible rather than
- * implied. (The same principle the peek row already obeys downstairs: the row
- * IS the ambition's evidence.)
- */
-interface Sat {
-  /** What a tap focuses: the memory itself, wherever in the world it lives. */
-  id: string;
-  sizeIdx: number;
-  /** The memory's own radius; the satellite draws at SAT_R of it. */
-  r: number;
-  /** Its own place on the ellipse — every satellite on its own phase. */
-  ph: number;
-  /** The angle it is at right now, kept so a held one can be let go without
-      snapping to wherever it would have travelled to meanwhile. */
-  a: number;
-  /** Being read: it holds still under its panel, as a focused orb does. */
-  held: boolean;
-  /**
-   * The field ball behind it, when the memory is one of the viewer's own: the
-   * satellite then fades, dims and re-lights EXACTLY as its memory does,
-   * because it is reading the same numbers.
-   */
-  ball: Ball | null;
-  /** Otherwise, the appearance it was built with. */
-  tier: number;
-  alivePow: number;
-  /** Room evidence: the given name the whisper says. */
-  who: string | null;
-  /** Written every frame; the hit test, the whisper and the panel read these. */
-  x: number;
-  y: number;
-  /** Its drawn radius this frame — the hit test uses the same number. */
-  dr: number;
-  /** Greater than zero in front of the cloud, at or below it behind. */
-  front: number;
-  /** One eased fade each: focus lights this one and dims the rest. */
-  glow: number;
-  dim: number;
-  /**
-   * EMERGENCE. 0 is inside the sentence at nothing, 1 is out on the ellipse
-   * whole. It is the satellite's alpha, its scale and its distance from the
-   * centre at once, because those are one movement: coming out from behind
-   * the words. Under reduced motion it is the alpha alone.
-   */
-  em: number;
-  /** Where it was when the subject last changed — so a reversal never pops. */
-  em0: number;
-}
-
-/** A candidate's body in the sky: light that has not condensed. */
-interface Neb {
-  id: string;
-  kind: Candidate["kind"];
-  /** which wall's sky it floats in; its whole system lives at that column */
-  col: number;
-  /** Which of the baked cloud SHAPES it is; its light is everyone's light. */
-  variant: number;
-  r: number;
-  frac: number;
-  homeX: number;
-  homeY: number;
-  x: number;
-  y: number;
-  ampX: number;
-  ampY: number;
-  rateX: number;
-  rateY: number;
-  phX: number;
-  phY: number;
-  breathRate: number;
-  breathPhase: number;
-  /** The memories it is made of, in orbit around it. */
-  sats: Sat[];
-  /**
-   * Painter's order for those satellites: far side first, nearest last, so an
-   * orb low on the ellipse covers one behind it rather than the other way
-   * round. Written once per frame in placeSats over a preallocated index
-   * array (the field's own sortByDepth convention), read forward by the draw
-   * pass and BACKWARD by the hit test — one ordering, so what answers a tap
-   * is always what the eye has on top.
-   */
-  satOrd: number[];
-  /** Which evidence built them, so a re-drafted candidate re-solves once. */
-  evSig: string;
-  /** The span's widening, as a multiplier on the box-derived base. */
-  orbK: number;
-  /** The widest satellite it carries: the orbit has to clear the words by it. */
-  satR: number;
-  /**
-   * The ellipse the satellites turn on, solved from the SENTENCE's measured
-   * box (plus the margin, the satellite and the span) — read every frame,
-   * measured only on resize, on a text change and on focus.
-   */
-  orbRx: number;
-  orbRy: number;
-  /** The sentence's own box, as the DOM last rendered it. */
-  txtW: number;
-  txtH: number;
-  /**
-   * What this candidate keeps every other candidate off: whichever is bigger,
-   * its light or its words. At rest no sentence may sit on a neighbour's
-   * sentence or on a neighbour's body.
-   */
-  keepR: number;
-  /** Seconds for one turn — slower the longer it has gathered. */
-  period: number;
-  /** Where its LIGHT is. It trails the body, which is the only thing with
-      weight here — the cloud itself is exactly where the finger put it. */
-  haloX: number;
-  haloY: number;
-  /** Clustered: nested rather than intersecting. 1 apart, NEST_K drawn in. */
-  nest: number;
-  /** The most nesting may draw it in: the span's widening, and nothing under. */
-  nestFloor: number;
-  /** The subject: tapped, so it carries its evidence. One at a time. */
-  focused: boolean;
-  /** When that last changed, and where the eases were at the time. */
-  focusAt: number;
-  focus: number;
-  focus0: number;
-  /** Not the subject while another one is: one uniform sink, body and words. */
-  dimN: number;
-  /** Dragged: it keeps the place it was put (for this session only). */
-  pinned: boolean;
-  dragging: boolean;
-  dragX: number;
-  dragY: number;
-  /**
-   * The sentence's own light. Clustered members whisper at a quarter
-   * strength — the cluster speaks with its one draft line — and a member
-   * under the pointer (or a finger) comes back to full for as long as the
-   * touch lasts. Eased in the loop: a single fade, never a movement.
-   */
-  dimS: number;
-  /** About to receive the pattern in your hand: the drop target, said in
-      light because nothing else on screen says the gesture exists. */
-  joining: boolean;
-  /** Near enough to another pattern that they could be joined — said at rest,
-      before any drag, so the gesture is discoverable rather than merely
-      confirmable once attempted. */
-  pairable: boolean;
-  /** 0 present → 1 dispersed (dragged off the top of the sky). */
-  gone: number;
-  /** 1 open → 0 condensed to a point, on adoption. */
-  condense: number;
-  condenseAt: number;
-}
 
 interface World {
   wallL: number;
@@ -1891,154 +1408,6 @@ function buildPalette(
   };
 }
 
-/**
- * Aliveness mirrors the real activation engine's constants (7-day half-life,
- * reflection charge 0.25 — scoring/activation.ts). With the live archive's
- * June–July gap most balls WILL be dim; that is honest and desired.
- */
-function colorBall(b: Ball, T: number): void {
-  const ref = Math.min(Math.max(b.updatedMs, b.capturedMs), T);
-  const days = Math.max(0, (T - ref) / DAY_MS);
-  const decay = Math.pow(0.5, days / FIELD_DECAY_HALF_LIFE_DAYS);
-  /**
-   * WHAT YOU BUILT ON DOES NOT ROT.
-   *
-   * Every memory used to decay on the same curve — including the ones a
-   * pattern is standing on and the ones you came back and answered. Animal
-   * Crossing has the better rule and has had it for twenty years: weeds grow
-   * in the parts of the island you never developed, and never in the parts
-   * you did. Come back after two months and what you made is exactly as you
-   * left it; only the untended edges show the time.
-   *
-   * So a memory that is load-bearing — cited by a pattern, or answered in
-   * your own words — has a floor under it and cannot sink to dark. The rest
-   * of the field still fades exactly as it did, which is where the passage
-   * of time is supposed to be visible.
-   */
-  const tended =
-    (b.hasNotes ? FIELD_FLOOR_CITED : 0) +
-    (b.reflections > 0 ? FIELD_FLOOR_ANSWERED : 0) +
-    (b.hasGroup ? FIELD_FLOOR_IN_GROUP : 0);
-  const a = clamp01(
-    Math.max(
-      decay +
-        FIELD_REFLECTION_WEIGHT *
-          Math.min(b.reflections, FIELD_REFLECTION_SATURATION) *
-          decay,
-      tended,
-    ) + (b.hasNotes ? FIELD_CITED_LIFT : 0),
-  );
-  b.alive = a;
-  b.alivePow = Math.pow(a, 1.4);
-  /**
-   * THE FRONTIER. A memory nothing rests on is where this person's
-   * self-knowledge stops — and it was the one thing the world could not show,
-   * because brightness only ever said "recent". Outer Wilds' log marks the
-   * places you have BEEN that still hold something unfound; it never nags
-   * about somewhere you have not gone. Same rule here: only a memory old
-   * enough to have been read, and still cited by nothing, is a frontier.
-   */
-  b.frontier = !b.hasNotes && days > FIELD_FRONTIER_DAYS;
-}
-
-/**
- * The aliveness continuum, quantised to the baked sprite tiers. Five steps is
- * below what the eye resolves in a gradient this soft, so it still reads as a
- * continuum — and it keeps every appearance pre-rendered.
- */
-function tierOf(b: Ball): number {
-  return Math.round(clamp01((b.alive - 0.05) / 0.55) * (TIERS - 1));
-}
-
-/**
- * THE FIELD SHOWS EVERYTHING — INVARIANT, not a layout preference.
- *
- * Standing in the field, EVERY inspiration that exists at the dial's time is
- * on screen at once. Not a slice you scroll through, not the newest few with
- * the rest somewhere below the fold: all of them, on every wall, at every
- * viewport height. The founder has asked for this twice, and the honest way
- * to keep the promise as an archive grows is to make the ORBS give way, not
- * the archive: the field fits its inhabitants by shrinking them and their
- * drift, down to a floor, and past that floor the oldest compress into denser
- * sediment at the bottom rather than anything being pushed off the screen.
- *
- * Size still encodes nothing. It is the field making room, which is a fact
- * about the field and not about any memory in it.
- */
-function fitField(arr: Ball[], bandW: number, bandH: number): number {
-  const n = Math.max(arr.length, 1);
-  /* the radius at which n of them share this band without stacking */
-  const fitR = Math.sqrt((bandW * bandH) / n) / 2.6;
-  for (const b of arr) {
-    const r = clamp(Math.min(b.rBase, fitR), ORB_R_MIN, b.rBase);
-    b.r = r;
-    /* nearest baked size, so nothing is ever scaled by more than a few
-       percent — the sphere's rim and specular only survive at 1:1 */
-    let bi = 0;
-    let bd = Infinity;
-    for (let i = 0; i < SIZE_R.length; i++) {
-      const d = Math.abs(SIZE_R[i] - r);
-      if (d < bd) {
-        bd = d;
-        bi = i;
-      }
-    }
-    if (SIZE_R[bi] > r && bi > 0) bi -= 1;
-    b.sizeIdx = bi;
-    /* and it is DRAWN at the size it was baked at. The radius jitter was
-       always meaningless variation — size encodes nothing here, by law — so
-       snapping it to a baked value costs the design nothing and buys a
-       pixel-exact edge on every orb in the field.
-
-       DOWN, NEVER UP. The radius arriving here is what the band could FIT;
-       rounding it up would hand every orb a few extra pixels at exactly the
-       moment the field is crowded enough for that to matter, and the fit
-       would quietly stop holding. The smallest baked size is the floor. */
-    b.r = SIZE_R[bi];
-    /* the drift shrinks with the orb, or a crowded field would stir itself
-       into a collision every few seconds */
-    const k = r / Math.max(b.rBase, 1);
-    b.ampX = b.ampBaseX * k;
-    b.ampY = b.ampBaseY * k;
-  }
-  /* 0 while there is room to spare, 1 once even the floor is crowded: how
-     hard the oldest have to be compressed to keep everyone on screen */
-  return clamp01((n * Math.pow(2.6 * ORB_R_MIN, 2)) / Math.max(bandW * bandH, 1));
-}
-
-/**
- * Blue-noise-ish x for a home assignment: the best of up to 12 candidates by
- * clearance from what is already placed. Shared by the personal field and by
- * every room's field — the same discipline, one column over.
- */
-function scatterX(
-  b: Ball,
-  y: number,
-  px: number[],
-  py: number[],
-  lo: number,
-  hi: number,
-): number {
-  let best = (lo + hi) / 2;
-  let bestGap = -1;
-  for (let tries = 0; tries < 12; tries++) {
-    /* the twelve draws are the BALL's, not the moment's — see Ball.scat */
-    const cand = lo + b.r + b.scat[tries] * Math.max(1, hi - lo - b.r * 2);
-    let gap = Infinity;
-    for (let i = 0; i < px.length; i++) {
-      const dx = cand - px[i];
-      const dy = y - py[i];
-      const d = Math.sqrt(dx * dx + dy * dy);
-      if (d < gap) gap = d;
-    }
-    if (gap > bestGap) {
-      bestGap = gap;
-      best = cand;
-    }
-    if (gap > b.r * 2.2) break;
-  }
-  return clamp(best, lo + b.r, hi - b.r);
-}
 
 // ---------------------------------------------------------------------------
 // Ambition fallback chain
@@ -2090,40 +1459,6 @@ function scatterX(
  * ==========================================================================
  */
 
-/**
- * WHAT A WALL'S HEADQUARTERS SAYS. One shape for every kind of wall — yours,
- * a room's, an agent's — because headquarters is the same five things
- * everywhere: whose wall this is, what it holds, what it turned away from,
- * whether it is looking at a moment other than now, and whether something else
- * is forming.
- */
-interface WallChrome {
-  /** the wall's name, and nothing else in that slot, ever */
-  eyebrow: string;
-  text: string | null;
-  /**
-   * AND WHAT IT STOPPED DOING. A portrait that says only what it is, is a
-   * brochure; one that says what it turned away from has paid for the claim —
-   * it is the most credible thing a self-description can contain, because it
-   * costs something to say. It renders as a second clause in the same
-   * sentence, one step down the luminance channel: the assertion is nearer
-   * than the renunciation. It is not a second element — headquarters is never
-   * two-headed.
-   */
-  awayFrom: string | null;
-  /** The forming register, when nothing is adopted: what the wall itself says. */
-  formingAlt: string | null;
-  asOf: string | null;
-  /** The one line under the ambition, or nothing when nothing is forming. */
-  forming: string | null;
-  /** Nothing kept here at all. Youth, not failure — and never filled in. */
-  empty: boolean;
-  /**
-   * What this wall said a moment ago, so the poster can tell the words that
-   * survived the rewrite from the words that are new. See posterWords.
-   */
-  prevText: string | null;
-}
 
 /**
  * Where the reading panel sits, in viewport coordinates. Either `top` or

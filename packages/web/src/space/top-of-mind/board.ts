@@ -104,3 +104,37 @@ export function formingWords(
   const w = numWords(n);
   return `${w[0].toUpperCase()}${w.slice(1)} ${n === 1 ? "pattern is" : "patterns are"} forming`;
 }
+/**
+ * WHAT A WALL'S HEADQUARTERS SAYS. One shape for every kind of wall — yours,
+ * a room's, an agent's — because headquarters is the same five things
+ * everywhere: whose wall this is, what it holds, what it turned away from,
+ * whether it is looking at a moment other than now, and whether something else
+ * is forming.
+ */
+export interface WallChrome {
+  /** the wall's name, and nothing else in that slot, ever */
+  eyebrow: string;
+  text: string | null;
+  /**
+   * AND WHAT IT STOPPED DOING. A portrait that says only what it is, is a
+   * brochure; one that says what it turned away from has paid for the claim —
+   * it is the most credible thing a self-description can contain, because it
+   * costs something to say. It renders as a second clause in the same
+   * sentence, one step down the luminance channel: the assertion is nearer
+   * than the renunciation. It is not a second element — headquarters is never
+   * two-headed.
+   */
+  awayFrom: string | null;
+  /** The forming register, when nothing is adopted: what the wall itself says. */
+  formingAlt: string | null;
+  asOf: string | null;
+  /** The one line under the ambition, or nothing when nothing is forming. */
+  forming: string | null;
+  /** Nothing kept here at all. Youth, not failure — and never filled in. */
+  empty: boolean;
+  /**
+   * What this wall said a moment ago, so the poster can tell the words that
+   * survived the rewrite from the words that are new. See posterWords.
+   */
+  prevText: string | null;
+}
