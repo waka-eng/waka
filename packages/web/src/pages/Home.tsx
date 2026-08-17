@@ -67,15 +67,10 @@ import { Link, useNavigate } from "react-router-dom";
 import { hueCss } from "../lib/appearance";
 import { clamp, clamp01, DAY_MS, easeOut, kd, lerp, TAU } from "../lib/num";
 import {
-  BLOOM_PEAK,
-  BLOOM_R,
   GRAIN_PX,
   GRAIN_TILE,
-  ORB_PAD,
-  TIERS,
   VIGNETTE,
   mix,
-  orbsForHue,
   rgbCss,
 } from "../canvas/sprites";
 import {
@@ -97,12 +92,12 @@ import {
   springs,
   stepSky,
   CONDENSE_MS,
-  EMERGE_SCALE,
+  FOCUS_DIM,
   FOCUS_POP,
   NEB_CORE,
-  SAT_R,
   type SkyDeps,
 } from "../space/signal/sky-engine";
+import { paintSky } from "../space/signal/sky-paint";
 import { deriveAgentChrome } from "../space-kinds/agent";
 import {
   deriveGroupChrome,
@@ -136,12 +131,13 @@ import {
   colorBall,
   fitField,
   scatterX,
-  tierOf,
+  sortByDepth,
   EASE_DIM_IN,
   EASE_DIM_OUT,
   EASE_GLOW_IN,
   EASE_GLOW_OUT,
 } from "../space/inspiration/field";
+import { paintField } from "../space/inspiration/field-paint";
 import {
   bornBall,
   makeAgentBall,
@@ -318,15 +314,6 @@ const PEEK_MAX = 8;
  * throw was being read as a nudge and then re-timed from scratch.
  */
 const FLICK = 380;
-/**
- * CULL AT THE REAL SPRITE EXTENT. The widest bloom reaches
- * 32 × BLOOM_R × 1.12 ≈ 79px from its centre and the widest disc
- * 32 + ORB_PAD = 34px, so these are the true margins. The old
- * ±300/±260 additively blended a couple of million device pixels of orbs
- * entirely below the fold, every frame.
- */
-const CULL_BLOOM = 82;
-const CULL_ORB = 40;
 /** The whole pour fits in this, however many memories there are to pour. */
 const POUR_MS = 2400;
 /**
@@ -473,24 +460,21 @@ const PITCH_FULL = 1400;
  *
  * The tuning the ENGINE reads — the orbital period and width, the emergence,
  * the nesting, the clustering threshold — moved with it to
- * `space/signal/sky-engine.ts`. The five the page still draws with (SAT_R,
- * FOCUS_POP, EMERGE_SCALE, NEB_CORE, CONDENSE_MS) are imported back from there
- * rather than written down twice. What remains below is the page's own: read
- * by the draw pass and by nothing else.
+ * `space/signal/sky-engine.ts`. The tuning the PAINTER reads went a step
+ * further and moved into `space/signal/sky-paint.ts`, which now owns the one
+ * number only it ever used (how much a satellite dims behind its candidate).
+ * `FOCUS_POP`, `NEB_CORE` and `CONDENSE_MS` are imported back from the engine
+ * rather than written down twice, and so is `FOCUS_DIM` — which the painter
+ * and this page's DOM sync both read, and which would be a candidate whose
+ * words and whose light disagreed about being the subject if they ever drifted
+ * apart. What remains below is the page's own: read by what the page still
+ * lays out itself and by nothing else.
  */
 /**
  * Air between a satellite and the name of whoever saved it — and the least the
  * name is ever left from the edge of the sky, which clips.
  */
 const SAT_SAY_GAP = 12;
-/**
- * Passing BEHIND its candidate a satellite dims by this much and draws before
- * the cloud's blooms; in front it draws after them. Occlusion only — nothing
- * that exists ever pops out of existence.
- */
-const ORBIT_BEHIND = 0.18;
-/** Everything that is not the subject sinks to this alpha, body and sentence. */
-const FOCUS_DIM = 0.22;
 /**
  * THE MOST OF THE VIEWPORT ONE CANDIDATE'S SYSTEM MAY CLAIM.
  *
@@ -2895,23 +2879,14 @@ function HomeExperience(): JSX.Element {
     const inspTop = new Float32Array(8);
 
     /* Painter's order for the shadow+body pass: bottom-most orb first, so an
-       orb's contact shadow lands ON whatever it is resting against and is
-       then covered by the orb itself. Insertion sort over a preallocated
-       index array — O(n) on the near-sorted frame-to-frame case, and it
-       allocates nothing. */
+       orb's contact shadow lands ON whatever it is resting against and is then
+       covered by the orb itself. A preallocated index array, kept for the life
+       of the loop and re-sorted in place, so neither the painter nor the hit
+       test allocates per frame. `sortByDepth` itself moved to
+       `space/inspiration/field.ts` when the painter left the page — the two
+       must never end up with two orderings, which is the bug where you click
+       one memory and a different one lights up. */
     const order: number[] = list.map((_, i) => i);
-    function sortByDepth(arr: Ball[], ord: number[]) {
-      for (let i = 1; i < ord.length; i++) {
-        const v = ord[i];
-        const y = arr[v].y;
-        let j = i - 1;
-        while (j >= 0 && arr[ord[j]].y < y) {
-          ord[j + 1] = ord[j];
-          j--;
-        }
-        ord[j + 1] = v;
-      }
-    }
 
     function wake() {
       clock.lastActive = performance.now();
@@ -4410,6 +4385,22 @@ function HomeExperience(): JSX.Element {
       }
     }
 
+    /**
+     * Is the detail panel open right now? An ACCESSOR, and deliberately not a
+     * value.
+     *
+     * The field's painter needs this to know whether to lay the focused
+     * memory's wide outer ring down — a ring that reaches under an open card,
+     * and light must live behind a panel, never on it. The ref it reads is
+     * re-pointed by React while this loop is still running, so a boolean
+     * captured when the painter was wired up would be frozen at whatever was
+     * true then. Nothing would report that: the ring would simply stop
+     * answering the panel, and the picture would keep drawing. Declared once
+     * out here rather than inside `draw` so the frame does not allocate a
+     * closure sixty times a second to ask one question.
+     */
+    const panelOpen = () => panelOpenRef.current;
+
     function draw(now: number) {
       const pal = paletteRef.current;
       ctx!.setTransform(view.dpr, 0, 0, view.dpr, -cam.x * view.dpr, -cam.y * view.dpr);
@@ -4418,10 +4409,6 @@ function HomeExperience(): JSX.Element {
       const t = now / 1000;
       const selId = selectedIdRef.current;
       const depthSpan = Math.max(view.layout.fieldBottom - view.layout.fieldTop, 1);
-      /* The bloom's whole strength curve, in one place: wide and thin, the way
-         a bright point reads through a night lens. A dormant memory keeps a
-         trace of one — the continuum never reaches nothing. */
-      const bloomAlpha = (pow: number) => BLOOM_PEAK * (0.13 + 0.87 * pow);
 
       /* pass 0 — the deep background: dim sparkle points, then drifting dust
          motes. Together they are the air in front of the camera, and they are
@@ -4449,236 +4436,33 @@ function HomeExperience(): JSX.Element {
         ctx!.drawImage(pal.mote, mx + cam.x - mr * 3, moteY[i] + cam.y - mr * 3, mr * 6, mr * 6);
       }
 
-      /* pass 0b — the sky. Nebulae are additive light like everything else
-         here, and the memories they are made of ORBIT them: real orbs, drawn
-         from the field's own baked sprites, so a candidate's provenance is
-         legible rather than implied.
+      /* pass 0b — THE SKY. Each candidate a cloud of light with its own
+         evidence in orbit around it. `space/signal/sky-paint.ts`, which reads
+         three of the loop's state groups and so was allowed to leave; the
+         satellite pass's occlusion rules and the two aliveness fixes recorded
+         in its comments went with it unchanged. */
+      paintSky({ ctx: ctx!, pal, sky, cam, view, t, grid });
 
-         A satellite on the far side of its orbit draws BEFORE the cloud's
-         blooms and dims; on the near side it draws after them. That is
-         occlusion, not visibility: nothing that exists ever pops out of
-         existence. */
-      const satPass = (n: Neb, near: boolean, ground: number) => {
-        /* placeSats left this far-to-near; satAt walks the same array
-           backwards, so the one whose pixels are on top is the one that
-           answers a tap */
-        for (let k = 0; k < n.satOrd.length; k++) {
-          const s = n.sats[n.satOrd[k]];
-          if ((s.front > 0) !== near) continue;
-          /* AT REST THERE IS NOTHING HERE. `em` is the emergence: zero until
-             the candidate is the subject, and back to zero as it retracts —
-             so the sky at rest is sentences and bodies, and this pass costs
-             one comparison per satellite. */
-          if (s.em <= 0.004) continue;
-          const base = ground * s.em * (near ? 1 : 1 - ORBIT_BEHIND) * lerp(1, 0.2, s.dim);
-          if (base <= 0.01) continue;
-          /* the memory's own light, live where the memory is the viewer's own */
-          const pow = s.ball ? s.ball.alivePow : s.alivePow;
-          /* the memory's own bloom, with the same floor under it the field
-             puts under a focused orb: the disc no longer flatters a dormant
-             memory, so the light around it is what has to carry attention */
-          const bloom = Math.max(
-            bloomAlpha(pow) * base * (1 + s.glow * 0.7),
-            0.32 * s.glow * base,
-          );
-          /* AND THE SAME LIE, DELETED HERE TOO. A satellite IS a memory — the
-             very one the field draws a section below — so pinning a selected
-             one at the top tier said "fully alive" about something dormant,
-             in the one place a person looks hardest: the evidence under a
-             claim. The field's own orb pass had this deleted already; the
-             orbits kept it, so the same memory read as two different
-             alivenesses depending on which of the two you were looking at. */
-          const tier = s.ball ? tierOf(s.ball) : s.tier;
-          if (bloom > 0.004) {
-            ctx!.globalCompositeOperation = "lighter";
-            const hr = s.dr * BLOOM_R;
-            ctx!.globalAlpha = Math.min(bloom, BLOOM_PEAK);
-            ctx!.drawImage(pal.blooms[s.sizeIdx][tier], s.x - hr, s.y - hr, hr * 2, hr * 2);
-          }
-          ctx!.globalCompositeOperation = "source-over";
-          /* the same emergence the position carries: it comes out of the
-             sentence small and arrives whole, one movement */
-          /* and the selection swell deleted here too, for the same reason the
-             tier lie was: a satellite IS a memory, so the disc must answer to
-             the same law on both walls. The EMERGE_SCALE term stays — that is
-             arrival, the memory coming out of the sentence, not feedback. */
-          const ex = (s.r + ORB_PAD) * SAT_R * (view.reduced ? 1 : lerp(EMERGE_SCALE, 1, s.em));
-          ctx!.globalAlpha = base;
-          ctx!.drawImage(pal.orbs[s.sizeIdx][tier], s.x - ex, s.y - ex, ex * 2, ex * 2);
-        }
-      };
-      for (const n of sky.nebs) {
-        if (n.gone >= 1) continue;
-        const sx = n.x - cam.x;
-        if (sx < -n.r * 2.4 || sx > view.w + n.r * 2.4) continue;
-        const sy = n.y - cam.y;
-        if (sy < -n.r * 2.4 || sy > view.h + n.r * 2.4) continue;
-        const breath = view.reduced ? 1 : 1 + Math.sin(t * n.breathRate + n.breathPhase) * 0.055;
-        /* dispersing: it thins AND spreads, which is what dispersing means —
-           and the subject sits a little nearer, body and words together */
-        const rr = n.r * breath * n.condense * (1 + n.gone * 0.5) * (1 + FOCUS_POP * n.focus);
-        /* while one candidate is the subject, every other one sinks — the
-           field's own focus law, applied to the sky's bodies */
-        const a =
-          (1 - n.gone) *
-          (n.dragging ? 1.25 : 1) *
-          /* the one it would join, answering — the drop target is a rise in
-             light and nothing else, which is the only channel this layout has
-             and the only one it needs */
-          (n.joining ? 1.4 : 1) *
-          /* and, at rest, a pair that COULD be joined leans toward each other
-             — the invitation, held perfectly still */
-          (n.pairable && !n.dragging ? 1.15 : 1) *
-          (n.kind === "draft" ? 1.4 : 1) *
-          lerp(1, FOCUS_DIM, n.dimN);
-        /* the satellites vanish with their candidate, over the same beat */
-        const satGround = (1 - n.gone) * n.condense;
-        if (n.sats.length > 0) satPass(n, false, satGround);
-        ctx!.globalCompositeOperation = "lighter";
-        ctx!.globalAlpha = clamp01(a);
-        ctx!.drawImage(pal.nebulae[n.variant], grid(n.haloX) - rr, grid(n.haloY) - rr, rr * 2, rr * 2);
-        if (n.sats.length > 0) satPass(n, true, satGround);
-      }
-      ctx!.globalCompositeOperation = "lighter";
-
-      /* pass 1 — the diffuse blooms. Additive on dusk, so a dense pile glows
-         hotter for free; a soft multiply wash on paper. This is what makes
-         the orbs feel lit from within rather than filled in. One pass per
-         visible column: the personal field, then any room in view. */
-      ctx!.globalCompositeOperation = "lighter";
-      const bloomPass = (arr: Ball[], still: boolean) => {
-        for (const b of arr) {
-          if (!b.active) continue;
-          /* Cull at the sprite's REAL extent. The widest bloom is
-             32 × BLOOM_R × 1.12 ≈ 79px of half-extent, so ±300/±260 was
-             additively blending whole screenfuls of orbs below the fold. */
-          const sxb = b.x - cam.x;
-          if (sxb < -CULL_BLOOM || sxb > view.w + CULL_BLOOM) continue;
-          const sy = b.y - cam.y;
-          if (sy < -CULL_BLOOM || sy > view.h + CULL_BLOOM) continue;
-          const depth = clamp01((b.y - view.layout.fieldTop) / depthSpan);
-          /* A MACHINE'S MEMORY DOES NOT BREATHE, IT CYCLES.
-             The bloom's breath is a sine — the single most organic thing on
-             screen, and it was running identically under an agent's memories
-             while everything around them was stepping. Quantizing the sine
-             rather than removing it keeps the amplitude, the rate and the
-             phase exactly as they were: same rhythm, fewer states in it. */
-          const breathRaw = Math.sin(t * b.breathRate + b.breathPhase);
-          const breathQ =
-            mech < 0.02 ? breathRaw : Math.round(breathRaw * (5 - mech * 3)) / (5 - mech * 3);
-          const breath =
-            view.reduced || still ? 1 : 1 + breathQ * (0.04 + 0.05 * b.alive);
-          /* the founder's continuum law, unchanged */
-          let alpha = bloomAlpha(b.alivePow) * breath * lerp(1, 0.72, depth);
-          alpha *= (1 - b.gone) * lerp(1, 0.12, b.dim) * (1 + b.glow * 0.7 + b.relight * 0.9);
-          /* The focused orb is the only lit thing on screen, so it gets a floor
-             under its bloom: a dormant memory is dim at rest, but attention
-             still has to land on it. */
-          if (b.id === selId) alpha = Math.max(alpha, 0.32 * b.glow);
-          /* THE FINGER IS ON THIS ONE. Juice lives in the bloom: the disc's
-             tier never moves, the radius never moves, nothing about what this
-             memory IS changes because it is being touched. Only the light
-             around it says so. */
-          alpha += 0.3 * b.press;
-          if (alpha <= 0.004) continue;
-          const hr = b.r * BLOOM_R * (1 + b.glow * 0.12);
-          ctx!.globalAlpha = Math.min(alpha, BLOOM_PEAK + 0.14 * b.press);
-          ctx!.drawImage(pal.blooms[b.sizeIdx][tierOf(b)], b.x - hr, b.y - hr, hr * 2, hr * 2);
-          /* The focused orb wears a second, much wider and dimmer ring — but
-             not while its panel is open: a ring that wide reaches under the
-             card, and light must live BEHIND the panel, never on it. */
-          if (b.glow > 0.02 && b.id === selId && !panelOpenRef.current) {
-            const ar = b.r * 4.2;
-            ctx!.globalAlpha = 0.1 * b.glow;
-            ctx!.drawImage(pal.aura, b.x - ar, b.y - ar, ar * 2, ar * 2);
-          }
-        }
-      };
-      bloomPass(list, pour.active);
-
-      /* pass 2 — the orbs. A pastel gradient disc with a soft edge that melts
-         into its own bloom: no rim light, no terminator, no contact shadow,
-         because these are lit from within and float. Aliveness picks the
-         baked tier — full gradient when alive, desaturating toward slate as it
-         fades, a dim slate disc when dormant. It never disappears. */
-      ctx!.globalCompositeOperation = "source-over";
-      const orbPass = (arr: Ball[], ord: number[]) => {
-      sortByDepth(arr, ord);
-      for (const oi of ord) {
-        const b = arr[oi];
-        if (!b.active) continue;
-        /* and the disc at its own: 32 + ORB_PAD = 34px */
-        const sxb = b.x - cam.x;
-        if (sxb < -CULL_ORB || sxb > view.w + CULL_ORB) continue;
-        const sy = b.y - cam.y;
-        if (sy < -CULL_ORB || sy > view.h + CULL_ORB) continue;
-        let a = 1 - b.gone;
-        /* focus dims EVERYTHING else, uniformly — there is exactly one lit
-           thing on the screen (founder ruling, explicit) */
-        a *= lerp(1, 0.2, b.dim);
-        if (a <= 0.01) continue;
-
-        const rx = b.r;
-        const ry = b.r;
-        const cyv = b.y;
-        /* a scrubbed-away orb also shrinks slightly as it fades in place */
-        const shrink = 1 - b.gone * 0.06;
-        /* JUICE LIVES IN THE BLOOM, AND THAT INCLUDES SIZE. Selection used to
-           swell the disc eight percent — feedback moving geometry, which the
-           law rejects outright, and which contradicted `hold`'s own contract
-           ("Never a position target — light only") twenty lines after a
-           comment swearing the radius never moves. It was not gated on
-           `reduced` either, so a person who asked for less movement got the
-           swell anyway. Selection reads entirely through the bloom now: the
-           0.32 alpha floor, the ×1.7 glow gain, the widened bloom radius and
-           the second wide aura ring. `shrink` stays — it is the gone-fade,
-           the memory leaving, not the layout answering a touch. */
-        const pop = shrink;
-        const ex = (rx + ORB_PAD) * pop;
-        const ey = (ry + ORB_PAD) * pop;
-
-        ctx!.globalAlpha = a;
-        if (b.img) {
-          const spr = rx * 2 * view.dpr > 110 ? b.img.lg : b.img.sm;
-          ctx!.drawImage(spr, b.x - rx * pop, cyv - ry * pop, rx * 2 * pop, ry * 2 * pop);
-          if (b.alive < 1) {
-            /* the photo desaturating toward slate as its light leaves */
-            ctx!.globalAlpha = a * (1 - tierOf(b) / (TIERS - 1)) * 0.7;
-            ctx!.fillStyle = pal.gray;
-            ctx!.beginPath();
-            ctx!.ellipse(b.x, cyv, rx * pop, ry * pop, 0, 0, TAU);
-            ctx!.fill();
-          }
-        } else {
-          /* THE DISC TELLS THE TRUTH, INCLUDING WHILE YOU ARE READING IT.
-             This used to pin a selected orb at the top tier, which meant a
-             dormant memory rendered as fully alive the moment you tapped it —
-             the product's own thesis running backwards. You could not watch a
-             reflection re-light it (the disc was already at maximum), and the
-             orb you had just brought back was DIMMER after you closed the
-             panel than while you read it. Attention is carried by the bloom,
-             which has a floor under it; the disc is what the memory IS. */
-          const tier = tierOf(b);
-          /* stepped as you cross into a machine's wall: the same disc, landing
-             on a grid instead of anywhere */
-          /* Two facts, two channels, resolved to one sheet: WHOSE it is picks
-             the hue, WHAT KIND OF MIND kept it picks the resolution. Your own
-             smooth untinted memories are the common case and skip the cache
-             entirely. */
-          const machine = b.origin === "agent";
-          const hue = b.hue ?? -1;
-          const sheet = hue < 0 && !machine ? pal.orbs : orbsForHue(pal, hue, machine);
-          ctx!.drawImage(sheet[b.sizeIdx][tier], grid(b.x) - ex, grid(cyv) - ey, ex * 2, ey * 2);
-        }
-        /* NO RING. The frontier was drawn as an open arc outside the disc and
-           it read as decoration nobody could name — "what are these outlines
-           for" was the whole verdict. The opacity already carries it: a memory
-           nothing rests on has no cited-bonus under its light, so it sits
-           dimmer than its neighbours on its own. The fact is still computed
-           and the companion still speaks it; it just is not drawn twice. */
-      }
-      };
-      orbPass(list, order);
+      /* passes 1 and 2 — THE GROUND. Every memory's diffuse bloom laid down in
+         additive light, then every memory's disc drawn over it. One appearance
+         in two loops: the disc reads as lit from within precisely because its
+         own bloom is already underneath it, so the two are not separable and
+         they left together. `space/inspiration/field-paint.ts`. */
+      paintField({
+        ctx: ctx!,
+        pal,
+        list,
+        order,
+        cam,
+        view,
+        t,
+        depthSpan,
+        selId,
+        still: pour.active,
+        mech,
+        grid,
+        panelOpen,
+      });
 
       /* No connection visuals. The founder was explicit after seeing them:
          "I don't want the connections with the other balls to appear. It's

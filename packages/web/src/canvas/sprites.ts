@@ -38,6 +38,20 @@ export const BLOOM_R = 2.2;
 export const BLOOM_PEAK = 0.2;
 export const BLOOM_EXP = 2.2;
 /**
+ * The bloom's whole strength curve, in one place: wide and thin, the way
+ * a bright point reads through a night lens. A dormant memory keeps a
+ * trace of one — the continuum never reaches nothing.
+ *
+ * It sits here rather than in either painter because BOTH of them ask it the
+ * same question. It was a local inside the page's draw function while the sky
+ * and the field were painted by the same 531-line body; splitting that body
+ * would have meant two copies of one curve, and two copies is how the light
+ * under a memory and the light under the same memory shown as evidence drift
+ * apart. That exact drift is what the satellite pass's own comments record
+ * having already been fixed twice.
+ */
+export const bloomAlpha = (pow: number) => BLOOM_PEAK * (0.13 + 0.87 * pow);
+/**
  * How much of the disc's radius is feather.
  *
  * This said "Crisp: this is photography" over a value of 0.07 — seven percent

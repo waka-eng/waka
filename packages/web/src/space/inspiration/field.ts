@@ -118,6 +118,34 @@ export function tierOf(b: Ball): number {
 }
 
 /**
+ * Painter's order for the shadow+body pass: bottom-most orb first, so an
+ * orb's contact shadow lands ON whatever it is resting against and is
+ * then covered by the orb itself. Insertion sort over a preallocated
+ * index array — O(n) on the near-sorted frame-to-frame case, and it
+ * allocates nothing.
+ *
+ * TWO CALLERS, AND THEY MUST NEVER DISAGREE. The painter walks this order
+ * forwards; the page's hit test walks the identical array backwards, so the
+ * orb whose pixels are on top is the orb that answers a tap. Walking `list`
+ * by index instead was the bug behind "I click one ball and a different one
+ * lights up". When the painter moved out of the page the sort had to land
+ * somewhere both could import, or the two would have been free to drift into
+ * two orderings — which is that same bug with no single line to blame.
+ */
+export function sortByDepth(arr: Ball[], ord: number[]) {
+  for (let i = 1; i < ord.length; i++) {
+    const v = ord[i];
+    const y = arr[v].y;
+    let j = i - 1;
+    while (j >= 0 && arr[ord[j]].y < y) {
+      ord[j + 1] = ord[j];
+      j--;
+    }
+    ord[j + 1] = v;
+  }
+}
+
+/**
  * THE FIELD SHOWS EVERYTHING — INVARIANT, not a layout preference.
  *
  * Standing in the field, EVERY inspiration that exists at the dial's time is
