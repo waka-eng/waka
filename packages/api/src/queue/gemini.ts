@@ -114,9 +114,43 @@ function clip(value: string, max: number): string {
   return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
 }
 
-/** Delimit anything the model must read as data rather than as instruction. */
+/**
+ * Delimit anything the model must read as data rather than as instruction.
+ *
+ * THE BODY MUST NOT BE ABLE TO SPELL THE DELIMITER.
+ *
+ * This fence is the whole defence. The system instruction says everything
+ * between the markers is data; if the data can write `<<<end attachment>>>`
+ * itself, it ends the fence early and whatever follows arrives as
+ * instruction. What an attacker gains is not a leaked secret — it is
+ * sentences of their choosing minted as the VICTIM'S OWN signals, in the
+ * victim's voice, shown back to them as things they apparently believe. And
+ * it compounds, because a signal is re-interpolated into later synthesis
+ * prompts every time the profile is re-derived.
+ *
+ * It was reachable. `extractPageBody` strips tags BEFORE decoding entities,
+ * so `&lt;&lt;&lt;end attachment&gt;&gt;&gt;` on any page carries no angle
+ * brackets at the moment the tag stripper looks, survives untouched, and is
+ * turned into real ones by the decode that follows.
+ *
+ * Fixed here rather than in the extractor on purpose. Reordering the
+ * extractor would fix one path and leave every other one — a pasted note, a
+ * reflection answer, an image description — still able to do it, and would
+ * introduce its own bug: decoding first means `&lt;script&gt;` becomes a real
+ * tag for the stripper to eat, silently deleting text an author escaped.
+ * Neutralising at the fence covers every caller and cannot be bypassed by
+ * finding a new way in.
+ *
+ * It spaces the runs out rather than deleting them, because this is data a
+ * person may have written deliberately and the model should still read what
+ * they said. `<<<loud>>>` in a margin note survives as `< < <loud> > >`.
+ */
+function neutralizeFenceMarkers(body: string): string {
+  return body.replace(/<{3,}|>{3,}/g, (run) => run.split("").join(" "));
+}
+
 function fence(tag: string, body: string): string {
-  return `<<<${tag}>>>\n${body}\n<<<end ${tag}>>>`;
+  return `<<<${tag}>>>\n${neutralizeFenceMarkers(body)}\n<<<end ${tag}>>>`;
 }
 
 // ---------------------------------------------------------------------------
