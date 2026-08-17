@@ -30,6 +30,35 @@ import type { Ball } from "./orb";
 export const ORB_R_MIN = 6;
 
 /**
+ * THE FOCUS LAW, AS RATES — how fast light arrives and how slowly it leaves.
+ *
+ * Each is the fraction of the distance still remaining one second later, fed
+ * to `kd()` with the frame's own dt, so all of these mean the same thing on a
+ * 60Hz Android and a 120Hz iPhone. They were per-frame constants (0.14, 0.16,
+ * 0.2) and therefore meant two different things on the two devices sitting
+ * side by side.
+ *
+ * They live HERE, with the field, and not with whoever happens to read them.
+ * They sat in Home.tsx for as long as the page was the only thing that eased
+ * anything, in a block of twelve that also held the camera's rubber band and
+ * the companion's turn. Then the sky engine moved out to `space/signal/
+ * sky-engine.ts` and took a satellite's glow and dim with it — and a satellite
+ * IS a field orb, shown as evidence, so the two must fade on ONE curve or the
+ * same memory answers a selection two different ways depending on which
+ * section you are looking at it in. Copying five numbers into the new module
+ * is exactly how that drifts apart. The other seven eases stayed in the page:
+ * they belong to a camera and a character, and nothing outside the loop reads
+ * them.
+ */
+export const EASE_LIGHT = 1.2e-4;
+/** Light in fast, out slow: τ ≈ 28ms arriving, ≈ 180ms leaving. */
+export const EASE_GLOW_IN = 1e-16;
+export const EASE_GLOW_OUT = 3.8e-3;
+/** The haze the other way round: it closes in slowly and lifts briskly. */
+export const EASE_DIM_IN = 1.1e-2;
+export const EASE_DIM_OUT = 4.5e-4;
+
+/**
  * Aliveness mirrors the real activation engine's constants (7-day half-life,
  * reflection charge 0.25 — scoring/activation.ts). With the live archive's
  * June–July gap most balls WILL be dim; that is honest and desired.

@@ -8,8 +8,9 @@
  * One reason to exist: a `Candidate` is a signal that has formed and has not
  * been adopted; a `Neb` is the light that candidate is drawn as; a `Sat` is one
  * piece of its evidence, in orbit around it. Those three shapes are the whole
- * vocabulary of the sky, and nothing here computes a frame — the engine that
- * moves them still lives in the page. No React, no canvas, no network.
+ * vocabulary of the sky, and nothing here computes a frame: what MOVES them is
+ * `sky-engine.ts` beside this file, which for a long time lived in the page and
+ * no longer does. No React, no canvas, no network.
  *
  * `sky` is a word for WHERE this is drawn, not a fourth noun beside the canon's
  * three; `docs/architecture.md` keeps that distinction.
