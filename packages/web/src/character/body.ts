@@ -39,7 +39,7 @@ import { hashStr, mix32 } from "../lib/num";
  *   2. THE LATHE/PLANET MODEL — lathe-symmetric about a vertical axis; yaw is
  *      a longitude, features travel across the surface, the silhouette never
  *      scales and features are OCCLUDED rather than hidden. Two rotation
- *      physics in one world is two worlds.
+ *      physics in one layout is two worlds.
  *   3. ONE KEY — KEY_X / KEY_Y. No companion carries its own light source.
  *   4. ONE RAMP — bodyTier off ramp.bodyLit/bodyShade. Two beings at the same
  *      aliveness are the same colour at the same luminance. Temperature and

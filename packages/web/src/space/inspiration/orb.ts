@@ -269,11 +269,11 @@ export interface BornSeed extends SignalSeed {
 export function seedOf(
   c: Inspiration,
   citations: Map<string, Evidence[]>,
-  patternById: Map<string, Signal>,
+  signalById: Map<string, Signal>,
 ): SignalSeed {
   const cites = citations.get(c.id) ?? [];
   const above = cites
-    .map((e) => patternById.get(e.signalId))
+    .map((e) => signalById.get(e.signalId))
     .filter((p): p is Signal => Boolean(p));
   return {
     id: c.id,

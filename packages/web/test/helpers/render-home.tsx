@@ -290,7 +290,7 @@ export async function mountWorld(facts: WorldFacts): Promise<MountedWorld> {
     },
     async toField() {
       const canvas = container.querySelector("canvas");
-      if (!canvas) throw new Error("no canvas — the world never mounted");
+      if (!canvas) throw new Error("no canvas — the layout never mounted");
       for (let i = 0; i < 12; i += 1) {
         await act(async () => {
           canvas.dispatchEvent(

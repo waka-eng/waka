@@ -505,7 +505,7 @@ export const MOCK_AGENT_BUNDLES: AgentBundle[] = [
  *
  * A signed-out visitor in DEV gets this instead of the door, because it is the
  * only way the entire world — every space, every group, the hues, the legend —
- * can be LOOKED AT without a session. `offlineWorld()` returns null outside
+ * can be LOOKED AT without a session. `offlineHome()` returns null outside
  * dev, so a real visitor always gets the login screen and never an invented
  * memory.
  *
@@ -520,7 +520,7 @@ import type { Adopted, Provenance } from "../space/top-of-mind/board";
 import type { Inspiration, Signal, Evidence, Entry } from "./data";
 
 /** Everything the world is built from, when it is built from nothing. */
-export interface OfflineWorld {
+export interface OfflineHome {
   /** The ground: the field is made of these, and of nothing else. */
   inspirations: Inspiration[];
   /** The sky: signals still forming, each citing memories that exist. */
@@ -535,7 +535,7 @@ export interface OfflineWorld {
   provenance: Provenance;
 }
 
-/** The quote a fixture pattern took from a fixture memory, kept out of band
+/** The quote a fixture signal took from a fixture memory, kept out of band
     so the two producers below can be written independently of each other. */
 export const OFFLINE_QUOTES = new Map<string, string>();
 
@@ -545,7 +545,7 @@ export function offlineSignal(
   day: number,
   text: string,
   extra: {
-    /** The words a pattern carried out of it. Verbatim inside `text`, or the
+    /** The words a signal carried out of it. Verbatim inside `text`, or the
         panel simply does not mark them — see markPassages. */
     quote?: string;
     /** The signals this memory fed. Real statements, and its light reads them. */
@@ -597,16 +597,16 @@ export function offlineReading(
   day: number,
   title: string,
   evidence: Array<[number, string | null]>,
-): { pattern: Signal; evidence: Evidence[] } {
+): { signal: Signal; evidence: Evidence[] } {
   const at = Date.parse(daysAgo(day));
   return {
-    pattern: {
+    signal: {
       id: `offline-p${n}`,
       statement: title,
       /* still overhead: a fixture has adopted nothing */
       status: "emerging",
       /* NOT SCORED, SO NOT CLAIMING A SCORE. Confidence is the server's
-         reading of a pattern; a fixture has no server, and inventing a
+         reading of a signal; a fixture has no server, and inventing a
          plausible number would put a made-up value into the one channel this
          page reserves for meaning. Zero is "not scored", and the sky's layout
          then keeps the order the fixture declares. */
@@ -641,7 +641,7 @@ export function offlineReading(
  * Returns null outside dev — and then the page's own failure line stands, as
  * it did before any of this existed.
  */
-export function offlineWorld(): OfflineWorld | null {
+export function offlineHome(): OfflineHome | null {
   if (!showsDebug()) return null;
 
   const R1 = "I am becoming someone who shows the thing instead of describing it.";
@@ -816,14 +816,14 @@ export function offlineWorld(): OfflineWorld | null {
   const notes: Entry[] = readings.map((r, i) => ({
     id: `offline-e${i + 1}`,
     type: "pattern" as const,
-    body: r.pattern.statement,
+    body: r.signal.statement,
     belief: null,
     prompt: null,
     locked: false,
     pinned: i === 0,
     dismissed: false,
     sortOrder: i,
-    citedSignals: [{ id: r.pattern.id, statement: r.pattern.statement }],
+    citedSignals: [{ id: r.signal.id, statement: r.signal.statement }],
     createdMs: boardMs,
   }));
 
@@ -831,12 +831,12 @@ export function offlineWorld(): OfflineWorld | null {
      is the peek row — not the newest few, but what led to what you are
      reading. It points at layer 2 because that is what an entry cites. */
   const provenance: Provenance = new Map(
-    readings.map((r) => [r.pattern.id, r.pattern.statement] as const),
+    readings.map((r) => [r.signal.id, r.signal.statement] as const),
   );
 
   return {
     inspirations,
-    signals: readings.map((r) => r.pattern),
+    signals: readings.map((r) => r.signal),
     citations,
     notes,
     adopted: {

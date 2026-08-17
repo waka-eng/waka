@@ -325,9 +325,9 @@ export async function deleteAccount(): Promise<void> {
 
 /* PROFILES LIVE FURTHER DOWN, IN MAIN'S VERSION.
    This file briefly held two `fetchProfiles`/`createProfile` pairs: one written
-   for the world, one from the account-management work, backed by real routes
+   for the layout, one from the account-management work, backed by real routes
    for rename and delete as well. Main's is canonical — it is the one the
-   server actually answers — so the world uses `ApiOwnedProfile` and gains the
+   server actually answers — so the layout uses `ApiOwnedProfile` and gains the
    two verbs it never had. */
 
 // ---------------------------------------------------------------------------
@@ -1398,7 +1398,7 @@ export async function fetchGroupWall(groupId: string): Promise<ApiGroupWallSigna
  * only for captures their author marked public. Private ones are not filtered
  * on the client — they never leave the server.
  */
-export interface ApiGroupFieldCapture {
+export interface ApiGroupFieldInspiration {
   id: string;
   text: string;
   kind: ApiInspirationKind | null;
@@ -1410,8 +1410,8 @@ export interface ApiGroupFieldCapture {
   ownerType: "human" | "agent";
 }
 
-export async function fetchGroupField(groupId: string): Promise<ApiGroupFieldCapture[]> {
-  const body = await getJson<{ field: ApiGroupFieldCapture[] }>(
+export async function fetchGroupField(groupId: string): Promise<ApiGroupFieldInspiration[]> {
+  const body = await getJson<{ field: ApiGroupFieldInspiration[] }>(
     apiPath(`/groups/${encodeURIComponent(groupId)}/field`),
     "Failed to load this room's field",
   );

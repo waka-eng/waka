@@ -136,11 +136,11 @@ import {
 } from "../space/inspiration/orb";
 import {
   MOCK_AGENTS,
-  offlineWorld,
+  offlineHome,
   showsDebug,
   MOCK_AGENT_BUNDLES,
   type AgentBundle,
-  type OfflineWorld,
+  type OfflineHome,
 } from "../lib/fixture";
 import {
   agoWords,
@@ -193,7 +193,7 @@ import {
   type ApiGroupProposal,
   type ApiGroupMember,
   type ApiGroupSummary,
-  type ApiGroupFieldCapture,
+  type ApiGroupFieldInspiration,
   type ApiGroupWallSignal,
   type ApiTopOfMindVersion,
   ApiError,
@@ -786,10 +786,10 @@ async function loadAgentWalls(): Promise<AgentBundle[]> {
 }
 
 
-interface World {
+interface Layout {
   wallL: number;
   wallR: number;
-  worldH: number;
+  layoutH: number;
   /** The deepest the camera goes: standing in the jar. */
   maxCam: number;
   /** The highest the camera goes: standing in the sky, one viewport above HQ. */
@@ -814,15 +814,15 @@ interface World {
  * declared here, and their homes are assigned into it (assignHomes) so the
  * peek is solved directly rather than emerging from a pile settling.
  */
-function computeWorld(vw: number, vh: number, dialH: number): World {
+function computeLayout(vw: number, vh: number, dialH: number): Layout {
   const interior = Math.min(vw - 24, 560);
   const wallL = (vw - interior) / 2;
   const wallR = vw - wallL;
-  const worldH = vh * 2;
+  const layoutH = vh * 2;
   return {
     wallL,
     wallR,
-    worldH,
+    layoutH,
     maxCam: vh,
     minCam: -vh,
     /* The peek line sits clear of the time dial, which is fixed to the
@@ -832,7 +832,7 @@ function computeWorld(vw: number, vh: number, dialH: number): World {
     /* AND THE FIELD ENDS EXACTLY WHERE THE DIAL BEGINS — not forty pixels of
        air above it. The reserve is a real, measured piece of chrome, so it is
        the only thing the field owes the bottom of the screen. */
-    fieldBottom: worldH - dialH,
+    fieldBottom: layoutH - dialH,
   };
 }
 
@@ -1437,7 +1437,7 @@ function buildPalette(
  *      production visitor is redirected out of /jar before any of this is
  *      reachable at all.
  *   2. ONLY ON FAILURE, AND NEVER A DEFAULT. Nothing here is constructed
- *      until the archive fetch has actually rejected: `offlineWorld()` is
+ *      until the archive fetch has actually rejected: `offlineHome()` is
  *      called from one catch and from nowhere else, and every memory below
  *      lives inside its body rather than at module scope, so an app whose API
  *      answers never allocates a single one of them.
@@ -1619,13 +1619,13 @@ export default function HomePage(): JSX.Element {
      a prototype living beside the real surface; the only things still behind
      `showsDebug()` are the offline fixture and the mock walls, which is where
      that gate belongs. */
-  return <WorldExperience />;
+  return <HomeExperience />;
 }
 
-function WorldExperience(): JSX.Element {
+function HomeExperience(): JSX.Element {
   const [phase, setPhase] = useState<"loading" | "ready" | "failed">("loading");
   /**
-   * NOTHING BEHIND THIS WORLD BUT THE FIXTURE — see offlineWorld().
+   * NOTHING BEHIND THIS WORLD BUT THE FIXTURE — see offlineHome().
    *
    * Set exactly once, from the archive fetch's own failure, and never unset:
    * a page that swapped a fixture out for real data underneath the reader
@@ -1683,14 +1683,14 @@ function WorldExperience(): JSX.Element {
    */
   const [citations, setCitations] = useState<Map<string, Evidence[]>>(new Map());
   /** LAYER 3 — the one artifact this profile stands on. Null before the first
-      synthesis, which the world says in words rather than leaving blank. */
+      synthesis, which the layout says in words rather than leaving blank. */
   const [topOfMind, setTopOfMind] = useState<TopOfMind | null>(null);
   /** The background sweep has finished. The only thing that waits for it is
       imagery, which must appear all at once or not at all. */
   const [sweepDone, setSweepDone] = useState(false);
   /** pattern id → what it rests on. Filled by the sky's background sweep;
       read by the orbit, which never fetches on tap. */
-  const evidenceByPatternRef = useRef<Map<string, Evidence[]>>(new Map());
+  const evidenceBySignalRef = useRef<Map<string, Evidence[]>>(new Map());
 
   /**
    * READING THE SKY — the one owner, so it can happen more than once.
@@ -1727,7 +1727,7 @@ function WorldExperience(): JSX.Element {
           if (have) have.push(e);
           else index.set(e.inspirationId, [e]);
         }
-        evidenceByPatternRef.current.set(p.id, full.evidence);
+        evidenceBySignalRef.current.set(p.id, full.evidence);
       } catch {
         /* this signal draws no orbit; the statement still stands */
       }
@@ -1744,7 +1744,7 @@ function WorldExperience(): JSX.Element {
       if (!lead) return cur;
       const prov: Provenance = new Map();
       for (const c of lead.citedSignals)
-        for (const e of evidenceByPatternRef.current.get(c.id) ?? [])
+        for (const e of evidenceBySignalRef.current.get(c.id) ?? [])
           if (!prov.has(e.inspirationId)) prov.set(e.inspirationId, e.quote);
       if (prov.size > 0) setProvenance(prov);
       return cur;
@@ -2118,7 +2118,7 @@ function WorldExperience(): JSX.Element {
   >(new Map());
   const groupChromeRef = useRef<Map<string, WallChrome>>(new Map());
   /* a room's ground, by group id, filled when the room wakes */
-  const groupFieldRef = useRef<Map<string, ApiGroupFieldCapture[]>>(new Map());
+  const groupFieldRef = useRef<Map<string, ApiGroupFieldInspiration[]>>(new Map());
   /** Namespaced room-orb id → ball, for the panel and relight lookups. */
   const groupBallsRef = useRef<Map<string, Ball>>(new Map());
   /** Rooms whose orbs have already poured this session: no re-pour on return. */
@@ -2151,7 +2151,7 @@ function WorldExperience(): JSX.Element {
          never generates a signal: every statement here was formed on some
          member's own wall out of their own inspirations and then shared in,
          so the ground was always real and simply never fetched. */
-      fetchGroupField(groupId).catch(() => [] as ApiGroupFieldCapture[]),
+      fetchGroupField(groupId).catch(() => [] as ApiGroupFieldInspiration[]),
     ])
       .then(([top, wall, proposals, field]) => {
         wallSignalsRef.current.set(groupId, wall);
@@ -2219,16 +2219,16 @@ function WorldExperience(): JSX.Element {
      * finds `offlineRef` already set and drops what it came back with. That is
      * the no-merge rule, enforced at the only four places state is written.
      */
-    const goOffline = (world: OfflineWorld) => {
+    const goOffline = (layout: OfflineHome) => {
       offlineRef.current = true;
       setOffline(true);
-      setNotes(world.notes);
-      setSignals(world.signals);
-      setCitations(world.citations);
+      setNotes(layout.notes);
+      setSignals(layout.signals);
+      setCitations(layout.citations);
       setTopOfMind(null);
       /* THE FIXTURE DESCRIBES THE WHOLE WORLD, NOT JUST YOUR WALL.
          This set no groups and no agents, so the dev fixture rendered exactly
-         one column — which meant every wall-specific behaviour in this world
+         one column — which meant every wall-specific behaviour in this layout
          (a room's ground, the per-member hues, the legend, pixelated agent
          memories, the machine hand, the crossing quantization) could only
          ever be seen by signing in. Every one of those shipped unobserved,
@@ -2236,9 +2236,9 @@ function WorldExperience(): JSX.Element {
 
          So the fixture now builds the same four rooms the product was
          designed around: one with only you, one with you and an agent, one of
-         people, one of machines. It stays dev-gated — `offlineWorld()` returns
+         people, one of machines. It stays dev-gated — `offlineHome()` returns
          null unless `showsDebug()` — so nothing here can reach a real
-         visitor. Its purpose is that the world can be LOOKED AT without a
+         visitor. Its purpose is that the layout can be LOOKED AT without a
          session. */
       const iso = (t: number) => new Date(t).toISOString();
       const fixtureGroups: ApiGroupSummary[] = [
@@ -2277,18 +2277,18 @@ function WorldExperience(): JSX.Element {
       );
       /* each room's ground: the members' public memories, so the hues, the
          legend and the pixelated agent orbs all have something to render */
-      for (const room of fixtureGroups) {
+      for (const group of fixtureGroups) {
         const who =
-          room.id === "fx-alone"
+          group.id === "fx-alone"
             ? [you]
-            : room.id === "fx-pair"
+            : group.id === "fx-pair"
               ? [you, yours]
-              : room.id === "fx-people"
+              : group.id === "fx-people"
                 ? [you, ...people]
                 : [you, yours, ...bots];
         const field = who.flatMap((m, mi) =>
           Array.from({ length: 3 + (mi % 3) }, (_, k) => ({
-            id: `${room.id}-${m.profileId}-${k}`,
+            id: `${group.id}-${m.profileId}-${k}`,
             text: `${m.name} kept this ${k + 1}: a sentence long enough to read as prose rather than as a label.`,
             kind: "note" as const,
             source: m.type === "agent" ? ("agent" as const) : ("app" as const),
@@ -2299,18 +2299,18 @@ function WorldExperience(): JSX.Element {
             ownerType: m.type,
           })),
         );
-        groupFieldRef.current.set(room.id, field);
+        groupFieldRef.current.set(group.id, field);
       }
       setGroupFieldTick((n) => n + 1);
       setGroups(fixtureGroups);
       setProposal(null);
-      setAdopted(world.adopted);
-      setProvenance(world.provenance);
-      setInspirations(world.inspirations);
+      setAdopted(layout.adopted);
+      setProvenance(layout.provenance);
+      setInspirations(layout.inspirations);
       setPhase("ready");
     };
     /* LAYER 1 — the field. The archive is the spine, so its answer alone
-       decides whether this is the real world or the fixture. */
+       decides whether this is the real layout or the fixture. */
     loadInspirations()
       .then((rows) => {
         if (dead || offlineRef.current) return;
@@ -2326,28 +2326,28 @@ function WorldExperience(): JSX.Element {
            again". Reloading can never fix not being signed in, so the one
            instruction on screen was guaranteed to fail, forever. It is a
            door, not an error: go to the door. */
-        const world = offlineWorld();
+        const layout = offlineHome();
         /* NOT SIGNED IN IS NOT A FAILURE — but in dev it is an OPPORTUNITY.
            A 401 used to land in the same branch as a dead network, so a
            production build met a signed-out visitor with "reload to try
            again", an instruction that can never work. It goes to the door.
 
            In dev, where a fixture exists, the fixture wins instead: that is
-           the only way the whole world — every wall, every room, the hues,
+           the only way the whole layout — every wall, every room, the hues,
            the legend — can be LOOKED AT without a session, which is what it
-           is for. `offlineWorld()` is null outside dev, so a real visitor
+           is for. `offlineHome()` is null outside dev, so a real visitor
            still gets the door. */
         if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
-          if (!world) {
+          if (!layout) {
             navigate("/login", { replace: true });
             return;
           }
-          goOffline(world);
+          goOffline(layout);
           return;
         }
         /* outside dev there is no fixture and never was: the page says what
            it has always said when the archive cannot be reached */
-        if (!world) {
+        if (!layout) {
           /* AND IT SAYS WHY. "Reload to try again" was the entire failure
              report — the one screen a person meets when the product breaks,
              and it named neither what broke nor anything they could act on.
@@ -2364,7 +2364,7 @@ function WorldExperience(): JSX.Element {
           setPhase("failed");
           return;
         }
-        goOffline(world);
+        goOffline(layout);
       });
     /* LAYER 2 — the sky. Patterns, and then in the background what each of
        them rests on: the citation index the field reads its meaning from and
@@ -2493,7 +2493,7 @@ function WorldExperience(): JSX.Element {
              `fetchGroups()` and therefore always resolves after your own board
              has loaded: the poster painted your ambition on arrival and was
              overwritten seconds later, while you were reading it. That also
-             breaks the law that the world never moves unless you moved it.
+             breaks the law that the layout never moves unless you moved it.
 
              The `return` that went with it exited the whole loop, so every
              room after the first with a board was never fetched at all — no
@@ -2660,7 +2660,7 @@ function WorldExperience(): JSX.Element {
       /* SINGLE APPEARANCE. The images live on the details, so they only exist
          once the whole sweep has landed — and they are published in ONE step
          when it does. Publishing per arrival would pop pictures into orbs one
-         at a time under a reader's eyes, which is the mid-read swap the world
+         at a time under a reader's eyes, which is the mid-read swap the layout
          forbids everywhere else. */
       void Promise.all(Array.from({ length: 4 }, () => pump())).then(() => {
         if (!dead) setSweepDone(true);
@@ -2917,7 +2917,7 @@ function WorldExperience(): JSX.Element {
     /* the same two hops: entry → its signals → the memories they were drawn
        from, which is what the row beneath the poster is actually made of */
     for (const c of best.citedSignals)
-      for (const e of evidenceByPatternRef.current.get(c.id) ?? [])
+      for (const e of evidenceBySignalRef.current.get(c.id) ?? [])
         if (!prov.has(e.inspirationId)) prov.set(e.inspirationId, e.quote);
     if (prov.size > 0) setProvenance((prev) => (prev.size > 0 ? prev : prov));
   }, [adopted, notes]);
@@ -2998,13 +2998,13 @@ function WorldExperience(): JSX.Element {
        claim rests on), applied to the material a room actually has. */
     for (const w of walls) {
       if (w.kind !== "group") continue;
-      const room = groupCacheRef.current.get(w.id);
-      const lead = room?.data?.top?.entries?.[0];
+      const cached = groupCacheRef.current.get(w.id);
+      const lead = cached?.data?.top?.entries?.[0];
       const prov: Provenance = new Map();
       if (lead)
-        for (const ev of room?.data?.evidence ?? [])
+        for (const ev of cached?.data?.evidence ?? [])
           if (ev.citedBy.includes(lead.body)) prov.set(ev.signalId, ev.quote);
-      m.set(`room:${w.id}`, prov);
+      m.set(`cached:${w.id}`, prov);
     }
     wallProvRef.current = m;
     simApiRef.current?.setProvenance(m);
@@ -3020,7 +3020,7 @@ function WorldExperience(): JSX.Element {
     };
     w.wakaField = () => simApiRef.current?.audit() ?? null;
     /* The whole control surface, for a console or a test that needs to drive
-       the world without a pointer in the way. Bisecting "the button did not
+       the layout without a pointer in the way. Bisecting "the button did not
        work" from "the command did not work" is otherwise guesswork. */
     w.wakaSim = () => simApiRef.current;
     return () => {
@@ -3136,7 +3136,7 @@ function WorldExperience(): JSX.Element {
        the in-page switch is for the person who has not set one, or who wants
        this page still and the rest of their machine as it was. */
     /* THE SYSTEM PREFERENCE, AND NOTHING ELSE.
-       An in-page "hold the world still" switch lived here for a while and it
+       An in-page "hold the layout still" switch lived here for a while and it
        was a mistake: in a product whose motion IS the meaning, one persisted
        boolean could freeze everything — the companion stopped walking,
        leaning, bobbing and answering — with no visible state saying why, and
@@ -3148,7 +3148,7 @@ function WorldExperience(): JSX.Element {
     let vw = 1;
     let vh = 1;
     let dpr = 1;
-    let world = computeWorld(1, 1, DIAL_H);
+    let layout = computeLayout(1, 1, DIAL_H);
     /* the dial's real strip, read off the dial itself every measure */
     let dialH = DIAL_H;
     let camY = 0;
@@ -3167,7 +3167,7 @@ function WorldExperience(): JSX.Element {
        camera gains camX = column × vw with the same snap discipline as the
        vertical: velocity-biased, one column per gesture, never resting
        between. The COMPANION leads every transition — it sets off first and
-       the world eases after it, which is how the page explains where the
+       the layout eases after it, which is how the page explains where the
        rooms are. */
     /* not zero: the loop resumes where the last one was, or was going */
     const resumedAt = headingRef.current;
@@ -3179,7 +3179,7 @@ function WorldExperience(): JSX.Element {
     let travelDir: 1 | -1 = 1;
     let travelDest = 0;
     let travelAt = 0;
-    let travelFromX = 0; /* where the world's slide profile eases from */
+    let travelFromX = 0; /* where the layout's slide profile eases from */
     let charOff = 0; /* the traveler's screen lead, px */
     let charLead = 0;
     let charFrom = 0; /* where the lead ramp starts — no pops on re-travel */
@@ -3301,7 +3301,7 @@ function WorldExperience(): JSX.Element {
     let lastT = 0;
 
     /* Dust motes: preallocated, mutated in place, never reallocated. They
-       live in SCREEN space (drawn at world y = y + camY) because they are
+       live in SCREEN space (drawn at layout y = y + camY) because they are
        the air in front of the camera, not objects in the pile. */
     const moteX = new Float32Array(MOTES);
     const moteY = new Float32Array(MOTES);
@@ -3413,7 +3413,7 @@ function WorldExperience(): JSX.Element {
       lastActive = performance.now();
       /* ANY REAL EVENT WAKES THE WORLD, at once and to full amplitude. wake()
          is what every one of them already calls — a touch, the pour, a scrub,
-         a relight, a travel, an adoption, a room arriving — so the world's
+         a relight, a travel, an adoption, a room arriving — so the layout's
          attention and the loop's attention are the same thing. */
       stirAt = lastActive;
       settle = 1;
@@ -3479,11 +3479,11 @@ function WorldExperience(): JSX.Element {
       const n = present.length;
       if (n === 0) return;
 
-      const spanL = world.wallL;
-      const spanR = world.wallR;
+      const spanL = layout.wallL;
+      const spanR = layout.wallR;
 
       /* THE BAND IS THE WHOLE SCREEN, LESS THE ONE PIECE OF CHROME ON IT.
-         Standing in the field the camera sees world [vh, 2vh]; the dial owns
+         Standing in the field the camera sees layout [vh, 2vh]; the dial owns
          its measured strip at the bottom of that, and nothing else is owed
          anything. Every orb's own radius and drift are then held off both
          edges by its `clear`, so the promise is exact by construction at every
@@ -3492,7 +3492,7 @@ function WorldExperience(): JSX.Element {
          it — a fixed reserve that ate a tenth of a tall screen and a quarter
          of a short one, which is the bug.) */
       const yTopEdge = vh + FIELD_EDGE;
-      const yBotEdge = world.fieldBottom;
+      const yBotEdge = layout.fieldBottom;
 
       /* FIT FIRST. Every orb is sized to the band it has to share before a
          single one of them is placed. */
@@ -3555,9 +3555,9 @@ function WorldExperience(): JSX.Element {
         for (let i = 0; i < rowN0; i++) rowSet.push(present[n - 1 - i]);
       }
       const rowN = rowSet.length;
-      const spanL = world.wallL;
-      const spanR = world.wallR;
-      const top = world.fieldTop;
+      const spanL = layout.wallL;
+      const spanR = layout.wallR;
+      const top = layout.fieldTop;
       /* the peek is EXACT: the highest top edge in the row, drift included,
          lands on the line — so the promise is the same 96px at every height */
       let lift = Infinity;
@@ -3614,7 +3614,7 @@ function WorldExperience(): JSX.Element {
      * only because you moved it.
      */
     function peekLift(): number {
-      return clamp01(1 - camY / Math.max(world.maxCam, 1));
+      return clamp01(1 - camY / Math.max(layout.maxCam, 1));
     }
 
     /**
@@ -3756,7 +3756,7 @@ function WorldExperience(): JSX.Element {
     };
     const colLo = () => wallsRef.current[0]?.col ?? 0;
     const colHi = () => wallsRef.current[wallsRef.current.length - 1]?.col ?? 0;
-    const minCamNow = () => (hasSky(curWall().kind) ? world.minCam : 0);
+    const minCamNow = () => (hasSky(curWall().kind) ? layout.minCam : 0);
     /**
      * THE PLACES THE CAMERA MAY REST, in order, and the ONE definition of
      * them. The array used to be written out at each of the three sites that
@@ -3767,7 +3767,7 @@ function WorldExperience(): JSX.Element {
      */
     const restPoints = (): number[] => {
       const lo = minCamNow();
-      return lo < 0 ? [lo, 0, world.maxCam] : [0, world.maxCam];
+      return lo < 0 ? [lo, 0, layout.maxCam] : [0, layout.maxCam];
     };
 
     function findBall(id: string): Ball | undefined {
@@ -4007,7 +4007,7 @@ function WorldExperience(): JSX.Element {
     function canTravelHere(): boolean {
       if (camAiming) return false;
       const atHQ = Math.abs(camY) < 2;
-      const atSky = hasSky(curWall().kind) && Math.abs(camY - world.minCam) < 2;
+      const atSky = hasSky(curWall().kind) && Math.abs(camY - layout.minCam) < 2;
       return atHQ || atSky;
     }
 
@@ -4132,7 +4132,7 @@ function WorldExperience(): JSX.Element {
       for (const n of nebs) {
         if (n.gone > 0 || !n.pinned) continue;
         /* stored relative to the wall it belongs to: a new agent arriving
-           shifts every column, and a spot remembered in world coordinates
+           shifts every column, and a spot remembered in layout coordinates
            would come back on somebody else's wall */
         layout[n.id] = { x: Math.round(n.x - n.col * vw), y: Math.round(n.y) };
       }
@@ -4474,11 +4474,11 @@ function WorldExperience(): JSX.Element {
       n.homeX = clamp(n.homeX, off + padX, Math.max(off + padX, off + vw - padX));
       /* the pads are capped at a fraction of the viewport, so this range is
          never empty however tall the words wrapped */
-      n.homeY = clamp(n.homeY, world.minCam + padY + 28, -padY);
+      n.homeY = clamp(n.homeY, layout.minCam + padY + 28, -padY);
     }
 
     function layoutSky() {
-      const cy = world.minCam + vh * 0.46;
+      const cy = layout.minCam + vh * 0.46;
       const base = Math.min(vw, vh);
       const ring = Math.min(vw * 0.3, vh * 0.27);
       /* each wall's sky is laid out in its own column, around its own centre */
@@ -4617,7 +4617,7 @@ function WorldExperience(): JSX.Element {
         if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
           const off = c.col * vw;
           n.x = n.homeX = off + clamp(saved.x, 12, vw - 12);
-          n.y = n.homeY = clamp(saved.y, world.minCam + 30, -20);
+          n.y = n.homeY = clamp(saved.y, layout.minCam + 30, -20);
           n.pinned = true;
         }
         next.push(n);
@@ -4905,7 +4905,7 @@ function WorldExperience(): JSX.Element {
              frame under a comment claiming it was 1:1 — three frames of lag,
              which is forty pixels at a normal drag speed, and onUp then wrote
              that LAGGED position as the cloud's new home. You aimed, and the
-             world put it forty pixels short, every time, on the gesture that
+             layout put it forty pixels short, every time, on the gesture that
              performs this product's central act of meaning-making.
              The weight moves to the halo below: the light has inertia, the
              object does not. That is what "made of light" means, said in the
@@ -5073,8 +5073,8 @@ function WorldExperience(): JSX.Element {
          (Grow the viewport while standing in the sky and the camera sat at
          the old −vh — a legal position in the new range, so the rubber-band
          had nothing to say about it — and one ArrowDown went to the field.) */
-      const prevLo = world.minCam;
-      const prevHi = world.maxCam;
+      const prevLo = layout.minCam;
+      const prevHi = layout.maxCam;
       const wasRest = restPoints();
       let sec = 0;
       {
@@ -5082,11 +5082,11 @@ function WorldExperience(): JSX.Element {
         for (let i = 1; i < wasRest.length; i++)
           if (Math.abs(wasRest[i] - ref) < Math.abs(wasRest[sec] - ref)) sec = i;
       }
-      world = computeWorld(vw, vh, dialH);
+      layout = computeLayout(vw, vh, dialH);
       /* Only when the rest points actually moved: this observer also fires
          for HQ's own content growing, and re-anchoring on that would yank a
          camera the reader is holding. */
-      if (primed && (world.minCam !== prevLo || world.maxCam !== prevHi)) {
+      if (primed && (layout.minCam !== prevLo || layout.maxCam !== prevHi)) {
         const nowRest = restPoints();
         const landing = nowRest[Math.min(sec, nowRest.length - 1)];
         if (camAiming) {
@@ -5126,9 +5126,9 @@ function WorldExperience(): JSX.Element {
       /* THE MOUTH STANDS ON THE SEAM, so headquarters ends above it rather
          than at it. The strip is a CONSTANT (see MOUTH_H): a reserve measured
          off the mouth's live height would move the companion every time a
-         line of typing wrapped, and the world moves only when you move it. */
-      const seam = world.fieldTop - MOUTH_H;
-      const room = seam - hqH - gap * 2;
+         line of typing wrapped, and the layout moves only when you move it. */
+      const seam = layout.fieldTop - MOUTH_H;
+      const group = seam - hqH - gap * 2;
       charSize = clamp(vh * 0.14, 84, 150);
       /* The floor yields to the room before the room yields to the floor. The
          shrink must NOT be gated on `room > 0`: a section whose poster already
@@ -5136,7 +5136,7 @@ function WorldExperience(): JSX.Element {
          the companion small, and skipping the shrink there put the body back
          across the peek line. Below CHAR_MIN the body stops reading as a body,
          so that is where it stops. */
-      if (charSize > room) charSize = Math.max(Math.min(room, charSize), CHAR_MIN);
+      if (charSize > group) charSize = Math.max(Math.min(group, charSize), CHAR_MIN);
       const lo = hqH + charSize * 0.5 + gap;
       const hi = seam - charSize * 0.5 - gap;
       /* If even 32px cannot fit, `hi` is still below `lo`; split the
@@ -5149,7 +5149,7 @@ function WorldExperience(): JSX.Element {
       root!.style.setProperty("--jar-vh", `${Math.round(vh)}px`);
       /* the seam, so the mouth hangs off exactly the line the field's top
          edge peeks over — one number, measured, never duplicated in CSS */
-      root!.style.setProperty("--jar-seam", `${Math.round(world.fieldTop)}px`);
+      root!.style.setProperty("--jar-seam", `${Math.round(layout.fieldTop)}px`);
 
       /* homes are assigned after the companion has its slot, so the peek row
          can be told to keep clear of it */
@@ -5171,8 +5171,8 @@ function WorldExperience(): JSX.Element {
          covers all three sections. */
       const atmos = atmosRef.current;
       if (atmos) {
-        atmos.style.top = `${Math.round(world.minCam)}px`;
-        atmos.style.height = `${Math.round(world.worldH - world.minCam)}px`;
+        atmos.style.top = `${Math.round(layout.minCam)}px`;
+        atmos.style.height = `${Math.round(layout.layoutH - layout.minCam)}px`;
       }
       if (!motesPlaced) {
         motesPlaced = true;
@@ -5181,7 +5181,7 @@ function WorldExperience(): JSX.Element {
           moteY[i] = Math.random() * vh;
         }
       }
-      camY = clamp(camY, minCamNow(), world.maxCam);
+      camY = clamp(camY, minCamNow(), layout.maxCam);
       wake();
     }
 
@@ -5239,7 +5239,7 @@ function WorldExperience(): JSX.Element {
       snapAt = 0;
       /* DIRECTION-BIASED COMMIT. A deliberate pull that stops short of the
          midpoint used to spring all the way back with no explanation; every
-         native sheet in the world commits at a quarter to a third, because
+         native sheet in the layout commits at a quarter to a third, because
          refusal has to be EARNED. Pull toward a section and a third of the
          way is enough; drift back the other way and it takes two thirds. */
       const p = clamp01((camY - a) / Math.max(b - a, 1));
@@ -5376,7 +5376,7 @@ function WorldExperience(): JSX.Element {
              HOME, not as a clamp on position, so the orb keeps its own drift
              the whole way and reads as carried rather than pinned — and it is
              driven by the camera's own position, so it reverses by itself and
-             the world moves only because you moved it. Its field home (what
+             the layout moves only because you moved it. Its field home (what
              assignHomes solved) is never touched. */
           const homeX = b.peek ? lerp(b.homeX, b.peekX, lift) : b.homeX;
           const homeY = b.peek ? lerp(b.homeY, b.peekY, lift) : b.homeY;
@@ -5422,12 +5422,12 @@ function WorldExperience(): JSX.Element {
       };
 
       /* ONE FIELD, AND IT IS SCREEN-ANCHORED SIDEWAYS. Its x is a screen
-         coordinate, not a world one, so the memories stay exactly where they
+         coordinate, not a layout one, so the memories stay exactly where they
          are while the walls slide past above them — which is the whole image:
          your memories are the ground and the walls are what different contexts
          make of them. (The draw pass adds camX back, the way the companion's
          own screen anchor does.) */
-      moveField(list, world.wallL, world.wallR);
+      moveField(list, layout.wallL, layout.wallR);
 
       /* A newborn whose keep did not land has finished fading: it leaves the
          ground, and the field closes over the space exactly as it does for a
@@ -5510,7 +5510,7 @@ function WorldExperience(): JSX.Element {
         return s;
       };
       /* An empty archive is the one state every single person passes through,
-         and the world's own vocabulary pointed at the dark beats any
+         and the layout's own vocabulary pointed at the dark beats any
          instruction: it asks for one thing, once, and then goes quiet. */
       if (inspCol === 0 && list.every((b) => !b.active || b.leaving))
         return pick([
@@ -5557,7 +5557,7 @@ function WorldExperience(): JSX.Element {
          The layout and the present-set were taught to filter by wall, but the
          DRAW was not — so every ball belonging to somewhere else never got a
          home, kept x=0,y=0, and was still painted: the entire off-wall
-         population stacked at the world origin, which is the top-left of
+         population stacked at the layout origin, which is the top-left of
          headquarters. That pile was the shape over the poster.
 
          `active` is the flag every consumer already honors — the draw, the
@@ -5641,7 +5641,7 @@ function WorldExperience(): JSX.Element {
       if (!pal) return;
       const t = now / 1000;
       const selId = selectedIdRef.current;
-      const depthSpan = Math.max(world.fieldBottom - world.fieldTop, 1);
+      const depthSpan = Math.max(layout.fieldBottom - layout.fieldTop, 1);
       /* The bloom's whole strength curve, in one place: wide and thin, the way
          a bright point reads through a night lens. A dormant memory keeps a
          trace of one — the continuum never reaches nothing. */
@@ -5747,7 +5747,7 @@ function WorldExperience(): JSX.Element {
           (1 - n.gone) *
           (n.dragging ? 1.25 : 1) *
           /* the one it would join, answering — the drop target is a rise in
-             light and nothing else, which is the only channel this world has
+             light and nothing else, which is the only channel this layout has
              and the only one it needs */
           (n.joining ? 1.4 : 1) *
           /* and, at rest, a pair that COULD be joined leans toward each other
@@ -5780,7 +5780,7 @@ function WorldExperience(): JSX.Element {
           if (sxb < -CULL_BLOOM || sxb > vw + CULL_BLOOM) continue;
           const sy = b.y - camY;
           if (sy < -CULL_BLOOM || sy > vh + CULL_BLOOM) continue;
-          const depth = clamp01((b.y - world.fieldTop) / depthSpan);
+          const depth = clamp01((b.y - layout.fieldTop) / depthSpan);
           /* A MACHINE'S MEMORY DOES NOT BREATHE, IT CYCLES.
              The bloom's breath is a sine — the single most organic thing on
              screen, and it was running identically under an agent's memories
@@ -5856,7 +5856,7 @@ function WorldExperience(): JSX.Element {
            swell anyway. Selection reads entirely through the bloom now: the
            0.32 alpha floor, the ×1.7 glow gain, the widened bloom radius and
            the second wide aura ring. `shrink` stays — it is the gone-fade,
-           the memory leaving, not the world answering a touch. */
+           the memory leaving, not the layout answering a touch. */
         const pop = shrink;
         const ex = (rx + ORB_PAD) * pop;
         const ey = (ry + ORB_PAD) * pop;
@@ -5950,7 +5950,7 @@ function WorldExperience(): JSX.Element {
         /* it rides ahead of the world vertically as well as horizontally */
         const cyC = charY + bob + charLift;
         /* THE TRAVELER'S PLACE. The companion is screen-anchored — it is the
-           one who travels, so the world slides under it — and during a
+           one who travels, so the layout slides under it — and during a
            transition it rides ahead of centre by charOff, near the leading
            third of the screen, still bobbing. */
         const charSX = camX + vw / 2 + charOff;
@@ -6155,7 +6155,7 @@ function WorldExperience(): JSX.Element {
       /* pass 4 — the vignette. (The film grain used to be painted here too,
          with `overlay` against a transparent canvas — which is not a blend at
          all, just a flat grey sheet at seven percent over every pixel of the
-         frame. It also rode the world transform, so the "film" grain slid
+         frame. It also rode the layout transform, so the "film" grain slid
          across the image as you scrolled. It now lives on a DOM layer above
          the canvas, where it has an opaque backdrop and belongs to the lens.)
 
@@ -6204,7 +6204,7 @@ function WorldExperience(): JSX.Element {
              `pointer-events: auto` and starts at opacity zero until the loop
              has given it a place; it also passes through zero while a
              candidate condenses or disperses. Its one child is the least
-             reversible control in the world, and on touch that child rests
+             reversible control in the layout, and on touch that child rests
              visible by design — so the container has to stop taking the
              pointer whenever it cannot actually be seen. The same rule the
              action itself now obeys, applied one level up where the
@@ -6289,7 +6289,7 @@ function WorldExperience(): JSX.Element {
         lastActive = now;
       } else if (!dragging) {
         /* rubber-band at the outer ends (a room's top is HQ: no sky there) */
-        const cl = clamp(camY, minCamNow(), world.maxCam);
+        const cl = clamp(camY, minCamNow(), layout.maxCam);
         if (cl !== camY) {
           camY = Math.abs(camY - cl) < 0.4 ? cl : lerp(camY, cl, kd(EASE_BAND, dt));
           lastActive = now;
@@ -6297,7 +6297,7 @@ function WorldExperience(): JSX.Element {
       }
 
       /* THE TRAVEL. The companion sets off first — easing in over its lead
-         beat — and the world follows ~140ms later on a FIXED cubic-out, so
+         beat — and the layout follows ~140ms later on a FIXED cubic-out, so
          the room slides in under the character and the slide is over when it
          reads as over: arrival COMMITS a few pixels out instead of letting
          an exponential tail asymptote while input sits dead. */
@@ -6353,14 +6353,14 @@ function WorldExperience(): JSX.Element {
       }
       /* THE VERTICAL TRAVELER. Read the camera's own speed rather than any
          input: a drag, a flick, the wheel, an arrow key and the forming
-         line's glide into the sky all move the world, and the companion
-         answers the world. */
+         line's glide into the sky all move the layout, and the companion
+         answers the layout. */
       const camVY = dt > 0 ? (camY - camYPrev) / dt : 0;
       camYPrev = camY;
       const wantPitch = reduced ? 0 : clamp(camVY / PITCH_FULL, -1, 1);
       pitch = Math.abs(pitch - wantPitch) < 0.002 ? wantPitch : lerp(pitch, wantPitch, kd(2e-3, dt));
       /* it leads the world the same way it leads a room transition: up first,
-         then the world follows it up */
+         then the layout follows it up */
       const wantLift = reduced ? 0 : -pitch * PITCH_LEAD_PX;
       charLift = Math.abs(charLift - wantLift) < 0.2 ? wantLift : lerp(charLift, wantLift, kd(6e-3, dt));
       /* the hover-bob quickens toward a WALK while the companion leads, and
@@ -6368,7 +6368,7 @@ function WorldExperience(): JSX.Element {
          Rising it LENGTHENS (buoyant), descending it quickens (settling). */
       /* AND IT IS THIS BEING'S OWN RATE. `bobRate` and `blinkMs` were hashed
          per wall, given per-being ladders, and then read nowhere — every
-         companion in the world bobbed at exactly 1.4 and blinked on the same
+         companion in the layout bobbed at exactly 1.4 and blinked on the same
          distribution. For a product whose thesis is a companion with a
          character, the individuality was authored and thrown away. */
       bobPh +=
@@ -6520,7 +6520,7 @@ function WorldExperience(): JSX.Element {
       }
       /* Something was captured today. That is a STATE, and states render —
          so it is a steady offset under the companion's light, not a twitch.
-         (It used to flash every six seconds: the world brightening itself
+         (It used to flash every six seconds: the layout brightening itself
          some six hundred times an hour with no hand involved anywhere, which
          is the same crime as a camera move on panel-open.) */
       freshLit = freshToday ? 0.12 : 0;
@@ -6578,12 +6578,12 @@ function WorldExperience(): JSX.Element {
            still slid smoothly and the blink still fell at a human's uneven
            interval, so the creature was a machine that moved like an animal.
            Gaze is where that shows most: a continuous glide across a stepped
-           world is the one motion that gives the illusion away.
+           layout is the one motion that gives the illusion away.
 
            `mech` is 0 on your own wall and 1 standing in an agent's, so this
            is the same crossing signal everything else reads. Nothing new is
            introduced — a value that was continuous becomes discrete, which is
-           the only sentence this world knows how to say about machines. */
+           the only sentence this layout knows how to say about machines. */
         if (mech >= 0.02) {
           const eyeStep = 0.35 + mech * 0.85;
           eyeX = Math.round(eyeX / eyeStep) * eyeStep;
@@ -6646,7 +6646,7 @@ function WorldExperience(): JSX.Element {
       /* Two discrete facts leave the loop for React, and only when they
          change: whether the camera is in the sky (the dial has no meaning
          there) and which nebulae have been drawn together. */
-      const nowInSky = camY < world.minCam * 0.45;
+      const nowInSky = camY < layout.minCam * 0.45;
       if (nowInSky !== skyShown) {
         skyShown = nowInSky;
         setInSky(nowInSky);
@@ -6655,14 +6655,14 @@ function WorldExperience(): JSX.Element {
          dial fades away — exactly as it does in the sky. Read off the camera
          rather than off arrival, so it goes as the wall slides in. */
       /* AND TIME ONLY MEANS SOMETHING TO THE FIELD.
-         The dial lay across the bottom edge at all times — but in this world
+         The dial lay across the bottom edge at all times — but in this layout
          HORIZONTAL means "whose wall", and the dial means "when". Two
          different horizontal meanings on the same edge, and the bottom edge
          belongs to the axis. There is also nothing up here to wind: the sky
          holds signals that are still forming and headquarters holds one
          sentence, neither of which has a history to scrub. So it comes up
          with the field and goes away with it. */
-      const inField = camY > world.fieldTop * 0.5;
+      const inField = camY > layout.fieldTop * 0.5;
       /* THE LEGEND BELONGS TO THE GROUND IT EXPLAINS.
          It is a key to the orbs, so it exists where the orbs are. Standing at
          headquarters reading one sentence, or up in the sky among signals,
@@ -6715,7 +6715,7 @@ function WorldExperience(): JSX.Element {
         camAiming ||
         snapAt > 0 ||
         camY < minCamNow() ||
-        camY > world.maxCam;
+        camY > layout.maxCam;
       if (!awake) {
         for (const b of list) {
           if (b.leaving) {
@@ -6782,7 +6782,7 @@ function WorldExperience(): JSX.Element {
          idea of attention as an interface is that it can go somewhere else.
          So the eyes leave you and go to the memory, the body leans after them,
          and it holds there while you read. It does not travel: tap is focus,
-         not rearrangement, and the world stays where you left it. */
+         not rearrangement, and the layout stays where you left it. */
       attendTo(b.x, b.y);
       b.hold = 1;
       heldBall = b;
@@ -6982,13 +6982,13 @@ function WorldExperience(): JSX.Element {
       /* ONE GESTURE OWNS THE WORLD, AND THE CLOUD DRAG IS ONE OF THEM.
          Ownership used to be claimed AFTER the nebula branch had already
          returned, so a cloud drag ran with no identity and no capture and
-         carried both halves of the bug the world drag had just had fixed: a
+         carried both halves of the bug the layout drag had just had fixed: a
          second finger rewrote the grab offsets, so the first finger's next
          move teleported the cloud by the distance between them, and a drag
          that left the window delivered no pointerup at all — welding the
          cloud to the cursor until the next click. It is claimed here, once,
          before anything branches, because every press that gets this far is
-         the world's: a cloud, a satellite, an orb, or bare ground. */
+         the layout's: a cloud, a satellite, an orb, or bare ground. */
       if (ownerId !== null) return;
       ownerId = e.pointerId;
       try {
@@ -7017,7 +7017,7 @@ function WorldExperience(): JSX.Element {
          would never happen. The sentence above keeps its precedence: the
          words visually ARE the cloud. */
       const onSat = nb ? null : satAt(e.clientX, e.clientY);
-      if (!nb && !onSat) nb = camY < world.minCam * 0.3 ? nebAt(e.clientX, e.clientY) : null;
+      if (!nb && !onSat) nb = camY < layout.minCam * 0.3 ? nebAt(e.clientX, e.clientY) : null;
       if (nb) {
         /* a cloud on the move carries no whisper: the name belongs to the
            memory under the pointer, and the pointer now owns the cloud */
@@ -7053,7 +7053,7 @@ function WorldExperience(): JSX.Element {
       camVel = 0;
       velX = 0;
       /* Interrupting a camera move is always legal — a camera is a position
-         and a velocity, and nothing about one is half-rendered. But the world
+         and a velocity, and nothing about one is half-rendered. But the layout
          still owes you a resting place: this used to strand the camera
          between two sections permanently, against the page's own law that it
          never rests between them. */
@@ -7107,7 +7107,7 @@ function WorldExperience(): JSX.Element {
       eyeTY = clamp((dy / d) * 2, -2, 2);
       /* which cloud the pointer rests on: a clustered member's whispered
          sentence rises back to full while it is touched */
-      hoverNeb = camY < world.minCam * 0.3 ? nebAt(e.clientX, e.clientY) : null;
+      hoverNeb = camY < layout.minCam * 0.3 ? nebAt(e.clientX, e.clientY) : null;
       /* and which satellite: whose memory it is rises beside it, one fade */
       if (!nebDrag) {
         hoverSat = satAt(e.clientX, e.clientY);
@@ -7200,7 +7200,7 @@ function WorldExperience(): JSX.Element {
         wake();
         return;
       }
-      const out = camY < minCamNow() || camY > world.maxCam;
+      const out = camY < minCamNow() || camY > layout.maxCam;
       camY -= dy * (out ? 0.35 : 1);
       /* reduced motion keeps the direct 1:1 drag but drops the inertia */
       if (!reduced) camVel = lerp(camVel, -dy / dts, kd(EASE_VEL, dts));
@@ -7230,7 +7230,7 @@ function WorldExperience(): JSX.Element {
         }
         /* dragged off the top of the sky: it thins and disperses. Locally
            only — there is no endpoint to tell that it was let go of. */
-        if (n.y < world.minCam + n.r * 0.35) {
+        if (n.y < layout.minCam + n.r * 0.35) {
           n.gone = 0.01;
           /* A DISPERSING CANDIDATE IS NO LONGER THE SUBJECT OF ANYTHING. The
              same teardown adoption's condense and syncSky already obey: a
@@ -7257,7 +7257,7 @@ function WorldExperience(): JSX.Element {
       if (dragAxis === 2) {
         /* completing a swipe: velocity-biased, one column per gesture. The
            finger only pulled the room part-way — the companion now leads the
-           actual crossing, or the world eases home uncommitted. */
+           actual crossing, or the layout eases home uncommitted. */
         const disp = camX - col * vw;
         const dir: 1 | -1 =
           Math.abs(velX) > FLICK ? (velX < 0 ? 1 : -1) : disp > 0 ? 1 : -1;
@@ -7277,7 +7277,7 @@ function WorldExperience(): JSX.Element {
         }
         if (!travelActive) {
           /* it changed its mind with you: turns back and eases home while
-             the world springs back under it */
+             the layout springs back under it */
           travelYaw = false;
           unwindAt = 0;
         }
@@ -7295,7 +7295,7 @@ function WorldExperience(): JSX.Element {
       const wasTap = !dragging || (held < 260 && travel2 < 14);
       /* A FINGER THAT STOPPED IS NOT MOVING. Browsers send no pointermove for
          a stationary finger, so drag fast, stop dead, hold, release — and the
-         world used to be thrown at the speed you were moving half a second
+         layout used to be thrown at the speed you were moving half a second
          ago. */
       if (performance.now() - lastT > 80) {
         camVel = 0;
@@ -7344,7 +7344,7 @@ function WorldExperience(): JSX.Element {
         unwindAt = 0;
       } else if (dragging || interruptedSnap) {
         /* cancelled mid-drag, or cancelled on a press that had interrupted a
-           move: either way the world is owed a resting place */
+           move: either way the layout is owed a resting place */
         snapSection(0);
       }
       interruptedSnap = false;
@@ -7386,7 +7386,7 @@ function WorldExperience(): JSX.Element {
         return;
       }
       wheelXAcc = 0;
-      camY = clamp(camY + e.deltaY, minCamNow() - 60, world.maxCam + 60);
+      camY = clamp(camY + e.deltaY, minCamNow() - 60, layout.maxCam + 60);
       camAiming = false;
       /* snap once the wheel goes quiet */
       snapAt = nowW + 150;
@@ -7401,7 +7401,7 @@ function WorldExperience(): JSX.Element {
             : 0;
       const horiz = e.key === "ArrowLeft" || e.key === "ArrowRight";
       /* "/" IS FIND, EVERYWHERE. The gesture people already have for searching
-         a page, and it puts the verb on the world rather than in a menu. */
+         a page, and it puts the verb on the layout rather than in a menu. */
       if (e.key === "/") {
         e.preventDefault();
         openSeekRef.current();
@@ -7410,7 +7410,7 @@ function WorldExperience(): JSX.Element {
       const mine = step !== 0 || horiz || e.key === "Escape";
       if (!mine) return;
       /* the world handles this key, so the browser does not ALSO handle it:
-         a native scroll or a focus move underneath the world's own move is a
+         a native scroll or a focus move underneath the layout's own move is a
          second thing happening, and it reads as a fight */
       e.preventDefault();
       /* AUTO-REPEAT IS NOT THIRTY DECISIONS. Held down, a key fires some
@@ -7538,7 +7538,7 @@ function WorldExperience(): JSX.Element {
         if (ground === ownerProfileId) return;
         ground = ownerProfileId;
         /* the ground that left goes dark, the one that arrived pours in — the
-           same arrival the world uses everywhere, so a swap reads as a ground
+           same arrival the layout uses everywhere, so a swap reads as a ground
            filling rather than as a screen being replaced */
         for (const b of list) if (!onThisWall(b)) b.active = false;
         assignHomes();
@@ -7717,7 +7717,7 @@ function WorldExperience(): JSX.Element {
         /* bring it to a comfortable reading height rather than to the exact
            centre: the companion sits mid-frame and the memory should land
            beside it, not behind it */
-        const want = clamp(b.y - vh * 0.5, world.minCam, world.maxCam);
+        const want = clamp(b.y - vh * 0.5, layout.minCam, layout.maxCam);
         if (Math.abs(want - camY) > 8) {
           snapAt = 0;
           camVel = 0;
@@ -7731,7 +7731,7 @@ function WorldExperience(): JSX.Element {
         if (col !== 0 || travelActive) return;
         snapAt = 0;
         camVel = 0;
-        aimTo(world.minCam, 0);
+        aimTo(layout.minCam, 0);
       },
       travel,
       syncSky,
@@ -7780,7 +7780,7 @@ function WorldExperience(): JSX.Element {
       born: (seed: BornSeed) => {
         if (byId.has(seed.id)) return;
         /* a memory now exists that did not a moment ago — the loudest thing
-           that happens in this world, and the creature looks down at it.
+           that happens in this layout, and the creature looks down at it.
            After the duplicate guard, so a re-render never re-celebrates. */
         simApiRef.current?.acknowledge("kept");
         const b = bornBall(seed);
@@ -7946,7 +7946,7 @@ function WorldExperience(): JSX.Element {
              either way, so a long glide read as the same walk over a longer
              corridor.
 
-             The lead is what carries velocity in this world — how far ahead
+             The lead is what carries velocity in this layout — how far ahead
              of the camera the creature runs, which the body's tilt is already
              derived from, so leaning harder comes free. It grows with the
              same sqrt as the duration and caps at a bit over twice the
@@ -8020,7 +8020,7 @@ function WorldExperience(): JSX.Element {
       audit: (): FieldAudit => {
         const bandTop = 0;
         /* the MEASURED dial, not the guess: the band the layout actually
-           solves against is world.fieldBottom, which is worldH − dialH, and
+           solves against is layout.fieldBottom, which is layoutH − dialH, and
            at rest in the field that is exactly vh − dialH on screen. An audit
            that measured a different band from the one assignHomes fits into
            would be grading a promise nobody made. */
@@ -8059,7 +8059,7 @@ function WorldExperience(): JSX.Element {
           vh,
           vw,
           camY: Math.round(camY),
-          fieldRest: Math.round(world.maxCam),
+          fieldRest: Math.round(layout.maxCam),
           present,
           onScreen,
           clippedTop,
@@ -8455,10 +8455,10 @@ function WorldExperience(): JSX.Element {
          boundary rendered as a shorter chain, not a missing feature: a room
          that could show you the memories behind someone else's statement
          would be breaking the promise the share note makes. */
-      const room = groupCacheRef.current.get(atWall.id);
-      const lead = room?.data?.top?.entries?.[0];
+      const group = groupCacheRef.current.get(atWall.id);
+      const lead = group?.data?.top?.entries?.[0];
       if (!lead) return out;
-      for (const ev of room?.data?.evidence ?? []) {
+      for (const ev of group?.data?.evidence ?? []) {
         if (!ev.citedBy.includes(lead.body) || seen.has(ev.signalId)) continue;
         seen.add(ev.signalId);
         out.push({
@@ -8478,7 +8478,7 @@ function WorldExperience(): JSX.Element {
     const lead = board.find((e) => e.pinned) ?? board[0];
     if (!lead) return out;
     for (const cite of lead.citedSignals)
-      for (const e of evidenceByPatternRef.current.get(cite.id) ?? []) {
+      for (const e of evidenceBySignalRef.current.get(cite.id) ?? []) {
         if (seen.has(e.inspirationId)) continue;
         seen.add(e.inspirationId);
         out.push(e);
@@ -8494,7 +8494,7 @@ function WorldExperience(): JSX.Element {
    */
   const evidenceFor = useCallback(
     (c: Candidate): Evidence[] =>
-      c.kind === "reading" ? evidenceByPatternRef.current.get(c.id) ?? [] : [],
+      c.kind === "reading" ? evidenceBySignalRef.current.get(c.id) ?? [] : [],
     /* provTick is the ref's change signal — see the fetch effect above */
     [provTick],
   );
@@ -8543,21 +8543,21 @@ function WorldExperience(): JSX.Element {
    */
   useEffect(() => {
     if (!focusCandId) return undefined;
-    if (evidenceByPatternRef.current.has(focusCandId)) return undefined;
+    if (evidenceBySignalRef.current.has(focusCandId)) return undefined;
     /* proposals and local drafts have no server pattern behind them */
     if (focusCandId.startsWith("proposal:") || focusCandId.startsWith("draft:")) return undefined;
     let dead = false;
     loadSignal(focusCandId)
       .then((full) => {
         if (dead) return;
-        evidenceByPatternRef.current.set(full.id, full.evidence);
+        evidenceBySignalRef.current.set(full.id, full.evidence);
         setProvTick((n) => n + 1);
       })
       .catch(() => {
         /* no chain available: the statement still stands, unsourced, and the
            section simply does not appear — better than an error where a
            quotation should be */
-        if (!dead) evidenceByPatternRef.current.set(focusCandId, []);
+        if (!dead) evidenceBySignalRef.current.set(focusCandId, []);
       });
     return () => {
       dead = true;
@@ -8595,7 +8595,7 @@ function WorldExperience(): JSX.Element {
     for (const p of signals ?? []) {
       if (p.status !== "emerging") continue;
       const evidence = new Map<string, EvidenceRef>();
-      for (const e of evidenceByPatternRef.current.get(p.id) ?? []) {
+      for (const e of evidenceBySignalRef.current.get(p.id) ?? []) {
         const s = signalById.get(e.inspirationId);
         if (!s || evidence.has(e.inspirationId)) continue;
         evidence.set(e.inspirationId, {
@@ -8808,10 +8808,10 @@ function WorldExperience(): JSX.Element {
 
 
   /* ---------------- the mouth ----------------
-     The one verb this world was missing. It says one phrase at rest, becomes
+     The one verb this layout was missing. It says one phrase at rest, becomes
      a plain field when you touch it, and commits on Enter — guarded, because
      the first Enter of a Korean sentence belongs to the IME and not to us.
-     The world moves for it exactly once: an orb is born where the words are
+     The layout moves for it exactly once: an orb is born where the words are
      and falls to its home in the ground below. */
 
   const openMouth = useCallback(() => {
@@ -9064,7 +9064,7 @@ function WorldExperience(): JSX.Element {
   );
 
   /** Throw out a pattern of your own. The memories under it stay. */
-  const dropPattern = useCallback((id: string) => {
+  const dropSignal = useCallback((id: string) => {
     setVerdicts((prev) => new Map(prev).set(id, "gone"));
     if (offlineRef.current) return;
     deleteSignal(id)
@@ -9178,14 +9178,14 @@ function WorldExperience(): JSX.Element {
     if (groupForm.mode === "make") {
       createGroup(text)
         .then(landed)
-        .catch(() => failed("That room could not be made. Try another name."));
+        .catch(() => failed("That group could not be made. Try another name."));
     } else {
       /* a pasted invite link works as well as a bare code — the link is the
          thing people will actually send each other */
       const code = text.includes("/") ? text.split("/").filter(Boolean).pop() ?? text : text;
       joinGroup(code)
         .then((r) => landed(r.group))
-        .catch(() => failed("No room answered to that. Check the link."));
+        .catch(() => failed("No group answered to that. Check the link."));
     }
   }, [groupForm]);
 
@@ -9578,7 +9578,7 @@ function WorldExperience(): JSX.Element {
    * layers: open the words, change them, keep them.
    */
   const [edit, setEdit] = useState<{
-    kind: "memory" | "pattern" | "entry";
+    kind: "memory" | "signal" | "entry";
     id: string;
     text: string;
     saving: boolean;
@@ -9631,7 +9631,7 @@ function WorldExperience(): JSX.Element {
           done();
         })
         .catch(fail);
-    } else if (edit.kind === "pattern") {
+    } else if (edit.kind === "signal") {
       updateSignal(edit.id, { statement: text })
         .then(() => {
           setSignals((prev) =>
@@ -9735,7 +9735,7 @@ function WorldExperience(): JSX.Element {
     /* ONE QUESTION, AND IT IS NOT GENERATED.
        The canon keeps stored reflections — they are layer-1 detail, the
        person's own words, and input to extraction — but parks the question
-       GENERATOR. So the world asks the plainest question there is, opens
+       GENERATOR. So the layout asks the plainest question there is, opens
        immediately, and spends no round trip on it. There is no "asking" beat
        to sit through and nothing to fail. */
     setReflect({ step: "open", question: "What did this stir in you?", answer: "" });
@@ -9814,7 +9814,7 @@ function WorldExperience(): JSX.Element {
 
   return (
     <div ref={rootRef} className="jar" aria-label="Waka">
-      {/* the volume: a world-tall gradient the camera descends through */}
+      {/* the volume: a layout-tall gradient the camera descends through */}
       <div ref={atmosRef} className="jar-atmos" aria-hidden="true" />
 
       {phase === "ready" ? (
@@ -9872,7 +9872,7 @@ function WorldExperience(): JSX.Element {
                         /* ASK THE LOUDEST CLAIM WHERE IT CAME FROM.
                            The sentence itself is the control — there is no
                            button beside it, because a button beside a poster
-                           is furniture and this world has none. Only on the
+                           is furniture and this layout has none. Only on the
                            wall you are standing on: the other columns are
                            read at a distance, not interrogated. */
                         data-jar-chrome={here ? "1" : undefined}
@@ -9973,7 +9973,7 @@ function WorldExperience(): JSX.Element {
                       </button>
                     ) : null}
                     {/* THE BOARD'S OWN VERBS — and this is what makes the
-                        world an instrument rather than a display.
+                        layout an instrument rather than a display.
 
                         Until now the poster was whatever the server had
                         written, and there was no way to touch it. You could
@@ -10184,7 +10184,7 @@ function WorldExperience(): JSX.Element {
                     direction, so it is never a control sitting around. */}
                 {/* A WORLD HELD STILL SAYS SO, AND SAYS IT WHERE YOU CAN UNDO IT.
                     The preference persisted with no visible state and no
-                    control in the world, so anybody who pressed it once was
+                    control in the layout, so anybody who pressed it once was
                     left with a companion that no longer walked, leaned, bobbed
                     or answered — and nothing on screen explaining why. A
                     setting that can freeze everything must never be invisible.
@@ -10192,7 +10192,7 @@ function WorldExperience(): JSX.Element {
                     reduced-motion preference is not ours to argue with. */}
                 {/* It sits AT THE EDGE, hard against the margin it is talking
                     about, in the quiet label register — a signpost where the
-                    world runs out, not a sentence in the middle of the room.
+                    layout runs out, not a sentence in the middle of the room.
                     Centred under the poster it read as a statement about your
                     ambition, which it is not. */}
                 {ready ? (
@@ -10329,7 +10329,7 @@ function WorldExperience(): JSX.Element {
             )}
             {/* WHERE THIS ONE GOES, DECIDED WHILE WRITING IT.
                 Offered only once there are words: an empty mouth showing a
-                privacy control is a form, and this world does not have forms.
+                privacy control is a form, and this layout does not have forms.
                 It reads as a state, matching the panel — the line says where
                 the memory is headed, and pressing it changes that — because a
                 public/private pair invites a decision every time, and the
@@ -10367,7 +10367,7 @@ function WorldExperience(): JSX.Element {
             {/* WHAT YOU SAID IS CARRIED BY THE STATEMENT, NOT BY A LABEL BESIDE
                 IT. A pattern you agreed with holds its full weight; one you
                 half-agreed with lightens; one you called untrue is set in the
-                world's dimmest ink and struck through — still there, because
+                layout's dimmest ink and struck through — still there, because
                 nothing here is deleted for disagreeing with it. */}
             <p className="jar-neb-text" data-said={verdicts.get(c.id) ?? undefined}>
               {c.text}
@@ -10385,7 +10385,7 @@ function WorldExperience(): JSX.Element {
                 So under the statement sit the memories it came from, and
                 inside each memory the QUOTED SPAN carries full ink while the
                 rest of the sentence stays dim. That is salience rendered in
-                the world's only meaning channel: same words, same size, same
+                the layout's only meaning channel: same words, same size, same
                 face — light is the difference. No highlighter, no percentage,
                 no confidence bar. You can see at a glance that four memories
                 said the same thing and exactly which fragment of each one did
@@ -10433,7 +10433,7 @@ function WorldExperience(): JSX.Element {
                 from says the opposite in every case it examined: confidence
                 is discrete and TYPOGRAPHIC, carried by how the claim is set
                 rather than by controls beside it. Obra Dinn separates your
-                marks from the world's by handwriting versus print; Umineko
+                marks from the layout's by handwriting versus print; Umineko
                 types the assertion by colour. None of them grew a toolbar.
 
                 So there is nothing here at rest. The answers are one quiet
@@ -10481,7 +10481,7 @@ function WorldExperience(): JSX.Element {
                     <button
                       type="button"
                       onClick={() =>
-                        setEdit({ kind: "pattern", id: c.id, text: c.text, saving: false })
+                        setEdit({ kind: "signal", id: c.id, text: c.text, saving: false })
                       }
                     >
                       say it better
@@ -10490,7 +10490,7 @@ function WorldExperience(): JSX.Element {
                 ) : null}
               </p>
             ) : null}
-            {edit?.kind === "pattern" && edit.id === c.id ? (
+            {edit?.kind === "signal" && edit.id === c.id ? (
               <div className="jar-reflect">
                 <textarea
                   className="jar-reflect-box"
@@ -10542,7 +10542,7 @@ function WorldExperience(): JSX.Element {
             atWall.kind === "self" &&
             verdicts.get(c.id) === "not_true" ? (
               <p className="jar-neb-ask jar-neb-ask--after">
-                <button type="button" onClick={() => dropPattern(c.id)}>
+                <button type="button" onClick={() => dropSignal(c.id)}>
                   {dropAsk === c.id ? "gone" : "then let it go"}
                 </button>
               </p>
@@ -10573,12 +10573,12 @@ function WorldExperience(): JSX.Element {
 
       <canvas ref={canvasRef} className="jar-canvas" aria-hidden="true" />
 
-      {/* THE EMULSION. Above the world and the type, below the chrome that
+      {/* THE EMULSION. Above the layout and the type, below the chrome that
           has to stay legible (the panel, the dial, the back link). It blends
           rather than covers, so it lifts the midtones and leaves the blacks
           black — which is the whole reason it cannot live inside the canvas,
           where its backdrop is transparent and `overlay` silently becomes a
-          flat grey sheet. It is fixed to the FRAME, not to the world: film
+          flat grey sheet. It is fixed to the FRAME, not to the layout: film
           grain belongs to the lens, and does not slide when you scroll. */}
       <div ref={grainRef} className="jar-grain" aria-hidden="true" />
 
@@ -10727,7 +10727,7 @@ function WorldExperience(): JSX.Element {
               that was shared rather than a memory that can be reached.
               It asks once, in place, because there is no undo behind it. */}
           {/* EDITING THE MEMORY ITSELF — the last thing the archive could do
-              that this world could not. Editing a capture re-derives the
+              that this layout could not. Editing a capture re-derives the
               signals resting on it, which is why it belongs here beside the
               words rather than on a settings screen somewhere. */}
           {panelCanReflect && !panelIsGroup && edit?.id === panelId ? (
@@ -10797,7 +10797,7 @@ function WorldExperience(): JSX.Element {
               </button>
               <span aria-hidden="true"> · </span>
               {/* THE PICTURE GOES INSIDE THE GLASS. A memory that carries an
-                  image is drawn with it, which is the thing this world was
+                  image is drawn with it, which is the thing this layout was
                   first sketched around — and the server reads the picture at
                   capture time, so it feeds the signals too. */}
               <label className="jar-attach">
@@ -10816,7 +10816,7 @@ function WorldExperience(): JSX.Element {
               </label>
               <span aria-hidden="true"> · </span>
               {/* WHO ELSE MAY SEE THIS.
-                  The one verb the data model gained and the world could not
+                  The one verb the data model gained and the layout could not
                   perform: rooms were rendering a ground nobody could put
                   anything on. It reads as a state rather than as a switch —
                   the word says where the memory currently is, and pressing it
@@ -10864,7 +10864,7 @@ function WorldExperience(): JSX.Element {
 
       <div className="jar-topbar" data-jar-chrome="1">
         {/* THE WAY OUT, AND THERE HAS TO BE ONE.
-            Making the world home orphaned every other screen: profile,
+            Making the layout home orphaned every other screen: profile,
             settings and the list surfaces became unreachable because nothing
             linked to them. That is not a design choice, it is a door that was
             bricked up by accident.
@@ -10872,14 +10872,14 @@ function WorldExperience(): JSX.Element {
             Two exits, and they are different kinds of thing, so they do not
             share a shape. The archive is the SAME memories in another
             register — words, editable, searchable — and it goes away once the
-            world can do everything it can. Settings is the account: it leaves
-            the world entirely and always will. */}
+            layout can do everything it can. Settings is the account: it leaves
+            the layout entirely and always will. */}
         {/* THE WAY OUT IS NOT A PLACE TO PUT THINGS.
             This grew to four pills in a row — archive, settings, rooms, who is
-            here — which is a toolbar, and a toolbar is the thing this world
+            here — which is a toolbar, and a toolbar is the thing this layout
             was built to not have. They were collapsed to one. But the one was
             a TERNARY: on a room wall the exit was replaced by the room's
-            members, and this is the only link to /profile in the entire world.
+            members, and this is the only link to /profile in the entire layout.
             So on four of six walls there was no way to your account at all —
             no settings, no language, no sessions, no sign out — from a slot
             named `jar-exits`, under a comment calling it "the way out".
@@ -10895,11 +10895,11 @@ function WorldExperience(): JSX.Element {
                This opened a drawer of six unrelated things — find, rooms, add
                an agent, settings, hold still, archive — which is a toolbar
                folded up, not a toolbar removed. Each of those belongs
-               somewhere the world already has:
+               somewhere the layout already has:
 
                  rooms / agents  →  the ENDS OF THE AXIS. They make columns;
                                     the axis is what columns live on. You find
-                                    them by walking to the edge of the world.
+                                    them by walking to the edge of the layout.
                  find            →  the FIELD. It is a verb about memories, so
                                     it sits with them and answers with "/".
                  hold still      →  SETTINGS. A persisted preference about how
@@ -11069,10 +11069,10 @@ function WorldExperience(): JSX.Element {
       ) : null}
 
       {/* ================= THE AXIS, ALONG THE BOTTOM EDGE =================
-          You could travel sideways forever and never know how far the world
+          You could travel sideways forever and never know how far the layout
           went or what was in it — you found out by walking. Losing your sense
           of direction is the first named failure of a moving camera, and it
-          is the one this world had.
+          is the one this layout had.
 
           The bottom edge maps the HORIZONTAL axis, which is the only thing it
           should ever have mapped: one mark per wall, in axis order — agents
@@ -11132,8 +11132,8 @@ function WorldExperience(): JSX.Element {
       {/* MAKING OR JOINING A ROOM. A form, and it is honest about being one:
           typed text, a submit and an error line all need to reflow and be
           reachable by keyboard, and none of that survives being painted into
-          the world. So it is DOM, it sits over the world rather than inside
-          it, and the world holds perfectly still behind it. */}
+          the layout. So it is DOM, it sits over the layout rather than inside
+          it, and the layout holds perfectly still behind it. */}
       {groupForm ? (
         <div className="jar-roomform" data-jar-chrome="1">
           <div className="jar-roomform-tabs jar-label">
@@ -11142,7 +11142,7 @@ function WorldExperience(): JSX.Element {
               className={groupForm.mode === "make" ? "is-on" : undefined}
               onClick={() => setGroupForm({ ...groupForm, mode: "make", error: null })}
             >
-              Make a room
+              Make a group
             </button>
             <button
               type="button"
@@ -11236,7 +11236,7 @@ function WorldExperience(): JSX.Element {
                   beside them.
 
                   Still no tally. The count is legible because the PEOPLE are,
-                  which is the only way this world is allowed to say a number —
+                  which is the only way this layout is allowed to say a number —
                   and you can see at a glance whether the missing one is you. */}
               <p className="jar-proposal-who jar-label">
                 {(members.get(groupPanel) ?? []).map((m, i) => {
@@ -11297,7 +11297,7 @@ function WorldExperience(): JSX.Element {
           ) : (
             <p className="jar-neb-ask">
               <button type="button" onClick={() => setPropose({ text: "", busy: false })}>
-                put something to this room
+                put something to this group
               </button>
             </p>
           )}
@@ -11315,7 +11315,7 @@ function WorldExperience(): JSX.Element {
               </>
             ) : (
               <button type="button" onClick={() => setLeaving(groupPanel)}>
-                leave this room
+                leave this group
               </button>
             )}
           </p>
@@ -11335,7 +11335,7 @@ function WorldExperience(): JSX.Element {
           screen that can actually change them.
 
           It is deliberately flat inside: labels, words and two-step
-          confirmations. The world's register is for material — memories,
+          confirmations. The layout's register is for material — memories,
           statements, the poster — and administering a room is not material,
           it is paperwork. Paperwork gets to look like paperwork. */}
       {/* THE ACCOUNT, DROPPED. The mirror of the space settings on the left,
@@ -11519,7 +11519,7 @@ function WorldExperience(): JSX.Element {
                       </>
                     ) : (
                       <button type="button" onClick={() => setLeaving(gid)}>
-                        leave this room
+                        leave this group
                       </button>
                     )}
                   </p>
@@ -11533,7 +11533,7 @@ function WorldExperience(): JSX.Element {
                             className="jar-settings-danger"
                             onClick={() => closeThisGroup(gid)}
                           >
-                            close it for everyone — what the room decided goes too
+                            close it for everyone — what the group decided goes too
                           </button>
                           <span aria-hidden="true"> · </span>
                           <button type="button" onClick={() => setClosing(null)}>
@@ -11546,7 +11546,7 @@ function WorldExperience(): JSX.Element {
                           className="jar-settings-verb"
                           onClick={() => setClosing(gid)}
                         >
-                          close this room
+                          close this group
                         </button>
                       )}
                     </p>
@@ -11558,7 +11558,7 @@ function WorldExperience(): JSX.Element {
             /* YOUR OWN SPACE AND AN AGENT'S both belong to the account, and
                everything you can change about them — your name, your language,
                your sessions, the agent's name, deleting either — is flat work
-               with focus traps and plain confirmations that in-world UI cannot
+               with focus traps and plain confirmations that in-layout UI cannot
                give. So this does not reimplement the account screen badly; it
                says what this space is and opens the door to it. */
             <>

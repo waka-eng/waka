@@ -105,7 +105,7 @@ vi.mock("../src/lib/auth-context", async (importOriginal) => {
   };
 });
 
-let world: MountedWorld;
+let layout: MountedWorld;
 
 beforeAll(() => {
   installCanvasStub();
@@ -114,16 +114,16 @@ beforeAll(() => {
 });
 
 beforeEach(async () => {
-  world = await mountWorld(FACTS);
+  layout = await mountWorld(FACTS);
 });
 
 afterEach(() => {
-  world?.unmount();
+  layout?.unmount();
 });
 
 /** The one sentence this file exists to keep true. */
 function expectGroundIsWhole(where: string) {
-  const a = world.audit();
+  const a = layout.audit();
   expect(a.present, `${where}: nothing is standing here at all`).toBeGreaterThan(0);
   expect(a.drawn.active, `${where}: memories are laid out but never switched on`).toBe(
     a.present,
@@ -134,8 +134,8 @@ function expectGroundIsWhole(where: string) {
 }
 
 describe("the ground under a wall", () => {
-  it("is whole when the world first opens", async () => {
-    await world.toField();
+  it("is whole when the layout first opens", async () => {
+    await layout.toField();
     expectGroundIsWhole("on opening");
   });
 
@@ -149,25 +149,25 @@ describe("the ground under a wall", () => {
    * either side of it pass, which is the point — the failure is specific.
    */
   it("is whole after travelling to another wall", async () => {
-    await world.travelTo(/four of us/i);
-    await world.toField();
+    await layout.travelTo(/four of us/i);
+    await layout.toField();
     expectGroundIsWhole("after travelling");
   });
 
   it("is whole again after travelling back", async () => {
-    await world.travelTo(/four of us/i);
-    await world.toField();
-    await world.travelTo(/waka|just me/i);
-    await world.toField();
+    await layout.travelTo(/four of us/i);
+    await layout.toField();
+    await layout.travelTo(/waka|just me/i);
+    await layout.toField();
     expectGroundIsWhole("after returning");
   });
 });
 
 describe("whose ground you are standing in", () => {
   it("starts as your own, and holds only your memories", async () => {
-    await world.travelTo(/four of us/i);
-    await world.toField();
-    const a = world.audit();
+    await layout.travelTo(/four of us/i);
+    await layout.toField();
+    const a = layout.audit();
 
     expect(a.ground, "the default ground is the viewer's own").toBeNull();
     expect(a.present, "five of the group's memories are the viewer's").toBe(5);
@@ -181,12 +181,12 @@ describe("whose ground you are standing in", () => {
    * time this was built, and it read as working.
    */
   it("changes the memories, not just the label, when you switch", async () => {
-    await world.travelTo(/four of us/i);
-    await world.toField();
-    const mine = world.audit().present;
+    await layout.travelTo(/four of us/i);
+    await layout.toField();
+    const mine = layout.audit().present;
 
-    await world.standIn(/hana/i);
-    const theirs = world.audit();
+    await layout.standIn(/hana/i);
+    const theirs = layout.audit();
 
     expect(theirs.ground, "the switch reached the simulation").toBe(OTHER);
     expect(theirs.present, "Hana kept three of the group's memories").toBe(3);
@@ -195,12 +195,12 @@ describe("whose ground you are standing in", () => {
   });
 
   it("comes back to your own ground when you switch back", async () => {
-    await world.travelTo(/four of us/i);
-    await world.toField();
-    await world.standIn(/hana/i);
-    await world.standIn(/^you$/i);
+    await layout.travelTo(/four of us/i);
+    await layout.toField();
+    await layout.standIn(/hana/i);
+    await layout.standIn(/^you$/i);
 
-    const a = world.audit();
+    const a = layout.audit();
     expect(a.ground).toBeNull();
     expect(a.present).toBe(5);
     expectGroundIsWhole("back in my own ground");

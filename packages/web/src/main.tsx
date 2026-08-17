@@ -57,7 +57,7 @@ import "./styles/chrome.css";
   the one artifact in between — read through `lib/data`.
 
   The list surfaces stay exactly where they were. They are the fastest way to
-  read and edit the same archive, and the world is not a replacement for
+  read and edit the same archive, and the layout is not a replacement for
   typing; `/inspirations` and `/signals` remain addressable.
 */
 const HomePage = lazy(() => import("./pages/Home"));
@@ -76,7 +76,7 @@ const HomePage = lazy(() => import("./pages/Home"));
  * production build entirely, so this cannot open a real deployment: there,
  * RequireAuth is the only path and a signed-out visitor still gets the door.
  */
-function ProtectedWorld() {
+function ProtectedHome() {
   if (import.meta.env.DEV) {
     return (
       <Suspense fallback={null}>
@@ -86,7 +86,7 @@ function ProtectedWorld() {
   }
   return (
     <RequireAuth>
-      {/* No spinner: the world's own first frame IS its loading state, and a
+      {/* No spinner: the layout's own first frame IS its loading state, and a
           flash of chrome before it would be the half-appearance the page
           forbids everywhere inside itself. */}
       <Suspense fallback={null}>
@@ -125,7 +125,7 @@ ReactDOM.createRoot(root).render(
             }
           />
           {/* The account screen is checkable in dev for the same reason the
-              world is: its look could otherwise only be verified by whoever
+              layout is: its look could otherwise only be verified by whoever
               holds the password, which is how several things shipped here
               unobserved. `import.meta.env.DEV` is compiled out of production,
               so RequireAuth remains the only path in a real deployment. */}
@@ -147,11 +147,11 @@ ReactDOM.createRoot(root).render(
               - anonymous        → <Navigate> to /login with state.from set,
               - authenticated    → render the underlying page.
           */}
-          {/* Home is the world. */}
-          <Route path="/" element={<ProtectedWorld />} />
+          {/* Home is the layout. */}
+          <Route path="/" element={<ProtectedHome />} />
           {/*
             THE ARCHIVE IS GONE. It was the same three layers in a list — the
-            world does everything it did, verified affordance by affordance
+            layout does everything it did, verified affordance by affordance
             rather than by call site, and every one of its verbs has an
             equivalent here: search is the seek line, "read this again" is
             reflecting, "take it down" is letting a pattern go, and both
@@ -160,7 +160,7 @@ ReactDOM.createRoot(root).render(
             Its four paths are deliberately NOT redirected to "/". They fall
             to the catch-all below, which routes through the guard so an
             anonymous visitor still lands on /login with their path kept. A
-            bookmark to /inspirations now opens the world, which is where
+            bookmark to /inspirations now opens the layout, which is where
             those memories actually are.
           */}
           {/*

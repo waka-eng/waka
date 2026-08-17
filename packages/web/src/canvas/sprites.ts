@@ -321,7 +321,7 @@ export function rasterOrb(ramp: Ramp, r: number, dpr: number, tier: number): HTM
   const ly = cy + KEY_Y * R;
 
   /* the terminator: the form falling away from the key, into the ground's own
-     colour so the dark side sinks into the world rather than going grey */
+     colour so the dark side sinks into the layout rather than going grey */
   const shade = g.createRadialGradient(lx, ly, R * 0.2, cx - KEY_X * R * 0.3, cy - KEY_Y * R * 0.3, R * 1.6);
   shade.addColorStop(0, "rgba(6,8,13,0)");
   shade.addColorStop(0.55, `rgba(6,8,13,${(KEY_SHADE * 0.35).toFixed(3)})`);

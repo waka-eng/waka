@@ -326,7 +326,7 @@ export async function loadSignals(profile?: string): Promise<Signal[]> {
 }
 
 /** HEADQUARTERS. Null is a real state, not an error: a profile with nothing
-    synthesized yet has nothing to stand on, and the world says so in words. */
+    synthesized yet has nothing to stand on, and the layout says so in words. */
 export async function loadTopOfMind(profile?: string): Promise<TopOfMind | null> {
   const row = await fetchTopOfMind({ profile });
   if (!row) return null;
