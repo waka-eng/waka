@@ -17,6 +17,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 process.env.JWT_SECRET ??= "test-login-throttle-secret";
 
 import {
+  loginFailureDb,
+  type LoginFailureRow,
+  type LoginFailureStore,
+} from "../../test/helpers/login-failure-store.js";
+import {
   DEVICE_FAILURE_BUDGET,
   IDENTIFIER_FAILURE_BUDGET,
   judgeLoginThrottle,
@@ -25,6 +30,7 @@ import {
   mintLoginDeviceCredential,
   readLoginDeviceCredential,
   readLoginThrottle,
+  recordLoginFailure,
   resolveLoginSource,
   SOURCE_FAILURE_BUDGET,
 } from "./login-throttle.js";
@@ -233,6 +239,120 @@ describe("readLoginThrottle", () => {
     expect(one.buckets[0]!.keyHash).not.toBe(other.buckets[0]!.keyHash);
     /* And the address itself is nowhere in the stored key. */
     expect(one.buckets[0]!.keyHash).not.toContain("one@example.com");
+  });
+});
+
+/**
+ * WHERE THE COUNT IS WORKED OUT.
+ *
+ * These are about one property: the number that lands in the row is decided by
+ * the store at the moment of the write, not by the caller from something it
+ * read earlier. Everything above can be green while this is broken, because
+ * arithmetic done in JavaScript is perfectly correct as long as exactly one
+ * request is in flight — and a suite that awaits each attempt before firing the
+ * next never has more than one.
+ *
+ * The store these use evaluates the SQL the code actually generates rather than
+ * assuming what it meant, so "the count goes up" and "a closed window starts
+ * again" are separately falsifiable. See test/helpers/login-failure-store.ts.
+ */
+describe("recordLoginFailure", () => {
+  const ATTEMPT = { identifier: "target@example.com", source: null, deviceId: null };
+
+  function only(store: LoginFailureStore): LoginFailureRow {
+    const rows = [...store.values()];
+    expect(rows).toHaveLength(1);
+    return rows[0]!;
+  }
+
+  /**
+   * THE REGRESSION.
+   *
+   * A brute-force is not a queue. Every request in a burst reads the bucket
+   * before any of them has finished its password compare, so if the new count
+   * is `whatILastRead + 1` they all write the same number and the burst costs
+   * one increment. Twenty-five guesses have to cost twenty-five.
+   */
+  it("charges every attempt that read before any of them had written", async () => {
+    const store: LoginFailureStore = new Map();
+    const db = loginFailureDb(store) as never;
+    const burst = 25;
+
+    /* Each read happens before any write — the gap the bcrypt compare opens,
+       with nothing in between to serialise them. */
+    const readings = await Promise.all(
+      Array.from({ length: burst }, () => readLoginThrottle(db, ATTEMPT, { now: NOW })),
+    );
+    readings.forEach((reading) => expect(reading.buckets[0]!.failures).toBe(0));
+
+    await Promise.all(readings.map((reading) => recordLoginFailure(db, reading)));
+
+    expect(only(store).failures).toBe(burst);
+  });
+
+  it("adds to a window that is still open, and leaves the window where it was", async () => {
+    const store: LoginFailureStore = new Map();
+    const db = loginFailureDb(store) as never;
+
+    await recordLoginFailure(db, await readLoginThrottle(db, ATTEMPT, { now: NOW }));
+    const later = new Date(NOW.getTime() + 60 * 1000);
+    await recordLoginFailure(db, await readLoginThrottle(db, ATTEMPT, { now: later }));
+
+    expect(only(store).failures).toBe(2);
+    expect(only(store).windowStartedAt).toEqual(NOW);
+  });
+
+  /**
+   * THE OTHER HALF OF MOVING THE SUM INTO SQL, AND THE EASIER ONE TO LOSE.
+   *
+   * Once the write no longer takes its value from what JavaScript read, the
+   * window reset in `readLoginThrottle` stops governing it. A plain
+   * `failures + 1` would then be atomic and permanent: the count would climb
+   * past the budget and never come down, and a throttle whose bucket never
+   * empties is an account nobody can reach from a new browser again. If this
+   * case ever goes red the fix for brute force has become a lockout.
+   */
+  it("starts a window that has closed again at one instead of adding to it", async () => {
+    const store: LoginFailureStore = new Map();
+    const db = loginFailureDb(store) as never;
+
+    for (let attempt = 0; attempt < IDENTIFIER_FAILURE_BUDGET; attempt += 1) {
+      await recordLoginFailure(db, await readLoginThrottle(db, ATTEMPT, { now: NOW }));
+    }
+    expect(only(store).failures).toBe(IDENTIFIER_FAILURE_BUDGET);
+
+    const afterTheWindow = new Date(NOW.getTime() + LOGIN_FAILURE_WINDOW_MS + 1000);
+    await recordLoginFailure(
+      db,
+      await readLoginThrottle(db, ATTEMPT, { now: afterTheWindow }),
+    );
+
+    expect(only(store).failures).toBe(1);
+    expect(only(store).windowStartedAt).toEqual(afterTheWindow);
+    /* And the bucket is spendable again, which is the point of the reset. */
+    expect(
+      judgeLoginThrottle(await readLoginThrottle(db, ATTEMPT, { now: afterTheWindow })).refused,
+    ).toBe(false);
+  });
+
+  it("charges each scope its own attempt rather than sharing one count", async () => {
+    const store: LoginFailureStore = new Map();
+    const db = loginFailureDb(store) as never;
+
+    await recordLoginFailure(
+      db,
+      await readLoginThrottle(
+        db,
+        { identifier: "target@example.com", source: "203.0.113.7", deviceId: null },
+        { now: NOW },
+      ),
+    );
+
+    const scopes = [...store.values()].map((row) => ({ scope: row.scope, failures: row.failures }));
+    expect(scopes).toEqual([
+      { scope: "identifier", failures: 1 },
+      { scope: "source", failures: 1 },
+    ]);
   });
 });
 

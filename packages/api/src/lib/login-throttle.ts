@@ -108,16 +108,28 @@
  *   WAKA_TRUSTED_PROXY_HOPS=n      → take the entry n-from-the-right of
  *                                    X-Forwarded-For. n=1 is CloudFront.
  *
+ * SAY THE CONSEQUENCE OUT LOUD: with the variable unset, which is how this
+ * ships, the per-address budget is the ONLY live budget, and a per-address
+ * budget does not see spraying at all. One popular password tried once each
+ * against ten thousand addresses spends nothing anywhere and is answered every
+ * time. What is defended here is vertical guessing — many passwords at one
+ * address — and horizontal guessing stays open until a deployment says which
+ * hop it trusts. That is a deliberate gap with a switch next to it, not an
+ * oversight, and it should be read as "durable throttling of brute force
+ * against an account", not as "durable login throttling".
+ *
  * Until it is set, the per-address budget above carries the whole load, which
  * is the part that answers the reported hole. And because of the device
  * exemption, a source budget that is later switched on with the wrong number
- * still cannot lock an account holder out of their own account — the worst it
- * can do is make unrecognised browsers wait.
+ * still cannot lock an account holder out of their own account. It can hold
+ * unrecognised browsers out of that address for as long as whoever is spending
+ * the budget keeps spending it, which is the same indefinite cost written down
+ * above — not a wait with a known end.
  */
 
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
-import { inArray, lt } from "drizzle-orm";
+import { inArray, lt, sql } from "drizzle-orm";
 import type { Context } from "hono";
 
 import { loginFailures } from "../db/index.js";
@@ -517,6 +529,47 @@ export function judgeLoginThrottle(reading: LoginThrottleReading): LoginThrottle
 /**
  * Charge a failed attempt to every bucket it touched.
  *
+ * THE COUNT IS COMPUTED BY POSTGRES, NOT HERE. This is the whole of the
+ * function and the reason it looks like SQL rather than like arithmetic.
+ *
+ * The first version of this wrote `failures: bucket.failures + 1` — a number
+ * worked out in JavaScript from the read that `readLoginThrottle` did at the
+ * top of the request. That read and this write are separated by the account
+ * lookup and by a bcrypt compare, which is deliberately slow (~100-300ms in
+ * production). Every attempt that arrives inside that gap reads the same count
+ * and writes the same number back, so a hundred simultaneous guesses cost ONE
+ * increment: the classic lost update, and precisely the shape of traffic a
+ * brute-force actually has. Nobody guesses passwords one at a time and waits
+ * for the answer. Serially the old code was correct, which is why a serial
+ * test suite could not see it.
+ *
+ * So the new value is read and written inside one statement, where Postgres
+ * holds the row lock, and every attempt costs exactly one increment no matter
+ * how many are in flight.
+ *
+ * THE CASE IS NOT DECORATION. A bare `failures + 1` would be atomic and would
+ * also be wrong: the JavaScript side is what used to reset a spent window (see
+ * `readLoginThrottle`, which reports a closed window as zero), and once the
+ * write no longer takes its value from that reading, nothing resets anything.
+ * The count would climb forever, the bucket would sit permanently over budget,
+ * and the throttle would turn into the indefinite lockout this whole design
+ * exists to avoid. The window test therefore has to move into the statement
+ * too, and both columns have to decide it from the same predicate — a row that
+ * reset its count without resetting its window, or the reverse, is a bucket
+ * that lies about which fifteen minutes it is describing.
+ *
+ * What remains, stated rather than hidden: the REFUSAL still reads a count
+ * fetched before bcrypt, so attempts already in flight when a budget runs out
+ * are still answered. The overshoot is bounded by how many requests an attacker
+ * can hold open at once, and it does not compound — the next wave meets an
+ * accurate count and is refused at the gate. Charging the attempt before the
+ * compare instead would remove even that, and was rejected: the source bucket
+ * would then be counting attempts rather than failures, and an office of thirty
+ * people signing in successfully would spend SOURCE_FAILURE_BUDGET between
+ * them. Refunding the successful ones brings back a second write on the hot
+ * path and a decrement that has to reason about a window that may have turned
+ * over underneath it. Bounded overshoot on a slow path is the cheaper trade.
+ *
  * Deliberately not wrapped in a try/catch. A write that fails is a login that
  * was not throttled, and swallowing that would leave the route answering 401s
  * with the counter frozen at zero — the original hole, minus the evidence.
@@ -525,24 +578,38 @@ export async function recordLoginFailure(
   db: WakaDb,
   reading: LoginThrottleReading,
 ): Promise<void> {
+  /* Both timestamps go through the column's own encoder, the same way `lt()`
+     below encodes its bound, so a raw template cannot end up handing the driver
+     a shape the typed helpers never would. */
+  const windowFloor = sql.param(
+    new Date(reading.now.getTime() - LOGIN_FAILURE_WINDOW_MS),
+    loginFailures.windowStartedAt,
+  );
+  const openedNow = sql.param(reading.now, loginFailures.windowStartedAt);
+  /* One predicate, referenced by both columns, so they cannot disagree. */
+  const windowHasClosed = sql`${loginFailures.windowStartedAt} < ${windowFloor}`;
+
   for (const bucket of reading.buckets) {
-    const row = {
-      keyHash: bucket.keyHash,
-      scope: bucket.scope,
-      failures: bucket.failures + 1,
-      windowStartedAt: bucket.windowStartedAt,
-      updatedAt: reading.now,
-    };
     await db
       .insert(loginFailures)
-      .values(row)
+      .values({
+        keyHash: bucket.keyHash,
+        scope: bucket.scope,
+        /* The INSERT branch is a bucket nobody has touched yet: one failure, in
+           a window opening now. Note what is NOT here — no count carried over
+           from `reading`. Past this point the reading contributes the key and
+           the scope and nothing that can be stale. */
+        failures: 1,
+        windowStartedAt: reading.now,
+        updatedAt: reading.now,
+      })
       .onConflictDoUpdate({
         target: loginFailures.keyHash,
         set: {
-          scope: row.scope,
-          failures: row.failures,
-          windowStartedAt: row.windowStartedAt,
-          updatedAt: row.updatedAt,
+          scope: bucket.scope,
+          failures: sql`case when ${windowHasClosed} then 1 else ${loginFailures.failures} + 1 end`,
+          windowStartedAt: sql`case when ${windowHasClosed} then ${openedNow} else ${loginFailures.windowStartedAt} end`,
+          updatedAt: reading.now,
         },
       });
   }
@@ -561,6 +628,21 @@ export async function recordLoginFailure(
  * with an account of their own launder a run of guesses — fail nineteen times,
  * log into your own account, start again — which is the whole budget undone by
  * its own reset.
+ *
+ * Unlike `recordLoginFailure` this DOES write an absolute value, and that is
+ * right rather than an oversight: zero is zero whatever the row held a moment
+ * ago, so there is no earlier read for a concurrent writer to invalidate. If a
+ * failure lands between this read and this write, the failure is the thing that
+ * gets overwritten — the direction that favours the person who just proved they
+ * know the password, which is the direction this file always takes.
+ *
+ * The skip below is likewise read from a reading that may be stale, so a
+ * handful of failures arriving during one bcrypt can survive a successful
+ * login. Left alone on purpose: that costs at most a slice of a fifteen-minute
+ * budget, the person who just signed in walks away with a fresh device
+ * credential and is exempt from it anyway, and buying the last few counts back
+ * means a guarded UPDATE on every successful login for a case that only occurs
+ * while an attack is already underway.
  */
 export async function clearLoginFailures(
   db: WakaDb,
