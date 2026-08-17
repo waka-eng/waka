@@ -92,6 +92,25 @@ export const backgroundJobs = pgTable(
     lockedAt: timestamp("locked_at", { withTimezone: true }),
     lastError: text("last_error"),
 
+    /**
+     * When this job most recently began running — and, unlike `locked_at`,
+     * never cleared afterwards.
+     *
+     * It is the meter for the per-account model budget (lib/model-budget.ts).
+     * The lock timestamp cannot serve: it is cleared the moment a job settles,
+     * which is precisely when the spend it represents becomes history worth
+     * counting. Keeping a separate column means the budget reads a fact about
+     * what happened rather than inferring one from a lock that no longer
+     * exists.
+     *
+     * A retry overwrites it, so a job attempted three times inside one window
+     * is counted once rather than three times. That undercount is bounded by
+     * `max_attempts` and by the backoff between attempts, and the alternative
+     * — a second table logging every start — is a whole ledger to maintain,
+     * reap, and back up for a correction of at most two.
+     */
+    startedAt: timestamp("started_at", { withTimezone: true }),
+
     /** Set to collapse duplicate enqueues of the same work. */
     idempotencyKey: text("idempotency_key"),
 
@@ -114,6 +133,16 @@ export const backgroundJobs = pgTable(
     profileStatusIdx: index("background_jobs_profile_status_idx").on(
       table.profileId,
       table.status,
+    ),
+    /**
+     * The per-account budget asks "how much has this account started since T"
+     * on the way to every claim, so it is the one query in the drain loop that
+     * runs whether or not there is work to do. Profile first because the
+     * account's profiles are what scope it.
+     */
+    profileStartedAtIdx: index("background_jobs_profile_started_at_idx").on(
+      table.profileId,
+      table.startedAt,
     ),
     idempotencyUnique: uniqueIndex("background_jobs_idempotency_key_unique_idx")
       .on(table.idempotencyKey)

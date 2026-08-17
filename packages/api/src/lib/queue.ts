@@ -11,7 +11,7 @@
  * an enqueue that participates in the caller's transaction is atomic with the
  * write that motivated it.
  *
- * Three mechanics carry the weight, and all three are worth keeping in mind
+ * Four mechanics carry the weight, and all four are worth keeping in mind
  * when changing anything here:
  *
  *   - **Idempotency keys.** A unique partial index on `idempotency_key`
@@ -23,6 +23,12 @@
  *   - **Backoff to a terminal state.** Attempts are counted at claim time;
  *     once they exceed `maxAttempts` the row becomes `failed` and stays put,
  *     with its sanitized error, rather than looping forever.
+ *   - **A per-account model budget.** Every job type ends in a call against
+ *     one shared Gemini key, and this loop used to drain strictly oldest-first
+ *     regardless of whose work it was. An account past its rolling-hour budget
+ *     has its due backlog pushed out by `run_after` — the same mechanism as
+ *     retry backoff — and the loop moves on to somebody else's work instead of
+ *     spending the key on one tenant. See lib/model-budget.ts for the rule.
  *
  * The four job types are the pipeline:
  *   enrich_attachment          → read what was saved (page body, image text)
@@ -43,6 +49,11 @@ import {
   type RefreshTopOfMindPayload,
 } from "../db/index.js";
 import { getDb } from "./db.js";
+import {
+  type AccountModelUsage,
+  assessModelBudget,
+  modelBudgetWindowStart,
+} from "./model-budget.js";
 import { enrichAttachment } from "./signal-enrichment.js";
 import {
   describeSignalDerivation,
@@ -89,6 +100,12 @@ export interface DrainBackgroundJobsOptions {
   limit?: number;
   now?: Date;
   processor?: (job: BackgroundJob) => Promise<void>;
+  /**
+   * Where the loop reads and writes its rows. Defaults to Postgres; a test
+   * hands it a queue it can hold in memory, which is what makes the budget
+   * rule below observable at all — see `BackgroundJobStore`.
+   */
+  store?: BackgroundJobStore;
 }
 
 export interface DrainBackgroundJobsResult {
@@ -96,6 +113,72 @@ export interface DrainBackgroundJobsResult {
   succeeded: number;
   retried: number;
   failed: number;
+  /**
+   * Rows pushed past the head of the queue because their account had spent
+   * its model budget. Deferred, never dropped: each one is still pending,
+   * with a `run_after` naming the moment the window frees a slot.
+   */
+  deferred: number;
+}
+
+/**
+ * The head of the queue, read without claiming it.
+ *
+ * The budget is per account and a job is owned by a profile, so the account
+ * has to be resolved before the decision can be made — and it has to be made
+ * before the claim, or a job would be started (and charged) only to be put
+ * back.
+ */
+export interface RunnableJobHead {
+  jobId: string;
+  accountId: string;
+  /**
+   * True when this head is a `running` row being reclaimed from a worker that
+   * died rather than a `pending` row waiting its turn.
+   *
+   * The budget governs *starting* work, and a reclaim is finishing work whose
+   * start was already gated and already counted. It also cannot be deferred:
+   * `run_after` is not what makes a stale row claimable, so pushing it would
+   * move nothing and leave the same head in place forever — one abandoned job
+   * would stop the queue for every account on the deployment.
+   */
+  reclaimed: boolean;
+}
+
+export interface DeferAccountBacklogInput {
+  accountId: string;
+  /** When the budget frees a slot; becomes the rows' `run_after`. */
+  until: Date;
+  now: Date;
+}
+
+/**
+ * Everything the drain loop asks its store for, in one place.
+ *
+ * This is a seam, not a portability layer: Postgres *is* the queue and there
+ * will never be a second implementation in production. What it buys is a drain
+ * loop that a unit test can run end to end against a queue it holds in memory.
+ * The budget rule decides whether a person's work runs now or in an hour, and
+ * a rule that has only ever executed against a live database is a rule nobody
+ * has watched hold — the api unit suite runs on a bare checkout with no
+ * database at all, so without this seam the cap would ship untested.
+ */
+export interface BackgroundJobStore {
+  /** Whose work is next, without taking it. Null when nothing is runnable. */
+  headOfQueue(now: Date): Promise<RunnableJobHead | null>;
+  /** Take the next runnable job and mark it started. */
+  claimNext(now: Date): Promise<BackgroundJob | null>;
+  /** What this account has already started since `since`. */
+  usageForAccount(accountId: string, since: Date): Promise<AccountModelUsage>;
+  /** Push this account's due, unstarted work out to `until`. Returns rows moved. */
+  deferAccountBacklog(input: DeferAccountBacklogInput): Promise<number>;
+  markSucceeded(jobId: string): Promise<void>;
+  markFailedOrPending(
+    job: BackgroundJob,
+    err: unknown,
+    exhausted: boolean,
+    now: Date,
+  ): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -380,29 +463,101 @@ async function scheduleNextPendingBackgroundJobDrain(): Promise<void> {
 // Drain
 // ---------------------------------------------------------------------------
 
+/**
+ * How many accounts one drain will step over before giving up.
+ *
+ * Each deferral moves an entire account's due backlog out of the way in one
+ * statement, so the loop normally needs at most one per over-budget account
+ * and then reaches somebody who can run. The ceiling is for the case that
+ * cannot be reasoned about locally: another worker enqueuing while this one
+ * defers, which could otherwise keep handing this loop a fresh over-budget
+ * head forever. Stopping is safe — the rows are pending with a `run_after`,
+ * and the next wake-up starts from a queue that has already moved.
+ */
+const MAX_BUDGET_DEFERRALS_PER_DRAIN = 25;
+
 export async function drainBackgroundJobs(
   options: DrainBackgroundJobsOptions = {},
 ): Promise<DrainBackgroundJobsResult> {
   const limit = Math.max(0, Math.min(Math.trunc(options.limit ?? 10), 100));
+  const store = options.store ?? postgresBackgroundJobStore;
+  // Read the clock per step rather than once: an injected `now` pins the whole
+  // drain for a test, while a live drain whose jobs each take a model call
+  // must not do its stale-lock arithmetic against a clock from ten minutes ago.
+  const clock = () => options.now ?? new Date();
   const result: DrainBackgroundJobsResult = {
     claimed: 0,
     succeeded: 0,
     retried: 0,
     failed: 0,
+    deferred: 0,
   };
 
-  for (let processed = 0; processed < limit; processed += 1) {
-    const job = await claimNextBackgroundJob(options.now);
+  let deferrals = 0;
+  let processed = 0;
+  while (processed < limit) {
+    const now = clock();
+
+    /*
+     * Ask whose job is next before taking it.
+     *
+     * The order matters. Claiming first and putting the job back if the
+     * account is over budget would mean recording a start that never spent
+     * anything, and the budget is measured in starts — an account would be
+     * charged for the deferrals themselves and never recover. So the head is
+     * read, the account decided on, and only then is the row taken.
+     *
+     * The read costs one indexed query per drained job on top of the claim.
+     * Against a job whose body is a multi-second call to Gemini that is noise,
+     * and it is what keeps the decision honest.
+     *
+     * Two workers racing here can each peek the same head and then claim
+     * different rows, so one job belonging to an over-budget account may slip
+     * through per race. It is bounded by one job per worker per iteration and
+     * corrected on the next pass; the alternative is a lock across the whole
+     * queue, which is the thing SKIP LOCKED exists to avoid.
+     */
+    const head = await store.headOfQueue(now);
+    if (!head) break;
+
+    if (!head.reclaimed) {
+      const usage = await store.usageForAccount(head.accountId, modelBudgetWindowStart(now));
+      const verdict = assessModelBudget(usage, now);
+      if (!verdict.withinBudget) {
+        if (deferrals >= MAX_BUDGET_DEFERRALS_PER_DRAIN) break;
+        deferrals += 1;
+
+        // The whole due backlog, not just the head: deferring one row at a
+        // time would step through ten thousand of them before reaching the
+        // next account, which is the starvation this is here to end.
+        const moved = await store.deferAccountBacklog({
+          accountId: head.accountId,
+          until: verdict.retryAfter,
+          now,
+        });
+        result.deferred += moved;
+        console.log("[background-jobs] account is over its model budget; deferred", {
+          accountId: head.accountId,
+          startedInWindow: usage.startedInWindow,
+          deferred: moved,
+          retryAfter: verdict.retryAfter.toISOString(),
+        });
+        continue;
+      }
+    }
+
+    const job = await store.claimNext(now);
     if (!job) break;
+    processed += 1;
     result.claimed += 1;
 
     try {
       await (options.processor ?? processBackgroundJob)(job);
-      await markJobSucceeded(job.id);
+      await store.markSucceeded(job.id);
       result.succeeded += 1;
     } catch (err) {
       const exhausted = job.attempts >= job.maxAttempts;
-      await markJobFailedOrPending(job, err, exhausted, options.now ?? new Date());
+      await store.markFailedOrPending(job, err, exhausted, clock());
       if (exhausted) result.failed += 1;
       else result.retried += 1;
     }
@@ -582,13 +737,144 @@ function parseRefreshGroupTopOfMindPayload(
 // ---------------------------------------------------------------------------
 
 /**
+ * What "runnable right now" means, written once.
+ *
+ * Two readers need it — the head peek that decides whose budget to check, and
+ * the claim that takes the row — and a peek that disagreed with the claim
+ * would check one account's budget and then run another account's job. Sharing
+ * the fragment is what makes that impossible rather than merely unlikely. Both
+ * readers alias the table `candidate` so the fragment drops into either.
+ *
+ * Parenthesized as a whole because it is an OR being pasted into somebody
+ * else's WHERE: the day a caller adds one AND beside it, unparenthesized
+ * precedence would quietly claim rows that are not runnable.
+ */
+function runnableBackgroundJobPredicate(nowIso: string) {
+  return sql`
+    (
+      (
+        candidate.status = 'pending'::background_job_status
+        AND candidate.run_after <= ${nowIso}::timestamptz
+      )
+      OR (
+        candidate.status = 'running'::background_job_status
+        AND candidate.locked_at < ${nowIso}::timestamptz - (${STALE_LOCK_SECONDS} || ' seconds')::interval
+        -- A job that crashes the worker (rather than throwing) never runs
+        -- its own failure path, so only the reclaim bounds it. Without this
+        -- ceiling a poison job is reclaimed every stale-lock interval
+        -- forever; with it, a job that has already been attempted its full
+        -- budget is left where it is rather than taking the worker down again.
+        AND candidate.attempts < candidate.max_attempts
+      )
+    )
+  `;
+}
+
+/** The same order the claim takes rows in: oldest due first, then oldest made. */
+const RUNNABLE_JOB_ORDER = sql`ORDER BY candidate.run_after ASC, candidate.created_at ASC`;
+
+/**
+ * Read the head of the queue and whose account owns it, taking nothing.
+ *
+ * The join is to `profiles` because jobs are owned by a profile and the budget
+ * is per account — an account holds its human profile and its agents, and a
+ * cap that counted per profile would be lifted by creating another agent.
+ */
+async function readBackgroundJobQueueHead(now: Date): Promise<RunnableJobHead | null> {
+  const nowIso = now.toISOString();
+  const rows = await getDb().execute(sql<RunnableJobHead>`
+    SELECT
+      candidate.id AS "jobId",
+      profile.account_id AS "accountId",
+      (candidate.status = 'running'::background_job_status) AS "reclaimed"
+    FROM background_jobs AS candidate
+    JOIN profiles AS profile ON profile.id = candidate.profile_id
+    WHERE ${runnableBackgroundJobPredicate(nowIso)}
+    ${RUNNABLE_JOB_ORDER}
+    LIMIT 1
+  `);
+
+  const result = rows as unknown as RunnableJobHead[];
+  return result[0] ?? null;
+}
+
+/**
+ * How much of the shared key this account has spent since `since`.
+ *
+ * Counted across every profile the account owns, and over `started_at` rather
+ * than `created_at`: what costs the key is a job running, not a job being
+ * asked for. A thousand enqueues that are still waiting have spent nothing.
+ */
+async function readAccountModelUsage(
+  accountId: string,
+  since: Date,
+): Promise<AccountModelUsage> {
+  const rows = await getDb().execute(sql<{ started: number; oldest: Date | null }>`
+    SELECT
+      count(*)::int AS started,
+      min(job.started_at) AS oldest
+    FROM background_jobs AS job
+    JOIN profiles AS profile ON profile.id = job.profile_id
+    WHERE profile.account_id = ${accountId}::uuid
+      AND job.started_at >= ${since.toISOString()}::timestamptz
+  `);
+
+  const [row] = rows as unknown as Array<{ started: number | string; oldest: Date | string | null }>;
+  if (!row) return { startedInWindow: 0, oldestStartInWindow: null };
+  return {
+    startedInWindow: Number(row.started ?? 0),
+    oldestStartInWindow: coerceNullableDate(row.oldest),
+  };
+}
+
+/**
+ * Push an over-budget account's due work out to the moment its window frees.
+ *
+ * `run_after` is deliberately the only thing touched. It is what retry backoff
+ * already moves, what the claim already orders by, and what the local
+ * scheduler already wakes on, so a deferred job is not a new state anything
+ * downstream has to learn — it is a pending job whose turn is later. Nothing
+ * is dropped, no attempt is spent, and no error is written on a row that has
+ * not failed at anything.
+ *
+ * The whole due backlog moves at once. One row at a time would be correct and
+ * useless: an account with ten thousand due jobs would sit at the head of the
+ * queue for ten thousand iterations while everybody else waited.
+ */
+async function deferAccountBacklogForBudget(
+  input: DeferAccountBacklogInput,
+): Promise<number> {
+  const rows = await getDb().execute(sql<{ deferred: number }>`
+    WITH moved AS (
+      UPDATE background_jobs AS job
+      SET run_after = ${input.until.toISOString()}::timestamptz,
+          updated_at = ${input.now.toISOString()}::timestamptz
+      FROM profiles AS profile
+      WHERE profile.id = job.profile_id
+        AND profile.account_id = ${input.accountId}::uuid
+        AND job.status = 'pending'::background_job_status
+        AND job.run_after <= ${input.now.toISOString()}::timestamptz
+      RETURNING job.id
+    )
+    SELECT count(*)::int AS deferred FROM moved
+  `);
+
+  const [row] = rows as unknown as Array<{ deferred: number | string }>;
+  return Number(row?.deferred ?? 0);
+}
+
+/**
  * Claim one job atomically.
  *
  * `FOR UPDATE SKIP LOCKED` is what lets several workers drain the same table
  * without coordination: each takes a different row instead of blocking on the
- * same one. The second arm of the WHERE is the stale-lock reclaim — a
- * `running` row whose lock has aged past the ceiling belongs to a worker that
- * is not coming back.
+ * same one. The second arm of the shared predicate is the stale-lock reclaim —
+ * a `running` row whose lock has aged past the ceiling belongs to a worker
+ * that is not coming back.
+ *
+ * `started_at` is stamped here and never cleared afterwards, unlike
+ * `locked_at`. It is the meter the per-account budget reads, and a meter that
+ * a successful job erases measures nothing.
  */
 async function claimNextBackgroundJob(now = new Date()): Promise<BackgroundJob | null> {
   const nowIso = now.toISOString();
@@ -598,26 +884,13 @@ async function claimNextBackgroundJob(now = new Date()): Promise<BackgroundJob |
       status = 'running'::background_job_status,
       attempts = job.attempts + 1,
       locked_at = ${nowIso}::timestamptz,
+      started_at = ${nowIso}::timestamptz,
       updated_at = ${nowIso}::timestamptz
     WHERE job.id = (
       SELECT candidate.id
       FROM background_jobs AS candidate
-      WHERE
-        (
-          candidate.status = 'pending'::background_job_status
-          AND candidate.run_after <= ${nowIso}::timestamptz
-        )
-        OR (
-          candidate.status = 'running'::background_job_status
-          AND candidate.locked_at < ${nowIso}::timestamptz - (${STALE_LOCK_SECONDS} || ' seconds')::interval
-          -- A job that crashes the worker (rather than throwing) never runs
-          -- its own failure path, so only the reclaim bounds it. Without this
-          -- ceiling a poison job is reclaimed every stale-lock interval
-          -- forever; with it, a job that has already been attempted its full
-          -- budget is left where it is rather than taking the worker down again.
-          AND candidate.attempts < candidate.max_attempts
-        )
-      ORDER BY candidate.run_after ASC, candidate.created_at ASC
+      WHERE ${runnableBackgroundJobPredicate(nowIso)}
+      ${RUNNABLE_JOB_ORDER}
       LIMIT 1
       FOR UPDATE SKIP LOCKED
     )
@@ -631,6 +904,7 @@ async function claimNextBackgroundJob(now = new Date()): Promise<BackgroundJob |
       job.max_attempts AS "maxAttempts",
       job.run_after AS "runAfter",
       job.locked_at AS "lockedAt",
+      job.started_at AS "startedAt",
       job.last_error AS "lastError",
       job.idempotency_key AS "idempotencyKey",
       job.created_at AS "createdAt",
@@ -683,6 +957,22 @@ async function markJobFailedOrPending(
     WHERE id = ${job.id}::uuid
   `);
 }
+
+/**
+ * The real store: Postgres, which is the queue.
+ *
+ * A plain object of the functions above rather than a class — there is one
+ * instance, it holds no state, and the connection it uses is already a
+ * process-wide singleton.
+ */
+export const postgresBackgroundJobStore: BackgroundJobStore = {
+  headOfQueue: readBackgroundJobQueueHead,
+  claimNext: claimNextBackgroundJob,
+  usageForAccount: readAccountModelUsage,
+  deferAccountBacklog: deferAccountBacklogForBudget,
+  markSucceeded: markJobSucceeded,
+  markFailedOrPending: markJobFailedOrPending,
+};
 
 export function summarizeBackgroundJob(job: BackgroundJob): BackgroundJobSummary {
   return {

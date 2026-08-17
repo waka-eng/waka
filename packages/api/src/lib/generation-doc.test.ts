@@ -26,6 +26,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import * as embeddings from "./inspiration-embeddings.js";
+import * as modelBudget from "./model-budget.js";
 import * as derivation from "./signal-derivation.js";
 import * as synthesis from "./top-of-mind-synthesis.js";
 import * as gemini from "../queue/gemini.js";
@@ -44,6 +45,11 @@ const MODULES: Record<string, Record<string, unknown>> = {
   "top-of-mind-synthesis.ts": synthesis,
   "gemini.ts": gemini,
   "inspiration-embeddings.ts": embeddings,
+  // What the pipeline is allowed to spend is tuning like any other: the
+  // budget decides whether an account's derivation runs now or in an hour,
+  // and a cap raised in code but not in the doc is exactly the drift the rest
+  // of this file exists to catch.
+  "model-budget.ts": modelBudget,
 };
 
 /**

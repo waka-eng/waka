@@ -425,6 +425,27 @@ output; all user-originated text and enrichment output is delimiter-fenced
 and the system instructions pin the model against treating it as
 instructions.
 
+### The per-account model budget (`packages/api/src/lib/model-budget.ts`)
+
+| Constant | Value | One line |
+|---|---|---|
+| `MODEL_BUDGET_WINDOW_MS` | 3600000 | The sliding window every count is taken over (1 hour) |
+| `MODEL_BUDGET_JOBS_PER_ACCOUNT` | 60 | Jobs one account may **start** per window |
+| `MODEL_BUDGET_RELEASE_MARGIN_MS` | 1000 | Nudge past the start that frees a slot, so a wake-up cannot re-read the same boundary |
+
+One API key serves every account, so the queue's throughput *is* the key's
+spend. Before claiming anything, the drain reads which account owns the head
+of the queue and counts what that account has already started inside the
+window. When the budget is gone it pushes that account's whole due backlog to
+the moment the window frees a slot, and serves somebody else instead.
+
+Nothing is refused and nothing is dropped: a deferred job is a pending job
+whose `run_after` is later, which is the mechanism retry backoff already uses.
+The budget is spent by jobs *starting*, not by jobs being enqueued — a
+thousand saves waiting their turn have cost the key nothing — and it is
+counted per **account** rather than per profile, because one account owns its
+human profile and its agents.
+
 ---
 
 ## What the field shows, and why its numbers differ
