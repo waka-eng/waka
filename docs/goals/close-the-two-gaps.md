@@ -335,3 +335,66 @@ a nine-member `deps`, and the two hit-testers left in `Home.tsx`.
 has been settled by measuring instead of arguing, and twice the measurement
 reversed the previous answer. The tool is committed so the next person does
 not have to take this on trust either.
+
+### 4c — done (2026-08-17), recorded in `c7cc869`
+
+The sky engine left the page on the boundary 4b measured. `Home.tsx` 10,959 →
+10,110. The commit message carries the detail, including which of the thirteen
+moved functions the suite actually reaches and which are covered by the
+identical-body diff alone.
+
+### 4d — the refs collapse; the panels still do not come out, and here is why
+
+**Done: twelve refs became one seam.** `packages/web/src/canvas/measured.ts`
+holds the elements React creates and the canvas side reads and writes. The
+membership rule is mechanical and has no exceptions — an element is in
+`Measured` if and only if the frame effect or the palette pass that feeds it
+dereferences the element. That rule excludes `panelRef`, `panelTextRef`, the
+four dial refs and `mouthFieldRef`: the reading panel and the dial DO cross the
+seam, but they cross it as numbers through `SimApi.place()` and
+`SimApi.scrubTo()`, and the elements themselves are only ever read by React.
+
+Every field is a ref object, never a captured element, so `.current` is read in
+the frame that uses it. The opposite shape is the trap the sky extraction hit —
+a value collected when the object is built freezes whatever was mounted at that
+instant, silently, and nothing throws.
+
+**Proven a pure collection, not asserted.** The substitution was undone
+mechanically — every `measured.x` back to `xRef` — and the result diffed
+against the file before the change. The only differences are the import and the
+declaration block; all 49 use sites are byte-identical.
+
+**What green meant here, before and after.** Each of the twelve was pinned to
+its value at construction, one at a time, and the whole suite re-run:
+
+| frozen | before 4d | after 4d |
+|---|---|---|
+| `root`, `canvas` | red | red |
+| `atmos`, `hq`, `charSay`, `mouth` | **green** | red |
+| `grain`, `hqInner`, `nebEls`, `clusterEls`, `satSay`, `mouthSpot` | green | green |
+
+Ten of twelve silent holes, in exactly the place a silent failure was
+predicted, is not a net — so `test/measured.test.tsx` reads back four of the
+styles the loop writes and closes four of them. The six that remain open are
+named in that file's header with the reason each one is out of reach: a canvas
+the stub does not rasterise, a value only ever read into the companion's size,
+a formed candidate with a pointer resting on its satellite, and a keep.
+
+**Not done, and it is not the refs.** The refs were one of two things holding
+the three panels, and the smaller one. Free bindings per block, measured after
+this change (JSX intrinsics excluded):
+
+| block | lines | bindings, was | bindings, now |
+|---|---|---|---|
+| the ready field | 463 | 44 | 34 |
+| the reading panel | 277 | 37 | 31 |
+| the sky | 216 | 35 | 24 |
+
+`measured` is now ONE of those, in place of three each in the ready field and
+the sky. The rest is not ref-shaped. The sky's 24 are ten pieces of data, six
+actions, `simApiRef`, `measured`, and six of transient editing state — and that
+last group is the real remaining blocker, because `edit`, `setEdit` and
+`saveEdit` appear in ALL THREE blocks. One editing state, written by three
+panels, is a shared mutable channel of exactly the kind `measured` just
+resolved for the DOM, and threading it as props would relocate it rather than
+resolve it. That is the next measurement, not this one.
