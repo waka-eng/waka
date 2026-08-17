@@ -76,6 +76,7 @@ import {
 } from "../lib/aliveness";
 import { hueCss, tintRamp, type Ramp } from "../lib/appearance";
 import { clamp, clamp01, DAY_MS, easeOut, hashStr, kd, lerp, mix32, TAU } from "../lib/num";
+import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
 import {
   daysAgo,
   MOCK_AGENTS,
@@ -1535,53 +1536,6 @@ function posterWords(text: string, prev: string | null): JSX.Element[] {
 // Walls: the horizontal axis, and what stands on it (v10)
 // ---------------------------------------------------------------------------
 
-/**
- * THE AXIS IS SEMANTIC NOW.
- *
- *     ← your agents      |   WAKA (you)   |   rooms (people) →
- *
- * A "room" was only ever the first kind of wall; an agent's profile is the
- * second. Everything already written — travel and its choreography, the wake
- * on arrival, the peek invariant, the panels — is kind-agnostic from here, and
- * direction now MEANS kind, which is most of the wayfinding for free.
- */
-type WallKind = "self" | "room" | "agent";
-
-interface Wall {
-  kind: WallKind;
-  /** the group id, the agent id, or "" for the owner's own wall */
-  id: string;
-  /** the eyebrow, and the name a neighbouring wall's edge says */
-  name: string;
-  /** where it stands: agents negative, the owner at the origin, rooms positive */
-  col: number;
-}
-
-const wallKey = (w: Wall): string => `${w.kind}:${w.id}`;
-/**
- * A ROOM IS THE ONLY WALL WITHOUT A SKY OR A DIAL, and that carve-out is not
- * inherited by anything: an agent's own history IS the dial (there is no second
- * surface for it), and the things it is still forming are its sky.
- */
-/**
- * EVERY WALL HAS A SKY, INCLUDING A ROOM'S.
- *
- * Rooms were carved out of this when a room had nothing to put up there. Under
- * the canon they do: members share SIGNALS to a room, and what hangs on its
- * wall is exactly that — statements, other people's, not yet agreed. That is
- * the definition of a sky. Without one those shared statements have nowhere to
- * live at all: the field is always your own memories by ruling, and the room's
- * headquarters holds only what the room has already settled on.
- *
- * So the shape is the same everywhere, which is the point: what is forming
- * above, what is held in the middle, your own memories below. In a room the
- * top is what people have said out loud and the middle is what you have agreed.
- */
-const hasSky = (k: WallKind): boolean => k === "self" || k === "agent" || k === "room";
-/* The dial stays out of a room. It winds ONE archive through time, and a room
-   is several people's statements arriving on their own clocks — there is no
-   single history there to scrub. */
-const hasDial = (k: WallKind): boolean => k !== "room";
 
 // ---------------------------------------------------------------------------
 // MOCK AGENTS — replaced by GET /api/agents when that lands
@@ -4030,7 +3984,7 @@ function WorldExperience(): JSX.Element {
   /** Rooms whose data could not be fetched: the column says so, quietly. */
   const [failedRooms, setFailedRooms] = useState<ReadonlySet<string>>(() => new Set());
   /** Which wall the camera is standing on. Discrete, pushed from the loop. */
-  const [atWall, setAtWall] = useState<Wall>({ kind: "self", id: "", name: "Waka", col: 0 });
+  const [atWall, setAtWall] = useState<Space>({ kind: "self", id: "", name: "Waka", col: 0 });
   /** The camera is over a wall that has no dial: the dial fades, as in the sky. */
   const [dialAway, setDialAway] = useState(false);
   /** Drafts assembled here, in this session. They live nowhere else. */
@@ -4169,19 +4123,19 @@ function WorldExperience(): JSX.Element {
    * Newest agent nearest you, newest room nearest you: the axis grows outward
    * from where you stand.
    */
-  const walls = useMemo<Wall[]>(() => {
-    const out: Wall[] = [];
+  const walls = useMemo<Space[]>(() => {
+    const out: Space[] = [];
     (agents ?? []).forEach((a, i) => {
       out.push({ kind: "agent", id: a.agent.id, name: a.agent.name, col: -(i + 1) });
     });
     out.reverse(); /* leftmost first, so the array is the axis in order */
     out.push({ kind: "self", id: "", name: "Waka", col: 0 });
     groups.forEach((g, i) => {
-      out.push({ kind: "room", id: g.id, name: g.name, col: i + 1 });
+      out.push({ kind: "group", id: g.id, name: g.name, col: i + 1 });
     });
     return out;
   }, [agents, groups]);
-  const wallsRef = useRef<Wall[]>([]);
+  const wallsRef = useRef<Space[]>([]);
   wallsRef.current = walls;
   const agentsRef = useRef<AgentBundle[]>([]);
   agentsRef.current = agents ?? [];
@@ -4264,8 +4218,8 @@ function WorldExperience(): JSX.Element {
    * wall begins, so arrival usually finds it ready.
    */
   const loadWall = useCallback(
-    (w: Wall) => {
-      if (w.kind === "room") loadRoom(w.id);
+    (w: Space) => {
+      if (w.kind === "group") loadRoom(w.id);
     },
     [loadRoom],
   );
@@ -4273,7 +4227,7 @@ function WorldExperience(): JSX.Element {
   loadWallRef.current = loadWall;
 
   /** The camera came to rest on a wall. Discrete, pushed from the loop. */
-  const pushArrived = useCallback((w: Wall) => {
+  const pushArrived = useCallback((w: Space) => {
     setAtWall((prev) => (prev.kind === w.kind && prev.id === w.id ? prev : w));
   }, []);
   const pushArrivedRef = useRef(pushArrived);
@@ -4926,7 +4880,7 @@ function WorldExperience(): JSX.Element {
                it instead of borrowing from you. Until it arrives the room is
                honestly blank — it says its own name and nothing else, rather
                than showing someone else's ambition under it. */
-            atWall.kind === "room"
+            atWall.kind === "group"
             ? roomChromeRef.current.get(atWall.id) ?? {
                 text: null,
                 eyebrow: atWall.name,
@@ -5028,13 +4982,13 @@ function WorldExperience(): JSX.Element {
     for (const w of walls) {
       if (w.kind === "agent") {
         const a = (agents ?? []).find((x) => x.agent.id === w.id);
-        if (a) m.set(wallKey(w), deriveAgentChrome(a, nowMs, nowMs));
-      } else if (w.kind === "room") {
+        if (a) m.set(spaceKey(w), deriveAgentChrome(a, nowMs, nowMs));
+      } else if (w.kind === "group") {
         const rc = roomChromeRef.current.get(w.id);
-        if (rc) m.set(wallKey(w), rc);
+        if (rc) m.set(spaceKey(w), rc);
       } else {
         const at = deriveAmbition(nowMs, adopted, notes);
-        m.set(wallKey(w), {
+        m.set(spaceKey(w), {
           eyebrow: at.eyebrow,
           text: at.text,
           awayFrom: null,
@@ -5077,7 +5031,7 @@ function WorldExperience(): JSX.Element {
        are what light — the same rule as everywhere else (what this wall's
        claim rests on), applied to the material a room actually has. */
     for (const w of walls) {
-      if (w.kind !== "room") continue;
+      if (w.kind !== "group") continue;
       const room = roomCacheRef.current.get(w.id);
       const lead = room?.data?.top?.entries?.[0];
       const prov: Provenance = new Map();
@@ -5151,7 +5105,7 @@ function WorldExperience(): JSX.Element {
        the person who kept it — `ownerProfileId` is what the per-member hue
        will read, and it is carried from here rather than re-derived. */
     const roomBalls = walls
-      .filter((w) => w.kind === "room")
+      .filter((w) => w.kind === "group")
       .flatMap((w) =>
         (roomFieldRef.current.get(w.id) ?? []).map((cap) =>
           makeAgentBall({
@@ -5178,7 +5132,7 @@ function WorldExperience(): JSX.Element {
        memories are excluded so they stay the warm white they are at home. */
     const hueOf = new Map<string, number>();
     for (const w of walls) {
-      if (w.kind !== "room") continue;
+      if (w.kind !== "group") continue;
       let next = 0;
       for (const cap of roomFieldRef.current.get(w.id) ?? []) {
         if (cap.ownerProfileId === viewerIdRef.current) continue;
@@ -5724,8 +5678,8 @@ function WorldExperience(): JSX.Element {
        of them. What still varies per wall is what stands ABOVE: its adopted
        ambition, its sky of forming candidates, and which memories its claim
        rests on — the peek row. */
-    const SELF_WALL: Wall = { kind: "self", id: "", name: "Waka", col: 0 };
-    const wallAt = (c: number): Wall =>
+    const SELF_WALL: Space = { kind: "self", id: "", name: "Waka", col: 0 };
+    const wallAt = (c: number): Space =>
       wallsRef.current.find((w) => w.col === c) ?? SELF_WALL;
     const curWall = () => wallAt(col);
     /**
@@ -5843,7 +5797,7 @@ function WorldExperience(): JSX.Element {
      * one of you.
      */
     interface Resident {
-      wall: Wall;
+      wall: Space;
       being: Being;
       sprites: BeingSprites;
       /** its own aliveness: the memories IT kept, and how alive they still are */
@@ -5912,7 +5866,7 @@ function WorldExperience(): JSX.Element {
      * A wall's being, baked once and held for the session. Nothing renders
      * half-loaded: the sprites exist before the column is ever drawn.
      */
-    function ensureResident(w: Wall): Resident | null {
+    function ensureResident(w: Space): Resident | null {
       if (w.kind !== "agent") return null;
       const got = residents.get(w.col);
       if (got && got.wall.id === w.id) return got;
@@ -5954,7 +5908,7 @@ function WorldExperience(): JSX.Element {
     function tryWakeWall() {
       if (travelActive) return;
       const w = curWall();
-      if (w.kind === "room") {
+      if (w.kind === "group") {
         const entry = roomCacheRef.current.get(w.id);
         if (!entry || entry.status === "pending") {
           awaitingWake = true;
@@ -5970,7 +5924,7 @@ function WorldExperience(): JSX.Element {
         awaitingWake = false;
       }
       /* the wall's claim lifts its own handful of the ground */
-      provenance = wallProv.get(wallKey(w)) ?? new Map();
+      provenance = wallProv.get(spaceKey(w)) ?? new Map();
       electPeek(presentBalls());
       const res = ensureResident(w);
       if (res) {
@@ -9851,7 +9805,7 @@ function WorldExperience(): JSX.Element {
             if (q) b.quote = q;
           }
         }
-        provenance = byWall.get(wallKey(curWall())) ?? new Map();
+        provenance = byWall.get(spaceKey(curWall())) ?? new Map();
         electPeek(presentBalls());
         wake();
       },
@@ -10282,7 +10236,7 @@ function WorldExperience(): JSX.Element {
    * so the legend and the orbs are physically incapable of disagreeing.
    */
   const legend = useMemo<Array<{ id: string; name: string; hue: number; agent: boolean }>>(() => {
-    if (atWall.kind !== "room") return [];
+    if (atWall.kind !== "group") return [];
     const caps = roomFieldRef.current.get(atWall.id) ?? [];
     const seen = new Map<string, { id: string; name: string; hue: number; agent: boolean }>();
     for (const c of caps) {
@@ -10338,7 +10292,7 @@ function WorldExperience(): JSX.Element {
       }
       return out;
     }
-    if (atWall.kind === "room") {
+    if (atWall.kind === "group") {
       /* A ROOM'S CHAIN STOPS AT THE STATEMENT, AND THAT IS THE POINT.
          Sharing into a room sends the statement and nothing under it — the
          memories stay on their author's own wall. So a room's board can
@@ -10523,7 +10477,7 @@ function WorldExperience(): JSX.Element {
        shared wall has: the field below is always your own by ruling, and the
        room's headquarters holds only what it has already agreed. */
     for (const g of groups) {
-      const col = walls.find((w) => w.kind === "room" && w.id === g.id)?.col;
+      const col = walls.find((w) => w.kind === "group" && w.id === g.id)?.col;
       if (col === undefined) continue;
       for (const s of wallSignalsRef.current.get(g.id) ?? []) {
         out.push({
@@ -11126,7 +11080,7 @@ function WorldExperience(): JSX.Element {
    *
    * Not a modal and not a route: it is a fact about where you are standing, so
    * it opens beside the name that opened it and closes when you travel. The
-   * key is `wallKey(space)` rather than a group id because every kind of space
+   * key is `spaceKey(space)` rather than a group id because every kind of space
    * has settings — yours sends you to the account screen, an agent's names
    * what it is, a group's is the real one.
    */
@@ -11146,7 +11100,7 @@ function WorldExperience(): JSX.Element {
   const [closing, setClosing] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
   useEffect(() => {
-    if (atWall.kind !== "room" || members.has(atWall.id)) return;
+    if (atWall.kind !== "group" || members.has(atWall.id)) return;
     let dead = false;
     fetchGroupMembers(atWall.id)
       .then((rows) => {
@@ -11199,7 +11153,7 @@ function WorldExperience(): JSX.Element {
     () => new Map(),
   );
   useEffect(() => {
-    if (atWall.kind !== "room") return;
+    if (atWall.kind !== "group") return;
     let dead = false;
     fetchGroupProposals(atWall.id)
       .then((rows) => {
@@ -11721,12 +11675,12 @@ function WorldExperience(): JSX.Element {
               it is yours, it lives below all of these, and it does not slide
               sideways when you travel. */}
           {walls.map((w) => {
-            const key = wallKey(w);
+            const key = spaceKey(w);
             const here = w.kind === atWall.kind && w.id === atWall.id;
             /* the wall you are standing on is the one the dial winds; every
                other wall shows what it holds NOW */
             const c = here ? chrome : wallChromeNow.get(key) ?? null;
-            const ready = w.kind !== "room" || wokenRooms.has(w.id);
+            const ready = w.kind !== "group" || wokenRooms.has(w.id);
             return (
               <div
                 key={key}
@@ -11735,7 +11689,7 @@ function WorldExperience(): JSX.Element {
                    typography and the body must never disagree about what
                    kind of mind you are standing in */
                 data-kind={
-                  w.kind === "room" && machineRooms.has(w.id) ? "agent" : w.kind
+                  w.kind === "group" && machineRooms.has(w.id) ? "agent" : w.kind
                 }
                 style={{ left: `calc(var(--jar-vw, 100vw) * ${w.col})` }}
               >
@@ -12065,7 +12019,7 @@ function WorldExperience(): JSX.Element {
                     </p>
                   )
                 ) : null}
-                {w.kind === "room" && failedRooms.has(w.id) && !ready ? (
+                {w.kind === "group" && failedRooms.has(w.id) && !ready ? (
                   <p className="jar-wall-hold jar-label">Couldn’t reach this room</p>
                 ) : null}
                 {/* THE EDGE OF THE WORLD, AND WHAT IS BEYOND IT.
@@ -12142,7 +12096,7 @@ function WorldExperience(): JSX.Element {
             const left = walls[i - 1] ?? null;
             const right = walls[i + 1] ?? null;
             return (
-              <Fragment key={`edges-${wallKey(w)}`}>
+              <Fragment key={`edges-${spaceKey(w)}`}>
                 {left ? (
                   <button
                     type="button"
@@ -12818,12 +12772,12 @@ function WorldExperience(): JSX.Element {
             <button
               type="button"
               className="jar-here jar-back jar-label"
-              aria-expanded={settingsFor === wallKey(atWall)}
+              aria-expanded={settingsFor === spaceKey(atWall)}
               onClick={() =>
-                setSettingsFor(settingsFor === wallKey(atWall) ? null : wallKey(atWall))
+                setSettingsFor(settingsFor === spaceKey(atWall) ? null : spaceKey(atWall))
               }
             >
-              {atWall.kind === "room"
+              {atWall.kind === "group"
                 ? groups.find((g) => g.id === atWall.id)?.name ?? atWall.name
                 : atWall.name}
             </button>
@@ -12968,7 +12922,7 @@ function WorldExperience(): JSX.Element {
           const here = atWall.kind === w.kind && atWall.id === w.id;
           return (
             <button
-              key={wallKey(w)}
+              key={spaceKey(w)}
               type="button"
               className={`jar-axis-mark${here ? " is-here" : ""} jar-axis-mark--${w.kind}`}
               aria-current={here ? "true" : undefined}
@@ -13073,7 +13027,7 @@ function WorldExperience(): JSX.Element {
       {/* THE ROOM, OPENED. Who is in it, how to bring somebody, what you can
           put to them, and the way out — one surface, because they are all the
           same question: who is this with and what do we say together. */}
-      {roomPanel && atWall.kind === "room" && atWall.id === roomPanel ? (
+      {roomPanel && atWall.kind === "group" && atWall.id === roomPanel ? (
         <div className="jar-roomform" data-jar-chrome="1">
           <div className="jar-label" style={{ marginBottom: 14 }}>
             {atWall.name}
@@ -13267,18 +13221,18 @@ function WorldExperience(): JSX.Element {
         </div>
       ) : null}
 
-      {settingsFor === wallKey(atWall) && phase === "ready" ? (
+      {settingsFor === spaceKey(atWall) && phase === "ready" ? (
         <div className="jar-settings" data-jar-chrome="1" role="dialog" aria-label="Space settings">
           <div className="jar-settings-head">
             <span className="jar-label">
-              {atWall.kind === "room" ? "This room" : atWall.kind === "agent" ? "This agent" : "You"}
+              {atWall.kind === "group" ? "This room" : atWall.kind === "agent" ? "This agent" : "You"}
             </span>
             <button type="button" className="jar-settings-x" onClick={() => setSettingsFor(null)}>
               close
             </button>
           </div>
 
-          {atWall.kind === "room" ? (
+          {atWall.kind === "group" ? (
             (() => {
               const gid = atWall.id;
               const roll = members.get(gid) ?? [];
