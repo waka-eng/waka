@@ -115,6 +115,7 @@ import {
   type BeingSprites,
   type Palette,
 } from "../canvas/palette";
+import { useMeasured } from "../canvas/measured";
 import { BODY_TIERS, bodyPath } from "../character/raster";
 import { GroupPanel } from "../space-kinds/GroupPanel";
 import { SpaceSettings } from "../space/settings/SpaceSettings";
@@ -1365,25 +1366,20 @@ function HomeExperience(): JSX.Element {
      half-built. When it is rebuilt it fades and never removes: a filtered
      field that emptied itself would be lying about what is kept. */
 
-  const rootRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const hqRef = useRef<HTMLDivElement>(null);
-  const atmosRef = useRef<HTMLDivElement>(null);
-  /** The emulsion: one DOM layer over the whole frame, blended, never redrawn. */
-  const grainRef = useRef<HTMLDivElement>(null);
-  const charSayRef = useRef<HTMLDivElement>(null);
-  const hqInnerRef = useRef<HTMLDivElement>(null);
+  /**
+   * THE TWELVE ELEMENTS THE CANVAS SIDE READS AND WRITES — see
+   * `canvas/measured.ts` for the membership rule and why they are ref objects
+   * rather than the elements themselves.
+   *
+   * They were twelve separate refs declared here. Nothing about the traffic
+   * changed; what changed is that a block of this file's JSX can now be handed
+   * ONE named seam instead of three anonymous handles, which is the thing that
+   * was holding the ready field, the sky and the reading panel in the page.
+   */
+  const measured = useMeasured();
   const panelRef = useRef<HTMLDivElement>(null);
   /* the prose itself, so a long memory can be opened at its marked span */
   const panelTextRef = useRef<HTMLParagraphElement>(null);
-  /** The DOM the loop positions: one sentence per nebula, one line per cluster. */
-  const nebElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
-  const clusterElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
-  /** The one whisper the orbits carry: whose memory the pointer is on. */
-  const satSayRef = useRef<HTMLDivElement>(null);
-  /** The mouth's camera-riding layer, and the element a memory is born from. */
-  const mouthRef = useRef<HTMLDivElement>(null);
-  const mouthSpotRef = useRef<HTMLElement | null>(null);
   const mouthFieldRef = useRef<HTMLTextAreaElement | null>(null);
   /**
    * The memories kept in this session, as the seeds they were built from.
@@ -2085,16 +2081,16 @@ function HomeExperience(): JSX.Element {
 
   /* ------------- palette: resolve vars once, re-raster sprites ------------- */
   useEffect(() => {
-    const root = rootRef.current;
+    const root = measured.root.current;
     if (!root) return;
-    const canvasEl = canvasRef.current;
+    const canvasEl = measured.canvas.current;
     const ctx2d = canvasEl ? canvasEl.getContext("2d") : null;
     if (!ctx2d) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const pal = buildPalette(root, dpr, ctx2d);
     paletteRef.current = pal;
     /* the film is laid on the DOM layer once, here — never per frame */
-    const grainEl = grainRef.current;
+    const grainEl = measured.grain.current;
     if (grainEl && pal.grainUrl) {
       grainEl.style.backgroundImage = `url(${pal.grainUrl})`;
       grainEl.style.backgroundSize = `${GRAIN_PX * GRAIN_TILE}px ${GRAIN_PX * GRAIN_TILE}px`;
@@ -2393,8 +2389,8 @@ function HomeExperience(): JSX.Element {
 
   /* ---------------- the simulation: one rAF loop, refs only ---------------- */
   useEffect(() => {
-    const root = rootRef.current;
-    const canvas = canvasRef.current;
+    const root = measured.root.current;
+    const canvas = measured.canvas.current;
     if (!root || !canvas || !inspirations || !agents) return undefined;
     const ctx = canvas.getContext("2d");
     if (!ctx) return undefined;
@@ -3134,7 +3130,7 @@ function HomeExperience(): JSX.Element {
      * the middle of it.
      */
     function mouthSpot(): { x: number; y: number } | null {
-      const el = mouthSpotRef.current;
+      const el = measured.mouthSpot.current;
       if (!el) return null;
       const r = el.getBoundingClientRect();
       if (r.width === 0 && r.height === 0) return null;
@@ -3682,8 +3678,8 @@ function HomeExperience(): JSX.Element {
       wake,
       groupBalls: () => groupBallsRef.current,
       viewerId: () => viewerIdRef.current,
-      nebEl: (id) => nebElsRef.current.get(id) ?? null,
-      satSayEl: () => satSayRef.current,
+      nebEl: (id) => measured.nebEls.current.get(id) ?? null,
+      satSayEl: () => measured.satSay.current,
       selectedId: () => selectedIdRef.current,
       setFocusCandId,
     };
@@ -3906,7 +3902,7 @@ function HomeExperience(): JSX.Element {
       /* Measure the CONTENT block, not .jar-hq: the companion's whisper line
          is an absolutely positioned child of .jar-hq whose top we write from
          charY, and observing that would be a resize feedback loop. */
-      const hqH = hqInnerRef.current ? hqInnerRef.current.offsetHeight : 0;
+      const hqH = measured.hqInner.current ? measured.hqInner.current.offsetHeight : 0;
       /* IT SHRINKS BEFORE ANYTHING ELSE IN HQ GIVES WAY — and that promise
          used to be broken by its own floor. charSize was clamped to a hard
          minimum of 84 and the slot was then solved with
@@ -3936,7 +3932,7 @@ function HomeExperience(): JSX.Element {
       /* If even 32px cannot fit, `hi` is still below `lo`; split the
          difference rather than always resolving downward into the dial. */
       companion.y = hi >= lo ? clamp((hqH + seam) / 2, lo, hi) : (lo + hi) / 2;
-      const say = charSayRef.current;
+      const say = measured.charSay.current;
       if (say) say.style.top = `${Math.round(companion.y + companion.size * 0.62)}px`;
       /* the columns' DOM measures itself off these — one write per resize */
       root!.style.setProperty("--jar-vw", `${Math.round(view.w)}px`);
@@ -3963,7 +3959,7 @@ function HomeExperience(): JSX.Element {
       /* The volume is a real, world-tall gradient: the sky at the top is a
          different place from the deep. It starts one viewport above HQ, so it
          covers all three sections. */
-      const atmos = atmosRef.current;
+      const atmos = measured.atmos.current;
       if (atmos) {
         atmos.style.top = `${Math.round(view.layout.minCam)}px`;
         atmos.style.height = `${Math.round(view.layout.layoutH - view.layout.minCam)}px`;
@@ -4947,25 +4943,25 @@ function HomeExperience(): JSX.Element {
     /** Camera-following DOM: the volume and the HQ both ride at 1x. */
     function syncDom() {
       /* the words ride BOTH camera axes: rooms are columns of the same page */
-      const hq = hqRef.current;
+      const hq = measured.hq.current;
       if (hq)
         hq.style.transform = `translate3d(${(-cam.x).toFixed(1)}px, ${(-cam.y).toFixed(1)}px, 0)`;
-      const atmos = atmosRef.current;
+      const atmos = measured.atmos.current;
       if (atmos) atmos.style.transform = `translate3d(0, ${(-cam.y).toFixed(1)}px, 0)`;
       /* The mouth rides BOTH axes, like headquarters — it stands on your own
          wall's seam, so it slides away when you travel and scrolls away when
          you descend. It is a sibling of .jar-hq rather than a child of it
          only because it has to sit ABOVE the canvas: a field you are typing
          into cannot have orbs drawn over the words. */
-      const mouth = mouthRef.current;
+      const mouth = measured.mouth.current;
       if (mouth)
         mouth.style.transform = `translate3d(${(-cam.x).toFixed(1)}px, ${(-cam.y).toFixed(1)}px, 0)`;
       /* the companion's whisper is screen-anchored, like the companion */
-      const say = charSayRef.current;
+      const say = measured.charSay.current;
       if (say) say.style.transform = `translate3d(${cam.x.toFixed(1)}px, 0, 0)`;
       /* Each candidate's sentence is DOM, positioned on its cloud every
          frame: the canvas carries the light, the words stay crisp. */
-      const els = nebElsRef.current;
+      const els = measured.nebEls.current;
       if (els.size > 0) {
         for (const n of sky.nebs) {
           const el = els.get(n.id);
@@ -4999,7 +4995,7 @@ function HomeExperience(): JSX.Element {
              measured from, and scale is a transform, so the box stays put */
           el.style.width = `${Math.round(Math.min(n.r * 1.7, 320))}px`;
         }
-        for (const [id, el] of clusterElsRef.current) {
+        for (const [id, el] of measured.clusterEls.current) {
           if (!el) continue;
           let sx = 0;
           let sy = 0;
@@ -5020,7 +5016,7 @@ function HomeExperience(): JSX.Element {
       /* whose memory the pointer is on, beside it — it rides the satellite, so
          the name stays where the memory is even while the orbit turns under
          it. Absolutely positioned: it can never shift anything else. */
-      const who = satSayRef.current;
+      const who = measured.satSay.current;
       if (who && sky.hoverSat) {
         const sx = sky.hoverSat.x - cam.x;
         const sy = sky.hoverSat.y - cam.y;
@@ -5750,7 +5746,7 @@ function HomeExperience(): JSX.Element {
       let nb: Neb | null = null;
       const nebEl = e.target instanceof Element ? e.target.closest(".jar-neb") : null;
       if (nebEl) {
-        for (const [id, el] of nebElsRef.current) {
+        for (const [id, el] of measured.nebEls.current) {
           if (el === nebEl) {
             const cand = sky.nebs.find((q) => q.id === id) ?? null;
             if (cand && !(cand.gone > 0.4 || cand.condense < 0.99)) nb = cand;
@@ -6259,7 +6255,7 @@ function HomeExperience(): JSX.Element {
     ro.observe(root);
     /* HQ's content grows when the ambition and the band arrive, which moves
        the companion's slot — so that block's height is observed too */
-    if (hqInnerRef.current) ro.observe(hqInnerRef.current);
+    if (measured.hqInner.current) ro.observe(measured.hqInner.current);
 
     measure();
     /* `measure` is the first moment `vw` is real, so the horizontal camera can
@@ -8586,12 +8582,12 @@ function HomeExperience(): JSX.Element {
   );
 
   return (
-    <div ref={rootRef} className="jar" aria-label="Waka">
+    <div ref={measured.root} className="jar" aria-label="Waka">
       {/* the volume: a layout-tall gradient the camera descends through */}
-      <div ref={atmosRef} className="jar-atmos" aria-hidden="true" />
+      <div ref={measured.atmos} className="jar-atmos" aria-hidden="true" />
 
       {phase === "ready" ? (
-        <div ref={hqRef} className="jar-hq">
+        <div ref={measured.hq} className="jar-hq">
           {/* ---- ONE COLUMN PER WALL (v10) ----
               Agents to the left, you at the origin, rooms to the right. A
               column is dark until the traveler has arrived with complete data
@@ -8623,7 +8619,7 @@ function HomeExperience(): JSX.Element {
                 {ready && c ? (
                   <div
                     className="jar-hq-inner"
-                    ref={w.kind === "self" ? hqInnerRef : undefined}
+                    ref={w.kind === "self" ? measured.hqInner : undefined}
                   >
                     {/* the wall's name, and nothing else in this slot, ever —
                         no kind label, no model, no chip */}
@@ -8994,7 +8990,7 @@ function HomeExperience(): JSX.Element {
             );
           })}
           {/* what the companion is glowing about — its one line, in words */}
-          <div ref={charSayRef} className="jar-char-say">
+          <div ref={measured.charSay} className="jar-char-say">
             {charSay ? (
               <p key={charSay} className="jar-label">
                 {charSay.split(/\s+/).map((word, i) => (
@@ -9067,13 +9063,13 @@ function HomeExperience(): JSX.Element {
           headquarters' own transform every frame, so it belongs to your wall
           and to the seam exactly as if it lived there. */}
       {phase === "ready" ? (
-        <div ref={mouthRef} className="jar-mouth" data-jar-chrome="1">
+        <div ref={measured.mouth} className="jar-mouth" data-jar-chrome="1">
           <div className={`jar-mouth-slot${atNow ? "" : " jar-mouth-slot--away"}`}>
             {mouthOpen ? (
               <textarea
                 ref={(el) => {
                   mouthFieldRef.current = el;
-                  mouthSpotRef.current = el;
+                  measured.mouthSpot.current = el;
                 }}
                 className="jar-mouth-field"
                 value={draft}
@@ -9092,7 +9088,7 @@ function HomeExperience(): JSX.Element {
               <button
                 type="button"
                 ref={(el) => {
-                  mouthSpotRef.current = el;
+                  measured.mouthSpot.current = el;
                 }}
                 className="jar-mouth-rest jar-label"
                 onClick={openMouth}
@@ -9132,8 +9128,8 @@ function HomeExperience(): JSX.Element {
           <div
             key={c.id}
             ref={(el) => {
-              if (el) nebElsRef.current.set(c.id, el);
-              else nebElsRef.current.delete(c.id);
+              if (el) measured.nebEls.current.set(c.id, el);
+              else measured.nebEls.current.delete(c.id);
             }}
             className={`jar-neb jar-neb--${c.kind}`}
           >
@@ -9326,8 +9322,8 @@ function HomeExperience(): JSX.Element {
           <div
             key={sig}
             ref={(el) => {
-              if (el) clusterElsRef.current.set(sig, el);
-              else clusterElsRef.current.delete(sig);
+              if (el) measured.clusterEls.current.set(sig, el);
+              else measured.clusterEls.current.delete(sig);
             }}
             className="jar-cluster"
           >
@@ -9341,10 +9337,10 @@ function HomeExperience(): JSX.Element {
             a given name, beside the satellite, one fade. The loop writes both
             its words and its place — it has no React children, so it can
             never shift anything on the page. */}
-        <div ref={satSayRef} className="jar-satsay jar-label" aria-hidden="true" />
+        <div ref={measured.satSay} className="jar-satsay jar-label" aria-hidden="true" />
       </div>
 
-      <canvas ref={canvasRef} className="jar-canvas" aria-hidden="true" />
+      <canvas ref={measured.canvas} className="jar-canvas" aria-hidden="true" />
 
       {/* THE EMULSION. Above the layout and the type, below the chrome that
           has to stay legible (the panel, the dial, the back link). It blends
@@ -9353,7 +9349,7 @@ function HomeExperience(): JSX.Element {
           where its backdrop is transparent and `overlay` silently becomes a
           flat grey sheet. It is fixed to the FRAME, not to the layout: film
           grain belongs to the lens, and does not slide when you scroll. */}
-      <div ref={grainRef} className="jar-grain" aria-hidden="true" />
+      <div ref={measured.grain} className="jar-grain" aria-hidden="true" />
 
       {/* The reading panel: a focused orb's information, beside the orb. It
           fades in and out; it never slides, and it never owns the screen. */}
