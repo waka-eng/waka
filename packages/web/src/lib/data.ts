@@ -64,7 +64,7 @@ const ms = (iso: string | null | undefined): number => {
 /* ---------------------------------------------------------------- layer 1 */
 
 /**
- * ONE CAPTURE — one orb in the field.
+ * ONE INSPIRATION — one orb in the field.
  *
  * `capturedMs` and `updatedMs` are milliseconds because every consumer in the
  * world is arithmetic (decay, the dial, the sort). Parsing once here keeps
@@ -74,7 +74,7 @@ export interface WorldInspiration {
   id: string;
   preview: string;
   /**
-   * Whether the rooms this account is in can see it.
+   * Whether the groups this account is in can see it.
    *
    * A DELIBERATE, LOSSY TRANSLATION. The canon names this `visibility` and
    * types it as an enum (`private` | `public`) precisely so it can grow —
@@ -99,8 +99,8 @@ export interface WorldInspiration {
   reflectionCount: number;
 }
 
-/** One capture, opened: the words in full and what was hanging off them. */
-export interface WorldCaptureDetail extends WorldInspiration {
+/** One inspiration, opened: the words in full and what was hanging off them. */
+export interface WorldInspirationDetail extends WorldInspiration {
   text: string;
   reflections: Array<{
     id: string;
@@ -120,13 +120,13 @@ export interface WorldCaptureDetail extends WorldInspiration {
 /* ---------------------------------------------------------------- layer 2 */
 
 /**
- * ONE PATTERN — one body in the sky.
+ * ONE SIGNAL — one body in the sky.
  *
  * `status` is the vertical story the founder chose: `emerging` is still
  * forming overhead, `active` is what headquarters is standing on, `retired`
  * has sunk. `confidence` is the light. `evidenceCount` is the orbit's mass,
  * and the evidence itself (with the reason it was read that way) arrives only
- * when a pattern is opened — the sky never fetches what it cannot draw.
+ * when a signal is opened — the sky never fetches what it cannot draw.
  */
 export interface WorldSignal {
   id: string;
@@ -138,16 +138,16 @@ export interface WorldSignal {
   createdMs: number;
   /** A human edited the words: the server keeps feeding it but never rewrites. */
   locked: boolean;
-  /** Every capture behind it is gone; only the lock is keeping it here. */
+  /** Every inspiration behind it is gone; only the lock is keeping it here. */
   unsupported: boolean;
-  /** The rooms this pattern is out loud in. Captures never appear in a room. */
+  /** The groups this signal is shared into. Inspirations never appear in a group. */
   sharedGroupIds: string[];
 }
 
-/** What a pattern rests on, and why it was read that way. */
+/** What a signal rests on, and why it was read that way. */
 export interface WorldEvidence {
   /** Whose evidence this is. Carried so the field can look back UP: a memory
-      learns what it is for from the patterns that cite it, and needs to name
+      learns what it is for from the signals that cite it, and needs to name
       them. */
   signalId: string;
   inspirationId: string;
@@ -160,7 +160,7 @@ export interface WorldEvidence {
   createdMs: number;
 }
 
-export interface WorldPatternDetail extends WorldSignal {
+export interface WorldSignalDetail extends WorldSignal {
   evidence: WorldEvidence[];
 }
 
@@ -181,8 +181,8 @@ export interface WorldEntry {
   pinned: boolean;
   dismissed: boolean;
   sortOrder: number;
-  /** The patterns beneath this statement, named. This is the provenance the
-      headquarters peek draws, and it points at layer 2 — not at captures. */
+  /** The signals beneath this statement, named. This is the provenance the
+      headquarters peek draws, and it points at layer 2 — not at inspirations. */
   citedSignals: Array<{ id: string; statement: string }>;
   createdMs: number;
 }
@@ -266,7 +266,7 @@ function toEntry(row: ApiTopOfMindEntry): WorldEntry {
 
 /* ----------------------------------------------------------------- loaders */
 
-/** THE FIELD. Every capture the acting profile owns, oldest first — the
+/** THE FIELD. Every inspiration the acting profile owns, oldest first — the
     order the field lays them down in, so the sort never moves after paint. */
 /**
  * The server caps `limit` at 200 and parses the query `.strict()`, so asking
@@ -341,7 +341,7 @@ export async function loadTopOfMind(profile?: string): Promise<WorldTopOfMind | 
 
 /** One memory opened: the words in full, what was attached, and what the
     person said back. Enrichment comes through labelled, never as their words. */
-export async function loadInspiration(id: string): Promise<WorldCaptureDetail> {
+export async function loadInspiration(id: string): Promise<WorldInspirationDetail> {
   const row = await fetchInspiration(id);
   return {
     id: row.id,
@@ -386,8 +386,8 @@ function firstImage(attachments: ApiAttachment[]): string | null {
   return null;
 }
 
-/** One pattern opened: the same statement, plus what it rests on. */
-export async function loadSignal(id: string): Promise<WorldPatternDetail> {
+/** One signal opened: the same statement, plus what it rests on. */
+export async function loadSignal(id: string): Promise<WorldSignalDetail> {
   const row = await fetchSignal(id);
   return { ...toSignal(row), evidence: (row.evidence ?? []).map((e) => toEvidence(row.id, e)) };
 }
@@ -395,7 +395,7 @@ export async function loadSignal(id: string): Promise<WorldPatternDetail> {
 /* ---------------------------------------------------------------- aliveness */
 
 /**
- * HOW ALIVE A CAPTURE IS, 0..1 — the only channel the world spends on it.
+ * HOW ALIVE AN INSPIRATION IS, 0..1 — the only channel the world spends on it.
  *
  * Unchanged in shape from the founder's formula; changed in inputs only where
  * the canon removed one. The half-life is a week on the later of captured and
