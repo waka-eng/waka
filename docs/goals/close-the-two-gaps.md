@@ -412,3 +412,100 @@ last group is the real remaining blocker, because `edit`, `setEdit` and
 panels, is a shared mutable channel of exactly the kind `measured` just
 resolved for the DOM, and threading it as props would relocate it rather than
 resolve it. That is the next measurement, not this one.
+
+### 4e — the editing state gets an owner; the panels still cannot leave
+
+4d ended by naming the last shared channel: `edit`, `setEdit` and `saveEdit`,
+free in all three blocked blocks at once. That is now one object with one owner
+in `packages/web/src/space/editing.ts`, and the answer to "did a panel come
+free" is **no**. The numbers are below rather than the verdict alone, because
+the verdict is the boring half.
+
+**The counter, checked against two published answers before it was trusted.**
+`packages/web/scripts/measure-blocks.mjs` counts, per JSX block, every free name
+the block reads, split into what the component body holds (the props a child
+would take) and what is module-level or global (not props — a child imports
+them itself). Aimed at `c7cc869` and at 4d's result it reproduces both columns
+of 4d's table exactly: 43 / 38 / 28 and 41 / 38 / 26. A tool that agrees with a
+known answer at two commits is one whose answer at a third can be read.
+
+| block | lines | bindings, after 4d | after 4e | of which editing |
+|---|---|---|---|---|
+| the ready field | 463 → 456 | 41 | 39 | 3 → 1 |
+| the reading panel | 277 → 276 | 38 | 36 | 3 → 1 |
+| the sky | 216 → 214 | 26 | 24 | 3 → 1 |
+
+Exactly −2 each, which is the arithmetic of three names becoming one and is
+all it could ever have been. `Home.tsx` 9,910 → 9,840.
+
+**So what actually holds them, and it is not a third `measured`.** The tool now
+also reports which names more than one block reads, because that is the only
+column that distinguishes a channel running BETWEEN blocks from a block's own
+subject. There were eleven such names after 4d and there are nine now — three
+became one — and `editing` is the only one read by all three blocks:
+
+```
+editing    [hook]  the ready field, the sky, the reading panel
+measured   [hook]  the ready field, the sky
+atWall     [state] the ready field, the sky
+simApiRef  [ref]   the ready field, the sky
+salience   [cb]    the ready field, the sky
+candidates [memo]  the ready field, the sky
+TRef       [ref]   the ready field, the reading panel
+verdicts   [state] the sky, the reading panel
+sayVerdict [cb]    the sky, the reading panel
+```
+
+Two of the nine are the collections already built. Of the other seven, none is
+shared by more than two blocks and no three of them are the same kind of thing,
+so there is no fourth object waiting to be named — collecting `atWall`,
+`salience` and `candidates` would produce a bag whose only property is that the
+ready field and the sky both happen to read it, which is the grab-bag
+`measured`'s membership rule exists to refuse.
+
+Everything else is the block's own: the reading panel's 29 component-body names
+are 8 pieces of panel state, 6 of its own callbacks, 5 locals derived from the
+focused ball, 4 refs, 3 setters, 2 memos and `editing` — and 25 of those 29
+appear in no other block, so they would leave WITH it and leave no seam behind.
+That is the honest shape of the answer: what blocks the panels is not
+entanglement any more, it is size. A 29-prop component is not more readable than
+the block it replaced. The state has an owner and the panels stay.
+
+**The save itself moved unchanged, and that was checked rather than claimed.**
+The old `saveEdit` body and the new `keep` were normalised for the rename
+(`edit`→`held`, `setEdit`→`put`, the page's writers behind `d.`) and diffed.
+Four differences, all of them the intended ones: the two accessor reads at the
+top, one re-wrapped line, and the failure path's functional `setEdit((e) => …)`
+becoming a read of the same ref — equivalent because `put` is the only writer to
+either half. Every branch, every comment and the 404 reload are byte-identical.
+
+**Why the shape is not `measured`'s shape.** `Measured` is one stable object of
+refs because its reader is the frame loop, which closes over it once and never
+re-runs. `Editing`'s reader is the RENDER, which re-runs whenever the words
+change, so the object is rebuilt when its value changes and that identity change
+is what makes React redraw the open editor. The refs move to where the freeze
+actually is: the callbacks are stable for the page's life, so the draft and the
+page's writers are read through refs at call time rather than captured.
+
+**What green meant here, measured the same way 4d measured it.** Each freeze was
+introduced deliberately and the suite re-run:
+
+| frozen | before 4e | after 4e |
+|---|---|---|
+| the draft `keep()` reads | — | red (3 cases, 2 suites) |
+| the draft `retype()` writes onto | — | red (3 cases, 2 suites) |
+| the `deps` object | — | **green** |
+
+The last row is the point of recording the table. Freezing the writers changes
+nothing today because every member of `EditingDeps` is stable by React's own
+guarantee — so the ref around it is a defence with no net under it, and the day
+someone adds a `useCallback` to that list there will be nothing to catch it.
+That is stated in the file's header rather than left for someone to discover.
+
+**And a hole that was there before this change.** Editing is one gesture on
+three layers and it had exactly ONE test, on the poster's entry. Measured, not
+assumed: throwing from inside the `memory` and `signal` branches of the save
+left the whole suite green. Both are now driven end to end in
+`test/home-sky.test.tsx` — "say it better" on a candidate, and "change the
+words" on the memory a candidate was read from, reached by the product's own
+`read from` row — and each was proven to go red for both freezes above.

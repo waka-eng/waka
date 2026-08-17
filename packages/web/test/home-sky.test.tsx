@@ -72,6 +72,11 @@ import {
   type MountedWorld,
 } from "./helpers/render-home";
 
+/* Hoisted with the mock factory that fills it, because `vi.mock` is lifted
+   above every other statement in the file and a plain `const` here would not
+   exist yet when the factory runs. */
+const KEPT = vi.hoisted(() => ({ calls: [] as { id: string; text: string }[] }));
+
 const GROUP_ID = "group-1";
 const PROPOSAL_ID = "proposal-1";
 const DAY = 86_400_000;
@@ -188,6 +193,26 @@ vi.mock("../src/lib/api", async (importOriginal) => {
     ...actual,
     ...apiMockFrom(FACTS),
     fetchGroupWall: async () => [],
+    /**
+     * The write behind "keep the change", and the only one of the three whose
+     * result is not visible on screen: a kept memory closes its own panel, and
+     * the orb it belongs to carries its words on a canvas that draws nothing
+     * here. So this one is recorded rather than read back — what the archive
+     * was asked to store is the only honest observation available.
+     */
+    updateInspiration: async (inspirationId: string, input: { text: string }) => {
+      KEPT.calls.push({ id: inspirationId, text: input.text });
+      return { id: inspirationId, text: input.text };
+    },
+    /* The write behind "keep these words". Its RESULT is discarded by the page
+       — the new sentence is already in hand — so this only has to resolve.
+       What matters is that it is mocked at all: unmocked it would reach the
+       network, fail, and the page would put the machine's sentence back, which
+       would turn the rewrite case below into a test of nothing. */
+    updateSignal: async (signalId: string, input: { statement: string }) => ({
+      id: signalId,
+      statement: input.statement,
+    }),
     fetchGroupProposals: async (groupId: string) => (groupId === GROUP_ID ? [OPEN_PROPOSAL] : []),
     affirmGroupProposal: async () => ({
       proposal: { ...OPEN_PROPOSAL, status: "accepted" as const },
@@ -259,6 +284,7 @@ beforeEach(async () => {
   /* a spot kept from an earlier case would come back as a PINNED cloud, which
      silently disables the layout the first case is about */
   window.localStorage.clear();
+  KEPT.calls.length = 0;
   layout = await mountWorld(FACTS);
   /* the sky arrives a hop behind the field: loadSignals, then one loadSignal
      per signal for its evidence, then the memo, then syncSky */
@@ -987,5 +1013,154 @@ describe("condensing", () => {
         opacityOf(cloud(opening)),
         "the sky came back up when the subject left — otherwise it is dimmed behind nothing",
       ).toBeGreaterThan(0.9);
+  });
+});
+
+/**
+ * SAYING IT BETTER — the act that turns the machine's reading into your line.
+ *
+ * Editing is one gesture on three layers and it had exactly one test, on the
+ * poster's entry. That was measured rather than assumed: throwing from inside
+ * the `memory` and the `signal` branches of `keep()` left the whole suite
+ * green, so two thirds of the act was standing on nothing but the fact that
+ * nobody had touched it lately.
+ *
+ * This closes the signal third, and it is the branch worth closing first
+ * because the sky is where a person argues with what was said about them. It
+ * drives the whole path — focus the cloud, open the words, type, keep — so it
+ * fails if any one of them stops working, including the two silent freezes
+ * `space/editing.ts` is shaped against: a `keep` that reads the draft it was
+ * built with sends the machine's sentence back unchanged, and a `retype` that
+ * writes onto that draft loses every keystroke. Both of those end here as a
+ * sky still showing the old words.
+ *
+ * The value goes in through the prototype's own setter for the reason
+ * `home-poster.test.tsx` gives at length: React tracks the last value it wrote
+ * on the node, so a plain `.value =` leaves the tracker agreeing with the new
+ * text and the change is read as a no-op.
+ */
+describe("changing a signal's words", () => {
+  const MINE = "Naming is the argument I keep having.";
+
+  it("puts the person's own sentence overhead, in place of the machine's", async () => {
+    await climbToSky();
+    const el = await tapSentence(NAMING);
+
+    const acts = [...el.querySelectorAll<HTMLElement>(".jar-neb-ask button")];
+    const better = acts.find((b) => /say it better/i.test(b.textContent ?? ""));
+    if (!better) {
+      throw new Error(
+        `no "say it better" under the subject — saw ${JSON.stringify(
+          acts.map((b) => (b.textContent ?? "").trim()),
+        )}. It is offered only on your own wall, only on the candidate being ` +
+          "read, and only before you have answered it.",
+      );
+    }
+    await act(async () => better.click());
+
+    const box = el.querySelector<HTMLTextAreaElement>("textarea.jar-reflect-box");
+    if (!box) throw new Error("the edit box never opened — 'say it better' did nothing");
+    expect(box.value, "the words open for changing are the ones on screen").toBe(
+      SIGNALS[0].statement,
+    );
+
+    const nativeValue = Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      "value",
+    )?.set;
+    if (!nativeValue) throw new Error("jsdom has no HTMLTextAreaElement value setter");
+    await act(async () => {
+      nativeValue.call(box, MINE);
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    const keep = [...el.querySelectorAll<HTMLElement>(".jar-reflect button")].find((b) =>
+      /keep these words/i.test(b.textContent ?? ""),
+    );
+    if (!keep) throw new Error("the edit box has no way to keep what was typed");
+    await act(async () => keep.click());
+    await layout.step(10);
+
+    expect(
+      clouds().map((n) => (n.querySelector(".jar-neb-text")?.textContent ?? "").trim()),
+      "the rewrite never reached the sky — it is still showing the machine's sentence",
+    ).toContain(MINE);
+    expect(
+      clouds().some((n) =>
+        (n.querySelector(".jar-neb-text")?.textContent ?? "").startsWith(NAMING),
+      ),
+      "the sentence that was replaced is still overhead beside the one that replaced it",
+    ).toBe(false);
+  });
+});
+
+/**
+ * CHANGING THE MEMORY UNDERNEATH IT — the third of the act, and the last one
+ * no test reached.
+ *
+ * The route is the product's own and it is worth naming, because it is also
+ * the shortest one to a reading panel over the viewer's own save: a candidate
+ * being read lists what it was read FROM, and each of those rows travels to
+ * that memory in the field and opens it. So the chain runs downward from the
+ * sky into layer 1, which is exactly the claim `jar-prov` exists to make, and
+ * this case walks it.
+ *
+ * `more` is on the way: the panel keeps its housekeeping verbs behind one
+ * quiet word, and "change the words" is one of them.
+ */
+describe("changing a memory's words", () => {
+  const MINE = "What I actually meant was the naming.";
+
+  it("keeps the person's own text on the memory the sky was read from", async () => {
+    await climbToSky();
+    const el = await tapSentence(NAMING);
+
+    const row = el.querySelector<HTMLElement>(".jar-prov-row");
+    if (!row) throw new Error("the subject lists nothing it was read from");
+    await act(async () => row.click());
+    await layout.step(60);
+
+    const panel = layout.container.querySelector<HTMLElement>(".jar-panel--in");
+    if (!panel) throw new Error("travelling to the cited memory never opened its panel");
+
+    const open = [...panel.querySelectorAll<HTMLElement>(".jar-neb-ask button")].find((b) =>
+      /^more$/i.test((b.textContent ?? "").trim()),
+    );
+    if (!open) throw new Error("the panel offers no way to the housekeeping verbs");
+    await act(async () => open.click());
+
+    const change = [...panel.querySelectorAll<HTMLElement>(".jar-neb-ask button")].find((b) =>
+      /change the words/i.test(b.textContent ?? ""),
+    );
+    if (!change) throw new Error("`more` did not offer changing the words");
+    await act(async () => change.click());
+
+    const box = panel.querySelector<HTMLTextAreaElement>("textarea.jar-reflect-box");
+    if (!box) throw new Error("the edit box never opened — 'change the words' did nothing");
+    const nativeValue = Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      "value",
+    )?.set;
+    if (!nativeValue) throw new Error("jsdom has no HTMLTextAreaElement value setter");
+    await act(async () => {
+      nativeValue.call(box, MINE);
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    const keep = [...panel.querySelectorAll<HTMLElement>(".jar-reflect button")].find((b) =>
+      /keep the change/i.test(b.textContent ?? ""),
+    );
+    if (!keep) throw new Error("the edit box has no way to keep what was typed");
+    await act(async () => keep.click());
+    await layout.step(10);
+
+    expect(
+      KEPT.calls,
+      "the changed words never reached the archive — the memory branch of `keep` did not run",
+    ).toEqual([{ id: "own-0", text: MINE }]);
+    expect(
+      layout.container.querySelector(".jar-panel--in"),
+      "a kept memory closes its panel: the words on screen are no longer the words behind them",
+    ).toBeNull();
   });
 });
