@@ -2669,17 +2669,11 @@ function HomeExperience(): JSX.Element {
       ms: TRAVEL_MS,
     };
 
-    let dragLeadOn = false; /* a held horizontal drag: the companion walks */
-    let dragLeadTarget = 0;
-    let inFieldShown = false;
-    let dialAwayShown = false;
-    let wheelXAcc = 0;
-    let wheelXUntil = 0;
-    let dragAxis: 0 | 1 | 2 = 0; /* undecided · vertical · horizontal */
-    let lastX = 0;
-    let velX = 0;
-    /* Set on wheel; the section snap fires once the wheel goes quiet. */
-    let snapAt = 0;
+    /** Which one-time hints have already been said, so they are said once. */
+    const hinted = {
+      inField: false,
+      dialAway: false,
+    };
     /**
      * STAGING ORBS INTO THE FIELD — the pour, and everything that schedules it.
      *
@@ -2790,39 +2784,63 @@ function HomeExperience(): JSX.Element {
       lastActive: 0,
     };
 
-    let pointerDown = false;
     /**
-     * WHOSE GESTURE THIS IS. The listeners live on `window` and there was no
-     * pointer identity anywhere, which failed three ways every time and not
-     * as a matter of taste: a second finger rewrote downX/lastX so the first
-     * finger's next move teleported the world by the distance between them,
-     * either finger's release committed the other's gesture, and dragging off
-     * the window delivered no pointerup at all — welding the world to the
-     * cursor until the next click. The first pointer owns the world until it
-     * lets go; the rest are not answered.
+     * ONE HAND ON THE WORLD — everything about the gesture in progress.
+     *
+     * Twenty-four variables that are meaningless apart and dangerous apart.
+     * `downX` without `ownerId` is where SOME finger landed, and that is
+     * precisely the bug the pointer-identity comment below describes: state
+     * that reads as one gesture's while any number of pointers write it.
+     * Grouping them does not fix that on its own, but it makes the thing
+     * `ownerId` guards a single object instead of two dozen names nobody
+     * could enumerate.
      */
-    let ownerId: number | null = null;
-    /** Did the press interrupt a snap? Then it owes the world one back. */
-    let interruptedSnap = false;
-    /** Which memory the finger is on, if any: it answers at touchdown. */
-    let pressId: string | null = null;
-    /** When the press landed: a tap is decided on release, not on a threshold. */
-    let downT = 0;
-    let dragging = false;
-    /* hover bookkeeping: the cursor is only re-tested every other move, and
-       only written when it actually changes */
-    let hoverTick = 0;
-    let cursor = "";
-    let nebDrag: Neb | null = null;
-    /** Did the press that grabbed a cloud ever become a drag? If not, it is a
-        tap, and a tap on a candidate is what makes it the subject. */
-    let nebMoved = false;
-    let nebOffX = 0;
-    let nebOffY = 0;
-    let downX = 0;
-    let downY = 0;
-    let lastY = 0;
-    let lastT = 0;
+    const gesture = {
+      down: false,
+      /**
+       * WHOSE GESTURE THIS IS. The listeners live on `window` and there was no
+       * pointer identity anywhere, which failed three ways every time and not
+       * as a matter of taste: a second finger rewrote downX/lastX so the first
+       * finger's next move teleported the world by the distance between them,
+       * either finger's release committed the other's gesture, and dragging off
+       * the window delivered no pointerup at all — welding the world to the
+       * cursor until the next click. The first pointer owns the world until it
+       * lets go; the rest are not answered.
+       */
+      ownerId: null as number | null,
+      /** Did the press interrupt a snap? Then it owes the world one back. */
+      interruptedSnap: false,
+      /** Which memory the finger is on, if any: it answers at touchdown. */
+      pressId: null as string | null,
+      /** When the press landed: a tap is decided on release, not on a threshold. */
+      downT: 0,
+      dragging: false,
+      /* hover bookkeeping: the cursor is only re-tested every other move, and
+         only written when it actually changes */
+      hoverTick: 0,
+      cursor: "",
+      nebDrag: null as Neb | null,
+      /** Did the press that grabbed a cloud ever become a drag? If not, it is a
+          tap, and a tap on a candidate is what makes it the subject. */
+      nebMoved: false,
+      nebOffX: 0,
+      nebOffY: 0,
+      downX: 0,
+      downY: 0,
+      lastX: 0,
+      lastY: 0,
+      lastT: 0,
+      velX: 0,
+      /** undecided · vertical · horizontal */
+      axis: 0 as 0 | 1 | 2,
+      wheelXAcc: 0,
+      wheelXUntil: 0,
+      /** Set on wheel; the section snap fires once the wheel goes quiet. */
+      snapAt: 0,
+      /** a held horizontal drag: the companion walks */
+      leadOn: false,
+      leadTarget: 0,
+    };
 
     /* Dust motes: preallocated, mutated in place, never reallocated. They
        live in SCREEN space (drawn at layout y = y + camY) because they are
@@ -3205,7 +3223,7 @@ function HomeExperience(): JSX.Element {
     function dropBall(i: number) {
       const b = list[i];
       if (selectedIdRef.current === b.id) release();
-      if (pressId === b.id) pressId = null;
+      if (gesture.pressId === b.id) gesture.pressId = null;
       if (sky.heldBall === b) sky.heldBall = null;
       list.splice(i, 1);
       byId.delete(b.id);
@@ -3514,7 +3532,7 @@ function HomeExperience(): JSX.Element {
       simApiRef.current?.acknowledge("arrived");
       trip.yaw = false;
       companion.unwindAt = 0; /* the unwind branch turns it back front, the short way */
-      wheelXUntil = performance.now() + 120;
+      gesture.wheelXUntil = performance.now() + 120;
       pushArrivedRef.current(curWall());
       headingRef.current = null; /* landed; there is nowhere still to get to */
       /* YOU ARRIVE IN YOUR OWN GROUND, ALWAYS.
@@ -3612,7 +3630,7 @@ function HomeExperience(): JSX.Element {
       trip.dir = dir;
       cam.xTarget = dest * view.w;
       cam.xBack = false;
-      dragLeadOn = false; /* the travel choreography owns the lead now */
+      gesture.leadOn = false; /* the travel choreography owns the lead now */
       if (view.reduced) {
         trip.col = dest;
         cam.x = cam.xTarget;
@@ -4673,7 +4691,7 @@ function HomeExperience(): JSX.Element {
           cam.target = landing;
           cam.aimFrom = cam.y;
           cam.aimT0 = performance.now();
-        } else if (!dragging && !pointerDown) {
+        } else if (!gesture.dragging && !gesture.down) {
           cam.y = landing;
         }
       }
@@ -4814,7 +4832,7 @@ function HomeExperience(): JSX.Element {
       while (i < rest.length - 2 && cam.y >= rest[i + 1]) i++;
       const a = rest[i];
       const b = rest[i + 1];
-      snapAt = 0;
+      gesture.snapAt = 0;
       /* DIRECTION-BIASED COMMIT. A deliberate pull that stops short of the
          midpoint used to spring all the way back with no explanation; every
          native sheet in the layout commits at a quarter to a third, because
@@ -5852,7 +5870,7 @@ function HomeExperience(): JSX.Element {
       clock.prev = now;
 
       /* the wheel went quiet: settle onto section A or B */
-      if (snapAt > 0 && now >= snapAt && !pointerDown) snapSection(0);
+      if (gesture.snapAt > 0 && now >= gesture.snapAt && !gesture.down) snapSection(0);
 
       if (cam.aiming) {
         /* the profile snapSection solved: same duration on every device, and
@@ -5865,7 +5883,7 @@ function HomeExperience(): JSX.Element {
           cam.vel = 0;
         }
         clock.lastActive = now;
-      } else if (!dragging) {
+      } else if (!gesture.dragging) {
         /* rubber-band at the outer ends (a room's top is HQ: no sky there) */
         const cl = clamp(cam.y, minCamNow(), view.layout.maxCam);
         if (cl !== cam.y) {
@@ -5896,11 +5914,11 @@ function HomeExperience(): JSX.Element {
         }
         clock.lastActive = now;
       } else {
-        if (dragLeadOn && !pointerDown) dragLeadOn = false; /* lost release */
-        if (dragLeadOn) {
+        if (gesture.leadOn && !gesture.down) gesture.leadOn = false; /* lost release */
+        if (gesture.leadOn) {
           /* the companion sets off with the first centimetres of a held
              drag: it walks toward where the finger says the page is going */
-          companion.off = lerp(companion.off, dragLeadTarget, 1 - Math.pow(0.003, dt));
+          companion.off = lerp(companion.off, gesture.leadTarget, 1 - Math.pow(0.003, dt));
           clock.lastActive = now;
         } else if (companion.off !== 0) {
           /* arrival (or a released drag): it decelerates back to centre */
@@ -6001,7 +6019,7 @@ function HomeExperience(): JSX.Element {
              who asked for less movement got no answer under their finger at
              all — and being told what you are touching is a STATE, not a
              motion. It renders instantly there, exactly as dim and glow do. */
-          const wantPress = b.id === pressId ? 1 : 0;
+          const wantPress = b.id === gesture.pressId ? 1 : 0;
           if (view.reduced) {
             b.dim = wantDim;
             b.glow = wantGlow;
@@ -6247,14 +6265,14 @@ function HomeExperience(): JSX.Element {
          a list of whose-colour-is-whose answers a question nobody is asking —
          it was just chrome in the corner. It comes up with the field and goes
          away with it, exactly as the timeline does. */
-      if (inField !== inFieldShown) {
-        inFieldShown = inField;
+      if (inField !== hinted.inField) {
+        hinted.inField = inField;
         setInField(inField);
       }
       const nowAway =
         !inField || !hasDial(wallAt(Math.round(cam.x / Math.max(view.w, 1))).kind);
-      if (nowAway !== dialAwayShown) {
-        dialAwayShown = nowAway;
+      if (nowAway !== hinted.dialAway) {
+        hinted.dialAway = nowAway;
         setDialAway(nowAway);
       }
       if (sky.nebs.length > 1) {
@@ -6288,10 +6306,10 @@ function HomeExperience(): JSX.Element {
         cam.xBack ||
         scrubbingRef.current ||
         selActive ||
-        pointerDown ||
+        gesture.down ||
         easing ||
         cam.aiming ||
-        snapAt > 0 ||
+        gesture.snapAt > 0 ||
         cam.y < minCamNow() ||
         cam.y > view.layout.maxCam;
       if (!awake) {
@@ -6543,13 +6561,13 @@ function HomeExperience(): JSX.Element {
 
     /** Hand the world back: the capture and the identity always go together. */
     const releaseOwner = (id: number) => {
-      if (ownerId !== id) return;
+      if (gesture.ownerId !== id) return;
       try {
         root!.releasePointerCapture(id);
       } catch {
         /* already gone with the pointer itself */
       }
-      ownerId = null;
+      gesture.ownerId = null;
     };
 
     const onDown = (e: PointerEvent) => {
@@ -6567,8 +6585,8 @@ function HomeExperience(): JSX.Element {
          cloud to the cursor until the next click. It is claimed here, once,
          before anything branches, because every press that gets this far is
          the layout's: a cloud, a satellite, an orb, or bare ground. */
-      if (ownerId !== null) return;
-      ownerId = e.pointerId;
+      if (gesture.ownerId !== null) return;
+      gesture.ownerId = e.pointerId;
       try {
         root!.setPointerCapture(e.pointerId);
       } catch {
@@ -6601,17 +6619,17 @@ function HomeExperience(): JSX.Element {
            memory under the pointer, and the pointer now owns the cloud */
         sky.hoverSat = null;
         sayWho(null);
-        nebDrag = nb;
-        nebMoved = false;
+        gesture.nebDrag = nb;
+        gesture.nebMoved = false;
         nb.dragging = true;
-        nebOffX = nb.x - (e.clientX + cam.x);
-        nebOffY = nb.y - (e.clientY + cam.y);
+        gesture.nebOffX = nb.x - (e.clientX + cam.x);
+        gesture.nebOffY = nb.y - (e.clientY + cam.y);
         nb.dragX = nb.x;
         nb.dragY = nb.y;
         /* a press is not yet a drag: it becomes one at the same six pixels
            the rest of the page uses, and until then it is still a TAP */
-        downX = e.clientX;
-        downY = e.clientY;
+        gesture.downX = e.clientX;
+        gesture.downY = e.clientY;
         wake();
         return;
       }
@@ -6620,24 +6638,24 @@ function HomeExperience(): JSX.Element {
         sky.hoverSat = onSat;
         sayWho(onSat);
       }
-      pointerDown = true;
-      dragging = false;
-      dragAxis = 0;
-      downX = e.clientX;
-      downY = e.clientY;
-      lastY = e.clientY;
-      lastX = e.clientX;
-      downT = lastT = performance.now();
+      gesture.down = true;
+      gesture.dragging = false;
+      gesture.axis = 0;
+      gesture.downX = e.clientX;
+      gesture.downY = e.clientY;
+      gesture.lastY = e.clientY;
+      gesture.lastX = e.clientX;
+      gesture.downT = gesture.lastT = performance.now();
       cam.vel = 0;
-      velX = 0;
+      gesture.velX = 0;
       /* Interrupting a camera move is always legal — a camera is a position
          and a velocity, and nothing about one is half-rendered. But the layout
          still owes you a resting place: this used to strand the camera
          between two sections permanently, against the page's own law that it
          never rests between them. */
-      interruptedSnap = cam.aiming;
+      gesture.interruptedSnap = cam.aiming;
       cam.aiming = false;
-      snapAt = 0;
+      gesture.snapAt = 0;
       /* Warm the reading while the finger is still down: it buys the whole
          press-to-release interval, and it is free when the background sweep
          has already been here. Another member's room orb is never fetched —
@@ -6651,7 +6669,7 @@ function HomeExperience(): JSX.Element {
          produced literally nothing for the ninety to two hundred and fifty
          milliseconds the finger was down. The hit is already in hand for the
          prefetch above, so this costs one assignment. */
-      pressId = warm ? warm.id : null;
+      gesture.pressId = warm ? warm.id : null;
       wake();
     };
     /**
@@ -6687,7 +6705,7 @@ function HomeExperience(): JSX.Element {
          sentence rises back to full while it is touched */
       sky.hoverNeb = cam.y < view.layout.minCam * 0.3 ? nebAt(e.clientX, e.clientY) : null;
       /* and which satellite: whose memory it is rises beside it, one fade */
-      if (!nebDrag) {
+      if (!gesture.nebDrag) {
         sky.hoverSat = satAt(e.clientX, e.clientY);
         sayWho(sky.hoverSat);
       }
@@ -6696,76 +6714,76 @@ function HomeExperience(): JSX.Element {
          the pointer never lies about which orb it would take. The cursor
          lives on the ROOT: the canvas is pointer-events:none, so it is never
          the element the cursor resolves from. */
-      if ((hoverTick++ & 1) === 0 && !dragging) {
+      if ((gesture.hoverTick++ & 1) === 0 && !gesture.dragging) {
         const over =
           sky.hoverNeb !== null ||
           sky.hoverSat !== null ||
           overChar(e.clientX, e.clientY + cam.y) ||
           hitAt(e.clientX, e.clientY) !== null;
         const want = over ? "pointer" : "";
-        if (cursor !== want) {
-          cursor = want;
+        if (gesture.cursor !== want) {
+          gesture.cursor = want;
           root!.style.cursor = want;
         }
       }
     };
     const onMove = (e: PointerEvent) => {
       onHover(e);
-      if (ownerId !== null && e.pointerId !== ownerId) return;
-      if (nebDrag) {
-        if (!nebMoved && Math.abs(e.clientX - downX) + Math.abs(e.clientY - downY) > TAP_SLOP)
-          nebMoved = true;
-        nebDrag.dragX = e.clientX + cam.x + nebOffX;
-        nebDrag.dragY = e.clientY + cam.y + nebOffY;
+      if (gesture.ownerId !== null && e.pointerId !== gesture.ownerId) return;
+      if (gesture.nebDrag) {
+        if (!gesture.nebMoved && Math.abs(e.clientX - gesture.downX) + Math.abs(e.clientY - gesture.downY) > TAP_SLOP)
+          gesture.nebMoved = true;
+        gesture.nebDrag.dragX = e.clientX + cam.x + gesture.nebOffX;
+        gesture.nebDrag.dragY = e.clientY + cam.y + gesture.nebOffY;
         wake();
         return;
       }
-      if (!pointerDown) return;
-      if (!dragging && Math.abs(e.clientX - downX) + Math.abs(e.clientY - downY) > TAP_SLOP) {
-        dragging = true;
+      if (!gesture.down) return;
+      if (!gesture.dragging && Math.abs(e.clientX - gesture.downX) + Math.abs(e.clientY - gesture.downY) > TAP_SLOP) {
+        gesture.dragging = true;
         /* the finger is moving the world now, not touching a memory: the
            contact light lets go the moment the gesture changes its mind */
-        pressId = null;
+        gesture.pressId = null;
         /* The gesture picks its axis ONCE. Sideways on the ground is travel
            (v8) — allowed only from a vertical rest point, never mid-sky, and
            only when a neighbouring column exists to go to. */
-        const horiz = Math.abs(e.clientX - downX) > Math.abs(e.clientY - downY);
-        dragAxis =
+        const horiz = Math.abs(e.clientX - gesture.downX) > Math.abs(e.clientY - gesture.downY);
+        gesture.axis =
           horiz && canTravelHere() && wallsRef.current.length > 1 && !trip.active
             ? 2
             : 1;
       }
-      const dy = e.clientY - lastY;
-      lastY = e.clientY;
-      const dxm = e.clientX - lastX;
-      lastX = e.clientX;
-      if (!dragging) return;
+      const dy = e.clientY - gesture.lastY;
+      gesture.lastY = e.clientY;
+      const dxm = e.clientX - gesture.lastX;
+      gesture.lastX = e.clientX;
+      if (!gesture.dragging) return;
       const nowT = performance.now();
       /* Four milliseconds, not one. A coalesced three-pixel jitter over a
          floored 1ms reports three thousand pixels a second — a phantom flick
          six times over the threshold, and the snap now CONSUMES this number. */
-      const dts = Math.max(nowT - lastT, 4) / 1000;
-      if (dragAxis === 2) {
+      const dts = Math.max(nowT - gesture.lastT, 4) / 1000;
+      if (gesture.axis === 2) {
         /* The room slides only part-way under a finger — commitment is on
            release, and the TRAVELER leads the actual transition. Pulling
            where no neighbour exists meets heavy resistance instead. */
-        const off = -(e.clientX - downX);
+        const off = -(e.clientX - gesture.downX);
         const hasNext = trip.col + 1 <= colHi();
         const hasPrev = trip.col - 1 >= colLo();
         const resist = (off > 0 && !hasNext) || (off < 0 && !hasPrev) ? 0.16 : 0.55;
         cam.x = trip.col * view.w + clamp(off * resist, -view.w * 0.32, view.w * 0.32);
         cam.xBack = false;
-        if (!view.reduced) velX = lerp(velX, dxm / dts, kd(EASE_VEL, dts));
+        if (!view.reduced) gesture.velX = lerp(gesture.velX, dxm / dts, kd(EASE_VEL, dts));
         /* THE COMPANION SETS OFF WITH THE DRAG: from the first centimetres
            it turns toward the pull and starts walking — leading by the
            fraction of the commit distance dragged. Reduced motion: parked. */
         if (!view.reduced) {
-          dragLeadOn = true;
+          gesture.leadOn = true;
           const disp = cam.x - trip.col * view.w;
-          dragLeadTarget = clamp(disp / (view.w * 0.14), -1, 1) * DRAG_LEAD_PX;
-          if (Math.abs(dragLeadTarget) > 4) {
+          gesture.leadTarget = clamp(disp / (view.w * 0.14), -1, 1) * DRAG_LEAD_PX;
+          if (Math.abs(gesture.leadTarget) > 4) {
             trip.yaw = true;
-            companion.yawTarget = (dragLeadTarget > 0 ? 1 : -1) * (TAU / 4);
+            companion.yawTarget = (gesture.leadTarget > 0 ? 1 : -1) * (TAU / 4);
             companion.unwindAt = 0;
           }
         }
@@ -6774,7 +6792,7 @@ function HomeExperience(): JSX.Element {
           loadGroupRef.current(groupsRef.current[trip.col].id);
         else if (off < -20 && trip.col - 1 > 0 && groupsRef.current[trip.col - 2])
           loadGroupRef.current(groupsRef.current[trip.col - 2].id);
-        lastT = nowT;
+        gesture.lastT = nowT;
         wake();
         return;
       }
@@ -6782,23 +6800,23 @@ function HomeExperience(): JSX.Element {
       cam.y -= dy * (out ? 0.35 : 1);
       /* reduced motion keeps the direct 1:1 drag but drops the inertia */
       if (!view.reduced) cam.vel = lerp(cam.vel, -dy / dts, kd(EASE_VEL, dts));
-      lastT = nowT;
+      gesture.lastT = nowT;
       wake();
     };
     const onUp = (e: PointerEvent) => {
-      if (ownerId !== null && e.pointerId !== ownerId) return;
+      if (gesture.ownerId !== null && e.pointerId !== gesture.ownerId) return;
       /* the finger is off it: the contact light starts decaying now, and the
          selection's own glow takes over from tap() below */
-      pressId = null;
+      gesture.pressId = null;
       /* Hand the world back before anything branches. Every path out of here
          is a finished gesture, and the capture and the identity go together —
          the cloud-drag paths used to return without either. */
       releaseOwner(e.pointerId);
-      if (nebDrag) {
-        const n = nebDrag;
+      if (gesture.nebDrag) {
+        const n = gesture.nebDrag;
         n.dragging = false;
-        nebDrag = null;
-        if (!nebMoved) {
+        gesture.nebDrag = null;
+        if (!gesture.nebMoved) {
           /* A PRESS THAT NEVER MOVED IS A TAP. The candidate becomes the
              subject and its evidence emerges; tapping the subject again gives
              the sky back. Nothing is pinned and nothing is persisted — the
@@ -6830,23 +6848,23 @@ function HomeExperience(): JSX.Element {
         wake();
         return;
       }
-      if (!pointerDown) return;
-      pointerDown = false;
-      if (dragAxis === 2) {
+      if (!gesture.down) return;
+      gesture.down = false;
+      if (gesture.axis === 2) {
         /* completing a swipe: velocity-biased, one column per gesture. The
            finger only pulled the room part-way — the companion now leads the
            actual crossing, or the layout eases home uncommitted. */
         const disp = cam.x - trip.col * view.w;
         const dir: 1 | -1 =
-          Math.abs(velX) > FLICK ? (velX < 0 ? 1 : -1) : disp > 0 ? 1 : -1;
+          Math.abs(gesture.velX) > FLICK ? (gesture.velX < 0 ? 1 : -1) : disp > 0 ? 1 : -1;
         const dest = trip.col + dir;
         const commit =
-          (Math.abs(velX) > FLICK || Math.abs(disp) > view.w * 0.14) &&
+          (Math.abs(gesture.velX) > FLICK || Math.abs(disp) > view.w * 0.14) &&
           dest >= colLo() &&
           dest <= colHi();
-        dragging = false;
-        dragAxis = 0;
-        dragLeadOn = false;
+        gesture.dragging = false;
+        gesture.axis = 0;
+        gesture.leadOn = false;
         if (commit) travel(dir);
         if (!trip.active && cam.x !== trip.col * view.w) {
           /* uncommitted (or travel refused): ease home — never rest between */
@@ -6866,31 +6884,31 @@ function HomeExperience(): JSX.Element {
          four-and-four thumb wobble latches a drag, and the else-branch then
          "snaps" a camera that never moved. What actually distinguishes a tap
          is that it was short and it went nowhere. */
-      const held = performance.now() - downT;
-      const travel2 = Math.hypot(e.clientX - downX, e.clientY - downY);
+      const held = performance.now() - gesture.downT;
+      const travel2 = Math.hypot(e.clientX - gesture.downX, e.clientY - gesture.downY);
       /* (a horizontal gesture has already returned above, so this is only
          ever the vertical axis or a press that never picked one) */
-      const wasTap = !dragging || (held < 260 && travel2 < 14);
+      const wasTap = !gesture.dragging || (held < 260 && travel2 < 14);
       /* A FINGER THAT STOPPED IS NOT MOVING. Browsers send no pointermove for
          a stationary finger, so drag fast, stop dead, hold, release — and the
          layout used to be thrown at the speed you were moving half a second
          ago. */
-      if (performance.now() - lastT > 80) {
+      if (performance.now() - gesture.lastT > 80) {
         cam.vel = 0;
-        velX = 0;
+        gesture.velX = 0;
       }
       if (wasTap && !isChrome(e.target)) {
         tap(e.clientX, e.clientY);
         /* the press interrupted a camera move, so the world is between two
            sections and has to be given a place to rest again */
-        if (interruptedSnap) snapSection(0);
+        if (gesture.interruptedSnap) snapSection(0);
       } else {
         /* the page never rests between the two sections */
         snapSection(view.reduced ? 0 : cam.vel);
       }
-      interruptedSnap = false;
-      dragging = false;
-      dragAxis = 0;
+      gesture.interruptedSnap = false;
+      gesture.dragging = false;
+      gesture.axis = 0;
       /* a finger has no hover to leave with: the name it raised goes on lift */
       if (e.pointerType !== "mouse") {
         sky.hoverSat = null;
@@ -6899,38 +6917,38 @@ function HomeExperience(): JSX.Element {
       wake();
     };
     const onCancel = (e: PointerEvent) => {
-      if (ownerId !== null && e.pointerId !== ownerId) return;
-      pressId = null;
+      if (gesture.ownerId !== null && e.pointerId !== gesture.ownerId) return;
+      gesture.pressId = null;
       sky.hoverSat = null;
       sayWho(null);
-      if (nebDrag) {
-        nebDrag.dragging = false;
+      if (gesture.nebDrag) {
+        gesture.nebDrag.dragging = false;
         /* a cancelled press that never moved never claimed a new place */
-        if (nebMoved) {
-          nebDrag.pinned = true;
-          nebDrag.homeX = nebDrag.x;
-          nebDrag.homeY = nebDrag.y;
+        if (gesture.nebMoved) {
+          gesture.nebDrag.pinned = true;
+          gesture.nebDrag.homeX = gesture.nebDrag.x;
+          gesture.nebDrag.homeY = gesture.nebDrag.y;
           persistSky();
         }
-        nebDrag = null;
+        gesture.nebDrag = null;
       }
-      if (dragAxis === 2) {
+      if (gesture.axis === 2) {
         cam.xTarget = trip.col * view.w;
         cam.xBack = true;
-        dragLeadOn = false;
+        gesture.leadOn = false;
         trip.yaw = false;
         companion.unwindAt = 0;
-      } else if (dragging || interruptedSnap) {
+      } else if (gesture.dragging || gesture.interruptedSnap) {
         /* cancelled mid-drag, or cancelled on a press that had interrupted a
            move: either way the layout is owed a resting place */
         snapSection(0);
       }
-      interruptedSnap = false;
+      gesture.interruptedSnap = false;
       cam.vel = 0;
-      velX = 0;
-      pointerDown = false;
-      dragging = false;
-      dragAxis = 0;
+      gesture.velX = 0;
+      gesture.down = false;
+      gesture.dragging = false;
+      gesture.axis = 0;
       releaseOwner(e.pointerId);
     };
     const onWheel = (e: WheelEvent) => {
@@ -6949,25 +6967,25 @@ function HomeExperience(): JSX.Element {
            tail was already over threshold the instant the lockout lifted —
            one gesture, two walls. What arrives during a lockout is the
            previous gesture still ending: it is spent, not saved. */
-        if (nowW < wheelXUntil) {
-          wheelXAcc = 0;
+        if (nowW < gesture.wheelXUntil) {
+          gesture.wheelXAcc = 0;
           return;
         }
         if (!canTravelHere() || wallsRef.current.length < 2) return;
-        wheelXAcc += e.deltaX;
-        if (Math.abs(wheelXAcc) > 70) {
-          const dir: 1 | -1 = wheelXAcc > 0 ? 1 : -1;
-          wheelXAcc = 0;
-          wheelXUntil = nowW + 450;
+        gesture.wheelXAcc += e.deltaX;
+        if (Math.abs(gesture.wheelXAcc) > 70) {
+          const dir: 1 | -1 = gesture.wheelXAcc > 0 ? 1 : -1;
+          gesture.wheelXAcc = 0;
+          gesture.wheelXUntil = nowW + 450;
           travel(dir);
         }
         return;
       }
-      wheelXAcc = 0;
+      gesture.wheelXAcc = 0;
       cam.y = clamp(cam.y + e.deltaY, minCamNow() - 60, view.layout.maxCam + 60);
       cam.aiming = false;
       /* snap once the wheel goes quiet */
-      snapAt = nowW + 150;
+      gesture.snapAt = nowW + 150;
       wake();
     };
     const onKey = (e: KeyboardEvent) => {
@@ -7297,7 +7315,7 @@ function HomeExperience(): JSX.Element {
            beside it, not behind it */
         const want = clamp(b.y - view.h * 0.5, view.layout.minCam, view.layout.maxCam);
         if (Math.abs(want - cam.y) > 8) {
-          snapAt = 0;
+          gesture.snapAt = 0;
           cam.vel = 0;
           aimTo(want, 0);
         }
@@ -7307,7 +7325,7 @@ function HomeExperience(): JSX.Element {
          Only the personal column has a sky to glide into. */
       toSky: () => {
         if (trip.col !== 0 || trip.active) return;
-        snapAt = 0;
+        gesture.snapAt = 0;
         cam.vel = 0;
         aimTo(view.layout.minCam, 0);
       },
@@ -7503,7 +7521,7 @@ function HomeExperience(): JSX.Element {
           trip.dir = dir;
           cam.xTarget = dest * view.w;
           cam.xBack = false;
-          dragLeadOn = false;
+          gesture.leadOn = false;
           if (view.reduced) {
             trip.col = dest;
             cam.x = cam.xTarget;
