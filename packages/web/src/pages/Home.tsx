@@ -1588,6 +1588,21 @@ interface FieldAudit {
   /** the band the fit was solved into */
   bandTop: number;
   bandBottom: number;
+  /** which wall the LOOP thinks it is standing on — not what React thinks */
+  wallKind: string;
+  wallId: string;
+  /** whose ground, null being the viewer's own */
+  ground: string | null;
+  /** how many balls each owner contributes to this wall, before the ground filter */
+  owners: Record<string, number>;
+  /** and whether the ones that survived the filter can actually be seen */
+  drawn: {
+    active: number;
+    rMin: number;
+    rMax: number;
+    aliveMax: number;
+    arriveMin: number;
+  };
 }
 
 export default function HomePage(): JSX.Element {
@@ -3896,12 +3911,26 @@ function WorldExperience(): JSX.Element {
       unwindAt = 0; /* the unwind branch turns it back front, the short way */
       wheelXUntil = performance.now() + 120;
       pushArrivedRef.current(curWall());
+      /* YOU ARRIVE IN YOUR OWN GROUND, ALWAYS.
+         Standing in someone else's ground is a thing you did on THAT wall and
+         it does not follow you to the next one. This is reset here, at the
+         loop's own arrival, rather than from a React effect watching the wall
+         change: that effect fires while the column is still in flight, and the
+         settle it triggered mid-travel left every ball inactive because the
+         re-activation below had already run against the old column. */
+      ground = null;
       /* THE GROUND IS RE-SOLVED FOR WHOEVER'S WALL THIS IS.
          Arriving changes which memories are standing on it, so the layout has
          to run again — without this the previous wall's homes stay assigned
          and the new wall's memories have nowhere to be. */
       assignHomes();
-      electPeek(presentBalls());
+      /* AND THEY ARE SWITCHED ON. The layout above gives them somewhere to be;
+         this is what makes them exist. Without it a travelled-to wall drew an
+         empty ground however much was standing on it. */
+      const here = presentBalls();
+      if (reduced) settleInstantly();
+      else primePour(here);
+      electPeek(here);
       tryWakeWall();
     }
 
@@ -5170,12 +5199,25 @@ function WorldExperience(): JSX.Element {
       );
     }
 
-    function primePour() {
+    /**
+     * `only` is the set to pour — the wall you have just walked into. Left out,
+     * it is the whole archive, which is what the first open wants.
+     *
+     * Arriving needs the narrow form for two reasons. The stagger is
+     * POUR_MS/length, so pouring all 128 balls to show the 9 that belong here
+     * spreads those 9 across two seconds of mostly-empty slots. And more
+     * importantly nothing else activates them: arriveColumn re-ran the LAYOUT
+     * and gave every newly-present ball a home, but `active` is only ever set
+     * by `enter` (through a pour) or by `settleInstantly`, so a wall reached by
+     * travelling had homes assigned to orbs that were never switched on. That
+     * is the empty ground under a group's sky.
+     */
+    function primePour(only?: Ball[]) {
       const t0 = performance.now() + 300;
       /* Newest first: the peek band is the invitation, so it must fill on the
          first beat rather than the last. Nothing stacks in a float field, so
          arrival order no longer has to build the strata. */
-      const order = list.slice().sort((a, b) => b.capturedMs - a.capturedMs);
+      const order = (only ?? list).slice().sort((a, b) => b.capturedMs - a.capturedMs);
       /* A FIXED STAGGER IS A LOCKOUT LONGER THAN THE THING IT PROTECTS. At
          thirty-five milliseconds apiece, two hundred memories are still
          arriving seven seconds after open — every morning, in a tool used
@@ -7437,10 +7479,15 @@ function WorldExperience(): JSX.Element {
       standIn: (ownerProfileId: string | null) => {
         if (ground === ownerProfileId) return;
         ground = ownerProfileId;
-        /* settleInstantly re-reads onThisWall, so it both activates the ground
-           that arrived and deactivates the one that left */
+        /* the ground that left goes dark, the one that arrived pours in — the
+           same arrival the world uses everywhere, so a swap reads as a ground
+           filling rather than as a screen being replaced */
+        for (const b of list) if (!onThisWall(b)) b.active = false;
         assignHomes();
-        settleInstantly();
+        const here = presentBalls();
+        if (reduced) settleInstantly();
+        else primePour(here);
+        electPeek(here);
         wake();
       },
       scrubTo: (T: number, pos: number) => {
@@ -7953,6 +8000,43 @@ function WorldExperience(): JSX.Element {
           lowest: Math.round(lowest),
           bandTop,
           bandBottom,
+          wallKind: curWall().kind,
+          wallId: curWall().id,
+          ground,
+          owners: (() => {
+            const by: Record<string, number> = {};
+            for (const b of list) {
+              if ((b.agentId ?? "") !== curWall().id) continue;
+              const k = b.ownerProfileId ?? "(none)";
+              by[k] = (by[k] ?? 0) + 1;
+            }
+            return by;
+          })(),
+          /* drawn-ness, not just placed-ness: an orb can have a home in the
+             band and still never reach the screen if it is inactive, has no
+             radius, or has no light. */
+          drawn: (() => {
+            let active = 0;
+            let rMin = Infinity;
+            let rMax = 0;
+            let aliveMax = 0;
+            let arriveMin = Infinity;
+            for (const b of list) {
+              if (!onThisWall(b)) continue;
+              if (b.active) active++;
+              rMin = Math.min(rMin, b.r);
+              rMax = Math.max(rMax, b.r);
+              aliveMax = Math.max(aliveMax, b.alive);
+              arriveMin = Math.min(arriveMin, b.arrive);
+            }
+            return {
+              active,
+              rMin: Math.round(rMin),
+              rMax: Math.round(rMax),
+              aliveMax: Number(aliveMax.toFixed(3)),
+              arriveMin: Number(arriveMin.toFixed(2)),
+            };
+          })(),
         };
       },
     };
@@ -8240,8 +8324,10 @@ function WorldExperience(): JSX.Element {
   const [standing, setStanding] = useState<string | null>(null);
   const wallKey = spaceKey(atWall);
   useEffect(() => {
+    /* the label only. The LOOP resets its own ground in arriveColumn, because
+       this effect fires while the column is still sliding and a settle at that
+       moment leaves the whole field inactive. */
     setStanding(null);
-    simApiRef.current?.standIn(null);
   }, [wallKey]);
   const standIn = useCallback((ownerProfileId: string | null) => {
     setStanding(ownerProfileId);
