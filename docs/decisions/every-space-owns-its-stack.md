@@ -1,7 +1,8 @@
 # Decision: every space derives its own signals
 
-Status: **proposed (2026-08-17).** Not built. This amends `docs/data-model.md`,
-which currently says the opposite.
+Status: **decided (2026-08-17).** Not built. This amends `docs/data-model.md`,
+which currently says the opposite. The plan is
+`docs/goals/every-space-owns-its-stack.md`.
 
 ## The question this answers
 
@@ -79,12 +80,13 @@ layers over a data model that has two.
 
 ## What this costs, and what has to be decided with it
 
-1. **`signal_shares` loses its job.** A group's wall would be derived, not
-   shared into. Sharing a personal signal becomes a separate feature, or is
-   removed. **Undecided — decide before building.** The table and the per-signal
-   share UI both exist today.
+1. **`signal_shares` loses its job. DECIDED: removed.** A group's wall is
+   purely derived. One kind of signal on a wall, one origin, and the page
+   explains itself. The cost is real and should be said out loud: bringing a
+   privately-derived insight into a room without exposing the memories behind
+   it stops being possible.
 
-2. **The privacy rule inverts, in a defensible direction.** Today: a member sees
+2. **The privacy rule inverts for groups. DECIDED: yes, and scoped.** Today: a member sees
    *that* a shared signal fed an entry, never which one. Under this decision a
    group's evidence is visible, because every memory in a group's ground was
    deliberately made public by its owner. That is simpler and more honest than
@@ -92,11 +94,16 @@ layers over a data model that has two.
    change to a stated canon rule and must be written into `data-model.md`, not
    left implied.
 
-3. **Model spend multiplies by group count.** A person in four groups has their
-   public memories read five times — once in their own space, once per group.
-   The per-account budget added in `0008_one_key_many_accounts` has no notion of
-   a group as a spender. A group's derivation needs an owner to bill, and the
-   obvious candidates (the group, or the members pro rata) are both new.
+3. **Model spend multiplies by group count. DECIDED: a daily sweep, and no new
+   spender.** `lib/model-budget.ts` exists because "a burst is the attack"; a
+   cron deriving each group once a day cannot burst. Charging a member would be
+   worse than nothing — `background_jobs.profile_id` is NOT NULL, so a group job
+   already borrows an arbitrary member through `resolveJobOwnerProfileId`, and
+   that member would lose budget for their own saves to a job they never
+   triggered. The sweep gets a bounded batch and one global ceiling instead.
+   **The reversal condition:** the day group derivation fires on a member action
+   rather than a clock, churn becomes a burst and a per-group budget becomes
+   necessary.
 
 4. **Retroactivity.** Making a memory public must fold it into the ground of
    every group the owner is in, and that ground's next derivation. Making it
