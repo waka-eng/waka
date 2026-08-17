@@ -74,13 +74,14 @@ import {
   FIELD_REFLECTION_SATURATION,
   FIELD_REFLECTION_WEIGHT,
 } from "../lib/aliveness";
-import { hueCss, tintRamp } from "../lib/appearance";
+import { hueCss, tintRamp, type Ramp } from "../lib/appearance";
+import { clamp, clamp01, DAY_MS, easeOut, hashStr, kd, lerp, mix32, TAU } from "../lib/num";
 import {
   dateWords,
   givenName,
   numWords,
   groupCompany,
-  whoWords,
+
   yearWords,
 } from "../lib/words";
 
@@ -96,6 +97,9 @@ import {
   createGroupProposal,
   fetchGroupMembers,
   leaveGroup,
+  removeGroupMember,
+  renameGroup,
+  deleteGroup,
   fetchGroupTopOfMind,
   fetchGroups,
   fetchGroupField,
@@ -166,8 +170,6 @@ function showsDebug(): boolean {
  * which carries the law.
  */
 
-const DAY_MS = 86_400_000;
-const TAU = Math.PI * 2;
 /** Size buckets the orb + halo sprites are rastered at (radius is 24-32). */
 /**
  * THE SIZES A DISC IS ACTUALLY BAKED AT — and they have to cover the range the
@@ -539,32 +541,6 @@ const SKY_PAD_Y = 0.42;
 /** The least of the viewport an orbit is ever left clear of an edge. */
 const SKY_EDGE = 12;
 
-const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
-const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
-const clamp01 = (v: number) => clamp(v, 0, 1);
-/**
- * The page's one easing curve in numbers: cubic-bezier(0.22, 1, 0.36, 1),
- * which every CSS transition in jar.css already rides. A cubic ease-out sits
- * on it to within a pixel at these durations, so the canvas and the DOM
- * genuinely move on the same curve rather than on two that look alike.
- */
-const easeOut = (u: number) => 1 - Math.pow(1 - u, 3);
-/**
- * A RATE, NOT A PER-FRAME STEP.
- *
- * `lerp(x, target, 0.14)` is not a speed — it is a speed per FRAME, so the
- * same line runs at double speed on a 120Hz phone as on a 60Hz one, and slows
- * down again as a phone thermally throttles. A world whose motion rate is a
- * function of the display it landed on, and of how long you have been looking
- * at it, is telling you something untrue about itself.
- *
- * `rps` is the fraction of the remaining distance still left after one full
- * second, so the ease is the same ease at any frame rate. (The file already
- * used this idiom correctly in the drift and the nest; the input path is
- * simply where it never got applied.)
- */
-const kd = (rps: number, dt: number) => 1 - Math.pow(rps, dt);
-
 /**
  * Sky layout persistence, tier ONE: the personal sky's nebula positions,
  * local to this browser, written through on drag end and pruned to the
@@ -594,30 +570,6 @@ function writeSkyLayout(layout: Record<string, { x: number; y: number }>): void 
   } catch {
     /* storage unavailable (private mode, quota): the sky still works */
   }
-}
-
-function hashStr(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
-/**
- * FNV-1a's low bits are correlated across near-identical inputs — `agent-01`
- * and `agent-02` land in the same slot on roughly half the axes under a bare
- * modulo, which is exactly the input shape a family of agent ids has. This is
- * the avalanche finaliser that makes `hashStr(x) % k` an honest draw.
- */
-function mix32(h: number): number {
-  h ^= h >>> 16;
-  h = Math.imul(h, 2246822507);
-  h ^= h >>> 13;
-  h = Math.imul(h, 3266489909);
-  h ^= h >>> 16;
-  return h >>> 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -2515,34 +2467,6 @@ function computeWorld(vw: number, vh: number, dialH: number): World {
 // Palette + sprites (rastered once at load and on DPR change, never per frame)
 // ---------------------------------------------------------------------------
 
-/**
- * THE ALIVENESS RAMP — the whole colour model, and all of it.
- *
- * There is no longer a hue per theme. Six hash-picked pastels carried NO
- * meaning while the page's one law says light is the only meaning channel, and
- * six meaningless hues is exactly what read as noise. What an orb looks like is
- * now a function of its ALIVENESS alone, on two channels: LUMINANCE and COLOUR
- * TEMPERATURE. Two memories about different things look identical at the same
- * aliveness — which is the truth, because their themes were never what the
- * light was about.
- */
-export interface Ramp {
-  /** Fully alive: the brightest, warmest end. */
-  live: [number, number, number];
-  /** The far side of the disc's own gradient at that end. */
-  liveEdge: [number, number, number];
-  /** What its bloom is made of. */
-  liveBloom: [number, number, number];
-  /** Half-way: dimmer and cooler. */
-  fade: [number, number, number];
-  /** Dormant: dim, cold and nearly colourless. It never disappears. */
-  dorm: [number, number, number];
-  /** The air: motes and the deep background's sparkle. */
-  dust: [number, number, number];
-  /** The companion's own matte body, lit and shaded. */
-  bodyLit: [number, number, number];
-  bodyShade: [number, number, number];
-}
 
 interface Palette {
   dpr: number;
@@ -11690,6 +11614,31 @@ function WorldExperience(): JSX.Element {
   }, [members]);
   machineRoomsRef.current = machineRooms;
   const [roomPanel, setRoomPanel] = useState<string | null>(null);
+
+  /**
+   * THIS SPACE'S SETTINGS — keyed by the space, opened from its name.
+   *
+   * Not a modal and not a route: it is a fact about where you are standing, so
+   * it opens beside the name that opened it and closes when you travel. The
+   * key is `wallKey(space)` rather than a group id because every kind of space
+   * has settings — yours sends you to the account screen, an agent's names
+   * what it is, a group's is the real one.
+   */
+  const [settingsFor, setSettingsFor] = useState<string | null>(null);
+  /**
+   * The account drop, top right — the mirror of the space settings top left.
+   * They are mutually exclusive: opening one closes the other, because two
+   * panels hanging off the same bar is a menu bar, which this world does not
+   * have.
+   */
+  const [accountOpen, setAccountOpen] = useState(false);
+  /** The rename box, while it is open: null when nobody is renaming. */
+  const [renaming, setRenaming] = useState<{ id: string; text: string; busy: boolean } | null>(
+    null,
+  );
+  /** Two-step confirmations, so a destructive word is never beside its own yes. */
+  const [closing, setClosing] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
   useEffect(() => {
     if (atWall.kind !== "room" || members.has(atWall.id)) return;
     let dead = false;
@@ -11788,6 +11737,58 @@ function WorldExperience(): JSX.Element {
         simApiRef.current?.travel(-1);
       })
       .catch(() => setLeaving(null));
+  }, []);
+
+  /**
+   * MAINTAINING A ROOM — three verbs the server has always answered.
+   *
+   * `PATCH /groups/:id`, `DELETE /groups/:id` and
+   * `DELETE /groups/:id/members/:profileId` are implemented and owner-gated on
+   * the server, and the client had a function for none of them: the only group
+   * verb it could perform was leaving. So a room could be made and joined and
+   * then never renamed, never tidied and never closed.
+   *
+   * Each one is optimistic in the direction that is safe. A rename shows
+   * immediately because the worst case is a word reverting. Closing a room and
+   * removing a member are SERVER-FIRST — the inverse — because the light must
+   * not go out until the database has agreed, which is the same rule the
+   * memory panel's delete already follows.
+   */
+  const renameRoom = useCallback((groupId: string, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setRenaming((cur) => (cur ? { ...cur, busy: true } : cur));
+    renameGroup(groupId, trimmed)
+      .then((updated) => {
+        setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, ...updated } : g)));
+        setRenaming(null);
+      })
+      .catch(() => setRenaming((cur) => (cur ? { ...cur, busy: false } : cur)));
+  }, []);
+
+  const closeRoom = useCallback((groupId: string) => {
+    deleteGroup(groupId)
+      .then(() => {
+        setGroups((prev) => prev.filter((g) => g.id !== groupId));
+        setClosing(null);
+        setSettingsFor(null);
+        /* the column is gone, so stop standing in it */
+        simApiRef.current?.travel(-1);
+      })
+      .catch(() => setClosing(null));
+  }, []);
+
+  const removeMember = useCallback((groupId: string, profileId: string) => {
+    removeGroupMember(groupId, profileId)
+      .then(async () => {
+        const fresh = await fetchGroupMembers(groupId).catch(() => null);
+        if (fresh) {
+          membersRef.current.set(groupId, fresh);
+          setMembers(new Map(membersRef.current));
+        }
+        setRemoving(null);
+      })
+      .catch(() => setRemoving(null));
   }, []);
 
   /** read by the loop, which is created once and must not close over stale state */
@@ -13296,51 +13297,59 @@ function WorldExperience(): JSX.Element {
                product's name, printed on the product, next to nothing it
                explained. A label in this position has one job: say where
                pressing it goes. */
-            <Link className="jar-back jar-label" to="/profile">
-              Your account
-            </Link>
+            /* WHERE YOU ARE, TOP LEFT — and it is the way into this space's
+               settings. It replaces a caption that read
+               "OUR AGENTS · YUN, DEMO AND FOUR MORE": apparatus, unclickable
+               (it inherited `pointer-events: none` from the bar), and it spent
+               the widest line on screen listing people you can already see by
+               their hues in the field.
+
+               A name in this position answers "where am I" and "what can I do
+               about it" with one word. Every space has one, so it never
+               disappears the way the account link used to — and settings are
+               PER SPACE, because renaming a room, taking someone out of it or
+               closing it are all facts about the space you are standing in. */
+            <button
+              type="button"
+              className="jar-here jar-back jar-label"
+              aria-expanded={settingsFor === wallKey(atWall)}
+              onClick={() =>
+                setSettingsFor(settingsFor === wallKey(atWall) ? null : wallKey(atWall))
+              }
+            >
+              {atWall.kind === "room"
+                ? groups.find((g) => g.id === atWall.id)?.name ?? atWall.name
+                : atWall.name}
+            </button>
           }
         </div>
-        {/* WHAT YOU ARE LOOKING AT, WHEN IT IS NOT YOURS.
-            One line, in the register the page already keeps for meta, saying
-            the two things a person could otherwise get wrong: these memories
-            are not their archive, and the mouth is not saving into it. It
-            lives in the fixed chrome rather than on a wall because it is a
-            fact about the whole session — so it is there in the sky, at
-            headquarters and down in the field, and it cannot be travelled
-            away from. */}
+
+        {/* AND THE WAY OUT MOVES RIGHT. Two permanent things at the top of the
+            screen, on opposite sides, each answering a different question:
+            left is WHERE YOU ARE, right is HOW YOU LEAVE. They stopped being
+            the same slot the moment the room's name needed somewhere to live,
+            and putting them at opposite ends means neither can ever hide the
+            other — which is exactly the bug the ternary here used to cause. */}
+        <button
+          type="button"
+          className="jar-account jar-back jar-label"
+          aria-expanded={accountOpen}
+          onClick={() => {
+            setAccountOpen((v) => !v);
+            setSettingsFor(null);
+          }}
+        >
+          Your account
+        </button>
+
+        {/* WHAT YOU ARE LOOKING AT, WHEN IT IS NOT YOURS. It lives in the
+            fixed chrome rather than on a wall because it is a fact about the
+            whole session — so it is there in the sky, at headquarters and down
+            in the field, and it cannot be travelled away from. */}
         {offline ? (
           <p className="jar-offline jar-label">
             Offline — showing sample memories, nothing is kept
           </p>
-        ) : null}
-        {/* WHICH ROOM YOU ARE IN — the other half of what that comment
-            promised, and until now the half that was never built. A room's
-            name and its people were readable in exactly two places: the axis
-            along the bottom, which names every wall and so says nothing about
-            this one, and the legend, which draws only in the field. Stand at
-            a room's headquarters or in its sky and there was nothing on
-            screen saying whose room this was.
-
-            It goes here rather than in `jar-exits` because it is not an exit;
-            it is where you are standing, which is precisely the fact this
-            line was reserved for. Pressing it opens the same room panel the
-            members button used to. */}
-        {atWall.kind === "room" && !offline ? (
-          <button
-            type="button"
-            className="jar-context jar-label"
-            aria-expanded={roomPanel === atWall.id}
-            onClick={() => setRoomPanel(roomPanel === atWall.id ? null : atWall.id)}
-          >
-            {groups.find((g) => g.id === atWall.id)?.name ?? "This room"}
-            {(members.get(atWall.id)?.length ?? 0) > 0 ? (
-              <span className="jar-context-who">
-                {" · "}
-                {whoWords(members.get(atWall.id) as ApiGroupMember[])}
-              </span>
-            ) : null}
-          </button>
         ) : null}
       </div>
 
@@ -13686,6 +13695,257 @@ function WorldExperience(): JSX.Element {
               close
             </button>
           </p>
+        </div>
+      ) : null}
+
+      {/* THIS SPACE'S SETTINGS.
+          Opened by the space's own name, top left, and scoped to the space you
+          are standing in — because everything in here is a fact about THIS
+          space and nothing in here is a fact about the product. A room is the
+          rich case; the other two kinds say what they are and point at the one
+          screen that can actually change them.
+
+          It is deliberately flat inside: labels, words and two-step
+          confirmations. The world's register is for material — memories,
+          statements, the poster — and administering a room is not material,
+          it is paperwork. Paperwork gets to look like paperwork. */}
+      {/* THE ACCOUNT, DROPPED. The mirror of the space settings on the left,
+          and deliberately the same object: same panel, same flat register,
+          anchored to the pill that opened it.
+
+          What is IN it is only what belongs to the account rather than to a
+          space — who you are signed in as, the way to the screen that can
+          change it, and the way out. It does not reimplement the account
+          screen: renaming a profile, language, sessions and deletion need
+          focus traps and text that reflows at 200%, and that is what
+          `/profile` is for. This is the door and the label on it. */}
+      {accountOpen && phase === "ready" ? (
+        <div
+          className="jar-settings jar-settings--right"
+          data-jar-chrome="1"
+          role="dialog"
+          aria-label="Your account"
+        >
+          <div className="jar-settings-head">
+            <span className="jar-label">Signed in</span>
+            <button type="button" className="jar-settings-x" onClick={() => setAccountOpen(false)}>
+              close
+            </button>
+          </div>
+
+          <p className="jar-settings-name">{auth?.profile?.name ?? "You"}</p>
+          {auth?.account?.email ? (
+            <p className="jar-settings-note">{auth.account.email}</p>
+          ) : null}
+
+          <p className="jar-neb-ask">
+            <Link className="jar-settings-verb" to="/profile" onClick={() => setAccountOpen(false)}>
+              open your account
+            </Link>
+          </p>
+
+          {/* SIGNING OUT IS NOT DESTRUCTIVE, so it does not ask twice — nothing
+              is lost and signing back in restores everything. It is last
+              because it is the one thing here that ends the session. */}
+          <p className="jar-neb-ask jar-neb-ask--after">
+            <button
+              type="button"
+              onClick={() => {
+                setAccountOpen(false);
+                void auth?.logout();
+              }}
+            >
+              sign out
+            </button>
+          </p>
+        </div>
+      ) : null}
+
+      {settingsFor === wallKey(atWall) && phase === "ready" ? (
+        <div className="jar-settings" data-jar-chrome="1" role="dialog" aria-label="Space settings">
+          <div className="jar-settings-head">
+            <span className="jar-label">
+              {atWall.kind === "room" ? "This room" : atWall.kind === "agent" ? "This agent" : "You"}
+            </span>
+            <button type="button" className="jar-settings-x" onClick={() => setSettingsFor(null)}>
+              close
+            </button>
+          </div>
+
+          {atWall.kind === "room" ? (
+            (() => {
+              const gid = atWall.id;
+              const roll = members.get(gid) ?? [];
+              const mine = roll.find((m) => m.profileId === auth?.profile?.id);
+              const iOwnIt = mine?.role === "owner";
+              return (
+                <>
+                  {/* THE NAME. Owners can change it; everyone else reads it. */}
+                  {renaming?.id === gid ? (
+                    <form
+                      className="jar-settings-rename"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        renameRoom(gid, renaming.text);
+                      }}
+                    >
+                      <input
+                        className="jar-roomform-box"
+                        autoFocus
+                        value={renaming.text}
+                        onChange={(e) => setRenaming({ ...renaming, text: e.target.value })}
+                      />
+                      <p className="jar-neb-ask">
+                        <button type="submit" disabled={renaming.busy}>
+                          {renaming.busy ? "…" : "rename it"}
+                        </button>
+                        <span aria-hidden="true"> · </span>
+                        <button type="button" onClick={() => setRenaming(null)}>
+                          keep the old name
+                        </button>
+                      </p>
+                    </form>
+                  ) : (
+                    <p className="jar-settings-name">
+                      {groups.find((g) => g.id === gid)?.name ?? atWall.name}
+                      {iOwnIt ? (
+                        <button
+                          type="button"
+                          className="jar-settings-verb"
+                          onClick={() =>
+                            setRenaming({
+                              id: gid,
+                              text: groups.find((g) => g.id === gid)?.name ?? "",
+                              busy: false,
+                            })
+                          }
+                        >
+                          rename
+                        </button>
+                      ) : null}
+                    </p>
+                  )}
+
+                  {/* WHO IS HERE — the same people the field's hues stand for,
+                      named, with the one verb an owner has over them. */}
+                  <ul className="jar-settings-roll">
+                    {roll.map((m) => (
+                      <li key={m.profileId} className="jar-settings-member">
+                        <span>{m.name}</span>
+                        {m.role === "owner" ? (
+                          <span className="jar-share-hint">made it</span>
+                        ) : null}
+                        {iOwnIt && m.profileId !== auth?.profile?.id ? (
+                          removing === m.profileId ? (
+                            <span className="jar-neb-ask">
+                              <button type="button" onClick={() => removeMember(gid, m.profileId)}>
+                                take them out
+                              </button>
+                              <span aria-hidden="true"> · </span>
+                              <button type="button" onClick={() => setRemoving(null)}>
+                                keep them
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="jar-settings-verb"
+                              onClick={() => setRemoving(m.profileId)}
+                            >
+                              remove
+                            </button>
+                          )
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+
+                  <p className="jar-neb-ask">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const g = groups.find((x) => x.id === gid);
+                        if (g) copyInvite(g);
+                      }}
+                    >
+                      {copied === gid ? "link copied" : "copy the invite link"}
+                    </button>
+                  </p>
+
+                  {/* THE TWO WAYS OUT, and they are not the same act. Leaving
+                      takes your statements down and leaves the room standing.
+                      Closing it ends the room for everyone, and takes the top
+                      of mind the room built together — which nobody else can
+                      get back, so it says so. */}
+                  <p className="jar-neb-ask jar-neb-ask--after">
+                    {leaving === gid ? (
+                      <>
+                        <button type="button" onClick={() => leaveRoom(gid)}>
+                          leave — your statements come down
+                        </button>
+                        <span aria-hidden="true"> · </span>
+                        <button type="button" onClick={() => setLeaving(null)}>
+                          stay
+                        </button>
+                      </>
+                    ) : (
+                      <button type="button" onClick={() => setLeaving(gid)}>
+                        leave this room
+                      </button>
+                    )}
+                  </p>
+
+                  {iOwnIt ? (
+                    <p className="jar-neb-ask">
+                      {closing === gid ? (
+                        <>
+                          <button
+                            type="button"
+                            className="jar-settings-danger"
+                            onClick={() => closeRoom(gid)}
+                          >
+                            close it for everyone — what the room decided goes too
+                          </button>
+                          <span aria-hidden="true"> · </span>
+                          <button type="button" onClick={() => setClosing(null)}>
+                            keep it
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          className="jar-settings-verb"
+                          onClick={() => setClosing(gid)}
+                        >
+                          close this room
+                        </button>
+                      )}
+                    </p>
+                  ) : null}
+                </>
+              );
+            })()
+          ) : (
+            /* YOUR OWN SPACE AND AN AGENT'S both belong to the account, and
+               everything you can change about them — your name, your language,
+               your sessions, the agent's name, deleting either — is flat work
+               with focus traps and plain confirmations that in-world UI cannot
+               give. So this does not reimplement the account screen badly; it
+               says what this space is and opens the door to it. */
+            <>
+              <p className="jar-settings-name">{atWall.name}</p>
+              <p className="jar-settings-note">
+                {atWall.kind === "agent"
+                  ? "Its memory is its own — what it keeps here is not mixed into yours."
+                  : "Everything you keep, and what WAKA has read out of it."}
+              </p>
+              <p className="jar-neb-ask">
+                <Link className="jar-settings-verb" to="/profile">
+                  open your account
+                </Link>
+              </p>
+            </>
+          )}
         </div>
       ) : null}
 
