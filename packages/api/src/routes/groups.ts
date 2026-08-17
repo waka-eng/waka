@@ -44,7 +44,6 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
 import {
-  backgroundJobs,
   groupProposalKindValues,
   groupProposalStatusValues,
   type RefreshGroupTopOfMindPayload,
@@ -77,8 +76,6 @@ import {
   loadGroupTopOfMind,
 } from "./groups-top-of-mind.js";
 import { loadGroupWall } from "./groups-wall.js";
-
-const DEFAULT_MAX_JOB_ATTEMPTS = 3;
 
 const createGroupSchema = z
   .object({ name: z.string().trim().min(1, "Group name is required").max(120) })
