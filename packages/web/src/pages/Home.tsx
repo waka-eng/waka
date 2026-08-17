@@ -801,7 +801,7 @@ function computeLayout(vw: number, vh: number, dialH: number): Layout {
  *      the gesture can be exercised, but it does not ask a server to save
  *      anything and does not pretend one agreed.
  *
- * The shapes are the API's own, to the field — see `lib/api.ts` — so the swap
+ * The shapes are the API's own, to the field — see `lib/api/` — so the swap
  * is invisible to everything downstream: the ball constructor, the sky, the
  * peek election and the panel all read exactly what they read from the wire.
  *
