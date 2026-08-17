@@ -506,7 +506,51 @@ export async function removeGroupMember(
     .returning({ id: groupMembers.id, role: groupMembers.role });
   if (removed.length === 0) return false;
   if (removed[0]!.role === "owner") await promoteSuccessorOwner(db, input.groupId);
+  /**
+   * AND THE DOOR IS RE-KEYED.
+   *
+   * Deleting the membership row ended the person's access to exactly nothing:
+   * the invite link carries a join code, the code does not expire, and
+   * `joinGroupByCode` asks only whether the code matches. Anyone removed who
+   * had ever seen the link — or a screenshot of it, or the message it arrived
+   * in — could walk back in immediately, and the group would have no way to
+   * tell that from a normal join.
+   *
+   * Removal is the one exit that means "not you, not again", so it is the one
+   * that rotates. Leaving does not: that is voluntary, the person may be asked
+   * back, and re-keying on every departure would invalidate the link in
+   * everyone else's hands for no security gain.
+   *
+   * A rotation failure must not resurrect the membership, so it is deliberately
+   * not fatal — the row is already gone, which is the part that matters, and
+   * the owner can rotate again from the panel. Failing the whole request here
+   * would leave a caller believing the removal did not happen.
+   */
+  await rotateJoinCode(db, input.groupId);
   return true;
+}
+
+/**
+ * Give a group a fresh join code, retrying on the unique collision the same
+ * way `createGroup` does — the alphabet is small enough that a clash is rare
+ * but not impossible, and a clash must not be mistaken for a real failure.
+ */
+export async function rotateJoinCode(db: WakaDb, groupId: string): Promise<string | null> {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const joinCode = generateJoinCode();
+    try {
+      const [updated] = await db
+        .update(groups)
+        .set({ joinCode })
+        .where(eq(groups.id, groupId))
+        .returning({ joinCode: groups.joinCode });
+      return updated?.joinCode ?? null;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (!/join_code/i.test(message) && !/unique/i.test(message)) throw err;
+    }
+  }
+  return null;
 }
 
 export async function listGroupMembers(
