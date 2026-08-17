@@ -93,8 +93,38 @@
  *     when it is executing; nothing in it can notice the `selftest()` call
  *     being deleted, because the thing that would notice is the call. That
  *     question is asked from outside, in `test/seam-gate.test.ts`, which runs
- *     this file as a process and reads the proof out of its output — and also
- *     checks that `pnpm test` still invokes it at all.
+ *     this file as a process and reads the proof out of its output, checks the
+ *     number of suites it says it read against the files vitest will collect,
+ *     and checks that `pnpm test` still invokes it at all.
+ *
+ *     THE SAME ARGUMENT APPLIES ONE FRAME DOWN, and for a while it was made
+ *     only at the top. `scanFixture()` and `endToEnd()` are calls too, and the
+ *     numbers announcing them used to be constants — the expected fixture list
+ *     and a literal `4` — so either call could be deleted while the line above
+ *     the verdict went on describing the work. They are receipts now, written
+ *     where the work happens, and a deleted call moves them. What is still not
+ *     covered is a call replaced by a literal that repeats its answer, or the
+ *     proof line edited by hand. That is forgery rather than deletion, it
+ *     needs the answer to be known in advance, and no amount of checking
+ *     inside this file reaches it — the regress has to stop, and it stops
+ *     there rather than quietly.
+ *   - THE COMMENT SCANNER IS A SCANNER, NOT A PARSER. Comments are blanked
+ *     before any of the code patterns run (see `commentsBlanked`), which is
+ *     what stops a mock inside a comment from satisfying rule 2 and a sentence
+ *     about a helper from being read as an import of it. Four shapes still get
+ *     past it. A block comment whose prose happens to contain the two
+ *     characters that close one ends there, and the rest of that comment is
+ *     read as code — so a sentence written below such a line CAN still declare
+ *     a mock nobody made. A `//` inside a regular expression literal blanks
+ *     the rest of that line, hiding anything written after it. A quote whose
+ *     partner is not on the same line is treated as punctuation, which is what
+ *     makes an apostrophe in JSX text safe and what would make a hand-wrapped
+ *     string unreadable. And a specifier containing whitespace is skipped
+ *     rather than reported as unfollowable, because every such match seen in
+ *     this package so far has been two halves of two different statements. No
+ *     file here writes any of the four today. The fix for all of them is one
+ *     thing — parse with the TypeScript compiler instead of scanning — and it
+ *     is the dependency this check is deliberately too cheap to have.
  *   - `vi.spyOn` is deliberately NOT counted. A spy that records calls is a
  *     measuring instrument, not a replaced layer, and counting it would push
  *     every suite into declaring its own assertions as seams — which trains
@@ -206,6 +236,95 @@ function declarationIn(header) {
 }
 
 /**
+ * THE SOURCE WITH ITS COMMENTS BLANKED OUT, WHICH IS WHERE THE CODE IS.
+ *
+ * Everything above this line reads PROSE — the header, the declaration
+ * paragraph — and must keep the comments. Everything below it reads CODE, and
+ * reading prose as code cost this gate its second rule. A `vi.mock` inside a
+ * block comment still counted as a mock, so the shape of the original
+ * incident — a suite that mounts the world with the `lib/data` mock commented
+ * out, which is what someone leaves behind after asking "what happens if I
+ * take this out" — reported clean. Rule 2 was switchable off with two
+ * keystrokes and no deletion.
+ *
+ * It runs the other way too, and that half was already live in this package.
+ * `IMPORT_OF_ANY` read a header sentence about a helper that no longer exists
+ * as an import of it, and `IMPORT_OF_HOME` read a sentence saying a suite does
+ * NOT render the page as evidence that it does. Five lines in `test/` today
+ * parse as import specifiers, harmless only because none of them begins with a
+ * dot.
+ *
+ * BLANKED, NOT REMOVED: every character becomes a space and newlines stay, so
+ * offsets and line numbers are the ones in the file. STRINGS ARE LEFT ALONE,
+ * unlike the sibling scanner in `check-vocabulary.mjs`, because the thing being
+ * read here IS a string literal — the module specifier. They are still SKIPPED
+ * over, so a `//` inside `"http://localhost"` does not start a comment.
+ *
+ * The line bound on `"` and `'` is that scanner's hard-won repair, kept: an
+ * apostrophe in JSX text ("this room's roll") is punctuation, not a quote, and
+ * a scanner that opens a string on it goes blind to everything up to the next
+ * one. So a quote whose partner is not on the same line is treated as an
+ * ordinary character. Backticks may legitimately span lines; one that never
+ * closes anywhere is treated as punctuation for the same reason.
+ */
+function commentsBlanked(source) {
+  const out = Array.from(source);
+  const blank = (from, to) => {
+    for (let i = from; i < to && i < out.length; i += 1) {
+      if (out[i] !== "\n") out[i] = " ";
+    }
+  };
+  const lineEndAfter = (from) => {
+    const nl = source.indexOf("\n", from);
+    return nl === -1 ? source.length : nl;
+  };
+
+  let i = 0;
+  while (i < source.length) {
+    const two = source.slice(i, i + 2);
+    if (two === "//") {
+      const stop = lineEndAfter(i);
+      blank(i, stop);
+      i = stop;
+      continue;
+    }
+    if (two === "/*") {
+      const end = source.indexOf("*/", i + 2);
+      const stop = end === -1 ? source.length : end + 2;
+      blank(i, stop);
+      i = stop;
+      continue;
+    }
+    const quote = source[i];
+    if (quote === '"' || quote === "'" || quote === "`") {
+      const bound = quote === "`" ? source.length : lineEndAfter(i + 1);
+      let j = i + 1;
+      let closed = false;
+      while (j < bound) {
+        if (source[j] === "\\") {
+          j += 2;
+          continue;
+        }
+        if (source[j] === quote) {
+          closed = true;
+          break;
+        }
+        j += 1;
+      }
+      if (!closed) {
+        /* punctuation, not a delimiter */
+        i += 1;
+        continue;
+      }
+      i = j + 1;
+      continue;
+    }
+    i += 1;
+  }
+  return out.join("");
+}
+
+/**
  * Normalise a mocked module specifier to the name a person writes in prose.
  *
  *     "../src/lib/data"         -> lib/data
@@ -233,8 +352,16 @@ function seamName(specifier) {
  * form matters most: `mountWorld` reaches the page through
  * `await import("../../src/pages/Home")` and a helper written the same way
  * would otherwise be a blank space in the graph.
+ *
+ * A SPECIFIER MAY NOT CONTAIN WHITESPACE, and that is not tidiness. Without it
+ * the capture runs past its own closing quote when the opening one was never a
+ * quote — the second half of a `).toBe(3)` and the first half of the next
+ * assertion become one "module path", which two suites in this package produce
+ * today. Comment blanking removes most of that; this removes the rest, because
+ * a match that spans a line boundary is a match the file never wrote. No real
+ * specifier has a space in it, so nothing legitimate is lost.
  */
-const IMPORT_OF_ANY = /(?:\bfrom|\bimport)\s*\(?\s*["'`]([^"'`]+)["'`]/g;
+const IMPORT_OF_ANY = /(?:\bfrom|\bimport)\s*\(?\s*["'`]([^"'`\s]+)["'`]/g;
 
 /**
  * The seams a source replaces by asking vitest to replace them.
@@ -255,13 +382,19 @@ const IMPORT_OF_ANY = /(?:\bfrom|\bimport)\s*\(?\s*["'`]([^"'`]+)["'`]/g;
  * name so that `vi.mocked(fn)` — a typed accessor for a mock that already
  * exists, used nineteen times in `auth-boundary.test.ts` — is not read as a
  * seam being created.
+ *
+ * A FOURTH: THE COMMENTS ARE GONE BEFORE THIS LOOKS. A mock inside a block
+ * comment is not a mock, and reading one as a mock is how rule 2 came to be
+ * satisfied by a `vi.mock("../src/lib/data")` somebody had commented out —
+ * see `commentsBlanked`.
  */
 function mockedSeams(source) {
+  const code = commentsBlanked(source);
   const seams = new Set();
-  for (const m of source.matchAll(/\bvi\.(?:mock|doMock)\(\s*["'`]([^"'`]+)["'`]/g)) {
+  for (const m of code.matchAll(/\bvi\.(?:mock|doMock)\(\s*["'`]([^"'`\s]+)["'`]/g)) {
     seams.add(seamName(m[1]));
   }
-  for (const m of source.matchAll(/\bvi\.(?:stubGlobal|stubEnv)\(\s*["'`]([^"'`]+)["'`]/g)) {
+  for (const m of code.matchAll(/\bvi\.(?:stubGlobal|stubEnv)\(\s*["'`]([^"'`\s]+)["'`]/g)) {
     seams.add(m[1]);
   }
   return seams;
@@ -275,8 +408,14 @@ function mockedSeams(source) {
  * `import Home from "../src/pages/Home.tsx"` — the original incident, typed
  * with the extension a great many editors add for you — reported clean. One
  * character of tolerance is the difference between a rule and a coincidence.
+ *
+ * Whitespace is excluded for the same reason as in `IMPORT_OF_ANY`, and this
+ * one is asked of code with its comments blanked: a header sentence saying a
+ * suite "never renders `../src/pages/Home`" used to be read as proof that it
+ * does, and the gate would then contradict, in its own output, the sentence it
+ * had just read.
  */
-const IMPORT_OF_HOME = /["'`][^"'`]*src\/pages\/Home(\.[cm]?[jt]sx?)?["'`]/;
+const IMPORT_OF_HOME = /["'`][^"'`\s]*src\/pages\/Home(\.[cm]?[jt]sx?)?["'`]/;
 
 /** A file that is itself a suite, and so is not a helper anybody declares. */
 const SUITE_FILE = /\.test\.[cm]?[jt]sx?$/;
@@ -317,10 +456,16 @@ const SUITE_FILE = /\.test\.[cm]?[jt]sx?$/;
  * beside this one came to be blind over half of `Home.tsx`.
  */
 function followImports(source, read, fromKey, seen, depth) {
-  let mounts = IMPORT_OF_HOME.test(source);
+  /*
+   * Blanked here rather than at the call site, so that every file the walk
+   * opens on the way down gets the same treatment as the suite it started
+   * from. A helper's own comments are prose too.
+   */
+  const code = commentsBlanked(source);
+  let mounts = IMPORT_OF_HOME.test(code);
   const unfollowable = [];
   const helpers = [];
-  for (const [, specifier] of source.matchAll(IMPORT_OF_ANY)) {
+  for (const [, specifier] of code.matchAll(IMPORT_OF_ANY)) {
     const found = read(specifier, fromKey);
     if (found.kind === "outside") continue;
     if (found.kind === "unreadable") {
@@ -889,6 +1034,81 @@ const SELFTEST = [
   {
     flags: ["MOUNTS THE WORLD AND DOES NOT MOCK `lib/data`"],
     why:
+      "THE MOCK IS COMMENTED OUT. This is the one that matters, and it was live: a " +
+      "`vi.mock(\"../src/lib/data\")` inside a block comment satisfied rule 2, so the " +
+      "whole gate could be switched off for a file by wrapping four lines in the " +
+      "thing a person leaves behind while asking what happens without them. The " +
+      "suite is then the original incident exactly — world mounted, `lib/api` " +
+      "underneath, loaders throwing into the dev fixture — and reported clean",
+    helpers: { "./helpers/render-home": HELPER_THAT_MOUNTS },
+    src: [
+      "/**",
+      " * WHAT THIS MOCKS, AND WHY: `lib/api`, and `helpers/render-home` for the",
+      " * canvas and the clock.",
+      " */",
+      'import { it } from "vitest";',
+      'import { mountWorld } from "./helpers/render-home";',
+      'vi.mock("../src/lib/api", () => ({}));',
+      "/* TODO(sprint-4): put this back once the loader shapes settle.",
+      'vi.mock("../src/lib/data", () => ({}));',
+      "*/",
+    ].join("\n"),
+  },
+  {
+    flags: [],
+    why:
+      "A SENTENCE ABOUT AN IMPORT IS NOT AN IMPORT. The header explains that a helper " +
+      "was deleted, writing the specifier it used to be taken `from`; the gate read " +
+      "that as an import it could not open and failed a suite whose only import is " +
+      "vitest",
+    src: [
+      "/**",
+      " * WHAT THIS MOCKS, AND WHY: nothing. The frozen clock this suite used to take",
+      ' * from "./helpers/ghost" went away with the loader that needed it.',
+      " */",
+      'import { it } from "vitest";',
+    ].join("\n"),
+  },
+  {
+    flags: [],
+    why:
+      "A SENTENCE DENYING THE MOUNT IS NOT A MOUNT. The gate used to answer a header " +
+      "saying the suite never renders the page by accusing it of rendering the page — " +
+      "flatly contradicting, in its own output, the line it had just read",
+    src: [
+      "/**",
+      " * WHAT THIS MOCKS, AND WHY: nothing. This suite never renders",
+      ' * "../src/pages/Home"; it asks the loaders directly.',
+      " */",
+      'import { it } from "vitest";',
+    ].join("\n"),
+  },
+  {
+    flags: ["MOUNTS THE WORLD AND DOES NOT MOCK `lib/data`"],
+    why:
+      "AN ASSERTION MESSAGE ENDING IN THE WORD `from`, WITH A REAL IMPORT BEHIND IT. " +
+      "The capture ran from that string's closing quote to the next quote anywhere " +
+      "below — swallowing the `await import(…)` line whole, so the helper that mounts " +
+      "the page was never opened and the suite reported clean. Two suites in this " +
+      "package end a message with `from` today; this is that shape with a mount " +
+      "underneath it",
+    helpers: { "./helpers/render-home": HELPER_THAT_MOUNTS },
+    src: [
+      "/**",
+      " * WHAT THIS MOCKS, AND WHY: `lib/api`, and `helpers/render-home` for the",
+      " * canvas and the clock.",
+      " */",
+      'import { it } from "vitest";',
+      'vi.mock("../src/lib/api", () => ({}));',
+      'it("counts the rows", async () => {',
+      '  expect(rows.length, "the memories it was read from").toBe(3);',
+      '  const { mountWorld } = await import("./helpers/render-home");',
+      "});",
+    ].join("\n"),
+  },
+  {
+    flags: ["MOUNTS THE WORLD AND DOES NOT MOCK `lib/data`"],
+    why:
       "THE INCIDENT THROUGH A SECOND MOUNTING HELPER — same work, different " +
       "filename, and the first version of this rule knew only one name",
     helpers: { "./helpers/render-page": HELPER_THAT_MOUNTS },
@@ -1249,6 +1469,31 @@ function withFixture(files, fn) {
   }
 }
 
+/*
+ * WHAT ACTUALLY RAN — WRITTEN BY THE WORK, NOT BY THE PRINTER.
+ *
+ * The proof line reads these two counters and nothing else. That is the
+ * repair of a hole in the layers this file grew last round: the line used to
+ * be built from `FIXTURE_SUITES.length` — the EXPECTED list, not what the walk
+ * found — and from a `return 4` at the bottom of `endToEnd`. Both are
+ * constants, so both survived their own subject being deleted. Commenting out
+ * the `scanFixture(failures);` call left the gate still announcing a 7-suite
+ * scan; replacing `endToEnd(failures)` with the literal 4 left it still
+ * announcing four child runs; and the outside test that reads those numbers
+ * could not tell either from the truth.
+ *
+ * A counter incremented where the work happens cannot be lied to by deleting
+ * the call, because the call is the only thing that increments it. That is the
+ * same argument this file makes about `selftest()` in its own header, one
+ * frame down. WHAT IT DOES NOT COVER is somebody editing the proof line
+ * itself, or handing these variables a value by hand — a forgery is always one
+ * step past a deletion, and the regress has to stop somewhere. It stops here,
+ * said out loud, because the alternative is a gate that checks its own
+ * checker for ever.
+ */
+let fixtureSuitesWalked = 0;
+let childRunsSpawned = 0;
+
 /**
  * LAYER TWO: the scan loop, over a tree with known answers.
  *
@@ -1264,6 +1509,7 @@ function scanFixture(failures) {
     const found = walk(testDir)
       .map((file) => relative(testDir, file).split(sep).join("/"))
       .sort();
+    fixtureSuitesWalked = found.length;
     if (found.join("|") !== FIXTURE_SUITES.join("|")) {
       failures.push(
         "  FILE DISCOVERY: `walk` did not find the suites the fixture contains.\n" +
@@ -1342,13 +1588,21 @@ function runNode(args) {
     return { status: 0, stdout, stderr: "" };
   } catch (error) {
     return { status: error.status, stdout: error.stdout ?? "", stderr: error.stderr ?? "" };
+  } finally {
+    /*
+     * The receipt for one child, written by the only line that can spawn one.
+     * A run that exits 1 is as real as one that exits 0 — both are the gate
+     * having been executed end to end — so this sits in `finally` rather than
+     * on either branch.
+     */
+    childRunsSpawned += 1;
   }
 }
 
 const runAgainst = (root) => runNode(["--scan", root]);
 
 function endToEnd(failures) {
-  if (process.env[NO_SPAWN]) return 0;
+  if (process.env[NO_SPAWN]) return;
 
   withFixture(FIXTURE, (root) => {
     const run = runAgainst(root);
@@ -1358,11 +1612,35 @@ function endToEnd(failures) {
           "      A gate that prints its failures and exits 0 is a gate CI ignores.\n",
       );
     }
+    /*
+     * THE HEADLINE, WHICH NOTHING USED TO READ. `5 of 7 suite(s)` is the one
+     * line a person actually acts on, and both numbers in it were asserted by
+     * nobody: rewriting it to `${failing.length - 1} of ${suites.length + 7}`
+     * left every layer of this self-test green. A count in a report is a claim
+     * like any other.
+     */
+    const headline = `${FIXTURE_FAILING.length} of ${FIXTURE_SUITES.length} suite(s)`;
+    if (!run.stderr.includes(headline)) {
+      failures.push(
+        `  THE HEADLINE: the report did not say "${headline}".\n` +
+          "      That line is the summary the reader believes without counting.\n",
+      );
+    }
+
     for (const [file, problems] of FIXTURE_FAILING) {
-      if (!run.stderr.includes(`test/${file}`)) {
+      /*
+       * THE WHOLE PATH, NOT A SUBSTRING OF IT. `test/chain.test.ts` sits
+       * inside `test/test/chain.test.ts`, which is exactly what this report
+       * prints when the entry line hands `scan` the package root instead of
+       * its `test/` directory — every path in the output then names a file
+       * that does not exist, and a substring check cannot tell that from a
+       * correct run.
+       */
+      if (!run.stderr.includes(`\n  test/${file}\n`)) {
         failures.push(
           `  THE REPORT: test/${file} failed the audit and was not named in the output.\n` +
-            "      A failure nobody can find in the terminal is a failure nobody fixes.\n",
+            "      A failure nobody can find in the terminal is a failure nobody fixes,\n" +
+            "      and a path printed with the wrong prefix is one nobody can open.\n",
         );
       }
       /*
@@ -1445,8 +1723,6 @@ function endToEnd(failures) {
         "      that CI reads, and the half a person never sees.\n",
     );
   }
-
-  return 4;
 }
 
 function selftest() {
@@ -1474,7 +1750,7 @@ function selftest() {
   }
 
   scanFixture(failures);
-  const runs = endToEnd(failures);
+  endToEnd(failures);
 
   if (failures.length > 0) {
     console.error(
@@ -1486,8 +1762,8 @@ function selftest() {
   }
   console.log(
     `seams: self-test passed (${SELFTEST.length} audit cases, ` +
-      `a ${FIXTURE_SUITES.length}-suite scan over the real walk, ` +
-      `${runs} end-to-end runs)`,
+      `a ${fixtureSuitesWalked}-suite scan over the real walk, ` +
+      `${childRunsSpawned} end-to-end runs)`,
   );
 }
 
