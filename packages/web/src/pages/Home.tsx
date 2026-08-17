@@ -104,6 +104,7 @@ import {
   type Palette,
 } from "../canvas/palette";
 import { BODY_TIERS, bodyPath } from "../character/raster";
+import { SpaceSettings } from "../space/settings/SpaceSettings";
 import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
 import { agentBeing, OWNER_BEING, unit, type Being } from "../character/body";
 import { posterWords } from "../space/top-of-mind/poster";
@@ -8671,8 +8672,6 @@ function HomeExperience(): JSX.Element {
     null,
   );
   /** Two-step confirmations, so a destructive word is never beside its own yes. */
-  const [closing, setClosing] = useState<string | null>(null);
-  const [removing, setRemoving] = useState<string | null>(null);
   useEffect(() => {
     if (atWall.kind !== "group" || members.has(atWall.id)) return;
     let dead = false;
@@ -8762,6 +8761,8 @@ function HomeExperience(): JSX.Element {
 
   /** Leaving is destructive and irreversible, so it asks once, in words. */
   const [leaving, setLeaving] = useState<string | null>(null);
+  const [closing, setClosing] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
   const leaveThisGroup = useCallback((groupId: string) => {
     leaveGroup(groupId)
       .then(() => {
@@ -10811,191 +10812,27 @@ function HomeExperience(): JSX.Element {
       ) : null}
 
       {settingsFor === spaceKey(atWall) && phase === "ready" ? (
-        <div className="jar-settings" data-jar-chrome="1" role="dialog" aria-label="Space settings">
-          <div className="jar-settings-head">
-            <span className="jar-label">
-              {atWall.kind === "group" ? "This room" : atWall.kind === "agent" ? "This agent" : "You"}
-            </span>
-            <button type="button" className="jar-settings-x" onClick={() => setSettingsFor(null)}>
-              close
-            </button>
-          </div>
-
-          {atWall.kind === "group" ? (
-            (() => {
-              const gid = atWall.id;
-              const roll = members.get(gid) ?? [];
-              const mine = roll.find((m) => m.profileId === auth?.profile?.id);
-              const iOwnIt = mine?.role === "owner";
-              return (
-                <>
-                  {/* THE NAME. Owners can change it; everyone else reads it. */}
-                  {renaming?.id === gid ? (
-                    <form
-                      className="jar-settings-rename"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        renameThisGroup(gid, renaming.text);
-                      }}
-                    >
-                      <input
-                        className="jar-roomform-box"
-                        autoFocus
-                        value={renaming.text}
-                        onChange={(e) => setRenaming({ ...renaming, text: e.target.value })}
-                      />
-                      <p className="jar-neb-ask">
-                        <button type="submit" disabled={renaming.busy}>
-                          {renaming.busy ? "…" : "rename it"}
-                        </button>
-                        <span aria-hidden="true"> · </span>
-                        <button type="button" onClick={() => setRenaming(null)}>
-                          keep the old name
-                        </button>
-                      </p>
-                    </form>
-                  ) : (
-                    <p className="jar-settings-name">
-                      {groups.find((g) => g.id === gid)?.name ?? atWall.name}
-                      {iOwnIt ? (
-                        <button
-                          type="button"
-                          className="jar-settings-verb"
-                          onClick={() =>
-                            setRenaming({
-                              id: gid,
-                              text: groups.find((g) => g.id === gid)?.name ?? "",
-                              busy: false,
-                            })
-                          }
-                        >
-                          rename
-                        </button>
-                      ) : null}
-                    </p>
-                  )}
-
-                  {/* WHO IS HERE — the same people the field's hues stand for,
-                      named, with the one verb an owner has over them. */}
-                  <ul className="jar-settings-roll">
-                    {roll.map((m) => (
-                      <li key={m.profileId} className="jar-settings-member">
-                        <span>{m.name}</span>
-                        {m.role === "owner" ? (
-                          <span className="jar-share-hint">made it</span>
-                        ) : null}
-                        {iOwnIt && m.profileId !== auth?.profile?.id ? (
-                          removing === m.profileId ? (
-                            <span className="jar-neb-ask">
-                              <button type="button" onClick={() => removeMember(gid, m.profileId)}>
-                                take them out
-                              </button>
-                              <span aria-hidden="true"> · </span>
-                              <button type="button" onClick={() => setRemoving(null)}>
-                                keep them
-                              </button>
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              className="jar-settings-verb"
-                              onClick={() => setRemoving(m.profileId)}
-                            >
-                              remove
-                            </button>
-                          )
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-
-                  <p className="jar-neb-ask">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const g = groups.find((x) => x.id === gid);
-                        if (g) copyInvite(g);
-                      }}
-                    >
-                      {copied === gid ? "link copied" : "copy the invite link"}
-                    </button>
-                  </p>
-
-                  {/* THE TWO WAYS OUT, and they are not the same act. Leaving
-                      takes your statements down and leaves the room standing.
-                      Closing it ends the room for everyone, and takes the top
-                      of mind the room built together — which nobody else can
-                      get back, so it says so. */}
-                  <p className="jar-neb-ask jar-neb-ask--after">
-                    {leaving === gid ? (
-                      <>
-                        <button type="button" onClick={() => leaveThisGroup(gid)}>
-                          leave — your statements come down
-                        </button>
-                        <span aria-hidden="true"> · </span>
-                        <button type="button" onClick={() => setLeaving(null)}>
-                          stay
-                        </button>
-                      </>
-                    ) : (
-                      <button type="button" onClick={() => setLeaving(gid)}>
-                        leave this group
-                      </button>
-                    )}
-                  </p>
-
-                  {iOwnIt ? (
-                    <p className="jar-neb-ask">
-                      {closing === gid ? (
-                        <>
-                          <button
-                            type="button"
-                            className="jar-settings-danger"
-                            onClick={() => closeThisGroup(gid)}
-                          >
-                            close it for everyone — what the group decided goes too
-                          </button>
-                          <span aria-hidden="true"> · </span>
-                          <button type="button" onClick={() => setClosing(null)}>
-                            keep it
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          type="button"
-                          className="jar-settings-verb"
-                          onClick={() => setClosing(gid)}
-                        >
-                          close this group
-                        </button>
-                      )}
-                    </p>
-                  ) : null}
-                </>
-              );
-            })()
-          ) : (
-            /* YOUR OWN SPACE AND AN AGENT'S both belong to the account, and
-               everything you can change about them — your name, your language,
-               your sessions, the agent's name, deleting either — is flat work
-               with focus traps and plain confirmations that in-layout UI cannot
-               give. So this does not reimplement the account screen badly; it
-               says what this space is and opens the door to it. */
-            <>
-              <p className="jar-settings-name">{atWall.name}</p>
-              <p className="jar-settings-note">
-                {atWall.kind === "agent"
-                  ? "Its memory is its own — what it keeps here is not mixed into yours."
-                  : "Everything you keep, and what WAKA has read out of it."}
-              </p>
-              <p className="jar-neb-ask">
-                <Link className="jar-settings-verb" to="/profile">
-                  open your account
-                </Link>
-              </p>
-            </>
-          )}
-        </div>
+        <SpaceSettings
+          space={atWall}
+          members={members}
+          groups={groups}
+          leaving={leaving}
+          setLeaving={setLeaving}
+          closing={closing}
+          setClosing={setClosing}
+          removing={removing}
+          setRemoving={setRemoving}
+          renaming={renaming}
+          setRenaming={setRenaming}
+          viewerProfileId={auth?.profile?.id ?? null}
+          copied={copied}
+          copyInvite={copyInvite}
+          onClose={() => setSettingsFor(null)}
+          leaveThisGroup={leaveThisGroup}
+          renameThisGroup={renameThisGroup}
+          closeThisGroup={closeThisGroup}
+          removeMember={removeMember}
+        />
       ) : null}
 
       {phase === "loading" ? <div className="jar-skel jar-skel-line">Pouring Waka…</div> : null}
