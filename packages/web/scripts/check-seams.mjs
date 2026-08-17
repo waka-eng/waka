@@ -102,29 +102,63 @@
  *     numbers announcing them used to be constants — the expected fixture list
  *     and a literal `4` — so either call could be deleted while the line above
  *     the verdict went on describing the work. They are receipts now, written
- *     where the work happens, and a deleted call moves them. What is still not
- *     covered is a call replaced by a literal that repeats its answer, or the
- *     proof line edited by hand. That is forgery rather than deletion, it
- *     needs the answer to be known in advance, and no amount of checking
- *     inside this file reaches it — the regress has to stop, and it stops
- *     there rather than quietly.
- *   - THE COMMENT SCANNER IS A SCANNER, NOT A PARSER. Comments are blanked
- *     before any of the code patterns run (see `commentsBlanked`), which is
- *     what stops a mock inside a comment from satisfying rule 2 and a sentence
- *     about a helper from being read as an import of it. Four shapes still get
- *     past it. A block comment whose prose happens to contain the two
- *     characters that close one ends there, and the rest of that comment is
- *     read as code — so a sentence written below such a line CAN still declare
- *     a mock nobody made. A `//` inside a regular expression literal blanks
- *     the rest of that line, hiding anything written after it. A quote whose
- *     partner is not on the same line is treated as punctuation, which is what
- *     makes an apostrophe in JSX text safe and what would make a hand-wrapped
- *     string unreadable. And a specifier containing whitespace is skipped
- *     rather than reported as unfollowable, because every such match seen in
- *     this package so far has been two halves of two different statements. No
- *     file here writes any of the four today. The fix for all of them is one
- *     thing — parse with the TypeScript compiler instead of scanning — and it
- *     is the dependency this check is deliberately too cheap to have.
+ *     where the work happens, and a deleted call moves them. The receipt for
+ *     the fixture scan is written at the END of that function, after both of
+ *     its comparisons, because next to the walk it recorded only that the walk
+ *     had happened: `if (1) return;` in front of `scan(…)` gutted the layer
+ *     with the proof line still announcing a seven-suite scan.
+ *
+ *     WHAT IS STILL NOT COVERED is a call replaced by a literal that repeats
+ *     its answer, or the proof line edited by hand. That is forgery rather
+ *     than deletion, it needs the answer to be known in advance, and no amount
+ *     of checking inside this file reaches it — the regress has to stop, and
+ *     it stops there rather than quietly. Two smaller residues, named because
+ *     they were found by probing rather than by reasoning: disabling the
+ *     fixture's FILE-DISCOVERY comparison alone leaves the receipt at 7 and
+ *     the gate green — though the narrowing it exists to catch is still red
+ *     three ways below it, through the failing list, the headline and the
+ *     report, so what that mutation costs is the clear message and not the
+ *     detection; and a `pnpm test` line whose earlier stage cannot fail (a
+ *     leading `exit 0 &&`) satisfies the `&&`-chain check in
+ *     `test/seam-gate.test.ts`, which reads the shape of the chain and not the
+ *     behaviour of its links.
+ *   - THE PARSE ANSWERS ONE QUESTION: WHERE THE PROSE IS. `commentsBlanked`
+ *     now asks the TypeScript compiler, so comments in every spelling and JSX
+ *     text are blanked before any rule looks. THE RULES THEMSELVES ARE STILL
+ *     REGULAR EXPRESSIONS OVER TEXT, and the gap that leaves is a real one,
+ *     stated with the shape that reaches it rather than in general terms:
+ *
+ *       A `vi.mock("../src/lib/data", …)` WRITTEN INSIDE AN ORDINARY STRING
+ *       LITERAL IS COUNTED AS A MOCK. Staged and run, not reasoned about: a
+ *       suite that mounts the world through `helpers/render-home`, mocks only
+ *       `lib/api`, names `lib/data` in its header, and asserts somewhere that
+ *       some advice text equals `'vi.mock("../src/lib/data", () => ({}))'`
+ *       reports `seams: clean`. That is rule 2 turned off — the green-and-
+ *       wrong direction, the one that matters — and it is reachable from code
+ *       that compiles and runs.
+ *
+ *     How likely: it needs the exact call typed out inside a string, which is
+ *     not what a hurried afternoon produces — but this repository tests gates
+ *     by asserting on the text they print, so a future suite about THIS file
+ *     is a plausible way to write it by accident. No suite does today, and
+ *     that is a fact about today, not a reason.
+ *
+ *     THE FIX, AND WHY IT IS NOT IN THIS CHANGE. The four seam patterns and
+ *     the two import patterns would become AST queries — a `vi.mock` is a
+ *     CallExpression whose callee is `vi.mock` and whose first argument is a
+ *     string literal, which no amount of quoting can imitate — and the parser
+ *     is already in hand for it. It is not a line, though: a mock inside a
+ *     COMMENT is not a CallExpression either, so moving these rules onto the
+ *     AST would make every commented-out-mock case below pass whether
+ *     `commentsBlanked` works or not, and the coverage this round was built
+ *     to add would quietly stop covering anything. It has to arrive with its
+ *     own re-derived cases, which is a round of its own and not a paragraph
+ *     in this one.
+ *
+ *     One narrower shape is left for the same reason and is much smaller: a
+ *     module specifier containing whitespace is skipped rather than reported
+ *     as unfollowable, because every such match seen in this package has been
+ *     two halves of two different statements.
  *   - `vi.spyOn` is deliberately NOT counted. A spy that records calls is a
  *     measuring instrument, not a replaced layer, and counting it would push
  *     every suite into declaring its own assertions as seams — which trains
@@ -170,6 +204,24 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+
+/*
+ * THE ONE DEPENDENCY THIS FILE HAS, AND WHY IT STOPPED BEING TOO EXPENSIVE.
+ *
+ * Finding where the comments are used to be done by hand, by a scanner written
+ * in this file, on the stated reasoning that a parser was "the dependency this
+ * check is deliberately too cheap to have". That reasoning was wrong twice
+ * over. `typescript` is already a devDependency of this package and already
+ * runs on every `pnpm typecheck`, so it costs no install and no lockfile
+ * change; and the scanner it was buying its way out of had a live false
+ * negative in it — see `commentsBlanked` below.
+ *
+ * Imported at the top rather than behind a try/catch. A gate that quietly fell
+ * back to the hand scanner when the import failed would report `clean` in the
+ * same words with the hole back in place, which is the failure this whole file
+ * is about. If typescript is missing the gate does not start.
+ */
+import ts from "typescript";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const PACKAGE_ROOT = resolve(dirname(THIS_FILE), "..");
@@ -236,6 +288,37 @@ function declarationIn(header) {
 }
 
 /**
+ * Which dialect a file is, so the parse below is the one its author wrote in.
+ *
+ * It matters for exactly one thing here and that thing is enough: in a `.ts`
+ * file `<T>value` is a type assertion, and in a `.tsx` file it opens a JSX
+ * element. Parse one as the other and the recovery hands back a tree whose
+ * comment positions are somebody else's. `Profile.test.ts` writes generic
+ * calls today, so this is not hypothetical about this package.
+ *
+ * A source with no filename — every string case in the self-test below — is
+ * parsed as TSX, the more permissive of the two for the shapes those cases
+ * use. That default is stated rather than assumed because it is the one place
+ * where the parse is a guess.
+ */
+const SCRIPT_KIND = new Map([
+  [".ts", ts.ScriptKind.TS],
+  [".mts", ts.ScriptKind.TS],
+  [".cts", ts.ScriptKind.TS],
+  [".tsx", ts.ScriptKind.TSX],
+  [".js", ts.ScriptKind.JS],
+  [".mjs", ts.ScriptKind.JS],
+  [".cjs", ts.ScriptKind.JS],
+  [".jsx", ts.ScriptKind.JSX],
+]);
+
+function scriptKindOf(key) {
+  const dot = key.lastIndexOf(".");
+  const named = dot === -1 ? undefined : SCRIPT_KIND.get(key.slice(dot));
+  return named ?? ts.ScriptKind.TSX;
+}
+
+/**
  * THE SOURCE WITH ITS COMMENTS BLANKED OUT, WHICH IS WHERE THE CODE IS.
  *
  * Everything above this line reads PROSE — the header, the declaration
@@ -254,73 +337,102 @@ function declarationIn(header) {
  * parse as import specifiers, harmless only because none of them begins with a
  * dot.
  *
+ * THIS USED TO BE A HAND-WRITTEN SCANNER, AND THE SCANNER SHIPPED WITH THE
+ * BUG IT WAS ADDED TO FIX STILL IN IT. It walked the text tracking quotes and
+ * comment openers, which means it had to decide what a `/` was without a
+ * grammar. A regular expression literal containing a quote character —
+ * ``s.replace(/`/g, "")``, one line, nothing clever — desynchronised it: the
+ * backtick inside the regex opened a "template literal" whose only bound was
+ * the end of the file, so everything up to the next backtick anywhere below
+ * was skipped as string, INCLUDING WHOLE COMMENTS, which were then never
+ * blanked and were read as code. Two ordinary lines in a suite — that
+ * `replace`, and an assertion ending `` .toBe(`a`) `` — were enough to make a
+ * commented-out `vi.mock("../src/lib/data")` between them count as a real
+ * mock, which turns rule 2 off for a suite that mounts the world. That is
+ * D16's own incident, reopened by its own repair, and it was live: asked where
+ * the comments are in each of the 78 `.ts`/`.tsx`/`.mjs` files in this
+ * package, the scanner and the parse agree on 77 and disagree on this one,
+ * where the scanner reads fifteen comment spans as string — the largest of
+ * them thirty-five lines, opening on a backtick in prose and closing on
+ * another one in a doc comment far below.
+ *
+ * So the question is asked of the TypeScript parser, which is where the
+ * grammar lives. Every token is visited and the comment trivia around it
+ * collected: LEADING at each token's full start, and TRAILING at the same
+ * position, which is the end of the token before it. Both are needed and one
+ * alone is a quiet hole — leading trivia stops collecting at the first
+ * non-newline, so `foo(); /* note *\/` on one line is invisible to it, and
+ * two files in this package write exactly that.
+ *
  * BLANKED, NOT REMOVED: every character becomes a space and newlines stay, so
  * offsets and line numbers are the ones in the file. STRINGS ARE LEFT ALONE,
- * unlike the sibling scanner in `check-vocabulary.mjs`, because the thing being
- * read here IS a string literal — the module specifier. They are still SKIPPED
- * over, so a `//` inside `"http://localhost"` does not start a comment.
- *
- * The line bound on `"` and `'` is that scanner's hard-won repair, kept: an
- * apostrophe in JSX text ("this room's roll") is punctuation, not a quote, and
- * a scanner that opens a string on it goes blind to everything up to the next
- * one. So a quote whose partner is not on the same line is treated as an
- * ordinary character. Backticks may legitimately span lines; one that never
- * closes anywhere is treated as punctuation for the same reason.
+ * unlike the sibling scanner in `check-vocabulary.mjs`, because the thing
+ * being read here IS a string literal — the module specifier. A `//` inside
+ * `"http://localhost"` is not a comment and an apostrophe in JSX text is not a
+ * quote, which the old scanner spent two repairs approximating and a parser
+ * simply knows.
  */
-function commentsBlanked(source) {
+function commentsBlanked(source, key = "") {
+  /*
+   * The name is a label for error messages and nothing else — the dialect is
+   * the last argument, passed explicitly so that it is decided by
+   * `scriptKindOf` above rather than by whatever this string happens to end
+   * in. Two places deciding the same thing is how one of them goes stale.
+   */
+  const parsed = ts.createSourceFile(
+    "the-file-being-audited",
+    source,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes, which is what makes `getChildren` hand back tokens */ true,
+    scriptKindOf(key),
+  );
+
   const out = Array.from(source);
   const blank = (from, to) => {
     for (let i = from; i < to && i < out.length; i += 1) {
       if (out[i] !== "\n") out[i] = " ";
     }
   };
-  const lineEndAfter = (from) => {
-    const nl = source.indexOf("\n", from);
-    return nl === -1 ? source.length : nl;
-  };
 
-  let i = 0;
-  while (i < source.length) {
-    const two = source.slice(i, i + 2);
-    if (two === "//") {
-      const stop = lineEndAfter(i);
-      blank(i, stop);
-      i = stop;
-      continue;
+  const walk = (node) => {
+    /*
+     * `getChildren` rather than `forEachChild`, because `forEachChild` skips
+     * punctuation. A comment sitting alone before a closing brace is leading
+     * trivia of that brace and of nothing else, and a walk that never visits
+     * the brace never blanks it.
+     */
+    const children = node.getChildren(parsed);
+    if (children.length > 0) {
+      for (const child of children) walk(child);
+      return;
     }
-    if (two === "/*") {
-      const end = source.indexOf("*/", i + 2);
-      const stop = end === -1 ? source.length : end + 2;
-      blank(i, stop);
-      i = stop;
-      continue;
+    /*
+     * JSX TEXT IS PROSE TOO, and leaving it standing was the same hole in a
+     * second spelling. The words between `<p>` and `</p>` are shown to a
+     * reader, not run — but they were being read as code, so a suite that
+     * mounts the world, mocks only `lib/api`, and happens to RENDER the
+     * sentence `vi.mock("../src/lib/data")` — a help string, a docs page under
+     * test — had rule 2 satisfied by text on a screen. Measured, not feared:
+     * that file reported `seams: clean` before this line existed.
+     *
+     * The one thing this can hide is a `.tsx` file whose JSX never closes, in
+     * which everything below becomes text and a real mock under it goes
+     * unseen. Such a file does not compile: `pnpm test` runs vitest in the
+     * same `&&` chain and it stops at "Transform failed", which is where a
+     * file with unterminated JSX should be caught rather than here.
+     */
+    if (node.kind === ts.SyntaxKind.JsxText) blank(node.getStart(parsed), node.getEnd());
+
+    const at = node.getFullStart();
+    for (const range of ts.getTrailingCommentRanges(source, at) ?? []) {
+      blank(range.pos, range.end);
     }
-    const quote = source[i];
-    if (quote === '"' || quote === "'" || quote === "`") {
-      const bound = quote === "`" ? source.length : lineEndAfter(i + 1);
-      let j = i + 1;
-      let closed = false;
-      while (j < bound) {
-        if (source[j] === "\\") {
-          j += 2;
-          continue;
-        }
-        if (source[j] === quote) {
-          closed = true;
-          break;
-        }
-        j += 1;
-      }
-      if (!closed) {
-        /* punctuation, not a delimiter */
-        i += 1;
-        continue;
-      }
-      i = j + 1;
-      continue;
+    for (const range of ts.getLeadingCommentRanges(source, at) ?? []) {
+      blank(range.pos, range.end);
     }
-    i += 1;
-  }
+  };
+  walk(parsed);
+
   return out.join("");
 }
 
@@ -388,8 +500,8 @@ const IMPORT_OF_ANY = /(?:\bfrom|\bimport)\s*\(?\s*["'`]([^"'`\s]+)["'`]/g;
  * satisfied by a `vi.mock("../src/lib/data")` somebody had commented out —
  * see `commentsBlanked`.
  */
-function mockedSeams(source) {
-  const code = commentsBlanked(source);
+function mockedSeams(source, key) {
+  const code = commentsBlanked(source, key);
   const seams = new Set();
   for (const m of code.matchAll(/\bvi\.(?:mock|doMock)\(\s*["'`]([^"'`\s]+)["'`]/g)) {
     seams.add(seamName(m[1]));
@@ -460,8 +572,13 @@ function followImports(source, read, fromKey, seen, depth) {
    * Blanked here rather than at the call site, so that every file the walk
    * opens on the way down gets the same treatment as the suite it started
    * from. A helper's own comments are prose too.
+   *
+   * `fromKey` decides which dialect it is parsed as, which is why the walk
+   * carries the key of the file it is currently reading rather than of the
+   * suite it started from: a `.tsx` helper reached from a `.ts` suite is
+   * still JSX.
    */
-  const code = commentsBlanked(source);
+  const code = commentsBlanked(source, fromKey);
   let mounts = IMPORT_OF_HOME.test(code);
   const unfollowable = [];
   const helpers = [];
@@ -559,7 +676,7 @@ function auditSource(source, read, key) {
   const header = headerOf(source);
   const declaration = declarationIn(header);
   const world = followImports(source, read, key, new Set([key]), 0);
-  const seams = [...new Set([...mockedSeams(source), ...world.helpers])];
+  const seams = [...new Set([...mockedSeams(source, key), ...world.helpers])];
 
   if (!MARKER.test(header)) {
     problems.push(
@@ -1055,6 +1172,160 @@ const SELFTEST = [
     ].join("\n"),
   },
   {
+    flags: ["MOUNTS THE WORLD AND DOES NOT MOCK `lib/data`"],
+    why:
+      "THE SAME MOCK COMMENTED OUT THE WAY AN EDITOR DOES IT — `//` on each line of " +
+      "the selection, which is what every toggle-comment key emits and is far commoner " +
+      "than reaching for `/* */`. The case above pinned only the block spelling, so the " +
+      "`//` half of the comment handling could be deleted outright with all thirty-odd " +
+      "cases printing `passed`, and the real `home-dial.test.tsx` toggled off this way " +
+      "reported clean. One shape of a rule is not the rule",
+    helpers: { "./helpers/render-home": HELPER_THAT_MOUNTS },
+    src: [
+      "/**",
+      " * WHAT THIS MOCKS, AND WHY: `lib/api`, and `helpers/render-home` for the",
+      " * canvas and the clock.",
+      " */",
+      'import { it } from "vitest";',
+      'import { mountWorld } from "./helpers/render-home";',
+      'vi.mock("../src/lib/api", () => ({}));',
+      '// vi.mock("../src/lib/data", async (importOriginal) => {',
+      "//   const actual = await importOriginal();",
+      "//   return { ...actual, ...dataMockFrom(FACTS) };",
+      "// });",
+    ].join("\n"),
+  },
+  {
+    flags: ["MOUNTS THE WORLD AND DOES NOT MOCK `lib/data`"],
+    why:
+      "AND THE SAME MOCK PARKED AT THE END OF A LINE THAT STILL RUNS. A comment on the " +
+      "same line as code is TRAILING trivia, and leading trivia stops collecting at the " +
+      "first thing that is not a newline — so a walk that asks only for leading comments " +
+      "never sees this one, blanks nothing, and reads the note as a live mock. Two files " +
+      "in this package write a trailing comment today",
+    helpers: { "./helpers/render-home": HELPER_THAT_MOUNTS },
+    src: [
+      "/**",
+      " * WHAT THIS MOCKS, AND WHY: `lib/api`, and `helpers/render-home` for the",
+      " * canvas and the clock.",
+      " */",
+      'import { it } from "vitest";',
+      'import { mountWorld } from "./helpers/render-home";',
+      'vi.mock("../src/lib/api", () => ({})); // vi.mock("../src/lib/data", () => ({}));',
+    ].join("\n"),
+  },
+  {
+    flags: ["MOUNTS THE WORLD AND DOES NOT MOCK `lib/data`"],
+    why:
+      "THE SAME MOCK, COMMENTED OUT, WITH TWO ORDINARY LINES AROUND IT THAT USED TO " +
+      "TURN THE COMMENT BACK INTO CODE. The hand-written scanner this file used to " +
+      "carry had no grammar, so the backtick inside the regular expression literal " +
+      "opened a template string bounded only by the end of the file: everything down " +
+      "to the next backtick was skipped as string, the comment in the middle of it was " +
+      "never blanked, and the mock inside the comment counted. Two lines nobody would " +
+      "look at twice, and rule 2 was off for the file — D16's own incident, reopened " +
+      "inside D16's own repair. This is the case that fails if the parse is ever traded " +
+      "back for a scanner",
+    helpers: { "./helpers/render-home": HELPER_THAT_MOUNTS },
+    src: [
+      "/**",
+      " * WHAT THIS MOCKS, AND WHY: `lib/api`, `lib/data`, and `helpers/render-home`",
+      " * for the canvas and the clock.",
+      " */",
+      'import { it } from "vitest";',
+      'import { mountWorld } from "./helpers/render-home";',
+      'const stripped = (s) => s.replace(/`/g, "");',
+      'vi.mock("../src/lib/api", () => ({}));',
+      "/* TODO(sprint-4): put this back once the loader shapes settle.",
+      'vi.mock("../src/lib/data", () => ({}));',
+      "*/",
+      'it("keeps the label", () => {',
+      '  expect(stripped("`a`")).toBe(`a`);',
+      "});",
+    ].join("\n"),
+  },
+  {
+    flags: [],
+    key: "a-self-test-case.test.ts",
+    why:
+      "A `.ts` SUITE THAT WRITES `<T>value`, WITH ITS REAL MOCKS UNDER IT. That is a " +
+      "type assertion in TypeScript and an opening JSX tag in TSX, so parsing every " +
+      "file as TSX — the obvious simplification, and every other case here allows it — " +
+      "turns both `vi.mock` lines below into the TEXT of an element that never closes. " +
+      "They are blanked as prose, the suite is left mocking nothing, and a file that " +
+      "correctly mocks `lib/data` is accused of mounting the world without it. The " +
+      "dialect is part of the question and this is the case that says so; `Profile" +
+      ".test.ts` writes generic calls in a `.ts` file today",
+    helpers: { "./helpers/render-home": HELPER_THAT_MOUNTS },
+    src: [
+      "/**",
+      " * WHAT THIS MOCKS, AND WHY: `lib/data` because the page reads through the",
+      " * loaders, `lib/api` for the group reads, and `helpers/render-home` for the",
+      " * canvas and the clock.",
+      " */",
+      'import { it } from "vitest";',
+      'import { mountWorld } from "./helpers/render-home";',
+      "const root = <HTMLElement>document.body;",
+      'vi.mock("../src/lib/data", () => ({}));',
+      'vi.mock("../src/lib/api", () => ({}));',
+    ].join("\n"),
+  },
+  {
+    flags: ["MOUNTS THE WORLD AND DOES NOT MOCK `lib/data`"],
+    why:
+      "AND THE MOCK THAT ONLY EXISTS ON A SCREEN. The sentence between `<p>` and `</p>` " +
+      "is shown to a reader, not run, and it was being read as code — so a suite that " +
+      "mounts the world on `lib/api` and renders the words `vi.mock(\"../src/lib/data\")` " +
+      "as help text had rule 2 satisfied by a paragraph. Same class as the comment, one " +
+      "spelling over, and it reported clean until this case existed",
+    helpers: { "./helpers/render-home": HELPER_THAT_MOUNTS },
+    src: [
+      "/**",
+      " * WHAT THIS MOCKS, AND WHY: `lib/api`, `lib/data`, and `helpers/render-home`",
+      " * for the canvas and the clock.",
+      " */",
+      'import { it } from "vitest";',
+      'import { mountWorld } from "./helpers/render-home";',
+      'vi.mock("../src/lib/api", () => ({}));',
+      "export const Hint = () => (",
+      '  <p>To fix this suite, add vi.mock("../src/lib/data") above the imports.</p>',
+      ");",
+    ].join("\n"),
+  },
+  {
+    flags: ["does not name `fetch`, which this suite replaces"],
+    why:
+      "A `//` INSIDE A STRING IS NOT A COMMENT. `\"http://localhost\"` carries the two " +
+      "characters that open a line comment, and a reader that blanks from there loses " +
+      "the rest of the line — here the `vi.stubGlobal` sharing it, which then goes " +
+      "undeclared and unreported. The old scanner bought this by skipping strings " +
+      "by hand; a parse gets it from the grammar, and this case is what notices if it " +
+      "is ever bought by hand again",
+    src: [
+      "/** WHAT THIS MOCKS, AND WHY: `WAKA_API_URL`, so nothing reaches the network. */",
+      'import { it } from "vitest";',
+      "beforeEach(() => {",
+      '  vi.stubEnv("WAKA_API_URL", "http://localhost"); vi.stubGlobal("fetch", stub);',
+      "});",
+    ].join("\n"),
+  },
+  {
+    flags: ["does not name `lib/appearance`, which this suite replaces"],
+    why:
+      "AN APOSTROPHE IN JSX TEXT IS NOT A QUOTE. \"this room's roll\" opens a string for " +
+      "anything reading character by character, and with no partner on the line the " +
+      "reader goes blind from there to the next one — over both mocks below, so a suite " +
+      "that replaces two layers is reported as replacing none. The old scanner bounded " +
+      "quotes to their line to survive this; the parse knows it is text",
+    src: [
+      "/** WHAT THIS MOCKS, AND WHY: `lib/data`, the layer under the page. */",
+      'import { it } from "vitest";',
+      "const empty = <p>this room's roll is still empty</p>;",
+      'vi.mock("../src/lib/data", () => ({}));',
+      'vi.mock("../src/lib/appearance", () => ({}));',
+    ].join("\n"),
+  },
+  {
     flags: [],
     why:
       "A SENTENCE ABOUT AN IMPORT IS NOT AN IMPORT. The header explains that a helper " +
@@ -1509,7 +1780,6 @@ function scanFixture(failures) {
     const found = walk(testDir)
       .map((file) => relative(testDir, file).split(sep).join("/"))
       .sort();
-    fixtureSuitesWalked = found.length;
     if (found.join("|") !== FIXTURE_SUITES.join("|")) {
       failures.push(
         "  FILE DISCOVERY: `walk` did not find the suites the fixture contains.\n" +
@@ -1546,6 +1816,17 @@ function scanFixture(failures) {
         );
       }
     }
+
+    /*
+     * THE RECEIPT IS WRITTEN LAST, AND THAT POSITION IS THE POINT. It used to
+     * sit next to the `walk` call above, where it recorded that the walk had
+     * happened and nothing about whether anything was compared to it — so
+     * `if (1) return;` in front of `scan(…)` gutted this whole layer with the
+     * proof line still announcing a seven-suite scan and the outside test
+     * still satisfied. Down here the number is only reached by a run that got
+     * all the way through both comparisons, which is the thing being claimed.
+     */
+    fixtureSuitesWalked = found.length;
   });
 }
 
@@ -1736,7 +2017,16 @@ function selftest() {
      * scanned.
      */
     const read = c.onDisk ? readerUnder(PACKAGE_ROOT) : readerFor(c.helpers ?? {});
-    const key = c.onDisk ? join(TEST_DIR, "any-suite.test.tsx") : "<a self-test case>";
+    /*
+     * The key is a filename because the parse needs one — `.ts` and `.tsx` are
+     * different grammars for `<T>value`, and a case that stages that has to be
+     * able to say which it is. Cases that do not care get a `.tsx` name, the
+     * more permissive of the two, and the default is written here rather than
+     * left to `commentsBlanked` so that a reader of the cases can see it.
+     */
+    const key = c.onDisk
+      ? join(TEST_DIR, "any-suite.test.tsx")
+      : (c.key ?? "a-self-test-case.test.tsx");
     const said = auditSource(c.src, read, key);
     const ok = said.length === c.flags.length && c.flags.every((f, i) => said[i].includes(f));
     if (!ok) {

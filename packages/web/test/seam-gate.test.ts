@@ -51,10 +51,28 @@
  *     it here would mean the gate printing the list it read, which is a second
  *     output mode to prove; the exchange was judged the wrong way round for
  *     one number.
- *   - It reads the include patterns out of `vitest.config.ts` with a regular
- *     expression. If that list ever stops being literal strings on one line,
- *     this case fails loudly rather than silently — which is the right way for
- *     it to break, and is why the parse is asserted rather than defaulted.
+ *   - It reads `include` AND `exclude` out of `vitest.config.ts` with a regular
+ *     expression, and globs both. Reading `include` alone was a live hole with
+ *     the same shape as the case itself: `exclude: ["test/when.test.ts"]` drops
+ *     a suite from the run — 12 files, 99 tests — while the gate still reads 13
+ *     and 13 still equals 13, so a suite left the run with this file green. If
+ *     either list ever stops being literal strings on one line, this case fails
+ *     loudly rather than silently, which is why the parse is asserted rather
+ *     than defaulted: a field that is mentioned and unreadable is not the same
+ *     fact as a field that is absent, and only the second one is empty.
+ *
+ *     What that still does not reach is a run whose file set is decided
+ *     somewhere other than these two keys — `test.projects`, a workspace file,
+ *     or a pattern typed on the command line. Those change what vitest
+ *     collects without changing this config, and this case would compare the
+ *     gate against a run that did not happen. None is used in this package.
+ *   - The `pnpm test` case reads the SHAPE of the chain, not the behaviour of
+ *     its links. Every stage must be joined by `&&` and the gate must be one of
+ *     them, which is what stops the gate being backgrounded, `;`-joined or
+ *     swallowed by `||`. A stage that cannot fail — a leading `exit 0 &&` — is
+ *     a chain of `&&` by this reading and never reaches the gate. Closing it
+ *     means running the line, which means a test that runs the whole suite to
+ *     check that the suite runs; the shape check is where this stops.
  */
 import { spawnSync } from "node:child_process";
 import { globSync, readFileSync } from "node:fs";
@@ -79,6 +97,34 @@ function runGate() {
     stdio: ["ignore", "pipe", "pipe"],
   });
   return { status: run.status, stdout: run.stdout ?? "", stderr: run.stderr ?? "" };
+}
+
+/**
+ * One list of file patterns out of `vitest.config.ts`, by name.
+ *
+ * ABSENCE IS READ FROM THE TEXT, NOT ASSUMED. A field that is not mentioned at
+ * all is genuinely empty and returns nothing; a field that IS mentioned and
+ * cannot be parsed makes this throw, rather than returning the empty list and
+ * quietly meaning "no exclusions". Those two are the same value and opposite
+ * facts, and treating them alike is how the `exclude` hole below got written:
+ * an unread list defaulted to nothing excluded, which is exactly what a
+ * silently narrowed run looks like from here.
+ */
+function patternsIn(config: string, field: "include" | "exclude"): string[] {
+  if (!new RegExp(`\\b${field}\\s*:`).test(config)) return [];
+  const list = config.match(new RegExp(`\\b${field}\\s*:\\s*\\[([^\\]]*)\\]`));
+  expect(
+    list,
+    `vitest.config.ts states an \`${field}\` this test cannot read — teach it the ` +
+      "new spelling rather than deleting the check, or the run it describes stops " +
+      "being the run that happens",
+  ).not.toBeNull();
+  const patterns = [...list![1].matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+  expect(
+    patterns.length,
+    `\`${field}\` in vitest.config.ts is stated but parsed to no patterns`,
+  ).toBeGreaterThan(0);
+  return patterns;
 }
 
 /**
@@ -138,13 +184,24 @@ describe("the seam gate", () => {
        rather than of a pattern copied into this file. A copy would agree with
        the gate for the same wrong reason on the day either one narrowed. */
     const config = readFileSync(join(PACKAGE_ROOT, "vitest.config.ts"), "utf8");
-    const include = config.match(/include:\s*\[([^\]]*)\]/);
-    expect(include, "vitest.config.ts no longer states an `include` this test can read").not
-      .toBeNull();
-    const patterns = [...include![1].matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+    const patterns = patternsIn(config, "include");
     expect(patterns.length, "no include patterns found in vitest.config.ts").toBeGreaterThan(0);
+
+    /* AND WHAT IT TAKES BACK OUT. This used to read `include` alone, and the
+       count check passed while a suite was gone: `exclude: ["test/when.test.ts"]`
+       dropped that file to 12 files / 99 tests, the gate still read 13, 13
+       equalled 13, and the whole package was green — the exact quiet narrowing
+       this case exists for, arriving through the one line it was not reading.
+       Both lists are globbed with the same globber against the same directory
+       and subtracted, so a literal path and a pattern are handled the same
+       way. */
+    const dropped = new Set(
+      patternsIn(config, "exclude").flatMap((pattern) => globSync(pattern, { cwd: PACKAGE_ROOT })),
+    );
     const collected = new Set(
-      patterns.flatMap((pattern) => globSync(pattern, { cwd: PACKAGE_ROOT })),
+      patterns
+        .flatMap((pattern) => globSync(pattern, { cwd: PACKAGE_ROOT }))
+        .filter((file) => !dropped.has(file)),
     );
 
     expect(
