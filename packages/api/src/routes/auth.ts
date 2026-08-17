@@ -41,7 +41,7 @@ import {
 } from "../lib/auth.js";
 import { getDb } from "../lib/db.js";
 import { DEFAULT_LOCALE, normalizeSupportedLocale, supportedLocaleSchema } from "../lib/locales.js";
-import { type AuthEnv, requireAuth } from "../lib/middleware.js";
+import { type AuthEnv, humanSessionsOnly, requireAuth } from "../lib/middleware.js";
 import {
   isPublicHandleTaken,
   normalizePublicHandle,
@@ -701,7 +701,7 @@ authRoutes.patch("/me/profile", requireAuth, async (c) => {
  * Erases the whole account: every profile it owns and every layer of memory
  * under them. The confirmation literal is required because this has no undo.
  */
-authRoutes.delete("/me", requireAuth, async (c) => {
+authRoutes.delete("/me", requireAuth, humanSessionsOnly, async (c) => {
   let rawBody: unknown;
   try {
     rawBody = await c.req.json();
