@@ -7,9 +7,9 @@
  * trade documented in routes/auth.ts), so an attacker could first confirm a
  * target is registered here and then grind its password at network speed.
  *
- * This file is the whole of the rule. `lib/email-verification.ts` is the
- * precedent it follows: durable state, checked in plain TypeScript, with the
- * reason written next to the number.
+ * This file is the whole of the rule, and it is shaped the way the rest of
+ * this repo's security work is: durable state, checked in plain TypeScript,
+ * with the reason written next to the number.
  *
  * ─────────────────────────────────────────────────────────────────────────
  * THE THING THAT MUST NOT HAPPEN
@@ -60,8 +60,9 @@
  * That residue is not closeable with what this repo has today. Telling an
  * account's owner apart from the flood needs either a credential they already
  * hold (this one) or a channel only they can answer — a reset link, a mailed
- * code — and `lib/email-verification.ts` still writes its mail to the console
- * because no provider has been chosen. The honest completion of this design is
+ * code — and this repo cannot send mail at all: no provider has ever been
+ * chosen, which is why the email-verification feature that assumed one was
+ * removed rather than left half-built. The honest completion of this design is
  * "we don't recognise this browser, check your email", and this file is where
  * it hooks in the day there is an inbox to send to. Until then the trade being
  * made is: unlimited guessing, which ends with someone else owning the
@@ -96,8 +97,8 @@
  *     straight to it can write that header themselves.
  *
  * Which hop is trustworthy is a fact about the infrastructure — the same class
- * of decision as choosing an email provider, which `lib/email-verification.ts`
- * deliberately left to whoever runs it. So it is one environment variable:
+ * of decision as choosing an email provider, and it belongs to whoever runs the
+ * deployment rather than to this file. So it is one environment variable:
  *
  *   WAKA_TRUSTED_PROXY_HOPS unset  → per-source budget OFF. The only safe
  *                                    default: guessing wrong here throttles

@@ -41,7 +41,6 @@ import {
   wantsSecureCookie,
 } from "../lib/auth.js";
 import { getDb } from "../lib/db.js";
-import { issueVerification } from "../lib/email-verification.js";
 import {
   buildLoginDeviceCookie,
   clearLoginFailures,
@@ -233,21 +232,15 @@ export async function signupHandler(c: Context<AuthEnv>): Promise<Response> {
     throw err;
   }
 
-  // 4b. Ask them to prove the address. Nothing until now ever did, which is
-  //     how someone could hold an account on an email they did not own — see
-  //     lib/email-verification.ts. A send failure must not undo a signup that
-  //     already succeeded, so it is caught: the account exists, the person is
-  //     signed in, and they can ask for the link again.
-  try {
-    await issueVerification(getDb(), {
-      accountId: created.account.id,
-      email: created.account.email,
-      baseUrl: process.env.PUBLIC_WEB_URL ?? "http://localhost:5173",
-    });
-  } catch (err) {
-    console.error("[signup] could not issue an email verification link", err);
-  }
-
+  // 4b. NO VERIFICATION LINK IS SENT, AND SIGNUP BELIEVES THE ADDRESS.
+  //     Signup used to mint one here. The transport behind it was never
+  //     implemented, so the link only ever reached a log line and the address
+  //     stayed unprovable; the one thing that required proof — joining a group
+  //     — was therefore closed to every account. The owner removed the
+  //     requirement instead of wiring a provider. Sending mail from here again
+  //     means choosing a provider and a sending domain first; the reasoning is
+  //     in drizzle/migrations/0010_the_address_stays_unproven.sql.
+  //
   // 5. Mint a session bound to the human profile. Both cookie and body carry
   //    it so the client can pick whichever transport fits its environment.
   const token = await signSessionToken({

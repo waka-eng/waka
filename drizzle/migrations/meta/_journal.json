@@ -71,6 +71,13 @@
       "when": 1787400000000,
       "tag": "0009_an_edit_is_model_work",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1787500000000,
+      "tag": "0010_the_address_stays_unproven",
+      "breakpoints": true
     }
   ]
 }

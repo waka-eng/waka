@@ -52,7 +52,6 @@ import { getDb } from "../lib/db.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
 import { loadGroupField } from "./groups-field.js";
 import {
-  accountHasProvenEmail,
   createGroupForProfile,
   deleteGroup,
   joinGroupByCode,
@@ -143,7 +142,6 @@ export interface GroupsRouteDependencies {
   listGroups?: typeof listGroupsForProfile;
   createGroup?: typeof createGroupForProfile;
   joinGroup?: typeof joinGroupByCode;
-  hasProvenEmail?: typeof accountHasProvenEmail;
   leaveGroupFn?: typeof leaveGroup;
   deleteGroupFn?: typeof deleteGroup;
   renameGroupFn?: typeof renameGroup;
@@ -166,7 +164,6 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
   const listGroups = deps.listGroups ?? listGroupsForProfile;
   const createGroup = deps.createGroup ?? createGroupForProfile;
   const joinGroup = deps.joinGroup ?? joinGroupByCode;
-  const hasProvenEmail = deps.hasProvenEmail ?? accountHasProvenEmail;
   const leaveGroupFn = deps.leaveGroupFn ?? leaveGroup;
   const deleteGroupFn = deps.deleteGroupFn ?? deleteGroup;
   const renameGroupFn = deps.renameGroupFn ?? renameGroup;
@@ -255,30 +252,24 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
       );
     }
     const session = c.get("session");
-    /**
-     * A GROUP IS WHERE YOUR MEMORIES REACH OTHER PEOPLE.
+    /*
+     * JOINING IS NOT GATED ON A PROVEN EMAIL ADDRESS, AND RE-ADDING THAT GATE
+     * NEEDS A WORKING MAIL PROVIDER FIRST.
      *
-     * Everything else an unverified account does stays inside it: keeping an
-     * inspiration, forming a signal, reading its own top of mind. Joining is
-     * the first act that discloses — your public memories become part of a
-     * group's ground and your name joins its roll — and the address on the
-     * account has never been proven, so nobody knows who is being let in.
+     * This handler used to answer 403 `email_not_verified` until the account
+     * had proven its address. Nothing ever sent the link — the transport was
+     * left as an unimplemented interface — so the proof was unobtainable and
+     * every account that predated the gate could join nothing at all. The
+     * owner dropped the requirement rather than wire a provider or bless the
+     * existing accounts. The full reasoning is in
+     * drizzle/migrations/0010_the_address_stays_unproven.sql.
      *
-     * This is the gate that makes verification worth having before a mail
-     * provider exists. It is also narrow on purpose: an unverified person
-     * loses nothing they could have done alone.
+     * The join code is what a join stands on now: it is a bearer credential,
+     * rotated on removal (groups-membership.ts). Google sign-in still refuses
+     * an unverified `email_verified` claim (auth-google.ts) — that is Google
+     * attesting the address, not this product asking for proof, and it is a
+     * separate defence that did not go away with this one.
      */
-    const proven = await hasProvenEmail(getDatabase(), session.profile.id);
-    if (!proven) {
-      return c.json(
-        {
-          error:
-            "Confirm your email address before joining a room — we sent you a link when you signed up.",
-          code: "email_not_verified",
-        },
-        403,
-      );
-    }
     const result = await joinGroup(getDatabase(), {
       profileId: session.profile.id,
       joinCode: parsed.data.joinCode,

@@ -68,12 +68,6 @@ vi.mock("../lib/session.js", () => ({
   hashSessionToken: vi.fn(async () => "hashed-token"),
 }));
 
-/* Signup posts a verification link; that has its own tests and its own table,
-   and the fake store below only knows about login_failures. */
-vi.mock("../lib/email-verification.js", () => ({
-  issueVerification: vi.fn(async () => ({ sent: true, token: null })),
-}));
-
 import {
   applyLoginFailureUpsert,
   type LoginFailureRow,
