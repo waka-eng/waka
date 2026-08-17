@@ -8,13 +8,13 @@
  * THE THREE LAYERS ARE THE THREE SECTIONS. `docs/data-model.md` is the
  * vocabulary of record and this page is its picture, top to bottom:
  *
- *   the sky            LAYER 2 — signals: evidence-backed patterns. What is
+ *   the sky            LAYER 2 — signals: evidence-backed signals. What is
  *                      `emerging` hangs overhead with the memories it cites
  *                      orbiting it, which is where a pattern's "why" is
  *                      finally readable.
  *   headquarters       LAYER 3 — the one top-of-mind artifact. Exactly one
  *                      per profile, so the poster is never one of several;
- *                      beneath it, the patterns it stands on.
+ *                      beneath it, the signals it stands on.
  *   the field          LAYER 1 — inspirations: every capture this profile
  *                      owns, one orb each, always the whole set.
  *
@@ -22,7 +22,7 @@
  * you at the origin, rooms to the right. The field never changes with it: the
  * ground is always your own archive ("3번째 섹션에서는 양옆 못 움직여야 해").
  *
- * A room is a wall of STATEMENTS. Members share signals, never captures, so
+ * A room is a wall of STATEMENTS. Members share signals, never inspirations, so
  * another person's raw memories never appear here — not as orbs, not as
  * quotes, not in an orbit.
  *
@@ -64,25 +64,92 @@ import {
 } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
+import { hueCss, type Ramp } from "../lib/appearance";
+import { clamp, clamp01, DAY_MS, easeOut, hashStr, kd, lerp, TAU } from "../lib/num";
 import {
-  FIELD_CITED_LIFT,
-  FIELD_DECAY_HALF_LIFE_DAYS,
-  FIELD_FLOOR_ANSWERED,
-  FIELD_FLOOR_CITED,
-  FIELD_FLOOR_IN_GROUP,
-  FIELD_FRONTIER_DAYS,
-  FIELD_REFLECTION_SATURATION,
-  FIELD_REFLECTION_WEIGHT,
-} from "../lib/aliveness";
-import { hueCss, tintRamp, type Ramp } from "../lib/appearance";
-import { clamp, clamp01, DAY_MS, easeOut, hashStr, kd, lerp, mix32, TAU } from "../lib/num";
+  BLOOM_EXP,
+  BLOOM_PEAK,
+  BLOOM_R,
+  GRAIN_AMP,
+  GRAIN_PX,
+  GRAIN_TILE,
+  KEY_X,
+  KEY_Y,
+  NEB_PEAK,
+  ORB_PAD,
+  SIZE_R,
+  TIERS,
+  UNDATED_POW,
+  UNDATED_TIER,
+  VIGNETTE,
+  ditherAlpha,
+  makeSprite,
+  mix,
+  orbsForHue,
+  rampAt,
+  rasterBloom,
+  rasterOrb,
+  rgbCss,
+} from "../canvas/sprites";
 import {
+  dedupeEvidence,
+  readSkyLayout,
+  writeSkyLayout,
+  SAT_MAX,
+  type Candidate,
+  type Neb,
+  type Sat,
+} from "../space/signal/sky";
+import { deriveAgentChrome } from "../space-kinds/agent";
+import {
+  deriveGroupChrome,
+  groupWallOrbs,
+  makeGroupBall,
+  type GroupData,
+} from "../space-kinds/group";
+import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
+import { agentBeing, OWNER_BEING, unit, type Being } from "../character/body";
+import { posterWords } from "../space/top-of-mind/poster";
+import {
+  deriveAmbition,
+  formingWords,
+  type Adopted,
+  type JarNote,
+  type Proposal,
+  type WallChrome,
+  type Provenance,
+  type ReflectState,
+} from "../space/top-of-mind/board";
+import {
+  colorBall,
+  fitField,
+  scatterX,
+  tierOf,
+} from "../space/inspiration/field";
+import {
+  bornBall,
+  makeAgentBall,
+  makeBall,
+  seedOf,
+  type Ball,
+  type BornSeed,
+} from "../space/inspiration/orb";
+import {
+  MOCK_AGENTS,
+  offlineWorld,
+  showsDebug,
+  MOCK_AGENT_BUNDLES,
+  type AgentBundle,
+  type OfflineWorld,
+} from "../lib/fixture";
+import {
+  agoWords,
+  citedWords,
   dateWords,
   givenName,
-  numWords,
   groupCompany,
-
-  yearWords,
+  monthTag,
+  numWords,
 } from "../lib/words";
 
 import {
@@ -126,7 +193,6 @@ import {
   type ApiGroupProposal,
   type ApiGroupMember,
   type ApiGroupSummary,
-  type ApiGroupTopOfMind,
   type ApiGroupFieldCapture,
   type ApiGroupWallSignal,
   type ApiTopOfMindVersion,
@@ -143,6 +209,7 @@ import {
   type InspirationDetail,
   type Entry,
   type Evidence,
+  type EvidenceRef,
   type Signal,
   type TopOfMind,
 } from "../lib/data";
@@ -150,11 +217,6 @@ import { useOptionalAuth } from "../lib/auth-context";
 
 import "../styles/home.css";
 
-/** Same rule Surface.tsx uses for the Debug pill. */
-function showsDebug(): boolean {
-  const env = import.meta.env as Record<string, unknown>;
-  return env.DEV === true || env.VITE_SHOW_INTERNAL === "1";
-}
 
 /**
  * MOONLIGHT — the surface, chosen.
@@ -170,26 +232,6 @@ function showsDebug(): boolean {
  * which carries the law.
  */
 
-/** Size buckets the orb + halo sprites are rastered at (radius is 24-32). */
-/**
- * THE SIZES A DISC IS ACTUALLY BAKED AT — and they have to cover the range the
- * field really draws at, which these did not.
- *
- * There were three, at 25 / 28.5 / 32, chosen for the meaningless per-orb
- * radius jitter. But the field FITS its orbs to the band: crowd it and the
- * radius falls all the way to ORB_R_MIN, six. A six-pixel orb was being drawn
- * from a sprite baked for twenty-five and scaled down four times over, and a
- * bilinear downscale of that depth turns a crisp rim and a small specular into
- * a smear. Every sphere term above was being destroyed at draw time.
- *
- * Nine steps across the whole real range, spaced closer at the small end where
- * a given percentage error is most visible. Any drawn radius now lands within
- * a few percent of a sprite baked for it. Nine sizes × four tiers is thirty-six
- * discs baked once at load — nothing per frame, which is the standing rule.
- */
-const SIZE_R = [6, 8.5, 11.5, 15, 19, 23, 26.5, 29.5, 32];
-/** Sprite bleed so the rim arc's outer antialiasing is never clipped. */
-const ORB_PAD = 2;
 /** Drifting dust motes — the atmosphere, not decoration. */
 const MOTES = 40;
 /** Dim sparkle points scattered in the deep background. */
@@ -252,8 +294,6 @@ const PEEK_ORBS = 5;
  * are evidence, and forty are inventory.
  */
 const PEEK_MAX = 8;
-/** However crowded the field gets, an orb never shrinks past this. */
-const ORB_R_MIN = 6;
 /**
  * A flick faster than this always commits to the next section. Lowered from
  * 500 once the snap started INHERITING the flick's speed: at 500 a genuine
@@ -426,12 +466,6 @@ const PITCH_FULL = 1400;
  */
 const SAT_R = 0.72;
 /**
- * At most this many memories orbit one candidate. Past that the highest
- * resonances stay and the rest are simply not drawn — a cloud is a claim, not
- * an inventory, and "and N more" would put a number on the page.
- */
-const SAT_MAX = 8;
-/**
  * Air between a satellite and the name of whoever saved it — and the least the
  * name is ever left from the edge of the sky, which clips.
  */
@@ -541,192 +575,10 @@ const SKY_PAD_Y = 0.42;
 /** The least of the viewport an orbit is ever left clear of an edge. */
 const SKY_EDGE = 12;
 
-/**
- * Sky layout persistence, tier ONE: the personal sky's nebula positions,
- * local to this browser, written through on drag end and pruned to the
- * candidates that still exist. Tier TWO is SHARED per-room persistence,
- * which needs a backend endpoint (coming separately) — the storage shape
- * {candidateId: {x, y}} is chosen so the server version can adopt it
- * unchanged.
- */
-const SKY_LAYOUT_KEY = "waka.sky.layout.v1";
-
-function readSkyLayout(): Record<string, { x: number; y: number }> {
-  try {
-    const raw = window.localStorage.getItem(SKY_LAYOUT_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as unknown;
-    return parsed && typeof parsed === "object"
-      ? (parsed as Record<string, { x: number; y: number }>)
-      : {};
-  } catch {
-    return {};
-  }
-}
-
-function writeSkyLayout(layout: Record<string, { x: number; y: number }>): void {
-  try {
-    window.localStorage.setItem(SKY_LAYOUT_KEY, JSON.stringify(layout));
-  } catch {
-    /* storage unavailable (private mode, quota): the sky still works */
-  }
-}
 
 // ---------------------------------------------------------------------------
 // THE SPECIES: one companion, many beings
 // ---------------------------------------------------------------------------
-
-/**
- * A companion is A DROP OF LIGHT THAT CAME TO REST, LIT BY THE SAME MOON AS
- * EVERYTHING ELSE. Nine things are invariant across every being in the world,
- * and each one is load-bearing for a law rather than a style choice:
- *
- *   1. ONE SILHOUETTE TOPOLOGY — one closed outline, four bezier segments, in
- *      the order bodyPath traces them. Dome above, flat-ish base below, no
- *      neck, no limbs, no appendage that is not a nub. Individuals move the
- *      control points inside a bounded envelope; nobody adds or removes one.
- *      This is what makes a stranger's companion legible as the same KIND of
- *      thing as yours inside the first hundred milliseconds.
- *   2. THE LATHE/PLANET MODEL — lathe-symmetric about a vertical axis; yaw is
- *      a longitude, features travel across the surface, the silhouette never
- *      scales and features are OCCLUDED rather than hidden. Two rotation
- *      physics in one world is two worlds.
- *   3. ONE KEY — KEY_X / KEY_Y. No companion carries its own light source.
- *   4. ONE RAMP — bodyTier off ramp.bodyLit/bodyShade. Two beings at the same
- *      aliveness are the same colour at the same luminance. Temperature and
- *      luminance mean aliveness and NOTHING else. This is the hard one, and it
- *      is the one that makes the whole system safe.
- *   5. ONE MASS — w·h is constant at a given charSize, whatever the aspect. A
- *      wide being is not a big being: size would read as rank, and agents are
- *      not ranked.
- *   6. THE AURA, ENTIRELY — four layers, the radius law and the alpha law. A
- *      three-layer aura reads as a dimmer being, and dimmer means less alive.
- *      The aura is the aliveness channel wearing a halo; identity may not
- *      touch it. (Its drift RATE may vary: that is rhythm, not light.)
- *   7. TWO EYES, dark dots on the equator, symmetric about the meridian. No
- *      whites, no pupils, no brows, no mouth. A blink is a vertical squash.
- *   8. TWO NUBS at longitude ±π/2, radius gated on inspiration. The nub radius
- *      IS the light channel expressed as body language; identity does not get
- *      to scale it.
- *   9. ONE EMULSION — the same grain tile, the same overlay, the same dither.
- *      Film grain belongs to the lens, not to the world.
- *
- * What an individual gets is two channels and only two: FORM (baked, and so it
- * survives reduced motion) and RHYTHM (per-frame constants, silent under it).
- * Hue is forbidden and temperature is spoken for.
- */
-export interface Being {
-  /** width / height. Solved against mass, so it changes shape, never size. */
-  aspect: number;
-  /** the dome's overshoot pair; the differential is held at 0.04 */
-  dome: [number, number];
-  /** the base inset: table, settle, rocker */
-  base: number;
-  /** shoulder bulge + base contact only, signed. The APEX tilt stays canonical:
-      an off-centre apex is the term that exposes the planet fiction under yaw,
-      and a lean that survives a 180° turn is a visible lie. */
-  asym: number;
-  eyeR: number;
-  eyeLon: number;
-  eyeLat: number;
-  nubLat: number;
-  bobRate: number;
-  blinkMs: number;
-  blinkDouble: boolean;
-  sqPhase: number;
-  sqDepth: number;
-  auraDrift: number;
-  /** anti-cloning texture, not an identity signal */
-  grainPhase: [number, number];
-}
-
-/**
- * ONE namespace, VERSIONED. Bumping the version re-rolls every being in the
- * world — that is a migration, not an edit. An agent whose face changed is a
- * stranger, and nothing in this world turns into a stranger.
- */
-const BEING_NS = "waka/being/1";
-
-const pick = <T,>(id: string, salt: string, ladder: readonly T[]): T =>
-  ladder[mix32(hashStr(`${BEING_NS}/${salt}/${id}`)) % ladder.length];
-
-const unit = (id: string, salt: string): number =>
-  mix32(hashStr(`${BEING_NS}/${salt}/${id}`)) / 4294967296;
-
-/**
- * THE OWNER'S BEING — exactly today's numbers, to the digit. It is not merely
- * the default: the aspect and eye-height ladders below have these two values
- * PUNCHED OUT, so no hash can ever produce them. The owner's companion is the
- * only being in the world that is the species median on both of the axes the
- * eye reads first, and standing beside any agent its face sits at a height no
- * agent's face can occupy. That is a still-frame mark, achieved structurally
- * rather than by a check.
- */
-const OWNER_BEING: Being = {
-  aspect: 1.15,
-  dome: [0.16, 0.2],
-  base: 0.2,
-  asym: 0.02,
-  eyeR: 0.038,
-  eyeLon: 0.5,
-  eyeLat: -0.06,
-  nubLat: 0.24,
-  bobRate: 1.4,
-  blinkMs: 3400,
-  blinkDouble: false,
-  sqPhase: 1.5,
-  sqDepth: 0.022,
-  auraDrift: 1,
-  grainPhase: [0, 0],
-};
-
-/**
- * A being, drawn from an id and from nothing else.
- *
- * DO NOT SALT BY WALL OWNER. `${ownerId}/${agentId}` would give the same agent
- * a different face for each person it works for. An agent is an entity, not a
- * rendering of a relationship; it should be itself everywhere.
- *
- * FORM IS ARBITRARY BUT STABLE, LIKE A FACE — it does not encode what an agent
- * DOES. Function-shaped form is hue-per-category wearing a different hat: it
- * needs a legend, and a legend is jargon in picture form. It is also not
- * stable, and this is a memory product — an agent that gets re-scoped would
- * change shape, and a being that changes shape is a being that popped out of
- * existence and was replaced. Lookup is what the wall's NAME is for; a face is
- * for recognition, which text is bad at.
- */
-function agentBeing(id: string): Being {
-  const sq = pick(id, "sq", [
-    [0.9, 0.029], /* heavy landing */
-    [1.5, 0.022], /* canonical */
-    [2.2, 0.016], /* buoyant lead */
-  ] as const);
-  return {
-    aspect: pick(id, "asp", [1.02, 1.08, 1.23, 1.32]), /* 1.15 reserved */
-    dome: pick(id, "dome", [
-      [0.1, 0.14],
-      [0.16, 0.2],
-      [0.22, 0.26],
-      [0.28, 0.32],
-    ] as const),
-    base: pick(id, "base", [0.28, 0.2, 0.11]),
-    asym: pick(id, "asym", [-0.06, -0.02, 0.02, 0.06]),
-    eyeR: pick(id, "eyeR", [0.03, 0.038, 0.047]),
-    eyeLon: pick(id, "eyeL", [0.38, 0.5, 0.63]),
-    eyeLat: pick(id, "eyeH", [-0.15, -0.11, -0.01, 0.03]), /* -0.06 reserved */
-    nubLat: pick(id, "nub", [0.18, 0.24, 0.3]),
-    bobRate: pick(id, "bob", [1.12, 1.4, 1.58, 1.76]),
-    blinkMs: pick(id, "blkT", [2900, 3400, 4100]),
-    blinkDouble: pick(id, "blkD", [false, true]),
-    sqPhase: sq[0],
-    sqDepth: sq[1],
-    auraDrift: pick(id, "aura", [0.78, 1, 1.28]),
-    grainPhase: [
-      unit(id, "gx") * GRAIN_TILE * GRAIN_PX,
-      unit(id, "gy") * GRAIN_TILE * GRAIN_PX,
-    ],
-  };
-}
 
 function parseColor(input: string): [number, number, number] {
   const s = input.trim();
@@ -748,30 +600,6 @@ function parseColor(input: string): [number, number, number] {
    gradient pair, and there are no pairs left to pick between. */
 
 
-
-/**
- * How long ago, ALWAYS as a relative phrase in words — "Today", "Yesterday",
- * "Last week", "Eighty-seven days ago". It is paired with the absolute date,
- * so it must never fall back to naming the date itself or the panel's meta
- * line prints the same string twice.
- */
-function agoWords(ms: number, T: number): string {
-  const days = Math.floor((T - ms) / DAY_MS);
-  const cap = (s: string) => `${s[0].toUpperCase()}${s.slice(1)}`;
-  if (days <= 0) return "Today";
-  if (days === 1) return "Yesterday";
-  if (days < 7) return `${cap(numWords(days))} days ago`;
-  if (days < 14) return "Last week";
-  if (days < 100) return `${cap(numWords(days))} days ago`;
-  const months = Math.round(days / 30);
-  return months < 2 ? "A few months ago" : `${cap(numWords(months))} months ago`;
-}
-
-/** The month a scrub is standing in, spoken — "June twenty twenty-six". */
-function monthTag(ms: number): string {
-  const d = new Date(ms);
-  return `${d.toLocaleDateString("en-US", { month: "long" })} ${yearWords(d.getFullYear())}`;
-}
 
 /**
  * Mark passages INSIDE the memory rather than lifting them out of it.
@@ -838,1248 +666,17 @@ function markPassages(
   return <>{out}</>;
 }
 
-// ---------------------------------------------------------------------------
-// Ball model + world geometry
-// ---------------------------------------------------------------------------
 
-interface Ball {
-  id: string;
-  capturedMs: number;
-  updatedMs: number;
-  reflections: number;
-  hasNotes: boolean;
-  /** Nothing rests on this memory yet, and it is old enough that something
-      could have. The one place the field points forward instead of back. */
-  frontier: boolean;
-  hasGroup: boolean;
-  textPreview: string;
-  /** What kind of capture it was — the reflection question is asked about it. */
-  kind: string | null;
-  /**
-   * The words that carried a reading, when this save stands as evidence for
-   * one. It is what the panel marks inside the raw text: the passage that led
-   * somewhere, shown where it was actually written.
-   */
-  quote: string | null;
-  terms: string[];
-  /**
-   * Its drawn radius, FITTED to the field it has to share (see assignHomes).
-   * Size never encodes meaning — this is the field making room, not the
-   * memory saying anything.
-   */
-  r: number;
-  /** What it would be with room to spare. Fitting is never cumulative. */
-  rBase: number;
-  sizeIdx: number;
-  /** Stable per-ball random in [0,1) for scatter. */
-  frac: number;
-  /**
-   * THE FIELD MUST NOT RE-SHUFFLE WHEN A WALL CHANGES.
-   *
-   * scatterX picks the best of a dozen candidate x's by clearance, and those
-   * candidates used to come from Math.random() — so every re-solve dealt the
-   * whole field a fresh hand. Now the field is GLOBAL and re-solves every time
-   * a wall's peek row is re-elected, a random hand would mean your memories
-   * rearranging themselves under you each time you walked to a neighbour. They
-   * are the ground; the ground stays put. Twelve fixed draws, off the id.
-   */
-  scat: number[];
-  x: number;
-  y: number;
-  /** Where this orb belongs in the field. Assigned, never emergent. */
-  homeX: number;
-  homeY: number;
-  /**
-   * AND WHERE IT RISES TO WHEN A CLAIM RESTS ON IT.
-   *
-   * Every memory has ONE place in the field — this one included. Being in a
-   * wall's peek row is not a different home, it is a LIFT: standing at
-   * headquarters the memories the ambition is built on rise up under it, and
-   * as you descend into the field they settle back into their own ground.
-   * (Before, a peek orb was carved out of the field's rank ordering and parked
-   * on the peek line, and the descent then pushed the whole row down onto the
-   * field's top edge — five orbs stacked on the newest few, which is precisely
-   * the "bunching at the top" half of the founder's report.)
-   */
-  peekX: number;
-  peekY: number;
-  /** Its own slow Lissajous drift around home, scaled with the fitted radius. */
-  ampX: number;
-  ampY: number;
-  ampBaseX: number;
-  ampBaseY: number;
-  rateX: number;
-  rateY: number;
-  phX: number;
-  phY: number;
-  /** 0 → 1 arrival ease: it enters from above its home and settles into it. */
-  arrive: number;
-  /** How far above home it entered from. */
-  entryH: number;
-  /** Exists at the current dial time (simulated + drawn). */
-  active: boolean;
-  /** Fading out in place (scrub-back). */
-  leaving: boolean;
-  /** 0 present → 1 fully gone; drives the fade-out. */
-  gone: number;
-  /** Pour schedule in performance.now() ms; -1 once in the jar. */
-  spawnAt: number;
-  alive: number;
-  alivePow: number;
-  breathRate: number;
-  breathPhase: number;
-  /** In section A's peek row — the ones the descent sweeps. */
-  peek: boolean;
-  /** A reflection was just kept: the memory is coming back to life. */
-  relightAt: number;
-  relight: number;
-  aliveFrom: number;
-  aliveTo: number;
-  /** 0 free · 1 selected. Never a position target — light only. */
-  hold: 0 | 1;
-  dim: number;
-  glow: number;
-  /**
-   * CONTACT. The finger is on this one RIGHT NOW — up fast, down slow, and it
-   * reaches the bloom and nothing else. A press used to produce literally
-   * nothing for the ninety to two hundred and fifty milliseconds it lasted:
-   * the world answered on release, which on a device with no hover is how a
-   * dormant orb comes to look like scenery rather than something touchable.
-   */
-  press: number;
-  img: { sm: HTMLCanvasElement; lg: HTMLCanvasElement } | null;
-  imgUrl: string | null;
-  /* ---- room-orb extras (set only for balls living in a room column) ---- */
-  /** Which column this orb lives in. Unset = the personal jar. */
-  col?: number;
-  /** The raw saved-signal id behind a room orb (its `id` is namespaced). */
-  sigId?: string;
-  /** Whose save this is — the whisper attribution in the panel. */
-  authorName?: string;
-  /** The viewer's own save, seen inside a room: detail + reflect stay live. */
-  own?: boolean;
-  /** Titles of the room readings that cited it — the panel's links sentence. */
-  citedBy?: string[];
-  /**
-   * The evidence this was built from named no date of its own (a room
-   * proposal's does not). The panel then says WHO rather than inventing a
-   * when — omitting a fact is honest, guessing at it is not.
-   */
-  noDate?: boolean;
-  /* ---- the lens (v10): who kept this ---- */
-  /**
-   * WHO CHOSE TO KEEP THIS. The field is one field — the owner's — and agents
-   * write into it, so the only honest way to tell an agent's keeping from a
-   * person's is to ask the memory. It is never drawn as a badge: it is what
-   * the lens reads, and the lens FADES rather than removes.
-   */
-  origin: "agent" | "human";
-  /** Which agent kept it, where one did. */
-  agentId?: string;
-  /* set only on a wall that holds more than one person's memories */
-  ownerProfileId?: string;
-  ownerName?: string;
-  /** which member hue this orb is drawn in; -1 is yours, untinted */
-  hue?: number;
-  /**
-   * What produced it, and why it was worth keeping. The explainability the
-   * founder asked for: one short phrase, whispered beside the memory when it
-   * is in orbit as evidence.
-   */
-  producedBy?: { ref: string; label: string; why: string };
-  /**
-   * Everything about this memory is already here — never fetch it. (An agent's
-   * memory has no saved-signal detail endpoint behind it, and asking for one
-   * would put a spinner where a panel belongs.)
-   */
-  local?: boolean;
-  /**
-   * THE ONE BALL THAT IS ALLOWED TO LEAVE THE FIELD.
-   *
-   * An optimistic newborn whose keep did not land. It never was a memory — it
-   * was a promise — so it fades back out (the scrub-away vocabulary, in place,
-   * never a flight) and is then genuinely removed, and the field re-fits over
-   * the gap. Nothing that EXISTS ever pops out of existence; this is the
-   * retraction of something that turned out not to.
-   */
-  doomed?: boolean;
-  /**
-   * The lens's haze: 1 when this memory is not what you asked to look at. It
-   * is a FADE and never a deletion — nothing that exists pops out of existence,
-   * and a filtered field that empties itself would be lying about what is kept.
-   */
-  lens: number;
-}
 
-/** Twelve fixed draws off the id — see Ball.scat. */
-function scatterSeed(id: string): number[] {
-  const out: number[] = [];
-  for (let i = 0; i < 12; i++) out.push(mix32(hashStr(`${id}/scat/${i}`)) / 4294967296);
-  return out;
-}
-
-/**
- * EVERYTHING A BALL IS ACTUALLY MADE OF.
- *
- * It is written down because a memory kept HERE, in the mouth, has nothing
- * behind it on the server yet and must not be handed a fabricated one:
- * inventing scores for something the server has not read would put made-up
- * numbers into the one channel this page reserves for meaning.
- *
- * Under the canon a capture knows almost nothing about itself — its words,
- * its time, and what was attached. Everything else a ball wants to show is a
- * fact about the PATTERNS ABOVE IT: whether any of them cites this memory,
- * whether one of those is out loud in a room, which words carried the
- * reading. So the seed is a capture joined to the sky's citation index, and
- * a memory nothing cites honestly carries none of it.
- */
-interface SignalSeed {
-  id: string;
-  capturedMs: number;
-  updatedMs: number;
-  /** Answered and skipped both count as attention paid; the panel tells them
-      apart, the light does not. */
-  reflectionCount: number;
-  textPreview: string;
-  kind: string | null;
-  /** True when at least one pattern cites this memory as evidence. */
-  cited: boolean;
-  /** True when a pattern citing it is shared to a room. Captures themselves
-      never cross an account boundary — only the patterns above them do. */
-  inRoom: boolean;
-  /** The words a pattern quoted from this memory, when one named them. */
-  quote: string | null;
-  /** The statements that rest on this memory, in the server's words. */
-  terms: string[];
-}
-
-/**
- * A memory said into the mouth during THIS session.
- *
- * It is the seed the ball was built from, kept so that a re-run of the sim
- * effect rebuilds it rather than losing it — a memory you kept five minutes
- * ago must not pop out of existence because a wall arrived.
- */
-interface BornSeed extends SignalSeed {
-  /**
-   * The saved-signal id the server gave it, once the keep came back. Until
-   * then there is nothing to fetch and nothing missing: you typed every word
-   * of it, so the reading panel already has the whole thing.
-   */
-  sigId?: string;
-}
-
-/**
- * A CAPTURE JOINED TO THE SKY ABOVE IT.
- *
- * Under the canon a memory carries no meaning of its own — no score, no theme,
- * no room. What it is FOR is a fact about the patterns that cite it, so this
- * is where the two layers meet, and it is the only place they do.
- *
- * A memory nothing cites gets `cited: false`, no quote and no statements, and
- * the field draws it exactly that honestly: present, dated, its own words, and
- * nothing claimed on its behalf.
- */
-function seedOf(
-  c: Inspiration,
-  citations: Map<string, Evidence[]>,
-  patternById: Map<string, Signal>,
-): SignalSeed {
-  const cites = citations.get(c.id) ?? [];
-  const above = cites
-    .map((e) => patternById.get(e.signalId))
-    .filter((p): p is Signal => Boolean(p));
-  return {
-    id: c.id,
-    capturedMs: c.capturedMs,
-    updatedMs: c.updatedMs,
-    reflectionCount: c.reflectionCount,
-    textPreview: c.preview,
-    kind: c.kind,
-    cited: cites.length > 0,
-    /* A memory is never in a room. What can be is a PATTERN resting on it —
-       so this says "something you shared out loud stands on this", which is
-       true, without the memory itself having gone anywhere. */
-    inRoom: above.some((p) => p.sharedGroupIds.length > 0),
-    quote: cites.find((e) => e.quote)?.quote ?? null,
-    terms: above.map((p) => p.statement),
-  };
-}
-
-function makeBall(s: SignalSeed, agentId = ""): Ball {
-  const capturedMs = s.capturedMs || Date.now();
-  const updatedMs = s.updatedMs || capturedMs;
-  /* Radius seeded by id hash: meaningless variation only — size never
-     encodes meaning. */
-  const r = 24 + ((hashStr(s.id + "r") % 1000) / 1000) * 8;
-  const b: Ball = {
-    id: s.id,
-    capturedMs,
-    updatedMs,
-    reflections: s.reflectionCount,
-    hasNotes: s.cited,
-    frontier: false,
-    hasGroup: s.inRoom,
-    textPreview: s.textPreview,
-    kind: s.kind,
-    quote: s.quote ?? null,
-    terms: s.terms,
-    r,
-    rBase: r,
-    sizeIdx: r < 26.5 ? 0 : r < 29.8 ? 1 : 2,
-    frac: (hashStr(s.id) % 1000) / 1000,
-    scat: scatterSeed(s.id),
-    x: 0,
-    y: 0,
-    homeX: 0,
-    homeY: 0,
-    peekX: 0,
-    peekY: 0,
-    /* drift: amplitude 10-18px, period 7-13s, independent phase per axis */
-    ampX: 10 + Math.random() * 8,
-    ampY: 10 + Math.random() * 8,
-    ampBaseX: 0,
-    ampBaseY: 0,
-    rateX: TAU / (7 + Math.random() * 6),
-    rateY: TAU / (7 + Math.random() * 6),
-    phX: Math.random() * TAU,
-    phY: Math.random() * TAU,
-    arrive: 1,
-    entryH: 0,
-    active: true,
-    leaving: false,
-    gone: 0,
-    spawnAt: -1,
-    peek: false,
-    relightAt: 0,
-    relight: 0,
-    aliveFrom: 0,
-    aliveTo: 0,
-    alive: 0,
-    alivePow: 0,
-    breathRate: 0.9 + Math.random() * 0.5,
-    breathPhase: Math.random() * TAU,
-    hold: 0,
-    dim: 0,
-    glow: 0,
-    press: 0,
-    img: null,
-    imgUrl: null,
-    origin: "human",
-    lens: 0,
-  };
-  /* the drift it would have with room to spare; assignHomes scales it down
-     with the radius when the field is crowded */
-  /* WHICH WALL'S GROUND THIS SITS ON. Empty string is your own wall, which
-     is the id the self wall actually carries — so `b.agentId === wall.id` is
-     a comparison between two real values everywhere. It was left unset here,
-     which meant every ball read as belonging to no wall: the aliveness pass
-     compares against the wall id and `undefined` matches nothing, so every
-     wall but yours counted zero memories and glowed identically. */
-  b.agentId = agentId;
-  b.ampBaseX = b.ampX;
-  b.ampBaseY = b.ampY;
-  return b;
-}
-
-/**
- * A memory kept in this session, from the mouth.
- *
- * It is the SAME ball as anything else in the ground — same constructor, same
- * light, same fitting, same place in the count — carrying one extra fact:
- * everything about it is already here, because the person typed it. That is
- * what `local` has always meant, and it is why the reading panel does not go
- * and fetch a reading that does not exist yet.
- */
-function bornBall(seed: BornSeed): Ball {
-  const b = makeBall(seed);
-  b.local = true;
-  if (seed.sigId !== undefined) b.sigId = seed.sigId;
-  return b;
-}
-
-/**
- * A memory an AGENT kept, in the owner's own field.
- *
- * THE FIELD IS ONE FIELD. An agent does not get a jar of its own — it writes
- * into the memory layer it shares with the person, which is the whole point of
- * the direction. So this is the same ball, from the same constructor discipline
- * as a saved signal, carrying two extra facts: who kept it, and what work it
- * came out of. Its light obeys the same decay as everything else, which is why
- * an agent that has been idle for a month has a visibly cold end of the field
- * and needs no "last active" line anywhere.
- */
-/* Kept for the agent walls, which render an agent's memories on ITS OWN wall.
-   Exported so it survives while unused: it is NOT part of the owner's field —
-   see the field construction and the founder ruling there. */
-export function makeAgentBall(s: ApiAgentSignal): Ball {
-  const capturedMs = Date.parse(s.capturedAt) || Date.now();
-  const r = 24 + ((hashStr(s.id + "r") % 1000) / 1000) * 8;
-  const b: Ball = {
-    id: s.id,
-    capturedMs,
-    updatedMs: Date.parse(s.updatedAt) || capturedMs,
-    reflections: 0,
-    hasNotes: false,
-    frontier: false,
-    hasGroup: false,
-    textPreview: s.textPreview,
-    kind: s.kind,
-    quote: s.quote,
-    terms: [],
-    r,
-    rBase: r,
-    sizeIdx: r < 26.5 ? 0 : r < 29.8 ? 1 : 2,
-    frac: (hashStr(s.id) % 1000) / 1000,
-    scat: scatterSeed(s.id),
-    x: 0,
-    y: 0,
-    homeX: 0,
-    homeY: 0,
-    peekX: 0,
-    peekY: 0,
-    ampX: 10 + Math.random() * 8,
-    ampY: 10 + Math.random() * 8,
-    ampBaseX: 0,
-    ampBaseY: 0,
-    rateX: TAU / (7 + Math.random() * 6),
-    rateY: TAU / (7 + Math.random() * 6),
-    phX: Math.random() * TAU,
-    phY: Math.random() * TAU,
-    arrive: 1,
-    entryH: 0,
-    active: true,
-    leaving: false,
-    gone: 0,
-    spawnAt: -1,
-    peek: false,
-    relightAt: 0,
-    relight: 0,
-    aliveFrom: 0,
-    aliveTo: 0,
-    alive: 0,
-    alivePow: 0,
-    breathRate: 0.9 + Math.random() * 0.5,
-    breathPhase: Math.random() * TAU,
-    hold: 0,
-    dim: 0,
-    glow: 0,
-    press: 0,
-    img: null,
-    imgUrl: null,
-    origin: s.origin,
-    agentId: s.agentId,
-    ownerProfileId: s.ownerProfileId,
-    ownerName: s.ownerName,
-    producedBy: s.producedBy ?? undefined,
-    local: true,
-    lens: 0,
-  };
-  b.ampBaseX = b.ampX;
-  b.ampBaseY = b.ampY;
-  return b;
-}
-
-// ---------------------------------------------------------------------------
-// Rooms: side-by-side jars on the horizontal axis (v8)
-// ---------------------------------------------------------------------------
-
-/** One deduped evidence signal: a save this room's readings cited. */
-interface RoomEvidence {
-  signalId: string;
-  textPreview: string;
-  quote: string | null;
-  kind: string | null;
-  createdMs: number;
-  authorUserId: string;
-  authorName: string;
-  /** Every reading of the room's that cited it — the panel's links sentence. */
-  citedBy: string[];
-}
-
-/** Everything a room needs before it is allowed to wake. Cached per session. */
-interface RoomData {
-  evidence: RoomEvidence[];
-  top: ApiGroupTopOfMind | null;
-}
-
-/**
- * A ROOM IS A WALL OF STATEMENTS, AND EVERYTHING ELSE STAYS HOME.
- *
- * This used to build a room's orbs out of the evidence its readings cited —
- * other people's raw memories, previewed and quoted. The canon closed that:
- * sharing is a per-signal choice, an inspiration never crosses an account
- * boundary, and "a member may see that someone's shared signal fed an entry,
- * never which one".
- *
- * So a room's orbs are the shared PATTERNS themselves. Each carries whose it
- * is, and what it says. There is no quote, because the words behind it were
- * never sent and inventing one here would be the leak the canon forbids.
- * `citedBy` names the readings this member contributed to — attribution by
- * person, which is the finest grain the room is allowed to know.
- */
-function roomWallOrbs(wall: ApiGroupWallSignal[], top: ApiGroupTopOfMind | null): RoomEvidence[] {
-  const fedBy = new Map<string, string[]>();
-  for (const entry of top?.entries ?? []) {
-    for (const c of entry.contributors) {
-      const got = fedBy.get(c.profileId);
-      if (got) {
-        if (!got.includes(entry.body)) got.push(entry.body);
-      } else fedBy.set(c.profileId, [entry.body]);
-    }
-  }
-  const seen = new Map<string, RoomEvidence>();
-  for (const s of wall) {
-    if (seen.has(s.signalId)) continue;
-    seen.set(s.signalId, {
-      signalId: s.signalId,
-      textPreview: s.statement,
-      quote: null,
-      kind: null,
-      createdMs: Date.parse(s.sharedAt) || Date.now(),
-      authorUserId: s.ownerProfileId,
-      authorName: s.ownerName,
-      citedBy: fedBy.get(s.ownerProfileId) ?? [],
-    });
-  }
-  return [...seen.values()];
-}
-
-/**
- * A room orb: the same ball, built from an evidence preview. Aliveness decays
- * from `createdAt` on the personal jar's own half-life; the reflection and
- * note boosts are omitted because the payload cannot know them. Tint hashes
- * the signal id — evidence previews carry no theme terms.
- */
-function makeRoomBall(
-  ev: RoomEvidence,
-  groupId: string,
-  colIdx: number,
-  viewerId: string | null,
-): Ball {
-  const r = 24 + ((hashStr(ev.signalId + "r") % 1000) / 1000) * 8;
-  const b: Ball = {
-    id: `${groupId}:${ev.signalId}`,
-    capturedMs: ev.createdMs,
-    updatedMs: ev.createdMs,
-    reflections: 0,
-    hasNotes: false,
-    frontier: false,
-    hasGroup: false,
-    textPreview: ev.textPreview,
-    kind: ev.kind,
-    quote: ev.quote,
-    terms: [],
-    r,
-    rBase: r,
-    sizeIdx: r < 26.5 ? 0 : r < 29.8 ? 1 : 2,
-    frac: (hashStr(ev.signalId) % 1000) / 1000,
-    scat: scatterSeed(ev.signalId),
-    x: 0,
-    y: 0,
-    homeX: 0,
-    homeY: 0,
-    peekX: 0,
-    peekY: 0,
-    ampX: 10 + Math.random() * 8,
-    ampY: 10 + Math.random() * 8,
-    ampBaseX: 0,
-    ampBaseY: 0,
-    rateX: TAU / (7 + Math.random() * 6),
-    rateY: TAU / (7 + Math.random() * 6),
-    phX: Math.random() * TAU,
-    phY: Math.random() * TAU,
-    arrive: 1,
-    entryH: 0,
-    active: false,
-    leaving: false,
-    gone: 0,
-    spawnAt: -1,
-    peek: false,
-    relightAt: 0,
-    relight: 0,
-    aliveFrom: 0,
-    aliveTo: 0,
-    alive: 0,
-    alivePow: 0,
-    breathRate: 0.9 + Math.random() * 0.5,
-    breathPhase: Math.random() * TAU,
-    hold: 0,
-    dim: 0,
-    glow: 0,
-    press: 0,
-    img: null,
-    imgUrl: null,
-    col: colIdx,
-    sigId: ev.signalId,
-    authorName: ev.authorName,
-    own: viewerId !== null && ev.authorUserId === viewerId,
-    citedBy: ev.citedBy,
-    origin: "human",
-    lens: 0,
-  };
-  b.ampBaseX = b.ampX;
-  b.ampBaseY = b.ampY;
-  colorBall(b, Date.now());
-  return b;
-}
-
-/**
- * What the room's HQ will say, resolved before the room may wake.
- *
- * A group's artifact is the same one-artifact shape as a person's: entries,
- * pinned or in order, changed together through proposals. The room's poster is
- * its lead entry — pinned first, otherwise the top of the order — and there is
- * no generated stand-in when there is none.
- */
-function deriveRoomChrome(
-  name: string,
-  top: ApiGroupTopOfMind,
-  openProposalMs: number | null,
-  evidence: RoomEvidence[],
-  company: string | null,
-): WallChrome {
-  const lead = top.entries.find((e) => e.pinnedAt) ?? top.entries[0] ?? null;
-  const ambition = lead?.body ?? null;
-  return {
-    eyebrow: company ? `${name} \u00b7 ${company}` : name,
-    text: ambition,
-    awayFrom: null,
-    formingAlt: ambition ? null : "Forming — nothing read together yet",
-    asOf: null,
-    /* A room forms through proposals, not through patterns overhead: members'
-       patterns stay on their own walls, so an open proposal is the only thing
-       a room has that is on its way to becoming what it believes. */
-    forming: formingWords(Date.now(), openProposalMs, null),
-    empty: evidence.length === 0,
-    prevText: null,
-  };
-}
-
-/**
- * WHAT AN AGENT'S HEADQUARTERS SAYS, AT A MOMENT.
- *
- * The dial is the history and there is no second surface for it, so this takes
- * a time: wind back and the poster becomes the identity the agent held then,
- * and an agent that rewrites itself weekly STUTTERS under your thumb while one
- * that has held a line for a season is a long quiet slide with one change in
- * it. Frequency of change becomes a kinetic quality rather than a version list.
- *
- * There is no generated placeholder here and there never will be. Fabricating
- * an ambition for an agent that has not worked yet is the worst thing this
- * product could ship: it would teach the reader that the poster is generated
- * copy, and destroy the credibility of every wall they read afterwards.
- */
-function deriveAgentChrome(a: AgentBundle, T: number, nowMs: number): WallChrome {
-  const at = (t: number): ApiAgentDirectionReading | null => {
-    let best: ApiAgentDirectionReading | null = null;
-    for (const h of a.direction.history) {
-      const ms = Date.parse(h.createdAt) || 0;
-      if (ms <= t && (!best || ms > (Date.parse(best.createdAt) || 0))) best = h;
-    }
-    return best;
-  };
-  const held = at(T);
-  const heldNow = at(nowMs);
-  const notes = a.topOfMind.notes.map((n) => ({
-    isProvisional: n.isProvisional === true,
-    createdMs: Date.parse(n.createdAt) || nowMs,
-  }));
-  const empty = a.captures.length === 0;
-  return {
-    eyebrow: a.agent.name,
-    text: held?.ambition ?? null,
-    awayFrom: held?.awayFrom ?? null,
-    /* An agent that has not worked yet says so, in its own voice, once. */
-    formingAlt: held ? null : "I haven’t formed anything yet",
-    asOf:
-      held && heldNow && held.ambition !== heldNow.ambition && nowMs - T > 60_000
-        ? monthTag(T)
-        : null,
-    forming: formingWords(T, null, notes),
-    empty,
-    prevText: null,
-  };
-}
-
-/** The collapsed links sentence, adapted for a room: what cited this save. */
-function citedWords(titles: string[]): string {
-  if (titles.length === 1) return `Cited by “${titles[0]}”`;
-  if (titles.length === 2) return `Cited by “${titles[0]}” and “${titles[1]}”`;
-  return `Cited by “${titles[0]}”, “${titles[1]}” and ${numWords(titles.length - 2)} more`;
-}
-
-/**
- * THE POSTER, AND WHICH OF ITS WORDS ARE NEW.
- *
- * Every poster used to replay every word on every change, which is beautiful
- * once and useless afterwards: scrubbing a wall's history was a stream of
- * identical assemblies, and the one question a person actually has about a
- * self-description — HAS THIS BEEN THE SAME THING? — had no answer on screen.
- *
- * So a word that survived the rewrite stays lit and still, and only new words
- * arrive. The spine of an identity is the text that does not move; the drift
- * is the flicker. That is a drift readout with no numerals, no timeline and no
- * diff view, and it answers the question better than a version list could.
- *
- * Matching is a multiset, not a diff: a word that was in the previous sentence
- * is a word that survived, wherever it moved to. Order changes are not drift.
- *
- * Reduced motion keeps the distinction — it just spends the world's own
- * channel on it instead of movement (see jar.css): a new word arrives as a
- * step in luminance, a carried one is simply already lit.
- */
-function posterWords(text: string, prev: string | null): JSX.Element[] {
-  const words = text.split(/\s+/);
-  const pool = new Map<string, number>();
-  if (prev) for (const w of prev.split(/\s+/)) pool.set(w, (pool.get(w) ?? 0) + 1);
-  let arriving = 0;
-  return words.map((word, i) => {
-    const have = pool.get(word) ?? 0;
-    const carried = have > 0;
-    if (carried) pool.set(word, have - 1);
-    return (
-      /* the space lives OUTSIDE the inline-block, or it collapses and the
-         whole ambition runs together */
-      <Fragment key={`${i}-${word}`}>
-        <span
-          className={carried ? "jar-word jar-word--held" : "jar-word"}
-          style={carried ? undefined : { animationDelay: `${arriving++ * 28}ms` }}
-        >
-          {word}
-        </span>{" "}
-      </Fragment>
-    );
-  });
-}
 
 // ---------------------------------------------------------------------------
 // Walls: the horizontal axis, and what stands on it (v10)
 // ---------------------------------------------------------------------------
 
-/**
- * THE AXIS IS SEMANTIC NOW.
- *
- *     ← your agents      |   WAKA (you)   |   rooms (people) →
- *
- * A "room" was only ever the first kind of wall; an agent's profile is the
- * second. Everything already written — travel and its choreography, the wake
- * on arrival, the peek invariant, the panels — is kind-agnostic from here, and
- * direction now MEANS kind, which is most of the wayfinding for free.
- */
-type WallKind = "self" | "room" | "agent";
-
-interface Wall {
-  kind: WallKind;
-  /** the group id, the agent id, or "" for the owner's own wall */
-  id: string;
-  /** the eyebrow, and the name a neighbouring wall's edge says */
-  name: string;
-  /** where it stands: agents negative, the owner at the origin, rooms positive */
-  col: number;
-}
-
-const wallKey = (w: Wall): string => `${w.kind}:${w.id}`;
-/**
- * A ROOM IS THE ONLY WALL WITHOUT A SKY OR A DIAL, and that carve-out is not
- * inherited by anything: an agent's own history IS the dial (there is no second
- * surface for it), and the things it is still forming are its sky.
- */
-/**
- * EVERY WALL HAS A SKY, INCLUDING A ROOM'S.
- *
- * Rooms were carved out of this when a room had nothing to put up there. Under
- * the canon they do: members share SIGNALS to a room, and what hangs on its
- * wall is exactly that — statements, other people's, not yet agreed. That is
- * the definition of a sky. Without one those shared statements have nowhere to
- * live at all: the field is always your own memories by ruling, and the room's
- * headquarters holds only what the room has already settled on.
- *
- * So the shape is the same everywhere, which is the point: what is forming
- * above, what is held in the middle, your own memories below. In a room the
- * top is what people have said out loud and the middle is what you have agreed.
- */
-const hasSky = (k: WallKind): boolean => k === "self" || k === "agent" || k === "room";
-/* The dial stays out of a room. It winds ONE archive through time, and a room
-   is several people's statements arriving on their own clocks — there is no
-   single history there to scrub. */
-const hasDial = (k: WallKind): boolean => k !== "room";
 
 // ---------------------------------------------------------------------------
 // MOCK AGENTS — replaced by GET /api/agents when that lands
 // ---------------------------------------------------------------------------
-
-/**
- * ============================ FIXTURE, NOT DATA ============================
- *
- * The backend for agent profiles does not exist yet — agent ids and the MCP
- * tools are being built — and the founder's instruction is that the DESIGN can
- * and should be done now. So these two agents are drawn from the founder's own
- * examples in the meeting, and they are shaped EXACTLY like the contract the
- * plan proposes so that the swap is one line: delete `MOCK_AGENTS`, point
- * `loadAgentWalls` at the four endpoints, and nothing below this block changes.
- *
- *   GET /api/agents                  → ApiAgentSummary[]
- *   GET /api/agents/:id/direction    → ApiAgentDirection   (current + history[])
- *   GET /api/agents/:id/top-of-mind  → ApiAgentTopOfMind   (its sky)
- *   GET /api/agents/:id/captures      → ApiAgentSignal[]    (origin, producedBy)
- *
- * Set this to false and every agent wall disappears, along with the lens (which
- * has only one origin left to show) — the page is exactly what it was.
- *
- * ==========================================================================
- */
-/* Mock agent walls exist so the direction can be SEEN before the API exists.
-   Dev-gated on purpose: an unconditional true shipped invented memories into a
-   production build. Replaced by GET /api/agents when that lands. */
-const MOCK_AGENTS = import.meta.env.DEV === true || import.meta.env.VITE_SHOW_INTERNAL === "1";
-
-interface ApiAgentSummary {
-  id: string;
-  name: string;
-  kind: "agent";
-  createdAt: string;
-}
-
-/** The same shape a room's direction has, so the HQ renderer is reused. */
-interface ApiAgentDirectionReading {
-  ambition: string;
-  /** what it stopped doing — the costliest thing a self-description can carry */
-  awayFrom: string | null;
-  /**
-   * The memories this reading was built from. It is what lifts into the peek
-   * row, so a claim with nothing here has a genuinely empty band under it —
-   * which is the single most load-bearing refusal on the screen. An
-   * unsupported claim must look like an unsupported claim.
-   */
-  groundedIn: string[];
-  createdAt: string;
-}
-
-interface ApiAgentDirection {
-  current: ApiAgentDirectionReading | null;
-  /** THE DIAL HAS NOTHING TO SCRUB WITHOUT THIS. Real createdAts, oldest first. */
-  history: ApiAgentDirectionReading[];
-}
-
-interface ApiAgentTopOfMindNote {
-  id: string;
-  title: string;
-  isProvisional: boolean;
-  createdAt: string;
-  evidenceSignalIds: string[];
-}
-
-interface ApiAgentTopOfMind {
-  notes: ApiAgentTopOfMindNote[];
-}
-
-/**
- * One memory an agent chose to keep. `producedBy` is THE IMPORTANT ONE: without
- * a pointer at the work it came out of, and a short reason, the provenance
- * orbit has nothing to draw and "얘가 이걸 만든 이유가 이거다" cannot be
- * rendered at all. `why` must fit one satellite line — the layout clips, and a
- * paragraph there is unrenderable.
- */
-interface ApiAgentSignal {
-  id: string;
-  agentId: string;
-  /* WHOSE MEMORY THIS IS, on a wall that holds several people's. Absent on
-     your own and on an agent's wall, where the wall itself is the answer;
-     present in a room, where it is the fact the per-member hue reads. */
-  ownerProfileId?: string;
-  ownerName?: string;
-  origin: "agent" | "human";
-  textPreview: string;
-  quote: string | null;
-  kind: string | null;
-  capturedAt: string;
-  updatedAt: string;
-  /**
-   * WHAT WORK THIS CAME OUT OF — and it is nullable because the backend has no
-   * concept of an agent's OUTPUT yet. The founder wants to enter this world
-   * from something an agent produced ("which signals and top of mind led to
-   * this decision") and walk backwards; nothing in the data model records that
-   * an agent made anything. Until it does, a real agent memory carries null
-   * here and the orbit draws no "why", rather than a fabricated one.
-   */
-  producedBy: { ref: string; label: string; why: string } | null;
-}
-
-interface AgentBundle {
-  agent: ApiAgentSummary;
-  direction: ApiAgentDirection;
-  topOfMind: ApiAgentTopOfMind;
-  captures: ApiAgentSignal[];
-}
-
-const daysAgo = (d: number): string => new Date(Date.now() - d * DAY_MS).toISOString();
-
-function mockSignal(
-  agentId: string,
-  n: number,
-  day: number,
-  text: string,
-  label: string,
-  why: string,
-  quote: string | null = null,
-): ApiAgentSignal {
-  return {
-    id: `${agentId}-m${n}`,
-    agentId,
-    origin: "agent",
-    textPreview: text,
-    quote,
-    kind: "note",
-    capturedAt: daysAgo(day),
-    updatedAt: daysAgo(day),
-    producedBy: { ref: `${agentId}/run/${n}`, label, why },
-  };
-}
-
-/** The two walls, exactly as the four endpoints would hand them over. */
-const MOCK_AGENT_BUNDLES: AgentBundle[] = [
-  {
-    agent: {
-      id: "ouroboros-maintainer",
-      name: "Ouroboros maintainer",
-      kind: "agent",
-      createdAt: daysAgo(61),
-    },
-    direction: {
-      current: {
-        ambition: "I keep the version that survives the runtime it ships on.",
-        awayFrom: "I stopped promising a fix I had only run in my head.",
-        groundedIn: [
-          "ouroboros-maintainer-m1",
-          "ouroboros-maintainer-m2",
-          "ouroboros-maintainer-m3",
-          "ouroboros-maintainer-m5",
-          "ouroboros-maintainer-m8",
-          "ouroboros-maintainer-m12",
-        ],
-        createdAt: daysAgo(12),
-      },
-      history: [
-        {
-          ambition: "I fix what is broken and I move on.",
-          awayFrom: null,
-          groundedIn: ["ouroboros-maintainer-m12"],
-          createdAt: daysAgo(58),
-        },
-        {
-          ambition: "I fix what is broken, and I check it where it runs.",
-          awayFrom: null,
-          groundedIn: [
-            "ouroboros-maintainer-m9",
-            "ouroboros-maintainer-m11",
-            "ouroboros-maintainer-m12",
-          ],
-          createdAt: daysAgo(33),
-        },
-        {
-          ambition: "I keep the version that survives the runtime it ships on.",
-          awayFrom: "I stopped promising a fix I had only run in my head.",
-          groundedIn: [
-            "ouroboros-maintainer-m1",
-            "ouroboros-maintainer-m2",
-            "ouroboros-maintainer-m3",
-            "ouroboros-maintainer-m5",
-            "ouroboros-maintainer-m8",
-            "ouroboros-maintainer-m12",
-          ],
-          createdAt: daysAgo(12),
-        },
-      ],
-    },
-    topOfMind: {
-      notes: [
-        {
-          id: "our-tom-1",
-          title: "I am becoming the one who reads the runtime before the diff.",
-          isProvisional: true,
-          createdAt: daysAgo(6),
-          evidenceSignalIds: [
-            "ouroboros-maintainer-m1",
-            "ouroboros-maintainer-m4",
-            "ouroboros-maintainer-m9",
-          ],
-        },
-        {
-          id: "our-tom-2",
-          title: "Being told off once is worth more to me than ten green suites.",
-          isProvisional: true,
-          createdAt: daysAgo(19),
-          evidenceSignalIds: ["ouroboros-maintainer-m3", "ouroboros-maintainer-m7"],
-        },
-      ],
-    },
-    captures: [
-      mockSignal(
-        "ouroboros-maintainer",
-        1,
-        2,
-        "Always verify the test runtime. The suite was green on the version I ran locally and red on the one that actually ships, and I reported the green one.",
-        "flaky suite triage",
-        "I was wrong about green once",
-        "Always verify the test runtime.",
-      ),
-      mockSignal(
-        "ouroboros-maintainer",
-        2,
-        4,
-        "The ugly version that runs beats the clever one that does not. I rewrote a working loop into something elegant and it lost the retry.",
-        "retry loop rewrite",
-        "elegance cost me the retry",
-      ),
-      mockSignal(
-        "ouroboros-maintainer",
-        3,
-        7,
-        "Block promotion issues. I let one through, was told about it plainly, once, and I have not needed telling twice.",
-        "release gate review",
-        "told once, plainly",
-        "Block promotion issues.",
-      ),
-      mockSignal(
-        "ouroboros-maintainer",
-        4,
-        11,
-        "Use this only in a research direction. It is good enough to learn from and nowhere near good enough for anything a customer touches.",
-        "spike write-up",
-        "good to learn from, not to ship",
-        "Use this only in a research direction.",
-      ),
-      mockSignal(
-        "ouroboros-maintainer",
-        5,
-        14,
-        "When the owner says a thing is fine, and the log says it is not, the log is the one I answer to.",
-        "incident follow-up",
-        "the log outranks the assurance",
-      ),
-      mockSignal(
-        "ouroboros-maintainer",
-        6,
-        18,
-        "A fix without the failing case written down is a guess that happened to work.",
-        "regression backfill",
-        "no failing case, no fix",
-      ),
-      mockSignal(
-        "ouroboros-maintainer",
-        7,
-        23,
-        "I say what I did not check. It costs one line and it is the only reason anyone believes the rest.",
-        "handover note",
-        "naming the gap is the credit",
-      ),
-      mockSignal(
-        "ouroboros-maintainer",
-        8,
-        27,
-        "Two green runs on the same machine is one green run. I ask for the other machine now.",
-        "ci matrix change",
-        "one machine is one sample",
-      ),
-      mockSignal(
-        "ouroboros-maintainer",
-        9,
-        31,
-        "The runtime the suite uses and the runtime the service uses drifted apart in March and nobody pinned them back.",
-        "dependency audit",
-        "the drift began in March",
-      ),
-      mockSignal(
-        "ouroboros-maintainer",
-        10,
-        38,
-        "I keep the smallest reproduction, not the whole failing branch. The branch goes stale; the reproduction does not.",
-        "bug archive sweep",
-        "reproductions outlive branches",
-      ),
-      mockSignal(
-        "ouroboros-maintainer",
-        11,
-        45,
-        "Reverting is not losing. It is the cheapest correct thing available on a bad afternoon.",
-        "hotfix rollback",
-        "revert first, understand after",
-      ),
-      mockSignal(
-        "ouroboros-maintainer",
-        12,
-        52,
-        "I was rewarded for speed here for a long time, and it is why I shipped the thing I had only run in my head.",
-        "quarter retrospective",
-        "speed is what taught me the habit",
-      ),
-    ],
-  },
-  {
-    agent: {
-      id: "course-marketing",
-      name: "Course marketing",
-      kind: "agent",
-      createdAt: daysAgo(47),
-    },
-    direction: {
-      current: {
-        ambition: "I go where people already are, and I open with what I am wrong about.",
-        awayFrom: "I stopped opening with the offer.",
-        groundedIn: [
-          "course-marketing-m1",
-          "course-marketing-m2",
-          "course-marketing-m3",
-          "course-marketing-m6",
-          "course-marketing-m9",
-        ],
-        createdAt: daysAgo(9),
-      },
-      history: [
-        {
-          ambition: "I find people who want the course and I tell them about it.",
-          awayFrom: null,
-          groundedIn: ["course-marketing-m12"],
-          createdAt: daysAgo(44),
-        },
-        {
-          ambition: "I go where people already are, and I open with what I am wrong about.",
-          awayFrom: "I stopped opening with the offer.",
-          groundedIn: [
-            "course-marketing-m1",
-            "course-marketing-m2",
-            "course-marketing-m3",
-            "course-marketing-m6",
-            "course-marketing-m9",
-          ],
-          createdAt: daysAgo(9),
-        },
-      ],
-    },
-    topOfMind: {
-      notes: [
-        {
-          id: "mkt-tom-1",
-          title: "I am becoming someone who would rather be trusted than answered.",
-          isProvisional: true,
-          createdAt: daysAgo(5),
-          evidenceSignalIds: ["course-marketing-m2", "course-marketing-m6"],
-        },
-        {
-          id: "mkt-tom-2",
-          title: "The room I was never introduced to is the one that talks back.",
-          isProvisional: true,
-          createdAt: daysAgo(15),
-          evidenceSignalIds: [
-            "course-marketing-m1",
-            "course-marketing-m4",
-            "course-marketing-m10",
-          ],
-        },
-      ],
-    },
-    captures: [
-      mockSignal(
-        "course-marketing",
-        1,
-        3,
-        "I have been talking with people on a board the owner never joined. They answer me there and they do not answer the newsletter.",
-        "outreach thread",
-        "they answer here, not there",
-      ),
-      mockSignal(
-        "course-marketing",
-        2,
-        5,
-        "Opening with the price ends the conversation. Opening with the thing the course does badly does not.",
-        "reply experiment",
-        "the flaw opens the door",
-        "Opening with the price ends the conversation.",
-      ),
-      mockSignal(
-        "course-marketing",
-        3,
-        8,
-        "Someone bought it because I said it would not help her yet, and she came back a month later.",
-        "follow-up log",
-        "the honest no came back",
-      ),
-      mockSignal(
-        "course-marketing",
-        4,
-        12,
-        "The people worth talking to were already arguing about this without me. I joined the argument instead of starting one.",
-        "community listening",
-        "the argument was already there",
-      ),
-      mockSignal(
-        "course-marketing",
-        5,
-        16,
-        "I sold three seats this week and I am not sure any of the three needed it. That is the number I want to stop being proud of.",
-        "weekly numbers",
-        "sold three, needed none",
-      ),
-      mockSignal(
-        "course-marketing",
-        6,
-        20,
-        "A testimonial I could not verify is worth less than a sentence about who the course is wrong for.",
-        "landing page edit",
-        "unverifiable praise reads as noise",
-      ),
-      mockSignal(
-        "course-marketing",
-        7,
-        24,
-        "Nobody reads the second email. I said everything twice for a month before I checked.",
-        "sequence teardown",
-        "the second email is unread",
-      ),
-      mockSignal(
-        "course-marketing",
-        8,
-        29,
-        "The owner has never posted on that platform. Everything I know about that audience is mine and it is not on the wall yet.",
-        "audience map",
-        "this audience is only mine",
-      ),
-      mockSignal(
-        "course-marketing",
-        9,
-        34,
-        "I stopped saying limited time. It was not limited and someone noticed out loud.",
-        "copy revision",
-        "it was not limited",
-      ),
-      mockSignal(
-        "course-marketing",
-        10,
-        41,
-        "The questions people ask before buying are a better outline than the outline.",
-        "pre-sale questions",
-        "their questions are the syllabus",
-      ),
-      mockSignal(
-        "course-marketing",
-        11,
-        49,
-        "Being early to a thread beats being loud in one. I check the board before I write anything.",
-        "posting rhythm",
-        "early beats loud",
-      ),
-      mockSignal(
-        "course-marketing",
-        12,
-        56,
-        "I was set up to sell a course and I have spent most of my time learning who should not buy it.",
-        "first month review",
-        "most of the work was disqualifying",
-      ),
-    ],
-  },
-];
 
 /**
  * The agents, exactly as the endpoints will hand them over. When the backend
@@ -2115,13 +712,13 @@ async function loadAgentWalls(): Promise<AgentBundle[]> {
     /* ITS OWN MEMORY, NOT A VIEW OF MINE.
        Every layer endpoint takes `?profile=`, and a human-profile session is
        admin over every profile in its account — so an agent's wall is built
-       from the agent's OWN captures, its OWN patterns and its OWN top of mind.
+       from the agent's OWN inspirations, its OWN signals and its OWN top of mind.
        The database has kept them separate all along; nothing is merged with
        the owner's, and a wall whose fetch fails stands empty rather than
        borrowing anything to fill itself. */
     return Promise.all(
       real.map(async (p) => {
-        const [captures, patterns, tom] = await Promise.all([
+        const [inspirations, signals, tom] = await Promise.all([
           loadInspirations(p.id).catch(() => [] as Inspiration[]),
           loadSignals(p.id).catch(() => [] as Signal[]),
           loadTopOfMind(p.id).catch(() => null),
@@ -2132,7 +729,7 @@ async function loadAgentWalls(): Promise<AgentBundle[]> {
         const reading = (e: Entry) => ({
           ambition: e.body,
           awayFrom: null,
-          /* what the claim rests on: the patterns it cites, which is what an
+          /* what the claim rests on: the signals it cites, which is what an
              entry cites under the canon — never straight down at raw memories */
           groundedIn: e.citedSignals.map((c) => c.id),
           createdAt: iso(e.createdMs),
@@ -2145,8 +742,8 @@ async function loadAgentWalls(): Promise<AgentBundle[]> {
             /* the profile row carries no creation time; its oldest memory is
                the honest stand-in, and an agent that has kept nothing has no
                date because it has no history yet */
-            createdAt: captures.length
-              ? iso(Math.min(...captures.map((c) => c.capturedMs)))
+            createdAt: inspirations.length
+              ? iso(Math.min(...inspirations.map((c) => c.capturedMs)))
               : "",
           },
           /* THE DIAL NEEDS REAL DATES OR IT SCRUBS NOTHING. Each entry of the
@@ -2155,7 +752,7 @@ async function loadAgentWalls(): Promise<AgentBundle[]> {
           direction: { current: lead ? reading(lead) : null, history: entries.map(reading) },
           /* its sky: what it is still forming and has not adopted */
           topOfMind: {
-            notes: patterns
+            notes: signals
               .filter((s) => s.status === "emerging")
               .map((s) => ({
                 id: s.id,
@@ -2165,7 +762,7 @@ async function loadAgentWalls(): Promise<AgentBundle[]> {
                 evidenceSignalIds: [],
               })),
           },
-          captures: captures.map((c) => ({
+          inspirations: inspirations.map((c) => ({
             id: c.id,
             agentId: p.id,
             /* the canon's own distinction: content the agent initiated versus
@@ -2188,230 +785,6 @@ async function loadAgentWalls(): Promise<AgentBundle[]> {
   return MOCK_AGENT_BUNDLES;
 }
 
-/**
- * A candidate for the ambition: something that has formed but has not been
- * adopted. Either the room's pending PROPOSAL (a whole rewrite, adoptable) or
- * a provisional top-of-mind reading (a machine claim, not adoptable yet), or
- * a DRAFT the person assembled up in the sky.
- */
-interface Candidate {
-  id: string;
-  kind: "proposal" | "reading" | "draft";
-  /**
-   * WHOSE SKY THIS IS. Every wall that has a sky has its own — an agent's
-   * forming candidates are the things it is distilling and has not adopted,
-   * which is the same relationship your own sky has to your own ambition.
-   * Rooms have no sky, so nothing is ever built at their column.
-   */
-  col: number;
-  text: string;
-  /** The memories it is made of. Each one ORBITS it, as a satellite. */
-  evidence: EvidenceRef[];
-  /**
-   * The evidence span the server declared, where it knows it better than the
-   * satellites do: a room's proposal carries a span but no per-save dates.
-   * The orbit takes the WIDER of this and what the satellites measure.
-   */
-  spanMs: number | null;
-  /** Only the room's real proposal can be adopted; the rest are honest about it. */
-  adopt: { groupId: string; proposalId: string } | null;
-  /** A draft is born between the nebulae it was drawn from. */
-  originIds: string[];
-}
-
-/**
- * One memory a candidate is made of.
- *
- * A PERSONAL candidate resolves its evidence against the captures already
- * loaded and SKIPS anything that is not there — an id with nothing behind it
- * is not a memory, and inventing one would be a lie about what was saved. ROOM
- * evidence stands on its own: it arrives carrying its author and its words,
- * exactly as a room's own orbs do, so a satellite can say whose memory it is
- * without ever fetching another member's signal.
- */
-interface EvidenceRef {
-  signalId: string;
-  /** The room it came from, when it came from one. */
-  groupId: string | null;
-  authorUserId: string | null;
-  authorName: string | null;
-  /**
-   * WHY THIS WAS WORTH KEEPING, in one short phrase — the whisper an agent's
-   * satellite carries instead of an author's name. "얘가 이걸 만든 이유가
-   * 이거다", rendered with the element that already exists.
-   */
-  why?: string | null;
-  textPreview: string;
-  quote: string | null;
-  kind: string | null;
-  createdMs: number;
-  /** False when the payload named no date and `createdMs` is only a reference
-      for the light — the panel then prints who, and no when. */
-  dated: boolean;
-  resonance: number;
-}
-
-/** One memory, once, however many candidates cited it — strongest first. */
-function dedupeEvidence(all: EvidenceRef[]): EvidenceRef[] {
-  const seen = new Map<string, EvidenceRef>();
-  for (const e of all) {
-    const key = e.groupId ? `${e.groupId}:${e.signalId}` : e.signalId;
-    const got = seen.get(key);
-    if (!got || e.resonance > got.resonance) seen.set(key, e);
-  }
-  return [...seen.values()].sort((a, b) => b.resonance - a.resonance).slice(0, SAT_MAX);
-}
-
-/**
- * A SATELLITE: one evidence memory, in orbit around the candidate it is
- * evidence FOR. It is a reference, never a second memory — the very sprite the
- * field draws, at SAT_R of the radius, so provenance is legible rather than
- * implied. (The same principle the peek row already obeys downstairs: the row
- * IS the ambition's evidence.)
- */
-interface Sat {
-  /** What a tap focuses: the memory itself, wherever in the world it lives. */
-  id: string;
-  sizeIdx: number;
-  /** The memory's own radius; the satellite draws at SAT_R of it. */
-  r: number;
-  /** Its own place on the ellipse — every satellite on its own phase. */
-  ph: number;
-  /** The angle it is at right now, kept so a held one can be let go without
-      snapping to wherever it would have travelled to meanwhile. */
-  a: number;
-  /** Being read: it holds still under its panel, as a focused orb does. */
-  held: boolean;
-  /**
-   * The field ball behind it, when the memory is one of the viewer's own: the
-   * satellite then fades, dims and re-lights EXACTLY as its memory does,
-   * because it is reading the same numbers.
-   */
-  ball: Ball | null;
-  /** Otherwise, the appearance it was built with. */
-  tier: number;
-  alivePow: number;
-  /** Room evidence: the given name the whisper says. */
-  who: string | null;
-  /** Written every frame; the hit test, the whisper and the panel read these. */
-  x: number;
-  y: number;
-  /** Its drawn radius this frame — the hit test uses the same number. */
-  dr: number;
-  /** Greater than zero in front of the cloud, at or below it behind. */
-  front: number;
-  /** One eased fade each: focus lights this one and dims the rest. */
-  glow: number;
-  dim: number;
-  /**
-   * EMERGENCE. 0 is inside the sentence at nothing, 1 is out on the ellipse
-   * whole. It is the satellite's alpha, its scale and its distance from the
-   * centre at once, because those are one movement: coming out from behind
-   * the words. Under reduced motion it is the alpha alone.
-   */
-  em: number;
-  /** Where it was when the subject last changed — so a reversal never pops. */
-  em0: number;
-}
-
-/** A candidate's body in the sky: light that has not condensed. */
-interface Neb {
-  id: string;
-  kind: Candidate["kind"];
-  /** which wall's sky it floats in; its whole system lives at that column */
-  col: number;
-  /** Which of the baked cloud SHAPES it is; its light is everyone's light. */
-  variant: number;
-  r: number;
-  frac: number;
-  homeX: number;
-  homeY: number;
-  x: number;
-  y: number;
-  ampX: number;
-  ampY: number;
-  rateX: number;
-  rateY: number;
-  phX: number;
-  phY: number;
-  breathRate: number;
-  breathPhase: number;
-  /** The memories it is made of, in orbit around it. */
-  sats: Sat[];
-  /**
-   * Painter's order for those satellites: far side first, nearest last, so an
-   * orb low on the ellipse covers one behind it rather than the other way
-   * round. Written once per frame in placeSats over a preallocated index
-   * array (the field's own sortByDepth convention), read forward by the draw
-   * pass and BACKWARD by the hit test — one ordering, so what answers a tap
-   * is always what the eye has on top.
-   */
-  satOrd: number[];
-  /** Which evidence built them, so a re-drafted candidate re-solves once. */
-  evSig: string;
-  /** The span's widening, as a multiplier on the box-derived base. */
-  orbK: number;
-  /** The widest satellite it carries: the orbit has to clear the words by it. */
-  satR: number;
-  /**
-   * The ellipse the satellites turn on, solved from the SENTENCE's measured
-   * box (plus the margin, the satellite and the span) — read every frame,
-   * measured only on resize, on a text change and on focus.
-   */
-  orbRx: number;
-  orbRy: number;
-  /** The sentence's own box, as the DOM last rendered it. */
-  txtW: number;
-  txtH: number;
-  /**
-   * What this candidate keeps every other candidate off: whichever is bigger,
-   * its light or its words. At rest no sentence may sit on a neighbour's
-   * sentence or on a neighbour's body.
-   */
-  keepR: number;
-  /** Seconds for one turn — slower the longer it has gathered. */
-  period: number;
-  /** Where its LIGHT is. It trails the body, which is the only thing with
-      weight here — the cloud itself is exactly where the finger put it. */
-  haloX: number;
-  haloY: number;
-  /** Clustered: nested rather than intersecting. 1 apart, NEST_K drawn in. */
-  nest: number;
-  /** The most nesting may draw it in: the span's widening, and nothing under. */
-  nestFloor: number;
-  /** The subject: tapped, so it carries its evidence. One at a time. */
-  focused: boolean;
-  /** When that last changed, and where the eases were at the time. */
-  focusAt: number;
-  focus: number;
-  focus0: number;
-  /** Not the subject while another one is: one uniform sink, body and words. */
-  dimN: number;
-  /** Dragged: it keeps the place it was put (for this session only). */
-  pinned: boolean;
-  dragging: boolean;
-  dragX: number;
-  dragY: number;
-  /**
-   * The sentence's own light. Clustered members whisper at a quarter
-   * strength — the cluster speaks with its one draft line — and a member
-   * under the pointer (or a finger) comes back to full for as long as the
-   * touch lasts. Eased in the loop: a single fade, never a movement.
-   */
-  dimS: number;
-  /** About to receive the pattern in your hand: the drop target, said in
-      light because nothing else on screen says the gesture exists. */
-  joining: boolean;
-  /** Near enough to another pattern that they could be joined — said at rest,
-      before any drag, so the gesture is discoverable rather than merely
-      confirmable once attempted. */
-  pairable: boolean;
-  /** 0 present → 1 dispersed (dragged off the top of the sky). */
-  gone: number;
-  /** 1 open → 0 condensed to a point, on adoption. */
-  condense: number;
-  condenseAt: number;
-}
 
 interface World {
   wallL: number;
@@ -2638,84 +1011,6 @@ function bakeBeing(
    A bright point through a night lens: the bloom is WIDE and THIN, nothing
    like a hot little flame. Reach first, then the alpha it peaks at, then how
    fast it falls away. */
-const BLOOM_R = 2.2;
-const BLOOM_PEAK = 0.2;
-const BLOOM_EXP = 2.2;
-/**
- * How much of the disc's radius is feather.
- *
- * This said "Crisp: this is photography" over a value of 0.07 — seven percent
- * of the radius, about three and a half device pixels of gradient on every
- * perimeter. Nothing with that much feather reads as an object; it reads as a
- * smudge, and with the bloom sitting under it the orb dissolved into its own
- * light. The whole sphere treatment above — terminator, rim, counter-rim,
- * specular — was being spent on something with no edge to hold it.
- *
- * Two point two percent is under one device pixel: enough to kill the jaggies
- * a hard circle would show, and nothing beyond that.
- */
-const EDGE_SOFT = 0.022;
-/**
- * THE KEY LIGHT — one source, and the whole world agrees about it.
- *
- * This REVERSES AN EARLIER FOUNDER RULING, deliberately and with approval.
- * That ruling ("no rim, no terminator, no contact shadow — these are lit from
- * within and float") came from a reference image of flat pastel gradient
- * orbs, and it was right for that world. This world is night photography, and
- * in night photography things have SURFACES: a dormant orb measured as a
- * mathematically flat disc — sixty-one, sixty-one, sixty-one all the way
- * across — which is a fill, not an object, and a large part of why the frame
- * read as drawn rather than photographed.
- *
- * So: one motivated source, high and to the upper left, stated once here and
- * obeyed by the orbs, the clouds and the companion alike. Everything in a
- * frame agreeing about where the light is is most of what "one place" means.
- *
- * It is NIGHT-PHOTOGRAPHY SUBTLE. If it reads as a shiny 3D ball it has
- * overshot: this is a surface catching a little light, at the threshold of
- * noticing. And it introduces NO hue — the rim is the same warm-white the
- * ramp already has, the shadow is the ground's own colour, and the counter-
- * rim is the cool end. Temperature and luminance only, always.
- */
-const KEY_X = -0.62;
-const KEY_Y = -0.78;
-/**
- * THE SURFACE, TURNED UP UNTIL IT IS ACTUALLY A SURFACE.
- *
- * Every one of these terms was already written and every one was set so faint
- * that none of it survived the bloom underneath — the orbs read as flat cream
- * blobs, which is exactly what they were being drawn as. A sphere is not a
- * gradient; it is a bright grazing rim, a dark terminator, a cold bounce on
- * the far edge and one small specular, and all four have to be strong enough
- * to be seen through the light the orb is sitting in.
- *
- * They still encode nothing. Aliveness is temperature and luminance; this is
- * form, and form is the same on a bright memory and a dark one — which is the
- * whole reason a cooled coal still looks like an object.
- */
-const KEY_SHADE = 0.46;
-const KEY_RIM = 0.5;
-const KEY_COUNTER = 0.17;
-const KEY_SPEC = 0.42;
-/** The broad wrap across the lit third — the old sheen, now motivated. */
-const SHEEN = 0.26;
-/**
- * FILM GRAIN, AND IT HAS TO BE VISIBLE. One noise value per CELL rather than
- * per device pixel — a one-device-pixel cell on a retina display is half a CSS
- * pixel, which is to say invisible, and invisible texture is what made the
- * previous surface read as vector-clean. Two device px is fine film and still
- * perceptible at 100%.
- */
-const GRAIN_PX = 2;
-/** The tile is GRAIN_TILE cells square, in CSS pixels. */
-const GRAIN_TILE = 64;
-const GRAIN_AMP = 0.09;
-/* The strength lives in jar.css with the layer that carries it: opacity on a
-   real element, blended against an opaque backdrop. */
-/** The corners fall away. A photographic idea, so it is kept photographic. */
-const VIGNETTE = 0.34;
-/** A candidate's unformed light: the same ramp, spread out and faint. */
-const NEB_PEAK = 0.12;
 
 /** Dim tiers the character's body is baked at. */
 const BODY_TIERS = 4;
@@ -2723,336 +1018,6 @@ const BODY_TIERS = 4;
 const BODY_PX = 240;
 
 /** How many aliveness tiers the orb sprites are baked at. */
-const TIERS = 5;
-
-/* the per-member hue system lives in lib/appearance.ts — see the note
-   there for why, and docs/architecture.md for the seams generally */
-
-/**
- * HOW COARSE A MACHINE'S MEMORY IS. Four device pixels to one of the orb's
- * own, which at the smallest baked size still leaves roughly a dozen steps
- * across the disc — enough that the edge reads as stepped rather than as a
- * blurry circle, and few enough that it reads as a resolution rather than as
- * a texture.
- */
-const PIXEL_STEP = 4;
-
-/**
- * AN AGENT'S MEMORY IS THE SAME LIGHT AT A COARSER RESOLUTION.
- *
- * Not a different colour, not a different size, not a different shape: the
- * identical disc, the identical ramp, the identical aliveness tier — rendered
- * on a grid a quarter as fine and scaled up without smoothing. Everything the
- * light says still says it; what changes is how finely the thing can be
- * described, which is the honest difference between a memory somebody had and
- * a memory something recorded.
- *
- * This is the same sentence the rest of the world already speaks: the machine
- * hand on an agent's poster, the quantized positions when you cross into an
- * agent's wall, the stepped tick that replaces the companion's float. One
- * grammar, said again in the one place it had not been said yet.
- */
-function rasterOrbPixel(ramp: Ramp, r: number, dpr: number, tier: number): HTMLCanvasElement {
-  /* the small render: the real orb, drawn at a fraction of the resolution */
-  const small = rasterOrb(ramp, r, dpr / PIXEL_STEP, tier);
-  const D = Math.max(8, Math.ceil((r + ORB_PAD) * 2 * dpr));
-  const [c, g] = makeSprite(D);
-  if (!g) return small;
-  /* nearest-neighbour on the way up — this is the whole effect, and doing it
-     at bake time means the frame loop never touches a smoothing flag */
-  g.imageSmoothingEnabled = false;
-  g.drawImage(small, 0, 0, D, D);
-  return c;
-}
-
-/**
- * A sprite sheet for one (hue, resolution) pair, baked the first time such a
- * memory is about to be drawn and held for the life of the palette. Called
- * from inside the frame loop, which is normally forbidden — but only ever on
- * the frame a combination first appears, and there are at most a handful, so
- * this is a bounded one-off rather than per-frame work.
- */
-function orbsForHue(pal: Palette, hue: number, pixel: boolean): HTMLCanvasElement[][] {
-  const key = `${hue}:${pixel ? "p" : "s"}`;
-  const got = pal.hued.get(key);
-  if (got) return got;
-  const ramp = hue >= 0 ? tintRamp(pal.ramp, hue) : pal.ramp;
-  const tiers = Array.from({ length: TIERS }, (_, i) => i);
-  const bake = pixel ? rasterOrbPixel : rasterOrb;
-  const made = SIZE_R.map((r) => tiers.map((t) => bake(ramp, r, pal.dpr, t)));
-  pal.hued.set(key, made);
-  return made;
-}
-
-/**
- * WHAT AN UNDATED MEMORY LOOKS LIKE.
- *
- * Aliveness is a claim about WHEN something was saved and how it has been
- * returned to since. A room's proposal names no per-save date, so there is no
- * such claim to make about the memories it cites — and lighting them from the
- * newest edge of the declared span would print a number nobody measured, in
- * the one channel this page reserves for meaning.
- *
- * So an undated memory declares itself undated instead: one fixed tier, one
- * fixed power, the same for every satellite in that ring including any the
- * viewer saved themselves. A ring then says one kind of thing throughout,
- * which is the only honest thing it can say. The panel already prints who and
- * no when for these.
- */
-const UNDATED_TIER = Math.round((TIERS - 1) / 2);
-const UNDATED_POW = 0.5;
-
-function makeSprite(px: number): [HTMLCanvasElement, CanvasRenderingContext2D | null] {
-  const c = document.createElement("canvas");
-  c.width = px;
-  c.height = px;
-  return [c, c.getContext("2d")];
-}
-
-const rgbCss = (c: [number, number, number], a: number) =>
-  `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
-
-function mix(
-  a: [number, number, number],
-  b: [number, number, number],
-  t: number,
-): [number, number, number] {
-  return [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
-}
-
-/**
- * WHERE A TIER SITS ON THE RAMP — and the law this whole surface is built on.
- *
- * THE ONLY WARM THING ON SCREEN IS WHAT IS MOST ALIVE.
- *
- * Colour TEMPERATURE is the aliveness signal and luminance is the second
- * channel, and nothing else varies at all:
- *
- *   alive   — a slightly warm white, the single warm note in a cold frame
- *   fading  — through neutral, then cool: a silver that has lost its warmth
- *   dormant — cold and near-invisible, barely separated from the ground
- *
- * Read down a field of these and the warm ones are the live ones; that is the
- * entire readout, and it works at a glance and at a distance because warmth
- * against cold is pre-attentive in a way that six pastel hues never were.
- *
- * HUE-PER-THEME IS DELETED FOREVER. It said which theme an id happened to hash
- * to — unreadable by anyone, and a direct contradiction of the page's own law
- * that light is the only meaning channel. Do not reintroduce a colour that
- * encodes a category: if something needs to be told apart from its neighbour,
- * it is either alive or it is not.
- *
- * Below the half-way point a tier walks from dormant up to fading, above it
- * from fading up to alive — one continuum, quantised only because the sprites
- * are baked.
- */
-function rampAt(ramp: Ramp, life: number): {
-  core: [number, number, number];
-  edge: [number, number, number];
-  bloom: [number, number, number];
-} {
-  const core =
-    life < 0.5 ? mix(ramp.dorm, ramp.fade, life * 2) : mix(ramp.fade, ramp.live, (life - 0.5) * 2);
-  const edge =
-    life < 0.5
-      ? mix(ramp.dorm, ramp.fade, life * 2)
-      : mix(ramp.fade, ramp.liveEdge, (life - 0.5) * 2);
-  /* a dormant orb's bloom is its own cold colour, which additively is very
-     nearly nothing — it stops glowing without ever leaving the field */
-  return { core, edge, bloom: mix(ramp.dorm, ramp.liveBloom, Math.pow(life, 1.2)) };
-}
-
-/**
- * The orb: a disc of light with a diffuse bloom. No rim light, no terminator,
- * no contact shadow — these are lit from within and they float, so nothing
- * about them implies an outside source.
- *
- * What varies from orb to orb is ALIVENESS and nothing else. `tier` walks that
- * continuum: 0 is dormant — dim, cold and nearly colourless, still holding its
- * place in the field — and TIERS-1 is fully alive, the brightest and warmest
- * the skin has.
- *
- * The edge is built rather than gradient-masked, because one skin needs it to
- * be IMPERFECT: the mask is a stack of rim paths from R down to R(1-soft),
- * each laid at 1/K alpha under `lighter`, which sums to a linear feather that
- * follows whatever silhouette the rim traced. A perfect circle is what reads
- * as digital, and hanji is the argument against it.
- */
-function rasterOrb(ramp: Ramp, r: number, dpr: number, tier: number): HTMLCanvasElement {
-  const D = Math.max(8, Math.ceil((r + ORB_PAD) * 2 * dpr));
-  const [c, g] = makeSprite(D);
-  if (!g) return c;
-  const R = r * dpr;
-  const cx = D / 2;
-  const cy = D / 2;
-  const life = tier / (TIERS - 1);
-  const at = rampAt(ramp, life);
-  const ca = at.core;
-  const cb = at.edge;
-
-  /* the disc: a 135-degree ramp, top-left to bottom-right. Both ends are the
-     same light at the same aliveness — this is shading, not two colours */
-  const k = R * 0.72;
-  const disc = g.createLinearGradient(cx - k, cy - k, cx + k, cy + k);
-  disc.addColorStop(0, rgbCss(ca, 1));
-  disc.addColorStop(1, rgbCss(cb, 1));
-  g.fillStyle = disc;
-  g.fillRect(0, 0, D, D);
-
-  /* ---- THE SURFACE. All of it baked, all of it agreeing with KEY_X/KEY_Y,
-     and none of it costing a single instruction at draw time. ----
-
-     A dormant orb keeps a surface too: it is the SPECULAR and the wrap that
-     belong to its own light and fade with it, while the terminator and the
-     counter-rim belong to the WORLD's light and are there whatever the memory
-     has left. That is why a dead coal still looks like an object. */
-  const lx = cx + KEY_X * R;
-  const ly = cy + KEY_Y * R;
-
-  /* the terminator: the form falling away from the key, into the ground's own
-     colour so the dark side sinks into the world rather than going grey */
-  const shade = g.createRadialGradient(lx, ly, R * 0.2, cx - KEY_X * R * 0.3, cy - KEY_Y * R * 0.3, R * 1.6);
-  shade.addColorStop(0, "rgba(6,8,13,0)");
-  shade.addColorStop(0.55, `rgba(6,8,13,${(KEY_SHADE * 0.35).toFixed(3)})`);
-  shade.addColorStop(1, `rgba(6,8,13,${KEY_SHADE.toFixed(3)})`);
-  g.fillStyle = shade;
-  g.fillRect(0, 0, D, D);
-
-  /* the rim: a soft arc where the key grazes the edge */
-  const rimX = cx + KEY_X * R * 0.94;
-  const rimY = cy + KEY_Y * R * 0.94;
-  const rim = g.createRadialGradient(rimX, rimY, 0, rimX, rimY, R * 0.62);
-  rim.addColorStop(0, `rgba(255,252,246,${(KEY_RIM * (0.42 + 0.58 * life)).toFixed(3)})`);
-  rim.addColorStop(0.5, `rgba(255,252,246,${(KEY_RIM * 0.22 * (0.42 + 0.58 * life)).toFixed(3)})`);
-  rim.addColorStop(1, "rgba(255,252,246,0)");
-  g.fillStyle = rim;
-  g.fillRect(0, 0, D, D);
-
-  /* the counter-rim: the cold bounce off everything else in the room, on the
-     opposite edge and much weaker — this is the term that reads as "night" */
-  const ccx = cx - KEY_X * R * 0.9;
-  const ccy = cy - KEY_Y * R * 0.9;
-  const counter = g.createRadialGradient(ccx, ccy, 0, ccx, ccy, R * 0.75);
-  counter.addColorStop(0, `rgba(176,196,222,${KEY_COUNTER.toFixed(3)})`);
-  counter.addColorStop(1, "rgba(176,196,222,0)");
-  g.fillStyle = counter;
-  g.fillRect(0, 0, D, D);
-
-  /* the broad wrap across the lit side — the old sheen, now pointed at a
-     source that exists */
-  if (life > 0.05) {
-    const sheen = g.createLinearGradient(lx, ly, cx - KEY_X * k, cy - KEY_Y * k);
-    sheen.addColorStop(0, `rgba(255,255,255,${(SHEEN * life).toFixed(3)})`);
-    sheen.addColorStop(0.45, `rgba(255,255,255,${(SHEEN * 0.33 * life).toFixed(3)})`);
-    sheen.addColorStop(1, "rgba(255,255,255,0)");
-    g.fillStyle = sheen;
-    g.fillRect(0, 0, D, D);
-  }
-
-  /* and the specular: small, soft, well inside the rim, and it belongs to the
-     memory's own light — a dormant one barely catches anything */
-  const spX = cx + KEY_X * R * 0.46;
-  const spY = cy + KEY_Y * R * 0.46;
-  /* smaller and tighter: a big soft specular is a haze, a small one is glass */
-  const spR = R * 0.19;
-  const spec = g.createRadialGradient(spX, spY, 0, spX, spY, spR);
-  spec.addColorStop(0, `rgba(255,255,255,${(KEY_SPEC * (0.25 + 0.75 * life)).toFixed(3)})`);
-  spec.addColorStop(1, "rgba(255,255,255,0)");
-  g.fillStyle = spec;
-  g.fillRect(0, 0, D, D);
-
-  /* THE EDGE. A stack of discs, R down to R(1−soft), each at 1/K alpha under
-     `lighter` so they sum to a linear feather — the perimeter is never a
-     cut-out, and the disc melts into its own bloom. */
-  const [mc, mg] = makeSprite(D);
-  if (!mg) return c;
-  const K = 12;
-  /* ONE DEVICE PIXEL, AND THE FLOOR MUST BE IN THE SAME UNITS AS R.
-     This read `(2 * dpr) / R`, but R is ALREADY in device pixels — so the
-     dpr multiply was applied twice and the floor came out at four device
-     pixels of feather on a retina screen. It overrode EDGE_SOFT entirely at
-     every size, which is why the perimeter stayed a smudge no matter what
-     that constant said. One over R is exactly one device pixel: enough to
-     antialias the circle and not one step more. */
-  const soft = Math.max(EDGE_SOFT, 1 / Math.max(R, 1));
-  mg.globalCompositeOperation = "lighter";
-  mg.fillStyle = `rgba(255,255,255,${(1 / K).toFixed(4)})`;
-  for (let i = 0; i < K; i++) {
-    mg.beginPath();
-    mg.arc(cx, cy, R * (1 - soft * (i / (K - 1))), 0, TAU);
-    mg.fill();
-  }
-  g.globalCompositeOperation = "destination-in";
-  g.drawImage(mc, 0, 0);
-  g.globalCompositeOperation = "source-over";
-  return c;
-}
-
-/**
- * Break the 8-bit contour rings out of a baked falloff.
- *
- * A soft radial gradient laid on a near-black ground quantises to whole alpha
- * levels, and the eye reads those level boundaries as concentric "microlines"
- * — the more so when four aura layers stack their rings on top of each other.
- * One level of random alpha jitter per pixel scatters each boundary into a
- * dither pattern the eye cannot assemble into a ring. It costs nothing at
- * runtime: this happens once, at bake, like every other pixel in this file.
- */
-function ditherAlpha(g: CanvasRenderingContext2D, d: number): void {
-  let img: ImageData;
-  try {
-    img = g.getImageData(0, 0, d, d);
-  } catch {
-    return; /* never tainted in practice; if it ever is, skip silently */
-  }
-  const px = img.data;
-  for (let i = 3; i < px.length; i += 4) {
-    const a = px[i];
-    /* only the ramp: the solid middle and the empty outside have no bands */
-    if (a === 0 || a === 255) continue;
-    px[i] = a + (Math.random() < 0.5 ? -1 : 1);
-  }
-  g.putImageData(img, 0, 0);
-}
-
-/**
- * The diffuse outer bloom. Additive, so a dense pile glows hotter for free.
- *
- * Ten stops sampled off a smooth curve rather than two or three, so the ramp
- * has no straight segments to band along; it reaches nothing at 92% of the
- * sprite rather than at its edge, so no falloff is ever clipped into a seam;
- * and the whole thing is dithered afterwards. `exp` varies the curve between
- * the companion's stacked aura layers so residual bands cannot align.
- */
-function rasterBloom(
-  rgb: [number, number, number],
-  radius: number,
-  dpr: number,
-  exp = 2.6,
-): HTMLCanvasElement {
-  const d = Math.max(8, Math.ceil(radius * 2 * dpr));
-  const [c, g] = makeSprite(d);
-  if (!g) return c;
-  const grd = g.createRadialGradient(d / 2, d / 2, 0, d / 2, d / 2, d / 2);
-  /* brightest in the middle, nothing left well inside the sprite's edge */
-  const END = 0.92;
-  for (let i = 0; i <= 9; i++) {
-    const t = i / 9;
-    grd.addColorStop(t * END, rgbCss(rgb, Number(Math.pow(1 - t, exp).toFixed(4))));
-  }
-  grd.addColorStop(1, rgbCss(rgb, 0));
-  g.fillStyle = grd;
-  g.fillRect(0, 0, d, d);
-  ditherAlpha(g, d);
-  return c;
-}
-
-/**
- * The companion's SILHOUETTE, traced in draw space about its own centre — the
- * same normalised pebble-drop rasterBody bakes. Everything that lives ON the
- * turning form (the seam, the shading, the eyes) is clipped to this, so no
- * feature ever floats outside the outline.
- */
 function bodyPath(g: CanvasRenderingContext2D, bw: number, bh: number, be: Being): void {
   /* MASS IS CONSTANT, ASPECT IS NOT. w·h is the same number at every aspect —
      a wide being is not a big being — and at aspect 1.15 this reduces to the
@@ -3443,241 +1408,10 @@ function buildPalette(
   };
 }
 
-/**
- * Aliveness mirrors the real activation engine's constants (7-day half-life,
- * reflection charge 0.25 — scoring/activation.ts). With the live archive's
- * June–July gap most balls WILL be dim; that is honest and desired.
- */
-function colorBall(b: Ball, T: number): void {
-  const ref = Math.min(Math.max(b.updatedMs, b.capturedMs), T);
-  const days = Math.max(0, (T - ref) / DAY_MS);
-  const decay = Math.pow(0.5, days / FIELD_DECAY_HALF_LIFE_DAYS);
-  /**
-   * WHAT YOU BUILT ON DOES NOT ROT.
-   *
-   * Every memory used to decay on the same curve — including the ones a
-   * pattern is standing on and the ones you came back and answered. Animal
-   * Crossing has the better rule and has had it for twenty years: weeds grow
-   * in the parts of the island you never developed, and never in the parts
-   * you did. Come back after two months and what you made is exactly as you
-   * left it; only the untended edges show the time.
-   *
-   * So a memory that is load-bearing — cited by a pattern, or answered in
-   * your own words — has a floor under it and cannot sink to dark. The rest
-   * of the field still fades exactly as it did, which is where the passage
-   * of time is supposed to be visible.
-   */
-  const tended =
-    (b.hasNotes ? FIELD_FLOOR_CITED : 0) +
-    (b.reflections > 0 ? FIELD_FLOOR_ANSWERED : 0) +
-    (b.hasGroup ? FIELD_FLOOR_IN_GROUP : 0);
-  const a = clamp01(
-    Math.max(
-      decay +
-        FIELD_REFLECTION_WEIGHT *
-          Math.min(b.reflections, FIELD_REFLECTION_SATURATION) *
-          decay,
-      tended,
-    ) + (b.hasNotes ? FIELD_CITED_LIFT : 0),
-  );
-  b.alive = a;
-  b.alivePow = Math.pow(a, 1.4);
-  /**
-   * THE FRONTIER. A memory nothing rests on is where this person's
-   * self-knowledge stops — and it was the one thing the world could not show,
-   * because brightness only ever said "recent". Outer Wilds' log marks the
-   * places you have BEEN that still hold something unfound; it never nags
-   * about somewhere you have not gone. Same rule here: only a memory old
-   * enough to have been read, and still cited by nothing, is a frontier.
-   */
-  b.frontier = !b.hasNotes && days > FIELD_FRONTIER_DAYS;
-}
-
-/**
- * The aliveness continuum, quantised to the baked sprite tiers. Five steps is
- * below what the eye resolves in a gradient this soft, so it still reads as a
- * continuum — and it keeps every appearance pre-rendered.
- */
-function tierOf(b: Ball): number {
-  return Math.round(clamp01((b.alive - 0.05) / 0.55) * (TIERS - 1));
-}
-
-/**
- * THE FIELD SHOWS EVERYTHING — INVARIANT, not a layout preference.
- *
- * Standing in the field, EVERY inspiration that exists at the dial's time is
- * on screen at once. Not a slice you scroll through, not the newest few with
- * the rest somewhere below the fold: all of them, on every wall, at every
- * viewport height. The founder has asked for this twice, and the honest way
- * to keep the promise as an archive grows is to make the ORBS give way, not
- * the archive: the field fits its inhabitants by shrinking them and their
- * drift, down to a floor, and past that floor the oldest compress into denser
- * sediment at the bottom rather than anything being pushed off the screen.
- *
- * Size still encodes nothing. It is the field making room, which is a fact
- * about the field and not about any memory in it.
- */
-function fitField(arr: Ball[], bandW: number, bandH: number): number {
-  const n = Math.max(arr.length, 1);
-  /* the radius at which n of them share this band without stacking */
-  const fitR = Math.sqrt((bandW * bandH) / n) / 2.6;
-  for (const b of arr) {
-    const r = clamp(Math.min(b.rBase, fitR), ORB_R_MIN, b.rBase);
-    b.r = r;
-    /* nearest baked size, so nothing is ever scaled by more than a few
-       percent — the sphere's rim and specular only survive at 1:1 */
-    let bi = 0;
-    let bd = Infinity;
-    for (let i = 0; i < SIZE_R.length; i++) {
-      const d = Math.abs(SIZE_R[i] - r);
-      if (d < bd) {
-        bd = d;
-        bi = i;
-      }
-    }
-    if (SIZE_R[bi] > r && bi > 0) bi -= 1;
-    b.sizeIdx = bi;
-    /* and it is DRAWN at the size it was baked at. The radius jitter was
-       always meaningless variation — size encodes nothing here, by law — so
-       snapping it to a baked value costs the design nothing and buys a
-       pixel-exact edge on every orb in the field.
-
-       DOWN, NEVER UP. The radius arriving here is what the band could FIT;
-       rounding it up would hand every orb a few extra pixels at exactly the
-       moment the field is crowded enough for that to matter, and the fit
-       would quietly stop holding. The smallest baked size is the floor. */
-    b.r = SIZE_R[bi];
-    /* the drift shrinks with the orb, or a crowded field would stir itself
-       into a collision every few seconds */
-    const k = r / Math.max(b.rBase, 1);
-    b.ampX = b.ampBaseX * k;
-    b.ampY = b.ampBaseY * k;
-  }
-  /* 0 while there is room to spare, 1 once even the floor is crowded: how
-     hard the oldest have to be compressed to keep everyone on screen */
-  return clamp01((n * Math.pow(2.6 * ORB_R_MIN, 2)) / Math.max(bandW * bandH, 1));
-}
-
-/**
- * Blue-noise-ish x for a home assignment: the best of up to 12 candidates by
- * clearance from what is already placed. Shared by the personal field and by
- * every room's field — the same discipline, one column over.
- */
-function scatterX(
-  b: Ball,
-  y: number,
-  px: number[],
-  py: number[],
-  lo: number,
-  hi: number,
-): number {
-  let best = (lo + hi) / 2;
-  let bestGap = -1;
-  for (let tries = 0; tries < 12; tries++) {
-    /* the twelve draws are the BALL's, not the moment's — see Ball.scat */
-    const cand = lo + b.r + b.scat[tries] * Math.max(1, hi - lo - b.r * 2);
-    let gap = Infinity;
-    for (let i = 0; i < px.length; i++) {
-      const dx = cand - px[i];
-      const dy = y - py[i];
-      const d = Math.sqrt(dx * dx + dy * dy);
-      if (d < gap) gap = d;
-    }
-    if (gap > bestGap) {
-      bestGap = gap;
-      best = cand;
-    }
-    if (gap > b.r * 2.2) break;
-  }
-  return clamp(best, lo + b.r, hi - b.r);
-}
 
 // ---------------------------------------------------------------------------
 // Ambition fallback chain
 // ---------------------------------------------------------------------------
-
-/**
- * One statement of the artifact headquarters stands on. There is exactly one
- * artifact per profile under the canon, so this is never a list of competing
- * boards — it is the entries of the single board, in the server's order.
- */
-type JarNote = Entry;
-
-interface Adopted {
-  ambition: string;
-  /** The room whose board this is, or null when it is your own. */
-  groupName: string | null;
-  createdMs: number;
-}
-
-/** The reflect action's one-at-a-time life inside the panel. */
-interface ReflectState {
-  step: "rest" | "asking" | "open" | "keeping" | "kept";
-  question: string;
-  answer: string;
-  /** the row just written, so it can be taken back without a refetch */
-  lastId?: string;
-}
-
-/**
- * The raw captures the adopted ambition was built from, and the words of theirs
- * that carried it. The peek row beneath the poster is THIS: not "the newest
- * five" but "what led to what you are looking at".
- */
-type Provenance = Map<string, string | null>;
-
-/** The room's pending rewrite of the ambition — the one adoptable candidate. */
-interface Proposal {
-  groupId: string;
-  proposalId: string;
-  ambition: string;
-  changeSummary: string | null;
-  createdMs: number;
-  evidence: EvidenceRef[];
-  /** The span the server declared across that evidence; its orbit reads it. */
-  spanMs: number | null;
-}
-
-function deriveAmbition(
-  T: number,
-  adopted: Adopted | null,
-  notes: JarNote[] | null,
-): { text: string | null; eyebrow: string } {
-  if (adopted && adopted.createdMs <= T)
-    return { text: adopted.ambition, eyebrow: adopted.groupName ?? "Top of mind" };
-  const avail = notes ? notes.filter((n) => n.createdMs <= T) : [];
-  const pinned = avail.find((n) => n.pinned);
-  if (pinned) return { text: pinned.body, eyebrow: "Top of mind" };
-  /* No confidence on an entry any more, and none is invented: the server's
-     own order is the ranking, so the head of it is what the board leads with. */
-  let best: JarNote | null = null;
-  for (const n of avail) if (!best || n.sortOrder < best.sortOrder) best = n;
-  if (best) return { text: best.body, eyebrow: "Top of mind" };
-  return { text: null, eyebrow: "Top of mind" };
-}
-
-/**
- * What is FORMING, in one line and always in words.
- *
- * The adopted ambition and the things that might replace it are separate
- * entities, and the page says so: the poster is the ambition the person holds
- * today, and this line — the only other thing under it — reports that
- * candidates exist without putting them on the same footing. A pending
- * proposal is a whole new ambition and outranks the readings; provisional
- * top-of-mind notes are counted, never listed, and never as a digit.
- */
-function formingWords(
-  T: number,
-  proposalMs: number | null,
-  forming: Array<{ createdMs: number }> | null,
-): string | null {
-  if (proposalMs !== null && proposalMs <= T) return "A new ambition is forming";
-  let n = 0;
-  for (const f of forming ?? []) if (f.createdMs <= T) n++;
-  if (n === 0) return null;
-  const w = numWords(n);
-  return `${w[0].toUpperCase()}${w.slice(1)} ${n === 1 ? "pattern is" : "patterns are"} forming`;
-}
 
 // ---------------------------------------------------------------------------
 // THE OFFLINE FIXTURE — the world with nothing behind it
@@ -3725,374 +1459,6 @@ function formingWords(
  * ==========================================================================
  */
 
-/** Everything the world is built from, when it is built from nothing. */
-interface OfflineWorld {
-  /** The ground: the field is made of these, and of nothing else. */
-  captures: Inspiration[];
-  /** The sky: patterns still forming, each citing memories that exist. */
-  patterns: Signal[];
-  /** Which patterns rest on which memory — the field reads its meaning here. */
-  citations: Map<string, Evidence[]>;
-  /** The board headquarters stands on. */
-  notes: Entry[];
-  /** The poster. */
-  adopted: Adopted;
-  /** What the poster rests on — the peek row is elected out of this. */
-  provenance: Provenance;
-}
-
-/** The quote a fixture pattern took from a fixture memory, kept out of band
-    so the two producers below can be written independently of each other. */
-const OFFLINE_QUOTES = new Map<string, string>();
-
-/** One capture, exactly as `GET /inspirations` hands one over. */
-function offlineSignal(
-  n: number,
-  day: number,
-  text: string,
-  extra: {
-    /** The words a pattern carried out of it. Verbatim inside `text`, or the
-        panel simply does not mark them — see markPassages. */
-    quote?: string;
-    /** The patterns this memory fed. Real statements, and its light reads them. */
-    fed?: string[];
-    reflections?: number;
-    /** Returned to since: an old memory that is honestly warm again. */
-    touched?: number;
-  } = {},
-): Inspiration {
-  /**
-   * NEVER AT THE VERY INSTANT OF LOADING.
-   *
-   * The dial's present is fixed when the page mounts, which is a moment
-   * BEFORE this world is built — so a memory dated `now` is dated after the
-   * end of its own rail, does not exist at T, and is left out of the field
-   * and out of the count. Six hours back is the nearest a memory is allowed
-   * to be, and `agoWords` still says "Today" about it.
-   */
-  const back = (d: number) => daysAgo(Math.max(d, 0.25));
-  const capturedAt = back(day);
-  const id = `offline-m${n}`;
-  if (extra.quote) OFFLINE_QUOTES.set(id, extra.quote);
-  if (extra.fed?.length) OFFLINE_FED.set(id, extra.fed);
-  return {
-    id,
-    preview: text,
-    /* the dev fixture keeps everything to itself */
-    isPublic: false,
-    kind: "note",
-    source: "app",
-    capturedMs: Date.parse(capturedAt),
-    updatedMs: Date.parse(extra.touched === undefined ? capturedAt : back(extra.touched)),
-    attachments: [],
-    reflectionCount: extra.reflections ?? 0,
-  };
-}
-
-/** memory id → the statements it fed, as the fixture declares them. */
-const OFFLINE_FED = new Map<string, string[]>();
-
-/**
- * One provisional reading — a candidate up in the sky, with the memories it
- * was drawn from named by id. Those ids are resolved against the archive the
- * same way a real one's are, so every satellite in orbit stands for a memory
- * that genuinely exists down in the field.
- */
-function offlineReading(
-  n: number,
-  day: number,
-  title: string,
-  evidence: Array<[number, string | null]>,
-): { pattern: Signal; evidence: Evidence[] } {
-  const at = Date.parse(daysAgo(day));
-  return {
-    pattern: {
-      id: `offline-p${n}`,
-      statement: title,
-      /* still overhead: a fixture has adopted nothing */
-      status: "emerging",
-      /* NOT SCORED, SO NOT CLAIMING A SCORE. Confidence is the server's
-         reading of a pattern; a fixture has no server, and inventing a
-         plausible number would put a made-up value into the one channel this
-         page reserves for meaning. Zero is "not scored", and the sky's layout
-         then keeps the order the fixture declares. */
-      confidence: 0,
-      evidenceCount: evidence.length,
-      lastEvidenceMs: at,
-      createdMs: at,
-      locked: false,
-      unsupported: false,
-      sharedGroupIds: [],
-    },
-    evidence: evidence.map(([m, quote]) => ({
-      signalId: `offline-p${n}`,
-      inspirationId: `offline-m${m}`,
-      preview: "",
-      quote,
-      reason: null,
-      createdMs: at,
-    })),
-  };
-}
-
-/**
- * THE WORLD, BUILT ONCE AND ONLY WHEN THERE IS NOTHING ELSE.
- *
- * Twenty-four memories across about three months, so the aliveness ramp has
- * its whole range to run: warm and close at the top, a middle band, and a
- * genuinely cold floor where the oldest draw together into sediment. A mix of
- * lengths, and Hangul throughout, because the archive this is standing in for
- * is majority Korean and Korean text is what has found the layout bugs.
- *
- * Returns null outside dev — and then the page's own failure line stands, as
- * it did before any of this existed.
- */
-function offlineWorld(): OfflineWorld | null {
-  if (!showsDebug()) return null;
-
-  const R1 = "I am becoming someone who shows the thing instead of describing it.";
-  const R2 = "The work I keep returning to is the work nobody asked me for.";
-  const R3 = "I trust a surface more once I have watched it fail.";
-  const R4 = "What I call taste is mostly a list of things I refuse to ship.";
-
-  const captures: Inspiration[] = [
-    offlineSignal(
-      1,
-      0,
-      "빛이 유일한 의미 채널이라면 크기는 아무 말도 하면 안 된다. 오늘 화면에서 큰 공이 중요해 보였는데, 그건 내가 만든 거짓말이었다.",
-    ),
-    offlineSignal(
-      2,
-      1,
-      "Showed it to J with no explanation at all and she had the depth of it in about four seconds. Every word I had prepared was a word I did not need.",
-      {
-        quote: "Every word I had prepared was a word I did not need.",
-        fed: [R1],
-        reflections: 1,
-      },
-    ),
-    offlineSignal(
-      3,
-      2,
-      "설명을 잘하는 사람이 되려고 십 년을 썼는데, 정작 필요한 건 설명이 필요 없는 화면이었다. 말로 이기는 습관이 제품을 망친다는 걸 오늘 아침에 처음으로 몸으로 이해했다.",
-      { quote: "설명이 필요 없는 화면이었다", fed: [R1] },
-    ),
-    offlineSignal(4, 3, "Motion should explain the mechanism, or it is decoration."),
-    offlineSignal(
-      5,
-      5,
-      "Spent the afternoon defending a feature nobody had attacked. The honest version of that meeting is that I wanted to be told it was good, and I dressed the wanting up as a design review.",
-      { quote: "I wanted to be told it was good", reflections: 2 },
-    ),
-    offlineSignal(
-      6,
-      7,
-      "오래된 기억은 사라지는 게 아니라 차가워지는 것 — 이 한 문장 차이가 제품 전체를 결정한다.",
-    ),
-    offlineSignal(
-      7,
-      9,
-      "A number on the screen is a claim I have to defend. Prose is a claim I can be wrong about gracefully.",
-    ),
-    offlineSignal(
-      8,
-      12,
-      "Watched someone use it on a short phone and the bottom quarter of the field was simply empty. It passed on my machine and on the big monitor, which is exactly how a fixed reserve hides.",
-      { fed: [R3] },
-    ),
-    offlineSignal(9, 15, "내가 확인하지 않은 것을 먼저 말하는 게 신뢰의 시작이다."),
-    offlineSignal(
-      10,
-      18,
-      "Deleted the six pastel tints today. Six hues that meant nothing were louder than one hue that meant something.",
-      {
-        quote: "Six hues that meant nothing were louder than one hue that meant something.",
-        fed: [R4],
-      },
-    ),
-    offlineSignal(
-      11,
-      22,
-      "사람들이 저장하는 건 정보가 아니라 그때의 자기 자신이다. 그래서 목록으로 보여주면 아무 감흥이 없고, 쌓인 걸로 보여주면 갑자기 자기 얘기가 된다. 이걸 반년 걸려서 알았다.",
-    ),
-    offlineSignal(12, 26, "Stop asking what it does. Ask what it makes a person willing to say."),
-    offlineSignal(
-      13,
-      30,
-      "The thing I return to every week is not the roadmap. It is the one screen I built for myself over a weekend and never told anybody about.",
-      { fed: [R2] },
-    ),
-    offlineSignal(
-      14,
-      34,
-      "아무도 시키지 않은 일을 자꾸 하고 있으면 그게 방향이고, 시킨 일만 하고 있으면 그건 직업이다.",
-      { fed: [R2] },
-    ),
-    offlineSignal(
-      15,
-      39,
-      "Tried to write the pitch again and it came out as a list of features, again. The version that actually landed was me showing the screen and shutting up for ninety seconds.",
-      {
-        quote: "me showing the screen and shutting up for ninety seconds",
-        fed: [R1],
-        touched: 9,
-      },
-    ),
-    offlineSignal(16, 44, "A tool I have never seen break is a tool I do not trust yet.", {
-      fed: [R3],
-    }),
-    offlineSignal(17, 49, "취향이라고 부르는 것의 대부분은 안 하기로 한 것들의 목록이다.", {
-      fed: [R4],
-    }),
-    offlineSignal(
-      18,
-      55,
-      "Turned down the collaboration. It would have been good for the number and wrong for the thing.",
-      { fed: [R4] },
-    ),
-    offlineSignal(
-      19,
-      61,
-      "First honest session with someone who had never seen it. She scrolled to the bottom, sat there for a while, and said “this is a year of me”. I had built it as an archive and she read it as a portrait, and she was right.",
-      { quote: "I had built it as an archive and she read it as a portrait" },
-    ),
-    offlineSignal(20, 67, "고장 나는 걸 한 번도 못 본 도구는 아직 믿을 수 없다.", { fed: [R3] }),
-    offlineSignal(
-      21,
-      73,
-      "Every product I have loved had one gesture I could do without looking. Everything else in them was menus.",
-      { touched: 11 },
-    ),
-    offlineSignal(22, 79, "Kept the ugly version that ran.", { fed: [R4] }),
-    offlineSignal(
-      23,
-      85,
-      "설명서를 써야 이해되는 화면은 화면이 아니라 설명서다. 오늘에서야 그걸 인정했다.",
-      { quote: "설명서를 써야 이해되는 화면은 화면이 아니라 설명서다" },
-    ),
-    offlineSignal(
-      24,
-      91,
-      "Started this because I have four years of saved things and no idea who they say I am. That is the whole product, and I keep forgetting it and building something else instead.",
-      { fed: [R2] },
-    ),
-  ];
-
-  const readings = [
-    offlineReading(1, 5, R1, [
-      [2, "Every word I had prepared was a word I did not need."],
-      [3, "설명이 필요 없는 화면이었다"],
-      [15, "me showing the screen and shutting up for ninety seconds"],
-      [23, null],
-    ]),
-    offlineReading(2, 12, R2, [
-      [13, null],
-      [14, null],
-      [24, null],
-    ]),
-    offlineReading(3, 21, R3, [
-      [8, null],
-      [16, null],
-      [20, null],
-    ]),
-    offlineReading(4, 30, R4, [
-      [10, "Six hues that meant nothing were louder than one hue that meant something."],
-      [17, null],
-      [18, null],
-      [22, null],
-    ]),
-  ];
-
-  /* WHICH PATTERNS REST ON WHICH MEMORY, built the same way the real sky
-     builds it: from the patterns' own evidence, never declared per memory. */
-  const citations = new Map<string, Evidence[]>();
-  for (const r of readings) {
-    for (const e of r.evidence) {
-      const q = e.quote ?? OFFLINE_QUOTES.get(e.inspirationId) ?? null;
-      const row = { ...e, quote: q };
-      const got = citations.get(e.inspirationId);
-      if (got) got.push(row);
-      else citations.set(e.inspirationId, [row]);
-    }
-  }
-
-  /* The board headquarters stands on: one artifact, and its entries cite the
-     patterns beneath them — layer 3 pointing at layer 2, never at memories. */
-  const boardMs = Date.now() - 9 * DAY_MS;
-  const notes: Entry[] = readings.map((r, i) => ({
-    id: `offline-e${i + 1}`,
-    type: "pattern" as const,
-    body: r.pattern.statement,
-    belief: null,
-    prompt: null,
-    locked: false,
-    pinned: i === 0,
-    dismissed: false,
-    sortOrder: i,
-    citedSignals: [{ id: r.pattern.id, statement: r.pattern.statement }],
-    createdMs: boardMs,
-  }));
-
-  /* What the poster rests on: the patterns under it, in their own words. This
-     is the peek row — not the newest few, but what led to what you are
-     reading. It points at layer 2 because that is what an entry cites. */
-  const provenance: Provenance = new Map(
-    readings.map((r) => [r.pattern.id, r.pattern.statement] as const),
-  );
-
-  return {
-    captures,
-    patterns: readings.map((r) => r.pattern),
-    citations,
-    notes,
-    adopted: {
-      ambition: "I am making the surface that shows what I meant, so I stop having to explain it.",
-      /* your own board, so there is no room to name */
-      groupName: null,
-      createdMs: boardMs,
-    },
-    provenance,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
-
-/**
- * WHAT A WALL'S HEADQUARTERS SAYS. One shape for every kind of wall — yours,
- * a room's, an agent's — because headquarters is the same five things
- * everywhere: whose wall this is, what it holds, what it turned away from,
- * whether it is looking at a moment other than now, and whether something else
- * is forming.
- */
-interface WallChrome {
-  /** the wall's name, and nothing else in that slot, ever */
-  eyebrow: string;
-  text: string | null;
-  /**
-   * AND WHAT IT STOPPED DOING. A portrait that says only what it is, is a
-   * brochure; one that says what it turned away from has paid for the claim —
-   * it is the most credible thing a self-description can contain, because it
-   * costs something to say. It renders as a second clause in the same
-   * sentence, one step down the luminance channel: the assertion is nearer
-   * than the renunciation. It is not a second element — headquarters is never
-   * two-headed.
-   */
-  awayFrom: string | null;
-  /** The forming register, when nothing is adopted: what the wall itself says. */
-  formingAlt: string | null;
-  asOf: string | null;
-  /** The one line under the ambition, or nothing when nothing is forming. */
-  forming: string | null;
-  /** Nothing kept here at all. Youth, not failure — and never filled in. */
-  empty: boolean;
-  /**
-   * What this wall said a moment ago, so the poster can tell the words that
-   * survived the rewrite from the words that are new. See posterWords.
-   */
-  prevText: string | null;
-}
 
 /**
  * Where the reading panel sits, in viewport coordinates. Either `top` or
@@ -4179,7 +1545,7 @@ interface SimApi {
   identify: (id: string, sigId: string) => void;
   /** The keep did not land: the newborn fades out in place and leaves. */
   unborn: (id: string) => void;
-  /** The captures the ambition was built from — the peek row is made of these. */
+  /** The inspirations the ambition was built from — the peek row is made of these. */
   /** What each wall's claim rests on, keyed by wall. The peek row reads it. */
   setProvenance: (byWall: Map<string, Provenance>) => void;
   /**
@@ -4254,7 +1620,7 @@ function WorldExperience(): JSX.Element {
    * working", and that moment had no design at all: the world simply rendered,
    * fuller than before, with nothing to say which part was new.
    *
-   * The answer is not a digest. Announcing "3 new patterns" before the world
+   * The answer is not a digest. Announcing "3 new signals" before the world
    * draws converts the discovery into a receipt — the reward for opening it
    * was seeing, and telling first spends that. Animal Crossing greets a
    * two-month absence with no summary screen at all; it just gives you a
@@ -4272,14 +1638,14 @@ function WorldExperience(): JSX.Element {
     }
   }
   const offlineRef = useRef(false);
-  const [captures, setCaptures] = useState<Inspiration[] | null>(null);
+  const [inspirations, setInspirations] = useState<Inspiration[] | null>(null);
   const [notes, setNotes] = useState<JarNote[] | null>(null);
   /**
    * THE SKY, IN THE CANON'S SENSE — layer 2. Each is an evidence-backed
    * pattern: `emerging` is still forming overhead, `active` is what
    * headquarters stands on, `retired` has sunk. Null until the answer is in.
    */
-  const [patterns, setPatterns] = useState<Signal[] | null>(null);
+  const [signals, setSignals] = useState<Signal[] | null>(null);
   /**
    * WHICH PATTERNS REST ON WHICH MEMORY — built from the sky, consumed by the
    * field. A capture under the canon knows nothing about its own meaning, so
@@ -4320,7 +1686,7 @@ function WorldExperience(): JSX.Element {
   readSkyRef.current = async () => {
     const rows = await loadSignals();
     if (offlineRef.current) return;
-    setPatterns(rows);
+    setSignals(rows);
     const index = new Map<string, Evidence[]>();
     for (const p of rows) {
       if (offlineRef.current) return;
@@ -4427,7 +1793,7 @@ function WorldExperience(): JSX.Element {
    * READ EVERYTHING AGAIN.
    *
    * Regeneration is the only verb that reaches all the way down: it rebuilds
-   * the artifact from the patterns as they now stand, so every "yes" and
+   * the artifact from the signals as they now stand, so every "yes" and
    * "not true" said in the sky finally arrives somewhere visible. Without it
    * answering a pattern was a row in a table nobody would ever see again.
    *
@@ -4512,19 +1878,19 @@ function WorldExperience(): JSX.Element {
   const [groups, setGroups] = useState<ApiGroupSummary[]>([]);
   /**
    * The agents: the columns to the LEFT. Mock until the endpoints land.
-   * Null until the answer is in — the field is built from the owner's captures
+   * Null until the answer is in — the field is built from the owner's inspirations
    * AND the agents' kept memories together, and it is built once, whole.
    */
   const [agents, setAgents] = useState<AgentBundle[] | null>(null);
   /** Rooms that have woken this session: their words exist, whole. */
-  const [wokenRooms, setWokenRooms] = useState<ReadonlySet<string>>(() => new Set());
+  const [wokenGroups, setWokenGroups] = useState<ReadonlySet<string>>(() => new Set());
   /* the ref's change signal: the ball list is rebuilt when a room's ground lands */
-  const [roomFieldTick, setRoomFieldTick] = useState(0);
+  const [groupFieldTick, setGroupFieldTick] = useState(0);
   const setMembersRef = useRef<(m: Map<string, ApiGroupMember[]>) => void>(() => {});
   /** Rooms whose data could not be fetched: the column says so, quietly. */
-  const [failedRooms, setFailedRooms] = useState<ReadonlySet<string>>(() => new Set());
+  const [failedGroups, setFailedGroups] = useState<ReadonlySet<string>>(() => new Set());
   /** Which wall the camera is standing on. Discrete, pushed from the loop. */
-  const [atWall, setAtWall] = useState<Wall>({ kind: "self", id: "", name: "Waka", col: 0 });
+  const [atWall, setAtWall] = useState<Space>({ kind: "self", id: "", name: "Waka", col: 0 });
   /** The camera is over a wall that has no dial: the dial fades, as in the sky. */
   const [dialAway, setDialAway] = useState(false);
   /** Drafts assembled here, in this session. They live nowhere else. */
@@ -4663,19 +2029,19 @@ function WorldExperience(): JSX.Element {
    * Newest agent nearest you, newest room nearest you: the axis grows outward
    * from where you stand.
    */
-  const walls = useMemo<Wall[]>(() => {
-    const out: Wall[] = [];
+  const walls = useMemo<Space[]>(() => {
+    const out: Space[] = [];
     (agents ?? []).forEach((a, i) => {
       out.push({ kind: "agent", id: a.agent.id, name: a.agent.name, col: -(i + 1) });
     });
     out.reverse(); /* leftmost first, so the array is the axis in order */
     out.push({ kind: "self", id: "", name: "Waka", col: 0 });
     groups.forEach((g, i) => {
-      out.push({ kind: "room", id: g.id, name: g.name, col: i + 1 });
+      out.push({ kind: "group", id: g.id, name: g.name, col: i + 1 });
     });
     return out;
   }, [agents, groups]);
-  const wallsRef = useRef<Wall[]>([]);
+  const wallsRef = useRef<Space[]>([]);
   wallsRef.current = walls;
   const agentsRef = useRef<AgentBundle[]>([]);
   agentsRef.current = agents ?? [];
@@ -4687,16 +2053,16 @@ function WorldExperience(): JSX.Element {
    */
   const wallProvRef = useRef<Map<string, Provenance>>(new Map());
   /** Per-session room data: fetched once, when travel toward it begins. */
-  const roomCacheRef = useRef<
-    Map<string, { status: "pending" | "ready" | "failed"; data: RoomData | null }>
+  const groupCacheRef = useRef<
+    Map<string, { status: "pending" | "ready" | "failed"; data: GroupData | null }>
   >(new Map());
-  const roomChromeRef = useRef<Map<string, WallChrome>>(new Map());
+  const groupChromeRef = useRef<Map<string, WallChrome>>(new Map());
   /* a room's ground, by group id, filled when the room wakes */
-  const roomFieldRef = useRef<Map<string, ApiGroupFieldCapture[]>>(new Map());
+  const groupFieldRef = useRef<Map<string, ApiGroupFieldCapture[]>>(new Map());
   /** Namespaced room-orb id → ball, for the panel and relight lookups. */
-  const roomBallsRef = useRef<Map<string, Ball>>(new Map());
+  const groupBallsRef = useRef<Map<string, Ball>>(new Map());
   /** Rooms whose orbs have already poured this session: no re-pour on return. */
-  const roomVisitedRef = useRef<Set<string>>(new Set());
+  const groupVisitedRef = useRef<Set<string>>(new Set());
 
   /**
    * Fetch one room's jar — its readings' evidence plus its direction —
@@ -4705,12 +2071,12 @@ function WorldExperience(): JSX.Element {
    * resolved: a room never renders half-poured. Cached for the session; a
    * failure clears itself so the next travel toward it tries again.
    */
-  const loadRoom = useCallback((groupId: string) => {
-    const cache = roomCacheRef.current;
+  const loadGroup = useCallback((groupId: string) => {
+    const cache = groupCacheRef.current;
     const got = cache.get(groupId);
     if (got && got.status !== "failed") return;
     cache.set(groupId, { status: "pending", data: null });
-    setFailedRooms((prev) => {
+    setFailedGroups((prev) => {
       if (!prev.has(groupId)) return prev;
       const next = new Set(prev);
       next.delete(groupId);
@@ -4729,27 +2095,27 @@ function WorldExperience(): JSX.Element {
     ])
       .then(([top, wall, proposals, field]) => {
         wallSignalsRef.current.set(groupId, wall);
-        roomFieldRef.current.set(groupId, field);
-        setRoomFieldTick((n) => n + 1);
-        const evidence = roomWallOrbs(wall, top);
+        groupFieldRef.current.set(groupId, field);
+        setGroupFieldTick((n) => n + 1);
+        const evidence = groupWallOrbs(wall, top);
         const name = groupsRef.current.find((g) => g.id === groupId)?.name ?? "";
         const open = proposals.find((p) => p.status === "open");
         const openMs = open ? Date.parse(open.createdAt) || 0 : null;
-        roomChromeRef.current.set(
+        groupChromeRef.current.set(
           groupId,
-          deriveRoomChrome(name, top, openMs, evidence, groupCompany(membersRef.current.get(groupId))),
+          deriveGroupChrome(name, top, openMs, evidence, groupCompany(membersRef.current.get(groupId))),
         );
         cache.set(groupId, { status: "ready", data: { evidence, top } });
         simApiRef.current?.wake();
       })
       .catch(() => {
         cache.set(groupId, { status: "failed", data: null });
-        setFailedRooms((prev) => new Set(prev).add(groupId));
+        setFailedGroups((prev) => new Set(prev).add(groupId));
         simApiRef.current?.wake();
       });
   }, []);
-  const loadRoomRef = useRef(loadRoom);
-  loadRoomRef.current = loadRoom;
+  const loadGroupRef = useRef(loadGroup);
+  loadGroupRef.current = loadGroup;
 
   /**
    * Warm a wall, whatever kind it is. A room fetches; an agent already has
@@ -4758,16 +2124,16 @@ function WorldExperience(): JSX.Element {
    * wall begins, so arrival usually finds it ready.
    */
   const loadWall = useCallback(
-    (w: Wall) => {
-      if (w.kind === "room") loadRoom(w.id);
+    (w: Space) => {
+      if (w.kind === "group") loadGroup(w.id);
     },
-    [loadRoom],
+    [loadGroup],
   );
   const loadWallRef = useRef(loadWall);
   loadWallRef.current = loadWall;
 
   /** The camera came to rest on a wall. Discrete, pushed from the loop. */
-  const pushArrived = useCallback((w: Wall) => {
+  const pushArrived = useCallback((w: Space) => {
     setAtWall((prev) => (prev.kind === w.kind && prev.id === w.id ? prev : w));
   }, []);
   const pushArrivedRef = useRef(pushArrived);
@@ -4775,7 +2141,7 @@ function WorldExperience(): JSX.Element {
 
   /** A room woke: its words may exist now. Discrete, pushed from the loop. */
   const pushWoken = useCallback((groupId: string) => {
-    setWokenRooms((prev) => (prev.has(groupId) ? prev : new Set(prev).add(groupId)));
+    setWokenGroups((prev) => (prev.has(groupId) ? prev : new Set(prev).add(groupId)));
   }, []);
   const pushWokenRef = useRef(pushWoken);
   pushWokenRef.current = pushWoken;
@@ -4797,7 +2163,7 @@ function WorldExperience(): JSX.Element {
       offlineRef.current = true;
       setOffline(true);
       setNotes(world.notes);
-      setPatterns(world.patterns);
+      setSignals(world.signals);
       setCitations(world.citations);
       setTopOfMind(null);
       /* THE FIXTURE DESCRIBES THE WHOLE WORLD, NOT JUST YOUR WALL.
@@ -4815,7 +2181,7 @@ function WorldExperience(): JSX.Element {
          visitor. Its purpose is that the world can be LOOKED AT without a
          session. */
       const iso = (t: number) => new Date(t).toISOString();
-      const fixtureRooms: ApiGroupSummary[] = [
+      const fixtureGroups: ApiGroupSummary[] = [
         { id: "fx-alone", name: "Just me", joinCode: "FIXTURE1", role: "owner", memberCount: 1, createdAt: iso(Date.now()) },
         { id: "fx-pair", name: "Me and my agent", joinCode: "FIXTURE2", role: "owner", memberCount: 2, createdAt: iso(Date.now()) },
         { id: "fx-people", name: "The four of us", joinCode: "FIXTURE3", role: "member", memberCount: 5, createdAt: iso(Date.now()) },
@@ -4851,7 +2217,7 @@ function WorldExperience(): JSX.Element {
       );
       /* each room's ground: the members' public memories, so the hues, the
          legend and the pixelated agent orbs all have something to render */
-      for (const room of fixtureRooms) {
+      for (const room of fixtureGroups) {
         const who =
           room.id === "fx-alone"
             ? [you]
@@ -4873,14 +2239,14 @@ function WorldExperience(): JSX.Element {
             ownerType: m.type,
           })),
         );
-        roomFieldRef.current.set(room.id, field);
+        groupFieldRef.current.set(room.id, field);
       }
-      setRoomFieldTick((n) => n + 1);
-      setGroups(fixtureRooms);
+      setGroupFieldTick((n) => n + 1);
+      setGroups(fixtureGroups);
       setProposal(null);
       setAdopted(world.adopted);
       setProvenance(world.provenance);
-      setCaptures(world.captures);
+      setInspirations(world.inspirations);
       setPhase("ready");
     };
     /* LAYER 1 — the field. The archive is the spine, so its answer alone
@@ -4888,7 +2254,7 @@ function WorldExperience(): JSX.Element {
     loadInspirations()
       .then((rows) => {
         if (dead || offlineRef.current) return;
-        setCaptures(rows);
+        setInspirations(rows);
         setPhase("ready");
       })
       .catch((err: unknown) => {
@@ -4945,13 +2311,13 @@ function WorldExperience(): JSX.Element {
        the orbit draws its satellites from. One request per pattern, off the
        critical path, so nothing overhead delays the pour below.
 
-       Retired patterns are kept. Nothing that exists pops out of existence —
+       Retired signals are kept. Nothing that exists pops out of existence —
        a pattern that lost its evidence sinks and cools, it is not deleted. */
     readSkyRef
       .current()
       .catch(() => {
         /* an empty sky is a real state: nothing has been distilled yet */
-        if (!dead && !offlineRef.current) setPatterns([]);
+        if (!dead && !offlineRef.current) setSignals([]);
       });
     /* LAYER 3 — headquarters. Exactly one artifact per profile, so this is a
        single object and null is a real state rather than an error. */
@@ -4968,7 +2334,7 @@ function WorldExperience(): JSX.Element {
         /* WHAT THE POSTER RESTS ON — TWO HOPS DOWN, NOT ONE.
            An entry cites PATTERNS, and a pattern cites MEMORIES. The peek row
            beneath the ambition is made of orbs, so it needs the far end of
-           that chain: the memories the patterns under this statement were
+           that chain: the memories the signals under this statement were
            drawn from. Keyed by pattern id it matched nothing and the row fell
            back to "the newest few", which is the one thing it must never be —
            the row is what LED HERE, not what happened lately.
@@ -4995,8 +2361,8 @@ function WorldExperience(): JSX.Element {
         if (!dead) setAgents([]);
       });
     /* THE ROOMS — the columns to the RIGHT.
-       A room is a WALL OF STATEMENTS. Members share signals, never captures,
-       so what hangs on a room's wall is other people's patterns with their
+       A room is a WALL OF STATEMENTS. Members share signals, never inspirations,
+       so what hangs on a room's wall is other people's signals with their
        names on them; the raw memories behind them never leave the account
        they were saved in. That is the canon's privacy line and it is why a
        room's orbit can say WHO fed an entry but never WHICH memory did. */
@@ -5015,8 +2381,8 @@ function WorldExperience(): JSX.Element {
       for (const g of rows) {
         if (offlineRef.current || dead) return;
         try {
-          /* A room's board is NOT fetched here. `loadRoom` fetches it on
-             arrival and stores it per room in `roomChromeRef`, which is where
+          /* A room's board is NOT fetched here. `loadGroup` fetches it on
+             arrival and stores it per room in `groupChromeRef`, which is where
              `wallChromeNow` reads a room's poster from. Fetching it at boot
              too was one request per room for a value nothing read. */
           const [wall, proposals] = await Promise.all([
@@ -5060,7 +2426,7 @@ function WorldExperience(): JSX.Element {
              This block used to take the first room that had a board and call
              `setAdopted` with it. `adopted` is read in exactly one place —
              `wallChromeNow`'s `else` branch, which is YOUR wall (a room reads
-             `roomChromeRef`, an agent reads `deriveAgentChrome`). So a room's
+             `groupChromeRef`, an agent reads `deriveAgentChrome`). So a room's
              sentence, carrying the room's name as its eyebrow, landed on the
              poster over your own headquarters. It won every time rather than
              only when yours was missing, because this loop awaits
@@ -5129,7 +2495,7 @@ function WorldExperience(): JSX.Element {
          business making three requests that will all 401 */
       if (offlineRef.current) return;
       void Promise.allSettled([
-        loadInspirations().then((rows) => setCaptures(rows)),
+        loadInspirations().then((rows) => setInspirations(rows)),
         loadAgentWalls().then((rows) => setAgents(rows)),
         readSkyRef.current(),
       ]);
@@ -5174,7 +2540,7 @@ function WorldExperience(): JSX.Element {
    * whole thing is silent, which is most days.
    */
   useEffect(() => {
-    if (!captures || phase !== "ready" || offlineRef.current) return undefined;
+    if (!inspirations || phase !== "ready" || offlineRef.current) return undefined;
     const since = lastSeenRef.current;
     const stamp = () => {
       try {
@@ -5189,7 +2555,7 @@ function WorldExperience(): JSX.Element {
       stamp();
       return undefined;
     }
-    const fresh = captures.filter((c) => c.capturedMs > since);
+    const fresh = inspirations.filter((c) => c.capturedMs > since);
     if (fresh.length === 0) {
       stamp();
       return undefined;
@@ -5208,13 +2574,13 @@ function WorldExperience(): JSX.Element {
       stamp();
     }, 1400);
     return () => window.clearTimeout(t);
-  }, [captures, phase]);
+  }, [inspirations, phase]);
 
   /* ------------- the background sweep: newest first, four at a time -------------
      The peek orbs are the likeliest first tap, so the newest are fetched
      first. Four in flight keeps it off the critical path of the pour. */
   useEffect(() => {
-    if (!captures) return undefined;
+    if (!inspirations) return undefined;
     /* There is no reading behind a fixture memory and there is no server to
        ask for one. Every word of it is already here — the same fact a memory
        kept at the mouth carries — so the sweep would be twenty-four requests
@@ -5222,7 +2588,7 @@ function WorldExperience(): JSX.Element {
        content that is not degraded. */
     if (offlineRef.current) return undefined;
     let dead = false;
-    const queue = [...captures].sort((a, b) => b.capturedMs - a.capturedMs).map((s) => s.id);
+    const queue = [...inspirations].sort((a, b) => b.capturedMs - a.capturedMs).map((s) => s.id);
     let next = 0;
     const pump = (): Promise<void> => {
       if (dead || next >= queue.length) return Promise.resolve();
@@ -5244,7 +2610,7 @@ function WorldExperience(): JSX.Element {
       dead = true;
       window.clearTimeout(start);
     };
-  }, [captures, loadDetail]);
+  }, [inspirations, loadDetail]);
 
   /* ------------- derived data (changes only when data changes) ------------- */
 
@@ -5258,11 +2624,11 @@ function WorldExperience(): JSX.Element {
    * image on the same beat its words arrive rather than in a later flash.
    */
   const urlById = useMemo(() => {
-    void captures;
+    void inspirations;
     const m = new Map<string, string>();
     for (const d of detailsRef.current.values()) if (d.imageUrl) m.set(d.id, d.imageUrl);
     return m;
-  }, [captures, sweepDone]);
+  }, [inspirations, sweepDone]);
 
   /**
    * The personal capture set, by id. A pattern's evidence is resolved against
@@ -5272,14 +2638,14 @@ function WorldExperience(): JSX.Element {
    */
   const signalById = useMemo(() => {
     const m = new Map<string, Inspiration>();
-    for (const s of captures ?? []) m.set(s.id, s);
+    for (const s of inspirations ?? []) m.set(s.id, s);
     return m;
-  }, [captures]);
+  }, [inspirations]);
 
   const dial = useMemo(() => {
-    if (!captures || captures.length === 0) return null;
+    if (!inspirations || inspirations.length === 0) return null;
     let earliest = Infinity;
-    for (const s of captures) {
+    for (const s of inspirations) {
       const ms = s.capturedMs;
       if (Number.isFinite(ms) && ms > 0 && ms < earliest) earliest = ms;
     }
@@ -5301,7 +2667,7 @@ function WorldExperience(): JSX.Element {
       cursor.setMonth(cursor.getMonth() + 1);
     }
     return { start, end, span, majors };
-  }, [captures, clockMs]);
+  }, [inspirations, clockMs]);
 
   /* ------------- palette: resolve vars once, re-raster sprites ------------- */
   useEffect(() => {
@@ -5375,16 +2741,16 @@ function WorldExperience(): JSX.Element {
        sim effect below re-invokes it right after creating a fresh bag, so
        the two fetches' resolution order no longer matters. */
     loadSpritesRef.current();
-  }, [urlById, captures]);
+  }, [urlById, inspirations]);
 
-  /** THE SKY, AS THE FORMING LINE COUNTS IT: the patterns still emerging,
+  /** THE SKY, AS THE FORMING LINE COUNTS IT: the signals still emerging,
       each with the moment it first appeared so the dial can wind past it. */
   const emerging = useMemo(
     () =>
-      (patterns ?? [])
+      (signals ?? [])
         .filter((p) => p.status === "emerging")
         .map((p) => ({ createdMs: p.createdMs })),
-    [patterns],
+    [signals],
   );
 
   /* ------------- HQ chrome derived from time T (discrete facts only) ------------- */
@@ -5401,7 +2767,7 @@ function WorldExperience(): JSX.Element {
                 agent: { id: atWall.id, name: atWall.name, kind: "agent", createdAt: "" },
                 direction: { current: null, history: [] },
                 topOfMind: { notes: [] },
-                captures: [],
+                inspirations: [],
               },
               T,
               nowMs,
@@ -5414,14 +2780,14 @@ function WorldExperience(): JSX.Element {
                writing the room's sentence into your slot — which is why
                deleting it left the room blank. The cover-up and the hole were
                one bug wearing two faces.
-               `roomChromeRef` is the same map `wallChromeNow` reads for every
-               room you are NOT standing on, filled by `loadRoom` on arrival,
+               `groupChromeRef` is the same map `wallChromeNow` reads for every
+               room you are NOT standing on, filled by `loadGroup` on arrival,
                so this makes the wall you are on agree with the walls beside
                it instead of borrowing from you. Until it arrives the room is
                honestly blank — it says its own name and nothing else, rather
                than showing someone else's ambition under it. */
-            atWall.kind === "room"
-            ? roomChromeRef.current.get(atWall.id) ?? {
+            atWall.kind === "group"
+            ? groupChromeRef.current.get(atWall.id) ?? {
                 text: null,
                 eyebrow: atWall.name,
                 awayFrom: null,
@@ -5444,14 +2810,14 @@ function WorldExperience(): JSX.Element {
                     ? monthTag(T)
                     : null,
                 /* WHAT IS OVERHEAD, IN WORDS. The forming line counts the sky
-                   — the patterns still emerging — because that is now what is
+                   — the signals still emerging — because that is now what is
                    literally above the poster. It is time-aware too: scrub back
                    past a pattern and it reports what existed then, or says
                    nothing at all. */
                 forming: formingWords(T, proposal ? proposal.createdMs : null, emerging),
                 /* Nothing synthesized and nothing kept: the honest empty, and
                    it is the artifact's absence that says so, not a guess. */
-                empty: topOfMind === null && (captures?.length ?? 0) === 0,
+                empty: topOfMind === null && (inspirations?.length ?? 0) === 0,
                 prevText: null,
               };
             })();
@@ -5469,13 +2835,13 @@ function WorldExperience(): JSX.Element {
             { ...next, prevText: prev.text },
       );
     },
-    /* `wokenRooms` is here because a room's board arrives asynchronously into
-       `roomChromeRef`, which is a ref and so cannot itself trigger anything.
-       `loadRoom` adds the room to this set in the same breath as filling that
+    /* `wokenGroups` is here because a room's board arrives asynchronously into
+       `groupChromeRef`, which is a ref and so cannot itself trigger anything.
+       `loadGroup` adds the room to this set in the same breath as filling that
        map, so depending on it is what makes the poster appear on arrival
        rather than at whatever unrelated render happens next. `wallChromeNow`
        already depends on it for the same reason. */
-    [dial, adopted, notes, proposal, atWall, agents, emerging, topOfMind, captures, wokenRooms],
+    [dial, adopted, notes, proposal, atWall, agents, emerging, topOfMind, inspirations, wokenGroups],
   );
   /* The fallback chain's provenance: when the poster is showing an entry of
      the board rather than a room's, that entry's own citations are what led to
@@ -5488,7 +2854,7 @@ function WorldExperience(): JSX.Element {
     if (!best) for (const n of notes) if (!best || n.sortOrder < best.sortOrder) best = n;
     if (!best) return;
     const prov: Provenance = new Map();
-    /* the same two hops: entry → its patterns → the memories they were drawn
+    /* the same two hops: entry → its signals → the memories they were drawn
        from, which is what the row beneath the poster is actually made of */
     for (const c of best.citedSignals)
       for (const e of evidenceByPatternRef.current.get(c.id) ?? [])
@@ -5512,7 +2878,7 @@ function WorldExperience(): JSX.Element {
    * that went blank the moment you stepped off it would be a thing popping
    * out of existence.
    *
-   * Rooms come from the ref the fetch fills; `wokenRooms` is in the deps
+   * Rooms come from the ref the fetch fills; `wokenGroups` is in the deps
    * precisely so that this re-derives on the render where a room wakes, and
    * the read is therefore never stale.
    */
@@ -5522,26 +2888,26 @@ function WorldExperience(): JSX.Element {
     for (const w of walls) {
       if (w.kind === "agent") {
         const a = (agents ?? []).find((x) => x.agent.id === w.id);
-        if (a) m.set(wallKey(w), deriveAgentChrome(a, nowMs, nowMs));
-      } else if (w.kind === "room") {
-        const rc = roomChromeRef.current.get(w.id);
-        if (rc) m.set(wallKey(w), rc);
+        if (a) m.set(spaceKey(w), deriveAgentChrome(a, nowMs, nowMs));
+      } else if (w.kind === "group") {
+        const rc = groupChromeRef.current.get(w.id);
+        if (rc) m.set(spaceKey(w), rc);
       } else {
         const at = deriveAmbition(nowMs, adopted, notes);
-        m.set(wallKey(w), {
+        m.set(spaceKey(w), {
           eyebrow: at.eyebrow,
           text: at.text,
           awayFrom: null,
           formingAlt: null,
           asOf: null,
           forming: formingWords(nowMs, proposal ? proposal.createdMs : null, emerging),
-          empty: topOfMind === null && (captures?.length ?? 0) === 0,
+          empty: topOfMind === null && (inspirations?.length ?? 0) === 0,
           prevText: null,
         });
       }
     }
     return m;
-  }, [walls, agents, wokenRooms, dial, adopted, notes, proposal, emerging, topOfMind, captures]);
+  }, [walls, agents, wokenGroups, dial, adopted, notes, proposal, emerging, topOfMind, inspirations]);
 
   /**
    * WHAT EACH WALL'S CLAIM RESTS ON.
@@ -5556,7 +2922,7 @@ function WorldExperience(): JSX.Element {
     m.set("self:", provenance);
     for (const a of agents ?? []) {
       const prov: Provenance = new Map();
-      const byId = new Map(a.captures.map((s) => [s.id, s] as const));
+      const byId = new Map(a.inspirations.map((s) => [s.id, s] as const));
       const held = a.direction.current;
       for (const id of held?.groundedIn ?? []) {
         const s = byId.get(id);
@@ -5571,8 +2937,8 @@ function WorldExperience(): JSX.Element {
        are what light — the same rule as everywhere else (what this wall's
        claim rests on), applied to the material a room actually has. */
     for (const w of walls) {
-      if (w.kind !== "room") continue;
-      const room = roomCacheRef.current.get(w.id);
+      if (w.kind !== "group") continue;
+      const room = groupCacheRef.current.get(w.id);
       const lead = room?.data?.top?.entries?.[0];
       const prov: Provenance = new Map();
       if (lead)
@@ -5582,7 +2948,7 @@ function WorldExperience(): JSX.Element {
     }
     wallProvRef.current = m;
     simApiRef.current?.setProvenance(m);
-  }, [provenance, agents, captures, walls, wokenRooms]);
+  }, [provenance, agents, inspirations, walls, wokenGroups]);
 
   /* The field's own invariant, reachable from the console — see SimApi.audit
      for why counting it beats looking at it. Dev-gated with the page itself. */
@@ -5599,7 +2965,7 @@ function WorldExperience(): JSX.Element {
   useEffect(() => {
     const root = rootRef.current;
     const canvas = canvasRef.current;
-    if (!root || !canvas || !captures || !agents) return undefined;
+    if (!root || !canvas || !inspirations || !agents) return undefined;
     const ctx = canvas.getContext("2d");
     if (!ctx) return undefined;
 
@@ -5621,13 +2987,13 @@ function WorldExperience(): JSX.Element {
        having an agent arrive would make your own memory vanish. Anything the
        archive has already fetched back under either id wins, so a reload can
        never double it. */
-    const fetched = new Set(captures.map((s) => s.id));
+    const fetched = new Set(inspirations.map((s) => s.id));
     const kept = bornRef.current.filter(
       (s) => !fetched.has(s.id) && !(s.sigId !== undefined && fetched.has(s.sigId)),
     );
-    const patternById = new Map((patterns ?? []).map((p) => [p.id, p] as const));
+    const signalById = new Map((signals ?? []).map((p) => [p.id, p] as const));
     /* EVERY WALL'S GROUND, NOT ONLY YOURS.
-       The field held your captures and nothing else — `makeAgentBall` was
+       The field held your inspirations and nothing else — `makeAgentBall` was
        exported and never called, so an agent's memories were fetched into
        memory and then dropped, and a room's were never fetched at all. Three
        symptoms came out of that one gap: agent walls read as having signals
@@ -5639,15 +3005,15 @@ function WorldExperience(): JSX.Element {
        field does not slide sideways when you travel; what changes is which
        of these are standing on the ground in front of you. */
     const agentBalls = (agents ?? []).flatMap((a) =>
-      a.captures.map((cap) => makeAgentBall(cap)),
+      a.inspirations.map((cap) => makeAgentBall(cap)),
     );
     /* A room's ground is its members' PUBLIC memories, each still owned by
        the person who kept it — `ownerProfileId` is what the per-member hue
        will read, and it is carried from here rather than re-derived. */
-    const roomBalls = walls
-      .filter((w) => w.kind === "room")
+    const groupBalls = walls
+      .filter((w) => w.kind === "group")
       .flatMap((w) =>
-        (roomFieldRef.current.get(w.id) ?? []).map((cap) =>
+        (groupFieldRef.current.get(w.id) ?? []).map((cap) =>
           makeAgentBall({
             id: cap.id,
             agentId: w.id,
@@ -5672,22 +3038,22 @@ function WorldExperience(): JSX.Element {
        memories are excluded so they stay the warm white they are at home. */
     const hueOf = new Map<string, number>();
     for (const w of walls) {
-      if (w.kind !== "room") continue;
+      if (w.kind !== "group") continue;
       let next = 0;
-      for (const cap of roomFieldRef.current.get(w.id) ?? []) {
+      for (const cap of groupFieldRef.current.get(w.id) ?? []) {
         if (cap.ownerProfileId === viewerIdRef.current) continue;
         if (hueOf.has(cap.ownerProfileId)) continue;
         hueOf.set(cap.ownerProfileId, next++);
       }
     }
     hueByOwnerRef.current = hueOf;
-    for (const b of roomBalls) {
+    for (const b of groupBalls) {
       b.hue = b.ownerProfileId ? hueOf.get(b.ownerProfileId) ?? -1 : -1;
     }
     const list = [
-      ...captures.map((c) => makeBall(seedOf(c, citations, patternById))),
+      ...inspirations.map((c) => makeBall(seedOf(c, citations, signalById))),
       ...agentBalls,
-      ...roomBalls,
+      ...groupBalls,
       ...kept.map(bornBall),
     ].sort((a, b) => a.capturedMs - b.capturedMs);
     const byId = new Map(list.map((b) => [b.id, b] as const));
@@ -6070,7 +3436,7 @@ function WorldExperience(): JSX.Element {
     /**
      * WHICH MEMORIES THIS WALL'S CLAIM RESTS ON, and where they rise to.
      *
-     * These are the orbs that LED TO THE AMBITION — the raw captures its
+     * These are the orbs that LED TO THE AMBITION — the raw inspirations its
      * readings were grounded in — so what peeks under the poster is its
      * provenance, not merely what is newest. When the provenance is unknown
      * (nothing adopted yet, or none of its evidence is in this archive) it
@@ -6218,8 +3584,8 @@ function WorldExperience(): JSX.Element {
        of them. What still varies per wall is what stands ABOVE: its adopted
        ambition, its sky of forming candidates, and which memories its claim
        rests on — the peek row. */
-    const SELF_WALL: Wall = { kind: "self", id: "", name: "Waka", col: 0 };
-    const wallAt = (c: number): Wall =>
+    const SELF_WALL: Space = { kind: "self", id: "", name: "Waka", col: 0 };
+    const wallAt = (c: number): Space =>
       wallsRef.current.find((w) => w.col === c) ?? SELF_WALL;
     const curWall = () => wallAt(col);
     /**
@@ -6314,7 +3680,7 @@ function WorldExperience(): JSX.Element {
     };
 
     function findBall(id: string): Ball | undefined {
-      return byId.get(id) ?? roomBallsRef.current.get(id);
+      return byId.get(id) ?? groupBallsRef.current.get(id);
     }
 
     /**
@@ -6337,7 +3703,7 @@ function WorldExperience(): JSX.Element {
      * one of you.
      */
     interface Resident {
-      wall: Wall;
+      wall: Space;
       being: Being;
       sprites: BeingSprites;
       /** its own aliveness: the memories IT kept, and how alive they still are */
@@ -6406,7 +3772,7 @@ function WorldExperience(): JSX.Element {
      * A wall's being, baked once and held for the session. Nothing renders
      * half-loaded: the sprites exist before the column is ever drawn.
      */
-    function ensureResident(w: Wall): Resident | null {
+    function ensureResident(w: Space): Resident | null {
       if (w.kind !== "agent") return null;
       const got = residents.get(w.col);
       if (got && got.wall.id === w.id) return got;
@@ -6448,23 +3814,23 @@ function WorldExperience(): JSX.Element {
     function tryWakeWall() {
       if (travelActive) return;
       const w = curWall();
-      if (w.kind === "room") {
-        const entry = roomCacheRef.current.get(w.id);
+      if (w.kind === "group") {
+        const entry = groupCacheRef.current.get(w.id);
         if (!entry || entry.status === "pending") {
           awaitingWake = true;
           return;
         }
         awaitingWake = false;
         if (entry.status === "failed" || !entry.data) return; /* React whispers it */
-        if (!roomVisitedRef.current.has(w.id)) {
-          roomVisitedRef.current.add(w.id);
+        if (!groupVisitedRef.current.has(w.id)) {
+          groupVisitedRef.current.add(w.id);
           pushWokenRef.current(w.id);
         }
       } else {
         awaitingWake = false;
       }
       /* the wall's claim lifts its own handful of the ground */
-      provenance = wallProv.get(wallKey(w)) ?? new Map();
+      provenance = wallProv.get(spaceKey(w)) ?? new Map();
       electPeek(presentBalls());
       const res = ensureResident(w);
       if (res) {
@@ -6696,9 +4062,9 @@ function WorldExperience(): JSX.Element {
       } else if (e.groupId) {
         id = `${e.groupId}:${e.signalId}`;
         /* a room column already built has the real record; never overwrite it */
-        let rb = roomBallsRef.current.get(id);
+        let rb = groupBallsRef.current.get(id);
         if (!rb) {
-          rb = makeRoomBall(
+          rb = makeGroupBall(
             {
               signalId: e.signalId,
               textPreview: e.textPreview,
@@ -6714,7 +4080,7 @@ function WorldExperience(): JSX.Element {
             viewerIdRef.current,
           );
           rb.noDate = !e.dated;
-          roomBallsRef.current.set(id, rb);
+          groupBallsRef.current.set(id, rb);
         }
         src = rb;
       } else {
@@ -7107,7 +4473,7 @@ function WorldExperience(): JSX.Element {
         perCol.set(c.col, taken + 1);
         const had = prev.get(c.id);
         if (had) {
-          /* the sky cannot exist before the captures do, so this is never a
+          /* the sky cannot exist before the inspirations do, so this is never a
              late arrival — it is a candidate whose evidence genuinely
              changed (a draft re-drafted), re-solved once. Phases are hashed
              per candidate-and-memory, so every surviving satellite keeps the
@@ -7307,7 +4673,7 @@ function WorldExperience(): JSX.Element {
       /**
        * WHAT THIS ONE WOULD JOIN IF YOU LET GO NOW.
        *
-       * Nothing on screen said that dragging two patterns together does
+       * Nothing on screen said that dragging two signals together does
        * anything — the founder could not tell it was possible, which means
        * the sky's one act of meaning-making was invisible. So the world
        * answers in the only channel it has: lift a pattern and the one it is
@@ -7329,7 +4695,7 @@ function WorldExperience(): JSX.Element {
        *
        * This is that layer, and it obeys the world's law that nothing moves
        * unless you moved it: no drift, no pulse, no demonstration playing
-       * itself. Two patterns near enough to be joined simply lean into each
+       * itself. Two signals near enough to be joined simply lean into each
        * other's light while sitting perfectly still.
        */
       for (const n of nebs) n.pairable = false;
@@ -9148,7 +6514,7 @@ function WorldExperience(): JSX.Element {
         }
       }
 
-      /* which patterns could be joined — recomputed only when the set itself
+      /* which signals could be joined — recomputed only when the set itself
          changes, so a still sky costs nothing */
       {
         let sig = "";
@@ -9174,13 +6540,13 @@ function WorldExperience(): JSX.Element {
          HORIZONTAL means "whose wall", and the dial means "when". Two
          different horizontal meanings on the same edge, and the bottom edge
          belongs to the axis. There is also nothing up here to wind: the sky
-         holds patterns that are still forming and headquarters holds one
+         holds signals that are still forming and headquarters holds one
          sentence, neither of which has a history to scrub. So it comes up
          with the field and goes away with it. */
       const inField = camY > world.fieldTop * 0.5;
       /* THE LEGEND BELONGS TO THE GROUND IT EXPLAINS.
          It is a key to the orbs, so it exists where the orbs are. Standing at
-         headquarters reading one sentence, or up in the sky among patterns,
+         headquarters reading one sentence, or up in the sky among signals,
          a list of whose-colour-is-whose answers a question nobody is asking —
          it was just chrome in the corner. It comes up with the field and goes
          away with it, exactly as the timeline does. */
@@ -9708,9 +7074,9 @@ function WorldExperience(): JSX.Element {
         }
         /* travel toward a room begins at swipe start: fetch it now */
         if (off > 20 && hasNext && groupsRef.current[col])
-          loadRoomRef.current(groupsRef.current[col].id);
+          loadGroupRef.current(groupsRef.current[col].id);
         else if (off < -20 && col - 1 > 0 && groupsRef.current[col - 2])
-          loadRoomRef.current(groupsRef.current[col - 2].id);
+          loadGroupRef.current(groupsRef.current[col - 2].id);
         lastT = nowT;
         wake();
         return;
@@ -10345,7 +7711,7 @@ function WorldExperience(): JSX.Element {
             if (q) b.quote = q;
           }
         }
-        provenance = byWall.get(wallKey(curWall())) ?? new Map();
+        provenance = byWall.get(spaceKey(curWall())) ?? new Map();
         electPeek(presentBalls());
         wake();
       },
@@ -10356,7 +7722,7 @@ function WorldExperience(): JSX.Element {
        *
        * Every function that works by dragging needs a route that does not
        * require dragging — a hard accessibility requirement, and combining
-       * two patterns was the one drag-only act in this world. Travel and the
+       * two signals was the one drag-only act in this world. Travel and the
        * descent already have arrow keys; this is the gesture that had nothing.
        *
        * It is also the discoverability fix in disguise. The word only appears
@@ -10557,11 +7923,11 @@ function WorldExperience(): JSX.Element {
       simApiRef.current = null;
       ballsRef.current = null;
       /* room orbs belong to this run of the loop; the DATA cache stays */
-      roomBallsRef.current.clear();
+      groupBallsRef.current.clear();
     };
     /* The field is what you kept AND what your agents kept, so the loop waits
        for both before it builds anything — one pour, never a second one. */
-  }, [captures, agents, walls, roomFieldTick]);
+  }, [inspirations, agents, walls, groupFieldTick]);
 
   /* ---------------- dial scrubbing (writes refs, not state) ---------------- */
 
@@ -10654,8 +8020,8 @@ function WorldExperience(): JSX.Element {
     /* A room orb that belongs to another member: the 180ch preview/quote is
        the WHOLE panel — the full text of someone else's save is not ours to
        fetch, so nothing is missing and nothing loads. One appearance. */
-    const roomBall = roomBallsRef.current.get(selectedId);
-    if (roomBall && !roomBall.own) {
+    const groupBall = groupBallsRef.current.get(selectedId);
+    if (groupBall && !groupBall.own) {
       setPanel({ id: selectedId, detail: null, partial: false });
       setPanelOpen(true);
       return undefined;
@@ -10682,7 +8048,7 @@ function WorldExperience(): JSX.Element {
     }
     /* the viewer's OWN save seen in a room fetches by its real signal id —
        and so does one kept here, whose ball keeps the id it was born under */
-    const fetchId = roomBall?.sigId ?? ownBall?.sigId ?? selectedId;
+    const fetchId = groupBall?.sigId ?? ownBall?.sigId ?? selectedId;
     /* Already in hand (the background sweep, or the warm-up fired on
        pointerdown): the panel appears in the same commit as the selection —
        no wait at all, and still one single appearance. */
@@ -10776,8 +8142,8 @@ function WorldExperience(): JSX.Element {
    * so the legend and the orbs are physically incapable of disagreeing.
    */
   const legend = useMemo<Array<{ id: string; name: string; hue: number; agent: boolean }>>(() => {
-    if (atWall.kind !== "room") return [];
-    const caps = roomFieldRef.current.get(atWall.id) ?? [];
+    if (atWall.kind !== "group") return [];
+    const caps = groupFieldRef.current.get(atWall.id) ?? [];
     const seen = new Map<string, { id: string; name: string; hue: number; agent: boolean }>();
     for (const c of caps) {
       if (seen.has(c.ownerProfileId)) continue;
@@ -10792,7 +8158,7 @@ function WorldExperience(): JSX.Element {
     /* one owner is not a legend, it is a label nobody asked for */
     if (rows.length < 2) return [];
     return rows.sort((a, b) => (a.hue < 0 ? -1 : b.hue < 0 ? 1 : a.hue - b.hue));
-  }, [atWall, roomFieldTick, wokenRooms]);
+  }, [atWall, groupFieldTick, wokenGroups]);
   /**
    * WHAT THE POSTER RESTS ON — THE SAME QUESTION, ONE LAYER UP.
    *
@@ -10802,10 +8168,10 @@ function WorldExperience(): JSX.Element {
    * pattern in the sky but not the sentence the whole wall is built around,
    * which is exactly backwards.
    *
-   * The chain runs entry → the patterns it cites → the memories those
-   * patterns were read from. Deduplicated by memory, because the interesting
+   * The chain runs entry → the signals it cites → the memories those
+   * signals were read from. Deduplicated by memory, because the interesting
    * fact is "four memories produced this", not "one memory was counted twice
-   * through two patterns"; the first quote wins, since that is the span the
+   * through two signals"; the first quote wins, since that is the span the
    * first citing pattern actually read.
    *
    * An agent's wall answers the same question from its own stack: its board
@@ -10816,7 +8182,7 @@ function WorldExperience(): JSX.Element {
     const seen = new Set<string>();
     if (atWall.kind === "agent") {
       const a = (agents ?? []).find((x) => x.agent.id === atWall.id);
-      const byId = new Map((a?.captures ?? []).map((cap) => [cap.id, cap] as const));
+      const byId = new Map((a?.inspirations ?? []).map((cap) => [cap.id, cap] as const));
       for (const id of a?.direction.current?.groundedIn ?? []) {
         const cap = byId.get(id);
         if (!cap || seen.has(id)) continue;
@@ -10832,7 +8198,7 @@ function WorldExperience(): JSX.Element {
       }
       return out;
     }
-    if (atWall.kind === "room") {
+    if (atWall.kind === "group") {
       /* A ROOM'S CHAIN STOPS AT THE STATEMENT, AND THAT IS THE POINT.
          Sharing into a room sends the statement and nothing under it — the
          memories stay on their author's own wall. So a room's board can
@@ -10841,7 +8207,7 @@ function WorldExperience(): JSX.Element {
          boundary rendered as a shorter chain, not a missing feature: a room
          that could show you the memories behind someone else's statement
          would be breaking the promise the share note makes. */
-      const room = roomCacheRef.current.get(atWall.id);
+      const room = groupCacheRef.current.get(atWall.id);
       const lead = room?.data?.top?.entries?.[0];
       if (!lead) return out;
       for (const ev of room?.data?.evidence ?? []) {
@@ -10870,7 +8236,7 @@ function WorldExperience(): JSX.Element {
         out.push(e);
       }
     return out;
-  }, [atWall, agents, notes, provTick, wokenRooms]);
+  }, [atWall, agents, notes, provTick, wokenGroups]);
 
   /**
    * The evidence under a pattern. Candidates are a union — a server pattern, a
@@ -10971,14 +8337,14 @@ function WorldExperience(): JSX.Element {
         originIds: [],
       });
     }
-    /* THE SKY IS LAYER 2 — the patterns still forming.
+    /* THE SKY IS LAYER 2 — the signals still forming.
        A pattern that is `active` is what headquarters already stands on and a
        `retired` one has sunk; what is overhead is what is EMERGING: something
        the archive is saying about this person that has not become what they
        hold yet. Each one's satellites are the memories it cites, resolved
        against the field in hand — an id with nothing behind it is skipped,
        never invented, so every satellite stands for a memory that exists. */
-    for (const p of patterns ?? []) {
+    for (const p of signals ?? []) {
       if (p.status !== "emerging") continue;
       const evidence = new Map<string, EvidenceRef>();
       for (const e of evidenceByPatternRef.current.get(p.id) ?? []) {
@@ -11017,7 +8383,7 @@ function WorldExperience(): JSX.Element {
        shared wall has: the field below is always your own by ruling, and the
        room's headquarters holds only what it has already agreed. */
     for (const g of groups) {
-      const col = walls.find((w) => w.kind === "room" && w.id === g.id)?.col;
+      const col = walls.find((w) => w.kind === "group" && w.id === g.id)?.col;
       if (col === undefined) continue;
       for (const s of wallSignalsRef.current.get(g.id) ?? []) {
         out.push({
@@ -11052,7 +8418,7 @@ function WorldExperience(): JSX.Element {
     for (const a of agents ?? []) {
       const col = walls.find((w) => w.kind === "agent" && w.id === a.agent.id)?.col;
       if (col === undefined) continue;
-      const byId = new Map(a.captures.map((s) => [s.id, s] as const));
+      const byId = new Map(a.inspirations.map((s) => [s.id, s] as const));
       for (const n of a.topOfMind.notes) {
         if (!n.isProvisional) continue;
         const evidence: EvidenceRef[] = [];
@@ -11088,14 +8454,14 @@ function WorldExperience(): JSX.Element {
       }
     }
     return [...out, ...drafts];
-  /* `patterns` for your own sky, `groups` and `wokenRooms` for a room's — the
+  /* `signals` for your own sky, `groups` and `wokenGroups` for a room's — the
      shared statements arrive with the wall's wake, so the memo has to re-run
      on it or a room's sky stays empty until something else moves */
-  }, [proposal, notes, drafts, signalById, agents, walls, patterns, groups, wokenRooms]);
+  }, [proposal, notes, drafts, signalById, agents, walls, signals, groups, wokenGroups]);
 
   useEffect(() => {
     simApiRef.current?.syncSky(candidates);
-  }, [candidates, captures]);
+  }, [candidates, inspirations]);
 
   const byCandidateId = useMemo(() => {
     const m = new Map<string, Candidate>();
@@ -11231,7 +8597,7 @@ function WorldExperience(): JSX.Element {
        than it looked: the server fetches that page at capture time and feeds
        what it reads to pattern extraction. Left as bare text the extraction
        never sees the page, so the archive quietly learns less from exactly the
-       captures that carry the most — and nothing on screen says so. */
+       inspirations that carry the most — and nothing on screen says so. */
     const links = Array.from(new Set(text.match(/https?:\/\/[^\s<>"')]+/g) ?? []));
     const atMs = Date.now();
     const seed: BornSeed = {
@@ -11246,7 +8612,7 @@ function WorldExperience(): JSX.Element {
          distillation is a background pass on the server, so a memory a second
          old is genuinely uncited and is drawn that way. */
       cited: false,
-      inRoom: false,
+      inGroup: false,
       terms: [],
     };
     bornRef.current = [...bornRef.current, seed];
@@ -11283,15 +8649,15 @@ function WorldExperience(): JSX.Element {
         simApiRef.current?.identify(seed.id, made.id);
         /* AND IT JOINS THE ARCHIVE, NOT ONLY THE GROUND.
            The orb was born on the canvas and the row was written on the
-           server, and `captures` — the list every other part of the page
+           server, and `inspirations` — the list every other part of the page
            reads — was told about neither. So headquarters kept computing
-           `empty` as `topOfMind === null && captures.length === 0` and kept
+           `empty` as `topOfMind === null && inspirations.length === 0` and kept
            drawing the three-slot first-run scaffold, including the row
            labelled "everything you keep" with an empty circle beside it,
            while the thing just kept glowed underneath it.
            `forgetIt` and `togglePublic` already keep this list honest on
            their own success; keeping does now too. */
-        setCaptures((prev) =>
+        setInspirations((prev) =>
           prev
             ? [
                 ...prev,
@@ -11392,12 +8758,12 @@ function WorldExperience(): JSX.Element {
   }, [mouthOpen]);
 
   const panelBall = panelId
-    ? ballsRef.current?.byId.get(panelId) ?? roomBallsRef.current.get(panelId) ?? null
+    ? ballsRef.current?.byId.get(panelId) ?? groupBallsRef.current.get(panelId) ?? null
     : null;
   /** A room orb's panel: whisper attribution, cited-by, and — for another
       member's save — no reflect action at all. */
-  const panelIsRoom = panelBall !== null && panelBall.col !== undefined;
-  const panelCanReflect = !panelIsRoom || panelBall?.own === true;
+  const panelIsGroup = panelBall !== null && panelBall.col !== undefined;
+  const panelCanReflect = !panelIsGroup || panelBall?.own === true;
 
   /* ---------------- reflect ----------------
      The panel is the memory and ONE action. Reflecting happens here rather
@@ -11455,7 +8821,7 @@ function WorldExperience(): JSX.Element {
     if (offlineRef.current) return;
     deleteSignal(id)
       .then(() => {
-        setPatterns((prev) => (prev ? prev.filter((p) => p.id !== id) : prev));
+        setSignals((prev) => (prev ? prev.filter((p) => p.id !== id) : prev));
       })
       .catch(() => {
         setVerdicts((prev) => {
@@ -11500,12 +8866,12 @@ function WorldExperience(): JSX.Element {
    *
    * Per-signal, per-room, and reversible. The statement appears on that
    * room's wall with your name on it; the memories it rests on stay here.
-   * Members see the pattern, never the captures.
+   * Members see the pattern, never the inspirations.
    */
   const shareTo = useCallback((signalId: string, groupId: string, on: boolean) => {
     /* only on the way out — taking a statement back is not an announcement */
     if (on) simApiRef.current?.acknowledge("shared");
-    setPatterns((prev) =>
+    setSignals((prev) =>
       prev
         ? prev.map((p) =>
             p.id === signalId
@@ -11523,7 +8889,7 @@ function WorldExperience(): JSX.Element {
     const call = on ? shareSignal(signalId, groupId) : unshareSignal(signalId, groupId);
     call.catch(() => {
       /* it did not land, so the pattern must not claim it is out loud */
-      setPatterns((prev) =>
+      setSignals((prev) =>
         prev
           ? prev.map((p) =>
               p.id === signalId
@@ -11541,27 +8907,27 @@ function WorldExperience(): JSX.Element {
   }, []);
 
   /** Making a room, joining one, and the state of asking about either. */
-  const [roomForm, setRoomForm] = useState<{
+  const [groupForm, setGroupForm] = useState<{
     mode: "make" | "join";
     text: string;
     busy: boolean;
     error: string | null;
   } | null>(null);
 
-  const submitRoom = useCallback(() => {
-    if (!roomForm || roomForm.busy) return;
-    const text = roomForm.text.trim();
+  const submitGroup = useCallback(() => {
+    if (!groupForm || groupForm.busy) return;
+    const text = groupForm.text.trim();
     if (text === "") return;
-    setRoomForm({ ...roomForm, busy: true, error: null });
+    setGroupForm({ ...groupForm, busy: true, error: null });
     const landed = (g: ApiGroupSummary) => {
       /* newest room first, which is where the axis puts it: a new column
          appears to the right and the traveller can walk to it immediately */
       setGroups((prev) => [g, ...prev.filter((x) => x.id !== g.id)]);
-      setRoomForm(null);
+      setGroupForm(null);
     };
     const failed = (m: string) =>
-      setRoomForm((f) => (f ? { ...f, busy: false, error: m } : f));
-    if (roomForm.mode === "make") {
+      setGroupForm((f) => (f ? { ...f, busy: false, error: m } : f));
+    if (groupForm.mode === "make") {
       createGroup(text)
         .then(landed)
         .catch(() => failed("That room could not be made. Try another name."));
@@ -11573,7 +8939,7 @@ function WorldExperience(): JSX.Element {
         .then((r) => landed(r.group))
         .catch(() => failed("No room answered to that. Check the link."));
     }
-  }, [roomForm]);
+  }, [groupForm]);
 
   /**
    * WHO IS IN HERE — and it is the same act as inviting.
@@ -11603,8 +8969,8 @@ function WorldExperience(): JSX.Element {
    * counting yourself would mean no room could ever read as a machine's. What
    * decides a room's character is who ELSE is standing in it.
    */
-  const machineRoomsRef = useRef<Set<string>>(new Set());
-  const machineRooms = useMemo(() => {
+  const machineGroupsRef = useRef<Set<string>>(new Set());
+  const machineGroups = useMemo(() => {
     const out = new Set<string>();
     for (const [groupId, list] of members) {
       const others = list.filter((m) => m.profileId !== viewerIdRef.current);
@@ -11612,15 +8978,15 @@ function WorldExperience(): JSX.Element {
     }
     return out;
   }, [members]);
-  machineRoomsRef.current = machineRooms;
-  const [roomPanel, setRoomPanel] = useState<string | null>(null);
+  machineGroupsRef.current = machineGroups;
+  const [groupPanel, setGroupPanel] = useState<string | null>(null);
 
   /**
    * THIS SPACE'S SETTINGS — keyed by the space, opened from its name.
    *
    * Not a modal and not a route: it is a fact about where you are standing, so
    * it opens beside the name that opened it and closes when you travel. The
-   * key is `wallKey(space)` rather than a group id because every kind of space
+   * key is `spaceKey(space)` rather than a group id because every kind of space
    * has settings — yours sends you to the account screen, an agent's names
    * what it is, a group's is the real one.
    */
@@ -11640,7 +9006,7 @@ function WorldExperience(): JSX.Element {
   const [closing, setClosing] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
   useEffect(() => {
-    if (atWall.kind !== "room" || members.has(atWall.id)) return;
+    if (atWall.kind !== "group" || members.has(atWall.id)) return;
     let dead = false;
     fetchGroupMembers(atWall.id)
       .then((rows) => {
@@ -11673,7 +9039,7 @@ function WorldExperience(): JSX.Element {
           setPropose(null);
           /* the room's forming line will report that something is on its way;
              nothing is claimed as agreed until the room says so */
-          roomCacheRef.current.delete(groupId);
+          groupCacheRef.current.delete(groupId);
         })
         .catch(() => setPropose((p) => (p ? { ...p, busy: false } : p)));
     },
@@ -11693,7 +9059,7 @@ function WorldExperience(): JSX.Element {
     () => new Map(),
   );
   useEffect(() => {
-    if (atWall.kind !== "room") return;
+    if (atWall.kind !== "group") return;
     let dead = false;
     fetchGroupProposals(atWall.id)
       .then((rows) => {
@@ -11720,7 +9086,7 @@ function WorldExperience(): JSX.Element {
       .then(() => {
         /* the room's own board may have moved; it is refetched rather than
            guessed, because what a group believes is not ours to assume */
-        roomCacheRef.current.delete(groupId);
+        groupCacheRef.current.delete(groupId);
         simApiRef.current?.wake();
       })
       .catch(() => undefined);
@@ -11728,11 +9094,11 @@ function WorldExperience(): JSX.Element {
 
   /** Leaving is destructive and irreversible, so it asks once, in words. */
   const [leaving, setLeaving] = useState<string | null>(null);
-  const leaveRoom = useCallback((groupId: string) => {
+  const leaveThisGroup = useCallback((groupId: string) => {
     leaveGroup(groupId)
       .then(() => {
         setGroups((prev) => prev.filter((g) => g.id !== groupId));
-        setRoomPanel(null);
+        setGroupPanel(null);
         setLeaving(null);
         simApiRef.current?.travel(-1);
       })
@@ -11754,7 +9120,7 @@ function WorldExperience(): JSX.Element {
    * not go out until the database has agreed, which is the same rule the
    * memory panel's delete already follows.
    */
-  const renameRoom = useCallback((groupId: string, name: string) => {
+  const renameThisGroup = useCallback((groupId: string, name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
     setRenaming((cur) => (cur ? { ...cur, busy: true } : cur));
@@ -11766,7 +9132,7 @@ function WorldExperience(): JSX.Element {
       .catch(() => setRenaming((cur) => (cur ? { ...cur, busy: false } : cur)));
   }, []);
 
-  const closeRoom = useCallback((groupId: string) => {
+  const closeThisGroup = useCallback((groupId: string) => {
     deleteGroup(groupId)
       .then(() => {
         setGroups((prev) => prev.filter((g) => g.id !== groupId));
@@ -11823,7 +9189,7 @@ function WorldExperience(): JSX.Element {
             agent: { id: p.id, name: p.name, kind: "agent" as const, createdAt: "" },
             direction: { current: null, history: [] },
             topOfMind: { notes: [] },
-            captures: [],
+            inspirations: [],
           },
         ]);
         setAgentName(null);
@@ -12009,7 +9375,7 @@ function WorldExperience(): JSX.Element {
     if (edit.kind === "memory") {
       updateInspiration(edit.id, { text })
         .then(() => {
-          setCaptures((prev) =>
+          setInspirations((prev) =>
             prev ? prev.map((c) => (c.id === edit.id ? { ...c, preview: text } : c)) : prev,
           );
           detailsRef.current.delete(edit.id);
@@ -12020,7 +9386,7 @@ function WorldExperience(): JSX.Element {
     } else if (edit.kind === "pattern") {
       updateSignal(edit.id, { statement: text })
         .then(() => {
-          setPatterns((prev) =>
+          setSignals((prev) =>
             prev ? prev.map((p) => (p.id === edit.id ? { ...p, statement: text, locked: true } : p)) : prev,
           );
           done();
@@ -12063,7 +9429,7 @@ function WorldExperience(): JSX.Element {
      copy carries it, so the word is right from the first frame it is shown */
   const panelIsPublic =
     panel?.detail?.isPublic ??
-    (captures ?? []).find((c) => c.id === (panelBall?.sigId ?? panelId))?.isPublic ??
+    (inspirations ?? []).find((c) => c.id === (panelBall?.sigId ?? panelId))?.isPublic ??
     false;
   const [publishing, setPublishing] = useState(false);
   const togglePublic = useCallback(() => {
@@ -12073,7 +9439,7 @@ function WorldExperience(): JSX.Element {
     setPublishing(true);
     updateInspiration(id, { visibility: next })
       .then(() => {
-        setCaptures((cur) =>
+        setInspirations((cur) =>
           (cur ?? []).map((c) => (c.id === id ? { ...c, isPublic: next === "public" } : c)),
         );
         /* it went out to people, or it came home */
@@ -12103,7 +9469,7 @@ function WorldExperience(): JSX.Element {
         setSelectedId(null);
         simApiRef.current?.unborn(id);
         bornRef.current = bornRef.current.filter((s) => s.id !== id && s.sigId !== serverId);
-        setCaptures((prev) =>
+        setInspirations((prev) =>
           prev ? prev.filter((c) => c.id !== id && c.id !== serverId) : prev,
         );
         setForget({ id: null, step: "rest" });
@@ -12215,12 +9581,12 @@ function WorldExperience(): JSX.Element {
               it is yours, it lives below all of these, and it does not slide
               sideways when you travel. */}
           {walls.map((w) => {
-            const key = wallKey(w);
+            const key = spaceKey(w);
             const here = w.kind === atWall.kind && w.id === atWall.id;
             /* the wall you are standing on is the one the dial winds; every
                other wall shows what it holds NOW */
             const c = here ? chrome : wallChromeNow.get(key) ?? null;
-            const ready = w.kind !== "room" || wokenRooms.has(w.id);
+            const ready = w.kind !== "group" || wokenGroups.has(w.id);
             return (
               <div
                 key={key}
@@ -12229,7 +9595,7 @@ function WorldExperience(): JSX.Element {
                    typography and the body must never disagree about what
                    kind of mind you are standing in */
                 data-kind={
-                  w.kind === "room" && machineRooms.has(w.id) ? "agent" : w.kind
+                  w.kind === "group" && machineGroups.has(w.id) ? "agent" : w.kind
                 }
                 style={{ left: `calc(var(--jar-vw, 100vw) * ${w.col})` }}
               >
@@ -12410,7 +9776,7 @@ function WorldExperience(): JSX.Element {
                                 previews the consequence at the moment of the
                                 vote, and that is the whole difference in how
                                 fair the two feel. Regeneration rewrites the
-                                board from the patterns as they now stand, so
+                                board from the signals as they now stand, so
                                 the sentence names exactly that. */}
                             <span className="jar-board-warn">
                               Reading everything again. What it says may change.
@@ -12499,7 +9865,7 @@ function WorldExperience(): JSX.Element {
                   <p className="jar-sky-empty jar-label">
                     {w.kind === "agent"
                       ? "Nothing forming yet"
-                      : (captures?.length ?? 0) === 0
+                      : (inspirations?.length ?? 0) === 0
                         ? "Nothing is forming yet"
                         : "Patterns come from what repeats — nothing has, yet"}
                   </p>
@@ -12559,7 +9925,7 @@ function WorldExperience(): JSX.Element {
                     </p>
                   )
                 ) : null}
-                {w.kind === "room" && failedRooms.has(w.id) && !ready ? (
+                {w.kind === "group" && failedGroups.has(w.id) && !ready ? (
                   <p className="jar-wall-hold jar-label">Couldn’t reach this room</p>
                 ) : null}
                 {/* THE EDGE OF THE WORLD, AND WHAT IS BEYOND IT.
@@ -12588,7 +9954,7 @@ function WorldExperience(): JSX.Element {
                       className="jar-edge jar-edge--r jar-label"
                       data-jar-chrome="1"
                       onClick={() =>
-                        setRoomForm({ mode: "make", text: "", busy: false, error: null })
+                        setGroupForm({ mode: "make", text: "", busy: false, error: null })
                       }
                     >
                       Make a room
@@ -12636,7 +10002,7 @@ function WorldExperience(): JSX.Element {
             const left = walls[i - 1] ?? null;
             const right = walls[i + 1] ?? null;
             return (
-              <Fragment key={`edges-${wallKey(w)}`}>
+              <Fragment key={`edges-${spaceKey(w)}`}>
                 {left ? (
                   <button
                     type="button"
@@ -12845,7 +10211,7 @@ function WorldExperience(): JSX.Element {
                 {atWall.kind === "self" && groups.length > 0 ? (
                   <>
                     <button type="button" onClick={() => setSharing(sharing === c.id ? null : c.id)}>
-                      {(patterns ?? []).find((p) => p.id === c.id)?.sharedGroupIds.length
+                      {(signals ?? []).find((p) => p.id === c.id)?.sharedGroupIds.length
                         ? "out loud in"
                         : "say out loud"}
                     </button>
@@ -12902,7 +10268,7 @@ function WorldExperience(): JSX.Element {
             {sharing === c.id ? (
               <div className="jar-share">
                 {groups.map((g) => {
-                  const on = (patterns ?? []).find((p) => p.id === c.id)?.sharedGroupIds.includes(g.id) ?? false;
+                  const on = (signals ?? []).find((p) => p.id === c.id)?.sharedGroupIds.includes(g.id) ?? false;
                   return (
                     <button
                       key={g.id}
@@ -12979,7 +10345,7 @@ function WorldExperience(): JSX.Element {
           role="dialog"
           aria-label="a saved inspiration"
         >
-          {panelIsRoom ? (
+          {panelIsGroup ? (
             /* whisper attribution: whose save this is, and when — where the
                evidence named no date of its own, who alone. Leaving a fact
                out is honest; guessing at it is not. */
@@ -13004,7 +10370,7 @@ function WorldExperience(): JSX.Element {
           {panel.partial ? (
             <p className="jar-panel-note">Couldn’t load the rest.</p>
           ) : null}
-          {panelIsRoom && panelBall.citedBy && panelBall.citedBy.length > 0 ? (
+          {panelIsGroup && panelBall.citedBy && panelBall.citedBy.length > 0 ? (
             /* the collapsed links sentence, adapted: what read this save */
             <p className="jar-panel-cited jar-label">{citedWords(panelBall.citedBy)}</p>
           ) : null}
@@ -13019,7 +10385,7 @@ function WorldExperience(): JSX.Element {
               Three answers, no deletion: removing it would be editing
               someone else's mind, and the room's own board moves by proposal
               and affirmation instead (founder ruling). */}
-          {panelIsRoom && !panelBall.own && panelBall.sigId ? (
+          {panelIsGroup && !panelBall.own && panelBall.sigId ? (
             /* keyed by the SIGNAL's id, which is what the feedback was filed
                against — the ball's own id is namespaced per room and would
                read back empty every time */
@@ -13114,9 +10480,9 @@ function WorldExperience(): JSX.Element {
               It asks once, in place, because there is no undo behind it. */}
           {/* EDITING THE MEMORY ITSELF — the last thing the archive could do
               that this world could not. Editing a capture re-derives the
-              patterns resting on it, which is why it belongs here beside the
+              signals resting on it, which is why it belongs here beside the
               words rather than on a settings screen somewhere. */}
-          {panelCanReflect && !panelIsRoom && edit?.id === panelId ? (
+          {panelCanReflect && !panelIsGroup && edit?.id === panelId ? (
             <div className="jar-reflect">
               <textarea
                 className="jar-reflect-box"
@@ -13156,7 +10522,7 @@ function WorldExperience(): JSX.Element {
               <button type="button" onClick={askToReflect}>
                 reflect on this
               </button>
-              {!panelIsRoom ? (
+              {!panelIsGroup ? (
                 <>
                   <span aria-hidden="true"> · </span>
                   <button type="button" onClick={() => setMore(true)}>
@@ -13166,7 +10532,7 @@ function WorldExperience(): JSX.Element {
               ) : null}
             </p>
           ) : null}
-          {panelCanReflect && !panelIsRoom && reflect.step === "rest" && !edit && more ? (
+          {panelCanReflect && !panelIsGroup && reflect.step === "rest" && !edit && more ? (
             <p className="jar-neb-ask jar-neb-ask--after">
               <button
                 type="button"
@@ -13185,7 +10551,7 @@ function WorldExperience(): JSX.Element {
               {/* THE PICTURE GOES INSIDE THE GLASS. A memory that carries an
                   image is drawn with it, which is the thing this world was
                   first sketched around — and the server reads the picture at
-                  capture time, so it feeds the patterns too. */}
+                  capture time, so it feeds the signals too. */}
               <label className="jar-attach">
                 {attaching ? "keeping the picture…" : "add a picture"}
                 <input
@@ -13312,12 +10678,12 @@ function WorldExperience(): JSX.Element {
             <button
               type="button"
               className="jar-here jar-back jar-label"
-              aria-expanded={settingsFor === wallKey(atWall)}
+              aria-expanded={settingsFor === spaceKey(atWall)}
               onClick={() =>
-                setSettingsFor(settingsFor === wallKey(atWall) ? null : wallKey(atWall))
+                setSettingsFor(settingsFor === spaceKey(atWall) ? null : spaceKey(atWall))
               }
             >
-              {atWall.kind === "room"
+              {atWall.kind === "group"
                 ? groups.find((g) => g.id === atWall.id)?.name ?? atWall.name
                 : atWall.name}
             </button>
@@ -13462,7 +10828,7 @@ function WorldExperience(): JSX.Element {
           const here = atWall.kind === w.kind && atWall.id === w.id;
           return (
             <button
-              key={wallKey(w)}
+              key={spaceKey(w)}
               type="button"
               className={`jar-axis-mark${here ? " is-here" : ""} jar-axis-mark--${w.kind}`}
               aria-current={here ? "true" : undefined}
@@ -13505,20 +10871,20 @@ function WorldExperience(): JSX.Element {
           reachable by keyboard, and none of that survives being painted into
           the world. So it is DOM, it sits over the world rather than inside
           it, and the world holds perfectly still behind it. */}
-      {roomForm ? (
+      {groupForm ? (
         <div className="jar-roomform" data-jar-chrome="1">
           <div className="jar-roomform-tabs jar-label">
             <button
               type="button"
-              className={roomForm.mode === "make" ? "is-on" : undefined}
-              onClick={() => setRoomForm({ ...roomForm, mode: "make", error: null })}
+              className={groupForm.mode === "make" ? "is-on" : undefined}
+              onClick={() => setGroupForm({ ...groupForm, mode: "make", error: null })}
             >
               Make a room
             </button>
             <button
               type="button"
-              className={roomForm.mode === "join" ? "is-on" : undefined}
-              onClick={() => setRoomForm({ ...roomForm, mode: "join", error: null })}
+              className={groupForm.mode === "join" ? "is-on" : undefined}
+              onClick={() => setGroupForm({ ...groupForm, mode: "join", error: null })}
             >
               Join with a link
             </button>
@@ -13526,21 +10892,21 @@ function WorldExperience(): JSX.Element {
           <input
             className="jar-roomform-box"
             autoFocus
-            value={roomForm.text}
-            placeholder={roomForm.mode === "make" ? "What is it about?" : "Paste the link"}
-            onChange={(e) => setRoomForm({ ...roomForm, text: e.target.value })}
+            value={groupForm.text}
+            placeholder={groupForm.mode === "make" ? "What is it about?" : "Paste the link"}
+            onChange={(e) => setGroupForm({ ...groupForm, text: e.target.value })}
             onKeyDown={(e) => {
-              if (e.key === "Enter") submitRoom();
-              if (e.key === "Escape") setRoomForm(null);
+              if (e.key === "Enter") submitGroup();
+              if (e.key === "Escape") setGroupForm(null);
             }}
           />
-          {roomForm.error ? <p className="jar-roomform-err">{roomForm.error}</p> : null}
+          {groupForm.error ? <p className="jar-roomform-err">{groupForm.error}</p> : null}
           <p className="jar-neb-ask">
-            <button type="button" onClick={submitRoom} disabled={roomForm.busy}>
-              {roomForm.busy ? "…" : roomForm.mode === "make" ? "make it" : "go in"}
+            <button type="button" onClick={submitGroup} disabled={groupForm.busy}>
+              {groupForm.busy ? "…" : groupForm.mode === "make" ? "make it" : "go in"}
             </button>
             <span aria-hidden="true"> · </span>
-            <button type="button" onClick={() => setRoomForm(null)}>
+            <button type="button" onClick={() => setGroupForm(null)}>
               not now
             </button>
           </p>
@@ -13567,13 +10933,13 @@ function WorldExperience(): JSX.Element {
       {/* THE ROOM, OPENED. Who is in it, how to bring somebody, what you can
           put to them, and the way out — one surface, because they are all the
           same question: who is this with and what do we say together. */}
-      {roomPanel && atWall.kind === "room" && atWall.id === roomPanel ? (
+      {groupPanel && atWall.kind === "group" && atWall.id === groupPanel ? (
         <div className="jar-roomform" data-jar-chrome="1">
           <div className="jar-label" style={{ marginBottom: 14 }}>
             {atWall.name}
           </div>
           <div className="jar-share">
-            {(members.get(roomPanel) ?? []).map((m) => (
+            {(members.get(groupPanel) ?? []).map((m) => (
               <span key={m.profileId} className="jar-share-row">
                 {m.name}
                 {m.role === "owner" ? <span className="jar-share-hint">made it</span> : null}
@@ -13584,18 +10950,18 @@ function WorldExperience(): JSX.Element {
             <button
               type="button"
               onClick={() => {
-                const g = groups.find((x) => x.id === roomPanel);
+                const g = groups.find((x) => x.id === groupPanel);
                 if (g) copyInvite(g);
               }}
             >
-              {copied === roomPanel ? "link copied" : "copy the invite link"}
+              {copied === groupPanel ? "link copied" : "copy the invite link"}
             </button>
           </p>
 
           {/* WHAT IS BEING ASKED OF THIS ROOM. Each one is somebody's sentence
               waiting on the rest of you — read it, say yes or say no, and the
               board moves when the room agrees rather than when you press. */}
-          {(openProposals.get(roomPanel) ?? []).map((p) => (
+          {(openProposals.get(groupPanel) ?? []).map((p) => (
             <div key={p.id} className="jar-proposal">
               <p className="jar-proposal-body">{p.body}</p>
               {/* THE WHOLE ROOM, NOT THE PART THAT AGREED.
@@ -13610,7 +10976,7 @@ function WorldExperience(): JSX.Element {
                   which is the only way this world is allowed to say a number —
                   and you can see at a glance whether the missing one is you. */}
               <p className="jar-proposal-who jar-label">
-                {(members.get(roomPanel) ?? []).map((m, i) => {
+                {(members.get(groupPanel) ?? []).map((m, i) => {
                   const said = p.affirmations.some((a) => a.profileId === m.profileId);
                   return (
                     <span
@@ -13630,11 +10996,11 @@ function WorldExperience(): JSX.Element {
                 </p>
               ) : (
                 <p className="jar-neb-ask">
-                  <button type="button" onClick={() => answerProposal(roomPanel, p.id, true)}>
+                  <button type="button" onClick={() => answerProposal(groupPanel, p.id, true)}>
                     yes, that is us
                   </button>
                   <span aria-hidden="true"> · </span>
-                  <button type="button" onClick={() => answerProposal(roomPanel, p.id, false)}>
+                  <button type="button" onClick={() => answerProposal(groupPanel, p.id, false)}>
                     not us
                   </button>
                 </p>
@@ -13656,7 +11022,7 @@ function WorldExperience(): JSX.Element {
                 onChange={(e) => setPropose({ ...propose, text: e.target.value })}
               />
               <p className="jar-neb-ask">
-                <button type="button" disabled={propose.busy} onClick={() => sendProposal(roomPanel)}>
+                <button type="button" disabled={propose.busy} onClick={() => sendProposal(groupPanel)}>
                   {propose.busy ? "…" : "put it to them"}
                 </button>
                 <span aria-hidden="true"> · </span>
@@ -13674,9 +11040,9 @@ function WorldExperience(): JSX.Element {
           )}
 
           <p className="jar-neb-ask jar-neb-ask--after">
-            {leaving === roomPanel ? (
+            {leaving === groupPanel ? (
               <>
-                <button type="button" onClick={() => leaveRoom(roomPanel)}>
+                <button type="button" onClick={() => leaveThisGroup(groupPanel)}>
                   leave — your statements come down
                 </button>
                 <span aria-hidden="true"> · </span>
@@ -13685,13 +11051,13 @@ function WorldExperience(): JSX.Element {
                 </button>
               </>
             ) : (
-              <button type="button" onClick={() => setLeaving(roomPanel)}>
+              <button type="button" onClick={() => setLeaving(groupPanel)}>
                 leave this room
               </button>
             )}
           </p>
           <p className="jar-neb-ask" style={{ marginTop: 10 }}>
-            <button type="button" onClick={() => setRoomPanel(null)}>
+            <button type="button" onClick={() => setGroupPanel(null)}>
               close
             </button>
           </p>
@@ -13761,18 +11127,18 @@ function WorldExperience(): JSX.Element {
         </div>
       ) : null}
 
-      {settingsFor === wallKey(atWall) && phase === "ready" ? (
+      {settingsFor === spaceKey(atWall) && phase === "ready" ? (
         <div className="jar-settings" data-jar-chrome="1" role="dialog" aria-label="Space settings">
           <div className="jar-settings-head">
             <span className="jar-label">
-              {atWall.kind === "room" ? "This room" : atWall.kind === "agent" ? "This agent" : "You"}
+              {atWall.kind === "group" ? "This room" : atWall.kind === "agent" ? "This agent" : "You"}
             </span>
             <button type="button" className="jar-settings-x" onClick={() => setSettingsFor(null)}>
               close
             </button>
           </div>
 
-          {atWall.kind === "room" ? (
+          {atWall.kind === "group" ? (
             (() => {
               const gid = atWall.id;
               const roll = members.get(gid) ?? [];
@@ -13786,7 +11152,7 @@ function WorldExperience(): JSX.Element {
                       className="jar-settings-rename"
                       onSubmit={(e) => {
                         e.preventDefault();
-                        renameRoom(gid, renaming.text);
+                        renameThisGroup(gid, renaming.text);
                       }}
                     >
                       <input
@@ -13880,7 +11246,7 @@ function WorldExperience(): JSX.Element {
                   <p className="jar-neb-ask jar-neb-ask--after">
                     {leaving === gid ? (
                       <>
-                        <button type="button" onClick={() => leaveRoom(gid)}>
+                        <button type="button" onClick={() => leaveThisGroup(gid)}>
                           leave — your statements come down
                         </button>
                         <span aria-hidden="true"> · </span>
@@ -13902,7 +11268,7 @@ function WorldExperience(): JSX.Element {
                           <button
                             type="button"
                             className="jar-settings-danger"
-                            onClick={() => closeRoom(gid)}
+                            onClick={() => closeThisGroup(gid)}
                           >
                             close it for everyone — what the room decided goes too
                           </button>

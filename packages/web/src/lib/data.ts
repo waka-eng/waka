@@ -414,3 +414,43 @@ export function aliveness(c: Inspiration, now: number): number {
   const hasAttachment = c.attachments.length > 0 ? 0.1 : 0;
   return Math.max(0, Math.min(1, decay + attention + hasWords + hasAttachment));
 }
+
+/**
+ * ONE PIECE OF EVIDENCE, AS THE WORLD SHOWS IT — with who it came from.
+ *
+ * Shared by the sky (a signal's orbit) and by headquarters (what a proposal
+ * rests on), which is why it lives here rather than in either: two modules
+ * needing one shape is exactly what this layer is for, and putting it in
+ * either would make the other import it.
+ */
+/**
+ * One memory a candidate is made of.
+ *
+ * A PERSONAL candidate resolves its evidence against the captures already
+ * loaded and SKIPS anything that is not there — an id with nothing behind it
+ * is not a memory, and inventing one would be a lie about what was saved. ROOM
+ * evidence stands on its own: it arrives carrying its author and its words,
+ * exactly as a room's own orbs do, so a satellite can say whose memory it is
+ * without ever fetching another member's signal.
+ */
+export interface EvidenceRef {
+  signalId: string;
+  /** The room it came from, when it came from one. */
+  groupId: string | null;
+  authorUserId: string | null;
+  authorName: string | null;
+  /**
+   * WHY THIS WAS WORTH KEEPING, in one short phrase — the whisper an agent's
+   * satellite carries instead of an author's name. "얘가 이걸 만든 이유가
+   * 이거다", rendered with the element that already exists.
+   */
+  why?: string | null;
+  textPreview: string;
+  quote: string | null;
+  kind: string | null;
+  createdMs: number;
+  /** False when the payload named no date and `createdMs` is only a reference
+      for the light — the panel then prints who, and no when. */
+  dated: boolean;
+  resonance: number;
+}
