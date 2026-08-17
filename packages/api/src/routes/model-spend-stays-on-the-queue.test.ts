@@ -50,6 +50,12 @@ const SPENDS_THE_SHARED_KEY: Record<string, string> = {
   reembedSignal: "src/lib/signal-embeddings.ts",
   // Extraction, judging, synthesis — the generation calls.
   deriveSignalsForInspiration: "src/lib/signal-derivation.ts",
+  // Newly exported when signal-derivation.ts was split. It was module-private
+  // before, so nothing could reach it and it never needed listing; the split
+  // called that "a visibility change, not a behaviour change", and visibility
+  // is precisely what this guard polices. It holds the tie-breaker model call
+  // in the band between the two thresholds.
+  applyCandidates: "src/lib/signal-match-or-mint.ts",
   refreshTopOfMindForProfile: "src/lib/top-of-mind-synthesis.ts",
   refreshTopOfMindForGroup: "src/lib/top-of-mind-synthesis.ts",
   extractSignalCandidates: "src/queue/gemini.ts",

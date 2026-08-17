@@ -17,7 +17,7 @@
  *     the caller records as a version rather than a silent no-op.
  *
  * Everything below the interface is deliberately shallow. Selection, ranking,
- * validation, versioning, and the lock rule live in lib/signal-derivation.ts
+ * validation, versioning, and the lock rule live in lib/signal-match-or-mint.ts
  * and the lib/top-of-mind-* stage modules, where they are testable without a
  * model.
  */
