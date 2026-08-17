@@ -44,6 +44,7 @@ import { accounts, profiles } from "../db/index.js";
 import {
   buildSessionCookie,
   signSessionToken,
+  wantsSecureCookie,
 } from "../lib/auth.js";
 import { getDb } from "../lib/db.js";
 import { createSessionRow, describeUserAgent } from "../lib/session.js";
@@ -184,7 +185,8 @@ function tempCookieOptions(): {
     httpOnly: true,
     sameSite: "Lax",
     path: "/",
-    secure: process.env.NODE_ENV === "production",
+    /* same rule as the session cookie: on unless a local http flow says otherwise */
+    secure: wantsSecureCookie(),
     maxAge: STATE_TTL_SECONDS,
   };
 }
