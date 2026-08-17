@@ -546,6 +546,12 @@ export async function removeGroupMember(
    * would leave a caller believing the removal did not happen.
    */
   await rotateJoinCode(db, input.groupId);
+  /* and their votes go with them — the tally above already ignores a
+     non-member, but leaving the rows behind would make re-joining silently
+     restore a vote nobody cast again */
+  await db
+    .delete(groupTopOfMindAffirmations)
+    .where(eq(groupTopOfMindAffirmations.profileId, input.memberProfileId));
   return true;
 }
 
@@ -1174,9 +1180,32 @@ export async function affirmGroupProposal(
    * proposal and resolution, and the threshold has to follow the room as it
    * is now, not as it was when somebody wrote a sentence.
    */
+  /**
+   * ONLY THE PEOPLE STILL HERE GET A VOTE.
+   *
+   * The comment above is right that the threshold follows the room as it is
+   * now — but only the DENOMINATOR did. An affirmation's foreign key is to
+   * `profiles`, not to membership, so removing someone left their vote
+   * standing while the room it was cast in got smaller:
+   *
+   *   four members, owner opens a proposal (auto-affirmed, 1/4), B affirms
+   *   (2/4, not carried), owner removes B, owner affirms again — the
+   *   duplicate no-ops but the tally reruns, and 2 against 3 now carries.
+   *
+   * Two votes, one of them an ejected person's, overruling the two members
+   * who never agreed. So the count joins current membership: a vote is a
+   * statement by someone in the room, and leaving the room withdraws it.
+   */
   const [{ affirmations }] = await db
     .select({ affirmations: sql<number>`count(*)::int` })
     .from(groupTopOfMindAffirmations)
+    .innerJoin(
+      groupMembers,
+      and(
+        eq(groupMembers.profileId, groupTopOfMindAffirmations.profileId),
+        eq(groupMembers.groupId, input.groupId),
+      ),
+    )
     .where(eq(groupTopOfMindAffirmations.proposalId, proposal.id));
   const [{ members }] = await db
     .select({ members: sql<number>`count(*)::int` })

@@ -46,13 +46,16 @@ const codeOf = async (groupId: string) => {
   return row.join_code as string;
 };
 
+/* file scope: a describe-scoped afterAll would close the pool before the next
+   describe runs, which fails as a connection error and reads as a real bug */
+afterAll(async () => {
+  await t?.sql.end();
+});
+
 describe("a removed member cannot walk back in", () => {
   beforeEach(async () => {
     t ??= await createTestDatabase();
     await t.truncateAll();
-  });
-  afterAll(async () => {
-    await t?.sql.end();
   });
 
   /** THE REGRESSION. Before the fix the code was unchanged and the link worked. */
@@ -96,5 +99,57 @@ describe("a removed member cannot walk back in", () => {
     expect(first).toBeTruthy();
     expect(second).toBeTruthy();
     expect(second).not.toBe(first);
+  });
+});
+
+/**
+ * A REMOVED MEMBER'S VOTE GOES WITH THEM.
+ *
+ * An affirmation's foreign key is to `profiles`, not to membership, so the
+ * denominator followed the room while the numerator did not:
+ *
+ *   four members, owner opens a proposal (auto-affirmed, 1/4), B affirms
+ *   (2/4, not carried), owner removes B, owner affirms again — the duplicate
+ *   no-ops but the tally reruns, and 2 against 3 now carries.
+ *
+ * Two votes, one of them an ejected person's, overruling the two members who
+ * never agreed.
+ */
+describe("a vote is a statement by someone in the room", () => {
+  beforeEach(async () => {
+    t ??= await createTestDatabase();
+    await t.truncateAll();
+  });
+
+  it("stops counting an affirmation once its author is removed", async () => {
+    const g = await seedGroup();
+    const [proposal] = await t.sql`
+      INSERT INTO group_top_of_mind_proposals (group_id, proposed_by_profile_id, kind, body, status)
+      VALUES (${g.groupId}, ${g.owner}, 'add_entry', 'what we decided', 'open') RETURNING id`;
+    await t.sql`
+      INSERT INTO group_top_of_mind_affirmations (proposal_id, profile_id)
+      VALUES (${proposal.id}, ${g.owner}), (${proposal.id}, ${g.other})`;
+
+    const counted = async () => {
+      const [row] = await t.sql`
+        SELECT count(*)::int AS n
+        FROM group_top_of_mind_affirmations a
+        INNER JOIN group_members m
+          ON m.profile_id = a.profile_id AND m.group_id = ${g.groupId}
+        WHERE a.proposal_id = ${proposal.id}`;
+      return row.n as number;
+    };
+
+    expect(await counted()).toBe(2);
+
+    await removeGroupMember(t.db as never, {
+      groupId: g.groupId,
+      memberProfileId: g.other,
+    });
+
+    expect(
+      await counted(),
+      "the removed member's vote still counts, against a room that is now smaller",
+    ).toBe(1);
   });
 });

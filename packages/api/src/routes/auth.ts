@@ -574,7 +574,15 @@ authRoutes.patch("/me/preferences", requireAuth, async (c) => {
  * account row — onboarding happens once per login, not once per profile — so
  * the two writes share a transaction.
  */
-authRoutes.patch("/me/profile", requireAuth, async (c) => {
+/*
+ * humanSessionsOnly, for the same reason account erasure has it: publishing a
+ * handle, switching the profile public, and exposing its top of mind are the
+ * account holder's decisions about their own visibility to the open internet.
+ * An agent credential is reachable by prompt injection, and this route was
+ * requireAuth alone — so text an agent was told to write could be published,
+ * under a handle an agent chose, readable by anyone with no session at all.
+ */
+authRoutes.patch("/me/profile", requireAuth, humanSessionsOnly, async (c) => {
   let rawBody: unknown;
   try {
     rawBody = await c.req.json();

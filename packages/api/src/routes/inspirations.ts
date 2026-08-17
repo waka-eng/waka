@@ -569,6 +569,25 @@ export function createInspirationsRoutes(
     const source: InspirationSource =
       session.profile.type === "agent" ? parsed.data.source ?? "agent" : "app";
 
+    /**
+     * CAPTURING FOR SOMEONE IS NOT PUBLISHING FOR THEM.
+     *
+     * Agents legitimately hold "capture" on the human profile — relaying
+     * something you said is the whole point of the tool. `visibility` is a
+     * different permission wearing the same request: public means the text
+     * enters the ground of every group that profile belongs to, attributed to
+     * them, readable across an account boundary the canon says an inspiration
+     * never crosses.
+     *
+     * An agent credential is reachable by prompt injection, so this was a
+     * one-request path from "an agent read a poisoned page" to "a stranger's
+     * sentence is published under your name in your rooms". Writing for
+     * yourself is unchanged; writing for someone else falls back to the
+     * column's default, which is private.
+     */
+    const forSomeoneElse = target.profileId !== session.profile.id;
+    const visibility = forSomeoneElse ? undefined : parsed.data.visibility;
+
     const now = new Date();
     const reflectionInputs = parsed.data.reflections ?? [];
 
@@ -582,7 +601,7 @@ export function createInspirationsRoutes(
           source,
           /* absent means private, and that is the column's own default rather
              than a value written here — one place decides what unset means */
-          ...(parsed.data.visibility ? { visibility: parsed.data.visibility } : {}),
+          ...(visibility ? { visibility } : {}),
           createdAt: now,
           updatedAt: now,
         })
