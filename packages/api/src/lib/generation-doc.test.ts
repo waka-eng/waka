@@ -28,6 +28,7 @@ import { describe, expect, it } from "vitest";
 import * as embeddings from "./inspiration-embeddings.js";
 import * as modelBudget from "./model-budget.js";
 import * as derivation from "./signal-derivation.js";
+import * as selection from "./top-of-mind-selection.js";
 import * as synthesis from "./top-of-mind-synthesis.js";
 import * as gemini from "../queue/gemini.js";
 
@@ -42,6 +43,10 @@ const doc = readFileSync(DOC_PATH, "utf8");
  */
 const MODULES: Record<string, Record<string, unknown>> = {
   "signal-derivation.ts": derivation,
+  // Layer 3's tuning is all ranking, so it lives with the ranking stage. The
+  // pass module stays listed even though it exports no constant today: a
+  // number added there is exactly the kind that would otherwise slip the doc.
+  "top-of-mind-selection.ts": selection,
   "top-of-mind-synthesis.ts": synthesis,
   "gemini.ts": gemini,
   "inspiration-embeddings.ts": embeddings,
@@ -177,24 +182,24 @@ describe("the doc's [checked] structural claims", () => {
 
   it("keeps selection weights summing to 1", () => {
     expect(
-      synthesis.SELECTION_CONFIDENCE_WEIGHT +
-        synthesis.SELECTION_EVIDENCE_WEIGHT +
-        synthesis.SELECTION_RECENCY_WEIGHT +
-        synthesis.SELECTION_COMEBACK_WEIGHT,
+      selection.SELECTION_CONFIDENCE_WEIGHT +
+        selection.SELECTION_EVIDENCE_WEIGHT +
+        selection.SELECTION_RECENCY_WEIGHT +
+        selection.SELECTION_COMEBACK_WEIGHT,
     ).toBeCloseTo(1, 10);
   });
 
   it("keeps the cold-start floor within the selection limit", () => {
-    expect(synthesis.TOP_OF_MIND_MIN_SIGNALS).toBeGreaterThan(0);
-    expect(synthesis.TOP_OF_MIND_MIN_SIGNALS).toBeLessThanOrEqual(
-      synthesis.TOP_OF_MIND_SIGNAL_LIMIT,
+    expect(selection.TOP_OF_MIND_MIN_SIGNALS).toBeGreaterThan(0);
+    expect(selection.TOP_OF_MIND_MIN_SIGNALS).toBeLessThanOrEqual(
+      selection.TOP_OF_MIND_SIGNAL_LIMIT,
     );
   });
 
   it("keeps the named decision functions the doc points at", () => {
     expect(typeof derivation.classifyMatch).toBe("function");
-    expect(typeof synthesis.chooseSelection).toBe("function");
-    expect(typeof synthesis.computeSelectionScore).toBe("function");
+    expect(typeof selection.chooseSelection).toBe("function");
+    expect(typeof selection.computeSelectionScore).toBe("function");
     expect(typeof derivation.computeSignalConfidence).toBe("function");
   });
 
@@ -220,7 +225,7 @@ describe("the doc's [checked] structural claims", () => {
       "utf8",
     );
     const selectionSource = readFileSync(
-      resolve(REPO_ROOT, "packages/api/src/lib/top-of-mind-synthesis.ts"),
+      resolve(REPO_ROOT, "packages/api/src/lib/top-of-mind-selection.ts"),
       "utf8",
     );
     expect(readsSource).toMatch(/computeSignalConfidence\(/);
