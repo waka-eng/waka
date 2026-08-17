@@ -1,0 +1,515 @@
+/**
+ * THE MEASURING TOOL'S OWN GUARD, PROVEN TO FIRE.
+ *
+ * WHAT THIS MOCKS, AND WHY: nothing. It runs the real
+ * `scripts/measure-groups.mjs` as a real process against a real file on disk,
+ * because the thing under test IS the wiring — that the guard is called at all,
+ * that it reads the path it claims to read, and that it stops the run. A test
+ * that imported the module could not check any of that, and importing it would
+ * execute it. G6 in `docs/goals/a-codebase-you-can-navigate.md` asks every suite
+ * to say what it stands on; this one stands on the file system and `node`.
+ *
+ * WHY IT EXISTS. `measure-groups.mjs` prints the numbers that decide whether a
+ * candidate module may be extracted from `Home.tsx`, and it matches thirteen
+ * hardcoded state-object names against that file by text. If one is renamed
+ * there and not here, the name simply stops being counted — every row loses a
+ * group, silently, in the direction that makes a boundary look cheaper than it
+ * is. Drifting `stir` alone is enough to turn "4 group(s), so this FAILS" into
+ * "3 group(s), so this PASSES". The script now checks the constant against the
+ * real file on every run.
+ *
+ * But the check is one function call, and a reviewer's own experiment says the
+ * quiet part: DELETING `assertGroupsAreReal()` — or `selftest()` beside it —
+ * left the whole web suite green. This repo has been here before. A security
+ * guard was once removed with 495 tests passing, and the lesson written down
+ * afterwards was that a check nothing checks is a comment. So these three cases
+ * are the check on the check: drift must stop the run and name the name, an
+ * unreadable file must stop it too, and an honest file must let it through — the
+ * last one so that "it always fails" cannot masquerade as safety.
+ *
+ * The doctored component is GENERATED from the script's own `GROUPS`, rather
+ * than repeating the thirteen names here. A copy in this file would be a second
+ * place to drift, and it would go red for the wrong reason the first time
+ * someone legitimately adds a fourteenth owner.
+ */
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { afterEach, describe, expect, it } from "vitest";
+
+const WEB_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+const SCRIPT = join(WEB_ROOT, "scripts", "measure-groups.mjs");
+
+/** The thirteen names, read from the script rather than restated. */
+function groupNames(source: string): string[] {
+  const block = source.match(/const GROUPS = new Set\(\[([\s\S]*?)\]\)/);
+  expect(block, "GROUPS declaration not found in measure-groups.mjs — did it move?").not.toBeNull();
+  const names = [...block![1]!.matchAll(/"([^"]+)"/g)].map((m) => m[1]!);
+  /* If this ever reads zero names the cases below would all pass vacuously,
+     which is the exact shape of failure this file exists to prevent. */
+  expect(names.length).toBeGreaterThan(1);
+  return names;
+}
+
+/**
+ * The floor the script refuses to measure below, also read rather than restated
+ * — for the same reason as the names: a copy here is a second place to drift,
+ * and it would go red for the wrong reason the day someone legitimately lowers
+ * it after an extraction.
+ */
+function minRows(source: string): number {
+  const found = source.match(/const MIN_PLAUSIBLE_ROWS = (\d+);/);
+  expect(found, "MIN_PLAUSIBLE_ROWS not found in measure-groups.mjs — did it move?").not.toBeNull();
+  return Number(found![1]);
+}
+
+/**
+ * THE COMPONENT BODY the generated file wraps its effect in — two refs and one
+ * plain local, declared here rather than inline so the header assertion below
+ * can be derived from the same list that writes the file instead of being a
+ * second place to drift.
+ *
+ * Why three names and not one: the header's second sentence prints TWO numbers
+ * off the same map ("N names in the component body around it, M of them refs"),
+ * and a fixture where N equals M cannot tell you which of them you are reading.
+ * The real `Home.tsx` prints 254 and 49.
+ */
+const BODY_NAMES: ReadonlyArray<readonly [string, string]> = [
+  ["selectedIdRef", "useRef(null)"],
+  ["hoverRef", "useRef(0)"],
+  ["frameCount", "0"],
+];
+const BODY_REFS = BODY_NAMES.filter(([, init]) => init.startsWith("useRef")).length;
+
+/**
+ * A component whose frame effect declares each named group at its top level —
+ * the shape the real `Home.tsx` has, small enough to read. `omit` leaves one out,
+ * which is what a rename looks like from the script's side.
+ *
+ * `functions` is how many measurable functions the effect declares. It exists
+ * because the script now also refuses a report that came back implausibly small,
+ * so the doctored file has to be plausible on THAT axis too: a one-function
+ * component would make the drift case exit for the floor's reason while the
+ * assertion about drift went on passing, which is a green light bought with the
+ * wrong evidence.
+ *
+ * `untracked` adds the other shape the real file has: an object literal sitting
+ * exactly where the groups sit that `GROUPS` has never heard of, plus a
+ * declaration that is NOT an object literal and therefore must not be named. It
+ * is an option rather than the default because both branches of the disclosure
+ * have to be reachable from out here — see the end-to-end case.
+ */
+function componentDeclaring(
+  names: string[],
+  {
+    omit = [],
+    functions,
+    plain = 0,
+    untracked = false,
+  }: { omit?: string[]; functions: number; plain?: number; untracked?: boolean },
+): string {
+  const kept = names.filter((n) => !omit.includes(n));
+  const decls = kept.map((n) => `    const ${n} = { t: 0 };`).join("\n");
+  const read = kept.map((n) => `${n}.t`)[0] ?? "0";
+  /* `SELF_WALL` and `skyDeps` in miniature, and beside them the thing that
+     proves the tool is testing for an object literal and not merely for "a name
+     declared in the effect that is not a group": `notAnObject` is declared in
+     the same place and must never appear on the disclosure line. */
+  const strays = untracked
+    ? ["    const notAGroup = { t: 0 };", "    const notAnObject = 1;"].join("\n")
+    : "";
+  /* Each one reaches a group AND the component-body ref, so a unit built out of
+     them has something in every column the `--unit` block prints — including
+     the `[ref]` kind, which is the word that says "permanent accessor" and the
+     whole point of that block. */
+  const bodies = Array.from({ length: functions }, (_, i) =>
+    [
+      `    function tick${i}() {`,
+      `      return ${read} + selectedIdRef.current;`,
+      "    }",
+    ].join("\n"),
+  ).join("\n");
+  /* Functions touching NO group, and named nothing `--only` matches by name.
+     They are what makes a filter observable from outside the process: `--only
+     <a group>` must drop exactly these rows from the table and must NOT drop
+     them from the histogram or from the count in the header. */
+  const plains = Array.from({ length: plain }, (_, i) =>
+    [`    function plain${i}() {`, "      return 0;", "    }"].join("\n"),
+  ).join("\n");
+  return [
+    "function HomeExperience() {",
+    ...BODY_NAMES.map(([name, init]) => `  const ${name} = ${init};`),
+    "  useEffect(() => {",
+    decls,
+    strays,
+    bodies,
+    plains,
+    "    return tick0;",
+    "  }, []);",
+    "  return null;",
+    "}",
+  ].join("\n");
+}
+
+/**
+ * A fixture the script cannot possibly satisfy, pushed onto its own `SELFTEST`
+ * list just before `selftest()` runs.
+ *
+ * This is how the last case below gets a REAL self-test failure to check the
+ * handling of, without a second copy of the script that has been broken by hand
+ * and can rot. `SELFTEST` is a `const` array, so pushing to it is legal, and the
+ * push happens after every case is declared and before any is run.
+ */
+const PLANTED_FAILURE = {
+  why: "PLANTED BY measure-groups-guard.test.ts — this case exists to fail",
+  fn: "planted",
+  expect: { groups: ["view"], freeOther: [], calls: [], outer: [] },
+  src: [
+    "function Home() {",
+    "  useEffect(() => {",
+    "    function planted() {",
+    "      return 1;",
+    "    }",
+    "    return planted;",
+    "  }, []);",
+    "  return null;",
+    "}",
+  ].join("\n"),
+};
+
+function withAFailingFixture(source: string): string {
+  const anchor = "\nselftest();\n";
+  expect(
+    source.includes(anchor),
+    "the `selftest()` call is not where this test expects it — did it move?",
+  ).toBe(true);
+  return source.replace(anchor, `\nSELFTEST.push(${JSON.stringify(PLANTED_FAILURE)});\nselftest();\n`);
+}
+
+/**
+ * The script resolves the file it checks from its OWN location — `../src/pages/
+ * Home.tsx` — so a copy of it in a tree we control checks a file we control.
+ * `node_modules` is linked in because the script requires `typescript`; nothing
+ * else about the copy differs from the original.
+ */
+function runAgainst(
+  home: string | null,
+  transform: (source: string) => string = (s) => s,
+  args: string[] = ["--selftest"],
+): { status: number; out: string } {
+  const dir = mkdtempSync(join(tmpdir(), "measure-groups-guard-"));
+  try {
+    mkdirSync(join(dir, "scripts"), { recursive: true });
+    mkdirSync(join(dir, "src", "pages"), { recursive: true });
+    symlinkSync(join(WEB_ROOT, "node_modules"), join(dir, "node_modules"), "dir");
+    writeFileSync(join(dir, "scripts", "measure-groups.mjs"), transform(readFileSync(SCRIPT, "utf8")));
+    if (home !== null) writeFileSync(join(dir, "src", "pages", "Home.tsx"), home);
+
+    try {
+      const out = execFileSync("node", [join(dir, "scripts", "measure-groups.mjs"), ...args], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      return { status: 0, out };
+    } catch (err) {
+      const e = err as { status?: number; stdout?: string; stderr?: string };
+      return { status: e.status ?? -1, out: `${e.stdout ?? ""}${e.stderr ?? ""}` };
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+afterEach(() => {
+  /* nothing persists: every case builds and removes its own tree */
+});
+
+describe("measure-groups checks its group names against the real file", () => {
+  const source = readFileSync(SCRIPT, "utf8");
+
+  it("stops the run and names EVERY group that has gone, not just the first", () => {
+    const names = groupNames(source);
+    /* Two, from opposite ends of the list. With one, `groupsNotDeclared(…)
+       .slice(0, 1)` reported the same thing the honest code does and stayed
+       green — and a rename pass is exactly the event that moves several at
+       once, so a reader told about one would fix it, re-run, and be told about
+       the next, believing each time they were nearly done. */
+    const drifted = [names[0]!, names[names.length - 1]!];
+
+    const { status, out } = runAgainst(
+      componentDeclaring(names, { omit: drifted, functions: minRows(source) }),
+    );
+
+    expect(status).toBe(1);
+    expect(out).toContain("GROUPS HAS DRIFTED");
+    /* By name. A gate that says "something is wrong" sends the reader looking;
+       this one has to say which of the thirteen stopped existing. */
+    for (const name of drifted) expect(out).toContain(name);
+    /* And it says what the silent version of this would have cost, because the
+       number moving is the whole reason the check is here. */
+    expect(out).toContain("FAILS");
+  });
+
+  it("lets an honest file through, so the check is not merely always red", () => {
+    const names = groupNames(source);
+
+    const { status, out } = runAgainst(componentDeclaring(names, { functions: minRows(source) }));
+
+    expect(status).toBe(0);
+    /* The self-test ran too. Deleting the `selftest()` call is as silent a
+       removal as deleting the drift check, and this line is the evidence it
+       happened: it names how many cases in each family, so an emptied fixture
+       list shows up as a number rather than as nothing at all. */
+    expect(out).toMatch(
+      /self-test passed \(\d+ row cases, \d+ unit cases, \d+ argument cases, \d+ printing cases\)/,
+    );
+    /* And it STOPPED there. `--selftest` is what `pnpm test` runs, and losing
+       the early exit turns every test run into eighty-odd lines of table — a
+       report nobody asked for, in a place nobody reads, which is how a real
+       failure message gets scrolled past. */
+    expect(out).not.toContain("functions declared in the frame effect");
+  });
+
+  it("treats a file it cannot read as a failure, never as a pass", () => {
+    const { status, out } = runAgainst(null);
+
+    expect(status).toBe(1);
+    expect(out).toContain("cannot read");
+    /* The distinction that matters: unread is not the same as unchanged. */
+    expect(out).toContain("thirteen unverified strings");
+  });
+
+  /**
+   * The floor, from the side that proves it is a floor. Every group name is
+   * present here, so the drift check passes and this is the only thing left to
+   * refuse. Without a case like this the number is a comment: the script's own
+   * fixtures are all one to four functions long, so nothing else in the suite
+   * ever produces a report small enough to test it.
+   */
+  it("refuses a report too small to be the frame effect, with every name present", () => {
+    const names = groupNames(source);
+
+    const { status, out } = runAgainst(componentDeclaring(names, { functions: 1 }));
+
+    expect(status).toBe(1);
+    expect(out).not.toContain("GROUPS HAS DRIFTED");
+    expect(out).toContain("ONLY 1 FUNCTIONS FOUND");
+    /* It has to say what to do about it, because the legitimate version of this
+       — 4b and 4c shrinking the effect — looks identical from here. */
+    expect(out).toContain("MIN_PLAUSIBLE_ROWS");
+  });
+
+  /**
+   * AND A FAILING SELF-TEST HAS TO STOP THE RUN.
+   *
+   * The `self-test passed` assertion above is evidence that `selftest()` was
+   * CALLED. It is not evidence that failing it costs anything, and the two came
+   * apart: changing the `process.exit(1)` inside the failure branch to
+   * `exit(0)` left the whole suite green, because on an honest tree that branch
+   * is never taken. The hole only opens later, when a fixture genuinely breaks
+   * — and then `pnpm test` prints "SELF-TEST FAILED", continues into vitest, and
+   * reports success. A previous reviewer checked this mutation and recorded it
+   * as caught; it was not.
+   *
+   * So this case gives the script a fixture it cannot satisfy and demands the
+   * run die. It is the difference between "the guard is called" and "the guard
+   * has teeth", which is the failure mode this whole file exists for.
+   */
+  /**
+   * AND THE TWO LINES THAT ACTUALLY PUT IT ON SCREEN.
+   *
+   * Every round of this gate has ended the same way: the pure function gets
+   * extracted and asserted, and the layer CALLING it does not, so the next break
+   * simply moves up one. The script's own fixtures now assert the header block
+   * and the table as text, which means the last unchecked thing is the pair of
+   * `for (…) console.log(line)` calls at the bottom and the arguments handed to
+   * them — and all three ways of breaking those stayed green: deleting the
+   * header loop, deleting the table loop, and passing `null` where
+   * `onlyFilter(process.argv)` belongs.
+   *
+   * Reading stdout is the last level — there is nothing above it — but reading
+   * it only proves what the assertions here NAME, and the first version of this
+   * case named one of `formatHeader`'s four arguments. That left the same shape
+   * of hole one rung higher: with everything green the script could be made to
+   * print "Every object declared at the effect's top level is a tracked group"
+   * about a file where `SELF_WALL` and `skyDeps` are declared exactly there (by
+   * handing the printer an empty `untracked`), and "0 names in the component
+   * body around it, 0 of them refs" in place of 254 and 49 (by handing it an
+   * empty scope). Neither could be seen, because the generated component had no
+   * untracked object — so it took the affirmative branch this case ASSERTED —
+   * and one component-body name nobody counted. So the file now carries both
+   * shapes, and every argument the printer is handed shows up in something
+   * asserted here.
+   *
+   * The numbers are all derived from the doctored file rather than recorded, so
+   * this does not become a golden file that churns.
+   */
+  it("prints the header, the table and the filtered table, end to end", () => {
+    const names = groupNames(source);
+    const ticks = minRows(source);
+    const plains = 3;
+    const home = componentDeclaring(names, { functions: ticks, plain: plains, untracked: true });
+    /* Read off the generated file, not counted by hand: a hardcoded line number
+       has to be re-bumped every time this component grows a line, which is how
+       it comes to be quietly wrong about the sentence that makes a retarget of
+       the whole measurement visible. */
+    const effectLine = home.split("\n").findIndex((l) => l.includes("useEffect(")) + 1;
+    expect(effectLine).toBeGreaterThan(1);
+    const header = `${ticks + plains} functions declared in the frame effect (line ${effectLine}).`;
+    /* The second sentence, whose two numbers can only come from the component
+       scope the printer is handed. */
+    const scope = `${BODY_NAMES.length} names in the component body around it, ${BODY_REFS} of them refs.`;
+    const rowsFor = (out: string, prefix: string) =>
+      out.split("\n").filter((l) => new RegExp(`^${prefix}\\d+ `).test(l)).length;
+
+    const full = runAgainst(home, undefined, []);
+    expect(full.status).toBe(0);
+    expect(full.out).toContain(header);
+    expect(full.out).toContain(scope);
+    /* The disclosure, by name and by ONLY that name — the trailing newline is
+       the end of the list, so an over-broad collector that stops testing for an
+       object literal shows up as `notAnObject` arriving beside it. This line is
+       what stands in for the reverse GROUPS check the tool refuses to have, so a
+       false affirmative in its place is the gate lying about the one thing it
+       offered instead of a check. */
+    expect(full.out).toContain("Not tracked as groups, though declared alongside them: notAGroup\n");
+    expect(full.out).not.toContain("notAnObject");
+    expect(full.out).not.toContain(
+      "Every object declared at the effect's top level is a tracked group.",
+    );
+    expect(rowsFor(full.out, "tick")).toBe(ticks);
+    expect(rowsFor(full.out, "plain")).toBe(plains);
+
+    /* AND THE OTHER BRANCH, from out here as well: the same component without
+       the stray object has to print the affirmative sentence. Asserting only the
+       disclosure would leave the sentence a reader trusts MOST — everything is
+       accounted for — unreachable from any process-level case, which is exactly
+       the state the disclosure branch was in when it could be forced. */
+    const honest = componentDeclaring(names, { functions: ticks, plain: plains });
+    const clean = runAgainst(honest, undefined, []);
+    expect(clean.status).toBe(0);
+    expect(clean.out).toContain(
+      "Every object declared at the effect's top level is a tracked group.",
+    );
+    expect(clean.out).not.toContain("Not tracked as groups");
+    expect(clean.out).toContain(scope);
+
+    /* `--only <a group>` keeps the rows that touch it and drops the rest — and
+       the histogram underneath still describes the whole file, which is the one
+       thing that made feeding it the filtered rows invisible. */
+    const filtered = runAgainst(home, undefined, ["--only", names[0]!]);
+    expect(filtered.status).toBe(0);
+    expect(rowsFor(filtered.out, "tick")).toBe(ticks);
+    expect(rowsFor(filtered.out, "plain")).toBe(0);
+    expect(filtered.out).toContain(`  0: ${"#".repeat(plains)} (${plains})`);
+    /* The count above the table is the file's, not the filter's. */
+    expect(filtered.out).toContain(header);
+  });
+
+  /**
+   * AND `--unit`, WHICH IS THE PATH THE WHOLE TOOL EXISTS FOR.
+   *
+   * `summariseUnit` and `formatUnit` are asserted inside the script from both
+   * sides of the gate. The five lines of command line that reach them were not,
+   * and every one of them broke green: deleting the block outright, handing
+   * `summariseUnit` an empty member set, handing `formatUnit` an empty component
+   * scope so every `[ref]` became `[?]`, ignoring `unitMembers`, and feeding the
+   * unit the rows `--only` left rather than the whole report — which silently
+   * turns a member into "NOT FOUND" and makes the unit look smaller and
+   * therefore cheaper. That is the nine-versus-fifteen failure exactly, arrived
+   * at through the argument list instead of the walk.
+   *
+   * Both flags at once, because the unit must be measured from the FULL report
+   * while the table beside it is filtered.
+   */
+  it("measures the unit named by --unit, from the whole report, with kinds", () => {
+    const names = groupNames(source);
+    const home = componentDeclaring(names, { functions: minRows(source), plain: 3 });
+
+    const { status, out } = runAgainst(home, undefined, [
+      "--only",
+      names[0]!,
+      "--unit",
+      "tick0,plain0",
+    ]);
+
+    expect(status).toBe(0);
+    /* `plain0` is a row `--only` drops from the TABLE and must not drop from the
+       unit: two functions, four lines, and no NOT FOUND. */
+    expect(out).toContain("UNIT: 2 functions, 4 lines");
+    expect(out).not.toContain("NOT FOUND");
+    expect(out).toContain(`  state groups needed (1): ${names[0]}`);
+    expect(out).toContain("  calls back into the file (0): ");
+    expect(out).toContain("  other free names (0): ");
+    /* The kind, which only the component scope can supply. */
+    expect(out).toContain("  reaches past the effect (1): selectedIdRef[ref]");
+    expect(out).toContain("  → a deps object of about 1 members.");
+    expect(out).toContain(
+      "  GATE: four or more groups means it is not a module — 1 group(s), so this PASSES.",
+    );
+  });
+
+  /**
+   * `--file` REALLY AIMS THE MEASUREMENT, and an absence is still said as one.
+   *
+   * `targetFile` is asserted as a pure function, but nothing proved the command
+   * line calls it: replacing `targetFile(process.argv, REAL_HOME)` with
+   * `REAL_HOME` measured `Home.tsx` while the reader believed they were looking
+   * at whatever they pointed it at — and that affordance is how the
+   * nine-versus-fifteen fix was verified in the first place, so a wrong answer
+   * there discredits the verification and not merely a run.
+   *
+   * The file it is aimed at has no effect hook, which also pins the other half:
+   * the tool must say so in a sentence. `measure` returning nulls is covered by
+   * a fixture; the branch in the command-line block that turns that into English
+   * instead of an empty table under a confident header was not, and an empty
+   * table reads like an answer.
+   */
+  it("measures the file --file names, and calls an absence an absence", () => {
+    const names = groupNames(source);
+    const dir = mkdtempSync(join(tmpdir(), "measure-groups-elsewhere-"));
+    try {
+      const elsewhere = join(dir, "no-effect.tsx");
+      writeFileSync(
+        elsewhere,
+        ["function Other() {", "  const someRef = useRef(0);", "  return someRef;", "}"].join("\n"),
+      );
+
+      const { status, out } = runAgainst(
+        componentDeclaring(names, { functions: minRows(source) }),
+        undefined,
+        ["--file", elsewhere],
+      );
+
+      expect(status).toBe(0);
+      expect(out).toContain(`No effect hook found in ${elsewhere}`);
+      /* It measured THAT file, not the one next to the script: no table, and
+         none of the doctored component's rows. */
+      expect(out).not.toContain("groups touched");
+      expect(out).not.toContain("tick0");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("dies when a fixture genuinely fails, rather than printing and carrying on", () => {
+    const names = groupNames(source);
+
+    const { status, out } = runAgainst(
+      componentDeclaring(names, { functions: minRows(source) }),
+      withAFailingFixture,
+    );
+
+    expect(status).toBe(1);
+    expect(out).toContain("SELF-TEST FAILED");
+    /* By name, and the planted case is the one that failed — not something else
+       that happened to break while the plant went through unnoticed. */
+    expect(out).toContain(PLANTED_FAILURE.why);
+    /* And the success line must NOT also be there: a run that prints both has
+       fallen through the failure branch instead of stopping in it. */
+    expect(out).not.toContain("self-test passed");
+  });
+});
