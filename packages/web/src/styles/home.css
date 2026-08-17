@@ -1095,23 +1095,39 @@
    kind of question: what am I looking at. Unlike that one it IS pressable,
    so it takes ink rather than faint, and it is the only thing in this corner
    that responds. */
+/* WHICH SPACE YOU ARE IN — and it is a CONTROL, so it has to look and behave
+   like one. Written first as a bare line beside `.jar-offline`, it inherited
+   `pointer-events: none` from `.jar-topbar` (the bar is a pass-through so the
+   canvas underneath stays draggable) and was therefore unclickable: an
+   `elementFromPoint` at its centre returned `.jar`, not the button. It also
+   read as a caption rather than a way in. `.jar-back` beside it solved both
+   long ago — a pill that takes its own pointer events back — so this wears
+   the same clothes. */
 .jar-context {
-  display: block;
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5ch;
   margin: 0 0 0 auto;
-  padding: 7px 0;
+  padding: 7px 14px;
   max-width: 60ch;
   border: 0;
-  background: none;
+  border-radius: 999px;
+  background: var(--jar-card);
   font: inherit;
   text-align: right;
   color: var(--jar-muted);
   cursor: pointer;
-  transition: color 160ms var(--ease, ease);
+  transition:
+    background 0.2s ease,
+    color 0.2s ease;
 }
 
 .jar-context:hover,
+.jar-context:focus-visible,
 .jar-context[aria-expanded="true"] {
   color: var(--jar-ink);
+  background: var(--jar-card-hover);
 }
 
 /* The people are the quieter half: the room's name is what you are in, and

@@ -19,12 +19,12 @@ part assumed.**
 ## Where it stands
 
 ```
-13,663  packages/web/src/pages/World.tsx     the entire product, one file
+13,663  packages/web/src/pages/Home.tsx     the entire product, one file
  3,043  packages/web/src/styles/global.css   tokens --ink / --rule / --paper
- 1,755  packages/web/src/styles/world.css    tokens --jar-*
+ 1,755  packages/web/src/styles/home.css    tokens --jar-*
  1,710  packages/api/src/routes/groups.ts
  1,684  packages/web/src/lib/api.ts
- 1,098  packages/web/src/styles/world-chrome.css  tokens --w-*, repoints main's
+ 1,098  packages/web/src/styles/chrome.css  tokens --w-*, repoints main's
 ```
 
 Three token vocabularies for one product. One file holding a canvas renderer, a
@@ -35,7 +35,7 @@ state, and every panel's markup.
 
 ```
 packages/api             100 source files   the backend: routes, db schema, generation
-packages/web              35 source files   the product: World.tsx, the flat screens
+packages/web              35 source files   the product: Home.tsx, the flat screens
 packages/admin             7 source files   internal tooling
 packages/apis              0 source files   EMPTY — node_modules and nothing else
 packages/design-system     0 source files   EMPTY — node_modules and nothing else
@@ -48,7 +48,7 @@ imported — but `pnpm-workspace.yaml` globs `packages/*`, so they get
 They actively mislead. A `design-system` package is exactly where a new
 engineer would look before writing styles, and finding it empty *after*
 writing them is the wrong order. That is not hypothetical: this branch added
-`world-chrome.css` and a token repoint without ever checking whether a design
+`chrome.css` and a token repoint without ever checking whether a design
 system already existed, because the directory listing implied one did and the
 absence of any import implied one did not, and neither signal was checked.
 
@@ -62,15 +62,15 @@ Almost all of it lands in two files and their satellites:
 
 | File | Lines | What it is |
 | --- | --- | --- |
-| `packages/web/src/pages/World.tsx` | 13,600 | the entire product surface |
-| `packages/web/src/styles/world.css` | 1,755 | the world's appearance |
-| `packages/web/src/styles/world-chrome.css` | 1,098 | the flat screens in the world's light |
+| `packages/web/src/pages/Home.tsx` | 13,600 | the entire product surface |
+| `packages/web/src/styles/home.css` | 1,755 | the world's appearance |
+| `packages/web/src/styles/chrome.css` | 1,098 | the flat screens in the world's light |
 | `packages/api/src/routes/groups.ts` | +174 | rooms: the field, the majority rule |
 | `packages/web/src/lib/world-data.ts` | 406 | the one canon↔world translation |
 | `packages/api/src/routes/feedback.ts` | +100 | who may answer whose statement |
 
 The dependency is lopsided and worth naming: **everything in the world depends
-on `World.tsx`, and `World.tsx` depends on almost nothing.** That is the shape
+on `Home.tsx`, and `Home.tsx` depends on almost nothing.** That is the shape
 of a file that grew rather than one that was designed, and it is why the four
 steps below are ordered the way they are.
 
@@ -101,7 +101,7 @@ Nobody can navigate the rest of this list without it.
 Declare `@layer base, product, chrome;` once (done — `styles/layers.css`), then
 assign every stylesheet in ONE change. Not file by file: unlayered rules beat
 all layers, so moving one file in while its neighbours stay out drops it below
-them rather than raising it. Wrapping `world-chrome.css` alone was tried and
+them rather than raising it. Wrapping `chrome.css` alone was tried and
 instantly reverted every override it exists to make. Precedence then stops
 depending on import order — which is the bug that made a
 design pass apply in dev and not in production, with identical source. It is a
@@ -110,10 +110,10 @@ handful of lines and it removes an entire category of failure.
 ### 3. One token vocabulary
 
 `--ink`/`--rule`/`--paper`, `--jar-*` and `--w-*` describe the same product in
-three languages, and `world-chrome.css` exists mostly to translate between
+three languages, and `chrome.css` exists mostly to translate between
 them. Collapse to one set. The translation layer then deletes itself.
 
-### 4. Split `World.tsx` — the decided shape
+### 4. Split `Home.tsx` — the decided shape
 
 ```
 web/src/
@@ -162,7 +162,7 @@ code with different contents — `presentBalls()` already filters one list by
 `ball.agentId`, and the structure should say so.
 
 **`character/` is one creature, and today proved it has to be one file.**
-The companion is currently spread across the whole of `World.tsx` — its being
+The companion is currently spread across the whole of `Home.tsx` — its being
 and baking near the palette, its bob and lean inside the frame loop, its gaze
 and blink further down, its reactions in the sim API, its whisper in the DOM.
 Nothing owns it, and it shows: a body hashed from a group id rendered an
@@ -187,7 +187,7 @@ of space becomes a new file rather than a hunt through 13,000 lines.
 
 ### What goes where
 
-Every major piece of `World.tsx`, and its destination. Anything not listed is
+Every major piece of `Home.tsx`, and its destination. Anything not listed is
 either already in `lib/` or is page wiring that stays behind.
 
 **`canvas/`** — the machinery. It knows orbs, light and time; it does not know

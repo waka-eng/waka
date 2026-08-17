@@ -45,7 +45,7 @@ import "./styles/system.css";
 // Last, deliberately: the world is home, and the screens a person leaves it
 // for should look like the same product. Palette and type only — nothing
 // structural, and the flat screens stay flat on purpose.
-import "./styles/world-chrome.css";
+import "./styles/chrome.css";
 
 /*
   THE WORLD IS HOME.
@@ -60,7 +60,7 @@ import "./styles/world-chrome.css";
   read and edit the same archive, and the world is not a replacement for
   typing; `/inspirations` and `/signals` remain addressable.
 */
-const WorldPage = lazy(() => import("./pages/World"));
+const HomePage = lazy(() => import("./pages/Home"));
 
 /**
  * THE WORLD CAN BE LOOKED AT WITHOUT A SESSION, IN DEV ONLY.
@@ -80,7 +80,7 @@ function ProtectedWorld() {
   if (import.meta.env.DEV) {
     return (
       <Suspense fallback={null}>
-        <WorldPage />
+        <HomePage />
       </Suspense>
     );
   }
@@ -90,7 +90,7 @@ function ProtectedWorld() {
           flash of chrome before it would be the half-appearance the page
           forbids everywhere inside itself. */}
       <Suspense fallback={null}>
-        <WorldPage />
+        <HomePage />
       </Suspense>
     </RequireAuth>
   );

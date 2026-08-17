@@ -22,7 +22,7 @@ filter over yours.
 
 | Doc | What it owns |
 | --- | --- |
-| [`docs/architecture.md`](docs/architecture.md) | **Where things live** — the three layers as the three sections of the world, one column per mind, and the four seams that carry the coupling. Read it before `World.tsx`; that file assumes this map. |
+| [`docs/architecture.md`](docs/architecture.md) | **Where things live** — the three layers as the three sections of the world, one column per mind, and the four seams that carry the coupling. Read it before `Home.tsx`; that file assumes this map. |
 | [`docs/codebase.md`](docs/codebase.md) | **How the codebase is organised, and the plan for making it easier to build on.** Read it before a change that spans more than one file. |
 
 ## The two canonical docs

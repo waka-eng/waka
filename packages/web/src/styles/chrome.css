@@ -742,7 +742,7 @@ a:hover {
    "Matching the world" was being done by eye — a 10px label here, a clamp
    there, each one close to the world's and none of them equal to it. Close is
    what makes two screens feel like two products. These are the world's own
-   numbers, lifted from world.css rather than approximated. */
+   numbers, lifted from home.css rather than approximated. */
 
 /* the label register, byte for byte from .jar-label */
 .login-eyebrow,

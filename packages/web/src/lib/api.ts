@@ -1311,6 +1311,67 @@ export async function leaveGroup(groupId: string): Promise<void> {
   );
 }
 
+/**
+ * MAINTAINING A GROUP — three verbs the server has always answered and the
+ * client never asked.
+ *
+ * `PATCH /groups/:id`, `DELETE /groups/:id` and
+ * `DELETE /groups/:id/members/:profileId` are implemented, membership-gated
+ * and owner-gated on the server (groups.ts:1392, :1372, :1425). Until now the
+ * only group verb the client could perform was leaving, so a room could be
+ * made and joined and then never renamed, never tidied, and never closed —
+ * and an owner who wanted a member gone had no way to say so.
+ */
+
+/** PATCH /groups/:id — rename. Owner only; the server enforces it. */
+export async function renameGroup(groupId: string, name: string): Promise<ApiGroupSummary> {
+  const body = await patchJson<{ group: ApiGroupSummary }>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}`),
+    { name },
+    "Failed to rename this room",
+  );
+  return body.group;
+}
+
+/**
+ * DELETE /groups/:id — close the room for everyone. Owner only.
+ *
+ * This is the most destructive act in the group surface: it takes the room's
+ * top of mind with it, which is the one artifact its members made together.
+ * Nobody's own memories or signals are touched — a room never owned those —
+ * but what the room concluded is gone. Any caller must confirm first.
+ */
+export async function deleteGroup(groupId: string): Promise<void> {
+  await requestVoid(
+    apiPath(`/groups/${encodeURIComponent(groupId)}`),
+    "DELETE",
+    undefined,
+    "Failed to close this room",
+  );
+}
+
+/**
+ * DELETE /groups/:id/members/:profileId — remove someone. Owner only.
+ *
+ * Their shared statements stop appearing on the wall and their public captures
+ * leave the room's ground, because both are read through current membership
+ * rather than copied — so this is reversible by re-inviting, and it removes
+ * nothing they own.
+ */
+export async function removeGroupMember(
+  groupId: string,
+  memberProfileId: string,
+): Promise<void> {
+  await requestVoid(
+    apiPath(
+      `/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberProfileId)}`,
+    ),
+    "DELETE",
+    undefined,
+    "Failed to remove this member",
+  );
+}
+
 /** GET /groups/:id/members */
 export async function fetchGroupMembers(groupId: string): Promise<ApiGroupMember[]> {
   const body = await getJson<{ members: ApiGroupMember[] }>(

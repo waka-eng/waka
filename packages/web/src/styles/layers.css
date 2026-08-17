@@ -20,8 +20,8 @@
  * Three layers, in the order they should win:
  *
  *   base      resets, tokens, element defaults — the ground everything sits on
- *   product   the app's own components: global.css, system.css, world.css
- *   chrome    the flat screens wearing the world's light (world-chrome.css)
+ *   product   the app's own components: global.css, system.css, home.css
+ *   chrome    the flat screens wearing the world's light (chrome.css)
  *
  * `chrome` is last because its entire job is to override product styling for
  * the screens outside the world. That is a statement of intent, in one place,
@@ -30,8 +30,8 @@
  *
  * WHAT IS ASSIGNED, as of 85f3274:
  *
- *   product   global.css:2, system.css:2, world.css:5
- *   chrome    world-chrome.css:2
+ *   product   global.css:2, system.css:2, home.css:5
+ *   chrome    chrome.css:2
  *   base      nothing yet — declared so resets and element defaults have a
  *             floor to land on when they are separated out
  *
@@ -39,9 +39,9 @@
  * been false since that commit, and it was not a harmless stale comment: the
  * rule it stated — unlayered beats ALL layers — is true, so anyone reasoning
  * from it got every duplicate definition BACKWARDS. Read it and you conclude
- * global.css's `--ink: #0f0f0e` wins over world-chrome.css's, and therefore
+ * global.css's `--ink: #0f0f0e` wins over chrome.css's, and therefore
  * that the product is painted in the parchment theme. The opposite is the
- * case: `chrome` is the later layer, so world-chrome.css wins, `--ink` is
+ * case: `chrome` is the later layer, so chrome.css wins, `--ink` is
  * `#e8edf4`, and global.css's founding parchment palette is unreachable at
  * runtime. A token audit had to re-derive all of that against the tree
  * because this file asserted otherwise.
@@ -49,7 +49,7 @@
  * WHY IT HAD TO BE ONE CHANGE, which is still worth knowing before touching
  * the assignment: unlayered rules beat all layers, so moving one file into a
  * layer while its neighbours stay out does not raise it above them — it drops
- * it BELOW them. Wrapping world-chrome.css alone was tried and instantly undid
+ * it BELOW them. Wrapping chrome.css alone was tried and instantly undid
  * every override it exists to make: the card came back, the pill tabs came
  * back, `--ink` reverted to near-black. Any future change to which layer a
  * sheet belongs to carries the same hazard, and has to move every sheet at
