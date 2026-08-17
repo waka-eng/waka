@@ -308,6 +308,25 @@ describe("winding the dial forward again", () => {
 });
 
 describe("which end of the rail is which", () => {
+  /**
+   * BOTH ENDS ARE NAMED, SO BOTH ENDS ARE READ.
+   *
+   * The counts alone cannot say what this case is called. "Nothing is present
+   * at the top" is true of any top end earlier than your first memory, three
+   * days or three years; "everything is present at the bottom" is true of any
+   * bottom end at or after your NEWEST memory, which in this fixture is four
+   * days before today. A rail that ran to your last save instead of to now
+   * would satisfy every count below and be wrong in the way a person would
+   * notice first — the days since their last save would have vanished from
+   * the world.
+   *
+   * So the rail's own date readout is asked at each end and checked against
+   * the moment the test computed for it. Both are far from the neighbour they
+   * could be confused with: the top says "May third" where the first memory is
+   * May sixth, the bottom says "August sixteenth" where the newest memory is
+   * August eleventh. The words come from the product's own formatter — what is
+   * pinned is which moment the rail's ends sit at, not the spelling of a month.
+   */
   it("runs from before your first memory at the top to today at the bottom", async () => {
     await layout.toField();
     await windTo(0);
@@ -321,10 +340,22 @@ describe("which end of the rail is which", () => {
     expect(top.present, "the top of the rail is before your first memory").toBe(0);
     expect(top.drawn.active, "and nothing is left lit after the last one leaves").toBe(0);
     expect(top.onScreen).toBe(0);
+    /* the exact day, not merely "early enough": three days before the first
+       memory, which is the page's own `earliest - 3 * DAY_MS` */
+    expect(
+      one(".jar-dial-date").textContent,
+      "the top of the rail should name the day three days before your first memory",
+    ).toBe(dateWords(railStart, railEnd));
 
     await windTo(1);
 
     expect(layout.audit().present, "the bottom of the rail is now").toBe(keptMs.length);
+    /* AND THE BOTTOM IS TODAY, not the day of your last save. This is the
+       assertion the counts cannot make: every memory is present either way. */
+    expect(
+      one(".jar-dial-date").textContent,
+      "the bottom of the rail should name today, not the day of your newest memory",
+    ).toBe(dateWords(railEnd, railEnd));
     expectGroundIsWhole("at the bottom of the rail");
   });
 });

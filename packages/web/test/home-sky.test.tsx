@@ -5,11 +5,14 @@
  *
  * `home-field.test.tsx` beside this file watches the ground under a wall. The
  * sky over it had never been watched at all: no candidate reached the harness,
- * so `sky-engine.ts` — thirteen functions and seven hundred lines, freshly
+ * so `sky-engine.ts` — thirteen functions over a thousand lines, freshly
  * lifted out of Home.tsx — was standing on nothing but a diff that showed its
  * text had not changed. Five of its functions had never been executed by any
- * test, and all five hang off pointer input: `persistSky`, `focusOn`,
- * `springs`, `releaseHolds`, `sayWho`. This file simulates that input.
+ * test, and every one of them is reached only by a pointer gesture:
+ * `persistSky`, `focusOn`, `releaseHolds` and `sayWho` are called from the
+ * input handlers themselves, and `springs` runs in the frame loop but only
+ * while something is selected, which nothing but a tap ever starts. This file
+ * makes those gestures.
  *
  * HOW THE SKY IS OBSERVED, GIVEN THAT IT IS DRAWN ON A CANVAS THAT DRAWS
  * NOTHING.
@@ -22,12 +25,28 @@
  *      carries dispersal, condensation, the cluster whisper and the focus
  *      sink. So `.jar-neb`'s inline style is a live readout of the Neb behind
  *      it, published by the product for its own reasons rather than for this.
+ *      (Of those four factors only condensation and the focus sink are ever
+ *      driven below; nothing here disperses a cloud or builds a cluster.)
  *
- *   2. THE HIT TESTS ANSWER. A satellite exists nowhere else — it is painted
- *      and gone — but `satAt` will say whether one is under a given point, and
- *      `sayWho` writes its owner's given name into `.jar-satsay`. Sweeping the
- *      pointer across the sky and collecting where the whisper lights is
- *      therefore a genuine measurement of where the evidence is in orbit.
+ *   2. THE HIT TESTS ANSWER — FOR ONE CANDIDATE'S EVIDENCE, AND ONLY WHERE IT
+ *      HAS A NAME. A satellite exists nowhere else, it is painted and gone,
+ *      but `satAt` will say whether one is under a given point and `sayWho`
+ *      writes its owner's given name into `.jar-satsay`. Sweeping the pointer
+ *      and collecting where the whisper lights is therefore a measurement of
+ *      where the SUBJECT'S NAMED evidence is in orbit, and of nothing wider
+ *      than that. Both narrowings are load-bearing and neither is obvious:
+ *
+ *        `satAt` reads `sky.focusNeb` and returns null when there is none, so
+ *        it can never answer for a candidate that is not the subject — nor for
+ *        a satellite still under half emerged.
+ *
+ *        `sayWho` writes only `s.who`, which `makeSat` fills from an evidence
+ *        row's `authorName`. A room's evidence carries one; the viewer's own
+ *        signals cite their own saves and carry none. Measured: sweeping the
+ *        whole region around NAMING while it IS the subject and its three
+ *        satellites are fully out returns nothing at all. So every claim below
+ *        that rests on a sweep is a claim about the proposal's affirmers, and
+ *        a personal candidate's orbit is not observed by this file at all.
  *
  * Both are STATE, not appearance. Nothing here asserts a colour, a brightness
  * or a pixel, because the stub draws none and a test that claimed otherwise
@@ -60,7 +79,11 @@ const BASE = Date.UTC(2026, 7, 16);
 const iso = (daysAgo: number) => new Date(BASE - daysAgo * DAY).toISOString();
 
 /**
- * WHOSE SAVES STAND BEHIND THE PROPOSAL, AND WHY THERE ARE TWO OF THEM.
+ * WHO STANDS BEHIND THE PROPOSAL, AND WHY THERE ARE TWO OF THEM.
+ *
+ * Not saves. A room's proposal cites its AFFIRMERS and never their memories
+ * (`textPreview` is empty on every one of these rows), which is the canon's
+ * privacy line: a room may name who agreed and must not name what they kept.
  *
  * A group's pending proposal is the one candidate whose evidence carries
  * NAMES — the members who have affirmed it — and a name is the only thing a
@@ -137,14 +160,27 @@ const OPEN_PROPOSAL = {
  * THE SEAM IS `lib/data` FOR THE THREE LAYERS AND `lib/api` FOR A GROUP'S
  * READS — the same division `render-home.tsx` explains at length, and the same
  * one that let a whole suite describe the dev fixture once. `loadSignals` and
- * `loadSignal` are added here rather than in the shared helper because they
- * are this file's subject: the field's tests want an empty sky, and a helper
- * that quietly filled it would change what they are measuring.
+ * `loadSignal` are overridden in the `lib/data` mock BELOW rather than in the
+ * shared helper, because they are this file's subject: the field's tests want
+ * an empty sky, and a helper that quietly filled it would change what they are
+ * measuring.
  *
  * `fetchGroupWall` is emptied on purpose. A group's shared statements become
  * candidates at the GROUP's column, and every case below stands on the
- * viewer's own wall; leaving them in would put clouds in a sky no assertion
- * here ever looks at, which is noise rather than coverage.
+ * viewer's own wall, so those clouds would be candidates no assertion here
+ * reaches for by name.
+ *
+ * WHAT THAT DOES NOT BUY, SAID PLAINLY, BECAUSE IT LOOKS LIKE IT BUYS MORE.
+ * Emptying it does not leave a sky holding only the three sentences named
+ * below. `clouds()` returns SEVEN `.jar-neb`s here: those three, and four more
+ * standing over the agent walls to the left — which are the dev fixture
+ * (`lib/fixture/agent-walls.ts`, gated on `import.meta.env.DEV`, and Vitest
+ * sets DEV). Every loop below that walks `clouds()` walks those four as well.
+ * That is a real weakness of this file, and it cuts both ways: the whole-sky
+ * assertions (one subject, one sink) are stronger for it, while any claim
+ * about "the sky" here is partly a claim about invented agents. The three the
+ * cases name are the product's own — a mocked proposal and two mocked signals
+ * through `lib/data` — and nothing below identifies a cloud by position.
  */
 vi.mock("../src/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/lib/api")>();
@@ -405,44 +441,103 @@ describe("what a forming signal becomes overhead", () => {
     for (const opening of [PROPOSAL, NAMING, PROOF])
       expect(sentences.some((s) => s.startsWith(opening)), `"${opening}" never reached the sky`).toBe(true);
 
-    const spots = [PROPOSAL, NAMING, PROOF].map((s) => spotOf(cloud(s)));
-    for (const [i, at] of spots.entries()) {
-      expect(Number.isFinite(at.x) && Number.isFinite(at.y), `candidate ${i} has no place`).toBe(true);
-      expect(opacityOf(clouds()[i]), "a placed cloud is on screen").toBeGreaterThan(0);
+    /* THE ELEMENTS AND THEIR PLACES, ZIPPED. `clouds()` is not these three: it
+       is every candidate in every column, the dev fixture's agent walls
+       included, in whatever order React rendered them. This loop used to read
+       `clouds()[i]` while walking the named three, so the opacity it checked
+       belonged to whichever cloud happened to sit at that index. It agreed
+       today by coincidence — the first three in document order are these
+       three — and a coincidence is not a test. */
+    const named = [PROPOSAL, NAMING, PROOF].map((s) => cloud(s));
+    const spots = named.map(spotOf);
+    for (const [i, el] of named.entries()) {
+      expect(
+        Number.isFinite(spots[i].x) && Number.isFinite(spots[i].y),
+        `candidate ${i} has no place`,
+      ).toBe(true);
+      expect(opacityOf(el), "a placed cloud is on screen").toBeGreaterThan(0);
     }
-    /* THE SENTENCES ARE PARTED, and that is layoutSky's own claim: two
-       candidates whose keep-outs overlap are relaxed apart until neither sits
-       on the other's words. Two sentences printed on top of each other is the
-       failure that relaxation pass exists to prevent. */
-    expect(apart({ dx: spots[0].x, dy: spots[0].y }, { dx: spots[1].x, dy: spots[1].y })).toBeGreaterThan(60);
-    expect(apart({ dx: spots[1].x, dy: spots[1].y }, { dx: spots[2].x, dy: spots[2].y })).toBeGreaterThan(60);
+    /* NO TWO OF THESE THREE SENTENCES ARE PRINTED IN ONE PLACE — and measured,
+       that is the whole of it.
+       This was written as a check on `layoutSky`'s relaxation pass, the one
+       that pushes two candidates apart until neither sits on the other's
+       words. It is not one. Disabling that pass outright (its loop run zero
+       times) leaves all three distances below at 275, 248 and 492 pixels
+       instead of 305, 282 and 545 — no candidate crosses the threshold,
+       because the ring these are parked on already spreads them and nothing
+       here ever produces the overlapping HOMES relaxation exists for.
+       And the keep-out it would relax is not the one the product computes.
+       `keepR` is the greater of a cloud's light and its SENTENCE's half
+       diagonal, and jsdom lays out no text: `offsetWidth` reads 0 and falls
+       back to the width the loop had just written, `offsetHeight` reads 0 with
+       no fallback at all. So the half diagonal here is half of a width the
+       layout chose, against a height of nothing — a number, but not a
+       measurement of any words. Same gap as the orbit-clears-the-words maths
+       recorded further down, and from the same cause.
+       So sixty pixels is a guard against two sentences landing on one spot,
+       not a measurement of the rule that keeps them off each other. All three
+       pairs and not two of them: an overlap between the first and the last is
+       exactly what a two-of-three comparison lets through. */
+    for (const [i, j] of [
+      [0, 1],
+      [0, 2],
+      [1, 2],
+    ] as const)
+      expect(
+        apart({ dx: spots[i].x, dy: spots[i].y }, { dx: spots[j].x, dy: spots[j].y }),
+        `candidates ${i} and ${j} are printed in the same place`,
+      ).toBeGreaterThan(60);
   });
 
   /**
    * AND IT HAS SATELLITES — one per piece of evidence, in orbit, each saying
    * whose memory it stands for.
    *
-   * The control comes first and it is not decoration: at rest the sky is
-   * sentences and faint bodies and NOTHING ELSE, so the same sweep over the
-   * same region finds nothing at all. Without it this case could pass on a
-   * sky that had satellites permanently strewn everywhere, which is exactly
-   * the state progressive disclosure exists to prevent — and it would pass
-   * without the tap having done anything, which is the way a test passes by
-   * doing nothing.
+   * The control comes first and it is not decoration: before the tap the same
+   * sweep over the same region finds nothing, so what comes out afterwards
+   * came out because of the tap. Without it this case would pass without the
+   * tap having done anything, which is the way a test passes by doing nothing.
+   *
+   * WHAT THE CONTROL DOES NOT SAY, and it is less than it reads as. It is not
+   * "at rest the sky is sentences and faint bodies and nothing else". The
+   * sweep is blind twice over (see the header): `satAt` answers for the
+   * SUBJECT alone, and the whisper speaks only for evidence carrying a name.
+   * So an empty sweep before the tap rules out THIS PROPOSAL'S AFFIRMERS being
+   * permanently out, and says nothing whatever about the two personal
+   * candidates' satellites — which are nameless, and would be invisible to
+   * this sweep whether they were retracted or strewn across the whole sky.
+   * Progressive disclosure at large is not pinned by this file.
+   *
+   * AND THE ORBIT-CLEARS-THE-WORDS MATHS IS NOT COVERED HERE AT ALL, WHICH IS
+   * WORTH SAYING BECAUSE THE LAST ASSERTION LOOKS LIKE IT COVERS IT.
+   * `measureNeb` solves the ellipse from the sentence's own rendered box, and
+   * jsdom lays nothing out. The two halves fail differently, and that is the
+   * trap: `offsetWidth` is 0 but falls back to the width the loop had just
+   * written (`el.offsetWidth || w`, 320px here), so `rx` comes out about 219
+   * and is a real number. `offsetHeight` is 0 with NO fallback, so `ry` is
+   * solved for a sentence of zero height and comes out around 50 — flatter
+   * than any ring the product could ever draw, and the corner-enclosure step
+   * that exists to stop a satellite crossing the last word of a wrapped line
+   * runs against a box with no lines in it. Nothing below can tell a working
+   * clearance from a broken one; a browser would be needed.
+   * The standoff assertion is also a MAX over the two satellites, so it is one
+   * satellite's horizontal reach: measured, Hana sits 219 pixels out and Jun
+   * 58. It says the evidence is on an ellipse rather than stacked at the
+   * centre, and that is all it says.
    */
   it("puts the subject's evidence in orbit around it, one satellite each", async () => {
     await climbToSky();
     const before = orbitAround(cloud(PROPOSAL));
     expect(
       [...before.keys()],
-      "at rest a candidate is its sentence and its body — no evidence is out",
+      "before the tap, nothing in the sky answers the pointer as a satellite",
     ).toEqual([]);
 
     const el = await tapSentence(PROPOSAL);
     const orbit = orbitAround(el);
     expect(
       [...orbit.keys()].sort(),
-      "one satellite per affirmation, each naming whose save it is",
+      "one satellite per affirmation, each naming the member who affirmed it",
     ).toEqual(["Hana", "Jun"]);
 
     const [hana, jun] = [orbit.get("Hana")!, orbit.get("Jun")!];
@@ -477,10 +572,18 @@ describe("the focus rule: one subject at a time", () => {
     const subjects = clouds().filter((el) => growthOf(el) > 1.001);
     expect(subjects.length, "exactly one candidate is the subject").toBe(1);
     expect(subjects[0]).toBe(cloud(NAMING));
-    for (const el of clouds()) {
-      if (el === subjects[0]) continue;
-      expect(opacityOf(el), "every other candidate has sunk uniformly").toBeLessThan(0.5);
-    }
+    const sunk = clouds()
+      .filter((el) => el !== subjects[0])
+      .map(opacityOf);
+    for (const op of sunk) expect(op, "every other candidate has sunk").toBeLessThan(0.5);
+    /* AND SUNK TO ONE DEPTH, which the threshold above cannot say and which is
+       the actual rule: one lit thing, one sink, no second tier of highlight.
+       Two candidates dimmed by different amounts would both pass `< 0.5` while
+       breaking exactly the law the focus rule exists to keep, so the depths
+       are compared to each other rather than to a bound. They are one number
+       and not a near one — every non-subject reads the same `dimN` through the
+       same ease from the same start — so this is asserted tightly. */
+    for (const op of sunk) expect(op, "one sink, not a second tier").toBeCloseTo(sunk[0], 5);
 
     await tapSentence(PROOF);
     const after = clouds().filter((el) => growthOf(el) > 1.001);
@@ -512,12 +615,23 @@ describe("the focus rule: one subject at a time", () => {
   });
 
   /**
-   * Tapping the bare sky gives the subject back, and the orbit goes with it.
-   * The satellites are asked directly rather than inferred from the scale,
-   * because "the cloud came back down" and "its evidence went back in" are two
-   * separate eases and only one of them is the one this rule is about.
+   * Tapping the bare sky gives the subject back, and its evidence stops
+   * answering the pointer.
+   *
+   * THE RETRACTION ITSELF IS NOT WHAT THIS SEES, and the earlier wording here
+   * claimed it was. `satAt` opens with `const n = sky.focusNeb; if (!n) return
+   * null` — so the moment the subject is let go, nothing answers as a
+   * satellite whatever the satellites are doing. An empty sweep afterwards is
+   * therefore a second reading of "there is no subject", not an independent
+   * reading of "the orbit went back into the sentence". The `em` ease that
+   * performs the retraction is a number inside the loop, drawn only on a
+   * canvas that draws nothing here, and this file cannot see it.
+   *
+   * The two assertions are still worth having together: one says the cloud
+   * came back down to rest, the other says nothing is left holding a satellite
+   * selection open behind it. Neither says the orbit retracted.
    */
-  it("takes the evidence back in when the sky itself is tapped", async () => {
+  it("lets the subject go when the sky itself is tapped, and its evidence stops answering", async () => {
     await climbToSky();
     const el = await tapSentence(PROPOSAL);
     expect([...orbitAround(el).keys()].length, "the evidence came out first").toBe(2);
@@ -525,7 +639,7 @@ describe("the focus rule: one subject at a time", () => {
     await tapEmptySky();
     expect(
       [...orbitAround(el).keys()],
-      "letting the subject go retracts its evidence into the sentence",
+      "with no subject, nothing in the sky answers the pointer as a satellite",
     ).toEqual([]);
     expect(growthOf(el), "and the cloud is back at rest").toBeCloseTo(1, 2);
   });
