@@ -4372,6 +4372,66 @@ function WorldExperience(): JSX.Element {
   /** pattern id → what it rests on. Filled by the sky's background sweep;
       read by the orbit, which never fetches on tap. */
   const evidenceByPatternRef = useRef<Map<string, WorldEvidence[]>>(new Map());
+
+  /**
+   * READING THE SKY — the one owner, so it can happen more than once.
+   *
+   * This was written inline inside the world-load effect, which closes `}, []`,
+   * so it ran exactly once per page load and never again. That is the whole
+   * shape of the freeze: signals are DERIVED BY A BACKGROUND JOB, so the
+   * result of anything you keep is guaranteed to arrive after the page stopped
+   * listening. An agent writing through its CLI all afternoon, or a memory
+   * kept on your phone, reached the database and never the screen.
+   *
+   * It lives in a ref rather than a plain `useCallback` because the effect
+   * that calls it must keep its empty dependency list — the first pour is a
+   * mount concern and must not re-run — while this body is re-created on every
+   * render like any closure. The ref is the seam between the two.
+   *
+   * There is no `dead` flag here on purpose. React 18 makes a setState on an
+   * unmounted component a no-op, and the alternative — threading a cancel
+   * token through both callers — buys nothing this does not already have.
+   */
+  const readSkyRef = useRef<() => Promise<void>>(async () => {});
+  readSkyRef.current = async () => {
+    const rows = await loadSignals();
+    if (offlineRef.current) return;
+    setPatterns(rows);
+    const index = new Map<string, WorldEvidence[]>();
+    for (const p of rows) {
+      if (offlineRef.current) return;
+      if (p.evidenceCount === 0) continue;
+      try {
+        const full = await loadSignal(p.id);
+        for (const e of full.evidence) {
+          const have = index.get(e.inspirationId);
+          if (have) have.push(e);
+          else index.set(e.inspirationId, [e]);
+        }
+        evidenceByPatternRef.current.set(p.id, full.evidence);
+      } catch {
+        /* this signal draws no orbit; the statement still stands */
+      }
+    }
+    if (offlineRef.current) return;
+    setCitations(index);
+    /* AND NOW THE PEEK ROW CAN BE BUILT. The board's statement cites signals;
+       those signals cite memories; the row beneath the poster is those
+       memories, with the words each of them was quoted on. This is the only
+       place both halves of the chain are in hand. */
+    setNotes((cur) => {
+      const board = cur ?? [];
+      const lead = board.find((e) => e.pinned) ?? board[0];
+      if (!lead) return cur;
+      const prov: Provenance = new Map();
+      for (const c of lead.citedSignals)
+        for (const e of evidenceByPatternRef.current.get(c.id) ?? [])
+          if (!prov.has(e.inspirationId)) prov.set(e.inspirationId, e.quote);
+      if (prov.size > 0) setProvenance(prov);
+      return cur;
+    });
+  };
+
   /** room id → the statements hanging on its wall, with whose they are. */
   const wallSignalsRef = useRef<Map<string, ApiGroupWallSignal[]>>(new Map());
   const [adopted, setAdopted] = useState<Adopted | null>(null);
@@ -4963,43 +5023,8 @@ function WorldExperience(): JSX.Element {
 
        Retired patterns are kept. Nothing that exists pops out of existence —
        a pattern that lost its evidence sinks and cools, it is not deleted. */
-    loadSignals()
-      .then(async (rows) => {
-        if (dead || offlineRef.current) return;
-        setPatterns(rows);
-        const index = new Map<string, WorldEvidence[]>();
-        for (const p of rows) {
-          if (dead || offlineRef.current) return;
-          if (p.evidenceCount === 0) continue;
-          try {
-            const full = await loadSignal(p.id);
-            for (const e of full.evidence) {
-              const have = index.get(e.inspirationId);
-              if (have) have.push(e);
-              else index.set(e.inspirationId, [e]);
-            }
-            evidenceByPatternRef.current.set(p.id, full.evidence);
-          } catch {
-            /* this pattern draws no orbit; the statement still stands */
-          }
-        }
-        if (!dead && !offlineRef.current) setCitations(index);
-        /* AND NOW THE PEEK ROW CAN BE BUILT. The board's statement cites
-           patterns; those patterns cite memories; the row beneath the poster
-           is those memories, with the words each of them was quoted on. This
-           is the only place both halves of the chain are in hand. */
-        setNotes((cur) => {
-          const board = cur ?? [];
-          const lead = board.find((e) => e.pinned) ?? board[0];
-          if (!lead) return cur;
-          const prov: Provenance = new Map();
-          for (const c of lead.citedSignals)
-            for (const e of evidenceByPatternRef.current.get(c.id) ?? [])
-              if (!prov.has(e.inspirationId)) prov.set(e.inspirationId, e.quote);
-          if (prov.size > 0) setProvenance(prov);
-          return cur;
-        });
-      })
+    readSkyRef
+      .current()
       .catch(() => {
         /* an empty sky is a real state: nothing has been distilled yet */
         if (!dead && !offlineRef.current) setPatterns([]);
@@ -5134,6 +5159,59 @@ function WorldExperience(): JSX.Element {
     return () => {
       dead = true;
     };
+  }, []);
+
+  /**
+   * THE WORLD RE-READS ITSELF WHEN YOU COME BACK TO IT.
+   *
+   * Everything above the field was a photograph taken when the page opened.
+   * The field, the sky and the agents' walls are each fetched once, inside an
+   * effect that closes `}, []`, and there was no interval, no refetch after a
+   * write, and no listener anywhere in the client that would go and look
+   * again. Since signals are derived and the board is synthesised by
+   * BACKGROUND JOBS, the answer to anything you kept was guaranteed to land
+   * after the page stopped listening. The only escape was a reload, and
+   * nothing on screen ever suggested one.
+   *
+   * COMING BACK IS THE USER MOVING. The law is that the world never moves
+   * unless you moved it, and a poll would break it: statements would arrive
+   * over your shoulder while you were reading. Returning to the tab is a
+   * gesture, and it is the exact moment a person is ready to be told what
+   * changed — so that is the only trigger, and only after long enough away
+   * that something plausibly did.
+   *
+   * Nothing is rebuilt destructively. The balls effect already merges a
+   * fetched list against what is standing — `fetched`/`kept` reconciles by
+   * both ids so a reload can never double a memory — so new rows JOIN the
+   * ground the way a kept memory does, and orbs already on screen keep their
+   * homes. That is why this is three setState calls and not a re-pour.
+   *
+   * The board is deliberately absent: it refreshes on its own already
+   * (`rebuildBoard`, `restoreLead`, and the edit path), and a room rehydrates
+   * when you travel toward it. Only the three genuinely frozen layers are here.
+   */
+  const AWAY_LONG_ENOUGH_MS = 30_000;
+  useEffect(() => {
+    let hiddenAt: number | null = null;
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAt = Date.now();
+        return;
+      }
+      const away = hiddenAt === null ? 0 : Date.now() - hiddenAt;
+      hiddenAt = null;
+      if (away < AWAY_LONG_ENOUGH_MS) return;
+      /* the fixture has no server to ask, and a signed-out visitor has no
+         business making three requests that will all 401 */
+      if (offlineRef.current) return;
+      void Promise.allSettled([
+        loadInspirations().then((rows) => setCaptures(rows)),
+        loadAgentWalls().then((rows) => setAgents(rows)),
+        readSkyRef.current(),
+      ]);
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
   }, []);
 
   /**
