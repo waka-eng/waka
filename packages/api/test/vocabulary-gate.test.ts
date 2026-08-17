@@ -43,6 +43,17 @@ import { afterEach, describe, expect, it } from "vitest";
  * fails. Delete the check's `process.exit`, or the check, and the case goes red.
  * Every anchor is asserted before it is replaced, so a rename in the gate makes
  * these fail loudly instead of quietly mutating nothing.
+ *
+ * AND ONE THING IT TURNED OUT TO BE GOOD FOR THAT WAS WRITTEN OFF AS TOO
+ * EXPENSIVE. The gate prints how many self-test cases ran, and no number a
+ * process prints about itself can be checked from inside it. That was recorded
+ * as a limitation whose fix was "move SUITES and every case array into a shared
+ * module" — several hundred lines, so, not now. It is a mutant: run the gate,
+ * run a copy with one more case pushed onto SELFTEST, and the printed count has
+ * to be one higher. Twelve lines with machinery that already existed. The
+ * lesson is about the estimate rather than the check — the fix that gets
+ * written down instead of done is worth re-costing against the tools that
+ * arrived since.
  */
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -187,6 +198,74 @@ describe("the vocabulary gate, as the package actually runs it", () => {
     const [, total, awaiting, permanent] = summary as RegExpExecArray;
     expect(Number(awaiting) + Number(permanent), run.out).toBe(Number(total));
     expect(Number(total)).toBeGreaterThan(0);
+
+    /*
+     * AND EACH HALF ON ITS OWN. The sum above cannot see a split that lies by
+     * one in each direction — `rename - 1` with `permanent + 1` adds up
+     * perfectly and moves the number this gate is read by, which is how many of
+     * its holes are supposed to be temporary. The only thing outside the process
+     * that knows the truth is the list itself, so the entries are counted in the
+     * gate's own source. If that count is ever 0 the data has been reformatted
+     * rather than broken, and the message says so instead of a bare mismatch.
+     *
+     * WHAT THIS STILL DOES NOT CATCH, since it is one line to say it: freezing
+     * the printed number at the constant it happens to equal today survives,
+     * because this compares it against that same number. It cannot mislead for
+     * longer than one edit to ALLOWED — the next entry added or removed makes
+     * the two disagree and this case goes red — which is the only window in
+     * which a stale count could tell anyone anything false.
+     */
+    const declaredRename = (
+      readFileSync(GATE, "utf8").match(/^ {4}disposition: "rename",$/gm) ?? []
+    ).length;
+    expect(
+      declaredRename,
+      "no `disposition: \"rename\",` lines found in the gate — ALLOWED has been " +
+        "reformatted, so this case is counting nothing rather than checking anything",
+    ).toBeGreaterThan(0);
+    expect(
+      Number(awaiting),
+      `the clean line says ${awaiting} entries await a rename; ALLOWED declares ${declaredRename}\n${run.out}`,
+    ).toBe(declaredRename);
+  });
+
+  it("reads a .mts, which is TypeScript that neither rule used to match", () => {
+    /*
+     * NOT A MUTATION — this was true of the gate as shipped. `classify` matched
+     * `/\.ts$/` and the coverage walk matched `/\.tsx?$/`, so a `.mts` was
+     * scanned by neither and missed by neither: the one combination the coverage
+     * check exists to make impossible, and the exact shape of every blindness
+     * this project has had. The two lines below, in a `.ts`, exit 1 with both
+     * names. In a `.mts` they printed `clean`.
+     *
+     * Planted in the real package rather than a miniature one for the same
+     * reason the torn-file case is: in a tree the allowlist does not match, the
+     * run exits 1 at staleness regardless, and this case would pass on somebody
+     * else's exit code.
+     */
+    const planted = join(PKG, "src", `gate-probe-${process.pid}.probe.mts`);
+    temporary.push(planted);
+    writeFileSync(
+      planted,
+      ["export const capturedProbeNote = 1;", "export const roomProbeDesk = 2;", ""].join("\n"),
+    );
+
+    const run = runGate(GATE);
+
+    expect(run.code, `a .mts holding retired words must fail the run\n${run.out}`).toBe(1);
+    expect(run.out).toContain("2 identifier(s) still speak the old words");
+    expect(run.out).toContain(
+      `capturedProbeNote  (1x, first at src/gate-probe-${process.pid}.probe.mts:1)`,
+    );
+    expect(run.out).toContain(
+      `roomProbeDesk  (1x, first at src/gate-probe-${process.pid}.probe.mts:2)`,
+    );
+    /*
+     * AND IT WAS READ, NOT MERELY NOTICED. If only the coverage walk had been
+     * widened, this file would be reported as never scanned instead — a
+     * different, much weaker verdict that would still turn this run red.
+     */
+    expect(run.out).not.toContain("never scanned");
   });
 
   it("refuses TypeScript files no root covers, and says how many", () => {
@@ -307,6 +386,73 @@ describe("the vocabulary gate, as the package actually runs it", () => {
     expect(run.out).not.toContain("never scanned");
     expect(run.out).not.toContain("match nothing");
     expect(run.out).not.toContain("still speak the old words");
+  });
+
+  /*
+   * THE BOUNDARY, NOT THE COUNT — and this round is what made these necessary,
+   * which is the part worth writing down.
+   *
+   * The four count-based exits (`blind`, `neverRead`, `silent`, `unscanned`)
+   * were each pinned by a case planting TWO of the thing, because the printed
+   * number was a bare expression that could be replaced by the constant 1 with
+   * everything green. Two is what proves the count. Two is also exactly what
+   * cannot tell `if (x.length > 0)` from `if (x.length > 1)` — so the fix for
+   * one hole opened another, and `> 1` was green in the gate, the self-test and
+   * this file while a SINGLE torn file passed silently through the real package.
+   * One file is not the small case here. It is the incident: 87 lines of
+   * `src/lib/generation-doc.test.ts` went unread and the run printed `clean`.
+   */
+  it("refuses a single torn file — one is the incident, not the small case", () => {
+    const only = join(PKG, "src", `gate-torn-solo-${process.pid}.probe.ts`);
+    temporary.push(only);
+    writeFileSync(only, "const opened = `never closed;\nexport const value = 1;\n");
+
+    const run = runGate(GATE);
+
+    expect(run.code, `one torn file must fail the run\n${run.out}`).toBe(1);
+    expect(run.out).toContain("lost track inside 1 file(s)");
+    expect(run.out).toContain(`src/gate-torn-solo-${process.pid}.probe.ts:1`);
+    expect(run.out).not.toContain("never scanned");
+    expect(run.out).not.toContain("match nothing");
+    expect(run.out).not.toContain("still speak the old words");
+  });
+
+  it("refuses a single file that yielded no identifier", () => {
+    /*
+     * The cheapest tree there is for the `silent` check: a `.ts` file with
+     * nothing in it. It is discovered, it is read, and it says nothing — which
+     * is what an unread file looks like from here, and both deserve the same
+     * verdict. One of them, so the exit's threshold is asserted and not just its
+     * message.
+     */
+    const empty = join(PKG, "src", `gate-empty-${process.pid}.probe.ts`);
+    temporary.push(empty);
+    writeFileSync(empty, "\n");
+
+    const run = runGate(GATE);
+
+    expect(run.code, `one silent file must fail the run\n${run.out}`).toBe(1);
+    expect(run.out).toContain("1 TypeScript file(s) yielded no identifier at");
+    expect(run.out).toContain(`src/gate-empty-${process.pid}.probe.ts`);
+    expect(run.out).not.toContain("never reached the scanner");
+    expect(run.out).not.toContain("never scanned");
+    expect(run.out).not.toContain("match nothing");
+  });
+
+  it("refuses a single TypeScript file no root covers", () => {
+    const root = miniPackage({
+      "src/fine.ts": "export const value = 1;\n",
+      "extra/unlooked-at.ts": "export const value = 2;\n",
+    });
+    temporary.push(root);
+
+    const run = runGate(join(root, "scripts", "check-vocabulary.mjs"));
+
+    expect(run.code, run.out).toBe(1);
+    expect(run.out).toContain("1 TypeScript file(s) in this package were");
+    expect(run.out).toContain("extra/unlooked-at.ts");
+    /* Nothing downstream spoke — the two-file case's argument, at one file. */
+    expect(run.out).not.toContain("match nothing");
   });
 });
 
@@ -508,12 +654,134 @@ describe("the vocabulary gate, when the mistake is in the gate", () => {
     expect(run.out).not.toContain("clean —");
   });
 
+  it("fails when a single discovered file never reaches the scanner", () => {
+    /*
+     * The same hole as the filtered-input case above, at the boundary rather
+     * than at a directory: `slice(1)` drops exactly one file, whichever it is,
+     * so this asserts `neverRead.length > 0` and not merely that twenty missing
+     * files are noticed. `> 1` was green everywhere before this case existed.
+     */
+    const script = mutantGate("one discovered file is dropped before the scan", [
+      [
+        "const { violations, blind, read, silent } = scanFiles(\n  [...scanned].map((f) => relative(PKG, f)),",
+        "const { violations, blind, read, silent } = scanFiles(\n  [...scanned].slice(1).map((f) => relative(PKG, f)),",
+      ],
+    ]);
+
+    const run = runGate(script);
+
+    expect(run.code, `one file discovered and not read must fail the run\n${run.out}`).toBe(1);
+    expect(run.out).toContain("1 file(s) were found by the walk and then");
+    expect(run.out).toContain("never reached the scanner");
+    expect(run.out).not.toContain("clean —");
+  });
+
+  it("counts the cases it prints, and prints the ones it counted", () => {
+    /*
+     * THE SELF-TEST SUMMARY, WHICH USED TO BE A DOCUMENTED LIMITATION AND WAS
+     * NOT WORTH BEING ONE.
+     *
+     * `self-test passed (46 scanner, …)` is the gate's own report on its own
+     * proof, so nothing inside the process can vouch for it: replacing the whole
+     * expression with a string literal was green in the self-test, green here
+     * and green on the package. The note in the gate said the fix was to move
+     * SUITES and every case array into a shared module — several hundred lines —
+     * and used that cost to explain why it was written down instead of done.
+     * That cost was imaginary. Nothing moves. A copy of the gate with one more
+     * case in SELFTEST must print one more, and a copy truncated to the floor
+     * must print exactly the floor, and both are mutations of the kind this
+     * describe block already runs ten of.
+     *
+     * The mutations it kills: the string literal (neither number moves), a
+     * summary that is derived but offset (`cases.length + 1` — the truncated run
+     * disagrees with the floors), one where every label reports the same array
+     * (pushing to SELFTEST moves all ten, and the comparison is on the whole
+     * object rather than one field), and one that prints the floors instead of
+     * the counts (nothing moves when a case is added).
+     */
+    const summary = (out: string): Record<string, number> => {
+      const line = /self-test passed \(([^)]*)\)/.exec(out);
+      expect(line, `the gate no longer prints a self-test summary at all\n${out}`).not.toBeNull();
+      const counts: Record<string, number> = {};
+      for (const part of (line as RegExpExecArray)[1].split(", ")) {
+        const [count, ...label] = part.split(" ");
+        counts[label.join(" ")] = Number(count);
+      }
+      return counts;
+    };
+
+    const before = summary(runGate(GATE).out);
+    expect(Object.keys(before).length, "the summary lists no suites").toBeGreaterThan(1);
+
+    const pushed = mutantGate("one more case in the scanner suite", [
+      [
+        "\nselftest();",
+        '\nSELFTEST.push({ why: "a case added by the process test", src: "const fine = 1;", expect: [] });\nselftest();',
+      ],
+    ]);
+    expect(
+      summary(runGate(pushed).out),
+      "adding a case to SELFTEST did not move the number the gate prints for it",
+    ).toEqual({ ...before, scanner: before.scanner + 1 });
+
+    /*
+     * AND EVERY OTHER LABEL MOVES WITH ITS OWN ARRAY. The push above is one
+     * suite's, so the other nine were pinned only against each other: freezing
+     * one of them at the number it happens to hold today survived — and unlike a
+     * frozen total it would not correct itself, since the next case added to
+     * that suite would be misreported with everything green. Pushing a copy of
+     * each suite's first case works whatever shape its cases are, and every
+     * printed number then has to move by one.
+     */
+    const grown = mutantGate("one more case in every suite", [
+      ["\nselftest();", "\nfor (const s of SUITES) s.cases.push(s.cases[0]);\nselftest();"],
+    ]);
+    expect(
+      summary(runGate(grown).out),
+      "a suite gained a case and the number the gate prints for it did not move",
+    ).toEqual(Object.fromEntries(Object.entries(before).map(([label, n]) => [label, n + 1])));
+
+    /*
+     * AND THE ABSOLUTE VALUES, for every label rather than only the one this
+     * case can push to. Everything above is differential — it proves the numbers
+     * MOVE correctly, not that they start in the right place. So: cut every
+     * suite to the one number in the file that is allowed to be a constant — its
+     * floor — and the printed line has to be the floors, label for label.
+     */
+    const declared = [
+      ...readFileSync(GATE, "utf8").matchAll(
+        /\{ label: "([^"]+)", cases: (\w+), floor: (\d+) \}/g,
+      ),
+    ];
+    expect(
+      declared.length,
+      "SUITES is no longer written where this case reads it — label, array and floor on one line",
+    ).toBe(Object.keys(before).length);
+    const floors: Record<string, number> = {};
+    let truncate = "";
+    for (const [, label, array, floor] of declared) {
+      floors[label] = Number(floor);
+      truncate += `${array}.length = ${floor};\n`;
+    }
+    const cut = mutantGate("every suite cut to its floor", [
+      ["\nselftest();", `\n${truncate}selftest();`],
+    ]);
+    expect(
+      summary(runGate(cut).out),
+      "a suite holding exactly its floor in cases must print exactly its floor",
+    ).toEqual(floors);
+  });
+
   it("fails when the self-test has shrunk", () => {
     /*
-     * `self-test passed (45 scanner, …)` was a number printed rather than
+     * `self-test passed (46 scanner, …)` was a number printed rather than
      * checked, so the suite could be cut to three cases — or to none — and the
      * line would still say passed, with a smaller true number. Proof is not
      * supposed to get smaller, and the floors beside each suite are what say so.
+     *
+     * This is the floor's case and the one above is the number's, and they are
+     * separate on purpose: cutting the suite has to fail because the PROOF
+     * shrank, not because the printed count moved.
      */
     const script = mutantGate("the scanner suite is cut down", [
       ["\nselftest();", "\nSELFTEST.length = 3;\nselftest();"],

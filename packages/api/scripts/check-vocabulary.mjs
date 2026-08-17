@@ -136,19 +136,36 @@
  *     nothing can trigger is a check nobody can prove is connected.
  *   - WHETHER THE NUMBERS MEAN ANYTHING. `disposition` is read for sense, the
  *     rename/permanent split is counted from both sides rather than by
- *     subtraction, and the counts in the report, coverage and blind headers are
- *     asserted against trees with two of the thing in them.
+ *     subtraction AND each half is asserted against the list's own data from
+ *     outside, the counts in the report, coverage and blind headers are asserted
+ *     against trees with two of the thing in them, and — because two of a thing
+ *     cannot tell `> 0` from `> 1` — against trees with exactly ONE as well. The
+ *     incident this gate was written for was one torn file. The self-test's own
+ *     summary is checked the only way a self-reported number can be: a mutated
+ *     copy with one extra case must print one more.
  *
- * WHAT IS STILL UNCHECKED, in one place, with the fix for each:
+ * WHAT IS STILL UNCHECKED, in one place, with what would get through and the
+ * fix for each. It is a shorter list than it was, because two of the three
+ * entries that used to be here were closable and are now closed.
  *
- *   1. The self-test summary's case counts are cosmetic — see the note above
- *      `console.log` in `selftest()`. The floors make a shrunken suite fail, so
- *      this cannot hide missing proof, only misreport proof that is there.
+ *   1. JAVASCRIPT — `.js`, `.mjs`, `.cjs` — is outside both `classify` and the
+ *      coverage walk. A retired word in an identifier in such a file is neither
+ *      read nor reported unread. What keeps this from mattering today is that
+ *      the package has exactly two such files, `scripts/measure-concerns.mjs`
+ *      and this script, and neither ships; what makes it cost more than one
+ *      character is that the process test's mutated copies of this gate live in
+ *      `scripts/*.mjs` and rely on being invisible to it. See the long note
+ *      above `everyTypeScriptFile`. (This entry used to say `.mjs` and `.js`
+ *      while the rule was `/\.tsx?$/` — so `.mts` and `.cts`, which ARE
+ *      TypeScript, were outside it too and the note did not say so. That was a
+ *      live hole, not a hypothetical one: a `src/*.mts` with two retired words
+ *      in it ran clean. Both rules now match the whole family.)
  *   2. In a tree with no `.gitignore` anywhere above this package, the exclusion
  *      justification declines to speak and NOT_OURS goes unexamined — see the
  *      note beside `ignoreRules`. Every checkout has one; an export might not.
- *   3. `.mjs` and `.js` are outside the coverage walk entirely, which is the
- *      original sentence below about `classify` and remains true.
+ *      The same note covers the one unheld edit near it: widening the decline to
+ *      "or the ignore file mentions no directories" is green everywhere, and is
+ *      inert wherever a real `.gitignore` exists.
  *
  * Run: node scripts/check-vocabulary.mjs        (also runs in `pnpm test`)
  */
@@ -927,6 +944,23 @@ function forms(word) {
  * no proof at all. Pulled out to a name, the self-test can ask it directly, and
  * `test/vocabulary-gate.test.ts` builds a package with a `.tsx` in it to prove
  * the refusal is still wired to an exit rather than merely printed.
+ *
+ * THE RULE IS THE WHOLE TYPESCRIPT EXTENSION FAMILY, and the `[cm]?` is there
+ * because of a real hole rather than for completeness. This said `/\.ts$/` and
+ * the coverage walk below said `/\.tsx?$/`, so a `.mts` or a `.cts` was matched
+ * by NEITHER: not scanned, and not reported as unscanned either — the one
+ * combination the coverage check exists to make impossible. It was not
+ * hypothetical. `src/rr-probe.mts` holding two retired words ran clean on the
+ * shipped gate, and the identical two lines in `src/rr-probe.ts` exited 1 with
+ * both names and both line numbers. Node treats `.mts`/`.cts` as TypeScript,
+ * `tsc` compiles them, and this package's `tsconfig.json` includes only files
+ * whose names end in `.ts`, so a stray `.mts` is not typechecked either — which
+ * makes an unnoticed one worse than an ordinary blind spot rather than better.
+ * (Verified, not assumed: a deliberate type error in a `.mts` under `src` left
+ * `tsc --noEmit` green, and the same error in a `.ts` failed it.) Both rules
+ * moved in one edit, which is the only way they may ever move: the scan and the
+ * walk have to agree about what TypeScript is, or a file falls between them
+ * exactly the way this one did.
  */
 function classify(filename) {
   /*
@@ -936,8 +970,8 @@ function classify(filename) {
    * no .tsx today; if one ever appears, whoever added it should see the
    * sentence below rather than a pile of false alarms.
    */
-  if (/\.tsx$/.test(filename)) return "refuse";
-  if (/\.ts$/.test(filename)) return "scan";
+  if (/\.[cm]?tsx$/.test(filename)) return "refuse";
+  if (/\.[cm]?ts$/.test(filename)) return "scan";
   return "ignore";
 }
 
@@ -1691,6 +1725,12 @@ const SELFTEST = [
     why: "A NAME THAT MERELY STARTS WITH AN ALLOWED ONE IS NOT THE ALLOWED ONE. The lookup is an exact map today; widening it to `find((e) => name.startsWith(e.name))` is a one-line edit that reads like a convenience and hands `samePattern`'s exemption to everything built on top of it, in the file where that exemption lives",
     src: "const samePatternRoom = 1;",
   },
+  {
+    expect: ["HANDLE_PATTERN"],
+    file: "src/lib/public-handles.probe.ts",
+    why: "AND A FILE THAT MERELY STARTS WITH AN ALLOWED ONE'S PATH IS NOT THAT FILE. The name half of the scoping had this pair and the path half did not: `files.includes(file)` widened to a stem comparison — `files.some((f) => file.startsWith(f.replace(/\\.ts$/, \"\")))`, which is what anyone would write to let an entry cover the `.test.ts` beside it — was green in every case, and `public-handles.probe.ts` inherited HANDLE_PATTERN's exemption. The case above only proves a DIFFERENT directory is not covered, which that edit gets right",
+    src: "const HANDLE_PATTERN = /^[A-Za-z0-9_-]{3,24}$/;",
+  },
 ];
 
 /**
@@ -1749,10 +1789,20 @@ const EXPIRY_SELFTEST = [
  * rules could plausibly disagree about it. They do not: it is TypeScript, it is
  * scanned, and the case says so out loud rather than leaving it to be
  * rediscovered.
+ *
+ * `.mts` and `.cts` are here because the two rules DID disagree about them, on
+ * the shipped gate, with nothing red anywhere: this function matched `/\.ts$/`
+ * and the coverage walk matched `/\.tsx?$/`, so such a file was neither read
+ * nor missed. A `src/*.mts` holding two retired words printed `clean`. The pair
+ * of extensions is now written down on both sides, and `.mjs` stays here as the
+ * negative half — the family this gate reads is TypeScript's, and the line
+ * between them is the case rather than a comment.
  */
 const CLASSIFY_SELFTEST = [
   ["signals.ts", "scan"],
   ["sst-env.d.ts", "scan"],
+  ["signals.mts", "scan"],
+  ["legacy.cts", "scan"],
   ["Home.tsx", "refuse"],
   ["check-vocabulary.mjs", "ignore"],
   ["0000_three_layers.sql", "ignore"],
@@ -1853,6 +1903,27 @@ const DISCOVERY_SELFTEST = [
     expectScan: ["/pkg/src/signals.ts", "/pkg/vitest.unit.config.ts"],
     expectRefuse: ["/pkg/src/Probe.tsx"],
   },
+  {
+    why: "A `.mts` REACHES THE SCAN LIST, and a `.mjs` beside it does not. The walk and `classify` have to agree about the TypeScript family in the same direction: narrow this side and the file is silently unread, narrow the coverage side and it is unread AND unmissed, which is how a `src/*.mts` with two retired words in it printed `clean`",
+    roots: ["/pkg/src"],
+    loose: "/pkg",
+    tree: {
+      "/pkg": [{ name: "vitest.unit.config.ts", isDirectory: false }],
+      "/pkg/src": [
+        { name: "signals.ts", isDirectory: false },
+        { name: "queue.mts", isDirectory: false },
+        { name: "legacy.cts", isDirectory: false },
+        { name: "build-step.mjs", isDirectory: false },
+      ],
+    },
+    expectScan: [
+      "/pkg/src/legacy.cts",
+      "/pkg/src/queue.mts",
+      "/pkg/src/signals.ts",
+      "/pkg/vitest.unit.config.ts",
+    ],
+    expectRefuse: [],
+  },
 ];
 
 /**
@@ -1904,6 +1975,20 @@ const COVERAGE_SELFTEST = [
       "/pkg/src/signals.ts",
       "/pkg/vitest.unit.config.ts",
     ],
+  },
+  {
+    why: "`.mts` AND `.cts` ARE FOUND. They are TypeScript, and until this case both rules missed them from opposite sides — the scan matched `.ts` and this walk matched `.tsx?`, so such a file was neither read nor reported unread, which is the one state this check exists to make impossible. `.mjs` in the same directory must still be skipped, or the two halves of the rule have stopped agreeing about what TypeScript is",
+    dir: "/pkg/src",
+    notOurs: new Set(),
+    tree: {
+      "/pkg/src": [
+        { name: "signals.ts", isDirectory: false },
+        { name: "queue.mts", isDirectory: false },
+        { name: "legacy.cts", isDirectory: false },
+        { name: "build-step.mjs", isDirectory: false },
+      ],
+    },
+    expect: ["/pkg/src/legacy.cts", "/pkg/src/queue.mts", "/pkg/src/signals.ts"],
   },
 ];
 
@@ -2148,11 +2233,11 @@ const REPORT_SELFTEST = [
  * an edit on this line, which is exactly the moment to say why in the message.
  */
 const SUITES = [
-  { label: "scanner", cases: SELFTEST, floor: 45 },
+  { label: "scanner", cases: SELFTEST, floor: 46 },
   { label: "expiry", cases: EXPIRY_SELFTEST, floor: 4 },
-  { label: "file-kind", cases: CLASSIFY_SELFTEST, floor: 6 },
-  { label: "discovery", cases: DISCOVERY_SELFTEST, floor: 4 },
-  { label: "coverage", cases: COVERAGE_SELFTEST, floor: 3 },
+  { label: "file-kind", cases: CLASSIFY_SELFTEST, floor: 8 },
+  { label: "discovery", cases: DISCOVERY_SELFTEST, floor: 5 },
+  { label: "coverage", cases: COVERAGE_SELFTEST, floor: 4 },
   { label: "root/exclusion", cases: ROOTS_SELFTEST, floor: 2 },
   { label: "exclusion/ignore", cases: EXCLUSION_SELFTEST, floor: 6 },
   { label: "allowlist", cases: ALLOWLIST_SELFTEST, floor: 5 },
@@ -2430,24 +2515,27 @@ function selftest() {
     process.exit(1);
   }
   /*
-   * WHAT THIS LINE IS AND IS NOT, because it is the one number in this gate's
-   * output that nothing can check.
+   * THIS LINE IS NOW CHECKED FROM OUTSIDE, and the story of how is the useful
+   * part of the comment.
    *
-   * The counts come from SUITES, so they track the arrays — but nothing outside
-   * this process reads them, and replacing the expression with a string literal
-   * is green in the self-test, green in the process test and green on the
-   * package. That mutation was run; it survives. What it can no longer do is
-   * hide anything: the floors above fail first if a suite has actually shrunk,
-   * so a hard-coded summary is a cosmetic lie about proof that is still there,
-   * rather than a cover for proof that is gone.
+   * It used to say: the counts come from SUITES so they track the arrays, but
+   * nothing outside this process reads them, and replacing the whole expression
+   * with a string literal is green everywhere — which was true, and was written
+   * down as a limitation with a fix beside it: move SUITES and every case array
+   * into a module both this script and the test import. That fix was described
+   * as several hundred lines of case data moving, and that description was
+   * simply wrong. Nothing has to move. `test/vocabulary-gate.test.ts` already
+   * runs MUTATED COPIES of this file; a copy with one case pushed onto SELFTEST
+   * must print a scanner count one higher and everything else identical, and a
+   * copy truncated to the floor must print exactly the floor. Twelve lines,
+   * using machinery that already existed.
    *
-   * The fix, for whoever decides the cosmetic half is worth closing: move SUITES
-   * and the case arrays into a module this script imports, and have
-   * `test/vocabulary-gate.test.ts` import the same module and assert the printed
-   * numbers against the real array lengths. It is a real refactor rather than a
-   * line — several hundred lines of case data have to move — which is why it is
-   * written down here instead of done in the same breath as the checks that were
-   * hiding missing files.
+   * So the numbers are held down now: `counts the cases it prints, and prints
+   * the ones it counted` in that file goes red on the string-literal mutation,
+   * on a summary that is derived but offset, and on one whose labels all report
+   * the same array. The floors above remain the check that matters — they fail
+   * first if a suite has actually shrunk — and this line is no longer a number
+   * that only its author can vouch for.
    */
   console.log(
     `vocabulary (api): self-test passed (` +
@@ -2558,6 +2646,18 @@ const ignoreRules = (() => {
  * this into a hiding place — making the search find nothing — is held down by
  * the process test, which runs the whole thing against this repository, where
  * `.gitignore` is right there.
+ *
+ * ONE EDIT NEARBY IS NOT HELD, and it is written down rather than left to be
+ * found: widening this condition to `ignoreRules.names.size === 0 || …` — decline
+ * when the ignore file mentioned no directories, as well as when there was no
+ * ignore file — is green in the self-test, the process test and the package. It
+ * is unheld because nothing here can produce the tree that separates the two: a
+ * package with a `.gitignore` that names nothing. Every tree the gate actually
+ * runs on has one that names plenty, which is exactly why the widening hides
+ * nothing there, and it is also why closing it would mean a case that depends on
+ * what `.gitignore` files exist ABOVE a temporary directory — a case whose
+ * verdict is a property of the machine it runs on. That is worse proof than this
+ * sentence.
  */
 const unjustified =
   ignoreRules.files === 0
@@ -2623,6 +2723,17 @@ const { violations, blind, read, silent } = scanFiles(
  * exactly why it is worth having: it fires on the SHAPE of the failure — the
  * scan ran out of file while still expecting a closing mark — rather than on
  * any particular cause. It costs one integer.
+ *
+ * `> 0`, AND THE BOUNDARY IS ASSERTED RATHER THAN READ. This and the three
+ * count-based exits below it were pinned by cases that plant exactly TWO of the
+ * thing — which is what it takes to prove the printed COUNT is not the constant
+ * 1, and is also precisely what cannot tell `> 0` from `> 1`. Changing this one
+ * character was green in the gate, the self-test and the process test, and hid a
+ * single torn file in the real package: the incident that produced this check
+ * was ONE file, `src/lib/generation-doc.test.ts`. Each of the four now has a
+ * one-of-the-thing case alongside its two-of-the-thing case, and the fix for the
+ * count is what created the hole in the boundary — worth remembering the next
+ * time a number is pinned by planting several.
  */
 if (blind.length > 0) {
   console.error(
@@ -2657,6 +2768,9 @@ if (blind.length > 0) {
  * expression handed to `scanFiles`, because a filter applied to a shared
  * variable would otherwise shrink both sides at once. Narrowing `scanned` itself
  * is what the coverage walk below already catches.
+ *
+ * `> 0` is the boundary and it is asserted at one file as well as at several —
+ * see the note on the blind check above for why that needed saying out loud.
  */
 const shouldHaveRead = [...scanned].map((f) => relative(PKG, f));
 const wasRead = new Set(read);
@@ -2679,6 +2793,11 @@ if (neverRead.length > 0) {
  * honest possibilities are an empty file nobody deleted or a scan that was
  * handed nothing — and the second is what `readSource` returning `""` for a
  * directory looks like from here.
+ *
+ * `> 0` is the boundary and it is asserted at one file as well as at several,
+ * with an empty file planted in the real package — the cheapest tree there is
+ * for this check, and the one the two-file version could not distinguish from
+ * `> 1`.
  */
 if (silent.length > 0) {
   console.error(
@@ -2718,18 +2837,39 @@ if (silent.length > 0) {
  * the scanner.
  *
  * WHAT THIS CHECK STILL DOES NOT COVER, said out loud rather than left to be
- * discovered: `.mjs` and `.js`. The canon is a vocabulary for the TypeScript
- * this package ships, and the two `.mjs` files here are both build-time
- * scripts, one of them this one. If product code ever arrives in plain
- * JavaScript, this is the sentence that will be wrong, and the fix is to widen
- * both `classify` and the pattern below together.
+ * discovered, and rewritten because the sentence that used to be here was
+ * wrong in a way that mattered.
+ *
+ * It said `.mjs` and `.js`, as if the rule were "not JavaScript". The rule was
+ * `/\.tsx?$/`, and `.mts` and `.cts` are outside it while being TypeScript —
+ * neither scanned nor reported missing, which is exactly the combination this
+ * check exists to make impossible. That was a live hole in the shipped gate,
+ * not a mutation: two retired words in a `src/*.mts` ran clean. Both rules now
+ * match `/\.[cm]?tsx?$/` and there is a case for it in the coverage suite and
+ * another in `test/vocabulary-gate.test.ts` that plants a real `.mts`.
+ *
+ * What is genuinely left outside is JAVASCRIPT: `.js`, `.mjs`, `.cjs`. A
+ * retired word in an identifier in such a file would not be seen and would not
+ * be missed. Two things keep that from being worth closing today, and both are
+ * facts rather than preferences. The package contains exactly two `.js`-family
+ * files, `scripts/measure-concerns.mjs` and this script, and neither ships. And
+ * `test/vocabulary-gate.test.ts` proves the checks in this file are wired to
+ * exits by writing MUTATED COPIES of this script into `scripts/` and running
+ * them; those copies live in a directory this gate scans and are `.mjs`
+ * precisely because that is an extension it neither reads nor demands coverage
+ * of. Widen the rules to JavaScript and a deliberately broken copy of this
+ * script becomes a file the gate reads — the run that is testing it, and any
+ * run happening beside it, would both judge it as if it were the package's own
+ * code. So widening costs a second decision about where the mutants live, which
+ * is a change worth making the day product code arrives in plain JavaScript,
+ * and not before.
  */
 function everyTypeScriptFile(dir, listing, notOurs, found = []) {
   for (const { name, isDirectory } of listing(dir)) {
     if (notOurs.has(name)) continue;
     const full = join(dir, name);
     if (isDirectory) everyTypeScriptFile(full, listing, notOurs, found);
-    else if (/\.tsx?$/.test(name)) found.push(full);
+    else if (/\.[cm]?tsx?$/.test(name)) found.push(full);
   }
   return found;
 }
@@ -2750,6 +2890,7 @@ function rootsAlsoExcluded(roots, notOurs) {
   return roots.map((r) => r.split("/").pop()).filter((n) => notOurs.has(n));
 }
 
+/* `> 0`, asserted at one uncovered file as well as at two — see the blind check. */
 const unscanned = everyTypeScriptFile(PKG, realListing, NOT_OURS).filter(
   (f) => !scanned.has(f),
 );
