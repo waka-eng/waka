@@ -21,6 +21,30 @@
  * been kept by time `t`. It never asks the page. A test that read the expected
  * number out of the thing it is testing would agree with any bug.
  *
+ * WHAT THIS MOCKS, AND WHY (gate G6).
+ *
+ *   `lib/data` — the seam, and mocking `lib/api` INSTEAD is the mistake this
+ *   project has already made once. The loaders throw on the first shape they
+ *   do not recognise, the page catches that and answers by replacing the whole
+ *   world with the dev fixture, and the suite then passes while describing a
+ *   fixture. That would be especially invisible HERE, where every assertion is
+ *   a count: the fixture has memories too, so the numbers would simply be
+ *   someone else's and still move when the rail moved.
+ *
+ *   `lib/api` — for the group reads only, which have no loader above them.
+ *   This file's facts hold no groups, so it keeps those fetches off the
+ *   network rather than supplying anything.
+ *
+ *   `lib/auth-context` — the session stated as a fact, because the page also
+ *   renders for a signed-out visitor and that is a different world.
+ *
+ *   `helpers/canvas-stub` and `helpers/render-home` — the canvas, the clock,
+ *   the frame loop and the viewport. The clock matters more here than in any
+ *   other file: the rail's two ends are computed from the page's own frozen
+ *   `Date.now`, so the test and the dial are reading one calendar.
+ *
+ * `home-field.test.tsx` gives the long version of all four.
+ *
  * WHAT THIS FILE DELIBERATELY DOES NOT CLAIM.
  *
  * The canvas stub draws nothing (see canvas-stub.ts), so the fade itself, the
@@ -80,14 +104,7 @@ const FACTS = {
   groups: [],
 };
 
-/**
- * `lib/data` IS THE SEAM, and mocking `lib/api` INSTEAD is the mistake this
- * project has already made once: the loaders throw on the first shape they do
- * not recognise, the page catches that and answers by replacing the whole
- * world with the dev fixture, and the suite then passes while describing a
- * fixture. `lib/api` is mocked too, but only for the reads that genuinely go
- * through it (groups), exactly as home-field.test.tsx does.
- */
+/* Why these three and not others: see the G6 paragraph in the header. */
 vi.mock("../src/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/lib/api")>();
   return { ...actual, ...apiMockFrom(FACTS) };

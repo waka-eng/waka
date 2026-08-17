@@ -3,12 +3,49 @@
 /**
  * THE LOOP STILL REACHES THE PAGE'S ELEMENTS.
  *
- * WHAT THIS MOCKS AND WHY (gate G6). It mocks `lib/api` and `lib/data`, the
- * same two layers `home-field.test.tsx` mocks and for the same reason: the
- * subject is the page, so the network and the offline fixture both have to be
- * replaced by something stated in one place. Nothing below asserts anything
- * about the mocked material itself — the counts and the names are scenery, and
- * the assertions are about elements the loop wrote into.
+ * WHAT THIS MOCKS AND WHY (gate G6). The same four seams every suite that
+ * mounts this page uses, for the same reasons `home-field.test.tsx` gives at
+ * length:
+ *
+ *   `lib/data` — THE SEAM THAT MATTERS. The page reads the three layers
+ *   through the loaders, not through the HTTP client, so this is the module
+ *   directly beneath it. Mocking one layer lower would send invented rows
+ *   through translations that throw, and the page answers a throw by replacing
+ *   the world with the dev fixture — green, and describing nothing.
+ *
+ *   `lib/api` — for the group reads only, which genuinely do go straight
+ *   through it. There are no groups in this file's facts, so this mock exists
+ *   to keep those fetches off the network rather than to supply anything.
+ *
+ *   `lib/auth-context` — the session, stated as a fact. The page renders for a
+ *   signed-out visitor too, so without this it would render the visitor's
+ *   version and the twelve elements below would not all exist.
+ *
+ *   `helpers/canvas-stub` and `helpers/render-home` — the canvas, the clock,
+ *   the frame loop, the viewport and `Math.random`. Each is a thing a test
+ *   cannot have for real, and each file says why in its own header.
+ *
+ * Nothing below asserts anything about the mocked material itself — the counts
+ * and the names are scenery, and every assertion is about an element the loop
+ * wrote into.
+ *
+ * AND THAT IS EXACTLY WHY THIS FILE CANNOT POLICE ITS OWN SEAM. The seam above
+ * is correct, but nothing here could tell if it were not. Measured during the
+ * G6 survey: with `lib/data` deliberately unmocked, this file mounts the dev
+ * fixture — 24 invented memories in place of the 3 declared below, the
+ * fixture's "Course marketing" wall on screen — and all four tests PASS, since
+ * "the loop wrote a transform into this element" is true of any world at all.
+ * Every other suite that mounts the page goes loudly red under the same break;
+ * this one did not, which makes it the closest thing in the package to a
+ * repeat of the original incident.
+ *
+ * It is not covered by better assertions here, because sharper assertions
+ * would change what this file is for — the twelve elements are the subject and
+ * their contents are not. It is covered by `withFixtureAlarm` in
+ * `helpers/render-home.tsx`, which now refuses to hand back a world the
+ * fixture produced, so a wrong seam fails at mount before any assertion runs.
+ * That guard is the reason this paragraph describes a closed hole rather than
+ * an open one.
  *
  * WHY IT EXISTS. `canvas/measured.ts` collects the twelve elements the canvas
  * side reads and writes. The whole file is a promise that `.current` is read AT

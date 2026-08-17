@@ -15,6 +15,17 @@
  * whenever `showsDebug()` is true — that is `import.meta.env.DEV`, which
  * Vitest sets. So the test reads exactly the instrument a developer reads, and
  * an instrument that lies to one lies to the other.
+ *
+ * WHAT THIS HELPER REPLACES, so the suites that import it can say so (G6):
+ * the canvas is `canvas-stub.ts`'s, the clock and `requestAnimationFrame` are
+ * `installClock`'s, `Math.random` is `installRandom`'s, and the viewport is
+ * whatever `setViewport` was told. Nothing else. In particular the simulation
+ * is NOT replaced — the shipped `useEffect`, layout and activation rules run
+ * here — and the three layers are not replaced from in here either: each suite
+ * mocks `lib/data` itself, which is the seam G6 is about.
+ *
+ * `mountWorld` also refuses to hand back a world the dev fixture produced; see
+ * `withFixtureAlarm` below for why that is a hard failure and not a warning.
  */
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -55,6 +66,10 @@ const iso = (daysAgo: number) => new Date(at(daysAgo)).toISOString();
  * That is not hypothetical — it is what happened on the first attempt here, and
  * the only reason it was caught is that the fixture's wall is named "Course
  * marketing" and the audit reported memories belonging to nobody.
+ *
+ * Reading a name off the screen is not a net, though — it needs someone to be
+ * looking. `withFixtureAlarm` below is the net, and it is what makes this
+ * paragraph a rule rather than a hope.
  */
 export function dataMockFrom(facts: WorldFacts) {
   return {
@@ -244,6 +259,65 @@ function installClock() {
   };
 }
 
+/**
+ * The sentence `offlineHome()` says on its way past.
+ *
+ * Duplicated from `lib/fixture/offline-home.ts` rather than imported, because
+ * importing it would mean this helper loading the fixture module in every run
+ * that does not want it. If the wording ever changes, `fixture-says-so.test.ts`
+ * asserts the same phrase and goes red, which is the pointer back to here.
+ */
+const FIXTURE_ALARM = "THE DEV FIXTURE IS ON SCREEN";
+
+/**
+ * THE ALARM, WIRED TO SOMETHING THAT CAN ACTUALLY STOP THE RUN.
+ *
+ * The fixture already announces itself — that is what `fixture-says-so.test.ts`
+ * proves. But a `console.warn` is only a warning, and vitest prints stderr for
+ * FAILING tests only: in a green run the announcement is written and never
+ * shown. So the alarm was audible in exactly the situation where nobody was
+ * listening, and silent in the one where it mattered.
+ *
+ * Measured, not assumed. With `lib/data` deliberately unmocked,
+ * `measured.test.tsx` mounted the fixture — 24 invented memories instead of the
+ * 3 its own facts declare, the fixture's "Course marketing" wall on screen —
+ * and all four of its tests still passed, because what they assert is that the
+ * loop wrote into twelve elements, which is true of any world at all. That is
+ * the original incident reproduced exactly, in a file whose seam is correct.
+ *
+ * Watching the warning is deliberately how this is detected, rather than
+ * reading some flag off the page. It uses the product's own alarm, so the two
+ * cannot drift apart: a fixture that stopped warning would fail
+ * `fixture-says-so.test.ts` before it ever got the chance to fool this.
+ */
+async function withFixtureAlarm<T>(work: () => Promise<T>): Promise<T> {
+  const realWarn = console.warn;
+  let announced = "";
+  console.warn = (...args: unknown[]) => {
+    const first = String(args[0] ?? "");
+    if (!announced && first.includes(FIXTURE_ALARM)) announced = first;
+    realWarn(...args);
+  };
+  try {
+    const value = await work();
+    if (announced) {
+      throw new Error(
+        "THE DEV FIXTURE TOOK OVER THIS MOUNT — every assertion after this " +
+          "point would describe invented data.\n" +
+          "The page replaces the whole world with `offlineHome()` when a " +
+          "loader throws, so this almost always means the suite mocked the " +
+          "wrong seam: mock `lib/data`, not `lib/api`, for the three layers. " +
+          "See gate G6 in docs/goals/a-codebase-you-can-navigate.md.\n" +
+          "The page said: " +
+          announced,
+      );
+    }
+    return value;
+  } finally {
+    console.warn = realWarn;
+  }
+}
+
 export async function mountWorld(facts: WorldFacts): Promise<MountedWorld> {
   const { default: HomePage } = await import("../../src/pages/Home");
   const { AuthProvider } = await import("../../src/lib/auth-context");
@@ -255,20 +329,38 @@ export async function mountWorld(facts: WorldFacts): Promise<MountedWorld> {
   document.body.appendChild(container);
   const root = createRoot(container);
 
-  await act(async () => {
-    root.render(
-      createElement(
-        MemoryRouter,
-        null,
-        createElement(AuthProvider, null, createElement(HomePage) as ReactElement),
-      ),
-    );
-  });
-  /* let the fetches settle and the loop build the field */
-  await act(async () => {
-    await Promise.resolve();
-  });
-  await step(30);
+  try {
+    await withFixtureAlarm(async () => {
+      await act(async () => {
+        root.render(
+          createElement(
+            MemoryRouter,
+            null,
+            createElement(AuthProvider, null, createElement(HomePage) as ReactElement),
+          ),
+        );
+      });
+      /* let the fetches settle and the loop build the field */
+      await act(async () => {
+        await Promise.resolve();
+      });
+      await step(30);
+    });
+  } catch (err) {
+    /*
+     * A MOUNT THAT FAILED STILL HAS TO CLEAN UP AFTER ITSELF.
+     *
+     * `mountWorld` never returns here, so the caller has no handle to unmount
+     * with and its `afterEach` cannot help. Left alone, a page that is still
+     * mounted keeps its frame loop and its listeners, and the NEXT test in the
+     * file inherits them — so one honest failure becomes a cascade of
+     * unrelated ones and the real message scrolls away. The original error is
+     * rethrown untouched; this only tidies.
+     */
+    act(() => root.unmount());
+    container.remove();
+    throw err;
+  }
 
   const audit = () => {
     const hook = (window as unknown as { wakaField?: () => FieldAudit | null }).wakaField;

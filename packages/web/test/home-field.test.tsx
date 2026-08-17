@@ -20,6 +20,40 @@
  * those three agreeing is not enough — the bug had `present` and `onScreen`
  * agreeing perfectly while `active` sat at zero.
  *
+ * WHAT THIS MOCKS, AND WHY (gate G6). Four seams, and the first is the one the
+ * gate was written for.
+ *
+ *   `lib/data` — THE RIGHT SEAM, and the reason G6 exists. The page reaches
+ *   the three layers through `loadInspirations` / `loadSignals` /
+ *   `loadTopOfMind`, which paginate and translate on the way down; the HTTP
+ *   client is a layer below that and the page never calls it for these. Mock
+ *   `lib/api` instead and the invented rows go through translations written
+ *   for real ones, the first mismatch throws inside a loader, and the page
+ *   does what it is built to do — it catches, calls `offlineHome()` and
+ *   replaces the entire world with the dev fixture. Every assertion here would
+ *   then hold, in green, against a world no product code had produced. That is
+ *   not hypothetical: it is what happened on the first attempt at this file,
+ *   and it was caught only because the fixture's wall has a recognisable name.
+ *   `helpers/render-home.tsx` carries the same warning beside `dataMockFrom`,
+ *   and `fixture-says-so.test.ts` proves the fixture now announces itself.
+ *
+ *   `lib/api` — for the group reads ONLY. `fetchGroups`, `fetchGroupField`,
+ *   `fetchGroupMembers` and the rest have no loader above them, so here the
+ *   client genuinely IS the layer directly beneath the page. Two different
+ *   seams for two different reads is not an inconsistency; it is the shape of
+ *   the code being described accurately.
+ *
+ *   `lib/auth-context` — the session, stated rather than fetched. The page
+ *   reads the OPTIONAL hook and renders for a signed-out visitor too, so
+ *   without this the suite would be measuring the visitor's world. How a
+ *   session is actually obtained is `auth-boundary.test.ts`'s subject.
+ *
+ *   `helpers/canvas-stub` and `helpers/render-home` — the canvas, the clock,
+ *   the frame loop, the viewport and `Math.random`: the parts of a browser a
+ *   test cannot have for real. The simulation itself is NOT mocked. The same
+ *   `useEffect`, the same layout pass and the same activation rules run here
+ *   as ship, which is the only reason the invariant above means anything.
+ *
  * What this deliberately does not check is appearance. The canvas here draws
  * nothing (see canvas-stub.ts), so brightness, colour and position on screen
  * are outside its reach and no test in this file may claim otherwise.

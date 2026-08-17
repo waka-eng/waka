@@ -1,3 +1,24 @@
+/**
+ * TWO LANGUAGES, THE SAME SENTENCES, AND NO GAPS BETWEEN THEM.
+ *
+ * WHAT THIS MOCKS, AND WHY (gate G6): nothing, and there is nothing under it
+ * to mock. `lib/locales` is a pair of message catalogs and the pure functions
+ * that read them — no fetch, no storage, no clock, no DOM. Give it a locale
+ * and a number and it hands back a string. The seam a mock would go at IS the
+ * subject, so replacing anything would leave nothing being tested.
+ *
+ * That absence is also why the expected strings below are written out in full
+ * instead of computed. A case that compared against `t(locale, key)` would
+ * pass on a catalog that had lost every Korean line, because both sides would
+ * be reading the same wrong row — the same shape of green the G6 incident
+ * produced, arrived at without a mock anywhere near it.
+ *
+ * The two structural cases carry more weight than they look. A missing key
+ * does not throw: it renders the word `undefined` into a sentence a person
+ * reads, in whichever language the reviewer does not happen to speak. So the
+ * catalogs are checked for the identical key set and for no blank values,
+ * which is the only way that failure is ever seen before a user sees it.
+ */
 import { describe, expect, it } from "vitest";
 
 import {
