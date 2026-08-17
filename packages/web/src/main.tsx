@@ -54,7 +54,7 @@ import "./styles/world-chrome.css";
   main bundle: the login screen and the public profile must not pay for a
   renderer they never start. Everything it draws is the same three layers the
   rest of the app is built on — captures in the field, patterns in the sky,
-  the one artifact in between — read through `lib/world-data`.
+  the one artifact in between — read through `lib/data`.
 
   The list surfaces stay exactly where they were. They are the fastest way to
   read and edit the same archive, and the world is not a replacement for

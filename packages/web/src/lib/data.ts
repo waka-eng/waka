@@ -1,30 +1,40 @@
 /**
- * THE WORLD'S DATA LAYER, IN THE CANON'S WORDS.
+ * THE WORLD'S DATA LAYER — AND IT SPEAKS THE CANON'S WORDS, NOT ITS OWN.
  *
  * `docs/data-model.md` is the vocabulary of record. This module is where the
- * three layers become the three vertical sections of the world, and nowhere
- * else translates:
+ * three layers become the three vertical sections of the world:
  *
- *   layer 1  inspiration   a capture          → THE FIELD    one orb each
- *   layer 2  signal        a pattern, cited   → THE SKY      bodies forming
- *   layer 3  top of mind   the one artifact   → HEADQUARTERS what you stand in
+ *   layer 1  inspiration   → THE FIELD          one orb each, below you
+ *   layer 2  signal        → THE SKY            statements still forming
+ *   layer 3  top of mind   → HEADQUARTERS       what you stand in
  *
- * The old surface called layer 1 "signals" — the exact inversion the canon
- * was written to end ("The vocabulary is inverted, and it already shipped a
- * bug"). So the world does not shim the old names back into place. A capture
- * is a capture here, a signal is a pattern, and the view models below carry
- * only what the canon actually returns.
+ * THIS FILE USED TO BE THE TRANSLATION, AND IT IS NOT ANY MORE. It carried a
+ * second vocabulary — an inspiration was a `WorldCapture`, a signal was a
+ * `WorldPattern`, the loaders were `loadField` / `loadSky` /
+ * `loadHeadquarters` — so every reader had to hold two words for one thing
+ * and this module was the only place they met. That is now gone: the types
+ * and functions here use the canon's nouns, and one word runs from the
+ * Postgres column through the route to the view model.
+ *
+ * `field`, `sky` and `headquarters` survive, but only as the words for WHERE
+ * a layer is DRAWN. They belong in the UI and in comments like this one, and
+ * never in a type name, a function name or a path — because a person standing
+ * in the world sees a field, while the thing being fetched is an inspiration.
+ *
+ * The `World` prefix stays and is doing work: `WorldInspiration` is the view
+ * model, `ApiInspiration` is the payload, and the two differ (see `isPublic`
+ * below, which is a deliberate lossy flatten of the canon's `visibility`).
  *
  * What the canon took away, and what the world must therefore stop drawing:
  *
- *   - A capture has no score. There is no `resonanceScore`, no five-axis
+ *   - An inspiration has no score. There is no `resonanceScore`, no five-axis
  *     `signalScores`. Aliveness is computed from time and attention alone
  *     (see `aliveness`), which was always the honest input.
- *   - A capture is never shared. Sharing moved to the signal layer precisely
- *     so raw captures never cross an account boundary; an orb in the field
- *     has no out-loud/held state to render any more.
- *   - A capture cites no room. Rooms consume signals, so "where else this
- *     led" is a property of the pattern above it, not the memory below.
+ *   - An inspiration is never shared as itself into another account beyond
+ *     the rooms its author's account belongs to, and only when marked public;
+ *     an orb in the field has no out-loud/held state to render any more.
+ *   - An inspiration cites no group. Groups consume signals, so "where else
+ *     this led" is a property of the signal above it, not the memory below.
  */
 
 import {
@@ -60,7 +70,7 @@ const ms = (iso: string | null | undefined): number => {
  * world is arithmetic (decay, the dial, the sort). Parsing once here keeps
  * `Date.parse` out of the frame loop, which is a standing rule.
  */
-export interface WorldCapture {
+export interface WorldInspiration {
   id: string;
   preview: string;
   /**
@@ -90,7 +100,7 @@ export interface WorldCapture {
 }
 
 /** One capture, opened: the words in full and what was hanging off them. */
-export interface WorldCaptureDetail extends WorldCapture {
+export interface WorldCaptureDetail extends WorldInspiration {
   text: string;
   reflections: Array<{
     id: string;
@@ -118,7 +128,7 @@ export interface WorldCaptureDetail extends WorldCapture {
  * and the evidence itself (with the reason it was read that way) arrives only
  * when a pattern is opened — the sky never fetches what it cannot draw.
  */
-export interface WorldPattern {
+export interface WorldSignal {
   id: string;
   statement: string;
   status: ApiSignal["status"];
@@ -139,8 +149,8 @@ export interface WorldEvidence {
   /** Whose evidence this is. Carried so the field can look back UP: a memory
       learns what it is for from the patterns that cite it, and needs to name
       them. */
-  patternId: string;
-  captureId: string;
+  signalId: string;
+  inspirationId: string;
   preview: string;
   /** The words that carried the reading, when the server named them. */
   quote: string | null;
@@ -150,7 +160,7 @@ export interface WorldEvidence {
   createdMs: number;
 }
 
-export interface WorldPatternDetail extends WorldPattern {
+export interface WorldPatternDetail extends WorldSignal {
   evidence: WorldEvidence[];
 }
 
@@ -173,7 +183,7 @@ export interface WorldEntry {
   sortOrder: number;
   /** The patterns beneath this statement, named. This is the provenance the
       headquarters peek draws, and it points at layer 2 — not at captures. */
-  citedPatterns: Array<{ id: string; statement: string }>;
+  citedSignals: Array<{ id: string; statement: string }>;
   createdMs: number;
 }
 
@@ -187,7 +197,7 @@ export interface WorldTopOfMind {
 
 /* ------------------------------------------------------------- conversion */
 
-export function toCapture(row: {
+export function toInspiration(row: {
   id: string;
   textPreview: string;
   kind: ApiInspirationKind | null;
@@ -197,7 +207,7 @@ export function toCapture(row: {
   visibility?: ApiInspirationVisibility;
   attachmentSummary: ApiAttachmentSummary[];
   reflectionCount: number;
-}): WorldCapture {
+}): WorldInspiration {
   return {
     id: row.id,
     preview: row.textPreview,
@@ -212,7 +222,7 @@ export function toCapture(row: {
   };
 }
 
-export function toPattern(row: ApiSignal): WorldPattern {
+export function toSignal(row: ApiSignal): WorldSignal {
   return {
     id: row.id,
     statement: row.statement,
@@ -227,10 +237,10 @@ export function toPattern(row: ApiSignal): WorldPattern {
   };
 }
 
-function toEvidence(patternId: string, row: ApiSignalEvidence): WorldEvidence {
+function toEvidence(signalId: string, row: ApiSignalEvidence): WorldEvidence {
   return {
-    patternId,
-    captureId: row.inspirationId,
+    signalId,
+    inspirationId: row.inspirationId,
     preview: row.preview,
     quote: row.quote ?? null,
     reason: row.reason ?? null,
@@ -249,7 +259,7 @@ function toEntry(row: ApiTopOfMindEntry): WorldEntry {
     pinned: Boolean(row.pinned),
     dismissed: Boolean(row.dismissed),
     sortOrder: row.sortOrder ?? 0,
-    citedPatterns: Array.isArray(row.citedSignals) ? row.citedSignals : [],
+    citedSignals: Array.isArray(row.citedSignals) ? row.citedSignals : [],
     createdMs: ms(row.createdAt),
   };
 }
@@ -295,12 +305,12 @@ const FIELD_MAX_PAGES = 10;
  * is defined by the one before it, and the first page is what the world needs
  * to paint — the rest arrive behind it.
  */
-export async function loadField(profile?: string): Promise<WorldCapture[]> {
-  const out: WorldCapture[] = [];
+export async function loadInspirations(profile?: string): Promise<WorldInspiration[]> {
+  const out: WorldInspiration[] = [];
   let cursor: string | undefined;
   for (let page = 0; page < FIELD_MAX_PAGES; page++) {
     const got = await fetchInspirationPage({ limit: FIELD_PAGE, profile, cursor });
-    out.push(...got.inspirations.map(toCapture));
+    out.push(...got.inspirations.map(toInspiration));
     if (!got.nextCursor || got.inspirations.length === 0) break;
     cursor = got.nextCursor;
   }
@@ -310,14 +320,14 @@ export async function loadField(profile?: string): Promise<WorldCapture[]> {
 /** THE SKY. Patterns, brightest-first is decided by the sky's own layout;
     here they arrive as the server ranked them. Retired ones are included —
     nothing that exists pops out of existence, it sinks. */
-export async function loadSky(profile?: string): Promise<WorldPattern[]> {
+export async function loadSignals(profile?: string): Promise<WorldSignal[]> {
   const rows = await fetchSignals({ limit: 200, profile });
-  return rows.map(toPattern);
+  return rows.map(toSignal);
 }
 
 /** HEADQUARTERS. Null is a real state, not an error: a profile with nothing
     synthesized yet has nothing to stand on, and the world says so in words. */
-export async function loadHeadquarters(profile?: string): Promise<WorldTopOfMind | null> {
+export async function loadTopOfMind(profile?: string): Promise<WorldTopOfMind | null> {
   const row = await fetchTopOfMind({ profile });
   if (!row) return null;
   return {
@@ -331,7 +341,7 @@ export async function loadHeadquarters(profile?: string): Promise<WorldTopOfMind
 
 /** One memory opened: the words in full, what was attached, and what the
     person said back. Enrichment comes through labelled, never as their words. */
-export async function loadCapture(id: string): Promise<WorldCaptureDetail> {
+export async function loadInspiration(id: string): Promise<WorldCaptureDetail> {
   const row = await fetchInspiration(id);
   return {
     id: row.id,
@@ -377,9 +387,9 @@ function firstImage(attachments: ApiAttachment[]): string | null {
 }
 
 /** One pattern opened: the same statement, plus what it rests on. */
-export async function loadPattern(id: string): Promise<WorldPatternDetail> {
+export async function loadSignal(id: string): Promise<WorldPatternDetail> {
   const row = await fetchSignal(id);
-  return { ...toPattern(row), evidence: (row.evidence ?? []).map((e) => toEvidence(row.id, e)) };
+  return { ...toSignal(row), evidence: (row.evidence ?? []).map((e) => toEvidence(row.id, e)) };
 }
 
 /* ---------------------------------------------------------------- aliveness */
@@ -396,7 +406,7 @@ export async function loadPattern(id: string): Promise<WorldPatternDetail> {
  * a machine score the person never saw was never a good input to how alive
  * their own memory looks.
  */
-export function aliveness(c: WorldCapture, now: number): number {
+export function aliveness(c: WorldInspiration, now: number): number {
   const days = Math.max(0, (now - Math.max(c.updatedMs, c.capturedMs)) / 86_400_000);
   const decay = Math.pow(0.5, days / 7);
   const attention = 0.25 * Math.min(c.reflectionCount, 2) * decay;

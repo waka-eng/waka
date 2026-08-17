@@ -74,15 +74,15 @@ import {
   FIELD_REFLECTION_SATURATION,
   FIELD_REFLECTION_WEIGHT,
 } from "../lib/aliveness";
-import { hueCss, tintRamp } from "../lib/world-appearance";
+import { hueCss, tintRamp } from "../lib/appearance";
 import {
   dateWords,
   givenName,
   numWords,
-  roomCompany,
+  groupCompany,
   whoWords,
   yearWords,
-} from "../lib/world-words";
+} from "../lib/words";
 
 import {
   affirmGroupProposal,
@@ -129,18 +129,18 @@ import {
   ApiError,
 } from "../lib/api";
 import {
-  loadCapture,
-  loadField,
-  loadHeadquarters,
-  loadPattern,
-  loadSky,
-  type WorldCapture,
+  loadInspiration,
+  loadInspirations,
+  loadTopOfMind,
+  loadSignal,
+  loadSignals,
+  type WorldInspiration,
   type WorldCaptureDetail,
   type WorldEntry,
   type WorldEvidence,
-  type WorldPattern,
+  type WorldSignal,
   type WorldTopOfMind,
-} from "../lib/world-data";
+} from "../lib/data";
 import { useOptionalAuth } from "../lib/auth-context";
 
 import "../styles/world.css";
@@ -1128,14 +1128,14 @@ interface BornSeed extends SignalSeed {
  * nothing claimed on its behalf.
  */
 function seedOf(
-  c: WorldCapture,
+  c: WorldInspiration,
   citations: Map<string, WorldEvidence[]>,
-  patternById: Map<string, WorldPattern>,
+  patternById: Map<string, WorldSignal>,
 ): SignalSeed {
   const cites = citations.get(c.id) ?? [];
   const above = cites
-    .map((e) => patternById.get(e.patternId))
-    .filter((p): p is WorldPattern => Boolean(p));
+    .map((e) => patternById.get(e.signalId))
+    .filter((p): p is WorldSignal => Boolean(p));
   return {
     id: c.id,
     capturedMs: c.capturedMs,
@@ -2169,9 +2169,9 @@ async function loadAgentWalls(): Promise<AgentBundle[]> {
     return Promise.all(
       real.map(async (p) => {
         const [captures, patterns, tom] = await Promise.all([
-          loadField(p.id).catch(() => [] as WorldCapture[]),
-          loadSky(p.id).catch(() => [] as WorldPattern[]),
-          loadHeadquarters(p.id).catch(() => null),
+          loadInspirations(p.id).catch(() => [] as WorldInspiration[]),
+          loadSignals(p.id).catch(() => [] as WorldSignal[]),
+          loadTopOfMind(p.id).catch(() => null),
         ]);
         const entries = (tom?.entries ?? []).slice().sort((a, b) => a.createdMs - b.createdMs);
         const lead = tom?.entries.find((e) => e.pinned) ?? tom?.entries[0] ?? null;
@@ -2181,7 +2181,7 @@ async function loadAgentWalls(): Promise<AgentBundle[]> {
           awayFrom: null,
           /* what the claim rests on: the patterns it cites, which is what an
              entry cites under the canon — never straight down at raw memories */
-          groundedIn: e.citedPatterns.map((c) => c.id),
+          groundedIn: e.citedSignals.map((c) => c.id),
           createdAt: iso(e.createdMs),
         });
         return {
@@ -2800,7 +2800,7 @@ const BODY_PX = 240;
 /** How many aliveness tiers the orb sprites are baked at. */
 const TIERS = 5;
 
-/* the per-member hue system lives in lib/world-appearance.ts — see the note
+/* the per-member hue system lives in lib/appearance.ts — see the note
    there for why, and docs/architecture.md for the seams generally */
 
 /**
@@ -3803,9 +3803,9 @@ function formingWords(
 /** Everything the world is built from, when it is built from nothing. */
 interface OfflineWorld {
   /** The ground: the field is made of these, and of nothing else. */
-  captures: WorldCapture[];
+  captures: WorldInspiration[];
   /** The sky: patterns still forming, each citing memories that exist. */
-  patterns: WorldPattern[];
+  patterns: WorldSignal[];
   /** Which patterns rest on which memory — the field reads its meaning here. */
   citations: Map<string, WorldEvidence[]>;
   /** The board headquarters stands on. */
@@ -3835,7 +3835,7 @@ function offlineSignal(
     /** Returned to since: an old memory that is honestly warm again. */
     touched?: number;
   } = {},
-): WorldCapture {
+): WorldInspiration {
   /**
    * NEVER AT THE VERY INSTANT OF LOADING.
    *
@@ -3878,7 +3878,7 @@ function offlineReading(
   day: number,
   title: string,
   evidence: Array<[number, string | null]>,
-): { pattern: WorldPattern; evidence: WorldEvidence[] } {
+): { pattern: WorldSignal; evidence: WorldEvidence[] } {
   const at = Date.parse(daysAgo(day));
   return {
     pattern: {
@@ -3900,8 +3900,8 @@ function offlineReading(
       sharedGroupIds: [],
     },
     evidence: evidence.map(([m, quote]) => ({
-      patternId: `offline-p${n}`,
-      captureId: `offline-m${m}`,
+      signalId: `offline-p${n}`,
+      inspirationId: `offline-m${m}`,
       preview: "",
       quote,
       reason: null,
@@ -3930,7 +3930,7 @@ function offlineWorld(): OfflineWorld | null {
   const R3 = "I trust a surface more once I have watched it fail.";
   const R4 = "What I call taste is mostly a list of things I refuse to ship.";
 
-  const captures: WorldCapture[] = [
+  const captures: WorldInspiration[] = [
     offlineSignal(
       1,
       0,
@@ -4083,11 +4083,11 @@ function offlineWorld(): OfflineWorld | null {
   const citations = new Map<string, WorldEvidence[]>();
   for (const r of readings) {
     for (const e of r.evidence) {
-      const q = e.quote ?? OFFLINE_QUOTES.get(e.captureId) ?? null;
+      const q = e.quote ?? OFFLINE_QUOTES.get(e.inspirationId) ?? null;
       const row = { ...e, quote: q };
-      const got = citations.get(e.captureId);
+      const got = citations.get(e.inspirationId);
       if (got) got.push(row);
-      else citations.set(e.captureId, [row]);
+      else citations.set(e.inspirationId, [row]);
     }
   }
 
@@ -4104,7 +4104,7 @@ function offlineWorld(): OfflineWorld | null {
     pinned: i === 0,
     dismissed: false,
     sortOrder: i,
-    citedPatterns: [{ id: r.pattern.id, statement: r.pattern.statement }],
+    citedSignals: [{ id: r.pattern.id, statement: r.pattern.statement }],
     createdMs: boardMs,
   }));
 
@@ -4237,7 +4237,7 @@ interface SimApi {
    * a claim about you that you cannot walk back to its source is just an
    * assertion.
    */
-  revealMemory: (captureId: string) => void;
+  revealMemory: (inspirationId: string) => void;
   /** A reflection was kept: this memory's light genuinely comes back up. */
   relight: (id: string) => void;
   /**
@@ -4347,14 +4347,14 @@ function WorldExperience(): JSX.Element {
     }
   }
   const offlineRef = useRef(false);
-  const [captures, setCaptures] = useState<WorldCapture[] | null>(null);
+  const [captures, setCaptures] = useState<WorldInspiration[] | null>(null);
   const [notes, setNotes] = useState<JarNote[] | null>(null);
   /**
    * THE SKY, IN THE CANON'S SENSE — layer 2. Each is an evidence-backed
    * pattern: `emerging` is still forming overhead, `active` is what
    * headquarters stands on, `retired` has sunk. Null until the answer is in.
    */
-  const [patterns, setPatterns] = useState<WorldPattern[] | null>(null);
+  const [patterns, setPatterns] = useState<WorldSignal[] | null>(null);
   /**
    * WHICH PATTERNS REST ON WHICH MEMORY — built from the sky, consumed by the
    * field. A capture under the canon knows nothing about its own meaning, so
@@ -4453,7 +4453,7 @@ function WorldExperience(): JSX.Element {
   const rebuildBoard = useCallback(() => {
     setBoard({ step: "working" });
     refreshTopOfMind()
-      .then(() => loadHeadquarters())
+      .then(() => loadTopOfMind())
       .then((tom) => {
         setTopOfMind(tom);
         setNotes(tom?.entries ?? []);
@@ -4499,7 +4499,7 @@ function WorldExperience(): JSX.Element {
     window.setTimeout(() => setUndrop((u) => (u?.id === entry.id ? null : u)), 9000);
     if (offlineRef.current) return;
     dismissTopOfMindEntry(entry.id).catch(() => {
-      loadHeadquarters()
+      loadTopOfMind()
         .then((tom) => setNotes(tom?.entries ?? []))
         .catch(() => undefined);
     });
@@ -4514,7 +4514,7 @@ function WorldExperience(): JSX.Element {
     setUndrop(null);
     if (offlineRef.current) return;
     restoreTopOfMindEntry(id)
-      .then(() => loadHeadquarters())
+      .then(() => loadTopOfMind())
       .then((tom) => {
         setNotes(tom?.entries ?? []);
         setTopOfMind(tom);
@@ -4752,7 +4752,7 @@ function WorldExperience(): JSX.Element {
         const openMs = open ? Date.parse(open.createdAt) || 0 : null;
         roomChromeRef.current.set(
           groupId,
-          deriveRoomChrome(name, top, openMs, evidence, roomCompany(membersRef.current.get(groupId))),
+          deriveRoomChrome(name, top, openMs, evidence, groupCompany(membersRef.current.get(groupId))),
         );
         cache.set(groupId, { status: "ready", data: { evidence, top } });
         simApiRef.current?.wake();
@@ -4900,7 +4900,7 @@ function WorldExperience(): JSX.Element {
     };
     /* LAYER 1 — the field. The archive is the spine, so its answer alone
        decides whether this is the real world or the fixture. */
-    loadField()
+    loadInspirations()
       .then((rows) => {
         if (dead || offlineRef.current) return;
         setCaptures(rows);
@@ -4962,7 +4962,7 @@ function WorldExperience(): JSX.Element {
 
        Retired patterns are kept. Nothing that exists pops out of existence —
        a pattern that lost its evidence sinks and cools, it is not deleted. */
-    loadSky()
+    loadSignals()
       .then(async (rows) => {
         if (dead || offlineRef.current) return;
         setPatterns(rows);
@@ -4971,11 +4971,11 @@ function WorldExperience(): JSX.Element {
           if (dead || offlineRef.current) return;
           if (p.evidenceCount === 0) continue;
           try {
-            const full = await loadPattern(p.id);
+            const full = await loadSignal(p.id);
             for (const e of full.evidence) {
-              const have = index.get(e.captureId);
+              const have = index.get(e.inspirationId);
               if (have) have.push(e);
-              else index.set(e.captureId, [e]);
+              else index.set(e.inspirationId, [e]);
             }
             evidenceByPatternRef.current.set(p.id, full.evidence);
           } catch {
@@ -4992,9 +4992,9 @@ function WorldExperience(): JSX.Element {
           const lead = board.find((e) => e.pinned) ?? board[0];
           if (!lead) return cur;
           const prov: Provenance = new Map();
-          for (const c of lead.citedPatterns)
+          for (const c of lead.citedSignals)
             for (const e of evidenceByPatternRef.current.get(c.id) ?? [])
-              if (!prov.has(e.captureId)) prov.set(e.captureId, e.quote);
+              if (!prov.has(e.inspirationId)) prov.set(e.inspirationId, e.quote);
           if (prov.size > 0) setProvenance(prov);
           return cur;
         });
@@ -5005,7 +5005,7 @@ function WorldExperience(): JSX.Element {
       });
     /* LAYER 3 — headquarters. Exactly one artifact per profile, so this is a
        single object and null is a real state rather than an error. */
-    loadHeadquarters()
+    loadTopOfMind()
       .then((tom) => {
         if (dead || offlineRef.current) return;
         setTopOfMind(tom);
@@ -5145,7 +5145,7 @@ function WorldExperience(): JSX.Element {
     if (have) return Promise.resolve(have);
     const inFlight = detailPendingRef.current.get(id);
     if (inFlight) return inFlight;
-    const p = loadCapture(id)
+    const p = loadInspiration(id)
       .then((row) => {
         detailsRef.current.set(id, row);
         detailPendingRef.current.delete(id);
@@ -5268,7 +5268,7 @@ function WorldExperience(): JSX.Element {
    * down in the field.
    */
   const signalById = useMemo(() => {
-    const m = new Map<string, WorldCapture>();
+    const m = new Map<string, WorldInspiration>();
     for (const s of captures ?? []) m.set(s.id, s);
     return m;
   }, [captures]);
@@ -5487,9 +5487,9 @@ function WorldExperience(): JSX.Element {
     const prov: Provenance = new Map();
     /* the same two hops: entry → its patterns → the memories they were drawn
        from, which is what the row beneath the poster is actually made of */
-    for (const c of best.citedPatterns)
+    for (const c of best.citedSignals)
       for (const e of evidenceByPatternRef.current.get(c.id) ?? [])
-        if (!prov.has(e.captureId)) prov.set(e.captureId, e.quote);
+        if (!prov.has(e.inspirationId)) prov.set(e.inspirationId, e.quote);
     if (prov.size > 0) setProvenance((prev) => (prev.size > 0 ? prev : prov));
   }, [adopted, notes]);
 
@@ -10194,8 +10194,8 @@ function WorldExperience(): JSX.Element {
       toTop: () => {
         aimTo(0, 0);
       },
-      revealMemory: (captureId: string) => {
-        const b = findBall(captureId);
+      revealMemory: (inspirationId: string) => {
+        const b = findBall(inspirationId);
         if (!b) return;
         /* bring it to a comfortable reading height rather than to the exact
            centre: the companion sits mid-frame and the memory should land
@@ -10206,7 +10206,7 @@ function WorldExperience(): JSX.Element {
           camVel = 0;
           aimTo(want, 0);
         }
-        select(captureId);
+        select(inspirationId);
       },
       /* the signal line's glide: programmatic, and exempt from the snap.
          Only the personal column has a sky to glide into. */
@@ -10819,8 +10819,8 @@ function WorldExperience(): JSX.Element {
         if (!cap || seen.has(id)) continue;
         seen.add(id);
         out.push({
-          patternId: "",
-          captureId: id,
+          signalId: "",
+          inspirationId: id,
           preview: cap.textPreview,
           quote: cap.quote ?? null,
           reason: null,
@@ -10845,8 +10845,8 @@ function WorldExperience(): JSX.Element {
         if (!ev.citedBy.includes(lead.body) || seen.has(ev.signalId)) continue;
         seen.add(ev.signalId);
         out.push({
-          patternId: "",
-          captureId: ev.signalId,
+          signalId: "",
+          inspirationId: ev.signalId,
           preview: ev.textPreview,
           quote: ev.quote,
           /* whose sentence this is — in a room the author IS the provenance */
@@ -10860,10 +10860,10 @@ function WorldExperience(): JSX.Element {
     const board = notes ?? [];
     const lead = board.find((e) => e.pinned) ?? board[0];
     if (!lead) return out;
-    for (const cite of lead.citedPatterns)
+    for (const cite of lead.citedSignals)
       for (const e of evidenceByPatternRef.current.get(cite.id) ?? []) {
-        if (seen.has(e.captureId)) continue;
-        seen.add(e.captureId);
+        if (seen.has(e.inspirationId)) continue;
+        seen.add(e.inspirationId);
         out.push(e);
       }
     return out;
@@ -10930,7 +10930,7 @@ function WorldExperience(): JSX.Element {
     /* proposals and local drafts have no server pattern behind them */
     if (focusCandId.startsWith("proposal:") || focusCandId.startsWith("draft:")) return undefined;
     let dead = false;
-    loadPattern(focusCandId)
+    loadSignal(focusCandId)
       .then((full) => {
         if (dead) return;
         evidenceByPatternRef.current.set(full.id, full.evidence);
@@ -10979,10 +10979,10 @@ function WorldExperience(): JSX.Element {
       if (p.status !== "emerging") continue;
       const evidence = new Map<string, EvidenceRef>();
       for (const e of evidenceByPatternRef.current.get(p.id) ?? []) {
-        const s = signalById.get(e.captureId);
-        if (!s || evidence.has(e.captureId)) continue;
-        evidence.set(e.captureId, {
-          signalId: e.captureId,
+        const s = signalById.get(e.inspirationId);
+        if (!s || evidence.has(e.inspirationId)) continue;
+        evidence.set(e.inspirationId, {
+          signalId: e.inspirationId,
           groupId: null,
           authorUserId: null,
           authorName: null,
@@ -11460,13 +11460,13 @@ function WorldExperience(): JSX.Element {
    * room's wall with your name on it; the memories it rests on stay here.
    * Members see the pattern, never the captures.
    */
-  const shareTo = useCallback((patternId: string, groupId: string, on: boolean) => {
+  const shareTo = useCallback((signalId: string, groupId: string, on: boolean) => {
     /* only on the way out — taking a statement back is not an announcement */
     if (on) simApiRef.current?.acknowledge("shared");
     setPatterns((prev) =>
       prev
         ? prev.map((p) =>
-            p.id === patternId
+            p.id === signalId
               ? {
                   ...p,
                   sharedGroupIds: on
@@ -11478,13 +11478,13 @@ function WorldExperience(): JSX.Element {
         : prev,
     );
     if (offlineRef.current) return;
-    const call = on ? shareSignal(patternId, groupId) : unshareSignal(patternId, groupId);
+    const call = on ? shareSignal(signalId, groupId) : unshareSignal(signalId, groupId);
     call.catch(() => {
       /* it did not land, so the pattern must not claim it is out loud */
       setPatterns((prev) =>
         prev
           ? prev.map((p) =>
-              p.id === patternId
+              p.id === signalId
                 ? {
                     ...p,
                     sharedGroupIds: on
@@ -11874,7 +11874,7 @@ function WorldExperience(): JSX.Element {
       setEdit((e) => (e ? { ...e, saving: false } : e));
       if (err instanceof ApiError && err.status === 404) {
         setEdit(null);
-        void loadHeadquarters()
+        void loadTopOfMind()
           .then((tom) => {
             setTopOfMind(tom);
             setNotes(tom ? tom.entries : []);
@@ -12186,12 +12186,12 @@ function WorldExperience(): JSX.Element {
                           <p className="jar-prov-lead jar-label">built from</p>
                           {posterChain.map((e) => (
                             <button
-                              key={e.captureId}
+                              key={e.inspirationId}
                               type="button"
                               className="jar-prov-row"
                               onClick={() => {
                                 setPosterAsk(false);
-                                simApiRef.current?.revealMemory(e.captureId);
+                                simApiRef.current?.revealMemory(e.inspirationId);
                               }}
                             >
                               <span className="jar-prov-text">{salience(e)}</span>
@@ -12665,10 +12665,10 @@ function WorldExperience(): JSX.Element {
                 <p className="jar-prov-lead jar-label">read from</p>
                 {evidenceFor(c).map((e) => (
                   <button
-                    key={`${e.patternId}:${e.captureId}`}
+                    key={`${e.signalId}:${e.inspirationId}`}
                     type="button"
                     className="jar-prov-row"
-                    onClick={() => simApiRef.current?.revealMemory(e.captureId)}
+                    onClick={() => simApiRef.current?.revealMemory(e.inspirationId)}
                   >
                     <span className="jar-prov-text">{salience(e)}</span>
                     {e.reason ? <span className="jar-prov-why">{e.reason}</span> : null}

@@ -80,7 +80,7 @@ export function whoWords(rows: ApiGroupMember[]): string {
  * In words and never as a count, and never as a badge: it is a description of
  * the company, which is what a person would actually say about a room.
  */
-export function roomCompany(members: ApiGroupMember[] | undefined): string | null {
+export function groupCompany(members: ApiGroupMember[] | undefined): string | null {
   if (!members || members.length === 0) return null;
   const agents = members.filter((m) => m.type === "agent").length;
   const people = members.length - agents;
