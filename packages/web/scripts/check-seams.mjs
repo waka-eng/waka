@@ -20,14 +20,24 @@
  * TWO RULES, AND THEY DO DIFFERENT WORK.
  *
  *   1. DECLARED. Every suite carries a header paragraph marked `WHAT THIS
- *      MOCKS`, and that paragraph NAMES every seam the file actually replaces.
- *      Not "has a paragraph" — names them. A file that adds
+ *      MOCKS`, and that paragraph NAMES every seam the file actually replaces,
+ *      in backticks. Not "has a paragraph" — names them. A file that adds
  *      `vi.mock("../src/lib/data")` and does not say so fails, which is the
  *      only version of this rule that stays true as files change. Where a
  *      suite replaces nothing the paragraph must say so, in the word
  *      "nothing"; that is a real answer and the gate accepts it as one.
- *      "Names them" means the header contains the string, which is weaker than
- *      it sounds — see the first bullet under WHAT THIS GATE CANNOT SEE.
+ *
+ *      THE BACKTICKS ARE PART OF THE RULE, and they are the repair of a real
+ *      hole. This used to be a substring test over the whole header, and a
+ *      header saying "no fetch, no storage, no clock" already contains "fetch"
+ *      — so it would have accepted a `vi.stubGlobal("fetch", …)` added
+ *      underneath it, and two suites in this package sat one keystroke from
+ *      that. Every header here already writes seam names in backticks, so
+ *      asking for `` `fetch` `` rather than `fetch` costs no edits and turns a
+ *      coincidence of prose into a declaration. The name is looked for in the
+ *      DECLARATION PARAGRAPH — from `WHAT THIS MOCKS` to the end of that
+ *      comment block — rather than anywhere in the header, so a name that
+ *      appears in some earlier paragraph is not an answer to this question.
  *
  *   2. THE INCIDENT ITSELF. Any suite that mounts `pages/Home` must mock
  *      `lib/data`. This is the one rule that would have caught the original
@@ -50,29 +60,41 @@
  * WHAT THIS GATE CANNOT SEE, said plainly because G7 asks every gate to be
  * honest about its own reach:
  *
- *   - RULE 1 IS A SUBSTRING TEST over the whole header, so a seam name that
- *     also occurs in ordinary prose satisfies it by accident. A header saying
- *     "no fetch, no storage, no clock" already contains "fetch", and would
- *     accept a `vi.stubGlobal("fetch", …)` added underneath it. The rule
- *     reliably catches the case it was built for — a mock added and never
- *     written down in a header that does not discuss it — and does not catch a
- *     header whose prose happens to collide. Delimiting the names would fix
- *     this and is worth doing: the codebase already writes them in backticks,
- *     so requiring `` `lib/data` `` rather than `lib/data` is a cheap and
- *     greppable rule. It is not done here because it is a change to twelve
- *     headers rather than to this file, and half-doing it would be the same
- *     overclaim this paragraph exists to withdraw.
- *   - THE IMPORT WALK STOPS AT THE EDGE OF `test/`. A suite that reaches the
- *     page through PRODUCT code — importing `src/App`, which renders
- *     `pages/Home` — is invisible to rule 2, because following the product's
- *     own import graph is a different and much larger program. No suite does
- *     that today; if one is written, this is the sentence that was wrong.
- *   - It reads `vi.mock` and `vi.stubGlobal` and nothing else. A suite that
- *     reaches into `globalThis` by hand, or swaps a method with
- *     `Object.defineProperty`, replaces something this gate will not ask it to
- *     declare. `auth-boundary.test.ts` does exactly that with `localStorage`
- *     and declares it anyway, because the rule is about honesty and the gate
- *     is only the floor under it.
+ *   - RULE 1 STILL CANNOT READ. It asks that the seam name appear, in
+ *     backticks, inside the declaration paragraph — which a paragraph
+ *     explaining that the page does NOT use `lib/data` satisfies just as well
+ *     as one declaring the mock. `Profile.test.ts` carries a paragraph of that
+ *     shape today: adding `vi.mock("../src/lib/data")` to it reports clean,
+ *     which is how this bullet was checked rather than assumed. Closing it
+ *     needs a machine-readable seam list — a line each suite carries and this
+ *     file parses, instead of prose it greps — which is a change to every
+ *     header in the package and belongs in a round of its own.
+ *   - THE IMPORT WALK STOPS AT `src/` AND `node_modules/`, not at the edge of
+ *     `test/`. Everything else under `packages/web` is opened and read, so a
+ *     helper MOVED out of `test/` — four lines under `test-support/`, which is
+ *     neither a rename nor product code — is followed like any other file.
+ *     What stays invisible is a suite that reaches the page through PRODUCT
+ *     code: importing `src/App`, which renders `pages/Home`, is a question
+ *     about the product's own import graph and a much larger program. No suite
+ *     does that today, and the scan fixture below pins it as deliberately out
+ *     of scope rather than leaving the next reader to wonder.
+ *   - It reads `vi.mock`, `vi.doMock`, `vi.stubGlobal` and `vi.stubEnv`, and
+ *     nothing else. A suite that reaches into `globalThis` by hand, or swaps a
+ *     method with `Object.defineProperty`, replaces something this gate will
+ *     not ask it to declare. `auth-boundary.test.ts` does exactly that with
+ *     `localStorage` and declares it anyway, because the rule is about honesty
+ *     and the gate is only the floor under it.
+ *   - `test/setup-jsdom.ts` replaces `window.localStorage` for EVERY suite in
+ *     the package, through `Object.defineProperty`, and it is installed by
+ *     `vitest.config.ts` rather than imported by anybody. So no file is
+ *     obliged to declare it and none does: it is a real, package-wide seam
+ *     that this gate is structurally unable to attribute to a suite.
+ *   - IT CANNOT PROVE THAT IT RAN. Everything below proves what this file does
+ *     when it is executing; nothing in it can notice the `selftest()` call
+ *     being deleted, because the thing that would notice is the call. That
+ *     question is asked from outside, in `test/seam-gate.test.ts`, which runs
+ *     this file as a process and reads the proof out of its output — and also
+ *     checks that `pnpm test` still invokes it at all.
  *   - `vi.spyOn` is deliberately NOT counted. A spy that records calls is a
  *     measuring instrument, not a replaced layer, and counting it would push
  *     every suite into declaring its own assertions as seams — which trains
@@ -105,11 +127,23 @@
  *
  * Run: node scripts/check-seams.mjs        (also runs in `pnpm test`)
  */
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const TEST_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "test");
+const THIS_FILE = fileURLToPath(import.meta.url);
+const PACKAGE_ROOT = resolve(dirname(THIS_FILE), "..");
+const TEST_DIR = join(PACKAGE_ROOT, "test");
 
 /**
  * The phrase a header has to carry.
@@ -117,7 +151,7 @@ const TEST_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "test");
  * One fixed phrase rather than a list of accepted wordings, because the point
  * is that a reader opening any suite in this package finds the same words in
  * the same place. It is also greppable, which is how someone asks "which
- * suites touch `lib/data`" without reading eleven files.
+ * suites touch `lib/data`" without opening every file in the directory.
  */
 const MARKER = /WHAT THIS MOCKS/;
 
@@ -127,21 +161,57 @@ const MARKER = /WHAT THIS MOCKS/;
  * Bounded on purpose. The gate asks for a declaration in the HEADER, and
  * without a bound the phrase could sit anywhere — including inside the very
  * mock it was supposed to introduce, three hundred lines down, where nobody
- * opening the file would meet it. The first `import` is the boundary because
- * every suite here starts with one; a file with no import at all is treated as
- * all header, which is the lenient direction and costs nothing.
+ * opening the file would meet it.
+ *
+ * TWO WAYS THIS USED TO MISS THE BOUNDARY, both of which made rule 1 vacuous
+ * rather than merely lenient. The first import was found with `/^import\s/m`,
+ * so `import{it,expect,vi}from"vitest";` — legal, and what a formatter with
+ * different settings emits — matched nothing and the whole file became the
+ * header. And a file with no static import at all (everything reached through
+ * `await import(…)`) did the same by design, on the reasoning that it "costs
+ * nothing". It does not cost nothing: with the whole file as the header, a
+ * declaration sitting BELOW the mocks satisfies rule 1, which is exactly the
+ * arrangement the bound exists to reject. So there is no lenient direction
+ * here any more. Where no import line can be found, only a comment block at
+ * the very top of the file counts as a header, and a file with neither has no
+ * header at all and is told so.
  */
+const IMPORT_LINE = /^import[\s{("'*]/m;
+const LEADING_COMMENT = /^\s*\/\*[\s\S]*?\*\//;
+
 function headerOf(source) {
-  const firstImport = source.search(/^import\s/m);
-  return firstImport === -1 ? source : source.slice(0, firstImport);
+  const firstImport = source.search(IMPORT_LINE);
+  if (firstImport !== -1) return source.slice(0, firstImport);
+  const leading = source.match(LEADING_COMMENT);
+  return leading ? leading[0] : "";
+}
+
+/**
+ * The declaration paragraph inside a header: `WHAT THIS MOCKS` to the end of
+ * the comment block that carries it.
+ *
+ * Rule 1 asks its question of this slice rather than of the whole header,
+ * because a header is often several paragraphs and only one of them is an
+ * answer. A seam name that appears in a paragraph above the marker — a note
+ * about what a sibling suite does, say — is a mention, not a declaration, and
+ * accepting it would let the gate be satisfied by writing about the codebase
+ * in general.
+ */
+function declarationIn(header) {
+  const at = header.search(MARKER);
+  if (at === -1) return "";
+  const rest = header.slice(at);
+  const end = rest.indexOf("*/");
+  return end === -1 ? rest : rest.slice(0, end);
 }
 
 /**
  * Normalise a mocked module specifier to the name a person writes in prose.
  *
- *     "../src/lib/data"        -> lib/data
+ *     "../src/lib/data"         -> lib/data
  *     "../src/lib/auth-context" -> lib/auth-context
  *     "./helpers/render-home"   -> helpers/render-home
+ *     "../test-support/render"  -> test-support/render
  *
  * The extension is dropped because a header saying "`helpers/canvas-stub.ts`"
  * and one saying "`helpers/canvas-stub`" are the same sentence, and a gate that
@@ -165,46 +235,36 @@ function seamName(specifier) {
  * would otherwise be a blank space in the graph.
  */
 const IMPORT_OF_ANY = /(?:\bfrom|\bimport)\s*\(?\s*["'`]([^"'`]+)["'`]/g;
-const IMPORT_OF_HELPER = /(?:\bfrom|\bimport)\s*\(?\s*["'`](\.{1,2}\/helpers\/[^"'`]+)["'`]/g;
 
 /**
- * Every seam a source replaces.
+ * The seams a source replaces by asking vitest to replace them.
  *
- * Three kinds, and each is a different way of taking something away from the
- * code under test:
+ * `vi.mock("X")` and its sibling `vi.doMock("X")` swap a module wholesale;
+ * `vi.stubGlobal("f")` and `vi.stubEnv("K")` swap a global or an environment
+ * variable. The third kind of seam — a helper imported for the replacements it
+ * installs — is not visible here at all, because answering "is this import a
+ * helper" needs the import walk; it is added in `auditSource`.
  *
- *   `vi.mock("X")`         — a module swapped out wholesale
- *   `vi.stubGlobal("f")`   — a global swapped out (`fetch`, in practice)
- *   `import "./helpers/…"` — a helper whose whole job is installing a
- *                            replacement: the canvas, the clock, the frame
- *                            loop, the viewport, `Math.random`
- *
- * The third is included because it is the one a reader is most likely to
- * forget they are relying on. A suite inherits a frozen clock and a canvas
- * that draws nothing simply by importing a helper, and a header that omits
- * that is describing a browser the test never had.
- *
- * TWO THINGS THESE PATTERNS LEARNED FROM BEING BROKEN. Backticks count as
+ * THREE THINGS THESE PATTERNS LEARNED FROM BEING BROKEN. Backticks count as
  * quotes: `` vi.mock(`../src/lib/appearance`) `` is ordinary, valid, does
  * exactly what the double-quoted form does, and used to be invisible to every
- * regex in this file — a gate a keystroke can switch off is not a gate. And a
- * helper can arrive through a SIDE-EFFECT import, `import "./helpers/x";` with
- * no bindings at all, which is precisely the shape a helper whose whole job is
- * installing something takes; matching only `from` missed the case the third
- * paragraph above is entirely about.
+ * regex in this file — a gate a keystroke can switch off is not a gate.
+ * `vi.doMock` is the same call with hoisting turned off, three characters from
+ * the one being policed, and reading only `vi.mock` left a documented vitest
+ * API as a way round the rule. And the `(` is required immediately after the
+ * name so that `vi.mocked(fn)` — a typed accessor for a mock that already
+ * exists, used nineteen times in `auth-boundary.test.ts` — is not read as a
+ * seam being created.
  */
-function seamsIn(source) {
+function mockedSeams(source) {
   const seams = new Set();
-  for (const m of source.matchAll(/\bvi\.mock\(\s*["'`]([^"'`]+)["'`]/g)) {
+  for (const m of source.matchAll(/\bvi\.(?:mock|doMock)\(\s*["'`]([^"'`]+)["'`]/g)) {
     seams.add(seamName(m[1]));
   }
-  for (const m of source.matchAll(/\bvi\.stubGlobal\(\s*["'`]([^"'`]+)["'`]/g)) {
+  for (const m of source.matchAll(/\bvi\.(?:stubGlobal|stubEnv)\(\s*["'`]([^"'`]+)["'`]/g)) {
     seams.add(m[1]);
   }
-  for (const m of source.matchAll(IMPORT_OF_HELPER)) {
-    seams.add(seamName(m[1]));
-  }
-  return [...seams];
+  return seams;
 }
 
 /**
@@ -218,8 +278,12 @@ function seamsIn(source) {
  */
 const IMPORT_OF_HOME = /["'`][^"'`]*src\/pages\/Home(\.[cm]?[jt]sx?)?["'`]/;
 
+/** A file that is itself a suite, and so is not a helper anybody declares. */
+const SUITE_FILE = /\.test\.[cm]?[jt]sx?$/;
+
 /**
- * DOES THIS FILE REACH THE PAGE — ASKED BY FOLLOWING IMPORTS, NOT BY NAME.
+ * DOES THIS FILE REACH THE PAGE — ASKED BY FOLLOWING IMPORTS, NOT BY NAME —
+ * AND WHAT LOCAL FILES DOES IT PULL IN ON THE WAY.
  *
  * Rule 2 used to ask whether the source contained the literal
  * `helpers/render-home`. A review defeated that in a minute by writing a
@@ -231,20 +295,31 @@ const IMPORT_OF_HOME = /["'`][^"'`]*src\/pages\/Home(\.[cm]?[jt]sx?)?["'`]/;
  * bet the writing rule made before it was made mechanical.
  *
  * So the question is answered by reading. Every relative import that stays
- * inside `test/` is opened and read too, transitively, and the file mounts the
- * world if anything reachable that way names `pages/Home`. A helper cannot be
- * renamed out of the rule, and one written tomorrow is covered on the day it
- * is written.
+ * inside the package and out of `src/` is opened and read too, TRANSITIVELY —
+ * a suite that imports a helper that imports a second helper that mounts the
+ * page is caught at the third step — and the file mounts the world if anything
+ * reachable that way names `pages/Home`. A helper cannot be renamed out of the
+ * rule, cannot be moved out of `test/` out of the rule, and one written
+ * tomorrow is covered on the day it is written.
  *
- * `unfollowable` is the honest half of that. An import inside `test/` that
- * cannot be opened means the walk stopped early and the answer below would be
- * a guess, so it is reported rather than shrugged at — an unread file is
+ * `helpers` is the other thing the walk knows and no regex could: which of a
+ * suite's OWN imports are local files rather than packages. Those are seams by
+ * rule 1 — a suite inherits a frozen clock and a canvas that draws nothing
+ * simply by importing a file that installs them, and a header that omits that
+ * is describing a browser the test never had. Only depth 0 is collected: a
+ * suite declares what IT reaches for, and what its helper reaches for is the
+ * helper's business to document.
+ *
+ * `unfollowable` is the honest half of all this. An import that should have
+ * been readable and was not means the walk stopped early and the answer would
+ * be a guess, so it is reported rather than shrugged at — an unread file is
  * indistinguishable from a clean one, which is exactly how the vocabulary gate
  * beside this one came to be blind over half of `Home.tsx`.
  */
-function reachesWorld(source, read, fromKey, seen) {
+function followImports(source, read, fromKey, seen, depth) {
   let mounts = IMPORT_OF_HOME.test(source);
   const unfollowable = [];
+  const helpers = [];
   for (const [, specifier] of source.matchAll(IMPORT_OF_ANY)) {
     const found = read(specifier, fromKey);
     if (found.kind === "outside") continue;
@@ -252,13 +327,14 @@ function reachesWorld(source, read, fromKey, seen) {
       unfollowable.push(found.key);
       continue;
     }
+    if (depth === 0 && !SUITE_FILE.test(found.key)) helpers.push(seamName(specifier));
     if (seen.has(found.key)) continue;
     seen.add(found.key);
-    const deeper = reachesWorld(found.source, read, found.key, seen);
+    const deeper = followImports(found.source, read, found.key, seen, depth + 1);
     mounts = mounts || deeper.mounts;
     unfollowable.push(...deeper.unfollowable);
   }
-  return { mounts, unfollowable };
+  return { mounts, unfollowable, helpers };
 }
 
 const FOLLOWABLE = ["", ".ts", ".tsx", ".js", ".jsx", ".mjs", "/index.ts", "/index.tsx"];
@@ -268,29 +344,47 @@ const FOLLOWABLE = ["", ".ts", ".tsx", ".js", ".jsx", ".mjs", "/index.ts", "/ind
  *
  *   { kind: "outside" }                 a package, or product code under
  *                                       `src/` — not followed, see the header
- *   { kind: "unreadable", key }         inside `test/`, and no file found
+ *   { kind: "unreadable", key }         ours to open, and no file found
  *   { kind: "read", key, source }
  *
- * Only `test/` is walked. Following `../src/...` would mean walking the
- * product's whole import graph to answer one question about test files, and
- * the answer to "which suites mount the page" has never needed it. The header
- * says out loud what that leaves invisible.
+ * The boundary is the PACKAGE, minus `src/` and `node_modules/`. It used to be
+ * `test/`, and that was too narrow by exactly the shape of the original
+ * incident: a four-line mounting helper at `test-support/render-page.tsx`,
+ * imported by a suite that mocked only `lib/api`, was reported clean, because
+ * "outside" was being used to mean two different things — "not our code" and
+ * "not in the directory I happened to think of". `src/` is excluded because
+ * following it means walking the product's whole import graph to answer one
+ * question about test files, and `node_modules/` because it is not ours. Those
+ * two exclusions are stated in the header as blind spots; every other file in
+ * the package is read.
+ *
+ * `root` is a parameter rather than a constant so the self-test can point the
+ * real reader at a fixture tree. A reader that answers "outside" to everything
+ * is a blind walk that looks exactly like a working one from the outside, so
+ * the fixture exercises this function rather than a stand-in for it.
  */
-function readLocal(specifier, fromKey) {
-  if (!/^\.{1,2}\//.test(specifier)) return { kind: "outside" };
-  const target = resolve(dirname(fromKey), specifier);
-  if (!target.startsWith(TEST_DIR + sep)) return { kind: "outside" };
-  for (const extension of FOLLOWABLE) {
-    const candidate = target + extension;
-    try {
-      if (statSync(candidate).isFile()) {
-        return { kind: "read", key: candidate, source: readFileSync(candidate, "utf8") };
-      }
-    } catch {
-      /* not this spelling; try the next */
+function readerUnder(root) {
+  return function read(specifier, fromKey) {
+    if (!/^\.{1,2}\//.test(specifier)) return { kind: "outside" };
+    const target = resolve(dirname(fromKey), specifier);
+    const inside = relative(root, target);
+    if (inside === "" || inside.startsWith("..") || inside.startsWith(sep)) {
+      return { kind: "outside" };
     }
-  }
-  return { kind: "unreadable", key: relative(TEST_DIR, target) };
+    const parts = inside.split(sep);
+    if (parts[0] === "src" || parts.includes("node_modules")) return { kind: "outside" };
+    for (const extension of FOLLOWABLE) {
+      const candidate = target + extension;
+      try {
+        if (statSync(candidate).isFile()) {
+          return { kind: "read", key: candidate, source: readFileSync(candidate, "utf8") };
+        }
+      } catch {
+        /* not this spelling; try the next */
+      }
+    }
+    return { kind: "unreadable", key: parts.join("/") };
+  };
 }
 
 /**
@@ -299,14 +393,14 @@ function readLocal(specifier, fromKey) {
  * Split out from the walk so the self-test below can run it over a string
  * instead of a file — the same shape `check-vocabulary.mjs` uses, and for the
  * same reason: a gate proven only by being pointed at the repo is proven only
- * against the day it was written.
+ * against the day it was written. Splitting it is not enough on its own, which
+ * is what the second layer of the self-test is about; see `scanFixture`.
  *
  * `read` and `key` are how the import walk is kept testable. The real scan
- * passes `readLocal` and the suite's path; a self-test case passes a handful
- * of helper sources written out in the case itself, so "a helper that reaches
- * the page" can be staged as a fact of the case rather than as a fact of the
- * repository. One case deliberately does use the real reader — see `onDisk`
- * below, and the reason it has to exist.
+ * passes `readerUnder(PACKAGE_ROOT)` and the suite's path; a self-test case
+ * passes a handful of helper sources written out in the case itself, so "a
+ * helper that reaches the page" can be staged as a fact of the case rather
+ * than as a fact of the repository.
  *
  * Neither argument has a default, deliberately. A default reader answering
  * "outside" to everything would be a blind walk that looks from the outside
@@ -318,7 +412,9 @@ function readLocal(specifier, fromKey) {
 function auditSource(source, read, key) {
   const problems = [];
   const header = headerOf(source);
-  const seams = seamsIn(source);
+  const declaration = declarationIn(header);
+  const world = followImports(source, read, key, new Set([key]), 0);
+  const seams = [...new Set([...mockedSeams(source), ...world.helpers])];
 
   if (!MARKER.test(header)) {
     problems.push(
@@ -336,24 +432,25 @@ function auditSource(source, read, key) {
       );
     }
   } else {
-    const unnamed = seams.filter((seam) => !header.includes(seam));
+    const unnamed = seams.filter((seam) => !declaration.includes(`\`${seam}\``));
     if (unnamed.length > 0) {
       problems.push(
         `the header does not name ${unnamed.map((s) => `\`${s}\``).join(", ")}, ` +
           "which this suite replaces. A declaration that is out of date with " +
-          "its own mocks is worse than none: it reads as though someone checked.",
+          "its own mocks is worse than none: it reads as though someone " +
+          "checked. Write the name in backticks, inside the declaration " +
+          "paragraph, so the gate is reading an answer and not a coincidence.",
       );
     }
   }
 
-  const world = reachesWorld(source, read, key, new Set([key]));
   for (const missing of world.unfollowable) {
     problems.push(
       `this suite imports \`${missing}\`, which the gate could not read. ` +
         "Rule 2 is answered by following imports, so an import that cannot be " +
         "opened is an import the gate cannot see through, and its answer to " +
         '"does this mount the world" would be a guess printed as a fact. ' +
-        "Fix the path, or teach `readLocal` the spelling it does not know.",
+        "Fix the path, or teach the reader the spelling it does not know.",
     );
   }
 
@@ -377,6 +474,90 @@ function auditSource(source, read, key) {
   return problems;
 }
 
+/*
+ * THE SCAN LOOP: which files are read, and what is done with the answers.
+ *
+ * `walk` decides what gets judged and `scan` decides what counts as failing,
+ * and neither of them is the audit. That distinction is the whole reason this
+ * file was rejected twice: a self-test that only ever called `auditSource` was
+ * green while `walk`'s pattern had lost `.tsx`, while `walk` no longer entered
+ * subdirectories, and while a single-problem suite was dropped from the
+ * failing list. `vitest.config.ts` in this package carries the same warning in
+ * its own words — "a test that never runs looks exactly like a test that
+ * passes" — and this loop had the identical shape with nothing pointed at it.
+ * `scanFixture` below is what points at it.
+ */
+function walk(dir, found = []) {
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) walk(full, found);
+    else if (/\.test\.(ts|tsx)$/.test(entry)) found.push(full);
+  }
+  return found;
+}
+
+/*
+ * The same glob vitest runs, and only that.
+ *
+ * `test/helpers/` and `test/setup-jsdom.ts` are not suites — they assert
+ * nothing and can pass nothing — so demanding a declaration from them would be
+ * asking a file to describe a subject it does not have. They install real
+ * seams, though, which is why rule 1 makes every suite that imports one name
+ * it: the obligation lands on the file making the claim.
+ *
+ * `root` and `testDir` are separate because they answer different questions:
+ * which tree is SCANNED for suites, and which tree may be READ when following
+ * their imports. For this package that is `test/` and `packages/web`.
+ */
+function scan({ root, testDir }) {
+  const read = readerUnder(root);
+  const suites = walk(testDir).sort();
+  const failing = [];
+  for (const file of suites) {
+    const problems = auditSource(readFileSync(file, "utf8"), read, file);
+    if (problems.length > 0) {
+      failing.push({ file: relative(testDir, file).split(sep).join("/"), problems });
+    }
+  }
+  return { suites, failing };
+}
+
+/**
+ * Print the verdict and hand back the exit code.
+ *
+ * A returned number rather than a `process.exit` call inside the branch, so
+ * that the self-test can run this whole path — walk, audit, report, exit — as
+ * a real process and read the code it actually exits with. A gate that printed
+ * its failures and exited 0 would look identical in a terminal and be worth
+ * nothing in CI, and that mutation survived every version of this file until
+ * the end-to-end runs below existed.
+ */
+function report({ suites, failing }) {
+  if (suites.length === 0) {
+    console.error(
+      "\nseams: the scan found NO suites at all, which is not the same as\n" +
+        "finding nothing wrong. Either the directory it walks has moved or the\n" +
+        "pattern it walks with no longer matches this package's file names.\n",
+    );
+    return 1;
+  }
+
+  if (failing.length === 0) {
+    console.log(`seams: clean — ${suites.length} suites each say what they replace`);
+    return 0;
+  }
+
+  console.error(
+    `\nseams: ${failing.length} of ${suites.length} suite(s) do not say what layer they replace.\n` +
+      "G6 in docs/goals/a-codebase-you-can-navigate.md: a suite that mocks the\n" +
+      "wrong layer describes the dev fixture and stays green while doing it.\n",
+  );
+  for (const { file, problems } of failing) {
+    for (const problem of problems) console.error(`  test/${file}\n      ${problem}\n`);
+  }
+  return 1;
+}
+
 /**
  * PROVE THE GATE CAN FAIL, AT MORE THAN ONE POINT, AND FOR THE RIGHT REASON.
  *
@@ -385,6 +566,33 @@ function auditSource(source, read, key) {
  * exactly one location, and a blind check prints the same word a working one
  * does. So the cases live here and run in `pnpm test` rather than in whatever
  * anyone remembered to try by hand the day it was written.
+ *
+ * THE SELF-TEST HAS THREE LAYERS, AND THE SECOND AND THIRD ARE THIS ROUND'S
+ * REPAIR. The first is the case list below: strings in, exact problem list
+ * out, which proves the JUDGEMENT. That is not the same as proving the gate.
+ * A review built a version of this file that lets a real violation through —
+ * `walk`'s pattern narrowed from `.test.(ts|tsx)` to `.test.(ts)`, one
+ * character — and the case list printed "passed" all the way down, because
+ * nothing in it had ever asked which files the gate reads. The same was true
+ * of `problems.length > 0`, of the recursion into subdirectories, and of the
+ * exit code. Every one of those decides WHAT GETS JUDGED or WHAT IS DONE WITH
+ * THE VERDICT, and none of them is `auditSource`.
+ *
+ * So layer two (`scanFixture`) writes a small tree of suites to a temporary
+ * directory and runs the REAL `walk` and the REAL `scan` over it, asserting
+ * the exact list of files discovered and the exact list of files reported
+ * failing. Layer three (`endToEnd`) runs this file as a CHILD PROCESS — three
+ * times against fixture trees, and once with no arguments against this package
+ * exactly as `pnpm test` invokes it — and asserts the exit codes and the
+ * printed text. Between them, each of the four one-line breaks above turns
+ * something red and names it.
+ *
+ * A break that produces no red is the finding, not the mutation. Every
+ * mechanism between "a file exists on disk" and "a violation is printed" was
+ * broken one at a time while writing this, and the survivors are what the
+ * layers above were added for. One survivor could not be closed from in here
+ * at all — deleting the `selftest()` call — and it is closed from outside, in
+ * `test/seam-gate.test.ts`.
  *
  * The must-flag cases are chosen to break the gate in DIFFERENT ways, because
  * "does it notice a file with no header" was never the interesting question.
@@ -408,9 +616,10 @@ function auditSource(source, read, key) {
  * names are written into the expected strings together with the clause that
  * follows them, which pins the reported list from both sides — a report naming
  * one seam too few does not contain the string, and neither does one naming a
- * seam too many. And the shape that was missing is staged below: an undeclared
- * seam FOLLOWED by a declared one, which is the case `seams.slice(-1)` cannot
- * survive. That mutation is a good permanent canary for this file.
+ * seam too many. Three cases below carry more than one problem, which is what
+ * makes "in order" mean anything: with every case at one problem or zero, a
+ * gate that reversed its list or spliced out everything before the last
+ * problem passed the whole suite.
  */
 
 /*
@@ -421,7 +630,9 @@ function auditSource(source, read, key) {
  * is then proven against the shape, not against today's filenames, which is
  * the whole point of the D2 repair. `INSTALLS` is the other half: a helper
  * that replaces something real and goes nowhere near the page, so a case can
- * prove the walk does not treat every helper import as a mount.
+ * prove the walk does not treat every helper import as a mount. Resolution —
+ * which spelling of which path on this disk becomes which file — is not what
+ * these prove; `scanFixture` runs the real reader over a real tree for that.
  */
 const HELPER_THAT_MOUNTS = 'const { default: Page } = await import("../../src/pages/Home");';
 const HELPER_THAT_INSTALLS = "export function installCanvasStub() {}";
@@ -437,7 +648,35 @@ const SELFTEST = [
     why: "the declaration exists but sits BELOW the imports, where no reader meets it",
     src: [
       'import { it } from "vitest";',
-      "/* WHAT THIS MOCKS, AND WHY: lib/data, because the page reads through it. */",
+      "/* WHAT THIS MOCKS, AND WHY: `lib/data`, because the page reads through it. */",
+      'vi.mock("../src/lib/data", () => ({}));',
+    ].join("\n"),
+  },
+  {
+    flags: ["no seam declaration in the header"],
+    why:
+      "THE SAME, IN A FILE WITH NO STATIC IMPORT AT ALL — treating such a file as all " +
+      "header was called lenient and was really vacuous: the declaration below the mock " +
+      "satisfied the rule the bound exists to enforce",
+    src: [
+      'const { it } = await import("vitest");',
+      'vi.mock("../src/lib/data", () => ({}));',
+      "/** WHAT THIS MOCKS, AND WHY: `lib/data`, the layer under the page. */",
+    ].join("\n"),
+  },
+  {
+    flags: ["does not name `lib/appearance`, which this suite replaces"],
+    why:
+      "ONE MISSING SPACE, UNDER A LINE COMMENT. `import{it}from\"vitest\"` is what a " +
+      "formatter with other settings emits, and `/^import\\s/` did not see it — so the " +
+      "header boundary fell back to the leading BLOCK comment, which a `//` line above " +
+      "it pushes out of reach, and a file with a perfectly good declaration was told it " +
+      "had none. The bound has to find the import to be a bound at all",
+    src: [
+      "// eslint-disable-next-line no-restricted-imports",
+      "/** WHAT THIS MOCKS, AND WHY: `lib/data`, the layer under the page. */",
+      'import{it,expect,vi}from"vitest";',
+      'vi.mock("../src/lib/appearance", () => ({}));',
       'vi.mock("../src/lib/data", () => ({}));',
     ].join("\n"),
   },
@@ -487,12 +726,58 @@ const SELFTEST = [
     ].join("\n"),
   },
   {
+    flags: ["does not name `lib/appearance`, which this suite replaces"],
+    why:
+      "`vi.doMock` — the same call with hoisting off, a documented vitest API three " +
+      "characters from the one being policed, and invisible until it was asked for",
+    src: [
+      "/** WHAT THIS MOCKS, AND WHY: `lib/data`, the layer under the page. */",
+      'import { it } from "vitest";',
+      'vi.doMock("../src/lib/appearance", () => ({}));',
+      'vi.mock("../src/lib/data", () => ({}));',
+    ].join("\n"),
+  },
+  {
     flags: ["does not name `fetch`, which this suite replaces"],
     why: "a stubbed global left undeclared",
     src: [
-      "/** WHAT THIS MOCKS, AND WHY: nothing but the network. */",
+      "/** WHAT THIS MOCKS, AND WHY: `lib/data`, the layer under the page. */",
       'import { it } from "vitest";',
       'vi.stubGlobal("fetch", async () => undefined);',
+    ].join("\n"),
+  },
+  {
+    flags: ["does not name `fetch`, which this suite replaces"],
+    why:
+      "THE PROSE COLLISION — a header saying \"no fetch, no storage, no clock\" contains " +
+      "the word `fetch`, and under a bare substring test that was an answer. This is one " +
+      "of the two live collisions in this package, staged.",
+    src: [
+      "/** WHAT THIS MOCKS, AND WHY: nothing — no fetch, no storage, no clock. */",
+      'import { it } from "vitest";',
+      'vi.stubGlobal("fetch", async () => undefined);',
+    ].join("\n"),
+  },
+  {
+    flags: ["does not name `WAKA_API_URL`, which this suite replaces"],
+    why: "`vi.stubEnv` replaces something real, and is a sibling of the call above",
+    src: [
+      "/** WHAT THIS MOCKS, AND WHY: nothing but the network. */",
+      'import { it } from "vitest";',
+      'vi.stubEnv("WAKA_API_URL", "http://localhost");',
+    ].join("\n"),
+  },
+  {
+    flags: ["does not name `lib/appearance`, which this suite replaces"],
+    why:
+      "the seam IS backticked, in a paragraph ABOVE the declaration — a mention of what " +
+      "another suite does is not an answer to what this one replaces",
+    src: [
+      "/** `lib/appearance` is mocked by `home-sky.test.tsx`, not here. */",
+      "/** WHAT THIS MOCKS, AND WHY: `lib/data`, the layer under the page. */",
+      'import { it } from "vitest";',
+      'vi.mock("../src/lib/appearance", () => ({}));',
+      'vi.mock("../src/lib/data", () => ({}));',
     ].join("\n"),
   },
   {
@@ -505,6 +790,19 @@ const SELFTEST = [
       'import { mountWorld } from "./helpers/render-home";',
       'vi.mock("../src/lib/data", () => ({}));',
       'vi.mock("../src/lib/api", () => ({}));',
+    ].join("\n"),
+  },
+  {
+    flags: ["does not name `support/canvas-stub`, which this suite replaces"],
+    why:
+      "A DECLARABLE HELPER THAT IS NOT UNDER `helpers/`. Rule 1's third seam kind used " +
+      "to be keyed to that literal directory name — the same bet rule 2 was rewritten to " +
+      "stop making — so `./support/canvas-stub` installed a canvas and owed nobody a word",
+    helpers: { "./support/canvas-stub": HELPER_THAT_INSTALLS },
+    src: [
+      "/** WHAT THIS MOCKS, AND WHY: `lib/data`, the layer under the page. */",
+      'import { it } from "vitest";',
+      'import "./support/canvas-stub";',
     ].join("\n"),
   },
   {
@@ -521,13 +819,27 @@ const SELFTEST = [
   {
     flags: ["imports `helpers/ghost`, which the gate could not read"],
     why:
-      "an import inside test/ that the walk cannot open — silence here would make " +
-      "rule 2 a guess",
+      "an import the walk cannot open — silence here would make rule 2 a guess",
     src: [
       "/** WHAT THIS MOCKS, AND WHY: `lib/data`, and `helpers/ghost` for the clock. */",
       'import { it } from "vitest";',
       'import { tick } from "./helpers/ghost";',
       'vi.mock("../src/lib/data", () => ({}));',
+    ].join("\n"),
+  },
+  {
+    flags: [
+      "imports `helpers/ghost-a`, which the gate could not read",
+      "imports `helpers/ghost-b`, which the gate could not read",
+    ],
+    why:
+      "TWO of them, in order — reporting only the first unreadable import leaves the " +
+      "second file exactly as unread and the report exactly as confident",
+    src: [
+      "/** WHAT THIS MOCKS, AND WHY: nothing; the two below are clocks. */",
+      'import { it } from "vitest";',
+      'import { tick } from "./helpers/ghost-a";',
+      'import { tock } from "./helpers/ghost-b";',
     ].join("\n"),
   },
   {
@@ -592,10 +904,49 @@ const SELFTEST = [
   },
   {
     flags: ["MOUNTS THE WORLD AND DOES NOT MOCK `lib/data`"],
+    why:
+      "THE INCIDENT TWO HELPERS DEEP — suite to `chain-a` to `chain-b` to the page. " +
+      "The transitive walk is the property rule 2 is sold on, and a depth-1 version of " +
+      "it passed every case here until this one existed",
+    helpers: {
+      "./helpers/chain-a": 'export { mountPage } from "./chain-b";',
+      "./chain-b": HELPER_THAT_MOUNTS,
+    },
+    src: [
+      "/**",
+      " * WHAT THIS MOCKS, AND WHY: `lib/api`, and `helpers/chain-a` for the canvas",
+      " * and the clock.",
+      " */",
+      'import { it } from "vitest";',
+      'import { mountPage } from "./helpers/chain-a";',
+      'vi.mock("../src/lib/api", () => ({}));',
+    ].join("\n"),
+  },
+  {
+    flags: ["MOUNTS THE WORLD AND DOES NOT MOCK `lib/data`"],
+    why:
+      "THE INCIDENT FROM A MOUNTING MODULE OUTSIDE `test/` — `test-support/render-page`, " +
+      "four lines, neither a rename nor product code, and invisible while the walk " +
+      "stopped at the edge of `test/`",
+    helpers: { "../test-support/render-page": HELPER_THAT_MOUNTS },
+    src: [
+      "/**",
+      " * WHAT THIS MOCKS, AND WHY: `lib/api`, and `test-support/render-page` for",
+      " * the canvas and the clock.",
+      " */",
+      'import { it } from "vitest";',
+      'import { mountPage } from "../test-support/render-page";',
+      'vi.mock("../src/lib/api", () => ({}));',
+    ].join("\n"),
+  },
+  {
+    flags: ["MOUNTS THE WORLD AND DOES NOT MOCK `lib/data`"],
     onDisk: true,
     why:
-      "THE REAL HELPER, THROUGH THE REAL READER — the one case that touches the " +
-      "disk, because nothing else here proves the resolution works on this repository",
+      "THE REAL HELPER, THROUGH THE REAL READER — `test/helpers/render-home.tsx` as it " +
+      "stands in this repository today, so that a rename or a move of the one helper " +
+      "six suites mount the world through cannot leave this gate quietly answering " +
+      "about a file that is no longer there",
     src: [
       "/**",
       " * WHAT THIS MOCKS, AND WHY: `lib/api`, and `helpers/render-home` for the",
@@ -603,6 +954,50 @@ const SELFTEST = [
       " */",
       'import { it } from "vitest";',
       'import { mountWorld } from "./helpers/render-home";',
+      'vi.mock("../src/lib/api", () => ({}));',
+    ].join("\n"),
+  },
+  {
+    flags: [
+      "does not name `lib/appearance`, which this suite replaces",
+      "MOUNTS THE WORLD AND DOES NOT MOCK `lib/data`",
+    ],
+    why:
+      "TWO PROBLEMS AT ONCE, IN ORDER — an undeclared seam and a world mounted on the " +
+      "wrong one. With every case at one problem or none, a gate that reversed its list " +
+      "or reported only its last problem passed everything here",
+    helpers: { "./helpers/render-home": HELPER_THAT_MOUNTS },
+    src: [
+      "/**",
+      " * WHAT THIS MOCKS, AND WHY: `lib/api`, and `helpers/render-home` for the",
+      " * canvas and the clock.",
+      " */",
+      'import { it } from "vitest";',
+      'import { mountWorld } from "./helpers/render-home";',
+      'vi.mock("../src/lib/appearance", () => ({}));',
+      'vi.mock("../src/lib/api", () => ({}));',
+    ].join("\n"),
+  },
+  {
+    flags: [
+      "does not name `lib/appearance`, which this suite replaces",
+      "imports `helpers/ghost`, which the gate could not read",
+      "MOUNTS THE WORLD AND DOES NOT MOCK `lib/data`",
+    ],
+    why:
+      "ALL THREE KINDS AT ONCE, IN THE ORDER THE FILE PROMISES — declaration first, " +
+      "unreadable imports next, rule 2 last so the one failure that means GREEN AND " +
+      "WRONG is the last thing on the screen",
+    helpers: { "./helpers/render-home": HELPER_THAT_MOUNTS },
+    src: [
+      "/**",
+      " * WHAT THIS MOCKS, AND WHY: `lib/api`, `helpers/render-home` for the canvas,",
+      " * and `helpers/ghost` for the clock.",
+      " */",
+      'import { it } from "vitest";',
+      'import { mountWorld } from "./helpers/render-home";',
+      'import { tick } from "./helpers/ghost";',
+      'vi.mock("../src/lib/appearance", () => ({}));',
       'vi.mock("../src/lib/api", () => ({}));',
     ].join("\n"),
   },
@@ -635,6 +1030,17 @@ const SELFTEST = [
   {
     flags: [],
     why:
+      "the same mock written with its extension — `lib/data.ts` and `lib/data` are the " +
+      "same sentence, and a gate that told them apart would be teaching punctuation",
+    src: [
+      "/** WHAT THIS MOCKS, AND WHY: `lib/data`, the layer under the page. */",
+      'import { it } from "vitest";',
+      'vi.mock("../src/lib/data.ts", () => ({}));',
+    ].join("\n"),
+  },
+  {
+    flags: [],
+    why:
       "a helper that installs a canvas and never touches the page — importing a " +
       "helper is not by itself mounting the world, or rule 2 would be an alarm " +
       "nobody could switch off",
@@ -654,27 +1060,393 @@ const SELFTEST = [
       'const warn = vi.spyOn(console, "warn");',
     ].join("\n"),
   },
+  {
+    flags: [],
+    why:
+      "`vi.mocked` reads a mock that already exists rather than creating a seam — " +
+      "`auth-boundary.test.ts` uses it throughout and declares none of them, and a " +
+      "rule widened to `vi.<anything>(` would demand a paragraph about an accessor",
+    src: [
+      "/** WHAT THIS MOCKS, AND WHY: `lib/api`, the layer beneath the provider. */",
+      'import { it } from "vitest";',
+      'vi.mock("../src/lib/api", () => ({}));',
+      "vi.mocked(fetchCurrentViewer).mockResolvedValue(null);",
+    ].join("\n"),
+  },
 ];
 
 /**
  * The reader a string-only case gets.
  *
- * Helpers the case wrote out are readable; any other `./helpers/…` is
+ * Helpers the case wrote out are readable; any other relative import is
  * deliberately UNREADABLE rather than absent, so that a case which forgets to
  * supply a helper it imports says so loudly instead of quietly being audited
- * as a file that mounts nothing. Everything else — packages, and product code
- * under `src/` — is outside the walk, exactly as on disk.
+ * as a file that mounts nothing. Packages and product code under `src/` are
+ * outside the walk, exactly as on disk.
+ *
+ * It is keyed by the specifier as written rather than by a resolved path,
+ * which is the one way it is unlike `readerUnder`: a string case cannot have a
+ * directory. That is why the fixture below exists — resolution is proven by
+ * running the real reader over a real tree, and these cases prove everything
+ * that happens after a file has been opened.
  */
 function readerFor(helpers) {
   return (specifier) => {
     if (Object.hasOwn(helpers, specifier)) {
       return { kind: "read", key: seamName(specifier), source: helpers[specifier] };
     }
-    if (/^\.{1,2}\/helpers\//.test(specifier)) {
-      return { kind: "unreadable", key: seamName(specifier) };
-    }
-    return { kind: "outside" };
+    if (!/^\.{1,2}\//.test(specifier)) return { kind: "outside" };
+    if (/(^|\/)src\//.test(specifier)) return { kind: "outside" };
+    return { kind: "unreadable", key: seamName(specifier) };
   };
+}
+
+/*
+ * THE TREE THE SCAN LOOP IS PROVEN AGAINST.
+ *
+ * Seven suites, each staging exactly one thing about the loop rather than
+ * about the audit, so that when one goes missing the report says which
+ * mechanism lost it:
+ *
+ *   clean.test.ts            passes; the scan must not report it
+ *   undeclared.test.tsx      a `.tsx` file with ONE problem — the file that
+ *                            disappears when `walk`'s pattern loses `tsx`, and
+ *                            the one that disappears when the failing list is
+ *                            gathered with `problems.length > 1`
+ *   pages/nested.test.ts     one directory down — gone if `walk` stops
+ *                            recursing
+ *   chain.test.ts            reaches the page through two helpers on disk, so
+ *                            the transitive walk is proven through the real
+ *                            reader and not only through written-out strings
+ *   moved-helper.test.ts     reaches the page through a mounting module OUTSIDE
+ *                            `test/`; this is the original incident with the
+ *                            helper moved one directory, which the walk used
+ *                            to call "outside" and report clean
+ *   through-product.test.ts  reaches a file under `src/` that names the page —
+ *                            and must stay CLEAN, because the header says
+ *                            product code is out of scope and a documented
+ *                            blind spot is worth pinning from both sides
+ *   ghost.test.ts            imports a file that does not exist, inside the
+ *                            walkable area, and must be reported as unreadable
+ *                            with the path the real reader produces
+ *
+ * Written to a temporary directory rather than checked in, because files named
+ * `*.test.tsx` that deliberately violate the gate would be collected by vitest
+ * and read by the next person grepping for a real suite.
+ */
+const FIXTURE = {
+  "test/clean.test.ts": [
+    "/** WHAT THIS MOCKS, AND WHY: nothing — it is a fixture for the gate's own scan. */",
+    'import { it } from "vitest";',
+  ].join("\n"),
+
+  "test/undeclared.test.tsx": [
+    "/** WHAT THIS MOCKS, AND WHY: nothing, says this header, untruthfully. */",
+    'import { it } from "vitest";',
+    'vi.mock("../src/lib/appearance", () => ({}));',
+  ].join("\n"),
+
+  "test/pages/nested.test.ts": [
+    "/** WHAT THIS MOCKS, AND WHY: `lib/api`, which is the wrong layer on purpose. */",
+    'import { it } from "vitest";',
+    'import Home from "../../src/pages/Home";',
+    'vi.mock("../../src/lib/api", () => ({}));',
+  ].join("\n"),
+
+  "test/chain.test.ts": [
+    "/** WHAT THIS MOCKS, AND WHY: `lib/api`, and `helpers/chain-a` for the clock. */",
+    'import { it } from "vitest";',
+    'import { mountPage } from "./helpers/chain-a";',
+    'vi.mock("../src/lib/api", () => ({}));',
+  ].join("\n"),
+  /*
+   * These two import each other, which is not decoration: helper graphs really
+   * do have cycles, and the `seen` set in `followImports` is the only reason
+   * one does not walk forever. A gate that dies of a stack overflow on a
+   * legitimate pair of helpers is a gate somebody deletes.
+   */
+  "test/helpers/chain-a.ts": 'export { mountPage } from "./chain-b";',
+  "test/helpers/chain-b.ts": [
+    'import { frame } from "./chain-a";',
+    'export const mountPage = async () => (await import("../../src/pages/Home")).default;',
+    "export const frames = () => frame;",
+  ].join("\n"),
+
+  "test/moved-helper.test.ts": [
+    "/** WHAT THIS MOCKS, AND WHY: `lib/api`, and `support/render-page` for the canvas. */",
+    'import { it } from "vitest";',
+    'import { mountPage } from "../support/render-page";',
+    'vi.mock("../src/lib/api", () => ({}));',
+  ].join("\n"),
+  "support/render-page.tsx":
+    'export const mountPage = async () => (await import("../src/pages/Home")).default;',
+
+  "test/through-product.test.ts": [
+    "/** WHAT THIS MOCKS, AND WHY: nothing — the walk must not follow this into `src/`. */",
+    'import { it } from "vitest";',
+    'import { App } from "../src/app-shim";',
+  ].join("\n"),
+  /*
+   * The specifier inside this one is written the way a SUITE would write it,
+   * not the way a file in `src/` would. The case is about whether the walk
+   * opens the file at all: if it ever does, this text makes the suite above
+   * mount the world and the fixture turns red on the widened scope rather than
+   * on a coincidence of paths.
+   */
+  "src/app-shim.ts": 'export const App = () => import("../src/pages/Home");',
+
+  "test/ghost.test.ts": [
+    "/** WHAT THIS MOCKS, AND WHY: nothing; `test/helpers/ghost` is a clock. */",
+    'import { it } from "vitest";',
+    'import { tick } from "./helpers/ghost";',
+  ].join("\n"),
+};
+
+const FIXTURE_SUITES = [
+  "chain.test.ts",
+  "clean.test.ts",
+  "ghost.test.ts",
+  "moved-helper.test.ts",
+  "pages/nested.test.ts",
+  "through-product.test.ts",
+  "undeclared.test.tsx",
+];
+
+const FIXTURE_FAILING = [
+  ["chain.test.ts", ["MOUNTS THE WORLD AND DOES NOT MOCK `lib/data`"]],
+  ["ghost.test.ts", ["imports `test/helpers/ghost`, which the gate could not read"]],
+  ["moved-helper.test.ts", ["MOUNTS THE WORLD AND DOES NOT MOCK `lib/data`"]],
+  ["pages/nested.test.ts", ["MOUNTS THE WORLD AND DOES NOT MOCK `lib/data`"]],
+  ["undeclared.test.tsx", ["does not name `lib/appearance`, which this suite replaces"]],
+];
+
+/* Two clean suites and nothing else, for the run that must exit 0. */
+const CLEAN_FIXTURE = {
+  "test/clean.test.ts": FIXTURE["test/clean.test.ts"],
+  "test/through-product.test.ts": FIXTURE["test/through-product.test.ts"],
+  "src/app-shim.ts": FIXTURE["src/app-shim.ts"],
+};
+
+/* Helpers but no suites: the shape of a scan pointed at the wrong directory. */
+const EMPTY_FIXTURE = { "test/helpers/chain-a.ts": FIXTURE["test/helpers/chain-a.ts"] };
+
+function writeFixture(files) {
+  const root = mkdtempSync(join(tmpdir(), "seam-gate-fixture-"));
+  for (const [path, source] of Object.entries(files)) {
+    const full = join(root, ...path.split("/"));
+    mkdirSync(dirname(full), { recursive: true });
+    writeFileSync(full, source, "utf8");
+  }
+  return root;
+}
+
+function withFixture(files, fn) {
+  const root = writeFixture(files);
+  try {
+    return fn(root);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+/**
+ * LAYER TWO: the scan loop, over a tree with known answers.
+ *
+ * `walk` and `scan` are asserted separately because they fail differently. A
+ * file the walk never finds and a file the scan never reports are the same
+ * silence in the terminal and two different bugs, and the first is the one
+ * that has actually happened here — twice, in two gates, in this package.
+ */
+function scanFixture(failures) {
+  withFixture(FIXTURE, (root) => {
+    const testDir = join(root, "test");
+
+    const found = walk(testDir)
+      .map((file) => relative(testDir, file).split(sep).join("/"))
+      .sort();
+    if (found.join("|") !== FIXTURE_SUITES.join("|")) {
+      failures.push(
+        "  FILE DISCOVERY: `walk` did not find the suites the fixture contains.\n" +
+          `      expected: ${JSON.stringify(FIXTURE_SUITES)}\n` +
+          `      found:    ${JSON.stringify(found)}\n` +
+          "      A suite the walk never opens is audited by nothing, and the report\n" +
+          "      for it reads exactly like a suite with no problems.\n",
+      );
+    }
+
+    const { failing } = scan({ root, testDir });
+    const said = failing.map(({ file, problems }) => [file, problems]);
+    const wanted = FIXTURE_FAILING.map(([file]) => file).join("|");
+    if (said.map(([file]) => file).join("|") !== wanted) {
+      failures.push(
+        "  THE FAILING LIST: `scan` reported a different set of suites than the\n" +
+          "      fixture stages.\n" +
+          `      expected: ${JSON.stringify(FIXTURE_FAILING.map(([f]) => f))}\n` +
+          `      reported: ${JSON.stringify(said.map(([f]) => f))}\n`,
+      );
+      return;
+    }
+    for (const [index, [file, expected]] of FIXTURE_FAILING.entries()) {
+      const [, problems] = said[index];
+      const ok =
+        problems.length === expected.length &&
+        expected.every((flag, i) => problems[i].includes(flag));
+      if (!ok) {
+        failures.push(
+          `  THE FAILING LIST: test/${file} was reported, but not for what it stages.\n` +
+            `      expected ${expected.length} problem(s): ${JSON.stringify(expected)}\n` +
+            `      got ${problems.length}: ` +
+            `${JSON.stringify(problems.map((p) => p.split("\n")[0]))}\n`,
+        );
+      }
+    }
+  });
+}
+
+/**
+ * LAYER THREE: this file, as a process, against those trees and against this
+ * package.
+ *
+ * The only thing layer two cannot see is what the gate DOES with a verdict it
+ * has reached correctly. A `report` that prints every failure and returns 0,
+ * or an entry point that exits 0 regardless, reads identically in a terminal
+ * and is worth nothing in `pnpm test` — and that mutation survived every
+ * earlier version of this self-test. So the runs below read the real exit
+ * status and the real output.
+ *
+ * The last of them takes no arguments and scans this repository, because the
+ * other three all arrive through `--scan` and a path nobody uses is not the
+ * path that has to be right.
+ */
+
+/*
+ * The marker that stops this from being an infinite regress. A child audits
+ * its tree and reports; it does not spawn children of its own.
+ */
+const NO_SPAWN = "SEAM_GATE_NO_SPAWN";
+
+function runNode(args) {
+  /*
+   * Both streams are piped rather than inherited. A child staging five
+   * deliberate failures would otherwise print its whole report into the
+   * terminal of a gate run that is passing, and a reader who saw that would
+   * reasonably stop trusting either message.
+   */
+  const options = {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, [NO_SPAWN]: "1" },
+  };
+  try {
+    const stdout = execFileSync(process.execPath, [THIS_FILE, ...args], options);
+    return { status: 0, stdout, stderr: "" };
+  } catch (error) {
+    return { status: error.status, stdout: error.stdout ?? "", stderr: error.stderr ?? "" };
+  }
+}
+
+const runAgainst = (root) => runNode(["--scan", root]);
+
+function endToEnd(failures) {
+  if (process.env[NO_SPAWN]) return 0;
+
+  withFixture(FIXTURE, (root) => {
+    const run = runAgainst(root);
+    if (run.status !== 1) {
+      failures.push(
+        `  THE EXIT CODE: five failing suites and the gate exited ${run.status}.\n` +
+          "      A gate that prints its failures and exits 0 is a gate CI ignores.\n",
+      );
+    }
+    for (const [file, problems] of FIXTURE_FAILING) {
+      if (!run.stderr.includes(`test/${file}`)) {
+        failures.push(
+          `  THE REPORT: test/${file} failed the audit and was not named in the output.\n` +
+            "      A failure nobody can find in the terminal is a failure nobody fixes.\n",
+        );
+      }
+      /*
+       * The file name alone is not the report. A run that printed a list of
+       * paths and dropped every reason would satisfy the check above and tell
+       * the person reading it nothing about what to change.
+       */
+      for (const problem of problems) {
+        if (!run.stderr.includes(problem)) {
+          failures.push(
+            `  THE REPORT: test/${file} was named, but not its reason.\n` +
+              `      missing from the output: ${JSON.stringify(problem)}\n`,
+          );
+        }
+      }
+    }
+    for (const quiet of ["clean.test.ts", "through-product.test.ts"]) {
+      if (run.stderr.includes(quiet)) {
+        failures.push(
+          `  THE REPORT: test/${quiet} passes the audit and was named as failing.\n`,
+        );
+      }
+    }
+  });
+
+  withFixture(CLEAN_FIXTURE, (root) => {
+    const run = runAgainst(root);
+    if (run.status !== 0 || !run.stdout.includes("clean — 2 suites")) {
+      failures.push(
+        `  THE CLEAN PATH: a tree with nothing wrong exited ${run.status} saying\n` +
+          `      ${JSON.stringify(run.stdout.trim() || run.stderr.trim())}\n` +
+          '      — it should exit 0 and say "clean — 2 suites".\n',
+      );
+    }
+  });
+
+  withFixture(EMPTY_FIXTURE, (root) => {
+    const run = runAgainst(root);
+    if (run.status !== 1 || !run.stderr.includes("found NO suites at all")) {
+      failures.push(
+        `  THE EMPTY SCAN: a tree with no suites in it exited ${run.status} saying\n` +
+          `      ${JSON.stringify(run.stdout.trim() || run.stderr.trim())}\n` +
+          "      — scanning nothing and printing `clean` is how a gate that has\n" +
+          "      lost its own directory looks from the outside.\n",
+      );
+    }
+  });
+
+  /*
+   * AND THE WAY THIS PACKAGE ACTUALLY RUNS IT: no arguments, this repository,
+   * as a process. The three runs above all reach the gate through `--scan`,
+   * and a gate proven only on the path nobody uses is the shape of every bug
+   * in this file's history.
+   *
+   * WHAT IT MAY NOT ASSERT IS THAT THE REPOSITORY IS CLEAN. The first draft
+   * did, and a probe showed what that costs: with one real undeclared
+   * `vi.stubGlobal("fetch")` added to `i18n.test.ts`, the gate printed
+   * "SELF-TEST FAILED — the gate cannot see what it claims to" and never named
+   * the suite. A working gate accusing itself of blindness, while hiding the
+   * violation it had correctly found, is a worse failure than the one it was
+   * built to prevent. So this asks only about THIS FILE: that the no-argument
+   * path proves itself before it judges anything, and that whichever verdict
+   * it reaches, it leaves with the matching code.
+   */
+  const here = runNode([]);
+  const proved = here.stdout.indexOf("self-test passed");
+  const clean = here.stdout.indexOf("seams: clean —");
+  const complained = here.stderr.includes("do not say what layer they replace");
+  if (proved === -1 || (clean !== -1 && clean < proved)) {
+    failures.push(
+      "  THE REAL RUN: `node scripts/check-seams.mjs` reached a verdict about this\n" +
+        "      package without first printing that it had proved itself.\n" +
+        `      stdout: ${JSON.stringify(here.stdout.trim())}\n`,
+    );
+  }
+  if ((clean !== -1 && here.status !== 0) || (complained && here.status !== 1)) {
+    failures.push(
+      `  THE REAL RUN: the no-argument path printed one verdict and exited ${here.status}.\n` +
+        "      An exit code that disagrees with the report is the half of a gate\n" +
+        "      that CI reads, and the half a person never sees.\n",
+    );
+  }
+
+  return 4;
 }
 
 function selftest() {
@@ -684,9 +1456,10 @@ function selftest() {
      * The on-disk case is anchored at a suite path that does not exist, which
      * is fine and is the point: only its DIRECTORY is used, so `./helpers/…`
      * resolves exactly as it would from any real suite, and the case is about
-     * the resolution rather than about any particular file being scanned.
+     * this repository's own helper rather than about any particular file being
+     * scanned.
      */
-    const read = c.onDisk ? readLocal : readerFor(c.helpers ?? {});
+    const read = c.onDisk ? readerUnder(PACKAGE_ROOT) : readerFor(c.helpers ?? {});
     const key = c.onDisk ? join(TEST_DIR, "any-suite.test.tsx") : "<a self-test case>";
     const said = auditSource(c.src, read, key);
     const ok = said.length === c.flags.length && c.flags.every((f, i) => said[i].includes(f));
@@ -699,6 +1472,10 @@ function selftest() {
       );
     }
   }
+
+  scanFixture(failures);
+  const runs = endToEnd(failures);
+
   if (failures.length > 0) {
     console.error(
       "\nseam gate SELF-TEST FAILED — the gate cannot see what it claims to.\n" +
@@ -707,47 +1484,31 @@ function selftest() {
     );
     process.exit(1);
   }
-  console.log(`seams: self-test passed (${SELFTEST.length} cases)`);
-}
-
-selftest();
-
-function walk(dir, found = []) {
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) walk(full, found);
-    else if (/\.test\.(ts|tsx)$/.test(entry)) found.push(full);
-  }
-  return found;
+  console.log(
+    `seams: self-test passed (${SELFTEST.length} audit cases, ` +
+      `a ${FIXTURE_SUITES.length}-suite scan over the real walk, ` +
+      `${runs} end-to-end runs)`,
+  );
 }
 
 /*
- * The same glob vitest runs, and only that.
+ * `--scan <root>` audits some other tree: the suites under `<root>/test`, with
+ * imports followed anywhere under `<root>` except `src/` and `node_modules/`.
+ * It exists so the self-test can run this file end to end against a fixture
+ * whose answers are known. Such a run does not self-test: it is the SUBJECT of
+ * a self-test already running in the parent, and proving itself again there
+ * would only make the parent slower. What stops the regress is the `NO_SPAWN`
+ * marker, not this branch. Nothing else uses `--scan`; `pnpm test` runs this
+ * file with no arguments, and that path self-tests before it scans anything.
  *
- * `test/helpers/` and `test/setup-jsdom.ts` are not suites — they assert
- * nothing and can pass nothing — so demanding a declaration from them would be
- * asking a file to describe a subject it does not have. They install real
- * seams, though, which is why rule 1 makes every suite that imports one name
- * it: the obligation lands on the file making the claim.
+ * BOTH PATHS LEAVE THROUGH THE SAME LINE, deliberately. When the two exits
+ * were written separately, the one the self-test could reach was covered and
+ * the one `pnpm test` actually uses was not — so `process.exit(0)` in the real
+ * path was a mutation that printed every failure and told CI everything was
+ * fine, with 34 cases and a fixture scan still saying "passed". One exit site
+ * means the child runs below cover the line this package runs.
  */
-const suites = walk(TEST_DIR);
-const failing = [];
-for (const file of suites) {
-  const problems = auditSource(readFileSync(file, "utf8"), readLocal, file);
-  if (problems.length > 0) failing.push({ file: relative(TEST_DIR, file), problems });
-}
-
-if (failing.length === 0) {
-  console.log(`seams: clean — ${suites.length} suites each say what they replace`);
-  process.exit(0);
-}
-
-console.error(
-  `\nseams: ${failing.length} of ${suites.length} suite(s) do not say what layer they replace.\n` +
-    "G6 in docs/goals/a-codebase-you-can-navigate.md: a suite that mocks the\n" +
-    "wrong layer describes the dev fixture and stays green while doing it.\n",
-);
-for (const { file, problems } of failing) {
-  for (const problem of problems) console.error(`  test/${file}\n      ${problem}\n`);
-}
-process.exit(1);
+const scanFlag = process.argv.indexOf("--scan");
+const root = scanFlag === -1 ? PACKAGE_ROOT : resolve(process.argv[scanFlag + 1]);
+if (scanFlag === -1) selftest();
+process.exit(report(scan({ root, testDir: join(root, "test") })));
