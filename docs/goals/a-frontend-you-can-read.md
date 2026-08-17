@@ -275,3 +275,27 @@ Recorded here because it is the starting state, not a phase.
   `arriveColumn` re-ran the layout but nothing set `active`. Measured 0 of 9
   before, 9 of 9 after.
 - Fixed: the field audit's missing wall filter.
+
+### Phase 0 — landed (2026-08-16)
+
+Branch `goal/frontend-you-can-read`, PR waka#248 against `dev`.
+
+- This session's 21 commits squashed to 7 chronological milestones. The
+  other 57 left untouched: their messages are someone's record of why a
+  decision was taken, and collapsing them would cost the reasoning while
+  buying nothing. Only the rapid-fire extraction commits were the complaint.
+- Squash verified by tree comparison, not by reading: `git diff
+  backup/pre-squash-2026-08-16 HEAD` is empty, so the seven commits produce a
+  byte-identical result to the twenty-one. Backup branch kept.
+- `origin/dev` confirmed as the exact merge base and 0 behind — fast-forward.
+- Green: web typecheck, 58/58 web tests, web build, 384/384 API unit tests.
+- **The full API suite refused to run**, and correctly: it will not perform
+  test-only schema DDL against a database that is not clearly disposable, and
+  `DB_CONNECTION_URL` here is the shared instance. That guard is `b70e233`
+  working as designed. It also restates Phase 2's premise — the coverage that
+  would exercise a real database is exactly the coverage nobody runs locally.
+
+**Gate met**, with one deliberate exception: the merge is left to the owner.
+The branch carries `e19cfd2` — the archive's removal — a product-level change
+outside this goal's subject, on a team repo. Opening the PR is this goal's
+job; deciding that change ships is not.
