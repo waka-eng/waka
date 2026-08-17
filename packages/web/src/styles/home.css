@@ -1056,6 +1056,15 @@
 }
 .jar-back {
   pointer-events: auto;
+  /* A <button> brings two things an <a> does not: the UA's own border, and no
+     inherited font-family. Both pills at the top of the screen wear this class
+     and both are buttons now, so the resets belong HERE rather than on
+     whichever one happened to be written first.
+     The border is not cosmetic trivia: with `box-sizing: border-box` its 2px
+     top and bottom made the account pill four pixels taller than the space
+     pill beside it, and read on screen as a stray ring around one of them. */
+  border: 0;
+  font-family: inherit;
   text-decoration: none;
   padding: 7px 14px;
   border-radius: 999px;
@@ -1100,28 +1109,26 @@
    underneath stays draggable; anything in the bar that is a control has to
    take its own events back, which is what `.jar-back` has always done. */
 .jar-here {
-  pointer-events: auto;
-  display: inline-flex;
-  align-items: baseline;
-  padding: 7px 14px;
+  /* ONE PILL, ONE OWNER. This used to restate `.jar-back`'s padding, radius,
+     background and transition, and then set `font: inherit` — a shorthand,
+     which wiped `.jar-label`'s size, weight, tracking and uppercase, so the
+     two pills at the top of the screen were different sizes and different
+     colours while claiming to be the same control.
+
+     It wears `jar-back jar-label` now, exactly as the account link does, and
+     keeps only what a <button> needs that an <a> does not, plus the truncation
+     a space's name can require. `font-family` rather than `font`: the button
+     needs the page's face, and nothing else about the label's type. */
+  cursor: pointer;
   max-width: 40ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  border: 0;
-  border-radius: 999px;
-  background: var(--jar-card);
-  font: inherit;
-  color: var(--jar-ink);
-  cursor: pointer;
-  transition:
-    background 0.2s ease,
-    color 0.2s ease;
 }
 
-.jar-here:hover,
-.jar-here:focus-visible,
+/* open is a state, and it reads the same way hovering does */
 .jar-here[aria-expanded="true"] {
+  color: var(--jar-ink);
   background: var(--jar-card-hover);
 }
 
@@ -1253,6 +1260,15 @@
 
 .jar-settings-rename {
   margin-bottom: 14px;
+}
+
+/* THE SAME PANEL, HUNG FROM THE OTHER PILL. Left is where you are, right is
+   who you are — the two permanent things at the top of the screen — so their
+   panels are the same object anchored to the control that opened it, rather
+   than two designs that happen to look alike. */
+.jar-settings--right {
+  left: auto;
+  right: 20px;
 }
 
 /* ---------- time dial: a soft neutral rail, no coloured glow ---------- */

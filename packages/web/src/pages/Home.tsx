@@ -11625,6 +11625,13 @@ function WorldExperience(): JSX.Element {
    * what it is, a group's is the real one.
    */
   const [settingsFor, setSettingsFor] = useState<string | null>(null);
+  /**
+   * The account drop, top right — the mirror of the space settings top left.
+   * They are mutually exclusive: opening one closes the other, because two
+   * panels hanging off the same bar is a menu bar, which this world does not
+   * have.
+   */
+  const [accountOpen, setAccountOpen] = useState(false);
   /** The rename box, while it is open: null when nobody is renaming. */
   const [renaming, setRenaming] = useState<{ id: string; text: string; busy: boolean } | null>(
     null,
@@ -13304,7 +13311,7 @@ function WorldExperience(): JSX.Element {
                closing it are all facts about the space you are standing in. */
             <button
               type="button"
-              className="jar-here jar-label"
+              className="jar-here jar-back jar-label"
               aria-expanded={settingsFor === wallKey(atWall)}
               onClick={() =>
                 setSettingsFor(settingsFor === wallKey(atWall) ? null : wallKey(atWall))
@@ -13323,9 +13330,17 @@ function WorldExperience(): JSX.Element {
             the same slot the moment the room's name needed somewhere to live,
             and putting them at opposite ends means neither can ever hide the
             other — which is exactly the bug the ternary here used to cause. */}
-        <Link className="jar-account jar-back jar-label" to="/profile">
+        <button
+          type="button"
+          className="jar-account jar-back jar-label"
+          aria-expanded={accountOpen}
+          onClick={() => {
+            setAccountOpen((v) => !v);
+            setSettingsFor(null);
+          }}
+        >
           Your account
-        </Link>
+        </button>
 
         {/* WHAT YOU ARE LOOKING AT, WHEN IT IS NOT YOURS. It lives in the
             fixed chrome rather than on a wall because it is a fact about the
@@ -13694,6 +13709,58 @@ function WorldExperience(): JSX.Element {
           confirmations. The world's register is for material — memories,
           statements, the poster — and administering a room is not material,
           it is paperwork. Paperwork gets to look like paperwork. */}
+      {/* THE ACCOUNT, DROPPED. The mirror of the space settings on the left,
+          and deliberately the same object: same panel, same flat register,
+          anchored to the pill that opened it.
+
+          What is IN it is only what belongs to the account rather than to a
+          space — who you are signed in as, the way to the screen that can
+          change it, and the way out. It does not reimplement the account
+          screen: renaming a profile, language, sessions and deletion need
+          focus traps and text that reflows at 200%, and that is what
+          `/profile` is for. This is the door and the label on it. */}
+      {accountOpen && phase === "ready" ? (
+        <div
+          className="jar-settings jar-settings--right"
+          data-jar-chrome="1"
+          role="dialog"
+          aria-label="Your account"
+        >
+          <div className="jar-settings-head">
+            <span className="jar-label">Signed in</span>
+            <button type="button" className="jar-settings-x" onClick={() => setAccountOpen(false)}>
+              close
+            </button>
+          </div>
+
+          <p className="jar-settings-name">{auth?.profile?.name ?? "You"}</p>
+          {auth?.account?.email ? (
+            <p className="jar-settings-note">{auth.account.email}</p>
+          ) : null}
+
+          <p className="jar-neb-ask">
+            <Link className="jar-settings-verb" to="/profile" onClick={() => setAccountOpen(false)}>
+              open your account
+            </Link>
+          </p>
+
+          {/* SIGNING OUT IS NOT DESTRUCTIVE, so it does not ask twice — nothing
+              is lost and signing back in restores everything. It is last
+              because it is the one thing here that ends the session. */}
+          <p className="jar-neb-ask jar-neb-ask--after">
+            <button
+              type="button"
+              onClick={() => {
+                setAccountOpen(false);
+                void auth?.logout();
+              }}
+            >
+              sign out
+            </button>
+          </p>
+        </div>
+      ) : null}
+
       {settingsFor === wallKey(atWall) && phase === "ready" ? (
         <div className="jar-settings" data-jar-chrome="1" role="dialog" aria-label="Space settings">
           <div className="jar-settings-head">
