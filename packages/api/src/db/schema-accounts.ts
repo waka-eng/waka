@@ -33,6 +33,14 @@ export const accounts = pgTable(
     /** bcrypt hash. Nullable so OAuth-only accounts are valid. */
     passwordHash: text("password_hash"),
     /**
+     * When the owner proved this address, and null until they do.
+     *
+     * Null is the honest default for every account that existed before
+     * verification did: they signed up when there was nothing to prove, so
+     * they have genuinely not proven it.
+     */
+    emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+    /**
      * Google OIDC "sub" claim — the immutable subject identifier. Google's
      * docs are explicit that email and numeric id may change but sub never
      * does, so it is the only safe long-lived key. Nullable for

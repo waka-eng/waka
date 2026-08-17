@@ -47,6 +47,7 @@ import {
   normalizePublicHandle,
   validatePublicHandle,
 } from "../lib/public-handles.js";
+import { issueVerification } from "../lib/email-verification.js";
 import { createSessionRow, describeUserAgent, revokeSessionByToken } from "../lib/session.js";
 import { cliAuthRoutes } from "./auth-cli.js";
 import { googleAuthRoutes, handleGoogleCallback } from "./auth-google.js";
@@ -346,6 +347,21 @@ authRoutes.post("/signup", async (c) => {
       );
     }
     throw err;
+  }
+
+  // 4b. Ask them to prove the address. Nothing until now ever did, which is
+  //     how someone could hold an account on an email they did not own — see
+  //     lib/email-verification.ts. A send failure must not undo a signup that
+  //     already succeeded, so it is caught: the account exists, the person is
+  //     signed in, and they can ask for the link again.
+  try {
+    await issueVerification(getDb(), {
+      accountId: created.account.id,
+      email: created.account.email,
+      baseUrl: process.env.PUBLIC_WEB_URL ?? "http://localhost:5173",
+    });
+  } catch (err) {
+    console.error("[signup] could not issue an email verification link", err);
   }
 
   // 5. Mint a session bound to the human profile. Both cookie and body carry

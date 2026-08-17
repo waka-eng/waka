@@ -43,6 +43,13 @@
       "when": 1787000000000,
       "tag": "0005_promotion_not_residence",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787100000000,
+      "tag": "0006_prove_the_address",
+      "breakpoints": true
     }
   ]
 }

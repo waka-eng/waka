@@ -35,6 +35,7 @@ import { z } from "zod";
 
 import {
   backgroundJobs,
+  accounts,
   groupMembers,
   inspirations,
   groupProposalKindValues,
@@ -491,6 +492,24 @@ export async function renameGroup(
 }
 
 /** Remove someone else. Returns false when they were not in the group. */
+/**
+ * Whether the account behind this profile has proven its email address.
+ *
+ * A named, injectable loader rather than an inline query, which is the
+ * convention every other read in this module follows — and the reason those
+ * reads have tests. An account row that has vanished answers false: refusing
+ * to let a profile with no account join a group is the safe direction.
+ */
+export async function accountHasProvenEmail(db: WakaDb, profileId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ emailVerifiedAt: accounts.emailVerifiedAt })
+    .from(accounts)
+    .innerJoin(profiles, eq(profiles.accountId, accounts.id))
+    .where(eq(profiles.id, profileId))
+    .limit(1);
+  return row?.emailVerifiedAt != null;
+}
+
 export async function removeGroupMember(
   db: WakaDb,
   input: { groupId: string; memberProfileId: string },
@@ -1273,6 +1292,7 @@ export interface GroupsRouteDependencies {
   listGroups?: typeof listGroupsForProfile;
   createGroup?: typeof createGroupForProfile;
   joinGroup?: typeof joinGroupByCode;
+  hasProvenEmail?: typeof accountHasProvenEmail;
   leaveGroupFn?: typeof leaveGroup;
   deleteGroupFn?: typeof deleteGroup;
   renameGroupFn?: typeof renameGroup;
@@ -1295,6 +1315,7 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
   const listGroups = deps.listGroups ?? listGroupsForProfile;
   const createGroup = deps.createGroup ?? createGroupForProfile;
   const joinGroup = deps.joinGroup ?? joinGroupByCode;
+  const hasProvenEmail = deps.hasProvenEmail ?? accountHasProvenEmail;
   const leaveGroupFn = deps.leaveGroupFn ?? leaveGroup;
   const deleteGroupFn = deps.deleteGroupFn ?? deleteGroup;
   const renameGroupFn = deps.renameGroupFn ?? renameGroup;
@@ -1383,6 +1404,30 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
       );
     }
     const session = c.get("session");
+    /**
+     * A GROUP IS WHERE YOUR MEMORIES REACH OTHER PEOPLE.
+     *
+     * Everything else an unverified account does stays inside it: keeping an
+     * inspiration, forming a signal, reading its own top of mind. Joining is
+     * the first act that discloses — your public memories become part of a
+     * group's ground and your name joins its roll — and the address on the
+     * account has never been proven, so nobody knows who is being let in.
+     *
+     * This is the gate that makes verification worth having before a mail
+     * provider exists. It is also narrow on purpose: an unverified person
+     * loses nothing they could have done alone.
+     */
+    const proven = await hasProvenEmail(getDatabase(), session.profile.id);
+    if (!proven) {
+      return c.json(
+        {
+          error:
+            "Confirm your email address before joining a room — we sent you a link when you signed up.",
+          code: "email_not_verified",
+        },
+        403,
+      );
+    }
     const result = await joinGroup(getDatabase(), {
       profileId: session.profile.id,
       joinCode: parsed.data.joinCode,
