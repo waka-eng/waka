@@ -12,6 +12,38 @@
  * the world, and human words on screen. These are the human words.
  */
 import type { ApiGroupMember } from "./api";
+import { DAY_MS } from "./num";
+
+/**
+ * How long ago, ALWAYS as a relative phrase in words — "Today", "Yesterday",
+ * "Last week", "Eighty-seven days ago". It is paired with the absolute date,
+ * so it must never fall back to naming the date itself or the panel's meta
+ * line prints the same string twice.
+ */
+export function agoWords(ms: number, T: number): string {
+  const days = Math.floor((T - ms) / DAY_MS);
+  const cap = (s: string) => `${s[0].toUpperCase()}${s.slice(1)}`;
+  if (days <= 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days < 7) return `${cap(numWords(days))} days ago`;
+  if (days < 14) return "Last week";
+  if (days < 100) return `${cap(numWords(days))} days ago`;
+  const months = Math.round(days / 30);
+  return months < 2 ? "A few months ago" : `${cap(numWords(months))} months ago`;
+}
+
+/** The month a scrub is standing in, spoken — "June twenty twenty-six". */
+export function monthTag(ms: number): string {
+  const d = new Date(ms);
+  return `${d.toLocaleDateString("en-US", { month: "long" })} ${yearWords(d.getFullYear())}`;
+}
+
+/** The collapsed links sentence, adapted for a group: what cited this save. */
+export function citedWords(titles: string[]): string {
+  if (titles.length === 1) return `Cited by “${titles[0]}”`;
+  if (titles.length === 2) return `Cited by “${titles[0]}” and “${titles[1]}”`;
+  return `Cited by “${titles[0]}”, “${titles[1]}” and ${numWords(titles.length - 2)} more`;
+}
 
 /**
  * The absolute date, spelled all the way out — "May eighteenth", and with the
