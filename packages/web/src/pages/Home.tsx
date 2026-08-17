@@ -104,6 +104,7 @@ import {
   type Palette,
 } from "../canvas/palette";
 import { BODY_TIERS, bodyPath } from "../character/raster";
+import { GroupPanel } from "../space-kinds/GroupPanel";
 import { SpaceSettings } from "../space/settings/SpaceSettings";
 import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
 import { agentBeing, OWNER_BEING, unit, type Being } from "../character/body";
@@ -10618,134 +10619,23 @@ function HomeExperience(): JSX.Element {
           put to them, and the way out — one surface, because they are all the
           same question: who is this with and what do we say together. */}
       {groupPanel && atWall.kind === "group" && atWall.id === groupPanel ? (
-        <div className="jar-roomform" data-jar-chrome="1">
-          <div className="jar-label" style={{ marginBottom: 14 }}>
-            {atWall.name}
-          </div>
-          <div className="jar-share">
-            {(members.get(groupPanel) ?? []).map((m) => (
-              <span key={m.profileId} className="jar-share-row">
-                {m.name}
-                {m.role === "owner" ? <span className="jar-share-hint">made it</span> : null}
-              </span>
-            ))}
-          </div>
-          <p className="jar-neb-ask" style={{ marginTop: 14 }}>
-            <button
-              type="button"
-              onClick={() => {
-                const g = groups.find((x) => x.id === groupPanel);
-                if (g) copyInvite(g);
-              }}
-            >
-              {copied === groupPanel ? "link copied" : "copy the invite link"}
-            </button>
-          </p>
-
-          {/* WHAT IS BEING ASKED OF THIS ROOM. Each one is somebody's sentence
-              waiting on the rest of you — read it, say yes or say no, and the
-              board moves when the room agrees rather than when you press. */}
-          {(openProposals.get(groupPanel) ?? []).map((p) => (
-            <div key={p.id} className="jar-proposal">
-              <p className="jar-proposal-body">{p.body}</p>
-              {/* THE WHOLE ROOM, NOT THE PART THAT AGREED.
-                  This listed only the people who had affirmed, which reads as
-                  a growing list with no end — you could not tell whether one
-                  more was needed or three. A proposal carries on a MAJORITY,
-                  so the useful thing is the room itself: everyone in it, those
-                  who agreed at full strength and those who have not yet dimmed
-                  beside them.
-
-                  Still no tally. The count is legible because the PEOPLE are,
-                  which is the only way this layout is allowed to say a number —
-                  and you can see at a glance whether the missing one is you. */}
-              <p className="jar-proposal-who jar-label">
-                {(members.get(groupPanel) ?? []).map((m, i) => {
-                  const said = p.affirmations.some((a) => a.profileId === m.profileId);
-                  return (
-                    <span
-                      key={m.profileId}
-                      className={said ? "jar-said" : "jar-not-said"}
-                      title={said ? "agreed" : "has not answered yet"}
-                    >
-                      {i > 0 ? " · " : ""}
-                      {givenName(m.name)}
-                    </span>
-                  );
-                })}
-              </p>
-              {p.viewerAffirmed ? (
-                <p className="jar-neb-ask">
-                  <span>you agreed</span>
-                </p>
-              ) : (
-                <p className="jar-neb-ask">
-                  <button type="button" onClick={() => answerProposal(groupPanel, p.id, true)}>
-                    yes, that is us
-                  </button>
-                  <span aria-hidden="true"> · </span>
-                  <button type="button" onClick={() => answerProposal(groupPanel, p.id, false)}>
-                    not us
-                  </button>
-                </p>
-              )}
-            </div>
-          ))}
-
-          {/* PUT SOMETHING TO THEM. A room's board is proposed to and
-              affirmed, never edited — one member rewriting what a group
-              believes would be editing other people's minds. */}
-          {propose ? (
-            <div className="jar-reflect" style={{ marginTop: 14 }}>
-              <textarea
-                className="jar-reflect-box"
-                rows={3}
-                autoFocus
-                placeholder="What do you think this room believes?"
-                value={propose.text}
-                onChange={(e) => setPropose({ ...propose, text: e.target.value })}
-              />
-              <p className="jar-neb-ask">
-                <button type="button" disabled={propose.busy} onClick={() => sendProposal(groupPanel)}>
-                  {propose.busy ? "…" : "put it to them"}
-                </button>
-                <span aria-hidden="true"> · </span>
-                <button type="button" onClick={() => setPropose(null)}>
-                  not now
-                </button>
-              </p>
-            </div>
-          ) : (
-            <p className="jar-neb-ask">
-              <button type="button" onClick={() => setPropose({ text: "", busy: false })}>
-                put something to this group
-              </button>
-            </p>
-          )}
-
-          <p className="jar-neb-ask jar-neb-ask--after">
-            {leaving === groupPanel ? (
-              <>
-                <button type="button" onClick={() => leaveThisGroup(groupPanel)}>
-                  leave — your statements come down
-                </button>
-                <span aria-hidden="true"> · </span>
-                <button type="button" onClick={() => setLeaving(null)}>
-                  stay
-                </button>
-              </>
-            ) : (
-              <button type="button" onClick={() => setLeaving(groupPanel)}>
-                leave this group
-              </button>
-            )}
-          </p>
-          <p className="jar-neb-ask" style={{ marginTop: 10 }}>
-            <button type="button" onClick={() => setGroupPanel(null)}>
-              close
-            </button>
-          </p>
-        </div>
+        <GroupPanel
+          groupId={groupPanel}
+          groups={groups}
+          members={members}
+          space={atWall}
+          openProposals={openProposals}
+          propose={propose}
+          setPropose={setPropose}
+          sendProposal={sendProposal}
+          answerProposal={answerProposal}
+          copied={copied}
+          copyInvite={copyInvite}
+          leaving={leaving}
+          setLeaving={setLeaving}
+          leaveThisGroup={leaveThisGroup}
+          onClose={() => setGroupPanel(null)}
+        />
       ) : null}
 
       {/* THIS SPACE'S SETTINGS.
