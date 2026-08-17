@@ -134,8 +134,9 @@ import {
   loadTopOfMind,
   loadSignal,
   loadSignals,
+  toInspiration,
   type WorldInspiration,
-  type WorldCaptureDetail,
+  type WorldInspirationDetail,
   type WorldEntry,
   type WorldEvidence,
   type WorldSignal,
@@ -4190,7 +4191,7 @@ interface PanelSpot {
  */
 interface PanelData {
   id: string;
-  detail: WorldCaptureDetail | null;
+  detail: WorldInspirationDetail | null;
   partial: boolean;
 }
 
@@ -4657,8 +4658,8 @@ function WorldExperience(): JSX.Element {
    */
   /** Read by the loop: a panel is occluding part of the field right now. */
   const panelOpenRef = useRef(false);
-  const detailsRef = useRef<Map<string, WorldCaptureDetail>>(new Map());
-  const detailPendingRef = useRef<Map<string, Promise<WorldCaptureDetail | null>>>(new Map());
+  const detailsRef = useRef<Map<string, WorldInspirationDetail>>(new Map());
+  const detailPendingRef = useRef<Map<string, Promise<WorldInspirationDetail | null>>>(new Map());
 
   /* ---- rooms (v8): session caches that survive the sim effect's re-runs ---- */
   const auth = useOptionalAuth();
@@ -5140,7 +5141,7 @@ function WorldExperience(): JSX.Element {
    * immediately when it is already in hand — which, thanks to the background
    * sweep below, is the common case by the time anything is tapped.
    */
-  const loadDetail = useCallback((id: string): Promise<WorldCaptureDetail | null> => {
+  const loadDetail = useCallback((id: string): Promise<WorldInspirationDetail | null> => {
     const have = detailsRef.current.get(id);
     if (have) return Promise.resolve(have);
     const inFlight = detailPendingRef.current.get(id);
@@ -10693,7 +10694,7 @@ function WorldExperience(): JSX.Element {
        place until the new content is complete */
     setPanelOpen(false);
     let done = false;
-    const show = (detail: WorldCaptureDetail | null) => {
+    const show = (detail: WorldInspirationDetail | null) => {
       if (done) return;
       done = true;
       window.clearTimeout(timer);
@@ -11278,6 +11279,34 @@ function WorldExperience(): JSX.Element {
         seed.sigId = made.id;
         setKeepPublic(false);
         simApiRef.current?.identify(seed.id, made.id);
+        /* AND IT JOINS THE ARCHIVE, NOT ONLY THE GROUND.
+           The orb was born on the canvas and the row was written on the
+           server, and `captures` — the list every other part of the page
+           reads — was told about neither. So headquarters kept computing
+           `empty` as `topOfMind === null && captures.length === 0` and kept
+           drawing the three-slot first-run scaffold, including the row
+           labelled "everything you keep" with an empty circle beside it,
+           while the thing just kept glowed underneath it.
+           `forgetIt` and `togglePublic` already keep this list honest on
+           their own success; keeping does now too. */
+        setCaptures((prev) =>
+          prev
+            ? [
+                ...prev,
+                toInspiration({
+                  id: made.id,
+                  textPreview: made.text,
+                  kind: made.kind,
+                  source: made.source,
+                  createdAt: made.createdAt,
+                  updatedAt: made.updatedAt,
+                  visibility: made.visibility,
+                  attachmentSummary: [],
+                  reflectionCount: 0,
+                }),
+              ]
+            : prev,
+        );
         /* each link becomes an attachment on the memory just kept, so the
            server can read the page and the extraction can use it */
         for (const url of links)
@@ -11292,7 +11321,18 @@ function WorldExperience(): JSX.Element {
         setMouthOpen(true);
         setMouthNote("That didn’t keep. The words are still here.");
       });
-  }, [draft]);
+    /* `keepPublic` IS A DEPENDENCY, and leaving it out silently discarded the
+       one privacy decision a person makes by hand. This callback reads
+       `keepPublic` when it builds the request, but the list said `[draft]`
+       only — so pressing "kept to yourself" until it read "going to your
+       rooms" changed the state and the label while React went on handing back
+       the callback that had closed over `false`. The memory saved PRIVATE.
+       It came out right only if the draft happened to change after the toggle,
+       which is to say: by luck.
+       It fails closed, so nothing was ever published by accident — but a
+       person who asked for something to reach their rooms was told it had and
+       it had not, which is the same lie in the safer direction. */
+  }, [draft, keepPublic]);
 
   const onMouthKey = useCallback(
     (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
