@@ -1597,6 +1597,7 @@ export interface FieldAudit {
   col: number;
   travelling: boolean;
   /** the columns travel is allowed to reach, and the axis the loop can see */
+  lastGo: string;
   colLo: number;
   colHi: number;
   wallCount: number;
@@ -1919,6 +1920,35 @@ function WorldExperience(): JSX.Element {
   const [failedGroups, setFailedGroups] = useState<ReadonlySet<string>>(() => new Set());
   /** Which wall the camera is standing on. Discrete, pushed from the loop. */
   const [atWall, setAtWall] = useState<Space>({ kind: "self", id: "", name: "Waka", col: 0 });
+  /**
+   * WHERE YOU ARE STANDING, KEPT OUTSIDE THE LOOP.
+   *
+   * The simulation is rebuilt whenever its inputs change — and one of those,
+   * `groupFieldTick`, fires exactly when a group's memories arrive. So the
+   * data you travelled to fetch was itself what cancelled the journey: the
+   * effect tore down mid-glide and the new one started at `col = 0`, walking
+   * you home. First visits to a group were the only ones affected, because a
+   * second visit is served from cache and ticks nothing, which is why this
+   * read as "some rooms never load" rather than as a travel bug.
+   *
+   * A ref survives the rebuild, so the new loop starts where the old one was.
+   */
+  const atWallRef = useRef<Space>(atWall);
+  atWallRef.current = atWall;
+  /**
+   * WHERE YOU WERE HEADING, IF THE REBUILD CAUGHT YOU MID-STRIDE.
+   *
+   * `atWallRef` only updates on ARRIVAL, so preserving it alone does not help
+   * a glide that was cancelled before it landed — which is precisely the case,
+   * since the fetch that causes the rebuild is the one travel itself started.
+   * This is set the moment travel is committed and cleared when it lands, so a
+   * loop rebuilt in between resumes at the destination.
+   *
+   * The glide is lost when that happens; arriving is not. Losing the animation
+   * to an interruption is a cost worth paying, being walked back to your own
+   * wall by the data you asked for is not.
+   */
+  const headingRef = useRef<number | null>(null);
   /** The camera is over a wall that has no dial: the dial fades, as in the sky. */
   const [dialAway, setDialAway] = useState(false);
   /** Drafts assembled here, in this session. They live nowhere else. */
@@ -2024,6 +2054,8 @@ function WorldExperience(): JSX.Element {
   const ballsRef = useRef<{ list: Ball[]; byId: Map<string, Ball> } | null>(null);
   const paletteRef = useRef<Palette | null>(null);
   const simApiRef = useRef<SimApi | null>(null);
+  /* why the last goToWall did or did not move — dev diagnosis only */
+  const lastGoRef = useRef<string>("never called");
   /**
    * Every signal's full detail, fetched in the background so that a tap has
    * nothing to wait for. The panel must appear ONCE AND WHOLE, so the only
@@ -2982,10 +3014,18 @@ function WorldExperience(): JSX.Element {
      for why counting it beats looking at it. Dev-gated with the page itself. */
   useEffect(() => {
     if (!showsDebug()) return undefined;
-    const w = window as unknown as { wakaField?: () => FieldAudit | null };
+    const w = window as unknown as {
+      wakaField?: () => FieldAudit | null;
+      wakaSim?: () => SimApi | null;
+    };
     w.wakaField = () => simApiRef.current?.audit() ?? null;
+    /* The whole control surface, for a console or a test that needs to drive
+       the world without a pointer in the way. Bisecting "the button did not
+       work" from "the command did not work" is otherwise guesswork. */
+    w.wakaSim = () => simApiRef.current;
     return () => {
       delete w.wakaField;
+      delete w.wakaSim;
     };
   }, []);
 
@@ -3129,7 +3169,9 @@ function WorldExperience(): JSX.Element {
        between. The COMPANION leads every transition — it sets off first and
        the world eases after it, which is how the page explains where the
        rooms are. */
-    let col = 0;
+    /* not zero: the loop resumes where the last one was, or was going */
+    const resumedAt = headingRef.current;
+    let col = resumedAt ?? atWallRef.current.col;
     let camX = 0;
     let camXTarget = 0;
     let camXBack = false; /* easing home after an uncommitted swipe */
@@ -3918,6 +3960,7 @@ function WorldExperience(): JSX.Element {
       unwindAt = 0; /* the unwind branch turns it back front, the short way */
       wheelXUntil = performance.now() + 120;
       pushArrivedRef.current(curWall());
+      headingRef.current = null; /* landed; there is nowhere still to get to */
       /* YOU ARRIVE IN YOUR OWN GROUND, ALWAYS.
          Standing in someone else's ground is a thing you did on THAT wall and
          it does not follow you to the next one. This is reset here, at the
@@ -7472,6 +7515,14 @@ function WorldExperience(): JSX.Element {
     if (hqInnerRef.current) ro.observe(hqInnerRef.current);
 
     measure();
+    /* `measure` is the first moment `vw` is real, so the horizontal camera can
+       only be placed here — before it, `col * vw` is a column times one pixel. */
+    camX = col * vw;
+    camXTarget = camX;
+    /* Resumed mid-journey: nobody ran the arrival, so run it now — the wall
+       needs its ground solved, poured and woken exactly as a glide would. */
+    if (resumedAt !== null) arriveColumn();
+    measure();
     if (reduced) settleInstantly();
     else primePour();
 
@@ -7849,9 +7900,19 @@ function WorldExperience(): JSX.Element {
        */
       goToWall: (target: number) => {
         const go = () => {
-          if (col === target) return;
+          lastGoRef.current = `enter col=${col} target=${target}`;
+          if (col === target) {
+            lastGoRef.current = `refused: already at col ${col}`;
+            return;
+          }
           const dest = clamp(target, colLo(), colHi());
-          if (dest === col) return;
+          if (dest === col) {
+            lastGoRef.current = `refused: clamp(${target},${colLo()},${colHi()}) = ${dest} = col`;
+            return;
+          }
+          lastGoRef.current = `travelling ${col} -> ${dest}`;
+          /* committed: a rebuild from here on resumes at the destination */
+          headingRef.current = dest;
           const dir: 1 | -1 = dest > col ? 1 : -1;
           if (selectedIdRef.current) release();
           /* every wall the glide passes is warmed, not just the destination:
@@ -8012,6 +8073,7 @@ function WorldExperience(): JSX.Element {
           ground,
           col,
           travelling: travelActive,
+          lastGo: lastGoRef.current,
           colLo: colLo(),
           colHi: colHi(),
           wallCount: wallsRef.current.length,

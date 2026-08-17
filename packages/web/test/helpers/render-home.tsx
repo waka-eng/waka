@@ -149,6 +149,30 @@ export interface MountedWorld {
  * when `step()` says so, which also makes "let the travel finish" an exact
  * statement rather than a sleep long enough to usually work.
  */
+/**
+ * A WORLD THAT IS THE SAME WORLD TWICE.
+ *
+ * Ball construction draws its drift amplitude and phase from `Math.random`, so
+ * every run breathes differently and an orb near the band's edge is inside it
+ * on one run and a pixel outside on the next. That produced a test which
+ * passed alone and failed in the suite — the worst possible net, because a
+ * failure nobody trusts gets re-run rather than read.
+ *
+ * Seeded here rather than in the product: the randomness is wanted in a real
+ * world, where it is what stops forty orbs pulsing in unison. It is only the
+ * test that needs the same world every time.
+ */
+function installRandom(seed = 0x2f6e2b1) {
+  let state = seed >>> 0;
+  Math.random = () => {
+    /* xorshift32 — small, fast, and identical on every machine */
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    return ((state >>> 0) % 1_000_000) / 1_000_000;
+  };
+}
+
 function installClock() {
   let now = 0;
   const frames = new Map<number, FrameRequestCallback>();
@@ -182,6 +206,7 @@ export async function mountWorld(facts: WorldFacts): Promise<MountedWorld> {
   const { default: HomePage } = await import("../../src/pages/Home");
   const { AuthProvider } = await import("../../src/lib/auth-context");
 
+  installRandom();
   const step = installClock();
 
   const container = document.createElement("div");

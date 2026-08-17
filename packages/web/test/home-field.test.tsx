@@ -148,13 +148,13 @@ describe("the ground under a wall", () => {
    * 9 present. Against the commit before the fix this case fails and the two
    * either side of it pass, which is the point — the failure is specific.
    */
-  it.todo("is whole after travelling to another wall", async () => {
+  it("is whole after travelling to another wall", async () => {
     await world.travelTo(/four of us/i);
     await world.toField();
     expectGroundIsWhole("after travelling");
   });
 
-  it.todo("is whole again after travelling back", async () => {
+  it("is whole again after travelling back", async () => {
     await world.travelTo(/four of us/i);
     await world.toField();
     await world.travelTo(/waka|just me/i);
@@ -163,33 +163,8 @@ describe("the ground under a wall", () => {
   });
 });
 
-/**
- * UNFINISHED, AND SAID SO RATHER THAN SKIPPED QUIETLY.
- *
- * Everything below needs the camera to arrive on another wall, and the harness
- * cannot yet make travel happen. What has been ruled out, so the next person
- * does not repeat it:
- *
- *   - the wall IS in the axis (the failure message prints the list)
- *   - the travel bounds are right: colLo -2, colHi 1, standing on col 0
- *   - React clicks DO fire in this harness — clicking the space name opens the
- *     settings panel, so event delegation is working
- *   - nothing throws: `goToWall` warms each wall it passes, and a rejected
- *     fetch there was the obvious suspect, but no error reaches the window
- *
- * So `goToWall` runs and returns early, with `travelActive` never set. The two
- * early returns are `col === target` and `dest === col` after clamping, and
- * neither should hold. The remaining suspects are the reduced-motion branch
- * (which would take the instant path and move `col`, so probably not) and the
- * stepped clock interacting with the glide.
- *
- * These are `todo` rather than deleted because the gap is the point — travel
- * is exactly where the original bug lived, so a suite that quietly omitted it
- * would repeat the mistake this file exists to end. `travelTo` asserts
- * arrival, so the day travel works these turn real rather than turning green.
- */
 describe("whose ground you are standing in", () => {
-  it.todo("starts as your own, and holds only your memories", async () => {
+  it("starts as your own, and holds only your memories", async () => {
     await world.travelTo(/four of us/i);
     await world.toField();
     const a = world.audit();
@@ -205,7 +180,7 @@ describe("whose ground you are standing in", () => {
    * different label over the same memories — which is what happened the first
    * time this was built, and it read as working.
    */
-  it.todo("changes the memories, not just the label, when you switch", async () => {
+  it("changes the memories, not just the label, when you switch", async () => {
     await world.travelTo(/four of us/i);
     await world.toField();
     const mine = world.audit().present;
@@ -219,7 +194,7 @@ describe("whose ground you are standing in", () => {
     expectGroundIsWhole("standing in Hana's ground");
   });
 
-  it.todo("comes back to your own ground when you switch back", async () => {
+  it("comes back to your own ground when you switch back", async () => {
     await world.travelTo(/four of us/i);
     await world.toField();
     await world.standIn(/hana/i);
