@@ -193,9 +193,16 @@ describe("bindableProfiles", () => {
 
   /**
    * The other half of the same rule: a human session is the account's admin,
-   * so narrowing must not catch it. Without this, tightening the filter to
-   * "own profile only" would pass — and quietly remove the agent profile
-   * from the picker the consent page exists to offer.
+   * so narrowing must not catch it.
+   *
+   * This does not catch a bug the route tests would miss — tightening the
+   * filter to "own profile only" already turns two of them red. What it does
+   * is pin the rule AT THE HELPER, where it is stated, rather than incidentally
+   * through a rendered page two layers up. That distinction earned its place
+   * here: the gate added in this commit rejects an agent session before the
+   * filter is ever reached, so route-level tests can no longer see the filter
+   * at all. A defence nothing fails for is a defence that will be deleted by
+   * someone who cannot tell it is load-bearing.
    */
   it("offers a human session every profile the account owns", async () => {
     mockState.db = makeDb([[HUMAN_ROW, AGENT_ROW]]);
