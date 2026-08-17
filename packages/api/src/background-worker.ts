@@ -36,7 +36,7 @@ function parseCronLimit(raw: string | undefined): number {
 
 export async function handler() {
   const limit = parseCronLimit(process.env.WAKA_BACKGROUND_JOB_CRON_LIMIT);
-  const total = { claimed: 0, succeeded: 0, retried: 0, failed: 0 };
+  const total = { claimed: 0, succeeded: 0, retried: 0, failed: 0, deferred: 0 };
   let passes = 0;
 
   while (passes < MAX_DRAIN_PASSES) {
@@ -46,6 +46,11 @@ export async function handler() {
     total.succeeded += result.succeeded;
     total.retried += result.retried;
     total.failed += result.failed;
+    // Work pushed out because its account had spent its model budget. Carried
+    // into the summary because an invocation that claimed nothing is otherwise
+    // indistinguishable from an idle one — "quiet" and "one account is at its
+    // cap and everyone else's queue is empty" are very different mornings.
+    total.deferred += result.deferred;
 
     // Nothing was due. Work scheduled for a future backoff is deliberately
     // left for the next wake-up rather than slept on: holding the invocation

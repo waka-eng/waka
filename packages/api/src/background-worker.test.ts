@@ -9,6 +9,7 @@ vi.mock("./lib/queue.js", () => ({
     succeeded: 0,
     retried: 0,
     failed: 0,
+    deferred: 0,
   })),
 }));
 
