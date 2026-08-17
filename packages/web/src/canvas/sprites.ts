@@ -464,3 +464,19 @@ export function rasterBloom(
  * turning form (the seam, the shading, the eyes) is clipped to this, so no
  * feature ever floats outside the outline.
  */
+
+export function parseColor(input: string): [number, number, number] {
+  const s = input.trim();
+  if (s.startsWith("#")) {
+    const hex = s.slice(1);
+    const full = hex.length === 3 ? hex.split("").map((c) => c + c).join("") : hex;
+    const n = parseInt(full.slice(0, 6), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  const m = /rgba?\(([^)]+)\)/.exec(s);
+  if (m) {
+    const parts = m[1].split(",").map((p) => parseFloat(p));
+    return [parts[0] || 0, parts[1] || 0, parts[2] || 0];
+  }
+  return [128, 128, 128];
+}
