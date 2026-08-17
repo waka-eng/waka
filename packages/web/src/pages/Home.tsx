@@ -2574,14 +2574,34 @@ function HomeExperience(): JSX.Element {
        every attempt to make it recoverable added another failure. The real
        accessibility requirement is served by the platform preference, which
        every branch in this file already honours. */
-    let reduced = mq.matches;
-
-    let vw = 1;
-    let vh = 1;
-    let dpr = 1;
-    let layout = computeLayout(1, 1, DIAL_H);
-    /* the dial's real strip, read off the dial itself every measure */
-    let dialH = DIAL_H;
+    /**
+     * WHAT THE WORLD IS BEING DRAWN INTO, and what the display asked for.
+     *
+     * Eight facts that are only ever true together — `w` and `h` without the
+     * `layout` computed from them is a size nothing has been placed against —
+     * and the most widely read state in the loop. Grouping them is what lets a
+     * function say `(view)` in its signature and mean it; loose, every one of
+     * the eighty-three functions here could reach any of them and none of them
+     * declared which.
+     *
+     * `primed` and `motesPlaced` are here rather than with the pour: both are
+     * once-only flags set inside `measure()`, and what they remember is that
+     * the world has been SIZED once, not that anything has been staged.
+     */
+    const view = {
+      reduced: mq.matches,
+      w: 1,
+      h: 1,
+      dpr: 1,
+      layout: computeLayout(1, 1, DIAL_H),
+      /* the dial's real strip, read off the dial itself every measure */
+      dialH: DIAL_H,
+      /* first sizing has happened: before this, orbs start on their homes
+         rather than pouring, and a resize must not re-anchor a held camera */
+      primed: false,
+      /* the dust has been scattered once; it is ambient and never re-placed */
+      motesPlaced: false,
+    };
     let camY = 0;
     let camVel = 0;
     /* Where a programmatic move is headed. `camAiming` is the sentinel — the
@@ -2664,7 +2684,6 @@ function HomeExperience(): JSX.Element {
      * starts moving instead of the thing you aimed at lighting up.
      */
     const TAP_SLOP = 11;
-    let primed = false;
 
     /**
      * HOW ALIVE THE WORLD IS RIGHT NOW.
@@ -2710,7 +2729,7 @@ function HomeExperience(): JSX.Element {
     /* the eased body-turn toward whatever it is attending to */
     let attendHold = 0;
     const mechAt = (x: number): number => {
-      const here = x / Math.max(vw, 1);
+      const here = x / Math.max(view.w, 1);
       let best = 0;
       for (const w of wallsRef.current) {
         if (w.kind !== "agent") continue;
@@ -2725,10 +2744,21 @@ function HomeExperience(): JSX.Element {
       const q = 1 + mech * 7;
       return Math.round(v / q) * q;
     };
-    let raf = 0;
-    let running = false;
-    let prev = 0;
-    let lastActive = 0;
+    /**
+     * THE FRAME LOOP'S OWN STATE — whether it is turning, and since when.
+     *
+     * Separate from `view` because this is the only group nothing else may
+     * write: `wake()` starts it, the loop stops itself when the world has been
+     * still long enough, and a second writer would mean two rAFs running.
+     */
+    const clock = {
+      raf: 0,
+      running: false,
+      /** the previous frame's timestamp, so `dt` is a real elapsed time */
+      prev: 0,
+      /** when something last happened; the loop parks itself after a while */
+      lastActive: 0,
+    };
 
     let pointerDown = false;
     /**
@@ -2852,7 +2882,6 @@ function HomeExperience(): JSX.Element {
     const riseA = new Float32Array(4);
     const inspTop = new Float32Array(8);
     let freshToday = false;
-    let motesPlaced = false;
 
     /* Painter's order for the shadow+body pass: bottom-most orb first, so an
        orb's contact shadow lands ON whatever it is resting against and is
@@ -2874,17 +2903,17 @@ function HomeExperience(): JSX.Element {
     }
 
     function wake() {
-      lastActive = performance.now();
+      clock.lastActive = performance.now();
       /* ANY REAL EVENT WAKES THE WORLD, at once and to full amplitude. wake()
          is what every one of them already calls — a touch, the pour, a scrub,
          a relight, a travel, an adoption, a room arriving — so the layout's
          attention and the loop's attention are the same thing. */
-      stir.at = lastActive;
+      stir.at = clock.lastActive;
       stir.amp = 1;
-      if (!running) {
-        running = true;
-        prev = performance.now();
-        raf = requestAnimationFrame(tick);
+      if (!clock.running) {
+        clock.running = true;
+        clock.prev = performance.now();
+        clock.raf = requestAnimationFrame(tick);
       }
     }
 
@@ -2943,8 +2972,8 @@ function HomeExperience(): JSX.Element {
       const n = present.length;
       if (n === 0) return;
 
-      const spanL = layout.wallL;
-      const spanR = layout.wallR;
+      const spanL = view.layout.wallL;
+      const spanR = view.layout.wallR;
 
       /* THE BAND IS THE WHOLE SCREEN, LESS THE ONE PIECE OF CHROME ON IT.
          Standing in the field the camera sees layout [vh, 2vh]; the dial owns
@@ -2955,8 +2984,8 @@ function HomeExperience(): JSX.Element {
          (The old band started 18px below the boundary and stopped 132px above
          it — a fixed reserve that ate a tenth of a tall screen and a quarter
          of a short one, which is the bug.) */
-      const yTopEdge = vh + FIELD_EDGE;
-      const yBotEdge = layout.fieldBottom;
+      const yTopEdge = view.h + FIELD_EDGE;
+      const yBotEdge = view.layout.fieldBottom;
 
       /* FIT FIRST. Every orb is sized to the band it has to share before a
          single one of them is placed. */
@@ -3019,9 +3048,9 @@ function HomeExperience(): JSX.Element {
         for (let i = 0; i < rowN0; i++) rowSet.push(present[n - 1 - i]);
       }
       const rowN = rowSet.length;
-      const spanL = layout.wallL;
-      const spanR = layout.wallR;
-      const top = layout.fieldTop;
+      const spanL = view.layout.wallL;
+      const spanR = view.layout.wallR;
+      const top = view.layout.fieldTop;
       /* the peek is EXACT: the highest top edge in the row, drift included,
          lands on the line — so the promise is the same 96px at every height */
       let lift = Infinity;
@@ -3053,12 +3082,12 @@ function HomeExperience(): JSX.Element {
            nearer, through the same collision-aware scatter as everything else
            — which is what keeps them off each other. */
         const keep = charSize * 0.72 + b.r;
-        if (Math.abs(x - vw / 2) < keep) {
+        if (Math.abs(x - view.w / 2) < keep) {
           const leftLo = spanL + b.r;
-          const leftHi = vw / 2 - keep;
-          const rightLo = vw / 2 + keep;
+          const leftHi = view.w / 2 - keep;
+          const rightLo = view.w / 2 + keep;
           const rightHi = spanR - b.r;
-          const goLeft = x < vw / 2 ? leftHi > leftLo : rightHi <= rightLo;
+          const goLeft = x < view.w / 2 ? leftHi > leftLo : rightHi <= rightLo;
           x = goLeft
             ? scatterX(b, b.peekY, px, py, leftLo, Math.max(leftLo, leftHi))
             : scatterX(b, b.peekY, px, py, Math.min(rightLo, rightHi), rightHi);
@@ -3078,7 +3107,7 @@ function HomeExperience(): JSX.Element {
      * only because you moved it.
      */
     function peekLift(): number {
-      return clamp01(1 - camY / Math.max(layout.maxCam, 1));
+      return clamp01(1 - camY / Math.max(view.layout.maxCam, 1));
     }
 
     /**
@@ -3220,7 +3249,7 @@ function HomeExperience(): JSX.Element {
     };
     const colLo = () => wallsRef.current[0]?.col ?? 0;
     const colHi = () => wallsRef.current[wallsRef.current.length - 1]?.col ?? 0;
-    const minCamNow = () => (hasSky(curWall().kind) ? layout.minCam : 0);
+    const minCamNow = () => (hasSky(curWall().kind) ? view.layout.minCam : 0);
     /**
      * THE PLACES THE CAMERA MAY REST, in order, and the ONE definition of
      * them. The array used to be written out at each of the three sites that
@@ -3231,7 +3260,7 @@ function HomeExperience(): JSX.Element {
      */
     const restPoints = (): number[] => {
       const lo = minCamNow();
-      return lo < 0 ? [lo, 0, layout.maxCam] : [0, layout.maxCam];
+      return lo < 0 ? [lo, 0, view.layout.maxCam] : [0, view.layout.maxCam];
     };
 
     function findBall(id: string): Ball | undefined {
@@ -3401,9 +3430,9 @@ function HomeExperience(): JSX.Element {
            vestigial: nothing draws them. They are left rather than deleted
            because the wake path is load-bearing and this is not the pass to
            re-time it — but nothing in this block reaches the screen. */
-        res.greetUntil = performance.now() + (reduced ? 0 : 1500);
+        res.greetUntil = performance.now() + (view.reduced ? 0 : 1500);
       }
-      flare = Math.max(flare, reduced ? 0 : 0.35);
+      flare = Math.max(flare, view.reduced ? 0 : 0.35);
       wake();
     }
 
@@ -3442,7 +3471,7 @@ function HomeExperience(): JSX.Element {
          this is what makes them exist. Without it a travelled-to wall drew an
          empty ground however much was standing on it. */
       const here = presentBalls();
-      if (reduced) settleInstantly();
+      if (view.reduced) settleInstantly();
       else primePour(here);
       electPeek(here);
       tryWakeWall();
@@ -3471,7 +3500,7 @@ function HomeExperience(): JSX.Element {
     function canTravelHere(): boolean {
       if (camAiming) return false;
       const atHQ = Math.abs(camY) < 2;
-      const atSky = hasSky(curWall().kind) && Math.abs(camY - layout.minCam) < 2;
+      const atSky = hasSky(curWall().kind) && Math.abs(camY - view.layout.minCam) < 2;
       return atHQ || atSky;
     }
 
@@ -3499,11 +3528,11 @@ function HomeExperience(): JSX.Element {
         loadWallRef.current(wallAt(back));
         travelDest = back;
         travelDir = dir;
-        camXTarget = back * vw;
+        camXTarget = back * view.w;
         travelFromX = camX;
         travelAt = performance.now();
         charFrom = charOff;
-        charLead = dir * Math.min(vw * TRAVEL_LEAD_X, 190);
+        charLead = dir * Math.min(view.w * TRAVEL_LEAD_X, 190);
         yawTarget = dir * (TAU / 4);
         unwindAt = 0;
         awaitingWake = false;
@@ -3518,10 +3547,10 @@ function HomeExperience(): JSX.Element {
       awaitingWake = false;
       travelDest = dest;
       travelDir = dir;
-      camXTarget = dest * vw;
+      camXTarget = dest * view.w;
       camXBack = false;
       dragLeadOn = false; /* the travel choreography owns the lead now */
-      if (reduced) {
+      if (view.reduced) {
         col = dest;
         camX = camXTarget;
         charOff = 0;
@@ -3533,7 +3562,7 @@ function HomeExperience(): JSX.Element {
       travelMs = TRAVEL_MS;
       travelAt = performance.now();
       travelFromX = camX;
-      charLead = travelDir * Math.min(vw * TRAVEL_LEAD_X, 190);
+      charLead = travelDir * Math.min(view.w * TRAVEL_LEAD_X, 190);
       charFrom = charOff;
       travelYaw = true;
       yawTarget = travelDir * (TAU / 4);
@@ -3620,7 +3649,7 @@ function HomeExperience(): JSX.Element {
         /* stored relative to the wall it belongs to: a new agent arriving
            shifts every column, and a spot remembered in layout coordinates
            would come back on somebody else's wall */
-        layout[n.id] = { x: Math.round(n.x - n.col * vw), y: Math.round(n.y) };
+        layout[n.id] = { x: Math.round(n.x - n.col * view.w), y: Math.round(n.y) };
       }
       writeSkyLayout(layout);
     }
@@ -3823,10 +3852,10 @@ function HomeExperience(): JSX.Element {
      * the same three, so the cap and the pad can never disagree.
      */
     function orbFitX(n: Neb) {
-      return Math.max(24, (vw * SKY_PAD_X - SKY_EDGE - n.ampX) / (1 + FOCUS_POP));
+      return Math.max(24, (view.w * SKY_PAD_X - SKY_EDGE - n.ampX) / (1 + FOCUS_POP));
     }
     function orbFitY(n: Neb) {
-      return Math.max(24, (vh * SKY_PAD_Y - SKY_EDGE - n.ampY) / (1 + FOCUS_POP));
+      return Math.max(24, (view.h * SKY_PAD_Y - SKY_EDGE - n.ampY) / (1 + FOCUS_POP));
     }
 
     /**
@@ -3948,29 +3977,29 @@ function HomeExperience(): JSX.Element {
          below are a floor under a pathological viewport, not the normal path. */
       const padX = Math.min(
         Math.max(n.r * 0.5, n.orbRx * (1 + FOCUS_POP) + n.ampX) + SKY_EDGE,
-        vw * SKY_PAD_X,
+        view.w * SKY_PAD_X,
       );
       const padY = Math.min(
         Math.max(n.r * 0.5, n.orbRy * (1 + FOCUS_POP) + n.ampY) + SKY_EDGE,
-        vh * SKY_PAD_Y,
+        view.h * SKY_PAD_Y,
       );
       /* every sky is its own column wide, and no candidate ever wanders out
          of the wall it belongs to */
-      const off = n.col * vw;
-      n.homeX = clamp(n.homeX, off + padX, Math.max(off + padX, off + vw - padX));
+      const off = n.col * view.w;
+      n.homeX = clamp(n.homeX, off + padX, Math.max(off + padX, off + view.w - padX));
       /* the pads are capped at a fraction of the viewport, so this range is
          never empty however tall the words wrapped */
-      n.homeY = clamp(n.homeY, layout.minCam + padY + 28, -padY);
+      n.homeY = clamp(n.homeY, view.layout.minCam + padY + 28, -padY);
     }
 
     function layoutSky() {
-      const cy = layout.minCam + vh * 0.46;
-      const base = Math.min(vw, vh);
-      const ring = Math.min(vw * 0.3, vh * 0.27);
+      const cy = view.layout.minCam + view.h * 0.46;
+      const base = Math.min(view.w, view.h);
+      const ring = Math.min(view.w * 0.3, view.h * 0.27);
       /* each wall's sky is laid out in its own column, around its own centre */
       const rank = new Map<number, number>();
       for (const n of sky.nebs) {
-        const cx = n.col * vw + vw / 2;
+        const cx = n.col * view.w + view.w / 2;
         n.r = n.kind === "proposal" ? base * 0.21 : base * (n.kind === "draft" ? 0.19 : 0.15);
         /* the words first: the orbit and the keep-out both come off them */
         measureNeb(n);
@@ -4101,9 +4130,9 @@ function HomeExperience(): JSX.Element {
            sky this viewport actually has */
         const saved = savedSky[c.id];
         if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
-          const off = c.col * vw;
-          n.x = n.homeX = off + clamp(saved.x, 12, vw - 12);
-          n.y = n.homeY = clamp(saved.y, layout.minCam + 30, -20);
+          const off = c.col * view.w;
+          n.x = n.homeX = off + clamp(saved.x, 12, view.w - 12);
+          n.y = n.homeY = clamp(saved.y, view.layout.minCam + 30, -20);
           n.pinned = true;
         }
         next.push(n);
@@ -4208,7 +4237,7 @@ function HomeExperience(): JSX.Element {
         const ry = n.orbRy * k;
         const w = TAU / n.period;
         const count = n.sats.length;
-        const dur = reduced ? SAT_FADE_MS : n.focused ? EMERGE_MS : RETRACT_MS;
+        const dur = view.reduced ? SAT_FADE_MS : n.focused ? EMERGE_MS : RETRACT_MS;
         for (let i = 0; i < count; i++) {
           const s = n.sats[i];
           /* THE EMERGENCE. One after another, in evidence order, out from the
@@ -4216,29 +4245,29 @@ function HomeExperience(): JSX.Element {
              order, which is what makes the retraction read as the same
              movement run backwards rather than as a second effect. Reduced
              motion holds the ring at its places and fades it instead. */
-          const stagger = reduced
+          const stagger = view.reduced
             ? 0
             : n.focused
               ? i * EMERGE_STAGGER
               : (count - 1 - i) * RETRACT_STAGGER;
           const u = clamp01((now - n.focusAt - stagger) / dur);
-          s.em = lerp(s.em0, n.focused ? 1 : 0, reduced ? u : easeOut(u));
+          s.em = lerp(s.em0, n.focused ? 1 : 0, view.reduced ? u : easeOut(u));
           /* under reduced motion it never travels: the fade is the whole event */
-          const out = reduced ? 1 : s.em;
+          const out = view.reduced ? 1 : s.em;
           if (s.held) {
             /* the memory being read holds still under its panel, exactly as a
                focused orb does — and its phase is re-based while it waits, so
                letting go carries it on from where it stopped rather than
                snapping to wherever it would have travelled to meanwhile */
-            s.ph = s.a - (reduced ? 0 : t * w);
+            s.ph = s.a - (view.reduced ? 0 : t * w);
           } else {
-            s.a = reduced ? s.ph : s.ph + t * w;
+            s.a = view.reduced ? s.ph : s.ph + t * w;
           }
           s.x = n.x + Math.cos(s.a) * rx * out;
           s.y = n.y + Math.sin(s.a) * ry * out;
           /* the near half of a shallow ellipse is the lower one */
           s.front = Math.sin(s.a);
-          s.dr = s.r * SAT_R * (reduced ? 1 : lerp(EMERGE_SCALE, 1, s.em));
+          s.dr = s.r * SAT_R * (view.reduced ? 1 : lerp(EMERGE_SCALE, 1, s.em));
         }
         /* AND THEIR DEPTH. Evidence order is not depth order: painting in it
            lets a satellite at the near bottom of the ellipse be covered by one
@@ -4346,7 +4375,7 @@ function HomeExperience(): JSX.Element {
             : sky.clusterMembers.has(n.id) && sky.hoverNeb !== n && !n.dragging
               ? 0.62
               : 1;
-        n.dimS = reduced
+        n.dimS = view.reduced
           ? wantS
           : Math.abs(n.dimS - wantS) < 0.01
             ? wantS
@@ -4356,13 +4385,13 @@ function HomeExperience(): JSX.Element {
            there is exactly one lit thing on screen and no second tier of
            highlight. */
         const wantN = sky.focusNeb !== null && sky.focusNeb !== n ? 1 : 0;
-        n.dimN = reduced
+        n.dimN = view.reduced
           ? wantN
           : Math.abs(n.dimN - wantN) < 0.01
             ? wantN
             : lerp(n.dimN, wantN, kd(EASE_LIGHT, dt));
         const fu = clamp01((now - n.focusAt) / FOCUS_MS);
-        n.focus = reduced
+        n.focus = view.reduced
           ? n.focused
             ? 1
             : 0
@@ -4374,7 +4403,7 @@ function HomeExperience(): JSX.Element {
            the one case where the ellipse would otherwise run its evidence
            through the cloud next door. */
         const wantNest = sky.clusterMembers.has(n.id) ? NEST_K : 1;
-        if (reduced) {
+        if (view.reduced) {
           n.nest = wantNest;
         } else if (n.nest !== wantNest) {
           const d = dt * (1000 / NEST_MS) * (1 - NEST_K);
@@ -4383,7 +4412,7 @@ function HomeExperience(): JSX.Element {
         }
         if (n.condenseAt > 0) {
           const u = clamp01((now - n.condenseAt) / CONDENSE_MS);
-          n.condense = reduced ? 0.06 : lerp(1, 0.06, u * u);
+          n.condense = view.reduced ? 0.06 : lerp(1, 0.06, u * u);
         }
         if (n.gone > 0 && n.gone < 1) n.gone = Math.min(1, n.gone + dt * 1.6);
         if (n.dragging) {
@@ -4411,9 +4440,9 @@ function HomeExperience(): JSX.Element {
           n.haloY = n.y;
           continue;
         }
-        const dx = reduced ? 0 : n.ampX * stir.amp * Math.sin(t * n.rateX + n.phX);
-        const dy = reduced ? 0 : n.ampY * stir.amp * Math.sin(t * n.rateY + n.phY);
-        const k = reduced ? 1 : kd(0.02, dt);
+        const dx = view.reduced ? 0 : n.ampX * stir.amp * Math.sin(t * n.rateX + n.phX);
+        const dy = view.reduced ? 0 : n.ampY * stir.amp * Math.sin(t * n.rateY + n.phY);
+        const k = view.reduced ? 1 : kd(0.02, dt);
         n.x = lerp(n.x, n.homeX + dx, k);
         n.y = lerp(n.y, n.homeY + dy, k);
         /* At rest the halo simply is where the cloud is — and it catches up
@@ -4428,8 +4457,8 @@ function HomeExperience(): JSX.Element {
            every released cloud for a second and a half. 1e-3 is τ≈145ms,
            slightly ahead of the body's own re-home at τ≈256ms, so the light
            arrives first and the cloud settles into it. */
-        n.haloX = reduced ? n.x : lerp(n.haloX, n.x, kd(1e-3, dt));
-        n.haloY = reduced ? n.y : lerp(n.haloY, n.y, kd(1e-3, dt));
+        n.haloX = view.reduced ? n.x : lerp(n.haloX, n.x, kd(1e-3, dt));
+        n.haloY = view.reduced ? n.y : lerp(n.haloY, n.y, kd(1e-3, dt));
       }
       /* They mingle, they never collide — and "collide" now includes the
          WORDS. A candidate's keep-out is whichever of its light and its
@@ -4481,7 +4510,7 @@ function HomeExperience(): JSX.Element {
         for (const s of n.sats) {
           const wantGlow = s.id === selId ? 1 : 0;
           const wantDim = selOn && s.id !== selId ? 1 : 0;
-          if (reduced) {
+          if (view.reduced) {
             s.glow = wantGlow;
             s.dim = wantDim;
           } else {
@@ -4526,19 +4555,19 @@ function HomeExperience(): JSX.Element {
 
     function measure() {
       const rect = root!.getBoundingClientRect();
-      vw = Math.max(rect.width, 1);
-      vh = Math.max(rect.height, 1);
+      view.w = Math.max(rect.width, 1);
+      view.h = Math.max(rect.height, 1);
       const nextDpr = Math.min(window.devicePixelRatio || 1, 2);
-      canvas!.width = Math.round(vw * nextDpr);
-      canvas!.height = Math.round(vh * nextDpr);
-      canvas!.style.width = `${vw}px`;
-      canvas!.style.height = `${vh}px`;
+      canvas!.width = Math.round(view.w * nextDpr);
+      canvas!.height = Math.round(view.h * nextDpr);
+      canvas!.style.width = `${view.w}px`;
+      canvas!.style.height = `${view.h}px`;
       /* DPR changed (zoom / monitor move): halo sprites are rastered in
          device pixels, so they re-raster here. */
-      if (nextDpr !== dpr) {
-        dpr = nextDpr;
+      if (nextDpr !== view.dpr) {
+        view.dpr = nextDpr;
         const pal = paletteRef.current;
-        if (pal && pal.dpr !== dpr) paletteRef.current = buildPalette(root!, dpr, ctx!);
+        if (pal && pal.dpr !== view.dpr) paletteRef.current = buildPalette(root!, view.dpr, ctx!);
       }
       /* THE CHROME STATES ITS OWN SIZE. Reading it beats guessing at it —
          the guess was 92 plus forty of air, which is a fifth of a short
@@ -4547,7 +4576,7 @@ function HomeExperience(): JSX.Element {
       /* The dial is a vertical rail against the right edge now, so it takes
          no height from the field at all — the bottom inset it used to claim
          belongs to the axis of walls. */
-      dialH = 0;
+      view.dialH = 0;
       /* WHICH SECTION THE CAMERA IS RESTING ON, read in the world that is
          about to be replaced. The rest points ARE ±vh, so a height change
          MOVES them — and the camera has to arrive on the same section it was
@@ -4559,8 +4588,8 @@ function HomeExperience(): JSX.Element {
          (Grow the viewport while standing in the sky and the camera sat at
          the old −vh — a legal position in the new range, so the rubber-band
          had nothing to say about it — and one ArrowDown went to the field.) */
-      const prevLo = layout.minCam;
-      const prevHi = layout.maxCam;
+      const prevLo = view.layout.minCam;
+      const prevHi = view.layout.maxCam;
       const wasRest = restPoints();
       let sec = 0;
       {
@@ -4568,11 +4597,11 @@ function HomeExperience(): JSX.Element {
         for (let i = 1; i < wasRest.length; i++)
           if (Math.abs(wasRest[i] - ref) < Math.abs(wasRest[sec] - ref)) sec = i;
       }
-      layout = computeLayout(vw, vh, dialH);
+      view.layout = computeLayout(view.w, view.h, view.dialH);
       /* Only when the rest points actually moved: this observer also fires
          for HQ's own content growing, and re-anchoring on that would yank a
          camera the reader is holding. */
-      if (primed && (layout.minCam !== prevLo || layout.maxCam !== prevHi)) {
+      if (view.primed && (view.layout.minCam !== prevLo || view.layout.maxCam !== prevHi)) {
         const nowRest = restPoints();
         const landing = nowRest[Math.min(sec, nowRest.length - 1)];
         if (camAiming) {
@@ -4613,9 +4642,9 @@ function HomeExperience(): JSX.Element {
          than at it. The strip is a CONSTANT (see MOUTH_H): a reserve measured
          off the mouth's live height would move the companion every time a
          line of typing wrapped, and the layout moves only when you move it. */
-      const seam = layout.fieldTop - MOUTH_H;
+      const seam = view.layout.fieldTop - MOUTH_H;
       const avail = seam - hqH - gap * 2;
-      charSize = clamp(vh * 0.14, 84, 150);
+      charSize = clamp(view.h * 0.14, 84, 150);
       /* The floor yields to the room before the room yields to the floor. The
          shrink must NOT be gated on `room > 0`: a section whose poster already
          fills it has negative room, which is exactly the case that most needs
@@ -4631,25 +4660,25 @@ function HomeExperience(): JSX.Element {
       const say = charSayRef.current;
       if (say) say.style.top = `${Math.round(charY + charSize * 0.62)}px`;
       /* the columns' DOM measures itself off these — one write per resize */
-      root!.style.setProperty("--jar-vw", `${Math.round(vw)}px`);
-      root!.style.setProperty("--jar-vh", `${Math.round(vh)}px`);
+      root!.style.setProperty("--jar-vw", `${Math.round(view.w)}px`);
+      root!.style.setProperty("--jar-vh", `${Math.round(view.h)}px`);
       /* the seam, so the mouth hangs off exactly the line the field's top
          edge peeks over — one number, measured, never duplicated in CSS */
-      root!.style.setProperty("--jar-seam", `${Math.round(layout.fieldTop)}px`);
+      root!.style.setProperty("--jar-seam", `${Math.round(view.layout.fieldTop)}px`);
 
       /* homes are assigned after the companion has its slot, so the peek row
          can be told to keep clear of it */
       assignHomes();
-      camXTarget = (travelActive ? travelDest : col) * vw;
-      if (!travelActive && !camXBack) camX = col * vw;
-      if (!primed) {
+      camXTarget = (travelActive ? travelDest : col) * view.w;
+      if (!travelActive && !camXBack) camX = col * view.w;
+      if (!view.primed) {
         /* first sizing: everything starts on its home, then pours or fades in */
         for (const b of list) {
           b.x = b.homeX;
           b.y = b.homeY;
         }
       }
-      primed = true;
+      view.primed = true;
       /* homes for the sky's inhabitants, in the viewport they now have */
       layoutSky();
       /* The volume is a real, world-tall gradient: the sky at the top is a
@@ -4657,17 +4686,17 @@ function HomeExperience(): JSX.Element {
          covers all three sections. */
       const atmos = atmosRef.current;
       if (atmos) {
-        atmos.style.top = `${Math.round(layout.minCam)}px`;
-        atmos.style.height = `${Math.round(layout.layoutH - layout.minCam)}px`;
+        atmos.style.top = `${Math.round(view.layout.minCam)}px`;
+        atmos.style.height = `${Math.round(view.layout.layoutH - view.layout.minCam)}px`;
       }
-      if (!motesPlaced) {
-        motesPlaced = true;
+      if (!view.motesPlaced) {
+        view.motesPlaced = true;
         for (let i = 0; i < MOTES; i++) {
-          moteX[i] = Math.random() * vw;
-          moteY[i] = Math.random() * vh;
+          moteX[i] = Math.random() * view.w;
+          moteY[i] = Math.random() * view.h;
         }
       }
-      camY = clamp(camY, minCamNow(), layout.maxCam);
+      camY = clamp(camY, minCamNow(), view.layout.maxCam);
       wake();
     }
 
@@ -4706,9 +4735,9 @@ function HomeExperience(): JSX.Element {
          The seeding was written, and then measured in the wrong unit, so it
          has never once been felt. */
       const durV = (3000 * dist) / Math.max(v0, 1);
-      const durD = 240 + 220 * (dist / Math.max(vh, 1));
+      const durD = 240 + 220 * (dist / Math.max(view.h, 1));
       camTarget = target;
-      camAimDur = reduced ? 1 : clamp(Math.min(durV, durD), 170, 460);
+      camAimDur = view.reduced ? 1 : clamp(Math.min(durV, durD), 170, 460);
       camAimFrom = camY;
       camAimT0 = performance.now();
       camAiming = true;
@@ -4853,8 +4882,8 @@ function HomeExperience(): JSX.Element {
 
           if (b.arrive < 1) b.arrive = Math.min(1, b.arrive + dt * (1000 / ARRIVE_MS));
           /* drift: independent slow sines per axis, frozen under reduced motion */
-          const dx = reduced ? 0 : b.ampX * stir.amp * Math.sin(t * b.rateX + b.phX);
-          const dy = reduced ? 0 : b.ampY * stir.amp * Math.sin(t * b.rateY + b.phY);
+          const dx = view.reduced ? 0 : b.ampX * stir.amp * Math.sin(t * b.rateX + b.phX);
+          const dy = view.reduced ? 0 : b.ampY * stir.amp * Math.sin(t * b.rateY + b.phY);
           const rise = (1 - overshoot(b.arrive)) * b.entryH;
           /* THE LIFT. A memory this wall's claim rests on rises out of the
              ground to sit under the poster, and settles back into its own
@@ -4870,7 +4899,7 @@ function HomeExperience(): JSX.Element {
           const ty = homeY + dy - rise;
           /* easing toward the target rather than assigning it is what lets a
              re-assigned home (scrub, resize) be absorbed as a glide */
-          const k = reduced ? 1 : 1 - Math.pow(0.001, dt);
+          const k = view.reduced ? 1 : 1 - Math.pow(0.001, dt);
           b.x = lerp(b.x, tx, k);
           b.y = lerp(b.y, ty, k);
         }
@@ -4913,7 +4942,7 @@ function HomeExperience(): JSX.Element {
          your memories are the ground and the walls are what different contexts
          make of them. (The draw pass adds camX back, the way the companion's
          own screen anchor does.) */
-      moveField(list, layout.wallL, layout.wallR);
+      moveField(list, view.layout.wallL, view.layout.wallR);
 
       /* A newborn whose keep did not land has finished fading: it leaves the
          ground, and the field closes over the space exactly as it does for a
@@ -5055,10 +5084,10 @@ function HomeExperience(): JSX.Element {
       }
       b.active = true;
       b.gone = 0;
-      b.arrive = reduced ? 1 : 0;
+      b.arrive = view.reduced ? 1 : 0;
       b.entryH = 90 + b.frac * 110;
       b.x = b.homeX;
-      b.y = b.homeY - (reduced ? 0 : b.entryH);
+      b.y = b.homeY - (view.reduced ? 0 : b.entryH);
     }
 
     /**
@@ -5093,7 +5122,7 @@ function HomeExperience(): JSX.Element {
         if (want !== present) {
           changed = true;
           if (!want) {
-            if (reduced) {
+            if (view.reduced) {
               b.active = false;
               b.gone = 1;
             } else {
@@ -5122,12 +5151,12 @@ function HomeExperience(): JSX.Element {
 
     function draw(now: number) {
       const pal = paletteRef.current;
-      ctx!.setTransform(dpr, 0, 0, dpr, -camX * dpr, -camY * dpr);
-      ctx!.clearRect(camX, camY, vw, vh);
+      ctx!.setTransform(view.dpr, 0, 0, view.dpr, -camX * view.dpr, -camY * view.dpr);
+      ctx!.clearRect(camX, camY, view.w, view.h);
       if (!pal) return;
       const t = now / 1000;
       const selId = selectedIdRef.current;
-      const depthSpan = Math.max(layout.fieldBottom - layout.fieldTop, 1);
+      const depthSpan = Math.max(view.layout.fieldBottom - view.layout.fieldTop, 1);
       /* The bloom's whole strength curve, in one place: wide and thin, the way
          a bright point reads through a night lens. A dormant memory keeps a
          trace of one — the continuum never reaches nothing. */
@@ -5143,13 +5172,13 @@ function HomeExperience(): JSX.Element {
         ctx!.globalAlpha = sparkA[i];
         ctx!.drawImage(
           pal.mote,
-          sparkX[i] * vw + camX - sr,
-          sparkY[i] * vh + camY - sr,
+          sparkX[i] * view.w + camX - sr,
+          sparkY[i] * view.h + camY - sr,
           sr * 2,
           sr * 2,
         );
       }
-      const thin = clamp01(-camY / Math.max(vh, 1));
+      const thin = clamp01(-camY / Math.max(view.h, 1));
       for (let i = 0; i < MOTES; i++) {
         const mr = moteR[i];
         const mx = moteX[i] + Math.sin(t * 0.5 + moteP[i]) * 9;
@@ -5212,7 +5241,7 @@ function HomeExperience(): JSX.Element {
              tier lie was: a satellite IS a memory, so the disc must answer to
              the same law on both walls. The EMERGE_SCALE term stays — that is
              arrival, the memory coming out of the sentence, not feedback. */
-          const ex = (s.r + ORB_PAD) * SAT_R * (reduced ? 1 : lerp(EMERGE_SCALE, 1, s.em));
+          const ex = (s.r + ORB_PAD) * SAT_R * (view.reduced ? 1 : lerp(EMERGE_SCALE, 1, s.em));
           ctx!.globalAlpha = base;
           ctx!.drawImage(pal.orbs[s.sizeIdx][tier], s.x - ex, s.y - ex, ex * 2, ex * 2);
         }
@@ -5220,10 +5249,10 @@ function HomeExperience(): JSX.Element {
       for (const n of sky.nebs) {
         if (n.gone >= 1) continue;
         const sx = n.x - camX;
-        if (sx < -n.r * 2.4 || sx > vw + n.r * 2.4) continue;
+        if (sx < -n.r * 2.4 || sx > view.w + n.r * 2.4) continue;
         const sy = n.y - camY;
-        if (sy < -n.r * 2.4 || sy > vh + n.r * 2.4) continue;
-        const breath = reduced ? 1 : 1 + Math.sin(t * n.breathRate + n.breathPhase) * 0.055;
+        if (sy < -n.r * 2.4 || sy > view.h + n.r * 2.4) continue;
+        const breath = view.reduced ? 1 : 1 + Math.sin(t * n.breathRate + n.breathPhase) * 0.055;
         /* dispersing: it thins AND spreads, which is what dispersing means —
            and the subject sits a little nearer, body and words together */
         const rr = n.r * breath * n.condense * (1 + n.gone * 0.5) * (1 + FOCUS_POP * n.focus);
@@ -5263,10 +5292,10 @@ function HomeExperience(): JSX.Element {
              32 × BLOOM_R × 1.12 ≈ 79px of half-extent, so ±300/±260 was
              additively blending whole screenfuls of orbs below the fold. */
           const sxb = b.x - camX;
-          if (sxb < -CULL_BLOOM || sxb > vw + CULL_BLOOM) continue;
+          if (sxb < -CULL_BLOOM || sxb > view.w + CULL_BLOOM) continue;
           const sy = b.y - camY;
-          if (sy < -CULL_BLOOM || sy > vh + CULL_BLOOM) continue;
-          const depth = clamp01((b.y - layout.fieldTop) / depthSpan);
+          if (sy < -CULL_BLOOM || sy > view.h + CULL_BLOOM) continue;
+          const depth = clamp01((b.y - view.layout.fieldTop) / depthSpan);
           /* A MACHINE'S MEMORY DOES NOT BREATHE, IT CYCLES.
              The bloom's breath is a sine — the single most organic thing on
              screen, and it was running identically under an agent's memories
@@ -5277,7 +5306,7 @@ function HomeExperience(): JSX.Element {
           const breathQ =
             mech < 0.02 ? breathRaw : Math.round(breathRaw * (5 - mech * 3)) / (5 - mech * 3);
           const breath =
-            reduced || still ? 1 : 1 + breathQ * (0.04 + 0.05 * b.alive);
+            view.reduced || still ? 1 : 1 + breathQ * (0.04 + 0.05 * b.alive);
           /* the founder's continuum law, unchanged */
           let alpha = bloomAlpha(b.alivePow) * breath * lerp(1, 0.72, depth);
           alpha *= (1 - b.gone) * lerp(1, 0.12, b.dim) * (1 + b.glow * 0.7 + b.relight * 0.9);
@@ -5319,9 +5348,9 @@ function HomeExperience(): JSX.Element {
         if (!b.active) continue;
         /* and the disc at its own: 32 + ORB_PAD = 34px */
         const sxb = b.x - camX;
-        if (sxb < -CULL_ORB || sxb > vw + CULL_ORB) continue;
+        if (sxb < -CULL_ORB || sxb > view.w + CULL_ORB) continue;
         const sy = b.y - camY;
-        if (sy < -CULL_ORB || sy > vh + CULL_ORB) continue;
+        if (sy < -CULL_ORB || sy > view.h + CULL_ORB) continue;
         let a = 1 - b.gone;
         /* focus dims EVERYTHING else, uniformly — there is exactly one lit
            thing on the screen (founder ruling, explicit) */
@@ -5349,7 +5378,7 @@ function HomeExperience(): JSX.Element {
 
         ctx!.globalAlpha = a;
         if (b.img) {
-          const spr = rx * 2 * dpr > 110 ? b.img.lg : b.img.sm;
+          const spr = rx * 2 * view.dpr > 110 ? b.img.lg : b.img.sm;
           ctx!.drawImage(spr, b.x - rx * pop, cyv - ry * pop, rx * 2 * pop, ry * 2 * pop);
           if (b.alive < 1) {
             /* the photo desaturating toward slate as its light leaves */
@@ -5422,13 +5451,13 @@ function HomeExperience(): JSX.Element {
          silhouette its features clip to, and the halo, all from one place so
          they can never disagree about which being is on screen. */
       const wear = worn(pal);
-      if (charY - camY > -charSize * 2 && charY - camY < vh + charSize * 2) {
+      if (charY - camY > -charSize * 2 && charY - camY < view.h + charSize * 2) {
         /* the bob rides its own integrated phase: while the companion leads
            it quickens toward a walk, and at rest it is the hover it was */
         /* THE FLOAT BECOMES A TICK. A sine is how something alive hovers; a
            machine's body arrives on frames. Same amplitude, same rate — only
            the resolution of the movement changes, which is the whole idea. */
-        const bobRaw = reduced ? 0 : Math.sin(bobPh) * 4 * stir.amp;
+        const bobRaw = view.reduced ? 0 : Math.sin(bobPh) * 4 * stir.amp;
         /* the step grows with how far into the machine's mind we are: one
            pixel of quantisation at the boundary, four at the far side */
         const bobStep = 1 + mech * 3;
@@ -5439,13 +5468,13 @@ function HomeExperience(): JSX.Element {
            one who travels, so the layout slides under it — and during a
            transition it rides ahead of centre by charOff, near the leading
            third of the screen, still bobbing. */
-        const charSX = camX + vw / 2 + charOff;
+        const charSX = camX + view.w / 2 + charOff;
         /* Squash-stretch coupled to the bob — and to the climb. Ascending it
            stretches a few percent and descending it compresses, which is the
            character's own response to being moved and not decoration on top
            of it. (Its LIGHT still obeys the rule that juice lives in the
            bloom; this is the body, and a body may act.) */
-        const sq = reduced ? 0 : Math.sin(bobPh + 1.5) * 0.022 - pitch * PITCH_STRETCH;
+        const sq = view.reduced ? 0 : Math.sin(bobPh + 1.5) * 0.022 - pitch * PITCH_STRETCH;
         const bw = charSize * (1 + sq);
         const bh = charSize * (1 - sq);
 
@@ -5455,7 +5484,7 @@ function HomeExperience(): JSX.Element {
         const auraR = charSize * lerp(1.25, 2.1, lit) * (1 + flare * 0.25);
         for (let i = 0; i < 4; i++) {
           const ph = t * (0.16 + i * 0.05) + i * 1.9;
-          const off = reduced ? 0 : charSize * 0.08;
+          const off = view.reduced ? 0 : charSize * 0.08;
           const rr = auraR * (0.72 + i * 0.11);
           /* multiply on paper tints rather than emits, so it needs more of the
              halo to carry the same reading of "inspired" */
@@ -5470,7 +5499,7 @@ function HomeExperience(): JSX.Element {
         }
 
         /* one mote on its way to the sky: the message, made of light */
-        if (!reduced) {
+        if (!view.reduced) {
           for (let i = 0; i < 4; i++) {
             if (riseA[i] <= 0) continue;
             ctx!.globalAlpha = clamp01(riseA[i]) * 0.55;
@@ -5479,7 +5508,7 @@ function HomeExperience(): JSX.Element {
         }
 
         /* inspiration coming off it, literally */
-        if (!reduced && lit > 0.55) {
+        if (!view.reduced && lit > 0.55) {
           for (let i = 0; i < 10; i++) {
             if (upA[i] <= 0) continue;
             ctx!.globalAlpha = upA[i] * 0.5;
@@ -5508,7 +5537,7 @@ function HomeExperience(): JSX.Element {
            direction of the thing it is looking at. The attend term eases in
            and out on its own clock so the turn reads as a decision rather
            than as a snap to a target. */
-        const lean = reduced
+        const lean = view.reduced
           ? 0
           : clamp(charOff / DRAG_LEAD_PX, -1, 1) * 0.045 +
             clamp(pitch, -1, 1) * 0.02 +
@@ -5648,7 +5677,7 @@ function HomeExperience(): JSX.Element {
          The corners fall away, as a night lens does: */
       ctx!.globalCompositeOperation = "source-over";
       ctx!.globalAlpha = VIGNETTE;
-      ctx!.drawImage(pal.vignette, camX, camY, vw, vh);
+      ctx!.drawImage(pal.vignette, camX, camY, view.w, view.h);
       ctx!.globalAlpha = 1;
       ctx!.globalCompositeOperation = "source-over";
     }
@@ -5742,22 +5771,22 @@ function HomeExperience(): JSX.Element {
            panel's own right-then-left placement does, and is clamped inside
            the viewport as a floor. Transform only: still nothing can shift. */
         let lx = sx + sky.hoverSat.dr + SAT_SAY_GAP;
-        if (lx + sky.satSayW > vw - SAT_SAY_GAP)
+        if (lx + sky.satSayW > view.w - SAT_SAY_GAP)
           lx = sx - sky.hoverSat.dr - SAT_SAY_GAP - sky.satSayW;
-        lx = clamp(lx, SAT_SAY_GAP, Math.max(SAT_SAY_GAP, vw - sky.satSayW - SAT_SAY_GAP));
+        lx = clamp(lx, SAT_SAY_GAP, Math.max(SAT_SAY_GAP, view.w - sky.satSayW - SAT_SAY_GAP));
         who.style.transform = `translate3d(${lx.toFixed(1)}px, ${sy.toFixed(1)}px, 0) translate(0, -50%)`;
       }
     }
 
     function tick(now: number) {
-      raf = requestAnimationFrame(tick);
+      clock.raf = requestAnimationFrame(tick);
       /* dt is clamped BOTH ways: a wake() racing a queued frame can hand a
          timestamp older than prev (heavily throttled tabs make it seconds),
          and a negative dt turns every 1-pow(k,dt) ease into a backward
          extrapolation. Zero means "hold still for a frame", which is always
          safe here. */
-      const dt = Math.min(Math.max((now - prev) / 1000, 0), 0.05);
-      prev = now;
+      const dt = Math.min(Math.max((now - clock.prev) / 1000, 0), 0.05);
+      clock.prev = now;
 
       /* the wheel went quiet: settle onto section A or B */
       if (snapAt > 0 && now >= snapAt && !pointerDown) snapSection(0);
@@ -5772,13 +5801,13 @@ function HomeExperience(): JSX.Element {
           camAiming = false;
           camVel = 0;
         }
-        lastActive = now;
+        clock.lastActive = now;
       } else if (!dragging) {
         /* rubber-band at the outer ends (a room's top is HQ: no sky there) */
-        const cl = clamp(camY, minCamNow(), layout.maxCam);
+        const cl = clamp(camY, minCamNow(), view.layout.maxCam);
         if (cl !== camY) {
           camY = Math.abs(camY - cl) < 0.4 ? cl : lerp(camY, cl, kd(EASE_BAND, dt));
-          lastActive = now;
+          clock.lastActive = now;
         }
       }
 
@@ -5802,39 +5831,39 @@ function HomeExperience(): JSX.Element {
             arriveColumn();
           }
         }
-        lastActive = now;
+        clock.lastActive = now;
       } else {
         if (dragLeadOn && !pointerDown) dragLeadOn = false; /* lost release */
         if (dragLeadOn) {
           /* the companion sets off with the first centimetres of a held
              drag: it walks toward where the finger says the page is going */
           charOff = lerp(charOff, dragLeadTarget, 1 - Math.pow(0.003, dt));
-          lastActive = now;
+          clock.lastActive = now;
         } else if (charOff !== 0) {
           /* arrival (or a released drag): it decelerates back to centre */
           charOff = Math.abs(charOff) < 0.4 ? 0 : lerp(charOff, 0, 1 - Math.pow(0.01, dt));
-          lastActive = now;
+          clock.lastActive = now;
         }
         if (camXBack) {
           /* an uncommitted swipe eases home — the world and the companion
              spring back TOGETHER; nothing rests between columns */
-          camX = reduced ? camXTarget : lerp(camX, camXTarget, kd(EASE_BAND, dt));
+          camX = view.reduced ? camXTarget : lerp(camX, camXTarget, kd(EASE_BAND, dt));
         /* AND THE CROSSING ITSELF RESOLVES IN STEPS. Read after the camera
            moves, so every other quantised thing this frame agrees about how
            far into the machine's mind we are. */
-        mech = reduced ? mechAt(camX) : lerp(mech, mechAt(camX), kd(2e-3, dt));
+        mech = view.reduced ? mechAt(camX) : lerp(mech, mechAt(camX), kd(2e-3, dt));
         /* ATTENTION EASES IN AND LETS GO. The target is the lean while the
            attention is live and zero once it lapses; both directions run
            through the same spring, so noticing and losing interest are the
            same motion played in opposite directions. rps=0.02 is τ≈256ms:
            quick enough to read as reacting, slow enough to be a turn. */
         const attendWant = performance.now() < attendUntil ? attendLean : 0;
-        attendHold = reduced ? attendWant : lerp(attendHold, attendWant, kd(2e-2, dt));
+        attendHold = view.reduced ? attendWant : lerp(attendHold, attendWant, kd(2e-2, dt));
           if (Math.abs(camX - camXTarget) < 0.6) {
             camX = camXTarget;
             camXBack = false;
           }
-          lastActive = now;
+          clock.lastActive = now;
         }
       }
       /* THE VERTICAL TRAVELER. Read the camera's own speed rather than any
@@ -5843,11 +5872,11 @@ function HomeExperience(): JSX.Element {
          answers the layout. */
       const camVY = dt > 0 ? (camY - camYPrev) / dt : 0;
       camYPrev = camY;
-      const wantPitch = reduced ? 0 : clamp(camVY / PITCH_FULL, -1, 1);
+      const wantPitch = view.reduced ? 0 : clamp(camVY / PITCH_FULL, -1, 1);
       pitch = Math.abs(pitch - wantPitch) < 0.002 ? wantPitch : lerp(pitch, wantPitch, kd(2e-3, dt));
       /* it leads the world the same way it leads a room transition: up first,
          then the layout follows it up */
-      const wantLift = reduced ? 0 : -pitch * PITCH_LEAD_PX;
+      const wantLift = view.reduced ? 0 : -pitch * PITCH_LEAD_PX;
       charLift = Math.abs(charLift - wantLift) < 0.2 ? wantLift : lerp(charLift, wantLift, kd(6e-3, dt));
       /* the hover-bob quickens toward a WALK while the companion leads, and
          relaxes back to a hover at rest — one integrated phase, no jumps.
@@ -5879,7 +5908,7 @@ function HomeExperience(): JSX.Element {
         pour.scrubDirty = false;
         reconcileScrub();
         computeInspiration();
-        lastActive = now;
+        clock.lastActive = now;
       }
 
 
@@ -5910,7 +5939,7 @@ function HomeExperience(): JSX.Element {
              all — and being told what you are touching is a STATE, not a
              motion. It renders instantly there, exactly as dim and glow do. */
           const wantPress = b.id === pressId ? 1 : 0;
-          if (reduced) {
+          if (view.reduced) {
             b.dim = wantDim;
             b.glow = wantGlow;
             if (b.press !== wantPress) {
@@ -5942,7 +5971,7 @@ function HomeExperience(): JSX.Element {
          yaw chases the scrub POSITION — weighted, never rigid. On release it
          unwinds the short way round, so it always comes to rest facing
          forward however many turns it was wound. */
-      if (reduced) {
+      if (view.reduced) {
         yaw = 0;
         yawTarget = 0;
         unwindAt = 0;
@@ -5999,7 +6028,7 @@ function HomeExperience(): JSX.Element {
 
       /* the companion. Its glow eases toward the real signal; its flare
          decays; it blinks; and when it is genuinely inspired, motes rise. */
-      inspNow = reduced ? insp : lerp(inspNow, insp, 1 - Math.pow(0.02, dt));
+      inspNow = view.reduced ? insp : lerp(inspNow, insp, 1 - Math.pow(0.02, dt));
       if (flare > 0) {
         flare = Math.max(0, flare - dt / 0.7);
         easing = true;
@@ -6010,7 +6039,7 @@ function HomeExperience(): JSX.Element {
          some six hundred times an hour with no hand involved anywhere, which
          is the same crime as a camera move on panel-open.) */
       freshLit = freshToday ? 0.12 : 0;
-      if (!reduced) {
+      if (!view.reduced) {
         /* Something is forming above: every nine seconds or so it looks up,
            and every fourteen it sends a mote that way. The companion is how
            the page mentions the sky without a banner. */
@@ -6100,10 +6129,10 @@ function HomeExperience(): JSX.Element {
       }
 
       /* the air drifts upward and re-wraps; frozen under reduced motion */
-      if (!reduced) {
+      if (!view.reduced) {
         /* higher air: in the sky the motes are a little quicker and a little
            sparser — the same atmosphere, thinner */
-        const up = clamp01(-camY / Math.max(vh, 1));
+        const up = clamp01(-camY / Math.max(view.h, 1));
         /* THE AIR IS THE ARCHIVE'S ALIVENESS, at the scale of a whole screen.
            You cannot paint a screenful of "twelve percent more alive" onto
            objects — but air can carry it: a dead archive has still air, a live
@@ -6113,8 +6142,8 @@ function HomeExperience(): JSX.Element {
         for (let i = 0; i < MOTES; i++) {
           moteY[i] -= moteS[i] * rate * stir.amp * dt;
           if (moteY[i] < -8) {
-            moteY[i] = vh + 8;
-            moteX[i] = Math.random() * vw;
+            moteY[i] = view.h + 8;
+            moteX[i] = Math.random() * view.w;
           }
         }
       }
@@ -6132,7 +6161,7 @@ function HomeExperience(): JSX.Element {
       /* Two discrete facts leave the loop for React, and only when they
          change: whether the camera is in the sky (the dial has no meaning
          there) and which nebulae have been drawn together. */
-      const nowInSky = camY < layout.minCam * 0.45;
+      const nowInSky = camY < view.layout.minCam * 0.45;
       if (nowInSky !== sky.shown) {
         sky.shown = nowInSky;
         setInSky(nowInSky);
@@ -6148,7 +6177,7 @@ function HomeExperience(): JSX.Element {
          holds signals that are still forming and headquarters holds one
          sentence, neither of which has a history to scrub. So it comes up
          with the field and goes away with it. */
-      const inField = camY > layout.fieldTop * 0.5;
+      const inField = camY > view.layout.fieldTop * 0.5;
       /* THE LEGEND BELONGS TO THE GROUND IT EXPLAINS.
          It is a key to the orbs, so it exists where the orbs are. Standing at
          headquarters reading one sentence, or up in the sky among signals,
@@ -6160,7 +6189,7 @@ function HomeExperience(): JSX.Element {
         setInField(inField);
       }
       const nowAway =
-        !inField || !hasDial(wallAt(Math.round(camX / Math.max(vw, 1))).kind);
+        !inField || !hasDial(wallAt(Math.round(camX / Math.max(view.w, 1))).kind);
       if (nowAway !== dialAwayShown) {
         dialAwayShown = nowAway;
         setDialAway(nowAway);
@@ -6189,7 +6218,7 @@ function HomeExperience(): JSX.Element {
          is hidden (handled in onVis) or when reduced motion has parked every
          orb at its home and genuinely nothing is moving. */
       let awake =
-        !reduced ||
+        !view.reduced ||
         pour.active ||
         !pour.done ||
         travelActive ||
@@ -6201,7 +6230,7 @@ function HomeExperience(): JSX.Element {
         camAiming ||
         snapAt > 0 ||
         camY < minCamNow() ||
-        camY > layout.maxCam;
+        camY > view.layout.maxCam;
       if (!awake) {
         for (const b of list) {
           if (b.leaving) {
@@ -6210,11 +6239,11 @@ function HomeExperience(): JSX.Element {
           }
         }
       }
-      if (awake) lastActive = now;
-      const grace = reduced ? 200 : 2600; /* breath settles, then true rest */
-      if (now - lastActive > grace) {
-        running = false;
-        cancelAnimationFrame(raf);
+      if (awake) clock.lastActive = now;
+      const grace = view.reduced ? 200 : 2600; /* breath settles, then true rest */
+      if (now - clock.lastActive > grace) {
+        clock.running = false;
+        cancelAnimationFrame(clock.raf);
       }
     }
 
@@ -6307,7 +6336,7 @@ function HomeExperience(): JSX.Element {
 
     /** Is the pointer over the companion? It sits in front of the field. */
     function overChar(cx: number, wy: number): boolean {
-      const dx = cx - (vw / 2 + charOff);
+      const dx = cx - (view.w / 2 + charOff);
       const dy = wy - charY;
       const r = charSize * 0.55;
       return dx * dx + dy * dy <= r * r;
@@ -6503,7 +6532,7 @@ function HomeExperience(): JSX.Element {
          would never happen. The sentence above keeps its precedence: the
          words visually ARE the cloud. */
       const onSat = nb ? null : satAt(e.clientX, e.clientY);
-      if (!nb && !onSat) nb = camY < layout.minCam * 0.3 ? nebAt(e.clientX, e.clientY) : null;
+      if (!nb && !onSat) nb = camY < view.layout.minCam * 0.3 ? nebAt(e.clientX, e.clientY) : null;
       if (nb) {
         /* a cloud on the move carries no whisper: the name belongs to the
            memory under the pointer, and the pointer now owns the cloud */
@@ -6571,7 +6600,7 @@ function HomeExperience(): JSX.Element {
      * settles, and the body follows the eyes rather than arriving with them.
      */
     function attendTo(wx: number, wy: number) {
-      const dx = wx - (camX + vw / 2);
+      const dx = wx - (camX + view.w / 2);
       const dy = wy - charY;
       const d = Math.hypot(dx, dy) || 1;
       /* overshoot: it commits to the direction before it has finished moving */
@@ -6579,13 +6608,13 @@ function HomeExperience(): JSX.Element {
       eyeTY = clamp((dy / d) * 1.6, -1.6, 1.6);
       attendUntil = performance.now() + 2600;
       /* and the body leans after the eyes, not with them */
-      attendLean = clamp(dx / Math.max(vw * 0.5, 1), -1, 1) * 0.05;
+      attendLean = clamp(dx / Math.max(view.w * 0.5, 1), -1, 1) * 0.05;
       wake();
     }
 
     const onHover = (e: PointerEvent) => {
       /* presence: the eyes drift a couple of pixels toward the last touch */
-      const dx = e.clientX - vw / 2;
+      const dx = e.clientX - view.w / 2;
       const dy = e.clientY + camY - charY;
       const d = Math.hypot(dx, dy) || 1;
       if (performance.now() < attendUntil) return; /* it is looking at something */
@@ -6593,7 +6622,7 @@ function HomeExperience(): JSX.Element {
       eyeTY = clamp((dy / d) * 2, -2, 2);
       /* which cloud the pointer rests on: a clustered member's whispered
          sentence rises back to full while it is touched */
-      sky.hoverNeb = camY < layout.minCam * 0.3 ? nebAt(e.clientX, e.clientY) : null;
+      sky.hoverNeb = camY < view.layout.minCam * 0.3 ? nebAt(e.clientX, e.clientY) : null;
       /* and which satellite: whose memory it is rises beside it, one fade */
       if (!nebDrag) {
         sky.hoverSat = satAt(e.clientX, e.clientY);
@@ -6661,16 +6690,16 @@ function HomeExperience(): JSX.Element {
         const hasNext = col + 1 <= colHi();
         const hasPrev = col - 1 >= colLo();
         const resist = (off > 0 && !hasNext) || (off < 0 && !hasPrev) ? 0.16 : 0.55;
-        camX = col * vw + clamp(off * resist, -vw * 0.32, vw * 0.32);
+        camX = col * view.w + clamp(off * resist, -view.w * 0.32, view.w * 0.32);
         camXBack = false;
-        if (!reduced) velX = lerp(velX, dxm / dts, kd(EASE_VEL, dts));
+        if (!view.reduced) velX = lerp(velX, dxm / dts, kd(EASE_VEL, dts));
         /* THE COMPANION SETS OFF WITH THE DRAG: from the first centimetres
            it turns toward the pull and starts walking — leading by the
            fraction of the commit distance dragged. Reduced motion: parked. */
-        if (!reduced) {
+        if (!view.reduced) {
           dragLeadOn = true;
-          const disp = camX - col * vw;
-          dragLeadTarget = clamp(disp / (vw * 0.14), -1, 1) * DRAG_LEAD_PX;
+          const disp = camX - col * view.w;
+          dragLeadTarget = clamp(disp / (view.w * 0.14), -1, 1) * DRAG_LEAD_PX;
           if (Math.abs(dragLeadTarget) > 4) {
             travelYaw = true;
             yawTarget = (dragLeadTarget > 0 ? 1 : -1) * (TAU / 4);
@@ -6686,10 +6715,10 @@ function HomeExperience(): JSX.Element {
         wake();
         return;
       }
-      const out = camY < minCamNow() || camY > layout.maxCam;
+      const out = camY < minCamNow() || camY > view.layout.maxCam;
       camY -= dy * (out ? 0.35 : 1);
       /* reduced motion keeps the direct 1:1 drag but drops the inertia */
-      if (!reduced) camVel = lerp(camVel, -dy / dts, kd(EASE_VEL, dts));
+      if (!view.reduced) camVel = lerp(camVel, -dy / dts, kd(EASE_VEL, dts));
       lastT = nowT;
       wake();
     };
@@ -6716,7 +6745,7 @@ function HomeExperience(): JSX.Element {
         }
         /* dragged off the top of the sky: it thins and disperses. Locally
            only — there is no endpoint to tell that it was let go of. */
-        if (n.y < layout.minCam + n.r * 0.35) {
+        if (n.y < view.layout.minCam + n.r * 0.35) {
           n.gone = 0.01;
           /* A DISPERSING CANDIDATE IS NO LONGER THE SUBJECT OF ANYTHING. The
              same teardown adoption's condense and syncSky already obey: a
@@ -6744,21 +6773,21 @@ function HomeExperience(): JSX.Element {
         /* completing a swipe: velocity-biased, one column per gesture. The
            finger only pulled the room part-way — the companion now leads the
            actual crossing, or the layout eases home uncommitted. */
-        const disp = camX - col * vw;
+        const disp = camX - col * view.w;
         const dir: 1 | -1 =
           Math.abs(velX) > FLICK ? (velX < 0 ? 1 : -1) : disp > 0 ? 1 : -1;
         const dest = col + dir;
         const commit =
-          (Math.abs(velX) > FLICK || Math.abs(disp) > vw * 0.14) &&
+          (Math.abs(velX) > FLICK || Math.abs(disp) > view.w * 0.14) &&
           dest >= colLo() &&
           dest <= colHi();
         dragging = false;
         dragAxis = 0;
         dragLeadOn = false;
         if (commit) travel(dir);
-        if (!travelActive && camX !== col * vw) {
+        if (!travelActive && camX !== col * view.w) {
           /* uncommitted (or travel refused): ease home — never rest between */
-          camXTarget = col * vw;
+          camXTarget = col * view.w;
           camXBack = true;
         }
         if (!travelActive) {
@@ -6794,7 +6823,7 @@ function HomeExperience(): JSX.Element {
         if (interruptedSnap) snapSection(0);
       } else {
         /* the page never rests between the two sections */
-        snapSection(reduced ? 0 : camVel);
+        snapSection(view.reduced ? 0 : camVel);
       }
       interruptedSnap = false;
       dragging = false;
@@ -6823,7 +6852,7 @@ function HomeExperience(): JSX.Element {
         nebDrag = null;
       }
       if (dragAxis === 2) {
-        camXTarget = col * vw;
+        camXTarget = col * view.w;
         camXBack = true;
         dragLeadOn = false;
         travelYaw = false;
@@ -6872,7 +6901,7 @@ function HomeExperience(): JSX.Element {
         return;
       }
       wheelXAcc = 0;
-      camY = clamp(camY + e.deltaY, minCamNow() - 60, layout.maxCam + 60);
+      camY = clamp(camY + e.deltaY, minCamNow() - 60, view.layout.maxCam + 60);
       camAiming = false;
       /* snap once the wheel goes quiet */
       snapAt = nowW + 150;
@@ -6953,8 +6982,8 @@ function HomeExperience(): JSX.Element {
     };
     const onVis = () => {
       if (document.hidden) {
-        running = false;
-        cancelAnimationFrame(raf);
+        clock.running = false;
+        cancelAnimationFrame(clock.raf);
       } else {
         /* Pour deadlines sit on the absolute clock and the rAF loop was
            cancelled while hidden: re-stagger any that expired so the balls
@@ -6979,8 +7008,8 @@ function HomeExperience(): JSX.Element {
       }
     };
     const onMq = () => {
-      reduced = mq.matches;
-      if (reduced) camVel = 0;
+      view.reduced = mq.matches;
+      if (view.reduced) camVel = 0;
       wake();
     };
 
@@ -7003,13 +7032,13 @@ function HomeExperience(): JSX.Element {
     measure();
     /* `measure` is the first moment `vw` is real, so the horizontal camera can
        only be placed here — before it, `col * vw` is a column times one pixel. */
-    camX = col * vw;
+    camX = col * view.w;
     camXTarget = camX;
     /* Resumed mid-journey: nobody ran the arrival, so run it now — the wall
        needs its ground solved, poured and woken exactly as a glide would. */
     if (resumedAt !== null) arriveColumn();
     measure();
-    if (reduced) settleInstantly();
+    if (view.reduced) settleInstantly();
     else primePour();
 
     simApiRef.current = {
@@ -7029,7 +7058,7 @@ function HomeExperience(): JSX.Element {
         for (const b of list) if (!onThisWall(b)) b.active = false;
         assignHomes();
         const here = presentBalls();
-        if (reduced) settleInstantly();
+        if (view.reduced) settleInstantly();
         else primePour(here);
         electPeek(here);
         wake();
@@ -7039,7 +7068,7 @@ function HomeExperience(): JSX.Element {
         TRef.current = T;
         /* the dial's position IS the companion's yaw: today (the right-hand
            end) is front-facing, and winding back turns it away from you */
-        yawTarget = reduced ? 0 : (pos - 1) * TAU * SPIN_TURNS;
+        yawTarget = view.reduced ? 0 : (pos - 1) * TAU * SPIN_TURNS;
         unwindAt = 0;
         if (selectedIdRef.current) release();
         pour.scrubDirty = true;
@@ -7173,8 +7202,8 @@ function HomeExperience(): JSX.Element {
         const b = selectedIdRef.current ? findBall(selectedIdRef.current) : undefined;
         if (!b && !sky.selSat) return null;
         const M = 20; /* never closer than this to an edge */
-        const w = Math.min(Math.max(360, Math.min(vw * 0.3, 500)), vw - 48);
-        const cx = vw / 2; /* the companion holds the middle of the frame */
+        const w = Math.min(Math.max(360, Math.min(view.w * 0.3, 500)), view.w - 48);
+        const cx = view.w / 2; /* the companion holds the middle of the frame */
         const cy = charY - camY;
         /* which side is the memory on? the words go to the other one */
         const orbX = b ? b.x - camX : cx;
@@ -7183,15 +7212,15 @@ function HomeExperience(): JSX.Element {
         let left = wantRight ? cx + gap : cx - gap - w;
         /* if that side cannot hold it, take the other; if neither can, the
            frame is too narrow for beside-anything and it becomes a sheet */
-        if (left < M || left + w > vw - M) {
+        if (left < M || left + w > view.w - M) {
           left = wantRight ? cx - gap - w : cx + gap;
         }
-        if (left < M || left + w > vw - M) {
-          return { left: Math.round((vw - w) / 2), top: null, bottom: Math.round(vh - (vh - M)) };
+        if (left < M || left + w > view.w - M) {
+          return { left: Math.round((view.w - w) / 2), top: null, bottom: Math.round(view.h - (view.h - M)) };
         }
         /* vertically it meets the companion at the shoulder and reads
            downward, clamped so a long memory never leaves the frame */
-        const top = clamp(cy - charSize * 0.34, 56, Math.max(56, vh * 0.52));
+        const top = clamp(cy - charSize * 0.34, 56, Math.max(56, view.h * 0.52));
         return { left: Math.round(left), top: Math.round(top), bottom: null };
       },
       toTop: () => {
@@ -7203,7 +7232,7 @@ function HomeExperience(): JSX.Element {
         /* bring it to a comfortable reading height rather than to the exact
            centre: the companion sits mid-frame and the memory should land
            beside it, not behind it */
-        const want = clamp(b.y - vh * 0.5, layout.minCam, layout.maxCam);
+        const want = clamp(b.y - view.h * 0.5, view.layout.minCam, view.layout.maxCam);
         if (Math.abs(want - camY) > 8) {
           snapAt = 0;
           camVel = 0;
@@ -7217,7 +7246,7 @@ function HomeExperience(): JSX.Element {
         if (col !== 0 || travelActive) return;
         snapAt = 0;
         camVel = 0;
-        aimTo(layout.minCam, 0);
+        aimTo(view.layout.minCam, 0);
       },
       travel,
       syncSky,
@@ -7241,8 +7270,8 @@ function HomeExperience(): JSX.Element {
         /* it climbs to the new value rather than jumping to it */
         b.alive = from;
         b.alivePow = Math.pow(from, 1.4);
-        b.relightAt = reduced ? 0 : performance.now();
-        if (reduced) {
+        b.relightAt = view.reduced ? 0 : performance.now();
+        if (view.reduced) {
           b.alive = b.aliveTo;
           b.alivePow = Math.pow(b.aliveTo, 1.4);
         }
@@ -7293,7 +7322,7 @@ function HomeExperience(): JSX.Element {
         b.leaving = false;
         b.gone = 0;
         b.spawnAt = -1;
-        if (reduced || spot === null || spot.y >= homeY) {
+        if (view.reduced || spot === null || spot.y >= homeY) {
           /* reduced motion: it is simply already at home, settled */
           b.arrive = 1;
           b.entryH = 0;
@@ -7307,7 +7336,7 @@ function HomeExperience(): JSX.Element {
         }
         computeInspiration();
         /* the companion answers a keep as it answers a reflection */
-        flare = Math.max(flare, reduced ? 0 : 0.9);
+        flare = Math.max(flare, view.reduced ? 0 : 0.9);
         wake();
       },
       identify: (id: string, sigId: string) => {
@@ -7326,7 +7355,7 @@ function HomeExperience(): JSX.Element {
         if (!b || b.doomed === true) return;
         b.doomed = true;
         pour.doomed++;
-        if (reduced) {
+        if (view.reduced) {
           b.active = false;
           b.leaving = false;
           b.gone = 1;
@@ -7409,10 +7438,10 @@ function HomeExperience(): JSX.Element {
           awaitingWake = false;
           travelDest = dest;
           travelDir = dir;
-          camXTarget = dest * vw;
+          camXTarget = dest * view.w;
           camXBack = false;
           dragLeadOn = false;
-          if (reduced) {
+          if (view.reduced) {
             col = dest;
             camX = camXTarget;
             charOff = 0;
@@ -7439,7 +7468,7 @@ function HomeExperience(): JSX.Element {
              single-wall lead: past that it stops reading as running and
              starts reading as the character having come loose. */
           const urgency = Math.min(2.15, Math.sqrt(Math.max(1, span)));
-          charLead = dir * Math.min(vw * TRAVEL_LEAD_X, 190) * urgency;
+          charLead = dir * Math.min(view.w * TRAVEL_LEAD_X, 190) * urgency;
           charFrom = charOff;
           travelYaw = true;
           yawTarget = dir * (TAU / 4);
@@ -7479,7 +7508,7 @@ function HomeExperience(): JSX.Element {
         n.haloX = n.x;
         n.haloY = n.y;
         n.pinned = true;
-        flare = Math.max(flare, reduced ? 0 : 0.4);
+        flare = Math.max(flare, view.reduced ? 0 : 0.4);
         wake();
       },
       condense: (id: string) => {
@@ -7510,7 +7539,7 @@ function HomeExperience(): JSX.Element {
            at rest in the field that is exactly vh − dialH on screen. An audit
            that measured a different band from the one assignHomes fits into
            would be grading a promise nobody made. */
-        const bandBottom = vh - dialH;
+        const bandBottom = view.h - view.dialH;
         let present = 0;
         let onScreen = 0;
         let clippedTop = 0;
@@ -7542,10 +7571,12 @@ function HomeExperience(): JSX.Element {
           }
         }
         return {
-          vh,
-          vw,
+          /* the audit's field names are a contract the tests read: they stay
+             `vh`/`vw` however the state behind them is spelled */
+          vh: view.h,
+          vw: view.w,
           camY: Math.round(camY),
-          fieldRest: Math.round(layout.maxCam),
+          fieldRest: Math.round(view.layout.maxCam),
           present,
           onScreen,
           clippedTop,
@@ -7604,8 +7635,8 @@ function HomeExperience(): JSX.Element {
     wake();
 
     return () => {
-      running = false;
-      cancelAnimationFrame(raf);
+      clock.running = false;
+      cancelAnimationFrame(clock.raf);
       ro.disconnect();
       root.style.cursor = "";
       root.removeEventListener("pointerdown", onDown, true);

@@ -131,13 +131,26 @@ function visit(node) {
       ts.isImportSpecifier(parent) ||
       ts.isExportSpecifier(parent) ||
       /* `x.settle` written as a type, and qualified type names */
-      ts.isQualifiedName(parent) ||
-      /* spells the same, is a different variable */
-      (wanted !== null && checker.getSymbolAtLocation(node) !== wanted);
+      ts.isQualifiedName(parent);
 
-    if (!skip && ts.isShorthandPropertyAssignment(parent) && parent.name === node) {
+    /*
+     * `{ vh }` is BOTH a property named vh and a reference to the variable vh,
+     * and the checker hands back the property when asked about the identifier.
+     * Comparing that against the variable's symbol says "different thing" and
+     * quietly skips a site that very much needed renaming — which is exactly
+     * what happened: two `{ vh, vw }` keys in the audit survived the rename
+     * and only `tsc` noticed. `getShorthandAssignmentValueSymbol` asks the
+     * other question, the one about the value.
+     */
+    const isShorthand = ts.isShorthandPropertyAssignment(parent) && parent.name === node;
+    const symbol = isShorthand
+      ? checker?.getShorthandAssignmentValueSymbol(parent)
+      : checker?.getSymbolAtLocation(node);
+    const otherVariable = wanted !== null && symbol !== wanted;
+
+    if (!skip && !otherVariable && isShorthand) {
       refusals.push(lineOf(node.getStart(sourceFile)));
-    } else if (!skip) {
+    } else if (!skip && !otherVariable) {
       hits.push({ start: node.getStart(sourceFile), end: node.getEnd() });
     }
   }
