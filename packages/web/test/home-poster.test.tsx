@@ -181,11 +181,25 @@ vi.mock("../src/lib/data", async (importOriginal) => {
   const signal = (id: string) => ({
     id,
     statement: `statement of ${id}`,
-    /* ACTIVE, NEVER EMERGING. An emerging signal is counted by the forming
-       line under the poster, and that line changing would re-run `setChrome`
-       with the same text — which carries the sentence forward onto itself and
-       lights every word. The first case below would then fail for a reason
-       that has nothing to do with what it is testing. */
+    /* ACTIVE RATHER THAN EMERGING — A PRECAUTION, AND NOT A LOAD-BEARING ONE.
+       An emerging signal is counted by the forming line under the poster, and
+       `setChrome`'s guard writes `prevText: prev.text` whenever ANY of the
+       chrome fields it compares has moved. So a forming line that changed
+       AFTER the poster already had its sentence would carry that sentence
+       forward onto itself, and `posterWords` would light every word of it.
+       That mechanism is real and worth knowing about.
+       What is NOT true is the claim that used to stand here: that the first
+       case below would fail if these were emerging. It does not. Measured —
+       flip this one word to "emerging" and all six cases still pass — because
+       nothing here ever makes the forming line change after the fact.
+       `formingWords` counts signals whose `createdMs` is at or before the dial
+       time, both of these are dated four days back, the dial never moves in
+       this file, and every fetch settles inside one React commit, so the line
+       reaches its value in the same commit that first gives the poster its
+       sentence, when `prev.text` is still null.
+       Left as `active` anyway: it costs nothing and it keeps the first case
+       out of reach of that mechanism if this fixture ever gains a signal dated
+       inside the run, or a case that winds the dial. */
     status: "active" as const,
     confidence: 60,
     evidenceCount: BEHIND[id].length,
