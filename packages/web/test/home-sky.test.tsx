@@ -1,0 +1,761 @@
+// @vitest-environment jsdom
+
+/**
+ * LAYER TWO, OBSERVED FOR THE FIRST TIME.
+ *
+ * `home-field.test.tsx` beside this file watches the ground under a wall. The
+ * sky over it had never been watched at all: no candidate reached the harness,
+ * so `sky-engine.ts` — thirteen functions and seven hundred lines, freshly
+ * lifted out of Home.tsx — was standing on nothing but a diff that showed its
+ * text had not changed. Five of its functions had never been executed by any
+ * test, and all five hang off pointer input: `persistSky`, `focusOn`,
+ * `springs`, `releaseHolds`, `sayWho`. This file simulates that input.
+ *
+ * HOW THE SKY IS OBSERVED, GIVEN THAT IT IS DRAWN ON A CANVAS THAT DRAWS
+ * NOTHING.
+ *
+ * Two channels, and neither of them is a pixel.
+ *
+ *   1. EACH CANDIDATE'S SENTENCE IS REAL DOM, and the loop writes the cloud's
+ *      own numbers onto it every frame in `syncDom`: the transform carries
+ *      where the loop put it and how far the subject has grown, the opacity
+ *      carries dispersal, condensation, the cluster whisper and the focus
+ *      sink. So `.jar-neb`'s inline style is a live readout of the Neb behind
+ *      it, published by the product for its own reasons rather than for this.
+ *
+ *   2. THE HIT TESTS ANSWER. A satellite exists nowhere else — it is painted
+ *      and gone — but `satAt` will say whether one is under a given point, and
+ *      `sayWho` writes its owner's given name into `.jar-satsay`. Sweeping the
+ *      pointer across the sky and collecting where the whisper lights is
+ *      therefore a genuine measurement of where the evidence is in orbit.
+ *
+ * Both are STATE, not appearance. Nothing here asserts a colour, a brightness
+ * or a pixel, because the stub draws none and a test that claimed otherwise
+ * would be describing its own stub. What is asserted is what exists, where the
+ * layout put it, and what is active — the same rule the field's file obeys.
+ *
+ * WHY THE SWEEP RATHER THAN ARITHMETIC. The obvious alternative was to solve
+ * each satellite's screen position in the test — the ellipse comes off the
+ * measured sentence box, the phase off a hash — and hover exactly there. That
+ * was rejected: it would reimplement `measureNeb` and `placeSats` in the test,
+ * so the test would agree with a broken engine as readily as with a working
+ * one. Sweeping asks the product where its own satellites are.
+ */
+import { act } from "react";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
+import {
+  apiMockFrom,
+  dataMockFrom,
+  mountWorld,
+  VIEWER_ID,
+  type MountedWorld,
+} from "./helpers/render-home";
+
+const GROUP_ID = "group-1";
+const PROPOSAL_ID = "proposal-1";
+const DAY = 86_400_000;
+const BASE = Date.UTC(2026, 7, 16);
+const iso = (daysAgo: number) => new Date(BASE - daysAgo * DAY).toISOString();
+
+/**
+ * WHOSE SAVES STAND BEHIND THE PROPOSAL, AND WHY THERE ARE TWO OF THEM.
+ *
+ * A group's pending proposal is the one candidate whose evidence carries
+ * NAMES — the members who have affirmed it — and a name is the only thing a
+ * satellite ever says out loud (`sayWho` prints nothing for a satellite with
+ * no author, which is every satellite of your own signals). So the proposal is
+ * the only candidate whose orbit can be counted from outside the canvas, and
+ * two affirmers is the smallest number that can tell "the evidence is in
+ * orbit" apart from "one thing is somewhere".
+ */
+const AFFIRMERS = [
+  { profileId: "profile-hana", name: "Hana Ko" },
+  { profileId: "profile-jun", name: "Jun Park" },
+];
+
+const FACTS = {
+  inspirations: Array.from({ length: 6 }, (_, i) => ({
+    id: `own-${i}`,
+    text: `something I kept, ${i}`,
+    daysAgo: i + 1,
+  })),
+  groups: [
+    {
+      id: GROUP_ID,
+      name: "The four of us",
+      field: [
+        { id: "g-mine-0", ownerProfileId: VIEWER_ID, ownerName: "You", daysAgo: 2 },
+        { id: "g-theirs-0", ownerProfileId: "profile-hana", ownerName: "Hana Ko", daysAgo: 4 },
+      ],
+    },
+  ],
+};
+
+/**
+ * Two of the viewer's own signals, still forming — the sky's ordinary
+ * inhabitants. Their evidence cites memories that genuinely exist in
+ * `FACTS.inspirations`, because the page resolves a personal candidate's
+ * evidence against the field in hand and SKIPS an id with nothing behind it.
+ * Citing invented ids would produce nebulae with no satellites and a test that
+ * measured its own fixture's carelessness.
+ */
+const SIGNALS = [
+  {
+    id: "signal-naming",
+    statement: "You keep coming back to how things are named.",
+    cites: ["own-0", "own-1", "own-2"],
+  },
+  {
+    id: "signal-proof",
+    statement: "You would rather check a claim than repeat it.",
+    cites: ["own-3", "own-4"],
+  },
+];
+
+const OPEN_PROPOSAL = {
+  id: PROPOSAL_ID,
+  kind: "edit_entry" as const,
+  status: "open" as const,
+  entryId: "entry-1",
+  body: "We ask the owner when the spec and the code disagree.",
+  rationale: null,
+  proposedByProfileId: AFFIRMERS[0].profileId,
+  proposedByName: AFFIRMERS[0].name,
+  affirmations: AFFIRMERS.map((a, i) => ({
+    profileId: a.profileId,
+    name: a.name,
+    createdAt: iso(i + 1),
+  })),
+  viewerAffirmed: false,
+  resolvedAt: null,
+  createdAt: iso(3),
+};
+
+/**
+ * THE SEAM IS `lib/data` FOR THE THREE LAYERS AND `lib/api` FOR A GROUP'S
+ * READS — the same division `render-home.tsx` explains at length, and the same
+ * one that let a whole suite describe the dev fixture once. `loadSignals` and
+ * `loadSignal` are added here rather than in the shared helper because they
+ * are this file's subject: the field's tests want an empty sky, and a helper
+ * that quietly filled it would change what they are measuring.
+ *
+ * `fetchGroupWall` is emptied on purpose. A group's shared statements become
+ * candidates at the GROUP's column, and every case below stands on the
+ * viewer's own wall; leaving them in would put clouds in a sky no assertion
+ * here ever looks at, which is noise rather than coverage.
+ */
+vi.mock("../src/lib/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/lib/api")>();
+  return {
+    ...actual,
+    ...apiMockFrom(FACTS),
+    fetchGroupWall: async () => [],
+    fetchGroupProposals: async (groupId: string) => (groupId === GROUP_ID ? [OPEN_PROPOSAL] : []),
+    affirmGroupProposal: async () => ({
+      proposal: { ...OPEN_PROPOSAL, status: "accepted" as const },
+      accepted: true,
+    }),
+  };
+});
+
+vi.mock("../src/lib/data", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/lib/data")>();
+  const row = (s: (typeof SIGNALS)[number]) => ({
+    id: s.id,
+    statement: s.statement,
+    /* `emerging` is the whole reason these appear overhead: an `active` signal
+       is what headquarters already stands on and a `retired` one has sunk. */
+    status: "emerging" as const,
+    confidence: 60,
+    evidenceCount: s.cites.length,
+    lastEvidenceMs: BASE - DAY,
+    createdMs: BASE - 10 * DAY,
+    locked: false,
+    unsupported: false,
+    sharedGroupIds: [],
+  });
+  return {
+    ...actual,
+    ...dataMockFrom(FACTS),
+    loadSignals: async () => SIGNALS.map(row),
+    loadSignal: async (id: string) => {
+      const s = SIGNALS.find((x) => x.id === id);
+      if (!s) throw new Error(`no such signal ${id}`);
+      return {
+        ...row(s),
+        evidence: s.cites.map((cite, i) => ({
+          signalId: s.id,
+          inspirationId: cite,
+          preview: `something I kept, ${cite.slice(4)}`,
+          quote: `the words that carried it, ${i}`,
+          reason: null,
+          createdMs: BASE - (i + 1) * DAY,
+        })),
+      };
+    },
+  };
+});
+
+vi.mock("../src/lib/auth-context", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/lib/auth-context")>();
+  const session = {
+    status: "authenticated",
+    account: { id: "account-1", email: "you@example.test" },
+    profile: { id: VIEWER_ID, name: "You", type: "human" },
+    profiles: [],
+    refresh: async () => undefined,
+    signOut: async () => undefined,
+  };
+  return { ...actual, useOptionalAuth: () => session, useAuth: () => session };
+});
+
+let layout: MountedWorld;
+
+beforeAll(() => {
+  installCanvasStub();
+  setViewport(1280, 900);
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+});
+
+beforeEach(async () => {
+  /* a spot kept from an earlier case would come back as a PINNED cloud, which
+     silently disables the layout the first case is about */
+  window.localStorage.clear();
+  layout = await mountWorld(FACTS);
+  /* the sky arrives a hop behind the field: loadSignals, then one loadSignal
+     per signal for its evidence, then the memo, then syncSky */
+  await layout.step(40);
+});
+
+afterEach(() => {
+  layout?.unmount();
+});
+
+/* ------------------------------------------------------------------ reading
+   the sky out of the DOM the loop writes to */
+
+/** The three sentences standing in the viewer's own sky, by their opening words. */
+const PROPOSAL = "We ask the owner";
+const NAMING = "You keep coming back";
+const PROOF = "You would rather check";
+
+function clouds(): HTMLElement[] {
+  return [...layout.container.querySelectorAll<HTMLElement>(".jar-sky .jar-neb")];
+}
+
+function cloud(startsWith: string): HTMLElement {
+  const found = clouds().find((n) =>
+    (n.querySelector(".jar-neb-text")?.textContent ?? "").startsWith(startsWith),
+  );
+  if (!found) {
+    const seen = clouds().map((n) => (n.querySelector(".jar-neb-text")?.textContent ?? "").slice(0, 24));
+    throw new Error(`no candidate whose sentence starts "${startsWith}" — saw ${JSON.stringify(seen)}`);
+  }
+  return found;
+}
+
+/** Where the loop last put this cloud, in screen pixels. */
+function spotOf(el: HTMLElement): { x: number; y: number } {
+  const m = /translate3d\((-?[\d.]+)px, (-?[\d.]+)px/.exec(el.style.transform);
+  if (!m) {
+    throw new Error(
+      `the loop has never placed this cloud — transform is "${el.style.transform}". ` +
+        "Either syncSky never ran or the sky has no Neb under this candidate's id.",
+    );
+  }
+  return { x: Number(m[1]), y: Number(m[2]) };
+}
+
+/**
+ * How far the subject has grown. `syncDom` writes `scale(1 + FOCUS_POP * focus)`
+ * — one number carrying the whole focus ease — so "is this one the subject" is
+ * readable without owning FOCUS_POP's value here.
+ */
+function growthOf(el: HTMLElement): number {
+  const m = /scale\(([\d.]+)\)/.exec(el.style.transform);
+  if (!m) throw new Error(`no scale in "${el.style.transform}"`);
+  return Number(m[1]);
+}
+
+const opacityOf = (el: HTMLElement) => Number(el.style.opacity);
+
+/* ------------------------------------------------------------------ pointer
+
+   `onDown` is registered on the layout root in the CAPTURE phase and
+   `onMove`/`onUp` on the window, so a press has to be dispatched on a real
+   descendant of the root and the lift on the window. Pressing the sentence is
+   the product's own gesture: "the words visually ARE the cloud". */
+
+const pointer = { pointerId: 1, pointerType: "mouse", bubbles: true } as const;
+
+async function pressOn(el: HTMLElement, x: number, y: number) {
+  await act(async () => {
+    el.dispatchEvent(new PointerEvent("pointerdown", { ...pointer, cancelable: true, clientX: x, clientY: y }));
+  });
+}
+
+function moveTo(x: number, y: number) {
+  window.dispatchEvent(new PointerEvent("pointermove", { ...pointer, clientX: x, clientY: y }));
+}
+
+async function liftAt(x: number, y: number) {
+  await act(async () => {
+    window.dispatchEvent(new PointerEvent("pointerup", { ...pointer, clientX: x, clientY: y }));
+  });
+}
+
+/** The bare layout, for a press that is meant to land on a satellite rather
+    than on a sentence — the canvas is the only child of the root that is not
+    itself chrome. */
+function canvas(): HTMLElement {
+  const el = layout.container.querySelector("canvas");
+  if (!el) throw new Error("no canvas — the layout never mounted");
+  return el as HTMLElement;
+}
+
+/**
+ * Climb into the sky, the way the layout offers it: the one quiet line under
+ * the ambition that says something is forming. Every satellite measurement
+ * needs the camera up here — a candidate's screen position is its place minus
+ * the camera, and from headquarters the whole sky sits at a negative y.
+ */
+async function climbToSky() {
+  const up = layout.container.querySelector<HTMLElement>(".jar-forming-line");
+  if (!up) throw new Error("no forming line — nothing is overhead to climb to");
+  await act(async () => up.click());
+  await layout.step(80);
+}
+
+/** A press that never moved is a tap: it makes the candidate the subject. */
+async function tapSentence(startsWith: string): Promise<HTMLElement> {
+  const el = cloud(startsWith);
+  const at = spotOf(el);
+  await pressOn(el, at.x, at.y);
+  await liftAt(at.x, at.y);
+  /* the focus ease is 300ms and the emergence 420ms plus stagger */
+  await layout.step(45);
+  return el;
+}
+
+async function tapEmptySky() {
+  await pressOn(canvas(), 30, 30);
+  await liftAt(30, 30);
+  await layout.step(30);
+}
+
+/**
+ * WHERE THIS CANDIDATE'S EVIDENCE ACTUALLY IS, asked of the product.
+ *
+ * Sweeps the pointer over the whole region a satellite could occupy — the
+ * orbit can never be wider than `SKY_PAD_X`/`SKY_PAD_Y` of the viewport, which
+ * is what `orbFitX`/`orbFitY` cut it to — and collects every point where the
+ * whisper lit, keyed by the name it said. The result is each satellite's
+ * centre of mass RELATIVE TO ITS CLOUD, which is the frame that matters: the
+ * cloud itself drifts, so an absolute position would move even for a satellite
+ * being held perfectly still.
+ *
+ * The step is ten pixels against a satellite whose hit radius is its drawn
+ * radius plus four, so a satellite cannot slip between two samples. Averaging
+ * the hits rather than taking the first one removes the sampling grid from the
+ * answer, which is what makes "it moved" and "it held still" separable at all.
+ */
+function orbitAround(el: HTMLElement): Map<string, { dx: number; dy: number }> {
+  const at = spotOf(el);
+  const say = layout.container.querySelector<HTMLElement>(".jar-satsay");
+  if (!say) throw new Error("the whisper element is missing — sayWho has nowhere to write");
+  const sums = new Map<string, { x: number; y: number; n: number }>();
+  for (let dx = -560; dx <= 560; dx += 10) {
+    for (let dy = -360; dy <= 360; dy += 10) {
+      moveTo(at.x + dx, at.y + dy);
+      if (!say.classList.contains("jar-satsay--on")) continue;
+      const who = say.textContent ?? "";
+      const got = sums.get(who) ?? { x: 0, y: 0, n: 0 };
+      got.x += dx;
+      got.y += dy;
+      got.n += 1;
+      sums.set(who, got);
+    }
+  }
+  const out = new Map<string, { dx: number; dy: number }>();
+  for (const [who, s] of sums) out.set(who, { dx: s.x / s.n, dy: s.y / s.n });
+  return out;
+}
+
+const apart = (a: { dx: number; dy: number }, b: { dx: number; dy: number }) =>
+  Math.hypot(a.dx - b.dx, a.dy - b.dy);
+
+/* ------------------------------------------------------------------- cases */
+
+describe("what a forming signal becomes overhead", () => {
+  /**
+   * The first thing that was never checked: that a signal reaches the sky at
+   * all. Three candidates stand over the viewer's own wall — two of their own
+   * signals still forming, and the group's pending proposal — and each one has
+   * a body the loop has placed somewhere in its own column.
+   *
+   * `spotOf` throws rather than returning a default when the transform is
+   * missing, because "no cloud was ever placed" and "a cloud was placed at the
+   * origin" are different failures and only one of them is this file's.
+   */
+  it("gives every candidate a body the loop has placed", async () => {
+    await climbToSky();
+    const sentences = clouds().map((n) => (n.querySelector(".jar-neb-text")?.textContent ?? ""));
+    for (const opening of [PROPOSAL, NAMING, PROOF])
+      expect(sentences.some((s) => s.startsWith(opening)), `"${opening}" never reached the sky`).toBe(true);
+
+    const spots = [PROPOSAL, NAMING, PROOF].map((s) => spotOf(cloud(s)));
+    for (const [i, at] of spots.entries()) {
+      expect(Number.isFinite(at.x) && Number.isFinite(at.y), `candidate ${i} has no place`).toBe(true);
+      expect(opacityOf(clouds()[i]), "a placed cloud is on screen").toBeGreaterThan(0);
+    }
+    /* THE SENTENCES ARE PARTED, and that is layoutSky's own claim: two
+       candidates whose keep-outs overlap are relaxed apart until neither sits
+       on the other's words. Two sentences printed on top of each other is the
+       failure that relaxation pass exists to prevent. */
+    expect(apart({ dx: spots[0].x, dy: spots[0].y }, { dx: spots[1].x, dy: spots[1].y })).toBeGreaterThan(60);
+    expect(apart({ dx: spots[1].x, dy: spots[1].y }, { dx: spots[2].x, dy: spots[2].y })).toBeGreaterThan(60);
+  });
+
+  /**
+   * AND IT HAS SATELLITES — one per piece of evidence, in orbit, each saying
+   * whose memory it stands for.
+   *
+   * The control comes first and it is not decoration: at rest the sky is
+   * sentences and faint bodies and NOTHING ELSE, so the same sweep over the
+   * same region finds nothing at all. Without it this case could pass on a
+   * sky that had satellites permanently strewn everywhere, which is exactly
+   * the state progressive disclosure exists to prevent — and it would pass
+   * without the tap having done anything, which is the way a test passes by
+   * doing nothing.
+   */
+  it("puts the subject's evidence in orbit around it, one satellite each", async () => {
+    await climbToSky();
+    const before = orbitAround(cloud(PROPOSAL));
+    expect(
+      [...before.keys()],
+      "at rest a candidate is its sentence and its body — no evidence is out",
+    ).toEqual([]);
+
+    const el = await tapSentence(PROPOSAL);
+    const orbit = orbitAround(el);
+    expect(
+      [...orbit.keys()].sort(),
+      "one satellite per affirmation, each naming whose save it is",
+    ).toEqual(["Hana", "Jun"]);
+
+    const [hana, jun] = [orbit.get("Hana")!, orbit.get("Jun")!];
+    /* THEY ORBIT, THEY DO NOT SIT ON IT. Both standing at the cloud's own
+       centre would satisfy every count above and is precisely the bug the
+       ellipse solve exists to prevent — evidence printed over the words. */
+    expect(apart(hana, jun), "the two satellites are at different places on the ellipse").toBeGreaterThan(80);
+    expect(
+      Math.max(Math.hypot(hana.dx, hana.dy), Math.hypot(jun.dx, jun.dy)),
+      "the orbit stands off the sentence rather than collapsing onto it",
+    ).toBeGreaterThan(80);
+  });
+});
+
+describe("the focus rule: one subject at a time", () => {
+  /**
+   * THE RULE EXISTS BECAUSE A SKYFUL OF ORBITING EVIDENCE WAS UNREADABLE.
+   * Tapping a candidate makes it the subject and sinks every other one on the
+   * field's own focus law — one lit thing, one uniform sink, no second tier of
+   * highlight. Tapping a different one moves the whole arrangement rather than
+   * adding to it.
+   *
+   * Measured through the loop's own numbers: the subject's growth, which
+   * `syncDom` writes as the transform's scale, and everyone else's opacity.
+   */
+  it("makes exactly one cloud the subject, and sinks the rest", async () => {
+    await climbToSky();
+    for (const el of clouds())
+      expect(growthOf(el), "nothing is the subject before anything is tapped").toBeCloseTo(1, 2);
+
+    await tapSentence(NAMING);
+    const subjects = clouds().filter((el) => growthOf(el) > 1.001);
+    expect(subjects.length, "exactly one candidate is the subject").toBe(1);
+    expect(subjects[0]).toBe(cloud(NAMING));
+    for (const el of clouds()) {
+      if (el === subjects[0]) continue;
+      expect(opacityOf(el), "every other candidate has sunk uniformly").toBeLessThan(0.5);
+    }
+
+    await tapSentence(PROOF);
+    const after = clouds().filter((el) => growthOf(el) > 1.001);
+    expect(after.length, "the subject MOVED — it was not joined by a second one").toBe(1);
+    expect(after[0]).toBe(cloud(PROOF));
+    expect(growthOf(cloud(NAMING)), "the one you left has come back down").toBeCloseTo(1, 2);
+  });
+
+  /**
+   * AND THE EVIDENCE IN WORDS FOLLOWS THE SUBJECT TOO. Under the subject's
+   * sentence sit the memories it was read from; that section belongs to the
+   * one being read and to nothing else, for the same reason its satellites do.
+   */
+  it("shows the read-from rows under the subject and under no one else", async () => {
+    await climbToSky();
+    expect(layout.container.querySelectorAll(".jar-sky .jar-prov").length).toBe(0);
+
+    await tapSentence(NAMING);
+    const one = [...layout.container.querySelectorAll(".jar-sky .jar-prov")];
+    expect(one.length, "exactly one candidate is showing what it rests on").toBe(1);
+    expect(cloud(NAMING).contains(one[0]), "and it is the subject's own").toBe(true);
+    expect(one[0].querySelectorAll(".jar-prov-row").length, "the memories it was read from").toBe(3);
+
+    await tapSentence(PROOF);
+    const two = [...layout.container.querySelectorAll(".jar-sky .jar-prov")];
+    expect(two.length, "still exactly one — the sky does not accumulate evidence").toBe(1);
+    expect(cloud(PROOF).contains(two[0])).toBe(true);
+    expect(two[0].querySelectorAll(".jar-prov-row").length).toBe(2);
+  });
+
+  /**
+   * Tapping the bare sky gives the subject back, and the orbit goes with it.
+   * The satellites are asked directly rather than inferred from the scale,
+   * because "the cloud came back down" and "its evidence went back in" are two
+   * separate eases and only one of them is the one this rule is about.
+   */
+  it("takes the evidence back in when the sky itself is tapped", async () => {
+    await climbToSky();
+    const el = await tapSentence(PROPOSAL);
+    expect([...orbitAround(el).keys()].length, "the evidence came out first").toBe(2);
+
+    await tapEmptySky();
+    expect(
+      [...orbitAround(el).keys()],
+      "letting the subject go retracts its evidence into the sentence",
+    ).toEqual([]);
+    expect(growthOf(el), "and the cloud is back at rest").toBeCloseTo(1, 2);
+  });
+});
+
+describe("a cloud keeps where you put it", () => {
+  /**
+   * Dragging a candidate pins it and writes the spot down, so it comes back
+   * there next session. Two things are checked and both had a bug behind them:
+   *
+   *   - the spot written is where the POINTER ended, not where a lagged lerp
+   *     had got to. That lag was forty pixels at a normal drag speed, on the
+   *     gesture that performs this product's central act of meaning-making.
+   *   - only the cloud that was actually placed is written down. `persistSky`
+   *     skips anything unpinned on purpose: a sky that wrote every candidate's
+   *     drifting position would restore an arrangement nobody made.
+   *
+   * The stored coordinates are relative to the wall, not to the layout — a new
+   * agent arriving shifts every column — so the expectation converts back
+   * through the camera the same way the engine does.
+   */
+  it("writes down the spot of the cloud you moved, and of no other", async () => {
+    await climbToSky();
+    const el = cloud(NAMING);
+    const from = spotOf(el);
+    const to = { x: from.x + 90, y: from.y - 60 };
+
+    await pressOn(el, from.x, from.y);
+    for (let i = 1; i <= 6; i += 1) {
+      await act(async () => moveTo(from.x + (90 * i) / 6, from.y - (60 * i) / 6));
+      /* a frame between moves: the drag is applied in the loop, and a gesture
+         that never let a frame run would leave the cloud where it started */
+      await layout.step(1);
+    }
+    /* THE DRAG HAS TO HAVE MOVED IT before anything about where it was kept
+       can mean anything. Read before the lift: the moment the gesture ends the
+       cloud is unpinned back into the ambient drift, which is a few pixels of
+       honest motion that has nothing to do with what was written down. */
+    expect(spotOf(el).x, "the cloud never went with the pointer").toBeCloseTo(to.x, 0);
+    expect(spotOf(el).y).toBeCloseTo(to.y, 0);
+
+    const camY = layout.audit().camY;
+    await liftAt(to.x, to.y);
+
+    const kept = JSON.parse(window.localStorage.getItem("waka.sky.layout.v1") ?? "null") as Record<
+      string,
+      { x: number; y: number }
+    > | null;
+    expect(kept, "nothing was written down at all — persistSky never ran").not.toBeNull();
+    expect(Object.keys(kept ?? {}), "only the cloud that was placed is kept").toEqual([
+      SIGNALS[0].id,
+    ]);
+    /* the camera is the only thing between a screen position and a stored one:
+       this is column zero, so the wall offset is nothing and the camera is all
+       of it. Two pixels of slack covers the rounding at both ends. */
+    expect(Math.abs(kept![SIGNALS[0].id].x - to.x), "kept where the pointer was").toBeLessThan(2);
+    expect(Math.abs(kept![SIGNALS[0].id].y - (to.y + camY))).toBeLessThan(2);
+  });
+});
+
+describe("reading a memory that is in orbit", () => {
+  /**
+   * A SATELLITE'S SELECTION IS NOT THE FIELD'S TO CLOSE.
+   *
+   * `springs` runs every frame while something is selected and closes a
+   * reading whose orb has scrubbed out from under it. A satellite breaks that
+   * assumption: the memory it stands for may live in a field this session has
+   * never poured — another member's save, standing in a proposal's orbit — and
+   * its ball is therefore inactive by construction. Without the one line at
+   * the top of `springs` that steps aside for a satellite, the panel would be
+   * torn down on the very next frame after it opened, and the reader would see
+   * a flash.
+   *
+   * Sixty frames is a second of the loop running with the selection live, so
+   * "it survived" is a real statement about every frame in between rather than
+   * about the moment of the tap.
+   */
+  it("does not close a reading whose memory the field has never poured", async () => {
+    await climbToSky();
+    const el = await tapSentence(PROPOSAL);
+    const orbit = orbitAround(el);
+    const at = spotOf(el);
+    const hana = orbit.get("Hana");
+    expect(hana, "no satellite to read — the orbit never emerged").toBeTruthy();
+
+    await pressOn(canvas(), at.x + hana!.dx, at.y + hana!.dy);
+    await liftAt(at.x + hana!.dx, at.y + hana!.dy);
+    /* Read before a single frame runs, because `springs` runs INSIDE a frame:
+       this asserts the tap landed, and the check after the frames asserts the
+       reading survived them. Rolled into one, a teardown on the very first
+       frame would report itself as "the tap missed".
+
+       `--in` rather than the panel element itself: a closing panel lingers in
+       the DOM for 200ms of REAL time so it can fade, and this clock is not
+       real — so "the element is still there" would be true either way, which
+       is the shape of a case that passes by doing nothing. */
+    expect(
+      layout.container.querySelector(".jar-panel--in"),
+      "tapping a satellite opens the memory it stands for",
+    ).not.toBeNull();
+
+    await layout.step(60);
+    expect(
+      layout.container.querySelector(".jar-panel--in"),
+      "the reading was torn down by the field's own spring check",
+    ).not.toBeNull();
+  });
+
+  /**
+   * AND IT HOLDS STILL WHILE IT IS READ, THEN TURNS AGAIN.
+   *
+   * A held satellite parks under its panel exactly as a focused orb does, and
+   * `releaseHolds` is what lets it go — the one line in it that no other
+   * caller reaches, since every other hold belongs to a ball in the field.
+   * Measured as the satellite's angle relative to its own cloud, because the
+   * cloud drifts underneath it and an absolute position would move either way.
+   *
+   * The three legs are needed together. Free-then-held alone would pass on an
+   * orbit that had simply stopped; held-then-free alone would pass on one that
+   * had never held. What is asserted is that the hold begins and ENDS.
+   */
+  it("holds the satellite still while it is read, and lets it turn again after", async () => {
+    await climbToSky();
+    const el = await tapSentence(PROPOSAL);
+    const start = orbitAround(el).get("Hana");
+    expect(start, "no satellite to hold").toBeTruthy();
+
+    await layout.step(120);
+    const drifted = orbitAround(el).get("Hana")!;
+    expect(apart(start!, drifted), "a free satellite goes on turning").toBeGreaterThan(30);
+
+    const on = spotOf(el);
+    await pressOn(canvas(), on.x + drifted.dx, on.y + drifted.dy);
+    await liftAt(on.x + drifted.dx, on.y + drifted.dy);
+    await layout.step(10);
+    const held0 = orbitAround(el).get("Hana")!;
+    await layout.step(120);
+    const held1 = orbitAround(el).get("Hana")!;
+    expect(apart(held0, held1), "the one being read holds still under its panel").toBeLessThan(12);
+
+    /* tapping it again is the release: the same hit test, the same satellite */
+    const off = spotOf(el);
+    await pressOn(canvas(), off.x + held1.dx, off.y + held1.dy);
+    await liftAt(off.x + held1.dx, off.y + held1.dy);
+    await layout.step(10);
+    expect(layout.container.querySelector(".jar-panel--in"), "the reading closed").toBeNull();
+    const free0 = orbitAround(el).get("Hana")!;
+    await layout.step(120);
+    const free1 = orbitAround(el).get("Hana")!;
+    expect(
+      apart(free0, free1),
+      "letting go carries it on from where it stopped — a satellite left held never turns again",
+    ).toBeGreaterThan(30);
+  });
+});
+
+describe("condensing", () => {
+  /**
+   * ADOPTION CONTRACTS THE CLOUD TO A CORE.
+   *
+   * `condense` is the sky's verb for it and `adopt` is its one caller. It is
+   * driven here through the page's own dev instrument rather than through the
+   * button, and that is worth stating plainly: `adopt` calls `condense(c.id)`
+   * and then `setProposal(null)` in the same commit, so the candidate leaves
+   * the list — and the loop's sky with it — before a single frame of the
+   * seven-hundred-millisecond contraction has run. Driving the button and
+   * watching for the contraction was tried first and cannot work; the case
+   * below it covers what the button does reach.
+   *
+   * What is asserted is the contraction itself: past `condense` 0.5 the
+   * sentence is no longer on screen (`syncDom` gates its opacity there,
+   * because an invisible sentence must stop taking the pointer — its one child
+   * is the least reversible control in the layout), and the cloud stops
+   * answering a press. The other candidates are checked in the same breath, or
+   * "everything vanished" would read as a pass.
+   */
+  it("contracts a condensed candidate past its core and out of reach", async () => {
+    await climbToSky();
+    const el = cloud(NAMING);
+    expect(opacityOf(el), "it is on screen to begin with").toBeGreaterThan(0.5);
+
+    const sim = (window as unknown as { wakaSim?: () => { condense: (id: string) => void } | null })
+      .wakaSim;
+    if (!sim) throw new Error("window.wakaSim is absent — the loop never published its verbs");
+    await act(async () => sim()!.condense(SIGNALS[0].id));
+    await layout.step(60); /* CONDENSE_MS is 700 */
+
+    expect(opacityOf(el), "the cloud contracted to a core and left the screen").toBe(0);
+    expect(el.style.pointerEvents, "and stopped taking the pointer with it").toBe("none");
+    for (const other of [cloud(PROOF), cloud(PROPOSAL)])
+      expect(opacityOf(other), "the rest of the sky is untouched").toBeGreaterThan(0.5);
+
+    /* and a press on its words no longer makes it the subject: a condensing
+       candidate is on its way out and answers nothing */
+    await pressOn(el, spotOf(el).x, spotOf(el).y);
+    await liftAt(spotOf(el).x, spotOf(el).y);
+    await layout.step(30);
+    expect(growthOf(el), "a candidate on its way out cannot be picked up").toBeCloseTo(1, 2);
+  });
+
+  /**
+   * WHAT THE ADOPT BUTTON DOES REACH.
+   *
+   * The proposal is the only adoptable candidate, and affirming it carries it
+   * out of the sky. The interesting half is what happens to the REST of the
+   * sky: the proposal was the subject, so every other candidate was sunk at
+   * the focus law's one tier — and a subject that has left still holds them
+   * all down unless `syncSky` notices. That line ("a candidate that has left
+   * the sky cannot be the subject of it") is what this checks, because a sky
+   * permanently dimmed behind a candidate that no longer exists is a state
+   * with no way out of it.
+   */
+  it("carries an adopted proposal out of the sky and lifts what it was dimming", async () => {
+    await climbToSky();
+    await tapSentence(PROPOSAL);
+    expect(opacityOf(cloud(NAMING)), "the sky is sunk behind the subject").toBeLessThan(0.5);
+
+    const button = cloud(PROPOSAL).querySelector<HTMLElement>(".jar-neb-act");
+    expect(button?.textContent, "the one action a proposal offers").toContain("Adopt");
+    await act(async () => button!.click());
+    await layout.step(60);
+
+    expect(
+      clouds().some((n) => (n.querySelector(".jar-neb-text")?.textContent ?? "").startsWith(PROPOSAL)),
+      "the adopted proposal is no longer a candidate overhead",
+    ).toBe(false);
+    for (const opening of [NAMING, PROOF])
+      expect(
+        opacityOf(cloud(opening)),
+        "the sky came back up when the subject left — otherwise it is dimmed behind nothing",
+      ).toBeGreaterThan(0.9);
+  });
+});
