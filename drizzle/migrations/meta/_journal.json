@@ -36,6 +36,13 @@
       "when": 1786931276881,
       "tag": "0004_group_survives_its_creator",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787000000000,
+      "tag": "0005_promotion_not_residence",
+      "breakpoints": true
     }
   ]
 }
