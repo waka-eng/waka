@@ -114,9 +114,45 @@
  * verdict. It costs one integer and it does not need to know what the next
  * unhandled delimiter will be.
  *
+ * THE THREE THINGS THAT DECIDE WHETHER THE JUDGEMENT RUNS AT ALL, since that is
+ * where every defect in this file has turned out to live. The parts that JUDGE
+ * are proven several ways over; the parts that decide which files reach them,
+ * whether a check's failure stops the process, and whether a printed number came
+ * from anything were carried by reading the code, three reviews running.
+ *
+ *   - WHICH FILES. The walk is checked against the filesystem, and the SCAN is
+ *     now checked against the walk: `scanFiles` reports the paths that reached
+ *     it and the files that yielded no identifier, and the run asserts both. The
+ *     four edits that used to delete a directory from the judgement in silence —
+ *     filtering the argument, an empty `readSource`, an early return, a
+ *     `try/catch` — all fail now. And NOT_OURS cannot excuse a directory the
+ *     repository tracks, so dropping a root while excluding it is no longer the
+ *     one edit that switches off a check and its guard together.
+ *   - WHETHER FAILURE STOPS ANYTHING. Every `process.exit(1)` in the run below
+ *     is held down by a case in `test/vocabulary-gate.test.ts` that goes red if
+ *     it is deleted. The checks no tree can trigger — the expiry pair count, the
+ *     root/exclusion guard, the self-test floors — are held by cases that run a
+ *     MUTATED COPY of this script against the real package, because a check
+ *     nothing can trigger is a check nobody can prove is connected.
+ *   - WHETHER THE NUMBERS MEAN ANYTHING. `disposition` is read for sense, the
+ *     rename/permanent split is counted from both sides rather than by
+ *     subtraction, and the counts in the report, coverage and blind headers are
+ *     asserted against trees with two of the thing in them.
+ *
+ * WHAT IS STILL UNCHECKED, in one place, with the fix for each:
+ *
+ *   1. The self-test summary's case counts are cosmetic — see the note above
+ *      `console.log` in `selftest()`. The floors make a shrunken suite fail, so
+ *      this cannot hide missing proof, only misreport proof that is there.
+ *   2. In a tree with no `.gitignore` anywhere above this package, the exclusion
+ *      justification declines to speak and NOT_OURS goes unexamined — see the
+ *      note beside `ignoreRules`. Every checkout has one; an export might not.
+ *   3. `.mjs` and `.js` are outside the coverage walk entirely, which is the
+ *      original sentence below about `classify` and remains true.
+ *
  * Run: node scripts/check-vocabulary.mjs        (also runs in `pnpm test`)
  */
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -164,6 +200,54 @@ const NOT_OURS = new Set([
   "coverage", // vitest's report, regenerated on every run
   ".turbo", // task cache
 ]);
+
+/**
+ * WHICH DIRECTORY NAMES THE REPOSITORY ITSELF SAYS ARE NOT OURS.
+ *
+ * NOT_OURS and ROOTS are two hand-maintained lists, and `rootsAlsoExcluded`
+ * below only catches the case where they NAME THE SAME THING. The coherent form
+ * of that mistake does not: drop `test` from ROOTS and add `"test"` to NOT_OURS,
+ * and the two lists agree with each other perfectly while twenty files stop
+ * being read AND stop being missed — the coverage check cannot report a file its
+ * own walk was told to skip. That is one edit, in two data lists, that switches
+ * off the scan and its guard together, which is precisely the shape this gate
+ * exists to make impossible.
+ *
+ * So the excuse has to come from somewhere that is not this file. `.gitignore`
+ * is the repository's own record of which directories are generated or vendored,
+ * it is maintained by a different force for a different reason, and nobody can
+ * add `test` to it without git quietly forgetting the next test file — which is
+ * a great deal louder than editing two constants here.
+ *
+ * The reading is DELIBERATELY LITERAL: a plain name on its own line, with or
+ * without slashes around it. A glob or a path does not license a name, and a
+ * `!` negation is not an ignore. Everything it declines to understand it treats
+ * as "not ignored", so the only mistake it can make is refusing an exclusion
+ * somebody must then justify — never allowing one it should have refused.
+ */
+function ignoredDirectoryNames(text) {
+  const names = new Set();
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#") || line.startsWith("!")) continue;
+    const name = line.replace(/^\/+/, "").replace(/\/+$/, "");
+    if (!name || name.includes("/") || /[*?[\]]/.test(name)) continue;
+    names.add(name);
+  }
+  return names;
+}
+
+/**
+ * Excluded directories that are really here and that the repository tracks.
+ *
+ * `exists` is handed in for the same reason every other traversal's listing is:
+ * so the cases can describe a package rather than need one. Only directories
+ * that are actually present can hide anything, which is why `.turbo` — a cache
+ * this package has never had — is not a finding.
+ */
+function unjustifiedExclusions(notOurs, ignored, exists) {
+  return [...notOurs].filter((name) => exists(name) && !ignored.has(name));
+}
 
 /**
  * The words that may not appear in an identifier, and what to use instead.
@@ -413,6 +497,76 @@ function unusedAllowanceFiles(entries, used) {
     if (unused.length > 0) stale.push({ name: entry.name, unused });
   }
   return { stale, checked };
+}
+
+/** The only two things an entry is allowed to be. */
+const DISPOSITIONS = ["permanent", "rename"];
+
+/**
+ * THE ALLOWLIST'S OWN SHAPE, CHECKED RATHER THAN ASSUMED.
+ *
+ * Everything above treats `disposition` as data with meaning and nothing ever
+ * read it for sense. One character does the damage: `disposition: "permanant"`
+ * on a rename entry matches neither branch, so the run prints "4 awaiting a
+ * rename, 3 permanent" instead of 5 and 2, and a hole that was supposed to be
+ * temporary has quietly reclassified itself as forever — with every case in this
+ * file green, because no case in this file reads the data. The number in that
+ * sentence is the ratchet the whole allowlist discipline is read against; it is
+ * the one line of this gate's output anyone tracks over time.
+ *
+ * A `rename` with no `to` is the same defect said differently: it is a permanent
+ * hole wearing a temporary label, since nobody can act on it. And a path listed
+ * twice in one entry is counted twice in the pair total the expiry check
+ * measures itself against, so the gate reports guarding more holes than exist
+ * while the duplicate proves nothing.
+ */
+function allowlistProblems(entries) {
+  const problems = [];
+  for (const entry of entries) {
+    if (!DISPOSITIONS.includes(entry.disposition)) {
+      problems.push(
+        `${entry.name}: disposition ${JSON.stringify(entry.disposition)} is ` +
+          `neither ${DISPOSITIONS.join(" nor ")}, so it counts as neither`,
+      );
+    }
+    if (entry.disposition === "rename" && !entry.to) {
+      problems.push(
+        `${entry.name}: a rename with no \`to\` — nobody can do a rename that ` +
+          `does not say what the name becomes`,
+      );
+    }
+    if (entry.files.length === 0) {
+      problems.push(`${entry.name}: allowed in no files, so it allows nothing`);
+    }
+    const seen = new Set();
+    for (const file of entry.files) {
+      if (seen.has(file)) {
+        problems.push(
+          `${entry.name}: ${file} listed twice — a repeated path inflates the ` +
+            `(name, file) total the expiry check measures itself against`,
+        );
+      }
+      seen.add(file);
+    }
+  }
+  return problems;
+}
+
+/**
+ * The two halves of the list, counted separately and never by subtraction.
+ *
+ * `ALLOWED.length - renames.length` reads like the same thing and is not: it
+ * makes the permanent count a mirror of the rename count, so anything that stops
+ * an entry from being seen as a rename — a typo in the data, a mistyped literal
+ * in the filter — moves it silently into "permanent" and the two numbers still
+ * add up to the total. Counting both and demanding they account for every entry
+ * is what makes that arithmetic unable to lie.
+ */
+function dispositionSplit(entries) {
+  return {
+    rename: entries.filter((e) => e.disposition === "rename"),
+    permanent: entries.filter((e) => e.disposition === "permanent"),
+  };
 }
 
 /** Identifier-ish tokens: what a variable, property or type could be called. */
@@ -862,9 +1016,11 @@ function filesToScan(roots, looseDir, listing) {
  */
 function scanSource(source, file, used = new Set()) {
   const found = [];
+  let tokens = 0;
   const { code, openedAt } = codeOnly(source);
   code.split("\n").forEach((line, index) => {
     for (const match of line.matchAll(TOKEN)) {
+      tokens += 1;
       const name = match[0];
       const allowance = ALLOWED_BY_NAME.get(name);
       if (allowance && allowance.files.includes(file)) {
@@ -881,7 +1037,7 @@ function scanSource(source, file, used = new Set()) {
   });
   const blindFromLine =
     openedAt === -1 ? -1 : source.slice(0, openedAt).split("\n").length;
-  return { found, blindFromLine };
+  return { found, blindFromLine, tokens };
 }
 
 /**
@@ -901,16 +1057,34 @@ function scanSource(source, file, used = new Set()) {
  * written for `src/lib/public-handles.ts` silently covers any file of that name
  * anywhere. The self-test carries a case for the second, which is the direction
  * that fails quietly.
+ *
+ * IT REPORTS WHAT IT ACTUALLY LOOKED AT, and that is the part worth the extra
+ * two lines. The coverage check at the bottom of this file compares the
+ * filesystem against the DISCOVERED list, so everything between "the walk found
+ * this file" and "its identifiers were examined" used to be unguarded: filter
+ * the argument here, or return an empty string from `readSource`, or wrap this
+ * loop in a `try { … } catch { continue; }` — the most ordinary robustness edit
+ * there is — and the files vanish from the scan while every check in this file
+ * still passes. So the loop says which paths reached `scanSource` (`read`) and
+ * which of them yielded no identifier at all (`silent`), and the run asserts
+ * both against what discovery handed it. A `.ts` file with nothing nameable in
+ * it is either empty or unread, and both deserve a sentence rather than a
+ * silent pass — an unread file and a clean one print the same word, which is
+ * the failure this whole gate is built around.
  */
 function scanFiles(files, readSource, used) {
   const violations = [];
   const blind = [];
+  const read = [];
+  const silent = [];
   for (const file of files) {
-    const { found, blindFromLine } = scanSource(readSource(file), file, used);
-    for (const hit of found) violations.push({ ...hit, file });
-    if (blindFromLine !== -1) blind.push({ file, line: blindFromLine });
+    const scan = scanSource(readSource(file), file, used);
+    read.push(file);
+    if (!(scan.tokens > 0)) silent.push(file);
+    for (const hit of scan.found) violations.push({ ...hit, file });
+    if (scan.blindFromLine !== -1) blind.push({ file, line: scan.blindFromLine });
   }
-  return { violations, blind };
+  return { violations, blind, read, silent };
 }
 
 /**
@@ -1511,6 +1685,12 @@ const SELFTEST = [
     why: "THE SAME allowed name, in a file it was not granted to. This pair is the whole argument for scoping the allowlist to files — without it, one exception becomes a package-wide hole",
     src: "const HANDLE_PATTERN = /^[A-Za-z0-9_-]{3,24}$/;",
   },
+  {
+    expect: ["samePatternRoom"],
+    file: "src/queue/gemini.ts",
+    why: "A NAME THAT MERELY STARTS WITH AN ALLOWED ONE IS NOT THE ALLOWED ONE. The lookup is an exact map today; widening it to `find((e) => name.startsWith(e.name))` is a one-line edit that reads like a convenience and hands `samePattern`'s exemption to everything built on top of it, in the file where that exemption lives",
+    src: "const samePatternRoom = 1;",
+  },
 ];
 
 /**
@@ -1750,6 +1930,112 @@ const ROOTS_SELFTEST = [
 ];
 
 /**
+ * AN EXCLUSION HAS TO BE JUSTIFIED FROM OUTSIDE THIS FILE.
+ *
+ * The check above only fires when ROOTS and NOT_OURS name the same directory.
+ * The version of that mistake nobody would call a mistake keeps them in perfect
+ * agreement — remove `test` from ROOTS and add `"test"` to NOT_OURS in the same
+ * edit — and it is strictly worse than either half alone, because the coverage
+ * walk skips exactly what the scan stopped reading. Twenty files leave the gate
+ * with nothing anywhere saying so.
+ *
+ * These drive `ignoredDirectoryNames` and `unjustifiedExclusions` together, over
+ * a made-up `.gitignore` and a made-up package, because what matters is the pair:
+ * a parse that is too generous licenses an exclusion it should have refused.
+ */
+const EXCLUSION_SELFTEST = [
+  {
+    why: "the real shape — everything excluded that is actually here is something the repository already ignores",
+    gitignore: "node_modules\n# build / cache\ndist\ncoverage\n",
+    notOurs: ["node_modules", "dist", "coverage", ".turbo"],
+    present: ["node_modules", "dist", "src", "test"],
+    expect: [],
+  },
+  {
+    why: "A SOURCE DIRECTORY EXCLUDED — dropping `test` from ROOTS and naming it here instead, which is the one edit that removes files from the scan and from the coverage check in the same breath",
+    gitignore: "node_modules\ndist\n",
+    notOurs: ["node_modules", "test"],
+    present: ["node_modules", "src", "test"],
+    expect: ["test"],
+  },
+  {
+    why: "AN EXCLUSION FOR SOMETHING THAT IS NOT THERE hides nothing — `.turbo` is a cache this package has never had, and a rule that fired on it would be noise nobody could act on",
+    gitignore: "node_modules\n",
+    notOurs: ["node_modules", ".turbo"],
+    present: ["node_modules"],
+    expect: [],
+  },
+  {
+    why: "A TRAILING SLASH IS STILL A NAME — `.gitignore` files write directories both ways and the two must not disagree",
+    gitignore: "/node_modules/\ncoverage/\n",
+    notOurs: ["node_modules", "coverage"],
+    present: ["node_modules", "coverage"],
+    expect: [],
+  },
+  {
+    why: "A NEGATION IS NOT AN IGNORE — `!dist` says the opposite, and reading the name off the line without reading the `!` would license the exclusion it revokes",
+    gitignore: "node_modules\n!dist\n",
+    notOurs: ["node_modules", "dist"],
+    present: ["node_modules", "dist"],
+    expect: ["dist"],
+  },
+  {
+    why: "A GLOB IS NOT A NAME. This check refuses what it cannot read literally, so its only possible mistake is asking for a justification that already exists — never accepting one that does not",
+    gitignore: "di*\ntools/output/\n",
+    notOurs: ["dist"],
+    present: ["dist"],
+    expect: ["dist"],
+  },
+];
+
+/**
+ * THE ALLOWLIST AS DATA, which nothing read for sense until now.
+ *
+ * These are the mutations that change a NUMBER the run prints rather than a
+ * verdict, and the number is the one thing about this gate anyone tracks between
+ * commits: how many holes there are and how many of them are supposed to close.
+ */
+const ALLOWLIST_SELFTEST = [
+  {
+    why: "the shape the list is supposed to have",
+    entries: [
+      { name: "a", files: ["src/a.ts"], disposition: "permanent" },
+      { name: "b", files: ["src/b.ts"], disposition: "rename", to: "c" },
+    ],
+    expectProblems: 0,
+    expectSplit: "1 rename / 1 permanent",
+  },
+  {
+    why: "A ONE-CHARACTER TYPO — `permanant` — belongs to neither half. It moves an entry out of the rename column with nothing to announce it, and the printed count silently says one fewer hole is waiting to be closed",
+    entries: [
+      { name: "a", files: ["src/a.ts"], disposition: "permanant", to: "b" },
+    ],
+    expectProblems: 1,
+    expectSplit: "0 rename / 0 permanent",
+  },
+  {
+    why: "A RENAME WITH NO `to` is a permanent hole wearing a temporary label — the disposition promises the entry expires and the entry does not say into what",
+    entries: [{ name: "a", files: ["src/a.ts"], disposition: "rename" }],
+    expectProblems: 1,
+    expectSplit: "1 rename / 0 permanent",
+  },
+  {
+    why: "THE SAME PATH TWICE in one entry counts twice in the pair total, so the gate reports guarding more holes than the list actually has, and the duplicate can never be reported stale on its own",
+    entries: [
+      { name: "a", files: ["src/a.ts", "src/a.ts"], disposition: "permanent" },
+    ],
+    expectProblems: 1,
+    expectSplit: "0 rename / 1 permanent",
+  },
+  {
+    why: "AN ENTRY ALLOWED NOWHERE — an empty `files` is an exemption that grants nothing and can never expire, since it has no pair to go stale",
+    entries: [{ name: "a", files: [], disposition: "permanent" }],
+    expectProblems: 1,
+    expectSplit: "0 rename / 1 permanent",
+  },
+];
+
+/**
  * THE SCAN LOOP, which is three lines and was carried by nothing.
  *
  * `readSource` is handed in, so a corpus can be made of strings. The cases are
@@ -1782,6 +2068,34 @@ const SCAN_LOOP_SELFTEST = [
     },
     expect: ["src/ok.ts:2 roomOk"],
     expectBlind: ["src/torn.ts:1"],
+  },
+  {
+    why: "EVERY blind file, not the first one. `if (blindFromLine !== -1 && blind.length === 0)` reads like a guard against a noisy report and means the second and later blind regions are never mentioned — the same masking bug in two files gets half a verdict",
+    corpus: {
+      "src/torn-a.ts": "const a = `never closed;",
+      "src/torn-b.ts": "const b = `also never closed;",
+    },
+    expect: [],
+    expectBlind: ["src/torn-a.ts:1", "src/torn-b.ts:1"],
+  },
+  {
+    why: "WHICH PATHS ACTUALLY REACHED THE SCANNER, reported rather than assumed. Filtering the argument, or a `try/catch` around this loop, removes files from the scan while leaving the discovery the coverage check measures untouched",
+    corpus: {
+      "src/a.ts": "const roomOne = 1;",
+      "src/b.ts": "const fine = 2;",
+    },
+    expect: ["src/a.ts:1 roomOne"],
+    expectRead: ["src/a.ts", "src/b.ts"],
+  },
+  {
+    why: "A FILE THAT YIELDED NO IDENTIFIER AT ALL is a finding, not a clean file. It is what a `readSource` that returns `\"\"` for a directory looks like, and what a `scanSource` that early-returns for one looks like — both of which leave the path in the list of files read",
+    corpus: {
+      "src/real.ts": "const roomHere = 1;",
+      "src/empty.ts": "",
+      "src/note.ts": "// nothing here but a sentence about a room\n",
+    },
+    expect: ["src/real.ts:1 roomHere"],
+    expectSilent: ["src/empty.ts", "src/note.ts"],
   },
 ];
 
@@ -1818,8 +2132,47 @@ const REPORT_SELFTEST = [
   },
 ];
 
+/**
+ * EVERY SUITE, WITH THE SIZE IT MAY NOT SHRINK BELOW.
+ *
+ * The summary line says how many cases ran, and until now that number was
+ * printed rather than checked: `SELFTEST` could be cut to three cases, or to
+ * none, and the run would still say `self-test passed` — a smaller true number,
+ * which is the one kind of lie a reader has no way to notice. Proof is not
+ * supposed to get smaller, so the floor is written down beside each suite and a
+ * suite below its floor is a failure.
+ *
+ * It is a ratchet, and it is meant to be raised: add cases, raise the floor in
+ * the same commit. Lowering one is allowed too — deleting a case that has stopped
+ * testing what it says it tests is a real thing that happens here — but it takes
+ * an edit on this line, which is exactly the moment to say why in the message.
+ */
+const SUITES = [
+  { label: "scanner", cases: SELFTEST, floor: 45 },
+  { label: "expiry", cases: EXPIRY_SELFTEST, floor: 4 },
+  { label: "file-kind", cases: CLASSIFY_SELFTEST, floor: 6 },
+  { label: "discovery", cases: DISCOVERY_SELFTEST, floor: 4 },
+  { label: "coverage", cases: COVERAGE_SELFTEST, floor: 3 },
+  { label: "root/exclusion", cases: ROOTS_SELFTEST, floor: 2 },
+  { label: "exclusion/ignore", cases: EXCLUSION_SELFTEST, floor: 6 },
+  { label: "allowlist", cases: ALLOWLIST_SELFTEST, floor: 5 },
+  { label: "scan-loop", cases: SCAN_LOOP_SELFTEST, floor: 6 },
+  { label: "report", cases: REPORT_SELFTEST, floor: 2 },
+];
+
 function selftest() {
   const failures = [];
+
+  for (const suite of SUITES) {
+    if (suite.cases.length < suite.floor) {
+      failures.push(
+        `  the ${suite.label} suite has shrunk to ${suite.cases.length} case(s) from ${suite.floor}.\n` +
+          `      A gate's proof is not supposed to get smaller. If a case was\n` +
+          `      genuinely testing nothing, delete it AND lower the floor, so the\n` +
+          `      commit says so out loud.\n`,
+      );
+    }
+  }
 
   for (const [filename, want] of CLASSIFY_SELFTEST) {
     const got = classify(filename);
@@ -1953,8 +2306,47 @@ function selftest() {
     }
   }
 
+  for (const c of EXCLUSION_SELFTEST) {
+    const present = new Set(c.present);
+    const got = unjustifiedExclusions(
+      c.notOurs,
+      ignoredDirectoryNames(c.gitignore),
+      (name) => present.has(name),
+    ).sort();
+    const want = [...c.expect].sort();
+    if (got.length !== want.length || !got.every((n, k) => n === want[k])) {
+      failures.push(
+        `  an exclusion the repository does not back up — ${c.why}\n` +
+          `      .gitignore: ${JSON.stringify(c.gitignore)}\n` +
+          `      excluded:   ${c.notOurs.join(", ")}\n` +
+          `      expected:   ${want.join(", ") || "(nothing)"}\n` +
+          `      found:      ${got.join(", ") || "(nothing)"}\n`,
+      );
+    }
+  }
+
+  for (const c of ALLOWLIST_SELFTEST) {
+    const problems = allowlistProblems(c.entries);
+    if (problems.length !== c.expectProblems) {
+      failures.push(
+        `  the allowlist's own shape — ${c.why}\n` +
+          `      expected ${c.expectProblems} problem(s), found ${problems.length}\n` +
+          `      ${problems.join("\n      ") || "(nothing)"}\n`,
+      );
+    }
+    const split = dispositionSplit(c.entries);
+    const got = `${split.rename.length} rename / ${split.permanent.length} permanent`;
+    if (got !== c.expectSplit) {
+      failures.push(
+        `  the allowlist's two halves — ${c.why}\n` +
+          `      expected: ${c.expectSplit}\n` +
+          `      counted:  ${got}\n`,
+      );
+    }
+  }
+
   for (const c of SCAN_LOOP_SELFTEST) {
-    const { violations, blind } = scanFiles(
+    const { violations, blind, read, silent } = scanFiles(
       Object.keys(c.corpus),
       (f) => c.corpus[f],
       new Set(),
@@ -1979,6 +2371,36 @@ function selftest() {
         `  the scan loop — ${c.why}\n` +
           `      expected blind regions: ${wantBlind.join(", ") || "(none)"}\n` +
           `      reported:               ${gotBlind.join(", ") || "(none)"}\n`,
+      );
+    }
+    /*
+     * `read` is asserted for every case rather than only the one that names it,
+     * because "which files reached the scanner" is the claim the run's coverage
+     * check now rests on, and a claim used everywhere should be checked
+     * everywhere. `expectRead` defaults to the whole corpus for the same reason.
+     */
+    const gotRead = [...read].sort();
+    const wantRead = [...(c.expectRead ?? Object.keys(c.corpus))].sort();
+    if (
+      gotRead.length !== wantRead.length ||
+      !gotRead.every((f, k) => f === wantRead[k])
+    ) {
+      failures.push(
+        `  the scan loop — ${c.why}\n` +
+          `      expected to read: ${wantRead.join(", ") || "(nothing)"}\n` +
+          `      actually read:    ${gotRead.join(", ") || "(nothing)"}\n`,
+      );
+    }
+    const gotSilent = [...silent].sort();
+    const wantSilent = [...(c.expectSilent ?? [])].sort();
+    if (
+      gotSilent.length !== wantSilent.length ||
+      !gotSilent.every((f, k) => f === wantSilent[k])
+    ) {
+      failures.push(
+        `  the scan loop — ${c.why}\n` +
+          `      expected to yield no identifier: ${wantSilent.join(", ") || "(nothing)"}\n` +
+          `      actually yielded none:           ${gotSilent.join(", ") || "(nothing)"}\n`,
       );
     }
   }
@@ -2007,16 +2429,74 @@ function selftest() {
     );
     process.exit(1);
   }
+  /*
+   * WHAT THIS LINE IS AND IS NOT, because it is the one number in this gate's
+   * output that nothing can check.
+   *
+   * The counts come from SUITES, so they track the arrays — but nothing outside
+   * this process reads them, and replacing the expression with a string literal
+   * is green in the self-test, green in the process test and green on the
+   * package. That mutation was run; it survives. What it can no longer do is
+   * hide anything: the floors above fail first if a suite has actually shrunk,
+   * so a hard-coded summary is a cosmetic lie about proof that is still there,
+   * rather than a cover for proof that is gone.
+   *
+   * The fix, for whoever decides the cosmetic half is worth closing: move SUITES
+   * and the case arrays into a module this script imports, and have
+   * `test/vocabulary-gate.test.ts` import the same module and assert the printed
+   * numbers against the real array lengths. It is a real refactor rather than a
+   * line — several hundred lines of case data have to move — which is why it is
+   * written down here instead of done in the same breath as the checks that were
+   * hiding missing files.
+   */
   console.log(
-    `vocabulary (api): self-test passed (${SELFTEST.length} scanner cases, ` +
-      `${EXPIRY_SELFTEST.length} expiry, ${CLASSIFY_SELFTEST.length} file-kind, ` +
-      `${DISCOVERY_SELFTEST.length} discovery, ${COVERAGE_SELFTEST.length} coverage, ` +
-      `${ROOTS_SELFTEST.length} root/exclusion, ${SCAN_LOOP_SELFTEST.length} scan-loop, ` +
-      `${REPORT_SELFTEST.length} report)`,
+    `vocabulary (api): self-test passed (` +
+      SUITES.map((s) => `${s.cases.length} ${s.label}`).join(", ") +
+      `)`,
   );
 }
 
 selftest();
+
+/*
+ * THE LIST ITSELF, BEFORE ANY FILE IS OPENED. These are defects in the data
+ * rather than in the package, and every one of them changes what the run prints
+ * about how many holes this gate is carrying.
+ */
+const listProblems = allowlistProblems(ALLOWED);
+const split = dispositionSplit(ALLOWED);
+/*
+ * A SECOND NET NO SINGLE MUTATION CAN REACH, and that is said here rather than
+ * left for the next reviewer to discover. Everything that could put an entry in
+ * neither column — a mistyped `disposition`, a filter looking for the wrong
+ * literal — is caught upstream by the entry check above or by the five allowlist
+ * cases in the self-test, and it was tried: disabling the entry check's
+ * disposition branch and mistyping an entry together still dies in the self-test
+ * before the run begins. So no case below can drive this branch, and it is kept
+ * anyway, deliberately, because it is what makes the two numbers on the clean
+ * line total by construction rather than by three other things being right. It
+ * is redundancy, it is one line, and the alternative is an arithmetic nobody
+ * ever states.
+ */
+if (split.rename.length + split.permanent.length !== ALLOWED.length) {
+  listProblems.push(
+    `the two halves account for ${split.rename.length + split.permanent.length} ` +
+      `of ${ALLOWED.length} entries — the rest are in neither column and are ` +
+      `counted in neither number`,
+  );
+}
+if (listProblems.length > 0) {
+  console.error(
+    `\nvocabulary (api): ALLOWED does not have the shape the rest of this file\n` +
+      `reads it as. Each entry is a hole in this gate, and the count of holes —\n` +
+      `how many are permanent, how many are waiting on a rename — is the one\n` +
+      `number anyone tracks between commits. An entry in neither column is a hole\n` +
+      `nobody is counting.\n`,
+  );
+  for (const problem of listProblems) console.error(`  ${problem}`);
+  console.error("");
+  process.exit(1);
+}
 
 /*
  * A ROOT THAT IS ALSO EXCLUDED, checked before anything is read, because it
@@ -2030,6 +2510,74 @@ if (excludedRoots.length > 0) {
       `and asserts the scan read it; a directory in NOT_OURS is not found, so it\n` +
       `cannot be missed either. That combination is a scan with its own guard\n` +
       `switched off, and it looks exactly like a clean run.\n`,
+  );
+  process.exit(1);
+}
+
+/*
+ * AND AN EXCLUSION THE REPOSITORY DOES NOT BACK UP, which is the same mistake
+ * made coherently: the guard above only sees ROOTS and NOT_OURS naming the same
+ * directory, and the edit that actually happens keeps them in agreement — the
+ * root is DROPPED as the exclusion is added. Nothing in this file can tell that
+ * apart from a directory that genuinely is not ours, so the answer comes from
+ * `.gitignore`, which is where this repository already records what is generated
+ * or vendored and which nobody can edit in this direction without git losing
+ * track of real files.
+ */
+const ignoreRules = (() => {
+  const names = new Set();
+  let files = 0;
+  let dir = PKG;
+  for (;;) {
+    try {
+      for (const name of ignoredDirectoryNames(
+        readFileSync(join(dir, ".gitignore"), "utf8"),
+      )) {
+        names.add(name);
+      }
+      files += 1;
+    } catch {
+      /* no .gitignore at this level, which is not a fact about anything */
+    }
+    /* Stop at the repository root — `.git` is a directory in a clone and a file
+       in a worktree, so its mere existence is the test. */
+    const parent = dirname(dir);
+    if (existsSync(join(dir, ".git")) || parent === dir) return { names, files };
+    dir = parent;
+  }
+})();
+
+/*
+ * THE ONE WAY THIS CHECK FALLS SILENT, said here rather than discovered later:
+ * a tree with no `.gitignore` anywhere above this package — an export, a tarball,
+ * a container that copied `packages/` without the repository — has no record to
+ * consult, and a check with no evidence should decline rather than accuse. The
+ * cost is that in such a tree NOT_OURS goes unexamined; the alternative is a red
+ * run on a legitimate checkout, which is worse, because the first thing anyone
+ * does with a gate that cries wolf is switch it off. The mutation that turns
+ * this into a hiding place — making the search find nothing — is held down by
+ * the process test, which runs the whole thing against this repository, where
+ * `.gitignore` is right there.
+ */
+const unjustified =
+  ignoreRules.files === 0
+    ? []
+    : unjustifiedExclusions(NOT_OURS, ignoreRules.names, (name) =>
+        existsSync(join(PKG, name)),
+      );
+if (unjustified.length > 0) {
+  console.error(
+    `\nvocabulary (api): NOT_OURS excludes ${unjustified.join(", ")}, which is in\n` +
+      `this package and which no .gitignore between here and the repository root\n` +
+      `mentions. NOT_OURS is for code this package does not own — vendored or\n` +
+      `generated — and the repository's own ignore rules are the record of which\n` +
+      `directories those are.\n\n` +
+      `Excluding a directory the repository tracks removes it from the coverage\n` +
+      `check as well as from the scan, so its files stop being read AND stop being\n` +
+      `missed. That is the one edit that can drop a source root and leave every\n` +
+      `other check in this file green.\n\n` +
+      `If it really is generated, ignore it in .gitignore first. If it is ours,\n` +
+      `it belongs in ROOTS.\n`,
   );
   process.exit(1);
 }
@@ -2051,7 +2599,7 @@ if (discovered.refuse.length > 0) {
 
 const scanned = new Set(discovered.scan);
 
-const { violations, blind } = scanFiles(
+const { violations, blind, read, silent } = scanFiles(
   [...scanned].map((f) => relative(PKG, f)),
   (rel) => readFileSync(join(PKG, rel), "utf8"),
   allowancesUsed,
@@ -2093,6 +2641,58 @@ if (blind.length > 0) {
 }
 
 /*
+ * DISCOVERED IS NOT READ, AND THE GAP BETWEEN THEM WAS GUARDED BY NOTHING.
+ *
+ * The coverage check below compares the filesystem against `scanned` — the list
+ * the WALK produced. Everything after that point was taken on trust: four
+ * separate one-line edits removed the whole `test/` directory from the judgement
+ * with the walk, the coverage check, the self-test and the process test all
+ * green — filtering the argument to `scanFiles`, returning `""` from
+ * `readSource` for those paths, early-returning from `scanSource`, or wrapping
+ * the loop body in a `try/catch` that continues. Every one of them is an edit
+ * somebody could make believing it was a tidy-up.
+ *
+ * So the loop now says which paths reached it and the run compares that against
+ * discovery — derived here a second time from `scanned` rather than reusing the
+ * expression handed to `scanFiles`, because a filter applied to a shared
+ * variable would otherwise shrink both sides at once. Narrowing `scanned` itself
+ * is what the coverage walk below already catches.
+ */
+const shouldHaveRead = [...scanned].map((f) => relative(PKG, f));
+const wasRead = new Set(read);
+const neverRead = shouldHaveRead.filter((f) => !wasRead.has(f));
+if (neverRead.length > 0) {
+  console.error(
+    `\nvocabulary (api): ${neverRead.length} file(s) were found by the walk and then\n` +
+      `never reached the scanner. Discovery is not judgement — a file that is\n` +
+      `listed and not read is reported exactly as a clean one is.\n`,
+  );
+  for (const f of neverRead) console.error(`  ${f}`);
+  console.error("");
+  process.exit(1);
+}
+
+/*
+ * AND A FILE THAT WAS READ BUT HELD NOTHING TO READ. This is the same failure
+ * arriving through the other door: the path reached the scanner and the scanner
+ * saw no identifier at all. A `.ts` file in this package always has one, so the
+ * honest possibilities are an empty file nobody deleted or a scan that was
+ * handed nothing — and the second is what `readSource` returning `""` for a
+ * directory looks like from here.
+ */
+if (silent.length > 0) {
+  console.error(
+    `\nvocabulary (api): ${silent.length} TypeScript file(s) yielded no identifier at\n` +
+      `all. Either the file is empty and should be deleted, or the scanner was\n` +
+      `handed nothing for it — and an unread file prints the same word a clean\n` +
+      `one does, which is the failure this gate exists to make impossible.\n`,
+  );
+  for (const f of silent) console.error(`  ${f}`);
+  console.error("");
+  process.exit(1);
+}
+
+/*
  * NOTHING TYPESCRIPT IN THIS PACKAGE GOES UNLOOKED-AT.
  *
  * ROOTS is a list someone maintains by hand, and a hand-maintained list of
@@ -2104,10 +2704,18 @@ if (blind.length > 0) {
  *
  * So the roots are checked against the filesystem rather than trusted. This
  * walk starts at the package root, skips only the directories named in
- * NOT_OURS, and asserts that every `.ts` file it finds is one the scan above
- * actually read. Dropping a root now fails; adding a directory of TypeScript
+ * NOT_OURS, and asserts that every `.ts` file it finds is one the walk above
+ * DISCOVERED. Dropping a root now fails; adding a directory of TypeScript
  * without deciding about it now fails. It is the same argument the ROOTS
  * comment makes, moved out of the comment and into an assertion.
+ *
+ * DISCOVERED, not read — and the difference is not pedantry. This sentence used
+ * to say "actually read", and it was wrong: `scanned` comes from the walk, and
+ * nothing here ever touched what `scanFiles` iterated or what `readSource`
+ * returned. That half is now the two checks above, and it took four green
+ * mutations to notice the claim was only a claim. The pair is what covers the
+ * ground: this walk ties the filesystem to discovery, and those tie discovery to
+ * the scanner.
  *
  * WHAT THIS CHECK STILL DOES NOT COVER, said out loud rather than left to be
  * discovered: `.mjs` and `.js`. The canon is a vocabulary for the TypeScript
@@ -2210,11 +2818,15 @@ if (stale.length > 0) {
 }
 
 if (violations.length === 0) {
-  const renames = ALLOWED.filter((e) => e.disposition === "rename");
+  /*
+   * Both halves counted, neither derived from the other — see `dispositionSplit`
+   * and the check at the top of the run, which is what makes these two numbers
+   * unable to add up while meaning something false.
+   */
   console.log(
     `vocabulary (api): clean — every identifier speaks the canon, or is one of\n` +
-      `  ${ALLOWED.length} recorded exceptions (${renames.length} awaiting a rename, ` +
-      `${ALLOWED.length - renames.length} permanent).`,
+      `  ${ALLOWED.length} recorded exceptions (${split.rename.length} awaiting a rename, ` +
+      `${split.permanent.length} permanent).`,
   );
   process.exit(0);
 }
