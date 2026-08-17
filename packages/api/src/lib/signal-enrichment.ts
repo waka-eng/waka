@@ -37,7 +37,12 @@ import {
 } from "./image-description.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
 
-const FETCH_TIMEOUT_MS = 6000;
+/**
+ * The whole exchange's budget: connect, redirects, headers, and reading the
+ * body. Exported because the test that holds this file honest has to wait out
+ * a real one — see the stalled-body test in the sibling spec.
+ */
+export const FETCH_TIMEOUT_MS = 6000;
 
 /** Redirect hops we will follow, each re-checked. Enough for shorteners. */
 const MAX_REDIRECTS = 4;
@@ -443,13 +448,49 @@ export async function assertFetchableUrl(url: string): Promise<void> {
  * public URL bounce us into the VPC on its second hop, which is the usual way
  * this protection is bypassed — so an image fetched by URL must come through
  * here too, not through a plain `fetch(..., { redirect: "follow" })`.
+ *
+ * THE DEADLINE HAS TO OUTLIVE THIS FUNCTION.
+ *
+ * `fetch` resolves when the response HEADERS arrive. The body is still on the
+ * wire at that point, and reading it is the slow, attacker-controlled part. So
+ * the obvious shape — `try { … } finally { clearTimeout(timer) }` — disarms
+ * the deadline at exactly the moment it starts to matter, and that is how this
+ * was written, under a comment asserting that the caller read the body "under
+ * the same abort signal". The signal was passed, correctly; there was simply
+ * nothing left alive to fire it. A page that answered its headers instantly
+ * and then dribbled its body a byte at a time was never interrupted — undici's
+ * own inactivity timer is reset by each byte that does arrive, so the read ran
+ * on until the Lambda's 14-minute ceiling.
+ *
+ * The cost is not one slow job. Enrichment drains sequentially on a shared
+ * background worker, so one hostile or broken page sits at the head of the
+ * queue and every other account's derivation waits behind it for the full
+ * fourteen minutes.
+ *
+ * Handing the caller a `release` is the smallest shape that keeps a single
+ * deadline over the entire exchange — connect, redirects, headers, body — while
+ * still letting the connection be dropped the moment the caller has what it
+ * needs. It costs the callers one discipline: `release` on every exit, which is
+ * why both of them call it from a `finally` rather than at the point they
+ * happen to be finished.
  */
 async function fetchWithTimeout(
   url: string,
   accept = "text/html,application/xhtml+xml",
-): Promise<{ response: Response; finalUrl: string; controller: AbortController }> {
+): Promise<{ response: Response; finalUrl: string; release: () => void }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  /**
+   * Stop the clock and let go of the socket. One call rather than two, because
+   * for the caller they are the same event: it is done with this exchange, and
+   * leaving either half behind is a leak — an armed timer that outlives its
+   * fetch, or a connection nobody is reading.
+   */
+  const release = (): void => {
+    clearTimeout(timer);
+    controller.abort();
+  };
+
   try {
     let current = url;
     for (let hop = 0; ; hop += 1) {
@@ -461,16 +502,17 @@ async function fetchWithTimeout(
       });
       const location = response.headers.get("location");
       if (response.status < 300 || response.status >= 400 || !location) {
-        // The caller reads the body under the same abort signal, so the
-        // timeout covers the download, not only the headers; the caller
-        // aborts once it has what it needs.
-        return { response, finalUrl: current, controller };
+        // Still ticking. The caller reads the body under this same signal, and
+        // now there is something left to trip it.
+        return { response, finalUrl: current, release };
       }
-      if (hop >= MAX_REDIRECTS) return { response, finalUrl: current, controller };
+      if (hop >= MAX_REDIRECTS) return { response, finalUrl: current, release };
       current = new URL(location, current).toString();
     }
-  } finally {
-    clearTimeout(timer);
+  } catch (err) {
+    // Nothing was handed out, so nobody else can release it.
+    release();
+    throw err;
   }
 }
 
@@ -523,41 +565,48 @@ export interface LinkEnrichment extends LinkMetadata {
  * decides whether a page that could not be reached is worth another attempt.
  */
 export async function fetchLinkEnrichment(url: string): Promise<LinkEnrichment> {
-  const { response, finalUrl, controller } = await fetchWithTimeout(url);
-  const hostname = safeHostname(finalUrl);
-  const empty: LinkEnrichment = {
-    finalUrl,
-    hostname,
-    title: null,
-    description: null,
-    siteName: null,
-    previewImageUrl: null,
-    text: null,
-  };
+  const { response, finalUrl, release } = await fetchWithTimeout(url);
+  try {
+    const hostname = safeHostname(finalUrl);
+    const empty: LinkEnrichment = {
+      finalUrl,
+      hostname,
+      title: null,
+      description: null,
+      siteName: null,
+      previewImageUrl: null,
+      text: null,
+    };
 
-  if (!response.ok) throw new Error(`http_${response.status}`);
-  const contentType = response.headers.get("content-type") ?? "";
-  // A PDF or a video stream is not something this reads, and pulling one down
-  // to discover that costs a member's attachment nothing but latency.
-  if (!contentType.includes("html")) return empty;
+    if (!response.ok) throw new Error(`http_${response.status}`);
+    const contentType = response.headers.get("content-type") ?? "";
+    // A PDF or a video stream is not something this reads, and pulling one down
+    // to discover that costs a member's attachment nothing but latency.
+    if (!contentType.includes("html")) return empty;
 
-  // Bounded read under the fetch's own timeout, then release the connection.
-  // MAX_HTML_CHARS is a character budget; a UTF-8 byte cap of 4× is a safe
-  // ceiling that still truncates a runaway page.
-  const bytes = await readCappedBody(response, MAX_HTML_CHARS * 4);
-  controller.abort();
-  const html = new TextDecoder().decode(bytes).slice(0, MAX_HTML_CHARS);
-  const metadata = extractLinkMetadata(html);
-  const body = isYouTubeHost(hostname)
-    ? extractYouTubeDescription(html) ?? extractPageBody(html)
-    : extractPageBody(html);
+    // Bounded read under the fetch's own deadline. MAX_HTML_CHARS is a
+    // character budget; a UTF-8 byte cap of 4× is a safe ceiling that still
+    // truncates a runaway page.
+    const bytes = await readCappedBody(response, MAX_HTML_CHARS * 4);
+    const html = new TextDecoder().decode(bytes).slice(0, MAX_HTML_CHARS);
+    const metadata = extractLinkMetadata(html);
+    const body = isYouTubeHost(hostname)
+      ? extractYouTubeDescription(html) ?? extractPageBody(html)
+      : extractPageBody(html);
 
-  return {
-    ...metadata,
-    finalUrl,
-    hostname,
-    text: composeEnrichmentText([metadata.title, metadata.description, body]),
-  };
+    return {
+      ...metadata,
+      finalUrl,
+      hostname,
+      text: composeEnrichmentText([metadata.title, metadata.description, body]),
+    };
+  } finally {
+    // Every exit, not only the one that read a page. The two early returns
+    // above — a non-2xx status and a content type we do not read — used to
+    // walk away from an open connection, and now that the deadline survives
+    // past the fetch they would walk away from a live timer as well.
+    release();
+  }
 }
 
 function safeHostname(url: string): string | null {
@@ -633,18 +682,18 @@ async function readImageBytes(
   // range on the second hop is exactly how this protection is bypassed, and
   // "it is an image" is not a reason to trust the URL. One byte over the cap
   // and describeImage rejects it, so reading cap+1 is enough to catch it.
-  const { response, controller } = await fetchWithTimeout(attachment.url, "image/*");
-  if (!response.ok) {
-    controller.abort();
-    throw new Error(`image_fetch_${response.status}`);
+  const { response, release } = await fetchWithTimeout(attachment.url, "image/*");
+  try {
+    if (!response.ok) throw new Error(`image_fetch_${response.status}`);
+    const bytes = await readCappedBody(response, MAX_IMAGE_BYTES + 1);
+    return {
+      bytes,
+      contentType:
+        attachment.contentType ?? response.headers.get("content-type") ?? "image/png",
+    };
+  } finally {
+    release();
   }
-  const bytes = await readCappedBody(response, MAX_IMAGE_BYTES + 1);
-  controller.abort();
-  return {
-    bytes,
-    contentType:
-      attachment.contentType ?? response.headers.get("content-type") ?? "image/png",
-  };
 }
 
 /**

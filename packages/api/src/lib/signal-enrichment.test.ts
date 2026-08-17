@@ -1,12 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { createServer, type RequestListener, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
+
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  FETCH_TIMEOUT_MS,
   MAX_ENRICHMENT_TEXT_CHARS,
   assertFetchableUrl,
   composeEnrichmentText,
   extractLinkMetadata,
   extractPageBody,
   extractYouTubeDescription,
+  fetchLinkEnrichment,
   isAuthWallSummary,
   isPrivateAddress,
   stripBoilerplateLines,
@@ -267,5 +272,114 @@ describe("isPrivateAddress — IPv4 hiding inside IPv6", () => {
     expect(isPrivateAddress("93.184.216.34")).toBe(false);
     expect(isPrivateAddress("2606:2800:220:1:248:1893:25c8:1946")).toBe(false);
     expect(isPrivateAddress("::ffff:93.184.216.34")).toBe(false);
+  });
+});
+
+/**
+ * A DEADLINE THAT EXPIRES BEFORE THE SLOW PART IS NOT A DEADLINE.
+ *
+ * `fetch` resolves at the response HEADERS, so a timer cleared when the fetch
+ * helper returns is already gone by the time the body — the only part whose
+ * pace the other end chooses — is read. The helper's own comment claimed the
+ * opposite, and nothing executed the claim.
+ *
+ * These run against a real loopback server through the real fetch stack on
+ * purpose. The whole question is whether an abort reaches a socket that is
+ * mid-stream; a stubbed response body would only prove that our stub honours
+ * our own signal, which is the part that was never in doubt.
+ *
+ * They cost the real six seconds, because the real six seconds is what ships.
+ * A shortened deadline injected for the test would be a different mechanism
+ * from the one running in production, and this is precisely the file where
+ * "the test passed" and "the guard works" came apart once already.
+ */
+describe("the enrichment fetch deadline", () => {
+  let server: Server | null = null;
+  const allowlistBefore = process.env.WAKA_ENRICHMENT_ALLOWED_HOSTS;
+
+  afterEach(async () => {
+    if (allowlistBefore === undefined) delete process.env.WAKA_ENRICHMENT_ALLOWED_HOSTS;
+    else process.env.WAKA_ENRICHMENT_ALLOWED_HOSTS = allowlistBefore;
+
+    const running = server;
+    server = null;
+    if (!running) return;
+    running.closeAllConnections();
+    await new Promise<void>((resolve) => running.close(() => resolve()));
+  });
+
+  /**
+   * A page served from loopback, which the address guard refuses outright
+   * unless the host is named — so the fixture names it, the same narrow
+   * exception `enrichmentHostAllowlist` exists for.
+   */
+  async function serveOnLoopback(handler: RequestListener): Promise<string> {
+    const started = createServer(handler);
+    // Aborting mid-stream destroys the socket under a response that may still
+    // be writing. That is the behaviour under test, not a broken fixture, so
+    // the resulting stream errors are swallowed rather than left to take the
+    // whole run down as an unhandled event.
+    started.on("clientError", () => undefined);
+    server = started;
+    await new Promise<void>((resolve) => started.listen(0, "127.0.0.1", resolve));
+    const { port } = started.address() as AddressInfo;
+    process.env.WAKA_ENRICHMENT_ALLOWED_HOSTS = `127.0.0.1:${port}`;
+    return `http://127.0.0.1:${port}/`;
+  }
+
+  it(
+    "gives up on a page that answers its headers and then dribbles its body",
+    async () => {
+      // The shape that walked straight through the old code: headers at once,
+      // then a byte at a time, forever. Every byte that does arrive resets
+      // undici's own inactivity timer, so nothing underneath us will ever call
+      // time on it — the enrichment deadline is the only thing that can, and it
+      // had already been cleared.
+      let drip: NodeJS.Timeout | undefined;
+      const url = await serveOnLoopback((_req, res) => {
+        res.on("error", () => undefined);
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        res.write("<html><head><title>");
+        drip = setInterval(() => res.write("."), 100);
+        res.on("close", () => clearInterval(drip));
+      });
+
+      const startedAt = Date.now();
+      // The abort, specifically. A bare `.rejects.toThrow()` would also be
+      // satisfied by the connection failing for some unrelated reason, which
+      // would prove nothing about the deadline.
+      await expect(fetchLinkEnrichment(url)).rejects.toThrow(/abort/i);
+      const elapsed = Date.now() - startedAt;
+      clearInterval(drip);
+
+      // Near its own deadline — not near the Lambda's fourteen minutes, which
+      // is how long every other account's derivation used to wait behind this
+      // one job on the shared worker.
+      expect(elapsed).toBeGreaterThanOrEqual(FETCH_TIMEOUT_MS - 1000);
+      expect(elapsed).toBeLessThan(FETCH_TIMEOUT_MS * 2);
+    },
+    FETCH_TIMEOUT_MS * 4,
+  );
+
+  /**
+   * The other half of the same change: the deadline now outlives the fetch, so
+   * every exit has to hand it back. If `release` were missed on the ordinary
+   * path this would still return a title, and then hold a live timer and an
+   * open socket afterwards.
+   */
+  it("still reads a page that answers promptly", async () => {
+    const paragraph =
+      "The argument of the piece, stated at enough length that the body extractor treats it as prose.";
+    const url = await serveOnLoopback((_req, res) => {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(
+        `<html><head><title>A page that finished</title></head>` +
+          `<body><main><p>${paragraph}</p></main></body></html>`,
+      );
+    });
+
+    const enrichment = await fetchLinkEnrichment(url);
+    expect(enrichment.title).toBe("A page that finished");
+    expect(enrichment.text).toContain(paragraph);
   });
 });
