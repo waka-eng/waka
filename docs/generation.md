@@ -253,6 +253,21 @@ in the model changes, only where the arithmetic runs.
 
 ## Layer 2 → Layer 3: how the top of mind is generated
 
+The pass is `packages/api/src/lib/top-of-mind-synthesis.ts`, and it is the
+order of the four stages below and nothing else. Each stage is its own file,
+named for the question it answers:
+
+| Stage | File | Answers |
+|---|---|---|
+| 1. Selection | `packages/api/src/lib/top-of-mind-selection.ts` | which signals may be considered at all |
+| 2. The live artifact | `packages/api/src/lib/top-of-mind-artifact.ts` | what the version standing now holds |
+| 3. Validation | `packages/api/src/lib/top-of-mind-validation.ts` | what of the reply the database can vouch for |
+| 4. Versioning | `packages/api/src/lib/top-of-mind-versioning.ts` | what the next version holds, and writing it |
+
+Stages 1 and 3 are one guarantee in two halves: stage 1 filters candidates by
+`signals.profileId`, and stage 3 checks the model's citations against exactly
+that set. Neither is any use without the other.
+
 ### 1. What starts a refresh
 
 | Trigger | Condition |
@@ -392,7 +407,7 @@ The authoritative values. Machine-checked against code — see
 | `CONFIDENCE_SOURCE_DIVERSITY_BONUS` | 8 | Added when app and agent evidence corroborate |
 | `MATCH_CANDIDATE_SCAN_LIMIT` | 500 | Most-recently-evidenced signals scanned per match |
 
-### Layer 3 — synthesis (`packages/api/src/lib/top-of-mind-synthesis.ts`)
+### Layer 3 — synthesis (`packages/api/src/lib/top-of-mind-selection.ts`)
 
 | Constant | Value | One line |
 |---|---|---|
