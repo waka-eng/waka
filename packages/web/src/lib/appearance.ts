@@ -1,17 +1,52 @@
 /**
- * WHOSE MEMORY THIS IS — the per-member hue system.
+ * WHOSE MEMORY THIS IS — the per-member hue system, and the ramp it works on.
  *
- * Extracted from Home.tsx because none of it touches React or the frame
- * loop: given a ramp and a member's slot it returns colours, and that is all.
- * It is the kind of thing `docs/architecture.md` means by a seam — a fact the
- * world needs, decided somewhere you can read in a minute.
+ * None of this touches React or the frame loop: given a ramp and a member's
+ * slot it returns colours, and that is all. It is the kind of thing
+ * `docs/architecture.md` means by a seam — a fact the world needs, decided
+ * somewhere you can read in a minute.
  *
- * The `Ramp` type comes back in from Home.tsx rather than moving with these
- * functions, because the palette is still the sim's to own. When `world/sim/`
- * is extracted (step 4 of docs/codebase.md), Ramp goes there and this module
- * imports it from its new home — one import line changes.
+ * `Ramp` NOW LIVES HERE, and that is the point of this change. It was declared
+ * in the page and imported back with a note saying it would follow the sim out
+ * later — which left a live `lib/ -> pages/` import: the leaf of the tree
+ * reaching up into the 13,000-line page it is supposed to be independent of.
+ * Every module that touches colour would have inherited that edge.
+ *
+ * It belongs here rather than in `canvas/` because it is a DESCRIPTION OF
+ * LIGHT, not a rendering technique: what live, fading and dormant look like,
+ * on luminance and colour temperature. `canvas/` bakes sprites FROM a ramp;
+ * `space/inspiration` decides how alive a memory is; both read this, and
+ * neither owns it.
  */
-import type { Ramp } from "../pages/Home";
+
+/**
+ * THE ALIVENESS RAMP — the whole colour model, and all of it.
+ *
+ * There is no longer a hue per theme. Six hash-picked pastels carried NO
+ * meaning while the page's one law says light is the only meaning channel, and
+ * six meaningless hues is exactly what read as noise. What an orb looks like is
+ * now a function of its ALIVENESS alone, on two channels: LUMINANCE and COLOUR
+ * TEMPERATURE. Two memories about different things look identical at the same
+ * aliveness — which is the truth, because their themes were never what the
+ * light was about.
+ */
+export interface Ramp {
+  /** Fully alive: the brightest, warmest end. */
+  live: [number, number, number];
+  /** The far side of the disc's own gradient at that end. */
+  liveEdge: [number, number, number];
+  /** What its bloom is made of. */
+  liveBloom: [number, number, number];
+  /** Half-way: dimmer and cooler. */
+  fade: [number, number, number];
+  /** Dormant: dim, cold and nearly colourless. It never disappears. */
+  dorm: [number, number, number];
+  /** The air: motes and the deep background's sparkle. */
+  dust: [number, number, number];
+  /** The companion's own matte body, lit and shaded. */
+  bodyLit: [number, number, number];
+  bodyShade: [number, number, number];
+}
 
 /**
  * WHOSE MEMORY THIS IS, ON A WALL THAT HOLDS SEVERAL PEOPLE'S.

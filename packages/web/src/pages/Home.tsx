@@ -74,7 +74,8 @@ import {
   FIELD_REFLECTION_SATURATION,
   FIELD_REFLECTION_WEIGHT,
 } from "../lib/aliveness";
-import { hueCss, tintRamp } from "../lib/appearance";
+import { hueCss, tintRamp, type Ramp } from "../lib/appearance";
+import { clamp, clamp01, DAY_MS, easeOut, hashStr, kd, lerp, mix32, TAU } from "../lib/num";
 import {
   dateWords,
   givenName,
@@ -166,8 +167,6 @@ function showsDebug(): boolean {
  * which carries the law.
  */
 
-const DAY_MS = 86_400_000;
-const TAU = Math.PI * 2;
 /** Size buckets the orb + halo sprites are rastered at (radius is 24-32). */
 /**
  * THE SIZES A DISC IS ACTUALLY BAKED AT — and they have to cover the range the
@@ -539,32 +538,6 @@ const SKY_PAD_Y = 0.42;
 /** The least of the viewport an orbit is ever left clear of an edge. */
 const SKY_EDGE = 12;
 
-const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
-const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
-const clamp01 = (v: number) => clamp(v, 0, 1);
-/**
- * The page's one easing curve in numbers: cubic-bezier(0.22, 1, 0.36, 1),
- * which every CSS transition in jar.css already rides. A cubic ease-out sits
- * on it to within a pixel at these durations, so the canvas and the DOM
- * genuinely move on the same curve rather than on two that look alike.
- */
-const easeOut = (u: number) => 1 - Math.pow(1 - u, 3);
-/**
- * A RATE, NOT A PER-FRAME STEP.
- *
- * `lerp(x, target, 0.14)` is not a speed — it is a speed per FRAME, so the
- * same line runs at double speed on a 120Hz phone as on a 60Hz one, and slows
- * down again as a phone thermally throttles. A world whose motion rate is a
- * function of the display it landed on, and of how long you have been looking
- * at it, is telling you something untrue about itself.
- *
- * `rps` is the fraction of the remaining distance still left after one full
- * second, so the ease is the same ease at any frame rate. (The file already
- * used this idiom correctly in the drift and the nest; the input path is
- * simply where it never got applied.)
- */
-const kd = (rps: number, dt: number) => 1 - Math.pow(rps, dt);
-
 /**
  * Sky layout persistence, tier ONE: the personal sky's nebula positions,
  * local to this browser, written through on drag end and pruned to the
@@ -594,30 +567,6 @@ function writeSkyLayout(layout: Record<string, { x: number; y: number }>): void 
   } catch {
     /* storage unavailable (private mode, quota): the sky still works */
   }
-}
-
-function hashStr(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
-/**
- * FNV-1a's low bits are correlated across near-identical inputs — `agent-01`
- * and `agent-02` land in the same slot on roughly half the axes under a bare
- * modulo, which is exactly the input shape a family of agent ids has. This is
- * the avalanche finaliser that makes `hashStr(x) % k` an honest draw.
- */
-function mix32(h: number): number {
-  h ^= h >>> 16;
-  h = Math.imul(h, 2246822507);
-  h ^= h >>> 13;
-  h = Math.imul(h, 3266489909);
-  h ^= h >>> 16;
-  return h >>> 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -2515,34 +2464,6 @@ function computeWorld(vw: number, vh: number, dialH: number): World {
 // Palette + sprites (rastered once at load and on DPR change, never per frame)
 // ---------------------------------------------------------------------------
 
-/**
- * THE ALIVENESS RAMP — the whole colour model, and all of it.
- *
- * There is no longer a hue per theme. Six hash-picked pastels carried NO
- * meaning while the page's one law says light is the only meaning channel, and
- * six meaningless hues is exactly what read as noise. What an orb looks like is
- * now a function of its ALIVENESS alone, on two channels: LUMINANCE and COLOUR
- * TEMPERATURE. Two memories about different things look identical at the same
- * aliveness — which is the truth, because their themes were never what the
- * light was about.
- */
-export interface Ramp {
-  /** Fully alive: the brightest, warmest end. */
-  live: [number, number, number];
-  /** The far side of the disc's own gradient at that end. */
-  liveEdge: [number, number, number];
-  /** What its bloom is made of. */
-  liveBloom: [number, number, number];
-  /** Half-way: dimmer and cooler. */
-  fade: [number, number, number];
-  /** Dormant: dim, cold and nearly colourless. It never disappears. */
-  dorm: [number, number, number];
-  /** The air: motes and the deep background's sparkle. */
-  dust: [number, number, number];
-  /** The companion's own matte body, lit and shaded. */
-  bodyLit: [number, number, number];
-  bodyShade: [number, number, number];
-}
 
 interface Palette {
   dpr: number;
