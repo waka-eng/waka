@@ -53,6 +53,32 @@
  * would be describing its own stub. What is asserted is what exists, where the
  * layout put it, and what is active — the same rule the field's file obeys.
  *
+ * WHAT THIS MOCKS, AND WHY (gate G6).
+ *
+ *   `lib/data` — the seam, and the whole subject arrives through it. A
+ *   candidate overhead is a signal from `loadSignals`, and the satellites
+ *   around it are the evidence from `loadSignal`; the page asks no HTTP client
+ *   for either. Mocking `lib/api` instead would throw inside a loader and the
+ *   page would answer by replacing the world with the dev fixture, which has a
+ *   sky of its own — so the sweep below would find satellites, `sayWho` would
+ *   whisper names, and every case would pass while measuring an orbit around
+ *   sentences that were typed into `lib/fixture/`.
+ *
+ *   `lib/api` — for the group reads, which have no loader above them, plus
+ *   `fetchGroupProposals` and `affirmGroupProposal`, this file's own subject
+ *   for the proposal cases. `fetchGroupWall` is emptied on purpose; the reason
+ *   is at the mock.
+ *
+ *   `lib/auth-context` — the session stated as a fact, because the page also
+ *   renders for a signed-out visitor and that is a different sky.
+ *
+ *   `helpers/canvas-stub` and `helpers/render-home` — canvas, clock, frame
+ *   loop, viewport and `Math.random`. The seeded random matters here more than
+ *   anywhere: a satellite's phase comes off a hash and its drift off
+ *   `Math.random`, so without the seed the sweep would find it in a different
+ *   place on every run. `home-field.test.tsx` gives the long version of all
+ *   four seams.
+ *
  * WHY THE SWEEP RATHER THAN ARITHMETIC. The obvious alternative was to solve
  * each satellite's screen position in the test — the ellipse comes off the
  * measured sentence box, the phase off a hash — and hover exactly there. That

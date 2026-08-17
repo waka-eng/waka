@@ -35,6 +35,31 @@
  * `jar-word--held` and which did not. That is the decision the whole feature
  * is, and it is the only part a test in jsdom can honestly see.
  *
+ * WHAT THIS MOCKS, AND WHY (gate G6).
+ *
+ *   `lib/data` — the seam. The board on the poster arrives through
+ *   `loadTopOfMind`, and the peek row under it through `loadSignals` and
+ *   `loadSignal`; the page never asks the HTTP client for any of the three
+ *   layers itself. Mocking `lib/api` instead would push invented rows through
+ *   translations built for real ones, the first mismatch would throw inside a
+ *   loader, and the page would answer by replacing the world with the dev
+ *   fixture — which HAS a poster, with a sentence on it, so the first
+ *   assertion below would still pass and every drift case after it would be
+ *   measuring the fixture's rewrite of the fixture's own words.
+ *
+ *   `lib/api` — for the group reads, which have no loader, and for one write:
+ *   `updateTopOfMindEntry`, the call behind "keep these words". Its reason is
+ *   given at the mock itself, and it is not decoration — left unmocked it
+ *   reaches the network, fails, and the page recovers by reloading the board,
+ *   which puts the OLD sentence back and turns every rewrite case here into a
+ *   test of nothing.
+ *
+ *   `lib/auth-context` — the session as a stated fact; the page renders a
+ *   different world for a signed-out visitor.
+ *
+ *   `helpers/canvas-stub` and `helpers/render-home` — canvas, clock, frame
+ *   loop, viewport. `home-field.test.tsx` gives the long version of all four.
+ *
  * WHAT WAS REJECTED. Calling `posterWords` directly as a unit test was the
  * obvious cheap option and it is nearly worthless: it pins the half that was
  * never broken and cannot see `prevText` at all, which is the half where a

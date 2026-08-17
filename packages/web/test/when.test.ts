@@ -1,3 +1,22 @@
+/**
+ * "TODAY", "YESTERDAY", "3 DAYS AGO".
+ *
+ * WHAT THIS MOCKS, AND WHY (gate G6): nothing, including the clock. `whenShort`
+ * takes an ISO string and returns words, and the one thing it reaches for is
+ * `Date.now()`. Every case below is written as an offset FROM that same
+ * `Date.now()` rather than as a fixed date, so the answer is identical at any
+ * wall-clock moment and a frozen clock would buy nothing — it would only add a
+ * second mechanism that can itself be wrong, and a reader would then have to
+ * check the fake clock before believing the assertion.
+ *
+ * The one thing a real clock could still spoil is a boundary, and none is
+ * pressed: today, yesterday and three days ago each sit a whole day away from
+ * the nearest edge of their bucket, so the milliseconds that pass between the
+ * test reading the clock and the function reading it cannot change an answer.
+ * If a case is ever added AT an edge — the last second before "yesterday"
+ * becomes "2 days ago" — that is the moment this file needs a frozen clock,
+ * and this paragraph is what says so.
+ */
 import { describe, expect, it } from "vitest";
 
 import { whenShort } from "../src/lib/when";

@@ -7,6 +7,10 @@
  * from a test at all. G6 in `docs/goals/a-codebase-you-can-navigate.md` asks
  * every suite to say this; here the answer is short.
  *
+ * `console.warn` is spied on below, and that is not a seam being replaced —
+ * it is the thing being MEASURED. The warning is the fixture's output as far
+ * as this file is concerned, and a spy is how the output is read.
+ *
  * WHY IT EXISTS. G6 exists because a suite once passed while describing that
  * fixture: it mocked `lib/api` instead of `lib/data`, the loader threw, the
  * page did what it is built to do and replaced the world with invented rows,
