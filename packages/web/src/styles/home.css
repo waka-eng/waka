@@ -1861,7 +1861,11 @@
    pieces of chrome each own a different edge and never meet. It is set in the
    label register and sits at the same weight as the axis marks: this is a key
    to the ground, not a control, and nothing here is pressable. */
-.jar-legend {
+/* WHOSE GROUND — a choice, where a colour key used to be.
+   Same corner, same quiet register: what changed is that these rows now DO
+   something, so unlike the key they take pointer events and one of them is
+   always lit as the ground you are standing in. */
+.jar-ground {
   position: absolute;
   /* it arrives with the ground rather than appearing: the same fade the rest
      of the chrome uses, so nothing in this world ever pops into existence */
@@ -1871,28 +1875,44 @@
   z-index: 5;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  pointer-events: none;
+  align-items: flex-start;
+  gap: 2px;
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--jar-faint);
-  opacity: 0.62;
-  transition: opacity 0.28s ease;
 }
-.jar-legend:hover {
-  opacity: 1;
-}
-.jar-legend-row {
+.jar-ground-row {
   display: flex;
   align-items: center;
   gap: 8px;
   white-space: nowrap;
+  /* a button, wearing nothing a button brings with it */
+  border: 0;
+  background: none;
+  padding: 4px 6px;
+  margin: 0 0 0 -6px;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  border-radius: 5px;
+  color: var(--jar-faint);
+  /* light is the only channel: the ground you are NOT in is dimmer, and that
+     is the whole difference — no underline, no chip, no marker */
+  opacity: 0.4;
+  transition: opacity 0.28s ease, background-color 0.2s ease;
 }
-/* the swatch is the orb, small: same circle, same soft edge, so the key and
-   the ground are visibly the same material */
-.jar-legend-dot {
+.jar-ground-row:hover,
+.jar-ground-row:focus-visible {
+  opacity: 0.8;
+}
+.jar-ground-row--here {
+  opacity: 1;
+}
+/* the swatch is the orb, small: same circle, same soft edge, so the name and
+   the ground it switches to are visibly the same material */
+.jar-ground-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
@@ -1901,10 +1921,10 @@
   flex: 0 0 auto;
 }
 /* AN AGENT'S MEMORY IS PIXELATED, HERE TOO.
-   The key has to be made of the same stuff as the ground it explains, so an
+   The name has to be made of the same stuff as the ground it opens, so an
    agent's swatch loses its curve exactly as its orbs do — a stepped square
    rather than a disc, at the same size and the same hue. */
-.jar-legend-dot--agent {
+.jar-ground-dot--agent {
   border-radius: 0;
   width: 6px;
   height: 6px;

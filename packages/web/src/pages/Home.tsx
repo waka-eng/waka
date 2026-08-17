@@ -1492,6 +1492,12 @@ interface PanelData {
 type Moment = "touch" | "kept" | "answered" | "arrived" | "shared" | "let-go";
 
 interface SimApi {
+  /**
+   * Whose ground to stand in on a group's wall — a member's profile id, or
+   * null for your own. Yours is the default everywhere and the only ground on
+   * a wall that has one owner.
+   */
+  standIn: (ownerProfileId: string | null) => void;
   scrubTo: (T: number, pos: number) => void;
   select: (id: string) => void;
   release: () => void;
@@ -3378,7 +3384,28 @@ function WorldExperience(): JSX.Element {
      * does not SLIDE. It does change — what is standing on the ground is whose
      * mind you are in.
      */
-    const onThisWall = (b: Ball): boolean => (b.agentId ?? "") === curWall().id;
+    /**
+     * WHOSE GROUND YOU ARE STANDING ON — null means your own.
+     *
+     * A group's ground used to be every member's public inspirations poured
+     * into one field, with a legend beside it decoding five hues. That asked
+     * the reader to do the work of separation before they could read anything,
+     * and it bought nothing: a group's ground CANNOT explain its sky. The wall
+     * query stops at shares by design (`loadGroupField` in routes/groups.ts) —
+     * a member sees the pattern someone arrived at, never the captures it was
+     * distilled from. So a mixture of five people's memories under five shared
+     * statements is not evidence for them; it is five grounds in a heap.
+     *
+     * One person at a time, yours first. Whose ground this is becomes
+     * something you MOVED to, which is the only way this world says anything.
+     */
+    let ground: string | null = null;
+    const onThisWall = (b: Ball): boolean => {
+      if ((b.agentId ?? "") !== curWall().id) return false;
+      if (curWall().kind !== "group") return true;
+      /* on a group's wall the ground belongs to exactly one member */
+      return (b.ownerProfileId ?? "") === (ground ?? viewerIdRef.current ?? "");
+    };
 
     function assignHomes() {
       const present: Ball[] = [];
@@ -7400,6 +7427,22 @@ function WorldExperience(): JSX.Element {
     else primePour();
 
     simApiRef.current = {
+      /**
+       * STAND IN SOMEONE ELSE'S GROUND — or back in your own, with null.
+       *
+       * The field re-solves and the orbs arrive where the new fit puts them.
+       * The CAMERA does not move: you asked to see a different ground, not to
+       * be taken somewhere, and the world only moves when you moved it.
+       */
+      standIn: (ownerProfileId: string | null) => {
+        if (ground === ownerProfileId) return;
+        ground = ownerProfileId;
+        /* settleInstantly re-reads onThisWall, so it both activates the ground
+           that arrived and deactivates the one that left */
+        assignHomes();
+        settleInstantly();
+        wake();
+      },
       scrubTo: (T: number, pos: number) => {
         if (travelActive) return; /* the dial is the personal jar's alone */
         TRef.current = T;
@@ -7874,6 +7917,14 @@ function WorldExperience(): JSX.Element {
         let highest = Infinity;
         let lowest = -Infinity;
         for (const b of list) {
+          /* THE WALL YOU ARE STANDING ON, NOT EVERY WALL AT ONCE. This counted
+             the whole list, so `present` read the same on every wall (the sum
+             of all of them) and `clippedTop` counted balls belonging to walls
+             you were not on — still at the homeY of zero they were built with,
+             a full viewport above the band. An audit that grades a population
+             the layout never placed reports a break that is not there, which
+             is worse than no audit: it was the instrument, not the field. */
+          if (!onThisWall(b)) continue;
           if (b.capturedMs > TRef.current) continue;
           present++;
           const home = b.peek ? lerp(b.homeY, b.peekY, peekLift()) : b.homeY;
@@ -8129,36 +8180,73 @@ function WorldExperience(): JSX.Element {
   }, [posterAsk, versions]);
 
   /**
-   * WHO IS WHICH COLOUR — and only where that is a question.
+   * WHOSE GROUND YOU COULD STAND IN — not a key to a mixture.
    *
-   * A legend is apparatus on any wall holding one person's memories, so it
-   * exists only in a room whose ground actually has more than one owner in
-   * it. Your own row is first and has no swatch: you are the warm white the
-   * whole world is drawn in, and giving yourself a colour chip would imply
-   * you are one option among five rather than the ground everything else is
-   * read against.
+   * This was a legend: five hues poured into one field and a colour key beside
+   * it. The mixture asked the reader to separate five people's memories before
+   * they could read any of them, and it could not repay that work — a group's
+   * ground is structurally incapable of explaining its sky, because the wall
+   * query stops at shares (`loadGroupField`, routes/groups.ts) and a member
+   * sees the pattern someone arrived at, never the captures behind it.
    *
-   * It reads `hueByOwnerRef`, which is written where the sprites are tinted,
-   * so the legend and the orbs are physically incapable of disagreeing.
+   * So the ground is ONE person's, yours by default, and this is the way to
+   * change whose. You are first and have no swatch: you are the warm white the
+   * whole world is drawn in, and giving yourself a colour chip would imply you
+   * are one option among five rather than the ground everything else is read
+   * against.
+   *
+   * Hues come from `hueByOwnerRef`, written where the sprites are tinted, so
+   * a name and the orbs it switches to are physically incapable of disagreeing.
    */
-  const legend = useMemo<Array<{ id: string; name: string; hue: number; agent: boolean }>>(() => {
+  const grounds = useMemo<
+    Array<{ id: string; name: string; hue: number; agent: boolean; mine: boolean }>
+  >(() => {
     if (atWall.kind !== "group") return [];
     const caps = groupFieldRef.current.get(atWall.id) ?? [];
-    const seen = new Map<string, { id: string; name: string; hue: number; agent: boolean }>();
+    const seen = new Map<
+      string,
+      { id: string; name: string; hue: number; agent: boolean; mine: boolean }
+    >();
     for (const c of caps) {
       if (seen.has(c.ownerProfileId)) continue;
+      /* WHO YOU ARE IS A COMPARISON OF IDS, never an inference from the hue.
+         `hueByOwnerRef` is empty until the tint pass has run, and when it is,
+         `?? -1` hands every member the same value your own row uses — so a
+         hue-based test called all five of them "you" and lit every row at
+         once. The id is known from the first render and cannot drift. */
+      const mine = c.ownerProfileId === viewerIdRef.current;
       seen.set(c.ownerProfileId, {
         id: c.ownerProfileId,
-        name: c.ownerProfileId === viewerIdRef.current ? "you" : c.ownerName,
-        hue: c.ownerProfileId === viewerIdRef.current ? -1 : hueByOwnerRef.current.get(c.ownerProfileId) ?? -1,
+        name: mine ? "you" : c.ownerName,
+        hue: mine ? -1 : hueByOwnerRef.current.get(c.ownerProfileId) ?? -1,
         agent: c.ownerType === "agent",
+        mine,
       });
     }
     const rows = [...seen.values()];
-    /* one owner is not a legend, it is a label nobody asked for */
+    /* one ground is not a choice, it is a label nobody asked for */
     if (rows.length < 2) return [];
-    return rows.sort((a, b) => (a.hue < 0 ? -1 : b.hue < 0 ? 1 : a.hue - b.hue));
+    /* you first, always: it is the ground everything else is read against */
+    return rows.sort((a, b) =>
+      a.mine ? -1 : b.mine ? 1 : a.hue - b.hue || a.name.localeCompare(b.name),
+    );
   }, [atWall, groupFieldTick, wokenGroups]);
+
+  /**
+   * Whose ground is under you right now — null is yours, and travelling to
+   * another wall puts you back in your own, because standing in someone
+   * else's ground is a thing you did here and does not follow you.
+   */
+  const [standing, setStanding] = useState<string | null>(null);
+  const wallKey = spaceKey(atWall);
+  useEffect(() => {
+    setStanding(null);
+    simApiRef.current?.standIn(null);
+  }, [wallKey]);
+  const standIn = useCallback((ownerProfileId: string | null) => {
+    setStanding(ownerProfileId);
+    simApiRef.current?.standIn(ownerProfileId);
+  }, []);
   /**
    * WHAT THE POSTER RESTS ON — THE SAME QUESTION, ONE LAYER UP.
    *
@@ -10719,18 +10807,33 @@ function WorldExperience(): JSX.Element {
         ) : null}
       </div>
 
-      {legend.length > 0 && inField && phase === "ready" ? (
-        <div className="jar-legend" data-jar-chrome="1">
-          {legend.map((m) => (
-            <span key={m.id} className="jar-legend-row">
-              <i
-                className={m.agent ? "jar-legend-dot jar-legend-dot--agent" : "jar-legend-dot"}
-                style={m.hue >= 0 ? { background: hueCss(m.hue) } : undefined}
-                aria-hidden="true"
-              />
-              {m.name}
-            </span>
-          ))}
+      {grounds.length > 0 && inField && phase === "ready" ? (
+        <div
+          className="jar-ground"
+          data-jar-chrome="1"
+          role="radiogroup"
+          aria-label="Whose inspirations are on the ground"
+        >
+          {grounds.map((m) => {
+            const here = m.mine ? standing === null : standing === m.id;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                role="radio"
+                aria-checked={here}
+                className={here ? "jar-ground-row jar-ground-row--here" : "jar-ground-row"}
+                onClick={() => standIn(m.mine ? null : m.id)}
+              >
+                <i
+                  className={m.agent ? "jar-ground-dot jar-ground-dot--agent" : "jar-ground-dot"}
+                  style={m.hue >= 0 ? { background: hueCss(m.hue) } : undefined}
+                  aria-hidden="true"
+                />
+                {m.name}
+              </button>
+            );
+          })}
         </div>
       ) : null}
 
