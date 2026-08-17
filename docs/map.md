@@ -95,8 +95,8 @@ This is what actually happens, in file order. Every hop below was read.
    somewhere else. Any `https://` links in the text are pulled out here, to be
    sent as attachments in step 8 once the row has an id. If the request fails
    the orb is retracted and the words come back.
-2. **`packages/web/src/lib/api.ts` → `createInspiration()`.** The only place in
-   the web package where HTTP happens — there is no `fetch` anywhere else under
+2. **`packages/web/src/lib/api/inspirations.ts` → `createInspiration()`.** The
+   only place in the web package where HTTP happens — there is no `fetch` anywhere else under
    `packages/web/src`, and that is checkable in one grep. It POSTs to
    `apiPath("/inspirations")` with `credentials: "include"`, so the httpOnly
    session cookie rides along.
@@ -201,7 +201,7 @@ This is what actually happens, in file order. Every hop below was read.
     `packages/web/src/lib/data.ts`: `loadInspirations()` (which follows the
     server's cursor — throwing it away silently capped the ground at one page),
     `loadSignals()`, `loadTopOfMind()`. Those call `fetchInspirationPage`,
-    `fetchSignals`, `fetchTopOfMind` in `packages/web/src/lib/api.ts`, which hit
+    `fetchSignals`, `fetchTopOfMind` under `packages/web/src/lib/api/`, which hit
     `GET /api/inspirations`, `GET /api/signals`
     (`packages/api/src/routes/signals.ts`) and `GET /api/top-of-mind`
     (`packages/api/src/routes/top-of-mind.ts`).
@@ -251,10 +251,10 @@ In this order. The first three are 1,059 lines together; the first five are
    the four job types *are* the generation pipeline. The dispatch function is
    the shortest place in the repo where you can watch layer 1 become layer 2
    become layer 3.
-4. **`packages/web/src/lib/api.ts`** (1,745 lines — read as a directory, not a
-   narrative) — the only place the browser does HTTP, and the whole client
-   surface typed in canon words. It is the mirror of file 1; read them together
-   and the two packages stop being two vocabularies.
+4. **`packages/web/src/lib/api/`** — the only place the browser does HTTP, and
+   the whole client surface typed in canon words. One file per resource,
+   mirroring `packages/api/src/routes/`, over a shared `http.ts`. Read it beside
+   file 1 and the two packages stop being two vocabularies.
 5. **`packages/web/src/lib/data.ts`** (456 lines) — where payloads become the
    things the canvas draws. Its header is also the clearest short statement in
    the repo of the world-words rule: `field`, `sky` and `headquarters` are words
@@ -327,13 +327,14 @@ one trap a reader reliably falls into, which is that the `Space` type lives in
 Written down rather than fixed, because this is a documentation change. Each was
 verified by opening the file.
 
-- **`docs/architecture.md` names `packages/web/src/lib/world-data.ts` as "the
-  ONLY translation between the canon's words and the world's". That file does
-  not exist.** Its successor is `packages/web/src/lib/data.ts`, and the header
-  there says the translation was deliberately *removed*: the second vocabulary
-  (`WorldCapture`, `WorldPattern`, `loadField`/`loadSky`/`loadHeadquarters`) is
-  gone and one word now runs from the Postgres column to the view model. The
-  seam is real, the name and the description are stale.
+- ~~`docs/architecture.md` names a `world-data.ts` that does not exist.~~
+  **FIXED.** It described a translation layer between the canon's words and the
+  world's, naming a file deleted long before. `data.ts`'s own header records
+  that the translation was deliberately *removed* — `WorldCapture`,
+  `WorldPattern`, `loadField`/`loadSky`/`loadHeadquarters` are gone and one word
+  now runs from the Postgres column to the view model. That section now
+  describes the three registers rather than a synonym table, and
+  `map-paths.test.ts` fails if any path cited in these documents stops existing.
 - **`packages/api/src/db/client.ts` is imported by nothing.** The live client is
   `packages/api/src/lib/db.ts`; every route and every generation module imports
   `getDb` from there. `db/index.ts` does not re-export `client.ts` either. Two

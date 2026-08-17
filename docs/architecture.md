@@ -58,22 +58,37 @@ See `GOAL.md` for how a room's top of mind gets approved.
 Four boundaries carry almost all the coupling in this codebase. Cross them
 deliberately.
 
-**`packages/web/src/lib/world-data.ts`** — the ONLY translation between the
-canon's words and the world's. If you find yourself mapping `signal` to
-`pattern` anywhere else, it belongs here.
+**`packages/web/src/lib/data.ts`** — where the three layers become the three
+vertical sections a person moves through. It is NOT a translation, and this
+paragraph used to say it was.
 
-The two vocabularies, and which to use where:
+That is worth stating rather than quietly correcting, because the old design is
+the one a reader will expect. This file carried a second vocabulary: an
+inspiration was a `WorldCapture`, a signal a `WorldPattern`, the loaders were
+`loadField` / `loadSky` / `loadHeadquarters`. Every reader had to hold two words
+for one thing, and this module was the only place they met.
 
-| canon (`docs/data-model.md`, the API, the database) | the world |
-| --- | --- |
-| inspiration | capture, memory, orb |
-| signal | pattern, statement |
-| top of mind | the poster, the board |
-| `visibility: "private" \| "public"` | `isPublic: boolean` |
+**That translation was deleted.** The canon's nouns now run unbroken from the
+Postgres column through the route to the view model, and
+`packages/web/scripts/check-vocabulary.mjs` fails the build if a second word for
+a canon noun reappears in an identifier.
 
-Use the canon's words in `packages/api/`, in request and response payloads, and
-in anything a database column touches. Use the world's inside the world. The
-one place both appear is `world-data.ts`, which is the point.
+What survives is not a synonym table but a distinction:
+
+| register | words | where it is legal |
+| --- | --- | --- |
+| **canon** | inspiration, signal, top of mind, profile, group | every identifier, column and payload, both packages |
+| **world** | the field, the sky, headquarters, the ground, an orb, a wall | prose and UI only — they name WHERE a layer is drawn, never what it is |
+| **human** | "room", "kept", "let go" | strings a person reads on screen |
+
+So a signal is a signal in the database, in the route, in the client and in the
+view model. It is drawn *in the sky*, and a person on screen reads about their
+*rooms*. `field`, `sky` and `headquarters` may appear in a comment or on screen
+and never in a type, a function or a path.
+
+One deliberate lossy flatten remains and is not a vocabulary at all: the canon's
+`visibility: "private" | "public"` becomes `isPublic: boolean` in the view
+model. `data.ts` documents why at the site.
 
 User-facing text is a third thing again: it says **inspiration**, because that
 is what the product calls itself — the page title is "WAKA — Inspirations".
