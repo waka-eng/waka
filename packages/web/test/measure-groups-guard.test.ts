@@ -67,6 +67,24 @@ function minRows(source: string): number {
 }
 
 /**
+ * THE COMPONENT BODY the generated file wraps its effect in — two refs and one
+ * plain local, declared here rather than inline so the header assertion below
+ * can be derived from the same list that writes the file instead of being a
+ * second place to drift.
+ *
+ * Why three names and not one: the header's second sentence prints TWO numbers
+ * off the same map ("N names in the component body around it, M of them refs"),
+ * and a fixture where N equals M cannot tell you which of them you are reading.
+ * The real `Home.tsx` prints 254 and 49.
+ */
+const BODY_NAMES: ReadonlyArray<readonly [string, string]> = [
+  ["selectedIdRef", "useRef(null)"],
+  ["hoverRef", "useRef(0)"],
+  ["frameCount", "0"],
+];
+const BODY_REFS = BODY_NAMES.filter(([, init]) => init.startsWith("useRef")).length;
+
+/**
  * A component whose frame effect declares each named group at its top level —
  * the shape the real `Home.tsx` has, small enough to read. `omit` leaves one out,
  * which is what a rename looks like from the script's side.
@@ -77,14 +95,32 @@ function minRows(source: string): number {
  * component would make the drift case exit for the floor's reason while the
  * assertion about drift went on passing, which is a green light bought with the
  * wrong evidence.
+ *
+ * `untracked` adds the other shape the real file has: an object literal sitting
+ * exactly where the groups sit that `GROUPS` has never heard of, plus a
+ * declaration that is NOT an object literal and therefore must not be named. It
+ * is an option rather than the default because both branches of the disclosure
+ * have to be reachable from out here — see the end-to-end case.
  */
 function componentDeclaring(
   names: string[],
-  { omit = [], functions, plain = 0 }: { omit?: string[]; functions: number; plain?: number },
+  {
+    omit = [],
+    functions,
+    plain = 0,
+    untracked = false,
+  }: { omit?: string[]; functions: number; plain?: number; untracked?: boolean },
 ): string {
   const kept = names.filter((n) => !omit.includes(n));
   const decls = kept.map((n) => `    const ${n} = { t: 0 };`).join("\n");
   const read = kept.map((n) => `${n}.t`)[0] ?? "0";
+  /* `SELF_WALL` and `skyDeps` in miniature, and beside them the thing that
+     proves the tool is testing for an object literal and not merely for "a name
+     declared in the effect that is not a group": `notAnObject` is declared in
+     the same place and must never appear on the disclosure line. */
+  const strays = untracked
+    ? ["    const notAGroup = { t: 0 };", "    const notAnObject = 1;"].join("\n")
+    : "";
   /* Each one reaches a group AND the component-body ref, so a unit built out of
      them has something in every column the `--unit` block prints — including
      the `[ref]` kind, which is the word that says "permanent accessor" and the
@@ -105,9 +141,10 @@ function componentDeclaring(
   ).join("\n");
   return [
     "function HomeExperience() {",
-    "  const selectedIdRef = useRef(null);",
+    ...BODY_NAMES.map(([name, init]) => `  const ${name} = ${init};`),
     "  useEffect(() => {",
     decls,
+    strays,
     bodies,
     plains,
     "    return tick0;",
@@ -293,10 +330,19 @@ describe("measure-groups checks its group names against the real file", () => {
    * header loop, deleting the table loop, and passing `null` where
    * `onlyFilter(process.argv)` belongs.
    *
-   * That is a place to stop rather than one more level to climb, because this
-   * case is outside the process: it runs the real script with no `--selftest`,
-   * against a file it controls, and reads what came out of stdout. Nothing about
-   * the printing is left between here and a terminal.
+   * Reading stdout is the last level — there is nothing above it — but reading
+   * it only proves what the assertions here NAME, and the first version of this
+   * case named one of `formatHeader`'s four arguments. That left the same shape
+   * of hole one rung higher: with everything green the script could be made to
+   * print "Every object declared at the effect's top level is a tracked group"
+   * about a file where `SELF_WALL` and `skyDeps` are declared exactly there (by
+   * handing the printer an empty `untracked`), and "0 names in the component
+   * body around it, 0 of them refs" in place of 254 and 49 (by handing it an
+   * empty scope). Neither could be seen, because the generated component had no
+   * untracked object — so it took the affirmative branch this case ASSERTED —
+   * and one component-body name nobody counted. So the file now carries both
+   * shapes, and every argument the printer is handed shows up in something
+   * asserted here.
    *
    * The numbers are all derived from the doctored file rather than recorded, so
    * this does not become a golden file that churns.
@@ -305,18 +351,51 @@ describe("measure-groups checks its group names against the real file", () => {
     const names = groupNames(source);
     const ticks = minRows(source);
     const plains = 3;
-    const home = componentDeclaring(names, { functions: ticks, plain: plains });
-    /* `useEffect` is the third line of that component, every time. */
-    const header = `${ticks + plains} functions declared in the frame effect (line 3).`;
+    const home = componentDeclaring(names, { functions: ticks, plain: plains, untracked: true });
+    /* Read off the generated file, not counted by hand: a hardcoded line number
+       has to be re-bumped every time this component grows a line, which is how
+       it comes to be quietly wrong about the sentence that makes a retarget of
+       the whole measurement visible. */
+    const effectLine = home.split("\n").findIndex((l) => l.includes("useEffect(")) + 1;
+    expect(effectLine).toBeGreaterThan(1);
+    const header = `${ticks + plains} functions declared in the frame effect (line ${effectLine}).`;
+    /* The second sentence, whose two numbers can only come from the component
+       scope the printer is handed. */
+    const scope = `${BODY_NAMES.length} names in the component body around it, ${BODY_REFS} of them refs.`;
     const rowsFor = (out: string, prefix: string) =>
       out.split("\n").filter((l) => new RegExp(`^${prefix}\\d+ `).test(l)).length;
 
     const full = runAgainst(home, undefined, []);
     expect(full.status).toBe(0);
     expect(full.out).toContain(header);
-    expect(full.out).toContain("Every object declared at the effect's top level is a tracked group.");
+    expect(full.out).toContain(scope);
+    /* The disclosure, by name and by ONLY that name — the trailing newline is
+       the end of the list, so an over-broad collector that stops testing for an
+       object literal shows up as `notAnObject` arriving beside it. This line is
+       what stands in for the reverse GROUPS check the tool refuses to have, so a
+       false affirmative in its place is the gate lying about the one thing it
+       offered instead of a check. */
+    expect(full.out).toContain("Not tracked as groups, though declared alongside them: notAGroup\n");
+    expect(full.out).not.toContain("notAnObject");
+    expect(full.out).not.toContain(
+      "Every object declared at the effect's top level is a tracked group.",
+    );
     expect(rowsFor(full.out, "tick")).toBe(ticks);
     expect(rowsFor(full.out, "plain")).toBe(plains);
+
+    /* AND THE OTHER BRANCH, from out here as well: the same component without
+       the stray object has to print the affirmative sentence. Asserting only the
+       disclosure would leave the sentence a reader trusts MOST — everything is
+       accounted for — unreachable from any process-level case, which is exactly
+       the state the disclosure branch was in when it could be forced. */
+    const honest = componentDeclaring(names, { functions: ticks, plain: plains });
+    const clean = runAgainst(honest, undefined, []);
+    expect(clean.status).toBe(0);
+    expect(clean.out).toContain(
+      "Every object declared at the effect's top level is a tracked group.",
+    );
+    expect(clean.out).not.toContain("Not tracked as groups");
+    expect(clean.out).toContain(scope);
 
     /* `--only <a group>` keeps the rows that touch it and drops the rest — and
        the histogram underneath still describes the whole file, which is the one

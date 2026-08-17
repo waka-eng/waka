@@ -101,7 +101,16 @@
  * too — and the two `console.log` loops that remain, plus the whole `--unit`
  * block, are covered from OUTSIDE the process by `test/measure-groups-guard.
  * test.ts`, which runs this script against a file it controls and reads stdout.
- * That is where the climb stops, because there is no level above stdout.
+ *
+ * Stdout is the last level; it is not automatically the last hole. A round after
+ * that paragraph was written, two of the four ARGUMENTS handed to `formatHeader`
+ * were still unasserted from out there, and both could be replaced with the
+ * whole suite green: an empty `untracked` printed "Every object declared at the
+ * effect's top level is a tracked group" about a file where `SELF_WALL` and
+ * `skyDeps` are declared exactly there, and an empty scope turned "254 names …,
+ * 49 of them refs" into "0 names …, 0 of them refs". The generated file the
+ * guard runs against had no untracked object and one component-body name, so it
+ * could not see either. It now has both shapes and asserts every argument.
  *
  * WHAT REMAINS UNCHECKED IS WRITTEN DOWN, at the bottom of this file, under
  * "WHAT IS STILL NOT CHECKED". It is short and it is honest; read it before
@@ -2256,11 +2265,18 @@ if (members) {
  * WHAT IS STILL NOT CHECKED. Read this before quoting a number from here.
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Four rounds of review found breaks in this file by the same method every
- * time: change something, see whether anything goes red. The four lists below
- * are what survived — written down rather than left for the fifth round,
+ * Five rounds of review found breaks in this file by the same method every
+ * time: change something, see whether anything goes red. The four below are what
+ * survived the last of them — written down rather than left for a sixth round,
  * because a hole someone can read is worth more than a green report that is not
  * true. Each says what would break, how it would look, and the fix.
+ *
+ * The pattern every one of those rounds produced is worth stating once, because
+ * it is what to check first next time: the break always moves UP. Extract a pure
+ * function and assert it, and the next defect is in the code that calls it;
+ * assert the caller's output, and the next one is in an ARGUMENT the caller
+ * hands over. That last step is where round five ended — `formatHeader` was
+ * asserted from both sides, and two of the four things handed to it were not.
  *
  * 1. NO NUMBER MEASURED FROM THE REAL `Home.tsx` IS PINNED — only its shape.
  *    Every fixture here is a file of ten to twenty lines written next to its own
@@ -2277,13 +2293,35 @@ if (members) {
  *    re-bless weekly stops being read; that trade is why it is not here. If this
  *    tool ever decides something irreversible, take the trade.
  *
+ *    ONE DIRECTION OF THAT IS WORTH NAMING ON ITS OWN, because it is the one
+ *    nothing here covers at all: `GROUPS` GAINING A NAME THAT IS NOT A STATE
+ *    OWNER. `assertGroupsAreReal` only asks whether every name in `GROUPS` is
+ *    declared at the effect's top level, so adding `ctx` and `canvas` — which
+ *    are declared exactly there — passes it, passes every fixture, and passes
+ *    the guard test: measured just now, `draw` goes from 7 groups to 8 and
+ *    `measure` from 6 to 8, the histogram reshapes, and nothing anywhere goes
+ *    red. Neither name reaches the disclosure line either, because neither is an
+ *    object literal. So: the drift check covers names LEAVING the file, the
+ *    disclosure covers owners the list has never heard of, and NOTHING asks
+ *    whether a name in the list was ever a state owner. It inflates the cost of
+ *    every boundary that reads one, which is the safe direction to be wrong in
+ *    and still wrong. Not cheap to close — `mech` and `ground` are not object
+ *    literals either, so the obvious predicate ("every group is an object
+ *    literal at that level") would fail on today's honest file.
+ *
  * 2. WHICH EFFECT GETS MEASURED IS DECIDED BY SIZE, AND NOTHING FAILS IF IT
  *    MOVES. Among `Home.tsx`'s effect hooks the frame loop is 200,767 characters
  *    and the next is about 14,000, so the choice is not close today — but 4b and
  *    4c exist to shrink the first one, and the margin is a coincidence, not a
- *    property. The chosen line is printed in the header and asserted, so a
- *    retarget is VISIBLE; it is not RED, and "a human would have noticed" is the
- *    standard this file exists to stop relying on.
+ *    property. The chosen line is printed in the header, so a retarget is
+ *    VISIBLE; it is not RED. And be exact about what "asserted" covers here: the
+ *    fixtures and the guard test pin that sentence against files they generate,
+ *    which proves the tool prints the line the chosen effect really starts on —
+ *    nothing asserts 2378, and nothing could without pinning a number off the
+ *    real file (see 1). So if the frame effect stops being the biggest hook,
+ *    this tool measures a different one, says so in a sentence, and stays green.
+ *    "A human would have noticed" is the standard this file exists to stop
+ *    relying on.
  *    THE FIX: have `measure` return the runner-up's span too, and let
  *    `assertGroupsAreReal` refuse a margin under, say, 2×. Roughly six lines.
  *    Not taken here only because this round's scope was the printing path.
@@ -2313,5 +2351,10 @@ if (members) {
  * owner we have not heard of?" — because answering it needs a list of names to
  * excuse, and a list of excuses is a place for a violation to hide. What stands
  * in for it is the disclosure line above the table, and BOTH of its branches are
- * now asserted, including the one that says everything is accounted for.
+ * now asserted — inside this file as text out of `formatHeader`, and out of a
+ * real process's stdout by the guard test, which runs the script against a
+ * generated file in each shape. The second half of that is not decoration: the
+ * pure function was asserted a round before the argument was, and in between,
+ * `formatHeader(report, componentScope, effectLine, [])` printed "everything is
+ * accounted for" with every gate green.
  */
