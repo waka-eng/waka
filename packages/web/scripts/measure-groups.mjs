@@ -90,6 +90,23 @@
  *     right-looking table, so the rows, the histogram and the unit block are
  *     rendered by pure functions and the exact printed text is asserted.
  *
+ * AND THEN THE SAME LESSON ONE LEVEL UP, TWICE. Extracting a pure function and
+ * asserting it leaves the code that CALLS it uncovered, and the next break just
+ * moves there. It did, twice, in the two rounds after the paragraph above was
+ * written: the header sentences and the sort and the histogram's argument were
+ * still inline in the command-line block, and four separate edits changed what
+ * the tool PRINTS about `Home.tsx` with everything green — one of them printing
+ * "Every object declared at the effect's top level is a tracked group" while two
+ * were not. So the header and the table are pure functions asserted as text
+ * too — and the two `console.log` loops that remain, plus the whole `--unit`
+ * block, are covered from OUTSIDE the process by `test/measure-groups-guard.
+ * test.ts`, which runs this script against a file it controls and reads stdout.
+ * That is where the climb stops, because there is no level above stdout.
+ *
+ * WHAT REMAINS UNCHECKED IS WRITTEN DOWN, at the bottom of this file, under
+ * "WHAT IS STILL NOT CHECKED". It is short and it is honest; read it before
+ * quoting a number from here into a document.
+ *
  * Run: node scripts/measure-groups.mjs [--only sky] [--unit a,b,c]
  *      node scripts/measure-groups.mjs --selftest    (fixtures + the `GROUPS`
  *                                                     reality check; in `pnpm test`)
@@ -120,14 +137,20 @@ const GROUPS = new Set([
 /**
  * Names bound inside a function: params, locals, catch clauses. Not free.
  *
- * There was a fourth line here, binding a catch clause's variable directly. It
- * was dead: `forEachChild` visits that variable as a `VariableDeclaration` like
- * any other, so the branch below had already bound it, and deleting the catch
- * line changed no answer in any fixture or in `Home.tsx`. Removed rather than
- * left in place — a line that looks like a guard and guards nothing is worse
- * than no line, because the next reader counts it as coverage. The behaviour it
- * appeared to provide is real and is pinned by the `catches` fixture; what
- * actually delivers it is the variable-declaration branch.
+ * TWO LINES THAT LOOKED LIKE COVERAGE HAVE BEEN REMOVED FROM HERE, both proven
+ * dead by the same method: delete it, and no fixture and no row of the
+ * `Home.tsx` table moves. One bound a catch clause's variable. The other bound
+ * the measured function's own parameters — `for (const p of fn.parameters ?? [])
+ * bind(p.name)` — which the walk below already does, because `forEachChild`
+ * visits those parameters like any other node and the `ts.isParameter` branch
+ * binds them there.
+ *
+ * A line that looks like a guard and guards nothing is worse than no line,
+ * because the next reader counts it as coverage. The parameter loop was worse
+ * than that: it read like the thing that keeps `function ownParam(view) {…}`
+ * from inventing a group read, so the branch that actually does that work looked
+ * redundant and could have been deleted instead. Both behaviours are real and
+ * both are now pinned by fixtures that name them — `catches` and `ownParam`.
  */
 function boundWithin(fn) {
   const bound = new Set();
@@ -137,7 +160,6 @@ function boundWithin(fn) {
       for (const el of name.elements) if (ts.isBindingElement(el)) bind(el.name);
     }
   };
-  for (const p of fn.parameters ?? []) bind(p.name);
   (function walk(node) {
     if (node !== fn && (ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node))) {
       if (node.name && ts.isIdentifier(node.name)) bound.add(node.name.text);
@@ -306,11 +328,18 @@ function measure(source, fileName) {
     }
   }
 
-  /** Every named function declared at the top of the effect body. */
+  /** Every named function declared at the top of the effect body.
+   *
+   *  Rows used to carry a `line` as well. Nothing read it — not a column, not
+   *  the unit block, not the histogram — so it was a number nobody could see
+   *  being wrong, which is the one kind this tool must not ship: zeroing it left
+   *  every fixture and both gates green. Removed rather than covered, because a
+   *  field that has to be asserted to be safe is a field being kept for no
+   *  reason. `lineOf` is right here if a column for it is ever wanted. */
   const functions = [];
   for (const stmt of effect.body.statements ?? []) {
     if (ts.isFunctionDeclaration(stmt) && stmt.name && stmt.body) {
-      functions.push({ name: stmt.name.text, node: stmt, line: lineOf(stmt.name) });
+      functions.push({ name: stmt.name.text, node: stmt });
     } else if (ts.isVariableStatement(stmt)) {
       for (const d of stmt.declarationList.declarations) {
         if (
@@ -319,14 +348,14 @@ function measure(source, fileName) {
           (ts.isArrowFunction(d.initializer) || ts.isFunctionExpression(d.initializer)) &&
           d.initializer.body
         ) {
-          functions.push({ name: d.name.text, node: d.initializer, line: lineOf(d.name) });
+          functions.push({ name: d.name.text, node: d.initializer });
         }
       }
     }
   }
 
   const report = [];
-  for (const { name, node, line } of functions) {
+  for (const { name, node } of functions) {
     const bound = boundWithin(node);
     const groups = new Set();
     const freeOther = new Set();
@@ -346,7 +375,25 @@ function measure(source, fileName) {
            4c gate turns on the group count, so it can declare a module
            unseparable and stop a seam from being built. */
         const isRenamedField = ts.isBindingElement(p) && p.propertyName === n;
-        if (!isMember && !isKey && !isRenamedField && !bound.has(n.text)) {
+        /* A name in a TYPE position is not a read of the value it is spelled
+           like. `function masked(arg: view): view` mentions `view` twice and
+           touches the state object zero times; `pour.Thing` names a namespace.
+           Counting them inflates the one number the 4c gate turns on, which is
+           the same over-report as the renamed field above and dangerous for the
+           same reason: an inflated group count declares a module unseparable and
+           a seam that should exist never gets built.
+           Latent in `Home.tsx` today — no type there is spelled like one of the
+           thirteen — so no printed number moves. Fixed rather than written down
+           as a defect because, unlike the `lines` off-by-one below, nothing that
+           has ever been measured with this tool changes.
+           `typeof view` is DELIBERATELY still counted. It names a VALUE binding
+           rather than a type, and a module that carries that annotation still
+           needs `view` in scope to compile, so it is a real dependency. The
+           `typeAnnotations` fixture asserts both halves of that line. */
+        const isTypeName =
+          (ts.isTypeReferenceNode(p) && p.typeName === n) ||
+          (ts.isQualifiedName(p) && p.left === n);
+        if (!isMember && !isKey && !isRenamedField && !isTypeName && !bound.has(n.text)) {
           if (GROUPS.has(n.text)) groups.add(n.text);
           else if (declaredInEffect.has(n.text) && n.text !== name) {
             /* a call is a dependency on behaviour, a read is one on state */
@@ -366,7 +413,6 @@ function measure(source, fileName) {
 
     report.push({
       name,
-      line,
       groups: [...groups].sort(),
       freeOther: [...freeOther].sort(),
       calls: [...calls].sort(),
@@ -507,6 +553,86 @@ function histogramLines(report) {
 }
 
 /**
+ * THE THREE SENTENCES ABOVE THE TABLE, which get read more often than the table.
+ *
+ * They were three `console.log` calls sitting in the command-line block, so
+ * nothing they say could be asserted, and FOUR separate breaks changed one of
+ * these lines with the whole suite green:
+ *
+ *   - the ref count counting `local` names instead of `ref` ones: "49 of them
+ *     refs" became "7 of them refs";
+ *   - `/^useRef[<(]/` tightened to `/^useRef\(/`, which is the shape 11 of
+ *     `Home.tsx`'s 49 refs are written in and not the 38 written `useRef<T>(…)`.
+ *     Same line, from the other end, and it also turns `[ref]` into `[hook]` in
+ *     the `--unit` block, where that word is the whole point;
+ *   - the chosen effect's line frozen, which is the affordance that makes a
+ *     retarget visible instead of silent;
+ *   - the untracked disclosure replaced by its own else-branch, so the tool
+ *     printed "Every object declared at the effect's top level is a tracked
+ *     group" while `SELF_WALL` and `skyDeps` sat there.
+ *
+ * That last one is worse than silence. This disclosure is what stands in for the
+ * reverse `GROUPS` check the tool deliberately refuses to have, so a false
+ * affirmative here is the gate lying about the one thing it offered in place of
+ * a check. Both of its branches are asserted below, because a fixture that
+ * always has untracked objects can never notice the other sentence exists.
+ */
+function formatHeader(report, componentScope, effectLine, untracked) {
+  const refs = [...componentScope.values()].filter((v) => v.kind === "ref").length;
+  return [
+    `${report.length} functions declared in the frame effect (line ${effectLine}).`,
+    `${componentScope.size} names in the component body around it, ${refs} of them refs.`,
+    /* Read this next to the counts: these are objects living where the groups
+       live that GROUPS does not track, so nothing below charges anyone for
+       touching them. Today both are known and neither is state — a fourteenth
+       owner would show up here first. The trailing newline is the blank line
+       before the table, and it is asserted so that it stays one. */
+    untracked.length
+      ? `Not tracked as groups, though declared alongside them: ${untracked.join(" ")}\n`
+      : `Every object declared at the effect's top level is a tracked group.\n`,
+  ];
+}
+
+/**
+ * THE TABLE AND THE HISTOGRAM UNDER IT — one function, so they cannot disagree
+ * about what they are describing.
+ *
+ * Both of these lived in the command-line block too, and both broke green.
+ *
+ * THE SORT. Inverting the comparator puts the eleven-group `tick` at row 69 and
+ * the zero-group rows on top, which is the opposite of what every reader takes
+ * this table to mean, and no assertion touched it — `rowsToPrint`'s fixture pins
+ * "the order it was measured", which is a different thing from the order it is
+ * printed in. Group count decides, `lines` breaks ties, and the fixture below is
+ * built so that the tie-break actually MOVES a row: two one-group functions
+ * whose measured order is the reverse of their sorted order, because a stable
+ * sort makes a dropped tie-break invisible against any other arrangement.
+ *
+ * THE HISTOGRAM'S ARGUMENT. `histogramLines(rows)` in place of
+ * `histogramLines(report)` makes it describe whatever `--only` left behind,
+ * under a caption that still says "how many functions" — the shape of the whole
+ * argument in `close-the-two-gaps.md`, quietly narrowed to a subset. So the
+ * filter chooses ROWS and the histogram is handed the WHOLE report, and the
+ * second fixture passes a filter that drops rows precisely to assert that
+ * difference.
+ *
+ * Sorting a copy: `rowsToPrint` returns the caller's own array when there is no
+ * filter, and the report is read again afterwards by the unit block.
+ */
+function formatTable(report, filter) {
+  const rows = [...rowsToPrint(report, filter)].sort(
+    (a, b) => b.groups.length - a.groups.length || b.lines - a.lines,
+  );
+  return [
+    TABLE_HEADER,
+    "-".repeat(100),
+    ...rows.map((r) => formatRow(r)),
+    "\ngroups touched → how many functions",
+    ...histogramLines(report),
+  ];
+}
+
+/**
  * THE ARGUMENTS — which file, which functions, which rows.
  *
  * These decide WHAT gets measured and WHAT gets shown, which makes them the
@@ -538,6 +664,26 @@ function unitMembers(argv) {
       .map((s) => s.trim())
       .filter((s) => s.length > 0),
   );
+}
+
+/**
+ * `--only` READS ITS OWN VALUE, and that reading is the part that broke.
+ *
+ * `rowsToPrint` was extracted and pinned last round; the two lines that decide
+ * what reaches it were left inline in the command-line block and were not. Then
+ * `process.argv[onlyArg + 1]` → `[onlyArg + 2]` made `--only sky` filter on the
+ * string `--file` — printing all 69 rows under a heading saying otherwise — with
+ * every fixture green. That is the same defect the last two rounds were about,
+ * one level up from where the fix landed: the judge gets proved and the code
+ * choosing what it judges does not.
+ *
+ * `?? null` because `--only` typed with nothing after it should show everything,
+ * which is what `rowsToPrint` does with a falsy filter, rather than filter on
+ * `undefined`.
+ */
+function onlyFilter(argv) {
+  const at = argv.indexOf("--only");
+  return at === -1 ? null : (argv[at + 1] ?? null);
 }
 
 function rowsToPrint(report, filter) {
@@ -607,6 +753,15 @@ const SELFTEST = [
        fell out of the count entirely and the seam was reported six members
        short of what `SkyDeps` actually had to declare. */
     expect: { groups: [], freeOther: [], calls: [], outer: ["selectedIdRef"] },
+    /* THE GENERIC FORM, asserted as a `ref`, because the only other case that
+       asserts a kind writes `useRef(0)` — and `Home.tsx` has 38 refs written
+       `useRef<T>(…)` against 11 written `useRef(…)`. Tightening the kind test to
+       `/^useRef\(/` therefore misclassifies the majority of the real file: the
+       header line drops from "49 of them refs" to "11 of them refs", and the
+       `--unit` block starts printing `selectedIdRef[hook]` where `[ref]` is the
+       word that says a permanent accessor. Every fixture stayed green while it
+       did, because the one asserting a kind was written in the minority shape. */
+    kinds: { selectedIdRef: "ref" },
     src: [
       "function Home() {",
       "  const selectedIdRef = useRef<string | null>(null);",
@@ -970,6 +1125,137 @@ const SELFTEST = [
     ].join("\n"),
   },
   {
+    why: "NEGATIVE — the measured function's OWN parameters are bound, like any other",
+    fn: "ownParam",
+    /* `boundWithin` used to open with `for (const p of fn.parameters ?? [])`,
+       which read like the line that makes this case safe. It was dead: the walk
+       reaches these same parameters through `forEachChild` and binds them at its
+       `ts.isParameter` branch, so deleting the loop moved nothing here, in any
+       other fixture, or in `Home.tsx`. Deleted — but the BEHAVIOUR it appeared
+       to provide is real, and nothing named it, since every other case gives the
+       measured function parameters that are not spelled like anything tracked.
+       Named here: `view` and `cam` are parameters and only `sky` is read. */
+    expect: { groups: ["sky"], freeOther: [], calls: [], outer: [] },
+    src: [
+      "function Home() {",
+      "  useEffect(() => {",
+      "    function ownParam(view, cam) {",
+      "      return view.x + cam.y + sky.t;",
+      "    }",
+      "    return ownParam;",
+      "  }, []);",
+      "  return null;",
+      "}",
+    ].join("\n"),
+  },
+  {
+    why: "NEGATIVE — a TYPE spelled like a group is not a read of it, but `typeof` is",
+    fn: "typeAnnotations",
+    /* The over-reporting family again, and the reason this one is a fix rather
+       than a written-down defect: it is latent in `Home.tsx` (no type there is
+       spelled like one of the thirteen), so correcting it re-dates no number
+       anyone has quoted, unlike the `lines` off-by-one below.
+       `view` in `arg: view`, `cam` in `cam[]` and `pour` in `pour.Thing` are
+       type positions and cost nothing to sever — they vanish at compile time.
+       `typeof clock` is different in kind and is DELIBERATELY still counted: it
+       names a value binding, so a module carrying that annotation genuinely
+       needs `clock` in scope. Both halves are here, so a fix that swept away all
+       four would be as red as no fix at all. */
+    expect: { groups: ["clock", "sky"], freeOther: [], calls: [], outer: [] },
+    src: [
+      "function Home() {",
+      "  useEffect(() => {",
+      "    function typeAnnotations(arg: view): view {",
+      "      const near: cam[] = [];",
+      "      const far: pour.Thing = near;",
+      "      const held: typeof clock = far;",
+      "      return sky.t + arg + held;",
+      "    }",
+      "    return typeAnnotations;",
+      "  }, []);",
+      "  return null;",
+      "}",
+    ].join("\n"),
+  },
+  {
+    why: "`React.useLayoutEffect` is an effect hook too — both halves of how the callee is read",
+    fn: "paints",
+    /* `isEffectHookCall` does two things no fixture named. It matches
+       `/^use[A-Za-z]*Effect$/` rather than `useEffect` exactly, and it takes the
+       NAME off a property access rather than the whole expression, so
+       `React.useLayoutEffect(…)` is recognised on both counts. Tighten the regex
+       or drop the property-access half and this file has no frame effect at all:
+       zero rows and a deps object of zero, printed as calmly as any other
+       answer — which is the arrow-component failure repeating through a
+       different door. Neither break moved anything in `Home.tsx`, whose frame
+       loop is a plain `useEffect`, so both were free to happen. */
+    expect: { groups: ["view"], freeOther: [], calls: [], outer: ["someRef"] },
+    src: [
+      "function Home() {",
+      "  const someRef = useRef(0);",
+      "  React.useLayoutEffect(() => {",
+      "    function paints() {",
+      "      return someRef.current + view.w;",
+      "    }",
+      "    return paints;",
+      "  }, []);",
+      "  return null;",
+      "}",
+    ].join("\n"),
+  },
+  {
+    why: "a component-body OBJECT destructuring is component scope, like the array kind",
+    fn: "readsDestructured",
+    /* `note` recurses through object and array binding patterns. Only the array
+       half was named — by the `const [focusCandId, setFocusCandId] = useState()`
+       in `usesBoth` — so the object half could be deleted with everything green,
+       and `const { paneRef, tidy } = useLayout()` would then be in no bucket at
+       all. That fall-through is the original nine-versus-fifteen bug, and this
+       is a shape React code is full of. Latent in `Home.tsx` today, which is
+       exactly why it needs writing down rather than leaving to the real file. */
+    expect: { groups: [], freeOther: [], calls: [], outer: ["paneRef", "tidy"] },
+    kinds: { paneRef: "hook", tidy: "hook" },
+    src: [
+      "function Home() {",
+      "  const { paneRef, tidy } = useLayout();",
+      "  useEffect(() => {",
+      "    function readsDestructured() {",
+      "      return paneRef.current + tidy();",
+      "    }",
+      "    return readsDestructured;",
+      "  }, []);",
+      "  return null;",
+      "}",
+    ].join("\n"),
+  },
+  {
+    why: "a COMPONENT PROP reached from the effect is a dependency, not a name in no bucket",
+    fn: "readsProp",
+    /* `componentScope` notes three shapes — parameters, variable declarations,
+       function declarations — and the parameter one was named by no fixture, so
+       the line `for (const p of componentFn.parameters ?? []) note(…)` could be
+       deleted with the whole suite green. `props` would then be in NO bucket at
+       all: not a group, not declared in the effect, not in component scope. That
+       is the exact fall-through that lost six names from the sky's deps and got
+       nine printed where the truth was fifteen.
+       Latent in `Home.tsx`, whose component takes no props — which is precisely
+       why nobody would notice the line going, and why it is written down here
+       rather than trusted to the real file. */
+    expect: { groups: [], freeOther: [], calls: [], outer: ["props"] },
+    kinds: { props: "prop" },
+    src: [
+      "function Home(props) {",
+      "  useEffect(() => {",
+      "    function readsProp() {",
+      "      return props.viewMode;",
+      "    }",
+      "    return readsProp;",
+      "  }, []);",
+      "  return null;",
+      "}",
+    ].join("\n"),
+  },
+  {
     why: "a destructured local is bound, and the FIELD it was renamed from is not a read",
     fn: "destructures",
     /* Two mechanisms in one small function, both previously unpinned on this
@@ -1054,6 +1340,39 @@ const SELFTEST = [
       "    return realFn;",
       "  }, []);",
       "  return table;",
+      "}",
+    ].join("\n"),
+  },
+  {
+    why: "A DECOY IN A LATER ARGUMENT of an effect-named call is not the effect either",
+    fn: "realFn",
+    /* The other half of `isEffectHookCall`, and the half nothing reached: the
+       callback has to be the FIRST argument. Drop `call.arguments[0] !== node`
+       and any function anywhere in an `use…Effect(…)` call becomes a candidate,
+       so the biggest one wins — here a hook taking a value first and its
+       callback second, which is a shape custom hooks in this repo's own idiom
+       could easily take. The failure is the one this tool fears most: a full,
+       plausible, entirely different table. Deliberately the larger of the two,
+       the same way the `walls.map` decoy above is. */
+    expect: { groups: ["cam"], freeOther: [], calls: [], outer: [] },
+    rows: ["realFn"],
+    src: [
+      "function Home() {",
+      "  useEffect(() => {",
+      "    function realFn() {",
+      "      return cam.x;",
+      "    }",
+      "    return realFn;",
+      "  }, []);",
+      "  useAnimationEffect(60, () => {",
+      "    function decoyFn() {",
+      "      return sky.a + sky.b + sky.c + sky.d + sky.e + sky.f + sky.g;",
+      "    }",
+      "    const padPadPadPadPadPadPadPadPadPadPadPadPadPadPad = decoyFn();",
+      "    const padPadPadPadPadPadPadPadPadPadPadPadPadPadPa2 = decoyFn();",
+      "    return padPadPadPadPadPadPadPadPadPadPadPadPadPadPad;",
+      "  });",
+      "  return null;",
       "}",
     ].join("\n"),
   },
@@ -1378,16 +1697,50 @@ const ARG_SELFTEST = [
     file: "/tmp/old-home.tsx",
   },
   {
+    why: "--file with a RELATIVE path is resolved, which is how anyone would type it",
+    /* Every other case here passes an absolute path, so dropping the `resolve()`
+       stayed green while `readFileSync` was left holding whatever the shell
+       handed over — and `--file` is the affordance the nine-versus-fifteen fix
+       was VERIFIED with, aimed at a checkout of the pre-extraction file. A
+       wrong answer here invalidates the verification, not just a run. */
+    argv: ["node", "measure-groups.mjs", "--file", "./old-home.tsx"],
+    file: "./old-home.tsx",
+  },
+  {
     why: "--file still works alongside the other flags",
     argv: ["node", "measure-groups.mjs", "--only", "sky", "--file", "/tmp/old-home.tsx"],
     file: "/tmp/old-home.tsx",
     members: null,
+    only: "sky",
   },
   {
     why: "no --unit means no unit block at all",
     argv: ["node", "measure-groups.mjs"],
     file: "/repo/src/pages/Home.tsx",
     members: null,
+    only: null,
+  },
+  {
+    why: "--only takes the word after ITSELF, not the word after that",
+    /* The break this exists for: `argv[at + 1]` → `argv[at + 2]` filtered on the
+       string `--file`, which matches no group and no row name, so all 69 rows
+       printed under a heading promising a subset. `rowsToPrint` was pinned and
+       this — the line handing it its argument — was not. */
+    argv: ["node", "measure-groups.mjs", "--only", "sky"],
+    file: "/repo/src/pages/Home.tsx",
+    only: "sky",
+  },
+  {
+    why: "--only reads its own value when another flag comes first",
+    argv: ["node", "measure-groups.mjs", "--file", "/tmp/old-home.tsx", "--only", "trip"],
+    file: "/tmp/old-home.tsx",
+    only: "trip",
+  },
+  {
+    why: "--only with nothing after it shows every row, rather than filtering on nothing",
+    argv: ["node", "measure-groups.mjs", "--only"],
+    file: "/repo/src/pages/Home.tsx",
+    only: null,
   },
   {
     why: "--unit keeps EVERY member, spaces and all — a unit measured short looks cheap",
@@ -1426,6 +1779,157 @@ const ONLY_SELFTEST = [
       { name: "onKey", groups: ["cam"] },
     ],
     kept: ["tick", "onKey"],
+  },
+];
+
+/**
+ * THE HEADER BLOCK — the part of the output that gets quoted.
+ *
+ * "69 functions declared in the frame effect (line 2378)" and "254 names in the
+ * component body around it, 49 of them refs" are the sentences that end up in a
+ * design document; the table is what you go and look at afterwards. Nothing
+ * asserted a word of them.
+ *
+ * The two cases differ in EVERY number and in the branch, on purpose: a pair of
+ * fixtures that share a count cannot tell you which count you are reading. One
+ * has two rows, four component-body names, two refs and two untracked objects;
+ * the other has one, one, one and none.
+ *
+ * The refs here are written `useRef<T>(…)`, which is how 38 of `Home.tsx`'s 49
+ * are written and is the shape no kind assertion previously used.
+ */
+const HEADER_SELFTEST = [
+  {
+    why: "untracked objects present — the disclosure that stands in for a reverse GROUPS check",
+    printed: [
+      "2 functions declared in the frame effect (line 5).",
+      "4 names in the component body around it, 2 of them refs.",
+      "Not tracked as groups, though declared alongside them: SELF_WALL skyDeps\n",
+    ],
+    src: [
+      "function Home() {",
+      "  const skyRef = useRef<string | null>(null);",
+      "  const groupBallsRef = useRef<Ball[]>([]);",
+      "  const [dialAway, setDialAway] = useState(false);",
+      "  useEffect(() => {",
+      "    const view = { z: 0 };",
+      "    const skyDeps = {};",
+      "    const SELF_WALL = {};",
+      "    function tick() {",
+      "      return view.z + skyRef.current;",
+      "    }",
+      "    function draw() {",
+      "      return SELF_WALL;",
+      "    }",
+      "    return tick;",
+      "  }, []);",
+      "  return null;",
+      "}",
+    ].join("\n"),
+  },
+  {
+    why: "NO untracked objects — the other branch, which printed while two sat there",
+    /* This is the case that was missing, and it is the reason the tool could be
+       made to print "Every object declared at the effect's top level is a
+       tracked group" about a file where `SELF_WALL` and `skyDeps` are declared
+       exactly there. The disclosure is what this tool offers INSTEAD of a
+       reverse GROUPS check — the reverse check was refused because it needs a
+       list of things to excuse and a list of excuses is a place to hide — so a
+       false affirmative here is worse than printing nothing at all. */
+    printed: [
+      "1 functions declared in the frame effect (line 3).",
+      "1 names in the component body around it, 1 of them refs.",
+      "Every object declared at the effect's top level is a tracked group.\n",
+    ],
+    src: [
+      "function Home() {",
+      "  const camRef = useRef(0);",
+      "  useEffect(() => {",
+      "    const cam = { x: 0 };",
+      "    function tick() {",
+      "      return cam.x + camRef.current;",
+      "    }",
+      "    return tick;",
+      "  }, []);",
+      "  return null;",
+      "}",
+    ].join("\n"),
+  },
+];
+
+/**
+ * THE TABLE, IN THE ORDER IT IS PRINTED — which is not the order it is measured.
+ *
+ * `rowsToPrint` pins which rows survive `--only`; this pins what happens to them
+ * afterwards, which is where two more silent breaks lived.
+ *
+ * The four rows are arranged so the sort has work to do that a stable sort would
+ * not do by itself. Measured order is `nebAt, onKey, tick, syncDom`. Printed
+ * order must be `tick` (3 groups), then `syncDom` and `onKey` — both one group,
+ * and `syncDom` first because it is the longer of the two. That pair is the tie
+ * -break: their measured order is the reverse of their printed order, so
+ * dropping `|| b.lines - a.lines` moves them and cannot hide behind stability.
+ *
+ * The second case is the histogram's argument. `--only sky` keeps two of the
+ * four rows, and the histogram underneath must still describe all four — it is
+ * captioned "how many functions", and narrowing it to the filtered subset while
+ * the caption stays is the quiet kind of wrong. Feed it `rows` instead of
+ * `report` and the `1: ## (2)` bar disappears.
+ */
+const TABLE_SRC = [
+  "function Home() {",
+  "  const skyRef = useRef(null);",
+  "  useEffect(() => {",
+  "    function nebAt() {",
+  "      return 1;",
+  "    }",
+  "    function onKey() {",
+  "      return cam.x;",
+  "    }",
+  "    function tick() {",
+  "      return sky.t + view.w + cam.z + skyRef.current;",
+  "    }",
+  "    function syncDom() {",
+  "      const a = 1;",
+  "      const b = 2;",
+  "      return view.w + nebAt() + a + b;",
+  "    }",
+  "    return tick;",
+  "  }, []);",
+  "  return null;",
+  "}",
+].join("\n");
+
+const TABLE_SELFTEST = [
+  {
+    why: "every row, sorted by groups and then by length — the order the table is read as meaning",
+    filter: null,
+    printed: [
+      "name                          lines  groups  in-effect  past-effect  groups touched",
+      "-".repeat(100),
+      "tick                              2       3          0            1  cam sky view",
+      "syncDom                           4       1          1            0  view",
+      "onKey                             2       1          0            0  cam",
+      "nebAt                             2       0          0            0  ",
+      "\ngroups touched → how many functions",
+      "  0: # (1)",
+      "  1: ## (2)",
+      "  3: # (1)",
+    ],
+  },
+  {
+    why: "--only narrows the ROWS and leaves the histogram describing the whole file",
+    filter: "sky",
+    printed: [
+      "name                          lines  groups  in-effect  past-effect  groups touched",
+      "-".repeat(100),
+      "tick                              2       3          0            1  cam sky view",
+      "nebAt                             2       0          0            0  ",
+      "\ngroups touched → how many functions",
+      "  0: # (1)",
+      "  1: ## (2)",
+      "  3: # (1)",
+    ],
   },
 ];
 
@@ -1514,11 +2018,43 @@ function selftest() {
     }
   }
 
+  /* The header block and the table, as text. Compared line by line rather than
+     as one blob, so a failure says WHICH sentence moved instead of printing two
+     paragraphs and leaving the reader to diff them by eye. */
+  const compareLines = (got, want) =>
+    want
+      .map((w, i) => (got[i] === w ? `        ok  |${w}|` : `        BAD wanted |${w}|\n            got    |${got[i] ?? "(nothing)"}|`))
+      .join("\n") + (got.length > want.length ? `\n        BAD extra line |${got[want.length]}|` : "");
+
+  for (const c of HEADER_SELFTEST) {
+    const { report, componentScope, effectLine, untracked } = measure(c.src, "selftest.tsx");
+    const printed = formatHeader(report, componentScope, effectLine, untracked);
+    if (!same(printed, c.printed)) {
+      failures.push(`  ${c.why}\n      printed header:\n${compareLines(printed, c.printed)}\n`);
+    }
+  }
+
+  for (const c of TABLE_SELFTEST) {
+    const { report } = measure(TABLE_SRC, "selftest.tsx");
+    const printed = formatTable(report, c.filter);
+    if (!same(printed, c.printed)) {
+      failures.push(
+        `  ${c.why}\n    --only ${c.filter ?? "(none)"}\n      printed table:\n${compareLines(printed, c.printed)}\n`,
+      );
+    }
+  }
+
   for (const c of ARG_SELFTEST) {
     const problems = [];
     const file = targetFile(c.argv, "/repo/src/pages/Home.tsx");
     if (file !== resolve(c.file)) {
       problems.push(`      measures: wanted ${resolve(c.file)} — got ${file}`);
+    }
+    if (c.only !== undefined) {
+      const got = onlyFilter(c.argv);
+      if (got !== c.only) {
+        problems.push(`      --only: wanted ${c.only ?? "(none)"} — got ${got ?? "(none)"}`);
+      }
     }
     if (c.members !== undefined) {
       const got = unitMembers(c.argv);
@@ -1557,7 +2093,8 @@ function selftest() {
   console.log(
     `measure-groups: self-test passed ` +
       `(${SELFTEST.length} row cases, ${UNIT_SELFTEST.length} unit cases, ` +
-      `${ARG_SELFTEST.length + ONLY_SELFTEST.length} argument cases)`,
+      `${ARG_SELFTEST.length + ONLY_SELFTEST.length} argument cases, ` +
+      `${HEADER_SELFTEST.length + TABLE_SELFTEST.length} printing cases)`,
   );
 }
 
@@ -1578,6 +2115,32 @@ function selftest() {
  */
 const REAL_HOME = resolve(dirname(fileURLToPath(import.meta.url)), "..", "src", "pages", "Home.tsx");
 
+/**
+ * AND IS THE ANSWER THE RIGHT SIZE? A smoke alarm, not a golden file.
+ *
+ * Every fixture in this file is small by construction — a dozen lines, one to
+ * four functions — so anything that only misbehaves at SCALE is invisible to all
+ * of them at once. Truncating the report at twenty rows turns the header from
+ * "69 functions" into "20 functions" and turns `--unit step,satAt,nebAt` into
+ * "UNIT: 0 functions, 0 lines / NOT FOUND: nebAt, satAt, step … 0 group(s), so
+ * this PASSES" — the gate printing its verdict inverted — with every fixture and
+ * both gates green, because nothing anywhere pins a number taken off the real
+ * file.
+ *
+ * Recording the real count would be a golden file and would churn on every
+ * honest edit to `Home.tsx`, which is a worse trade: a check people re-bless
+ * weekly stops being read. So this is a floor with a wide margin instead. The
+ * frame effect declares 69 functions today; fewer than thirty means the walk
+ * lost most of the file, not that the file shrank.
+ *
+ * It does not close the class, only its loudest member — see "WHAT IS STILL NOT
+ * CHECKED" at the bottom of this file for what a report of the wrong SHAPE still
+ * gets away with. And 4b and 4c exist to make this number smaller: when honest
+ * extraction takes it under the floor, lower the floor in the commit that
+ * re-measures.
+ */
+const MIN_PLAUSIBLE_ROWS = 30;
+
 function assertGroupsAreReal() {
   let source;
   try {
@@ -1592,7 +2155,7 @@ function assertGroupsAreReal() {
     process.exit(1);
   }
 
-  const { effect, declaredInEffect } = measure(source, REAL_HOME);
+  const { effect, declaredInEffect, report } = measure(source, REAL_HOME);
   if (!effect) {
     console.error(
       `\nmeasure-groups: no frame effect found in ${REAL_HOME}\n` +
@@ -1613,6 +2176,26 @@ function assertGroupsAreReal() {
         `  PASSES" — the gate deciding the opposite thing, quietly.\n\n` +
         `  If the rename was intentional, mirror it in GROUPS and re-measure. The\n` +
         `  numbers in docs/goals/close-the-two-gaps.md were taken with the old names.\n`,
+    );
+    process.exit(1);
+  }
+
+  /* After the drift check, not before it: a report this small is usually a
+     symptom, and "which of the thirteen has gone" is the more specific
+     diagnosis. This one fires when the groups are all present and the FUNCTIONS
+     are not. */
+  if (report.length < MIN_PLAUSIBLE_ROWS) {
+    console.error(
+      `\nmeasure-groups: ONLY ${report.length} FUNCTIONS FOUND IN THE FRAME EFFECT — that is not a measurement.\n\n` +
+        `  ${REAL_HOME}\n\n` +
+        `  This is a floor of ${MIN_PLAUSIBLE_ROWS}, well under the 69 that effect has been\n` +
+        `  declaring. A number this far down means the walk lost most of the file\n` +
+        `  rather than that the file got smaller, and every count taken from a\n` +
+        `  report that short is a fraction of the truth — a unit measured short is\n` +
+        `  a unit that looks cheap enough to extract.\n\n` +
+        `  If the effect really has shrunk this far, that is the goal of 4b and 4c:\n` +
+        `  lower MIN_PLAUSIBLE_ROWS in the same commit that re-measures, so the new\n` +
+        `  number is a decision someone made rather than a threshold that decayed.\n`,
     );
     process.exit(1);
   }
@@ -1643,35 +2226,15 @@ if (effectLine === null) {
   process.exit(0);
 }
 
-const onlyArg = process.argv.indexOf("--only");
-const rows = rowsToPrint(report, onlyArg === -1 ? null : process.argv[onlyArg + 1]);
-
-rows.sort((a, b) => b.groups.length - a.groups.length || b.lines - a.lines);
-
-/* WHICH function was measured, said out loud. The effect is chosen by size among
-   the file's effect hooks, and 4b and 4c exist to change those sizes; if the
-   choice ever moves, this line moves with it, which is the difference between a
-   retarget you notice and a different table you believe. */
-console.log(`${report.length} functions declared in the frame effect (line ${effectLine}).`);
-console.log(
-  `${componentScope.size} names in the component body around it, ` +
-    `${[...componentScope.values()].filter((v) => v.kind === "ref").length} of them refs.`,
-);
-/* Read this next to the counts: these are objects living where the groups live
-   that GROUPS does not track, so nothing below charges anyone for touching
-   them. Today both are known and neither is state — a fourteenth owner would
-   show up here first. */
-console.log(
-  untracked.length
-    ? `Not tracked as groups, though declared alongside them: ${untracked.join(" ")}\n`
-    : `Every object declared at the effect's top level is a tracked group.\n`,
-);
-console.log(TABLE_HEADER);
-console.log("-".repeat(100));
-for (const r of rows) console.log(formatRow(r));
-
-console.log("\ngroups touched → how many functions");
-for (const line of histogramLines(report)) console.log(line);
+/* WHICH function was measured, and how big the surface around it is, said out
+   loud before any row. The effect is chosen by size among the file's effect
+   hooks, and 4b and 4c exist to change those sizes; if the choice ever moves,
+   the header line moves with it, which is the difference between a retarget you
+   notice and a different table you believe. Every sentence here is built by
+   `formatHeader` and asserted character for character, from both sides of the
+   untracked disclosure. */
+for (const line of formatHeader(report, componentScope, effectLine, untracked)) console.log(line);
+for (const line of formatTable(report, onlyFilter(process.argv))) console.log(line);
 
 /*
  * A MODULE IS A SET, NOT A FUNCTION.
@@ -1687,3 +2250,68 @@ if (members) {
   console.log(`\n${"=".repeat(72)}`);
   for (const line of formatUnit(unit, componentScope)) console.log(line);
 }
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ * WHAT IS STILL NOT CHECKED. Read this before quoting a number from here.
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Four rounds of review found breaks in this file by the same method every
+ * time: change something, see whether anything goes red. The four lists below
+ * are what survived — written down rather than left for the fifth round,
+ * because a hole someone can read is worth more than a green report that is not
+ * true. Each says what would break, how it would look, and the fix.
+ *
+ * 1. NO NUMBER MEASURED FROM THE REAL `Home.tsx` IS PINNED — only its shape.
+ *    Every fixture here is a file of ten to twenty lines written next to its own
+ *    answer, and the only things checked against the real file are the thirteen
+ *    group names and `MIN_PLAUSIBLE_ROWS`. So a change that moves the real
+ *    numbers UNIFORMLY — every row one group short, one column consistently
+ *    attributed to the wrong bucket at a scale the fixtures never reach — passes
+ *    everything here and prints a full, plausible, wrong table. The row floor
+ *    catches only the loudest member of that class, a report that came back far
+ *    too small.
+ *    THE FIX: check in a summary of the real file's answer — the histogram, the
+ *    row count, and the top few rows — and compare on every run. It is a golden
+ *    file, it churns on every honest edit to `Home.tsx`, and a check people
+ *    re-bless weekly stops being read; that trade is why it is not here. If this
+ *    tool ever decides something irreversible, take the trade.
+ *
+ * 2. WHICH EFFECT GETS MEASURED IS DECIDED BY SIZE, AND NOTHING FAILS IF IT
+ *    MOVES. Among `Home.tsx`'s effect hooks the frame loop is 200,767 characters
+ *    and the next is about 14,000, so the choice is not close today — but 4b and
+ *    4c exist to shrink the first one, and the margin is a coincidence, not a
+ *    property. The chosen line is printed in the header and asserted, so a
+ *    retarget is VISIBLE; it is not RED, and "a human would have noticed" is the
+ *    standard this file exists to stop relying on.
+ *    THE FIX: have `measure` return the runner-up's span too, and let
+ *    `assertGroupsAreReal` refuse a margin under, say, 2×. Roughly six lines.
+ *    Not taken here only because this round's scope was the printing path.
+ *
+ * 3. `lines` IS A SPAN, NOT A COUNT — every row in the table is one short, and a
+ *    unit of four is four short. Pinned deliberately by the `makesLiteral`
+ *    fixture with the truth written beside it.
+ *    THE FIX: the end line is read 0-based and `lineOf` returns 1-based, so the
+ *    `+ 1` only cancels `lineOf`'s own and a span comes out. Take both 0-based,
+ *    or add 2. Correcting it re-dates every line count taken with this tool, and
+ *    `docs/goals/close-the-two-gaps.md` quotes three of them ("`draw`, 531
+ *    lines", "`tick`, 467 lines", "13 functions, 723 lines"). Fix and correct
+ *    that document in one commit, and update the fixture in the same breath.
+ *
+ * 4. SCOPE IS TRACKED PER FUNCTION, NOT PER BLOCK, so a function that reads a
+ *    group outwardly AND declares an unrelated local of the same name anywhere
+ *    inside loses the real dependency — under-reporting, the dangerous
+ *    direction. Pinned by the `realDependency` fixture, which asserts what the
+ *    tool DOES and not what it should.
+ *    THE FIX: bind names per block during the walk instead of flattening the
+ *    subtree in `boundWithin`. That changes what the tool measures, so it needs
+ *    its own commit and its own re-measurement; `realDependency` going red is
+ *    the signal that someone did it.
+ *
+ * ONE THING THAT LOOKS LIKE A HOLE AND IS A DECISION: there is no reverse
+ * `GROUPS` check — nothing asks "is anything at the effect's top level a state
+ * owner we have not heard of?" — because answering it needs a list of names to
+ * excuse, and a list of excuses is a place for a violation to hide. What stands
+ * in for it is the disclosure line above the table, and BOTH of its branches are
+ * now asserted, including the one that says everything is accounted for.
+ */
