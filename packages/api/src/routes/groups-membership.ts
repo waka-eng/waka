@@ -22,7 +22,6 @@ import { randomBytes } from "node:crypto";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 import {
-  accounts,
   groupMembers,
   groups,
   groupTopOfMindAffirmations,
@@ -340,24 +339,6 @@ export async function renameGroup(
 }
 
 /** Remove someone else. Returns false when they were not in the group. */
-/**
- * Whether the account behind this profile has proven its email address.
- *
- * A named, injectable loader rather than an inline query, which is the
- * convention every other read in this module follows — and the reason those
- * reads have tests. An account row that has vanished answers false: refusing
- * to let a profile with no account join a group is the safe direction.
- */
-export async function accountHasProvenEmail(db: WakaDb, profileId: string): Promise<boolean> {
-  const [row] = await db
-    .select({ emailVerifiedAt: accounts.emailVerifiedAt })
-    .from(accounts)
-    .innerJoin(profiles, eq(profiles.accountId, accounts.id))
-    .where(eq(profiles.id, profileId))
-    .limit(1);
-  return row?.emailVerifiedAt != null;
-}
-
 export async function removeGroupMember(
   db: WakaDb,
   input: { groupId: string; memberProfileId: string },

@@ -81,29 +81,36 @@ exploited" is not a finding.
 an exploit path, and the ones not being fixed are recorded here with the reason
 and what would reopen them.
 
-### Phase 2 — Make verification real
+### Phase 2 — Verification is removed, not deferred — DONE
 
-`1319a95` built email verification with the transport left out deliberately —
-choosing SES over Resend is a decision about domains, DKIM and credentials that
-belongs to whoever runs the infrastructure. That decision is now the only thing
-standing between a working gate and a broken product.
+This phase used to read "make verification real": wire a provider, verify a
+sending domain, add a `/verify-email` page, decide the backfill. The product
+owner decided against all of it, and the feature is gone.
 
-- **Wire a provider.** One implementation of `SendVerificationEmail`, passed in
-  at the edge. Nothing else in `lib/email-verification.ts` changes.
-- **Verify a sending domain** before a single message leaves.
-- **A `/verify-email` page** on the web side that posts the token and says
-  which of the four outcomes happened — `expired` is actionable where `invalid`
-  is not, which is why they are told apart.
-- **Decide the backfill, and say which was chosen.** Joining a group now
-  requires a proven address. Every pre-existing account is unproven, which is
-  honest but means they cannot join anything until mail works. Either wire the
-  transport before deploying, or mark accounts created before `0006` as
-  verified so only new signups are gated. The second is a deliberate weakening
-  and should be written down as one.
-- **Resend endpoint**, throttled by the cooldown already implemented.
+The reason is the third bullet that used to be here. `1319a95` shipped the gate
+without the transport — joining a group required a proven address, and no mail
+was ever sent — so every account that existed before it could join nothing, and
+no new account could prove anything either. The two ways forward were to wire a
+provider or to bless the pre-existing accounts as verified. The owner took
+neither: the requirement itself was dropped.
 
-**Gate:** a real address receives a real link, following it proves the address,
-and a person who signed up yesterday can join a group.
+`0010_the_address_stays_unproven` drops `email_verifications` and
+`accounts.email_verified_at`; `lib/email-verification.ts`, the join gate and
+its 403 `email_not_verified` are gone with them. Joining a group stands on the
+join code, which is a bearer credential rotated when someone is removed.
+
+Re-opening this means choosing a mail provider and a sending domain FIRST, and
+deciding what happens to accounts that already exist — in that order. Do not
+start from the deleted code.
+
+**Not part of this, and still enforced:** Google sign-in refuses an ID token
+whose `email_verified` claim is not `true` (`routes/auth-google.ts`). That is
+Google attesting an address, and it is the live defence against account
+pre-hijacking.
+
+**Gate:** nothing in the repo refers to the removed symbols, the schema is
+dropped by a forward migration, and the Google claim check still has tests that
+fail without it.
 
 ### Phase 3 — The net sees more than one thing
 

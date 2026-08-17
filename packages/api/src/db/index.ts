@@ -19,7 +19,6 @@
 
 export * from "./schema-accounts";
 export * from "./schema-profiles";
-export * from "./schema-email-verification";
 export * from "./schema-login-failures";
 export * from "./schema-sessions";
 export * from "./schema-cli-login-codes";

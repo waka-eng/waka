@@ -32,14 +32,20 @@ export const accounts = pgTable(
     email: text("email").notNull(),
     /** bcrypt hash. Nullable so OAuth-only accounts are valid. */
     passwordHash: text("password_hash"),
-    /**
-     * When the owner proved this address, and null until they do.
+    /*
+     * THERE IS NO `email_verified_at`, AND ADDING ONE BACK NEEDS A DECISION
+     * MADE FIRST — see drizzle/migrations/0010_the_address_stays_unproven.sql.
      *
-     * Null is the honest default for every account that existed before
-     * verification did: they signed up when there was nothing to prove, so
-     * they have genuinely not proven it.
+     * An address proven by password signup was tracked here and gated joining
+     * a group. No mail transport was ever wired, so no account could prove
+     * anything and every account that predated the feature was locked out of
+     * joining. The owner dropped the requirement rather than wire a provider.
+     * Reintroducing the column without a working provider recreates that.
+     *
+     * This is NOT the Google `email_verified` claim, which is a different
+     * thing and still enforced — routes/auth-google.ts.
      */
-    emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+
     /**
      * Google OIDC "sub" claim — the immutable subject identifier. Google's
      * docs are explicit that email and numeric id may change but sub never

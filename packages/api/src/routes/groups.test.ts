@@ -93,9 +93,6 @@ function mountWith(
     "/api/groups",
     createGroupsRoutes({
       getDatabase: (() => ({})) as GroupsRouteDependencies["getDatabase"],
-      /* verified unless a case says otherwise — these tests are about joining,
-         not about proving an address, and the gate has its own cases */
-      hasProvenEmail: async () => true,
       authMiddleware: sessionMiddleware(as) as never,
       loadMembership: vi.fn(async () => ownerMembership),
       enqueueRefresh: vi.fn(async () => ({ jobId: "job-1", alreadyQueued: false })),
@@ -735,42 +732,3 @@ describe("a room's field", () => {
   });
 });
 
-/**
- * A GROUP IS WHERE MEMORIES REACH OTHER PEOPLE.
- *
- * Password signup never verified an address, so an account could sit on
- * someone else's email — which is what made the Google pre-hijacking work.
- * Everything an unverified account does alone stays inside it; joining is the
- * first act that DISCLOSES, so it is the one that waits for proof.
- *
- * The gate is narrow on purpose, and the second case holds that line: nothing
- * a person can do by themselves is withheld.
- */
-describe("joining before the address is proven", () => {
-  it("is refused, and says what to do about it", async () => {
-    const joinGroup = vi.fn();
-    const app = mountWith({ joinGroup, hasProvenEmail: async () => false });
-
-    const response = await app.request("/api/groups/join", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ joinCode: "ABCD1234" }),
-    });
-
-    expect(response.status).toBe(403);
-    const body = (await response.json()) as { code?: string };
-    expect(body.code).toBe("email_not_verified");
-    expect(joinGroup, "an unverified account reached the group").not.toHaveBeenCalled();
-  });
-
-  it("does not withhold anything a person does on their own", async () => {
-    const app = mountWith({
-      hasProvenEmail: async () => false,
-      listGroups: (async () => []) as never,
-    });
-
-    const response = await app.request("/api/groups");
-
-    expect(response.status, "reading your own groups is not a disclosure").toBe(200);
-  });
-});
