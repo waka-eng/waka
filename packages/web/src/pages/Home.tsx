@@ -1593,6 +1593,13 @@ export interface FieldAudit {
   wallId: string;
   /** whose ground, null being the viewer's own */
   ground: string | null;
+  /** which column the loop is standing on, and whether it is mid-glide */
+  col: number;
+  travelling: boolean;
+  /** the columns travel is allowed to reach, and the axis the loop can see */
+  colLo: number;
+  colHi: number;
+  wallCount: number;
   /** how many balls each owner contributes to this wall, before the ground filter */
   owners: Record<string, number>;
   /** and whether the ones that survived the filter can actually be seen */
@@ -8003,6 +8010,11 @@ function WorldExperience(): JSX.Element {
           wallKind: curWall().kind,
           wallId: curWall().id,
           ground,
+          col,
+          travelling: travelActive,
+          colLo: colLo(),
+          colHi: colHi(),
+          wallCount: wallsRef.current.length,
           owners: (() => {
             const by: Record<string, number> = {};
             for (const b of list) {
