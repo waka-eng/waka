@@ -35,6 +35,9 @@ export interface WorldFacts {
 
 export const VIEWER_ID = "profile-viewer";
 
+/** what the group decided together — the lead entry of its board */
+export const DECIDED = "We ask the owner when the spec and the code disagree.";
+
 const BASE = Date.UTC(2026, 7, 16);
 const at = (daysAgo: number) => BASE - daysAgo * 86_400_000;
 const iso = (daysAgo: number) => new Date(at(daysAgo)).toISOString();
@@ -111,8 +114,47 @@ export function apiMockFrom(facts: WorldFacts) {
         joinedAt: iso(30),
       }));
     },
-    fetchGroupTopOfMind: async () => null,
-    fetchGroupWall: none,
+    /**
+     * A group that has decided something, and the shared signals that fed it.
+     *
+     * Both are needed together or provenance stays empty for an innocent
+     * reason: the loop builds it by matching `evidence.citedBy` against the
+     * lead entry's body, so a board with no entries and a wall with no
+     * signals would give zero and prove nothing.
+     */
+    fetchGroupTopOfMind: async (groupId: string) => {
+      const g = facts.groups.find((x) => x.id === groupId);
+      if (!g || g.field.length === 0) return null;
+      return {
+        id: `tom-${groupId}`,
+        groupId,
+        entries: [
+          {
+            id: `entry-${groupId}`,
+            body: DECIDED,
+            pinnedAt: iso(1),
+            createdAt: iso(1),
+            contributors: [...new Set(g.field.map((f) => f.ownerProfileId))].map((profileId) => ({
+              profileId,
+              name: g.field.find((f) => f.ownerProfileId === profileId)?.ownerName ?? "",
+            })),
+          },
+        ],
+        createdAt: iso(1),
+        updatedAt: iso(1),
+      };
+    },
+    fetchGroupWall: async (groupId: string) => {
+      const g = facts.groups.find((x) => x.id === groupId);
+      return (g?.field ?? []).map((f, i) => ({
+        signalId: `sig-${f.id}`,
+        statement: `a statement from ${f.ownerName}`,
+        confidence: 50,
+        ownerProfileId: f.ownerProfileId,
+        ownerName: f.ownerName,
+        sharedAt: iso(f.daysAgo + i),
+      }));
+    },
     fetchGroupProposals: none,
     fetchProfiles: none,
     fetchTopOfMindVersions: none,

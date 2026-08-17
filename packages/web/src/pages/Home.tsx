@@ -1007,6 +1007,15 @@ export interface FieldAudit {
   wallId: string;
   /** whose ground, null being the viewer's own */
   ground: string | null;
+  /**
+   * How many memories this wall's claim is standing on.
+   *
+   * Here because its absence let a real bug ship: the provenance map was
+   * written under a hand-built key that no reader ever asked for, so every
+   * group's peek row was empty and 64 tests stayed green. A count is the
+   * smallest thing that would have gone to zero.
+   */
+  provenanceCount: number;
   /** which column the loop is standing on, and whether it is mid-glide */
   col: number;
   travelling: boolean;
@@ -7493,6 +7502,7 @@ function HomeExperience(): JSX.Element {
           wallKind: curWall().kind,
           wallId: curWall().id,
           ground,
+          provenanceCount: provenance.size,
           col,
           travelling: travelActive,
           lastGo: lastGoRef.current,

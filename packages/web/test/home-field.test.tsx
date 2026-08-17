@@ -206,3 +206,33 @@ describe("whose ground you are standing in", () => {
     expectGroundIsWhole("back in my own ground");
   });
 });
+
+/**
+ * WHAT THE CLAIM IS STANDING ON.
+ *
+ * A group's poster is its board's lead entry, and under it sits the peek row:
+ * the memories that entry was read from. That row was EMPTY for every group,
+ * because the provenance map was written under a hand-built key
+ * (`room:<id>`, then `cached:<id>`) while the only reader asked for
+ * `spaceKey(w)` — `group:<id>`. Two spellings, both wrong, and 64 tests
+ * stayed green through both.
+ *
+ * A count is the smallest assertion that would have caught it. The rule is
+ * not "provenance is non-empty" in general — a group whose members shared
+ * nothing genuinely has none — it is that a group WITH shared signals feeding
+ * its decision has a claim standing on something.
+ */
+describe("what a wall's claim rests on", () => {
+  it("is not empty on a group whose shared signals fed its decision", async () => {
+    await layout.travelTo(/four of us/i);
+    await layout.toField();
+
+    const a = layout.audit();
+    expect(a.wallKind, "we are standing on the group").toBe("group");
+    expect(
+      a.provenanceCount,
+      "the group's poster is standing on nothing — check the key the " +
+        "provenance map is written under against spaceKey()",
+    ).toBeGreaterThan(0);
+  });
+});
