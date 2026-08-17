@@ -1568,7 +1568,7 @@ interface SimApi {
   audit: () => FieldAudit;
 }
 
-interface FieldAudit {
+export interface FieldAudit {
   vh: number;
   vw: number;
   /** where the camera was standing when this was counted */
