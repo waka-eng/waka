@@ -453,8 +453,53 @@ proposals here as behaviour-changing. It runs only behind Phase 2's net.
 regression in Phases 3–4. If it has not, the net is not trusted yet and this
 phase does not start.
 
-**Gate (exit):** to be written at entry, from what Phase 4 reveals. Splitting
-this into its own goal is an acceptable and expected outcome.
+**Gate (exit):** `Home.tsx` under 6,000 and the effect under 2,000.
+
+### How, specifically — because "split the effect" is not a plan
+
+Phase 4 established that nothing can leave this effect while every function can
+touch everything: the sky's 950 lines reach 18 outward and 23 reach back, and
+three JSX panels are held by DOM refs the loop writes into. Both are the same
+fact wearing two costumes — 83 functions closing over 113 loose `let`s.
+
+So the first step is not an extraction. It is giving that state an owner.
+
+**5a. Name the state, move nothing** (mechanical, compiler-checked, no
+behaviour change). The 113 variables already group by theme:
+
+| count | group | becomes |
+|---|---|---|
+| 42 | camera and travel | `cam.y`, `cam.x`, `cam.travelling`, … |
+| 33 | the character | `being.yaw`, `being.blink`, … |
+| 15 | the sky | `sky.nebs`, `sky.focus`, … |
+| 10 | viewport and clock | `view.vw`, `view.dpr`, … |
+| 9 | the field's pour | `pour.active`, `pour.step`, … |
+| 4 | the rest | judged individually |
+
+`let camY = 0` becomes `cam.y`. Every use site is a compiler error until it is
+carried through, which is the same property that made the vocabulary rename
+safe. Nothing moves file, nothing changes behaviour, and the net stays green
+throughout or the step is wrong.
+
+**5b. Read the dependencies off the signatures.** With state named, a function
+that only touches `sky` says so by using only `sky`. The sky engine's "18
+outward dependencies" collapse to two or three objects, because most of the 18
+were individual fields of the same theme. That measurement is the gate for 5c:
+if a candidate still needs four or more groups, it is not a module.
+
+**5c. Extract what 5b proved separable**, taking its group as a parameter —
+`stepSky(sky, view, dt)` rather than a closure over everything. The sky is the
+expected first, at roughly 950 lines.
+
+**5d. The three blocked panels.** Their DOM refs are a distinct seam: React
+owns the elements, the loop measures them. Collect them into one `measured`
+object written by React and read by the loop, and the refs stop being props
+threaded into children.
+
+**Before 5b**, the net needs cases for the sky, the poster and the dial. It
+currently asserts one invariant and one count over all 5,109 lines, and it
+stayed green through a real bug in Phase 3 — the fixtures for those exist
+already, so this is fixture work rather than harness work.
 
 ### Phase 6 — What the backend has and the screen does not
 
