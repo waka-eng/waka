@@ -225,9 +225,18 @@ derivation, so a delete racing a derivation cannot strand a signal on
 evidence that no longer exists.
 
 **Human edits.** Editing a signal's statement **locks** it (WAKA stops
-rewording it), re-embeds it immediately (so future captures match what it says
-now, not what it used to say), and schedules a synthesis refresh. Deleting a
+rewording it), drops its stored vector immediately, queues a `reembed_signal`
+job to compute the new one, and schedules a synthesis refresh. Deleting a
 signal is allowed, cascades its evidence links, and also schedules a refresh.
+
+The drop and the re-embedding are split because they cost different things.
+Forgetting the old vector is a delete, and it cannot wait: a vector describing
+the previous wording goes on matching captures to a pattern its owner has just
+said they no longer hold. Computing the new one is a call on the shared model
+key, and every such call belongs on the queue where the per-account budget
+below can see it — the request path must not spend that key. In between, the
+signal is not a match target, so a similar capture mints a visible
+near-duplicate its owner can merge: the recoverable mistake, again.
 
 ### Is there a maximum number of signals?
 
@@ -424,6 +433,53 @@ All generation calls run at temperature 0 with schema-constrained JSON
 output; all user-originated text and enrichment output is delimiter-fenced
 and the system instructions pin the model against treating it as
 instructions.
+
+### The per-account model budget (`packages/api/src/lib/model-budget.ts`)
+
+| Constant | Value | One line |
+|---|---|---|
+| `MODEL_BUDGET_WINDOW_MS` | 3600000 | The sliding window every count is taken over (1 hour) |
+| `MODEL_BUDGET_JOBS_PER_ACCOUNT` | 60 | Job **starts** one account may take per window — see below for what a start is, and is not |
+| `MODEL_BUDGET_RELEASE_MARGIN_MS` | 1000 | Nudge past the start that frees a slot, so a wake-up cannot re-read the same boundary |
+
+One API key serves every account, so the queue's throughput *is* the key's
+spend. Before claiming anything, the drain reads which account owns the head
+of the queue and counts what that account has already started inside the
+window. When the budget is gone it pushes that account's whole due backlog to
+the moment the window frees a slot, and serves somebody else instead.
+
+Nothing is refused and nothing is dropped: a deferred job is a pending job
+whose `run_after` is later, which is the mechanism retry backoff already uses.
+The budget is spent by jobs *starting*, not by jobs being enqueued — a
+thousand saves waiting their turn have cost the key nothing — and it is
+counted per **account** rather than per profile, because one account owns its
+human profile and its agents.
+
+**Every model call is a job**, including the one that used to be a request.
+Editing a statement re-embedded it inside the PATCH, which meant one account
+could spend the shared key at HTTP speed while this budget watched the queue.
+That call is the `reembed_signal` job type now. The rule the code holds to is
+flat: if it spends the key, it is a row in `background_jobs` — and
+`packages/api/src/routes/model-spend-stays-on-the-queue.test.ts` fails the
+build if a handler ever reaches a model entry point again.
+
+**What 60 starts actually bounds**, stated precisely, because a protection
+believed to be stronger than it is protects nothing:
+
+- **Starts, not executions.** `started_at` is overwritten on each claim, so a
+  job retried to its `max_attempts` (3) counts as one start, not three. The
+  true ceiling is up to 180 job executions per account per hour. The undercount
+  is bounded by `max_attempts` and by the backoff between attempts; the
+  alternative is a second table logging every start, which is a whole ledger to
+  maintain and reap for a correction of at most two.
+- **Jobs, not model calls.** One `derive_signals` job is one extraction, one
+  capture embedding, up to `MAX_SIGNAL_CANDIDATES` (3) candidate embeddings and
+  up to 3 merge-judge calls: at most 8, and it is a real bound, because
+  `parseSignalCandidates` slices the model's answer to the cap rather than
+  trusting the schema constraint to have been honoured. Every other job type is
+  one or two calls. So 60 starts is at most ~480 model calls an hour, times the
+  retry factor above in the pathological case where every job fails twice
+  before it succeeds.
 
 ---
 
