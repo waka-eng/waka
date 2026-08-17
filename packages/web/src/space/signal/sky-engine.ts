@@ -115,6 +115,17 @@ const ORBIT_FLAT = 0.7;
 const FOCUS_MS = 300;
 /** How much bigger the subject sits. Enough to read as nearer, not as a jump. */
 export const FOCUS_POP = 0.06;
+/**
+ * Everything that is not the subject sinks to this alpha, body and sentence.
+ *
+ * Beside `FOCUS_POP` rather than in the page because the two are one law seen
+ * from two ends — the subject rises, everything else sinks — and because both
+ * of the things that read it now live in different files: the sky's painter
+ * dims the cloud by it, and the page's DOM sync dims the SENTENCE over that
+ * cloud by it. Those two numbers going out of step would mean a candidate
+ * whose words and whose light disagreed about whether it was the subject.
+ */
+export const FOCUS_DIM = 0.22;
 /** The emergence: out to the ellipse over this long… */
 const EMERGE_MS = 420;
 /** …one satellite after another, in evidence order. */
