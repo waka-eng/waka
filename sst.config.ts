@@ -225,7 +225,6 @@ export default $config({
       ATTACHMENTS_BUCKET: attachmentsBucket.name,
       ATTACHMENTS_REGION: AWS_REGION,
       WAKA_VAULT_BUCKET: vaultBucket.name,
-      NODE_ENV: "production",
       WAKA_VAULT_PREFIX: "vault/",
       WAKA_VAULT_REGION: AWS_REGION,
       ...(publicApiUrl ? { PUBLIC_API_URL: publicApiUrl } : {}),

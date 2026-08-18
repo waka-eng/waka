@@ -8,16 +8,14 @@
  *
  *   GET /api/auth/cli/start
  *     Requires an already-authenticated browser (`waka_session` cookie or
- *     Bearer header) held by a **human-profile** session — the user must have
- *     logged into WAKA in this browser first. Validates that `callback`
- *     points at a loopback address and **renders a consent page**: which
- *     device is asking, which profile it would act as, and a button. It
- *     mints nothing.
+ *     Bearer header) — the user must have logged into WAKA in this browser
+ *     first. Validates that `callback` points at a loopback address and
+ *     **renders a consent page**: which device is asking, which profile it
+ *     would act as, and a button. It mints nothing.
  *
  *   POST /api/auth/cli/consent
- *     The consent page's form target, same human-profile requirement. Mints
- *     the one-time code and 302-redirects to
- *     `${callback}?code=...&state=...`.
+ *     The consent page's form target. Mints the one-time code and
+ *     302-redirects to `${callback}?code=...&state=...`.
  *
  *     Why a page and a POST rather than minting in /start? A session cookie
  *     is `SameSite=Lax`, which is deliberately sent on top-level GET
@@ -55,12 +53,7 @@ import { z } from "zod";
 import { accounts, cliLoginCodes, profiles, type ProfileType } from "../db/index.js";
 import { SESSION_TTL_SECONDS, signSessionToken } from "../lib/auth.js";
 import { getDb } from "../lib/db.js";
-import {
-  type AuthEnv,
-  humanSessionsOnly,
-  profileAccessError,
-  requireAuth,
-} from "../lib/middleware.js";
+import { type AuthEnv, profileAccessError, requireAuth } from "../lib/middleware.js";
 import {
   type AuthenticatedSession,
   createSessionRow,
@@ -331,27 +324,12 @@ export const cliAuthRoutes = new Hono<AuthEnv>();
  * The profiles a session may issue a credential for.
  *
  * Candidates come from the account, never from the request: a caller may
- * name a profile, but only ever one of its own. That is the property this
- * function is here for, and it is the one both routes lean on.
- *
- * The `write` filter is a second, narrower rule — an agent-bound session may
- * read the human profile but must never mint a credential that *acts* as it.
- * Both routes now refuse an agent session at the door, so no request that
- * reaches this helper can exercise that filter any more. It stays rather
- * than being deleted because it is keyed off the access matrix instead of a
- * profile type spelled out here, so it cannot fall behind the matrix, and
- * because the next route to reach for this helper should not have to know
- * that its own middleware is what makes the filter redundant.
- *
- * Keeping it costs a test, and that cost is the point. No route-level
- * assertion in auth-cli.test.ts can reach the filter now — the gate answers
- * first — so deleting the filter outright leaves the whole suite green,
- * which is precisely how a defence decays into a comment claiming a
- * guarantee nothing enforces. Hence the export: the filter is held up by its
- * own tests in auth-cli.test.ts rather than by routes that can no longer
- * see it.
+ * name a profile, but only ever one of its own. Issuing a credential is an
+ * administrative act rather than a read, so an agent-bound session sees only
+ * itself — it can read the human profile, but must not be able to mint
+ * something that *acts* as it.
  */
-export async function bindableProfiles(
+async function bindableProfiles(
   session: AuthenticatedSession,
 ): Promise<Array<{ id: string; accountId: string; name: string; type: ProfileType }>> {
   const rows = await getDb()
@@ -380,46 +358,7 @@ export async function bindableProfiles(
  * Nothing is minted here. `profile` preselects a choice; the person confirms
  * it on the page.
  */
-/*
- * humanSessionsOnly, for the reason account erasure and public handles have
- * it — and for one more that is specific to this pair of routes.
- *
- * `requireAuth` accepts a Bearer token, which is exactly what a CLI/MCP
- * process presents. So both halves of the consent flow were reachable by an
- * agent-bound credential, and `bindableProfiles` let that session bind to
- * *itself*: an agent holding one token could walk /start → /consent →
- * /exchange with no human anywhere in the loop and come out the other side
- * holding a second, independently-revocable 30-day session. Then a third.
- * The consent page was never seen; the "did a person press Allow?" question
- * was answered by the agent.
- *
- * What that breaks is the remedy. sessions.ts is the account holder's
- * documented answer to a misbehaving agent — see the connections a session
- * may end — and it is already human-only for the same reason. But ending a
- * connection only helps if the set of connections shrinks when you end one.
- * If every spare token can mint more, revocation is a race the person loses:
- * they revoke the one they can see, the agent mints two they cannot, and the
- * loop never converges. A remedy that does not terminate is not a remedy.
- *
- * The gate reads the session's bound profile, not its transport, which is
- * the same line every other account-level route draws (sessions.ts and
- * groups.ts write it inline; auth.ts reaches for this middleware). A CLI
- * credential the person minted for their OWN human profile can still walk
- * this flow — it is the person's own credential, and treating "arrived over
- * Bearer" as disqualifying would break the documented header path for no
- * boundary the data model actually recognises.
- *
- * Which makes the narrowing honest but partial, and it should be read that
- * way: what converges now is revocation against an AGENT-bound credential,
- * the population sessions.ts was written for. A human-bound CLI credential
- * can still mint another, so the racing-revocation shape survives for the
- * ordinary "connect Claude Code to my own memory" install. Closing that too
- * needs a different instrument — a live-session cap per account, or
- * requiring an interactive cookie session rather than a Bearer on /consent —
- * not a wider reading of profile type, which is a data-model boundary and
- * not a proxy for "is a person here".
- */
-cliAuthRoutes.get("/start", requireAuth, humanSessionsOnly, async (c) => {
+cliAuthRoutes.get("/start", requireAuth, async (c) => {
   const callback = safeLoopbackCallback(c.req.query("callback") ?? null);
   if (!callback) {
     return c.json(
@@ -472,36 +411,8 @@ cliAuthRoutes.get("/start", requireAuth, humanSessionsOnly, async (c) => {
  *
  * Form target of the consent page. Mints the one-time code and hands it to
  * the loopback callback.
- *
- * humanSessionsOnly here as well as on /start. The reason is thinner than
- * it looks, and worth stating plainly because the obvious reason is wrong.
- *
- * It is NOT that an agent could otherwise still reach the mint. The consent
- * token is an HMAC over the requesting session's own `sessionId`
- * (signConsentToken, up in /start), and the check below re-derives it from
- * `session.sessionId` — so a token minted for the person's browser cannot be
- * replayed by an agent session, and the only route that hands tokens out is
- * the one gated above. Take this middleware away and leave /start's, and the
- * end-to-end attack test fails on its status code alone: no row is written,
- * because the agent never obtains a token that verifies.
- *
- * It is here because the endpoint that writes the row should not be safe
- * only by virtue of a different route's middleware. What makes /start's gate
- * sufficient today is that one `sessionId` inside the MAC — a local detail
- * of a helper in this file, and the first thing a "finish the login on
- * another device" flow would loosen. This is the half that mints; it carries
- * its own lock.
- *
- * The reverse pairing was considered and rejected, though not for the reason
- * it first appears. Gating only /consent would let an agent session render
- * the consent page, but the page it gets back lists only its own profile
- * (the `write` filter in bindableProfiles) and an account email it can
- * already read from GET /api/auth/me — and /start returns that HTML in its
- * own response, never to the callback. So the cost is not disclosure. The
- * cost is that the agent walks away holding a valid consent token, and the
- * mint hangs off that token.
  */
-cliAuthRoutes.post("/consent", requireAuth, humanSessionsOnly, async (c) => {
+cliAuthRoutes.post("/consent", requireAuth, async (c) => {
   const form = await c.req.parseBody();
   const readField = (name: string): string =>
     typeof form[name] === "string" ? (form[name] as string) : "";

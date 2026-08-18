@@ -8,9 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "node scripts/check-vocabulary.mjs && node scripts/check-seams.mjs && node scripts/measure-groups.mjs --selftest && vitest run",
-    "vocabulary": "node scripts/check-vocabulary.mjs",
-    "seams": "node scripts/check-seams.mjs"
+    "test": "vitest run"
   },
   "dependencies": {
     "lucide-react": "^1.28.0",

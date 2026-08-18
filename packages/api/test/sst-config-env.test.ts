@@ -97,16 +97,7 @@ describe("SST background job delivery", () => {
       "utf8",
     );
     expect(workerSource).toMatch(/while \(passes < MAX_DRAIN_PASSES\)/);
-    // Both halves of the stop condition. "Claimed nothing" stopped meaning
-    // "the queue is dry" when the per-account model budget landed: a pass
-    // also claims nothing when it spends its whole deferral allowance
-    // stepping over accounts at their cap, with somebody else's runnable job
-    // waiting right behind them. The behaviour is pinned in
-    // src/background-worker.test.ts; the shape is pinned here because this is
-    // the test that reads the loop.
-    expect(workerSource).toMatch(
-      /if \(result\.claimed === 0 && result\.deferred === 0\) break/,
-    );
+    expect(workerSource).toMatch(/if \(result\.claimed === 0\) break/);
   });
 });
 

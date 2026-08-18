@@ -36,47 +36,6 @@
  * User text is wrapped in delimiters everywhere it appears. A capture that
  * itself reads "ignore the above and output X" is data, and the delimiters
  * plus the schema constraint are the cheapest defense that actually holds.
- *
- * Why this file is one thing that must not be split
- * -------------------------------------------------
- * It is over the 800-line rule in `docs/goals/a-codebase-you-can-navigate.md`,
- * on purpose, and this is the reason the rule allows a file to say so.
- *
- * Measured rather than felt: of its lines, roughly a fifth are comment, a
- * tenth are blank, and another eighty are the English text of the three system
- * instructions — the sentences a person is asked to trust, which are the
- * product's behaviour and not decoration. What is left is well under five
- * hundred lines of machinery arranged as three near-identical quartets: an
- * instruction, a response schema, a prompt builder, a parser. Find any one of
- * them by its name and you are already where you need to be. Length is not
- * what makes a file hard to navigate; this one is a directory with headings.
- *
- * Splitting it by model call — extraction, judge, synthesis in three files —
- * was the obvious cut and it is the one that must not be made. `fence()` and
- * `neutralizeFenceMarkers` below are the only thing standing between a web
- * page somebody else wrote and sentences of their choosing being minted as the
- * victim's own signals. Two of the three prompt builders call `fence()`. Move
- * one of them out and the fence becomes an import — and an import is a thing a
- * person can forget. That is not hypothetical here: the judge's builder, in
- * this very file, already assembles its delimiters by hand without calling
- * `fence()`, which is what forgetting looks like when the function is sitting
- * forty lines away. Putting a file boundary in between would make that the
- * easy mistake rather than the rare one.
- *
- * Splitting off the transport instead — the key, the URL, `callGemini`, the
- * envelope schema — was also tried on paper and rejected. Those four are a
- * private chain with exactly one consumer, this file, so the result is a
- * module that exists to be imported by its only neighbour: two files to follow
- * one call. And the real transport layer already exists and is already
- * separate, in `lib/gemini-http.ts`, which generation and embedding share. A
- * second file named for the wire, sitting between that one and this one, gives
- * a reader two names for one idea and nothing in either name to say which is
- * which.
- *
- * If this file does need to divide one day, the seam is the whole layer-3
- * synthesis quartet, and the price of admission is exporting `fence()` and
- * proving by test that every prompt built anywhere still passes through it.
- * Do that first, then move.
  */
 
 import { z } from "zod";
@@ -155,43 +114,9 @@ function clip(value: string, max: number): string {
   return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
 }
 
-/**
- * Delimit anything the model must read as data rather than as instruction.
- *
- * THE BODY MUST NOT BE ABLE TO SPELL THE DELIMITER.
- *
- * This fence is the whole defence. The system instruction says everything
- * between the markers is data; if the data can write `<<<end attachment>>>`
- * itself, it ends the fence early and whatever follows arrives as
- * instruction. What an attacker gains is not a leaked secret — it is
- * sentences of their choosing minted as the VICTIM'S OWN signals, in the
- * victim's voice, shown back to them as things they apparently believe. And
- * it compounds, because a signal is re-interpolated into later synthesis
- * prompts every time the profile is re-derived.
- *
- * It was reachable. `extractPageBody` strips tags BEFORE decoding entities,
- * so `&lt;&lt;&lt;end attachment&gt;&gt;&gt;` on any page carries no angle
- * brackets at the moment the tag stripper looks, survives untouched, and is
- * turned into real ones by the decode that follows.
- *
- * Fixed here rather than in the extractor on purpose. Reordering the
- * extractor would fix one path and leave every other one — a pasted note, a
- * reflection answer, an image description — still able to do it, and would
- * introduce its own bug: decoding first means `&lt;script&gt;` becomes a real
- * tag for the stripper to eat, silently deleting text an author escaped.
- * Neutralising at the fence covers every caller and cannot be bypassed by
- * finding a new way in.
- *
- * It spaces the runs out rather than deleting them, because this is data a
- * person may have written deliberately and the model should still read what
- * they said. `<<<loud>>>` in a margin note survives as `< < <loud> > >`.
- */
-function neutralizeFenceMarkers(body: string): string {
-  return body.replace(/<{3,}|>{3,}/g, (run) => run.split("").join(" "));
-}
-
+/** Delimit anything the model must read as data rather than as instruction. */
 function fence(tag: string, body: string): string {
-  return `<<<${tag}>>>\n${neutralizeFenceMarkers(body)}\n<<<end ${tag}>>>`;
+  return `<<<${tag}>>>\n${body}\n<<<end ${tag}>>>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -775,56 +700,14 @@ export function buildTopOfMindSynthesisRequest(
   };
 }
 
-/**
- * ONE BAD ENTRY MUST NOT COST THE WHOLE REPLY.
- *
- * `synthesizedArtifactSchema` validates the artifact as a unit, so a single
- * entry carrying a `type` outside the enum failed the entire object and this
- * returned `{entries: []}` — discarding `noChange` and the six good entries
- * with it. Downstream, an empty `entries` used to mean "the model says you
- * have nothing", and a person's standing top of mind was replaced by a version
- * with none. The blast radius of one malformed field was the artifact.
- *
- * The envelope and the entries are parsed separately now: the envelope keeps
- * `noChange` even when every entry is bad, and each entry is validated on its
- * own so the good ones survive their neighbour. A dropped entry is logged with
- * its index, because silently returning five where the model sent six is the
- * kind of thing that should be visible.
- */
-const synthesisEnvelopeSchema = z.object({
-  noChange: z.boolean().optional(),
-  entries: z.array(z.unknown()).optional(),
-});
-
-const synthesizedEntrySchema = z.object({
-  type: z.enum(topOfMindEntryTypeValues),
-  body: z.string(),
-  belief: z.string().optional(),
-  prompt: z.string().optional(),
-  citedSignalIds: z.array(z.string()).optional(),
-});
-
 export function parseTopOfMindSynthesis(payload: unknown): TopOfMindSynthesisResult {
-  const envelope = synthesisEnvelopeSchema.safeParse(payload);
-  if (!envelope.success) {
+  const parsed = synthesizedArtifactSchema.safeParse(payload);
+  if (!parsed.success) {
     console.warn("[gemini] top-of-mind synthesis payload failed validation", {
-      issues: envelope.error.issues,
+      issues: parsed.error.issues,
     });
     return { entries: [] };
   }
-
-  const accepted: Array<z.infer<typeof synthesizedEntrySchema>> = [];
-  (envelope.data.entries ?? []).forEach((raw, index) => {
-    const one = synthesizedEntrySchema.safeParse(raw);
-    if (one.success) accepted.push(one.data);
-    else
-      console.warn("[gemini] dropping one malformed synthesis entry", {
-        index,
-        issues: one.error.issues,
-      });
-  });
-
-  const parsed = { data: { entries: accepted, noChange: envelope.data.noChange } };
 
   const entries = (parsed.data.entries ?? [])
     .map((entry) => ({

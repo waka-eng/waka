@@ -29,7 +29,7 @@ import {
   S3Client,
   type ObjectIdentifier,
 } from "@aws-sdk/client-s3";
-import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 
 import {
   accounts,
@@ -161,51 +161,6 @@ export async function eraseAccount(
   await db.transaction(async (tx) => {
     if (groupIds.length > 0) {
       await tx.delete(topOfMinds).where(inArray(topOfMinds.groupId, groupIds));
-    }
-
-    /**
-     * NO ROOM IS LEFT WITHOUT AN OWNER.
-     *
-     * Erasing an account deletes its profiles, which cascades away their
-     * `group_members` rows — and if one of those carried `role: 'owner'`, the
-     * room is left with members and nobody able to rename it, remove anyone,
-     * or close it. Leaving a room has always handed the seat on
-     * (`promoteSuccessorOwner` in routes/groups.ts); deleting an account is
-     * leaving every room at once and owes the same courtesy.
-     *
-     * This is the second half of the fix for the cascade that used to take the
-     * whole room: `groups.created_by_profile_id` is now `ON DELETE SET NULL`
-     * (migration 0004), so the room survives its creator — and this makes sure
-     * it survives as something its remaining members can still administer,
-     * rather than a room frozen at whatever it was.
-     *
-     * Longest-standing member first, the same rule `promoteSuccessorOwner`
-     * uses, so the outcome does not depend on which way you left.
-     */
-    if (profileIds.length > 0) {
-      const owned = await tx
-        .select({ groupId: groupMembers.groupId })
-        .from(groupMembers)
-        .where(
-          and(inArray(groupMembers.profileId, profileIds), eq(groupMembers.role, "owner")),
-        );
-
-      const leaving = new Set(profileIds);
-      for (const groupId of new Set(owned.map((row) => row.groupId))) {
-        const roll = await tx
-          .select({ id: groupMembers.id, profileId: groupMembers.profileId })
-          .from(groupMembers)
-          .where(eq(groupMembers.groupId, groupId))
-          .orderBy(asc(groupMembers.createdAt), asc(groupMembers.id));
-        /* everyone except the profiles about to disappear with this account */
-        const heir = roll.find((row) => !leaving.has(row.profileId));
-        if (heir) {
-          await tx
-            .update(groupMembers)
-            .set({ role: "owner" })
-            .where(eq(groupMembers.id, heir.id));
-        }
-      }
     }
 
     await tx.delete(accounts).where(eq(accounts.id, accountId));

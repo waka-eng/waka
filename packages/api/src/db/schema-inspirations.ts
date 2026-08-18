@@ -6,15 +6,9 @@
  * and never distilled in place: distillation produces *signals* (layer 2),
  * which cite inspirations as evidence.
  *
- * Inspirations cross an account boundary ONLY when their author marked them
- * public. That is a deliberate reversal of the original invariant ("only
- * signals are shareable"): rooms now hold a field made of their members'
- * memories, so a room can show what people actually keep rather than only the
- * machine's readings of it. The gate is per capture and set by the person
- * saving it, never inferred and never defaulted open — `private` is the
- * default at the column level, so anything written by an older path or a
- * client that has not been updated stays invisible to everyone else.
- * See docs/data-model.md.
+ * Inspirations never cross an account boundary. They are not shown on group
+ * walls, not cited to other members, and not exported by group flows — only
+ * signals are shareable. See docs/data-model.md.
  *
  * `source` records whose initiative the content is, which is a different
  * fact from which session captured it (that is the session's bound profile):
@@ -45,21 +39,6 @@ export const inspirationSourceValues = ["app", "agent"] as const;
 export type InspirationSource = (typeof inspirationSourceValues)[number];
 export const inspirationSourceEnum = pgEnum("inspiration_source", inspirationSourceValues);
 
-/**
- * Who may see this capture. `private` is the whole archive's default and the
- * column default, so the failure mode of every bug, older row and stale
- * client is "nobody else sees it" rather than "everyone does".
- *
- * `public` does not mean the internet — it means the rooms this profile's
- * account belongs to. There is no world-readable capture.
- */
-export const inspirationVisibilityValues = ["private", "public"] as const;
-export type InspirationVisibility = (typeof inspirationVisibilityValues)[number];
-export const inspirationVisibilityEnum = pgEnum(
-  "inspiration_visibility",
-  inspirationVisibilityValues,
-);
-
 export const inspirations = pgTable(
   "inspirations",
   {
@@ -72,7 +51,6 @@ export const inspirations = pgTable(
     text: text("text").notNull(),
     kind: inspirationKindEnum("kind"),
     source: inspirationSourceEnum("source").notNull().default("app"),
-    visibility: inspirationVisibilityEnum("visibility").notNull().default("private"),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
