@@ -17,8 +17,9 @@
  *     the caller records as a version rather than a silent no-op.
  *
  * Everything below the interface is deliberately shallow. Selection, ranking,
- * validation, versioning, and the lock rule live in lib/signal-derivation.ts
- * and lib/top-of-mind-synthesis.ts, where they are testable without a model.
+ * validation, versioning, and the lock rule live in lib/signal-match-or-mint.ts
+ * and the lib/top-of-mind-* stage modules, where they are testable without a
+ * model.
  */
 
 import type { TopOfMindEntryType } from "../db/index.js";
@@ -85,7 +86,9 @@ export interface TopOfMindSynthesisSignal {
 /**
  * An entry the human has edited. It is sent so the model can build around it
  * — and it must come back byte-identical. The caller enforces that rather
- * than trusting it; see `lib/top-of-mind-synthesis.ts`.
+ * than trusting it; see `countLockViolations` in
+ * `lib/top-of-mind-validation.ts` for the check, and `assembleEntries` in
+ * `lib/top-of-mind-versioning.ts` for the copy that makes it true regardless.
  */
 export interface TopOfMindLockedEntry {
   id: string;

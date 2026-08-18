@@ -26,7 +26,10 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import * as embeddings from "./inspiration-embeddings.js";
+import * as modelBudget from "./model-budget.js";
 import * as derivation from "./signal-derivation.js";
+import * as derivationThresholds from "./signal-derivation-thresholds.js";
+import * as selection from "./top-of-mind-selection.js";
 import * as synthesis from "./top-of-mind-synthesis.js";
 import * as gemini from "../queue/gemini.js";
 
@@ -40,14 +43,58 @@ const doc = readFileSync(DOC_PATH, "utf8");
  * schemas, functions, and classes are behavior, covered by their own tests.
  */
 const MODULES: Record<string, Record<string, unknown>> = {
+  // Layer 2's tuning all lives in the thresholds module now. It is named here
+  // *as well as* being reachable through the facade, and the redundancy is the
+  // point: `signal-derivation.ts` re-exports it with `export *` today, but the
+  // moment someone rewrites that into a list of names the facade stops showing
+  // this test any constant nobody remembered to add to the list — which is
+  // precisely how a split once left an undocumented constant with a green
+  // suite. Importing the module directly cannot be undone by a facade edit.
+  "signal-derivation-thresholds.ts": derivationThresholds,
+  // The pass itself, and with it every sibling stage it re-exports.
   "signal-derivation.ts": derivation,
+  // Layer 3's tuning is all ranking, so it lives with the ranking stage. The
+  // pass module stays listed even though it exports no constant today: a
+  // number added there is exactly the kind that would otherwise slip the doc.
+  "top-of-mind-selection.ts": selection,
   "top-of-mind-synthesis.ts": synthesis,
   "gemini.ts": gemini,
   "inspiration-embeddings.ts": embeddings,
+  // What the pipeline is allowed to spend is tuning like any other: the
+  // budget decides whether an account's derivation runs now or in an hour,
+  // and a cap raised in code but not in the doc is exactly the drift the rest
+  // of this file exists to catch.
+  "model-budget.ts": modelBudget,
 };
+
+/**
+ * The field's constants live in the WEB package, and are read as text rather
+ * than imported.
+ *
+ * Brightness in the field is a scoring model — it decides what a person sees —
+ * so its numbers belong under the same guard as the ones deciding what the
+ * machine concludes. They used to be eight literals in a render loop, silently
+ * disagreeing with the constants above.
+ *
+ * Read, not imported, because the API test suite must not take a dependency on
+ * the web package to check a document. A regex over `export const NAME = 7;`
+ * is enough, and it fails loudly if the file moves — which is the correct
+ * outcome, since the doc names its path.
+ */
+const WEB_TUNING = new URL("../../../web/src/lib/aliveness.ts", import.meta.url);
+
+function webTuningExports(): Map<string, string> {
+  const out = new Map<string, string>();
+  const src = readFileSync(fileURLToPath(WEB_TUNING), "utf8");
+  for (const m of src.matchAll(/^export const ([A-Z][A-Z0-9_]+) = ([0-9.]+);/gm)) {
+    out.set(m[1] as string, String(m[2]));
+  }
+  return out;
+}
 
 function tuningExports(): Map<string, string> {
   const out = new Map<string, string>();
+  for (const [name, value] of webTuningExports()) out.set(name, value);
   for (const mod of Object.values(MODULES)) {
     for (const [name, value] of Object.entries(mod)) {
       if (!/^[A-Z][A-Z0-9_]+$/.test(name)) continue;
@@ -145,24 +192,24 @@ describe("the doc's [checked] structural claims", () => {
 
   it("keeps selection weights summing to 1", () => {
     expect(
-      synthesis.SELECTION_CONFIDENCE_WEIGHT +
-        synthesis.SELECTION_EVIDENCE_WEIGHT +
-        synthesis.SELECTION_RECENCY_WEIGHT +
-        synthesis.SELECTION_COMEBACK_WEIGHT,
+      selection.SELECTION_CONFIDENCE_WEIGHT +
+        selection.SELECTION_EVIDENCE_WEIGHT +
+        selection.SELECTION_RECENCY_WEIGHT +
+        selection.SELECTION_COMEBACK_WEIGHT,
     ).toBeCloseTo(1, 10);
   });
 
   it("keeps the cold-start floor within the selection limit", () => {
-    expect(synthesis.TOP_OF_MIND_MIN_SIGNALS).toBeGreaterThan(0);
-    expect(synthesis.TOP_OF_MIND_MIN_SIGNALS).toBeLessThanOrEqual(
-      synthesis.TOP_OF_MIND_SIGNAL_LIMIT,
+    expect(selection.TOP_OF_MIND_MIN_SIGNALS).toBeGreaterThan(0);
+    expect(selection.TOP_OF_MIND_MIN_SIGNALS).toBeLessThanOrEqual(
+      selection.TOP_OF_MIND_SIGNAL_LIMIT,
     );
   });
 
   it("keeps the named decision functions the doc points at", () => {
     expect(typeof derivation.classifyMatch).toBe("function");
-    expect(typeof synthesis.chooseSelection).toBe("function");
-    expect(typeof synthesis.computeSelectionScore).toBe("function");
+    expect(typeof selection.chooseSelection).toBe("function");
+    expect(typeof selection.computeSelectionScore).toBe("function");
     expect(typeof derivation.computeSignalConfidence).toBe("function");
   });
 
@@ -188,7 +235,7 @@ describe("the doc's [checked] structural claims", () => {
       "utf8",
     );
     const selectionSource = readFileSync(
-      resolve(REPO_ROOT, "packages/api/src/lib/top-of-mind-synthesis.ts"),
+      resolve(REPO_ROOT, "packages/api/src/lib/top-of-mind-selection.ts"),
       "utf8",
     );
     expect(readsSource).toMatch(/computeSignalConfidence\(/);

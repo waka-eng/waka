@@ -37,9 +37,28 @@ export const groups = pgTable(
     /** Short code a member types to join. Unique while the group lives. */
     joinCode: text("join_code").notNull(),
 
-    createdByProfileId: uuid("created_by_profile_id")
-      .notNull()
-      .references(() => profiles.id, { onDelete: "cascade" }),
+    /**
+     * WHO MADE IT — a historical credit, NOT an ownership link.
+     *
+     * This was `notNull` with `onDelete: "cascade"`, which quietly meant that
+     * deleting your account deleted every room you had ever created, for
+     * everyone still in it: their shares, the join code, and the top of mind
+     * the room had built together. It needed no attacker — it is what happens
+     * when a person exercises the delete button the product offers them.
+     *
+     * The rest of the code is written on the opposite assumption. Leaving a
+     * room hands the seat on (`promoteSuccessorOwner`), `deleteGroup`'s own
+     * comment says "deleting is not a bigger version of leaving", and
+     * `eraseAccount` carefully removes only the group artifacts that CITE the
+     * departing member's signals — reasoning that is moot for any group the
+     * cascade was about to take whole.
+     *
+     * Ownership lives on the membership row, where it always did. This column
+     * now records who started the room and goes null when they go.
+     */
+    createdByProfileId: uuid("created_by_profile_id").references(() => profiles.id, {
+      onDelete: "set null",
+    }),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

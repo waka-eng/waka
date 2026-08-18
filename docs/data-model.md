@@ -97,8 +97,26 @@ agent's relayed excerpt, an agent's own observation.
     "이거 와카에 넣어줘" into the human profile writes `source: "app"`;
     an agent spontaneously noting something about the human writes
     `source: "agent"`.
-- Inspirations **never cross an account boundary**: not shown on group
-  walls, not cited to other members, not exported by group flows.
+- Inspirations carry a **`visibility`** of `private` (the default, at the
+  column level) or `public`, chosen by the person who saved it and editable
+  in both directions afterwards. Only `public` ones cross an account
+  boundary, and only into the rooms that person's account belongs to —
+  there is no world-readable capture. A room's *field* is exactly this: the
+  public captures of its current members, each carrying whose it is.
+  Closing one again removes it from every room at once, since no copy is
+  made anywhere.
+
+  This reverses the original rule ("inspirations never cross an account
+  boundary; only signals are shareable"). A room that could show only the
+  machine's readings of what people keep, and never what they actually
+  kept, was a thinner room than the product wanted. The gate is per capture
+  and never inferred.
+
+  What is still absolute: **evidence never crosses**. A signal's evidence
+  names the exact spans of the memories behind it, and sharing a statement
+  has never shipped its grounds. A consequence worth knowing: a shared
+  statement may cite memories its author kept private, so a room can show a
+  statement whose grounds are not all visible in that room.
 - Attachments (links, images, files) hang off the inspiration.
   **Enrichment** is machine-derived capture-time context stored with the
   attachment and never presented as the human's words: a link attachment
@@ -164,7 +182,10 @@ rule, everywhere, is: **human edits lock the entry**.
 
 ## Sharing and privacy, summarized
 
-1. Inspirations: never cross an account boundary. Period.
+1. Inspirations: private by default; `public` per capture by explicit
+   choice, and then visible only in the rooms that account belongs to.
+   Never world-readable. Evidence never crosses, whatever the capture's
+   visibility says.
 2. Signals: private by default; shared per group by explicit choice; the
    shared surface is the distilled statement, not the evidence.
 3. A profile's top of mind: account-private, unless the owner enables the

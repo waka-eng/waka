@@ -1,5 +1,33 @@
 // @vitest-environment jsdom
 
+/**
+ * THE PROFILE PAGE — the account's settings, its memories, its connections.
+ *
+ * WHAT THIS MOCKS, AND WHY (gate G6). Two modules, one layer apart.
+ *
+ *   `lib/api` — the layer directly beneath this page. `pages/Profile.tsx`
+ *   imports the HTTP client and calls it; nothing sits in between, because
+ *   `lib/data` translates only the three layers of the world and this page
+ *   renders none of them. Six functions are replaced and the rest of the real
+ *   module is spread back in, so `ApiError` and the payload types stay the
+ *   product's own.
+ *
+ *   `lib/auth-context` — one layer ABOVE `lib/api`, and that is the deliberate
+ *   part. The subject here is what the page DOES with a session, not how a
+ *   session is arrived at; `auth-boundary.test.ts` owns the second question
+ *   and drives the real provider through a mocked `lib/api` to answer it.
+ *   Stating the session as a fact here is what stops a change in the sign-in
+ *   flow from turning twenty assertions about tab order red.
+ *
+ * WHY MOCKING `lib/api` IS SAFE HERE, given that mocking `lib/api` is the
+ * exact mistake G6 exists to prevent. The suite that burned this project
+ * mocked it under `pages/Home`, which answers a failed load by replacing the
+ * whole world with the dev fixture — so every assertion held against invented
+ * rows and the suite stayed green. This page has no such fallback: every
+ * `catch` in `Profile.tsx` puts a message on screen and renders nothing in
+ * place of the data it did not get. A mock that is wrong here produces an
+ * empty page and a red test, not a green one describing something else.
+ */
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
@@ -430,11 +458,26 @@ describe("ProfilePage rooms", () => {
   });
 
   /** Deleting an account should not sit beside a language picker. */
-  it("keeps account deletion in the identity room only", async () => {
+  /*
+    Two gates, one attribute (`Profile.tsx`): the tab it lives on, and the word
+    that reveals it. This asserted only the first, from before the screen
+    disclosed progressively — so it read the closed disclosure as a missing
+    panel. Both gates are checked now, because "only in the identity room" and
+    "only once asked for" are separate promises and either can break alone.
+  */
+  it("keeps account deletion in the identity room only, and behind a word", async () => {
     const container = await renderProfilePage();
     const danger = () => container.querySelector(".profile-danger-panel");
+    const disclose = () =>
+      container.querySelector<HTMLButtonElement>(".profile-disclose-inline");
 
+    expect(danger()?.hasAttribute("hidden")).toBe(true);
+
+    await act(async () => {
+      disclose()?.click();
+    });
     expect(danger()?.hasAttribute("hidden")).toBe(false);
+
     await openTab(container, "Memories & connections");
     expect(danger()?.hasAttribute("hidden")).toBe(true);
   });

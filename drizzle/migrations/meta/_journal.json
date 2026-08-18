@@ -15,6 +15,69 @@
       "when": 1786831196527,
       "tag": "0001_background_job_rerun",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786924060471,
+      "tag": "0002_inspiration_visibility",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786924060472,
+      "tag": "0003_signal_promotion_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786931276881,
+      "tag": "0004_group_survives_its_creator",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787000000000,
+      "tag": "0005_promotion_not_residence",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787100000000,
+      "tag": "0006_prove_the_address",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787200000000,
+      "tag": "0007_a_wrong_password_costs_something",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787300000000,
+      "tag": "0008_one_key_many_accounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1787400000000,
+      "tag": "0009_an_edit_is_model_work",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1787500000000,
+      "tag": "0010_the_address_stays_unproven",
+      "breakpoints": true
     }
   ]
 }

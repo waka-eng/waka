@@ -1,3 +1,5 @@
+/* assigned to the `product` layer — see styles/layers.css for the order */
+@layer product {
 /*
  * WAKA — the design system, applied across every surface.
  * ==========================================================================
@@ -138,6 +140,31 @@
 
   --rule: color-mix(in srgb, var(--ink) 11%, transparent);
   --rule-strong: color-mix(in srgb, var(--ink) 22%, transparent);
+
+  /* WHAT HAS FOCUS -- and deliberately NOT the mark.
+     -------------------------------------------------------------------------
+     The rule below asked for `var(--mark)`, which no stylesheet has ever
+     defined. A var() that resolves to nothing makes the whole declaration
+     invalid at computed-value time, so `outline` fell back to its initial
+     value -- `none` -- as an AUTHOR declaration, which beats the browser's own
+     focus ring too. The result was not a missing accent on one control: it was
+     every keyboard user, on every screen, with no indication of where they
+     were.
+
+     It is not the mark's colour either. The obvious repair is
+     `--mark: #fff2dc`, matching the comment's "a mark, and what has focus" --
+     but that value is `--jar-live`, the live extreme of the aliveness ramp.
+     Light is the only meaning channel this product has, so a dormant memory's
+     row button would have worn the brightest "alive" light in the world for as
+     long as it held focus. Focus is not aliveness and must not borrow its
+     light.
+
+     So: neutral ink, no hue (hue is identity, and focus is not a person), at
+     55% -- which measures 5.5:1 against the world's ground `#06080d`, well
+     past the 3:1 that WCAG 2.2 asks of a focus indicator. Expressed against
+     `--ink` rather than as a literal so it follows the ground if the ground
+     ever inverts. */
+  --focus: color-mix(in srgb, var(--ink) 55%, transparent);
 }
 
 /* ==========================================================================
@@ -300,11 +327,20 @@
     border-color var(--dur-fast) var(--ease);
 }
 
-.field-input,
+/* WHAT HAS FOCUS, and only what has focus.
+   `.field-input` used to lead this selector list, so a text input took the
+   outline unconditionally rather than on focus. That was invisible for as long
+   as the declaration was dead, and would have become a permanent 2px ring on
+   every input the moment the token existed -- overriding `outline: none` at
+   global.css:1113, which is a deliberate decision: an input already says it has
+   focus by taking its border to full ink (global.css:1117). It is dropped
+   rather than moved; no rule ever wanted it.
 
-/* The accent appears in exactly two places: a mark, and what has focus. */
+   The offset matters. At 3px the ring sits OUTSIDE the control, on the ground,
+   so it is measured against `#06080d` everywhere -- including around the white
+   Google button, where a light ring drawn inside would have been invisible. */
 :where(button, a, input, textarea, [tabindex]):focus-visible {
-  outline: 2px solid var(--mark);
+  outline: 2px solid var(--focus);
   outline-offset: 3px;
 }
 
@@ -463,4 +499,6 @@ body:has(.reference-capture-modal) .nc-stage--top-of-mind-wall {
 
 @media (prefers-reduced-motion: reduce) {
   .nc-stage--top-of-mind-wall { transition: none; }
+}
+
 }

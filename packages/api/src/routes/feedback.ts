@@ -25,6 +25,8 @@ import {
   feedback,
   feedbackTargetTypeValues,
   feedbackValueValues,
+  groupMembers,
+  signalShares,
   signals,
   topOfMindEntries,
   topOfMinds,
@@ -33,6 +35,7 @@ import {
   type FeedbackValue,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
+import { enqueueGroupTopOfMindRefresh } from "../lib/queue.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
 import { enqueueTopOfMindRefresh } from "../lib/queue.js";
 
@@ -143,17 +146,64 @@ function serializeFeedback(row: Feedback): FeedbackRecord {
  * against any id at all, and regeneration would read a stranger's verdict as
  * the owner's.
  */
+/**
+ * MAY THIS PROFILE ANSWER THIS SIGNAL? The rule alone, so it can be executed.
+ *
+ * Widening feedback from "signals you own" to "signals shared into your rooms"
+ * changed who may write about whose statement, and nothing executed it — the
+ * route tests inject a mock. Two facts decide it, and both must be supplied by
+ * a caller that read them from the database under the acting profile's
+ * identity: never trust either from a request.
+ */
+export function mayAnswerSignal(input: {
+  ownsIt: boolean;
+  sharedIntoARoomYouAreIn: boolean;
+}): boolean {
+  return input.ownsIt || input.sharedIntoARoomYouAreIn;
+}
+
 async function targetBelongsToProfile(
   db: WakaDb,
   input: { profileId: string; targetType: FeedbackTargetType; targetId: string },
 ): Promise<boolean> {
   if (input.targetType === "signal") {
-    const [row] = await db
+    const [own] = await db
       .select({ id: signals.id })
       .from(signals)
       .where(and(eq(signals.id, input.targetId), eq(signals.profileId, input.profileId)))
       .limit(1);
-    return Boolean(row);
+    const ownsIt = Boolean(own);
+
+    /**
+     * A STATEMENT SOMEBODY SHARED WITH YOU CAN BE ANSWERED.
+     *
+     * Feedback used to require that you owned the signal, which meant a room
+     * was a place where claims were posted and nobody could reply — and the
+     * affirmations a room's synthesis is supposed to read had no way to
+     * accumulate.
+     *
+     * So: a signal is answerable if its owner shared it into a group you are
+     * currently in. Both halves are checked here, and membership is read now
+     * rather than trusted from earlier — leaving a room ends your standing to
+     * answer what was said in it.
+     *
+     * WHAT THIS DOES NOT GRANT. Reacting to a statement gives no access to
+     * anything beneath it. The evidence rows naming the exact spans of the
+     * author's memories stay where they are; sharing a statement has never
+     * shipped its grounds and does not start now.
+     */
+    const [shared] = await db
+      .select({ id: signalShares.id })
+      .from(signalShares)
+      .innerJoin(groupMembers, eq(groupMembers.groupId, signalShares.groupId))
+      .where(
+        and(
+          eq(signalShares.signalId, input.targetId),
+          eq(groupMembers.profileId, input.profileId),
+        ),
+      )
+      .limit(1);
+    return mayAnswerSignal({ ownsIt, sharedIntoARoomYouAreIn: Boolean(shared) });
   }
 
   const [row] = await db
@@ -187,6 +237,52 @@ export async function createFeedbackForProfile(
       correctionText: input.correctionText ?? null,
     })
     .returning();
+
+  /**
+   * AGREEING WITH A ROOM'S STATEMENT ASKS THE ROOM TO THINK AGAIN.
+   *
+   * A room used to wait for a person to write a proposal. Under the goal it
+   * should draft when enough shared, affirmed material has accumulated — so
+   * the moment somebody agrees with a statement said in a room, that room is
+   * asked to re-synthesise.
+   *
+   * WHERE THE THRESHOLD LIVES. Not here. `enqueueGroupTopOfMindRefresh` is
+   * keyed on the group, so repeat agreements coalesce into one pending job
+   * rather than one per click, and synthesis itself decides whether there is
+   * enough to say — which is the layer that already knows, and the layer that
+   * refuses to speak from thin evidence. Putting a count in this function
+   * would be a second opinion about the same question, in the wrong place.
+   *
+   * Only agreement triggers it. "not true" is information the room's next
+   * draft should weigh, not a reason to redraft immediately — disagreeing
+   * with one sentence is not news about the whole room.
+   */
+  if (row && input.targetType === "signal" && input.value === "true") {
+    const sharedInto = await db
+      .select({ groupId: signalShares.groupId })
+      .from(signalShares)
+      .innerJoin(groupMembers, eq(groupMembers.groupId, signalShares.groupId))
+      .where(
+        and(
+          eq(signalShares.signalId, input.targetId),
+          eq(groupMembers.profileId, input.profileId),
+        ),
+      );
+    for (const share of sharedInto) {
+      try {
+        await enqueueGroupTopOfMindRefresh(
+          input.profileId,
+          share.groupId,
+          "shares_changed",
+        );
+      } catch {
+        /* a refresh that could not be queued must not fail the agreement —
+           the person's answer is recorded either way, and the next agreement
+           or share will ask again */
+      }
+    }
+  }
+
   return row ? serializeFeedback(row) : null;
 }
 

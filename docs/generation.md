@@ -152,7 +152,8 @@ First, candidates within one batch are deduped against each other at
 twice in one reply mints once.
 
 Then, per candidate, the decision — this is `classifyMatch` in
-`packages/api/src/lib/signal-derivation.ts` **[checked]**:
+`packages/api/src/lib/signal-derivation-thresholds.ts`, applied by
+`packages/api/src/lib/signal-match-or-mint.ts` **[checked]**:
 
 | Similarity to nearest existing signal | Decision |
 |---|---|
@@ -225,9 +226,18 @@ derivation, so a delete racing a derivation cannot strand a signal on
 evidence that no longer exists.
 
 **Human edits.** Editing a signal's statement **locks** it (WAKA stops
-rewording it), re-embeds it immediately (so future captures match what it says
-now, not what it used to say), and schedules a synthesis refresh. Deleting a
+rewording it), drops its stored vector immediately, queues a `reembed_signal`
+job to compute the new one, and schedules a synthesis refresh. Deleting a
 signal is allowed, cascades its evidence links, and also schedules a refresh.
+
+The drop and the re-embedding are split because they cost different things.
+Forgetting the old vector is a delete, and it cannot wait: a vector describing
+the previous wording goes on matching captures to a pattern its owner has just
+said they no longer hold. Computing the new one is a call on the shared model
+key, and every such call belongs on the queue where the per-account budget
+below can see it — the request path must not spend that key. In between, the
+signal is not a match target, so a similar capture mints a visible
+near-duplicate its owner can merge: the recoverable mistake, again.
 
 ### Is there a maximum number of signals?
 
@@ -252,6 +262,21 @@ in the model changes, only where the arithmetic runs.
 ---
 
 ## Layer 2 → Layer 3: how the top of mind is generated
+
+The pass is `packages/api/src/lib/top-of-mind-synthesis.ts`, and it is the
+order of the four stages below and nothing else. Each stage is its own file,
+named for the question it answers:
+
+| Stage | File | Answers |
+|---|---|---|
+| 1. Selection | `packages/api/src/lib/top-of-mind-selection.ts` | which signals may be considered at all |
+| 2. The live artifact | `packages/api/src/lib/top-of-mind-artifact.ts` | what the version standing now holds |
+| 3. Validation | `packages/api/src/lib/top-of-mind-validation.ts` | what of the reply the database can vouch for |
+| 4. Versioning | `packages/api/src/lib/top-of-mind-versioning.ts` | what the next version holds, and writing it |
+
+Stages 1 and 3 are one guarantee in two halves: stage 1 filters candidates by
+`signals.profileId`, and stage 3 checks the model's citations against exactly
+that set. Neither is any use without the other.
 
 ### 1. What starts a refresh
 
@@ -375,7 +400,7 @@ Deliberate consequences:
 The authoritative values. Machine-checked against code — see
 `packages/api/src/lib/generation-doc.test.ts`.
 
-### Layer 2 — derivation (`packages/api/src/lib/signal-derivation.ts`)
+### Layer 2 — derivation (`packages/api/src/lib/signal-derivation-thresholds.ts`)
 
 | Constant | Value | One line |
 |---|---|---|
@@ -392,7 +417,7 @@ The authoritative values. Machine-checked against code — see
 | `CONFIDENCE_SOURCE_DIVERSITY_BONUS` | 8 | Added when app and agent evidence corroborate |
 | `MATCH_CANDIDATE_SCAN_LIMIT` | 500 | Most-recently-evidenced signals scanned per match |
 
-### Layer 3 — synthesis (`packages/api/src/lib/top-of-mind-synthesis.ts`)
+### Layer 3 — synthesis (`packages/api/src/lib/top-of-mind-selection.ts`)
 
 | Constant | Value | One line |
 |---|---|---|
@@ -425,7 +450,93 @@ output; all user-originated text and enrichment output is delimiter-fenced
 and the system instructions pin the model against treating it as
 instructions.
 
+### The per-account model budget (`packages/api/src/lib/model-budget.ts`)
+
+| Constant | Value | One line |
+|---|---|---|
+| `MODEL_BUDGET_WINDOW_MS` | 3600000 | The sliding window every count is taken over (1 hour) |
+| `MODEL_BUDGET_JOBS_PER_ACCOUNT` | 60 | Job **starts** one account may take per window — see below for what a start is, and is not |
+| `MODEL_BUDGET_RELEASE_MARGIN_MS` | 1000 | Nudge past the start that frees a slot, so a wake-up cannot re-read the same boundary |
+
+One API key serves every account, so the queue's throughput *is* the key's
+spend. Before claiming anything, the drain reads which account owns the head
+of the queue and counts what that account has already started inside the
+window. When the budget is gone it pushes that account's whole due backlog to
+the moment the window frees a slot, and serves somebody else instead.
+
+Nothing is refused and nothing is dropped: a deferred job is a pending job
+whose `run_after` is later, which is the mechanism retry backoff already uses.
+The budget is spent by jobs *starting*, not by jobs being enqueued — a
+thousand saves waiting their turn have cost the key nothing — and it is
+counted per **account** rather than per profile, because one account owns its
+human profile and its agents.
+
+**Every model call is a job**, including the one that used to be a request.
+Editing a statement re-embedded it inside the PATCH, which meant one account
+could spend the shared key at HTTP speed while this budget watched the queue.
+That call is the `reembed_signal` job type now. The rule the code holds to is
+flat: if it spends the key, it is a row in `background_jobs` — and
+`packages/api/src/routes/model-spend-stays-on-the-queue.test.ts` fails the
+build if a handler ever reaches a model entry point again.
+
+**What 60 starts actually bounds**, stated precisely, because a protection
+believed to be stronger than it is protects nothing:
+
+- **Starts, not executions.** `started_at` is overwritten on each claim, so a
+  job retried to its `max_attempts` (3) counts as one start, not three. The
+  true ceiling is up to 180 job executions per account per hour. The undercount
+  is bounded by `max_attempts` and by the backoff between attempts; the
+  alternative is a second table logging every start, which is a whole ledger to
+  maintain and reap for a correction of at most two.
+- **Jobs, not model calls.** One `derive_signals` job is one extraction, one
+  capture embedding, up to `MAX_SIGNAL_CANDIDATES` (3) candidate embeddings and
+  up to 3 merge-judge calls: at most 8, and it is a real bound, because
+  `parseSignalCandidates` slices the model's answer to the cap rather than
+  trusting the schema constraint to have been honoured. Every other job type is
+  one or two calls. So 60 starts is at most ~480 model calls an hour, times the
+  retry factor above in the pathological case where every job fails twice
+  before it succeeds.
+
 ---
+
+## What the field shows, and why its numbers differ
+
+Everything above decides what the machine CONCLUDES. This section covers what
+a person SEES — an orb's brightness in the field — because that is also a
+scoring model, and it used to be eight unnamed literals in a render loop
+disagreeing with the five constants above.
+
+Source: `packages/web/src/lib/aliveness.ts`.
+
+| Constant | Value | What it does |
+| --- | --- | --- |
+| `FIELD_DECAY_HALF_LIFE_DAYS` | 7 | Half-life of an untended memory's light |
+| `FIELD_REFLECTION_SATURATION` | 2 | Attention stops adding light past this many reflections |
+| `FIELD_REFLECTION_WEIGHT` | 0.25 | What each reflection adds, as a fraction of current decay |
+| `FIELD_FLOOR_CITED` | 0.34 | A memory a signal rests on cannot sink below this |
+| `FIELD_FLOOR_ANSWERED` | 0.18 | Nor one you answered in your own words |
+| `FIELD_FLOOR_IN_GROUP` | 0.1 | Nor one that is out loud in a group |
+| `FIELD_CITED_LIFT` | 0.12 | Being cited also lifts a memory above its floor |
+| `FIELD_FRONTIER_DAYS` | 3 | Untouched longer than this and cited by nothing = a frontier |
+
+**Why the field decays faster than confidence.** 7 days against 45 and 30 is
+deliberate. Those govern what the machine concludes over months; this governs
+what a person sees on a surface they may open daily. A field that took a month
+to visibly change would not show the passage of time, which is its only job.
+
+That is an argument rather than a fact, and it is written down so it can be
+argued with. The unacceptable state was the previous one: the same idea
+carrying different numbers in two places with nothing connecting them.
+
+**Why reflections saturate at 2 while evidence saturates at 6.** They count
+different things. `SELECTION_EVIDENCE_SATURATION` counts a pattern accumulating
+across many memories; `FIELD_REFLECTION_SATURATION` counts one person returning
+to a single memory. Two returns to the same thought is already unusual.
+
+**Why `hasNotes` appears twice.** A citation both sets a floor
+(`FIELD_FLOOR_CITED`) and lifts the result (`FIELD_CITED_LIFT`): being rested
+upon stops a memory sinking AND makes it brighter than an equally old one that
+is not. Deliberate, and named so it reads as a decision rather than a bug.
 
 ## How this doc stays true
 

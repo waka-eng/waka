@@ -181,11 +181,39 @@ export async function verifySessionToken(
 
 export interface SessionCookieOptions {
   /**
-   * When true (default in production), set Secure so the cookie is only sent
-   * over HTTPS. Disabled automatically when NODE_ENV !== "production" so the
-   * `sst dev` localhost flow over http:// still works.
+   * When true (the default), set Secure so the cookie is only sent over HTTPS.
+   * Dropped only when the runtime says out loud that it is a local http flow —
+   * see `wantsSecureCookie`.
    */
   secure?: boolean;
+}
+
+/**
+ * SECURE UNLESS SOMETHING SAYS OTHERWISE — the opposite of what this did.
+ *
+ * It was `NODE_ENV === "production"`, which reads as safe and is not: AWS
+ * Lambda's Node runtime does not set NODE_ENV, and `sst.config.ts` never put
+ * it in the function's environment. So the deployed API has been sending its
+ * session cookie WITHOUT Secure — over HTTPS, so not yet intercepted, but one
+ * downgrade or one mixed-content request from handing the session to a
+ * network observer.
+ *
+ * The defect is not the missing variable, it is the direction of the default.
+ * A security attribute decided by an environment variable that has to be
+ * present fails OPEN the moment it is absent — a typo, a new stage, a runtime
+ * that populates its environment differently. So the default inverts: Secure
+ * is on, and disabling it requires an explicit statement from a place that
+ * knows it is serving plain http.
+ *
+ * `test` is named here because the suite asserts on the cookie string, and
+ * `development` because `sst dev` serves localhost over http.
+ */
+export function wantsSecureCookie(): boolean {
+  const env = process.env.NODE_ENV;
+  if (env === "development" || env === "test") return false;
+  /* an explicit local escape hatch, for a dev server that is not sst dev */
+  if (process.env.WAKA_INSECURE_COOKIES === "1") return false;
+  return true;
 }
 
 /**
@@ -198,8 +226,7 @@ export function buildSessionCookie(
   token: string,
   options: SessionCookieOptions = {},
 ): string {
-  const isProd = process.env.NODE_ENV === "production";
-  const secure = options.secure ?? isProd;
+  const secure = options.secure ?? wantsSecureCookie();
 
   const parts = [
     `${SESSION_COOKIE_NAME}=${token}`,
@@ -224,8 +251,7 @@ export function buildSessionCookie(
 export function buildSessionClearCookie(
   options: SessionCookieOptions = {},
 ): string {
-  const isProd = process.env.NODE_ENV === "production";
-  const secure = options.secure ?? isProd;
+  const secure = options.secure ?? wantsSecureCookie();
 
   const parts = [
     `${SESSION_COOKIE_NAME}=`,
