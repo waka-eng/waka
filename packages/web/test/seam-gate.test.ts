@@ -75,13 +75,65 @@
  *     check that the suite runs; the shape check is where this stops.
  */
 import { spawnSync } from "node:child_process";
-import { globSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+/**
+ * A GLOB WE OWN, BECAUSE `fs.globSync` IS NOT EVERYWHERE.
+ *
+ * This file used `fs.globSync`, which arrived in Node 22. It passed on a
+ * developer machine and failed in CI with `globSync is not a function`, because
+ * CI pins Node 20 (`.github/workflows/ci.yml`, `NODE_VERSION`). Green locally
+ * and red on the runner is the worst version of a broken test: the person who
+ * wrote it has no reason to look.
+ *
+ * Bumping the runner was the other option and was rejected — the same variable
+ * feeds the deploy workflows, so a test-only problem would have moved the Node
+ * version production is built with.
+ *
+ * It handles what a vitest `include`/`exclude` actually contains: a literal
+ * path, `*` within one segment, and `**` across segments. Anything richer is
+ * not in these lists, and a pattern this does not understand simply matches
+ * nothing — which the count assertion below turns into a loud failure rather
+ * than a silent narrowing.
+ */
+function globFiles(pattern: string, cwd: string): string[] {
+  const rx = new RegExp(
+    "^" +
+      pattern
+        .split(/(\*\*\/|\*\*|\*|\?)/)
+        .map((part) => {
+          if (part === "**/") return "(?:[^/]+/)*";
+          if (part === "**") return ".*";
+          if (part === "*") return "[^/]*";
+          if (part === "?") return "[^/]";
+          return part.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+        })
+        .join("") +
+      "$",
+  );
+
+  const found: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === "node_modules" || entry.name === "dist" || entry.name.startsWith("."))
+        continue;
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else {
+        const rel = relative(cwd, full).split("\\").join("/");
+        if (rx.test(rel)) found.push(rel);
+      }
+    }
+  };
+  walk(cwd);
+  return found;
+}
 
 /**
  * Run the gate and hand back everything it said, whatever it exited with.
@@ -196,11 +248,11 @@ describe("the seam gate", () => {
        and subtracted, so a literal path and a pattern are handled the same
        way. */
     const dropped = new Set(
-      patternsIn(config, "exclude").flatMap((pattern) => globSync(pattern, { cwd: PACKAGE_ROOT })),
+      patternsIn(config, "exclude").flatMap((pattern) => globFiles(pattern, PACKAGE_ROOT)),
     );
     const collected = new Set(
       patterns
-        .flatMap((pattern) => globSync(pattern, { cwd: PACKAGE_ROOT }))
+        .flatMap((pattern) => globFiles(pattern, PACKAGE_ROOT))
         .filter((file) => !dropped.has(file)),
     );
 

@@ -1,4 +1,4 @@
-# WAKA — the three-layer world
+# WAKA
 
 **A place to keep what catches your attention, and to watch what it adds up to.**
 
@@ -6,67 +6,137 @@ You save something. WAKA reads it, and over time names the patterns it sees — 
 sentences in your own words, not tags or scores. Those settle into one short
 piece: what is on your mind right now.
 
-This branch replaces a flat list of saved items with a single world you move
-through.
+It is one screen. Not a list of saves, but a world you move through.
 
 ---
 
 ## The three layers
 
-Everything in the product is one of three things, and they stack vertically on
-screen because they stack conceptually.
+Everything in the product is one of three things. They stack vertically on
+screen because they stack conceptually — you stand in the middle of your own
+thinking, with the raw material below and the patterns above.
 
-| | what it is | where you see it |
-|---|---|---|
-| **inspiration** | something you kept | the ground beneath you |
-| **signal** | a pattern WAKA found across several | the sky above you |
-| **top of mind** | the one thing you currently hold | where you stand |
+| | what it is | where you see it | who can see it |
+|---|---|---|---|
+| **inspiration** | something you kept | the ground beneath you | private by default |
+| **signal** | a pattern found across several | the sky above you | yours, shareable into a room |
+| **top of mind** | the one thing you currently hold | where you stand | yours; a room has one too |
 
 A memory becomes evidence for a pattern. Patterns settle into one piece. You can
-follow the line in either direction.
+follow the line in either direction — tap a pattern and its evidence comes into
+orbit around it.
+
+**Three words for three registers, and they are kept apart on purpose.** The
+canon words above are what the database, the API and every identifier say. *The
+field, the sky, headquarters* name **where** a layer is drawn and belong only in
+prose and UI. *Room* is the warmer word a person reads on screen for a group. A
+check fails the build if the first register leaks into the wrong place.
 
 ---
 
-## What you can do
+## Moving through it
+
+Two axes. Up and down is **when**. Side to side is **whose**.
 
 ```
-save something          →  it lands as an orb on the ground, before the network answers
-scrub the dial          →  the world winds back; the field shows what you had kept then
-walk left or right      →  your space, an agent's space, a room — each with its own stack
-tap a pattern           →  its evidence comes into orbit; tap again to let it go
-adopt one               →  it condenses into what you are holding
-sign in from the CLI    →  with a consent step that binds the tool to one chosen space
+        the sky            patterns still forming
+           |
+   ────────┼────────       headquarters — what you hold
+           |
+       the ground          every memory you kept
+
+   agents ← you → rooms    each space has its own full stack
 ```
 
-Your memories are private by default. Rooms are shared. Agents that save on your
-behalf get their own space rather than being mixed into yours.
+- **Scrub the dial** and the world winds back — the ground shows what you had
+  kept at that moment, not what you have kept since.
+- **Walk sideways** into an agent's space or a room. An agent that saves on your
+  behalf gets its own stack rather than being mixed into yours.
+- **Tap a pattern** to bring its evidence into orbit. **Adopt** one and it
+  condenses into what you are holding.
 
 ---
 
-## What is in this branch
+## Where things live
 
-It is really two branches, and reviewing it as one will not work.
+```
+packages/api      the server, the schema, and the generation pipeline
+packages/web      the product — one canvas screen, plus a few flat pages
+packages/admin    an internal queue inspector, not deployed
+```
 
-### Part one — the product (83 commits)
+**Start with [`docs/map.md`](docs/map.md)** — it names the three packages, walks
+one save from the browser to a row and back, and lists the six files to read
+first. Its file paths are checked by a test, so it cannot quietly rot.
 
-The world itself: the three layers, the canvas, rooms, agent spaces, the dial,
-the command-line consent flow. This is what makes the screenshots different.
+### The server
 
-### Part two — making it safe and readable (105 commits)
+| path | what is in it |
+|---|---|
+| `src/index.ts` | 94 lines, and the API's table of contents |
+| `src/routes/` | one file per surface; `groups-*` and `inspirations-*` split by concern so an authorization question has a short file for an answer |
+| `src/lib/signal-*.ts` | how a save becomes a pattern: gather, extract, match-or-mint, lifecycle |
+| `src/lib/top-of-mind-*.ts` | how patterns become the one piece |
+| `src/queue/`, `src/lib/queue.ts` | Postgres *is* the queue; a job is a row |
+| `src/db/` | Drizzle schema, one file per group of tables |
 
-No new features. Nine security fixes, a restructuring so the code can be
-navigated, and a test suite that went from asserting almost nothing about the
-world to 118 cases.
+`groups-field.ts` is worth knowing about: it is the only place the group module
+reads layer 1, deliberately kept to one short file so *"can a private memory
+escape a room?"* has one place to be answered.
+
+### The product
+
+| path | what is in it |
+|---|---|
+| `src/pages/Home.tsx` | the world — the canvas, the frame loop, the panels |
+| `src/space/` | one directory per layer: `inspiration/`, `signal/`, `top-of-mind/` — split by **layer** |
+| `src/space-kinds/` | how spaces differ: yours, an agent's, a room's — split by **kind** |
+| `src/canvas/` | palette, sprites, and the measured DOM handles the loop reads |
+| `src/lib/api/` | the only place the browser does HTTP, one file per resource, mirroring the server's routes |
+| `src/lib/data.ts` | payloads become view models — and it is *not* a translation; the canon's words run straight through |
+
+The `space/` versus `space-kinds/` distinction is the one thing here whose names
+do not explain themselves — [`src/space/README.md`](packages/web/src/space/README.md)
+exists for exactly that.
 
 ---
 
-## The nine security fixes
+## Running it
 
-Written as what someone could have done, because that is what matters.
+```bash
+pnpm install
+pnpm dev:local                     # API and web on one origin
+```
+
+```bash
+pnpm --filter @waka/web test       # vocabulary gate, seam gate, self-tests, 118 cases
+pnpm --filter @waka/api test       # vocabulary gate, 501 cases
+npx tsc --noEmit                   # per package, as its own step
+```
+
+The gates run before the tests and are not optional. They check that one name
+means one thing, that every test suite states which layer it replaces, and —
+because this repo has been bitten by it — that each gate can still *fail*.
+
+---
+
+## What this branch changes
+
+Two halves, and they review differently.
+
+**The product (83 commits).** The world itself: the three layers, the canvas,
+rooms, agent spaces, the dial, the command-line consent flow.
+
+**Making it safe and readable (105 commits).** No new features. Nine security
+fixes, a restructuring so the code can be navigated, and a test suite that went
+from asserting almost nothing about the world to 118 cases.
+
+<details>
+<summary><strong>The nine security fixes</strong> — what someone could have done</summary>
 
 | # | what was possible |
 |---|---|
-| 1 | A saved web page could put words in your mouth — its text escaped the boundary that keeps it *data*, and was read as *instruction*, minting an attacker's sentences as your own patterns, in your voice |
+| 1 | A saved web page could put words in your mouth — its text escaped the boundary keeping it *data* and was read as *instruction*, minting an attacker's sentences as your own patterns, in your voice |
 | 2 | Passwords could be guessed without limit, and sign-up confirmed in advance whether an address was registered |
 | 3 | One account could exhaust the shared AI budget and take the feature down for everyone |
 | 4 | A connected tool could issue itself fresh credentials, so disconnecting it never disconnected it |
@@ -77,42 +147,13 @@ Written as what someone could have done, because that is what matters.
 | 9 | Removing someone from a room left their key working |
 
 Each has a test proven to fail against the code as it was.
+</details>
 
----
-
-## Running it
-
-```bash
-pnpm install
-pnpm dev:local        # the real stack on one origin, API and web together
-```
-
-```bash
-pnpm --filter @waka/web test     # vocabulary gate, seam gate, self-tests, 118 cases
-pnpm --filter @waka/api test     # vocabulary gate, 501 cases
-npx tsc --noEmit                 # per package, run as its own step
-```
-
-Start reading at [`docs/map.md`](docs/map.md) — what the three packages are, the
-one path a request takes end to end, and the six files to read first.
-
----
-
-## How to review this
-
-**Do not read it end to end.** 199 files, 61,000 added lines, and most of it is
-not where a mistake would be.
-
-- **Skim part one** if that work was already agreed.
-- **Spend your attention on part two**, and inside it:
-  - **The security tests** — read the test, not the fix. Each one fails against
-    the old code.
-  - **The two defects this branch introduced**, both fixed in `59c312f`:
-    removing a member from one room deleted their votes in *every* room, and the
-    field was drawn from data the screen never watched for changes.
-- **Large moves are proven, not asserted.** The biggest relocation came out
-  byte-identical across 749 lines once the parameter changes were undone. Skim
-  those; read the small connecting pieces, where the only new logic lives.
+**Reviewing:** skim the product half if it was already agreed. In the second
+half, read the security *tests* rather than the fixes, and the two defects this
+branch introduced and fixed in `59c312f`. Large relocations were checked
+mechanically — the biggest came out byte-identical across 749 lines — so skim
+those and read the small connecting pieces, where the only new logic lives.
 
 ---
 
@@ -121,36 +162,33 @@ not where a mistake would be.
 Full list with reproductions in [`docs/known-issues.md`](docs/known-issues.md).
 
 - **Authentication has no test.** Sign-in works; the check enforcing it is never
-  exercised. We deleted it entirely and all 501 tests passed. **Found by this
-  branch, not caused by it.**
-- **A crafted link can freeze background work for about a minute** through
-  runaway text-matching. Also present before this branch.
+  exercised. Deleting it entirely leaves all 501 tests passing. Found by this
+  branch, not caused by it.
+- **A crafted link can freeze background work** for about a minute through
+  runaway text-matching. Present before this branch too.
 - **A room's summary was never built** — the function returns *not implemented*
   while work to build it is scheduled and discarded on every join.
 - **Email verification was removed**, deliberately: it required a proven address
   to join a room, no mail was ever sent, so nobody could join anything.
 - **Rooms do not think for themselves.** A room shows patterns its members
-  distilled privately and chose to share; its own contents feed nothing. This is
-  the current design and it is confusing on screen —
-  [`docs/decisions/every-space-owns-its-stack.md`](docs/decisions/every-space-owns-its-stack.md)
+  distilled privately and chose to share; the room's own ground feeds nothing.
+  That is why a room can show five patterns above an empty ground and be working
+  as designed. [`docs/decisions/every-space-owns-its-stack.md`](docs/decisions/every-space-owns-its-stack.md)
   proposes changing it.
 
 ---
 
 ## Two things to be honest about
 
-**The codebase got bigger.** ~56,000 → ~59,600 lines. That is tests, written
+**The codebase got bigger.** ~56,000 → ~59,600 lines: tests, written
 explanations of why files are the size they are, and documentation.
 *Restructured* here means **navigable**, not smaller.
 
 **Nine times, a check was green while blind** — the part doing the judging was
 right, and the part deciding what got judged was never tested. A vocabulary
 check reported "clean" over half a file it had never read. Two security guards
-could be deleted with 495 tests passing. Authentication was the largest
-instance.
+could be deleted with 495 tests passing. Authentication is the largest instance
+and is still open.
 
 > **Do not only test the thing that judges. Test the thing that decides what
 > gets judged.**
-
-That rule is why the gates in this branch look paranoid, and why several of them
-now fail on purpose in their own test suites.
