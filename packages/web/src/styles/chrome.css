@@ -1,0 +1,1122 @@
+/* assigned to the `chrome` layer — see styles/layers.css for the order */
+@layer chrome {
+/*
+ * THE FLAT SCREENS, WEARING THE WORLD'S SKIN.
+ *
+ * The world is home now, and the screens a person leaves it for — settings,
+ * profile, login, the archive list — looked like a different product. Pressing
+ * "settings" moved you from moonlight into a bright generic form, which reads
+ * as leaving Waka rather than as opening part of it.
+ *
+ * These screens deliberately stay FLAT. The research is unambiguous about
+ * where in-world UI stops paying: text has to resize to 200% and reflow, and
+ * every destructive confirmation wants a plain focus-trapped dialog. Dead
+ * Space's own remake shipped colourblind modes, subtitle scaling and menu
+ * narration — and no text-size control for its holograms, because once UI is
+ * world geometry "make it bigger" stops being a setting you can ship.
+ *
+ * So the answer is not to drag them into the world. It is to give them the
+ * world's LIGHT: the same ground, the same ink, the same two faces, the same
+ * one uppercase register. Continuity of surface, not of geometry.
+ *
+ * Loaded last on purpose — it is the final word over surface.css and
+ * system.css, and it overrides nothing structural, only the palette and type.
+ */
+
+/* ================= REPOINT THE TOKENS, NOT THE SELECTORS =================
+   The flat screens carry a complete design system of their own — a parchment
+   ground, near-black ink, three faces, and every component in global.css
+   drawing from those tokens. Overriding a LIST of selectors was the wrong
+   approach: it only reached the components I happened to enumerate, and left
+   everything else painting in the old palette, which is why the account
+   screen kept looking like a different product no matter how many rules I
+   added.
+
+   So the token layer itself is repointed. Every rule in global.css that says
+   `var(--ink)` or `var(--bg)` now resolves to the world's values, and
+   components I have never named come out right for free — including any the
+   team adds later. Their LAYOUT is untouched and should be: main designed
+   these screens deliberately, and the ask is that they wear this world's
+   light, not that they be rebuilt.
+
+   `--error` is the one token deliberately drained of hue. There is no red in
+   Waka: colour temperature means aliveness, and an error is not a state a
+   memory can be in. */
+:root,
+body {
+  /* ---------------------------------------------------------------
+   * ONE DEFINITION PER COLOUR.
+   *
+   * These values used to be written out twice under two vocabularies:
+   * #06080d was --bg, --paper AND --w-ground; #e8edf4 was --ink, --accent
+   * AND --w-ink. Worse, --w-muted was defined here and then REDEFINED
+   * hundreds of lines below, so the value at this position was dead and
+   * anybody reading top-down learned the wrong number.
+   *
+   * The primitives below are the only literals. Every token in either
+   * vocabulary is an alias of one of them, so a colour changes in exactly
+   * one place and the two vocabularies cannot drift apart.
+   * ------------------------------------------------------------- */
+  --moon-ground: #06080d;
+  --moon-ink: #e8edf4;
+  /* readable on this ground at body sizes — the world can afford dimmer
+     because its faint type is ornament over light; a form cannot */
+  --moon-muted: rgba(232, 237, 244, 0.72);
+  --moon-faint: rgba(232, 237, 244, 0.52);
+  --moon-edge: rgba(255, 255, 255, 0.08);
+  --moon-raised: rgba(255, 255, 255, 0.035);
+  --moon-warm: #fff2dc;
+
+  /* the flat screens' own vocabulary */
+  --w-ground: var(--moon-ground);
+  --w-ink: var(--moon-ink);
+  --w-muted: var(--moon-muted);
+  --w-faint: var(--moon-faint);
+  --w-edge: var(--moon-edge);
+  --w-raised: var(--moon-raised);
+  --w-warm: var(--moon-warm);
+
+  /* main's vocabulary, repointed to the same primitives. Every rule in
+     global.css that reads var(--ink) resolves here, which is why the flat
+     screens wear this light without being rewritten. --error is drained of
+     hue on purpose: there is no red in Waka. */
+  --bg: var(--moon-ground);
+  --paper: var(--moon-ground);
+  --ink: var(--moon-ink);
+  --accent: var(--moon-ink);
+  --muted: var(--moon-muted);
+  --line: var(--moon-edge);
+  --rule: var(--moon-edge);
+  --cell: var(--moon-raised);
+  --error: var(--moon-muted);
+}
+
+body {
+  background: var(--w-ground);
+  color: var(--w-ink);
+  font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+    "Segoe UI", Roboto, sans-serif;
+}
+
+/* ---------- type ----------
+   Two faces and one uppercase register, exactly as the world has them: Jost
+   for the voice (Latin only, so headings alone), Pretendard for everything
+   that could hold Korean. Nothing else is allowed to shout. */
+.login-title,
+.profile-header h1,
+h1,
+h2 {
+  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-weight: 300;
+  letter-spacing: 0.012em;
+  color: var(--w-ink);
+  text-wrap: balance;
+}
+/* THE LABEL REGISTER APPLIES TO LABELS, NOT TO THEIR CONTAINERS.
+   `.profile-public-heading` and `.profile-danger-heading` are WRAPPERS that
+   hold an eyebrow AND a paragraph of explanation. Putting them in this group
+   uppercased the prose too, so "this permanently deletes your account" was
+   set as a 16px all-caps headline — the loudest text on a page whose job is
+   to be calm. The eyebrow inside them is the label; the paragraph is prose. */
+.login-eyebrow,
+.field-label,
+.profile-public-heading > .login-eyebrow,
+.profile-danger-heading > .login-eyebrow {
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--w-muted);
+}
+.login-subtitle,
+.field-hint,
+.login-footer {
+  color: var(--w-muted);
+}
+
+/* ---------- fields ----------
+   A rule under the words rather than a box around them: the world has no
+   boxes, and a bordered input on this ground reads as a slot cut into it. */
+.field-input,
+input[type="text"],
+input[type="email"],
+input[type="password"],
+textarea,
+select {
+  width: 100%;
+  padding: 9px 0;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--w-edge);
+  border-radius: 0;
+  color: var(--w-ink);
+  font-family: inherit;
+  font-size: 16px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+.field-input::placeholder,
+input::placeholder,
+textarea::placeholder {
+  color: var(--w-faint);
+}
+.field-input:focus,
+input:focus,
+textarea:focus,
+select:focus {
+  border-bottom-color: var(--w-muted);
+}
+
+/* ---------- actions ----------
+   Underlined words, not filled pills. The world's one interactive signal is a
+   word you can press; nothing here earns more weight than that — including,
+   and especially, the destructive ones. There is no red anywhere in Waka:
+   colour temperature means aliveness and is not spent on warnings. */
+.btn-primary,
+.btn-destructive,
+button[type="submit"] {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--w-ink);
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 5px;
+  text-decoration-thickness: 1px;
+  transition: color 0.2s ease, opacity 0.2s ease;
+}
+.btn-destructive {
+  color: var(--w-muted);
+  opacity: 0.7;
+}
+.btn-destructive:hover {
+  opacity: 1;
+  color: var(--w-ink);
+}
+.btn-primary:disabled,
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.login-link,
+a {
+  color: var(--w-muted);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+.login-link:hover,
+a:hover {
+  color: var(--w-ink);
+}
+
+/* ---------- panels ----------
+   The one place a surface exists is where something must be occluded. It is a
+   wash and a hairline, never a card with a shadow — light lives behind a
+   surface in this product, never on it. */
+/* No panels. A surface exists only where something must be occluded, and a
+   settings section occludes nothing — it is separated by space and a rule,
+   the same way the rest of this page separates things. */
+.profile-public-panel,
+.profile-danger-panel {
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--w-edge);
+  border-radius: 0;
+  margin-top: 30px;
+  padding-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.login-form {
+  background: none;
+  border: 0;
+  border-radius: 0;
+}
+/* the prose inside a section, at reading size and reading weight */
+.profile-public-heading,
+.profile-danger-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.profile-public-heading .login-subtitle,
+.profile-danger-heading .login-subtitle {
+  font-size: 13.5px;
+  line-height: 1.6;
+  text-transform: none;
+  letter-spacing: 0;
+}
+/* a field's hint belongs to the field above it, not to the label below */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 22px;
+}
+
+/* Messages speak in the world's voice: prose, quiet, and no colour carrying
+   the meaning — the words carry it. */
+.form-error,
+.form-success {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--w-muted);
+  font-style: italic;
+}
+
+/* ---------- the ground, said explicitly ----------
+   This file set the dark ink on `body` and assumed the ground came with it.
+   It did not: `.login-shell` and `.login-card` carry their own cream surface
+   from surface.css, which is more specific than a bare `body` rule — so the
+   page kept the light background and took the dark theme's near-white text,
+   and the entire sign-in screen rendered white on white. Unreadable, and the
+   first screen anybody sees.
+
+   A palette is only a palette if every surface in it is named. Each container
+   that paints its own ground is listed here, so nothing is left inheriting a
+   colour from the theme it is no longer in. */
+.login-shell,
+.profile-shell,
+.auth-shell,
+.surface-shell {
+  background: var(--w-ground);
+  color: var(--w-ink);
+}
+.login-card,
+.profile-card,
+.auth-card {
+  background: var(--w-raised);
+  border: 1px solid var(--w-edge);
+  color: var(--w-ink);
+}
+/* the oversized display word behind the form: it is a watermark, and on this
+   ground it has to be lifted out of the background rather than dropped into
+   it — light on dark, at the same weight it had as dark on light */
+.login-shell h1,
+.login-shell .login-display,
+.login-hero {
+  color: var(--w-ink);
+}
+/* the two-up SIGN IN / CREATE ACCOUNT switch: a filled black tab reads as a
+   hole punched in a dark page, so the selected one is carried by ink and a
+   rule instead — the same way the world marks the wall you are standing on */
+.auth-tabs button,
+.login-tabs button {
+  background: none;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  color: var(--w-muted);
+  padding: 10px 4px;
+  letter-spacing: 0.1em;
+}
+.auth-tabs button[aria-selected="true"],
+.login-tabs button[aria-selected="true"],
+.auth-tabs button.is-active,
+.login-tabs button.is-active {
+  color: var(--w-ink);
+  border-bottom-color: var(--w-ink);
+}
+/* the Google button is the one place a foreign brand's own surface belongs —
+   it stays white, because a recoloured Google button is a phishing signal */
+.google-button,
+.btn-google {
+  background: #fff;
+  color: #1f1f1f;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+/* ---------- no boxes ----------
+   With the ground fixed, what was left were the outlines: every field, the
+   tab pair and the submit all sat in their own bordered rectangle, inherited
+   from a light theme where a hairline box reads as a subtle container. On
+   this ground the same hairline reads as a hole cut into the page — you see
+   the containers before you see the words in them.
+
+   The world's rule is that a surface exists only where something must be
+   occluded. A sign-in form occludes nothing, so it gets no boxes: a rule
+   under each field, a rule under the selected tab, and words for actions. */
+.login-form,
+.auth-form,
+.field {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+/* `:not([hidden])` for the same reason as the panels below — the profile
+   page's "you" tab IS a .login-form, so an unconditional display here keeps
+   it on screen when the other tab is selected. */
+.login-form:not([hidden]),
+.auth-form:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.login-form[hidden],
+.auth-form[hidden] {
+  display: none;
+}
+/* the divider keeps its word: two rules with OR between them is the standard
+   read, and dropping the word leaves two orphan lines that mean nothing */
+.login-divider,
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--w-faint);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+/* the real markup already carries its own line spans and label, so the rules
+   go on those rather than on pseudo-elements that would double them */
+.login-divider__line {
+  flex: 1;
+  height: 1px;
+  background: var(--w-edge);
+}
+.login-divider__label {
+  color: var(--w-faint);
+  white-space: nowrap;
+}
+/* the tab pair: a filled black tab reads as a hole punched in a dark page, so
+   the selected one is carried by ink and a rule under it — the same way the
+   world marks the wall you are standing on */
+.login-tabs {
+  display: flex;
+  gap: 22px;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+}
+.login-tabs button {
+  flex: 0 0 auto;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  padding: 8px 2px;
+  color: var(--w-muted);
+  text-decoration: none;
+}
+.login-tabs button[aria-selected="true"] {
+  color: var(--w-ink);
+  border-bottom-color: var(--w-ink);
+}
+
+/* ================= THE ACCOUNT SCREEN, IN THE WORLD'S VOICE =================
+   The profile page grew rooms, memories and connections — three lists that
+   arrived with their own card-and-pill styling from a lighter design. On this
+   ground a bordered card reads as a hole cut into the page, and a filled pill
+   reads as a button pretending to be a state.
+
+   The world's rules, applied to a screen that is deliberately NOT the world:
+   a rule under things instead of a border around them, one uppercase register
+   for eyebrows only, actions as underlined words, and state carried by ink
+   weight rather than by a coloured chip. No red anywhere — colour temperature
+   means aliveness here and is not spent on warnings. */
+
+/* ---------- tabs ----------
+   The same mark the world uses for the wall you are standing on: ink and a
+   rule beneath. A filled tab would be the only solid shape on the page. */
+.profile-tabs {
+  display: flex;
+  gap: 22px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--w-edge);
+  padding: 0;
+  margin-bottom: 22px;
+}
+.profile-tabs button {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  margin-bottom: -1px;
+  padding: 10px 2px;
+  color: var(--w-muted);
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+.profile-tabs button[aria-selected="true"] {
+  color: var(--w-ink);
+  border-bottom-color: var(--w-ink);
+}
+/* the sliding indicator belongs to a design with a filled tab; the rule above
+   already says which one is selected, and two answers to one question is one
+   too many */
+.profile-tabs-indicator {
+  display: none;
+}
+
+/* ---------- lists ----------
+   Rooms, memories and connections are all the same shape: a name, something
+   quiet about it, and what you can do. One grammar, three contents. */
+/* `display` BEATS `hidden`, AND THAT IS HOW BOTH TABS ENDED UP ON SCREEN.
+   These panels are shown and hidden with the HTML `hidden` attribute, which
+   works by setting `display: none` at the lowest possible precedence — any
+   author rule that sets `display` silently switches it off. Setting flex here
+   un-hid the inactive panel, so both tab bodies rendered stacked and pressing
+   a tab appeared to do nothing: the content never changed because it was all
+   already there. `:not([hidden])` keeps the layout and gives the attribute
+   back its job. */
+.profile-list:not([hidden]),
+.profile-panel:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  gap: 0;
+}
+.profile-list[hidden],
+.profile-panel[hidden],
+.profile-room[hidden] {
+  display: none;
+}
+.profile-list-row,
+.profile-room,
+.profile-memory-row,
+.profile-connection-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--w-edge);
+  border-radius: 0;
+}
+.profile-list-row:last-child,
+.profile-room:last-child,
+.profile-memory-row:last-child,
+.profile-connection-row:last-child {
+  border-bottom: 0;
+}
+.profile-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.profile-row-name,
+.profile-row-title {
+  color: var(--w-ink);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+/* when and how many: the quiet second line, never a badge */
+.profile-row-meta {
+  color: var(--w-muted);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- what a thing IS, said in ink ----------
+   `agent`, `owner`, `this device` — these were chips. A chip is a small filled
+   rectangle competing with the name beside it for a fact that is subordinate
+   to the name. Set small, spaced and dim, it reads as an aside, which is what
+   it is. */
+.profile-row-tag,
+.profile-memory-badge {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  margin-left: 10px;
+  color: var(--w-faint);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* ---------- actions ----------
+   Words you can press, at the same weight as everything else. The destructive
+   one is DIMMER than its neighbours rather than louder: the thing that cannot
+   be undone should be the hardest to hit by accident, and the confirmation
+   carries the warning, not the colour. */
+.profile-row-actions {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex: 0 0 auto;
+}
+.profile-memory-action,
+.profile-row-actions button,
+.profile-signout-button {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--w-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 1px;
+  transition: color 0.2s ease;
+}
+.profile-memory-action:hover,
+.profile-row-actions button:hover,
+.profile-signout-button:hover {
+  color: var(--w-ink);
+}
+.profile-row-actions .is-destructive,
+.profile-memory-action.is-destructive {
+  color: var(--w-faint);
+}
+.profile-row-actions .is-destructive:hover,
+.profile-memory-action.is-destructive:hover {
+  color: var(--w-muted);
+}
+
+/* ---------- adding one ----------
+   The field is a rule you type on, and the verb is a word — the same pair the
+   world uses at its mouth. */
+.profile-memory-new,
+.profile-memory-create {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 14px 0 0;
+  background: none;
+  border: 0;
+}
+.profile-memories-panel,
+.profile-memories-heading {
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+/* ---------- toggles ----------
+   These rendered as two bare checkboxes with invisible labels: the row is a
+   flex container whose text was inheriting a colour meant for a dark-on-light
+   theme, so the words describing what you are about to make public were not
+   readable at all. On a privacy control that is the worst possible bug — the
+   checkbox is the only thing you can see, and it says nothing about what it
+   does. */
+.profile-toggle-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0 0 14px;
+  color: var(--w-ink);
+  font-size: 14px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.profile-toggle-row span {
+  color: var(--w-ink);
+}
+.profile-toggle-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  flex: 0 0 auto;
+  accent-color: var(--w-ink);
+  cursor: pointer;
+}
+.profile-toggle-row input:disabled,
+.profile-toggle-row input:disabled + span {
+  opacity: 0.45;
+  cursor: default;
+}
+/* the save verb sits after the form, not across it */
+.login-form .btn-primary,
+.profile-card .btn-primary {
+  align-self: flex-start;
+  margin-top: 8px;
+}
+/* the tab strip's own rule is the only line it needs — the pill outline
+   underneath it belonged to the filled-tab design that is gone */
+.profile-tabs {
+  box-shadow: none;
+  overflow: visible;
+}
+
+/* ================= LIGHT, NOT JUST DARKNESS =================
+   Repointing the tokens made this screen dark. It did not make it feel like
+   the world, because the world's character is not its blackness — it is that
+   everything sits IN a volume with light behind it. A flat near-black page
+   with pale text on it is just a form with the colours swapped.
+
+   Three things carry that here, and none of them is decoration:
+   a ground that is deeper at the edges than the middle, a measure that stops
+   the column reading as a lonely strip, and a type scale that comes down to
+   reading size so the prose stops shouting. */
+
+.login-shell,
+.profile-shell {
+  min-height: 100dvh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(32px, 7vh, 88px) 24px 96px;
+  /* the volume: one soft pool of light, high and centred, exactly where the
+     world puts the light behind its companion. It never reads as a gradient
+     because it has no edge — it is the room, not a panel in it. */
+  background:
+    radial-gradient(
+      120% 80% at 50% 12%,
+      rgba(232, 237, 244, 0.055) 0%,
+      rgba(232, 237, 244, 0.022) 34%,
+      transparent 68%
+    ),
+    var(--w-ground);
+}
+
+/* The card stops being a card: on this ground a bordered box is a hole cut
+   into the room. It is a column of content standing in the light. */
+.login-card,
+.profile-card {
+  width: 100%;
+  max-width: 620px;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ---------- type comes back to reading size ----------
+   The prose here was set at poster scale — a paragraph explaining a checkbox
+   was as loud as the page title. One display size, one reading size, one
+   label size, and nothing in between. */
+.login-title,
+.profile-header h1 {
+  font-size: clamp(38px, 5.2vw, 58px);
+  line-height: 1.02;
+  letter-spacing: -0.005em;
+  margin: 0;
+}
+.profile-email,
+.login-subtitle {
+  font-size: 14px;
+  line-height: 1.6;
+  letter-spacing: 0;
+}
+.field-hint {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--w-faint);
+}
+/* the long privacy paragraph: reading size, and a measure that does not run
+   the full width of the column */
+.profile-public-panel > .login-subtitle,
+.profile-danger-panel > .login-subtitle {
+  max-width: 52ch;
+  font-size: 14px;
+}
+
+/* the header sits apart from the form rather than on top of it */
+.profile-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 26px;
+}
+
+/* ================= THE SAME VALUES, NOT SIMILAR ONES =================
+   "Matching the world" was being done by eye — a 10px label here, a clamp
+   there, each one close to the world's and none of them equal to it. Close is
+   what makes two screens feel like two products. These are the world's own
+   numbers, lifted from home.css rather than approximated. */
+
+/* the label register, byte for byte from .jar-label */
+.login-eyebrow,
+.field-label,
+.profile-public-heading > .login-eyebrow,
+.profile-danger-heading > .login-eyebrow,
+.profile-tabs button,
+.profile-row-tag,
+.profile-memory-badge,
+.profile-memories-heading > .login-eyebrow {
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--w-muted);
+}
+
+/* THE VOICE, at the poster's own weight and tracking.
+   Jost 300 and never heavier — in a geometric the elegance is the thin even
+   stroke and the air around it, and weight is what kills it. The page title
+   was landing near 58px and bold-ish, which is louder than anything the world
+   ever prints; the poster tops out at 34. */
+.login-title,
+.profile-header h1,
+h1,
+h2 {
+  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-weight: 300;
+  font-size: clamp(28px, 3vw, 40px);
+  letter-spacing: 0.012em;
+  line-height: 1.32;
+  text-wrap: balance;
+  color: var(--w-ink);
+}
+
+/* THE GRAIN. The world's signature texture, and the one thing that made these
+   screens read as a different surface no matter what the palette said. It is
+   an overlay blend, so it leaves black black by construction and lives on the
+   midtones — the type and the rules — without ever lifting the ground.
+   Fixed to the frame, like film grain belongs to the lens rather than to what
+   is being filmed. */
+.login-shell::after,
+.profile-shell::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+  opacity: 0.09;
+  background-image: url("data:image/svg+xml;utf8,\
+<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'>\
+<filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/></filter>\
+<rect width='140' height='140' filter='url(%23n)' opacity='0.55'/></svg>");
+  background-repeat: repeat;
+}
+
+/* THE RHYTHM. The world breathes between its three sections; this page had
+   form-density — every label 22px under the last. Sections now separate by a
+   full beat and the fields inside them by a half. */
+.profile-public-panel,
+.profile-danger-panel {
+  margin-top: 46px;
+  padding-top: 28px;
+  gap: 18px;
+}
+.field {
+  margin-bottom: 26px;
+}
+.profile-tabs {
+  margin-bottom: 30px;
+}
+
+/* ================= ORDER IS NOT A GUARANTEE, SPECIFICITY IS =================
+   Everything above assumed this file's rules win because it is imported last.
+   In a dev server that holds; in the production bundle the CSS is
+   concatenated in an order the bundler chooses, and global.css's profile
+   block landed AFTER the grain. So the same source produced a restyled page
+   on 5173 and an unchanged one on 3030 — which is precisely the failure that
+   made this look like "no design updates" from the outside.
+
+   Relying on order across two different pipelines was the mistake. These are
+   the same declarations, re-stated one specificity step higher (`body` is a
+   type selector, so `body .x` beats any bare `.x` wherever it sits in the
+   file). Nothing new is being designed here; this is the same design, made
+   order-independent. */
+
+body .profile-shell,
+body .login-shell {
+  background:
+    radial-gradient(
+      120% 80% at 50% 12%,
+      rgba(232, 237, 244, 0.055) 0%,
+      rgba(232, 237, 244, 0.022) 34%,
+      transparent 68%
+    ),
+    var(--w-ground);
+  min-height: 100dvh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(32px, 7vh, 88px) 24px 96px;
+}
+body .profile-card,
+body .login-card {
+  width: 100%;
+  max-width: 620px;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+body .profile-header h1,
+body .login-title {
+  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-weight: 300;
+  font-size: clamp(28px, 3vw, 40px);
+  letter-spacing: 0.012em;
+  line-height: 1.32;
+  color: var(--w-ink);
+}
+body .profile-tabs {
+  display: flex;
+  gap: 22px;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--w-edge);
+  border-radius: 0;
+  box-shadow: none;
+  margin-bottom: 30px;
+}
+body .profile-tabs-indicator {
+  display: none;
+}
+body .profile-tabs button {
+  background: none;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  margin-bottom: -1px;
+  padding: 10px 2px;
+  color: var(--w-muted);
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+body .profile-tabs button[aria-selected="true"] {
+  color: var(--w-ink);
+  border-bottom-color: var(--w-ink);
+}
+body .profile-public-panel,
+body .profile-danger-panel {
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--w-edge);
+  border-radius: 0;
+}
+body .profile-list-row,
+body .profile-room,
+body .profile-memory-row,
+body .profile-connection-row {
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--w-edge);
+  border-radius: 0;
+  padding: 14px 0;
+  min-height: 0;
+}
+body .profile-memory-badge,
+body .profile-row-tag {
+  flex: 0 0 auto;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--w-faint);
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/* A SECTION RULE BELONGS TO THE SECTION BELOW IT.
+   The last field's bottom margin (26px) and the panel's top margin (46px)
+   stacked into 72px of nothing above the rule, against 28px below it — so the
+   line read as floating in a dead gap rather than as the start of something.
+   Tightened, and the asymmetry kept: more air above the rule than below, so
+   it still says "a new section begins here" rather than "these two things are
+   equally far apart". */
+body .profile-public-panel,
+body .profile-danger-panel {
+  margin-top: 34px;
+  padding-top: 20px;
+}
+body .field:last-of-type {
+  margin-bottom: 8px;
+}
+
+/* ---------- the words that open things ----------
+   The world's one interactive signal: a lowercase word you press. It sits
+   where the section it reveals will appear, so opening it is the section
+   arriving rather than the page rearranging around you. */
+body .profile-disclose {
+  margin: 26px 0 0;
+  font-size: 14px;
+}
+body .profile-disclose--last {
+  margin-top: 40px;
+}
+body .profile-disclose button {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--w-muted);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 5px;
+  text-decoration-thickness: 1px;
+  transition: color 0.2s ease;
+}
+body .profile-disclose button:hover {
+  color: var(--w-ink);
+}
+/* the one that throws the account away is the quietest thing on the page:
+   what cannot be undone should be hardest to reach by accident, and the
+   confirmation carries the weight, not the colour */
+body .profile-disclose--last button {
+  color: var(--w-faint);
+}
+body .profile-disclose--last button:hover {
+  color: var(--w-muted);
+}
+/* a revealed section arrives, it does not appear */
+body .profile-public-panel:not([hidden]),
+body .profile-danger-panel:not([hidden]) {
+  animation: jar-reveal 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes jar-reveal {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* THE THIRD TIME THIS FILE HAS BROKEN `hidden` WITH `display`.
+   Any rule that sets display on an element using the `hidden` attribute turns
+   the attribute off — it is the weakest display declaration there is. This
+   file sets display on .profile-panel, on .login-form and on the two setting
+   sections, and each time the element it was hiding stayed on screen.
+
+   One rule, at the end, for every element on these screens that hides itself
+   that way. Placed last and with `body` specificity so nothing later in any
+   bundle order can undo it again. */
+/* Scoped to the elements that actually hide themselves this way, rather than
+   to every element on the page. `body [hidden]` fixed the bug but took the
+   attribute's meaning away from anything else that might legitimately use it —
+   a hidden input that still needs layout, a template node a library toggles.
+   These four are the ones this file sets `display` on, so these four are the
+   ones that need it back. */
+body .profile-panel[hidden],
+body .profile-room[hidden],
+body .login-form[hidden],
+body .auth-form[hidden],
+body .profile-public-panel[hidden],
+body .profile-danger-panel[hidden],
+body .profile-list[hidden] {
+  display: none !important;
+}
+
+/* the save verb joins the row of words rather than shouting between them —
+   the world has one uppercase register and it belongs to eyebrows, never to
+   things you press */
+body .login-form .btn-primary,
+body .profile-card .btn-primary {
+  margin-top: 26px;
+  color: var(--w-ink);
+  font-size: 14px;
+  letter-spacing: 0;
+  text-transform: lowercase;
+}
+
+/* ================= READABILITY AND ONE PLACE FOR ACTIONS =================
+
+   Two real problems, both structural rather than cosmetic.
+
+   1. CONTRAST. These screens borrowed the world's ink values, where dim text
+      sits over a lit volume and is usually one short label. Here it is a form:
+      labels, hints and help paragraphs that must be READ, on a near-black
+      ground. `--w-muted` at 55% and `--w-faint` at 30% land under WCAG AA for
+      body text — the world can afford that because its dim type is decoration
+      over light, and a settings screen cannot afford it at all. Raised to
+      values that pass at their actual sizes. The world is unaffected: it has
+      its own tokens.
+
+   2. ACTION PLACEMENT. Five controls sat at five different places with no
+      grouping — sign out top-right, a disclosure mid-form, save under it,
+      delete below that, back home centred underneath. Nielsen's consistency
+      heuristic and simple proximity both say the same thing: things you can
+      DO belong together, in a predictable place, ordered by consequence.
+      Save sits with the form it saves; everything that leaves or destroys is
+      one row at the foot, ordered harmless → irreversible. */
+
+:root,
+body {
+  /* the readable values now live with the primitives above, so this block
+     no longer restates them — one definition per colour, and reading the
+     file top-down teaches the right number. */
+}
+
+/* help text is read once and must be readable that once */
+body .field-hint,
+body .login-subtitle,
+body .profile-email {
+  color: rgba(232, 237, 244, 0.62);
+  font-size: 13px;
+}
+/* labels name the thing under them: they may be quiet, not faint */
+body .field-label,
+body .login-eyebrow {
+  color: rgba(232, 237, 244, 0.66);
+}
+/* what you typed is the loudest thing in the form, because it is yours */
+body .field-input,
+body input,
+body select,
+body textarea {
+  color: var(--w-ink);
+  font-size: 15px;
+}
+
+/* ---------- one foot, ordered by consequence ----------
+   Leaving is harmless, so it reads normally. Destroying is last and quietest:
+   what cannot be undone should be the hardest thing to hit by accident, and
+   the confirmation carries the warning. */
+body .profile-disclose--last,
+body .login-footer {
+  margin: 0;
+}
+body .profile-foot {
+  display: flex;
+  align-items: baseline;
+  gap: 22px;
+  margin-top: 52px;
+  padding-top: 20px;
+  border-top: 1px solid var(--w-edge);
+}
+body .profile-foot .login-footer {
+  margin-right: auto;
+}
+
+/* the destructive word in the foot: last in the row and quietest in it */
+body .profile-disclose-inline {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--w-faint);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 5px;
+  text-decoration-thickness: 1px;
+  transition: color 0.2s ease;
+}
+body .profile-disclose-inline:hover {
+  color: var(--w-muted);
+}
+/* sign out leaves the header and joins the foot, where leaving belongs */
+body .profile-signout-button {
+  font-size: 14px;
+  text-transform: lowercase;
+  letter-spacing: 0;
+}
+
+}
