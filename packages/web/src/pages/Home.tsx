@@ -6675,7 +6675,31 @@ function HomeExperience(): JSX.Element {
     };
     /* The field is what you kept AND what your agents kept, so the loop waits
        for both before it builds anything — one pour, never a second one. */
-  }, [inspirations, agents, walls, groupFieldTick]);
+    /*
+     * `citations` AND `signals` ARE DEPENDENCIES, and leaving them out lit the
+     * field wrong.
+     *
+     * Every orb is built here from `seedOf(c, citations, signalById)`, and
+     * `signalById` is derived from `signals` a few lines above — so both decide
+     * what a memory LOOKS like: whether anything rests on it. Neither was
+     * listed, so a memory that a signal was later found to rest on kept the
+     * appearance of a memory nothing rested on, until something unrelated
+     * happened to rebuild the loop. The most common something was travelling to
+     * another wall and back, which is why it read as intermittent.
+     *
+     * Adding them rebuilds this effect when they change, and that is a real
+     * cost — it is the largest effect in the file. Two things make it the right
+     * trade rather than a shrug. They change on load and on an explicit
+     * refresh, not per frame. And a rebuild is no longer destructive: travel
+     * survives one through `headingRef`, which exists because a rebuild
+     * mid-crossing used to restart the journey at column zero.
+     *
+     * The alternative — reading both through refs at use time — does not work
+     * here. These reads happen in the effect's SETUP, so a ref would be read at
+     * exactly the same moment and hold exactly the same stale value. A ref only
+     * helps a value read per frame; this one is read once per build.
+     */
+  }, [inspirations, agents, walls, groupFieldTick, citations, signals]);
 
   /* ---------------- dial scrubbing (writes refs, not state) ---------------- */
 

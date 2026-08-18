@@ -25,6 +25,7 @@ import {
   groupMembers,
   groups,
   groupTopOfMindAffirmations,
+  groupTopOfMindProposals,
   profiles,
   type GroupMemberRole,
 } from "../db/index.js";
@@ -375,12 +376,39 @@ export async function removeGroupMember(
    * would leave a caller believing the removal did not happen.
    */
   await rotateJoinCode(db, input.groupId);
-  /* and their votes go with them — the tally above already ignores a
-     non-member, but leaving the rows behind would make re-joining silently
-     restore a vote nobody cast again */
-  await db
-    .delete(groupTopOfMindAffirmations)
-    .where(eq(groupTopOfMindAffirmations.profileId, input.memberProfileId));
+  /*
+   * And their votes in THIS ROOM go with them — the tally already ignores a
+   * non-member, but leaving the rows behind would make re-joining silently
+   * restore a vote nobody cast again.
+   *
+   * SCOPED THROUGH THE PROPOSAL, and the first version was not.
+   *
+   * It matched on `profile_id` alone. The affirmations table has no
+   * `group_id` — a vote reaches its room only through the proposal it is
+   * attached to — so a predicate that names only the person is a predicate
+   * that spans every room they are in. Removing someone from one group
+   * silently erased their votes in all the others, and the person who did the
+   * removing had no way to know and no right to do it.
+   *
+   * The test that looked like it covered this could not fail on it: its
+   * assertion counts through a join on `group_members`, and the membership row
+   * is deleted a few statements above, so the count drops whether or not any
+   * affirmation row goes. `group-membership-scope.db.test.ts` asserts the
+   * cross-room rows survive instead, which is the thing that was actually at
+   * stake.
+   */
+  await db.delete(groupTopOfMindAffirmations).where(
+    and(
+      eq(groupTopOfMindAffirmations.profileId, input.memberProfileId),
+      inArray(
+        groupTopOfMindAffirmations.proposalId,
+        db
+          .select({ id: groupTopOfMindProposals.id })
+          .from(groupTopOfMindProposals)
+          .where(eq(groupTopOfMindProposals.groupId, input.groupId)),
+      ),
+    ),
+  );
   return true;
 }
 
