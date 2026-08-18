@@ -8,24 +8,11 @@
  * superseded and points forward at its replacement, so the history is a chain
  * a reader can walk.
  *
- * This file is the pass — the order the stages run in, and the two entry
- * points the queue calls. Each stage is its own module, named for the
- * question it answers:
- *
- *   1. `top-of-mind-selection.ts`  — which signals may be considered at all
- *   2. `top-of-mind-artifact.ts`   — what the version standing now holds
- *   3. `top-of-mind-validation.ts` — what of the reply the database can vouch for
- *   4. `top-of-mind-versioning.ts` — what the next version holds, and writing it
- *
- * Two invariants are enforced in code rather than trusted to the prompt, and
- * each now sits in a named module a test can call without a provider:
+ * Two invariants are enforced here rather than trusted:
  *
  *   - **Every cited signal exists and belongs to this profile.** A citation
  *     the model invented is dropped, and an entry left with no citation is
- *     dropped with it. An artifact that cites nothing is a horoscope. The
- *     profile filter is in stage 1 and the check against it is in stage 3;
- *     neither is any use without the other, which is why stage 3's set is
- *     built from the selection and never re-queried.
+ *     dropped with it. An artifact that cites nothing is a horoscope.
  *
  *   - **Human decisions survive regeneration.** Entries the owner locked,
  *     pinned, or dismissed are copied forward verbatim from the previous
@@ -40,16 +27,22 @@
  * previous system hid its failures in exactly that gap.
  */
 
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 
 import {
-  feedback,
+  inspirations,
   profiles,
+  signalEvidence,
   signals,
   topOfMindEntries,
+  topOfMindEntrySignals,
+  topOfMinds,
+  type TopOfMindEntryType,
   type TopOfMindRevisionReason,
+  feedback,
 } from "../db/index.js";
 import { getDb } from "./db.js";
+import { computeSignalConfidence } from "./signal-derivation.js";
 import { normalizeSupportedLocale } from "./locales.js";
 import {
   getDefaultModelProvider,
@@ -57,21 +50,53 @@ import {
   type TopOfMindSynthesisEntry,
   type TopOfMindRecentFeedback,
 } from "./model-provider.js";
-import { loadLiveArtifact } from "./top-of-mind-artifact.js";
 import { acquireTopOfMindArtifactLock } from "./top-of-mind-family-lock.js";
-import { selectSignals } from "./top-of-mind-selection.js";
-import {
-  countLockViolations,
-  validateSynthesizedEntries,
-} from "./top-of-mind-validation.js";
-import {
-  assembleEntries,
-  carryEverything,
-  isUnchanged,
-  writeVersion,
-} from "./top-of-mind-versioning.js";
 
 type WakaDb = ReturnType<typeof getDb>;
+type WakaTx = Parameters<Parameters<WakaDb["transaction"]>[0]>[0];
+
+// ---------------------------------------------------------------------------
+// Selection tuning
+//
+// Named exports rather than inline numbers so Phase 5 can tune ranking in one
+// diff, and so a reviewer can see the whole ranking policy in one screen.
+// ---------------------------------------------------------------------------
+
+/** How many signals the synthesis call is allowed to consider. */
+export const TOP_OF_MIND_SIGNAL_LIMIT = 12;
+
+/** Weights of the four ranking terms; they sum to 1. */
+export const SELECTION_CONFIDENCE_WEIGHT = 0.45;
+export const SELECTION_EVIDENCE_WEIGHT = 0.2;
+export const SELECTION_RECENCY_WEIGHT = 0.2;
+export const SELECTION_COMEBACK_WEIGHT = 0.15;
+
+/**
+ * Applied to a signal whose most recent verdict from its owner is "not_true".
+ * A multiplier rather than an exclusion: the person may be wrong, the pattern
+ * may return with new evidence, and a memory that silently drops whatever was
+ * disputed is a memory that cannot be argued with. Disputed signals fight
+ * uphill; they are not banished.
+ */
+export const SELECTION_DISPUTED_MULTIPLIER = 0.4;
+
+/** Evidence count at which the support term saturates. */
+export const SELECTION_EVIDENCE_SATURATION = 6;
+/** Half-life of the recency term, in days. */
+export const SELECTION_RECENCY_HALF_LIFE_DAYS = 30;
+
+/**
+ * A signal that went quiet and then came back is more interesting than one
+ * that never stopped: the return is the person's own attention re-landing on
+ * something, which is exactly what a top of mind is for. The bonus needs a
+ * real gap before it, and the return itself has to be recent — a comeback
+ * from four months ago is just history.
+ */
+export const COMEBACK_MIN_DORMANT_DAYS = 21;
+export const COMEBACK_SATURATION_DAYS = 90;
+export const COMEBACK_MAX_RETURN_AGE_DAYS = 14;
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 // ---------------------------------------------------------------------------
 // Public surface
@@ -98,6 +123,572 @@ export interface TopOfMindRefreshResult {
   droppedCitations: number;
   /** Locked entries the model failed to reproduce byte-identically. */
   lockViolations: number;
+}
+
+interface SelectedSignal {
+  id: string;
+  statement: string;
+  confidence: number;
+  evidenceCount: number;
+  lastEvidenceAt: Date | null;
+  score: number;
+}
+
+export interface CarriedEntry {
+  type: TopOfMindEntryType;
+  body: string;
+  belief: string | null;
+  prompt: string | null;
+  lockedAt: Date | null;
+  pinnedAt: Date | null;
+  dismissedAt: Date | null;
+  sortOrder: number;
+  citedSignalIds: string[];
+}
+
+interface LiveArtifactSnapshot {
+  id: string;
+  version: number;
+  entries: CarriedEntry[];
+}
+
+// ---------------------------------------------------------------------------
+// Ranking
+// ---------------------------------------------------------------------------
+
+/**
+ * The dormancy-comeback bonus, in 0..1, computed from one signal's evidence
+ * timestamps: how long the gap before the newest piece of evidence was, and
+ * whether that return is recent enough to still be a return.
+ */
+export function computeComebackBonus(evidenceAt: Date[], now: Date): number {
+  if (evidenceAt.length < 2) return 0;
+
+  const times = evidenceAt.map((date) => date.getTime()).sort((a, b) => a - b);
+  const last = times[times.length - 1]!;
+  const previous = times[times.length - 2]!;
+
+  const returnAgeDays = (now.getTime() - last) / MS_PER_DAY;
+  if (returnAgeDays > COMEBACK_MAX_RETURN_AGE_DAYS) return 0;
+
+  const dormantDays = (last - previous) / MS_PER_DAY;
+  if (dormantDays < COMEBACK_MIN_DORMANT_DAYS) return 0;
+
+  const span = COMEBACK_SATURATION_DAYS - COMEBACK_MIN_DORMANT_DAYS;
+  return Math.min(1, (dormantDays - COMEBACK_MIN_DORMANT_DAYS) / span);
+}
+
+/** 0..100. Deterministic: same rows, same clock, same order, every time. */
+export function computeSelectionScore(input: {
+  confidence: number;
+  evidenceCount: number;
+  lastEvidenceAt: Date | null;
+  comebackBonus: number;
+  /** True when the owner's latest verdict on this signal is "not_true". */
+  disputed?: boolean;
+  now: Date;
+}): number {
+  const support = Math.min(1, input.evidenceCount / SELECTION_EVIDENCE_SATURATION);
+  const quietDays = input.lastEvidenceAt
+    ? Math.max(0, (input.now.getTime() - input.lastEvidenceAt.getTime()) / MS_PER_DAY)
+    : Number.POSITIVE_INFINITY;
+  const recency = Number.isFinite(quietDays)
+    ? Math.pow(2, -quietDays / SELECTION_RECENCY_HALF_LIFE_DAYS)
+    : 0;
+
+  const score =
+    SELECTION_CONFIDENCE_WEIGHT * input.confidence +
+    SELECTION_EVIDENCE_WEIGHT * support * 100 +
+    SELECTION_RECENCY_WEIGHT * recency * 100 +
+    SELECTION_COMEBACK_WEIGHT * input.comebackBonus * 100;
+
+  const damped = input.disputed ? score * SELECTION_DISPUTED_MULTIPLIER : score;
+
+  return Math.max(0, Math.min(100, damped));
+}
+
+/**
+ * Below this many active signals, the selection reaches into `emerging` ones
+ * to reach a small artifact. It exists for the cold start: a signal needs
+ * three pieces of evidence to become active, and a new profile rarely says
+ * the same thing three ways in its first sitting, so an active-only selection
+ * leaves it staring at nothing. A handful of forming patterns *is* what
+ * currently matters to someone who just arrived — shown tentatively, and
+ * superseded the moment real patterns cross the bar.
+ *
+ * The floor is also the ceiling on how far emerging reaches: once a profile
+ * has this many active signals, emerging ones never appear, so an established
+ * artifact is never diluted with single-observation noise.
+ */
+export const TOP_OF_MIND_MIN_SIGNALS = 3;
+
+interface SelectionOutcome {
+  signals: SelectedSignal[];
+  /** True when the selection leaned on emerging signals to fill the floor. */
+  provisional: boolean;
+}
+
+async function selectSignals(
+  db: WakaDb,
+  profileId: string,
+  now: Date,
+): Promise<SelectionOutcome> {
+  const rows = await db
+    .select({
+      id: signals.id,
+      statement: signals.statement,
+      status: signals.status,
+      confidence: signals.confidence,
+      lastEvidenceAt: signals.lastEvidenceAt,
+    })
+    .from(signals)
+    .where(
+      and(
+        eq(signals.profileId, profileId),
+        inArray(signals.status, ["active", "emerging"]),
+        // A locked statement with no support left is still the owner's text,
+        // but it is not evidence of anything current, and the artifact is a
+        // claim about what is current.
+        isNull(signals.unsupportedAt),
+      ),
+    )
+    .orderBy(desc(signals.confidence), desc(signals.lastEvidenceAt));
+
+  if (rows.length === 0) return { signals: [], provisional: false };
+
+  const evidenceRows = await db
+    .select({
+      signalId: signalEvidence.signalId,
+      createdAt: signalEvidence.createdAt,
+      source: inspirations.source,
+    })
+    .from(signalEvidence)
+    .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
+    .where(
+      inArray(
+        signalEvidence.signalId,
+        rows.map((row) => row.id),
+      ),
+    );
+
+  const evidenceBySignal = new Map<
+    string,
+    Array<{ createdAt: Date; source: "app" | "agent" }>
+  >();
+  for (const row of evidenceRows) {
+    const bucket = evidenceBySignal.get(row.signalId);
+    if (bucket) bucket.push(row);
+    else evidenceBySignal.set(row.signalId, [row]);
+  }
+
+  // The latest verdict per signal decides `disputed` — newest first, first
+  // write wins per target. A later "true" therefore lifts an older "not_true",
+  // which is what changing one's mind should do.
+  const verdictRows = await db
+    .select({
+      targetId: feedback.targetId,
+      value: feedback.value,
+    })
+    .from(feedback)
+    .where(
+      and(
+        eq(feedback.profileId, profileId),
+        eq(feedback.targetType, "signal"),
+        inArray(
+          feedback.targetId,
+          rows.map((row) => row.id),
+        ),
+      ),
+    )
+    .orderBy(desc(feedback.createdAt));
+
+  const latestVerdict = new Map<string, string>();
+  for (const row of verdictRows) {
+    if (!latestVerdict.has(row.targetId)) latestVerdict.set(row.targetId, row.value);
+  }
+
+  const scored = rows
+    .map((row) => {
+      const evidence = evidenceBySignal.get(row.id) ?? [];
+      const evidenceAt = evidence.map((item) => item.createdAt);
+      // Live, not the stored snapshot: the snapshot was written the moment
+      // evidence last landed — its decay term frozen at full — so ranking by
+      // it would keep a signal that went quiet months ago scoring as if it
+      // were still current. Time only passes for this signal if it passes
+      // here, at read.
+      const confidence = computeSignalConfidence(evidence, now);
+      return {
+        id: row.id,
+        statement: row.statement,
+        status: row.status,
+        confidence,
+        evidenceCount: evidenceAt.length,
+        lastEvidenceAt: row.lastEvidenceAt,
+        score: computeSelectionScore({
+          confidence,
+          evidenceCount: evidenceAt.length,
+          lastEvidenceAt: row.lastEvidenceAt,
+          comebackBonus: computeComebackBonus(evidenceAt, now),
+          disputed: latestVerdict.get(row.id) === "not_true",
+          now,
+        }),
+      };
+    })
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      const aRecency = a.lastEvidenceAt?.getTime() ?? 0;
+      const bRecency = b.lastEvidenceAt?.getTime() ?? 0;
+      if (bRecency !== aRecency) return bRecency - aRecency;
+      // Ids as the last tiebreak so two identically-scored signals never
+      // swap places between two runs over identical data.
+      return a.id < b.id ? -1 : 1;
+    });
+
+  const strip = (s: (typeof scored)[number]): SelectedSignal => ({
+    id: s.id,
+    statement: s.statement,
+    confidence: s.confidence,
+    evidenceCount: s.evidenceCount,
+    lastEvidenceAt: s.lastEvidenceAt,
+    score: s.score,
+  });
+
+  const chosen = chooseSelection(
+    scored.filter((s) => s.status === "active"),
+    scored.filter((s) => s.status === "emerging"),
+  );
+  return { signals: chosen.signals.map(strip), provisional: chosen.provisional };
+}
+
+/**
+ * The cold-start rule, isolated from the database so it can be reasoned about
+ * directly. Both lists arrive already ranked, strongest first.
+ *
+ * With enough durable patterns, the artifact is those alone — identical to
+ * the behaviour before the cold start existed, so an established profile is
+ * never diluted with single-observation noise. Below the floor, the selection
+ * borrows the strongest forming patterns, and only enough to reach the floor,
+ * and reports itself provisional so the synthesis writes tentatively.
+ */
+export function chooseSelection<T>(
+  active: T[],
+  emerging: T[],
+): { signals: T[]; provisional: boolean } {
+  if (active.length >= TOP_OF_MIND_MIN_SIGNALS) {
+    return { signals: active.slice(0, TOP_OF_MIND_SIGNAL_LIMIT), provisional: false };
+  }
+  const backfill = emerging.slice(0, Math.max(0, TOP_OF_MIND_MIN_SIGNALS - active.length));
+  return { signals: [...active, ...backfill], provisional: backfill.length > 0 };
+}
+
+// ---------------------------------------------------------------------------
+// Reading the live artifact
+// ---------------------------------------------------------------------------
+
+async function loadLiveArtifact(
+  db: WakaDb | WakaTx,
+  profileId: string,
+): Promise<LiveArtifactSnapshot | null> {
+  const [artifact] = await db
+    .select({ id: topOfMinds.id, version: topOfMinds.version })
+    .from(topOfMinds)
+    .where(and(eq(topOfMinds.profileId, profileId), eq(topOfMinds.status, "live")))
+    .limit(1);
+  if (!artifact) return null;
+
+  const entryRows = await db
+    .select()
+    .from(topOfMindEntries)
+    .where(eq(topOfMindEntries.topOfMindId, artifact.id))
+    .orderBy(asc(topOfMindEntries.sortOrder));
+
+  const citationRows =
+    entryRows.length === 0
+      ? []
+      : await db
+          .select({
+            entryId: topOfMindEntrySignals.entryId,
+            signalId: topOfMindEntrySignals.signalId,
+          })
+          .from(topOfMindEntrySignals)
+          .where(
+            inArray(
+              topOfMindEntrySignals.entryId,
+              entryRows.map((row) => row.id),
+            ),
+          );
+
+  const citationsByEntry = new Map<string, string[]>();
+  for (const row of citationRows) {
+    const bucket = citationsByEntry.get(row.entryId);
+    if (bucket) bucket.push(row.signalId);
+    else citationsByEntry.set(row.entryId, [row.signalId]);
+  }
+
+  return {
+    id: artifact.id,
+    version: artifact.version,
+    entries: entryRows.map((row) => ({
+      type: row.type,
+      body: row.body,
+      belief: row.belief,
+      prompt: row.prompt,
+      lockedAt: row.lockedAt,
+      pinnedAt: row.pinnedAt,
+      dismissedAt: row.dismissedAt,
+      sortOrder: row.sortOrder,
+      citedSignalIds: citationsByEntry.get(row.id) ?? [],
+    })),
+  };
+}
+
+/** Locked, pinned, and dismissed are the three ways a human touched an entry. */
+function isHumanTouched(entry: CarriedEntry): boolean {
+  return entry.lockedAt !== null || entry.pinnedAt !== null || entry.dismissedAt !== null;
+}
+
+// ---------------------------------------------------------------------------
+// Validation
+// ---------------------------------------------------------------------------
+
+interface ValidationOutcome {
+  entries: TopOfMindSynthesisEntry[];
+  droppedCitations: number;
+}
+
+/**
+ * Keep only what the database can vouch for: citations that name a signal
+ * this profile actually holds, and entries that still have at least one after
+ * the filter. An entry with no citation left is not a weaker entry, it is an
+ * unsourced claim about someone.
+ */
+export function validateSynthesizedEntries(
+  entries: TopOfMindSynthesisEntry[],
+  knownSignalIds: Set<string>,
+): ValidationOutcome {
+  let droppedCitations = 0;
+  const validated: TopOfMindSynthesisEntry[] = [];
+
+  for (const entry of entries) {
+    const cited = entry.citedSignalIds.filter((id) => {
+      if (knownSignalIds.has(id)) return true;
+      droppedCitations += 1;
+      return false;
+    });
+    if (cited.length === 0) continue;
+    validated.push({ ...entry, citedSignalIds: [...new Set(cited)] });
+  }
+
+  return { entries: validated, droppedCitations };
+}
+
+/**
+ * Did the model return every locked entry unchanged? The answer does not
+ * change what gets written — locked entries are copied from storage either
+ * way — but a model that quietly rewrites a person's own words is a fact
+ * worth seeing in the logs before it is a fact worth seeing in the product.
+ */
+export function countLockViolations(
+  lockedEntries: CarriedEntry[],
+  returned: TopOfMindSynthesisEntry[],
+): number {
+  const returnedBodies = new Set(returned.map((entry) => entry.body));
+  return lockedEntries.filter((entry) => !returnedBodies.has(entry.body)).length;
+}
+
+// ---------------------------------------------------------------------------
+// Versioning
+// ---------------------------------------------------------------------------
+
+export interface PersistedEntry {
+  type: TopOfMindEntryType;
+  body: string;
+  belief: string | null;
+  prompt: string | null;
+  lockedAt: Date | null;
+  pinnedAt: Date | null;
+  dismissedAt: Date | null;
+  citedSignalIds: string[];
+}
+
+/**
+ * The order a reader meets the artifact in:
+ *   pinned, then locked, then what the model wrote, then dismissed.
+ *
+ * Pinned first because pinning is the owner saying "keep this where I can see
+ * it". Dismissed last because they are carried only so a dismissal survives
+ * the next regeneration; every read path filters them out by default.
+ */
+export function assembleEntries(input: {
+  carried: CarriedEntry[];
+  generated: TopOfMindSynthesisEntry[];
+}): PersistedEntry[] {
+  const humanTouched = input.carried.filter(isHumanTouched);
+  const carriedBodies = new Set(humanTouched.map((entry) => entry.body));
+
+  const bySortOrder = (a: CarriedEntry, b: CarriedEntry) => a.sortOrder - b.sortOrder;
+  const toPersisted = (entry: CarriedEntry): PersistedEntry => ({
+    type: entry.type,
+    body: entry.body,
+    belief: entry.belief,
+    prompt: entry.prompt,
+    lockedAt: entry.lockedAt,
+    pinnedAt: entry.pinnedAt,
+    dismissedAt: entry.dismissedAt,
+    citedSignalIds: entry.citedSignalIds,
+  });
+
+  const pinned = humanTouched
+    .filter((entry) => entry.pinnedAt !== null && entry.dismissedAt === null)
+    .sort(bySortOrder)
+    .map(toPersisted);
+  const locked = humanTouched
+    .filter(
+      (entry) =>
+        entry.lockedAt !== null && entry.pinnedAt === null && entry.dismissedAt === null,
+    )
+    .sort(bySortOrder)
+    .map(toPersisted);
+  const dismissed = humanTouched
+    .filter((entry) => entry.dismissedAt !== null)
+    .sort(bySortOrder)
+    .map(toPersisted);
+
+  const generated = input.generated
+    // The model was asked to reproduce locked entries; those copies are
+    // redundant with the verbatim ones, and a dismissed body coming back is
+    // the regeneration re-proposing something the owner already refused.
+    .filter((entry) => !carriedBodies.has(entry.body))
+    .map<PersistedEntry>((entry) => ({
+      type: entry.type,
+      body: entry.body,
+      belief: entry.belief ?? null,
+      prompt: entry.prompt ?? null,
+      lockedAt: null,
+      pinnedAt: null,
+      dismissedAt: null,
+      citedSignalIds: entry.citedSignalIds,
+    }));
+
+  return [...pinned, ...locked, ...generated, ...dismissed];
+}
+
+/**
+ * Same entries, same order, same citations — nothing for a reader to notice.
+ *
+ * Dismissed entries are excluded from the comparison because they are
+ * excluded from every read: they ride along so a dismissal survives the next
+ * regeneration, and where they sit in the list is not something anyone sees.
+ */
+export function isUnchanged(previous: CarriedEntry[], next: PersistedEntry[]): boolean {
+  const before = [...previous]
+    .filter((entry) => entry.dismissedAt === null)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+  const after = next.filter((entry) => entry.dismissedAt === null);
+  if (before.length !== after.length) return false;
+
+  // Citations compared as sets, not sequences: the carried order comes from a
+  // query with no ORDER BY and the generated order from the model, so the same
+  // citations arriving shuffled would otherwise read as a change and mislabel
+  // a genuine no-change pass as `regenerated`.
+  const sortedIds = (ids: string[]): string => [...ids].sort().join(",");
+
+  return before.every((entry, index) => {
+    const candidate = after[index]!;
+    return (
+      entry.type === candidate.type &&
+      entry.body === candidate.body &&
+      (entry.belief ?? null) === candidate.belief &&
+      (entry.prompt ?? null) === candidate.prompt &&
+      sortedIds(entry.citedSignalIds) === sortedIds(candidate.citedSignalIds)
+    );
+  });
+}
+
+/** Everything the previous version held, in the order it held it. */
+function carryEverything(previous: LiveArtifactSnapshot): PersistedEntry[] {
+  return [...previous.entries]
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((entry) => ({
+      type: entry.type,
+      body: entry.body,
+      belief: entry.belief,
+      prompt: entry.prompt,
+      lockedAt: entry.lockedAt,
+      pinnedAt: entry.pinnedAt,
+      dismissedAt: entry.dismissedAt,
+      citedSignalIds: entry.citedSignalIds,
+    }));
+}
+
+async function writeVersion(
+  tx: WakaTx,
+  input: {
+    profileId: string;
+    previous: LiveArtifactSnapshot | null;
+    entries: PersistedEntry[];
+    reason: TopOfMindRevisionReason;
+    now: Date;
+  },
+): Promise<{ id: string; version: number }> {
+  // Supersede before inserting: the partial unique index permits exactly one
+  // live row per profile, so the old one has to step down first.
+  if (input.previous) {
+    await tx
+      .update(topOfMinds)
+      .set({ status: "superseded", replacedAt: input.now })
+      .where(eq(topOfMinds.id, input.previous.id));
+  }
+
+  const [created] = await tx
+    .insert(topOfMinds)
+    .values({
+      profileId: input.profileId,
+      version: (input.previous?.version ?? 0) + 1,
+      status: "live",
+      reason: input.reason,
+    })
+    .returning({ id: topOfMinds.id, version: topOfMinds.version });
+  if (!created) throw new Error("Failed to insert top of mind version");
+
+  if (input.previous) {
+    await tx
+      .update(topOfMinds)
+      .set({ replacedById: created.id })
+      .where(eq(topOfMinds.id, input.previous.id));
+  }
+
+  for (const [index, entry] of input.entries.entries()) {
+    const [insertedEntry] = await tx
+      .insert(topOfMindEntries)
+      .values({
+        topOfMindId: created.id,
+        type: entry.type,
+        body: entry.body,
+        belief: entry.belief,
+        prompt: entry.prompt,
+        lockedAt: entry.lockedAt,
+        pinnedAt: entry.pinnedAt,
+        dismissedAt: entry.dismissedAt,
+        sortOrder: index,
+      })
+      .returning({ id: topOfMindEntries.id });
+    if (!insertedEntry) throw new Error("Failed to insert top of mind entry");
+
+    if (entry.citedSignalIds.length > 0) {
+      await tx
+        .insert(topOfMindEntrySignals)
+        .values(
+          entry.citedSignalIds.map((signalId) => ({
+            entryId: insertedEntry.id,
+            signalId,
+          })),
+        )
+        .onConflictDoNothing();
+    }
+  }
+
+  return created;
 }
 
 // ---------------------------------------------------------------------------
@@ -276,56 +867,13 @@ export async function refreshTopOfMindForProfile(
     // generated entries here would empty someone's top of mind on a
     // technicality, without a single model call having been made.
     const nothingReconsidered = selected.length === 0 && previous !== null;
-
-    /**
-     * AN EMPTY REPLY IS NOT A VERDICT THAT YOU ARE EMPTY.
-     *
-     * `assembleEntries` keeps a carried entry only when it is locked, pinned
-     * or dismissed — everything else is expected to be re-supplied by
-     * `generated`. That is right when the model answered, and catastrophic
-     * when it did not: an empty `generated` wrote a NEW VERSION with every
-     * machine-authored entry gone, superseding the old one, with nothing in
-     * the product able to bring it back.
-     *
-     * Three reachable inputs produce an empty `generated` without any error
-     * being raised: the model returns one entry whose `type` is outside the
-     * enum and the whole zod object fails, so the reply collapses to
-     * `{entries: []}`; the model cites only invented signal ids and
-     * `validateSynthesizedEntries` drops them all; or the model takes "return
-     * the current entries unchanged" literally and replies with `noChange`
-     * and no entries. In every case the person opens the app after an
-     * ordinary capture and finds their top of mind blank.
-     *
-     * `carryEverything` is the honest record of "the machine had nothing to
-     * say this time", and it already exists for exactly that reading one
-     * branch up. There is no case where deleting a person's standing artifact
-     * because a model call came back empty is the correct outcome.
-     */
-    const modelSaidNothingUsable = selected.length > 0 && generated.length === 0;
-    if (modelSaidNothingUsable && previous !== null) {
-      console.warn("[top-of-mind] synthesis returned no usable entries; carrying the artifact", {
-        profileId: input.profileId,
-        selected: selected.length,
-        previousEntries: previous.entries.length,
-      });
-    }
-
-    /**
-     * AND `no_change` MUST MEAN NO CHANGE. `modelSaidNoChange` short-circuited
-     * the comparison below while `entries` was still whatever `assembleEntries`
-     * had produced — so a reply of `{noChange: true, entries: []}` wrote a
-     * TRUNCATED artifact and labelled the truncation `no_change`. The label and
-     * the content now come from the same decision.
-     */
-    const carryPrevious =
-      previous !== null && (nothingReconsidered || modelSaidNoChange || modelSaidNothingUsable);
-
-    const entries = carryPrevious
+    const entries = nothingReconsidered
       ? carryEverything(previous)
       : assembleEntries({ carried: previous?.entries ?? [], generated });
 
     const unchanged =
-      previous !== null && (carryPrevious || isUnchanged(previous.entries, entries));
+      previous !== null &&
+      (nothingReconsidered || modelSaidNoChange || isUnchanged(previous.entries, entries));
     const reason: TopOfMindRevisionReason = previous === null
       ? "initial"
       : unchanged
@@ -359,35 +907,6 @@ export async function refreshTopOfMindForProfile(
  * profile's own, and its co-editing mechanism (proposals, affirmations) is a
  * different versioning story. The seam exists so the queue can route the job
  * type today and the behaviour can land without touching the router.
- *
- * IT IS A STUB. It logs and returns; no group artifact has ever been written
- * by it. Anything a member sees on a room's board today came from somewhere
- * else, and `GET /api/groups/:groupId/top-of-mind` reads a table this
- * function does not fill.
- *
- * WHOEVER FILLS IT IN OWNS ONE RULE THAT IS NOT ENFORCED HERE. Attribution is
- * allowed and is the point: a group entry "may attribute contributing members'
- * shared signals" (`docs/data-model.md`, "Sharing and privacy", rule 4). What
- * may never cross is the evidence — the shared surface of a signal is its
- * distilled statement, not the captures under it, and an inspiration does not
- * travel whatever its visibility says (same section, rules 1 and 2).
- *
- * Today that line is held by the read path, not the write path, and it is held
- * one notch tighter than the canon demands: `loadGroupTopOfMind` in
- * `routes/groups-top-of-mind.ts` selects `topOfMindEntrySignals.ownerProfileId`
- * and joins `profiles` for a name, never selecting `signalId` at all, and
- * `routes/groups.ts` names those two fields again on the way out. So an entry
- * tells a room WHICH MEMBERS fed it, by profile id and display name, and not
- * which signal of theirs did. It is a rule about a SELECT list, which means
- * the shape that breaks it is not a missing `if` — it is someone spreading the
- * citation row instead of naming its fields, and shipping every member's
- * signal ids to the room.
- *
- * The write side has one obligation that follows from that: group citations
- * must carry `ownerProfileId`, or the read path has nothing to attribute with
- * and will show a room an entry that came from nobody. The personal pass
- * leaves it null on purpose — on a personal artifact the answer is never in
- * question — so it is not something the profile path can be copied for.
  */
 export async function refreshTopOfMindForGroup(input: {
   groupId: string;

@@ -27,13 +27,3 @@ export {
   createTestDatabase,
   type TestDatabase,
 } from "./db.js";
-
-/* Unlike the two above this one opens nothing — it is an in-memory stand-in for
-   a single table, used by the no-database suite. Import it directly rather than
-   through this barrel from a spec that must not pull in `./db.js`. */
-export {
-  applyLoginFailureUpsert,
-  loginFailureDb,
-  type LoginFailureRow,
-  type LoginFailureStore,
-} from "./login-failure-store.js";

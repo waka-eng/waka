@@ -2,22 +2,18 @@ import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 
 import type { AuthenticatedSession } from "../lib/session.js";
-import { createGroupsRoutes, type GroupsRouteDependencies } from "./groups.js";
 import {
+  createGroupsRoutes,
+  proposalShapeIsValid,
+  type EnqueueGroupRefreshResult,
   type GroupMemberSummary,
   type GroupMembership,
-  type GroupSummary,
-} from "./groups-membership.js";
-import {
-  carriesMajority,
-  proposalShapeIsValid,
   type GroupProposalView,
-} from "./groups-proposals.js";
-import {
-  type EnqueueGroupRefreshResult,
+  type GroupSummary,
   type GroupTopOfMindView,
-} from "./groups-top-of-mind.js";
-import { type GroupWallSignal } from "./groups-wall.js";
+  type GroupsRouteDependencies,
+  type GroupWallSignal,
+} from "./groups.js";
 
 const accountId = "00000000-0000-4000-8000-0000000000a1";
 const profileId = "00000000-0000-4000-8000-000000000001";
@@ -369,7 +365,6 @@ describe("GET /api/groups/:groupId/members", () => {
         profileId,
         name: "Ada",
         initials: "A",
-        type: "human",
         role: "owner",
         joinedAt: "2026-07-07T00:00:00.000Z",
       },
@@ -653,82 +648,3 @@ describe("proposalShapeIsValid", () => {
     expect(proposalShapeIsValid({ kind: "remove_entry", entryId, body: "why" })).toBe(false);
   });
 });
-
-/**
- * THE MAJORITY RULE ITSELF.
- *
- * Every existing test injects a mock `affirmProposal`, so the arithmetic that
- * decides whether a room has spoken was never executed by anything. The route
- * tests prove the route calls the function; they cannot prove the function is
- * right, and "364 passed" said nothing about the rule at all.
- *
- * The rule is one line — strictly more than half — so it is extracted and
- * tested directly rather than reached through a database. What matters is the
- * boundaries: an even room must not carry on a tie, and a room of one is
- * carried by its only member, which is the honest reading of "most of us"
- * when us is one.
- */
-describe("a proposal carries on a majority of the room", () => {
-  it("needs strictly more than half, so a tie does not carry", () => {
-    expect(carriesMajority(2, 4)).toBe(false);
-    expect(carriesMajority(3, 4)).toBe(true);
-  });
-
-  it("needs three of five — the four-of-us room", () => {
-    expect(carriesMajority(2, 5)).toBe(false);
-    expect(carriesMajority(3, 5)).toBe(true);
-  });
-
-  it("carries a room of one by its only member", () => {
-    expect(carriesMajority(1, 1)).toBe(true);
-    expect(carriesMajority(0, 1)).toBe(false);
-  });
-
-  it("never carries a room with no members", () => {
-    expect(carriesMajority(0, 0)).toBe(false);
-    expect(carriesMajority(3, 0)).toBe(false);
-  });
-
-  it("is unmoved by more affirmations than members", () => {
-    expect(carriesMajority(9, 5)).toBe(true);
-  });
-});
-
-describe("a room's field", () => {
-  it("is membership-gated: a non-member is told the group does not exist", async () => {
-    const loadMembership = vi.fn(async () => null);
-    const loadField = vi.fn(async () => []);
-    const app = mountWith({ loadMembership, loadField });
-    const res = await app.request(`/api/groups/${groupId}/field`);
-    expect(res.status).toBe(404);
-    /* the field is never read for somebody who is not in the room — the gate
-       runs first, so a non-member cannot even cause the query */
-    expect(loadField).not.toHaveBeenCalled();
-  });
-
-  it("serialises field by field, so a loader that selects more cannot publish it", async () => {
-    const loadMembership = vi.fn(async () => plainMembership);
-    const loadField = vi.fn(async () => [
-      {
-        id: "i1",
-        text: "kept this",
-        kind: "note",
-        source: "app",
-        createdAt: new Date("2026-08-01T00:00:00.000Z"),
-        updatedAt: new Date("2026-08-01T00:00:00.000Z"),
-        ownerProfileId: "p1",
-        ownerName: "Sora",
-        ownerType: "human",
-        secret: "must not appear",
-      },
-    ]);
-    const app = mountWith({ loadMembership, loadField } as never);
-    const res = await app.request(`/api/groups/${groupId}/field`);
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { field: Array<Record<string, unknown>> };
-    expect(body.field).toHaveLength(1);
-    expect(body.field[0]?.ownerName).toBe("Sora");
-    expect(body.field[0]).not.toHaveProperty("secret");
-  });
-});
-

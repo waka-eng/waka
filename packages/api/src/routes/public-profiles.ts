@@ -113,11 +113,6 @@ async function getPublicProfileByHandle(
     .from(profiles)
     .where(
       and(
-        /* AND A PERSON'S, NEVER AN AGENT'S. The handle columns live on every
-           profile, so an agent switched public was reachable here exactly like
-           a human one — publishing an account's memory to anyone with the URL.
-           A public profile is a person choosing to be found. */
-        eq(profiles.type, "human"),
         eq(profiles.publicHandle, handle),
         eq(profiles.publicProfileEnabled, true),
       ),

@@ -3,8 +3,7 @@ export type AdminJobType =
   | "enrich_attachment"
   | "derive_signals"
   | "refresh_top_of_mind"
-  | "refresh_group_top_of_mind"
-  | "reembed_signal";
+  | "refresh_group_top_of_mind";
 
 /**
  * A queue row as this app is allowed to see it.

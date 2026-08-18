@@ -5,30 +5,24 @@
  * it cannot prove the two things that matter most when the model misbehaves:
  * that a locked entry is reproduced from the stored row rather than from what
  * came back, and that a citation the profile does not hold never reaches the
- * database. Both are enforced in code, so both are asserted here.
- *
- * The subjects live in the stage modules the pass runs in order —
- * `top-of-mind-selection.ts`, `-artifact.ts`, `-validation.ts`,
- * `-versioning.ts` — and every one of them is a pure function or a snapshot
- * type, which is why this suite needs neither a database nor a provider.
+ * database. Both are enforced here, so both are asserted here.
  */
 
 import { describe, expect, it } from "vitest";
 
-import { type CarriedEntry } from "./top-of-mind-artifact.js";
 import {
+  assembleEntries,
   chooseSelection,
-  computeComebackBonus,
-  computeSelectionScore,
   SELECTION_DISPUTED_MULTIPLIER,
   TOP_OF_MIND_MIN_SIGNALS,
   TOP_OF_MIND_SIGNAL_LIMIT,
-} from "./top-of-mind-selection.js";
-import {
+  computeComebackBonus,
+  computeSelectionScore,
   countLockViolations,
+  isUnchanged,
   validateSynthesizedEntries,
-} from "./top-of-mind-validation.js";
-import { assembleEntries, isUnchanged } from "./top-of-mind-versioning.js";
+  type CarriedEntry,
+} from "./top-of-mind-synthesis.js";
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = new Date("2026-08-15T12:00:00.000Z");

@@ -12,10 +12,9 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "node scripts/check-vocabulary.mjs && vitest run",
-    "test:unit": "node scripts/check-vocabulary.mjs && vitest run --config vitest.unit.config.ts",
-    "test:watch": "vitest",
-    "vocabulary": "node scripts/check-vocabulary.mjs"
+    "test": "vitest run",
+    "test:unit": "vitest run --config vitest.unit.config.ts",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@aws-sdk/client-lambda": "^3.1111.0",

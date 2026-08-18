@@ -62,13 +62,6 @@ export interface AdminBackgroundJobSummary {
   maxAttempts: number;
   runAfter: string;
   lockedAt: string | null;
-  /**
-   * When this job last began running. Read alongside `runAfter` it is what
-   * explains a job sitting an hour out with no error against it: the account
-   * spent its model budget, and the queue moved the work rather than dropping
-   * it. Without it, a deferral is indistinguishable from a stuck queue.
-   */
-  startedAt: string | null;
   lastError: string | null;
   idempotencyKey: string | null;
   createdAt: string;
@@ -154,7 +147,6 @@ export function serializeJob(job: BackgroundJob): AdminBackgroundJobSummary {
     maxAttempts: job.maxAttempts,
     runAfter: job.runAfter.toISOString(),
     lockedAt: job.lockedAt?.toISOString() ?? null,
-    startedAt: job.startedAt?.toISOString() ?? null,
     lastError: sanitizeLastError(job.lastError),
     idempotencyKey: job.idempotencyKey,
     createdAt: job.createdAt.toISOString(),

@@ -16,23 +16,6 @@
  * Deliberately modest: no headless browser, one request per URL, a short
  * timeout, hand-followed redirects, and a hard character cap. A page that
  * refuses to speak is recorded as such so it is not knocked on forever.
- *
- * WHAT IS HERE AND WHAT IS NEXT DOOR. This file is the part that touches the
- * outside world: deciding an address may be dereferenced at all, bounding how
- * long the exchange may take and how many bytes it may cost, and writing the
- * verdict onto the attachment. Turning the bytes that come back into words is
- * `signal-enrichment-html.ts`, which imports nothing and can be read without
- * any of this.
- *
- * The two halves were separated along that line and no other. The body
- * deadline is COMPUTED from whatever byte cap its caller passes, and both
- * callers that pass one — the link path below and the image path below it —
- * have to stay where a reader can see them against `bodyTimeoutMs`. That is
- * why this file is not further divided into "link fetching" and "image
- * description" even though those read like two things: it would put the two
- * callers in separate files and the derivation in a third, which is exactly
- * the arrangement that let a cap and a deadline drift into forbidding what
- * they advertised.
  */
 
 import { lookup } from "node:dns/promises";
@@ -53,152 +36,31 @@ import {
   MAX_IMAGE_BYTES,
 } from "./image-description.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
-import {
-  composeEnrichmentText,
-  extractLinkMetadata,
-  extractPageBody,
-  extractYouTubeDescription,
-  isYouTubeHost,
-  type LinkMetadata,
-} from "./signal-enrichment-html.js";
 
-/**
- * The reading half, re-offered under this module's name.
- *
- * Named one by one rather than `export *`, so this list is a statement about
- * what enrichment's front door offers and adding to the file next door does
- * not silently widen it. It exists because `docs/map.md` sends a reader to
- * `signal-enrichment.ts` for page bodies and because the tests and the prompt
- * fence test already import these from here — moving a file should not oblige
- * every caller to learn that it moved. Read `signal-enrichment-html.ts` when
- * you want to know how any of them work.
- */
-export {
-  composeEnrichmentText,
-  extractLinkMetadata,
-  extractPageBody,
-  extractYouTubeDescription,
-  isAuthWallSummary,
-  stripBoilerplateLines,
-  MAX_ENRICHMENT_TEXT_CHARS,
-  type LinkMetadata,
-} from "./signal-enrichment-html.js";
-
-/**
- * TWO DEADLINES, BECAUSE AN EXCHANGE HAS TWO DIFFERENT WAYS OF GOING WRONG.
- *
- * There used to be one number — six seconds — and it was fine while it only
- * ever covered the headers. Once the deadline was made to survive into the
- * body read (which it had to; see `fetchWithTimeout`) that single number
- * started answering a question it was never sized for. It stopped the drip,
- * which was the point — and it also refused an 8 MiB image from anything not
- * sustaining well over a megabyte a second, and refused an honest little page
- * from a server that took seven seconds to think. A budget that cannot spend
- * the allowance advertised beside it is not a budget, it is a contradiction
- * waiting for a bug report. Turning a hang into a permanent silent failure for
- * pages that were being read correctly the day before is not a fix.
- *
- * Getting an answer STARTED is a wall-clock question. An origin that has sent
- * nothing after six seconds is not about to; how large the eventual body might
- * be has no bearing on it. That is `FETCH_HEADERS_TIMEOUT_MS`, unchanged in
- * both value and meaning from before any of this, because nothing about the
- * bug argued it was the wrong number for the job it was actually doing.
- *
- * Reading a body is a THROUGHPUT question, and it has to be, because the two
- * callers here are allowed to read amounts that differ by sixteen times. A
- * deadline that ignores that either strangles the image path or hands the link
- * path far more rope than it needs. So the body's deadline is computed from
- * the caller's own byte cap — see `bodyTimeoutMs`, which is the piece that
- * makes the two constants incapable of disagreeing again.
- *
- * Rejected on the way here: one larger total budget for everybody (an origin
- * that silently sits on its headers would then hold the worker for the image
- * path's whole allowance, thirty-eight seconds, for having sent nothing at
- * all); and shrinking MAX_IMAGE_BYTES until it fit inside six seconds, which
- * would have quietly narrowed what a member is allowed to save in order to
- * settle an argument between two timers.
- */
-export const FETCH_HEADERS_TIMEOUT_MS = 6000;
-
-/**
- * The slowest body we are willing to sit through, in bytes per second.
- *
- * Two megabits. Every origin that is actually serving beats this by an order
- * of magnitude — it is under the floor of a congested shared host, let alone
- * anything behind a CDN. What it excludes is the drip: the page that answers
- * its headers instantly and then releases one byte per tick forever, which is
- * the shape that used to run until the Lambda's fourteen-minute ceiling.
- *
- * Deliberately generous rather than typical. The cost of setting it too low is
- * seconds on a background job nobody is watching; the cost of setting it too
- * high is a real page that a member saved being permanently dropped, because
- * an abort classifies as a retryable failure that then fails identically on
- * every retry until the attempts run out. Those are not symmetrical mistakes.
- */
-const MIN_BODY_BYTES_PER_SEC = 256 * 1024;
-
-/**
- * What even a one-kilobyte body gets, before throughput enters into it.
- *
- * The rate above answers "how long may these bytes take to arrive"; it does
- * not answer "how long may the origin take to produce them". A server-rendered
- * page under load, a cold cache, a database behind the request — these emit
- * headers at once and then take seconds to finish a body far smaller than the
- * cap. Sizing a small read purely by rate would give that page under two
- * seconds and drop it, which is the regression this whole constant exists to
- * prevent.
- */
-const BODY_TIMEOUT_FLOOR_MS = 10_000;
-
-/**
- * How long a caller allowed to read `maxBytes` may spend reading them.
- *
- * Derived, not declared, so the deadline and the byte cap cannot drift apart:
- * change either cap and its deadline moves with it. In the shipping cases that
- * is ten seconds for a page (the floor; 512 KB at the rate above is only two)
- * and thirty-two for an image. Worst case per job is therefore sixteen seconds
- * for a link and thirty-eight for an image — bounded by us, rather than by the
- * far end's goodwill, which is the whole point.
- */
-export function bodyTimeoutMs(maxBytes: number): number {
-  const atFloorRate = Math.ceil((maxBytes / MIN_BODY_BYTES_PER_SEC) * 1000);
-  return Math.max(BODY_TIMEOUT_FLOOR_MS, atFloorRate);
-}
+const FETCH_TIMEOUT_MS = 6000;
 
 /** Redirect hops we will follow, each re-checked. Enough for shorteners. */
 const MAX_REDIRECTS = 4;
 
 /**
- * How much of a fetched document the extractors are allowed to see.
+ * How much of a page is kept.
  *
- * The patterns in `signal-enrichment-html.ts` run over attacker-chosen HTML:
- * the page belongs to whoever wrote it and a member only chose to save a link
- * to it. Handing a regex a megabyte of hostile markup is a denial of service
- * waiting to be written, and nothing useful lives that far down — metadata
- * sits in the head and the body extractor takes what it needs from the first
- * screens.
- *
- * This cap is enforced HERE, at the one place bytes become a string, and not
- * in the file that does the matching. Those functions take a string and cannot
- * tell whether it came off a socket or out of a test; making each of them
- * re-check a length would be four chances to forget. One truncation at the
- * boundary is the whole guarantee.
+ * Enough for an article's argument, not enough to mirror the article. The cap
+ * is also what keeps one saved link from outweighing everything else a profile
+ * has ever written when extraction reads its material.
  */
-const MAX_HTML_CHARS = 128_000;
+export const MAX_ENRICHMENT_TEXT_CHARS = 4000;
 
 /**
- * The same cap in bytes. MAX_HTML_CHARS is a character budget; ×4 is the
- * widest a UTF-8 encoding of it can be, so this truncates a runaway page
- * without ever cutting a page that would have fit.
+ * How much of a fetched document the extractors are allowed to see.
  *
- * One constant rather than the expression written at each use, because it is
- * now used twice — once to stop the read and once to size the read's deadline
- * — and those two must not be allowed to disagree.
- *
- * Exported so the deadline tests can ask `bodyTimeoutMs` for the link path's
- * real budget instead of restating it as a number that would go stale.
+ * The patterns below run over attacker-chosen HTML: the page belongs to
+ * whoever wrote it and a member only chose to save a link to it. Handing a
+ * regex a megabyte of hostile markup is a denial of service waiting to be
+ * written, and nothing useful lives that far down — metadata sits in the head
+ * and the body extractor takes what it needs from the first screens.
  */
-export const MAX_HTML_BYTES = MAX_HTML_CHARS * 4;
+const MAX_HTML_CHARS = 128_000;
 
 /**
  * A realistic browser UA, not an honest bot one. Several large sites serve bot
@@ -207,6 +69,235 @@ export const MAX_HTML_BYTES = MAX_HTML_CHARS * 4;
  */
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
+
+// ---------------------------------------------------------------------------
+// Text extraction
+// ---------------------------------------------------------------------------
+
+function decodeEntities(value: string): string {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+    // Hex entities as well as decimal ones. Seen on a real save as
+    // `&#x27;와인 바꿔치기 논란&#x27;`, which extraction then reads as part of
+    // the words.
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(Number.parseInt(code, 16)))
+    .replace(/&nbsp;/g, " ");
+}
+
+function collapse(value: string): string {
+  return decodeEntities(value).replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Titles a site serves when it wants a login instead of showing the page.
+ *
+ * Stored verbatim these are worse than nothing: a LinkedIn post save came back
+ * as "Sign Up | LinkedIn — 500 million+ members | Manage your professional
+ * identity…", so the capture read as *a LinkedIn account page* rather than as
+ * the post its owner reacted to. Silence leaves the person's own words standing
+ * alone, which is the truthful outcome.
+ */
+const AUTH_WALL_TITLE =
+  /^(?:sign\s?up|sign\s?in|log\s?in|login|register|create an account|join now|로그인|회원가입)\b/i;
+
+/** True when a page is offering an account rather than its content. */
+export function isAuthWallSummary(title: string | null, description: string | null): boolean {
+  if (!title) return false;
+  if (!AUTH_WALL_TITLE.test(title.trim())) return false;
+  // A real article may open with the word "Login"; an auth wall pairs that
+  // title with the site's generic pitch rather than with a subject.
+  const body = (description ?? "").toLowerCase();
+  return (
+    body.length === 0 ||
+    /members|create (?:an )?account|professional (?:identity|network|community)|sign\s?up|join|비밀번호|계정/.test(
+      body,
+    )
+  );
+}
+
+/**
+ * Lines a creator repeats on every upload: contact addresses, socials, the
+ * schedule, music credits, comment policy. They say nothing about the thing
+ * and, on a short description, they outweigh what does.
+ *
+ * Matched per LINE, never per sentence. Splitting on "." as well shreds the
+ * text it is meant to clean — Korean prose and bare URLs both contain periods,
+ * so `사업..` becomes `사업 —` and `www.youtube.com` becomes `www — youtube — com`.
+ */
+const BOILERPLATE_LINE =
+  /비즈니스\s*문의|광고\s*문의|협찬|business inquir|인스타그램|틱톡|업로드\s*일정|구독\s*(?:과|및|,)?\s*좋아요|\bBGM\b|음원\s*제공|저작권|편집\s*툴|Premiere\s*Pro|After\s*Effect|댓글은\s*삭제|혐오\s*및\s*차별/i;
+
+/** Places a creator points you at rather than tells you something. */
+const SOCIAL_HOST =
+  /\b(?:instagram|tiktok|facebook|twitter|threads|patreon|discord|twitch|linkedin|substack|t\.me|open\.kakao|cafe\.naver|blog\.naver)\b/i;
+
+/**
+ * Line SHAPES that are a sign-off in any language.
+ *
+ * A keyword list only knows the languages someone thought to add, so a Japanese
+ * or Spanish creator's sign-off walks straight through it. These do not depend
+ * on vocabulary: an address, a link to a profile, or a short `label : url` pair
+ * is a pointer somewhere else, not a sentence about the thing. Structure is the
+ * durable signal; keywords are the top-up.
+ */
+function isStructuralBoilerplate(line: string): boolean {
+  // A bare link on its own line.
+  if (/^https?:\/\/\S+$/i.test(line)) return true;
+  // `label : https://…` — the shape of every "instagram : <url>" line.
+  if (/^.{0,40}[:：]\s*https?:\/\/\S+$/i.test(line)) return true;
+  // A short line that exists to carry an address.
+  if (line.length <= 120 && /[\w.+-]+@[\w.-]+\.\w{2,}/.test(line)) return true;
+  // A short line pointing at a profile somewhere else.
+  if (line.length <= 160 && SOCIAL_HOST.test(line) && /https?:\/\//i.test(line)) return true;
+  return false;
+}
+
+/**
+ * Drop a creator's standing sign-off from a description, keeping its prose.
+ *
+ * Structure first, vocabulary second — see {@link isStructuralBoilerplate}.
+ */
+export function stripBoilerplateLines(value: string): string {
+  const kept = value
+    .split(/\r?\n+/)
+    .map((line) => line.trim())
+    .filter(
+      (line) =>
+        line.length > 0 && !isStructuralBoilerplate(line) && !BOILERPLATE_LINE.test(line),
+    );
+  return kept.join(" ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * A YouTube video's own description, with the creator's sign-off removed.
+ *
+ * Read from `shortDescription` in the embedded player JSON rather than from
+ * `og:description`, because the og tag arrives already whitespace-collapsed —
+ * the line breaks that separate "what this video is about" from "business
+ * inquiries / instagram / upload schedule" are gone by then, and the two become
+ * one run of text that cannot be told apart. `shortDescription` keeps them, so
+ * the sign-off can be dropped line by line.
+ */
+export function extractYouTubeDescription(html: string): string | null {
+  const match = html.match(/"shortDescription":"((?:[^"\\]|\\.)*)"/);
+  if (!match) return null;
+  let raw: string;
+  try {
+    raw = JSON.parse(`"${match[1]!}"`) as string;
+  } catch {
+    return null;
+  }
+  const stripped = stripBoilerplateLines(decodeEntities(raw));
+  return stripped.length > 0 ? stripped : null;
+}
+
+/** Blocks that exist to move you elsewhere rather than to say anything. */
+const CHROME_BLOCK =
+  /<(script|style|noscript|svg|nav|header|footer|aside|form|template)[^>]*>[\s\S]*?<\/\1>/gi;
+
+/**
+ * The page's own prose.
+ *
+ * This is the point of link enrichment. A title and a one-line blurb are ~200
+ * characters — enough to name what was saved, nowhere near enough to know what
+ * it argued — so a profile whose captures are all links carries a fraction of
+ * the material of one that pastes essays. Paragraphs are where that closes.
+ *
+ * Deliberately crude: chrome stripped, `<p>` blocks preferred, short fragments
+ * (nav links, captions, cookie notices) dropped, and a whole-container fallback
+ * for the many pages that never use a paragraph tag. Not a readability port.
+ */
+export function extractPageBody(html: string, budget = MAX_ENRICHMENT_TEXT_CHARS): string | null {
+  if (budget <= 0) return null;
+  const container =
+    html.match(/<article[^>]*>([\s\S]*?)<\/article>/i)?.[1] ??
+    html.match(/<main[^>]*>([\s\S]*?)<\/main>/i)?.[1] ??
+    html;
+  const cleaned = container.replace(CHROME_BLOCK, " ").replace(/<!--[\s\S]*?-->/g, " ");
+
+  const paragraphs: string[] = [];
+  for (const match of cleaned.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)) {
+    const text = collapse(match[1]!.replace(/<[^>]+>/g, " "));
+    // Long enough to be prose rather than a caption, a byline, or a nav item.
+    if (text.length < 60) continue;
+    paragraphs.push(text);
+    if (paragraphs.join(" ").length >= budget) break;
+  }
+  if (paragraphs.length > 0) return paragraphs.join(" ").slice(0, budget).trim();
+
+  // Div soup. Most pages that hide their content from a paragraph scan are
+  // ordinary sites with an unusual template, not empty ones — taking the
+  // stripped container is coarse but recovers material that would otherwise
+  // be lost entirely.
+  const flattened = collapse(cleaned.replace(/<[^>]+>/g, " "));
+  if (flattened.length < 60) return null;
+  return flattened.slice(0, budget).trim();
+}
+
+export interface LinkMetadata {
+  title: string | null;
+  description: string | null;
+  siteName: string | null;
+  previewImageUrl: string | null;
+}
+
+/** Structured facts a link card renders, og tags first. */
+export function extractLinkMetadata(html: string): LinkMetadata {
+  const meta = (name: string): string | null => {
+    const re = new RegExp(
+      `<meta[^>]+(?:property|name)=["']${name}["'][^>]*content=["']([^"']*)["']|` +
+        `<meta[^>]+content=["']([^"']*)["'][^>]*(?:property|name)=["']${name}["']`,
+      "i",
+    );
+    const m = html.match(re);
+    const raw = m?.[1] ?? m?.[2];
+    return raw ? collapse(raw) : null;
+  };
+
+  const titleTag = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const title = meta("og:title") || (titleTag ? collapse(titleTag[1]!) : null);
+  const rawDescription = meta("og:description") || meta("description");
+  const description = rawDescription ? stripBoilerplateLines(rawDescription) : null;
+
+  // A page asking for an account is not a page speaking. Reporting nothing is
+  // what makes the caller record `page_silent` instead of storing the site's
+  // own pitch as if it were the material.
+  if (isAuthWallSummary(title, rawDescription)) {
+    return { title: null, description: null, siteName: null, previewImageUrl: null };
+  }
+
+  return {
+    title: title && title.length > 0 ? title : null,
+    description: description && description.length > 0 ? description : null,
+    siteName: meta("og:site_name"),
+    previewImageUrl: meta("og:image") || meta("twitter:image"),
+  };
+}
+
+/**
+ * One field for extraction to read.
+ *
+ * The structured columns beside it exist to render a link card; this is the
+ * text. It leads with the page's own naming of itself because a video or a
+ * gallery frequently has no prose at all, and a title is still material.
+ */
+export function composeEnrichmentText(
+  parts: Array<string | null>,
+  cap = MAX_ENRICHMENT_TEXT_CHARS,
+): string | null {
+  const joined = parts
+    .map((part) => (part ?? "").trim())
+    .filter((part) => part.length > 0)
+    .join(" — ")
+    .trim();
+  if (joined.length === 0) return null;
+  return joined.slice(0, cap);
+}
 
 // ---------------------------------------------------------------------------
 // Fetching, with the hygiene a server-side fetch of a user's URL requires
@@ -233,58 +324,15 @@ export function isPrivateAddress(address: string): boolean {
   }
   if (version === 6) {
     const value = address.toLowerCase();
-    /**
-     * A v4 ADDRESS WEARING A v6 COAT, IN EVERY TEXTUAL FORM.
-     *
-     * This checked only the dotted spelling `::ffff:169.254.169.254`, and the
-     * one caller that reaches it never sees that spelling. `assertFetchableUrl`
-     * hands over `new URL(...).hostname`, and the WHATWG parser re-serialises
-     * a v4-mapped literal to HEX:
-     *
-     *   new URL("http://[::ffff:169.254.169.254]/").hostname
-     *     === "[::ffff:a9fe:a9fe]"
-     *
-     * So the dotted branch was unreachable in production, `isIP` returned 6,
-     * no other v6 rule matched, and the guard returned false — for the AWS and
-     * GCP instance metadata endpoint, which hands the Lambda role's
-     * credentials to anything that asks. The OS then resolves the v4-mapped
-     * socket to the real IPv4 peer, so the connection lands. A member only had
-     * to save a link on their own capture.
-     *
-     * Both spellings are handled now, and so are the other prefixes that carry
-     * a v4 address in the low 32 bits: `::x.x.x.x` (deprecated v4-compatible)
-     * and `64:ff9b::/96` (NAT64). Each is decoded back to its v4 form and
-     * re-checked, so there is one set of private ranges and no second list to
-     * drift.
-     */
-    const embedded = embeddedIPv4(value);
-    if (embedded) return isPrivateAddress(embedded);
+    // v4-mapped (::ffff:10.0.0.1) would otherwise slip past the v6 checks.
+    const mapped = value.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+    if (mapped) return isPrivateAddress(mapped[1]!);
     if (value === "::1" || value === "::") return true;
     if (/^f[cd]/.test(value)) return true; // unique local
     if (/^fe[89ab]/.test(value)) return true; // link local
     return false;
   }
   return false;
-}
-
-/**
- * The IPv4 address embedded in a v6 literal, in dotted form, or null.
- *
- * Handles the dotted tail (`::ffff:10.0.0.1`) and the hex tail
- * (`::ffff:a9fe:a9fe`) for the three prefixes that mean "this is really IPv4":
- * v4-mapped `::ffff:`, v4-compatible `::`, and NAT64 `64:ff9b::`.
- */
-function embeddedIPv4(value: string): string | null {
-  const prefixes = [/^::ffff:/, /^64:ff9b::/, /^::(?!$)/];
-  const prefix = prefixes.find((p) => p.test(value));
-  if (!prefix) return null;
-  const tail = value.replace(prefix, "");
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(tail)) return tail;
-  const hex = tail.match(/^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
-  if (!hex) return null;
-  const hi = Number.parseInt(hex[1]!, 16);
-  const lo = Number.parseInt(hex[2]!, 16);
-  return `${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`;
 }
 
 /**
@@ -347,96 +395,18 @@ export async function assertFetchableUrl(url: string): Promise<void> {
   }
 }
 
-interface FetchBudget {
-  accept?: string;
-  /**
-   * The most the caller will read from this response — required, because it is
-   * what the body deadline is computed from. Passing the cap rather than the
-   * observed size is the point: the budget has to be settled before a single
-   * byte arrives, and it should be the same whether the page turns out to be
-   * one kilobyte or the full cap.
-   */
-  maxBytes: number;
-}
-
 /**
  * Follow redirects by hand so every hop is checked. `redirect: "follow"` lets a
  * public URL bounce us into the VPC on its second hop, which is the usual way
  * this protection is bypassed — so an image fetched by URL must come through
  * here too, not through a plain `fetch(..., { redirect: "follow" })`.
- *
- * THE DEADLINE HAS TO OUTLIVE THIS FUNCTION.
- *
- * `fetch` resolves when the response HEADERS arrive. The body is still on the
- * wire at that point, and reading it is the slow, attacker-controlled part. So
- * the obvious shape — `try { … } finally { clearTimeout(timer) }` — disarms
- * the deadline at exactly the moment it starts to matter, and that is how this
- * was written, under a comment asserting that the caller read the body "under
- * the same abort signal". The signal was passed, correctly; there was simply
- * nothing left alive to fire it. A page that answered its headers instantly
- * and then dribbled its body a byte at a time was never interrupted — undici's
- * own inactivity timer is reset by each byte that does arrive, so the read ran
- * on until the Lambda's 14-minute ceiling.
- *
- * The cost is not one slow job. Enrichment drains sequentially on a shared
- * background worker, so one hostile or broken page sits at the head of the
- * queue and every other account's derivation waits behind it for the full
- * fourteen minutes.
- *
- * So the clock is handed forward rather than cleared. It is armed once for the
- * headers, re-armed for the body the moment the headers land — a body cap's
- * worth of time, see `bodyTimeoutMs` — and only stopped when the caller calls
- * `release`. Two phases, one controller, so an abort in either phase reaches
- * the same open socket.
- *
- * WHAT THIS DOES NOT COVER: name resolution. `assertFetchableUrl` awaits
- * `lookup` from `node:dns/promises`, which takes no AbortSignal, so neither
- * deadline can interrupt it — and it runs once per hop, so a chain of
- * hostnames with blackholed nameservers can spend several resolver timeouts
- * (getaddrinfo's own, on the order of ten seconds each) entirely outside our
- * budget. Bounded by MAX_REDIRECTS rather than by us. It is written down here
- * instead of quietly rounded off because the previous comment on this function
- * claimed coverage it did not have, and that claim WAS the bug.
- *
- * CALLER CONTRACT: `release` on every exit, from a `finally` — which is what
- * both callers do. Skipping it now leaks an armed timer as well as an open
- * connection, so the penalty for forgetting is worse than it was when the
- * timer cleared itself. Nothing enforces this but the two call sites; a shape
- * that took a callback and released for you would enforce it, and is the right
- * answer if a third caller ever appears.
  */
 async function fetchWithTimeout(
   url: string,
-  { accept = "text/html,application/xhtml+xml", maxBytes }: FetchBudget,
-): Promise<{ response: Response; finalUrl: string; release: () => void }> {
+  accept = "text/html,application/xhtml+xml",
+): Promise<{ response: Response; finalUrl: string; controller: AbortController }> {
   const controller = new AbortController();
-  // Deliberately spanning the whole redirect chain rather than resetting per
-  // hop: five hops that each answer in five seconds is not a live page, it is
-  // a way to buy twenty-five seconds of the worker.
-  let timer = setTimeout(() => controller.abort(), FETCH_HEADERS_TIMEOUT_MS);
-
-  /**
-   * Stop the clock and let go of the socket. One call rather than two, because
-   * for the caller they are the same event: it is done with this exchange, and
-   * leaving either half behind is a leak — an armed timer that outlives its
-   * fetch, or a connection nobody is reading.
-   */
-  const release = (): void => {
-    clearTimeout(timer);
-    controller.abort();
-  };
-
-  /**
-   * Headers are in, so the question changes from "will this origin answer" to
-   * "can it deliver what we are willing to read". Swap the clock accordingly,
-   * here rather than at the call site: the caller already has one discipline
-   * to remember and a second one would be a second thing to forget.
-   */
-  const startBodyDeadline = (): void => {
-    clearTimeout(timer);
-    timer = setTimeout(() => controller.abort(), bodyTimeoutMs(maxBytes));
-  };
-
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
     let current = url;
     for (let hop = 0; ; hop += 1) {
@@ -448,21 +418,16 @@ async function fetchWithTimeout(
       });
       const location = response.headers.get("location");
       if (response.status < 300 || response.status >= 400 || !location) {
-        startBodyDeadline();
-        return { response, finalUrl: current, release };
+        // The caller reads the body under the same abort signal, so the
+        // timeout covers the download, not only the headers; the caller
+        // aborts once it has what it needs.
+        return { response, finalUrl: current, controller };
       }
-      if (hop >= MAX_REDIRECTS) {
-        // Out of hops. The caller still reads whatever this last response is,
-        // so it still needs a body deadline of its own.
-        startBodyDeadline();
-        return { response, finalUrl: current, release };
-      }
+      if (hop >= MAX_REDIRECTS) return { response, finalUrl: current, controller };
       current = new URL(location, current).toString();
     }
-  } catch (err) {
-    // Nothing was handed out, so nobody else can release it.
-    release();
-    throw err;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -515,49 +480,41 @@ export interface LinkEnrichment extends LinkMetadata {
  * decides whether a page that could not be reached is worth another attempt.
  */
 export async function fetchLinkEnrichment(url: string): Promise<LinkEnrichment> {
-  const { response, finalUrl, release } = await fetchWithTimeout(url, {
-    maxBytes: MAX_HTML_BYTES,
-  });
-  try {
-    const hostname = safeHostname(finalUrl);
-    const empty: LinkEnrichment = {
-      finalUrl,
-      hostname,
-      title: null,
-      description: null,
-      siteName: null,
-      previewImageUrl: null,
-      text: null,
-    };
+  const { response, finalUrl, controller } = await fetchWithTimeout(url);
+  const hostname = safeHostname(finalUrl);
+  const empty: LinkEnrichment = {
+    finalUrl,
+    hostname,
+    title: null,
+    description: null,
+    siteName: null,
+    previewImageUrl: null,
+    text: null,
+  };
 
-    if (!response.ok) throw new Error(`http_${response.status}`);
-    const contentType = response.headers.get("content-type") ?? "";
-    // A PDF or a video stream is not something this reads, and pulling one down
-    // to discover that costs a member's attachment nothing but latency.
-    if (!contentType.includes("html")) return empty;
+  if (!response.ok) throw new Error(`http_${response.status}`);
+  const contentType = response.headers.get("content-type") ?? "";
+  // A PDF or a video stream is not something this reads, and pulling one down
+  // to discover that costs a member's attachment nothing but latency.
+  if (!contentType.includes("html")) return empty;
 
-    // Bounded read under the body deadline that was armed for exactly this
-    // many bytes when the headers landed.
-    const bytes = await readCappedBody(response, MAX_HTML_BYTES);
-    const html = new TextDecoder().decode(bytes).slice(0, MAX_HTML_CHARS);
-    const metadata = extractLinkMetadata(html);
-    const body = isYouTubeHost(hostname)
-      ? extractYouTubeDescription(html) ?? extractPageBody(html)
-      : extractPageBody(html);
+  // Bounded read under the fetch's own timeout, then release the connection.
+  // MAX_HTML_CHARS is a character budget; a UTF-8 byte cap of 4× is a safe
+  // ceiling that still truncates a runaway page.
+  const bytes = await readCappedBody(response, MAX_HTML_CHARS * 4);
+  controller.abort();
+  const html = new TextDecoder().decode(bytes).slice(0, MAX_HTML_CHARS);
+  const metadata = extractLinkMetadata(html);
+  const body = isYouTubeHost(hostname)
+    ? extractYouTubeDescription(html) ?? extractPageBody(html)
+    : extractPageBody(html);
 
-    return {
-      ...metadata,
-      finalUrl,
-      hostname,
-      text: composeEnrichmentText([metadata.title, metadata.description, body]),
-    };
-  } finally {
-    // Every exit, not only the one that read a page. The two early returns
-    // above — a non-2xx status and a content type we do not read — used to
-    // walk away from an open connection, and now that the deadline survives
-    // past the fetch they would walk away from a live timer as well.
-    release();
-  }
+  return {
+    ...metadata,
+    finalUrl,
+    hostname,
+    text: composeEnrichmentText([metadata.title, metadata.description, body]),
+  };
 }
 
 function safeHostname(url: string): string | null {
@@ -566,6 +523,12 @@ function safeHostname(url: string): string | null {
   } catch {
     return null;
   }
+}
+
+function isYouTubeHost(hostname: string | null): boolean {
+  if (!hostname) return false;
+  const host = hostname.replace(/^www\./, "");
+  return host === "youtube.com" || host === "youtu.be" || host === "m.youtube.com";
 }
 
 // ---------------------------------------------------------------------------
@@ -627,24 +590,18 @@ async function readImageBytes(
   // range on the second hop is exactly how this protection is bypassed, and
   // "it is an image" is not a reason to trust the URL. One byte over the cap
   // and describeImage rejects it, so reading cap+1 is enough to catch it.
-  const { response, release } = await fetchWithTimeout(attachment.url, {
-    accept: "image/*",
-    // Sixteen times the link path's cap, and the reason the body deadline is
-    // computed rather than shared: eight megabytes is half a minute from an
-    // origin we would still call honest, and no fixed number serves both.
-    maxBytes: MAX_IMAGE_BYTES + 1,
-  });
-  try {
-    if (!response.ok) throw new Error(`image_fetch_${response.status}`);
-    const bytes = await readCappedBody(response, MAX_IMAGE_BYTES + 1);
-    return {
-      bytes,
-      contentType:
-        attachment.contentType ?? response.headers.get("content-type") ?? "image/png",
-    };
-  } finally {
-    release();
+  const { response, controller } = await fetchWithTimeout(attachment.url, "image/*");
+  if (!response.ok) {
+    controller.abort();
+    throw new Error(`image_fetch_${response.status}`);
   }
+  const bytes = await readCappedBody(response, MAX_IMAGE_BYTES + 1);
+  controller.abort();
+  return {
+    bytes,
+    contentType:
+      attachment.contentType ?? response.headers.get("content-type") ?? "image/png",
+  };
 }
 
 /**

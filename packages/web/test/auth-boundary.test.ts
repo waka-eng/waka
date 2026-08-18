@@ -1,40 +1,5 @@
 // @vitest-environment jsdom
 
-/**
- * WHO IS SIGNED IN, AND WHAT THAT OPENS.
- *
- * WHAT THIS MOCKS, AND WHY (gate G6). Two seams, and they are different kinds
- * of thing.
- *
- *   `lib/api` — the layer directly beneath the subject. `AuthProvider`,
- *   `RequireAuth` and the login page call the HTTP client themselves. Nothing
- *   sits between them and it: `lib/data` translates only the three layers of
- *   the world, and none of them appear on this screen. So the module
- *   immediately below the code under test is `lib/api`, and that is the one
- *   replaced. The real module is spread back in through `importOriginal` so
- *   that `ApiError` stays the class the product actually throws — the login
- *   page branches on it, and a look-alike would take the wrong branch.
- *
- *   `window.localStorage` — a browser API, not a layer of ours. The cached
- *   viewer is written there, and several cases below are about a stale cache
- *   losing a race with a fresh sign-in, which can only be stated if the test
- *   can see the store and empty it between runs.
- *
- * WHAT IS DELIBERATELY LEFT REAL, and this is the whole point of the file: the
- * session state machine. Every case runs through the real `AuthProvider`, the
- * real `RequireAuth` and a real router, because the bugs this suite exists for
- * are ORDERING bugs — a slow `/auth/me` answering after a login has already
- * succeeded and wiping it. Faking the provider would leave no order left to
- * get wrong, and the three cases about stale responses would all pass against
- * a provider that had no race in it because it had no logic in it.
- *
- * THIS SUITE NEVER MOUNTS THE WORLD, and that is what keeps the G6 incident
- * away from it. The protected routes below render a one-line `<main>`, not
- * `pages/Home`. `pages/Home` answers a failed load by replacing everything
- * with the dev fixture, so a suite that mocked `lib/api` and then mounted it
- * would be asserting against invented rows. Guarding a placeholder is the
- * honest subject here: whether the door opens, not what is behind it.
- */
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router-dom";

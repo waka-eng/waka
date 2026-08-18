@@ -14,16 +14,16 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const inspiration = {
+const capture = {
   text: "A small studio near serious peers made the work feel possible.",
   kind: "note" as const,
 };
 
 describe("canonical inspiration embedding input", () => {
   it("carries the reflections written on a capture", () => {
-    const base = buildCanonicalInspirationEmbeddingInput(inspiration);
+    const base = buildCanonicalInspirationEmbeddingInput(capture);
     const withReflection = buildCanonicalInspirationEmbeddingInput({
-      ...inspiration,
+      ...capture,
       reflections: [
         {
           question: "What does this ask for?",
@@ -43,7 +43,7 @@ describe("canonical inspiration embedding input", () => {
     // A skipped prompt records that someone chose not to answer. It says
     // nothing about the capture's content, so it must not move the vector.
     const skipped = buildCanonicalInspirationEmbeddingInput({
-      ...inspiration,
+      ...capture,
       reflections: [
         {
           question: "What does this ask for?",
@@ -53,7 +53,7 @@ describe("canonical inspiration embedding input", () => {
         },
       ],
     });
-    expect(skipped).toBe(buildCanonicalInspirationEmbeddingInput(inspiration));
+    expect(skipped).toBe(buildCanonicalInspirationEmbeddingInput(capture));
   });
 
   it("carries what an attachment turned out to say", () => {
@@ -82,22 +82,22 @@ describe("canonical inspiration embedding input", () => {
     // must hash exactly as it did at capture time, or every capture would
     // re-embed twice: once on arrival and once when nothing had changed.
     const pending = buildCanonicalInspirationEmbeddingInput({
-      ...inspiration,
+      ...capture,
       attachments: [
         { type: "image" as const, enrichmentText: null },
         { type: "link" as const, enrichmentText: "   " },
       ],
     });
-    expect(pending).toBe(buildCanonicalInspirationEmbeddingInput(inspiration));
+    expect(pending).toBe(buildCanonicalInspirationEmbeddingInput(capture));
   });
 
   it("orders its sections so the same capture always hashes the same", () => {
-    expect(buildCanonicalInspirationEmbeddingInput(inspiration)).toBe(
+    expect(buildCanonicalInspirationEmbeddingInput(capture)).toBe(
       [
         "waka.inspiration_embedding_input.v1",
         "kind:note",
         "text:",
-        inspiration.text,
+        capture.text,
         "attachments:",
         "none",
         "reflections:",

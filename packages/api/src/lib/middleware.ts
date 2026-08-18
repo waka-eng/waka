@@ -66,36 +66,6 @@ export const requireAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
   await next();
 };
 
-/**
- * THIS IS A PERSON'S DECISION, NOT AN AGENT'S.
- *
- * `docs/data-model.md` grants an agent-bound session read + capture on the
- * human profile and full access only to its own — never the power to act on
- * the ACCOUNT. Every owner surface honours that (profiles.ts, sessions.ts,
- * groups.ts) except the one that cannot be undone: `DELETE /api/auth/me` was
- * mounted on `requireAuth` alone and never read `session.profile.type`, so a
- * credential minted through the documented CLI/MCP loopback login — bound to
- * an agent profile, held by a process, and reachable by prompt injection
- * through anything that agent reads — could erase the whole account. Every
- * profile, every inspiration, every signal, the top of mind, the S3 objects.
- * No soft delete, no re-auth, no email. The only barrier was a confirmation
- * literal the agent can read in the source.
- *
- * It lives here rather than in groups.ts (where the same predicate was written
- * for a narrower reason) so that the next account-level route reaches for it
- * without knowing about groups.
- */
-export const humanSessionsOnly: MiddlewareHandler<AuthEnv> = async (c, next) => {
-  const session = c.get("session");
-  if (session.profile.type !== "human") {
-    return c.json(
-      { error: "This is the account holder's decision and cannot be made by an agent session" },
-      403,
-    );
-  }
-  await next();
-};
-
 export const optionalAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
   const token = readToken(c);
   if (token) {
