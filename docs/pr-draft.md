@@ -122,14 +122,9 @@ because this repo has been bitten by it — that each gate can still *fail*.
 
 ## What this branch changes
 
-Two halves, and they review differently.
-
-**The product (83 commits).** The world itself: the three layers, the canvas,
-rooms, agent spaces, the dial, the command-line consent flow.
-
-**Making it safe and readable (105 commits).** No new features. Nine security
-fixes, a restructuring so the code can be navigated, and a test suite that went
-from asserting almost nothing about the world to 118 cases.
+The world itself — the three layers, the canvas, rooms, agent spaces, the dial,
+the CLI consent flow — plus a restructuring so the code can be navigated, nine
+security fixes, and a test suite that went from almost nothing to 118 cases.
 
 <details>
 <summary><strong>The nine security fixes</strong> — what someone could have done</summary>
@@ -149,46 +144,30 @@ from asserting almost nothing about the world to 118 cases.
 Each has a test proven to fail against the code as it was.
 </details>
 
-**Reviewing:** skim the product half if it was already agreed. In the second
-half, read the security *tests* rather than the fixes, and the two defects this
-branch introduced and fixed in `59c312f`. Large relocations were checked
-mechanically — the biggest came out byte-identical across 749 lines — so skim
-those and read the small connecting pieces, where the only new logic lives.
-
 ---
 
-## Known issues
+## Reviewing this
 
-Full list with reproductions in [`docs/known-issues.md`](docs/known-issues.md).
+199 files, and most of them are not where a mistake would be.
 
-- **Authentication has no test.** Sign-in works; the check enforcing it is never
-  exercised. Deleting it entirely leaves all 501 tests passing. Found by this
-  branch, not caused by it.
-- **A crafted link can freeze background work** for about a minute through
-  runaway text-matching. Present before this branch too.
-- **A room's summary was never built** — the function returns *not implemented*
-  while work to build it is scheduled and discarded on every join.
-- **Email verification was removed**, deliberately: it required a proven address
-  to join a room, no mail was ever sent, so nobody could join anything.
-- **Rooms do not think for themselves.** A room shows patterns its members
-  distilled privately and chose to share; the room's own ground feeds nothing.
-  That is why a room can show five patterns above an empty ground and be working
-  as designed. [`docs/decisions/every-space-owns-its-stack.md`](docs/decisions/every-space-owns-its-stack.md)
-  proposes changing it.
+- **Read the security tests**, not the fixes. Each fails against the old code.
+- **Read the two defects this branch introduced**, fixed in `59c312f`: removing
+  a member from one room deleted their votes in *every* room, and the field was
+  drawn from data the screen never watched.
+- **Skim the large moves.** They were checked mechanically — the biggest came
+  out byte-identical across 749 lines. The new logic is in the small connecting
+  pieces between them.
 
----
+**One thing to know before you start: authentication has no test.** Sign-in
+works, but the check enforcing it is never exercised — deleting it leaves all
+501 tests passing. It predates this branch. Do not read a green suite as cover
+for the auth paths.
 
-## Two things to be honest about
+Other known issues, with reproductions, are in
+[`docs/known-issues.md`](docs/known-issues.md) — including a room's summary
+never having been built, and why a room can show five patterns above an empty
+ground and still be working as designed.
 
-**The codebase got bigger.** ~56,000 → ~59,600 lines: tests, written
-explanations of why files are the size they are, and documentation.
-*Restructured* here means **navigable**, not smaller.
-
-**Nine times, a check was green while blind** — the part doing the judging was
-right, and the part deciding what got judged was never tested. A vocabulary
-check reported "clean" over half a file it had never read. Two security guards
-could be deleted with 495 tests passing. Authentication is the largest instance
-and is still open.
-
-> **Do not only test the thing that judges. Test the thing that decides what
-> gets judged.**
+The line count went **up**, ~56,000 → ~59,600: tests, documentation, and written
+reasons for why files are the size they are. *Restructured* here means
+navigable, not smaller.
