@@ -144,6 +144,7 @@ import {
   makeAgentBall,
   makeBall,
   seedOf,
+  skyOf,
   type Ball,
   type BornSeed,
 } from "../space/inspiration/orb";
@@ -1023,6 +1024,34 @@ function HomeExperience(): JSX.Element {
    * and a memory nothing cites shows none of it rather than a default.
    */
   const [citations, setCitations] = useState<Map<string, Evidence[]>>(new Map());
+  /**
+   * THE SKY AS THE FIELD READS IT — one value, and a ref beside it.
+   *
+   * The two halves are always read together (`skyOf` needs both), so they are
+   * one object: paired here, they cannot be read one render apart. The map is
+   * built once per change rather than once per pour, and it is deliberately
+   * NOT called `signalById` — that name is taken a few hundred lines below by
+   * the viewer's CAPTURES by id, and the pour used to declare a second one
+   * shadowing it, which is a collision worth not renewing.
+   *
+   * The ref is the seam the pour reads through. The pour's dependency list is
+   * `[inspirations, agents, walls, groupFieldTick]` and must stay that way —
+   * one pour, never a second one — so it may not close over a value that
+   * changes underneath it, in the same way `skyDeps` hands the sky engine
+   * accessors onto refs rather than values that were true when the loop
+   * started. What makes a late sky visible is the re-light effect below the
+   * pour, not this ref: the ref only keeps the pour honest about reading the
+   * sky AT THE MOMENT IT POURS.
+   */
+  const sky = useMemo(
+    () => ({
+      citations,
+      signals: new Map((signals ?? []).map((p) => [p.id, p] as const)),
+    }),
+    [citations, signals],
+  );
+  const skyRef = useRef(sky);
+  skyRef.current = sky;
   /** LAYER 3 — the one artifact this profile stands on. Null before the first
       synthesis, which the layout says in words rather than leaving blank. */
   const [topOfMind, setTopOfMind] = useState<TopOfMind | null>(null);
@@ -2410,7 +2439,11 @@ function HomeExperience(): JSX.Element {
     const kept = bornRef.current.filter(
       (s) => !fetched.has(s.id) && !(s.sigId !== undefined && fetched.has(s.sigId)),
     );
-    const signalById = new Map((signals ?? []).map((p) => [p.id, p] as const));
+    /* AT THE MOMENT OF THE POUR, not at the moment this effect was written.
+       See `skyRef` — the sky is two requests deep and lands after everything
+       in this effect's dependency list has settled, so reading it through the
+       ref is what stops those dependencies from having to grow. */
+    const pouredSky = skyRef.current;
     /* EVERY WALL'S GROUND, NOT ONLY YOURS.
        The field held your inspirations and nothing else — `makeAgentBall` was
        exported and never called, so an agent's memories were fetched into
@@ -2470,7 +2503,7 @@ function HomeExperience(): JSX.Element {
       b.hue = b.ownerProfileId ? hueOf.get(b.ownerProfileId) ?? -1 : -1;
     }
     const list = [
-      ...inspirations.map((c) => makeBall(seedOf(c, citations, signalById))),
+      ...inspirations.map((c) => makeBall(seedOf(c, pouredSky.citations, pouredSky.signals))),
       ...agentBalls,
       ...groupBalls,
       ...kept.map(bornBall),
@@ -6676,30 +6709,112 @@ function HomeExperience(): JSX.Element {
     /* The field is what you kept AND what your agents kept, so the loop waits
        for both before it builds anything — one pour, never a second one. */
     /*
-     * `citations` AND `signals` ARE DEPENDENCIES, and leaving them out lit the
-     * field wrong.
+     * `citations` AND `signals` ARE DELIBERATELY NOT DEPENDENCIES, and an
+     * earlier attempt at this bug added them.
      *
-     * Every orb is built here from `seedOf(c, citations, signalById)`, and
-     * `signalById` is derived from `signals` a few lines above — so both decide
-     * what a memory LOOKS like: whether anything rests on it. Neither was
-     * listed, so a memory that a signal was later found to rest on kept the
-     * appearance of a memory nothing rested on, until something unrelated
-     * happened to rebuild the loop. The most common something was travelling to
-     * another wall and back, which is why it read as intermittent.
+     * The reasoning was sound and the fix was not. Every orb is built from
+     * `seedOf(c, citations, signalById)`, so both decide whether a memory looks
+     * like something rests on it, and neither was listed — a memory a signal
+     * was later found to rest on kept the appearance of one nothing rested on.
+     * Adding them to this list does make the light correct.
      *
-     * Adding them rebuilds this effect when they change, and that is a real
-     * cost — it is the largest effect in the file. Two things make it the right
-     * trade rather than a shrug. They change on load and on an explicit
-     * refresh, not per frame. And a rebuild is no longer destructive: travel
-     * survives one through `headingRef`, which exists because a rebuild
-     * mid-crossing used to restart the journey at column zero.
+     * It also re-pours the field every time either changes. `view.primed` is
+     * declared INSIDE this effect, so a rebuild resets it, every ball is
+     * snapped back to its home, and the arrival animation replays for memories
+     * that never moved. That is the thing this file forbids in the line
+     * directly above — one pour, never a second one — and it is what restarted
+     * the camera at column zero mid-travel the last time this effect was
+     * rebuilt for a good reason.
      *
-     * The alternative — reading both through refs at use time — does not work
-     * here. These reads happen in the effect's SETUP, so a ref would be read at
-     * exactly the same moment and hold exactly the same stale value. A ref only
-     * helps a value read per frame; this one is read once per build.
+     * The light is corrected by the re-light effect below instead: it
+     * re-derives the four facts in place and re-runs `colorBall`, with no
+     * rebuild, no relayout and no motion. `skyRef` is what keeps THIS list
+     * honest — the pour reads the sky through a ref, so it sees what is true at
+     * the moment it pours rather than closing over a value that moves.
      */
-  }, [inspirations, agents, walls, groupFieldTick, citations, signals]);
+  }, [inspirations, agents, walls, groupFieldTick]);
+
+  /**
+   * AND WHEN THE SKY LANDS, THE GROUND IS LIT AGAIN — IN PLACE.
+   *
+   * The pour above bakes `hasNotes` / `hasGroup` / `quote` / `terms` into every
+   * ball at construction, and `colorBall` reads them to decide the cited floor,
+   * the cited lift, the in-a-room floor and the frontier. But the sky is two
+   * requests deep — `loadSignals`, then a `loadSignal` per signal, in sequence
+   * — so on any real page load `citations` arrives AFTER the archive, the
+   * agents and the walls have all settled, which is after the last pour. Every
+   * memory a pattern rests on was therefore lit as if nothing rested on it, and
+   * decayed to dark like an untended one; `frontier` flipped true for every
+   * memory older than three days, so the companion announced an archive with
+   * nothing built on it while patterns rested on all of it. It came right by
+   * accident on any later change to the agents or the walls — travelling to a
+   * room, or coming back to the tab after a long absence — which is why it read
+   * as "the field is dim until I wander around" rather than as a bug.
+   *
+   * WHY NOT `citations` AND `signals` IN THE POUR'S DEPENDENCY LIST. Because
+   * that re-pours the whole field: a new list, new balls, new drift phases,
+   * new homes, and a re-entry animation for memories that never moved. The
+   * comment above it means what it says, and the last time this loop was
+   * rebuilt out from under itself the camera restarted at column zero
+   * mid-travel. Nothing here needs a new field — the balls are correct in every
+   * respect except four facts they could not have known yet.
+   *
+   * WHY NOT A REF READ AT USE TIME EITHER. That is the right shape for the
+   * POUR, and `skyRef` is exactly that, but a ref cannot be the whole answer:
+   * a ref makes a read fresh whenever it happens, and the problem here is that
+   * the read never happens again at all. Something has to run when the sky
+   * lands, and this is the smallest thing that can — no rebuild, no relayout,
+   * no motion, just the four facts re-derived through the same `skyOf` the
+   * pour uses and the light recomputed. The palette effect re-colours the same
+   * list the same way for the same reason.
+   *
+   * The light changes instantly rather than swelling. `simApi.relight` eases
+   * one orb up when YOU answer a memory, because that is an event you caused
+   * and are watching; this is the page finishing loading, and forty orbs
+   * blooming at once would announce a network round-trip as if it were news.
+   */
+  useEffect(() => {
+    const bag = ballsRef.current;
+    if (!bag) return;
+    for (const b of bag.list) {
+      /* Only the viewer's own ground is built from the sky. An agent's and a
+         room's memories come through `makeAgentBall`, which never consults
+         citations, and re-deriving would silently blank the little they do
+         carry. Empty string IS the self wall's id — see makeBall. */
+      if ((b.agentId ?? "") !== "") continue;
+      /* A memory kept in this session is known to the server under `sigId`,
+         and the citation index is keyed by the server's id — so a pattern
+         that lands on something said into the mouth minutes ago finds it. */
+      const above = skyOf(b.sigId ?? b.id, sky.citations, sky.signals);
+      b.hasNotes = above.cited;
+      b.hasGroup = above.inGroup;
+      b.quote = above.quote;
+      b.terms = above.terms;
+      colorBall(b, TRef.current);
+    }
+    /**
+     * AND THE POSTER'S OWN WORDS GO BACK ON TOP.
+     *
+     * `quote` has two writers. `simApi.setProvenance` puts the words a WALL'S
+     * CLAIM was read from onto the memories under it, and its effect is
+     * declared above this one — so when the sky lands, both fire and the
+     * provenance quote is written first and overwritten here. A memory cited
+     * by two patterns would then show the wrong one of the two under the
+     * poster: not a crash, not a blank, just a sentence quietly swapped for
+     * another true sentence, which is the kind of change nobody traces back.
+     *
+     * Re-applying restores the precedence that held before there was anything
+     * to re-light: the poster's reading wins where it has one, the sky's fills
+     * in everywhere else. Guarded because an empty map is not "no provenance
+     * anywhere", it is "that effect has not run yet", and handing the sim an
+     * empty one would clear the peek row the pour just elected. `setProvenance`
+     * wakes the loop itself, which is why the plain wake is the other branch.
+     */
+    const wallProv = wallProvRef.current;
+    if (wallProv.size > 0) simApiRef.current?.setProvenance(wallProv);
+    /* the loop may have gone quiet with nothing to draw; this is a change */
+    else simApiRef.current?.wake();
+  }, [sky]);
 
   /* ---------------- dial scrubbing (writes refs, not state) ---------------- */
 

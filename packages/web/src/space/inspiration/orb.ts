@@ -256,32 +256,40 @@ export interface BornSeed extends SignalSeed {
 }
 
 /**
- * A CAPTURE JOINED TO THE SKY ABOVE IT.
+ * EVERYTHING ONE MEMORY LEARNS FROM THE SKY ABOVE IT.
  *
  * Under the canon a memory carries no meaning of its own — no score, no theme,
- * no room. What it is FOR is a fact about the patterns that cite it, so this
- * is where the two layers meet, and it is the only place they do.
+ * no room. What it is FOR is a fact about the patterns that cite it, so these
+ * four fields are the whole of what the second layer tells the first, and this
+ * is the only place that reading happens.
+ *
+ * It is split out of `seedOf` because the sky arrives LATE — two requests deep,
+ * after the field has already been poured — so the field has to be able to ask
+ * this question a second time, of a ball that already exists, without rebuilding
+ * anything. Two call sites, one derivation: written twice they would drift, and
+ * the drift would be invisible, because both answers are plausible light.
  *
  * A memory nothing cites gets `cited: false`, no quote and no statements, and
  * the field draws it exactly that honestly: present, dated, its own words, and
  * nothing claimed on its behalf.
  */
-export function seedOf(
-  c: Inspiration,
+export interface SkyOverInspiration {
+  cited: boolean;
+  inGroup: boolean;
+  quote: string | null;
+  terms: string[];
+}
+
+export function skyOf(
+  inspirationId: string,
   citations: Map<string, Evidence[]>,
   signalById: Map<string, Signal>,
-): SignalSeed {
-  const cites = citations.get(c.id) ?? [];
+): SkyOverInspiration {
+  const cites = citations.get(inspirationId) ?? [];
   const above = cites
     .map((e) => signalById.get(e.signalId))
     .filter((p): p is Signal => Boolean(p));
   return {
-    id: c.id,
-    capturedMs: c.capturedMs,
-    updatedMs: c.updatedMs,
-    reflectionCount: c.reflectionCount,
-    textPreview: c.preview,
-    kind: c.kind,
     cited: cites.length > 0,
     /* A memory is never in a room. What can be is a PATTERN resting on it —
        so this says "something you shared out loud stands on this", which is
@@ -289,6 +297,23 @@ export function seedOf(
     inGroup: above.some((p) => p.sharedGroupIds.length > 0),
     quote: cites.find((e) => e.quote)?.quote ?? null,
     terms: above.map((p) => p.statement),
+  };
+}
+
+/** A CAPTURE JOINED TO THE SKY ABOVE IT — the seed a ball is built from. */
+export function seedOf(
+  c: Inspiration,
+  citations: Map<string, Evidence[]>,
+  signalById: Map<string, Signal>,
+): SignalSeed {
+  return {
+    id: c.id,
+    capturedMs: c.capturedMs,
+    updatedMs: c.updatedMs,
+    reflectionCount: c.reflectionCount,
+    textPreview: c.preview,
+    kind: c.kind,
+    ...skyOf(c.id, citations, signalById),
   };
 }
 

@@ -376,39 +376,44 @@ export async function removeGroupMember(
    * would leave a caller believing the removal did not happen.
    */
   await rotateJoinCode(db, input.groupId);
-  /*
-   * And their votes in THIS ROOM go with them — the tally already ignores a
-   * non-member, but leaving the rows behind would make re-joining silently
-   * restore a vote nobody cast again.
+  /**
+   * AND THEIR VOTES GO WITH THEM — OUT OF THIS ROOM, AND NO FURTHER.
    *
-   * SCOPED THROUGH THE PROPOSAL, and the first version was not.
+   * The tally already ignores a non-member, so this delete is not what makes
+   * the count right; it is what stops re-joining from silently restoring a
+   * vote nobody cast again.
    *
-   * It matched on `profile_id` alone. The affirmations table has no
-   * `group_id` — a vote reaches its room only through the proposal it is
-   * attached to — so a predicate that names only the person is a predicate
-   * that spans every room they are in. Removing someone from one group
-   * silently erased their votes in all the others, and the person who did the
-   * removing had no way to know and no right to do it.
+   * The predicate is the whole story. `group_top_of_mind_affirmations` has no
+   * `group_id` column — its only scoping is `proposal_id` — so a delete keyed
+   * on the profile alone does not mean "their votes here", it means "their
+   * votes anywhere". Removing someone from a room you own reached into every
+   * other room they are in: rooms you are not a member of, cannot read, and
+   * that were never named in the request. The agreements there simply stopped
+   * existing, which stalls whatever was resting on them and leaves nothing to
+   * tell it apart from "they never voted". So the scope has to come from the
+   * proposals, which are the only rows in this graph that know which room they
+   * belong to.
    *
-   * The test that looked like it covered this could not fail on it: its
-   * assertion counts through a join on `group_members`, and the membership row
-   * is deleted a few statements above, so the count drops whether or not any
-   * affirmation row goes. `group-membership-scope.db.test.ts` asserts the
-   * cross-room rows survive instead, which is the thing that was actually at
-   * stake.
+   * A subquery rather than "read the proposal ids, then delete where in
+   * them": two statements would let a proposal opened between them keep an
+   * affirmation the removal was supposed to take, and would rebuild an empty
+   * list into a delete with no proposal predicate at all if the read came back
+   * empty. One statement cannot drift from itself.
    */
-  await db.delete(groupTopOfMindAffirmations).where(
-    and(
-      eq(groupTopOfMindAffirmations.profileId, input.memberProfileId),
-      inArray(
-        groupTopOfMindAffirmations.proposalId,
-        db
-          .select({ id: groupTopOfMindProposals.id })
-          .from(groupTopOfMindProposals)
-          .where(eq(groupTopOfMindProposals.groupId, input.groupId)),
+  await db
+    .delete(groupTopOfMindAffirmations)
+    .where(
+      and(
+        eq(groupTopOfMindAffirmations.profileId, input.memberProfileId),
+        inArray(
+          groupTopOfMindAffirmations.proposalId,
+          db
+            .select({ id: groupTopOfMindProposals.id })
+            .from(groupTopOfMindProposals)
+            .where(eq(groupTopOfMindProposals.groupId, input.groupId)),
+        ),
       ),
-    ),
-  );
+    );
   return true;
 }
 
