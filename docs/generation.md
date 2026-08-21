@@ -426,8 +426,16 @@ Same recoverable-mistake stance as match-or-mint, one level up. State
 maintenance (contested flips, reconciliation after evidence loss) is
 immediate SQL and does not wait for midnight; generation does.
 
+**The canonical rendering is machine-facing:** one deterministic
+markdown document (rank-ordered, stable `p-<uuid8>` ids, a preamble
+carrying the consumption contract, contested pairs cross-referenced),
+served byte-identically via `GET /api/principles.md` and the MCP tool —
+the web view is the human's decorated reading of the same document.
+Golden-tested byte-for-byte once implemented.
+
 The audit chain stays unbroken: answer → principle → signals → the
-person's own captures.
+person's own captures — and decisions made by agents cite principle ids,
+extending it to the last mile.
 
 ---
 

@@ -243,6 +243,45 @@ in seconds, and the first held principle at the first midnight after the
 bar is crossed — about six weeks in, regardless of capture volume.
 `PRINCIPLE_MIN_SPAN_DAYS` is a wall clock, not a volume bar.
 
+## The machine rendering
+
+Owner decision (2026-08-18): the primary consumer of principles is
+**other AI tools**, deciding on the person's behalf without the person
+in the loop. So the canonical rendering is not the web view — it is a
+**single deterministic markdown document**, produced by one renderer and
+served byte-identically to every consumer. The web view is the human's
+decorated reading of the same document; if two agents could fetch two
+shapes, they could act under two readings of one person.
+
+Contract properties, each testable:
+
+- **Deterministic.** Same principle set → byte-identical markdown
+  (rank order, fixed date format, stable ids). Pinned by a golden test
+  — a fixture set rendered and compared byte-for-byte, so the format
+  itself is drift-locked like everything else.
+- **Self-describing.** The preamble IS the consumption contract:
+  bounding-not-answering, rank-decides-conflicts, cite-ids-in-decisions,
+  and the state semantics. An AI fetching it cold needs no other
+  documentation.
+- **Citable.** Each principle carries a stable short id
+  (`p-<uuid8>`), so a decision made without the person present can be
+  audited afterward — the answer → principle → signals → captures chain
+  extended to its last mile.
+- **Tension is explicit.** Contested pairs name each other inline and
+  the preamble says rank decides meanwhile — an agent never stalls on an
+  unresolved conflict.
+- **Aspirational is binding for agents** (flagged for owner veto): a
+  declaration is the person's own stated word, and an agent acting for
+  them obeys it even before history demonstrates it. Demonstration
+  governs what WAKA asserts; the person's word governs what their
+  agents obey. The preamble states this.
+
+Delivery: `GET /api/principles.md` under any WAKA credential (works for
+any tool that can hold a token and fetch — not only MCP speakers), the
+same access matrix as the JSON list; `waka_get_principles` returns the
+identical document (with the structured list available for tools that
+want fields). One renderer, no second shape.
+
 ## One question per view
 
 Raised by the owner on 2026-08-18: does a fourth view multiply the
@@ -366,8 +405,10 @@ green.
 `POST` (declare → `validateDeclaration` → aspirational + locked, or a
 refusal naming the failing test), `PATCH /:id` (edit → lock),
 `DELETE /:id`, `POST /reorder` (owner; sticky), feedback accepts
-`targetType: "principle"`. **No refresh endpoint** — generation belongs
-to the cron alone. Cross-account answers 404 exactly like signals (no
+`targetType: "principle"`, and `GET /api/principles.md` — the canonical
+machine rendering (see "The machine rendering"), with its golden
+byte-for-byte test. **No refresh endpoint** — generation belongs to the
+cron alone. Cross-account answers 404 exactly like signals (no
 existence oracle).
 
 **Gate:** route tests cover the matrix cells (owner / agent-on-own /
@@ -396,10 +437,12 @@ assumed.
 
 ### Phase 5 — MCP
 
-`waka_get_principles` (ranked, with states and citations). Skill
-guidance gets the consumption contract: principles are consulted before
-acting; when acting for the human, the human's principles bound the
-work; answers should cite principle ids. waka-mcp README + live suite
+`waka_get_principles` returns the canonical markdown document — the
+same bytes `GET /api/principles.md` serves — plus the structured list
+for tools that want fields. Skill guidance gets the consumption
+contract: principles are consulted before acting; when acting for the
+human, the human's principles bound the work; answers cite principle
+ids. waka-mcp README + live suite
 extension (declared aspirational visible through the tool).
 
 **Gate:** waka-mcp unit + live suites green against a stack running the
