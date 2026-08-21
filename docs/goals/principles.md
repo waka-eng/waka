@@ -210,8 +210,9 @@ signals over months — one or two captures never make one, so there is no
 moment to catch live, and a daily rhythm is the honest cadence.
 
 **Mechanism.** A dedicated `sst.aws.Cron("PrincipleRefresh")` at
-`PRINCIPLE_REFRESH_CRON` — proposed **00:00 Asia/Seoul** (15:00 UTC;
-per-profile timezones deferred). It enqueues `refresh_principles` for
+`PRINCIPLE_REFRESH_CRON` — **00:00 PST** (owner decision 2026-08-18;
+fixed 08:00 UTC, so during daylight saving it fires at 01:00 Pacific —
+EventBridge crons don't shift with DST; per-profile timezones deferred). It enqueues `refresh_principles` for
 each profile with signal or top-of-mind activity since the last run,
 then wakes the worker — the queue stays the mechanism; the cron is the
 sole enqueuer.
@@ -295,7 +296,7 @@ capture).
 
 Pipeline: a `refresh_principles` job, keyed per profile, debounced by
 partial unique index, enqueued **only** by the daily
-`PrincipleRefresh` cron (00:00 Asia/Seoul) for profiles with activity
+`PrincipleRefresh` cron (00:00 PST) for profiles with activity
 since the last run — see "When a principle is generated" for the hard
 guarantee. Feedback and evidence-loss are immediate SQL state flips
 outside generation.
@@ -321,10 +322,13 @@ rule-as-evidence, the three states, rank), the access-matrix rows
 (owner: full; agent session on its human's principles: **read only** —
 capture doesn't extend here because principles are curation, not
 capture), and the sharing stance (principles are **not shareable** in
-v1; the group wall stays signals-only). `docs/generation.md` is *not*
-touched yet — its drift test would fail on constants that don't exist,
-which is the lock working; it updates in the same diff as the code
-(Phase 6).
+v1; the group wall stays signals-only). `docs/generation.md` already
+carries the design as a clearly-marked **"designed, not yet
+implemented"** section (added at the owner's request, 2026-08-18, so one
+doc is the source of truth for generation mechanics); its constants stay
+in prose there because the drift test would rightly fail on table rows
+naming unexported constants. Phase 6 graduates that section into the
+drift-locked tables in the same diff as the code.
 
 **Gate: the owner signs the amended canon. Nothing below starts first.**
 
