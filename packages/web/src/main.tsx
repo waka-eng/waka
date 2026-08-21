@@ -198,6 +198,7 @@ ReactDOM.createRoot(root).render(
             <Route path="/inspirations/:inspirationId" />
             <Route path="/signals" />
             <Route path="/principles" />
+            <Route path="/top-of-mind" />
             <Route path="/rooms" />
             <Route path="/rooms/:groupId" />
           </Route>

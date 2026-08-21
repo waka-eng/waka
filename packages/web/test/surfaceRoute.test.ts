@@ -31,6 +31,14 @@ describe("Surface routes", () => {
       entityId: null,
     });
     expect(parseSurfacePath("/signals")).toEqual({ view: "signals", entityId: null });
+    /* The wall's own address. It used to have none but "/", and the world took
+       "/" — so the flat screen's top of mind was the one view on its bottom bar
+       that nothing outside Surface could link to. Both addresses resolve here:
+       "/" because the back affordance still builds it, "/top-of-mind" because
+       the world's menu has to be able to point AT this view rather than at the
+       world it is already showing. */
+    expect(parseSurfacePath("/top-of-mind")).toEqual({ view: "wall", entityId: null });
+    expect(parseSurfacePath("/")).toEqual({ view: "wall", entityId: null });
     expect(parseSurfacePath("/inspirations/inspiration-1")).toEqual({
       view: "inspiration",
       entityId: "inspiration-1",

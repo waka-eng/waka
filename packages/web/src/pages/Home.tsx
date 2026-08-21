@@ -9686,10 +9686,19 @@ function HomeExperience(): JSX.Element {
           {flatMenuOpen ? (
             <div className="jar-flatmenu-sheet" role="menu">
               {[
-                ["/principles", "Principles"],
-                ["/inspirations", "All memories"],
-                ["/signals", "All patterns"],
-                ["/capture", "Keep something"],
+                /* The flat screen's own bottom bar, in its order and its
+                   words, so the two do not drift into naming the same screen
+                   two ways. `top of mind` is Surface's `wall` view, which
+                   `surface-route.ts` resolves to "/" — and "/" is the world,
+                   whose headquarters IS top of mind. So it lands on the same
+                   layer either way; it simply arrives in the world's rendering
+                   of it rather than the list's. */
+                ["/capture", "capture"],
+                ["/inspirations", "inspirations"],
+                ["/signals", "signals"],
+                ["/top-of-mind", "top of mind"],
+                ["/rooms", "rooms"],
+                ["/principles", "principles"],
               ].map(([to, label]) => (
                 <Link
                   key={to}
