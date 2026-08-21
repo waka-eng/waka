@@ -98,8 +98,9 @@
   --sf-body: 14px;                        /* running text, lists, results */
   /*
      The doors into the surface. Fluid: 15px at phone widths — measured, the
-     four-verb row overflows a 375px screen at anything larger — opening to
-     17px once there is room, because at 15px the app's primary navigation
+     verb row overflows a 375px screen at anything larger (and with five
+     verbs it can outgrow even that, so the row wraps under 520px) — opening
+     to 17px once there is room, because at 15px the app's primary navigation
      read as metadata.
   */
   --sf-nav: clamp(15px, 10px + 1.2vw, 17px);
@@ -111,7 +112,13 @@
   position: fixed;
   inset: 0;
   z-index: 1;
-  overflow: hidden;
+  /*
+     clip, not hidden: hidden still lets focus scroll the frame — tabbing to
+     a verb that hangs past the edge dragged the whole surface sideways and
+     clipped the left gutter. clip forbids scrolling outright; anything that
+     does not fit must wrap instead (see .sf-verbs at phone widths).
+  */
+  overflow: clip;
   background: var(--sf-paper);
   color: var(--sf-ink);
   font-family: var(--sf-sans);
@@ -941,7 +948,9 @@
    a 320px viewport. */
 @media (max-width: 520px) {
   .sf-foot { gap: 10px; }
-  .sf-verbs { gap: clamp(12px, 4vw, 20px); }
+  /* Five verbs (principles is always present now) can outgrow one phone
+     line; the frame clips rather than scrolls, so the row must wrap. */
+  .sf-verbs { gap: clamp(12px, 4vw, 20px); flex-wrap: wrap; }
   .sf-foot-end { gap: 10px; }
 
   .sf-rooms-panel {

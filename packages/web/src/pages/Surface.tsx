@@ -888,6 +888,13 @@ export default function SurfacePage(): JSX.Element {
 
   return (
     <div className="sf" data-state={view} data-busy={busy ? "true" : "false"}>
+      {/*
+        The board header belongs to the board. Every other view opens with its
+        own head (a back link and its own name), so repeating "X's top of
+        mind" above them titled the wrong page — it reads as a headline for
+        whatever sits below it.
+      */}
+      {view === "wall" ? (
       <header className="sf-head">
         {/*
           The name, and nothing else.
@@ -923,6 +930,7 @@ export default function SurfacePage(): JSX.Element {
           </button>
         </p>
       </header>
+      ) : null}
 
       <div className="sf-body">
         {notice ? (
@@ -1587,22 +1595,22 @@ export default function SurfacePage(): JSX.Element {
           >
             yours
           </button>
-          {/* Progressive disclosure: this door exists only once a principle
-              does. The view stays reachable by URL either way. */}
-          {principlesList.length > 0 || view === "principles" ? (
-            <button
-              type="button"
-              className={`sf-primary-verb${view === "principles" ? " on" : ""}`}
-              aria-pressed={view === "principles"}
-              onClick={() =>
-                navigateSurface(view === "principles" ? "wall" : "principles", {
-                  replace: view === "principles",
-                })
-              }
-            >
-              {t(locale, "principlesVerb")}
-            </button>
-          ) : null}
+          {/* Always present, even at zero — the empty view is what teaches
+              what a principle is, and a door that appears out of nowhere
+              reads as a bug, not a reward. (Owner decision, 2026-08-21;
+              replaces the earlier progressive-disclosure behavior.) */}
+          <button
+            type="button"
+            className={`sf-primary-verb${view === "principles" ? " on" : ""}`}
+            aria-pressed={view === "principles"}
+            onClick={() =>
+              navigateSurface(view === "principles" ? "wall" : "principles", {
+                replace: view === "principles",
+              })
+            }
+          >
+            {t(locale, "principlesVerb")}
+          </button>
         </div>
 
         {/*
