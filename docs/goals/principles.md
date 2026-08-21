@@ -192,13 +192,17 @@ person → signal; **what currently matters** → top of mind; a **goal**
 fails time, stays a signal; **generic virtue without citations** →
 refused outright.
 
-**Declarations get a graded exemption.** An aspirational declaration
-skips evidence and time at creation — trusting the owner's word pending
-demonstration is the point — but must pass context, directive, and
-completion. A declaration that is really a rule or a goal is refused at
-`POST` with the failing test named, teaching the concept at the exact
-moment of confusion. (One judged call, `validateDeclaration`;
-owner-initiated, outside the daily cadence.)
+**Declarations get a graded exemption — and are never refused to the
+owner's face (owner decision, 2026-08-18).** An aspirational declaration
+skips evidence and time at creation; context, directive, and completion
+are still applied, but **internally**: a declaration that qualifies
+becomes an aspirational principle, and one that is really a rule or a
+goal is quietly kept as an **inspiration** instead — which is where
+decision #1 already says it belongs, as evidence. The surface shows
+where the words landed, never why; there is no refusal ceremony and no
+displayed test verdict. (One judged call, `validateDeclaration`,
+owner-initiated, outside the daily cadence; its outcome is routing, not
+rejection.)
 
 ## When a principle is generated
 
@@ -402,8 +406,10 @@ green.
 ### Phase 3 — API
 
 `GET /api/principles` (ranked; `?profile=` under the matrix),
-`POST` (declare → `validateDeclaration` → aspirational + locked, or a
-refusal naming the failing test), `PATCH /:id` (edit → lock),
+`POST` (declare → `validateDeclaration` internally → aspirational +
+locked when it qualifies, else stored as an inspiration; the response
+states what was created, never a test verdict), `PATCH /:id` (edit →
+lock),
 `DELETE /:id`, `POST /reorder` (owner; sticky), feedback accepts
 `targetType: "principle"`, and `GET /api/principles.md` — the canonical
 machine rendering (see "The machine rendering"), with its golden
@@ -429,7 +435,7 @@ empty state is one sentence and the declare box. i18n in both catalogs
 (en-US, ko-KR — "원칙"). Visual spec of record until this phase lands:
 the owner's mockup canvas (2026-08-18) —
 https://claude.ai/code/artifact/dd9a3f29-8403-4ca7-9272-23e29d8feda5
-(populated view, day-one empty state, refused declaration).
+(populated view, day-one empty state).
 
 **Gate:** web tests green; browser verification against a live stack —
 declare, reorder, edit-lock, contested rendering all exercised, not
@@ -462,7 +468,8 @@ green in both repos.
 ### Phase 7 — E2E and cutover
 
 `tools/e2e/principles.ts`: declared-aspirational path live end to end
-(including a refused declaration naming its failing test); promotion
+(including a non-qualifying declaration landing as an inspiration, not
+a principle, with no refusal surfaced); promotion
 path with the documented env overrides for the time-span bars **and a
 direct job invocation** (`WAKA_PRINCIPLE_*_OVERRIDE`, honored only when
 set — e2e can wait for neither 45 days nor midnight; unit tests pin the

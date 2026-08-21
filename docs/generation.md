@@ -405,9 +405,10 @@ what survives is what qualifies.
    goal, not a principle.
 
 Owner **declarations** skip evidence and time (aspirational until
-demonstrated — trust pending demonstration) but must pass context,
-directive, and completion; a declaration failing them is refused with
-the failing test named.
+demonstrated — trust pending demonstration); context, directive, and
+completion are applied internally, and a declaration failing them is
+quietly kept as an inspiration — evidence, where it belongs — with no
+refusal surfaced.
 
 **States:** `held` (demonstrated), `aspirational` (declared, visibly
 undemonstrated; redeemed to held when evidence arrives), `contested`
