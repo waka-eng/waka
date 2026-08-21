@@ -163,6 +163,21 @@ export default function ProfilePage(): JSX.Element {
    * decide what you are looking at now.
    */
   const [tab, setTab] = useState<ProfileTab>("you");
+  /**
+   * PROGRESSIVE DISCLOSURE, THE WAY THE WORLD DOES IT.
+   *
+   * This screen showed everything at once — name, language, a paragraph about
+   * public pages, a handle, two checkboxes, another paragraph, and a delete
+   * confirmation — so the two things anyone actually came to change were
+   * buried among settings most people touch once and never again.
+   *
+   * The world never does this. The poster is one sentence until you press it;
+   * the memory panel is a memory until you press `more`. Same grammar here:
+   * what is true right now is visible, and everything else is one quiet word
+   * away. Nothing is hidden that you cannot reach in a single press, and
+   * nothing shouts that you did not ask about.
+   */
+  const [open, setOpen] = useState<"public" | "danger" | null>(null);
   const tabRefs = useRef<Partial<Record<ProfileTab, HTMLButtonElement | null>>>({});
 
   const [connections, setConnections] = useState<ApiConnection[] | null>(null);
@@ -389,7 +404,20 @@ export default function ProfilePage(): JSX.Element {
               ))}
             </select>
           </label>
-          <section className="profile-public-panel" aria-labelledby="profile-public-title">
+          {open !== "public" ? (
+            <p className="profile-disclose">
+              <button type="button" onClick={() => setOpen("public")}>
+                {publicProfileEnabled
+                  ? "your page is public — change it"
+                  : "make a public page"}
+              </button>
+            </p>
+          ) : null}
+          <section
+            className="profile-public-panel"
+            aria-labelledby="profile-public-title"
+            hidden={open !== "public"}
+          >
             <div className="profile-public-heading">
               <p className="login-eyebrow" id="profile-public-title">
                 {t(locale, "profilePublicTitle")}
@@ -612,10 +640,13 @@ export default function ProfilePage(): JSX.Element {
           ) : null}
         </section>
         </div>
+
         <section
           className="profile-danger-panel profile-panel"
           aria-labelledby="profile-danger-title"
-          hidden={tab !== "you"}
+          /* both gates in one attribute: the tab it lives on, and the word
+             that reveals it */
+          hidden={tab !== "you" || open !== "danger"}
         >
           <div className="profile-danger-heading">
             <p className="login-eyebrow" id="profile-danger-title">
@@ -647,9 +678,28 @@ export default function ProfilePage(): JSX.Element {
             {t(locale, "profileDeleteHint")}
           </span>
         </section>
+        {/* ONE PLACE FOR THINGS YOU CAN DO, ORDERED BY CONSEQUENCE.
+            These were scattered — sign out top-right, delete mid-page, back
+            home centred underneath — so there was no way to learn where an
+            action lives. Everything that LEAVES or DESTROYS is one row at the
+            foot, harmless first and irreversible last, which is both the
+            consistency heuristic and simple proximity. `save` stays with the
+            form it saves, because that is the one action that belongs to the
+            fields rather than to the account. */}
+        <div className="profile-foot">
         <p className="login-footer">
           <Link className="login-link" to="/">{t(locale, "profileBackHome")}</Link>
         </p>
+          {tab === "you" && open !== "danger" ? (
+            <button
+              type="button"
+              className="profile-disclose-inline"
+              onClick={() => setOpen("danger")}
+            >
+              delete this account
+            </button>
+          ) : null}
+        </div>
       </section>
     </main>
   );

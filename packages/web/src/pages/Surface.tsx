@@ -93,7 +93,7 @@ import {
   type ApiSignalDetail,
   type ApiTopOfMind,
   type ApiTopOfMindEntry,
-} from "../lib/api";
+} from "../lib/api-surface";
 import { whenShort } from "../lib/when";
 import {
   buildSurfacePath,

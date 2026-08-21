@@ -36,14 +36,15 @@
  *     them in as the attacker.
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 
-import { accounts, profiles } from "../db/index.js";
+import { accounts, profiles, sessions } from "../db/index.js";
 import {
   buildSessionCookie,
   signSessionToken,
+  wantsSecureCookie,
 } from "../lib/auth.js";
 import { getDb } from "../lib/db.js";
 import { createSessionRow, describeUserAgent } from "../lib/session.js";
@@ -184,7 +185,8 @@ function tempCookieOptions(): {
     httpOnly: true,
     sameSite: "Lax",
     path: "/",
-    secure: process.env.NODE_ENV === "production",
+    /* same rule as the session cookie: on unless a local http flow says otherwise */
+    secure: wantsSecureCookie(),
     maxAge: STATE_TTL_SECONDS,
   };
 }
@@ -525,6 +527,7 @@ export async function handleGoogleCallback(c: Context): Promise<Response> {
         id: accounts.id,
         email: accounts.email,
         googleSub: accounts.googleSub,
+        passwordHash: accounts.passwordHash,
       })
       .from(accounts)
       .where(eq(accounts.email, normalizedEmail))
@@ -539,10 +542,53 @@ export async function handleGoogleCallback(c: Context): Promise<Response> {
         // overwrite the link rather than risk an account-takeover bug.
         return failTo("account_conflict");
       }
+      /**
+       * LINKING PROVES THE EMAIL. THE PASSWORD ON IT WAS NEVER PROVEN.
+       *
+       * This is the account pre-hijacking shape, and it worked here:
+       *
+       *   1. An attacker signs up with a password for victim@example.com.
+       *      Nothing verifies that address, so the account simply exists.
+       *   2. The victim later signs in with Google, which HAS verified the
+       *      address (`email_verified` is required above).
+       *   3. This branch finds the account by email, links the Google
+       *      identity, and hands the victim a session into it.
+       *   4. The attacker's password still works. They keep access to an
+       *      account that now accumulates the victim's memories, and every
+       *      inspiration, signal and group the victim adds is readable by
+       *      whoever set that password.
+       *
+       * Google has now proven who owns this address; the password holder
+       * never did. So the credential that was never proven is dropped, and
+       * every session standing on it goes with it — an attacker sitting in an
+       * open session would otherwise keep the access the password loss was
+       * meant to take away.
+       *
+       * The rightful owner loses nothing they can notice: they arrived by
+       * Google and leave signed in by Google. Someone who genuinely set that
+       * password and genuinely owns the address recovers it the same way
+       * anyone does, having now proven the address once.
+       */
+      const hadPassword = found.passwordHash !== null;
       await db
         .update(accounts)
-        .set({ googleSub: claims.sub, updatedAt: new Date() })
+        .set({
+          googleSub: claims.sub,
+          ...(hadPassword ? { passwordHash: null } : {}),
+          updatedAt: new Date(),
+        })
         .where(eq(accounts.id, found.id));
+      if (hadPassword) {
+        /* one statement, and the set of profiles is resolved by the database
+           rather than round-tripped — sessions hang off profiles, and every
+           profile of this account is standing on the credential just dropped */
+        await db.delete(sessions).where(
+          inArray(
+            sessions.profileId,
+            db.select({ id: profiles.id }).from(profiles).where(eq(profiles.accountId, found.id)),
+          ),
+        );
+      }
       identity = {
         accountId: found.id,
         email: found.email,

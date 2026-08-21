@@ -25,7 +25,22 @@
 
 import { config as loadDotenv } from "dotenv";
 
-loadDotenv({ path: ".env.local", override: false });
+/*
+ * `.env.local` WINS, and it has to override rather than defer.
+ *
+ * drizzle-kit's own bundled dotenv loads `.env` before this file is evaluated,
+ * and `.env` in this repo is a byte-identical copy of `.env.example` whose
+ * DB_CONNECTION_URL is the placeholder `postgresql://USER:PASSWORD@HOST.neon.tech/DB`.
+ * With `override: false` that placeholder was already in process.env and won, so
+ * every `db:migrate` / `db:push` / `db:studio` resolved to host HOST.neon.tech and
+ * died on DNS — with the error swallowed, leaving only a spinner and exit 1. That
+ * silent failure is what taught someone to apply 0002 and 0003 to the shared
+ * database BY HAND, which is the whole origin of the ledger drift.
+ *
+ * `db:generate` and `db:check` never open a connection, so they kept reporting
+ * success throughout, which is why the tooling read as half-alive rather than broken.
+ */
+loadDotenv({ path: ".env.local", override: true });
 loadDotenv({ path: ".env", override: false });
 
 import { defineConfig } from "drizzle-kit";

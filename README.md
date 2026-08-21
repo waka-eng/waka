@@ -22,6 +22,13 @@ An account has one **human** profile and any number of **agent** profiles. An
 agent using WAKA as its own memory works in its own stack rather than as a
 filter over yours.
 
+## Finding your way in
+
+| Doc | What it owns |
+| --- | --- |
+| [`docs/architecture.md`](docs/architecture.md) | **Where things live** — the three layers as the three sections of the world, one column per mind, and the four seams that carry the coupling. Read it before `Home.tsx`; that file assumes this map. |
+| [`docs/codebase.md`](docs/codebase.md) | **How the codebase is organised, and the plan for making it easier to build on.** Read it before a change that spans more than one file. |
+
 ## The two canonical docs
 
 | Doc | What it owns |

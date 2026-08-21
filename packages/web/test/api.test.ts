@@ -1,3 +1,25 @@
+/**
+ * THE HTTP CLIENT, AGAINST A NETWORK THAT SAYS WHAT THE TEST TOLD IT TO.
+ *
+ * WHAT THIS MOCKS, AND WHY (gate G6). The global `fetch`, and nothing else.
+ * `lib/api` IS the subject here — every function below is one request shape
+ * and one response shape — so the only seam left underneath it is the network.
+ * Mocking a module would remove the thing being measured; mocking anything
+ * above it would measure a caller instead.
+ *
+ * This is therefore the one web suite where stubbing `fetch` is the right
+ * answer rather than a shortcut. Every other suite sits on a page, and a page
+ * sits on this module: reaching all the way down to `fetch` from up there
+ * would make each of those files silently responsible for URL strings and
+ * header casing it has no opinion about, and the first route rename would turn
+ * a dozen unrelated suites red.
+ *
+ * WHY EVERY CASE ASSERTS TWICE. What the call RETURNS, and the exact request
+ * it SENT. A client can decode a payload perfectly while calling the wrong
+ * route, or calling the right one without `credentials: "include"` — which
+ * reads as "not signed in" to every route on the server. Only the second half
+ * of each pair can see that, and it is the half a type checker never will.
+ */
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {

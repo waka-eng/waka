@@ -31,6 +31,20 @@ export default defineConfig({
       "**/.sst/**",
       // Integration scripts, driven by hand against a live stack.
       "**/*.smoke.ts",
+      /*
+       * Tests of behaviour that lives IN the database — triggers, constraints,
+       * cascades. A mock cannot execute a trigger, so these need a migrated
+       * disposable Postgres and run under the full suite (`pnpm test`), which
+       * has the setup guard that refuses a non-disposable target.
+       *
+       * The suffix is the contract rather than a list of paths, for the same
+       * reason `include` is a glob: a new one is excluded automatically, and
+       * naming it `.db.test.ts` is the author saying out loud that it needs a
+       * database. Without this the file is collected here, finds no
+       * connection, and fails in a way that reads as a broken test rather
+       * than a misrouted one.
+       */
+      "**/*.db.test.ts",
     ],
   },
 });

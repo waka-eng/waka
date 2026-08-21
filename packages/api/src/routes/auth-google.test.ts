@@ -113,16 +113,25 @@ function makeDb(selectResults: unknown[][]) {
     }),
   }));
 
-  const db: any = { select, update, insert, setCalls, insertCalls };
+  /* Sessions standing on a credential that is being dropped are deleted, so
+     the double has to model a delete and record it — the revocation is the
+     security-relevant half of linking, not an incidental write. */
+  const deleteCalls: Array<{ table: unknown }> = [];
+  const del = vi.fn((table: unknown) => {
+    deleteCalls.push({ table });
+    return { where: vi.fn(async () => undefined) };
+  });
+
+  const db: any = { select, update, insert, delete: del, setCalls, insertCalls, deleteCalls };
   db.transaction = vi.fn(async (work: (tx: typeof db) => Promise<unknown>) => work(db));
   return db;
 }
 
 /** bySub miss → byEmail hit → the account's existing human profile. */
-function linkableAccountDb() {
+function linkableAccountDb(passwordHash: string | null = null) {
   return makeDb([
     [],
-    [{ id: "account-1", email: "user@example.com", googleSub: null }],
+    [{ id: "account-1", email: "user@example.com", googleSub: null, passwordHash }],
     [{ id: "profile-1", name: "Existing" }],
   ]);
 }
@@ -256,5 +265,57 @@ describe("Google OAuth callback email verification", () => {
     expect(response.headers.get("location")).toContain("error=account_conflict");
     expect(db.update).not.toHaveBeenCalled();
     expect(mockState.createSessionRow).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * ACCOUNT PRE-HIJACKING.
+ *
+ * Password signup does not verify the address, so anyone can hold an account
+ * on someone else's email. When the real owner arrives through Google — which
+ * HAS verified it — this route links the two and signs them in. Before this
+ * was closed, the squatter's password survived that link, so they kept access
+ * to an account that then filled with the victim's inspirations, signals and
+ * groups.
+ *
+ * Google has proven who owns the address. The password holder never did, so
+ * the unproven credential is what goes.
+ */
+describe("linking a Google identity to an account that had a password", () => {
+  it("drops the password, because nobody ever proved they owned that address", async () => {
+    const db = linkableAccountDb("argon2-hash-of-something");
+    mockState.db = db;
+    mockGoogleToken({ email_verified: true });
+
+    await callbackRequest();
+
+    expect(
+      db.setCalls[0]!.values,
+      "the squatter can still sign in with the password they set",
+    ).toMatchObject({ googleSub: "google-sub-123", passwordHash: null });
+  });
+
+  it("revokes the sessions that credential was already holding open", async () => {
+    const db = linkableAccountDb("argon2-hash-of-something");
+    mockState.db = db;
+    mockGoogleToken({ email_verified: true });
+
+    await callbackRequest();
+
+    expect(
+      db.deleteCalls.length,
+      "an open session keeps the access that dropping the password removed",
+    ).toBeGreaterThan(0);
+  });
+
+  it("leaves a Google-only account alone, having no password to drop", async () => {
+    const db = linkableAccountDb(null);
+    mockState.db = db;
+    mockGoogleToken({ email_verified: true });
+
+    await callbackRequest();
+
+    expect(db.setCalls[0]!.values).not.toHaveProperty("passwordHash");
+    expect(db.deleteCalls.length, "nothing was at risk, so nobody is signed out").toBe(0);
   });
 });
