@@ -191,7 +191,7 @@ describe("the ground under a wall", () => {
   it("is whole again after travelling back", async () => {
     await layout.travelTo(/four of us/i);
     await layout.toField();
-    await layout.travelTo(/waka|just me/i);
+    await layout.travelTo(/^me$/i);
     await layout.toField();
     expectGroundIsWhole("after returning");
   });

@@ -535,7 +535,7 @@ describe("what the poster is standing on", () => {
    */
   async function atOwnWallWithGround(): Promise<void> {
     await layout.travelTo(/four of us/i);
-    await layout.travelTo(/waka/i);
+    await layout.travelTo(/^me$/i);
     const a = layout.audit();
     expect(a.wallKind, "we came home to our own wall").toBe("self");
     expect(a.wallId, "and it is the self wall, whose key is `self:`").toBe("");

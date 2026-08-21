@@ -101,6 +101,28 @@ const TOKEN = /[A-Za-z_$][A-Za-z0-9_$]*/g;
  */
 function codeOnly(source) {
   const out = Array.from(source);
+  /* JSX TEXT IS SCREEN COPY, NOT CODE.
+     This gate's rule, from docs/architecture.md, is "canon words in code,
+     human words on screen" — and it was reading the screen. `＋ capture` as a
+     button's label is the interface speaking to a person, which the rule
+     explicitly permits, but it arrives here as bare source and was counted as
+     an identifier.
+
+     Matched by LINE, not by a `>`…`<` span: a span rule has to start after
+     some `>`, and `=>` and `a > b` are everywhere, so it would blank real code
+     and hide real violations. A line qualifies only if it carries no code
+     punctuation at all, which leaves prose and nothing else. `{view ===
+     "capture"}` keeps its braces and quotes and is still read as code. */
+  {
+    let at = 0;
+    for (const line of source.split("\n")) {
+      const t = line.trim();
+      if (t && !/[=(){}<>;:.'"`[\]]/.test(t) && /[A-Za-z]/.test(t)) {
+        for (let i = at; i < at + line.length; i += 1) out[i] = " ";
+      }
+      at += line.length + 1;
+    }
+  }
   const blank = (from, to) => {
     for (let i = from; i < to && i < out.length; i += 1) {
       if (out[i] !== "\n") out[i] = " ";
