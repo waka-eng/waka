@@ -1,5 +1,5 @@
 /**
- * Layer 3 — synthesizing one profile's top of mind.
+ * Layer 3 — synthesizing a top of mind: one profile's, or one group's.
  *
  * The artifact is the unit. A refresh selects the profile's strongest signals
  * deterministically, asks the provider for the WHOLE artifact once, validates
