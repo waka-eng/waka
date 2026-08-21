@@ -1,9 +1,9 @@
 # How WAKA generates memory
 
 This is the mechanics companion to [data-model.md](data-model.md). That doc
-says what the three layers *are*; this one says exactly how layer 2 is derived
-from layer 1 and layer 3 from layer 2 — every threshold, every decision, and
-which guarantees are enforced by code versus asked of the model.
+says what the layers *are*; this one says exactly how each layer is derived
+from the one below — every threshold, every decision, and which guarantees
+are enforced by code versus asked of the model.
 
 **This doc cannot silently drift from the implementation.** Every constant in
 the [tuning tables](#tuning-constants) is machine-checked against the exported

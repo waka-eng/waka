@@ -1,8 +1,11 @@
 # Goal: principles — the layer that survives
 
-Status: **draft v1 — awaiting owner review (2026-08-18).** No code
-exists. Phase 0's gate is owner sign-off on the canon amendment; nothing
-is built before that.
+Status: **approved for execution (2026-08-18); Phase 0 delivered —
+awaiting the owner's signature on the amended canon.** The draft was
+reviewed iteratively by the owner through 2026-08-18 (cadence, tests,
+routing, machine rendering, mockup all owner-decided); "submit and start
+implementation" received the same day. No code exists yet: the Phase 0
+gate holds until the amended `docs/data-model.md` is signed.
 
 Canon: extends `docs/data-model.md` with a **fourth layer**. Phase 0
 amends that document; every later phase implements it and has no model
@@ -494,4 +497,16 @@ a principle declared on waka.im is visible through web and MCP.
 
 ## Log
 
-(empty — awaiting Phase 0)
+### Phase 0 — canon amendment (2026-08-18), awaiting owner signature
+
+`docs/data-model.md` amended to the four-layer canon: title and status;
+profiles own four layers; the permission matrix gains the principles
+column (agent on human: read-only — capture does not extend to
+curation); the layers table gains the fourth column; a full "Principle
+(layer 4)" section (definition, five tests, states, routing-not-refusal,
+rank, many-not-one, nightly-only cadence, machine rendering with
+aspirational-binding-for-agents, audit chain); the edit rule extended;
+sharing summary rule 6 (not shareable v1); vocabulary, API, and MCP
+tables extended; six decision-log entries. `docs/generation.md` intro
+made layer-neutral. **Gate: the owner signs the amended canon; phases
+1–7 start on that signature.**
