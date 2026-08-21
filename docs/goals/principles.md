@@ -497,6 +497,26 @@ a principle declared on waka.im is visible through web and MCP.
 
 ## Log
 
+### Phase 3 — API (2026-08-18)
+
+`routes/principles.ts`: GET / (ranked, matrix), GET /api/principles.md
+(the canonical rendering, own factory since the URL is a sibling
+document), POST (routeDeclaration internally → aspirational+locked+
+declared, or an inspiration — response carries no verdict; regex-tested
+that no refusal vocabulary travels), PATCH (locks), DELETE (clears the
+partner's conflict link), POST /reorder (two-pass rank write under the
+per-profile unique index; every arranged row stamped owner_ranked_at).
+No refresh endpoint. Feedback: targetType principle validated +
+not_true flips contested immediately. Both signal-loss paths call
+reconcilePrinciplesAfterSignalLoss in-transaction.
+
+Gate measured: matrix cells all asserted (owner read; agent-on-own
+201 into its own profile; agent-on-human write 403 with zero inserts;
+agent-on-human read 200; cross-account 404), reorder stickiness (2
+negative-pass writes + 2 ownerRankedAt stamps; partial order 400),
+markdown golden byte-for-byte + determinism + empty. Suite 417/417,
+ts 0. **Pass.**
+
 ### Phase 2 — longevity selection and synthesis (2026-08-18)
 
 `lib/principle-generation.ts`: the five exported bars

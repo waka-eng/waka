@@ -23,6 +23,7 @@ import { z } from "zod";
 
 import {
   feedback,
+  principles,
   feedbackTargetTypeValues,
   feedbackValueValues,
   signals,
@@ -156,6 +157,15 @@ async function targetBelongsToProfile(
     return Boolean(row);
   }
 
+  if (input.targetType === "principle") {
+    const [row] = await db
+      .select({ id: principles.id })
+      .from(principles)
+      .where(and(eq(principles.id, input.targetId), eq(principles.profileId, input.profileId)))
+      .limit(1);
+    return Boolean(row);
+  }
+
   const [row] = await db
     .select({ id: topOfMindEntries.id })
     .from(topOfMindEntries)
@@ -187,6 +197,19 @@ export async function createFeedbackForProfile(
       correctionText: input.correctionText ?? null,
     })
     .returning();
+
+  // The owner's dispute marks the principle contested at feedback time —
+  // immediate state maintenance, deliberately outside the nightly cadence:
+  // waiting a day to stop asserting something already refuted would be
+  // dishonesty, not thrift.
+  if (row && input.targetType === "principle" && input.value === "not_true") {
+    await db
+      .update(principles)
+      .set({ state: "contested", updatedAt: new Date() })
+      .where(
+        and(eq(principles.id, input.targetId), eq(principles.profileId, input.profileId)),
+      );
+  }
   return row ? serializeFeedback(row) : null;
 }
 
