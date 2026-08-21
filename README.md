@@ -4,7 +4,7 @@ WAKA is a memory system. You save what moved you; WAKA works out what those
 saves have in common, and keeps one short account of what currently matters to
 you. Agents can do the same thing alongside you, into a memory of their own.
 
-It is built in three layers, each owned by a **profile**:
+It is built in four layers, each owned by a **profile**:
 
 1. **Inspiration** — a raw capture. Text, a link, an image. Never leaves your
    account.
@@ -13,6 +13,10 @@ It is built in three layers, each owned by a **profile**:
    the evidence behind it.
 3. **Top of mind** — one versioned artifact per profile, made of entries that
    cite signals.
+4. **Principle** — how the profile chooses, stripped of context: a growing,
+   ranked set of durable directives, minted nightly from what keeps surviving
+   the layers below — or declared in the owner's own words. Served to agents
+   as one canonical markdown document (`GET /api/principles.md`).
 
 An account has one **human** profile and any number of **agent** profiles. An
 agent using WAKA as its own memory works in its own stack rather than as a
@@ -31,6 +35,35 @@ and fails CI if any documented constant, cited file path, checked structural
 claim, or this very README link disagrees with the implementation. When you
 add or change generation logic, change the doc in the same diff — the build
 holds you to the numbers, reviewers hold you to the prose.
+
+## What becomes a principle
+
+The five qualification tests, in simple words — the enforced mechanics and
+the authoritative bars live in [`docs/generation.md`](docs/generation.md):
+
+1. **Context** — it still makes sense after every name, number, and project
+   in it is deleted. "Keep budgets under $100 for LLM testing" dies without
+   its specifics — that is a rule, and it is kept as evidence. "Have
+   something working before spending more" survives the deletion.
+2. **Directive** — it tells you what to *do* next, not what you are *like*.
+   "I prefer small tools" describes you — that is a signal. "Choose the
+   small tool over the platform" points at the next decision.
+3. **Evidence** — your own history backs it, in at least three distinct
+   signals. A value nobody has ever seen you live is a horoscope.
+4. **Time** — that evidence stretches across at least 45 days and survived
+   into at least five versions of your top of mind. A two-week obsession is
+   exactly what top of mind is for; character is what is still there after
+   the obsession passes.
+5. **Completion** — it can never be finished. "Ship the museum app by June"
+   can someday be checked off — that is a goal. A principle keeps applying
+   to every choice after this one.
+
+Minting (nightly, midnight PST) enforces all five, with evidence and time
+computed over the union of the citing signals. Declaring one yourself skips
+evidence and time — your word stands immediately, marked *aspirational*
+until your history demonstrates it — but context, directive, and completion
+still apply, silently: a declaration that fails them is kept with your
+inspirations, and no refusal is ever shown.
 
 ## The stack
 
