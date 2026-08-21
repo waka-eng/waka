@@ -7992,6 +7992,9 @@ function HomeExperience(): JSX.Element {
    * have.
    */
   const [accountOpen, setAccountOpen] = useState(false);
+  /* TEMPORARY. See `.jar-flatmenu` in the JSX below — this is scaffolding for
+     the screens the world has no home for yet, and it goes when they do. */
+  const [flatMenuOpen, setFlatMenuOpen] = useState(false);
   /** The rename box, while it is open: null when nobody is renaming. */
   const [renaming, setRenaming] = useState<{ id: string; text: string; busy: boolean } | null>(
     null,
@@ -9644,6 +9647,64 @@ function HomeExperience(): JSX.Element {
             the same slot the moment the room's name needed somewhere to live,
             and putting them at opposite ends means neither can ever hide the
             other — which is exactly the bug the ternary here used to cause. */}
+        {/* SCAFFOLDING, AND NAMED AS SUCH.
+            Everything else in this bar earned its place by being a fact about
+            where you are standing. This did not: it is a drawer, and the
+            comments above are right that a toolbar is what this layout was
+            built to not have.
+
+            It exists because `dev` grew screens the world has no geometry for.
+            /principles is layer 4 — declared statements resting on signals —
+            and the world draws three layers, not four, so there is nowhere to
+            put it. The list views are the same memories in another register,
+            which the archive comment above already calls a thing that "goes
+            away once the layout can do everything it can".
+
+            So they are reachable rather than orphaned, from one control that
+            admits what it is. Top centre because the two ends of this bar are
+            taken and neither may be crowded — the way out is on the left and
+            the account is on the right, and the bug that produced this comment
+            once was exactly one of them hiding the other.
+
+            DELETE THIS when /principles has a home in the world. That is the
+            real fix; this is the placeholder that keeps it usable meanwhile. */}
+        <div className="jar-flatmenu" data-jar-chrome="1">
+          <button
+            type="button"
+            className="jar-flatmenu-toggle jar-label"
+            aria-expanded={flatMenuOpen}
+            aria-haspopup="menu"
+            aria-label="Other screens"
+            onClick={() => {
+              setFlatMenuOpen((v) => !v);
+              setAccountOpen(false);
+              setSettingsFor(null);
+            }}
+          >
+            <span aria-hidden="true">≡</span>
+          </button>
+          {flatMenuOpen ? (
+            <div className="jar-flatmenu-sheet" role="menu">
+              {[
+                ["/principles", "Principles"],
+                ["/inspirations", "All memories"],
+                ["/signals", "All patterns"],
+                ["/capture", "Keep something"],
+              ].map(([to, label]) => (
+                <Link
+                  key={to}
+                  to={to}
+                  role="menuitem"
+                  className="jar-flatmenu-item jar-label"
+                  onClick={() => setFlatMenuOpen(false)}
+                >
+                  {label}
+                </Link>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
         <button
           type="button"
           className="jar-account jar-back jar-label"
