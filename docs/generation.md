@@ -370,6 +370,76 @@ Deliberate consequences:
 
 ---
 
+## Layer 4: principles — designed, not yet implemented
+
+> **Status: design canon, code pending.** This section is the source of
+> truth for the fourth layer's mechanics, per `docs/goals/principles.md`
+> (draft under review; nothing built before its Phase 0 signature). Its
+> constants appear in prose, not in the tables below, deliberately: the
+> drift test fails table rows naming constants the code does not export,
+> and that protection is wanted. When the implementation lands, this
+> section graduates into the drift-locked tables in the same diff.
+
+A **principle** is how a person chooses, stripped of context — the
+generator from which context-bound **rules** compile ("frugal mindset" →
+"≤$100 for LLM testing" under the context *LLM testing*). WAKA stores
+the generator; captured rules are evidence, never artifacts. Unlike top
+of mind (ONE bounded artifact, rewritten whole, decaying by design),
+principles are a **growing, uncapped set** selected by *longevity* —
+what survives is what qualifies.
+
+**Five qualification tests, all required for a minted principle:**
+
+1. **Context** — still instructs after every proper noun, number, and
+   project name is deleted; otherwise it is a rule → evidence.
+2. **Directive** — prescribes the next choice; a fact about the person
+   is a signal, not a principle.
+3. **Evidence** — cites at least 3 distinct signals (proposed
+   `PRINCIPLE_MIN_SIGNALS`) from this profile's own history; uncited
+   virtue is a horoscope.
+4. **Time** — evidence spanning at least 45 days (proposed
+   `PRINCIPLE_MIN_SPAN_DAYS`) and selected into at least 5 top-of-mind
+   versions (proposed `PRINCIPLE_MIN_TOM_APPEARANCES`); a two-week
+   obsession is top of mind, not character.
+5. **Completion** — can never be finished; anything checkable-off is a
+   goal, not a principle.
+
+Owner **declarations** skip evidence and time (aspirational until
+demonstrated — trust pending demonstration); context, directive, and
+completion are applied internally, and a declaration failing them is
+quietly kept as an inspiration — evidence, where it belongs — with no
+refusal surfaced.
+
+**States:** `held` (demonstrated), `aspirational` (declared, visibly
+undemonstrated; redeemed to held when evidence arrives), `contested`
+(the owner's `not_true` verdict, or a judged conflict between two
+principles, marked as a pair for owner adjudication). An explicit,
+owner-reorderable **rank** keeps the set decidable even while a
+conflict stands — the higher rank wins operationally.
+
+**Generation is mint-or-match, daily.** A dedicated cron — the *sole*
+enqueuer, midnight PST (fixed 08:00 UTC), drift-pinned so any second
+call site fails CI — evaluates each active profile: one cheap SQL check
+for clusters newly past the bar, and only then model calls (distill one
+candidate; judge it against the standing set as
+`same | independent | conflicting`, conservative toward independent).
+Same recoverable-mistake stance as match-or-mint, one level up. State
+maintenance (contested flips, reconciliation after evidence loss) is
+immediate SQL and does not wait for midnight; generation does.
+
+**The canonical rendering is machine-facing:** one deterministic
+markdown document (rank-ordered, stable `p-<uuid8>` ids, a preamble
+carrying the consumption contract, contested pairs cross-referenced),
+served byte-identically via `GET /api/principles.md` and the MCP tool —
+the web view is the human's decorated reading of the same document.
+Golden-tested byte-for-byte once implemented.
+
+The audit chain stays unbroken: answer → principle → signals → the
+person's own captures — and decisions made by agents cite principle ids,
+extending it to the last mile.
+
+---
+
 ## Tuning constants
 
 The authoritative values. Machine-checked against code — see
