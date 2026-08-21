@@ -42,7 +42,10 @@ import {
   getDefaultModelProvider,
   type ModelProvider,
 } from "../lib/model-provider.js";
-import { PRINCIPLE_MAX_STATEMENT_LENGTH } from "../lib/principle-generation.js";
+import {
+  PRINCIPLE_MAX_STATEMENT_LENGTH,
+  refreshPrinciplesForProfile,
+} from "../lib/principle-generation.js";
 import { normalizeSupportedLocale } from "../lib/locales.js";
 import { loadProfileTarget, resolveProfileScope } from "./signals.js";
 
@@ -431,6 +434,27 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
 
     return c.json({ principles: await loadPrincipleViews(db, scope.profileId) });
   });
+
+  /**
+   * E2e-only: run generation for the acting profile, now. Registered ONLY
+   * when WAKA_ENABLE_PRINCIPLES_TEST_TRIGGER=1 — absent in deployed stages,
+   * where the nightly cron is the sole path into generation. Calls
+   * refreshPrinciplesForProfile directly rather than enqueueing, so the
+   * source-scan pin ("the cron is the sole enqueuer") holds even here.
+   */
+  if (process.env.WAKA_ENABLE_PRINCIPLES_TEST_TRIGGER === "1") {
+    routes.post("/refresh-test-trigger", async (c) => {
+      const session = c.get("session");
+      void refreshPrinciplesForProfile({ profileId: session.profile.id })
+        .then((result) => console.log("[principles] test trigger ran", result))
+        .catch((err) => {
+          console.warn("[principles] test trigger failed", {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+      return c.json({ status: "running" }, 202);
+    });
+  }
 
   return routes;
 }

@@ -497,6 +497,22 @@ a principle declared on waka.im is visible through web and MCP.
 
 ## Log
 
+### Phase 7 — e2e (2026-08-21), cutover in progress
+
+`tools/e2e/principles.ts`, 6 steps. Two fixture lessons recorded: (a) a
+single-theme fixture cannot mint — the bar demands three DISTINCT
+citing signals, so the fixture earns three (3 themes × 4 captures, the
+4th as slack because (b) extraction legitimately split an ambiguous
+budget anecdote into two 2-evidence signals on the first attempt —
+diagnosed from the live signal table, fixed in the fixture, not the
+system). The env-gated `refresh-test-trigger` route registers only
+under WAKA_ENABLE_PRINCIPLES_TEST_TRIGGER=1 and calls generation
+directly, keeping the cron-sole-enqueuer pin intact.
+
+Local gate measured: 6/6 — declaration both routes, canonical document
+contract, sticky reorder + edit-lock, and promotion minting a held
+principle with 3 citations under the documented overrides.
+
 ### Phase 6 — canon sync and drift lock (2026-08-21)
 
 `docs/generation.md`: the "designed, not yet implemented" banner is
