@@ -162,6 +162,38 @@ falls below the bar reverts to `aspirational` if owner-declared, or is
 retired if machine-minted. (Same cascade discipline as
 signals-after-evidence-loss.)
 
+## When a principle is generated
+
+Asked by the owner on 2026-08-18. Two different "whens":
+
+**The evaluation runs constantly** — chained one link onto the existing
+pipeline. Any top-of-mind refresh that versioned *with changes* enqueues
+`refresh_principles` (push-woken, debounced per profile), so the check
+runs seconds after the capture that started the chain. Feedback on a
+principle and a manual refresh also trigger it; the daily sweep remains
+a safety net, never the mechanism.
+
+**A principle mints only at a bar-crossing.** Nearly every run is one
+cheap SQL question — did any signal cluster newly cross the longevity
+bar? — answered no, exiting with zero model calls, exactly as a capture
+that yields nothing costs no synthesis today. The expensive path
+(distill → judge → mint/attach/conflict) runs only in the rare moment a
+theme's third distinct signal lands with a 45-day span and five
+top-of-mind survivals behind it. Chaining rather than scheduling means
+that moment surfaces seconds after the capture that completed the case
+— the day history earns a principle is worth catching live.
+
+**Declarations are not generation.** An aspirational principle is
+created instantly by the owner's own hand; generation's later role is
+redemption — a distilled candidate matching the declaration flips it to
+`held` instead of minting beside it.
+
+**Lived timeline for a fresh profile:** signals in seconds, top of mind
+in seconds, **no held principle for ~six weeks** regardless of capture
+volume — `PRINCIPLE_MIN_SPAN_DAYS` is a wall clock, not a volume bar.
+Aspirational declarations may fill the view from day one; the first
+earned principle arrives when history, not enthusiasm, has accumulated.
+
 ## One question per view
 
 Raised by the owner on 2026-08-18: does a fourth view multiply the
