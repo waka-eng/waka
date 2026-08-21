@@ -2295,11 +2295,11 @@ export default function SurfacePage(): JSX.Element {
             aria-label="your top of mind"
             onClick={() => navigateSurface("wall")}
           >
-            yours
+            top of mind
           </button>
           {/* The other walls: rooms kept with other people. Sibling of
-              "yours" because they are the same kind of thing — boards read
-              from signals — held by more than one profile. */}
+              "top of mind" because they are the same kind of thing — boards
+              read from signals — held by more than one profile. */}
           <button
             type="button"
             className={`sf-primary-verb${view === "rooms" || view === "room" ? " on" : ""}`}
