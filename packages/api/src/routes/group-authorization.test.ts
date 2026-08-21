@@ -472,6 +472,44 @@ describe("the group module itself", () => {
     const froms = code.match(/\.from\(\s*inspirations\s*\)/g) ?? [];
     expect(gates.length).toBeGreaterThanOrEqual(froms.length);
   });
+
+  /**
+   * THE OTHER HALF OF THE SAME RULE.
+   *
+   * docs/data-model.md rule 5: "Group membership is between human profiles for
+   * now; agent profiles do not join walls." `routes/groups.ts` enforces that
+   * when somebody joins. It was enforced nowhere when somebody LOOKS, so a
+   * member row naming an agent — arriving by a seed, a backfill, or any path
+   * that skips the join route — put that agent's public captures onto a wall
+   * belonging to other accounts. Six such rows existed in the dev database
+   * when this was found.
+   *
+   * Asserted by reading the source for the same reason the visibility gate is:
+   * no test in this package opens a database, so the query's shape is the only
+   * thing a test here can actually hold.
+   */
+  it("builds a room's ground from human members only", () => {
+    const { code } = groupModuleSource();
+    expect(
+      code,
+      "a room's field must filter members to human profiles — see " +
+        "docs/data-model.md rule 5",
+    ).toMatch(/eq\(\s*profiles\.type\s*,\s*"human"\s*\)/);
+
+    /* Counted against reads of LAYER 1, not against every group_members join.
+       The module joins that table three times and only one of them reaches
+       inspirations; the other two build the member roster, which legitimately
+       contains agents — an agent belongs in a room's list of who is here, it
+       is only their MEMORIES that must not land on the ground. Same shape as
+       the visibility count directly above, for the same reason. */
+    const humanGates = code.match(/eq\(\s*profiles\.type\s*,\s*"human"\s*\)/g) ?? [];
+    const layerOneReads = code.match(/\.from\(\s*inspirations\s*\)/g) ?? [];
+    expect(
+      humanGates.length,
+      "every read of layer 1 through group membership needs the gate, not " +
+        "just the first one",
+    ).toBeGreaterThanOrEqual(layerOneReads.length);
+  });
 });
 
 describe("a member of one group is not a member of another", () => {

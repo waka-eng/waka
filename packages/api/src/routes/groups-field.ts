@@ -72,6 +72,19 @@ export async function loadGroupField(
       and(
         eq(groupMembers.groupId, groupId),
         eq(inspirations.visibility, "public"),
+        /* THREE HALVES, NOT TWO. docs/data-model.md rule 5: "Group membership
+           is between human profiles for now; agent profiles do not join walls."
+           `routes/groups.ts:132` enforces that when somebody joins, and this
+           read did not enforce it when somebody looks — so a member row for an
+           agent, however it arrived, put that agent's public captures into a
+           room belonging to other accounts. Six such rows exist in the dev
+           database today, which is why this is a predicate and not a comment.
+
+           Enforced here as well as at the join because the two answer different
+           questions: the join asks "may this profile become a member", and this
+           asks "whose memories is this room's ground made of". A rule checked
+           only on the way in is a rule that a bad row silently repeals. */
+        eq(profiles.type, "human"),
       ),
     )
     .orderBy(desc(inspirations.createdAt))
