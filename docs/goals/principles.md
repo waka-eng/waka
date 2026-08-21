@@ -497,6 +497,21 @@ a principle declared on waka.im is visible through web and MCP.
 
 ## Log
 
+### Phase 5 — MCP (2026-08-21)
+
+waka-mcp: `getPrinciples` client (fetches `/api/principles.md` verbatim
++ the structured list, zod-checked), `waka_get_principles` tool
+returning the canonical bytes with the consumption contract in its
+description; skill guidance gains the PRINCIPLES trigger and the
+acting-for-the-human rule; README intro corrected to four layers.
+
+Gate measured: unit 35/35 (3 new: canonical+structured fetch, cross-
+profile passthrough, loud contract drift); live 9/9 against the local
+stack running the new API — test 9 declares as the human, reads the
+human's document through the agent credential (preamble + statement
+asserted), reads its own, and is 403'd declaring into the human's.
+**Pass.**
+
 ### Phase 4 — the view (2026-08-21)
 
 Surface gains the `principles` state: route model + router entry
