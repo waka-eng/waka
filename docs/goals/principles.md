@@ -68,6 +68,13 @@ Two structural decisions follow from the architecture:
 - **A separate surface view.** Principles join wall / capture / archive
   / signals as a first-class state of the one surface — not a profile
   sub-tab.
+- **Many, not one (owner clarification, 2026-08-18).** Top of mind is
+  ONE bounded artifact, rewritten whole. Principles are a **growing
+  set** — a person is as deep as their history, and the set grows with
+  it. Architecturally this makes principles *signals-shaped* (per-item
+  minting into an open set), not top-of-mind-shaped (whole-artifact
+  synthesis). Cardinality is the cleanest structural difference between
+  the two layers, and the first thing the surface should communicate.
 
 ## The layer, precisely
 
@@ -88,7 +95,14 @@ when implemented, drift-locked then, tuned only with real data):
 | `PRINCIPLE_MIN_SIGNALS` | 3 | Distinct citing signals required |
 | `PRINCIPLE_MIN_SPAN_DAYS` | 45 | First-to-last evidence span across those signals |
 | `PRINCIPLE_MIN_TOM_APPEARANCES` | 5 | Distinct top-of-mind versions in which the citing signals were selected |
-| `PRINCIPLE_LIMIT` | 7 | Held + aspirational principles a profile may surface — a list longer than a person can hold isn't principles |
+
+**There is no cap on the set — by design**, the same answer the canon
+gives for signals. Growth is bounded behaviorally: a principle is
+expensive to earn (the bar above), and the merge evaluation collapses
+overlap instead of letting near-duplicates accumulate. A memory that
+refused to learn a person's twentieth principle would be lying about
+them. Consumption surfaces (the view, the MCP tool) present the set
+ranked and may page it; storage never truncates it.
 
 The existing decay arithmetic already cooperates: support and spread
 never decay, so long-evidenced dormant patterns floor instead of
@@ -101,7 +115,7 @@ math refuses to forget.
 |---|---|---|
 | `held` | Demonstrated by history | Minted by synthesis only when the longevity bar is met |
 | `aspirational` | Declared by the owner, not yet demonstrated | `POST /api/principles`; locks on creation; visibly marked |
-| `contested` | Standing principle with live contrary judgment | v1: the owner's own `not_true` feedback. Automatic contradiction detection is **deferred** (v2) — it needs a judge comparing new signals against standing principles, and real usage should prove the need first |
+| `contested` | Standing principle in live dispute | Two routes in v1: the owner's own `not_true` feedback, and the **conflict evaluation** — a judge finding two principles in genuine collision marks the pair contested for owner adjudication. (Behavior-vs-principle contradiction — new *signals* undermining a held principle — stays deferred to v2.) |
 
 An `aspirational` principle becomes `held` when synthesis attaches
 citing signals to it that meet the bar — the declaration was a promise;
@@ -113,6 +127,25 @@ Synthesis proposes an order; the owner may reorder, and an owner reorder
 is sticky — synthesis thereafter appends new principles at the bottom
 and never re-sorts what the owner arranged. No cleverness: the rank *is*
 the tie-breaker, which is what makes it decidable.
+
+**Generation is mint-or-match, not whole-set synthesis.** When a
+cluster of signals crosses the longevity bar, a candidate principle is
+distilled and compared against the existing set — the same recoverable-
+mistake machinery the signal layer uses, one level up:
+
+- **Overlap** → merge evaluation: embedding similarity, then a judge
+  asking "same principle?" Same → the candidate's citations attach to
+  the existing principle; no near-duplicate is minted.
+- **Contradiction** → conflict evaluation: a judge finds the candidate
+  (or two standing principles) in genuine collision. Both are marked
+  `contested` **as a pair** and surfaced for the owner to adjudicate —
+  merge, retire one, or simply rank them. Rank keeps the fence
+  *decidable while contested*: the higher-ranked principle wins
+  operationally, so a contradiction is a visible tension awaiting
+  judgment, never a broken system.
+- **Novel** → minted `held` with its citations. A candidate matching an
+  `aspirational` declaration redeems that declaration to `held` instead
+  of minting beside it.
 
 **The phrasing contract.** Every principle is phrased as a direction or
 constraint — "prefer X over Y," "before X, require Y" — never as an
@@ -148,8 +181,11 @@ always?*
 inspiration sprawl: both are short lists of statement-shaped lines
 citing signals, and "You keep choosing small tools" (entry) versus
 "Prefer small tools you can hold in your head" (principle) are nearly
-the same sentence two views apart. Three rules keep them distinct:
+the same sentence two views apart. Four rules keep them distinct — the first structural, three presentational:
 
+0. **Cardinality.** Top of mind is one bounded artifact; principles are
+   an unbounded growing set. The surface says so: the wall is a single
+   rewritten board, the principles view is an accumulating ranked list.
 1. **Form.** Top of mind stays descriptive and second-person; principles
    are imperative constraints. The phrasing contract doubles as the
    anti-convergence rule, and synthesis receives the current entries
@@ -183,10 +219,15 @@ changes (the chain becomes derive → top of mind → principles), on
 principle feedback, and manually. Push-woken like everything else; the
 daily sweep remains only a safety net.
 
-Provider: one call, `synthesizePrinciples` — whole-set output like
-top-of-mind synthesis (≤ `PRINCIPLE_LIMIT`), temp 0, schema-constrained,
-statements ≤ 200 chars, citations validated against held signals in
-code, locked statements byte-identical from storage.
+Provider: two calls, both temp 0 and schema-constrained.
+`distillPrinciple` reads one eligible signal cluster (plus current
+top-of-mind entries for the no-restatement rule) and returns one
+candidate ≤ 200 chars. `judgePrincipleRelation` compares a candidate
+against one existing principle and answers `same | independent |
+conflicting` — the merge and conflict evaluations in a single judged
+call, conservative toward `independent` (a duplicate is visible and
+mergeable; a wrong merge or a false conflict is not). Citations are
+validated in code; locked statements never round-trip through a model.
 
 ## Phases
 
@@ -215,14 +256,16 @@ gracefully); typecheck + suite green.
 
 ### Phase 2 — Longevity selection and synthesis
 
-Eligibility arithmetic (`selectPrincipleEvidence`: signals meeting the
-constants, with span and top-of-mind-appearance counts computed from the
-version chain), the `synthesizePrinciples` provider call with the
-phrasing contract **and the no-restatement rule** (current top-of-mind
-entries ride along as what a principle must generalize beyond, never
-echo), code-side validation (citations resolve, locked byte-identical,
-shape checks), aspirational attachment, contested via feedback,
-reconciliation on evidence loss, job wiring into the chain.
+Eligibility arithmetic (`selectPrincipleEvidence`: signal clusters
+meeting the constants, with span and top-of-mind-appearance counts
+computed from the version chain), `distillPrinciple` with the phrasing
+contract **and the no-restatement rule** (current top-of-mind entries
+ride along as what a principle must generalize beyond, never echo),
+mint-or-match against the existing set via embeddings +
+`judgePrincipleRelation` (same → attach; conflicting → contested pair;
+independent → mint), aspirational redemption, contested via feedback,
+code-side validation (citations resolve, locked byte-identical, shape
+checks), reconciliation on evidence loss, job wiring into the chain.
 
 **Gate:** unit tests pin the arithmetic (eligibility bars, rank
 stickiness, aspirational→held promotion, reconciliation both
