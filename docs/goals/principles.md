@@ -497,6 +497,21 @@ a principle declared on waka.im is visible through web and MCP.
 
 ## Log
 
+### Phase 1 — schema (2026-08-18)
+
+`schema-principles.ts`: `principles` (statement, type value|maxim|stance,
+state held|aspirational|contested, origin minted|declared, rank with a
+per-profile unique index, owner_ranked_at for sticky rank, locked_at,
+held_since, conflicts_with_id) + `principle_signals` (M:N, unique per
+pair, composite (profile_id, id) tenancy FKs per house pattern — table-
+level UNIQUE emitted before the FKs, the baseline trap avoided).
+`feedback_target_type` gains `principle`. Migration `0002_principles.sql`.
+
+Gate measured: apply #1 clean, apply #2 clean no-op, `db:check`
+"Everything's fine", principle tables = 2, feedback targets =
+principle,signal,top_of_mind_entry, ts errors = 0, tests 364/364.
+**Pass.**
+
 ### Phase 0 — canon amendment (2026-08-18), awaiting owner signature
 
 `docs/data-model.md` amended to the four-layer canon: title and status;
