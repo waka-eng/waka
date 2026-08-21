@@ -162,37 +162,85 @@ falls below the bar reverts to `aspirational` if owner-declared, or is
 retired if machine-minted. (Same cascade discipline as
 signals-after-evidence-loss.)
 
+## What qualifies, and what cannot
+
+Five tests. A candidate — minted or declared — is a principle only if
+**all** applicable tests hold:
+
+1. **The context test.** It still instructs after every proper noun,
+   number, and project name is deleted. "≤$100 for LLM testing" dies
+   (those are parameters — a rule); "have something working before you
+   spend more" survives.
+2. **The directive test.** It prescribes the next choice; it never
+   describes the person. "You keep choosing small tools" is a fact —
+   that is a *signal*. Its principle form is "prefer tools you can hold
+   in your head."
+3. **The evidence test.** It cites at least `PRINCIPLE_MIN_SIGNALS`
+   distinct signals from this profile's own history. Uncited wisdom —
+   "be kind," "move fast" — is a horoscope regardless of truth.
+4. **The time test.** Its evidence spans `PRINCIPLE_MIN_SPAN_DAYS` and
+   survived `PRINCIPLE_MIN_TOM_APPEARANCES` top-of-mind versions. A
+   two-week obsession is top of mind, not character.
+5. **The completion test.** It can never be finished or satisfied.
+   "Ship by June" completes — a goal, not a principle. "Working before
+   scaling spend" never completes.
+
+What cannot be a principle, each mapped to where it belongs instead: a
+**rule** (context-bound, parameterized) → evidence; a **fact** about the
+person → signal; **what currently matters** → top of mind; a **goal**
+(completable) → not WAKA's to hold; a **single-burst enthusiasm** →
+fails time, stays a signal; **generic virtue without citations** →
+refused outright.
+
+**Declarations get a graded exemption.** An aspirational declaration
+skips evidence and time at creation — trusting the owner's word pending
+demonstration is the point — but must pass context, directive, and
+completion. A declaration that is really a rule or a goal is refused at
+`POST` with the failing test named, teaching the concept at the exact
+moment of confusion. (One judged call, `validateDeclaration`;
+owner-initiated, outside the daily cadence.)
+
 ## When a principle is generated
 
-Asked by the owner on 2026-08-18. Two different "whens":
+Owner decision (2026-08-18, superseding the chained design drafted
+earlier the same day): **generation runs once per day, at midnight, and
+nothing else may trigger it.** The reasoning is the layer's own tempo: a
+principle is what a person lives by, shown through many inspirations and
+signals over months — one or two captures never make one, so there is no
+moment to catch live, and a daily rhythm is the honest cadence.
 
-**The evaluation runs constantly** — chained one link onto the existing
-pipeline. Any top-of-mind refresh that versioned *with changes* enqueues
-`refresh_principles` (push-woken, debounced per profile), so the check
-runs seconds after the capture that started the chain. Feedback on a
-principle and a manual refresh also trigger it; the daily sweep remains
-a safety net, never the mechanism.
+**Mechanism.** A dedicated `sst.aws.Cron("PrincipleRefresh")` at
+`PRINCIPLE_REFRESH_CRON` — proposed **00:00 Asia/Seoul** (15:00 UTC;
+per-profile timezones deferred). It enqueues `refresh_principles` for
+each profile with signal or top-of-mind activity since the last run,
+then wakes the worker — the queue stays the mechanism; the cron is the
+sole enqueuer.
 
-**A principle mints only at a bar-crossing.** Nearly every run is one
-cheap SQL question — did any signal cluster newly cross the longevity
-bar? — answered no, exiting with zero model calls, exactly as a capture
-that yields nothing costs no synthesis today. The expensive path
-(distill → judge → mint/attach/conflict) runs only in the rare moment a
-theme's third distinct signal lands with a 45-day span and five
-top-of-mind survivals behind it. Chaining rather than scheduling means
-that moment surfaces seconds after the capture that completed the case
-— the day history earns a principle is worth catching live.
+**The hard guarantee, drift-locked.** No code path outside the cron
+handler (and an env-gated e2e override, absent in deployed stages)
+enqueues `refresh_principles`. A generation-doc test pin greps for call
+sites and fails CI if another appears. The manual refresh endpoint from
+the earlier draft is **deleted**; deployed surfaces expose no trigger.
+E2e invokes the job directly under the override because it cannot wait
+for midnight; unit tests pin the real arithmetic.
+
+**What stays immediate — flagged for owner veto: state maintenance
+involves no generation and does not wait for midnight.** `not_true`
+feedback flips a principle to `contested` at feedback time; deleting
+evidence under a held principle reconciles it (held → aspirational if
+declared, retired if minted) at delete time. Both are cheap SQL state
+flips with zero model calls. Waiting a day to stop displaying something
+the owner already refuted would be dishonesty, not thrift. Generation —
+distilling, judging, minting, redemption — happens only at midnight.
 
 **Declarations are not generation.** An aspirational principle is
-created instantly by the owner's own hand; generation's later role is
-redemption — a distilled candidate matching the declaration flips it to
-`held` instead of minting beside it.
+created instantly by the owner's own hand (validated at POST, see the
+qualification tests); the daily run's later role is redemption.
 
 **Lived timeline for a fresh profile:** signals in seconds, top of mind
-in seconds, **no held principle for ~six weeks** regardless of capture
-volume — `PRINCIPLE_MIN_SPAN_DAYS` is a wall clock, not a volume bar.
-Aspirational declarations may fill the view from day one; the first
-earned principle arrives when history, not enthusiasm, has accumulated.
+in seconds, and the first held principle at the first midnight after the
+bar is crossed — about six weeks in, regardless of capture volume.
+`PRINCIPLE_MIN_SPAN_DAYS` is a wall clock, not a volume bar.
 
 ## One question per view
 
@@ -246,12 +294,15 @@ Additive migration — no wipe, no backfill needed (production holds one
 capture).
 
 Pipeline: a `refresh_principles` job, keyed per profile, debounced by
-partial unique index, enqueued when a top-of-mind refresh completes with
-changes (the chain becomes derive → top of mind → principles), on
-principle feedback, and manually. Push-woken like everything else; the
-daily sweep remains only a safety net.
+partial unique index, enqueued **only** by the daily
+`PrincipleRefresh` cron (00:00 Asia/Seoul) for profiles with activity
+since the last run — see "When a principle is generated" for the hard
+guarantee. Feedback and evidence-loss are immediate SQL state flips
+outside generation.
 
-Provider: two calls, both temp 0 and schema-constrained.
+Provider: three calls, all temp 0 and schema-constrained.
+`validateDeclaration` applies the context/directive/completion tests to
+an owner declaration and names the failing test on refusal.
 `distillPrinciple` reads one eligible signal cluster (plus current
 top-of-mind entries for the no-restatement rule) and returns one
 candidate ≤ 200 chars. `judgePrincipleRelation` compares a candidate
@@ -308,10 +359,12 @@ green.
 ### Phase 3 — API
 
 `GET /api/principles` (ranked; `?profile=` under the matrix),
-`POST` (declare → aspirational + locked), `PATCH /:id` (edit → lock),
-`DELETE /:id`, `POST /reorder` (owner; sticky), `POST /refresh` (202,
-debounced), feedback accepts `targetType: "principle"`. Cross-account
-answers 404 exactly like signals (no existence oracle).
+`POST` (declare → `validateDeclaration` → aspirational + locked, or a
+refusal naming the failing test), `PATCH /:id` (edit → lock),
+`DELETE /:id`, `POST /reorder` (owner; sticky), feedback accepts
+`targetType: "principle"`. **No refresh endpoint** — generation belongs
+to the cron alone. Cross-account answers 404 exactly like signals (no
+existence oracle).
 
 **Gate:** route tests cover the matrix cells (owner / agent-on-own /
 agent-on-human read-only / cross-account 404) and the reorder
@@ -358,10 +411,12 @@ green in both repos.
 
 ### Phase 7 — E2E and cutover
 
-`tools/e2e/principles.ts`: declared-aspirational path live end to end;
-promotion path with the documented env overrides for the time-span bars
-(`WAKA_PRINCIPLE_*_OVERRIDE`, honored only when set — e2e cannot wait 45
-days; unit tests pin the real arithmetic). Deploy to dev on merge,
+`tools/e2e/principles.ts`: declared-aspirational path live end to end
+(including a refused declaration naming its failing test); promotion
+path with the documented env overrides for the time-span bars **and a
+direct job invocation** (`WAKA_PRINCIPLE_*_OVERRIDE`, honored only when
+set — e2e can wait for neither 45 days nor midnight; unit tests pin the
+real arithmetic and a drift pin holds the cron-only guarantee). Deploy to dev on merge,
 behavioral verification on dev.waka.im, then promote to production.
 
 **Gate:** e2e green locally and against deployed dev; prod deploy green;
