@@ -255,7 +255,7 @@ words for the wrong layer. Disposition of every existing concept:
 | WOW vocabulary | `wow_kind`, `why`, `belief_statement`, `reflection_question`, `reflection_guide`, `wow_score`; routes `/api/wow-moments`, `/api/wow-status` | Deleted. Native entry fields are designed for the new generator (`type`, `body`, `prompt`, `confidence` carry over from the current surface; belief statements get a deliberate yes/no as a native field, not a legacy leftover). |
 | Lens boards | `top_of_mind_notes.lens` (`all`/`app`/`agent`) with separately generated per-lens boards | Deleted — superseded structurally: agent memory lives in the agent profile's own stack. `source` provenance remains on inspirations. |
 | **Principle** (L4) | No entity | New `principles` + `principle_signals` tables (statement, type `value \| maxim \| stance`, state, rank, lock; M:N citations to signals); `feedback.target_type` gains `principle`. |
-| **Wall** (personal) | The one-surface web UI | Concept unchanged: a profile's own surface over its layers — the principles view joins it under progressive disclosure (the nav affordance exists only once a principle does). |
+| **Wall** (personal) | The one-surface web UI | Concept unchanged: a profile's own surface over its layers — the principles view joins it as an always-present nav verb (the empty view teaches what a principle is and offers the declare line). |
 | **Group wall** | Group rooms + feed of members' shared captures | Now shows members' **shared signals** (distilled statements), never raw captures. |
 | **Group top of mind** | `group_top_of_mind_notes` (+ per-evidence `owner_user_id`), direction proposals/affirmations | Becomes the group-scoped `top_of_mind` artifact; the direction machinery is the co-editing mechanism producing new versions. |
 | CLI auth | `auth-cli.ts` loopback flow, `cli_login_codes`, sessions with `client: "cli"` | Loopback flow gains a **consent + profile-selection step**; the minted session binds to the chosen profile. Per-profile scoping (read+capture vs full) is enforced from that binding. |
@@ -363,6 +363,11 @@ follows the permission matrix.
 - **2026-08-18** — Principles are per-profile like every layer, **not
   shareable** in v1, read-only to agent sessions on the human profile,
   and surfaced under progressive disclosure.
+- **2026-08-21** — Progressive disclosure **reversed** (owner decision):
+  the principles nav verb is always present, empty set or not — the
+  empty view is the explanation. The board header ("X's top of mind" +
+  last-read) now renders only on the wall view; every other view titles
+  itself.
 
 The migration itself (schema, API, web, MCP phases and gates) belongs in a
 `docs/goals/` goal document that references this file — for this layer,
