@@ -1308,6 +1308,26 @@ export async function joinGroup(
   return { group: body.group, alreadyMember: Boolean(body.alreadyMember) };
 }
 
+/** POST /groups/:id/leave — walk out; your shared signals come off its wall. */
+export async function leaveGroup(groupId: string): Promise<void> {
+  await requestVoid(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/leave`),
+    "POST",
+    {},
+    "Failed to leave this room",
+  );
+}
+
+/** DELETE /groups/:id — the owner closes the room for everyone. */
+export async function deleteGroup(groupId: string): Promise<void> {
+  await requestVoid(
+    apiPath(`/groups/${encodeURIComponent(groupId)}`),
+    "DELETE",
+    undefined,
+    "Failed to close this room",
+  );
+}
+
 /** GET /groups/:id/members */
 export async function fetchGroupMembers(groupId: string): Promise<ApiGroupMember[]> {
   const body = await getJson<{ members: ApiGroupMember[] }>(

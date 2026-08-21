@@ -292,6 +292,40 @@ async function main(): Promise<void> {
       return "proposal accepted once a second member affirmed it";
     });
 
+    /*
+      The assertion the first version of this suite lacked, to its cost: for
+      months, acceptance marked the proposal accepted and then NOTHING
+      happened — group synthesis was an explicit not_implemented seam, and
+      this suite passed anyway. An accepted change must MATERIALIZE: the
+      refresh writes the next version and the members' words arrive on it
+      verbatim and locked.
+    */
+    await step("acceptance materializes a reading with the words locked", async () => {
+      const landed = await waitFor(
+        async ({ note }) => {
+          const tom = await api<{
+            topOfMind: { version: number; reason: string } | null;
+            entries: Array<{ body: string; lockedAt: string | null }>;
+          }>(owner!, `/api/groups/${groupId}/top-of-mind`);
+          if (tom.status !== 200) throw new Error(`top-of-mind → ${tom.status}`);
+          const added = (tom.body.entries ?? []).find((entry) =>
+            entry.body.includes("what an object earns by being used"),
+          );
+          note(
+            `version: ${tom.body.topOfMind?.version ?? 0}, accepted entry: ${added ? "present" : "absent"}`,
+          );
+          return tom.body.topOfMind && added
+            ? { version: tom.body.topOfMind.version, locked: added.lockedAt !== null }
+            : null;
+        },
+        { timeoutMs: 180_000, label: "the accepted words on the group's reading" },
+      );
+      if (!landed.locked) {
+        throw new Error("the accepted entry arrived unlocked — member words must lock");
+      }
+      return `v${landed.version}, accepted entry present and locked`;
+    });
+
     await step("a non-member cannot tell the group exists", async () => {
       const stranger = await signUp({ baseUrl });
       try {

@@ -15,6 +15,11 @@ describe("Surface routes", () => {
       view: "inspiration",
       entityId: "inspiration-1",
     });
+    expect(parseSurfacePath("/rooms")).toEqual({ view: "rooms", entityId: null });
+    expect(parseSurfacePath("/rooms/group-1")).toEqual({
+      view: "room",
+      entityId: "group-1",
+    });
   });
 
   it("decodes an id that had to be escaped to fit in a path", () => {
@@ -39,9 +44,18 @@ describe("Surface routes", () => {
   });
 
   it("sends anything it does not recognise home rather than nowhere", () => {
-    for (const path of ["/rooms/room-1", "/readings/read-1", "/sit", "/nonsense/deep"]) {
+    for (const path of ["/readings/read-1", "/sit", "/nonsense/deep"]) {
       expect(parseSurfacePath(path)).toEqual({ view: "wall", entityId: null });
     }
+  });
+
+  /* A malformed room id falls back to the rooms list, same as inspirations. */
+  it("falls back to the rooms list when the room id cannot be read", () => {
+    expect(parseSurfacePath("/rooms/%E0%A4%A")).toEqual({
+      view: "rooms",
+      entityId: null,
+    });
+    expect(buildSurfacePath({ view: "room", entityId: null })).toBe("/rooms");
   });
 
   it("builds paths that round-trip for every Surface view", () => {
@@ -50,6 +64,8 @@ describe("Surface routes", () => {
       { view: "capture" as const, entityId: null },
       { view: "archive" as const, entityId: null },
       { view: "signals" as const, entityId: null },
+      { view: "rooms" as const, entityId: null },
+      { view: "room" as const, entityId: "group-1" },
       { view: "inspiration" as const, entityId: "one / two" },
     ];
 

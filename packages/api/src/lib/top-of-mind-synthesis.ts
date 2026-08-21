@@ -30,10 +30,14 @@
 import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 
 import {
+  groupMembers,
+  groups,
+  groupTopOfMindProposals,
   inspirations,
   profiles,
   signalEvidence,
   signals,
+  signalShares,
   topOfMindEntries,
   topOfMindEntrySignals,
   topOfMinds,
@@ -902,19 +906,535 @@ export async function refreshTopOfMindForProfile(
   };
 }
 
+// ---------------------------------------------------------------------------
+// The group pass
+//
+// Same artifact grammar, different subject and different hands. The signals
+// are the ones members chose to put on the group's wall — an explicit act,
+// so there is no scoring pass and no cold start: the wall IS the selection,
+// capped at TOP_OF_MIND_SIGNAL_LIMIT by live confidence. And where a personal
+// artifact is edited directly, a group's is edited by ACCEPTED PROPOSALS:
+// each one applied here, deterministically, before the model writes anything
+// — an accepted change is the members' own hand and never passes through a
+// model. An applied edit locks its entry; an applied removal dismisses it;
+// an applied addition arrives locked. From there the personal carry rules
+// take over unchanged.
+// ---------------------------------------------------------------------------
+
+export interface GroupTopOfMindRefreshResult {
+  status: "versioned" | "nothing_to_synthesize";
+  topOfMindId: string | null;
+  version: number;
+  reason: TopOfMindRevisionReason | null;
+  entryCount: number;
+  /** Accepted proposals materialized into this version. */
+  appliedProposals: number;
+  droppedCitations: number;
+}
+
+interface GroupCarriedEntry extends CarriedEntry {
+  /** Null for an entry added by proposal in this very pass. */
+  id: string | null;
+}
+
+interface GroupLiveArtifactSnapshot {
+  id: string;
+  version: number;
+  createdAt: Date;
+  entries: GroupCarriedEntry[];
+  /** signalId → the member whose signal it was when cited. */
+  citationOwners: Map<string, string>;
+}
+
+interface GroupSharedSignal {
+  id: string;
+  statement: string;
+  confidence: number;
+  evidenceCount: number;
+  lastEvidenceAt: Date | null;
+  ownerProfileId: string;
+}
+
+export interface GroupProposalToApply {
+  kind: "edit_entry" | "add_entry" | "remove_entry";
+  entryId: string | null;
+  body: string | null;
+}
+
 /**
- * The group artifact is generated from members' shared signals rather than a
- * profile's own, and its co-editing mechanism (proposals, affirmations) is a
- * different versioning story. The seam exists so the queue can route the job
- * type today and the behaviour can land without touching the router.
+ * Materialize accepted proposals into the carried set. Pure, so the three
+ * rules — edit rewrites and locks, removal dismisses, addition arrives
+ * locked — are testable without a database. A proposal aimed at an entry
+ * that no longer exists is skipped and not counted: its target left before
+ * the decision could land, and inventing a place for it would be worse.
  */
-export async function refreshTopOfMindForGroup(input: {
-  groupId: string;
-  reason: string;
-}): Promise<{ status: "not_implemented"; groupId: string }> {
-  console.log("[top-of-mind] group synthesis is not wired yet", {
-    groupId: input.groupId,
-    reason: input.reason,
+export function applyGroupProposals(
+  carried: GroupCarriedEntry[],
+  proposals: GroupProposalToApply[],
+  now: Date,
+): { entries: GroupCarriedEntry[]; applied: number } {
+  const entries = carried.map((entry) => ({ ...entry }));
+  let applied = 0;
+  let nextSort = entries.reduce((max, entry) => Math.max(max, entry.sortOrder), -1) + 1;
+
+  for (const proposal of proposals) {
+    if (proposal.kind === "add_entry") {
+      const body = proposal.body?.trim();
+      if (!body) continue;
+      entries.push({
+        id: null,
+        type: "pattern",
+        body,
+        belief: null,
+        prompt: null,
+        lockedAt: now,
+        pinnedAt: null,
+        dismissedAt: null,
+        sortOrder: nextSort,
+        citedSignalIds: [],
+      });
+      nextSort += 1;
+      applied += 1;
+      continue;
+    }
+
+    const target = entries.find((entry) => entry.id !== null && entry.id === proposal.entryId);
+    if (!target) continue;
+
+    if (proposal.kind === "remove_entry") {
+      target.dismissedAt = now;
+      applied += 1;
+    } else {
+      const body = proposal.body?.trim();
+      if (!body) continue;
+      target.body = body;
+      target.lockedAt = now;
+      applied += 1;
+    }
+  }
+
+  return { entries, applied };
+}
+
+async function loadLiveGroupArtifact(
+  db: WakaDb | WakaTx,
+  groupId: string,
+): Promise<GroupLiveArtifactSnapshot | null> {
+  const [artifact] = await db
+    .select({
+      id: topOfMinds.id,
+      version: topOfMinds.version,
+      createdAt: topOfMinds.createdAt,
+    })
+    .from(topOfMinds)
+    .where(and(eq(topOfMinds.groupId, groupId), eq(topOfMinds.status, "live")))
+    .limit(1);
+  if (!artifact) return null;
+
+  const entryRows = await db
+    .select()
+    .from(topOfMindEntries)
+    .where(eq(topOfMindEntries.topOfMindId, artifact.id))
+    .orderBy(asc(topOfMindEntries.sortOrder));
+
+  const citationRows =
+    entryRows.length === 0
+      ? []
+      : await db
+          .select({
+            entryId: topOfMindEntrySignals.entryId,
+            signalId: topOfMindEntrySignals.signalId,
+            ownerProfileId: topOfMindEntrySignals.ownerProfileId,
+          })
+          .from(topOfMindEntrySignals)
+          .where(
+            inArray(
+              topOfMindEntrySignals.entryId,
+              entryRows.map((row) => row.id),
+            ),
+          );
+
+  const citationsByEntry = new Map<string, string[]>();
+  const citationOwners = new Map<string, string>();
+  for (const row of citationRows) {
+    const bucket = citationsByEntry.get(row.entryId);
+    if (bucket) bucket.push(row.signalId);
+    else citationsByEntry.set(row.entryId, [row.signalId]);
+    if (row.ownerProfileId) citationOwners.set(row.signalId, row.ownerProfileId);
+  }
+
+  return {
+    id: artifact.id,
+    version: artifact.version,
+    createdAt: artifact.createdAt,
+    citationOwners,
+    entries: entryRows.map((row) => ({
+      id: row.id,
+      type: row.type,
+      body: row.body,
+      belief: row.belief,
+      prompt: row.prompt,
+      lockedAt: row.lockedAt,
+      pinnedAt: row.pinnedAt,
+      dismissedAt: row.dismissedAt,
+      sortOrder: row.sortOrder,
+      citedSignalIds: citationsByEntry.get(row.id) ?? [],
+    })),
+  };
+}
+
+/**
+ * The wall, with live confidence. Same at-read computation as the personal
+ * selector: the stored column froze the decay term the moment evidence last
+ * landed, and a wall ranked by it would keep a long-quiet signal looking
+ * current.
+ */
+async function loadGroupSharedSignals(
+  db: WakaDb,
+  groupId: string,
+  now: Date,
+): Promise<GroupSharedSignal[]> {
+  const rows = await db
+    .select({
+      id: signals.id,
+      statement: signals.statement,
+      lastEvidenceAt: signals.lastEvidenceAt,
+      ownerProfileId: signals.profileId,
+    })
+    .from(signalShares)
+    .innerJoin(signals, eq(signals.id, signalShares.signalId))
+    .where(eq(signalShares.groupId, groupId));
+  if (rows.length === 0) return [];
+
+  const evidenceRows = await db
+    .select({
+      signalId: signalEvidence.signalId,
+      createdAt: signalEvidence.createdAt,
+      source: inspirations.source,
+    })
+    .from(signalEvidence)
+    .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
+    .where(
+      inArray(
+        signalEvidence.signalId,
+        rows.map((row) => row.id),
+      ),
+    );
+
+  const evidenceBySignal = new Map<string, Array<{ createdAt: Date; source: "app" | "agent" }>>();
+  for (const row of evidenceRows) {
+    const bucket = evidenceBySignal.get(row.signalId);
+    if (bucket) bucket.push(row);
+    else evidenceBySignal.set(row.signalId, [row]);
+  }
+
+  return rows
+    .map((row) => {
+      const evidence = evidenceBySignal.get(row.id) ?? [];
+      return {
+        id: row.id,
+        statement: row.statement,
+        confidence: computeSignalConfidence(evidence, now),
+        evidenceCount: evidence.length,
+        lastEvidenceAt: row.lastEvidenceAt,
+        ownerProfileId: row.ownerProfileId,
+      };
+    })
+    .sort((a, b) => {
+      if (b.confidence !== a.confidence) return b.confidence - a.confidence;
+      return a.id < b.id ? -1 : 1;
+    })
+    .slice(0, TOP_OF_MIND_SIGNAL_LIMIT);
+}
+
+/** Accepted proposals not yet materialized: resolved after the live version was written. */
+async function loadUnappliedProposals(
+  db: WakaDb | WakaTx,
+  groupId: string,
+  since: Date | null,
+): Promise<GroupProposalToApply[]> {
+  const rows = await db
+    .select({
+      kind: groupTopOfMindProposals.kind,
+      entryId: groupTopOfMindProposals.entryId,
+      body: groupTopOfMindProposals.body,
+      resolvedAt: groupTopOfMindProposals.resolvedAt,
+    })
+    .from(groupTopOfMindProposals)
+    .where(
+      and(
+        eq(groupTopOfMindProposals.groupId, groupId),
+        eq(groupTopOfMindProposals.status, "accepted"),
+      ),
+    )
+    .orderBy(asc(groupTopOfMindProposals.resolvedAt));
+
+  return rows
+    .filter((row) => row.resolvedAt !== null && (since === null || row.resolvedAt > since))
+    .map((row) => ({ kind: row.kind, entryId: row.entryId, body: row.body }));
+}
+
+function carryCarriedEntries(entries: GroupCarriedEntry[]): PersistedEntry[] {
+  return [...entries]
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((entry) => ({
+      type: entry.type,
+      body: entry.body,
+      belief: entry.belief,
+      prompt: entry.prompt,
+      lockedAt: entry.lockedAt,
+      pinnedAt: entry.pinnedAt,
+      dismissedAt: entry.dismissedAt,
+      citedSignalIds: entry.citedSignalIds,
+    }));
+}
+
+async function writeGroupVersion(
+  tx: WakaTx,
+  input: {
+    groupId: string;
+    previous: GroupLiveArtifactSnapshot | null;
+    entries: PersistedEntry[];
+    reason: TopOfMindRevisionReason;
+    /** signalId → member, for citation attribution on group entries. */
+    ownerBySignalId: Map<string, string>;
+    now: Date;
+  },
+): Promise<{ id: string; version: number }> {
+  if (input.previous) {
+    await tx
+      .update(topOfMinds)
+      .set({ status: "superseded", replacedAt: input.now })
+      .where(eq(topOfMinds.id, input.previous.id));
+  }
+
+  const [created] = await tx
+    .insert(topOfMinds)
+    .values({
+      groupId: input.groupId,
+      version: (input.previous?.version ?? 0) + 1,
+      status: "live",
+      reason: input.reason,
+    })
+    .returning({ id: topOfMinds.id, version: topOfMinds.version });
+  if (!created) throw new Error("Failed to insert group top of mind version");
+
+  if (input.previous) {
+    await tx
+      .update(topOfMinds)
+      .set({ replacedById: created.id })
+      .where(eq(topOfMinds.id, input.previous.id));
+  }
+
+  for (const [index, entry] of input.entries.entries()) {
+    const [insertedEntry] = await tx
+      .insert(topOfMindEntries)
+      .values({
+        topOfMindId: created.id,
+        type: entry.type,
+        body: entry.body,
+        belief: entry.belief,
+        prompt: entry.prompt,
+        lockedAt: entry.lockedAt,
+        pinnedAt: entry.pinnedAt,
+        dismissedAt: entry.dismissedAt,
+        sortOrder: index,
+      })
+      .returning({ id: topOfMindEntries.id });
+    if (!insertedEntry) throw new Error("Failed to insert group top of mind entry");
+
+    if (entry.citedSignalIds.length > 0) {
+      await tx
+        .insert(topOfMindEntrySignals)
+        .values(
+          entry.citedSignalIds.map((signalId) => ({
+            entryId: insertedEntry.id,
+            signalId,
+            ownerProfileId: input.ownerBySignalId.get(signalId) ?? null,
+          })),
+        )
+        .onConflictDoNothing();
+    }
+  }
+
+  return created;
+}
+
+export async function refreshTopOfMindForGroup(
+  input: { groupId: string; reason: string },
+  deps: TopOfMindRefreshDependencies = {},
+): Promise<GroupTopOfMindRefreshResult> {
+  const db = deps.db ?? getDb();
+  const now = deps.now ?? new Date();
+  const provider = deps.modelProvider ?? (await getDefaultModelProvider());
+
+  const nothing: GroupTopOfMindRefreshResult = {
+    status: "nothing_to_synthesize",
+    topOfMindId: null,
+    version: 0,
+    reason: null,
+    entryCount: 0,
+    appliedProposals: 0,
+    droppedCitations: 0,
+  };
+
+  const [groupRows, memberRows] = await Promise.all([
+    db
+      .select({
+        id: groups.id,
+        name: groups.name,
+        createdByProfileId: groups.createdByProfileId,
+      })
+      .from(groups)
+      .where(eq(groups.id, input.groupId))
+      .limit(1),
+    db
+      .select({
+        profileId: groupMembers.profileId,
+        name: profiles.name,
+        preferredLocale: profiles.preferredLocale,
+      })
+      .from(groupMembers)
+      .innerJoin(profiles, eq(profiles.id, groupMembers.profileId))
+      .where(eq(groupMembers.groupId, input.groupId)),
+  ]);
+  const group = groupRows[0];
+  // The group can be deleted while the job sits in the queue; that is a
+  // no-op, not an error.
+  if (!group || memberRows.length === 0) return nothing;
+
+  const [shared, liveBefore] = await Promise.all([
+    loadGroupSharedSignals(db, input.groupId, now),
+    loadLiveGroupArtifact(db, input.groupId),
+  ]);
+  const pending = await loadUnappliedProposals(db, input.groupId, liveBefore?.createdAt ?? null);
+
+  if (shared.length === 0 && liveBefore === null && pending.length === 0) {
+    return nothing;
+  }
+
+  // Members' decisions land before the model writes a word.
+  const appliedBefore = applyGroupProposals(liveBefore?.entries ?? [], pending, now);
+  const lockedNow = appliedBefore.entries.filter(
+    (entry) => entry.lockedAt !== null && entry.dismissedAt === null,
+  );
+
+  const memberNameById = new Map(memberRows.map((row) => [row.profileId, row.name]));
+  // The room speaks in its host's language until groups carry their own.
+  const hostLocale = normalizeSupportedLocale(
+    (
+      memberRows.find((row) => row.profileId === group.createdByProfileId) ?? memberRows[0]
+    )?.preferredLocale,
+  );
+
+  let generated: TopOfMindSynthesisEntry[] = [];
+  let modelSaidNoChange = false;
+  let droppedCitations = 0;
+
+  if (shared.length > 0) {
+    const synthesis = await provider.synthesizeTopOfMind({
+      profileId: input.groupId,
+      preferredLocale: hostLocale,
+      provisional: false,
+      recentFeedback: [],
+      group: {
+        name: group.name,
+        memberNames: memberRows.map((row) => row.name),
+      },
+      signals: shared.map((signal) => ({
+        id: signal.id,
+        statement: signal.statement,
+        confidence: signal.confidence,
+        evidenceCount: signal.evidenceCount,
+        lastEvidenceAt: signal.lastEvidenceAt,
+        ownerName: memberNameById.get(signal.ownerProfileId) ?? "a former member",
+      })),
+      lockedEntries: lockedNow.map((entry, index) => ({
+        id: `${liveBefore?.id ?? "pending"}:${index}`,
+        type: entry.type,
+        body: entry.body,
+        belief: entry.belief,
+        prompt: entry.prompt,
+        citedSignalIds: entry.citedSignalIds,
+      })),
+      currentEntries: appliedBefore.entries
+        .filter((entry) => entry.dismissedAt === null)
+        .map((entry) => ({
+          type: entry.type,
+          body: entry.body,
+          citedSignalIds: entry.citedSignalIds,
+        })),
+    });
+
+    modelSaidNoChange = synthesis.noChange === true;
+    const validated = validateSynthesizedEntries(
+      synthesis.entries,
+      new Set(shared.map((signal) => signal.id)),
+    );
+    generated = validated.entries;
+    droppedCitations = validated.droppedCitations;
+    if (droppedCitations > 0) {
+      console.warn("[top-of-mind] dropped citations the group wall does not hold", {
+        groupId: input.groupId,
+        droppedCitations,
+      });
+    }
+  }
+
+  const written = await db.transaction(async (tx) => {
+    await acquireTopOfMindArtifactLock(tx, { groupId: input.groupId });
+
+    // Re-read under the lock, same as the personal pass: a version may have
+    // landed while this one waited on the provider, and the members'
+    // decisions on that newer version are the ones that must carry.
+    const previous = await loadLiveGroupArtifact(tx, input.groupId);
+    const proposals = await loadUnappliedProposals(
+      tx,
+      input.groupId,
+      previous?.createdAt ?? null,
+    );
+    const applied = applyGroupProposals(previous?.entries ?? [], proposals, now);
+
+    const nothingReconsidered = shared.length === 0 && previous !== null;
+    const entries = nothingReconsidered
+      ? carryCarriedEntries(applied.entries)
+      : assembleEntries({ carried: applied.entries, generated });
+
+    const unchanged =
+      previous !== null &&
+      applied.applied === 0 &&
+      (nothingReconsidered || modelSaidNoChange || isUnchanged(previous.entries, entries));
+    const reason: TopOfMindRevisionReason =
+      previous === null
+        ? "initial"
+        : applied.applied > 0
+          ? "member_proposal"
+          : unchanged
+            ? "no_change"
+            : "regenerated";
+
+    const ownerBySignalId = new Map<string, string>(previous?.citationOwners ?? []);
+    for (const signal of shared) ownerBySignalId.set(signal.id, signal.ownerProfileId);
+
+    const created = await writeGroupVersion(tx, {
+      groupId: input.groupId,
+      previous,
+      entries,
+      reason,
+      ownerBySignalId,
+      now,
+    });
+
+    return { created, reason, entryCount: entries.length, applied: applied.applied };
   });
-  return { status: "not_implemented", groupId: input.groupId };
+
+  return {
+    status: "versioned",
+    topOfMindId: written.created.id,
+    version: written.created.version,
+    reason: written.reason,
+    entryCount: written.entryCount,
+    appliedProposals: written.applied,
+    droppedCitations,
+  };
 }
