@@ -497,6 +497,31 @@ a principle declared on waka.im is visible through web and MCP.
 
 ## Log
 
+### Phase 2 — longevity selection and synthesis (2026-08-18)
+
+`lib/principle-generation.ts`: the five exported bars
+(PRINCIPLE_MIN_SIGNALS=3, MIN_SPAN_DAYS=45, MIN_TOM_APPEARANCES=5,
+MAX_STATEMENT_LENGTH=200, MAX_CANDIDATES_PER_RUN=3, env-overridable for
+e2e only); `computeCitationEligibility` (union span, union ToM
+versions), `nextRank` (append-only — the whole of generation's rank
+vocabulary), `reconcileAction`/`promoteDecision` (pure),
+`refreshPrinciplesForProfile` (cheap SQL gate → distill → per-candidate
+relation judging → attach/mint/contested-pair), reconciliation and
+redemption. `queue/gemini.ts`: distill/relation/route calls, temp 0,
+schema-constrained, fenced. Queue: `refresh_principles` job type
+(migration 0003), processor case, `enqueueRefreshPrinciples` keyed per
+profile per day. Cron `PrincipleRefresh` at cron(0 8 * * ? *) = 00:00
+PST, enqueue+drain in one handler; source-scan test pins the enqueue to
+the cron handler alone.
+
+Gate measured: unit tests 404/404 (40 new: 7 eligibility, 2 rank
+stickiness, 1 promotion, 4 reconciliation, plus parsers/pins); live
+sanity 10/10 — distilled "Prefer transient implementations over durable
+infrastructure to maintain agility." (bounded, context-free, cites
+s1,s2,s3), relation same/conflicting/independent all correct, routing
+goal→inspiration, maxim→principle, $100-rule→inspiration. Cost: 7
+flash-lite calls (<1¢, est. 6). **Pass.**
+
 ### Phase 1 — schema (2026-08-18)
 
 `schema-principles.ts`: `principles` (statement, type value|maxim|stance,
