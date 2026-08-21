@@ -497,6 +497,19 @@ a principle declared on waka.im is visible through web and MCP.
 
 ## Log
 
+### Phase 6 — canon sync and drift lock (2026-08-21)
+
+`docs/generation.md`: the "designed, not yet implemented" banner is
+gone; the section is implemented canon, its five constants graduated
+into the drift-locked tables in the same diff as the scan-list change.
+`generation-doc.test.ts` scans `principle-generation.ts` (both
+directions), and gains two [checked] pins: union semantics of the
+longevity bar (the set clears together; no member clears alone) and
+the named-functions claim.
+
+Gate measured: drift test 15/15; suites API 419/419, web 71/71,
+waka-mcp 35/35. **Pass.**
+
 ### Phase 5 — MCP (2026-08-21)
 
 waka-mcp: `getPrinciples` client (fetches `/api/principles.md` verbatim

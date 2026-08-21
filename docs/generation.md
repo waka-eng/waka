@@ -370,15 +370,12 @@ Deliberate consequences:
 
 ---
 
-## Layer 4: principles — designed, not yet implemented
+## Layer 4: principles — how the person chooses
 
-> **Status: design canon, code pending.** This section is the source of
-> truth for the fourth layer's mechanics, per `docs/goals/principles.md`
-> (draft under review; nothing built before its Phase 0 signature). Its
-> constants appear in prose, not in the tables below, deliberately: the
-> drift test fails table rows naming constants the code does not export,
-> and that protection is wanted. When the implementation lands, this
-> section graduates into the drift-locked tables in the same diff.
+Implemented per `docs/goals/principles.md` (phases 1–5, 2026-08-18 →
+2026-08-21). The constants below live in
+`packages/api/src/lib/principle-generation.ts` and are drift-locked like
+every other table in this document.
 
 A **principle** is how a person chooses, stripped of context — the
 generator from which context-bound **rules** compile ("frugal mindset" →
@@ -394,13 +391,14 @@ what survives is what qualifies.
    project name is deleted; otherwise it is a rule → evidence.
 2. **Directive** — prescribes the next choice; a fact about the person
    is a signal, not a principle.
-3. **Evidence** — cites at least 3 distinct signals (proposed
-   `PRINCIPLE_MIN_SIGNALS`) from this profile's own history; uncited
-   virtue is a horoscope.
-4. **Time** — evidence spanning at least 45 days (proposed
-   `PRINCIPLE_MIN_SPAN_DAYS`) and selected into at least 5 top-of-mind
-   versions (proposed `PRINCIPLE_MIN_TOM_APPEARANCES`); a two-week
-   obsession is top of mind, not character.
+3. **Evidence** — cites at least `PRINCIPLE_MIN_SIGNALS` (3) distinct
+   signals from this profile's own history; uncited virtue is a
+   horoscope.
+4. **Time** — evidence spanning at least `PRINCIPLE_MIN_SPAN_DAYS` (45)
+   days and selected into at least `PRINCIPLE_MIN_TOM_APPEARANCES` (5)
+   top-of-mind versions; a two-week obsession is top of mind, not
+   character. Both computed over the UNION of the citing signals — the
+   theme's lifetime, not any one wording's. **[checked]**
 5. **Completion** — can never be finished; anything checkable-off is a
    goal, not a principle.
 
@@ -478,6 +476,16 @@ The authoritative values. Machine-checked against code — see
 | `COMEBACK_MIN_DORMANT_DAYS` | 21 | Minimum gap for a return to count |
 | `COMEBACK_SATURATION_DAYS` | 90 | Gap length where the bonus saturates |
 | `COMEBACK_MAX_RETURN_AGE_DAYS` | 14 | A return older than this is just history |
+
+### Layer 4 — principles (`packages/api/src/lib/principle-generation.ts`)
+
+| Constant | Value | One line |
+|---|---|---|
+| `PRINCIPLE_MIN_SIGNALS` | 3 | Distinct citing signals a principle must rest on |
+| `PRINCIPLE_MIN_SPAN_DAYS` | 45 | First-to-last evidence span across the citing signals |
+| `PRINCIPLE_MIN_TOM_APPEARANCES` | 5 | Distinct top-of-mind versions the citing signals survived into |
+| `PRINCIPLE_MAX_STATEMENT_LENGTH` | 200 | A principle is a directive, not an essay |
+| `PRINCIPLE_MAX_CANDIDATES_PER_RUN` | 3 | Candidates one nightly distillation may propose |
 
 ### Model calls (`packages/api/src/queue/gemini.ts`, `packages/api/src/lib/inspiration-embeddings.ts`)
 
