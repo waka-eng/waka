@@ -8835,49 +8835,39 @@ function HomeExperience(): JSX.Element {
                     thing in a different voice and a different place is the
                     duplicate the founder caught on the agent wall. So this
                     line exists only when nothing above it spoke. */}
-                {ready && c?.empty && !c?.formingAlt ? (
-                  w.kind === "self" ? (
-                    /**
-                     * THE FIRST SCREEN, AND IT IS THE ONE THAT MATTERS MOST.
-                     *
-                     * Day-one retention is a hard ceiling on every number
-                     * after it, and for this product the first session IS the
-                     * empty screen. It used to be a single line of text, which
-                     * is the worst available form — an empty page describes
-                     * absence, and absence is not something anyone wants to
-                     * fill in.
-                     *
-                     * What works instead, in every case studied: show the
-                     * SHAPE, unfilled. Obra Dinn hands you a book whose sixty
-                     * rows are already named and every fate blank, so you can
-                     * see the exact size of your ignorance before you know one
-                     * answer. Dirtmouth is an empty town whose closed doors
-                     * are visible and countable — not "nothing", but "not yet
-                     * open". So this is the three layers, standing, waiting,
-                     * each named and each honest about being empty. No
-                     * tutorial. No apology. No progress bar, ever.
-                     */
-                    <div className="jar-first">
-                      <p className="jar-first-line">
-                        <span className="jar-first-slot" aria-hidden="true" />
-                        <span>a pattern, once something recurs</span>
-                      </p>
-                      <p className="jar-first-line">
-                        <span className="jar-first-slot" aria-hidden="true" />
-                        <span>what it all comes to</span>
-                      </p>
-                      <p className="jar-first-line">
-                        <span className="jar-first-slot" aria-hidden="true" />
-                        <span>everything you keep</span>
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="jar-wall-empty">
-                      {w.kind === "agent"
-                        ? "Give me something to work on and I’ll start"
-                        : "This room hasn’t noticed anything yet — share more, read together."}
-                    </p>
-                  )
+                {/* AN EMPTY WALL OF YOUR OWN SAYS NOTHING NOW.
+                    This used to draw a three-slot scaffold — an empty circle
+                    beside "everything you keep", "a pattern, once something
+                    recurs", "what it all comes to" — arguing that an empty
+                    page describes absence while an unfilled SHAPE invites
+                    filling, after Obra Dinn's named-but-blank fates and
+                    Dirtmouth's visible closed doors.
+
+                    The argument is good and this was the wrong shape for it.
+                    Those references work because the book and the town ARE the
+                    interface; here the interface is a world with a sky, a
+                    headquarters and a field, and the scaffold was a centred
+                    list floating over it. It taught a shape the product does
+                    not have, and the first capture then contradicted it.
+
+                    It also assumed a first run it never checked for. The class
+                    was `jar-first`, but the condition was only "no top of mind
+                    and no inspirations" — so it fired for anyone who emptied a
+                    wall they had been keeping for months, and read as being
+                    put back into onboarding.
+
+                    Removed on the owner's call, having looked at it against a
+                    real emptied wall. An empty wall now renders as the world
+                    with nothing in it, which is the honest picture. Agent
+                    walls and rooms keep their own sentence below: those say
+                    what the machine or the room is waiting FOR, which is
+                    information, not scaffolding. */}
+                {ready && c?.empty && !c?.formingAlt && w.kind !== "self" ? (
+                  <p className="jar-wall-empty">
+                    {w.kind === "agent"
+                      ? "Give me something to work on and I’ll start"
+                      : "This room hasn’t noticed anything yet — share more, read together."}
+                  </p>
                 ) : null}
                 {w.kind === "group" && failedGroups.has(w.id) && !ready ? (
                   <p className="jar-wall-hold jar-label">Couldn’t reach this room</p>
