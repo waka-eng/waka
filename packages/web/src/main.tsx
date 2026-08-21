@@ -101,6 +101,7 @@ ReactDOM.createRoot(root).render(
             <Route path="/inspirations" />
             <Route path="/inspirations/:inspirationId" />
             <Route path="/signals" />
+            <Route path="/principles" />
           </Route>
           {/*
             Catch-all: route the visitor through "/" so the guard makes the

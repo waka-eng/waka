@@ -497,6 +497,27 @@ a principle declared on waka.im is visible through web and MCP.
 
 ## Log
 
+### Phase 4 — the view (2026-08-21)
+
+Surface gains the `principles` state: route model + router entry
+(`/principles` — the missing router row was caught live: the catch-all
+bounced the URL to `/` until added), austere rendering per the approved
+mockup (serif statements as inline lock-on-edit fields, rank numbers,
+hairline dividers, aspirational pill, contested + tension line in
+maroon, mono verbs), declare line with silent routing notices
+("Declared. Yours to demonstrate." / "Kept with your inspirations."),
+up/down reorder, dispute, remove. Progressive disclosure: the footer
+verb renders only when the set is non-empty (or the view is open).
+i18n en/ko symmetric (313 keys).
+
+Gate measured: web 71/71 + build clean; browser against the live stack
+— declare routed BOTH ways live (maxim → aspirational+locked+declared;
+"Ship the museum app by June" → inspiration, archive shows it, response
+carries only {created, inspirationId}); reorder persisted (ranks
+swapped server-side); edit autosaved with locked:true; dispute flipped
+state to contested server-side with the chip and tension line rendered.
+Screenshot on record. API suite 417/417. **Pass.**
+
 ### Phase 3 — API (2026-08-18)
 
 `routes/principles.ts`: GET / (ranked, matrix), GET /api/principles.md

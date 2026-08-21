@@ -9,7 +9,8 @@ export type SurfaceView =
   | "capture"
   | "archive"
   | "inspiration"
-  | "signals";
+  | "signals"
+  | "principles";
 
 export interface SurfaceRoute {
   view: SurfaceView;
@@ -35,6 +36,9 @@ export function parseSurfacePath(pathname: string): SurfaceRoute {
   if (segments.length === 1 && segments[0] === "signals") {
     return { view: "signals", entityId: null };
   }
+  if (segments.length === 1 && segments[0] === "principles") {
+    return { view: "principles", entityId: null };
+  }
   if (segments.length === 1 && segments[0] === "inspirations") {
     return { view: "archive", entityId: null };
   }
@@ -57,6 +61,8 @@ export function buildSurfacePath(input: SurfaceRoute): string {
   switch (input.view) {
     case "capture":
       return "/capture";
+    case "principles":
+      return "/principles";
     case "signals":
       return "/signals";
     case "archive":
