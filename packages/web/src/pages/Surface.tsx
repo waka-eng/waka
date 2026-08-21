@@ -31,6 +31,7 @@ import { Check, Paperclip } from "lucide-react";
 import { contributorColor, contributorInitials } from "../components/faces";
 import { useAuth } from "../lib/auth-context";
 import {
+  formatMessage,
   readStoredLocale,
   supportedLocales,
   writeStoredLocale,
@@ -39,12 +40,27 @@ import {
 import { t } from "../lib/locales";
 import {
   ApiError,
+  affirmGroupProposal,
+  createGroup,
+  createGroupProposal,
   createInspiration,
   declarePrinciple,
+  declineGroupProposal,
+  deleteGroup,
   deletePrinciple,
   disputePrinciple,
+  fetchGroupMembers,
+  fetchGroupProposals,
+  fetchGroups,
+  fetchGroupTopOfMind,
+  fetchGroupWall,
   fetchPrinciples,
+  joinGroup,
+  leaveGroup,
+  refreshGroupTopOfMind,
   reorderPrinciples,
+  shareSignal,
+  unshareSignal,
   updatePrinciple,
   createReflection,
   deleteInspiration,
@@ -64,6 +80,12 @@ import {
   updateSignal,
   updateTopOfMindEntry,
   uploadToPresignedUrl,
+  type ApiGroupMember,
+  type ApiGroupProposal,
+  type ApiGroupProposalKind,
+  type ApiGroupSummary,
+  type ApiGroupTopOfMind,
+  type ApiGroupWallSignal,
   type ApiInspiration,
   type ApiPrinciple,
   type ApiInspirationSummary,
@@ -197,6 +219,16 @@ export default function SurfacePage(): JSX.Element {
   const [locale, setLocale] = useState<SupportedLocale>(() => readStoredLocale());
   const [notice, setNotice] = useState<string | null>(null);
 
+  /* Declared first because every layer's handlers close over it. */
+  const navigateSurface = useCallback(
+    (next: SurfaceView, options: SurfaceNavigationOptions = {}): void => {
+      navigate(buildSurfacePath({ view: next, entityId: options.entityId ?? null }), {
+        replace: options.replace ?? false,
+      });
+    },
+    [navigate],
+  );
+
   // Layer 3 — the board.
   const [topOfMind, setTopOfMind] = useState<ApiTopOfMind | null>(null);
   const [boardLoading, setBoardLoading] = useState(true);
@@ -206,9 +238,8 @@ export default function SurfacePage(): JSX.Element {
   const [drags, setDrags] = useState<Record<string, { x: number; y: number }>>({});
   const [dragging, setDragging] = useState<string | null>(null);
 
-  // Layer 4 — the principles. Loaded on arrival (not on view entry) because
-  // the nav verb itself is progressively disclosed: it exists only once a
-  // principle does, so the surface has to know the count before any click.
+  // Layer 4 — the principles. Loaded on arrival (not on view entry) so the
+  // count is ready the moment the view opens.
   const [principlesList, setPrinciplesList] = useState<ApiPrinciple[]>([]);
   const [principlesLoaded, setPrinciplesLoaded] = useState(false);
   const [principleDrafts, setPrincipleDrafts] = useState<Record<string, string>>({});
@@ -330,7 +361,313 @@ export default function SurfacePage(): JSX.Element {
     [locale],
   );
 
-    // Layer 2 — the signals.
+  // Rooms — the walls a few profiles keep together ("groups" in the canon).
+  // A room shows only what crossed the account boundary by choice: members'
+  // shared signal statements and the reading generated from them — never
+  // anyone's captures. The list is loaded when a rooms view opens; a deep
+  // link to /rooms/:id needs the summary (name, role, join code) and there
+  // is no single-group endpoint, so membership stays the one read that
+  // answers both "which rooms" and "may I".
+  const [groupsList, setGroupsList] = useState<ApiGroupSummary[]>([]);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [groupsLoaded, setGroupsLoaded] = useState(false);
+  const [roomNameDraft, setRoomNameDraft] = useState("");
+  const [joinCodeDraft, setJoinCodeDraft] = useState("");
+  const [roomBusy, setRoomBusy] = useState(false);
+  const [roomWall, setRoomWall] = useState<ApiGroupWallSignal[]>([]);
+  const [roomTom, setRoomTom] = useState<ApiGroupTopOfMind | null>(null);
+  const [roomMembers, setRoomMembers] = useState<ApiGroupMember[]>([]);
+  const [roomProposals, setRoomProposals] = useState<ApiGroupProposal[]>([]);
+  const [roomLoading, setRoomLoading] = useState(false);
+  const [roomRereading, setRoomRereading] = useState(false);
+  const [roomEntryDrafts, setRoomEntryDrafts] = useState<Record<string, string>>({});
+  const [roomProposeDraft, setRoomProposeDraft] = useState("");
+  const [roomShareables, setRoomShareables] = useState<ApiSignal[]>([]);
+  const [sharePick, setSharePick] = useState("");
+
+  const roomId = route.view === "room" ? route.entityId : null;
+  const room = roomId ? (groupsList.find((row) => row.id === roomId) ?? null) : null;
+
+  const loadGroups = useCallback(async (): Promise<void> => {
+    setGroupsLoading(true);
+    try {
+      setGroupsList(await fetchGroups());
+    } catch (err) {
+      setNotice(errorMessage(err, "Your rooms could not be loaded."));
+    } finally {
+      setGroupsLoading(false);
+      setGroupsLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (view !== "rooms" && view !== "room") return;
+    void loadGroups();
+  }, [view, loadGroups]);
+
+  /* A room that is not on the member's own list does not exist for them —
+     the server answers 404 either way, so the redirect happens here where it
+     can land on the list instead of a blank layer. */
+  useEffect(() => {
+    if (!roomId || !groupsLoaded || groupsLoading) return;
+    if (!groupsList.some((row) => row.id === roomId)) {
+      setNotice(t(locale, "roomGone"));
+      navigateSurface("rooms", { replace: true });
+    }
+  }, [roomId, groupsLoaded, groupsLoading, groupsList, locale, navigateSurface]);
+
+  useEffect(() => {
+    if (!roomId) return;
+    let cancelled = false;
+    setRoomLoading(true);
+    setRoomWall([]);
+    setRoomTom(null);
+    setRoomMembers([]);
+    setRoomProposals([]);
+    setRoomEntryDrafts({});
+    setRoomProposeDraft("");
+    setSharePick("");
+    (async () => {
+      try {
+        const [wall, tom, members, proposals, mine] = await Promise.all([
+          fetchGroupWall(roomId),
+          fetchGroupTopOfMind(roomId),
+          fetchGroupMembers(roomId),
+          fetchGroupProposals(roomId),
+          fetchSignals({ limit: 100 }),
+        ]);
+        if (cancelled) return;
+        setRoomWall(wall);
+        setRoomTom(tom);
+        setRoomMembers(members);
+        setRoomProposals(proposals);
+        setRoomShareables(mine);
+      } catch (err) {
+        if (!cancelled) setNotice(errorMessage(err, "This room could not be loaded."));
+      } finally {
+        if (!cancelled) setRoomLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [roomId]);
+
+  const createRoom = useCallback((): void => {
+    const name = roomNameDraft.trim();
+    if (!name || roomBusy) return;
+    setRoomBusy(true);
+    void (async () => {
+      try {
+        const group = await createGroup(name);
+        setRoomNameDraft("");
+        setGroupsList((current) => [group, ...current]);
+        navigateSurface("room", { entityId: group.id });
+      } catch (err) {
+        setNotice(errorMessage(err, t(locale, "roomsError")));
+      } finally {
+        setRoomBusy(false);
+      }
+    })();
+  }, [roomNameDraft, roomBusy, locale, navigateSurface]);
+
+  const joinRoom = useCallback((): void => {
+    const code = joinCodeDraft.trim();
+    if (!code || roomBusy) return;
+    setRoomBusy(true);
+    void (async () => {
+      try {
+        const { group, alreadyMember } = await joinGroup(code);
+        setJoinCodeDraft("");
+        if (alreadyMember) setNotice(t(locale, "roomsAlreadyMember"));
+        setGroupsList((current) =>
+          current.some((row) => row.id === group.id) ? current : [group, ...current],
+        );
+        navigateSurface("room", { entityId: group.id });
+      } catch (err) {
+        setNotice(errorMessage(err, t(locale, "roomsError")));
+      } finally {
+        setRoomBusy(false);
+      }
+    })();
+  }, [joinCodeDraft, roomBusy, locale, navigateSurface]);
+
+  /* One button, two verbs: the owner closing a room and a member leaving one
+     are the same gesture with different blast radii, so the confirmation is
+     what carries the difference. */
+  const leaveOrCloseRoom = useCallback((): void => {
+    if (!room) return;
+    const owner = room.role === "owner";
+    if (!window.confirm(t(locale, owner ? "roomCloseConfirm" : "roomLeaveConfirm"))) return;
+    void (async () => {
+      try {
+        if (owner) await deleteGroup(room.id);
+        else await leaveGroup(room.id);
+        setGroupsList((current) => current.filter((row) => row.id !== room.id));
+        navigateSurface("rooms", { replace: true });
+      } catch (err) {
+        setNotice(errorMessage(err, t(locale, "roomError")));
+      }
+    })();
+  }, [room, locale, navigateSurface]);
+
+  const reloadRoomWall = useCallback(async (id: string): Promise<void> => {
+    setRoomWall(await fetchGroupWall(id));
+  }, []);
+
+  const reloadRoomProposals = useCallback(async (id: string): Promise<void> => {
+    setRoomProposals(await fetchGroupProposals(id));
+  }, []);
+
+  const bringSignal = useCallback((): void => {
+    if (!roomId || !sharePick) return;
+    void (async () => {
+      try {
+        await shareSignal(sharePick, roomId);
+        setRoomShareables((current) =>
+          current.map((row) =>
+            row.id === sharePick
+              ? { ...row, sharedGroupIds: [...row.sharedGroupIds, roomId] }
+              : row,
+          ),
+        );
+        setSharePick("");
+        await reloadRoomWall(roomId);
+      } catch (err) {
+        setNotice(errorMessage(err, t(locale, "roomError")));
+      }
+    })();
+  }, [roomId, sharePick, locale, reloadRoomWall]);
+
+  const takeDownSharedSignal = useCallback(
+    (signalId: string): void => {
+      if (!roomId) return;
+      void (async () => {
+        try {
+          await unshareSignal(signalId, roomId);
+          setRoomShareables((current) =>
+            current.map((row) =>
+              row.id === signalId
+                ? { ...row, sharedGroupIds: row.sharedGroupIds.filter((g) => g !== roomId) }
+                : row,
+            ),
+          );
+          await reloadRoomWall(roomId);
+        } catch (err) {
+          setNotice(errorMessage(err, t(locale, "roomError")));
+        }
+      })();
+    },
+    [roomId, locale, reloadRoomWall],
+  );
+
+  /* Same contract as the personal reread: wait for the version to move, and
+     say so honestly when it does not. Shared with the accepted-proposal path,
+     because an acceptance also asks regeneration for the next version. */
+  const pollRoomVersion = useCallback(
+    async (id: string, before: number): Promise<boolean> => {
+      const deadline = Date.now() + 90_000;
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 3_000));
+        const next = await fetchGroupTopOfMind(id);
+        if ((next.topOfMind?.version ?? 0) > before) {
+          setRoomTom(next);
+          setRoomEntryDrafts({});
+          return true;
+        }
+      }
+      return false;
+    },
+    [],
+  );
+
+  const rereadRoom = useCallback((): void => {
+    if (!roomId || roomRereading) return;
+    setRoomRereading(true);
+    void (async () => {
+      const before = roomTom?.topOfMind?.version ?? 0;
+      try {
+        await refreshGroupTopOfMind(roomId);
+        if (!(await pollRoomVersion(roomId, before))) {
+          setNotice(t(locale, "roomStillReading"));
+        }
+      } catch (err) {
+        setNotice(errorMessage(err, t(locale, "roomReadFailed")));
+      } finally {
+        setRoomRereading(false);
+      }
+    })();
+  }, [roomId, roomRereading, roomTom, locale, pollRoomVersion]);
+
+  const proposeRoomChange = useCallback(
+    (input: { kind: ApiGroupProposalKind; entryId?: string; body?: string }): void => {
+      if (!roomId) return;
+      void (async () => {
+        try {
+          await createGroupProposal(roomId, input);
+          setNotice(t(locale, "roomProposalSent"));
+          await reloadRoomProposals(roomId);
+        } catch (err) {
+          setNotice(errorMessage(err, t(locale, "roomError")));
+        }
+      })();
+    },
+    [roomId, locale, reloadRoomProposals],
+  );
+
+  const affirmRoomProposal = useCallback(
+    (proposal: ApiGroupProposal): void => {
+      if (!roomId) return;
+      void (async () => {
+        try {
+          const before = roomTom?.topOfMind?.version ?? 0;
+          const { accepted } = await affirmGroupProposal(roomId, proposal.id);
+          await reloadRoomProposals(roomId);
+          if (accepted) {
+            setNotice(t(locale, "roomAccepted"));
+            setRoomRereading(true);
+            try {
+              await pollRoomVersion(roomId, before);
+            } finally {
+              setRoomRereading(false);
+            }
+          }
+        } catch (err) {
+          setNotice(errorMessage(err, t(locale, "roomError")));
+        }
+      })();
+    },
+    [roomId, roomTom, locale, reloadRoomProposals, pollRoomVersion],
+  );
+
+  const declineRoomProposal = useCallback(
+    (proposal: ApiGroupProposal): void => {
+      if (!roomId) return;
+      void (async () => {
+        try {
+          await declineGroupProposal(roomId, proposal.id);
+          await reloadRoomProposals(roomId);
+        } catch (err) {
+          setNotice(errorMessage(err, t(locale, "roomError")));
+        }
+      })();
+    },
+    [roomId, locale, reloadRoomProposals],
+  );
+
+  /* What the picker offers: signals still standing, not already up here. */
+  const shareCandidates = useMemo(
+    () =>
+      roomId
+        ? roomShareables.filter(
+            (signal) =>
+              signal.status !== "retired" && !signal.sharedGroupIds.includes(roomId),
+          )
+        : [],
+    [roomShareables, roomId],
+  );
+
+  // Layer 2 — the signals.
   const [signals, setSignals] = useState<ApiSignal[]>([]);
   const [signalsLoading, setSignalsLoading] = useState(false);
   const [openSignal, setOpenSignal] = useState<ApiSignalDetail | null>(null);
@@ -367,15 +704,6 @@ export default function SurfacePage(): JSX.Element {
     { id: string; x: number; y: number; baseX: number; baseY: number } | null
   >(null);
   const dragMoved = useRef(false);
-
-  const navigateSurface = useCallback(
-    (next: SurfaceView, options: SurfaceNavigationOptions = {}): void => {
-      navigate(buildSurfacePath({ view: next, entityId: options.entityId ?? null }), {
-        replace: options.replace ?? false,
-      });
-    },
-    [navigate],
-  );
 
   /* The draft outlives the tab. Written on every keystroke because the moment
      worth protecting is the one nobody chose — a closed laptop, a crash. */
@@ -1300,6 +1628,380 @@ export default function SurfacePage(): JSX.Element {
           </div>
         </section>
 
+        {/* ----------------------------------------------------------- ROOMS */}
+        {/*
+          The walls a few profiles keep together. Doors, then two quiet ways
+          in: name a new room, or arrive with a code someone gave you.
+        */}
+        <section className={`sf-layer sf-layer--rooms${view === "rooms" ? " on" : ""}`}>
+          <div className="sf-column">
+            <button type="button" className="sf-back" onClick={() => navigateSurface("wall")}>
+              ← back
+            </button>
+            <div className="pr-head">
+              <div>
+                <div className="pr-eyebrow">{t(locale, "roomsEyebrow")}</div>
+                <h2 className="pr-title">{t(locale, "roomsTitle")}</h2>
+              </div>
+              <div className="pr-meta-right">
+                {groupsLoading ? "…" : groupsList.length}
+              </div>
+            </div>
+            {groupsLoaded && !groupsLoading && groupsList.length === 0 ? (
+              <p className="pr-empty">{t(locale, "roomsEmpty")}</p>
+            ) : null}
+            <div className="gr-list">
+              {groupsList.map((group) => (
+                <button
+                  key={group.id}
+                  type="button"
+                  className="gr-door"
+                  onClick={() => navigateSurface("room", { entityId: group.id })}
+                >
+                  <span className="gr-door-name">{group.name}</span>
+                  <span className="gr-door-meta">
+                    {formatMessage(locale, "roomsMembers", { n: group.memberCount })}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className="gr-new">
+              <input
+                type="text"
+                className="gr-input"
+                value={roomNameDraft}
+                placeholder={t(locale, "roomsCreatePlaceholder")}
+                disabled={roomBusy}
+                onChange={(event) => setRoomNameDraft(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") createRoom();
+                }}
+              />
+              {roomNameDraft.trim() ? (
+                <button
+                  type="button"
+                  className="pr-action"
+                  disabled={roomBusy}
+                  onClick={createRoom}
+                >
+                  {t(locale, "roomsCreate")}
+                </button>
+              ) : null}
+            </div>
+            <div className="gr-new">
+              <input
+                type="text"
+                className="gr-input"
+                value={joinCodeDraft}
+                placeholder={t(locale, "roomsJoinPlaceholder")}
+                disabled={roomBusy}
+                onChange={(event) => setJoinCodeDraft(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") joinRoom();
+                }}
+              />
+              {joinCodeDraft.trim() ? (
+                <button
+                  type="button"
+                  className="pr-action"
+                  disabled={roomBusy}
+                  onClick={joinRoom}
+                >
+                  {t(locale, "roomsJoin")}
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </section>
+
+        {/* ------------------------------------------------------------ ROOM */}
+        {/*
+          One room. The reading is the group's own post-its; editing one does
+          not save — it PROPOSES, because a change to what a group says about
+          itself is not something one person makes alone. Below the board:
+          open proposals, the wall of shared signals, and the one act that
+          crosses the boundary — putting up a signal of yours.
+        */}
+        <section className={`sf-layer sf-layer--room${view === "room" ? " on" : ""}`}>
+          <div className="sf-column">
+            <button type="button" className="sf-back" onClick={() => navigateSurface("rooms")}>
+              ← back
+            </button>
+            {room ? (
+              <>
+                <header className="gr-head">
+                  <h2 className="gr-name">{room.name}</h2>
+                  <p className="gr-meta">
+                    <span>
+                      {formatMessage(locale, "roomsMembers", { n: room.memberCount })}
+                      {roomMembers.length > 0
+                        ? ` — ${roomMembers.map((member) => member.name).join(", ")}`
+                        : ""}
+                    </span>
+                    {/* The code is how the next person gets in, so every
+                        member can read it off the wall. */}
+                    <span className="gr-code">
+                      {t(locale, "roomCode")} · {room.joinCode}
+                    </span>
+                  </p>
+                  <p className="sf-lastread">
+                    <span>
+                      {roomTom?.topOfMind
+                        ? `read ${whenShort(roomTom.topOfMind.createdAt)} · v${roomTom.topOfMind.version}`
+                        : roomLoading
+                          ? "…"
+                          : t(locale, "roomNotReadYet")}
+                    </span>
+                    <button
+                      type="button"
+                      className={`sf-reread${roomRereading ? " spinning" : ""}`}
+                      onClick={rereadRoom}
+                      disabled={roomRereading || roomLoading}
+                      title={t(locale, "roomReadAgain")}
+                      aria-label={t(locale, "roomReadAgain")}
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1" />
+                        <path d="M20.5 3.5v4.6h-4.6" />
+                      </svg>
+                    </button>
+                  </p>
+                </header>
+
+                {roomLoading ? <p className="sf-empty">reading…</p> : null}
+                {!roomLoading && (roomTom?.entries ?? []).length === 0 ? (
+                  <p className="sf-empty">{t(locale, "roomBoardEmpty")}</p>
+                ) : null}
+                <div className="sf-wall">
+                  {(roomTom?.entries ?? []).map((entry, i) => {
+                    const layout = NOTE_LAYOUTS[i % NOTE_LAYOUTS.length]!;
+                    const paper = NOTE_COLORS[i % NOTE_COLORS.length]!;
+                    const draftBody = roomEntryDrafts[entry.id] ?? entry.body;
+                    const changed =
+                      draftBody.trim() !== "" && draftBody.trim() !== entry.body;
+                    return (
+                      <article
+                        key={entry.id}
+                        className="sf-postit"
+                        style={{
+                          ["--bg" as string]: paper.hue,
+                          ["--ink" as string]: paper.ink,
+                          ["--tilt" as string]: `${layout.tilt}deg`,
+                          ["--w" as string]: layout.w,
+                        }}
+                      >
+                        <textarea
+                          className="sf-postit-text"
+                          value={draftBody}
+                          rows={1}
+                          spellCheck
+                          aria-label="this entry — edit to propose a change"
+                          onChange={(event) =>
+                            setRoomEntryDrafts((current) => ({
+                              ...current,
+                              [entry.id]: event.target.value,
+                            }))
+                          }
+                        />
+                        {entry.prompt ? <p className="sf-question">{entry.prompt}</p> : null}
+                        <footer>
+                          <span className="sf-provenance">
+                            {entry.type}
+                            {entry.contributors.length > 0
+                              ? ` · ${t(locale, "roomFrom")} ${entry.contributors
+                                  .map((c) => c.name)
+                                  .join(", ")}`
+                              : ""}
+                          </span>
+                          <span className="sf-postit-acts">
+                            {changed ? (
+                              <button
+                                type="button"
+                                className="gr-propose"
+                                onClick={() => {
+                                  proposeRoomChange({
+                                    kind: "edit_entry",
+                                    entryId: entry.id,
+                                    body: draftBody.trim(),
+                                  });
+                                  setRoomEntryDrafts((current) => ({
+                                    ...current,
+                                    [entry.id]: entry.body,
+                                  }));
+                                }}
+                              >
+                                {t(locale, "roomProposeWording")}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="sf-act"
+                                title={t(locale, "roomProposeTakeDown")}
+                                aria-label={t(locale, "roomProposeTakeDown")}
+                                onClick={() =>
+                                  proposeRoomChange({ kind: "remove_entry", entryId: entry.id })
+                                }
+                              >
+                                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                  <path d="M4 7h16" />
+                                  <path d="M10 11v6" />
+                                  <path d="M14 11v6" />
+                                  <path d="M6.5 7 7.4 20h9.2l.9-13" />
+                                  <path d="M9 7V4.8h6V7" />
+                                </svg>
+                              </button>
+                            )}
+                          </span>
+                        </footer>
+                      </article>
+                    );
+                  })}
+                </div>
+
+                <div className="gr-new">
+                  <input
+                    type="text"
+                    className="gr-input"
+                    value={roomProposeDraft}
+                    placeholder={t(locale, "roomProposeAddPlaceholder")}
+                    onChange={(event) => setRoomProposeDraft(event.currentTarget.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && roomProposeDraft.trim()) {
+                        proposeRoomChange({ kind: "add_entry", body: roomProposeDraft.trim() });
+                        setRoomProposeDraft("");
+                      }
+                    }}
+                  />
+                  {roomProposeDraft.trim() ? (
+                    <button
+                      type="button"
+                      className="pr-action"
+                      onClick={() => {
+                        proposeRoomChange({ kind: "add_entry", body: roomProposeDraft.trim() });
+                        setRoomProposeDraft("");
+                      }}
+                    >
+                      {t(locale, "roomPropose")}
+                    </button>
+                  ) : null}
+                </div>
+
+                {roomProposals.some((proposal) => proposal.status === "open") ? (
+                  <div className="gr-block">
+                    <div className="gr-block-head">{t(locale, "roomProposalsHead")}</div>
+                    {roomProposals
+                      .filter((proposal) => proposal.status === "open")
+                      .map((proposal) => (
+                        <div key={proposal.id} className="gr-proposal">
+                          <p className="gr-proposal-body">
+                            <span className="gr-kind">
+                              {t(
+                                locale,
+                                proposal.kind === "edit_entry"
+                                  ? "roomKindEdit"
+                                  : proposal.kind === "add_entry"
+                                    ? "roomKindAdd"
+                                    : "roomKindRemove",
+                              )}
+                            </span>
+                            {proposal.body ? ` — ${proposal.body}` : ""}
+                          </p>
+                          <p className="gr-proposal-meta">
+                            {t(locale, "roomBy")} {proposal.proposedByName}
+                            {proposal.affirmations.length > 0
+                              ? ` · ${proposal.affirmations.map((a) => a.name).join(", ")}`
+                              : ""}
+                          </p>
+                          <div className="gr-proposal-acts">
+                            {proposal.viewerAffirmed ? (
+                              <span className="gr-affirmed">{t(locale, "roomAffirmed")}</span>
+                            ) : (
+                              <button
+                                type="button"
+                                className="gr-propose"
+                                onClick={() => affirmRoomProposal(proposal)}
+                              >
+                                {t(locale, "roomAffirm")}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              className="gr-quiet"
+                              onClick={() => declineRoomProposal(proposal)}
+                            >
+                              {t(locale, "roomDecline")}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                ) : null}
+
+                <div className="gr-block">
+                  <div className="gr-block-head">{t(locale, "roomSharedHead")}</div>
+                  {!roomLoading && roomWall.length === 0 ? (
+                    <p className="sf-empty">{t(locale, "roomSharedEmpty")}</p>
+                  ) : null}
+                  {roomWall.map((row) => (
+                    <div key={row.signalId} className="gr-shared">
+                      <p className="gr-shared-statement">{row.statement}</p>
+                      <span className="sf-provenance">
+                        {row.ownerName} · {row.confidence}%
+                      </span>
+                      {row.ownerProfileId === profile?.id ? (
+                        <button
+                          type="button"
+                          className="sf-act"
+                          title={t(locale, "roomTakeDown")}
+                          aria-label={t(locale, "roomTakeDown")}
+                          onClick={() => takeDownSharedSignal(row.signalId)}
+                        >
+                          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <path d="M4 7h16" />
+                            <path d="M10 11v6" />
+                            <path d="M14 11v6" />
+                            <path d="M6.5 7 7.4 20h9.2l.9-13" />
+                            <path d="M9 7V4.8h6V7" />
+                          </svg>
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
+                  {shareCandidates.length > 0 ? (
+                    <div className="gr-new">
+                      <select
+                        className="gr-input"
+                        value={sharePick}
+                        aria-label={t(locale, "roomBringPick")}
+                        onChange={(event) => setSharePick(event.currentTarget.value)}
+                      >
+                        <option value="">{t(locale, "roomBringPick")}</option>
+                        {shareCandidates.map((signal) => (
+                          <option key={signal.id} value={signal.id}>
+                            {signal.statement}
+                          </option>
+                        ))}
+                      </select>
+                      {sharePick ? (
+                        <button type="button" className="pr-action" onClick={bringSignal}>
+                          {t(locale, "roomBring")}
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : !roomLoading &&
+                    !roomShareables.some((signal) => signal.status !== "retired") ? (
+                    <p className="sf-empty">{t(locale, "roomBringEmpty")}</p>
+                  ) : null}
+                </div>
+
+                <button type="button" className="gr-leave" onClick={leaveOrCloseRoom}>
+                  {t(locale, room.role === "owner" ? "roomClose" : "roomLeave")}
+                </button>
+              </>
+            ) : null}
+          </div>
+        </section>
+
         {/* --------------------------------------------------------- ARCHIVE */}
         <section className={`sf-layer sf-layer--archive${view === "archive" ? " on" : ""}`}>
           <div className="sf-column">
@@ -1594,6 +2296,21 @@ export default function SurfacePage(): JSX.Element {
             onClick={() => navigateSurface("wall")}
           >
             yours
+          </button>
+          {/* The other walls: rooms kept with other people. Sibling of
+              "yours" because they are the same kind of thing — boards read
+              from signals — held by more than one profile. */}
+          <button
+            type="button"
+            className={`sf-primary-verb${view === "rooms" || view === "room" ? " on" : ""}`}
+            aria-pressed={view === "rooms" || view === "room"}
+            onClick={() =>
+              navigateSurface(view === "rooms" ? "wall" : "rooms", {
+                replace: view === "rooms",
+              })
+            }
+          >
+            {t(locale, "roomsVerb")}
           </button>
           {/* Always present, even at zero — the empty view is what teaches
               what a principle is, and a door that appears out of nowhere

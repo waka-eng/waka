@@ -368,6 +368,20 @@ follows the permission matrix.
   empty view is the explanation. The board header ("X's top of mind" +
   last-read) now renders only on the wall view; every other view titles
   itself.
+- **2026-08-21** — **The group wall returns to the web surface** as the
+  rooms views (`/rooms`, `/rooms/:groupId`): doors, join-by-code, the
+  wall of shared signals, the share picker, and the co-edited group top
+  of mind with the full proposal flow. The rebuild had parked the old
+  rooms UI and left the web group client unconsumed.
+- **2026-08-21** — **Group top-of-mind synthesis implemented.** The
+  rebuild shipped `refreshTopOfMindForGroup` as an explicit
+  `not_implemented` seam — walls and proposals worked, but acceptance
+  never materialized and no group reading was ever generated, which this
+  document had described as existing. Now true: the wall is the
+  selection, member decisions are applied by code (edit locks, removal
+  dismisses, addition arrives locked), citations carry per-member
+  attribution, and the groups e2e asserts that acceptance materializes
+  a version. Mechanics: `docs/generation.md` §"The group's top of mind".
 
 The migration itself (schema, API, web, MCP phases and gates) belongs in a
 `docs/goals/` goal document that references this file — for this layer,
