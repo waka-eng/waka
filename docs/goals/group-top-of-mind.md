@@ -1,6 +1,6 @@
 # Goal: Group Top of Mind boards
 
-Status: in progress (started 2026-07-07)
+Status: superseded — the three-layers rebuild (2026-08-15) replaced this design; the group wall UI and group synthesis landed 2026-08-21 on the new base (see docs/generation.md §"The group's top of mind" and docs/data-model.md decision log).
 Branch: `goal/group-top-of-mind-latest`
 PRD story: US-052
 

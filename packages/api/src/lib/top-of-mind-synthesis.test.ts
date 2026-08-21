@@ -11,6 +11,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyGroupProposals,
   assembleEntries,
   chooseSelection,
   SELECTION_DISPUTED_MULTIPLIER,
@@ -289,5 +290,80 @@ describe("cold start: the artifact appears before patterns have recurred", () =>
 
   it("stays empty when the profile has nothing", () => {
     expect(chooseSelection([], [])).toEqual({ signals: [], provisional: false });
+  });
+});
+
+describe("applying accepted group proposals", () => {
+  const NOW2 = new Date("2026-08-21T12:00:00.000Z");
+  function groupEntry(id: string, overrides: Partial<CarriedEntry> = {}) {
+    return { ...carried({ body: `Entry ${id}.`, ...overrides }), id };
+  }
+
+  /** An accepted edit is the members' own hand: it rewrites AND locks. */
+  it("rewrites and locks the target of an accepted edit", () => {
+    const { entries, applied } = applyGroupProposals(
+      [groupEntry("e1"), groupEntry("e2", { sortOrder: 1 })],
+      [{ kind: "edit_entry", entryId: "e1", body: "What the group decided it says." }],
+      NOW2,
+    );
+    expect(applied).toBe(1);
+    expect(entries[0]).toMatchObject({
+      body: "What the group decided it says.",
+      lockedAt: NOW2,
+    });
+    expect(entries[1]!.lockedAt).toBeNull();
+  });
+
+  it("dismisses the target of an accepted removal", () => {
+    const { entries, applied } = applyGroupProposals(
+      [groupEntry("e1")],
+      [{ kind: "remove_entry", entryId: "e1", body: null }],
+      NOW2,
+    );
+    expect(applied).toBe(1);
+    expect(entries[0]!.dismissedAt).toBe(NOW2);
+  });
+
+  /** An accepted addition arrives locked, below everything standing. */
+  it("appends an accepted addition as a locked entry at the bottom", () => {
+    const { entries, applied } = applyGroupProposals(
+      [groupEntry("e1", { sortOrder: 3 })],
+      [{ kind: "add_entry", entryId: null, body: "A note the members wrote together." }],
+      NOW2,
+    );
+    expect(applied).toBe(1);
+    expect(entries[1]).toMatchObject({
+      id: null,
+      type: "pattern",
+      body: "A note the members wrote together.",
+      lockedAt: NOW2,
+      sortOrder: 4,
+      citedSignalIds: [],
+    });
+  });
+
+  /** The target left before the decision landed: skip, and say so by count. */
+  it("skips a proposal aimed at an entry that no longer exists", () => {
+    const { entries, applied } = applyGroupProposals(
+      [groupEntry("e1")],
+      [{ kind: "edit_entry", entryId: "gone", body: "New words." }],
+      NOW2,
+    );
+    expect(applied).toBe(0);
+    expect(entries[0]!.body).toBe("Entry e1.");
+  });
+
+  it("applies nothing from an empty body and mutates no input", () => {
+    const input = [groupEntry("e1")];
+    const { applied } = applyGroupProposals(
+      input,
+      [
+        { kind: "add_entry", entryId: null, body: "   " },
+        { kind: "edit_entry", entryId: "e1", body: "" },
+      ],
+      NOW2,
+    );
+    expect(applied).toBe(0);
+    expect(input[0]!.lockedAt).toBeNull();
   });
 });

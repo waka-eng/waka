@@ -1,6 +1,6 @@
 # Goal: Genuine cross-member Group Top of Mind synthesis
 
-Status: in progress (started 2026-07-07)
+Status: superseded — genuine cross-member synthesis landed 2026-08-21 on the rebuilt base as refreshTopOfMindForGroup (see docs/generation.md §"The group's top of mind").
 Branch: `goal/group-top-of-mind-latest`
 PRD story: US-053 (extends US-052)
 

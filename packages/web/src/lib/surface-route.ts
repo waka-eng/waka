@@ -1,7 +1,7 @@
 /**
  * The surface is one composition, but its places still need URLs. This is the
- * whole of that mapping: five states, each addressable, each round-tripping
- * back to the state it came from so Back and Forward restore where the person
+ * whole of that mapping: every state addressable, each round-tripping back to
+ * the state it came from so Back and Forward restore where the person
  * actually was.
  */
 export type SurfaceView =
@@ -10,7 +10,9 @@ export type SurfaceView =
   | "archive"
   | "inspiration"
   | "signals"
-  | "principles";
+  | "principles"
+  | "rooms"
+  | "room";
 
 export interface SurfaceRoute {
   view: SurfaceView;
@@ -42,6 +44,14 @@ export function parseSurfacePath(pathname: string): SurfaceRoute {
   if (segments.length === 1 && segments[0] === "inspirations") {
     return { view: "archive", entityId: null };
   }
+  if (segments.length === 1 && segments[0] === "rooms") {
+    return { view: "rooms", entityId: null };
+  }
+  if (segments.length === 2 && segments[0] === "rooms") {
+    const entityId = decodeSegment(segments[1]);
+    /* Same rule as a malformed inspiration id: fall back to the list. */
+    return entityId ? { view: "room", entityId } : { view: "rooms", entityId: null };
+  }
   if (segments.length === 2 && segments[0] === "inspirations") {
     const entityId = decodeSegment(segments[1]);
     /*
@@ -67,6 +77,10 @@ export function buildSurfacePath(input: SurfaceRoute): string {
       return "/signals";
     case "archive":
       return "/inspirations";
+    case "rooms":
+      return "/rooms";
+    case "room":
+      return input.entityId ? `/rooms/${encodeURIComponent(input.entityId)}` : "/rooms";
     case "inspiration":
       return input.entityId
         ? `/inspirations/${encodeURIComponent(input.entityId)}`
