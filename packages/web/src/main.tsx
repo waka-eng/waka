@@ -42,6 +42,16 @@ import "./styles/global.css";
 // Loaded after global.css and deliberately wins. See the header of that file
 // for what it supersedes and why it is separable rather than merged.
 import "./styles/system.css";
+// The flat screens' own structure — layout, columns, the principles list. It
+// is imported HERE, before chrome.css, because chrome.css declares itself "the
+// final word over surface.css" and orders its palette on top of this.
+//
+// Dropping this line is how the merge broke /principles: this branch used to
+// delete Surface.tsx and took its stylesheet's import with it. The merge kept
+// the page (it is the only home layer 4 has) but not the import, so every
+// Surface view rendered as unstyled stacked text — real content, no layout,
+// which reads as a broken page rather than a missing file.
+import "./styles/surface.css";
 // Last, deliberately: the world is home, and the screens a person leaves it
 // for should look like the same product. Palette and type only — nothing
 // structural, and the flat screens stay flat on purpose.
