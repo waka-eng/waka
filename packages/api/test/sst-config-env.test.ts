@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const sstConfig = readFileSync(resolve(__dirname, "../../../sst.config.ts"), "utf8");
@@ -110,5 +110,54 @@ describe("SST synthesis timeout", () => {
     expect(apiFunction?.groups?.body).toEqual(
       expect.stringContaining('timeout: "60 seconds"'),
     );
+  });
+});
+
+describe("SST principle generation cadence", () => {
+  /*
+    The owner's decision, drift-locked: principles are generated once per day
+    at midnight PST and NOTHING else may trigger generation. Any second call
+    site for the enqueue silently reintroduces a cadence the layer's meaning
+    forbids — which is exactly why this is a test and not a comment.
+  */
+  it("runs the nightly cron at midnight PST, enabled", () => {
+    const principleRefresh = sstConfig.match(
+      /new sst\.aws\.Cron\("PrincipleRefresh", \{(?<body>[\s\S]*?)\n    \}\);/,
+    );
+    expect(principleRefresh?.groups?.body).toMatch(/schedule: "cron\(0 8 \* \* \? \*\)"/);
+    expect(principleRefresh?.groups?.body).toEqual(expect.stringContaining("enabled: true"));
+    expect(principleRefresh?.groups?.body).toEqual(
+      expect.stringContaining("packages/api/src/principle-refresh.handler"),
+    );
+  });
+
+  it("keeps the cron the sole enqueuer of principle generation", () => {
+    const srcRoot = resolve(__dirname, "../src");
+    const offenders: string[] = [];
+    const allowed = new Set([
+      "lib/queue.ts", // the definition
+      "principle-refresh.ts", // the cron handler
+    ]);
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(path);
+          continue;
+        }
+        if (!entry.name.endsWith(".ts") || entry.name.endsWith(".test.ts")) continue;
+        const rel = relative(srcRoot, path);
+        if (allowed.has(rel)) continue;
+        if (readFileSync(path, "utf8").includes("enqueueRefreshPrinciples(")) {
+          offenders.push(rel);
+        }
+      }
+    };
+    walk(srcRoot);
+    expect(
+      offenders,
+      `enqueueRefreshPrinciples called outside the nightly cron: ${offenders.join(", ")}. ` +
+        "Generation is midnight-only by owner decision; see docs/goals/principles.md.",
+    ).toEqual([]);
   });
 });

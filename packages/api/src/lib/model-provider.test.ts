@@ -16,6 +16,9 @@ function fakeProvider(): ModelProvider {
   return {
     name: "test-provider",
     judgeSignalMatch: vi.fn(async () => ({ samePattern: false })),
+    distillPrinciples: vi.fn(async () => ({ candidates: [] })),
+    judgePrincipleRelation: vi.fn(async () => ({ relation: "independent" as const })),
+    routeDeclaration: vi.fn(async () => ({ route: "inspiration" as const, type: "maxim" as const })),
     extractSignalCandidates: vi.fn(),
     synthesizeTopOfMind: vi.fn(),
   };

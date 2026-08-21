@@ -59,6 +59,7 @@ import {
   type Reflection,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
+import { reconcilePrinciplesAfterSignalLoss } from "../lib/principle-generation.js";
 import {
   acquireSignalDerivationLock,
   reconcileSignalsAfterEvidenceLoss,
@@ -991,6 +992,12 @@ export function createInspirationsRoutes(
       if (removed.length === 0) return removed;
 
       await reconcileSignalsAfterEvidenceLoss(tx, {
+        profileId: target.profileId,
+        signalIds: citingRows.map((row) => row.signalId),
+      });
+      // Signals may have just retired; principles resting on them reconcile
+      // in the same transaction — immediate honesty, no midnight wait.
+      await reconcilePrinciplesAfterSignalLoss(tx, {
         profileId: target.profileId,
         signalIds: citingRows.map((row) => row.signalId),
       });

@@ -334,6 +334,24 @@ export default $config({
     });
 
     /**
+     * Layer 4's clock. Principles are generated once per day and ONLY here —
+     * midnight PST (fixed 08:00 UTC; EventBridge crons do not shift with
+     * DST, so summer runs land at 01:00 Pacific — documented, not hidden).
+     * The owner's decision: nothing else may trigger generation, and a
+     * source-scan test pins the enqueue to this handler.
+     */
+    new sst.aws.Cron("PrincipleRefresh", {
+      schedule: "cron(0 8 * * ? *)",
+      enabled: true,
+      function: {
+        handler: "packages/api/src/principle-refresh.handler",
+        timeout: "14 minutes",
+        link: runtimeLinks,
+        environment: runtimeEnvironment,
+      },
+    });
+
+    /**
      * The safety net, not the mechanism.
      *
      * Everything normal is pushed: the API wakes the worker on enqueue, and

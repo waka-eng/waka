@@ -8,8 +8,11 @@
  */
 
 import {
+  distillPrinciples,
   extractSignalCandidates,
+  judgePrincipleRelation,
   judgeSignalMatch,
+  routeDeclaration,
   synthesizeTopOfMind,
 } from "../queue/gemini.js";
 import type { ModelProvider } from "./model-provider.js";
@@ -20,5 +23,8 @@ export function createGeminiModelProvider(): ModelProvider {
     extractSignalCandidates,
     judgeSignalMatch,
     synthesizeTopOfMind,
+    distillPrinciples,
+    judgePrincipleRelation,
+    routeDeclaration,
   };
 }

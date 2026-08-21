@@ -26,6 +26,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import * as embeddings from "./inspiration-embeddings.js";
+import * as principleGeneration from "./principle-generation.js";
 import * as derivation from "./signal-derivation.js";
 import * as synthesis from "./top-of-mind-synthesis.js";
 import * as gemini from "../queue/gemini.js";
@@ -40,6 +41,7 @@ const doc = readFileSync(DOC_PATH, "utf8");
  * schemas, functions, and classes are behavior, covered by their own tests.
  */
 const MODULES: Record<string, Record<string, unknown>> = {
+  "principle-generation.ts": principleGeneration,
   "signal-derivation.ts": derivation,
   "top-of-mind-synthesis.ts": synthesis,
   "gemini.ts": gemini,
@@ -193,6 +195,31 @@ describe("the doc's [checked] structural claims", () => {
     );
     expect(readsSource).toMatch(/computeSignalConfidence\(/);
     expect(selectionSource).toMatch(/computeSignalConfidence\(/);
+  });
+
+  it("keeps the longevity bar measuring the union of citing signals", () => {
+    // The doc claims span and survivals are the THEME's, not any one
+    // wording's. Union semantics: no single signal below clears the bar the
+    // set clears together.
+    const now = new Date("2026-08-21T00:00:00Z");
+    const DAY = 86_400_000;
+    const set = [
+      { signalId: "a", evidenceAt: [new Date(now.getTime() - 60 * DAY), new Date(now.getTime() - 55 * DAY)], tomVersionIds: ["v1", "v2"] },
+      { signalId: "b", evidenceAt: [new Date(now.getTime() - 35 * DAY)], tomVersionIds: ["v3", "v4"] },
+      { signalId: "c", evidenceAt: [new Date(now.getTime())], tomVersionIds: ["v5"] },
+    ];
+    expect(principleGeneration.computeCitationEligibility(set, now).eligible).toBe(true);
+    for (const one of set) {
+      expect(principleGeneration.computeCitationEligibility([one], now).eligible).toBe(false);
+    }
+  });
+
+  it("keeps generation nightly-only: the cron is the sole enqueuer", () => {
+    // The cadence pin lives in sst-config-env.test.ts; this re-asserts the
+    // doc's structural claim that the named pieces exist.
+    expect(typeof principleGeneration.refreshPrinciplesForProfile).toBe("function");
+    expect(typeof principleGeneration.computeCitationEligibility).toBe("function");
+    expect(typeof principleGeneration.reconcileAction).toBe("function");
   });
 
   it("stays discoverable: the README links the canon", () => {

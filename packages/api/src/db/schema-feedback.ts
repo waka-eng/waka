@@ -16,7 +16,7 @@ import { index, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-co
 
 import { profiles } from "./schema-profiles";
 
-export const feedbackTargetTypeValues = ["signal", "top_of_mind_entry"] as const;
+export const feedbackTargetTypeValues = ["signal", "top_of_mind_entry", "principle"] as const;
 export type FeedbackTargetType = (typeof feedbackTargetTypeValues)[number];
 export const feedbackTargetTypeEnum = pgEnum("feedback_target_type", feedbackTargetTypeValues);
 

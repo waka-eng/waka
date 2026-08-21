@@ -1,8 +1,11 @@
 # Goal: principles — the layer that survives
 
-Status: **draft v1 — awaiting owner review (2026-08-18).** No code
-exists. Phase 0's gate is owner sign-off on the canon amendment; nothing
-is built before that.
+Status: **in progress (2026-08-18) — Phase 0 signed, phases 1–7
+running.** The draft was
+reviewed iteratively by the owner through 2026-08-18 (cadence, tests,
+routing, machine rendering, mockup all owner-decided); "submit and start
+implementation" received the same day. No code exists yet: the Phase 0
+gate holds until the amended `docs/data-model.md` is signed.
 
 Canon: extends `docs/data-model.md` with a **fourth layer**. Phase 0
 amends that document; every later phase implements it and has no model
@@ -494,4 +497,146 @@ a principle declared on waka.im is visible through web and MCP.
 
 ## Log
 
-(empty — awaiting Phase 0)
+### Phase 7 — e2e (2026-08-21), cutover in progress
+
+`tools/e2e/principles.ts`, 6 steps. Two fixture lessons recorded: (a) a
+single-theme fixture cannot mint — the bar demands three DISTINCT
+citing signals, so the fixture earns three (3 themes × 4 captures, the
+4th as slack because (b) extraction legitimately split an ambiguous
+budget anecdote into two 2-evidence signals on the first attempt —
+diagnosed from the live signal table, fixed in the fixture, not the
+system). The env-gated `refresh-test-trigger` route registers only
+under WAKA_ENABLE_PRINCIPLES_TEST_TRIGGER=1 and calls generation
+directly, keeping the cron-sole-enqueuer pin intact.
+
+Local gate measured: 6/6 — declaration both routes, canonical document
+contract, sticky reorder + edit-lock, and promotion minting a held
+principle with 3 citations under the documented overrides.
+
+### Phase 6 — canon sync and drift lock (2026-08-21)
+
+`docs/generation.md`: the "designed, not yet implemented" banner is
+gone; the section is implemented canon, its five constants graduated
+into the drift-locked tables in the same diff as the scan-list change.
+`generation-doc.test.ts` scans `principle-generation.ts` (both
+directions), and gains two [checked] pins: union semantics of the
+longevity bar (the set clears together; no member clears alone) and
+the named-functions claim.
+
+Gate measured: drift test 15/15; suites API 419/419, web 71/71,
+waka-mcp 35/35. **Pass.**
+
+### Phase 5 — MCP (2026-08-21)
+
+waka-mcp: `getPrinciples` client (fetches `/api/principles.md` verbatim
++ the structured list, zod-checked), `waka_get_principles` tool
+returning the canonical bytes with the consumption contract in its
+description; skill guidance gains the PRINCIPLES trigger and the
+acting-for-the-human rule; README intro corrected to four layers.
+
+Gate measured: unit 35/35 (3 new: canonical+structured fetch, cross-
+profile passthrough, loud contract drift); live 9/9 against the local
+stack running the new API — test 9 declares as the human, reads the
+human's document through the agent credential (preamble + statement
+asserted), reads its own, and is 403'd declaring into the human's.
+**Pass.**
+
+### Phase 4 — the view (2026-08-21)
+
+Surface gains the `principles` state: route model + router entry
+(`/principles` — the missing router row was caught live: the catch-all
+bounced the URL to `/` until added), austere rendering per the approved
+mockup (serif statements as inline lock-on-edit fields, rank numbers,
+hairline dividers, aspirational pill, contested + tension line in
+maroon, mono verbs), declare line with silent routing notices
+("Declared. Yours to demonstrate." / "Kept with your inspirations."),
+up/down reorder, dispute, remove. Progressive disclosure: the footer
+verb renders only when the set is non-empty (or the view is open).
+i18n en/ko symmetric (313 keys).
+
+Gate measured: web 71/71 + build clean; browser against the live stack
+— declare routed BOTH ways live (maxim → aspirational+locked+declared;
+"Ship the museum app by June" → inspiration, archive shows it, response
+carries only {created, inspirationId}); reorder persisted (ranks
+swapped server-side); edit autosaved with locked:true; dispute flipped
+state to contested server-side with the chip and tension line rendered.
+Screenshot on record. API suite 417/417. **Pass.**
+
+### Phase 3 — API (2026-08-18)
+
+`routes/principles.ts`: GET / (ranked, matrix), GET /api/principles.md
+(the canonical rendering, own factory since the URL is a sibling
+document), POST (routeDeclaration internally → aspirational+locked+
+declared, or an inspiration — response carries no verdict; regex-tested
+that no refusal vocabulary travels), PATCH (locks), DELETE (clears the
+partner's conflict link), POST /reorder (two-pass rank write under the
+per-profile unique index; every arranged row stamped owner_ranked_at).
+No refresh endpoint. Feedback: targetType principle validated +
+not_true flips contested immediately. Both signal-loss paths call
+reconcilePrinciplesAfterSignalLoss in-transaction.
+
+Gate measured: matrix cells all asserted (owner read; agent-on-own
+201 into its own profile; agent-on-human write 403 with zero inserts;
+agent-on-human read 200; cross-account 404), reorder stickiness (2
+negative-pass writes + 2 ownerRankedAt stamps; partial order 400),
+markdown golden byte-for-byte + determinism + empty. Suite 417/417,
+ts 0. **Pass.**
+
+### Phase 2 — longevity selection and synthesis (2026-08-18)
+
+`lib/principle-generation.ts`: the five exported bars
+(PRINCIPLE_MIN_SIGNALS=3, MIN_SPAN_DAYS=45, MIN_TOM_APPEARANCES=5,
+MAX_STATEMENT_LENGTH=200, MAX_CANDIDATES_PER_RUN=3, env-overridable for
+e2e only); `computeCitationEligibility` (union span, union ToM
+versions), `nextRank` (append-only — the whole of generation's rank
+vocabulary), `reconcileAction`/`promoteDecision` (pure),
+`refreshPrinciplesForProfile` (cheap SQL gate → distill → per-candidate
+relation judging → attach/mint/contested-pair), reconciliation and
+redemption. `queue/gemini.ts`: distill/relation/route calls, temp 0,
+schema-constrained, fenced. Queue: `refresh_principles` job type
+(migration 0003), processor case, `enqueueRefreshPrinciples` keyed per
+profile per day. Cron `PrincipleRefresh` at cron(0 8 * * ? *) = 00:00
+PST, enqueue+drain in one handler; source-scan test pins the enqueue to
+the cron handler alone.
+
+Gate measured: unit tests 404/404 (40 new: 7 eligibility, 2 rank
+stickiness, 1 promotion, 4 reconciliation, plus parsers/pins); live
+sanity 10/10 — distilled "Prefer transient implementations over durable
+infrastructure to maintain agility." (bounded, context-free, cites
+s1,s2,s3), relation same/conflicting/independent all correct, routing
+goal→inspiration, maxim→principle, $100-rule→inspiration. Cost: 7
+flash-lite calls (<1¢, est. 6). **Pass.**
+
+### Phase 1 — schema (2026-08-18)
+
+`schema-principles.ts`: `principles` (statement, type value|maxim|stance,
+state held|aspirational|contested, origin minted|declared, rank with a
+per-profile unique index, owner_ranked_at for sticky rank, locked_at,
+held_since, conflicts_with_id) + `principle_signals` (M:N, unique per
+pair, composite (profile_id, id) tenancy FKs per house pattern — table-
+level UNIQUE emitted before the FKs, the baseline trap avoided).
+`feedback_target_type` gains `principle`. Migration `0002_principles.sql`.
+
+Gate measured: apply #1 clean, apply #2 clean no-op, `db:check`
+"Everything's fine", principle tables = 2, feedback targets =
+principle,signal,top_of_mind_entry, ts errors = 0, tests 364/364.
+**Pass.**
+
+### Phase 0 — canon amendment (2026-08-18), awaiting owner signature
+
+`docs/data-model.md` amended to the four-layer canon: title and status;
+profiles own four layers; the permission matrix gains the principles
+column (agent on human: read-only — capture does not extend to
+curation); the layers table gains the fourth column; a full "Principle
+(layer 4)" section (definition, five tests, states, routing-not-refusal,
+rank, many-not-one, nightly-only cadence, machine rendering with
+aspirational-binding-for-agents, audit chain); the edit rule extended;
+sharing summary rule 6 (not shareable v1); vocabulary, API, and MCP
+tables extended; six decision-log entries. `docs/generation.md` intro
+made layer-neutral. **Gate: the owner signs the amended canon; phases
+1–7 start on that signature.**
+
+**Signed (2026-08-18):** the owner's `/goal "go ahead with the
+implementation"`, given in direct response to the Phase 0 summary of the
+amended canon — recorded here as the signature. Aspirational-binding-for-
+agents is thereby settled as decided.

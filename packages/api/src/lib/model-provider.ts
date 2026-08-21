@@ -21,7 +21,7 @@
  * and lib/top-of-mind-synthesis.ts, where they are testable without a model.
  */
 
-import type { TopOfMindEntryType } from "../db/index.js";
+import type { PrincipleType, TopOfMindEntryType } from "../db/index.js";
 import type { SupportedLocale } from "./locales.js";
 
 // ---------------------------------------------------------------------------
@@ -175,12 +175,80 @@ export interface SignalMatchJudgement {
   samePattern: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// Layer 4 — principles
+// ---------------------------------------------------------------------------
+
+/** One signal with its longevity stats, as distillation reads it. */
+export interface PrincipleDistillSignal {
+  id: string;
+  statement: string;
+  evidenceCount: number;
+  firstEvidenceAt: Date | null;
+  lastEvidenceAt: Date | null;
+  tomAppearances: number;
+}
+
+export interface DistillPrinciplesInput {
+  profileId: string;
+  preferredLocale: SupportedLocale;
+  signals: PrincipleDistillSignal[];
+  /** The standing set — context for no-duplication; matching is the judge's job. */
+  currentPrinciples: Array<{ id: string; statement: string; state: string }>;
+  /** Live top-of-mind entries — what a principle must generalize beyond, never echo. */
+  currentEntries: Array<{ body: string }>;
+}
+
+export interface PrincipleCandidate {
+  statement: string;
+  type: PrincipleType;
+  citedSignalIds: string[];
+}
+
+export interface DistillPrinciplesResult {
+  candidates: PrincipleCandidate[];
+}
+
+/**
+ * Asked per candidate against each standing principle. Conservative toward
+ * `independent`: a duplicate is visible and mergeable; a silent merge or a
+ * phantom conflict is not.
+ */
+export interface PrincipleRelationInput {
+  preferredLocale: SupportedLocale;
+  candidateStatement: string;
+  existingStatement: string;
+}
+
+export interface PrincipleRelation {
+  relation: "same" | "independent" | "conflicting";
+}
+
+/**
+ * Internal routing for an owner declaration — context, directive, and
+ * completion applied quietly. The outcome is a destination, never a verdict
+ * shown to the owner.
+ */
+export interface DeclarationRouteInput {
+  preferredLocale: SupportedLocale;
+  statement: string;
+}
+
+export interface DeclarationRoute {
+  route: "principle" | "inspiration";
+  /** Classified shape when the route is principle; maxim when unsure. */
+  type: PrincipleType;
+}
+
 export interface ModelProvider {
   readonly name: string;
   extractSignalCandidates(
     input: SignalCandidateExtractionInput,
   ): Promise<SignalCandidateExtractionResult>;
   judgeSignalMatch(input: SignalMatchJudgementInput): Promise<SignalMatchJudgement>;
+  distillPrinciples(input: DistillPrinciplesInput): Promise<DistillPrinciplesResult>;
+  judgePrincipleRelation(input: PrincipleRelationInput): Promise<PrincipleRelation>;
+  routeDeclaration(input: DeclarationRouteInput): Promise<DeclarationRoute>;
   synthesizeTopOfMind(
     input: TopOfMindSynthesisInput,
   ): Promise<TopOfMindSynthesisResult>;

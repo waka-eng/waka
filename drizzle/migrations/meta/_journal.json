@@ -15,6 +15,20 @@
       "when": 1786831196527,
       "tag": "0001_background_job_rerun",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787276652695,
+      "tag": "0002_principles",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787276958446,
+      "tag": "0003_refresh_principles_job",
+      "breakpoints": true
     }
   ]
 }
