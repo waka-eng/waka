@@ -129,6 +129,44 @@ falls below the bar reverts to `aspirational` if owner-declared, or is
 retired if machine-minted. (Same cascade discipline as
 signals-after-evidence-loss.)
 
+## One question per view
+
+Raised by the owner on 2026-08-18: does a fourth view multiply the
+places a person sees "the same content"? The audit, and the rules that
+keep the answer no:
+
+**An inspiration is primary in exactly one view — the archive.** In
+every other view it appears only as provenance behind an expansion
+(signal → evidence, entry → citations, principle → citing signals).
+Tracing is the auditability the owner chose, not duplication; it stays
+folded until asked for. Each view answers one question no other view
+answers: archive — *what did I save?*; signals — *what do my saves keep
+saying?*; wall — *what matters now?*; principles — *how do I choose,
+always?*
+
+**The real convergence risk is top of mind vs principles**, not
+inspiration sprawl: both are short lists of statement-shaped lines
+citing signals, and "You keep choosing small tools" (entry) versus
+"Prefer small tools you can hold in your head" (principle) are nearly
+the same sentence two views apart. Three rules keep them distinct:
+
+1. **Form.** Top of mind stays descriptive and second-person; principles
+   are imperative constraints. The phrasing contract doubles as the
+   anti-convergence rule, and synthesis receives the current entries
+   with the instruction that a principle may not restate one — it must
+   be the generalization that outlives the current moment. (Instruction-
+   level in v1; a cosine-overlap validator is v2 if usage shows the
+   instruction leaking.)
+2. **Material.** The wall is living paper — tilt, churn, decay.
+   Principles render austere: a short numbered list, no tilt, each row
+   carrying *held since* and its evidence span. Today's desk versus the
+   engraved list.
+3. **Progressive disclosure.** The `principles` nav affordance appears
+   only once the profile holds at least one principle (declared or
+   earned); the view stays reachable by URL. A new profile sees exactly
+   today's surface — the fourth question shows up when there is an
+   answer to it, which the 45-day bar makes honest anyway.
+
 ## Shape of the work
 
 Schema: `principles` (id, profile_id, statement, type
@@ -180,9 +218,11 @@ gracefully); typecheck + suite green.
 Eligibility arithmetic (`selectPrincipleEvidence`: signals meeting the
 constants, with span and top-of-mind-appearance counts computed from the
 version chain), the `synthesizePrinciples` provider call with the
-phrasing contract, code-side validation (citations resolve, locked
-byte-identical, shape checks), aspirational attachment, contested via
-feedback, reconciliation on evidence loss, job wiring into the chain.
+phrasing contract **and the no-restatement rule** (current top-of-mind
+entries ride along as what a principle must generalize beyond, never
+echo), code-side validation (citations resolve, locked byte-identical,
+shape checks), aspirational attachment, contested via feedback,
+reconciliation on evidence loss, job wiring into the chain.
 
 **Gate:** unit tests pin the arithmetic (eligibility bars, rank
 stickiness, aspirational→held promotion, reconciliation both
@@ -207,7 +247,12 @@ stickiness; suite green.
 `principles` becomes a surface state alongside wall / capture / archive
 / signals: ranked list with state chips (`held` / `aspirational` /
 `contested`), expandable citations (principle → signals), a declare box,
-reorder controls, edit-in-place that locks. i18n in both catalogs
+reorder controls, edit-in-place that locks. Rendered austere per the
+one-question-per-view rules: numbered, untilted, each row carrying
+*held since* and its evidence span — deliberately not the wall's paper.
+**Progressive disclosure:** the nav affordance appears only when the
+profile holds ≥1 principle; the view stays reachable by URL, where the
+empty state is one sentence and the declare box. i18n in both catalogs
 (en-US, ko-KR — "원칙").
 
 **Gate:** web tests green; browser verification against a live stack —
