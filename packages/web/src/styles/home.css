@@ -727,43 +727,6 @@
   color: var(--jar-muted);
 }
 
-/* ---------- the first screen ----------
-   Three named rows with nothing in them. The slot is an actual empty shape,
-   not a dash and not a placeholder string: an empty page describes absence,
-   an empty SLOT describes a thing that is missing — and only the second one
-   makes anybody want to fill it.
-
-   Nothing counts anything. No "0 of 3", no bar, no ticks. The rows are the
-   architecture of a full Waka standing there unfilled, and that is the whole
-   message. */
-.jar-first {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  max-width: 30ch;
-  margin: 26px auto 0;
-}
-.jar-first-line {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin: 0;
-  font-size: 14px;
-  font-style: italic;
-  color: var(--jar-faint);
-  text-align: left;
-}
-/* the shape of what is missing: an open outline, the same unclosed edge the
-   field draws around a memory nothing rests on */
-.jar-first-slot {
-  flex: none;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  border: 1px solid var(--jar-faint);
-  opacity: 0.5;
-}
-
 /* A WALL THAT HAS NOTHING YET, AND THE LINE THAT SAYS SO.
    These two carried no rules at all: an unstyled <p> inside the wall took the
    browser's own block defaults, so the sentence ran the full width of the
