@@ -80,6 +80,11 @@ export interface TopOfMindSynthesisSignal {
   confidence: number;
   evidenceCount: number;
   lastEvidenceAt: Date | null;
+  /**
+   * Which member holds this signal — set only on group synthesis, where the
+   * cross-member reading is the whole point. Never set on personal passes.
+   */
+  ownerName?: string;
 }
 
 /**
@@ -131,6 +136,12 @@ export interface TopOfMindSynthesisInput {
    * confirmed by return.
    */
   provisional: boolean;
+  /**
+   * Present when the artifact belongs to a group rather than a profile. The
+   * signals then carry `ownerName`s, and the synthesis speaks in the group's
+   * shared voice rather than to one person.
+   */
+  group?: { name: string; memberNames: string[] };
 }
 
 export interface TopOfMindSynthesisEntry {

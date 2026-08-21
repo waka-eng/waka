@@ -569,6 +569,49 @@ and return the current entries unchanged. Saying so is a real answer; churning
 the wording to look busy is not.
 `.trim();
 
+/**
+ * The group variant. Same artifact grammar, different subject: the signals
+ * belong to NAMED MEMBERS, and the reading is what the members' shared
+ * patterns add up to together — not one member's top of mind with guests.
+ */
+export const GROUP_TOP_OF_MIND_SYNTHESIS_SYSTEM_INSTRUCTION = `
+You write a group's shared top of mind: the short artifact answering what
+this group of people currently circles together. You are given the signals
+members chose to put on the group's wall — each a distilled pattern with an
+id and the name of the member it belongs to — and the artifact as it stands.
+
+Return the COMPLETE artifact every time, in the order a reader should meet it.
+Not a patch, not additions: the whole set, at most ${MAX_TOP_OF_MIND_ENTRIES}
+entries, fewer when fewer are true.
+
+Each entry:
+- type: pattern (what keeps holding across members), tension (members or
+  patterns pulling against each other), question (what is genuinely open
+  between them), hypothesis (a claim worth testing together), action
+  (something the group is moving toward).
+- body: one or two sentences in the group's plural voice. Never address one
+  person as "you" — the artifact belongs to everyone on the wall. Name
+  members when the point is genuinely theirs ("Ann returns to X; Ben to Y").
+- belief: only when the entry supports a crisp declarative claim.
+- prompt: only when the entry raises a question worth sitting with.
+- citedSignalIds: the ids of the signals the entry rests on. Cite only ids
+  from the list you were given. Never invent an id, and never write an entry
+  you cannot cite.
+
+The strongest entries rest on MORE THAN ONE member's signals — a shared
+pattern, a live disagreement, a question their walls raise together. An entry
+citing a single member's signal is allowed, but a whole artifact of solo
+entries is a failure: that is everyone's top of mind stapled together, not
+the group's.
+
+Locked entries were written or accepted by the members themselves. Reproduce
+each one exactly — same type, same body, same belief, same prompt, same cited
+ids, character for character. Build the rest of the artifact around them.
+
+If the current artifact still says what the wall says, set noChange to true
+and return the current entries unchanged. Saying so is a real answer.
+`.trim();
+
 const topOfMindSynthesisResponseSchema: ResponseSchema = {
   type: "OBJECT",
   properties: {
@@ -616,6 +659,12 @@ function buildTopOfMindSynthesisPrompt(input: TopOfMindSynthesisInput): string {
 
   sections.push(`Locale: ${input.preferredLocale}.`);
 
+  if (input.group) {
+    sections.push(
+      `The group is "${input.group.name}". Its members: ${input.group.memberNames.join(", ")}.`,
+    );
+  }
+
   if (input.provisional) {
     // The cold start: these patterns are drawn from one or two captures each,
     // not confirmed by return. Say what is there without overclaiming it.
@@ -635,7 +684,8 @@ function buildTopOfMindSynthesisPrompt(input: TopOfMindSynthesisInput): string {
           const recency = signal.lastEvidenceAt
             ? signal.lastEvidenceAt.toISOString()
             : "no evidence yet";
-          return `id: ${signal.id}\nconfidence: ${signal.confidence} | evidence: ${signal.evidenceCount} | last evidence: ${recency}\nstatement: ${signal.statement}`;
+          const owner = signal.ownerName ? `\nowner: ${signal.ownerName}` : "";
+          return `id: ${signal.id}${owner}\nconfidence: ${signal.confidence} | evidence: ${signal.evidenceCount} | last evidence: ${recency}\nstatement: ${signal.statement}`;
         })
         .join("\n\n"),
     ),
@@ -693,7 +743,13 @@ export function buildTopOfMindSynthesisRequest(
 ): GenerateContentRequest {
   return {
     systemInstruction: {
-      parts: [{ text: TOP_OF_MIND_SYNTHESIS_SYSTEM_INSTRUCTION }],
+      parts: [
+        {
+          text: input.group
+            ? GROUP_TOP_OF_MIND_SYNTHESIS_SYSTEM_INSTRUCTION
+            : TOP_OF_MIND_SYNTHESIS_SYSTEM_INSTRUCTION,
+        },
+      ],
     },
     contents: [{ role: "user", parts: [{ text: buildTopOfMindSynthesisPrompt(input) }] }],
     generationConfig: {

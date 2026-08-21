@@ -334,6 +334,34 @@ feedback fenced as data.
 Versions form a chain: the previous live artifact is marked superseded and
 points at its replacement. Nothing is mutated in place; history is walkable.
 
+### 5. The group's top of mind (`refreshTopOfMindForGroup`)
+
+A group's artifact runs the same pipeline with three deliberate differences
+(implemented 2026-08-21; before that the function was an explicit
+`not_implemented` seam, so groups had walls but never a reading):
+
+- **The wall is the selection.** No scoring pass, no cold start: members
+  chose what to share, so every shared signal is eligible, ranked by live
+  `computeSignalConfidence` and capped at `TOP_OF_MIND_SIGNAL_LIMIT`. Each
+  signal carries its owner's name into the prompt, and the group instruction
+  asks for cross-member entries in the group's plural voice — an artifact of
+  solo entries is named a failure in the instruction itself.
+- **Members edit by accepted proposal, and code applies them.** Before the
+  model writes a word, every proposal accepted since the previous version is
+  materialized deterministically: an accepted edit rewrites its entry and
+  locks it, an accepted removal dismisses it, an accepted addition arrives
+  locked (`applyGroupProposals`, pure and unit-tested). A pass that applied
+  any proposal writes reason `member_proposal`. Member decisions never pass
+  through the model.
+- **Citations carry attribution.** Each group citation row records which
+  member's signal fed the entry (`owner_profile_id`), which is what the room
+  view renders as contributors. Raw captures never appear anywhere in the
+  group path — the prompt sees distilled statements only.
+
+Triggers: a member requesting a reread, membership changes, and proposal
+acceptance — all enqueue the same `refresh_group_top_of_mind` job. The room
+speaks in its creator's preferred locale until groups carry their own.
+
 ---
 
 ## How time is applied
