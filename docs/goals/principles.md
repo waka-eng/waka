@@ -385,7 +385,10 @@ one-question-per-view rules: numbered, untilted, each row carrying
 **Progressive disclosure:** the nav affordance appears only when the
 profile holds ≥1 principle; the view stays reachable by URL, where the
 empty state is one sentence and the declare box. i18n in both catalogs
-(en-US, ko-KR — "원칙").
+(en-US, ko-KR — "원칙"). Visual spec of record until this phase lands:
+the owner's mockup canvas (2026-08-18) —
+https://claude.ai/code/artifact/dd9a3f29-8403-4ca7-9272-23e29d8feda5
+(populated view, day-one empty state, refused declaration).
 
 **Gate:** web tests green; browser verification against a live stack —
 declare, reorder, edit-lock, contested rendering all exercised, not
