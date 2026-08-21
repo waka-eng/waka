@@ -1,3 +1,23 @@
+/**
+ * The flat screen's own addresses: `buildSurfacePath` / `parseSurfacePath`.
+ *
+ * WHAT THIS MOCKS, AND WHY (gate G6)
+ *
+ * Nothing, and nothing needs replacing. Both functions under test are pure
+ * string work — a view name and an optional id in, a path out, and back. They
+ * touch no network, no database, no router and no clock, so there is no layer
+ * here to stand in for. A fake would only be a second implementation of the
+ * same two functions, and the test would then be checking the fake.
+ *
+ * ON `parseSurfacePath("/") === { view: "wall" }`, WHICH READS ODDLY NOW.
+ * `/` is the world, not Surface's wall — the world took the root route when it
+ * landed. That does not make this assertion wrong: it is Surface's own
+ * internal notion of "the view with no suffix", and it is what the page's back
+ * affordance resolves to, so leaving `/` there is what sends someone back to
+ * the world when they finish with a list. That is the intended way home now,
+ * not an escape hatch. If Surface is ever given its own root — `/surface` —
+ * this line is the one that has to move with it.
+ */
 import { describe, expect, it } from "vitest";
 
 import { buildSurfacePath, parseSurfacePath } from "../src/lib/surface-route";
@@ -11,6 +31,14 @@ describe("Surface routes", () => {
       entityId: null,
     });
     expect(parseSurfacePath("/signals")).toEqual({ view: "signals", entityId: null });
+    /* The wall's own address. It used to have none but "/", and the world took
+       "/" — so the flat screen's top of mind was the one view on its bottom bar
+       that nothing outside Surface could link to. Both addresses resolve here:
+       "/" because the back affordance still builds it, "/top-of-mind" because
+       the world's menu has to be able to point AT this view rather than at the
+       world it is already showing. */
+    expect(parseSurfacePath("/top-of-mind")).toEqual({ view: "wall", entityId: null });
+    expect(parseSurfacePath("/")).toEqual({ view: "wall", entityId: null });
     expect(parseSurfacePath("/inspirations/inspiration-1")).toEqual({
       view: "inspiration",
       entityId: "inspiration-1",

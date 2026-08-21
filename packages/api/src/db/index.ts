@@ -20,6 +20,7 @@
 export * from "./schema-accounts";
 export * from "./schema-profiles";
 export * from "./schema-principles";
+export * from "./schema-login-failures";
 export * from "./schema-sessions";
 export * from "./schema-cli-login-codes";
 export * from "./schema-inspirations";

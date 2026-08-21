@@ -2,6 +2,7 @@
 set -euo pipefail
 
 api_pid=""
+watch_pid=""
 shutting_down=0
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 web_dist_dir="$repo_root/packages/web/dist"
@@ -63,6 +64,10 @@ cleanup() {
     kill "$api_pid" 2>/dev/null || true
   fi
 
+  if [[ -n "$watch_pid" ]] && kill -0 "$watch_pid" 2>/dev/null; then
+    kill "$watch_pid" 2>/dev/null || true
+  fi
+
   wait 2>/dev/null || true
   return "$exit_code"
 }
@@ -73,9 +78,15 @@ trap 'exit 143' TERM
 
 load_env_local
 
-export PORT=3010
-export PUBLIC_API_URL="http://localhost:3010"
-export PUBLIC_WEB_URL="http://localhost:3010"
+# The port is one value in one place now. It was written out four times as a
+# literal, so moving the stack to another port meant editing the API URL, the
+# web URL, the dry-run guard and the printed line and getting all four to
+# agree — and any one of them left behind sends Google an OAuth callback at a
+# port nothing is listening on. Override with WAKA_LOCAL_PORT.
+export PORT="${WAKA_LOCAL_PORT:-3010}"
+local_origin="http://localhost:${PORT}"
+export PUBLIC_API_URL="$local_origin"
+export PUBLIC_WEB_URL="$local_origin"
 export VITE_API_URL=""
 export WAKA_SERVE_WEB_DIST=1
 export WAKA_WEB_DIST_DIR="$web_dist_dir"
@@ -86,8 +97,8 @@ if [[ "${WAKA_DEV_LOCAL_DRY_RUN:-}" == "1" ]]; then
     exit 1
   fi
 
-  if [[ "$PUBLIC_API_URL" != "http://localhost:3010" ]] || [[ "$PUBLIC_WEB_URL" != "http://localhost:3010" ]]; then
-    echo "dev:local dry run failed: local API and web URLs must both use localhost:3010" >&2
+  if [[ "$PUBLIC_API_URL" != "$local_origin" ]] || [[ "$PUBLIC_WEB_URL" != "$local_origin" ]]; then
+    echo "dev:local dry run failed: local API and web URLs must both use $local_origin" >&2
     exit 1
   fi
 
@@ -106,10 +117,30 @@ if [[ "${WAKA_DEV_LOCAL_DRY_RUN:-}" == "1" ]]; then
 fi
 
 echo "Starting WAKA local dev (Option B monolithic)..."
-echo "  Browser: http://localhost:3010"
+echo "  Browser: $local_origin"
 echo "Building web app for same-origin API paths..."
 
 pnpm --filter @waka/web build
+
+# THE BUILD KEEPS ITSELF CURRENT FROM HERE.
+#
+# This server serves packages/web/dist off disk and never looks at the source
+# again, so before this every web edit needed a manual `pnpm --filter
+# @waka/web build` before a reload showed anything. That is a silent failure:
+# the page loads, it just isn't your code, and you debug the previous version
+# while reading the current one. It cost real time twice in one session.
+#
+# `vite build --watch` recompiles dist on every save. The server keeps reading
+# from disk, so a browser reload is now always the current code — the same
+# guarantee the Vite dev server gives, without giving up the single-origin
+# setup that makes cookies and OAuth work here.
+#
+# Set WAKA_NO_WATCH=1 to opt out (a one-off build, then no rebuilding).
+if [[ "${WAKA_NO_WATCH:-}" != "1" ]]; then
+  echo "  Watching packages/web for changes (WAKA_NO_WATCH=1 to disable)"
+  pnpm --filter @waka/web exec vite build --watch --logLevel warn &
+  watch_pid=$!
+fi
 
 echo "Starting monolithic local server. Press Ctrl+C to stop."
 

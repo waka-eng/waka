@@ -47,6 +47,23 @@ export function parseSurfacePath(pathname: string): SurfaceRoute {
   if (segments.length === 1 && segments[0] === "rooms") {
     return { view: "rooms", entityId: null };
   }
+  /*
+    THE WALL NEEDS AN ADDRESS OF ITS OWN NOW.
+
+    This view's only address used to be "/", because Surface was the whole
+    product. The world took "/" when it landed, so the wall — the flat screen's
+    top of mind — became the one view on the bottom bar that could not be
+    linked to: following "/" leaves Surface entirely.
+
+    "/" still parses to `wall` below, and must: `buildSurfacePath({view:"wall"})`
+    returns "/", which is what the page's back affordance resolves to, and going
+    back to the world is the intended way home. This is an ADDITIONAL address,
+    not a replacement — it is how something outside Surface links INTO this
+    view, which nothing could do before.
+  */
+  if (segments.length === 1 && segments[0] === "top-of-mind") {
+    return { view: "wall", entityId: null };
+  }
   if (segments.length === 2 && segments[0] === "rooms") {
     const entityId = decodeSegment(segments[1]);
     /* Same rule as a malformed inspiration id: fall back to the list. */

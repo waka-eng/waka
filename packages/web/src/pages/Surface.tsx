@@ -93,7 +93,7 @@ import {
   type ApiSignalDetail,
   type ApiTopOfMind,
   type ApiTopOfMindEntry,
-} from "../lib/api";
+} from "../lib/api-surface";
 import { whenShort } from "../lib/when";
 import {
   buildSurfacePath,
@@ -125,10 +125,10 @@ export function markQuote(text: string, quote: string | null): JSX.Element {
   if (!quote) return <>{text}</>;
   const trimmed = quote.trim();
   if (trimmed.length < 12 || trimmed.length > MAX_QUOTE_CHARS) return <>{text}</>;
-  const pattern = trimmed
+  const quoteRe = trimmed
     .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
     .replace(/\s+/g, "\\s+");
-  const match = new RegExp(pattern, "i").exec(text);
+  const match = new RegExp(quoteRe, "i").exec(text);
   if (!match) return <>{text}</>;
   return (
     <>
