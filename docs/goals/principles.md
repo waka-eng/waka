@@ -1,7 +1,7 @@
 # Goal: principles — the layer that survives
 
-Status: **approved for execution (2026-08-18); Phase 0 delivered —
-awaiting the owner's signature on the amended canon.** The draft was
+Status: **in progress (2026-08-18) — Phase 0 signed, phases 1–7
+running.** The draft was
 reviewed iteratively by the owner through 2026-08-18 (cadence, tests,
 routing, machine rendering, mockup all owner-decided); "submit and start
 implementation" received the same day. No code exists yet: the Phase 0
@@ -510,3 +510,8 @@ sharing summary rule 6 (not shareable v1); vocabulary, API, and MCP
 tables extended; six decision-log entries. `docs/generation.md` intro
 made layer-neutral. **Gate: the owner signs the amended canon; phases
 1–7 start on that signature.**
+
+**Signed (2026-08-18):** the owner's `/goal "go ahead with the
+implementation"`, given in direct response to the Phase 0 summary of the
+amended canon — recorded here as the signature. Aspirational-binding-for-
+agents is thereby settled as decided.
