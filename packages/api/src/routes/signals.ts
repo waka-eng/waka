@@ -42,6 +42,7 @@ import {
   type ProfileOperation,
 } from "../lib/middleware.js";
 import { enqueueTopOfMindRefresh } from "../lib/queue.js";
+import { reconcilePrinciplesAfterSignalLoss } from "../lib/principle-generation.js";
 import {
   computeSignalConfidence,
   reembedSignalStatement,
@@ -497,6 +498,7 @@ export interface SignalRouteDependencies {
   loadProfile?: typeof loadProfileTarget;
   reembed?: typeof reembedSignalStatement;
   requestRefresh?: typeof enqueueTopOfMindRefresh;
+  reconcilePrinciples?: typeof reconcilePrinciplesAfterSignalLoss;
   authMiddleware?: MiddlewareHandler<AuthEnv>;
 }
 
@@ -512,6 +514,7 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
   const loadProfile = deps.loadProfile ?? loadProfileTarget;
   const reembed = deps.reembed ?? reembedSignalStatement;
   const requestRefresh = deps.requestRefresh ?? enqueueTopOfMindRefresh;
+  const reconcilePrinciples = deps.reconcilePrinciples ?? reconcilePrinciplesAfterSignalLoss;
 
   /**
    * Curating a signal changes what the artifact should be built from, so the
@@ -680,7 +683,12 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
     if (!deleted) return c.json({ error: "Signal not found" }, 404);
 
     // The artifact may cite the signal just removed; re-synthesise so an entry
-    // is not left resting on a citation that no longer resolves.
+    // is not left resting on a citation that no longer resolves. Principles
+    // reconcile immediately (state maintenance, no model, no midnight wait).
+    await reconcilePrinciples(db, {
+      profileId: scope.profileId,
+      signalIds: [parsedParams.data.signalId],
+    });
     scheduleRefresh(scope.profileId);
     return c.json({ deleted: true }, 200);
   });

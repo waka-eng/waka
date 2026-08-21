@@ -34,6 +34,7 @@ export const backgroundJobTypeValues = [
   "derive_signals",
   "refresh_top_of_mind",
   "refresh_group_top_of_mind",
+  "refresh_principles",
 ] as const;
 export type BackgroundJobType = (typeof backgroundJobTypeValues)[number];
 export const backgroundJobTypeEnum = pgEnum("background_job_type", backgroundJobTypeValues);
@@ -66,11 +67,16 @@ export interface RefreshGroupTopOfMindPayload {
   reason: "shares_changed" | "membership_changed" | "proposal_accepted" | "manual";
 }
 
+export interface RefreshPrinciplesPayload {
+  profileId: string;
+}
+
 export type BackgroundJobPayload =
   | EnrichAttachmentPayload
   | DeriveSignalsPayload
   | RefreshTopOfMindPayload
-  | RefreshGroupTopOfMindPayload;
+  | RefreshGroupTopOfMindPayload
+  | RefreshPrinciplesPayload;
 
 export const backgroundJobs = pgTable(
   "background_jobs",

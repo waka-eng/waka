@@ -22,6 +22,7 @@ import { groupsRoutes } from "./routes/groups.js";
 import { healthRoutes } from "./routes/health.js";
 import { inspirationsRoutes } from "./routes/inspirations.js";
 import { profilesRoutes } from "./routes/profiles.js";
+import { principlesMarkdownRoutes, principlesRoutes } from "./routes/principles.js";
 import { sessionsRoutes } from "./routes/sessions.js";
 import { publicProfileRoutes } from "./routes/public-profiles.js";
 import { signalsRoutes } from "./routes/signals.js";
@@ -61,6 +62,8 @@ app.route("/api/auth", authRoutes);
 // The memories an account owns — its human profile and any agent profiles.
 app.route("/api/profiles", profilesRoutes);
 app.route("/api/sessions", sessionsRoutes);
+app.route("/api/principles.md", principlesMarkdownRoutes);
+app.route("/api/principles", principlesRoutes);
 
 // Deliberately unauthenticated: returns only the owner-approved surface.
 app.route("/api/public/profiles", publicProfileRoutes);

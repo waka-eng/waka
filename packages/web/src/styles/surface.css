@@ -1414,3 +1414,185 @@
   color: var(--sf-ink-3);
   white-space: nowrap;
 }
+
+/* ---------------------------------------------------------------------------
+   Principles — layer 4.
+   ---------------------------------------------------------------------------
+   Deliberately not the wall's paper. Serif statements, rank numbers, hairline
+   dividers, no tilt: the wall is today's desk; this reads engraved. The meta
+   line reuses the signals view's provenance grammar so the system feels like
+   one instrument.
+   --------------------------------------------------------------------------- */
+
+.sf-layer--principles .sf-column { max-width: 720px; }
+
+.pr-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.pr-eyebrow {
+  font-family: var(--sf-mono, "JetBrains Mono", monospace);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sf-ink-3);
+}
+
+.pr-title {
+  margin: 10px 0 0;
+  font-family: "Instrument Serif", "Times New Roman", serif;
+  font-size: clamp(30px, 4vw, 44px);
+  line-height: 1.02;
+  letter-spacing: -0.01em;
+  font-weight: 400;
+  color: var(--sf-ink);
+}
+
+.pr-meta-right {
+  font-family: var(--sf-mono, "JetBrains Mono", monospace);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sf-ink-3);
+  white-space: nowrap;
+}
+
+.pr-empty {
+  margin-top: 26px;
+  max-width: 56ch;
+  font-family: "Instrument Serif", "Times New Roman", serif;
+  font-size: 21px;
+  line-height: 1.45;
+  color: var(--sf-ink-2);
+}
+
+.pr-list {
+  margin: 26px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pr-row {
+  display: flex;
+  gap: 20px;
+  padding: 20px 0 18px;
+  border-top: 1px solid var(--sf-rule);
+}
+
+.pr-row:last-child { border-bottom: 1px solid var(--sf-rule); }
+
+.pr-rank {
+  flex: 0 0 34px;
+  padding-top: 8px;
+  font-family: var(--sf-mono, "JetBrains Mono", monospace);
+  font-size: 11px;
+  color: var(--sf-ink-4);
+}
+
+.pr-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+/* The statement is an inline serif field: text until touched, and an owner
+   edit locks it server-side — the edit rule, visible as an underline only on
+   focus. */
+.pr-statement {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  padding: 0 0 2px;
+  background: transparent;
+  font-family: "Instrument Serif", "Times New Roman", serif;
+  font-size: 25px;
+  line-height: 1.25;
+  color: var(--sf-ink);
+  transition: border-color 0.15s var(--sf-ease);
+}
+
+.pr-statement:hover { border-bottom-color: var(--sf-rule); }
+.pr-statement:focus { outline: none; border-bottom-color: var(--sf-ink-4); }
+
+.pr-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  font-family: var(--sf-mono, "JetBrains Mono", monospace);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sf-ink-3);
+}
+
+.pr-state.is-aspirational {
+  border: 1px solid var(--sf-ink-4);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.pr-state.is-contested,
+.pr-tension { color: #8a2a1d; }
+
+.pr-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding-top: 10px;
+}
+
+.pr-action {
+  border: 0;
+  padding: 2px 2px;
+  background: transparent;
+  font-family: var(--sf-mono, "JetBrains Mono", monospace);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sf-ink-3);
+  cursor: pointer;
+  transition: color 0.15s var(--sf-ease);
+}
+
+.pr-action:hover:not(:disabled) { color: var(--sf-ink); }
+.pr-action:disabled { opacity: 0.35; cursor: default; }
+.pr-action.is-destructive:hover:not(:disabled) { color: #8a2a1d; }
+
+.pr-declare {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-top: 20px;
+  padding-left: 54px;
+}
+
+.pr-declare-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  border-bottom: 1px solid var(--sf-rule);
+  border-radius: 0;
+  padding: 6px 0;
+  background: transparent;
+  font: inherit;
+  font-size: 15px;
+  color: var(--sf-ink);
+}
+
+.pr-declare-input::placeholder { font-style: italic; color: var(--sf-ink-4); }
+.pr-declare-input:focus { outline: none; border-bottom-color: var(--sf-ink-4); }
+
+@media (max-width: 560px) {
+  .pr-row { gap: 12px; }
+  .pr-rank { flex-basis: 24px; }
+  .pr-statement { font-size: 21px; }
+  .pr-actions { flex-direction: column; align-items: flex-end; }
+}

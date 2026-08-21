@@ -1,0 +1,1 @@
+ALTER TYPE "public"."background_job_type" ADD VALUE 'refresh_principles';

@@ -1,9 +1,10 @@
-# The three-layer data model
+# The four-layer data model
 
 **Status: canonical.** Decided 2026-08-15, revised same day to make
 **profiles** first-class (owner + assistant review of the waka/waka-mcp
-integration). This document is the vocabulary of record for WAKA's data
-system. When code and this document disagree, the code is wrong — either
+integration); **amended 2026-08-18 to add the fourth layer, principles**
+(goal: `goals/principles.md`). This document is the vocabulary of record
+for WAKA's data system. When code and this document disagree, the code is wrong — either
 fix the code or amend this document first. New concepts land here before
 they land in a schema.
 
@@ -23,8 +24,9 @@ whose numbers are machine-checked against the implementation in CI.
 An **account** is the auth identity: one login (email/Google), one person.
 
 A **profile** is the unit that owns memory. Every profile — human or
-agent — owns a full three-layer stack: inspirations → signals → top of
-mind. There is exactly one top of mind **per profile**.
+agent — owns a full four-layer stack: inspirations → signals → top of
+mind → principles. There is exactly one top of mind **per profile**;
+principles are a growing set per profile.
 
 - Each account has one **human profile**: the person's own memory.
 - Each account can have **agent profiles**: separate stacks that agents
@@ -54,8 +56,8 @@ A session bound to an agent profile gets:
 
 | Target | Allowed |
 |---|---|
-| Its own agent profile | Full read/write: capture, curate signals, edit its top of mind |
-| The account's human profile | **Read + capture only**: read top of mind and signals (the conditioning use case), and capture inspirations into it — never edit or delete the human's signals or top of mind |
+| Its own agent profile | Full read/write: capture, curate signals, edit its top of mind, declare and curate its own principles |
+| The account's human profile | **Read + capture only**: read top of mind, signals, and principles (the conditioning use case), and capture inspirations into it — never edit or delete the human's signals, top of mind, or principles, and never declare into them. Principles are curation, so capture does not extend to them |
 | Other accounts | Nothing |
 
 The human-profile session can do everything in every profile of the
@@ -65,20 +67,22 @@ the auth-hardening track.
 
 ---
 
-## The three layers
+## The four layers
 
-| | Layer 1 — **Inspiration** | Layer 2 — **Signal** | Layer 3 — **Top of mind** |
-|---|---|---|---|
-| What | Raw capture: text, links, images | Distilled, durable pattern derived from inspirations | The synthesized artifact: what currently matters |
-| Created by | Humans and agents (per the permission matrix) | WAKA server (background generation) | WAKA server (generated from signals) |
-| Modified by | Owner-profile admin; captures are editable and deletable | Curated/edited by the profile's admin; mainly machine-made | Edited by the profile's admin (personal) / members together (group) |
-| Cardinality | Unbounded list per profile — editable, deletable, **not** append-only | Evolving set per profile | **Exactly one** per profile; exactly one per group |
-| Visibility | Private to the owning profile's account | Private by default; shareable per group — the unit walls consume | Profile: account (+ optional public surface); group: members |
+| | Layer 1 — **Inspiration** | Layer 2 — **Signal** | Layer 3 — **Top of mind** | Layer 4 — **Principle** |
+|---|---|---|---|---|
+| What | Raw capture: text, links, images | Distilled, durable pattern derived from inspirations | The synthesized artifact: what currently matters | How the profile chooses, stripped of context — a directive that survives its situations |
+| Created by | Humans and agents (per the permission matrix) | WAKA server (background generation) | WAKA server (generated from signals) | WAKA server (nightly, from long-lived signals) + owner declarations |
+| Modified by | Owner-profile admin; captures are editable and deletable | Curated/edited by the profile's admin; mainly machine-made | Edited by the profile's admin (personal) / members together (group) | Owner only: declare, edit (locks), reorder (sticky rank), delete, dispute |
+| Cardinality | Unbounded list per profile — editable, deletable, **not** append-only | Evolving set per profile | **Exactly one** per profile; exactly one per group | Growing, **uncapped** set per profile — expensive to earn, merged on overlap |
+| Visibility | Private to the owning profile's account | Private by default; shareable per group — the unit walls consume | Profile: account (+ optional public surface); group: members | Account-private; **not shareable** (v1); served to the profile's own credentialed tools via the canonical machine rendering |
 
 The pipeline, per profile: inspirations accumulate → WAKA distills
-signals → signals synthesize into the top of mind. The group flow reuses
-the middle layer: members share signals to a group wall, and the group's
-top of mind is generated from those shared signals.
+signals → signals synthesize into the top of mind → what keeps surviving
+distills, nightly, into principles. The group flow reuses the second
+layer: members share signals to a group wall, and the group's top of
+mind is generated from those shared signals; principles do not
+participate in groups (v1).
 
 ## Inspiration (layer 1)
 
@@ -151,10 +155,63 @@ agent's distilled working memory.
   change it together — proposals and affirmations are the co-editing
   mechanism — and accepted changes create new versions.
 
+## Principle (layer 4)
+
+**How the profile chooses, stripped of context.** A **rule** binds a
+context ("≤$100 for LLM testing") and is checkable; a **principle**
+survives having its context removed ("have something working before you
+put more money in") and *compiles into* different rules per context.
+WAKA stores the generator; captured rules are **evidence, never
+artifacts**.
+
+- **Five qualification tests**, all required for a minted principle:
+  *context* (still instructs with every proper noun and number deleted),
+  *directive* (prescribes the next choice; a fact about the person is a
+  signal), *evidence* (cites ≥3 distinct signals from this profile's own
+  history), *time* (evidence spans ≥45 days and survived ≥5 top-of-mind
+  versions), *completion* (can never be finished; anything checkable-off
+  is a goal). Exact thresholds live in
+  [generation.md](generation.md) and are drift-locked once implemented.
+- **States**: `held` (demonstrated), `aspirational` (declared by the
+  owner in their own words — locked from birth, visibly undemonstrated,
+  redeemed to held when evidence arrives), `contested` (the owner's
+  `not_true` verdict, or a judged conflict between two principles,
+  marked as a pair). Contested stays visible; rank decides operationally
+  until the owner resolves.
+- **Declarations are routed, never refused.** Validation runs
+  internally at declaration: what qualifies becomes aspirational; what
+  is really a rule or a goal is quietly kept as an inspiration — the
+  layer where it already belongs. The surface shows where the words
+  landed, never a test verdict.
+- **Rank is the tie-breaker.** An explicit, owner-reorderable order;
+  an owner reorder is sticky (generation thereafter appends, never
+  re-sorts). This is what makes the set decidable for agents.
+- **Many, not one.** The mirror of top of mind: top of mind is one
+  bounded artifact rewritten whole and decaying by design; principles
+  are an uncapped set selected by longevity, minted per-candidate with
+  merge-on-overlap. Cardinality is the structural difference between
+  the layers.
+- **Generated nightly, and only nightly**: one cron at midnight PST is
+  the sole enqueuer of principle generation. State maintenance
+  (disputes, reconciliation after evidence loss) is immediate SQL and
+  does not wait. Owner declarations are instant.
+- **The canonical rendering is machine-facing**: one deterministic
+  markdown document (rank-ordered, stable ids, a self-describing
+  preamble carrying the consumption contract), served byte-identically
+  to every consumer — the primary consumers are AI tools deciding on
+  the person's behalf. The web view is the human's decorated reading of
+  the same document. For agents acting for the human, **aspirational is
+  binding**: the person's declared word governs what their agents obey;
+  demonstration governs only what WAKA asserts.
+- **Audit chain**: decision → principle → signals → the person's own
+  captures. Agents cite principle ids in decisions they leaned on.
+
 ## The edit rule (regeneration vs. humans)
 
-Layers 2 and 3 are machine-generated *and* human-modifiable. The conflict
-rule, everywhere, is: **human edits lock the entry**.
+Layers 2, 3, and 4 are machine-generated *and* human-modifiable. The
+conflict rule, everywhere, is: **human edits lock the entry**. (Owner
+declarations at layer 4 are locked from birth — they are the owner's
+words on arrival.)
 
 - The server never rewrites a human-touched signal or top-of-mind entry.
 - Regeneration may: add new signals/entries, retire *untouched* stale
@@ -173,6 +230,9 @@ rule, everywhere, is: **human edits lock the entry**.
    contributing members' shared signals.
 5. Group membership is between **human profiles** for now; agent profiles
    do not join walls (revisit if a use case appears).
+6. Principles: account-private, **not shareable** in v1 — the group wall
+   stays signals-only. Served outward only as the canonical machine
+   rendering, under the profile's own credential, per the matrix.
 
 ---
 
@@ -194,7 +254,8 @@ words for the wrong layer. Disposition of every existing concept:
 | **Top of mind** (L3) | `top_of_mind_notes` (physical table renamed from `wow_moments`, code identifier still `wowMoments`), plus a separately computed `topOfMind` preview blob | One versioned `top_of_mind` artifact **per profile** with entries; notes table, preview blob, and the WOW→note compatibility serializer are all replaced. |
 | WOW vocabulary | `wow_kind`, `why`, `belief_statement`, `reflection_question`, `reflection_guide`, `wow_score`; routes `/api/wow-moments`, `/api/wow-status` | Deleted. Native entry fields are designed for the new generator (`type`, `body`, `prompt`, `confidence` carry over from the current surface; belief statements get a deliberate yes/no as a native field, not a legacy leftover). |
 | Lens boards | `top_of_mind_notes.lens` (`all`/`app`/`agent`) with separately generated per-lens boards | Deleted — superseded structurally: agent memory lives in the agent profile's own stack. `source` provenance remains on inspirations. |
-| **Wall** (personal) | The one-surface web UI | Concept unchanged: a profile's own surface over its three layers. |
+| **Principle** (L4) | No entity | New `principles` + `principle_signals` tables (statement, type `value \| maxim \| stance`, state, rank, lock; M:N citations to signals); `feedback.target_type` gains `principle`. |
+| **Wall** (personal) | The one-surface web UI | Concept unchanged: a profile's own surface over its layers — the principles view joins it under progressive disclosure (the nav affordance exists only once a principle does). |
 | **Group wall** | Group rooms + feed of members' shared captures | Now shows members' **shared signals** (distilled statements), never raw captures. |
 | **Group top of mind** | `group_top_of_mind_notes` (+ per-evidence `owner_user_id`), direction proposals/affirmations | Becomes the group-scoped `top_of_mind` artifact; the direction machinery is the co-editing mechanism producing new versions. |
 | CLI auth | `auth-cli.ts` loopback flow, `cli_login_codes`, sessions with `client: "cli"` | Loopback flow gains a **consent + profile-selection step**; the minted session binds to the chosen profile. Per-profile scoping (read+capture vs full) is enforced from that binding. |
@@ -206,7 +267,9 @@ words for the wrong layer. Disposition of every existing concept:
 | `POST /api/inspirations`, `GET /api/inspirations` | L1 | Capture + private archive/recall (today's `GET /api/signals` archive behavior moves here), plus edit/delete. |
 | `GET /api/signals` | L2 | **Repurposed**: lists the acting profile's distilled signals (statement, confidence, evidence count, lock/share state). |
 | `GET /api/top-of-mind` | L3 | Returns the acting profile's single current artifact (+ version metadata). |
-| Cross-profile reads | L2/L3 | An agent-bound session may read the human profile per the permission matrix (explicit target parameter; server-enforced). |
+| `GET /api/principles`, `POST`, `PATCH /:id`, `DELETE /:id`, `POST /reorder` | L4 | Ranked set + owner curation. **No refresh endpoint** — generation belongs to the nightly cron alone. |
+| `GET /api/principles.md` | L4 | The canonical machine rendering: one deterministic markdown document, byte-identical for every consumer. |
+| Cross-profile reads | L2/L3/L4 | An agent-bound session may read the human profile per the permission matrix (explicit target parameter; server-enforced). |
 | `/api/wow-moments`, `/api/wow-status` | — | Deleted. |
 
 ### MCP tools after the cleanup
@@ -220,6 +283,7 @@ follows the permission matrix.
 | `waka_list_inspirations` (was `waka_list_signals`) | `GET /api/inspirations` | Episodic recall over raw captures. |
 | `waka_list_signals` (new meaning) | `GET /api/signals` | Distilled patterns — likely the most useful recall surface for agents. |
 | `waka_get_profile` | `GET /api/top-of-mind` | The bound profile's artifact; an agent session may also read the human profile's (read-only). |
+| `waka_get_principles` | `GET /api/principles.md` | Returns the canonical markdown document — the same bytes the endpoint serves — plus the structured list for tools that want fields. |
 
 ---
 
@@ -277,5 +341,29 @@ follows the permission matrix.
   refresh; the six-cluster classification call and the keyword-bucket
   node ontology are deleted, not ported.
 
+- **2026-08-18** — **Principles adopted as layer 4**: context-free
+  directives ("how the profile chooses"), distinct from rules
+  (context-bound, checkable — and stored only as evidence). Five
+  qualification tests: context, directive, evidence, time, completion.
+- **2026-08-18** — Principles are **many, not one**: an uncapped growing
+  set selected by longevity — the structural mirror of the single
+  decaying top of mind. Minted per-candidate with merge-on-overlap and
+  judged conflict marking (contested pairs, rank decides meanwhile).
+- **2026-08-18** — Principle generation runs **once per day at midnight
+  PST and nothing else may trigger it**; state maintenance stays
+  immediate. Declarations are instant, owner-made, locked from birth.
+- **2026-08-18** — Declarations are **routed, never refused**: internal
+  validation sends qualifying ones to aspirational and rule/goal-shaped
+  ones to the inspiration archive, with no displayed test verdict.
+- **2026-08-18** — The **canonical rendering is machine-facing**: one
+  deterministic markdown document served byte-identically everywhere;
+  the web view is the human's reading of it. For agents acting on the
+  person's behalf, aspirational principles are binding as the person's
+  declared word.
+- **2026-08-18** — Principles are per-profile like every layer, **not
+  shareable** in v1, read-only to agent sessions on the human profile,
+  and surfaced under progressive disclosure.
+
 The migration itself (schema, API, web, MCP phases and gates) belongs in a
-`docs/goals/` goal document that references this file.
+`docs/goals/` goal document that references this file — for this layer,
+`goals/principles.md`.

@@ -36,9 +36,16 @@ import {
   writeStoredLocale,
   type SupportedLocale,
 } from "../lib/i18n";
+import { t } from "../lib/locales";
 import {
   ApiError,
   createInspiration,
+  declarePrinciple,
+  deletePrinciple,
+  disputePrinciple,
+  fetchPrinciples,
+  reorderPrinciples,
+  updatePrinciple,
   createReflection,
   deleteInspiration,
   deleteReflection,
@@ -58,6 +65,7 @@ import {
   updateTopOfMindEntry,
   uploadToPresignedUrl,
   type ApiInspiration,
+  type ApiPrinciple,
   type ApiInspirationSummary,
   type ApiSignal,
   type ApiSignalDetail,
@@ -198,7 +206,131 @@ export default function SurfacePage(): JSX.Element {
   const [drags, setDrags] = useState<Record<string, { x: number; y: number }>>({});
   const [dragging, setDragging] = useState<string | null>(null);
 
-  // Layer 2 — the signals.
+  // Layer 4 — the principles. Loaded on arrival (not on view entry) because
+  // the nav verb itself is progressively disclosed: it exists only once a
+  // principle does, so the surface has to know the count before any click.
+  const [principlesList, setPrinciplesList] = useState<ApiPrinciple[]>([]);
+  const [principlesLoaded, setPrinciplesLoaded] = useState(false);
+  const [principleDrafts, setPrincipleDrafts] = useState<Record<string, string>>({});
+  const [declareDraft, setDeclareDraft] = useState("");
+  const [declaring, setDeclaring] = useState(false);
+  const principleTimers = useRef<Record<string, number>>({});
+
+  const loadPrinciples = useCallback(async (): Promise<void> => {
+    try {
+      const rows = await fetchPrinciples();
+      setPrinciplesList(rows);
+      setPrincipleDrafts(Object.fromEntries(rows.map((row) => [row.id, row.statement])));
+    } catch {
+      // The verb simply stays hidden; the view shows the error if visited.
+      setPrinciplesList([]);
+    } finally {
+      setPrinciplesLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadPrinciples();
+  }, [loadPrinciples]);
+
+  const declare = useCallback((): void => {
+    const statement = declareDraft.trim();
+    if (!statement || declaring) return;
+    setDeclaring(true);
+    void (async () => {
+      try {
+        const result = await declarePrinciple(statement);
+        setDeclareDraft("");
+        if (result.created === "principle") {
+          setNotice(t(locale, "principlesDeclaredAsPrinciple"));
+          await loadPrinciples();
+        } else {
+          // Routed, never refused: the words are kept as a capture, and the
+          // surface says only where they landed.
+          setNotice(t(locale, "principlesDeclaredAsCapture"));
+        }
+      } catch (err) {
+        setNotice(errorMessage(err, t(locale, "principlesError")));
+      } finally {
+        setDeclaring(false);
+      }
+    })();
+  }, [declareDraft, declaring, locale, loadPrinciples]);
+
+  const rewritePrinciple = useCallback(
+    (principle: ApiPrinciple, statement: string): void => {
+      setPrincipleDrafts((current) => ({ ...current, [principle.id]: statement }));
+      window.clearTimeout(principleTimers.current[principle.id]);
+      principleTimers.current[principle.id] = window.setTimeout(() => {
+        const trimmed = statement.trim();
+        if (!trimmed || trimmed === principle.statement) return;
+        void (async () => {
+          try {
+            const updated = await updatePrinciple(principle.id, trimmed);
+            setPrinciplesList((current) =>
+              current.map((row) => (row.id === updated.id ? updated : row)),
+            );
+          } catch (err) {
+            setNotice(errorMessage(err, t(locale, "principlesError")));
+          }
+        })();
+      }, AUTOSAVE_DELAY_MS);
+    },
+    [locale],
+  );
+
+  const movePrinciple = useCallback(
+    (principle: ApiPrinciple, direction: -1 | 1): void => {
+      const index = principlesList.findIndex((row) => row.id === principle.id);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= principlesList.length) return;
+      const order = principlesList.map((row) => row.id);
+      [order[index], order[target]] = [order[target]!, order[index]!];
+      void (async () => {
+        try {
+          setPrinciplesList(await reorderPrinciples(order));
+        } catch (err) {
+          setNotice(errorMessage(err, t(locale, "principlesError")));
+        }
+      })();
+    },
+    [principlesList, locale],
+  );
+
+  const removePrinciple = useCallback(
+    (principle: ApiPrinciple): void => {
+      if (!window.confirm(t(locale, "principlesRemoveConfirm"))) return;
+      void (async () => {
+        try {
+          await deletePrinciple(principle.id);
+          setPrinciplesList((current) => current.filter((row) => row.id !== principle.id));
+        } catch (err) {
+          setNotice(errorMessage(err, t(locale, "principlesError")));
+        }
+      })();
+    },
+    [locale],
+  );
+
+  const disputePrincipleRow = useCallback(
+    (principle: ApiPrinciple): void => {
+      void (async () => {
+        try {
+          await disputePrinciple(principle.id);
+          setPrinciplesList((current) =>
+            current.map((row) =>
+              row.id === principle.id ? { ...row, state: "contested" as const } : row,
+            ),
+          );
+        } catch (err) {
+          setNotice(errorMessage(err, t(locale, "principlesError")));
+        }
+      })();
+    },
+    [locale],
+  );
+
+    // Layer 2 — the signals.
   const [signals, setSignals] = useState<ApiSignal[]>([]);
   const [signalsLoading, setSignalsLoading] = useState(false);
   const [openSignal, setOpenSignal] = useState<ApiSignalDetail | null>(null);
@@ -1018,6 +1150,148 @@ export default function SurfacePage(): JSX.Element {
           </div>
         </section>
 
+        {/* ------------------------------------------------------ PRINCIPLES */}
+        {/*
+          Layer 4. Deliberately NOT the wall's paper: serif statements, rank
+          numbers, hairline dividers, no tilt — the wall is today's desk, this
+          reads engraved. Cardinality is the first thing the surface says: the
+          wall is one rewritten board, this is an accumulating ranked list.
+        */}
+        <section className={`sf-layer sf-layer--principles${view === "principles" ? " on" : ""}`}>
+          <div className="sf-column">
+            <button type="button" className="sf-back" onClick={() => navigateSurface("wall")}>
+              ← back
+            </button>
+            <div className="pr-head">
+              <div>
+                <div className="pr-eyebrow">{t(locale, "principlesEyebrow")}</div>
+                <h2 className="pr-title">{t(locale, "principlesTitle")}</h2>
+              </div>
+              <div className="pr-meta-right">
+                {principlesList.length} · {t(locale, "principlesMeta")}
+              </div>
+            </div>
+
+            {principlesLoaded && principlesList.length === 0 ? (
+              <p className="pr-empty">{t(locale, "principlesEmpty")}</p>
+            ) : null}
+
+            <ol className="pr-list">
+              {principlesList.map((principle, index) => (
+                <li key={principle.id} className="pr-row">
+                  <span className="pr-rank">{String(index + 1).padStart(2, "0")}</span>
+                  <div className="pr-body">
+                    <input
+                      className="pr-statement"
+                      type="text"
+                      value={principleDrafts[principle.id] ?? principle.statement}
+                      aria-label={principle.statement}
+                      onChange={(event) => {
+                        const value = event.currentTarget.value;
+                        rewritePrinciple(principle, value);
+                      }}
+                    />
+                    <div className="pr-meta">
+                      <span className={`pr-state is-${principle.state}`}>
+                        {t(
+                          locale,
+                          principle.state === "held"
+                            ? "principlesStateHeld"
+                            : principle.state === "aspirational"
+                              ? "principlesStateAspirational"
+                              : "principlesStateContested",
+                        )}
+                      </span>
+                      {principle.origin === "declared" ? (
+                        <span>{t(locale, "principlesYourWords")}</span>
+                      ) : null}
+                      {principle.citedSignals.length > 0 ? (
+                        <span>
+                          {principle.citedSignals.length}{" "}
+                          {t(locale, "principlesSignalsBehind")}
+                        </span>
+                      ) : null}
+                      {principle.heldSince ? (
+                        <span>
+                          {t(locale, "principlesSince")} {whenShort(principle.heldSince)}
+                        </span>
+                      ) : principle.state === "aspirational" ? (
+                        <span>{t(locale, "principlesAwaiting")}</span>
+                      ) : null}
+                      {principle.state === "contested" ? (
+                        <span className="pr-tension">
+                          {t(locale, "principlesInTension")} —{" "}
+                          {t(locale, "principlesRankDecides")}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                  <span className="pr-actions">
+                    <button
+                      type="button"
+                      className="pr-action"
+                      disabled={index === 0}
+                      aria-label={t(locale, "principlesMoveUp")}
+                      onClick={() => movePrinciple(principle, -1)}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      className="pr-action"
+                      disabled={index === principlesList.length - 1}
+                      aria-label={t(locale, "principlesMoveDown")}
+                      onClick={() => movePrinciple(principle, 1)}
+                    >
+                      ↓
+                    </button>
+                    {principle.state !== "contested" ? (
+                      <button
+                        type="button"
+                        className="pr-action"
+                        onClick={() => disputePrincipleRow(principle)}
+                      >
+                        {t(locale, "principlesDispute")}
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="pr-action is-destructive"
+                      onClick={() => removePrinciple(principle)}
+                    >
+                      {t(locale, "principlesRemove")}
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ol>
+
+            <div className="pr-declare">
+              <input
+                className="pr-declare-input"
+                type="text"
+                value={declareDraft}
+                placeholder={t(locale, "principlesDeclarePlaceholder")}
+                disabled={declaring}
+                onChange={(event) => setDeclareDraft(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") declare();
+                }}
+              />
+              {declareDraft.trim() || declaring ? (
+                <button
+                  type="button"
+                  className="pr-action"
+                  disabled={declaring}
+                  onClick={declare}
+                >
+                  {declaring ? t(locale, "principlesDeclaring") : t(locale, "principlesDeclare")}
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </section>
+
         {/* --------------------------------------------------------- ARCHIVE */}
         <section className={`sf-layer sf-layer--archive${view === "archive" ? " on" : ""}`}>
           <div className="sf-column">
@@ -1313,6 +1587,22 @@ export default function SurfacePage(): JSX.Element {
           >
             yours
           </button>
+          {/* Progressive disclosure: this door exists only once a principle
+              does. The view stays reachable by URL either way. */}
+          {principlesList.length > 0 || view === "principles" ? (
+            <button
+              type="button"
+              className={`sf-primary-verb${view === "principles" ? " on" : ""}`}
+              aria-pressed={view === "principles"}
+              onClick={() =>
+                navigateSurface(view === "principles" ? "wall" : "principles", {
+                  replace: view === "principles",
+                })
+              }
+            >
+              {t(locale, "principlesVerb")}
+            </button>
+          ) : null}
         </div>
 
         {/*

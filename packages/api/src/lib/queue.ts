@@ -48,6 +48,7 @@ import {
   describeSignalDerivation,
   deriveSignalsForInspiration,
 } from "./signal-derivation.js";
+import { refreshPrinciplesForProfile } from "./principle-generation.js";
 import {
   refreshTopOfMindForGroup,
   refreshTopOfMindForProfile,
@@ -130,8 +131,12 @@ const RUNNING_JOB_STATUS = sql`background_jobs.status = 'running'::background_jo
  */
 async function enqueueKeyedJob(input: {
   profileId: string;
-  type: "enrich_attachment" | "derive_signals" | "refresh_group_top_of_mind";
-  payload: EnrichAttachmentPayload | DeriveSignalsPayload | RefreshGroupTopOfMindPayload;
+  type: "enrich_attachment" | "derive_signals" | "refresh_group_top_of_mind" | "refresh_principles";
+  payload:
+    | EnrichAttachmentPayload
+    | DeriveSignalsPayload
+    | RefreshGroupTopOfMindPayload
+    | { profileId: string };
   idempotencyKey: string;
 }): Promise<EnqueueResult> {
   const rows = await getDb().execute(sql<{ id: string }>`
@@ -173,6 +178,26 @@ async function enqueueKeyedJob(input: {
   if (shouldAutoDrainBackgroundJobs()) scheduleBackgroundJobDrain();
   else await wakeBackgroundWorker();
   return { jobId: job.id, created: job.created };
+}
+
+/**
+ * Nightly principle generation for one profile.
+ *
+ * THE CRON IS THE SOLE ENQUEUER in deployed code — the layer's cadence is
+ * once per day at midnight PST, and a source-scan test fails CI if another
+ * call site appears. Keyed per profile per calendar day, so a cron retry
+ * cannot run a profile's generation twice in one night.
+ */
+export async function enqueueRefreshPrinciples(
+  profileId: string,
+  dayKey: string,
+): Promise<EnqueueResult> {
+  return enqueueKeyedJob({
+    profileId,
+    type: "refresh_principles",
+    payload: { profileId },
+    idempotencyKey: `refresh_principles:${profileId}:${dayKey}`,
+  });
 }
 
 /**
@@ -428,6 +453,11 @@ export async function runBackgroundJobWorker(
 
 export async function processBackgroundJob(job: BackgroundJob): Promise<void> {
   switch (job.type) {
+    case "refresh_principles": {
+      const profileId = job.profileId;
+      await refreshPrinciplesForProfile({ profileId });
+      return;
+    }
     case "enrich_attachment": {
       const payload = parseEnrichAttachmentPayload(job.payload);
       if (!payload) return dropPoisonPayload(job);

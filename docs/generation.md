@@ -1,9 +1,9 @@
 # How WAKA generates memory
 
 This is the mechanics companion to [data-model.md](data-model.md). That doc
-says what the three layers *are*; this one says exactly how layer 2 is derived
-from layer 1 and layer 3 from layer 2 — every threshold, every decision, and
-which guarantees are enforced by code versus asked of the model.
+says what the layers *are*; this one says exactly how each layer is derived
+from the one below — every threshold, every decision, and which guarantees
+are enforced by code versus asked of the model.
 
 **This doc cannot silently drift from the implementation.** Every constant in
 the [tuning tables](#tuning-constants) is machine-checked against the exported
@@ -370,6 +370,74 @@ Deliberate consequences:
 
 ---
 
+## Layer 4: principles — how the person chooses
+
+Implemented per `docs/goals/principles.md` (phases 1–5, 2026-08-18 →
+2026-08-21). The constants below live in
+`packages/api/src/lib/principle-generation.ts` and are drift-locked like
+every other table in this document.
+
+A **principle** is how a person chooses, stripped of context — the
+generator from which context-bound **rules** compile ("frugal mindset" →
+"≤$100 for LLM testing" under the context *LLM testing*). WAKA stores
+the generator; captured rules are evidence, never artifacts. Unlike top
+of mind (ONE bounded artifact, rewritten whole, decaying by design),
+principles are a **growing, uncapped set** selected by *longevity* —
+what survives is what qualifies.
+
+**Five qualification tests, all required for a minted principle:**
+
+1. **Context** — still instructs after every proper noun, number, and
+   project name is deleted; otherwise it is a rule → evidence.
+2. **Directive** — prescribes the next choice; a fact about the person
+   is a signal, not a principle.
+3. **Evidence** — cites at least `PRINCIPLE_MIN_SIGNALS` (3) distinct
+   signals from this profile's own history; uncited virtue is a
+   horoscope.
+4. **Time** — evidence spanning at least `PRINCIPLE_MIN_SPAN_DAYS` (45)
+   days and selected into at least `PRINCIPLE_MIN_TOM_APPEARANCES` (5)
+   top-of-mind versions; a two-week obsession is top of mind, not
+   character. Both computed over the UNION of the citing signals — the
+   theme's lifetime, not any one wording's. **[checked]**
+5. **Completion** — can never be finished; anything checkable-off is a
+   goal, not a principle.
+
+Owner **declarations** skip evidence and time (aspirational until
+demonstrated — trust pending demonstration); context, directive, and
+completion are applied internally, and a declaration failing them is
+quietly kept as an inspiration — evidence, where it belongs — with no
+refusal surfaced.
+
+**States:** `held` (demonstrated), `aspirational` (declared, visibly
+undemonstrated; redeemed to held when evidence arrives), `contested`
+(the owner's `not_true` verdict, or a judged conflict between two
+principles, marked as a pair for owner adjudication). An explicit,
+owner-reorderable **rank** keeps the set decidable even while a
+conflict stands — the higher rank wins operationally.
+
+**Generation is mint-or-match, daily.** A dedicated cron — the *sole*
+enqueuer, midnight PST (fixed 08:00 UTC), drift-pinned so any second
+call site fails CI — evaluates each active profile: one cheap SQL check
+for clusters newly past the bar, and only then model calls (distill one
+candidate; judge it against the standing set as
+`same | independent | conflicting`, conservative toward independent).
+Same recoverable-mistake stance as match-or-mint, one level up. State
+maintenance (contested flips, reconciliation after evidence loss) is
+immediate SQL and does not wait for midnight; generation does.
+
+**The canonical rendering is machine-facing:** one deterministic
+markdown document (rank-ordered, stable `p-<uuid8>` ids, a preamble
+carrying the consumption contract, contested pairs cross-referenced),
+served byte-identically via `GET /api/principles.md` and the MCP tool —
+the web view is the human's decorated reading of the same document.
+Golden-tested byte-for-byte once implemented.
+
+The audit chain stays unbroken: answer → principle → signals → the
+person's own captures — and decisions made by agents cite principle ids,
+extending it to the last mile.
+
+---
+
 ## Tuning constants
 
 The authoritative values. Machine-checked against code — see
@@ -408,6 +476,16 @@ The authoritative values. Machine-checked against code — see
 | `COMEBACK_MIN_DORMANT_DAYS` | 21 | Minimum gap for a return to count |
 | `COMEBACK_SATURATION_DAYS` | 90 | Gap length where the bonus saturates |
 | `COMEBACK_MAX_RETURN_AGE_DAYS` | 14 | A return older than this is just history |
+
+### Layer 4 — principles (`packages/api/src/lib/principle-generation.ts`)
+
+| Constant | Value | One line |
+|---|---|---|
+| `PRINCIPLE_MIN_SIGNALS` | 3 | Distinct citing signals a principle must rest on |
+| `PRINCIPLE_MIN_SPAN_DAYS` | 45 | First-to-last evidence span across the citing signals |
+| `PRINCIPLE_MIN_TOM_APPEARANCES` | 5 | Distinct top-of-mind versions the citing signals survived into |
+| `PRINCIPLE_MAX_STATEMENT_LENGTH` | 200 | A principle is a directive, not an essay |
+| `PRINCIPLE_MAX_CANDIDATES_PER_RUN` | 3 | Candidates one nightly distillation may propose |
 
 ### Model calls (`packages/api/src/queue/gemini.ts`, `packages/api/src/lib/inspiration-embeddings.ts`)
 

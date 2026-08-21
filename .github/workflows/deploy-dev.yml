@@ -31,6 +31,7 @@ env:
   AWS_DEFAULT_REGION: us-west-2
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_APP }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_APP }}
+  DB_CONNECTION_URL: ${{ secrets.DB_CONNECTION_URL_DEV }}
   DEV_DOMAIN: dev.waka.im
 
 jobs:
@@ -110,6 +111,12 @@ jobs:
 
       - name: Clear stale SST development lock
         run: pnpm sst unlock --stage "$SST_STAGE"
+
+      - name: Apply development database migrations
+        # The prod workflow has always migrated; dev relied on hands. The gap
+        # shipped a stage whose API had routes its database lacked tables for
+        # (goal/principles cutover, 2026-08-21) — hence this step.
+        run: pnpm db:migrate
 
       - name: Deploy SST development stage
         run: pnpm sst deploy --stage "$SST_STAGE"
