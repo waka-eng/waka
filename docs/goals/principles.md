@@ -1,7 +1,17 @@
 # Goal: principles — the layer that survives
 
-Status: **in progress (2026-08-18) — Phase 0 signed, phases 1–7
-running.** The draft was
+Status: **done (2026-08-21).** All eight phases passed their gates. The
+fourth layer is live on dev.waka.im and waka.im: schema, nightly-only
+generation (cron sole-enqueuer, drift-pinned), the API with silent
+declaration routing and the canonical machine rendering, the austere
+surface view under progressive disclosure, waka-mcp's
+`waka_get_principles`, the graduated generation canon with five
+drift-locked constants, and a 6-step e2e. The cutover surfaced and
+fixed a real pipeline gap: deploy-dev never migrated (hidden by a
+stale 11-row drizzle journal, repaired to truthful sha256 entries);
+deploy-dev now migrates like prod always has. First production
+principle: the owner's own declaration, `p-9fc877ea` (aspirational,
+value) — "Help people whether they deserve it or not." The draft was
 reviewed iteratively by the owner through 2026-08-18 (cadence, tests,
 routing, machine rendering, mockup all owner-decided); "submit and start
 implementation" received the same day. No code exists yet: the Phase 0
@@ -512,6 +522,25 @@ directly, keeping the cron-sole-enqueuer pin intact.
 Local gate measured: 6/6 — declaration both routes, canonical document
 contract, sticky reorder + edit-lock, and promotion minting a held
 principle with 3 citations under the documented overrides.
+
+### Phase 7 — cutover, resolved (2026-08-21)
+
+Dev: first e2e run failed honestly — the deployed API had the routes,
+its database lacked the tables. Root cause: deploy-dev has never run
+migrations (prod always has), and the manual fallback was silently
+no-opping because dev's drizzle journal carried 11 stale pre-rebuild
+rows drizzle trusted. Repaired: 0002/0003 applied via psql, journal
+rebuilt to 4 truthful sha256 rows, `db:migrate` verified as a truthful
+no-op, DB_CONNECTION_URL_DEV secret set, migrate step added to
+deploy-dev.yml. Re-run: 5/5 + designed skip (no trigger on deployed
+stages — the cron-sole-enqueuer working as specified).
+
+Prod: deploy green, migrations applied by the workflow (journal 2→4,
+both tables). Gate closed live on the owner's account: declared "Help
+people whether they deserve it or not." → aspirational, locked,
+type=value, `p-9fc877ea`; visible via GET /api/principles.md (full
+contract preamble), via the waka-mcp client (identical bytes), and the
+view markers present in the served web bundle. **Pass.**
 
 ### Phase 6 — canon sync and drift lock (2026-08-21)
 

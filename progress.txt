@@ -2078,3 +2078,4 @@ combinations. Gates: 8/8 layer-1 e2e, 6/6 signals, 7/7 top-of-mind, 8/8 groups,
 291 unit tests. Bugs the gates caught and fixed: derive-signals swallowed every
 edit after the first; enrichment recorded transport failures as successes;
 deleting every citation left a signal active forever.
+goal(principles): done 2026-08-21 — layer 4 live on dev+prod; 8/8 gates; api 419 web 71 mcp 35+9live e2e 6/6; deploy-dev migration gap found+fixed
