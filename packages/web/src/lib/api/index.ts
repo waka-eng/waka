@@ -12,6 +12,7 @@
  *   inspirations.ts              inspirations.ts  /api/inspirations   (layer 1)
  *   attachments.ts               attachments.ts   /api/attachments
  *   signals.ts                   signals.ts       /api/signals        (layer 2)
+ *   principles.ts                principles.ts    /api/principles     (layer 4)
  *   top-of-mind.ts               top-of-mind.ts   /api/top-of-mind    (layer 3)
  *   groups.ts                    groups.ts        /api/groups
  *   feedback.ts                  feedback.ts      /api/feedback
@@ -45,6 +46,7 @@ export * from "./sessions";
 export * from "./inspirations";
 export * from "./attachments";
 export * from "./signals";
+export * from "./principles";
 export * from "./top-of-mind";
 export * from "./groups";
 export * from "./feedback";
