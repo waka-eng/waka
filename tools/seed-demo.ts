@@ -17,6 +17,15 @@ import {
   getDemoSeedSummary,
 } from "./demo-seed-data";
 
+/**
+ * The promotion bar from docs/generation.md, restated here because the seeder
+ * writes rows directly rather than going through derivation. If this number
+ * ever moves, it moves in generation.md first and the guard trigger in
+ * drizzle/migrations/0007 second; this is the third place and the only one a
+ * demo can be wrong in quietly.
+ */
+const SIGNAL_PROMOTION_EVIDENCE = 3;
+
 interface Args {
   databaseUrl: string;
   accountId?: string;
@@ -419,11 +428,18 @@ export async function seedDemoRows(
     const lastEvidenceAt = evidenceTimes.reduce((latest, at) => (at > latest ? at : latest));
     const createdAt = evidenceTimes.reduce((earliest, at) => (at < earliest ? at : earliest));
 
+    /* EVIDENCE FIRST, THEN PROMOTION — the same order the product uses.
+       `signals_require_evidence` (drizzle/migrations/0007) fires on the
+       TRANSITION into 'active' and counts the evidence rows that exist at
+       that moment. Writing a seed straight to 'active' counts zero and
+       aborts, which is not the trigger being wrong: derivation never does
+       that either. So every signal is born 'emerging', its evidence is
+       inserted, and only then does it take the status the seed asked for. */
     await sql`
       insert into signals (
         id, profile_id, statement, status, confidence, last_evidence_at, created_at, updated_at
       ) values (
-        ${id}, ${profileId}, ${seed.statement}, ${seed.status}::signal_status,
+        ${id}, ${profileId}, ${seed.statement}, 'emerging'::signal_status,
         ${seed.confidence}, ${lastEvidenceAt}, ${createdAt}, ${lastEvidenceAt}
       )
     `;
@@ -445,6 +461,34 @@ export async function seedDemoRows(
           ${evidence.quote ?? null}, ${inspirationTimes.get(evidence.inspirationSlug)!}
         )
       `;
+    }
+
+    /* Now the evidence is standing, so the promotion the seed describes is a
+       promotion the database will allow — IF the seed earned it. A seed that
+       asked for 'emerging' is already there and is left alone.
+
+       A seed that asks for 'active' on fewer than three evidence rows is
+       asking for a state the product can only ever ARRIVE at, never enter:
+       `settleStrandedSignals` leaves a locked signal standing when its
+       footnotes are deleted. Seeding it directly would be inventing a history
+       that never happened, so the demo says so out loud and leaves the signal
+       where its evidence actually puts it. */
+    if (seed.status !== "emerging") {
+      if (seed.evidence.length < SIGNAL_PROMOTION_EVIDENCE) {
+        console.warn(
+          `demo signal ${seed.slug} asks for '${seed.status}' on ` +
+            `${seed.evidence.length} evidence; the promotion bar is ` +
+            `${SIGNAL_PROMOTION_EVIDENCE} (docs/generation.md). Seeded as ` +
+            `'emerging' instead — give it a third evidence row, or declare it ` +
+            `emerging in tools/demo-seed-data.ts.`,
+        );
+      } else {
+        await sql`
+          update signals
+          set status = ${seed.status}::signal_status, updated_at = ${lastEvidenceAt}
+          where id = ${id}
+        `;
+      }
     }
   }
 
