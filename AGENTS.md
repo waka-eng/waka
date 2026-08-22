@@ -22,6 +22,11 @@ truth, and this section is its summary.
 - **feedback** — a reader's verdict on a signal or an entry. Pin, dismiss, and
   lock are *not* feedback; they are columns on the entry.
 
+Naming follows [`GLOSSARY.md`](GLOSSARY.md): data/API identifiers stay
+infrastructure English (no metaphors in the schema), UI strings speak the
+world's language with a plain-line explanation, and a metaphor must exist
+in the glossary's table before it is used.
+
 Two rules that decide most arguments:
 
 1. **Human edits lock.** A locked signal statement or top-of-mind entry is
