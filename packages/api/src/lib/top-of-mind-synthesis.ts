@@ -27,7 +27,7 @@
  * previous system hid its failures in exactly that gap.
  */
 
-import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 
 import {
   groupMembers,
@@ -923,7 +923,7 @@ export async function refreshTopOfMindForProfile(
 // ---------------------------------------------------------------------------
 
 export interface GroupTopOfMindRefreshResult {
-  status: "versioned" | "nothing_to_synthesize";
+  status: "versioned" | "nothing_to_synthesize" | "waiting_for_affirmations";
   topOfMindId: string | null;
   version: number;
   reason: TopOfMindRevisionReason | null;
@@ -1096,6 +1096,14 @@ async function loadGroupSharedSignals(
   groupId: string,
   now: Date,
 ): Promise<GroupSharedSignal[]> {
+  /**
+   * THE WALL IS THE SELECTION — so this reads exactly what the wall shows.
+   * A share whose owner has left is withdrawn (leaving ends the standing
+   * choice), and a retired signal has sunk. This loader used to read every
+   * share row bare, which made synthesis select from a SUPERSET of the wall:
+   * a departed member's statement could feed the room's next reading after
+   * the wall had already stopped showing it.
+   */
   const rows = await db
     .select({
       id: signals.id,
@@ -1104,7 +1112,17 @@ async function loadGroupSharedSignals(
       ownerProfileId: signals.profileId,
     })
     .from(signalShares)
-    .innerJoin(signals, eq(signals.id, signalShares.signalId))
+    .innerJoin(
+      signals,
+      and(eq(signals.id, signalShares.signalId), ne(signals.status, "retired")),
+    )
+    .innerJoin(
+      groupMembers,
+      and(
+        eq(groupMembers.groupId, signalShares.groupId),
+        eq(groupMembers.profileId, signalShares.profileId),
+      ),
+    )
     .where(eq(signalShares.groupId, groupId));
   if (rows.length === 0) return [];
 
@@ -1262,6 +1280,69 @@ async function writeGroupVersion(
   return created;
 }
 
+/**
+ * A ROOM'S FIRST DRAFT WAITS FOR AFFIRMED MATERIAL.
+ *
+ * The goal's rule: synthesis fires on accumulated evidence, never on a clock
+ * or a button — a cadence would draft from thin evidence in a slow week,
+ * which is exactly how ungrounded statements reach a sky. The same shape as
+ * `emerging → active` at 3, one level up: a shared statement is AFFIRMED
+ * when at least one current member other than its owner has said "true" of
+ * it (their latest verdict is the one that stands — a later "not true"
+ * withdraws the affirmation), and the room's FIRST generative draft waits
+ * until GROUP_DRAFT_MIN_AFFIRMED shared statements are affirmed.
+ *
+ * Only the first model draft is gated. An established room re-reads its
+ * standing artifact as shares and verdicts move — that is maintenance of
+ * something the room already said, not the room speaking first. And member
+ * decisions are NEVER gated: an accepted proposal materializes a version
+ * whatever the count, because the members speaking directly is the strongest
+ * evidence there is.
+ */
+export const GROUP_DRAFT_MIN_AFFIRMED = 3;
+
+async function countAffirmedSharedSignals(
+  db: WakaDb,
+  groupId: string,
+  shared: GroupSharedSignal[],
+): Promise<number> {
+  if (shared.length === 0) return 0;
+  const rows = await db
+    .select({
+      targetId: feedback.targetId,
+      reactorProfileId: feedback.profileId,
+      value: feedback.value,
+    })
+    .from(feedback)
+    .innerJoin(
+      groupMembers,
+      and(eq(groupMembers.groupId, groupId), eq(groupMembers.profileId, feedback.profileId)),
+    )
+    .where(
+      and(
+        eq(feedback.targetType, "signal"),
+        inArray(
+          feedback.targetId,
+          shared.map((signal) => signal.id),
+        ),
+      ),
+    )
+    .orderBy(desc(feedback.createdAt));
+
+  const ownerBySignal = new Map(shared.map((signal) => [signal.id, signal.ownerProfileId]));
+  const seenPair = new Set<string>();
+  const affirmedSignals = new Set<string>();
+  // Newest-first: the first (signal, reactor) pair seen is the standing verdict.
+  for (const row of rows) {
+    if (ownerBySignal.get(row.targetId) === row.reactorProfileId) continue;
+    const pair = `${row.targetId}:${row.reactorProfileId}`;
+    if (seenPair.has(pair)) continue;
+    seenPair.add(pair);
+    if (row.value === "true") affirmedSignals.add(row.targetId);
+  }
+  return affirmedSignals.size;
+}
+
 export async function refreshTopOfMindForGroup(
   input: { groupId: string; reason: string },
   deps: TopOfMindRefreshDependencies = {},
@@ -1315,6 +1396,21 @@ export async function refreshTopOfMindForGroup(
     return nothing;
   }
 
+  // The first-draft gate. Legible silence rather than a silent pass: the
+  // caller learns the room is waiting, not that there was nothing to say.
+  let waitingForAffirmations = false;
+  if (liveBefore === null && shared.length > 0) {
+    const affirmed = await countAffirmedSharedSignals(db, input.groupId, shared);
+    if (affirmed < GROUP_DRAFT_MIN_AFFIRMED) {
+      if (pending.length === 0) {
+        return { ...nothing, status: "waiting_for_affirmations" };
+      }
+      // Accepted proposals still materialize — the members spoke directly —
+      // but the model does not draft alongside them yet.
+      waitingForAffirmations = true;
+    }
+  }
+
   // Members' decisions land before the model writes a word.
   const appliedBefore = applyGroupProposals(liveBefore?.entries ?? [], pending, now);
   const lockedNow = appliedBefore.entries.filter(
@@ -1333,7 +1429,7 @@ export async function refreshTopOfMindForGroup(
   let modelSaidNoChange = false;
   let droppedCitations = 0;
 
-  if (shared.length > 0) {
+  if (shared.length > 0 && !waitingForAffirmations) {
     const synthesis = await provider.synthesizeTopOfMind({
       profileId: input.groupId,
       preferredLocale: hostLocale,

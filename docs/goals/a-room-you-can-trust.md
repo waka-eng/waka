@@ -199,6 +199,37 @@ house norm.
 
 ## Log
 
+- **2026-08-22 — Phases 1a + 1b: PASS,** with one honest carve-out. The
+  merged base had already widened answerability to statements shared into
+  your rooms (`mayAnswerSignal`), but its standing was WIDER than the
+  wall's: a member could file verdicts against a statement whose owner
+  had left (which the wall no longer shows), and against retired
+  signals — and group synthesis read a superset of the wall (every share
+  row bare, departed members' statements included). All three now mirror
+  the wall exactly: answerability requires you and the owner currently
+  in the room and the signal standing; `loadGroupSharedSignals` joins
+  current membership and excludes retired. The wall serves **named
+  reactions** (latest verdict per current member, reactor never the
+  owner — whose self-verdicts are private curation; a reaction row
+  carries name + verdict and nothing beneath the statement, pinned).
+  1b: the room's **first draft waits for affirmed material** —
+  `GROUP_DRAFT_MIN_AFFIRMED` (3) shared statements affirmed by someone
+  other than their owner, latest verdict wins, owner self-agreement
+  excluded; below the bar the pass returns the legible
+  `waiting_for_affirmations`, member proposals still materialize, and an
+  established room is never re-gated. The trigger side shipped earlier
+  on the base: agreement enqueues the room's re-synthesis. Gate measured
+  by `room-reactions.db.test.ts` (5/5, real functions, stub model):
+  non-member refused; owner-departure withdraws standing; latest-wins on
+  the wall; 2 genuine affirmations + 1 self-agreement stays waiting; the
+  third genuine one drafts `versioned/initial`; a withdrawn affirmation
+  before first speech re-silences, after it never does. Constant
+  drift-locked in `docs/generation.md` (CI-checked). api 49 files / 591
+  tests; web 126/126; typechecks and build clean. **Carve-out:** the
+  gate's live-permission-suite half (waka-mcp against a running stack)
+  cannot execute in this environment — the db test executes the same
+  real path; the live walk stays owed to a stack run.
+
 - **2026-08-22 — Phase 0b Step 1 and Phase 0c questions: LANDED in the
   canon.** `docs/data-model.md`'s decision log now names erasure as the
   model's one true delete with its exact blast radius (the sole

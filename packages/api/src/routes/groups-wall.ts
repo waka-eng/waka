@@ -8,9 +8,16 @@
  * distilled from.
  */
 
-import { and, asc, desc, eq, ne } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne } from "drizzle-orm";
 
-import { groupMembers, profiles, signalShares, signals } from "../db/index.js";
+import {
+  feedback,
+  groupMembers,
+  profiles,
+  signalShares,
+  signals,
+  type FeedbackValue,
+} from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import { labelMembersByProfileId } from "../lib/member-labels.js";
 
@@ -24,6 +31,19 @@ const MAX_WALL_SIGNALS = 200;
  * The distilled statement and who it belongs to — nothing else. There is
  * deliberately no field here for what the statement was derived from.
  */
+/**
+ * One member's answer to a statement on the wall — the latest they gave.
+ * Named, per the founder's law: the room reads WHO stands where, never a
+ * tally. The owner's own verdicts on their own statement do not appear
+ * here — answering yourself is private curation, not a reaction the room
+ * heard.
+ */
+export interface GroupWallReaction {
+  profileId: string;
+  name: string;
+  value: FeedbackValue;
+}
+
 export interface GroupWallSignal {
   signalId: string;
   statement: string;
@@ -40,6 +60,8 @@ export interface GroupWallSignal {
   ownerProfileId: string;
   ownerName: string;
   sharedAt: string;
+  /** Latest verdict per current member; the reactor is never the owner. */
+  reactions: GroupWallReaction[];
 }
 
 /**
@@ -86,6 +108,71 @@ export async function loadGroupWall(
     rows.map((row) => ({ profileId: row.ownerProfileId, name: row.ownerName })),
   );
 
+  /**
+   * WHO ANSWERED WHAT. Feedback is the one thing this file may reach beyond
+   * the share itself, because a reaction is a statement-level fact the room
+   * is meant to hear — it names no memory and carries no span. The reach is
+   * scoped twice: only verdicts by CURRENT members of this group (leaving a
+   * room ends your voice in it, same as the tally), and only the latest per
+   * member per statement, because feedback is append-only history and the
+   * newest word is the one that stands. The owner's own verdicts are
+   * filtered below: those are private curation. `inspirations` and
+   * `signal_evidence` remain unreachable from this file, as the header
+   * promises.
+   */
+  const reactionRows =
+    rows.length === 0
+      ? []
+      : await db
+          .select({
+            targetId: feedback.targetId,
+            reactorProfileId: feedback.profileId,
+            reactorName: profiles.name,
+            value: feedback.value,
+            createdAt: feedback.createdAt,
+          })
+          .from(feedback)
+          .innerJoin(
+            groupMembers,
+            and(
+              eq(groupMembers.groupId, groupId),
+              eq(groupMembers.profileId, feedback.profileId),
+            ),
+          )
+          .innerJoin(profiles, eq(profiles.id, feedback.profileId))
+          .where(
+            and(
+              eq(feedback.targetType, "signal"),
+              inArray(
+                feedback.targetId,
+                rows.map((row) => row.signalId),
+              ),
+            ),
+          )
+          .orderBy(desc(feedback.createdAt));
+
+  const ownerBySignal = new Map(rows.map((row) => [row.signalId, row.ownerProfileId]));
+  const reactorLabels = labelMembersByProfileId(
+    reactionRows.map((row) => ({ profileId: row.reactorProfileId, name: row.reactorName })),
+  );
+  /** newest-first rows: the first (signal, reactor) pair seen is the standing one */
+  const latestBySignal = new Map<string, GroupWallReaction[]>();
+  const seenPair = new Set<string>();
+  for (const row of reactionRows) {
+    if (ownerBySignal.get(row.targetId) === row.reactorProfileId) continue;
+    const pair = `${row.targetId}:${row.reactorProfileId}`;
+    if (seenPair.has(pair)) continue;
+    seenPair.add(pair);
+    const reaction: GroupWallReaction = {
+      profileId: row.reactorProfileId,
+      name: reactorLabels.get(row.reactorProfileId)?.displayName ?? row.reactorName,
+      value: row.value,
+    };
+    const bucket = latestBySignal.get(row.targetId);
+    if (bucket) bucket.push(reaction);
+    else latestBySignal.set(row.targetId, [reaction]);
+  }
+
   return rows.map((row) => ({
     signalId: row.signalId,
     statement: row.statement,
@@ -93,5 +180,6 @@ export async function loadGroupWall(
     ownerProfileId: row.ownerProfileId,
     ownerName: labels.get(row.ownerProfileId)?.displayName ?? row.ownerName,
     sharedAt: row.sharedAt.toISOString(),
+    reactions: latestBySignal.get(row.signalId) ?? [],
   }));
 }

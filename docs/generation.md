@@ -376,9 +376,29 @@ A group's artifact runs the same pipeline with three deliberate differences
 (implemented 2026-08-21; before that the function was an explicit
 `not_implemented` seam, so groups had walls but never a reading):
 
-- **The wall is the selection.** No scoring pass, no cold start: members
-  chose what to share, so every shared signal is eligible, ranked by live
-  `computeSignalConfidence` and capped at `TOP_OF_MIND_SIGNAL_LIMIT`. Each
+- **The wall is the selection — exactly the wall.** No scoring pass, no
+  cold start: members chose what to share, so every shared signal is
+  eligible, ranked by live `computeSignalConfidence` and capped at
+  `TOP_OF_MIND_SIGNAL_LIMIT`. "Exactly" is enforced since 2026-08-22: the
+  loader mirrors the wall's own withholdings — a share whose owner has
+  left the group is withdrawn, and a retired signal has sunk — where it
+  previously read every share row bare and could feed a departed member's
+  statement into the room's next reading.
+- **The first draft waits for affirmed material.** A room with no standing
+  artifact does not draft from thin evidence: a shared statement is
+  *affirmed* when at least one current member other than its owner has
+  said "true" of it (their latest verdict stands — a later "not true"
+  withdraws it), and the first generative draft waits until
+  `GROUP_DRAFT_MIN_AFFIRMED` (3) shared statements are affirmed — the
+  `emerging → active` shape, one level up. Below the bar the pass returns
+  the explicit status `waiting_for_affirmations` rather than a silent
+  nothing. Only the first model draft is gated: an established room
+  re-reads its standing artifact as shares and verdicts move, and member
+  decisions are never gated — an accepted proposal materializes a version
+  whatever the count. Answerability mirrors the wall too: a member may
+  file a verdict on a statement only while it stands on a wall they and
+  its owner are both currently in
+  (`packages/api/src/routes/feedback.ts`). Each
   signal carries its owner's name into the prompt, and the group instruction
   asks for cross-member entries in the group's plural voice — an artifact of
   solo entries is named a failure in the instruction itself.
@@ -530,6 +550,7 @@ The authoritative values. Machine-checked against code — see
 |---|---|---|
 | `TOP_OF_MIND_SIGNAL_LIMIT` | 12 | Signals synthesis may consider |
 | `TOP_OF_MIND_MIN_SIGNALS` | 3 | Cold-start floor; below it, emerging signals backfill |
+| `GROUP_DRAFT_MIN_AFFIRMED` | 3 | A room's first draft waits for this many shared statements affirmed by someone other than their owner |
 | `SELECTION_CONFIDENCE_WEIGHT` | 0.45 | Selection: confidence term |
 | `SELECTION_EVIDENCE_WEIGHT` | 0.2 | Selection: support term |
 | `SELECTION_RECENCY_WEIGHT` | 0.2 | Selection: recency term |

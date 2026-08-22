@@ -59,6 +59,12 @@ export interface ApiGroupMember {
  * A group wall row. The distilled statement crosses the account boundary;
  * the captures it rests on never do, which is why there is no evidence here.
  */
+export interface ApiGroupWallReaction {
+  profileId: string;
+  name: string;
+  value: "true" | "partly" | "not_true";
+}
+
 export interface ApiGroupWallSignal {
   signalId: string;
   statement: string;
@@ -67,6 +73,8 @@ export interface ApiGroupWallSignal {
   ownerProfileId: string;
   ownerName: string;
   sharedAt: string;
+  /** Latest verdict per current member; the reactor is never the owner. */
+  reactions: ApiGroupWallReaction[];
 }
 
 /**

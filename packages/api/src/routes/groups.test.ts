@@ -62,6 +62,7 @@ const wallSignal: GroupWallSignal = {
   signalId,
   statement: "Rooms that instruct without speaking",
   confidenceAsWritten: 72,
+  reactions: [],
   ownerProfileId: otherProfileId,
   ownerName: "Grace",
   sharedAt: "2026-08-10T00:00:00.000Z",
@@ -401,6 +402,7 @@ describe("GET /api/groups/:groupId/wall", () => {
           ownerProfileId: otherProfileId,
           ownerName: "Grace",
           sharedAt: "2026-08-10T00:00:00.000Z",
+          reactions: [],
         },
       ],
     });

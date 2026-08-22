@@ -420,6 +420,11 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
         ownerProfileId: shared.ownerProfileId,
         ownerName: shared.ownerName,
         sharedAt: shared.sharedAt,
+        reactions: shared.reactions.map((reaction) => ({
+          profileId: reaction.profileId,
+          name: reaction.name,
+          value: reaction.value,
+        })),
       })),
     });
   });

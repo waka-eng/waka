@@ -17,7 +17,8 @@
  * private verdict on a shared entry would be a vote nobody else can see.
  */
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
@@ -193,16 +194,37 @@ async function targetBelongsToProfile(
      * author's memories stay where they are; sharing a statement has never
      * shipped its grounds and does not start now.
      */
+    /**
+     * STANDING MIRRORS THE WALL, EXACTLY. The wall withholds a share whose
+     * owner has left (leaving withdraws it) and drops retired signals — so
+     * answerability must too, or a member could keep filing verdicts against
+     * a statement the room can no longer see. Three joins, three facts: you
+     * are in the room now, its owner is in the room now, and the signal
+     * still stands.
+     */
+    const ownerSeat = alias(groupMembers, "owner_seat");
     const [shared] = await db
       .select({ id: signalShares.id })
       .from(signalShares)
-      .innerJoin(groupMembers, eq(groupMembers.groupId, signalShares.groupId))
-      .where(
+      .innerJoin(
+        signals,
+        and(eq(signals.id, signalShares.signalId), ne(signals.status, "retired")),
+      )
+      .innerJoin(
+        groupMembers,
         and(
-          eq(signalShares.signalId, input.targetId),
+          eq(groupMembers.groupId, signalShares.groupId),
           eq(groupMembers.profileId, input.profileId),
         ),
       )
+      .innerJoin(
+        ownerSeat,
+        and(
+          eq(ownerSeat.groupId, signalShares.groupId),
+          eq(ownerSeat.profileId, signalShares.profileId),
+        ),
+      )
+      .where(eq(signalShares.signalId, input.targetId))
       .limit(1);
     return mayAnswerSignal({ ownsIt, sharedIntoARoomYouAreIn: Boolean(shared) });
   }
