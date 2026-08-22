@@ -505,3 +505,96 @@ being falsified by the code it governs.
 The queue discipline stands as CLAUDE.md writes it: when a unit
 finishes, pull the next item. The next item, as of this document, is the
 unlock verb.
+
+---
+
+## Addendum, 2026-08-22 — founder: groups is a priority feature
+
+The founder's call, same day: **groups is a priority feature.** This
+answers the direction of founder question 1 — the room is load-bearing,
+not an expansion — and it re-sequences Part 3. What it does *not* decide
+by itself is which rooms: WAKA's own vision docs point at two-person
+rooms of people whose hearts beat together (`finding-your-people`,
+`combination-as-an-act`, the graveyard's "77% of group boards are
+exactly two people"); the research points at coding-agent teams as the
+monetizable population. The plan below serves both, because the trust
+repairs and the loop are identical — the population choice only decides
+who gets invited first.
+
+Three consequences of the call:
+
+1. **The room-trust repairs jump the queue.** A room is other people
+   trusting WAKA with a co-authored record; every debt that can burn
+   that record is now a launch blocker, not a backlog item.
+2. **Hosting moves from item 9 to near the front of the line.** A room
+   exists between accounts *on one deployment* — join-by-code cannot
+   cross instances. Rooms as a real feature require strangers on a
+   shared instance, which makes the close-the-two-gaps security audit
+   urgent rather than queued.
+3. **The personal trust core (unlock, verifyQuote, consultation) stays,
+   as parallel small work** — a room's wall is made of members' locked
+   and corrected statements, so rooms inherit every personal-layer
+   trust property. Nothing there is displaced, only interleaved.
+
+### The groups-first queue
+
+**Phase 0 — make the room's record safe to trust** (before inviting
+anyone new):
+
+- **Merge wall-that-evolves Step 1.** Refresh currently destroys wall
+  history in production; the fix is built, tested, CI-green, and
+  unmerged. This is the graveyard's Evernote-2013 class of trust shock,
+  already paid for. Merge it.
+- **Erasure redaction, both steps.** The decision-log entry naming the
+  exception lands now; the departed-state redaction (versions survive,
+  the departed member's traces go nameless) gets the founder doctrine
+  call and counsel *now* rather than "when compliance asks" — because
+  with groups as the priority, one member's account deletion burning
+  the room's co-authored history is a product bug, not a legal
+  footnote.
+- **Decide the veto.** Symmetric decline — refusal joins affirmation as
+  a counted stance; no single member, of any kind of mind, kills a
+  proposal alone. One canon amendment, a few lines in
+  `carriesMajority`'s neighborhood, and the asymmetry is gone before
+  any new population can inherit it.
+- Fold in the small known staleness: the group wall serves the stored
+  confidence snapshot; label or live-compute it so the room never shows
+  a number-shaped lie.
+
+**Phase 1 — complete the room loop** (this is GOAL.md's own order,
+promoted): react to another member's statement (`createFeedback`
+currently targets only your own signals, so a room cannot accumulate
+the affirmed material synthesis needs); synthesis fires on accumulated
+evidence, never clock or button; the who-approved surface (named or by
+hue, never a tally) with counter-proposals; the room's timeline
+(versions are already stored — `room-timeline` Phase 2's failing gate
+is the work).
+
+**Phase 2 — rooms own their stack.** `every-space-owns-its-stack`
+(signed 2026-08-17) stops being queued and becomes the center: a room's
+sky distilled from its own public ground, retroactive retirement when a
+capture goes private, and — landing naturally here — room-level
+dismissal, the "never bring this up again" a governed room needs.
+
+**Phase 3 — open the doors.**
+
+- **Two before twenty.** The activation wedge is the two-person room —
+  day-one path to starting one, per the graveyard's own data. A room of
+  two is also the cheapest honest test of every governance rule.
+- **Hosted WAKA**, still hard-gated on the security audit — but the
+  audit itself is now scheduled work, because rooms-as-priority makes
+  shared instances the product's substrate.
+- **Agents get eyes** (`waka_get_room`, read-only, through the human's
+  seat, named as a consent scope) — only after Phase 0 and the sibling
+  grants, so room content never reaches eight profiles unconsented.
+  Eyes before hands before votes stands.
+- **Consultation extends to group serves** — which member's agent read
+  which version of the room's artifact — completing the room's flight
+  recorder, and with it the honest version of the team pitch if the
+  founder points the room at coding teams.
+
+The standing kill-lines all survive contact with this call, and two
+matter more now: no share-personal-signal-into-room in any form (the
+signed decision is the spine of Phase 2, not an obstacle to it), and no
+agent write path into rooms — the room stays a place agents read and
+humans decide, until the governance record says otherwise.
