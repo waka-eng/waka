@@ -46,6 +46,13 @@ export const signalStatusValues = ["emerging", "active", "retired"] as const;
 export type SignalStatus = (typeof signalStatusValues)[number];
 export const signalStatusEnum = pgEnum("signal_status", signalStatusValues);
 
+export const evidenceQuoteSourceValues = ["own", "enrichment"] as const;
+export type EvidenceQuoteSource = (typeof evidenceQuoteSourceValues)[number];
+export const evidenceQuoteSourceEnum = pgEnum(
+  "evidence_quote_source",
+  evidenceQuoteSourceValues,
+);
+
 export const signals = pgTable(
   "signals",
   {
@@ -127,8 +134,19 @@ export const signalEvidence = pgTable(
     /**
      * A verbatim span from the inspiration or its attachment enrichment.
      * Nullable on purpose: a missing quote is honest, an invented one is not.
+     * Since 2026-08-22 a quote is stored only after `verifyQuote` confirmed
+     * it is a literal (whitespace-normalized) span of its source; rows
+     * written before then carry a quote with a null `quoteSource`, which is
+     * how a surface tells a verified span from a legacy unverified one.
      */
     quote: text("quote"),
+    /**
+     * Whose words the verified quote is: the person's own text (their
+     * capture and reflections) or the fetched page behind their link. The
+     * two are different claims about a person and must never render alike.
+     * Null when there is no quote — or when the quote predates verification.
+     */
+    quoteSource: evidenceQuoteSourceEnum("quote_source"),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

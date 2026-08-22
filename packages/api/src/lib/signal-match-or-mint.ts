@@ -79,6 +79,8 @@ export interface ResolvedCandidate {
   statement: string;
   reason: string | null;
   quote: string | null;
+  /** Whose words the verified quote is; null when quote is null. */
+  quoteSource: "own" | "enrichment" | null;
   embedding: number[];
 }
 
@@ -134,6 +136,7 @@ export async function applyCandidates(
         inspirationId: input.inspirationId,
         reason: candidate.reason,
         quote: candidate.quote,
+        quoteSource: candidate.quoteSource,
       });
 
       // An emerging signal is a first draft read from a single capture; the
@@ -187,6 +190,7 @@ export async function applyCandidates(
       inspirationId: input.inspirationId,
       reason: candidate.reason,
       quote: candidate.quote,
+      quoteSource: candidate.quoteSource,
     });
 
     mintedSignalIds.push(minted.id);
@@ -273,6 +277,7 @@ async function attachEvidence(
     inspirationId: string;
     reason: string | null;
     quote: string | null;
+    quoteSource: "own" | "enrichment" | null;
   },
 ): Promise<void> {
   // Re-derivation after an edit revisits captures this signal already cites.
@@ -287,6 +292,7 @@ async function attachEvidence(
       inspirationId: input.inspirationId,
       reason: input.reason,
       quote: input.quote,
+      quoteSource: input.quoteSource,
     })
     .onConflictDoNothing();
 }

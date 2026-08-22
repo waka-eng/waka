@@ -61,6 +61,7 @@ const detail: SignalDetail = {
       preview: "A saved note about quiet research rooms.",
       reason: "The capture names the room as the condition, not the topic.",
       quote: "quiet research rooms",
+      quoteSource: "own",
       createdAt: "2026-05-30T12:00:00.000Z",
     },
   ],
@@ -222,6 +223,7 @@ describe("GET /api/signals/:signalId", () => {
         preview: "A saved note about quiet research rooms.",
         reason: "The capture names the room as the condition, not the topic.",
         quote: "quiet research rooms",
+        quoteSource: "own",
         createdAt: "2026-05-30T12:00:00.000Z",
       },
     ]);

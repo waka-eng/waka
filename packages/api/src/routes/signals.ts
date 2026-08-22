@@ -133,6 +133,10 @@ export interface SignalEvidenceItem {
   preview: string;
   reason: string | null;
   quote: string | null;
+  /** Whose words the quote is ("own" | "enrichment"). Null when there is no
+      quote, or when the quote predates span verification — a consumer must
+      treat a null-source quote as unverified. */
+  quoteSource: "own" | "enrichment" | null;
   createdAt: string;
 }
 
@@ -314,6 +318,7 @@ export async function getProfileSignal(
       inspirationId: signalEvidence.inspirationId,
       reason: signalEvidence.reason,
       quote: signalEvidence.quote,
+      quoteSource: signalEvidence.quoteSource,
       createdAt: signalEvidence.createdAt,
       text: inspirations.text,
     })
@@ -329,6 +334,7 @@ export async function getProfileSignal(
       preview: truncatePreview(evidence.text),
       reason: evidence.reason,
       quote: evidence.quote,
+      quoteSource: evidence.quoteSource,
       createdAt: evidence.createdAt.toISOString(),
     })),
   };

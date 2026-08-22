@@ -129,7 +129,18 @@ The contract, enforced by prompt and checked where code can check:
   noise, and noise is the failure mode this whole layer exists to prevent.
 - **Statements are patterns, not summaries.** "You keep returning to X"
   rather than "this note is about X".
-- **Quotes must be verbatim spans.** Absent is honest; invented is not.
+- **Quotes must be verbatim spans.** Absent is honest; invented is not — and
+  since 2026-08-22 this is enforced by code rather than asked of the model:
+  `verifyQuote` (`packages/api/src/lib/salience.ts`) keeps a claimed quote
+  only when it appears, whitespace-normalized, in the person's own words
+  (the capture text and their reflection answers) or in the attachment
+  enrichment, and records which in `signal_evidence.quote_source`
+  (`own` / `enrichment` — different claims about a person, never rendered
+  alike). Verification runs before the length clip, because the other order
+  truncates a long honest quote into a reject. A quote that verifies
+  nowhere is stored as null. Rows written before this date carry a quote
+  with a null `quote_source`, which is how a reader tells a verified span
+  from a legacy unverified one.
 - All user text is fenced between delimiters and the system instruction
   pins the model against instruction injection from capture content.
 - Temperature 0, JSON schema-constrained output, statements clipped to 500

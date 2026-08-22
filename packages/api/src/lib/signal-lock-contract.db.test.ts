@@ -16,6 +16,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
 import { releaseSignalStatement, updateSignalStatement } from "../routes/signals.js";
+import { deriveSignalsForInspiration } from "./signal-derivation.js";
 import { applyCandidates, acquireSignalDerivationLock } from "./signal-match-or-mint.js";
 import type { ModelProvider } from "./model-provider.js";
 
@@ -62,7 +63,7 @@ async function derive(
     const result = await applyCandidates(tx as never, {
       profileId,
       inspirationId,
-      candidates: [{ statement, reason: null, quote: null, embedding }],
+      candidates: [{ statement, reason: null, quote: null, quoteSource: null, embedding }],
       embeddingModel: EMBEDDING_MODEL,
       provider: neverCalledProvider,
       preferredLocale: "en-US" as never,
@@ -192,6 +193,89 @@ describe("regeneration updates a locked signal's support, never its words", () =
     expect(row.status, "no evidence and no lock means retired — the standing rule").toBe("retired");
     expect(row.unsupported_at).toBeNull();
     expect(row.locked_at).toBeNull();
+  });
+
+  it("stores a quote only as a verified span of the person's words or their page — no invented quotes, ever", async () => {
+    // The full derivation path — load capture, reflections, enrichment;
+    // verify; match-or-mint — with the model stubbed at both call sites.
+    const profileId = await seedProfile();
+    const [row] = await t.sql`
+      INSERT INTO inspirations (profile_id, text)
+      VALUES (${profileId}, ${"감기 걸린 날이라 오늘은 회 말고 국물이 좋겠다."}) RETURNING id`;
+    const inspirationId = row.id as string;
+    await t.sql`
+      INSERT INTO reflections (profile_id, inspiration_id, question, answer)
+      VALUES (${profileId}, ${inspirationId}, ${"왜 남겼나요?"}, ${"몸이 아픈 날의 예외를 기억하고 싶어서."})`;
+    await t.sql`
+      INSERT INTO attachments (profile_id, inspiration_id, type, url, enrichment_status, enrichment_kind, enrichment_text)
+      VALUES (${profileId}, ${inspirationId}, 'link', ${"https://example.test/soup"}, 'ready', 'page_body', ${"따뜻한 국물 요리가 감기 회복에 좋다는 오랜 통설이 있다."})`;
+
+    const claims = [
+      // Verbatim from the person's capture — must survive, labeled own.
+      { statement: "Sick days change the food rules.", quote: "감기 걸린 날이라 오늘은 회 말고" },
+      // Verbatim from the reflection answer — the person's words too.
+      { statement: "Exceptions are worth remembering.", quote: "몸이 아픈 날의 예외를 기억하고 싶어서" },
+      // Verbatim from the page behind the link — the article speaking.
+      { statement: "Soup reads as recovery food.", quote: "따뜻한 국물 요리가 감기 회복에 좋다는" },
+      // A paraphrase that appears nowhere — must be refused to null.
+      { statement: "Dislikes raw fish.", quote: "회를 싫어한다고 분명히 말했다" },
+    ];
+    const provider = {
+      extractSignalCandidates: async () => ({
+        statements: claims.map((claim) => ({
+          statement: claim.statement,
+          reason: "test reason",
+          quote: claim.quote,
+        })),
+      }),
+      judgeSignalMatch: async () => {
+        throw new Error("orthogonal embeddings never reach the judge band");
+      },
+    } as unknown as ModelProvider;
+    // Orthogonal unit vectors so all four candidates mint independently —
+    // 768-wide because the layer-1 embedding path validates the width.
+    let call = 0;
+    const embeddingClient = {
+      model: EMBEDDING_MODEL,
+      embed: async () => {
+        const vector = new Array<number>(768).fill(0);
+        vector[call % 4] = 1;
+        call += 1;
+        return vector;
+      },
+    };
+
+    const result = await deriveSignalsForInspiration(
+      { inspirationId, reason: "created" },
+      { db: t.db as never, modelProvider: provider, embeddingClient },
+    );
+    expect(result.status).toBe("derived");
+    expect(result.mintedSignalIds).toHaveLength(4);
+
+    const evidence = await t.sql`
+      SELECT s.statement, e.quote, e.quote_source
+      FROM signal_evidence e INNER JOIN signals s ON s.id = e.signal_id
+      WHERE e.inspiration_id = ${inspirationId}`;
+    const byStatement = new Map(
+      evidence.map((r) => [r.statement as string, r as { quote: string | null; quote_source: string | null }]),
+    );
+
+    expect(byStatement.get("Sick days change the food rules.")).toMatchObject({
+      quote: "감기 걸린 날이라 오늘은 회 말고",
+      quote_source: "own",
+    });
+    expect(byStatement.get("Exceptions are worth remembering.")).toMatchObject({
+      quote: "몸이 아픈 날의 예외를 기억하고 싶어서",
+      quote_source: "own",
+    });
+    expect(byStatement.get("Soup reads as recovery food.")).toMatchObject({
+      quote: "따뜻한 국물 요리가 감기 회복에 좋다는",
+      quote_source: "enrichment",
+    });
+    expect(
+      byStatement.get("Dislikes raw fish."),
+      "an invented quote must be refused to honest-null, never stored",
+    ).toMatchObject({ quote: null, quote_source: null });
   });
 
   it("still mints a fresh signal for an unrelated pattern while another is locked", async () => {

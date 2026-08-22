@@ -55,6 +55,7 @@ import {
   GeminiEmbeddingHttpClient,
 } from "./inspiration-embeddings.js";
 import { normalizeSupportedLocale } from "./locales.js";
+import { verifyQuote } from "./salience.js";
 import { getDefaultModelProvider, type ModelProvider } from "./model-provider.js";
 import {
   MATCH_CANDIDATE_SCAN_LIMIT,
@@ -223,14 +224,47 @@ export async function deriveSignalsForInspiration(
 
   // The capture's own vector is layer-1 machinery (recall, future matching),
   // and it is worth keeping current even when this capture yielded nothing.
-  await ensureInspirationEmbedding({ profileId, inspirationId: inspiration.id });
+  // The injected db and embedding client flow through — in production both
+  // defaults resolve to the same thing, and a test that stubbed them must
+  // never find a second, unstubbed connection underneath.
+  await ensureInspirationEmbedding({
+    profileId,
+    inspirationId: inspiration.id,
+    db,
+    client: embeddingClient,
+  });
+
+  /**
+   * The model names a span; `verifyQuote` decides whether to believe it. A
+   * quote survives only as a literal (whitespace-normalized) span of the
+   * person's own words — their capture and their reflection answers — or of
+   * the page enrichment behind their link, labeled which, because those are
+   * different claims about a person. Verification runs BEFORE the clip: the
+   * other order truncates a long honest quote into something verification
+   * would then reject (docs/known-issues.md H2). The clip afterwards only
+   * shortens a verified span, which keeps it a verified span.
+   */
+  const ownText = [inspiration.text, ...reflectionRows.map((row) => row.answer ?? "")]
+    .filter((piece) => piece.length > 0)
+    .join("\n\n");
+  const enrichmentText = attachmentRows
+    .map((row) => row.text)
+    .filter((piece): piece is string => Boolean(piece))
+    .join("\n\n");
 
   const statements = extraction.statements
-    .map((candidate) => ({
-      statement: clip(candidate.statement, MAX_STATEMENT_LENGTH),
-      reason: candidate.reason ? clip(candidate.reason, MAX_REASON_LENGTH) : null,
-      quote: candidate.quote ? clip(candidate.quote, MAX_QUOTE_LENGTH) : null,
-    }))
+    .map((candidate) => {
+      const verified = verifyQuote(candidate.quote, {
+        text: ownText,
+        enrichment: enrichmentText.length > 0 ? enrichmentText : null,
+      });
+      return {
+        statement: clip(candidate.statement, MAX_STATEMENT_LENGTH),
+        reason: candidate.reason ? clip(candidate.reason, MAX_REASON_LENGTH) : null,
+        quote: verified ? clip(verified.quote, MAX_QUOTE_LENGTH) : null,
+        quoteSource: verified?.source ?? null,
+      };
+    })
     .filter((candidate) => candidate.statement.length > 0);
 
   if (statements.length === 0) {
