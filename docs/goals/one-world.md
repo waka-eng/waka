@@ -392,3 +392,39 @@ Logged rather than quietly redone because the table is load-bearing for
 Phase 3 and must not be mistaken for verified. It is a hypothesis with a
 plausible shape. Phase 3's gate — a walkthrough per route, confirmed in a
 browser — is what turns it into evidence, and Phase 2 blocks that anyway.
+
+### 2026-08-22 — Phase 1, first of three: an outage is no longer a verdict
+
+Finding 3 closed. There were **two** silent conversions, not one, and fixing
+either alone would have left the lie intact:
+
+- `queue/gemini.ts` — `routeDeclaration` read a null payload (envelope failed
+  schema validation, or the prompt was blocked) as `{ route: "inspiration" }`.
+  The provider invented a verdict nobody reached.
+- `routes/principles.ts` — `.catch(() => ({ route: "inspiration" }))` did the
+  same thing one frame later for every thrown failure.
+
+Now `DeclarationNotConsideredError` names the state, the provider throws
+rather than inventing, and the route answers `503 { retryable: true }` and
+**writes nothing** — a declaration the person can send again beats a note they
+did not ask for.
+
+Driven against the live stack with no `GEMINI_API_KEY`:
+
+    before   201  {"created":"inspiration"}   + one row silently written
+    after    503  {"error":"Not considered yet","retryable":true}   + 0 rows
+
+The existing unit case was called "falls back to inspiration when routing
+itself fails" and asserted the old contract, so it encoded the defect as
+intent. It is rewritten with the reason at the site, and its load-bearing new
+assertion is `inserted).toHaveLength(0)` — without that, the change would be
+cosmetic.
+
+The product rule it was protecting still holds: no **refusal** is ever shown.
+That was always narrower than "say nothing", and the response carries no
+verdict vocabulary — asserted.
+
+**Still open in Phase 1:** the capture confirmation (finding 7) and the
+`aria-live` regions that make any of these outcomes audible. The MCP live
+gate's step 9 should now report the 503 rather than a wrong `created`, but
+that is unverified — re-running it needs a key.

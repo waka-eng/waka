@@ -89,6 +89,7 @@ import {
   formatSafeGeminiError,
   safeGeminiErrorDetails,
 } from "../lib/gemini-http.js";
+import { DeclarationNotConsideredError } from "../lib/model-provider.js";
 import type {
   DeclarationRoute,
   DeclarationRouteInput,
@@ -1183,6 +1184,16 @@ export function parseDeclarationRoute(payload: unknown): DeclarationRoute {
 
 export async function routeDeclaration(input: DeclarationRouteInput): Promise<DeclarationRoute> {
   const payload = await callGemini(buildDeclarationRouteRequest(input), "declaration routing");
-  if (payload === null) return { route: "inspiration", type: "maxim" };
+  /* `callGemini` returns null when the envelope failed schema validation or
+     the prompt was blocked — in both cases the tests did not run. Reading
+     that as "inspiration" was the same lie the route's catch told one frame
+     later: it produced a verdict nobody reached. The caller decides what to
+     say about an absent judge; this function's job is only to not invent
+     one. */
+  if (payload === null) {
+    throw new DeclarationNotConsideredError(
+      "declaration routing returned no usable verdict",
+    );
+  }
   return parseDeclarationRoute(payload);
 }
