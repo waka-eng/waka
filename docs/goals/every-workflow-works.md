@@ -1,0 +1,228 @@
+# Goal: every workflow works, the way a person performs it
+
+Status: **draft v1 (2026-08-22).** Not started.
+Branch: `claude/repo-sync-qlndc3`. Base `dev` @ `c6a64b2`.
+
+**What this goal owns:** does each workflow actually work, end to end, proven
+by driving it rather than by reading it.
+
+**What it does not own:** the craft of those workflows — the migration into the
+world, the palette, the menu, the doorway. That is
+[`docs/goals/one-world.md`](one-world.md), and where a finding belongs there
+this goal names it and hands it over rather than repeating it. A workflow can
+be beautiful and broken; it can also work and be ugly. Two goals, because they
+fail in different ways and are measured differently.
+
+## Why
+
+**The API is well covered. The product is not covered at all.**
+
+Six end-to-end harnesses exist and they are good — `organic`, `signals`,
+`top-of-mind`, `groups`, `cold-start`, `principles`. Each drives the real
+stack: real Postgres, real queue, real model. Between them they prove that a
+client calling the API gets a memory system back.
+
+Every one of them speaks HTTP. **Not one opens a browser.** So what is proven
+is that the workflows work the way `waka-mcp` performs them, and what is
+unproven is that they work the way a person does — through a canvas, a menu,
+a form, a keyboard, a phone. The 2026-08-22 audit found that gap the
+expensive way: the world rendered as a black rectangle for anyone whose
+network could not reach a font CDN, while every API suite would have stayed
+green, because the API was fine. The product was gone.
+
+Three more things follow from the same shape:
+
+1. **Five of the six suites are not registered as scripts.** `package.json`
+   has `e2e:organic`, `e2e:first-paint` and `e2e:fixtures`; `signals`,
+   `top-of-mind`, `groups`, `cold-start` and `principles` run only as raw
+   `pnpm tsx tools/e2e/<name>.ts`. A gate nobody can name is a gate nobody
+   runs.
+2. **Some workflows have no prover at all** — Google OAuth, attachments and
+   image description, account deletion, connection revocation, the public
+   profile page.
+3. **One workflow does not exist.** There is no password recovery: no route,
+   no token table, no mail transport. It cannot be proven because there is
+   nothing to prove. Owned by `one-world.md` Phase 5, deferred there pending
+   a mail provider, and named here so the inventory is honest.
+
+## The inventory
+
+Every workflow, and what proves it today. **"API" means proven over HTTP and
+unproven in a browser.**
+
+| # | Workflow | Proven today by |
+|---|---|---|
+| A1 | Sign up → onboarding → first capture | API (`organic`, `cold-start`) |
+| A2 | Sign in / sign out, email + password | API (`organic`) |
+| A3 | Sign in with Google | **nothing** |
+| A4 | Password recovery | **does not exist** |
+| B1 | Capture text | API (`organic`) |
+| B2 | Capture a link, enriched from its page | API (`organic`, fixture server) |
+| B3 | Capture an image, described so it is searchable | **nothing** (no bucket) |
+| C1 | Search and recall across the archive | API (`organic`) |
+| C2 | Open, edit, delete an inspiration | API (`organic`) |
+| C3 | Reflect on an inspiration | **nothing** |
+| D1 | Captures become signals; promotion at 3 evidence | API (`signals`) |
+| D2 | Lock, edit, let go a signal | API (`signals`) |
+| D3 | Cascade when the evidence under a signal is deleted | API (`signals`) |
+| E1 | Top of mind synthesised, versioned, citations resolve | API (`top-of-mind`) |
+| E2 | Entry actions — read again, say in my words, not this, undo | **nothing** |
+| F1 | Principles minted nightly under the five tests | API (`principles`) |
+| F2 | Declare a principle — both destinations | API (`principles`), fixed 2026-08-22 |
+| F3 | Edit, reorder, delete; `principles.md` renders | API (`principles`) |
+| G1 | Create a room, join by code | API (`groups`) |
+| G2 | Share a signal in; **the evidence must not cross** | API (`groups`) |
+| G3 | Room top of mind by proposal and approval | API (`groups`) |
+| G4 | Leave, close a room; join code rotates on removal | API (`groups`) partial |
+| H1 | Agent profile: its own stack, its own capture | API (MCP live gate) |
+| H2 | Cross-profile permission matrix | API (MCP live gate) |
+| I1 | Terminal consent, credential binding | API (MCP live gate) |
+| I2 | Capture and recall from a terminal | API (MCP live gate) |
+| J1 | Rename, locale, make a public page | **nothing** |
+| J2 | List and revoke connections | **nothing** |
+| J3 | Delete the account | **nothing** |
+| K1 | The world renders on a hostile network | Browser (`first-paint`) ✅ |
+
+Twenty-one proven at the API. **One proven in a browser.** Seven proven by
+nothing. One nonexistent.
+
+## Budget
+
+Model spend, because these harnesses call Gemini for real. `tools/e2e/README`
+prices a full pass of four suites at "well under a dollar"; six plus the MCP
+live gate should stay in the same order.
+
+| Phase | Expected | Actual |
+|---|---|---|
+| 1 — run the six suites + MCP live | ~1 full pass, < $2 | — |
+| 2 — browser harness (no model calls beyond setup) | < $1 | — |
+| 4 — re-runs after fixes | ~2 passes, < $4 | — |
+
+**Running total: $0.** Stop and report if any phase exceeds double its
+estimate.
+
+---
+
+### Phase 1 — Run what already exists
+
+Nothing is written in this phase. Six suites exist, are documented, and have
+never been run in this line of work. Run them, and the MCP live gate, and
+find out.
+
+- `pnpm tsx tools/e2e/organic.ts --fixture-port 8791` (needs
+  `WAKA_ENRICHMENT_ALLOWED_HOSTS` set for the fixture host)
+- `pnpm tsx tools/e2e/signals.ts`
+- `pnpm tsx tools/e2e/top-of-mind.ts`
+- `pnpm tsx tools/e2e/groups.ts`
+- `pnpm tsx tools/e2e/cold-start.ts`
+- `pnpm tsx tools/e2e/principles.ts`
+- `pnpm test:live` in `waka-mcp`
+
+**Every failure is triaged into exactly one of two buckets, with its output
+quoted in the log: a product defect, or a harness defect.** That distinction
+is the whole value of this phase and it is the one that gets skipped under
+pressure — "the suite is flaky" is not a bucket.
+
+**Gate:** all seven pass, **or** every failure is triaged with evidence and a
+named owner. Passing is not required to proceed; *knowing* is. A suite that
+cannot be run at all (missing fixture, missing bucket) is recorded as
+unproven rather than counted as passing.
+
+### Phase 2 — A harness that opens a browser
+
+The gap this goal exists for. `tools/e2e/first-paint.ts` is the pattern:
+Playwright, numbered PASS/FAIL, non-zero exit, driven against a stack serving
+the production build.
+
+Extend it into `tools/e2e/journeys.ts` covering the workflows a person
+performs and no API suite can reach:
+
+- **A1** cold start in a browser: sign up, onboarding, first capture, the
+  empty world (`#262` made the empty wall say something — nothing proves it)
+- **B1** capture, and the confirmation that it landed (finding 7's gate)
+- **C1/C2** find a memory again; edit it; delete it and get it back
+- **E2** the entry actions and their undo (`putEntryBack`)
+- **J1** rename, locale switch, publish a page
+- Keyboard traversal and the accessibility tree at each step — which is also
+  `one-world.md` Phase 2's automated half, built once and used by both
+
+**A journey is only added with a case that fails first.** Where the workflow
+already works, the failing case is constructed by breaking it (as
+`first-paint` withholds a chunk) — a green-on-first-run browser assertion
+proves the harness ran, not that it works.
+
+**Gate:** each journey above drives in a browser and its case demonstrably
+fails against a deliberately broken build. A journey that only ever passes is
+removed rather than kept as decoration.
+
+### Phase 3 — The workflows nothing proves
+
+Stand up what is missing so the unproven rows become provable:
+
+- **B3 attachments.** Needs a bucket. Local S3-compatible storage or a
+  documented skip — but a skip is recorded in the inventory as unproven, not
+  quietly dropped.
+- **A3 Google OAuth.** Needs a client. Decide whether it is provable in CI at
+  all; if not, say so once, in the inventory.
+- **C3 reflections, J2 connections, J3 account deletion.** Plain API
+  workflows with no harness. Account deletion is the sharp one — it is
+  irreversible and nothing tests it.
+- **G4** join-code rotation on member removal, which `groups.ts` covers only
+  partially.
+
+**Gate:** every row in the inventory reads *proven by <name>* or *unproven,
+because <reason>*. No row is blank.
+
+### Phase 4 — Fix what the proofs found
+
+Product defects from Phases 1–3, closed in severity order, each with the case
+that fails before the fix. Findings already owned by `one-world.md` are
+handed there and named here rather than fixed twice.
+
+**Gate:** every defect closed, or logged with a reason and the conditions
+that would reopen it. No defect leaves this goal unnamed.
+
+### Phase 5 — Keep it proven
+
+- **Register the five unregistered suites** as `pnpm e2e:*` scripts. A gate
+  nobody can name is a gate nobody runs.
+- **Wire the browser gates into CI**: `e2e:first-paint` and `e2e:journeys`.
+  These are the ones that catch what unit suites structurally cannot, and
+  neither runs automatically today.
+- **Model-spending suites stay manual** unless a key exists in CI — recorded
+  as a decision, with what it costs to leave them out.
+
+**Gate:** the browser gates run in CI and fail on `c6a64b2`. Every suite is
+reachable by a named script.
+
+---
+
+## Rules
+
+1. **Proven means driven, not read.** A workflow is proven when something ran
+   it and would have failed if it broke. Reading the route is not proof.
+2. **A case that has never failed is not a case.** Every assertion added here
+   demonstrates its own failure before it is trusted — the standard
+   `first-paint` was held to.
+3. **"Flaky" is not a triage bucket.** Every failure in Phase 1 is a product
+   defect or a harness defect, with output quoted.
+4. **Unproven is a valid outcome and a recorded one.** A workflow that cannot
+   be tested here says so in the inventory with its reason. Silence is what
+   this goal exists to remove.
+5. **No phase widens.** Craft findings go to `one-world.md`. This goal proves
+   things work; it does not redesign them.
+6. **Spending is a checkpoint.** State expected calls before a phase that
+   spends; stop at double.
+
+## Log
+
+### 2026-08-22 — written
+
+Inventory built from the route surface (31 route modules), the six e2e
+harnesses, the MCP live gate, and the 2026-08-22 experience audit. Counted:
+21 workflows proven at the API, 1 in a browser, 7 by nothing, 1 nonexistent.
+
+The structural finding that justifies the goal: every existing harness speaks
+HTTP and none opens a browser, so the black-rectangle defect of 2026-08-22 —
+the entire product missing for anyone behind a blocked CDN — would have left
+all six suites green.
