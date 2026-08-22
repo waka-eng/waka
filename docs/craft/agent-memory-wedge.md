@@ -1,0 +1,507 @@
+# Where WAKA wedges: the 2026 agent-memory map, graded against our code
+
+Status: research + strategy, authored 2026-08-22.
+Evidence base: [`agent-memory-ecosystem-2026.md`](agent-memory-ecosystem-2026.md)
+(external research, kept verbatim) plus a code-grounded review of both
+repos: a ground audit of what actually ships, seven independent strategy
+lenses (portability, teams, governance, arbitration, GTM, contrarian,
+coherence), and adversarial feasibility and completeness passes over all
+of them. Every claim below about our own code was verified by reading it;
+file:line citations are current at this commit.
+
+This document does what `second-brain-graveyard.md` did for capture
+tools: takes the field's evidence, grades WAKA against it honestly, and
+ends in house rules and a queue. It is a register and a plan, not a fix.
+
+---
+
+## The verdict in one paragraph
+
+The 2026 evidence says the open frontier in agent memory is **governance
+and behavior change** — who may read what, what gets written, what
+survives correction, what is provably forgotten — while retrieval recall
+is commoditized (LoCoMo/LongMemEval saturated and gameable) and
+platform-native memory is in a documented trust collapse (OpenAI's own
+summary "will not include everything ChatGPT remembers"; users who "have
+to turn it off to trust any answer"; Claude Code removing user memories
+from its system prompt after a poisoning disclosure). That frontier is
+where WAKA already lives: the audit found our bets are **more shipped
+than our own documents claim** — and that the doctrine carries four
+specific debts where a sentence we say about ourselves is false in code.
+So the wedge is not a pivot. It is **completion plus proof**: finish the
+promises the canon already wrote down, record the read side of memory the
+way we already record the write side, and turn every claim into a
+machine-checked invariant the way `generation.md` already is. Proof over
+recall.
+
+---
+
+## Part 1 — The audit: stronger than we say, and the debts
+
+### Shipped stronger than documented
+
+Seven assets the field would not guess a consumer memory app holds, each
+verified in code:
+
+1. **The lock is structural, not prompted.** `assembleEntries`
+   (`packages/api/src/lib/top-of-mind-versioning.ts`) rebuilds every new
+   top-of-mind version by copying human-touched entries out of the
+   *previous version's database rows* — the model's output is only ever
+   additive around them — and silently discards any model entry
+   re-proposing a dismissed body, forever. At L2 the statement and
+   `lockedAt` are written in one UPDATE (`routes/signals.ts:342`), so no
+   unlocked window exists to race. "The lock is a rule in the
+   version-writer, not a request to the model" is literally true. The
+   research rates this bet highest-conviction (ETH Zurich: hand-written
+   priors beat generated; the #1 platform complaint is an uncorrectable
+   synthesis; A-MemGuard names locking as a defense) — and nothing it
+   surveys enforces it structurally.
+2. **Tenancy is a schema fact.** Composite `(profile_id, id)` foreign
+   keys on every child table mean Postgres itself refuses a
+   cross-principal memory link. Against GateMem's finding that Mem0's
+   access-control violations run 28–67%, "our database cannot physically
+   store a cross-tenant memory link — and a live permission-matrix suite
+   walks the refused cross-profile write" is a one-sentence answer nobody
+   else in the landscape can give.
+3. **Dual provenance with server-side coercion.** Every capture records
+   whose *initiative* it was (`source: app|agent`) separately from which
+   session wrote it; a human session physically cannot claim `agent`, an
+   agent capturing for its human cannot publish
+   (`routes/inspirations-capture.ts:49-84`), and confidence pays a bonus
+   only when both kinds of mind corroborate. That is a working, tuned
+   instance of the consensus-validation discipline OWASP ASI06 and
+   A-MemGuard call for.
+4. **Rooms already have the governed write path the market lacks.**
+   Strict majority (`affirmations * 2 > members`) counted against
+   *current* membership, ejected members' votes vanishing, accepted text
+   auto-locking (`routes/groups-proposals.ts:292`,
+   `top-of-mind-synthesis.ts:990`). This is stricter than GOAL.md's own
+   spec and is exactly what Tencent Team Memory (12.9K stars, "no
+   governance for when memory is wrong") shipped without.
+5. **`principles.md` is a proto-standard.** One deterministic,
+   byte-identical, day-pinned markdown document with stable citable ids,
+   honesty states (held/aspirational/contested, contested pairs naming
+   each other), owner rank as the deterministic tie-breaker, and a
+   consumption contract as its preamble. The research says no
+   "AGENTS.md for learned memory" exists; we already ship the file such
+   a standard would need.
+6. **Drift-locked documentation is a trust instrument.**
+   `generation-doc.test.ts` machine-checks the spec against shipped
+   behavior in both directions on every commit — in a landscape where
+   vendor benchmark numbers don't survive reproduction, "the spec cannot
+   silently drift from the code" is a credibility asset no vendor holds.
+7. **`verifyQuote` exists** (`lib/salience.ts:51`) — verbatim-span
+   verification labeled own-words vs enrichment — written, documented,
+   and orphaned with zero callers.
+
+### The debts: sentences that are false in code today
+
+Each of these is a doctrine claim one code-read away from embarrassment.
+They are the real build list, and every one is strategy-proof — needed
+identically by any future WAKA.
+
+1. **No unlock path exists anywhere.** `data-model.md` promises
+   "unlocking is an explicit human act (revert to generated, or
+   delete)"; no route clears `lockedAt` on a signal, entry, or
+   principle. Locking is one-way, and by the canon's own supremacy rule
+   the code is wrong.
+2. **L2 and L4 overwrite in place.** A human edit destroys the machine's
+   prior statement, so "what did WAKA think before I corrected it" is
+   unanswerable, revert-to-generated is impossible even in principle,
+   and the Misattribution Gap applies to us: a bad correction is
+   indistinguishable from a bad synthesis. Only L3 has the supersede
+   chain.
+3. **Nothing logs reads.** `sessions.lastSeenAt` is the entire read-side
+   trace. No record exists of which session was served which
+   `principles.md` rendering or top-of-mind version, and the p-id
+   citations our skills instruct agents to make evaporate into their own
+   transcripts. Write-side provenance is unusually rich; the read side is
+   blank — and every field a serve log needs is already in the
+   authenticated request context.
+4. **Erasure burns the room's history.** Account erasure hard-deletes
+   *every version* of every group top-of-mind the departing member
+   touched (`lib/account-erasure.ts:161-163`). One member's GDPR right
+   destroys the whole room's co-authored, majority-approved record — the
+   one true exception to "fading never deletes," and it is undocumented.
+5. **The sibling-agent channel is open by default.**
+   `resolveProfileAccess` (`lib/middleware.ts:140-150`) grants an
+   agent-bound session read+capture on *every* profile in the account —
+   sibling agents included, up to eight — not just the human's. One
+   poisoned agent can read every sibling's memory. Nobody consented to
+   this; it is a latent default.
+6. **One member can veto what a majority must approve.** Any single
+   member can unilaterally decline any open proposal
+   (`groups-proposals.ts:417`) while acceptance needs a strict majority —
+   an undocumented asymmetry that becomes a governance denial-of-service
+   the day any non-human mind can touch a room.
+
+Also stale in our own heads: the versions UI exists now (the poster
+fetches its history, `Home.tsx:7061`); `MAX_AGENT_PROFILES = 8` is live
+server-side; the shipped majority rule is stricter than GOAL.md's; and
+reflections — hand-authored Q&A fed to extraction as "the strongest
+context a capture carries" — are the exact hand-written-prior channel the
+research's most-validated finding endorses, and we barely mention them.
+
+---
+
+## Part 2 — The thesis: complete the doctrine, then prove it
+
+The research recommends "build lock + versioning + provenance first."
+For WAKA that is not a build item — it is a **completion item and a
+positioning item**. The frontier competency table (conflict resolution
+7–60% industry-wide; multi-principal governance: no method passes;
+forgetting under adversarial probes: no method passes; memory→action:
+"inadequate") reads like a list of things our canon already promises and
+our code mostly delivers. What remains is to make every promised sentence
+true, record the half of the story we don't record, and then say only
+sentences a test enforces.
+
+The positioning that falls out is **proof over recall** — three claims,
+each linked to the code that enforces it, instead of any benchmark
+number:
+
+- *"Human words survive regeneration"* — byte-for-byte, as a property of
+  the data flow (`assembleEntries`).
+- *"Our database cannot physically store a cross-principal memory
+  link"* — composite FKs plus the live matrix suite.
+- *"A model-invented citation cannot exist in our database"* —
+  FK-validated citations.
+
+And after the queue below: *"every read of your memory is attributable
+to a named device acting as a named principal"* and *"no invented
+quotes, ever."* We never enter the recall-benchmark fight the research
+documents as vendor-conflicted and non-reproducing; our benchmark is our
+own laws, machine-checked, published as a conformance suite the way
+`generation.md` is already pinned.
+
+---
+
+## Part 3 — The queue
+
+Ordered by (differentiation × evidence-alignment) / effort, adversarially
+checked against the codebase and the goal queue. Effort in S/M/L for this
+codebase. Items 1–3 converged independently from five or more of the
+seven lenses — that convergence is itself the signal.
+
+**1. Close the lock debt** (S/M). The unlock verb, human-session-only,
+two modes: *revert* (restore the machine's statement, clear the lock,
+re-embed) and *release* (keep the human's text, let regeneration retire
+it normally — worded so it never reads as WAKA deleting a person's
+writing). Under it, extend the L3 writer pattern (supersede + forward
+pointer + partial unique index + reason enum) to signal statements and
+principles, written on human edit and on first derivation, so the
+machine's original survives. **Decision made here: a chain, not a single
+remembered predecessor** — deterministic max-version arbitration, the
+Misattribution answer, and any future contradiction benchmark all consume
+the chain, and the writer pattern is proven. Completes the research's
+#1-conviction bet; converts ChatGPT's top complaint into our sharpest
+demo: correct it, and if you change your mind, get the machine's original
+back byte-for-byte.
+
+**2. The consultation record** (M). New noun: **consultation** — a record
+that a session was served a profile's derived memory. One table
+(session, profile, surface, artifact version or rendering day-stamp,
+served-at) written by middleware on `GET /api/signals`,
+`/api/top-of-mind`, `/api/principles.md`; MCP responses carry the version
+receipt in the wire format. The write-back half: **a decision is a
+capture, not a layer** — `kind=decision` inspirations recorded by the
+acting session into its own profile, citing principle ids through a
+citation table whose FKs make an invented citation physically unstorable
+(the proven top-of-mind trick). Consultations are infrastructure beside
+sessions, never a fifth layer, never input to generation; the world
+renders them as states (a lit door: read today / this week / never),
+numerals never. This is the capability OWASP ASI06 names, the
+Misattribution Gap proves nobody has, and no competitor offers: the
+first time an agent does something odd, "what was it told?" becomes a
+query instead of an archaeology dig. Honest framing is load-bearing: a
+receipt proves *consultation*, never obedience — sell it as the record,
+not as behavior measurement.
+
+**3. Wire `verifyQuote`** (S — an afternoon). Call it at the single site
+where `signal_evidence.quote` is written; store a quote only as a
+verified literal substring of the person's own text or the enrichment,
+labeled which; move the 500-char clip after verification
+(known-issues #H2 has the details). A missing quote stays honest-null; an
+invented one becomes impossible. "No invented quotes, ever" — against
+platforms whose synthesis shows no sources at all.
+
+**4. Contested pairs at L2** (M). The match-or-mint judge already fires
+in the 0.7–0.86 band where negated statements disproportionately land —
+extend its contract from the binary `samePattern` to
+`same | independent | opposed` (the vocabulary L4 principle judging
+already uses; this is real work on the judge contract, not an enum
+one-liner) and mint an undirected `contradicts` relation alongside the
+new signal. Zero new model calls. Vocabulary split, written into the
+canon: a **tension** is held on purpose (an L3 entry type, a thing the
+person carries); **contested** is an unresolved conflict awaiting
+arbitration. Serving: unresolved pairs render as contested, both sides
+standing; resolution comes only from an owner act (lock, verdict), after
+which the loser becomes `yielded` — a state, never a deletion. Selection
+may ride a contested pair into synthesis so the artifact names the
+tension instead of asserting one side. This aims at the single
+competency where the whole field breaks (FactConsolidation: Zep 7%,
+Mem0 18%, best ~60%) with the deterministic-beats-LLM evidence on our
+side and our own 2026-08-02 proof (awareness lives in arithmetic above
+generation) as house doctrine.
+
+**5. Sibling access becomes a grant** (S+). Flip
+`resolveProfileAccess`'s intra-account default to human-profile-only for
+agent sessions; sibling-agent access becomes an explicit, human-granted,
+revocable pairing listed beside credentials. Add the refused-sibling-read
+case to the live matrix suite. *Then* surface the eight-agent household
+in the world — one column per mind is literally built for it — with the
+grants visible, so the multi-agent account ships consented instead of
+latent. Sequenced before any room-read surface so room content cannot
+silently reach eight profiles.
+
+**6. Everything-visible export** (S). `GET /api/export`: one
+deterministic bundle of the whole human profile — principles.md
+verbatim, every signal with lock state and evidence, the full
+top-of-mind version chain with reasons, raw inspirations.
+Human-session-only, pinned by the live suite (an agent credential must
+never exfiltrate the corpus). The anti-Dreaming: OpenAI warns its
+summary "will not include everything ChatGPT remembers"; our export *is*
+everything, and you can leave with it. `second-brain-graveyard.md`
+already ruled an export door is a prerequisite of the
+default-destination claim; the platforms' one-time import doors make it
+distribution too.
+
+**7. Dismissal descends to L2** (M). Our one working negative memory —
+L3 dismissals ride along every version and the generator cannot re-propose
+them — generalized down: a dismissed signal keeps its row and evidence,
+and its embedding becomes a suppression anchor; a candidate at ≥0.86
+cosine to it is dropped instead of minted, with every suppression logged
+so the silence is legible. **The word is dismissed, not tombstone** —
+nothing is buried, something is remembered. This is the GateMem
+forgetting axis (the one nobody passes, and today we score zero: deleting
+does nothing to stop the same pattern re-minting), landed exactly where
+the control-plane-placement result says it works. Room-level "never bring
+this up again" arrives free once every-space-owns-its-stack gives rooms
+their own L2. Adversarial-probe resistance (yes/no confirmation leakage)
+is serving-side behavior — it goes to close-the-two-gaps as tests.
+
+**8. Erasure redaction: departed, not deleted** (doc now; M gated).
+Step 1, immediately and doc-only: a decision-log entry in
+`data-model.md` naming erasure as the model's one true delete and its
+exact blast radius — the canon stops being falsified by
+`account-erasure.ts`. Step 2, gated on a founder doctrine call *and*
+counsel: versions survive; the departed member's citations and
+attribution flip to a new state **departed** (nameless, groundless — the
+legible-silence pattern); their own statements go; locked
+majority-approved text survives as the room's words *if* the
+collective-speech-act theory survives legal review — if GDPR says
+otherwise, the current cascade is correct and we document that instead.
+Until this is decided, no audit-of-record or compliance sentence may be
+uttered to anyone.
+
+**9. Hosted WAKA + one-line install** (L, gated). Today `waka-login`
+asks for *your deployed Lambda URL* — the research's "cheap MCP install"
+beachhead is currently uninstallable by strangers, which makes every GTM
+motion's denominator ~1. One multi-tenant stage (tenancy is already a
+schema fact; the 60 job-starts/hr budget already caps free-tier cost),
+signup on the existing consent page, waka-mcp on npm, three commands in
+the README. **Hard gate: close-the-two-gaps Phase 1 runs first** —
+hosting strangers converts every known auth gap in `known-issues.md`
+from register entry to incident. Self-host stays a first-class documented
+path; it is the privacy identity.
+
+**10. The team door** (gated on the founder identity question, items 5
+and 8, and the veto decision). When it opens: `waka_get_room` — a
+read-only MCP tool serving the room's approved artifact through the
+human's seat (a per-route carve-out of `humanProfilesOnly` on GETs only;
+the tally is already member-type-blind), with room-read named as a scope
+on the consent page. Eyes before hands before votes. Willingness-to-pay
+gets tested with hand-invoiced pilots on today's governance, not with
+billing code — and no pilot is honest until the veto asymmetry and the
+erasure cascade are disclosed or fixed.
+
+**Standing item:** resume `durable-interest` when the archive's data
+matures (2026-08-30). The research's "≥3 is partly speculative; use
+importance and recency" critique is that goal's exact program — promotion
+beyond frequency is paid-for work, not a new idea. The one uncovered
+sliver — a single owner gesture promoting a critical single-mention
+signal (a lock or a `true` verdict promotes immediately; the
+inflation-proof importance signal we already have) — rides along with its
+resumption.
+
+---
+
+## Part 4 — Decisions
+
+### Made here (the call, and the clause)
+
+- **L2 history is a chain, not a single prior** — arbitration, audit,
+  and the benchmark all consume the chain, and the writer is proven.
+- **The machine never declares a winner between two things it believes
+  about a person.** Owner-confirmed arbitrates (newest owner act wins);
+  evidence recency may order presentation but never resolve — recency-
+  wins is repetition-gameable, which makes it a poisoning vector, and
+  authority over the person belongs to the person.
+- **A decision is a capture** (`kind=decision`, citations FK-validated),
+  and the consultation log is infrastructure beside sessions. No fifth
+  layer, ever.
+- **GateMem-shaped probes become tests inside close-the-two-gaps** —
+  delegated requests, indirect inference, confirmation-after-deletion —
+  and no scorecard is published. Our public trust artifact is the
+  doctrine conformance suite: the five invariants above, drift-locked in
+  CI, "true of the shipped code on every commit." Adopting an
+  unreplicated synthetic benchmark as a north star would repeat the exact
+  vendor pathology the research debunks.
+- **The derived-memory format stays a working artifact.** A `SPEC.md`
+  documents `principles.md`'s contract (v0, loudly), export-only; no
+  AAIF campaign, no competitor adapters — a two-repo team cannot fight a
+  standards war and build the world simultaneously. The tripwire below
+  covers the case where the war starts without us.
+- **Import waits.** Export-first; importing another model's synthesis is
+  a poisoning vector (A-MemGuard's 66% detector miss rate) and needs a
+  canon amendment for a third provenance class before it can exist.
+  When it ships, the funnel pitch is real — "bring the synthesis you
+  can't correct to the place where correcting it locks it" — but not
+  before.
+- **Rooms do not borrow the word "principles"** until
+  every-space-owns-its-stack gives them a real fourth layer. The
+  vocabulary blur is exactly what the naming rules exist to prevent.
+- **The world is the product for the person; the canonical renderings
+  and MCP are the doors for machines.** Two doors, one memory. The
+  research's "thin destination app" framing inverts our reality — no
+  vendor in its landscape has a surface a person wants to inhabit, and
+  that surface is why the memory exists at all.
+
+### The founder's three (genuine stops — reason 4: the question is the deliverable)
+
+1. **Is WAKA a world for one person and their minds, or infrastructure
+   for teams — and which identity constrains the other?** Nearly every
+   cross-lens contradiction reduces to this. The evidence supports both;
+   the code is ~70% individual and 0% team; a solo founder mid-freeze
+   can only be one first. *Recommendation: individual-first — the
+   deliberate-memory identity against platform surveillance-memory —
+   with the team door earned by paid-pilot evidence, never by pivot.
+   Items 1–8 are identity-proof either way.*
+2. **May the machine ever pick between two things it believes about
+   you?** This doc says no (owner-confirmed only), and the queue is
+   built on that answer — but it is "who is the final authority on a
+   person," a values call that should be yours in the decision log, not
+   mine in a strategy doc.
+3. **When one member's right to be forgotten collides with the room's
+   right to its co-authored record, which wins — and is that law or
+   doctrine?** Redaction-instead-of-deletion is designed and gated;
+   until you decide what a room's history *is* (and counsel confirms
+   it), every compliance sentence stays unsaid.
+
+---
+
+## Part 5 — What we do not do
+
+The merged kill list; every line traces to a founder law, a signed
+decision, or the research's own evidence.
+
+- No generic recall store, no `add_memory`/`search_memory`, no
+  LoCoMo/LongMemEval chasing, no vendor-style benchmark comparisons —
+  recall is the commoditized axis and the numbers don't reproduce.
+- No rules registry, policy-YAML engine, or hosted CLAUDE.md/AGENTS.md —
+  rules are evidence, never artifacts. Generated stanzas may *point* at
+  live `principles.md`; they never copy it.
+- No reproducible same-answer outputs from principles — considered and
+  rejected; principles bound the option space, never pick answers.
+- No agent write path into rooms, ever, and no `visibility` field on
+  `waka_add_inspiration` — the server-side force-drop is the
+  anti-prompt-injection-publishing doctrine. Room access arrives
+  read-only or not at all; friction is solved by batched human consent,
+  never by an agent-writable flag.
+- No per-room visibility matrices or role taxonomies — one flag a person
+  can hold in their head beats a matrix they cannot.
+- No LLM anywhere in arbitration or as a poison detector — a model may
+  *pair* contested signals; it may never pick the winner (66% miss rate
+  is the evidence; 2026-08-02 is the house proof).
+- No "tombstone" vocabulary — funerary words smuggle deletion semantics
+  the canon rejects; the word is dismissed.
+- No pricing per call, capture, or memory-operation (Mem0's documented
+  pricing-cliff complaint; "a save is never a debt" forbids it
+  independently). When pricing exists: capture and correction free
+  forever; a second *account* reading you is what's paid.
+- No numerals, scores, compliance percentages, or drift warnings on any
+  surface — states render, numerals never; a room never measures a
+  person. Metrics are founder instruments only.
+- No hosted signup before the security audit; no share-personal-signal-
+  into-room in any form (every-space-owns-its-stack is signed); no
+  standards campaign; no reinventing what is paid for (durable-interest,
+  wall-that-evolves Step 1, salience.md — resume, merge, wire).
+
+---
+
+## Part 6 — Open frontier, honestly
+
+What this plan does not solve, so nobody mistakes the queue for the
+frontier:
+
+- **Measured behavior change.** Everything above records *consultation*
+  — self-reported citation, attestation. The field's actual bar (did
+  the agent's output follow the principle?) needs a verification loop
+  nobody here or elsewhere has built. For coding agents it is concrete
+  (did the diff follow the convention?) and is the natural next
+  research act after the consultation record exists.
+- **Write-path poisoning red-team.** Our defenses are structural, but no
+  suite attacks extraction, the judge band, enrichment injection, or the
+  budget ("a burst is the attack" is doctrine without an attack test).
+  Belongs beside the GateMem probes in close-the-two-gaps.
+- **The allocation question.** Nightly-only L4 minting is a clock, and
+  "synthesis fires on evidence, never on a clock" is our own room
+  doctrine — the tension is real and unresolved (the field calls it the
+  open problem: when to consolidate, how much to spend, what to
+  promote).
+- **Cross-document precedence.** An agent can be bound by its human's
+  principles, its own, a room's artifact, and a repo's AGENTS.md at
+  once. "Higher rank wins" is intra-document only. This chapter must be
+  written into the consumption contract before any team story ships.
+- **The audit log's own compliance.** Immutable (OWASP) vs erasable
+  (GDPR) needs a retention stance, an erasure-sweep answer, and a
+  room-member-erasure answer, in the same decision-log entry that ships
+  the consultation table.
+- **The cost of our own gates.** Suppression neighborhoods, corroboration
+  rules, symmetric declines all add refusal surface; GateMem's
+  over-refusal axis (24–63% in the field) says instrument the utility
+  cost of every gate we add — logged suppressions are the start.
+- **Sycophancy.** Consultation receipts create an incentive to cite
+  performatively (MemSyco-Bench exists because serving more memory can
+  degrade judgment). A receipt is a record, never a compliance score —
+  and nothing yet distinguishes a constrained agent from a parroting
+  one.
+- **Contradictions below the judge band.** Opposed pairs embedding under
+  0.7 cosine are never compared; the contested-pair design inherits that
+  recall floor. A nightly polarity sweep is the sketched, unbuilt fix.
+- **Reflections are under-leveraged.** The one shipped feature matching
+  the research's single most-validated finding (hand-written beats
+  generated) appears nowhere in our story. It should be the
+  human-authorship channel in the export format, the correction ritual,
+  and the promotion escape hatch.
+
+### Tripwires (check quarterly; each names its pre-committed response)
+
+1. **A platform ships portable + user-lockable + audited memory** → the
+   portability story thins; double down on multi-principal governance
+   (rooms, grants, consultation) where platforms structurally cannot
+   follow.
+2. **A derived-memory standard emerges (AAIF or elsewhere)** → bring
+   `principles.md` as the working reference implementation; join, don't
+   fight. The SPEC.md exists so this move takes a week, not a quarter.
+3. **A platform credibly solves governed multi-principal memory** →
+   retreat to provenance/audit-of-record — which is only a position if
+   items 2 and 8 shipped; that is half of why they rank where they do.
+
+---
+
+## Part 7 — Sequencing against the freeze
+
+"Nothing merges until the world-on-main goal is done" (amended
+2026-08-16) — and items 1–9 are all server-side. No lens priced this in;
+it is the largest schedule risk in the whole plan. The honest options:
+land items 1 and 3 (both S, both doctrine debts) as the first post-freeze
+merges, or grant an explicit exemption for them as canon maintenance.
+What is *not* frozen: documents. The two decision-log entries this plan
+demands — naming the erasure exception, and posing the veto question —
+cost paragraphs and should land now, so the vocabulary of record stops
+being falsified by the code it governs.
+
+The queue discipline stands as CLAUDE.md writes it: when a unit
+finishes, pull the next item. The next item, as of this document, is the
+unlock verb.
