@@ -199,6 +199,46 @@ house norm.
 
 ## Log
 
+- **2026-08-22 — Track S (stars and roots): S0–S3 shipped to the brief's
+  bar, with the deviations named.** S0 PASS (GLOSSARY.md verbatim at
+  root, README link, AGENTS.md naming line). S1 PASS — verdict A with
+  file paths in `docs/notes/2026-08-22-schema-gate.md`. S2: the release
+  verb ships on both layers (`POST /api/signals/:id/release`,
+  `/api/top-of-mind/entries/:id/release`) and the regeneration contract
+  is pinned against the real pipeline (`signal-lock-contract.db.test.ts`:
+  owner's words byte-identical across three passes while evidence goes
+  1→4 and promotion proceeds; release rewrites nothing; after release
+  the generator has jurisdiction again; release retires words standing
+  on nothing). The star renders as a CSS glyph so a starred sentence's
+  text content stays exactly the person's words; its hover line is the
+  brief's 맨말; pressing it (the mobile path) opens the confirm carrying
+  the same plain line; 다시 WAKA에게 맡기기 works on sky and poster.
+  Catalog sweep: 0 banned words in user-facing strings across both
+  catalogs (grep evidence: the only remaining hits are the three
+  `devWow*` developer-debug strings — the documented developer-facing
+  exception; JSON carries no comments, so the note lives here). S3: only
+  VERIFIED spans light (server: `verifyQuote` wired before the clip,
+  labeled own/enrichment in `signal_evidence.quote_source`, pinned by
+  the derivation-level db test; surface: page-words light dimmer and
+  dotted with their own hover line, pre-verification quotes fall back to
+  the plain preview — known-issues H2 closed at both halves); the honest
+  empty state ships; the edit path sits in the same panel as the roots.
+  **Deviations and flags, for the founder:** (1) the completion toast
+  prints the brief's own copy "별 {n}개는 그대로예요" — a numeral, the
+  one place Track S bends "states render, numerals never"; rule on it.
+  (2) The star-turn animation (0.4–0.8s) and the drawn sky→field root
+  lines are NOT built — the roots ride the existing evidence satellites
+  and press-to-travel per the brief's own "새 걸 짓지 말고" principle;
+  both are design-pass items alongside the brief's §8 open questions.
+  (3) The surface speaks the brief's ko copy inside a panel whose
+  neighboring verbs are English literals — the dialect seam is real and
+  needs a ruling. (4) WCAG AA contrast on dim/highlight is unmeasured
+  here. **The 30-second six-scene demo is not claimed:** every scene's
+  mechanics exist end-to-end and are test-pinned, but this environment
+  has no browser and no model key — recording it is the founder's
+  acceptance act, per the Track S honesty note. web 126/126 tests,
+  typecheck, build clean; api 48 files / 586 tests green.
+
 - **2026-08-22 — Phase 0a: PASS.** Audit found three ways the record was
   destroyable, all three closed: (1) membership had no history —
   `group_membership_events` added, append-only, written transactionally
