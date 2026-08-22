@@ -506,7 +506,7 @@ export function createTopOfMindRoutes(
   });
 
   const entryStateRoute = (
-    path: "/entries/:entryId/pin" | "/entries/:entryId/dismiss" | "/entries/:entryId/restore",
+    path: "/entries/:entryId/pin" | "/entries/:entryId/dismiss" | "/entries/:entryId/restore" | "/entries/:entryId/release",
     patch: () => Parameters<typeof updateLiveEntry>[1]["patch"],
   ) => {
     routes.post(path, async (c) => {
@@ -551,6 +551,12 @@ export function createTopOfMindRoutes(
   entryStateRoute("/entries/:entryId/pin", () => ({ pinnedAt: new Date() }));
   entryStateRoute("/entries/:entryId/dismiss", () => ({ dismissedAt: new Date() }));
   entryStateRoute("/entries/:entryId/restore", () => ({ dismissedAt: null }));
+  // Release is the unlock the canon promised ("unlocking is an explicit human
+  // act"): the words stay exactly as the person left them, and from the next
+  // synthesis on the generator may reword or retire them like any generated
+  // entry. The act is the owner handing the sentence back — nothing is
+  // rewritten at release time.
+  entryStateRoute("/entries/:entryId/release", () => ({ lockedAt: null }));
 
   return routes;
 }

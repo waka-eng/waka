@@ -357,6 +357,37 @@ export async function updateSignalStatement(
   return getProfileSignal(db, { profileId: input.profileId, signalId: input.signalId });
 }
 
+/**
+ * Release a locked signal — the unlock the canon promised ("unlocking is an
+ * explicit human act"). The words stay exactly as the person left them;
+ * derivation may simply restate them again from the next pass on.
+ *
+ * One consequence is applied at the same moment rather than left for a later
+ * pass to trip over: a locked signal that lost all its evidence was kept as
+ * `unsupported` only because the words were the person's. Releasing those
+ * words is accepting the standing rule for generated signals — no evidence,
+ * no signal — so the release retires it in the same UPDATE. Idempotent: an
+ * unlocked signal releases to itself.
+ */
+export async function releaseSignalStatement(
+  db: WakaDb,
+  input: { profileId: string; signalId: string },
+): Promise<SignalDetail | null> {
+  const updated = await db
+    .update(signals)
+    .set({
+      lockedAt: null,
+      status: sql`case when ${signals.unsupportedAt} is not null then 'retired'::signal_status else ${signals.status} end`,
+      unsupportedAt: null,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
+    .returning({ id: signals.id });
+  if (updated.length === 0) return null;
+
+  return getProfileSignal(db, { profileId: input.profileId, signalId: input.signalId });
+}
+
 export async function deleteProfileSignal(
   db: WakaDb,
   input: { profileId: string; signalId: string },
@@ -492,6 +523,7 @@ export interface SignalRouteDependencies {
   listSignals?: typeof listProfileSignals;
   getSignal?: typeof getProfileSignal;
   updateStatement?: typeof updateSignalStatement;
+  releaseStatement?: typeof releaseSignalStatement;
   deleteSignal?: typeof deleteProfileSignal;
   shareSignal?: typeof shareSignalWithGroup;
   unshareSignal?: typeof unshareSignalFromGroup;
@@ -509,6 +541,7 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
   const listSignals = deps.listSignals ?? listProfileSignals;
   const getSignal = deps.getSignal ?? getProfileSignal;
   const updateStatement = deps.updateStatement ?? updateSignalStatement;
+  const releaseStatement = deps.releaseStatement ?? releaseSignalStatement;
   const deleteSignal = deps.deleteSignal ?? deleteProfileSignal;
   const shareSignal = deps.shareSignal ?? shareSignalWithGroup;
   const unshareSignal = deps.unshareSignal ?? unshareSignalFromGroup;
@@ -691,6 +724,50 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
       signalId: parsedParams.data.signalId,
     });
     await scheduleReembed(scope.profileId, parsedParams.data.signalId);
+    scheduleRefresh(scope.profileId);
+    return c.json({ signal }, 200);
+  });
+
+  /**
+   * The lock's other half. Editing locks; this releases — same write scope as
+   * the edit, because whoever may lock a statement may hand it back. The text
+   * is not touched here: release only returns the sentence to the generator's
+   * jurisdiction, and the next derivation or synthesis decides what happens
+   * to it. The refresh is scheduled because a release can retire an
+   * unsupported signal the artifact still cites.
+   */
+  routes.post("/:signalId/release", async (c) => {
+    const parsedParams = signalParamsSchema.safeParse(c.req.param());
+    if (!parsedParams.success) {
+      return c.json(
+        { error: "Invalid signal id", details: parsedParams.error.flatten().fieldErrors },
+        400,
+      );
+    }
+    const parsedQuery = signalScopeQuerySchema.safeParse(c.req.query());
+    if (!parsedQuery.success) {
+      return c.json(
+        { error: "Invalid signal query", details: parsedQuery.error.flatten().fieldErrors },
+        400,
+      );
+    }
+
+    const db = getDatabase();
+    const scope = await resolveProfileScope(
+      db,
+      c.get("session"),
+      parsedQuery.data.profile,
+      "write",
+      loadProfile,
+    );
+    if (!scope.ok) return c.json(scope.body, scope.status);
+
+    const signal = await releaseStatement(db, {
+      profileId: scope.profileId,
+      signalId: parsedParams.data.signalId,
+    });
+    if (!signal) return c.json({ error: "Signal not found" }, 404);
+
     scheduleRefresh(scope.profileId);
     return c.json({ signal }, 200);
   });
