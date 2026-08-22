@@ -1,6 +1,6 @@
 # Goal: every workflow works, the way a person performs it
 
-Status: **draft v1 (2026-08-22).** Not started.
+Status: **Phase 1 passed (2026-08-22).** Phase 2 next.
 Branch: `claude/repo-sync-qlndc3`. Base `dev` @ `c6a64b2`.
 
 **What this goal owns:** does each workflow actually work, end to end, proven
@@ -94,11 +94,11 @@ live gate should stay in the same order.
 
 | Phase | Expected | Actual |
 |---|---|---|
-| 1 — run the six suites + MCP live | ~1 full pass, < $2 | — |
+| 1 — run the six suites + MCP live | ~1 full pass, < $2 | ~1 pass + 1 principles re-run; within estimate |
 | 2 — browser harness (no model calls beyond setup) | < $1 | — |
 | 4 — re-runs after fixes | ~2 passes, < $4 | — |
 
-**Running total: $0.** Stop and report if any phase exceeds double its
+**Running total: ~1 full pass of all suites plus one re-run.** Stop and report if any phase exceeds double its
 estimate.
 
 ---
@@ -226,3 +226,71 @@ The structural finding that justifies the goal: every existing harness speaks
 HTTP and none opens a browser, so the black-rectangle defect of 2026-08-22 —
 the entire product missing for anyone behind a blocked CDN — would have left
 all six suites green.
+
+### 2026-08-22 — Phase 1 run: 45 steps passed, 2 failed, both triaged
+
+Every suite, against a real stack with `GEMINI_API_KEY` set.
+
+| Suite | Result |
+|---|---|
+| `cold-start` | **1 / 1** |
+| `signals` | **6 / 6** |
+| `top-of-mind` | **8 / 8** |
+| `groups` | **9 / 9** |
+| `principles` | **6 / 6** (with the documented overrides; 5 + 1 skip without) |
+| `organic` | 6 / 8 — steps 7 and 8 failed |
+| `waka-mcp` live gate | **9 / 9** |
+
+**45 passed, 2 failed, 0 unexplained.**
+
+Two results are worth more than their line in the table:
+
+- **`groups` 9/9 includes step 5, "no group surface exposes another member's
+  raw capture."** The audit listed the sharing boundary as read-but-never-
+  driven and flagged it as the highest-stakes unaudited surface. It is
+  driven, and it holds — the check greps *every* group response for a phrase
+  only the other member captured. Step 9 also proves an agent-bound session
+  cannot reach a wall at all.
+- **`principles` step 6 now passes** — captures → signals → top of mind → a
+  minted principle, **with 3 citations**, in 9.8s under
+  `WAKA_PRINCIPLE_MIN_SPAN_OVERRIDE=0`, `WAKA_PRINCIPLE_MIN_TOM_OVERRIDE=1`,
+  `WAKA_ENABLE_PRINCIPLES_TEST_TRIGGER=1`. This is the deepest path in the
+  product and it had never been run in this line of work.
+
+#### Triage of the two failures — harness, not product
+
+    FAIL 7. a saved link is enriched from the page body (90.5s)
+         Timed out after 90000ms (61 attempts) … last seen: status=pending kind=null
+    FAIL 8. a saved image is enriched from what it depicts (90.5s)
+         Timed out after 90000ms (61 attempts) … last seen: status=pending kind=null
+
+**Cause: no attachments bucket in this environment.** Enrichment runs on
+attachments; attachments require S3. `attachments.ts:212` refuses without
+`ATTACHMENTS_BUCKET`, and `signal-enrichment.ts:614` throws
+`attachments_bucket_unconfigured`. The database agrees — **zero rows in
+`attachments`**, and no `enrich_attachment` job was ever enqueued. Nothing was
+broken; nothing could start.
+
+**But there is a real harness finding inside it, and it is not "flaky".**
+`organic.ts` already carries a written message for exactly this condition
+(`:608`, `:802` — "the stack under test has no attachments bucket
+configured"), yet steps 7 and 8 reach a 90-second timeout instead of
+surfacing it. The operator gets two red FAILs, no reason, three minutes gone.
+`principles.ts:187-188` shows the repo's own answer — detect the missing
+prerequisite and `SKIP` with the reason. Steps 7 and 8 should do the same.
+Filed for Phase 3, where B3 gets a bucket or a recorded skip.
+
+**Gate verdict: PASS.** The criterion was "all seven pass, **or** every
+failure is triaged with evidence and a named owner." 5 of 7 suites are clean,
+the 6th is clean but for two steps whose prerequisite is absent, and that
+prerequisite is named with the line numbers that enforce it. Nothing is
+unexplained. Proceed to Phase 2.
+
+#### Inventory rows now proven
+
+B2 stays unproven (needs the bucket). B3 unproven, same reason. Everything
+else in rows A1–A2, C1–C2, D1–D3, E1, F1–F3, G1–G4, H1–H2, I1–I2 is proven at
+the API by a suite that ran today. **G4's join-code rotation is covered by
+`groups` after all** — step 8 proves a non-member cannot tell the group
+exists; the rotation-on-removal case is still worth confirming separately in
+Phase 3.
