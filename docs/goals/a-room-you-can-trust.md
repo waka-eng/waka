@@ -1,7 +1,12 @@
 # Goal: a room you can trust
 
-Status: proposed 2026-08-22, from the founder's ruling that **groups is a
-priority feature**.
+Status: in flight — opened 2026-08-22 from the founder's ruling that
+**groups is a priority feature**; by the same day's end every phase
+executable without the founder had passed its gate (0a, 0d, 1a–1d, and
+Track S to the brief's bar). Standing gates, all founder-owned: 0b Step 2
+(erasure doctrine + counsel), 0c (the decline ruling), the numerals
+ruling on the brief's toast, and the 30-second demo as the acceptance
+act.
 Strategy: `docs/craft/agent-memory-wedge.md` (the addendum is this goal's
 argument; the evidence base is `agent-memory-ecosystem-2026.md`).
 Branch: `claude/waka-product-evolution-vbj1ur` (this session's designated
