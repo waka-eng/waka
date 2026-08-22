@@ -200,8 +200,10 @@ import {
   deleteSignal,
   dismissTopOfMindEntry,
   restoreTopOfMindEntry,
+  releaseTopOfMindEntry,
   holdTopOfMindEntry,
   refreshTopOfMind,
+  releaseSignal,
   updateInspiration,
   fetchProfiles,
   type ApiGroupProposal,
@@ -1196,6 +1198,7 @@ function HomeExperience(): JSX.Element {
   const [dropAsk] = useState<string | null>(null);
   /** The board's own state: at rest, asked about, or being rewritten. */
   const [board, setBoard] = useState<{ step: "rest" | "asking" | "working" }>({ step: "rest" });
+  const [boardToast, setBoardToast] = useState<string | null>(null);
 
   /** The statement the poster is currently showing, as an entry we can act on. */
   const lead = useMemo<Entry | null>(() => {
@@ -1223,6 +1226,17 @@ function HomeExperience(): JSX.Element {
         setTopOfMind(tom);
         setNotes(tom?.entries ?? []);
         setBoard({ step: "rest" });
+        /* the rewrite names what it could not touch: the person's stars.
+           NOTE for the founder: the count below is the brief's own copy
+           (Task 2.4) and it prints a numeral — the one place Track S bends
+           "states render, numerals never", flagged in the goal log. */
+        const stars = (tom?.entries ?? []).filter((e) => e.locked && !e.dismissed).length;
+        setBoardToast(
+          stars > 0
+            ? `하늘을 다시 그렸어요 — 별 ${stars}개는 그대로예요`
+            : "하늘을 다시 그렸어요",
+        );
+        window.setTimeout(() => setBoardToast(null), 6000);
         /* the poster re-arrives word by word, and the words that survived the
            rewrite stay lit — which is how you see what held */
         simApiRef.current?.toTop();
@@ -7169,6 +7183,9 @@ function HomeExperience(): JSX.Element {
           inspirationId: id,
           preview: cap.textPreview,
           quote: cap.quote ?? null,
+          /* the agent cache does not carry the server's span verdict yet, so
+             the quote renders unlit — a worse card and never a false one */
+          quoteSource: null,
           reason: null,
           createdMs: Date.parse(cap.capturedAt) || 0,
         });
@@ -7195,6 +7212,7 @@ function HomeExperience(): JSX.Element {
           inspirationId: ev.signalId,
           preview: ev.textPreview,
           quote: ev.quote,
+          quoteSource: null,
           /* whose sentence this is — in a room the author IS the provenance */
           reason: ev.authorName ? `said by ${ev.authorName}` : null,
           createdMs: ev.createdMs,
@@ -7238,20 +7256,38 @@ function HomeExperience(): JSX.Element {
    * the pointer. So: the whole sentence, with the read span in full ink and
    * the rest dimmed to the same value the world dims an untended memory to.
    *
-   * If the quote is not a literal substring (the server may normalise
-   * whitespace or the preview may be truncated before it), the honest
-   * fallback is the quote by itself — never a guessed span.
+   * Only a VERIFIED span may light. The server now vouches for a quote by
+   * naming whose words it is (`quoteSource`): the person's own, or the page
+   * behind their link — different claims, never lit alike, so the page's
+   * words carry a quieter mark and say so on hover. A quote with no source
+   * predates verification, and lighting it would put words in the person's
+   * mouth at the exact moment this panel claims to show receipts
+   * (docs/known-issues.md H2 was exactly that bug) — so it renders as the
+   * plain preview, a worse card and never a false one.
    */
   const salience = useCallback((e: Evidence): JSX.Element => {
     const full = e.preview ?? "";
     const q = (e.quote ?? "").trim();
-    if (!q) return <>{full}</>;
+    if (!q || e.quoteSource === null) return <>{full}</>;
+    const lit =
+      e.quoteSource === "enrichment" ? "jar-prov-lit jar-prov-lit--page" : "jar-prov-lit";
+    const said =
+      e.quoteSource === "enrichment"
+        ? "저장한 페이지의 문장이에요 — 내가 쓴 말이 아니에요"
+        : "내 기록에 실제로 있는 문장이에요";
     const at = full.indexOf(q);
-    if (at < 0) return <mark className="jar-prov-lit">{q}</mark>;
+    if (at < 0)
+      return (
+        <mark className={lit} title={said}>
+          {q}
+        </mark>
+      );
     return (
       <>
         {full.slice(0, at)}
-        <mark className="jar-prov-lit">{full.slice(at, at + q.length)}</mark>
+        <mark className={lit} title={said}>
+          {full.slice(at, at + q.length)}
+        </mark>
         {full.slice(at + q.length)}
       </>
     );
@@ -7308,6 +7344,7 @@ function HomeExperience(): JSX.Element {
         kind: "proposal",
         col: 0,
         text: proposal.ambition,
+        locked: false,
         evidence: proposal.evidence,
         spanMs: proposal.spanMs,
         adopt: { groupId: proposal.groupId, proposalId: proposal.proposalId },
@@ -7348,6 +7385,7 @@ function HomeExperience(): JSX.Element {
         kind: "reading",
         col: 0,
         text: p.statement,
+        locked: p.locked,
         evidence: [...evidence.values()],
         spanMs: null,
         adopt: null,
@@ -7368,6 +7406,7 @@ function HomeExperience(): JSX.Element {
           kind: "reading",
           col,
           text: s.statement,
+          locked: false,
           evidence: [
             {
               signalId: `${g.id}:${s.signalId}`,
@@ -7423,6 +7462,7 @@ function HomeExperience(): JSX.Element {
           kind: "reading",
           col,
           text: n.title,
+          locked: false,
           evidence,
           spanMs: null,
           adopt: null,
@@ -7482,6 +7522,7 @@ function HomeExperience(): JSX.Element {
                 /* a draft is born in the sky it was gathered in */
                 col: members[0].col,
                 text,
+                locked: false,
                 /* it inherits the memories its members were made of, once
                    each — and the WIDEST span any of them declared, so a draft
                    drawn from an old claim keeps that claim's slow orbit */
@@ -7854,6 +7895,43 @@ function HomeExperience(): JSX.Element {
 
   /** Which pattern is being offered to a room, and to which rooms so far. */
   const [sharing, setSharing] = useState<string | null>(null);
+
+  /**
+   * THE STAR'S OTHER HALF — handing a sentence back.
+   *
+   * A starred line is one the person wrote; pressing its star offers the one
+   * verb the lock was missing: 다시 WAKA에게 맡기기. Nothing is rewritten at
+   * that moment — the words stand until the next reading, which may then
+   * treat them like any of its own. The server answers with the row as it
+   * now is, and the sky/poster re-light from state rather than from hope.
+   */
+  const [entrusting, setEntrusting] = useState<string | null>(null);
+  const entrustSignal = useCallback((id: string) => {
+    releaseSignal(id)
+      .then((updated) => {
+        setSignals((prev) =>
+          prev
+            ? prev.map((p) =>
+                p.id === id ? { ...p, locked: updated.locked, status: updated.status } : p,
+              )
+            : prev,
+        );
+        setEntrusting(null);
+      })
+      .catch(() => setEntrusting(null));
+  }, []);
+  const entrustLead = useCallback((entryId: string) => {
+    releaseTopOfMindEntry(entryId)
+      .then((updated) => {
+        setNotes((prev) =>
+          prev
+            ? prev.map((n) => (n.id === entryId ? { ...n, locked: Boolean(updated.locked) } : n))
+            : prev,
+        );
+        setEntrusting(null);
+      })
+      .catch(() => setEntrusting(null));
+  }, []);
 
   /**
    * SAY THIS ONE OUT LOUD — or take it back.
@@ -8761,6 +8839,11 @@ function HomeExperience(): JSX.Element {
                           <span className="jar-board-act jar-label">Reading…</span>
                         ) : (
                           <>
+                            {boardToast ? (
+                              <span className="jar-board-warn" role="status">
+                                {boardToast}
+                              </span>
+                            ) : null}
                             <button
                               type="button"
                               className="jar-board-act jar-label"
@@ -8791,6 +8874,38 @@ function HomeExperience(): JSX.Element {
                             >
                               Say it in my words
                             </button>
+                            {lead.locked ? (
+                              entrusting === lead.id ? (
+                                <>
+                                  <span className="jar-board-warn">
+                                    이 문장을 WAKA가 다시 쓸 수 있게 돼요
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="jar-board-act jar-label"
+                                    onClick={() => entrustLead(lead.id)}
+                                  >
+                                    맡기기
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="jar-board-act jar-label"
+                                    onClick={() => setEntrusting(null)}
+                                  >
+                                    그대로 두기
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="jar-board-act jar-label jar-star-act"
+                                  title="내가 직접 쓴 문장 — WAKA가 다시 쓰지 않아요"
+                                  onClick={() => setEntrusting(lead.id)}
+                                >
+                                  ✶ 다시 WAKA에게 맡기기
+                                </button>
+                              )
+                            ) : null}
                             <button
                               type="button"
                               className="jar-board-act jar-label jar-board-act--quiet"
@@ -9066,8 +9181,33 @@ function HomeExperience(): JSX.Element {
                 layout's dimmest ink and struck through — still there, because
                 nothing here is deleted for disagreeing with it. */}
             <p className="jar-neb-text" data-said={verdicts.get(c.id) ?? undefined}>
+              {c.locked ? (
+                <button
+                  type="button"
+                  className="jar-star"
+                  title="내가 직접 쓴 문장 — WAKA가 다시 쓰지 않아요"
+                  aria-label="내가 직접 쓴 문장 — WAKA가 다시 쓰지 않아요"
+                  onClick={(ev) => {
+                    ev.stopPropagation();
+                    if (atWall.kind === "self" && c.kind === "reading")
+                      setEntrusting(entrusting === c.id ? null : c.id);
+                  }}
+                />
+              ) : null}
               {c.text}
             </p>
+            {entrusting === c.id && c.locked ? (
+              <p className="jar-neb-ask">
+                <span className="jar-star-plain">이 문장을 WAKA가 다시 쓸 수 있게 돼요</span>
+                <button type="button" onClick={() => entrustSignal(c.id)}>
+                  맡기기
+                </button>
+                <span aria-hidden="true"> · </span>
+                <button type="button" onClick={() => setEntrusting(null)}>
+                  그대로 두기
+                </button>
+              </p>
+            ) : null}
             {c.kind === "draft" ? (
               <p className="jar-neb-note jar-label">a draft, unsaved</p>
             ) : null}
@@ -9104,6 +9244,18 @@ function HomeExperience(): JSX.Element {
                   </button>
                 ))}
               </div>
+            ) : null}
+            {/* THE HONEST EMPTY. A pattern whose grounds were never recorded
+                (rows from before the chain was kept) says so, rather than
+                rendering no section — the absence of receipts is itself a
+                fact worth a line. */}
+            {focusCandId === c.id &&
+            c.kind === "reading" &&
+            evidenceFor(c).length === 0 &&
+            evidenceBySignalRef.current.has(c.id) ? (
+              <p className="jar-prov-lead jar-label">
+                이 signal의 뿌리는 아직 기록되지 않았어요
+              </p>
             ) : null}
             {/* The one action, and only where there is genuinely one to take.
                 A candidate with nowhere to be adopted to renders NOTHING: the

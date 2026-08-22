@@ -179,6 +179,24 @@ export async function dismissTopOfMindEntry(
   return body.entry;
 }
 
+/**
+ * POST /top-of-mind/entries/:entryId/release
+ *
+ * Hands an edited entry back to the generator: the words stand until the
+ * next synthesis, which may then reword or retire them like any generated
+ * line. Nothing is rewritten at release time.
+ */
+export async function releaseTopOfMindEntry(
+  entryId: string,
+): Promise<ApiTopOfMindEntry> {
+  const body = await postJson<{ entry: ApiTopOfMindEntry }>(
+    apiPath(`/top-of-mind/entries/${encodeURIComponent(entryId)}/release`),
+    {},
+    "Failed to hand this line back",
+  );
+  return body.entry;
+}
+
 /** POST /top-of-mind/entries/:entryId/restore */
 export async function restoreTopOfMindEntry(
   entryId: string,

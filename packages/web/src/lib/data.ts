@@ -154,6 +154,10 @@ export interface Evidence {
   preview: string;
   /** The words that carried the reading, when the server named them. */
   quote: string | null;
+  /** Whose words the quote is — the person's own ("own") or the page behind
+      their link ("enrichment"). Null means the quote predates the server's
+      span verification: the surface must not light it as a read span. */
+  quoteSource: "own" | "enrichment" | null;
   /** "얘가 이걸 만든 이유가 이거다" — the explainability pointer, rendered
       on the orbit rather than restated as a sentence. */
   reason: string | null;
@@ -243,6 +247,7 @@ function toEvidence(signalId: string, row: ApiSignalEvidence): Evidence {
     inspirationId: row.inspirationId,
     preview: row.preview,
     quote: row.quote ?? null,
+    quoteSource: row.quoteSource ?? null,
     reason: row.reason ?? null,
     createdMs: ms(row.createdAt),
   };

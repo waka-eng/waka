@@ -66,6 +66,13 @@ export interface Candidate {
   id: string;
   kind: "proposal" | "reading" | "draft";
   /**
+   * The person edited this statement, so the server never rewords it — on
+   * screen that state is the star. Only your own sky's readings can carry
+   * it: a room's wall statement may be starred in its OWNER'S sky, and a
+   * proposal or draft is nobody's frozen sentence.
+   */
+  locked: boolean;
+  /**
    * WHOSE SKY THIS IS. Every wall that has a sky has its own — an agent's
    * forming candidates are the things it is distilling and has not adopted,
    * which is the same relationship your own sky has to your own ambition.

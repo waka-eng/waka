@@ -1861,6 +1861,50 @@
      close: not a glow, a half-step */
   text-shadow: 0 0 12px rgba(232, 237, 244, 0.16);
 }
+/* THE PAGE'S WORDS, NOT THE PERSON'S. A quote verified against the fetched
+   page behind a saved link still lights — it genuinely did the reading — but
+   a half-step dimmer and underlined the way borrowed text is, because the
+   article speaking and the person speaking are different claims and must
+   never render alike. The hover line says whose it is. */
+.jar-prov-lit--page {
+  color: var(--jar-faint);
+  text-shadow: 0 0 8px rgba(232, 237, 244, 0.1);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+/* THE STAR. A sentence the person wrote wears one small point of light before
+   its first word — the state IS the glyph, no badge, no label. It is also the
+   press target for handing the sentence back, so it is a button that refuses
+   to look like machinery. */
+.jar-star {
+  background: none;
+  border: none;
+  padding: 0 6px 0 0;
+  margin: 0;
+  font: inherit;
+  line-height: inherit;
+  color: var(--jar-ink);
+  text-shadow: 0 0 10px rgba(240, 235, 214, 0.45), 0 0 3px rgba(240, 235, 214, 0.6);
+  cursor: pointer;
+}
+.jar-star:focus-visible {
+  outline: 1px solid var(--jar-ink);
+  outline-offset: 2px;
+}
+/* the glyph lives in the stylesheet, not the sentence: a starred line's text
+   content stays exactly the person's words, for every reader that asks the
+   DOM what the sentence says (tests included). */
+.jar-star::before {
+  content: "\2736";
+}
+/* the plain line beside the handing-back choice — explanation, not warning */
+.jar-star-plain {
+  color: var(--jar-faint);
+  margin-right: 8px;
+}
+.jar-star-act {
+  text-shadow: 0 0 10px rgba(240, 235, 214, 0.35);
+}
 /* "얘가 이걸 만든 이유가 이거다" — the server's own reason, when it gave one.
    A third register down, so it never competes with the quotation above it. */
 .jar-prov-why {

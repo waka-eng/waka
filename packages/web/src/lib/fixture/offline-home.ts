@@ -169,6 +169,7 @@ function offlineReading(
       inspirationId: `offline-m${m}`,
       preview: "",
       quote,
+      quoteSource: quote ? ("own" as const) : null,
       reason: null,
       createdMs: at,
     })),

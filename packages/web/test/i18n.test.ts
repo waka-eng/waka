@@ -84,6 +84,6 @@ describe("i18n catalogs", () => {
 
     expect(formatGeneratedFieldCounts("en-US", 1, 1)).toBe("1 source; 1 generated field");
     expect(formatGeneratedFieldCounts("en-US", 2, 3)).toBe("2 sources; 3 generated fields");
-    expect(formatGeneratedFieldCounts("ko-KR", 2, 3)).toBe("출처 2개; 생성 필드 3개");
+    expect(formatGeneratedFieldCounts("ko-KR", 2, 3)).toBe("기억 2개; 생성 필드 3개");
   });
 });

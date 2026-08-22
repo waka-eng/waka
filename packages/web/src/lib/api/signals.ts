@@ -12,6 +12,7 @@ import {
   apiPath,
   getJson,
   patchJson,
+  postJson,
   requestVoid,
   type ProfileScoped,
 } from "./http";
@@ -46,6 +47,13 @@ export interface ApiSignalEvidence {
   inspirationId: string;
   preview: string;
   quote: string | null;
+  /**
+   * Whose words the quote is: the person's own ("own") or the page behind
+   * their link ("enrichment"). Null means no quote — or a quote written
+   * before the server verified spans, which a surface must treat as
+   * unverified rather than light up as the person's words.
+   */
+  quoteSource: "own" | "enrichment" | null;
   reason: string | null;
   createdAt: string;
 }
@@ -105,6 +113,23 @@ export async function updateSignal(
     apiPath(`/signals/${encodeURIComponent(id)}`),
     input,
     "Failed to update this signal",
+  );
+  return body.signal;
+}
+
+/**
+ * POST /signals/:id/release
+ *
+ * The lock's other half: the words stay exactly as the person left them, and
+ * from the next pass on the generator may reword or retire them like any of
+ * its own. Releasing words that were standing on no evidence retires the
+ * signal in the same act — no evidence and no lock means no signal.
+ */
+export async function releaseSignal(id: string): Promise<ApiSignal> {
+  const body = await postJson<{ signal: ApiSignal }>(
+    apiPath(`/signals/${encodeURIComponent(id)}/release`),
+    {},
+    "Failed to hand this sentence back",
   );
   return body.signal;
 }
