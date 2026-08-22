@@ -4,9 +4,10 @@ Status: in flight — opened 2026-08-22 from the founder's ruling that
 **groups is a priority feature**; by the same day's end every phase
 executable without the founder had passed its gate (0a, 0d, 1a–1d, and
 Track S to the brief's bar). Standing gates, all founder-owned: 0b Step 2
-(erasure doctrine + counsel), 0c (the decline ruling), the numerals
-ruling on the brief's toast, and the 30-second demo as the acceptance
-act.
+(erasure doctrine + counsel), 0c (the decline ruling), and the 30-second
+demo as the acceptance act. Two former gates closed by the language
+ruling (2026-08-22, English only — see the log): the numerals question
+on the brief's toast, and the dialect seam.
 Strategy: `docs/craft/agent-memory-wedge.md` (the addendum is this goal's
 argument; the evidence base is `agent-memory-ecosystem-2026.md`).
 Branch: `claude/waka-product-evolution-vbj1ur` (this session's designated
@@ -203,6 +204,30 @@ house norm.
   be scrubbed through its own becoming.
 
 ## Log
+
+- **2026-08-22 — Founder ruling: the product speaks English only.** Every
+  Korean string on a product surface translated in place (the entrust
+  flow, the star's hover line, the provenance hovers, the redraw toast,
+  the roots empty state, the public profile page); the `ko-KR` catalog
+  and the language pickers removed on both web and API (`supportedLocales`
+  is `["en-US"]` at both layers; legacy `ko-KR` rows normalize to the
+  default on read, so no migration). Kept, deliberately: Korean *input*
+  handling — the enrichment boilerplate/auth-wall matchers that clean
+  Korean pages a person saves, and waka-mcp's Korean trigger-phrase
+  examples that let a person speak Korean *to* the product (it answers in
+  English); plus the dev-only offline fixture's Korean demo content
+  (renders in no real build) and founder-quote citations in comments.
+  Two standing gates closed as a consequence: **the numerals question is
+  moot** — the English toast says "your stars kept their places," THAT
+  the stars held rather than how many, so "states render, numerals never"
+  holds with no exception left to rule on; and **the dialect seam is
+  gone** — no ko copy sits beside English verbs anywhere. GLOSSARY.md
+  rewritten in English with the ruling at its head (the Korean original
+  stays in git history); the brief `docs/craft/revamp-stars-and-roots.md`
+  stays verbatim as a founder document. Gate measurements after the
+  sweep: api 49 files / 592 tests, web 18 files / 130 tests (three
+  language-picker cases replaced by two no-picker cases), vocabulary,
+  seams, and typecheck clean on both packages.
 
 - **2026-08-22 — Phase 1d: PASS on this base's honest reading,** delta
   named. The chain was always stored and nothing served it for a room:

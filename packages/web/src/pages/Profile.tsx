@@ -17,7 +17,6 @@ import { useAuth } from "../lib/auth-context";
 import { whenShort } from "../lib/when";
 import {
   normalizeSupportedLocale,
-  supportedLocales,
   t,
   writeStoredLocale,
 } from "../lib/locales";
@@ -47,7 +46,7 @@ export default function ProfilePage(): JSX.Element {
   const [publicTopOfMindEnabled, setPublicTopOfMindEnabled] = useState(
     profile?.publicTopOfMindEnabled === true,
   );
-  const [preferredLocale, setPreferredLocale] = useState<SupportedLocale>(() =>
+  const [preferredLocale] = useState<SupportedLocale>(() =>
     normalizeSupportedLocale(profile?.preferredLocale),
   );
   const [deleteText, setDeleteText] = useState("");
@@ -385,25 +384,8 @@ export default function ProfilePage(): JSX.Element {
               {t(locale, "profileNicknameNoSpacesHint")}
             </span>
           </label>
-          <label className="field">
-            <span className="field-label">{t(locale, "languageLabel")}</span>
-            <select
-              className="field-input"
-              value={preferredLocale}
-              disabled={submitting || deleting}
-              onChange={(event) => {
-                const next = normalizeSupportedLocale(event.currentTarget.value);
-                setPreferredLocale(next);
-                writeStoredLocale(next);
-              }}
-            >
-              {supportedLocales.map((option) => (
-                <option key={option.code} value={option.code}>
-                  {option.nativeLabel}
-                </option>
-              ))}
-            </select>
-          </label>
+          {/* The language field left with the second language (founder
+              ruling, 2026-08-22: the product speaks English only). */}
           {open !== "public" ? (
             <p className="profile-disclose">
               <button type="button" onClick={() => setOpen("public")}>

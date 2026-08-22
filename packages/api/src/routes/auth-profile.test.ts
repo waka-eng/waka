@@ -210,21 +210,21 @@ describe("GET /api/auth/me", () => {
 describe("PATCH /api/auth/me/preferences", () => {
   it("writes the locale onto the acting profile", async () => {
     const db = makeDb({
-      selects: [identity({ profile: { preferredLocale: "ko-KR" } })],
+      selects: [identity({ profile: { preferredLocale: "en-US" } })],
     });
     dbState.db = db;
 
     const response = await app().request(
       "/api/auth/me/preferences",
-      authorized({ preferredLocale: "ko-KR" }, "PATCH"),
+      authorized({ preferredLocale: "en-US" }, "PATCH"),
     );
 
     expect(response.status).toBe(200);
     expect(db.setCalls).toHaveLength(1);
     expect(db.setCalls[0]!.table).toBe(profiles);
-    expect(db.setCalls[0]!.values).toMatchObject({ preferredLocale: "ko-KR" });
+    expect(db.setCalls[0]!.values).toMatchObject({ preferredLocale: "en-US" });
     await expect(response.json()).resolves.toMatchObject({
-      profile: { preferredLocale: "ko-KR" },
+      profile: { preferredLocale: "en-US" },
     });
   });
 });
@@ -233,7 +233,7 @@ describe("PATCH /api/auth/me/profile", () => {
   it("requires authentication", async () => {
     const response = await app().request("/api/auth/me/profile", {
       method: "PATCH",
-      body: JSON.stringify({ name: "Mina", preferredLocale: "ko-KR" }),
+      body: JSON.stringify({ name: "Mina", preferredLocale: "en-US" }),
       headers: { "Content-Type": "application/json" },
     });
 
@@ -280,7 +280,7 @@ describe("PATCH /api/auth/me/profile", () => {
     const completedAt = new Date("2026-06-20T10:15:30.000Z");
     const db = makeDb({
       selects: [identity()],
-      updatedProfile: { ...PROFILE_ROW, name: "Mina Lee", preferredLocale: "ko-KR" },
+      updatedProfile: { ...PROFILE_ROW, name: "Mina Lee", preferredLocale: "en-US" },
       updatedAccount: { ...ACCOUNT_ROW, onboardingCompletedAt: completedAt },
     });
     dbState.db = db;
@@ -288,7 +288,7 @@ describe("PATCH /api/auth/me/profile", () => {
     const response = await app().request(
       "/api/auth/me/profile",
       authorized(
-        { name: " Mina Lee ", preferredLocale: "ko-KR", completeOnboarding: true },
+        { name: " Mina Lee ", preferredLocale: "en-US", completeOnboarding: true },
         "PATCH",
       ),
     );
@@ -297,7 +297,7 @@ describe("PATCH /api/auth/me/profile", () => {
     expect(db.setCalls[0]!.table).toBe(profiles);
     expect(db.setCalls[0]!.values).toMatchObject({
       name: "Mina Lee",
-      preferredLocale: "ko-KR",
+      preferredLocale: "en-US",
       updatedAt: expect.any(Date),
     });
     expect(db.setCalls[1]!.table).toBe(accounts);
@@ -306,7 +306,7 @@ describe("PATCH /api/auth/me/profile", () => {
     });
     await expect(response.json()).resolves.toMatchObject({
       account: { onboardingCompletedAt: completedAt.toISOString() },
-      profile: { name: "Mina Lee", preferredLocale: "ko-KR" },
+      profile: { name: "Mina Lee", preferredLocale: "en-US" },
     });
   });
 

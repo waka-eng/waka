@@ -1710,18 +1710,6 @@ body.dragging .drop-overlay {
   outline: 0;
 }
 
-[data-locale="ko-KR"] .nc-note-body,
-[data-locale="ko-KR"] .memory-contents-item-text,
-[data-locale="ko-KR"] .memory-detail-head--mockup h2,
-[data-locale="ko-KR"] .memory-readable-signal,
-[data-locale="ko-KR"] .memory-path-filter,
-[data-locale="ko-KR"] .nc-save-cta {
-  font-weight: 430;
-  line-height: 1.34;
-  word-break: keep-all;
-  overflow-wrap: normal;
-}
-
 @keyframes drawerSearchMorph {
   from {
     opacity: 0.72;

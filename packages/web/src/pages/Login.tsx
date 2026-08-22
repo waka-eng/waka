@@ -53,7 +53,7 @@ import { GoogleSignInButton, oauthErrorMessageKey } from "../components/GoogleSi
 import { ApiError } from "../lib/api";
 import type { LoginFieldErrors, SignupFieldErrors } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
-import { formatMessage, normalizeSupportedLocale, readStoredLocale, supportedLocales, t, writeStoredLocale } from "../lib/locales";
+import { formatMessage, readStoredLocale, t } from "../lib/locales";
 import type { SupportedLocale } from "../lib/locales";
 import { resolveRedirect } from "../lib/sign-in-destination";
 
@@ -91,12 +91,10 @@ const EMPTY_SIGNUP: SignupValues = {
 
 interface SignupFormProps {
   locale?: SupportedLocale;
-  onLocaleChange?: (locale: SupportedLocale) => void;
 }
 
 export function SignupForm({
   locale: shellLocale = readStoredLocale(),
-  onLocaleChange,
 }: SignupFormProps = {}): JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
@@ -269,30 +267,10 @@ export function SignupForm({
       </label>
 
 
-      <label className="field">
-        <span className="field-label">{t(locale, "languageLabel")}</span>
-        <select
-          className="field-input"
-          value={values.preferredLocale}
-          disabled={submitting}
-          onChange={(e) => {
-            const next = normalizeSupportedLocale(e.target.value);
-            handleChange("preferredLocale", next);
-            if (onLocaleChange) {
-              onLocaleChange(next);
-            } else {
-              writeStoredLocale(next);
-            }
-          }}
-        >
-          {supportedLocales.map((option) => (
-            <option key={option.code} value={option.code}>
-              {option.nativeLabel}
-            </option>
-          ))}
-        </select>
-      </label>
-
+      {/* The language field left with the second language (founder ruling,
+          2026-08-22: the product speaks English only). preferredLocale still
+          travels in the payload at its default — the account keeps the
+          column, the person just has nothing to choose. */}
       <button className="btn-primary" type="submit" disabled={submitting}>
         {submitting ? t(locale, "loginCreatingAccount") : t(locale, "loginCreateAccount")}
       </button>
@@ -492,14 +470,9 @@ export default function LoginPage(): JSX.Element {
   const [mode, setMode] = useState<Mode>("login");
   const loginTabRef = useRef<HTMLButtonElement>(null);
   const signupTabRef = useRef<HTMLButtonElement>(null);
-  const [locale, setLocale] = useState<SupportedLocale>(() => readStoredLocale());
+  const [locale] = useState<SupportedLocale>(() => readStoredLocale());
   const location = useLocation();
   const navigate = useNavigate();
-
-  const handleLocaleChange = (next: SupportedLocale): void => {
-    setLocale(next);
-    writeStoredLocale(next);
-  };
 
   /**
    * Surface the OAuth error code (if any) the API redirected us back with
@@ -651,7 +624,7 @@ export default function LoginPage(): JSX.Element {
           {mode === "login" ? (
             <LoginForm />
           ) : (
-            <SignupForm locale={locale} onLocaleChange={handleLocaleChange} />
+            <SignupForm locale={locale} />
           )}
         </div>
 

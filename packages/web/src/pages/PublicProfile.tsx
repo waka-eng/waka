@@ -42,21 +42,6 @@ const COPY = {
     open: "Open WAKA",
     controls: "public profile controls",
   },
-  "ko-KR": {
-    loading: "공개 프로필을 불러오는 중...",
-    missingTitle: "공개 프로필을 찾을 수 없어요",
-    missingBody: "아직 공유되지 않았거나 소유자가 공개를 꺼둔 핸들입니다.",
-    topOfMind: "탑오브마인드",
-    empty: "공개된 탑오브마인드가 아직 없어요.",
-    title: (name: string) => (
-      <>
-        <span className="nc-title-name">{name}님의</span> 탑오브마인드
-      </>
-    ),
-    start: "내 WAKA 만들기",
-    open: "WAKA 열기",
-    controls: "공개 프로필 컨트롤",
-  },
 } as const;
 
 

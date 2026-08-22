@@ -48,7 +48,7 @@ const mockAuthState = vi.hoisted(() => {
     type: "human" as "human" | "agent",
     name: "River",
     avatarUrl: null,
-    preferredLocale: "en-US" as "en-US" | "ko-KR",
+    preferredLocale: "en-US" as const,
     publicHandle: "q00",
     publicProfileEnabled: false,
     publicTopOfMindEnabled: false,
@@ -106,7 +106,7 @@ const mockProfilesApi = vi.hoisted(() => {
     type: "human" as "human" | "agent",
     name: "River",
     avatarUrl: null,
-    preferredLocale: "en-US" as "en-US" | "ko-KR",
+    preferredLocale: "en-US" as const,
     createdAt: "2026-05-01T00:00:00.000Z",
   };
   const agent = { ...human, id: "profile-2", type: "agent" as const, name: "claude" };

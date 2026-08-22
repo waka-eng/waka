@@ -31,12 +31,13 @@ filter over yours.
 
 ## Naming
 
-[`GLOSSARY.md`](GLOSSARY.md) — 같은 뼈대, 세 사투리. Every name crosses one
-of three dialects (data/API infrastructure English, the world's Korean UI
-language with its plain-line explanations, sales/docs English), and the
+[`GLOSSARY.md`](GLOSSARY.md) — one skeleton, three dialects. Every name
+crosses one of three dialects (data/API infrastructure English, the world's
+UI language with its plain-line explanations, sales/docs English), and the
 glossary's translation table is where a metaphor must exist before it may
-be used. `docs/data-model.md` stays the schema's truth; the glossary is
-the dialect boundary's.
+be used. The product speaks English only (founder ruling, 2026-08-22).
+`docs/data-model.md` stays the schema's truth; the glossary is the dialect
+boundary's.
 
 ## The two canonical docs
 

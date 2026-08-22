@@ -1230,14 +1230,14 @@ function HomeExperience(): JSX.Element {
         setNotes(tom?.entries ?? []);
         setBoard({ step: "rest" });
         /* the rewrite names what it could not touch: the person's stars.
-           NOTE for the founder: the count below is the brief's own copy
-           (Task 2.4) and it prints a numeral — the one place Track S bends
-           "states render, numerals never", flagged in the goal log. */
-        const stars = (tom?.entries ?? []).filter((e) => e.locked && !e.dismissed).length;
+           The brief's own copy counted them; the English line keeps the
+           law instead — states render, numerals never — so the toast says
+           THAT the stars held, and the sky shows which. */
+        const anyStars = (tom?.entries ?? []).some((e) => e.locked && !e.dismissed);
         setBoardToast(
-          stars > 0
-            ? `하늘을 다시 그렸어요 — 별 ${stars}개는 그대로예요`
-            : "하늘을 다시 그렸어요",
+          anyStars
+            ? "the sky was redrawn — your stars kept their places"
+            : "the sky was redrawn",
         );
         window.setTimeout(() => setBoardToast(null), 6000);
         /* the poster re-arrives word by word, and the words that survived the
@@ -7276,8 +7276,8 @@ function HomeExperience(): JSX.Element {
       e.quoteSource === "enrichment" ? "jar-prov-lit jar-prov-lit--page" : "jar-prov-lit";
     const said =
       e.quoteSource === "enrichment"
-        ? "저장한 페이지의 문장이에요 — 내가 쓴 말이 아니에요"
-        : "내 기록에 실제로 있는 문장이에요";
+        ? "a sentence from the page you saved — not your own words"
+        : "a sentence that is really in your record";
     const at = full.indexOf(q);
     if (at < 0)
       return (
@@ -7912,7 +7912,7 @@ function HomeExperience(): JSX.Element {
    * THE STAR'S OTHER HALF — handing a sentence back.
    *
    * A starred line is one the person wrote; pressing its star offers the one
-   * verb the lock was missing: 다시 WAKA에게 맡기기. Nothing is rewritten at
+   * verb the lock was missing: hand it back to WAKA. Nothing is rewritten at
    * that moment — the words stand until the next reading, which may then
    * treat them like any of its own. The server answers with the row as it
    * now is, and the sky/poster re-light from state rather than from hope.
@@ -8913,31 +8913,31 @@ function HomeExperience(): JSX.Element {
                               entrusting === lead.id ? (
                                 <>
                                   <span className="jar-board-warn">
-                                    이 문장을 WAKA가 다시 쓸 수 있게 돼요
+                                    WAKA will be allowed to rewrite this sentence
                                   </span>
                                   <button
                                     type="button"
                                     className="jar-board-act jar-label"
                                     onClick={() => entrustLead(lead.id)}
                                   >
-                                    맡기기
+                                    Hand it back
                                   </button>
                                   <button
                                     type="button"
                                     className="jar-board-act jar-label"
                                     onClick={() => setEntrusting(null)}
                                   >
-                                    그대로 두기
+                                    Leave it as it is
                                   </button>
                                 </>
                               ) : (
                                 <button
                                   type="button"
                                   className="jar-board-act jar-label jar-star-act"
-                                  title="내가 직접 쓴 문장 — WAKA가 다시 쓰지 않아요"
+                                  title="Your own words — WAKA will not rewrite them"
                                   onClick={() => setEntrusting(lead.id)}
                                 >
-                                  ✶ 다시 WAKA에게 맡기기
+                                  ✶ Hand it back to WAKA
                                 </button>
                               )
                             ) : null}
@@ -9220,8 +9220,8 @@ function HomeExperience(): JSX.Element {
                 <button
                   type="button"
                   className="jar-star"
-                  title="내가 직접 쓴 문장 — WAKA가 다시 쓰지 않아요"
-                  aria-label="내가 직접 쓴 문장 — WAKA가 다시 쓰지 않아요"
+                  title="your own words — WAKA will not rewrite them"
+                  aria-label="your own words — WAKA will not rewrite them"
                   onClick={(ev) => {
                     ev.stopPropagation();
                     if (atWall.kind === "self" && c.kind === "reading")
@@ -9233,13 +9233,13 @@ function HomeExperience(): JSX.Element {
             </p>
             {entrusting === c.id && c.locked ? (
               <p className="jar-neb-ask">
-                <span className="jar-star-plain">이 문장을 WAKA가 다시 쓸 수 있게 돼요</span>
+                <span className="jar-star-plain">WAKA will be allowed to rewrite this sentence</span>
                 <button type="button" onClick={() => entrustSignal(c.id)}>
-                  맡기기
+                  hand it back
                 </button>
                 <span aria-hidden="true"> · </span>
                 <button type="button" onClick={() => setEntrusting(null)}>
-                  그대로 두기
+                  leave it as it is
                 </button>
               </p>
             ) : null}
@@ -9289,7 +9289,7 @@ function HomeExperience(): JSX.Element {
             evidenceFor(c).length === 0 &&
             evidenceBySignalRef.current.has(c.id) ? (
               <p className="jar-prov-lead jar-label">
-                이 signal의 뿌리는 아직 기록되지 않았어요
+                the roots of this signal were never recorded
               </p>
             ) : null}
             {/* WHO HAS ANSWERED A ROOM'S STATEMENT — named, lit or dimmed,

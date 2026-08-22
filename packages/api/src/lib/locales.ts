@@ -1,13 +1,18 @@
 import { z } from "zod";
 
-export const supportedLocaleValues = ["en-US", "ko-KR"] as const;
+/**
+ * English is the product's only language — a founder ruling (2026-08-22).
+ * Rows that stored "ko-KR" before the ruling normalize to the default on
+ * read, so generation and the UI both speak English without a migration.
+ */
+export const supportedLocaleValues = ["en-US"] as const;
 
 export type SupportedLocale = (typeof supportedLocaleValues)[number];
 
 export const DEFAULT_LOCALE: SupportedLocale = "en-US";
 
 export const supportedLocaleSchema = z.enum(supportedLocaleValues, {
-  errorMap: () => ({ message: "Unsupported locale. Expected en-US or ko-KR." }),
+  errorMap: () => ({ message: "Unsupported locale. Expected en-US." }),
 });
 
 const supportedLocaleSet = new Set<string>(supportedLocaleValues);

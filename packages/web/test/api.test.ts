@@ -210,14 +210,14 @@ describe("the session", () => {
   it("PATCHes the preferred locale and returns both halves back", async () => {
     stubFetch(Response.json(viewer));
 
-    await expect(updateAuthPreferences({ preferredLocale: "ko-KR" })).resolves.toEqual(
+    await expect(updateAuthPreferences({ preferredLocale: "en-US" })).resolves.toEqual(
       viewer,
     );
     expect(fetch).toHaveBeenCalledWith("/api/auth/me/preferences", {
       method: "PATCH",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ preferredLocale: "ko-KR" }),
+      body: JSON.stringify({ preferredLocale: "en-US" }),
     });
   });
 });

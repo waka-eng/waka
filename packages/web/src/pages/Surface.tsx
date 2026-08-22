@@ -33,8 +33,6 @@ import { useAuth } from "../lib/auth-context";
 import {
   formatMessage,
   readStoredLocale,
-  supportedLocales,
-  writeStoredLocale,
   type SupportedLocale,
 } from "../lib/i18n";
 import { t } from "../lib/locales";
@@ -208,7 +206,7 @@ function errorMessage(err: unknown, fallback: string): string {
 }
 
 export default function SurfacePage(): JSX.Element {
-  const { profile, updatePreferredLocale } = useAuth();
+  const { profile } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -216,7 +214,7 @@ export default function SurfacePage(): JSX.Element {
   const view = route.view;
   const openInspirationId = route.view === "inspiration" ? route.entityId : null;
 
-  const [locale, setLocale] = useState<SupportedLocale>(() => readStoredLocale());
+  const [locale] = useState<SupportedLocale>(() => readStoredLocale());
   const [notice, setNotice] = useState<string | null>(null);
 
   /* Declared first because every layer's handlers close over it. */
@@ -2351,28 +2349,8 @@ export default function SurfacePage(): JSX.Element {
             </summary>
             <div className="sf-you-menu">
               <a href="/profile">your profile</a>
-              {/* The language is about you, so it lives with the other things
-                  that are. */}
-              <div className="sf-you-langs">
-                {supportedLocales.map((option) => (
-                  <button
-                    key={option.code}
-                    type="button"
-                    className={option.code === locale ? "on" : ""}
-                    onClick={() => {
-                      setLocale(option.code);
-                      writeStoredLocale(option.code);
-                      // The profile's locale drives generated-content language,
-                      // and boot reads it back from the server — so persist it
-                      // there, or this choice reverts on the next visit.
-                      // Best-effort: the local view has already switched.
-                      void updatePreferredLocale(option.code).catch(() => undefined);
-                    }}
-                  >
-                    {option.nativeLabel}
-                  </button>
-                ))}
-              </div>
+              {/* The language switcher left with the second language (founder
+                  ruling, 2026-08-22: the product speaks English only). */}
             </div>
           </details>
         </div>

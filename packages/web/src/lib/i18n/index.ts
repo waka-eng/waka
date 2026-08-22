@@ -1,7 +1,12 @@
 import enUsMessages from "./messages/en-US.json";
-import koKrMessages from "./messages/ko-KR.json";
 
-export const supportedLocaleValues = ["en-US", "ko-KR"] as const;
+/**
+ * English is the product's only language — a founder ruling (2026-08-22).
+ * The catalog machinery stays so a future locale is an entry here rather
+ * than an unpicking; stored "ko-KR" preferences from before the ruling
+ * normalize to the default on read.
+ */
+export const supportedLocaleValues = ["en-US"] as const;
 
 export type SupportedLocale = (typeof supportedLocaleValues)[number];
 
@@ -10,7 +15,6 @@ export const LOCALE_STORAGE_KEY = "waka.ui.locale";
 
 export const supportedLocales: Array<{ code: SupportedLocale; label: string; nativeLabel: string }> = [
   { code: "en-US", label: "English", nativeLabel: "English" },
-  { code: "ko-KR", label: "Korean", nativeLabel: "한국어" },
 ];
 
 const supportedLocaleSet = new Set<string>(supportedLocaleValues);
@@ -55,7 +59,6 @@ function exactCatalog<T extends Record<MessageKey, string>>(catalog: ExactCatalo
 
 export const messageCatalogs = {
   "en-US": exactCatalog(enUsMessages),
-  "ko-KR": exactCatalog(koKrMessages),
 } satisfies Record<SupportedLocale, Record<MessageKey, string>>;
 
 export const translationKeys = Object.keys(enUsMessages).sort() as MessageKey[];
