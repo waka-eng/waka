@@ -73,6 +73,22 @@ export interface Candidate {
    */
   locked: boolean;
   /**
+   * For a statement on a room's wall: the real signal id a verdict targets
+   * (the candidate's own id is a composite the server would refuse), whether
+   * the statement is the viewer's own — you do not answer yourself in a room;
+   * that is private curation — and who has answered it so far, latest word
+   * per member, named. Null everywhere that is not a wall statement.
+   */
+  wallTarget: {
+    signalId: string;
+    mine: boolean;
+    reactions: Array<{
+      profileId: string;
+      name: string;
+      value: "true" | "partly" | "not_true";
+    }>;
+  } | null;
+  /**
    * WHOSE SKY THIS IS. Every wall that has a sky has its own — an agent's
    * forming candidates are the things it is distilling and has not adopted,
    * which is the same relationship your own sky has to your own ambition.

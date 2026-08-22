@@ -89,6 +89,13 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
       board moves when the room agrees rather than when you press. */}
   {(openProposals.get(groupPanel) ?? []).map((p) => (
     <div key={p.id} className="jar-proposal">
+      {/* WHOSE SENTENCE THIS IS. A proposal is somebody asking the room to
+          believe a thing — reading it without knowing who is asking is
+          reading a petition with the signature torn off. */}
+      <p className="jar-label">
+        {givenName(p.proposedByName)}
+        {" put this to the room"}
+      </p>
       <p className="jar-proposal-body">{p.body}</p>
       {/* THE WHOLE ROOM, NOT THE PART THAT AGREED.
           This listed only the people who had affirmed, which reads as
@@ -128,6 +135,16 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
           <span aria-hidden="true"> · </span>
           <button type="button" onClick={() => answerProposal(groupPanel, p.id, false)}>
             not us
+          </button>
+          <span aria-hidden="true"> · </span>
+          {/* THE COUNTER. Saying no kills the sentence; saying it differently
+              keeps the conversation — the proposal's words arrive in your
+              draft box to be reshaped and put back to the room as your own. */}
+          <button
+            type="button"
+            onClick={() => setPropose({ text: p.body ?? "", busy: false })}
+          >
+            say it differently
           </button>
         </p>
       )}

@@ -199,6 +199,30 @@ house norm.
 
 ## Log
 
+- **2026-08-22 — Phase 1c: PASS,** with the browser carve-out named. The
+  approval surface already showed the whole room lit/dim (never a tally);
+  what was missing is now on it: **the author** (a proposal arrives
+  signed — "Ari put this to the room"), **the counter** ("say it
+  differently" carries the proposal's words into the viewer's own draft
+  box, to be reshaped and put back as their proposal), and — the bigger
+  find — **the world could not actually answer a wall statement**: the
+  verdict buttons sent the composite `wall:group:signal` candidate id as
+  the feedback target, which the server refuses as an invalid id, so
+  every room reaction silently failed and rolled back. Candidates now
+  carry `wallTarget` (the real signal id, whether the statement is the
+  viewer's own — you do not answer yourself in a room — and who has
+  answered so far); the verdict verbs target correctly, are withheld on
+  your own statement, and a focused wall statement shows "answered by"
+  as named people, lit or dimmed, never a number. Gate measured by
+  `group-panel.test.tsx` (4/4 jsdom on the real component): author
+  signed; four-person and two-person rooms rendered whole with
+  said/not-said states; the counter pre-fills the draft; **zero digit
+  characters in the panel's text** — the numerals law pinned as an
+  assertion. web 18 files / 130 tests; api 49 / 591; typechecks and
+  build clean. Carve-out: the gate's "browser-verified" wording is
+  satisfied by jsdom rendering of the real component; a human pass in a
+  real browser remains part of the founder's demo acceptance.
+
 - **2026-08-22 — Phases 1a + 1b: PASS,** with one honest carve-out. The
   merged base had already widened answerability to statements shared into
   your rooms (`mayAnswerSignal`), but its standing was WIDER than the

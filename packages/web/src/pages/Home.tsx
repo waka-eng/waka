@@ -163,6 +163,7 @@ import {
   agoWords,
   citedWords,
   dateWords,
+  givenName,
   groupCompany,
   monthTag,
   numWords,
@@ -7345,6 +7346,7 @@ function HomeExperience(): JSX.Element {
         col: 0,
         text: proposal.ambition,
         locked: false,
+        wallTarget: null,
         evidence: proposal.evidence,
         spanMs: proposal.spanMs,
         adopt: { groupId: proposal.groupId, proposalId: proposal.proposalId },
@@ -7386,6 +7388,7 @@ function HomeExperience(): JSX.Element {
         col: 0,
         text: p.statement,
         locked: p.locked,
+        wallTarget: null,
         evidence: [...evidence.values()],
         spanMs: null,
         adopt: null,
@@ -7407,6 +7410,11 @@ function HomeExperience(): JSX.Element {
           col,
           text: s.statement,
           locked: false,
+          wallTarget: {
+            signalId: s.signalId,
+            mine: s.ownerProfileId === viewerIdRef.current,
+            reactions: s.reactions ?? [],
+          },
           evidence: [
             {
               signalId: `${g.id}:${s.signalId}`,
@@ -7463,6 +7471,7 @@ function HomeExperience(): JSX.Element {
           col,
           text: n.title,
           locked: false,
+          wallTarget: null,
           evidence,
           spanMs: null,
           adopt: null,
@@ -7523,6 +7532,7 @@ function HomeExperience(): JSX.Element {
                 col: members[0].col,
                 text,
                 locked: false,
+                wallTarget: null,
                 /* it inherits the memories its members were made of, once
                    each — and the WIDEST span any of them declared, so a draft
                    drawn from an old claim keeps that claim's slow orbit */
@@ -7835,10 +7845,10 @@ function HomeExperience(): JSX.Element {
    * from.
    */
   const sayVerdict = useCallback(
-    (id: string, value: "true" | "partly" | "not_true") => {
+    (id: string, value: "true" | "partly" | "not_true", targetId?: string) => {
       setVerdicts((prev) => new Map(prev).set(id, value));
       if (offlineRef.current) return;
-      createFeedback({ targetType: "signal", targetId: id, value }).catch(() => {
+      createFeedback({ targetType: "signal", targetId: targetId ?? id, value }).catch(() => {
         /* it did not land, and the row should not claim it did */
         setVerdicts((prev) => {
           const next = new Map(prev);
@@ -9257,6 +9267,30 @@ function HomeExperience(): JSX.Element {
                 이 signal의 뿌리는 아직 기록되지 않았어요
               </p>
             ) : null}
+            {/* WHO HAS ANSWERED A ROOM'S STATEMENT — named, lit or dimmed,
+                never a tally. The same law the proposal panel obeys: the
+                count is legible because the people are. */}
+            {focusCandId === c.id && c.wallTarget && c.wallTarget.reactions.length > 0 ? (
+              <p className="jar-prov-lead jar-label">
+                {"answered by "}
+                {c.wallTarget.reactions.map((reaction, i) => (
+                  <span
+                    key={reaction.profileId}
+                    className={reaction.value === "true" ? "jar-said" : "jar-not-said"}
+                    title={
+                      reaction.value === "true"
+                        ? "yes, that rings true"
+                        : reaction.value === "partly"
+                          ? "partly"
+                          : "not true"
+                    }
+                  >
+                    {i > 0 ? " · " : ""}
+                    {givenName(reaction.name)}
+                  </span>
+                ))}
+              </p>
+            ) : null}
             {/* The one action, and only where there is genuinely one to take.
                 A candidate with nowhere to be adopted to renders NOTHING: the
                 absence of an affordance already says so, and saying it in
@@ -9288,7 +9322,10 @@ function HomeExperience(): JSX.Element {
                 line in the same face the statement is set in, and they arrive
                 only on the pattern being read. Once answered they are gone
                 and the STATEMENT itself carries what you said. */}
-            {c.kind === "reading" && focusCandId === c.id && !verdicts.has(c.id) ? (
+            {c.kind === "reading" &&
+            focusCandId === c.id &&
+            !verdicts.has(c.id) &&
+            !c.wallTarget?.mine ? (
               <p className="jar-neb-ask">
                 {/* The non-drag route, and the only thing on screen that ever
                     says joining is possible before you have tried it. */}
@@ -9314,11 +9351,11 @@ function HomeExperience(): JSX.Element {
                     <span aria-hidden="true"> · </span>
                   </>
                 ) : null}
-                <button type="button" onClick={() => sayVerdict(c.id, "true")}>yes</button>
+                <button type="button" onClick={() => sayVerdict(c.id, "true", c.wallTarget?.signalId)}>yes</button>
                 <span aria-hidden="true"> · </span>
-                <button type="button" onClick={() => sayVerdict(c.id, "partly")}>partly</button>
+                <button type="button" onClick={() => sayVerdict(c.id, "partly", c.wallTarget?.signalId)}>partly</button>
                 <span aria-hidden="true"> · </span>
-                <button type="button" onClick={() => sayVerdict(c.id, "not_true")}>not true</button>
+                <button type="button" onClick={() => sayVerdict(c.id, "not_true", c.wallTarget?.signalId)}>not true</button>
                 {/* CHANGE ITS WORDS, AND IT BECOMES YOURS. A human edit locks
                     the statement: the server keeps attaching evidence under it
                     and never rewrites the sentence again. That is the act that
