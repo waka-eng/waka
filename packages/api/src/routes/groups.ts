@@ -72,6 +72,7 @@ import {
 } from "./groups-proposals.js";
 import {
   enqueueGroupTopOfMindRefresh,
+  loadGroupTimeline,
   loadGroupTopOfMind,
 } from "./groups-top-of-mind.js";
 import { loadGroupWall } from "./groups-wall.js";
@@ -150,6 +151,7 @@ export interface GroupsRouteDependencies {
   loadField?: typeof loadGroupField;
   loadWall?: typeof loadGroupWall;
   loadTopOfMind?: typeof loadGroupTopOfMind;
+  loadTimeline?: typeof loadGroupTimeline;
   enqueueRefresh?: typeof enqueueGroupTopOfMindRefresh;
   listProposals?: typeof listGroupProposals;
   createProposal?: typeof createGroupProposal;
@@ -172,6 +174,7 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
   const loadField = deps.loadField ?? loadGroupField;
   const loadWall = deps.loadWall ?? loadGroupWall;
   const loadTopOfMind = deps.loadTopOfMind ?? loadGroupTopOfMind;
+  const loadTimeline = deps.loadTimeline ?? loadGroupTimeline;
   const enqueueRefresh = deps.enqueueRefresh ?? enqueueGroupTopOfMindRefresh;
   const listProposals = deps.listProposals ?? listGroupProposals;
   const createProposal = deps.createProposal ?? createGroupProposal;
@@ -519,6 +522,40 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
           profileId: contributor.profileId,
           name: contributor.name,
         })),
+      })),
+    });
+  });
+
+  // GET /api/groups/:groupId/top-of-mind/versions — the room's timeline:
+  // the artifact's chain plus the door's marks. Membership-gated like every
+  // group read, serialized field by field like every cross-account read.
+  routes.get("/:groupId/top-of-mind/versions", async (c) => {
+    const parsedParams = groupParamsSchema.safeParse(c.req.param());
+    if (!parsedParams.success) return c.json({ error: "Invalid group id" }, 400);
+    const session = c.get("session");
+    const { groupId } = parsedParams.data;
+
+    const membership = await loadMembership(getDatabase(), {
+      groupId,
+      profileId: session.profile.id,
+    });
+    if (!membership) return c.json({ error: "Group not found" }, 404);
+
+    const timeline = await loadTimeline(getDatabase(), groupId);
+    return c.json({
+      versions: timeline.versions.map((version) => ({
+        id: version.id,
+        version: version.version,
+        status: version.status,
+        reason: version.reason,
+        entryCount: version.entryCount,
+        createdAt: version.createdAt,
+      })),
+      doorMarks: timeline.doorMarks.map((mark) => ({
+        profileId: mark.profileId,
+        name: mark.name,
+        kind: mark.kind,
+        occurredAt: mark.occurredAt,
       })),
     });
   });

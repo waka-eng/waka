@@ -316,6 +316,39 @@ export async function refreshGroupTopOfMind(groupId: string): Promise<void> {
   );
 }
 
+export interface ApiGroupTimelineVersion {
+  id: string;
+  version: number;
+  status: "live" | "superseded";
+  reason: string;
+  entryCount: number;
+  createdAt: string;
+}
+
+export interface ApiGroupDoorMark {
+  profileId: string;
+  name: string;
+  kind: "joined" | "left" | "removed";
+  occurredAt: string;
+}
+
+export interface ApiGroupTimeline {
+  versions: ApiGroupTimelineVersion[];
+  doorMarks: ApiGroupDoorMark[];
+}
+
+/** GET /groups/:id/top-of-mind/versions — the room's own becoming. */
+export async function fetchGroupTimeline(groupId: string): Promise<ApiGroupTimeline> {
+  const body = await getJson<ApiGroupTimeline>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/top-of-mind/versions`),
+    "Failed to load the group's timeline",
+  );
+  return {
+    versions: Array.isArray(body.versions) ? body.versions : [],
+    doorMarks: Array.isArray(body.doorMarks) ? body.doorMarks : [],
+  };
+}
+
 /** GET /groups/:id/proposals */
 export async function fetchGroupProposals(
   groupId: string,

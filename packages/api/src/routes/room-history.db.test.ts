@@ -39,6 +39,7 @@ import {
   leaveGroup,
   removeGroupMember,
 } from "./groups-membership.js";
+import { loadGroupTimeline } from "./groups-top-of-mind.js";
 
 let t: TestDatabase;
 let seq = 0;
@@ -218,6 +219,33 @@ describe("the gate: refresh, acceptance, removal, re-join — everything prior s
       after.every((row) => row.owner_profile_id === g.a),
       "the attribution of who fed the entry outlives the signal itself",
     ).toBe(true);
+  });
+
+  it("serves the room's timeline: the chain with entry counts, and the door's marks in order", async () => {
+    const g = await seedGroup();
+    const [signal] = await t.sql`
+      INSERT INTO signals (profile_id, statement)
+      VALUES (${g.a}, 'keeps choosing depth over breadth') RETURNING id`;
+    await seedVersions(g.groupId, g.a, signal.id as string);
+    await removeGroupMember(t.db as never, { groupId: g.groupId, memberProfileId: g.b });
+    const [rekeyed] = await t.sql`SELECT join_code FROM groups WHERE id = ${g.groupId}`;
+    await joinGroupByCode(t.db as never, {
+      profileId: g.b,
+      joinCode: rekeyed.join_code as string,
+    });
+
+    const timeline = await loadGroupTimeline(t.db as never, g.groupId);
+    expect(
+      timeline.versions.map((v) => [v.version, v.status, v.entryCount]),
+      "the chain must arrive newest first with its entry counts",
+    ).toEqual([
+      [2, "live", 1],
+      [1, "superseded", 1],
+    ]);
+    expect(
+      timeline.doorMarks.map((m) => m.kind),
+      "the door's story, oldest first",
+    ).toEqual(["joined", "joined", "removed", "joined"]);
   });
 
   it("records a voluntary departure as left, not as removal", async () => {

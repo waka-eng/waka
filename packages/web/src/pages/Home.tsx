@@ -180,6 +180,8 @@ import {
   fetchGroupProposals,
   createGroupProposal,
   fetchGroupMembers,
+  fetchGroupTimeline,
+  type ApiGroupTimeline,
   leaveGroup,
   removeGroupMember,
   renameGroup,
@@ -8102,6 +8104,29 @@ function HomeExperience(): JSX.Element {
   }, [atWall, members]);
 
   /**
+   * THE ROOM SO FAR. Fetched with the same trigger as the member list —
+   * standing on the wall — because they answer the same question at two
+   * depths: who is here, and how the room came to hold them. Kept per group
+   * and refetched on re-arrival, since a timeline that never moves is a
+   * timeline nobody trusts.
+   */
+  const [groupTimelines, setGroupTimelines] = useState<Map<string, ApiGroupTimeline>>(
+    () => new Map(),
+  );
+  useEffect(() => {
+    if (atWall.kind !== "group") return;
+    let dead = false;
+    fetchGroupTimeline(atWall.id)
+      .then((timeline) => {
+        if (!dead) setGroupTimelines((prev) => new Map(prev).set(atWall.id, timeline));
+      })
+      .catch(() => undefined);
+    return () => {
+      dead = true;
+    };
+  }, [atWall]);
+
+  /**
    * CHANGING WHAT A ROOM BELIEVES.
    *
    * A room's board is not edited; it is PROPOSED to and affirmed. That is the
@@ -10152,6 +10177,7 @@ function HomeExperience(): JSX.Element {
           members={members}
           space={atWall}
           openProposals={openProposals}
+          timeline={groupTimelines.get(groupPanel) ?? null}
           propose={propose}
           setPropose={setPropose}
           sendProposal={sendProposal}

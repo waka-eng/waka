@@ -74,6 +74,7 @@ function renderPanel(overrides: Partial<GroupPanelProps>): HTMLElement {
     groups: [{ id: GROUP_ID, name: "the reading circle", joinCode: "CODE", role: "member" } as unknown as ApiGroupSummary],
     members: new Map(),
     openProposals: new Map(),
+    timeline: null,
     propose: null,
     setPropose: vi.fn(),
     sendProposal: vi.fn(),
@@ -204,6 +205,40 @@ describe("the approval surface", () => {
       text: "We keep choosing walks over meetings.",
       busy: false,
     });
+  });
+
+  it("tells the room so far in words — moves and door marks, no numeral", () => {
+    const el = renderPanel({
+      members: new Map([
+        [GROUP_ID, [member(ARI.profileId, ARI.name, "owner"), member(BO.profileId, BO.name, "member")]],
+      ]),
+      timeline: {
+        versions: [
+          { id: "v2", version: 2, status: "live", reason: "member_proposal", entryCount: 3, createdAt: "2026-08-20T00:00:00.000Z" },
+          { id: "v1", version: 1, status: "superseded", reason: "initial", entryCount: 2, createdAt: "2026-08-10T00:00:00.000Z" },
+          { id: "v0", version: 3, status: "superseded", reason: "no_change", entryCount: 3, createdAt: "2026-08-21T00:00:00.000Z" },
+        ],
+        doorMarks: [
+          { profileId: ARI.profileId, name: ARI.name, kind: "joined", occurredAt: "2026-08-01T00:00:00.000Z" },
+          { profileId: BO.profileId, name: BO.name, kind: "joined", occurredAt: "2026-08-05T00:00:00.000Z" },
+          { profileId: BO.profileId, name: BO.name, kind: "removed", occurredAt: "2026-08-15T00:00:00.000Z" },
+        ],
+      },
+    });
+
+    expect(el.textContent).toContain("the room so far");
+    expect(el.textContent).toContain("the room first spoke");
+    expect(el.textContent).toContain("a proposal carried");
+    expect(el.textContent).toContain("Bo was removed");
+    expect(el.textContent).toContain("Ari arrived");
+    expect(
+      el.textContent,
+      "an honest no_change pass is not an event in the room's life",
+    ).not.toContain("re-read itself");
+    expect(
+      /\d/.test(el.textContent ?? ""),
+      "a numeral appeared on the timeline — dates are words, versions are events",
+    ).toBe(false);
   });
 
   it("an answered proposal says so instead of asking again", () => {

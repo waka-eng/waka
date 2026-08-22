@@ -11,8 +11,13 @@
  * belongs together rather than scattered through a page that also draws
  * agents and your own wall.
  */
-import type { ApiGroupMember, ApiGroupProposal, ApiGroupSummary } from "../lib/api";
-import { givenName } from "../lib/words";
+import type {
+  ApiGroupMember,
+  ApiGroupProposal,
+  ApiGroupSummary,
+  ApiGroupTimeline,
+} from "../lib/api";
+import { dateWords, givenName } from "../lib/words";
 import type { Space } from "./index";
 
 export interface GroupPanelProps {
@@ -24,6 +29,8 @@ export interface GroupPanelProps {
   members: Map<string, ApiGroupMember[]>;
   /** every group's open proposals, keyed by group id */
   openProposals: Map<string, ApiGroupProposal[]>;
+  /** the room's own becoming — version chain and door marks; null until it arrives */
+  timeline: ApiGroupTimeline | null;
   /** the draft a member is writing, and whether it is in flight */
   propose: { text: string; busy: boolean } | null;
   setPropose: React.Dispatch<React.SetStateAction<{ text: string; busy: boolean } | null>>;
@@ -46,6 +53,7 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
     groups,
     members,
     openProposals,
+    timeline,
     propose,
     setPropose,
     sendProposal,
@@ -150,6 +158,51 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
       )}
     </div>
   ))}
+
+  {/* THE ROOM SO FAR. The artifact's chain and the door's marks, told as
+      one story, newest first: every version the room's reading has moved
+      through (the honest no_change passes stay off the surface — a pass
+      where nothing moved is not an event in the room's life), and every
+      arrival and departure, named. Dates arrive as words, reasons as
+      sentences — the timeline keeps the numerals law by construction. */}
+  {timeline &&
+  (timeline.versions.length > 0 || timeline.doorMarks.length > 0) ? (
+    <div className="jar-prov" style={{ marginTop: 14 }}>
+      <p className="jar-prov-lead jar-label">the room so far</p>
+      {[
+        ...timeline.versions
+          .filter((v) => v.reason !== "no_change")
+          .map((v) => ({
+            key: `v:${v.id}`,
+            at: Date.parse(v.createdAt) || 0,
+            line:
+              v.reason === "initial"
+                ? "the room first spoke"
+                : v.reason === "member_proposal"
+                  ? "a proposal carried"
+                  : v.reason === "human_edit"
+                    ? "a sentence was reworded"
+                    : "the room re-read itself",
+          })),
+        ...timeline.doorMarks.map((m) => ({
+          key: `d:${m.profileId}:${m.occurredAt}`,
+          at: Date.parse(m.occurredAt) || 0,
+          line: `${givenName(m.name)} ${
+            m.kind === "joined" ? "arrived" : m.kind === "left" ? "left" : "was removed"
+          }`,
+        })),
+      ]
+        .sort((a, b) => b.at - a.at)
+        .slice(0, 10)
+        .map((event) => (
+          <p key={event.key} className="jar-was">
+            {event.line}
+            {" · "}
+            {dateWords(event.at, Date.now())}
+          </p>
+        ))}
+    </div>
+  ) : null}
 
   {/* PUT SOMETHING TO THEM. A room's board is proposed to and
       affirmed, never edited — one member rewriting what a group

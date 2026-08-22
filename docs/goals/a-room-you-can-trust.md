@@ -199,6 +199,28 @@ house norm.
 
 ## Log
 
+- **2026-08-22 — Phase 1d: PASS on this base's honest reading,** delta
+  named. The chain was always stored and nothing served it for a room:
+  `GET /api/groups/:groupId/top-of-mind/versions` now exists
+  (membership-gated, field-by-field like every cross-account read),
+  serving the version chain with entry counts and — from 0a's ledger —
+  the **door's marks**: who arrived, left, was removed, named and in
+  order. The room's panel tells it as one story, "the room so far":
+  moves as sentences (first spoke / a proposal carried / re-read itself
+  / a sentence was reworded — honest `no_change` passes stay off the
+  surface, a pass where nothing moved is not an event in the room's
+  life), door marks as people, dates as words — the numerals law holds
+  by construction and is pinned as an assertion. Measured:
+  `loadGroupTimeline` db case (chain newest-first with counts; door
+  story `joined, joined, removed, joined`), panel render case (moves +
+  marks + zero digits). api 49 files / 592; web 19 files / 131;
+  typechecks, build, vocabulary/seam gates clean. **Delta:** the
+  pre-rebuild `room-timeline` goal's Phase-2 canvas gate (scrubbing the
+  wall's orbs through time on the dial) described the old codebase's
+  wall; on this base the room's history is now *readable* — putting it
+  on the dial is design-pass work alongside the founder's stars-and-
+  roots §8 questions, not re-implemented here.
+
 - **2026-08-22 — Phase 1c: PASS,** with the browser carve-out named. The
   approval surface already showed the whole room lit/dim (never a tally);
   what was missing is now on it: **the author** (a proposal arrives

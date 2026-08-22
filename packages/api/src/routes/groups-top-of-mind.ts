@@ -8,14 +8,16 @@
  * here rather than taken from the caller.
  */
 
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 
 import {
   groupMembers,
+  groupMembershipEvents,
   profiles,
   topOfMindEntries,
   topOfMindEntrySignals,
   topOfMinds,
+  type GroupMembershipEventKind,
   type RefreshGroupTopOfMindPayload,
   type TopOfMindEntryType,
   type TopOfMindRevisionReason,
@@ -51,6 +53,110 @@ export interface GroupTopOfMindView {
     createdAt: string;
   } | null;
   entries: GroupTopOfMindEntryView[];
+}
+
+export interface GroupTimelineView {
+  /** The artifact's chain, newest first. Entry counts, never entry bodies:
+      an old version's words are read by opening it, not skimmed in a list. */
+  versions: Array<{
+    id: string;
+    version: number;
+    status: TopOfMindStatus;
+    reason: TopOfMindRevisionReason;
+    entryCount: number;
+    createdAt: string;
+  }>;
+  /** The door's ledger, oldest first: who arrived, who left, who was
+      removed — named, because the room reads people, not counts. */
+  doorMarks: Array<{
+    profileId: string;
+    name: string;
+    kind: GroupMembershipEventKind;
+    occurredAt: string;
+  }>;
+}
+
+const MAX_TIMELINE_VERSIONS = 30;
+const MAX_DOOR_MARKS = 100;
+
+/**
+ * THE ROOM REMEMBERS BECOMING ITSELF.
+ *
+ * Versions were always stored — supersede chains, explicit no_change rows —
+ * and nothing served them for a room: the record existed and could not be
+ * read, which is the difference between having a history and keeping one.
+ * Beside the chain, the door's ledger (append-only since the record stopped
+ * being destroyable): joins and departures are the hinges a room's story
+ * turns on.
+ */
+export async function loadGroupTimeline(
+  db: WakaDb,
+  groupId: string,
+): Promise<GroupTimelineView> {
+  const [versionRows, markRows] = await Promise.all([
+    db
+      .select({
+        id: topOfMinds.id,
+        version: topOfMinds.version,
+        status: topOfMinds.status,
+        reason: topOfMinds.reason,
+        createdAt: topOfMinds.createdAt,
+      })
+      .from(topOfMinds)
+      .where(eq(topOfMinds.groupId, groupId))
+      .orderBy(desc(topOfMinds.version))
+      .limit(MAX_TIMELINE_VERSIONS),
+    db
+      .select({
+        profileId: groupMembershipEvents.profileId,
+        name: profiles.name,
+        kind: groupMembershipEvents.kind,
+        occurredAt: groupMembershipEvents.occurredAt,
+      })
+      .from(groupMembershipEvents)
+      .innerJoin(profiles, eq(profiles.id, groupMembershipEvents.profileId))
+      .where(eq(groupMembershipEvents.groupId, groupId))
+      .orderBy(asc(groupMembershipEvents.occurredAt), asc(groupMembershipEvents.id))
+      .limit(MAX_DOOR_MARKS),
+  ]);
+
+  const countRows =
+    versionRows.length === 0
+      ? []
+      : await db
+          .select({ topOfMindId: topOfMindEntries.topOfMindId })
+          .from(topOfMindEntries)
+          .where(
+            inArray(
+              topOfMindEntries.topOfMindId,
+              versionRows.map((row) => row.id),
+            ),
+          );
+  const counts = new Map<string, number>();
+  for (const row of countRows) {
+    counts.set(row.topOfMindId, (counts.get(row.topOfMindId) ?? 0) + 1);
+  }
+
+  const labels = labelMembersByProfileId(
+    markRows.map((row) => ({ profileId: row.profileId, name: row.name })),
+  );
+
+  return {
+    versions: versionRows.map((row) => ({
+      id: row.id,
+      version: row.version,
+      status: row.status,
+      reason: row.reason,
+      entryCount: counts.get(row.id) ?? 0,
+      createdAt: row.createdAt.toISOString(),
+    })),
+    doorMarks: markRows.map((row) => ({
+      profileId: row.profileId,
+      name: labels.get(row.profileId)?.displayName ?? row.name,
+      kind: row.kind,
+      occurredAt: row.occurredAt.toISOString(),
+    })),
+  };
 }
 
 /**
