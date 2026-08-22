@@ -29,7 +29,9 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { RequireAuth } from "./components/RequireAuth";
+import { SurfaceBoundary } from "./components/SurfaceBoundary";
 import { AuthProvider } from "./lib/auth-context";
+import { installPreloadRecovery } from "./lib/preload-recovery";
 import LoginPage from "./pages/Login";
 import OnboardingPage from "./pages/Onboarding";
 import ProfilePage from "./pages/Profile";
@@ -90,31 +92,48 @@ const SurfacePage = lazy(() => import("./pages/Surface"));
 function ProtectedSurface() {
   return (
     <RequireAuth>
-      <SurfacePage />
+      <SurfaceBoundary surface="the flat screens">
+        <SurfacePage />
+      </SurfaceBoundary>
     </RequireAuth>
   );
 }
 
 function ProtectedHome() {
+  /* The boundary sits OUTSIDE the Suspense on purpose. `fallback` answers
+     "not yet"; only a boundary answers "never", and until one existed a
+     rejected lazy import left `fallback={null}` on screen permanently — the
+     black rectangle of 2026-08-22. Loading forever and failing instantly
+     rendered identically, and the product chose the silent one. */
   if (import.meta.env.DEV) {
     return (
-      <Suspense fallback={null}>
-        <HomePage />
-      </Suspense>
+      <SurfaceBoundary surface="the world">
+        <Suspense fallback={null}>
+          <HomePage />
+        </Suspense>
+      </SurfaceBoundary>
     );
   }
   return (
     <RequireAuth>
       {/* No spinner: the layout's own first frame IS its loading state, and a
           flash of chrome before it would be the half-appearance the page
-          forbids everywhere inside itself. */}
-      <Suspense fallback={null}>
-        <HomePage />
-      </Suspense>
+          forbids everywhere inside itself. That stays true — it is the
+          *failure* case, not the loading case, that the boundary answers. */}
+      <SurfaceBoundary surface="the world">
+        <Suspense fallback={null}>
+          <HomePage />
+        </Suspense>
+      </SurfaceBoundary>
     </RequireAuth>
   );
 }
 
+
+/* Before React mounts, so a stylesheet that never arrives cannot cost the
+   screen that needed it. See lib/preload-recovery.ts for why this is narrow
+   rather than a blanket ignore. */
+installPreloadRecovery();
 
 const root = document.getElementById("root");
 if (!root) {

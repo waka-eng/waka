@@ -356,5 +356,8 @@
   "roomError": "이 룸을 불러오지 못했습니다.",
   "roomGone": "그 룸은 여기 없습니다.",
   "roomBy": "제안:",
-  "roomFrom": "함께 쓴 사람:"
+  "roomFrom": "함께 쓴 사람:",
+  "surfaceUnavailableTitle": "이 부분을 불러오지 못했어요.",
+  "surfaceUnavailableBody": "이 화면에 필요한 것이 도착하지 않았어요. 대개는 연결이 끊긴 경우이고, 머무는 동안 버전이 바뀐 경우도 있어요. 저장한 것에는 아무 영향이 없어요.",
+  "surfaceUnavailableRetry": "다시 시도"
 }

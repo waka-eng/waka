@@ -356,5 +356,8 @@
   "roomError": "This room could not be loaded.",
   "roomGone": "That room is not here.",
   "roomBy": "proposed by",
-  "roomFrom": "from"
+  "roomFrom": "from",
+  "surfaceUnavailableTitle": "This part didn’t load.",
+  "surfaceUnavailableBody": "Something this screen needs never arrived — usually a dropped connection, sometimes a version that changed while you were here. Nothing you kept is affected.",
+  "surfaceUnavailableRetry": "try again"
 }

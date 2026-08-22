@@ -39,8 +39,9 @@ Three forces, and they are not the same kind of problem.
    Surface routes sit at roughly `rgb(251,251,250)`. Opening the `≡` menu and
    choosing SIGNALS is a full-screen black-to-white flash, and coming back is
    the reverse (finding 4). The sign-in screen ranks its own submit button
-   below the tab labels that switch away from it (finding 5). The menu that
-   navigates the world opens on top of the sentence the world exists to show
+   below the tab labels that switch away from it (finding 5). The world — a
+   place you are meant to walk — navigates by a hamburger holding a flat list
+   of six addresses, which opens on top of the one sentence it exists to show
    (finding 6). None of these is a bug in the sense that something computes
    the wrong answer. All of them are the difference between a product and a
    set of screens.
@@ -54,8 +55,8 @@ Three forces, and they are not the same kind of problem.
 
 ## Shape of the work
 
-Seven phases. The order is not by severity — it is by **what each phase makes
-provable for the ones after it.**
+Eight, counting 4b. The order is not by severity — it is by **what each phase
+makes provable for the ones after it.**
 
 Phase 0 stops the outage and, more importantly, makes chunk failure a thing
 that can be seen at all. Phase 1 removes the rest of the silent-failure class
@@ -63,7 +64,8 @@ while the principle is fresh. Phase 2 is the theme decision, and it is
 sequenced third rather than last because six of the remaining findings are
 downstream of it — there is no point tuning the weight of a button on a
 surface whose palette is about to change. Phases 3–5 are the craft passes,
-each on a settled palette. Phase 6 closes the gates that would let any of it
+each on a settled palette, and Phase 4 is the one that removes something
+rather than adjusting it. Phase 6 closes the gates that would let any of it
 regress.
 
 **The rule that governs every phase: a fix must be provable by something
@@ -206,27 +208,77 @@ Closes findings 5 and 10. Wants Phase 2 settled.
 not described. The sign-in submit is the highest-weight control in the form.
 No screen shows two product nouns for one thing.
 
-### Phase 4 — The hand
+### Phase 4 — The menu goes away
 
-Closes findings 6 and 8. Wants Phase 2 settled.
+Closes finding 6. Wants Phase 2 settled.
 
-- **Destructive controls are 20×20px on touch, adjacent to non-destructive
-  ones at 21×21px, with no separation.** 21–22 controls per surface sit under
-  44px. The undo (`Surface.tsx:2243`) and the `window.confirm` guards
-  (`Surface.tsx:333,501`) mean this is an ergonomics problem rather than a
-  data-loss one — "fading never deletes" is being honoured — but a mis-tap
-  that undo has to catch is still a mis-tap.
-- **The `≡` menu opens over the top-of-mind sentence**, semi-transparent, so
-  the menu and the one sentence the world exists to present are both
-  unreadable at once. The control itself is correct — `aria-expanded`,
-  `aria-haspopup`, `aria-label`, glyph `aria-hidden` — and the code above it
-  says it is a placeholder to be deleted "when `/principles` has a home in
-  the world". Fixing the overlap does not require resolving that; it requires
-  the panel not landing on the headline.
+**The goal of this phase is that the `≡` control does not exist when it
+ends.** Not that it stops overlapping the headline — the overlap is a symptom,
+and treating it would preserve the thing causing it. A hamburger holding a
+flat list of six addresses is what a product reaches for when it has not
+decided where things live, and this world has decided: it is a place you walk,
+and a menu of addresses is the opposite of a place.
+
+The code already agrees. The comment above the control
+(`Home.tsx:9648-9660`) calls it "the placeholder that keeps it usable
+meanwhile" and says "DELETE THIS when `/principles` has a home in the world.
+That is the real fix." This phase does the real fix.
+
+**Most of the work is already done.** Of the six destinations the menu lists,
+four look like duplicates of affordances the world already has:
+
+| Menu entry | What the world appears to already have |
+|---|---|
+| CAPTURE | `KEEP SOMETHING` |
+| TOP OF MIND | the headline you stand in, with `READ IT AGAIN` / `SAY IT IN MY WORDS` / `NOT THIS` |
+| SIGNALS | `TWO PATTERNS ARE FORMING`, above the wall |
+| INSPIRATIONS | the field itself — one orb per memory |
+
+**Verify that affordance by affordance before deleting any of it.** Not
+caution for its own sake: it is the exact method `docs/architecture.md`
+records for deleting the archive — "the layout does everything it did,
+verified affordance by affordance rather than by call site". The archive's
+four routes were removed on that evidence and this is the same claim, so it
+needs the same evidence. An entry whose world equivalent turns out to be
+missing is a gap to close, not a link to keep.
+
+That leaves two that are genuinely homeless:
+
+- **ROOMS.** The world has `MAKE A ROOM` but no way to walk into one. Rooms
+  are walls, and the world already draws an axis of walls along the bottom
+  edge — `‹ DEMO AGENT` / `ME ›`. A room is a wall a few of you keep, so the
+  axis is where it belongs, and this may be less new design than it sounds.
+- **PRINCIPLES.** Layer 4, and the honest blocker. The world draws three
+  layers; `docs/data-model.md` has four, and the third is where you stand.
+  There is nowhere to put the fourth without deciding what it *is* spatially.
+  This is the one part of Phase 4 that is a design question rather than a
+  move. If it cannot be answered inside this phase, **the phase shrinks — the
+  menu loses five entries and keeps one — it does not get abandoned.** A
+  control with a single destination is a link, and a link can be named.
+
+The routes themselves stay addressable either way. `/inspirations` and
+`/signals` remain URLs a bookmark can reach; what goes away is the menu that
+implies the world could not show you those things itself.
+
+**Gate:** `≡`, `jar-flatmenu`, and `aria-label="Other screens"` do not appear
+in `packages/web/src`, and each of the six destinations is reachable from the
+world by an affordance named in a written walkthrough. If PRINCIPLES survives
+as a single named link, the walkthrough says so and says why, and the gate is
+the other five.
+
+### Phase 4b — The hand
+
+Closes finding 8. Independent of Phase 4's outcome.
+
+**Destructive controls are 20×20px on touch, adjacent to non-destructive ones
+at 21×21px, with no separation.** 21–22 controls per surface sit under 44px.
+The undo (`Surface.tsx:2243`) and the `window.confirm` guards
+(`Surface.tsx:333,501`) mean this is an ergonomics problem rather than a
+data-loss one — "fading never deletes" is being honoured — but a mis-tap that
+undo has to catch is still a mis-tap.
 
 **Gate:** no interactive control under 44px in either axis on a 390px
-viewport, asserted by a test that walks the routes. No overlay obscures the
-`h1` at any viewport in the set.
+viewport, asserted by a test that walks the routes.
 
 ### Phase 5 — The world, read aloud
 
@@ -321,3 +373,24 @@ Thirteen findings. Finding 2 fixed in the same commit (`4fc3c61`):
 then promotes — the order derivation uses and the order `0007`'s own comment
 says the product always follows. That exposed finding 12, which is a data
 decision and is logged unmade.
+
+### 2026-08-22 — Phase 0 landed
+
+`SurfaceBoundary` + `preload-recovery` shipped. The gate is
+`pnpm e2e:first-paint`, and it was demonstrated both ways before it was
+believed: on the unfixed build both steps FAIL (`rootChildren=0 canvases=0
+text=0`), on the fixed build both PASS. That demonstration is the point — a
+gate that has never failed is a gate nobody has checked.
+
+Two things done rather than one, because fonts were the trigger and not the
+bug. The boundary answers *any* rejected lazy chunk, including the likelier
+production cause: a visitor on a stale `index.html` asking for a hashed chunk
+that no longer exists. `preload-recovery` cancels the stylesheet case only —
+deliberately narrow, since blanket-cancelling would resolve a genuinely
+missing module to `undefined` and move the failure somewhere that names
+nothing.
+
+**Still open from Phase 0:** self-hosting the Latin faces. The blank screen is
+fixed and the third-party dependency is not — six families still load from two
+hosts on first paint, so a blocked CDN now costs typography instead of the
+whole product. That is a large improvement and not the finish line.
