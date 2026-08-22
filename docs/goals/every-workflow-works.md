@@ -1,6 +1,6 @@
 # Goal: every workflow works, the way a person performs it
 
-Status: **Phase 1 passed (2026-08-22).** Phase 2 next.
+Status: **Phase 2 passed (2026-08-22).** Phase 3 next.
 Branch: `claude/repo-sync-qlndc3`. Base `dev` @ `c6a64b2`.
 
 **What this goal owns:** does each workflow actually work, end to end, proven
@@ -52,16 +52,16 @@ unproven in a browser.**
 
 | # | Workflow | Proven today by |
 |---|---|---|
-| A1 | Sign up → onboarding → first capture | API (`organic`, `cold-start`) |
+| A1 | Sign up → onboarding → first capture | API + **Browser** (`journeys:cold-start`) ✅ |
 | A2 | Sign in / sign out, email + password | API (`organic`) |
 | A3 | Sign in with Google | **nothing** |
 | A4 | Password recovery | **does not exist** |
-| B1 | Capture text | API (`organic`) |
+| B1 | Capture text | API + **Browser** (`journeys:keep`) ✅ |
 | B2 | Capture a link, enriched from its page | API (`organic`, fixture server) |
 | B3 | Capture an image, described so it is searchable | **nothing** (no bucket) |
-| C1 | Search and recall across the archive | API (`organic`) |
-| C2 | Open, edit, delete an inspiration | API (`organic`) |
-| C3 | Reflect on an inspiration | **nothing** |
+| C1 | Search and recall across the archive | API + **Browser** (`journeys:seek`) ✅ |
+| C2 | Open, edit, delete an inspiration | API + **Browser** (`journeys:let-go`) ✅ |
+| C3 | Reflect on an inspiration | **Browser** (`journeys:reflect`) ✅ |
 | D1 | Captures become signals; promotion at 3 evidence | API (`signals`) |
 | D2 | Lock, edit, let go a signal | API (`signals`) |
 | D3 | Cascade when the evidence under a signal is deleted | API (`signals`) |
@@ -78,13 +78,15 @@ unproven in a browser.**
 | H2 | Cross-profile permission matrix | API (MCP live gate) |
 | I1 | Terminal consent, credential binding | API (MCP live gate) |
 | I2 | Capture and recall from a terminal | API (MCP live gate) |
-| J1 | Rename, locale, make a public page | **nothing** |
+| J1 | Rename, locale, make a public page | **Browser** (`journeys:account`) — rename only; locale and public page still unproven |
 | J2 | List and revoke connections | **nothing** |
 | J3 | Delete the account | **nothing** |
 | K1 | The world renders on a hostile network | Browser (`first-paint`) ✅ |
 
-Twenty-one proven at the API. **One proven in a browser.** Seven proven by
-nothing. One nonexistent.
+~~Twenty-one proven at the API. One proven in a browser. Seven by nothing.~~
+**After Phase 2: eight proven in a browser** (seven journeys plus
+`first-paint`), five still proven by nothing (A3, B3, E2, J2, J3), one
+nonexistent. Every browser row carries a negative control.
 
 ## Budget
 
@@ -95,7 +97,7 @@ live gate should stay in the same order.
 | Phase | Expected | Actual |
 |---|---|---|
 | 1 — run the six suites + MCP live | ~1 full pass, < $2 | ~1 pass + 1 principles re-run; within estimate |
-| 2 — browser harness (no model calls beyond setup) | < $1 | — |
+| 2 — browser harness (no model calls beyond setup) | < $1 | negligible; journeys never call the model |
 | 4 — re-runs after fixes | ~2 passes, < $4 | — |
 
 **Running total: ~1 full pass of all suites plus one re-run.** Stop and report if any phase exceeds double its
@@ -294,3 +296,66 @@ the API by a suite that ran today. **G4's join-code rotation is covered by
 `groups` after all** — step 8 proves a non-member cannot tell the group
 exists; the rotation-on-removal case is still worth confirming separately in
 Phase 3.
+
+### 2026-08-22 — Phase 2: `tools/e2e/journeys.ts`, 7 journeys, 7/7 both ways
+
+The first harness in this repo that drives the product as a person does.
+Seven journeys, each with a `breaks` function that sabotages the one call it
+rests on, and a `--negative` mode that runs every journey against its own
+sabotage and **requires it to fail**.
+
+    positive   7 passed, 0 failed
+    negative   7 passed, 0 failed   (every journey failed when broken)
+
+| Journey | Positive | Under sabotage |
+|---|---|---|
+| cold-start — signup, and the world is standing there | `canvases=1 emptyStateSpeaks=true` | `canvases=0 emptyStateSpeaks=false` |
+| keep — acknowledged, and there afterwards | `acknowledged=true persisted=true` | `false / false` |
+| seek — found again by a word from inside it | `found=true` | `found=false` |
+| reflect — survives a reload | `survivedReload=true` | `false` |
+| let-go — actually gone | `goneFromArchive=true` | `false` |
+| account — a new name survives a reload | `readBack="Renamed …"` | `readBack="Journey Tester"` |
+| a11y-floor — every control can be named | every visible control named | `1 unnamed: button.?` |
+
+#### Two things the gate caught that a green run would have hidden
+
+**1. A defect I nearly filed against the product.** The `reflect` journey
+failed with "keep this too" permanently disabled, even with the answer field
+full. It looked exactly like a product bug: an affordance that invites you to
+write and will not let you keep it. It is not. `Surface.tsx:2147` reads
+`disabled={!reflectionQuestion.trim()}` — a reflection here is **two** fields,
+a question the person writes for themselves and their answer to it, and the
+button is gated on the first. The harness was filling only the second.
+**Harness defect, and it is written at the site** so the next reader does not
+repeat the diagnosis.
+
+**2. A hole in an assertion, found only by the negative run.** `a11y-floor`
+passed under `--negative` — decoration, by this goal's own rule. The first
+sabotage stripped labels on an interval and lost the race against React's
+re-render. Replacing it with the *real* regression shape — inject one visible
+unnamed button — still passed, and that second failure was the informative
+one: the assertion filtered visibility with `offsetParent === null`, which is
+null for **every `position: fixed` element**. A fixed unnamed control was
+invisible to the check whose entire job is finding unnamed controls. Now
+measured from `getBoundingClientRect()` plus computed style.
+
+Neither would have surfaced from a green positive run. That is the argument
+for `--negative` existing, made by `--negative`.
+
+**Gate verdict: PASS.** The criterion was "each journey drives in a browser
+and its case demonstrably fails against a deliberately broken build; a
+journey that only ever passes is removed rather than kept as decoration." All
+seven fail under sabotage. Nothing was kept as decoration — `a11y-floor` was
+reported as decoration and earned its place back by being fixed, not by
+having its sabotage weakened.
+
+#### Also done
+
+`e2e:journeys` is registered in `package.json`. Three `[...NodeList]` spreads
+became `Array.from` so the file typechecks without `dom.iterable`.
+
+#### Still unproven after Phase 2
+
+A3 Google OAuth · B3 attachments (no bucket) · E2 top-of-mind entry actions
+and undo · J2 connections · J3 account deletion · J1's locale switch and
+public page. Phase 3 owns them.
