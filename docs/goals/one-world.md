@@ -14,12 +14,13 @@ to point at), and it turns finding 9 from a late phase into the thing the rest
 depends on. See "What this direction costs" below, which is the only part of
 this document arguing with the instruction, and does so once.
 
-Relates to `docs/goals/a-frontend-you-can-read.md`, unmerged on
-`world/three-layers`, which owns the *structure* of `packages/web` — the
-vocabulary gate, the extraction of `Home.tsx`, and the canvas test net its
-Phase 2 builds. That goal is now a hard dependency rather than a neighbour:
-migrating six screens into an 11,516-line file that cannot be rendered in a
-test is how this goal fails.
+~~Relates to `docs/goals/a-frontend-you-can-read.md`, unmerged on
+`world/three-layers`… a hard dependency.~~ **Withdrawn 2026-08-22 — measured,
+and the opposite is true.** `origin/world/three-layers` is a stale snapshot
+from 2026-08-16; `dev` is four days newer and strictly ahead on every axis
+this goal cares about. The extraction and the canvas test net that goal
+proposed **already exist on `dev`**, having landed by another route. Nothing
+blocks on that branch, and it should be closed. See the log for the numbers.
 
 Canon unchanged. `docs/data-model.md` for the nouns, `docs/architecture.md`
 for the laws and the three registers. **One canon amendment is required and is
@@ -157,12 +158,28 @@ The three layers each need an answer:
 - **Where you stand.** The top of mind is already an `h1`. It is the one part
   that works today.
 
-**Gate:** the three layers are reachable and comprehensible without the canvas
-— stated as a written walkthrough, confirmed by a person using a screen
-reader, **before any code**. If that walkthrough cannot be written, the phase
-halts and says so rather than shipping labels that describe nothing. And
-because Phase 3 is blocked on this, halting here halts the migration — which
-is the correct outcome, not a setback.
+**Gate (revised 2026-08-22 — no screen-reader user is available):** the three
+layers are reachable and comprehensible without the canvas, established three
+ways, all of which must hold:
+
+1. **A written walkthrough**, reviewed by the founder — what a person hears,
+   in order, arriving at each layer.
+2. **Automated assertions**: every interactive element has an accessible name;
+   every outcome in Phase 1 announces through a live region; a full keyboard
+   traversal reaches all three layers and returns.
+3. **No canvas-only meaning**: a test asserts that the field's aliveness, the
+   sky's state and the wall you stand on are each readable from the
+   accessibility tree, not only from pixels.
+
+This is **weaker than a real user and is recorded as weaker.** Automated
+checks prove an element has a name; they cannot prove the name means anything
+to somebody. Whoever gets access to a screen-reader user first should run the
+walkthrough past them and log the result here — that is the confirmation this
+gate is standing in for, not a formality it replaced.
+
+If the walkthrough cannot be written, the phase halts rather than shipping
+labels that describe nothing. Because Phase 3 is blocked on this, halting here
+halts the migration — the correct outcome, not a setback.
 
 ### Phase 3 — Bring the layers home
 
@@ -249,11 +266,16 @@ Closes findings 5 and 10. Independent of the migration.
 
 The one screen that stays flat, made good rather than left over.
 
-- **There is no password recovery.** Neither tab offers it; the word appears
-  nowhere on the page. For an email-and-password product that is a terminal
-  state, and it is the only finding in this document that locks a real person
-  out of their own memory. First thing in this phase and arguably first in the
-  goal that a user would thank anyone for.
+- **There is no password recovery — and it is deferred by decision
+  (2026-08-22), not by oversight.** Building it needs a mail transport, and
+  there is none in the repo: no SES, no nodemailer, no Resend, nothing. That
+  is a provider choice with credentials attached, so it waits for one.
+  Meanwhile the honest half shipped: the lockout response used to end "or
+  reset your password", sending the one person guaranteed to read it —
+  someone locked out and anxious — looking for a door that does not exist.
+  That clause is gone. **This remains the only finding in this document that
+  locks a real person out of their own memory, and deferring it does not make
+  it smaller.** When a provider is chosen, this is the first thing built.
 - **The submit button is a footnote** — 40×16px, lowercase, bottom-left,
   ranked below the two tabs that navigate away from the form
   (`chrome.css:1019-1025`).
@@ -428,3 +450,54 @@ verdict vocabulary — asserted.
 `aria-live` regions that make any of these outcomes audible. The MCP live
 gate's step 9 should now report the 503 rather than a wrong `created`, but
 that is unverified — re-running it needs a key.
+
+### 2026-08-22 — `world/three-layers` assessed: not needed, and stale
+
+v2 named that branch a hard dependency. **Measured, it is the reverse** —
+`dev` is ahead of it on every axis this goal cares about:
+
+| | `origin/dev` | `origin/world/three-layers` |
+|---|---|---|
+| last commit | 2026-08-20 | 2026-08-16 |
+| `Home.tsx` | 10,097 lines | 11,516 lines |
+| web test files | 20 | 6 |
+| canvas test net | `home-field` `home-light` `home-sky` `home-poster` `home-dial` `measured` `seam-gate` + `helpers/render-home` | none |
+| `src/space` · `canvas` · `character` · `space-kinds` | 11 · 3 · 2 · 4 | 5 · 1 · 1 · 3 |
+
+The branch is 502 commits "ahead" only in the sense that its history never
+merged; the *work* landed on `dev` by another route (#261, #262). Six files
+exist there and not on `dev`, and every one is superseded: three renumbered
+migrations, a drizzle snapshot, and `lib/api.ts` + `lib/fixture.ts` — the
+pre-refactor singles that `dev` replaced with `lib/api/` and `lib/fixture/`
+directories.
+
+`a-frontend-you-can-read.md` describes an 11,516-line `Home.tsx` and proposes
+building a canvas test net. Both sentences describe that branch's state, and
+`dev` has since passed them. **That goal doc is stale on `dev` and reads as
+current, which is the trap this entry exists to disarm.** Phase 3 is not
+blocked. The branch should be closed.
+
+### 2026-08-22 — four decisions taken
+
+- **Base:** `dev`. No dependency on `world/three-layers` (above).
+- **Phase 2 gate:** no screen-reader user available, so automated proxies plus
+  founder review stand in — recorded as weaker, with the real confirmation
+  still owed. See the revised gate.
+- **Password recovery:** deferred pending a mail provider. The lockout message
+  that pointed at the missing feature is fixed.
+- **Model key:** provided. Generation is now exercisable.
+
+### 2026-08-22 — the model key closes the loop on finding 3
+
+With `GEMINI_API_KEY` set, the same declaration that the old code filed
+silently as a note:
+
+    no key   503  {"error":"Not considered yet","retryable":true}   0 rows
+    key set  201  {"created":"principle", type:"stance", state:"aspirational"}
+
+So the statement **was** a principle. The old `.catch(() => inspiration)` was
+not mishandling an edge case; it was misclassifying real principles as notes
+for the whole duration of any outage, silently, with no way to tell afterwards.
+
+**The MCP live gate now passes 9 of 9**, up from 6 of 9. Gates 6 and 7 were
+the missing key; gate 9 was this defect.
