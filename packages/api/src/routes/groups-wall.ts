@@ -27,7 +27,16 @@ const MAX_WALL_SIGNALS = 200;
 export interface GroupWallSignal {
   signalId: string;
   statement: string;
-  confidence: number;
+  /**
+   * Confidence AS THE OWNER'S SYSTEM LAST WROTE IT — the one documented
+   * staleness in the system, named so no consumer mistakes it for a live
+   * value. Live confidence is a pure function of the evidence rows and the
+   * clock, and this query is deliberately unable to reach those rows (a
+   * member must never touch another member's private layers), so the wall
+   * serves the snapshot written when the evidence last changed. A signal
+   * that has gone quiet since then reads stronger here than it is.
+   */
+  confidenceAsWritten: number;
   ownerProfileId: string;
   ownerName: string;
   sharedAt: string;
@@ -80,7 +89,7 @@ export async function loadGroupWall(
   return rows.map((row) => ({
     signalId: row.signalId,
     statement: row.statement,
-    confidence: row.confidence,
+    confidenceAsWritten: row.confidence,
     ownerProfileId: row.ownerProfileId,
     ownerName: labels.get(row.ownerProfileId)?.displayName ?? row.ownerName,
     sharedAt: row.sharedAt.toISOString(),

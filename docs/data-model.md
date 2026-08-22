@@ -404,6 +404,40 @@ follows the permission matrix.
   attribution, and the groups e2e asserts that acceptance materializes
   a version. Mechanics: `docs/generation.md` §"The group's top of mind".
 
+- **2026-08-22** — **Erasure is the model's one true delete, and its blast
+  radius is now named.** Account erasure deletes every version of every
+  group top of mind for any group the departing member was in or whose
+  artifact cites their signals (`lib/account-erasure.ts`), then the room
+  regenerates clean — one member's erasure destroys the whole room's
+  co-authored version history. This is the sole exception to "fading
+  never deletes," recorded here so the vocabulary of record stops being
+  falsified by the code it governs. **Open ruling, gated on the founder
+  and counsel** (`goals/a-room-you-can-trust.md`, Phase 0b): whether a
+  majority-approved entry is the room's collective speech (versions
+  survive, the departed rendered nameless and groundless) or the departed
+  member's personal data (the current cascade is correct). Until ruled,
+  no audit-of-record claim may be made for rooms.
+- **2026-08-22** — **Open ruling, recorded before any non-human mind can
+  touch a room: the decline asymmetry.** Accepting a group proposal
+  needs a strict majority of current members; any single member can
+  decline — kill — any open proposal alone
+  (`routes/groups-proposals.ts`). Proposed resolution: refusal becomes a
+  counted stance like affirmation — a proposal dies when a majority
+  against is assured, or on timeout — so "a member is a member" holds
+  for both verbs. Gated on the founder (`goals/a-room-you-can-trust.md`,
+  Phase 0c); the code keeps today's rule until the ruling lands.
+- **2026-08-22** — **The room's record survives its members** (Phase 0a
+  of `goals/a-room-you-can-trust.md`): membership events are append-only
+  history (`group_membership_events` — joined/left/removed; the seat row
+  remains only the current seat), removal takes votes only from open
+  proposals (who carried an accepted version is history), and a deleted
+  signal leaves entry citations in place with a null reference rather
+  than unwriting them from past versions. Evidence quotes are now stored
+  only as verified spans, labeled whose words they are
+  (`signal_evidence.quote_source`: own | enrichment); the lock gained
+  its promised other half as **release** (the words stand; the generator
+  regains jurisdiction; releasing unsupported words retires them).
+
 The migration itself (schema, API, web, MCP phases and gates) belongs in a
 `docs/goals/` goal document that references this file — for this layer,
 `goals/principles.md`.

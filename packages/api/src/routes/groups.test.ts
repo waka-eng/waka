@@ -61,7 +61,7 @@ const groupSummary: GroupSummary = {
 const wallSignal: GroupWallSignal = {
   signalId,
   statement: "Rooms that instruct without speaking",
-  confidence: 72,
+  confidenceAsWritten: 72,
   ownerProfileId: otherProfileId,
   ownerName: "Grace",
   sharedAt: "2026-08-10T00:00:00.000Z",
@@ -397,7 +397,7 @@ describe("GET /api/groups/:groupId/wall", () => {
         {
           signalId,
           statement: "Rooms that instruct without speaking",
-          confidence: 72,
+          confidenceAsWritten: 72,
           ownerProfileId: otherProfileId,
           ownerName: "Grace",
           sharedAt: "2026-08-10T00:00:00.000Z",

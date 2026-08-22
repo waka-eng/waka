@@ -199,6 +199,27 @@ house norm.
 
 ## Log
 
+- **2026-08-22 — Phase 0b Step 1 and Phase 0c questions: LANDED in the
+  canon.** `docs/data-model.md`'s decision log now names erasure as the
+  model's one true delete with its exact blast radius (the sole
+  exception to "fading never deletes"), and records the decline
+  asymmetry as an open ruling with the proposed resolution (refusal
+  becomes a counted stance). Both are marked gated on the founder;
+  Phase 0b Step 2 additionally on counsel. The vocabulary of record is
+  no longer falsified by the code it governs. Also logged there:
+  Phase 0a's repairs and Track S's release/quote-source semantics.
+
+- **2026-08-22 — Phase 0d: PASS.** No room surface presents a stale
+  number as current. The wall's snapshot confidence is renamed on the
+  wire (`confidenceAsWritten`, with the staleness documented on the
+  type — the wall's query must never reach another member's private
+  layers to recompute it), the route's field-by-field serializer and
+  the published-keys pin follow, and the one rendering site
+  (`Surface.tsx`'s room wall, which printed `{confidence}%` as if
+  current) now shows the owner's name — the wall's honest provenance —
+  and nothing number-shaped. api 586/586, web 126/126, both typechecks
+  and the web build clean.
+
 - **2026-08-22 — Track S (stars and roots): S0–S3 shipped to the brief's
   bar, with the deviations named.** S0 PASS (GLOSSARY.md verbatim at
   root, README link, AGENTS.md naming line). S1 PASS — verdict A with

@@ -1945,9 +1945,14 @@ export default function SurfacePage(): JSX.Element {
                   {roomWall.map((row) => (
                     <div key={row.signalId} className="gr-shared">
                       <p className="gr-shared-statement">{row.statement}</p>
-                      <span className="sf-provenance">
-                        {row.ownerName} · {row.confidence}%
-                      </span>
+                      {/* Whose statement it is — and nothing number-shaped.
+                          The wall's confidence is a snapshot from when the
+                          owner's evidence last changed (the wall must not
+                          reach their private layers to recompute it), and a
+                          stale number rendered as a current percent was the
+                          one documented lie on this surface. The owner's
+                          name is the wall's honest provenance. */}
+                      <span className="sf-provenance">{row.ownerName}</span>
                       {row.ownerProfileId === profile?.id ? (
                         <button
                           type="button"

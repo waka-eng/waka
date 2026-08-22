@@ -62,7 +62,8 @@ export interface ApiGroupMember {
 export interface ApiGroupWallSignal {
   signalId: string;
   statement: string;
-  confidence: number;
+  /** As the owner's system last wrote it — a snapshot, not a live value. */
+  confidenceAsWritten: number;
   ownerProfileId: string;
   ownerName: string;
   sharedAt: string;
