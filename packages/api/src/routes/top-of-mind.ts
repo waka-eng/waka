@@ -167,6 +167,9 @@ async function loadEntries(
 
   const citationsByEntry = new Map<string, Array<{ id: string; statement: string }>>();
   for (const row of citationRows) {
+    // The inner join already excludes citations whose signal was deleted;
+    // this narrows the type to match.
+    if (row.signalId === null) continue;
     const cited = { id: row.signalId, statement: row.statement };
     const bucket = citationsByEntry.get(row.entryId);
     if (bucket) bucket.push(cited);

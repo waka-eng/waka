@@ -81,6 +81,11 @@ export async function loadLiveArtifact(
 
   const citationsByEntry = new Map<string, string[]>();
   for (const row of citationRows) {
+    // A null signalId is a citation whose signal was deleted after this
+    // version was written. The row is history and stays; the live snapshot
+    // carries only citations that still resolve, so a carried-forward entry
+    // never re-cites something its owner took back.
+    if (row.signalId === null) continue;
     const bucket = citationsByEntry.get(row.entryId);
     if (bucket) bucket.push(row.signalId);
     else citationsByEntry.set(row.entryId, [row.signalId]);

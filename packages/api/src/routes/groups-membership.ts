@@ -23,16 +23,19 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 import {
   groupMembers,
+  groupMembershipEvents,
   groups,
   groupTopOfMindAffirmations,
   groupTopOfMindProposals,
   profiles,
   type GroupMemberRole,
+  type GroupMembershipEventKind,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import { labelMembersByProfileId } from "../lib/member-labels.js";
 
 type WakaDb = ReturnType<typeof getDb>;
+type WakaTx = Parameters<Parameters<WakaDb["transaction"]>[0]>[0];
 
 /** No ambiguous 0/O/1/I — the code is read aloud and typed by hand. */
 const JOIN_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -68,6 +71,27 @@ export interface GroupMembership {
 export type JoinGroupResult =
   | { ok: true; group: GroupSummary; alreadyMember: boolean }
   | { ok: false; reason: "not_found" };
+
+/**
+ * THE DOOR KEEPS A LEDGER.
+ *
+ * The membership row is the current seat and nothing else — it is deleted on
+ * leave and removal, and a re-join writes a fresh row with a fresh
+ * `createdAt`. So every function below that changes who is in the room also
+ * appends a membership event in the same transaction: the seat says who is
+ * here, the events say how the room came to hold these people. Nothing in
+ * application code ever updates or deletes an event row.
+ */
+async function recordMembershipEvent(
+  db: WakaDb | WakaTx,
+  input: { groupId: string; profileId: string; kind: GroupMembershipEventKind },
+): Promise<void> {
+  await db.insert(groupMembershipEvents).values({
+    groupId: input.groupId,
+    profileId: input.profileId,
+    kind: input.kind,
+  });
+}
 
 /**
  * The caller's seat at this group, or null if they have none.
@@ -192,6 +216,11 @@ export async function createGroupForProfile(
           role: "owner",
           createdAt: now,
         });
+        await recordMembershipEvent(tx, {
+          groupId: group.id,
+          profileId: input.profileId,
+          kind: "joined",
+        });
         return group;
       });
 
@@ -235,10 +264,23 @@ export async function joinGroupByCode(
     profileId: input.profileId,
   });
   if (!existing) {
-    await db
-      .insert(groupMembers)
-      .values({ groupId: group.id, profileId: input.profileId, role: "member" })
-      .onConflictDoNothing();
+    await db.transaction(async (tx) => {
+      // The conflict target tells a lost race from a real join: only the
+      // insert that actually seated someone writes the arrival event, so a
+      // double-submitted join is one arrival, not two.
+      const seated = await tx
+        .insert(groupMembers)
+        .values({ groupId: group.id, profileId: input.profileId, role: "member" })
+        .onConflictDoNothing()
+        .returning({ id: groupMembers.id });
+      if (seated.length > 0) {
+        await recordMembershipEvent(tx, {
+          groupId: group.id,
+          profileId: input.profileId,
+          kind: "joined",
+        });
+      }
+    });
   }
 
   const summaries = await listGroupsForProfile(db, input.profileId);
@@ -261,22 +303,29 @@ export async function leaveGroup(
   db: WakaDb,
   input: { profileId: string; groupId: string },
 ): Promise<{ ok: boolean }> {
-  const deleted = await db
-    .delete(groupMembers)
-    .where(
-      and(
-        eq(groupMembers.groupId, input.groupId),
-        eq(groupMembers.profileId, input.profileId),
-      ),
-    )
-    .returning({ id: groupMembers.id, role: groupMembers.role });
-  const removed = deleted[0];
-  if (!removed) return { ok: false };
-  if (removed.role === "owner") await promoteSuccessorOwner(db, input.groupId);
-  return { ok: true };
+  return db.transaction(async (tx) => {
+    const deleted = await tx
+      .delete(groupMembers)
+      .where(
+        and(
+          eq(groupMembers.groupId, input.groupId),
+          eq(groupMembers.profileId, input.profileId),
+        ),
+      )
+      .returning({ id: groupMembers.id, role: groupMembers.role });
+    const removed = deleted[0];
+    if (!removed) return { ok: false };
+    await recordMembershipEvent(tx, {
+      groupId: input.groupId,
+      profileId: input.profileId,
+      kind: "left",
+    });
+    if (removed.role === "owner") await promoteSuccessorOwner(tx, input.groupId);
+    return { ok: true };
+  });
 }
 
-async function promoteSuccessorOwner(db: WakaDb, groupId: string): Promise<void> {
+async function promoteSuccessorOwner(db: WakaDb | WakaTx, groupId: string): Promise<void> {
   const [remainingOwner] = await db
     .select({ id: groupMembers.id })
     .from(groupMembers)
@@ -344,17 +393,72 @@ export async function removeGroupMember(
   db: WakaDb,
   input: { groupId: string; memberProfileId: string },
 ): Promise<boolean> {
-  const removed = await db
-    .delete(groupMembers)
-    .where(
-      and(
-        eq(groupMembers.groupId, input.groupId),
-        eq(groupMembers.profileId, input.memberProfileId),
-      ),
-    )
-    .returning({ id: groupMembers.id, role: groupMembers.role });
-  if (removed.length === 0) return false;
-  if (removed[0]!.role === "owner") await promoteSuccessorOwner(db, input.groupId);
+  const didRemove = await db.transaction(async (tx) => {
+    const removed = await tx
+      .delete(groupMembers)
+      .where(
+        and(
+          eq(groupMembers.groupId, input.groupId),
+          eq(groupMembers.profileId, input.memberProfileId),
+        ),
+      )
+      .returning({ id: groupMembers.id, role: groupMembers.role });
+    if (removed.length === 0) return false;
+    await recordMembershipEvent(tx, {
+      groupId: input.groupId,
+      profileId: input.memberProfileId,
+      kind: "removed",
+    });
+    if (removed[0]!.role === "owner") await promoteSuccessorOwner(tx, input.groupId);
+    /**
+     * AND THEIR VOTES GO WITH THEM — FROM THE PROPOSALS STILL BEING DECIDED,
+     * AND NO OTHERS.
+     *
+     * The tally already ignores a non-member, so this delete is not what makes
+     * the count right; it is what stops re-joining from silently restoring a
+     * vote nobody cast again. Only an OPEN proposal can still be carried, so
+     * only open proposals need that protection — which is why the subquery
+     * carries `status = 'open'`.
+     *
+     * It did not always. This delete used to take every affirmation the
+     * member had ever made in the room, settled proposals included — which
+     * destroyed the record of WHO carried each accepted version. That record
+     * is the room's approval history: the surface that shows who stood behind
+     * a version reads from these rows, and an accepted proposal's affirmations
+     * are facts about a decision already made, which a later removal has no
+     * business unmaking. A removed member's vote on a settled proposal is
+     * history; their vote on an open one is a live hand in a decision they no
+     * longer belong to.
+     *
+     * The scoping lesson stands from the previous wording: the affirmations
+     * table has no `group_id` column, so the room scope must come through the
+     * proposals — a delete keyed on the profile alone would reach into every
+     * other room they are in. And it stays one statement with a subquery
+     * rather than read-then-delete: two statements would let a proposal opened
+     * between them keep an affirmation this removal was supposed to take.
+     */
+    await tx
+      .delete(groupTopOfMindAffirmations)
+      .where(
+        and(
+          eq(groupTopOfMindAffirmations.profileId, input.memberProfileId),
+          inArray(
+            groupTopOfMindAffirmations.proposalId,
+            tx
+              .select({ id: groupTopOfMindProposals.id })
+              .from(groupTopOfMindProposals)
+              .where(
+                and(
+                  eq(groupTopOfMindProposals.groupId, input.groupId),
+                  eq(groupTopOfMindProposals.status, "open"),
+                ),
+              ),
+          ),
+        ),
+      );
+    return true;
+  });
+  if (!didRemove) return false;
   /**
    * AND THE DOOR IS RE-KEYED.
    *
@@ -376,44 +480,6 @@ export async function removeGroupMember(
    * would leave a caller believing the removal did not happen.
    */
   await rotateJoinCode(db, input.groupId);
-  /**
-   * AND THEIR VOTES GO WITH THEM — OUT OF THIS ROOM, AND NO FURTHER.
-   *
-   * The tally already ignores a non-member, so this delete is not what makes
-   * the count right; it is what stops re-joining from silently restoring a
-   * vote nobody cast again.
-   *
-   * The predicate is the whole story. `group_top_of_mind_affirmations` has no
-   * `group_id` column — its only scoping is `proposal_id` — so a delete keyed
-   * on the profile alone does not mean "their votes here", it means "their
-   * votes anywhere". Removing someone from a room you own reached into every
-   * other room they are in: rooms you are not a member of, cannot read, and
-   * that were never named in the request. The agreements there simply stopped
-   * existing, which stalls whatever was resting on them and leaves nothing to
-   * tell it apart from "they never voted". So the scope has to come from the
-   * proposals, which are the only rows in this graph that know which room they
-   * belong to.
-   *
-   * A subquery rather than "read the proposal ids, then delete where in
-   * them": two statements would let a proposal opened between them keep an
-   * affirmation the removal was supposed to take, and would rebuild an empty
-   * list into a delete with no proposal predicate at all if the read came back
-   * empty. One statement cannot drift from itself.
-   */
-  await db
-    .delete(groupTopOfMindAffirmations)
-    .where(
-      and(
-        eq(groupTopOfMindAffirmations.profileId, input.memberProfileId),
-        inArray(
-          groupTopOfMindAffirmations.proposalId,
-          db
-            .select({ id: groupTopOfMindProposals.id })
-            .from(groupTopOfMindProposals)
-            .where(eq(groupTopOfMindProposals.groupId, input.groupId)),
-        ),
-      ),
-    );
   return true;
 }
 

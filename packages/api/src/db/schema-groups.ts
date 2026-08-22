@@ -100,6 +100,61 @@ export const groupMembers = pgTable(
 export type GroupMember = typeof groupMembers.$inferSelect;
 export type NewGroupMember = typeof groupMembers.$inferInsert;
 
+// ---------------------------------------------------------------------------
+// group_membership_events — the door's history
+// ---------------------------------------------------------------------------
+
+export const groupMembershipEventKindValues = ["joined", "left", "removed"] as const;
+export type GroupMembershipEventKind = (typeof groupMembershipEventKindValues)[number];
+export const groupMembershipEventKindEnum = pgEnum(
+  "group_membership_event_kind",
+  groupMembershipEventKindValues,
+);
+
+/**
+ * Append-only record of every arrival and departure.
+ *
+ * The membership row is the CURRENT seat and nothing else: it is deleted on
+ * leave and on removal, and a re-join writes a fresh row with a fresh
+ * `createdAt` — so before this table existed, a room's past was unreadable.
+ * Who had been here, when someone was removed, that a member left and came
+ * back: each of those was a row that no longer existed. A room that remembers
+ * becoming itself needs the door to keep a ledger, not just a lock.
+ *
+ * Nothing updates or deletes these rows in application code. The two deletes
+ * that reach them are cascades, and both are deliberate: the group's owner
+ * taking the whole room down (`deleteGroup` — the room's history belongs to
+ * the room), and a profile's erasure (an event naming a person is a trace of
+ * that person, and erasure means their traces go).
+ */
+export const groupMembershipEvents = pgTable(
+  "group_membership_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+
+    profileId: uuid("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+
+    kind: groupMembershipEventKindEnum("kind").notNull(),
+
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    groupOccurredIdx: index("group_membership_events_group_occurred_idx").on(
+      table.groupId,
+      table.occurredAt,
+    ),
+  }),
+);
+
+export type GroupMembershipEvent = typeof groupMembershipEvents.$inferSelect;
+export type NewGroupMembershipEvent = typeof groupMembershipEvents.$inferInsert;
+
 export const groupsRelations = relations(groups, ({ many }) => ({
   members: many(groupMembers),
 }));

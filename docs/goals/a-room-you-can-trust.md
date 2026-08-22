@@ -4,8 +4,9 @@ Status: proposed 2026-08-22, from the founder's ruling that **groups is a
 priority feature**.
 Strategy: `docs/craft/agent-memory-wedge.md` (the addendum is this goal's
 argument; the evidence base is `agent-memory-ecosystem-2026.md`).
-Branch: `goal/a-room-you-can-trust` (code phases; doc phases may land on
-the strategy branch).
+Branch: `claude/waka-product-evolution-vbj1ur` (this session's designated
+branch; the header originally named `goal/a-room-you-can-trust`, amended
+because the running session may push only to its designated branch).
 Depends on: nothing for Phase 0; Phase 1 builds on the shipped
 proposal/affirmation machinery. `every-space-owns-its-stack` (signed
 2026-08-17) is deliberately NOT this goal — it is the phase after it,
@@ -111,6 +112,47 @@ not distinct, lineage unrecorded). Finish it: the room's poster scrubs
 through its own history the way the field already scrubs through time.
 **Gate:** room-timeline's own written gate, passing.
 
+## Track S — stars and roots (folded in by the founder, 2026-08-22)
+
+The founder's revamp brief — checked in verbatim as
+[`docs/craft/revamp-stars-and-roots.md`](../craft/revamp-stars-and-roots.md)
+— joins this goal as an interleaved track: *build nothing new; make the
+two mechanisms that already exist visible.* The lock becomes the **별**
+(star: a sentence the person wrote, which WAKA never rewrites) and the
+evidence links become **뿌리** (roots: the memories a signal grew from).
+The brief's own acceptance criteria are the gates; its global rules
+(GLOSSARY as naming truth, dialect boundaries, UI banned words, the
+plain-line tooltip test) bind every phase below. Its §7 deferral list is
+honored — no rooms UI, no MCP, no backfill in this track.
+
+- **S0 — GLOSSARY.md** at the repo root, verbatim from the brief; README
+  links it; the agent instruction file gains the one-line naming rule.
+  Gate: the brief's Task 0 checklist.
+- **S1 — schema gate** (investigation only). The brief's one question —
+  is the signal → evidence-record link stored today? — answered with
+  file paths in `docs/notes/2026-08-22-schema-gate.md`. Known answer:
+  **verdict A** (`signal_evidence` is M:N with verbatim quotes), so S2
+  and S3 proceed in parallel and S3 is UI work.
+- **S2 — the star.** Backend first: the release verb the brief's
+  "다시 WAKA에게 맡기기" requires is exactly this goal's lock-debt item —
+  human-session-only, clears `lockedAt`; plus the regeneration contract
+  pinned by test (locked text byte-identical across passes while
+  evidence and confidence keep updating). Then the surface: star state
+  on human-written sentences, the plain-line tooltip, the regeneration
+  contrast, the banned-word sweep. Gate: the brief's Task 2 checklist,
+  minus what this environment cannot execute (see the honesty note).
+- **S3 — roots v1.** Signal → its evidence records: highlighted orbs,
+  drawn root lines, the evidence panel with excerpts and dates, the
+  shortest path from a wrong memory to a corrected, starred sentence.
+  Gate: the brief's Task 3 checklist.
+
+**Honesty note on the brief's definition of done.** The 30-second
+six-scene demo requires a running browser and a human hand; this
+environment can execute the automated halves (the byte-identical lock
+test, the release-flow test, the banned-word grep, typecheck/build) and
+must say plainly which scenes it could not witness rather than claim
+the demo. The recording is the founder's acceptance act.
+
 ## After this goal (not in it)
 
 `every-space-owns-its-stack` — the room distills its own sky from its
@@ -157,4 +199,25 @@ house norm.
 
 ## Log
 
-_(phases append numbers and verdicts here)_
+- **2026-08-22 — Phase 0a: PASS.** Audit found three ways the record was
+  destroyable, all three closed: (1) membership had no history —
+  `group_membership_events` added, append-only, written transactionally
+  on create/join/leave/remove, current seats backfilled as arrivals in
+  migration `0013_the_room_remembers`; (2) removal deleted the member's
+  affirmations on EVERY proposal including settled ones — delete now
+  scoped to `status='open'`; (3) `top_of_mind_entry_signals.signal_id`
+  cascaded on signal delete, stripping citations out of historical
+  versions — FK now `set null`, live snapshots skip null citations so a
+  carried entry never re-cites a deleted signal. Paths audited and clean:
+  version writer (supersede + partial unique index), proposal rows
+  (persist after settling), unshare (share row only), group delete
+  (owner's deliberate act, documented), erasure (known destroyer —
+  Phase 0b's territory, untouched here). Gate measured by
+  `room-history.db.test.ts` on real Postgres 16: 4/4 — version chain
+  `[1 superseded → 2 live]` intact through removal + re-join; settled
+  votes kept 2/2 while the open proposal drops to 1; door ledger reads
+  `joined, removed, joined` and `joined, left`; 2/2 citation rows
+  survive signal delete as null-signalId with owner attribution intact.
+  Full api suite 47 files / 581 tests green (was 46/577); typecheck
+  clean; `drizzle-kit check` clean. Environment: local Postgres 16
+  (this sandbox), not Neon; no model calls spent.

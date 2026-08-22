@@ -401,6 +401,7 @@ export async function createTestDatabase(): Promise<TestDatabase> {
     "top_of_mind_entry_signals",
     "top_of_mind_entries",
     "top_of_minds",
+    "group_membership_events",
     "group_members",
     "groups",
     "signal_shares",

@@ -424,6 +424,7 @@ async function loadLiveArtifact(
 
   const citationsByEntry = new Map<string, string[]>();
   for (const row of citationRows) {
+    if (row.signalId === null) continue;
     const bucket = citationsByEntry.get(row.entryId);
     if (bucket) bucket.push(row.signalId);
     else citationsByEntry.set(row.entryId, [row.signalId]);
@@ -1057,6 +1058,7 @@ async function loadLiveGroupArtifact(
   const citationsByEntry = new Map<string, string[]>();
   const citationOwners = new Map<string, string>();
   for (const row of citationRows) {
+    if (row.signalId === null) continue;
     const bucket = citationsByEntry.get(row.entryId);
     if (bucket) bucket.push(row.signalId);
     else citationsByEntry.set(row.entryId, [row.signalId]);

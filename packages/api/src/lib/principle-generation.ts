@@ -201,6 +201,7 @@ async function loadCitationEvidence(
       and(eq(topOfMinds.profileId, profileId), inArray(topOfMindEntrySignals.signalId, signalIds)),
     );
   for (const row of tomRows) {
+    if (row.signalId === null) continue;
     const bucket = out.get(row.signalId);
     if (bucket && !bucket.tomVersionIds.includes(row.topOfMindId)) {
       bucket.tomVersionIds.push(row.topOfMindId);
