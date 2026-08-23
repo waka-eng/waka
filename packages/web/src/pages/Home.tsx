@@ -5195,17 +5195,6 @@ function HomeExperience(): JSX.Element {
           /* an uncommitted swipe eases home — the world and the companion
              spring back TOGETHER; nothing rests between columns */
           cam.x = view.reduced ? cam.xTarget : lerp(cam.x, cam.xTarget, kd(EASE_BAND, dt));
-        /* AND THE CROSSING ITSELF RESOLVES IN STEPS. Read after the camera
-           moves, so every other quantised thing this frame agrees about how
-           far into the machine's mind we are. */
-        mech = view.reduced ? mechAt(cam.x) : lerp(mech, mechAt(cam.x), kd(2e-3, dt));
-        /* ATTENTION EASES IN AND LETS GO. The target is the lean while the
-           attention is live and zero once it lapses; both directions run
-           through the same spring, so noticing and losing interest are the
-           same motion played in opposite directions. rps=0.02 is τ≈256ms:
-           quick enough to read as reacting, slow enough to be a turn. */
-        const attendWant = performance.now() < companion.attendUntil ? companion.attendLean : 0;
-        companion.attendHold = view.reduced ? attendWant : lerp(companion.attendHold, attendWant, kd(2e-2, dt));
           if (Math.abs(cam.x - cam.xTarget) < 0.6) {
             cam.x = cam.xTarget;
             cam.xBack = false;
@@ -5213,6 +5202,28 @@ function HomeExperience(): JSX.Element {
           clock.lastActive = now;
         }
       }
+      /* AND THE CROSSING ITSELF RESOLVES IN STEPS. Read after the camera
+         moves, so every other quantised thing this frame agrees about how
+         far into the machine's mind we are.
+
+         OUTSIDE THE TWO BRANCHES ABOVE, BECAUSE THE CAMERA MOVES IN BOTH.
+         These two lines sat one brace deeper, inside `if (cam.xBack)` — a
+         branch that means only "an uncommitted swipe is springing back". A
+         committed travel therefore never reached them, so `mech` stayed at
+         its initial 0 for the life of the session and every quantised thing
+         downstream read "not a machine": an agent's wall wore the same
+         smooth body as your own, and the stepped tick, the eye resolution
+         and the form dissolve were all unreachable. The camera is settled
+         for this frame either way by the time we get here, which is what
+         the paragraph above was always asking for. */
+      mech = view.reduced ? mechAt(cam.x) : lerp(mech, mechAt(cam.x), kd(2e-3, dt));
+      /* ATTENTION EASES IN AND LETS GO. The target is the lean while the
+         attention is live and zero once it lapses; both directions run
+         through the same spring, so noticing and losing interest are the
+         same motion played in opposite directions. rps=0.02 is τ≈256ms:
+         quick enough to read as reacting, slow enough to be a turn. */
+      const attendWant = performance.now() < companion.attendUntil ? companion.attendLean : 0;
+      companion.attendHold = view.reduced ? attendWant : lerp(companion.attendHold, attendWant, kd(2e-2, dt));
       /* THE VERTICAL TRAVELER. Read the camera's own speed rather than any
          input: a drag, a flick, the wheel, an arrow key and the forming
          line's glide into the sky all move the layout, and the companion
