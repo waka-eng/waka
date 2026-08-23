@@ -383,6 +383,10 @@ resumption.
    deliberate-memory identity against platform surveillance-memory —
    with the team door earned by paid-pilot evidence, never by pivot.
    Items 1–8 are identity-proof either way.*
+   **RULED 2026-08-23 (founder): both.** A world for one person and
+   their minds AND infrastructure for teams — the team direction is
+   identity, not hypothesis; sequencing and the hard gates stand; pilot
+   evidence decides pace, never whether. Signed in `data-model.md`.
 2. ~~**May the machine ever pick between two things it believes about
    you?**~~ **RULED 2026-08-23 (founder): never — the owner resolves.**
    Both sides stand as contested until an owner act; the loser becomes

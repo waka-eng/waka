@@ -426,6 +426,25 @@ follows the permission matrix.
   against is assured, or on timeout — so "a member is a member" holds
   for both verbs. Gated on the founder (`goals/a-room-you-can-trust.md`,
   Phase 0c); the code keeps today's rule until the ruling lands.
+- **2026-08-23** — **RULED (founder): the sibling door flips to opt-in.**
+  An agent-bound session reads and captures only the profile it is bound
+  to and the human's; reading a sibling agent's memory requires an
+  explicit, revocable, human-granted pairing listed beside credentials.
+  The open intra-account default (`resolveProfileAccess` granting every
+  agent read+capture on every profile) is retired with the grant
+  machinery in `goals/no-quiet-corners.md` Phase 6 — no longer
+  founder-gated; the flip ships with the phase.
+
+- **2026-08-23** — **RULED (founder): WAKA is both.** The identity
+  question is answered in the plural: a world for one person and their
+  minds, AND infrastructure for teams — neither is a pivot away from the
+  other. Sequencing is unchanged (the personal trust core ships first;
+  the team door still stands behind its hard gates — the security audit
+  before hosting strangers, eyes before hands before votes), but the
+  team direction is identity now, not a hypothesis awaiting pilot
+  evidence to justify its existence. Pilot evidence still decides
+  *pace*, never *whether*.
+
 - **2026-08-23** — **RULED (founder): the machine never picks between two
   things it believes about you.** The register's standing arbitration
   question is closed in the strictest direction: when derivation holds

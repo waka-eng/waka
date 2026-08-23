@@ -1,6 +1,6 @@
 # Goal: no quiet corners
 
-Status: ready — created 2026-08-23 on the founder's instruction to fill
+Status: in flight — go given 2026-08-23; created 2026-08-23 on the founder's instruction to fill
 all remaining gaps. Phase 0 (the register stops lying) passed at
 creation: this document's claims were verified against code the day it
 was written, and the wedge register's two stale entries were corrected
@@ -152,15 +152,15 @@ Register item 5, sequenced before any room-read surface ever ships.
 *every* profile in the account — sibling agents included. Build the
 grant: an explicit, human-granted, revocable pairing listed beside
 credentials, with the refused-sibling-read case added to the live
-matrix suite. **The default flip is founder-gated:** the machinery
-lands dark, and the intra-account default flips to human-profile-only
-on the founder's word — it is their privacy model, changed for every
-existing account at once, and this goal does not flip it for them.
+matrix suite. **The flip is RULED (founder, 2026-08-23): opt-in ships
+with this phase** — no flag, no dark machinery; the open default
+retires when the grants land. Signed in `data-model.md`'s decision
+log.
 
-**Gate (machinery):** db + live-matrix tests prove a granted sibling
-reads and an ungranted one is refused *when the flag is on*; with the
-flag off, today's behavior is bit-identical. **Gate (flip): the
-founder.**
+**Gate:** db + live-matrix tests prove a granted sibling reads, an
+ungranted one is refused, revocation takes effect on the next request,
+and the human's own profile and the agent's bound profile need no
+grant. The waka-mcp live suite re-run stays green through the flip.
 
 ## Phase 7 — the queue is fair
 
@@ -212,20 +212,18 @@ screenshots.
 
 ## Standing founder gates (listed, never worked around)
 
-- The Phase 6 default flip. Asked, the founder answered "what would you
-  recommend to align with our strategy" — the standing recommendation
-  is **flip to opt-in** (2026-08-23, argued in the log below); the flip
-  itself still waits for their word, because a delegation to recommend
-  is not a ruling and this changes every existing account's privacy at
-  once.
-- The Phase 8 motion sign-off.
-- The register's one remaining standing question: world-for-one vs
-  infrastructure for teams (arbitration was ruled 2026-08-23 — never,
-  the owner resolves; the room's identity was ruled 2026-08-23 — the
-  room keeps its approved text, counsel review still open).
-- Closed 2026-08-23: the 30-second recording — `a-room-you-can-trust`
-  accepted on substituted evidence at the founder's "is this
-  necessary?".
+- The Phase 8 motion sign-off — **the founder reviews live on their own
+  machine** (ruled 2026-08-23): when Phase 8 lands, the log carries the
+  exact run commands and the phase holds at its gate until they have
+  looked.
+- Counsel review of the erasure doctrine before any compliance sentence
+  is uttered to anyone.
+- Closed 2026-08-23, all by founder answer: the Phase 6 flip (ruled —
+  opt-in ships with the phase); the identity question (ruled — WAKA is
+  both, a world for one person and their minds AND infrastructure for
+  teams; sequencing and hard gates unchanged); arbitration (never — the
+  owner resolves); the 30-second recording (`a-room-you-can-trust`
+  accepted on substituted evidence).
 
 ## Budget
 
