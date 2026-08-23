@@ -19,6 +19,7 @@
 import { Hono } from "hono";
 
 import {
+  decisionPrincipleCitations,
   inspirations,
   reflections,
   type InspirationSource,
@@ -126,6 +127,18 @@ export function registerCaptureRoutes(
     const target = await resolveTargetProfile(db, session, query.data.profile, "capture");
     if (!target.ok) return c.json(target.body, target.status);
 
+    /* A citation without a decision is a claim with nothing deciding — the
+       shape mismatch is refused, not guessed at. */
+    if (
+      parsed.data.citedPrincipleIds?.length &&
+      parsed.data.kind !== "decision"
+    ) {
+      return c.json(
+        { error: "Only a decision (kind=decision) may cite principles" },
+        400,
+      );
+    }
+
     const source = sourceForCapture(session, parsed.data.source);
     const visibility = visibilityForCapture(
       session,
@@ -136,7 +149,8 @@ export function registerCaptureRoutes(
     const now = new Date();
     const reflectionInputs = parsed.data.reflections ?? [];
 
-    const persisted = await db.transaction(async (tx) => {
+    const persistInspiration = () =>
+      db.transaction(async (tx) => {
       const [inserted] = await tx
         .insert(inspirations)
         .values({
@@ -153,6 +167,22 @@ export function registerCaptureRoutes(
         .returning(inspirationSelection);
 
       if (!inserted) throw new Error("Failed to create inspiration");
+
+      /* The write-back half of the consultation record: the decision's
+         citations go through composite (profile_id, id) foreign keys, so an
+         invented id — or a real principle belonging to someone else — is
+         refused by Postgres itself, and the p-id citations agents are
+         instructed to make stop evaporating into their own transcripts. */
+      const citedPrincipleIds = parsed.data.citedPrincipleIds ?? [];
+      if (citedPrincipleIds.length > 0) {
+        await tx.insert(decisionPrincipleCitations).values(
+          [...new Set(citedPrincipleIds)].map((principleId) => ({
+            profileId: target.profileId,
+            inspirationId: inserted.id,
+            principleId,
+          })),
+        );
+      }
 
       const insertedReflections =
         reflectionInputs.length > 0
@@ -173,8 +203,27 @@ export function registerCaptureRoutes(
               .returning(reflectionSelection)
           : [];
 
-      return { inserted, insertedReflections };
-    });
+        return { inserted, insertedReflections };
+      });
+
+    let persisted: Awaited<ReturnType<typeof persistInspiration>>;
+    try {
+      persisted = await persistInspiration();
+    } catch (err) {
+      /* The composite FK doing its job: the cited id is not a principle of
+         this profile. That is a caller mistake, not a server fault. Drizzle
+         wraps the postgres error, so the code may sit one level down. */
+      const pgCode =
+        (err as { code?: string }).code ??
+        (err as { cause?: { code?: string } }).cause?.code;
+      if (pgCode === "23503") {
+        return c.json(
+          { error: "A decision may cite only principles this profile holds" },
+          400,
+        );
+      }
+      throw err;
+    }
 
     await requestSignalDerivation({
       profileId: target.profileId,

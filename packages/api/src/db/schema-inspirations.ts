@@ -36,7 +36,14 @@ import {
 import { profiles } from "./schema-profiles";
 
 /** Shape of what arrived. Advisory: extraction reads the content regardless. */
-export const inspirationKindValues = ["note", "link", "image", "mixed"] as const;
+/**
+ * "decision" joined the shape kinds 2026-08-23 (goals/no-quiet-corners.md,
+ * Phase 1): a decision is a capture, not a layer — recorded by the acting
+ * session into its own profile, optionally citing the principles it
+ * consulted through `decision_principle_citations`, whose composite FKs
+ * make an invented citation physically unstorable.
+ */
+export const inspirationKindValues = ["note", "link", "image", "mixed", "decision"] as const;
 export type InspirationKind = (typeof inspirationKindValues)[number];
 export const inspirationKindEnum = pgEnum("inspiration_kind", inspirationKindValues);
 

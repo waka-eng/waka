@@ -18,6 +18,7 @@
  * queue means a burst of captures still costs one synthesis.
  */
 
+import { recordConsultation } from "../lib/consultations.js";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
@@ -402,6 +403,14 @@ export function createTopOfMindRoutes(
     const topOfMind = await getTopOfMind(db, {
       profileId: scope.profileId,
       includeDismissed: parsedQuery.data.includeDismissed === true,
+    });
+    /* the read side answers for itself — the version served is the receipt,
+       and "nothing synthesized yet" is a serve worth recording too */
+    await recordConsultation(db, {
+      profileId: scope.profileId,
+      session: c.get("session"),
+      surface: "top_of_mind",
+      artifactVersion: topOfMind?.version ?? null,
     });
     // Null rather than an empty artifact: "nothing has been synthesized yet"
     // is a different state from "the synthesis found nothing to say", and a

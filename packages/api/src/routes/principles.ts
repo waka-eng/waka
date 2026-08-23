@@ -23,6 +23,7 @@
  * extend to curation.
  */
 
+import { recordConsultation } from "../lib/consultations.js";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
@@ -222,7 +223,15 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
   routes.get("/", async (c) => {
     const resolved = await resolveRead(c);
     if ("error" in resolved) return resolved.error;
-    const views = await loadPrincipleViews(getDatabase(), resolved.profileId);
+    const db = getDatabase();
+    const views = await loadPrincipleViews(db, resolved.profileId);
+    /* the read side answers for itself: the JSON list is the serve the MCP
+       client actually reads, so it is on the record like the rendering */
+    await recordConsultation(db, {
+      profileId: resolved.profileId,
+      session: c.get("session"),
+      surface: "principles",
+    });
     return c.json({ principles: views });
   });
 
@@ -494,7 +503,16 @@ export function createPrincipleMarkdownRoute(
     if (!profileRow) return c.json({ error: "Profile not found" }, 404);
 
     const views = await loadPrincipleViews(db, scope.profileId);
-    const markdown = renderPrinciplesMarkdown(profileRow, views, new Date());
+    const renderedAt = new Date();
+    const markdown = renderPrinciplesMarkdown(profileRow, views, renderedAt);
+    /* the read side answers for itself: the canonical document is a daily
+       rendering, so the day-stamp is its version receipt */
+    await recordConsultation(db, {
+      profileId: scope.profileId,
+      session: c.get("session"),
+      surface: "principles",
+      renderedOn: renderedAt,
+    });
     return c.text(markdown, 200, { "Content-Type": "text/markdown; charset=utf-8" });
   });
 

@@ -20,6 +20,7 @@
  *     behind it never cross an account boundary.
  */
 
+import { recordConsultation } from "../lib/consultations.js";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
@@ -625,6 +626,13 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
       profileId: scope.profileId,
       status: parsedQuery.data.status,
       limit: parsedQuery.data.limit ?? DEFAULT_SIGNAL_LIMIT,
+    });
+    /* the read side answers for itself: this serve is on the record before
+       the response leaves — goals/no-quiet-corners.md Phase 1 */
+    await recordConsultation(db, {
+      profileId: scope.profileId,
+      session: c.get("session"),
+      surface: "signals",
     });
     return c.json({ signals: signalRows }, 200);
   });

@@ -59,10 +59,22 @@ export const createInspirationSchema = z.object({
     (v) => (typeof v === "string" ? v.trim() || undefined : v),
     z
       .enum(inspirationKindValues, {
-        errorMap: () => ({ message: "kind must be note, link, image, or mixed" }),
+        errorMap: () => ({
+          message: "kind must be note, link, image, mixed, or decision",
+        }),
       })
       .optional(),
   ),
+  /**
+   * The principles a decision leaned on — meaningful only with
+   * kind=decision (a note does not consult). The route stores these
+   * through composite FKs, so an id that is not a principle of the
+   * capturing profile is refused by the schema itself.
+   */
+  citedPrincipleIds: z
+    .array(z.string().uuid("citedPrincipleIds must be principle uuids"))
+    .max(20, "a decision cites at most 20 principles")
+    .optional(),
   /** Honored only for an agent session — see the provenance note in `inspirations.ts`. */
   source: z
     .enum(inspirationSourceValues, {

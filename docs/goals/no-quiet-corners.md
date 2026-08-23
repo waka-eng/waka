@@ -194,6 +194,41 @@ exception argued in writing); **the motion is founder-gated** — the
 founder's eyes accept the star turn and root lines, because motion is a
 founder law and taste is not delegable.
 
+## Phase 9 — the loop shows its hands
+
+Added mid-flight from the founder's own ask (2026-08-23): *"people are
+not going to look at every single signal … they would look at the
+principles and top of mind … what they should do instead is be able to
+recalibrate and understand the loop that is creating it — and for our
+product that is not as clear."* That is the deepest form of this goal's
+thesis: row-level legibility exists (roots, citations, receipts), but
+the LOOP — what reads you, by what rules, and what your gestures teach
+it — has no surface. Three parts:
+
+1. **The rules, readable.** A "how WAKA reads you" rendering built FROM
+   the same constants `generation-doc.test.ts` already drift-locks —
+   when a pattern is spoken, when it fades, when the first draft waits,
+   (after Phase 4) when a candidate is refused — as sentences, never
+   numerals. It cannot lie: the same table pins the code and the copy.
+2. **The loop's diary.** Recent passes told as events, assembled from
+   what already lands on the record — derivation summaries, explicit
+   no-change versions, (Phase 1) consultations, (Phase 4) suppressions
+   — "read three new memories, added nothing; refused a candidate it
+   had been told to drop." States render; counters never.
+3. **Recalibration through gestures, named.** The loop-level levers are
+   the existing gestures made legible as teaching: dismiss becomes a
+   standing refusal (Phase 4's anchor), a verdict weighs promotion, the
+   star freezes, release returns jurisdiction. The surface names what
+   each gesture taught the loop — closing the gap between act and
+   effect — instead of adding abstract knobs a person cannot predict.
+
+**Gate:** the rules rendering is pinned both directions against the
+drift-locked constants table (changed constant → failing test → changed
+sentence); the diary renders a seeded fortnight with zero numerals; web
+tests pin all three parts; **the founder's eyes accept the surface** —
+their instinct originated it, so their read is the measure of whether
+the loop finally feels understandable.
+
 ## Track D — the demo kit
 
 The 30-second demo stopped being a gate on 2026-08-23 —
@@ -245,6 +280,31 @@ Postgres. No new infrastructure, no new dependencies.
   costs the founder thirty seconds, not an evening.
 
 ## Log
+
+- **2026-08-23 — Phase 1: PASS.** The read side answers for itself.
+  `consultations` table (migration `0017_the_read_side_gets_a_record`)
+  written awaited — a serve that cannot be recorded fails loudly rather
+  than happening off the record — by `GET /api/signals`,
+  `GET /api/top-of-mind` (artifact version as the receipt; the honest
+  null when nothing is synthesized), the principles JSON list (the
+  serve the MCP client actually reads), and the principles.md rendering
+  (day-stamp as the receipt, already in the wire format's trailing
+  line). The write-back half: `kind=decision` joined the inspiration
+  kinds, and `decision_principle_citations` cites through DOUBLE
+  composite (profile_id, id) FKs — an invented citation, or another
+  profile's principle, is refused by Postgres and the whole capture
+  rolls back. Gate measured: `consultations.db.test.ts` 6/6 on real
+  Postgres through the real route handlers (one row per serve naming
+  session + reader + version; accumulation not overwrite; atomic
+  citation; invented/foreign/wrong-kind citations all refused); full
+  api suite 50 files / 599 tests; vocabulary clean; live waka-mcp
+  suite 9/9 with a **peak of 10 consultations on the record during the
+  run** — and zero after, because the suite erases its account and the
+  record cascades with the served profile, which is the erasure
+  doctrine doing its job, not a leak. Also this phase: the founder's
+  loop question arrived mid-build and became Phase 9 — the consultation
+  record and Phase 4's suppression log are two of its three
+  prerequisites, so the sequencing holds.
 
 - **2026-08-23 — Three founder answers land before the first phase
   runs.** (1) **Arbitration ruled**: never — the owner resolves; Phase

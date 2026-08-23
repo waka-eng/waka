@@ -67,9 +67,17 @@ const detail: SignalDetail = {
   ],
 };
 
+
+/* A GET serve now writes a consultation through the real writer, so any db
+   a 200-path test injects must accept that one insert — the write itself is
+   pinned against real Postgres in consultations.db.test.ts. */
+function serveDb(): Record<string, unknown> {
+  return { insert: () => ({ values: async () => undefined }) };
+}
+
 describe("GET /api/signals", () => {
   it("scopes the list to the acting profile and passes status and limit through", async () => {
-    const db = {};
+    const db = serveDb();
     const listSignals = vi.fn(async () => [summary]);
     const app = new Hono();
     app.route(
@@ -113,7 +121,7 @@ describe("GET /api/signals", () => {
     app.route(
       "/api/signals",
       createSignalRoutes({
-        getDatabase: () => ({}) as any,
+        getDatabase: () => serveDb() as any,
         listSignals,
         authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
       }),
@@ -134,7 +142,7 @@ describe("GET /api/signals", () => {
     app.route(
       "/api/signals",
       createSignalRoutes({
-        getDatabase: () => ({}) as any,
+        getDatabase: () => serveDb() as any,
         listSignals,
         authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
       }),
@@ -153,7 +161,7 @@ describe("GET /api/signals", () => {
     app.route(
       "/api/signals",
       createSignalRoutes({
-        getDatabase: () => ({}) as any,
+        getDatabase: () => serveDb() as any,
         listSignals,
         loadProfile,
         authMiddleware: authMiddleware(sessionFor(agentProfileId, "agent")),
@@ -182,7 +190,7 @@ describe("GET /api/signals", () => {
     app.route(
       "/api/signals",
       createSignalRoutes({
-        getDatabase: () => ({}) as any,
+        getDatabase: () => serveDb() as any,
         listSignals,
         loadProfile,
         authMiddleware: authMiddleware(sessionFor(agentProfileId, "agent")),
@@ -203,7 +211,7 @@ describe("GET /api/signals/:signalId", () => {
     app.route(
       "/api/signals",
       createSignalRoutes({
-        getDatabase: () => ({}) as any,
+        getDatabase: () => serveDb() as any,
         getSignal,
         authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
       }),
@@ -235,7 +243,7 @@ describe("GET /api/signals/:signalId", () => {
     app.route(
       "/api/signals",
       createSignalRoutes({
-        getDatabase: () => ({}) as any,
+        getDatabase: () => serveDb() as any,
         getSignal,
         authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
       }),
@@ -271,7 +279,7 @@ describe("PATCH /api/signals/:signalId", () => {
     app.route(
       "/api/signals",
       createSignalRoutes({
-        getDatabase: () => ({}) as any,
+        getDatabase: () => serveDb() as any,
         updateStatement,
         dropEmbedding,
         requestReembed,
@@ -325,7 +333,7 @@ describe("PATCH /api/signals/:signalId", () => {
     app.route(
       "/api/signals",
       createSignalRoutes({
-        getDatabase: () => ({}) as any,
+        getDatabase: () => serveDb() as any,
         updateStatement,
         dropEmbedding: vi.fn(async () => undefined),
         requestReembed,
@@ -352,7 +360,7 @@ describe("PATCH /api/signals/:signalId", () => {
     app.route(
       "/api/signals",
       createSignalRoutes({
-        getDatabase: () => ({}) as any,
+        getDatabase: () => serveDb() as any,
         updateStatement,
         loadProfile,
         authMiddleware: authMiddleware(sessionFor(agentProfileId, "agent")),
@@ -378,7 +386,7 @@ describe("PATCH /api/signals/:signalId", () => {
     app.route(
       "/api/signals",
       createSignalRoutes({
-        getDatabase: () => ({}) as any,
+        getDatabase: () => serveDb() as any,
         updateStatement,
         authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
       }),
@@ -403,7 +411,7 @@ describe("DELETE /api/signals/:signalId", () => {
     app.route(
       "/api/signals",
       createSignalRoutes({
-        getDatabase: () => ({}) as any,
+        getDatabase: () => serveDb() as any,
         deleteSignal,
         reconcilePrinciples,
         authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
@@ -427,7 +435,7 @@ describe("signal shares", () => {
     app.route(
       "/api/signals",
       createSignalRoutes({
-        getDatabase: () => ({}) as any,
+        getDatabase: () => serveDb() as any,
         shareSignal,
         authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
       }),
@@ -453,7 +461,7 @@ describe("signal shares", () => {
     app.route(
       "/api/signals",
       createSignalRoutes({
-        getDatabase: () => ({}) as any,
+        getDatabase: () => serveDb() as any,
         shareSignal,
         authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
       }),
@@ -474,7 +482,7 @@ describe("signal shares", () => {
     app.route(
       "/api/signals",
       createSignalRoutes({
-        getDatabase: () => ({}) as any,
+        getDatabase: () => serveDb() as any,
         unshareSignal,
         authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
       }),
