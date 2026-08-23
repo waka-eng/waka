@@ -9676,17 +9676,37 @@ function HomeExperience(): JSX.Element {
           {flatMenuOpen ? (
             <div className="jar-flatmenu-sheet" role="menu">
               {[
-                /* The flat screen's own bottom bar, in its order and its
-                   words, so the two do not drift into naming the same screen
-                   two ways. `top of mind` is Surface's `wall` view, which
-                   `surface-route.ts` resolves to "/" — and "/" is the world,
-                   whose headquarters IS top of mind. So it lands on the same
-                   layer either way; it simply arrives in the world's rendering
-                   of it rather than the list's. */
-                ["/capture", "capture"],
-                ["/inspirations", "inspirations"],
-                ["/signals", "signals"],
-                ["/top-of-mind", "top of mind"],
+                /* WHAT IS LEFT IN HERE IS WHAT THE WORLD CANNOT DO YET.
+                   This menu is a holding pen, not a navigation model: a
+                   feature parks here until it has been designed into the
+                   world, and leaves the moment it has. It empties; it does
+                   not grow.
+
+                   Four left on 2026-08-22, each removed only after its world
+                   equivalent was driven in a browser and seen to work:
+
+                     capture       KEEP SOMETHING opens an inline
+                                   "Something worth keeping" field
+                     signals       TWO PATTERNS ARE FORMING opens the sky,
+                                   every statement standing in it
+                     inspirations  an orb in the field opens that memory,
+                                   with `reflect on this · more`
+                     top of mind   the headline you are standing in — and
+                                   this entry was always circular anyway:
+                                   `surface-route.ts` resolves the wall view
+                                   to "/", so it linked to the world from
+                                   inside the world
+
+                   The routes stay addressable. A bookmark to /inspirations
+                   still opens the list; what is gone is the world implying it
+                   needed one.
+
+                   These two remain because the world genuinely has nowhere to
+                   put them yet. `rooms` has MAKE A ROOM but no way to walk
+                   into one — they are walls, so the axis along the bottom is
+                   where they belong. `principles` is layer 4 and the world
+                   draws three; that is a design question, not a move.
+                   DELETE THIS WHOLE CONTROL when both have landed. */
                 ["/rooms", "rooms"],
                 ["/principles", "principles"],
               ].map(([to, label]) => (

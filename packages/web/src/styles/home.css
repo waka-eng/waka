@@ -1146,14 +1146,23 @@
 .jar-flatmenu-toggle[aria-expanded="true"] {
   opacity: 1;
 }
+/* OPAQUE, BECAUSE IT LANDS ON THE ONE SENTENCE THE WORLD IS FOR.
+   This was 88% with an 8px blur, and 12% of a 48px headline reads straight
+   through six lines of 11px menu type: the sentence is smeared and the menu
+   is unreadable, both at once, and the thing obscured is the top of mind —
+   the single line this whole surface exists to present.
+   Translucency is right for something floating IN the world. This is not in
+   the world; it is chrome laid over it, and chrome occludes. The hairline and
+   the shadow are what say "above" now that the blur no longer has to. */
 .jar-flatmenu-sheet {
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding: 6px 4px;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--jar-paper, #0b0a16) 88%, transparent);
-  backdrop-filter: blur(8px);
+  background: var(--jar-paper, #0b0a16);
+  border: 1px solid color-mix(in srgb, var(--jar-ink, #f4f1ea) 14%, transparent);
+  box-shadow: 0 10px 30px color-mix(in srgb, #000 55%, transparent);
 }
 .jar-flatmenu-item {
   display: block;

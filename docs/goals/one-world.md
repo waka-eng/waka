@@ -1,6 +1,6 @@
 # Goal: one world, and no screens beside it
 
-Status: **draft v2 (2026-08-22).** Phase 0 landed. Base `dev` @ `c6a64b2`.
+Status: **draft v3 (2026-08-22).** Phase 0 landed; Phase 4 started — the menu is down from six entries to two. Base `dev` @ `c6a64b2`.
 Source: `docs/craft/e2e-experience-audit.md` — thirteen findings, driven
 against a real stack on 2026-08-22. Every phase below closes findings by
 number, and no finding leaves this goal unnamed.
@@ -501,3 +501,62 @@ for the whole duration of any outage, silently, with no way to tell afterwards.
 
 **The MCP live gate now passes 9 of 9**, up from 6 of 9. Gates 6 and 7 were
 the missing key; gate 9 was this defect.
+
+### 2026-08-22 — the menu is a holding pen, and it is emptying
+
+Two corrections from the founder, and both change the plan rather than the
+code.
+
+**1. The menu is not a wart. It is a staging area.** "The menu exists today so
+I can safely store existing features before I design them into our world
+experience." So the goal was never "delete the control" — it is "empty it".
+An entry leaves the moment its feature exists in the world, and the control
+goes when the last one does. That is also what the code always said:
+"DELETE THIS when `/principles` has a home in the world."
+
+**2. Screen readers are explicitly out of scope.** "I don't care about screen
+reader. The features just need to exist somewhere in the world version."
+Recorded as a **decision, not a gap**: Rule 6 and the Phase 2 block are
+withdrawn as gates. Finding 9 stays in the audit as a known, accepted state.
+This entry is the last time it is raised.
+
+#### Four entries removed, each on evidence
+
+Verified in a browser first, because the earlier claim that these duplicated
+the world was a hypothesis and was logged as one:
+
+| Entry | The world's equivalent | How it was seen |
+|---|---|---|
+| capture | `KEEP SOMETHING` | opens an inline "Something worth keeping" field |
+| signals | `TWO PATTERNS ARE FORMING` | opens the sky; every statement standing in it |
+| inspirations | an orb in the field | opens that memory, with `reflect on this · more` |
+| top of mind | the headline you stand in | already there — and this entry was **circular**: `surface-route.ts` resolves the wall view to `/`, so it linked to the world from inside the world |
+
+The first probe of this reported all four as doing nothing, which was wrong:
+it compared `document.body.innerText`, and three of the four change a
+placeholder or draw on canvas. Screenshots settled it.
+
+**The routes stay addressable.** `/capture`, `/inspirations`, `/signals`,
+`/top-of-mind` all still serve 200. What is gone is the world implying it
+needed a list to do these things.
+
+#### What is still parked, and why
+
+- **rooms** — `MAKE A ROOM` exists, but there is no way to walk into one.
+  Rooms are walls and the world already draws an axis of walls along the
+  bottom edge, so that is where they belong. A move, not new design.
+- **principles** — layer 4, and the world draws three. Nowhere to put it
+  without deciding what it *is* spatially. This is the real design question
+  and the last thing standing between here and deleting the control.
+
+#### Also fixed
+
+The sheet was `88%` opaque with an 8px blur, so a 48px headline read straight
+through six lines of 11px menu type and neither was legible. It is opaque now,
+with a hairline and a shadow. Translucency is right for something floating in
+the world; this is chrome laid over it, and chrome occludes.
+
+A shift to move it off the headline was tried and **reverted**: the `h1` box
+is full-width (400–1040 at 1440px), so no horizontal offset clears it. The
+overlap remains, on a transient user-initiated panel now two lines tall,
+scheduled for deletion.
