@@ -1,5 +1,10 @@
-@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css");
-@import url("https://fonts.googleapis.com/css2?family=Jost:ital,wght@0,300;0,400;1,300&display=swap");
+/* NO @import HERE, DELIBERATELY. Pretendard and Jost load from index.html
+   <link> tags — the same two URLs used to be duplicated here as @import,
+   which put them inside this lazy chunk's CSS: on any network that blocks
+   either CDN the stylesheet failed, Vite's chunk preload rejected, and the
+   whole world rendered as a silent black page with no error. A <link> that
+   fails just falls back to the system face; a chunk that fails takes the
+   page with it. */
 
 /* assigned to the `product` layer — see styles/layers.css for the order */
 @layer product {
@@ -165,6 +170,23 @@
 }
 .jar-eyebrow {
   margin: 0 0 16px;
+}
+/* The room's name as its door: same slot, same face — a button only in that
+   it answers a tap, because a control dressed as chrome is the only kind of
+   button this layout allows beside a poster. */
+.jar-eyebrow-door {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: inherit;
+  color: inherit;
+  cursor: pointer;
+  /* the chrome layer is pointer-inert by default; a door must answer */
+  pointer-events: auto;
+  position: relative;
+  z-index: 3;
 }
 .jar-poster {
   margin: 0;

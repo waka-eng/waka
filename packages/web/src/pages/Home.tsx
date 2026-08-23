@@ -8681,8 +8681,22 @@ function HomeExperience(): JSX.Element {
                     ref={w.kind === "self" ? measured.hqInner : undefined}
                   >
                     {/* the wall's name, and nothing else in this slot, ever —
-                        no kind label, no model, no chip */}
-                    <div className="jar-eyebrow jar-label">{c.eyebrow}</div>
+                        no kind label, no model, no chip. On a group's own
+                        wall the name is also the door to the room's panel:
+                        the panel's header says "opened by tapping a group's
+                        wall", and until this button existed nothing anywhere
+                        called it — a finished, tested surface with no way in. */}
+                    {w.kind === "group" && here ? (
+                      <button
+                        type="button"
+                        className="jar-eyebrow jar-label jar-eyebrow-door"
+                        onClick={() => setGroupPanel(w.id)}
+                      >
+                        {c.eyebrow}
+                      </button>
+                    ) : (
+                      <div className="jar-eyebrow jar-label">{c.eyebrow}</div>
+                    )}
                     {c.text ? (
                       /* A STABLE KEY, AND A CARRIED/NEW SPLIT INSIDE IT.
                          The whole h1 used to be keyed by its words, so every
