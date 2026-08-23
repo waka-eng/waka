@@ -406,6 +406,25 @@ const SPIN_TURNS = 2;
 /** Let go and it eases back to front-facing, the short way round. */
 const UNWIND_MS = 650;
 /**
+ * THE GATHER BEFORE A REACTION.
+ *
+ * Every moment in this world was a reaction with no wind-up: the thing
+ * happened and the creature was already at full flare on the next frame. That
+ * is the one shape a living thing never makes. Anticipation is the first of
+ * the three terms carrying Luxo Jr. — a lamp with no eyes and no hue — and it
+ * is the cheapest of them here, because it spends time rather than light.
+ *
+ * It is the creature's own wind-up, not a prediction of yours. The memory is
+ * already born and falling; what these numbers stage is the beat between
+ * seeing it and answering, which is why nothing about the keep is delayed to
+ * pay for them.
+ */
+const ANTICIPATE_MS = 130;
+/** How far it compresses at the bottom of the gather. Squash, so positive. */
+const ANTICIPATE_SQ = 0.03;
+/** And how long the body takes to come back up out of it, once released. */
+const ANTICIPATE_EASE = 4.6e-4;
+/**
  * HOW LONG THE COMPANION TAKES TO BECOME THE ONE WHOSE WALL THIS IS.
  *
  * Shorter than UNWIND_MS on purpose: the change starts on the arrival beat
@@ -2934,6 +2953,11 @@ function HomeExperience(): JSX.Element {
       glanceAt: 0,
       glanceUntil: 0,
       riseAt: 0,
+      /* the wind-up: when it began, what it is winding up TO, and how far
+         into the compression the body currently is */
+      antAt: 0,
+      antFlare: 0,
+      ant: 0,
     };
 
     /* motes rising off the aura when the companion is genuinely inspired */
@@ -4733,7 +4757,11 @@ function HomeExperience(): JSX.Element {
            character's own response to being moved and not decoration on top
            of it. (Its LIGHT still obeys the rule that juice lives in the
            bloom; this is the body, and a body may act.) */
-        const sq = view.reduced ? 0 : Math.sin(companion.bobPh + 1.5) * 0.022 - companion.pitch * PITCH_STRETCH;
+        const sq = view.reduced
+          ? 0
+          : Math.sin(companion.bobPh + 1.5) * 0.022 -
+            companion.pitch * PITCH_STRETCH +
+            companion.ant;
         const bw = companion.size * (1 + sq);
         const bh = companion.size * (1 - sq);
 
@@ -5386,6 +5414,26 @@ function HomeExperience(): JSX.Element {
       /* the companion. Its glow eases toward the real signal; its flare
          decays; it blinks; and when it is genuinely inspired, motes rise. */
       companion.inspNow = view.reduced ? companion.insp : lerp(companion.inspNow, companion.insp, 1 - Math.pow(0.02, dt));
+      /* THE GATHER, AND THE RELEASE AT THE END OF IT. The compression eases IN
+         (u·u) so the body sinks rather than snapping down, and the flare it is
+         holding fires at the bottom — the fast half of a slow-in, fast-out.
+         The body then comes back up on its own clock, under the light, which
+         is what makes the release read as a push rather than a cut. */
+      if (companion.antAt > 0) {
+        const u = clamp01((now - companion.antAt) / ANTICIPATE_MS);
+        companion.ant = u * u * ANTICIPATE_SQ;
+        if (u >= 1) {
+          companion.flare = Math.max(companion.flare, companion.antFlare);
+          companion.antAt = 0;
+          companion.antFlare = 0;
+        }
+        easing = true;
+      } else if (companion.ant > 0.0005) {
+        companion.ant = lerp(companion.ant, 0, kd(ANTICIPATE_EASE, dt));
+        easing = true;
+      } else if (companion.ant !== 0) {
+        companion.ant = 0;
+      }
       if (companion.flare > 0) {
         companion.flare = Math.max(0, companion.flare - dt / 0.7);
         easing = true;
@@ -6510,8 +6558,16 @@ function HomeExperience(): JSX.Element {
           case "kept":
             /* SOMETHING NEW EXISTS. The biggest flare in the world, and the
                eyes go DOWN to the ground where it landed — the creature looks
-               at what was just made rather than at you making it. */
-            companion.flare = Math.max(companion.flare, 0.95);
+               at what was just made rather than at you making it.
+               IT GATHERS FIRST. The eyes travel during the wind-up, so the
+               look is already committed when the light arrives — the body
+               sinks toward the thing, then answers it. Under reduced motion
+               the gather is silent (it is rhythm) and the flare is immediate,
+               which is the same rule the bob and the lean already follow. */
+            if (!view.reduced) {
+              companion.antAt = performance.now();
+              companion.antFlare = 0.95;
+            } else companion.flare = Math.max(companion.flare, 0.95);
             companion.eyeTX = 0;
             companion.eyeTY = 1.5;
             companion.attendUntil = performance.now() + 1500;
@@ -6520,8 +6576,14 @@ function HomeExperience(): JSX.Element {
           case "answered":
             /* YOU TOLD IT SOMETHING TRUE ABOUT YOURSELF. It looks UP at the
                sky it read you from, and holds longer than anything else here:
-               this is the slow one, because being understood is not a ping. */
-            companion.flare = Math.max(companion.flare, 0.72);
+               this is the slow one, because being understood is not a ping.
+               It gathers too — the only other moment loud enough to deserve a
+               wind-up. The rest stay immediate on purpose: a creature that
+               winds up for a tap is a creature that is never simply present. */
+            if (!view.reduced) {
+              companion.antAt = performance.now();
+              companion.antFlare = 0.72;
+            } else companion.flare = Math.max(companion.flare, 0.72);
             companion.eyeTX = 0;
             companion.eyeTY = -1.6;
             companion.attendUntil = performance.now() + 2800;
