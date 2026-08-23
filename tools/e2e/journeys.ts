@@ -206,6 +206,61 @@ const JOURNEYS: Journey[] = [
   },
 
   {
+    id: "first-keep",
+    name: "the very first memory a person keeps appears in the field",
+    /* The keep itself is what this rests on. With the POST failing there is
+       nothing to appear, so the field stays dark and the journey fails —
+       which is also exactly what it looks like when the bug is present. */
+    breaks: (ctx) => breakRoute(ctx, (p, m) => p === "/api/inspirations" && m === "POST"),
+    run: async (page, base) => {
+      await signUp(page, base);
+
+      /* Read the FIELD off the canvas rather than the DOM. There is nothing in
+         the DOM to read: an orb is painted, and the whole claim of this
+         journey is about paint. The band is the bottom quarter, which is where
+         `assignHomes` fits the ground. */
+      const fieldLight = () =>
+        page.evaluate(() => {
+          const c = document.querySelector("canvas");
+          if (!c) return null;
+          const g = c.getContext("2d");
+          if (!g) return null;
+          const y = Math.floor(c.height * 0.72);
+          const h = Math.floor(c.height * 0.26);
+          const d = g.getImageData(0, y, c.width, h).data;
+          let sum = 0;
+          let n = 0;
+          for (let i = 0; i < d.length; i += 4 * 17) {
+            sum += (d[i]! + d[i + 1]! + d[i + 2]!) / 3;
+            n += 1;
+          }
+          return Math.round((sum / n) * 100) / 100;
+        });
+
+      const before = await fieldLight();
+      if (before === null) return { ok: false, detail: "no canvas to read the field from" };
+
+      await page.locator('button:has-text("Keep something")').first().click();
+      await page.waitForTimeout(900);
+      await page.fill(
+        'textarea[aria-label="something worth keeping"]',
+        `a lift button that dims once it has heard you ${uniq()}`,
+      );
+      await page.keyboard.press("Enter");
+      await page.waitForTimeout(5_000);
+
+      const after = await fieldLight();
+      /* Measured 2026-08-23 on a brand-new account: the field reads ~0.07
+         empty, ~0.05 after the first keep, and ~1.95 once the page is
+         RELOADED. So the orb exists and simply is not drawn until something
+         re-solves the ground. A tenfold floor is far below the reload value
+         and far above the noise between two empty frames. */
+      const ok = after !== null && after > before * 10 && after > 0.5;
+      return { ok, detail: `fieldLight ${before} -> ${after} (reload shows ~1.95)` };
+    },
+  },
+
+  {
     id: "seek",
     name: "a memory can be found again by a word from inside it",
     breaks: (ctx) =>

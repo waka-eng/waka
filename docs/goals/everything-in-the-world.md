@@ -1,6 +1,6 @@
 # Goal: everything in the world
 
-Status: **Phase 1 passed (2026-08-22).** Phase 2 next. Replaces `one-world.md`, whose premise was wrong.
+Status: **Phase 2 in progress (2026-08-23).** Its failing case is written and reproduces; the fix is not done. Replaces `one-world.md`, whose premise was wrong.
 Branch: `claude/repo-sync-qlndc3`. Base `dev` @ `c6a64b2`.
 Source: `docs/craft/e2e-experience-audit.md` — thirteen findings, driven
 against a real stack. **Three closed, ten open.** Every phase below closes
@@ -39,7 +39,9 @@ Measured, not remembered — every row re-checked against the tree at v1:
 | 6 | The `≡` menu | **closed** — the control is gone; nothing matches `jar-flatmenu` in `packages/web/src` |
 | 4 | Two palettes — world dark, flat screens near-white | open |
 | 5 | Sign-in's submit is the weakest control; no password recovery | open (lockout copy fixed) |
-| 7 | Keeping something confirms almost invisibly | open |
+| 7 | Keeping something confirms almost invisibly | open — and **worse in the world than on the flat screen**: see finding 15 |
+| 14 | **Nobody knows the world can be moved through** — real user feedback, 2026-08-23 | open, unstarted |
+| 15 | **The first memory a person ever keeps does not appear until reload** | open — failing case written |
 | 8 | 21–22 touch targets under 44px; destructive ones at 20px | open |
 | 9 | The world is one unlabelled canvas | **out of scope, by decision** |
 | 10 | Three product nouns on the sign-in screen | open |
@@ -513,3 +515,77 @@ middot between them would say they are the same kind of thing.
 The routes stay addressable, which was always the point: the parking lot keeps
 working, and nothing needs it. Regression: `e2e:journeys` 7/7,
 `e2e:first-paint` 2/2, web 130/130, vocabulary and seams clean.
+
+### 2026-08-23 — Phase 2, part 1: the case is written and it fails
+
+Not done. The gate's failing case exists and reproduces; the fix does not.
+
+#### What keeping something actually does in the world today
+
+Driven on a brand-new account. The keep succeeds — `201 /api/inspirations` —
+and then:
+
+    note        null      (`setMouthNote` is only ever set on FAILURE)
+    field       null      (the mouth closes)
+    aria-live   []        (there are none anywhere)
+    the field   unchanged
+
+**Nothing acknowledges it at all.** This is *worse* in the world than on the
+flat screen, which at least prints "kept" in small type. The audit recorded
+finding 7 as "confirms almost invisibly"; in the world it does not confirm.
+
+#### And the reason is a bug, not a missing flourish — finding 15
+
+The design already intends the confirmation. `Home.tsx:9060` says the mouth
+sits on the seam so "what you type sits just above where the orb it becomes
+will appear: **the geography teaches itself in one beat** and there is no
+tutorial anywhere."
+
+That beat is broken. Field brightness read off the canvas, bottom quarter:
+
+| account | before keep | after keep | after reload |
+|---|---|---|---|
+| **brand new** (empty field) | 0.07 | **0.05** — nothing | **1.95** |
+| demo (≈50 memories) | 3.39 | **5.11 → 5.73** — orb arrives | 3.40 |
+
+So `born()` draws the orb when the field already has memories, and does not
+when it is empty. **The very first memory anybody keeps vanishes until they
+reload.** It is the one capture that most needs to land, and it is the only
+one that does not.
+
+Cause not yet isolated, and I am not going to guess at it in this log.
+`born()` (`Home.tsx:6432`) pushes the ball, calls `assignHomes()` and
+`wake()`; `assignHomes` returns early only at `n === 0`; the sim effect's
+guard (`!root || !canvas || !inspirations || !agents`) resolves on a fresh
+account. Something between those is not re-solving the ground for the first
+ball, and finding it needs a session with instrumentation inside the loop
+rather than pixel-reading from outside.
+
+**The case is written**: `journeys:first-keep`, asserting the field brightens
+after the first keep of a new account. On the current build:
+
+    FAIL 1. the very first memory a person keeps appears in the field
+            — fieldLight 0.02 -> 0.05 (reload shows ~1.95)
+
+Its `--negative` sabotage is the keep POST itself, so the journey fails
+identically whether the bug is present or the write is broken — which is
+correct: from the person's side those are the same experience.
+
+#### Finding 14 — nobody knows the world can be moved through
+
+Real user feedback, 2026-08-23: *"they had no idea they can go left, right,
+up, bottom."* Unstarted, and the most valuable signal in this document
+because it came from somebody using the thing rather than from a harness.
+
+**It is partly finding 15.** The world's own answer to "how would anyone know
+there is a field below?" is that you keep something and watch it drop there —
+the sentence quoted above. For every new user that beat does not happen, so
+the world's one self-teaching moment is exactly the one that is broken. Fixing
+15 is a prerequisite for judging how much of 14 is left.
+
+What remains of 14 after that is a real design question and is not answered
+here: the axis along the bottom edge already maps the horizontal walls, the
+sky is reachable from the forming line, and neither apparently reads as "you
+can go there". Owned by this goal; it needs its own phase and probably its own
+measurement, because "did they know they could move" is not something the
+existing gates can see.
