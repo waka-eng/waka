@@ -55,6 +55,7 @@ import {
   GeminiEmbeddingHttpClient,
 } from "./inspiration-embeddings.js";
 import { normalizeSupportedLocale } from "./locales.js";
+import { verifyQuote } from "./salience.js";
 import { getDefaultModelProvider, type ModelProvider } from "./model-provider.js";
 import {
   MATCH_CANDIDATE_SCAN_LIMIT,
@@ -225,12 +226,54 @@ export async function deriveSignalsForInspiration(
   // and it is worth keeping current even when this capture yielded nothing.
   await ensureInspirationEmbedding({ profileId, inspirationId: inspiration.id });
 
+  /*
+   * THE TWO AUTHORS OF A SAVE, ASSEMBLED FOR THE VERIFIER.
+   *
+   * `salience.ts` has always known how to tell a real quote from an invented
+   * one and has never been asked. What it needs is the text the quote claims
+   * to come from: what the person wrote, and what the page they linked said.
+   * The first is the capture itself; the second is whatever the attachments
+   * extracted, which is the same text the extraction prompt was shown.
+   */
+  const enrichment =
+    attachmentRows
+      .map((row) => row.text)
+      .filter((text): text is string => typeof text === "string" && text.length > 0)
+      .join("\n") || null;
+
   const statements = extraction.statements
-    .map((candidate) => ({
-      statement: clip(candidate.statement, MAX_STATEMENT_LENGTH),
-      reason: candidate.reason ? clip(candidate.reason, MAX_REASON_LENGTH) : null,
-      quote: candidate.quote ? clip(candidate.quote, MAX_QUOTE_LENGTH) : null,
-    }))
+    .map((candidate) => {
+      /*
+       * A MISSING QUOTE IS HONEST; AN INVENTED ONE IS NOT.
+       *
+       * The schema comment has said this from the start and nothing enforced
+       * it: the model was asked not to invent and was never checked. A
+       * paraphrase went into `signal_evidence.quote`, was served by
+       * `GET /api/signals/:id`, and was marked up on the wall as a span of the
+       * person's own memory — words put in their mouth inside their own
+       * product. `verifyQuote` refuses anything it cannot find.
+       *
+       * Verified BEFORE clipping, against the whole text: clipping first would
+       * truncate a real quote into one that no longer matches. Clipping after
+       * is safe because a prefix of a substring is still a substring.
+       *
+       * Only `own` is kept. The verifier also recognises a quote lifted from
+       * the linked page, and that is a true quotation — but of the article,
+       * not of the person, and `signal_evidence` has no column to say which.
+       * Until it does, rendering an article's sentence as the member's own
+       * words is the same misattribution in a quieter voice.
+       */
+      const verified = verifyQuote(candidate.quote, {
+        text: inspiration.text,
+        enrichment,
+      });
+      return {
+        statement: clip(candidate.statement, MAX_STATEMENT_LENGTH),
+        reason: candidate.reason ? clip(candidate.reason, MAX_REASON_LENGTH) : null,
+        quote:
+          verified && verified.source === "own" ? clip(verified.quote, MAX_QUOTE_LENGTH) : null,
+      };
+    })
     .filter((candidate) => candidate.statement.length > 0);
 
   if (statements.length === 0) {
