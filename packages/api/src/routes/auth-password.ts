@@ -368,7 +368,8 @@ export async function loginHandler(c: Context<AuthEnv>): Promise<Response> {
            anxious, was sent looking for a door that does not exist. Waiting
            is genuinely the only thing that works right now, and saying only
            that is kinder than naming an escape they cannot take.
-           `docs/goals/one-world.md` Phase 5 owns building the real one; this
+           `docs/goals/everything-in-the-world.md` Phase 4 owns building the real
+           one; this
            line changes back in the same diff that makes it true. */
         error: "Too many sign-in attempts. Wait a few minutes and try again.",
       },

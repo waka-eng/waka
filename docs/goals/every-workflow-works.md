@@ -8,7 +8,7 @@ by driving it rather than by reading it.
 
 **What it does not own:** the craft of those workflows — the migration into the
 world, the palette, the menu, the doorway. That is
-[`docs/goals/one-world.md`](one-world.md), and where a finding belongs there
+[`docs/goals/everything-in-the-world.md`](everything-in-the-world.md), and where a finding belongs there
 this goal names it and hands it over rather than repeating it. A workflow can
 be beautiful and broken; it can also work and be ugly. Two goals, because they
 fail in different ways and are measured differently.
@@ -42,7 +42,7 @@ Three more things follow from the same shape:
    profile page.
 3. **One workflow does not exist.** There is no password recovery: no route,
    no token table, no mail transport. It cannot be proven because there is
-   nothing to prove. Owned by `one-world.md` Phase 5, deferred there pending
+   nothing to prove. Owned by `everything-in-the-world.md` Phase 4, deferred there pending
    a mail provider, and named here so the inventory is honest.
 
 ## The inventory
@@ -145,8 +145,11 @@ performs and no API suite can reach:
 - **C1/C2** find a memory again; edit it; delete it and get it back
 - **E2** the entry actions and their undo (`putEntryBack`)
 - **J1** rename, locale switch, publish a page
-- Keyboard traversal and the accessibility tree at each step — which is also
-  `one-world.md` Phase 2's automated half, built once and used by both
+- Keyboard traversal and the accessible-name floor at each step. This was
+  written to double as the craft goal's accessibility work; that work is now
+  out of scope by founder decision, so it stands alone here — it is a
+  regression check on the names that exist, not a claim that the world is
+  usable without sight
 
 **A journey is only added with a case that fails first.** Where the workflow
 already works, the failing case is constructed by breaking it (as
@@ -178,7 +181,7 @@ because <reason>*. No row is blank.
 ### Phase 4 — Fix what the proofs found
 
 Product defects from Phases 1–3, closed in severity order, each with the case
-that fails before the fix. Findings already owned by `one-world.md` are
+that fails before the fix. Findings already owned by `everything-in-the-world.md` are
 handed there and named here rather than fixed twice.
 
 **Gate:** every defect closed, or logged with a reason and the conditions
@@ -211,7 +214,7 @@ reachable by a named script.
 4. **Unproven is a valid outcome and a recorded one.** A workflow that cannot
    be tested here says so in the inventory with its reason. Silence is what
    this goal exists to remove.
-5. **No phase widens.** Craft findings go to `one-world.md`. This goal proves
+5. **No phase widens.** Craft findings go to `everything-in-the-world.md`. This goal proves
    things work; it does not redesign them.
 6. **Spending is a checkpoint.** State expected calls before a phase that
    spends; stop at double.
