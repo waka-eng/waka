@@ -383,16 +383,19 @@ resumption.
    deliberate-memory identity against platform surveillance-memory —
    with the team door earned by paid-pilot evidence, never by pivot.
    Items 1–8 are identity-proof either way.*
-2. **May the machine ever pick between two things it believes about
-   you?** This doc says no (owner-confirmed only), and the queue is
-   built on that answer — but it is "who is the final authority on a
-   person," a values call that should be yours in the decision log, not
-   mine in a strategy doc.
-3. **When one member's right to be forgotten collides with the room's
+2. ~~**May the machine ever pick between two things it believes about
+   you?**~~ **RULED 2026-08-23 (founder): never — the owner resolves.**
+   Both sides stand as contested until an owner act; the loser becomes
+   yielded, a state, never a deletion. Signed in `data-model.md`'s
+   decision log; governs `goals/no-quiet-corners.md` Phase 5.
+3. ~~**When one member's right to be forgotten collides with the room's
    right to its co-authored record, which wins — and is that law or
-   doctrine?** Redaction-instead-of-deletion is designed and gated;
-   until you decide what a room's history *is* (and counsel confirms
-   it), every compliance sentence stays unsaid.
+   doctrine?**~~ **RULED 2026-08-23 (founder): the room keeps its
+   approved text** — erasure removes the person and their name;
+   settled records survive as departed marks. Signed in
+   `data-model.md`'s decision log, implemented and pinned
+   (`account-erasure.db.test.ts`). Counsel review remains open before
+   any compliance sentence is uttered to anyone.
 
 ---
 

@@ -426,6 +426,18 @@ follows the permission matrix.
   against is assured, or on timeout — so "a member is a member" holds
   for both verbs. Gated on the founder (`goals/a-room-you-can-trust.md`,
   Phase 0c); the code keeps today's rule until the ruling lands.
+- **2026-08-23** — **RULED (founder): the machine never picks between two
+  things it believes about you.** The register's standing arbitration
+  question is closed in the strictest direction: when derivation holds
+  two opposed beliefs, both stand as **contested** and resolution comes
+  only from an owner act (a lock or a verdict), after which the loser
+  becomes **yielded** — a state, never a deletion. No evidence weight,
+  however lopsided, resolves a pair on its own; the machine may name a
+  tension, never settle one. This is "the world never moves unless the
+  user moved it," applied to belief. Governs
+  `goals/no-quiet-corners.md` Phase 5 (contested pairs), whose design
+  assumed exactly this and is now doctrine rather than proposal.
+
 - **2026-08-23** — **RULED (founder): a sentence the room approved belongs
   to the room.** The erasure question above is closed. Erasure stays the
   one true delete for everything the person OWNS — profiles, inspirations,

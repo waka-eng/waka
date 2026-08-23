@@ -131,7 +131,10 @@ relation alongside the new signal. Canon vocabulary written into
 `data-model.md`: a **tension** is held on purpose; **contested** is an
 unresolved conflict awaiting arbitration; resolution comes only from an
 owner act (lock, verdict), after which the loser becomes **yielded** —
-a state, never a deletion. Selection may ride a contested pair into
+a state, never a deletion. **Owner-only resolution is doctrine, not
+design** — ruled by the founder 2026-08-23 ("never — the owner
+resolves"), signed in `data-model.md`'s decision log: no evidence
+weight, however lopsided, resolves a pair on its own. Selection may ride a contested pair into
 synthesis so the artifact names the tension instead of asserting one
 side.
 
@@ -193,9 +196,11 @@ founder law and taste is not delegable.
 
 ## Track D — the demo kit
 
-The 30-second demo is `a-room-you-can-trust`'s standing acceptance
-gate, and today the world it needs exists only as a hand-run scratchpad
-script. Commit `tools/demo/`: one command against a fresh local stack
+The 30-second demo stopped being a gate on 2026-08-23 —
+`a-room-you-can-trust` closed on substituted evidence after the founder
+questioned the recording's necessity — but the demo world is still the
+first thing WAKA shows anyone, and today it exists only as a hand-run
+scratchpad script. Commit `tools/demo/`: one command against a fresh local stack
 that seeds the recordable world — the archive, the minted signals, the
 star, the room, the counted stances, the door marks — plus the
 six-scene shot list in its README, in the product's English.
@@ -207,13 +212,20 @@ screenshots.
 
 ## Standing founder gates (listed, never worked around)
 
-- The 30-second recording itself (`a-room-you-can-trust`'s acceptance).
-- The Phase 6 default flip.
+- The Phase 6 default flip. Asked, the founder answered "what would you
+  recommend to align with our strategy" — the standing recommendation
+  is **flip to opt-in** (2026-08-23, argued in the log below); the flip
+  itself still waits for their word, because a delegation to recommend
+  is not a ruling and this changes every existing account's privacy at
+  once.
 - The Phase 8 motion sign-off.
-- The register's three standing questions (world-for-one vs
-  infrastructure; may the machine arbitrate between beliefs; the
-  identity of the room) — reason-4 stops, owned by the founder, not
-  scheduled here.
+- The register's one remaining standing question: world-for-one vs
+  infrastructure for teams (arbitration was ruled 2026-08-23 — never,
+  the owner resolves; the room's identity was ruled 2026-08-23 — the
+  room keeps its approved text, counsel review still open).
+- Closed 2026-08-23: the 30-second recording — `a-room-you-can-trust`
+  accepted on substituted evidence at the founder's "is this
+  necessary?".
 
 ## Budget
 
@@ -235,6 +247,24 @@ Postgres. No new infrastructure, no new dependencies.
   costs the founder thirty seconds, not an evening.
 
 ## Log
+
+- **2026-08-23 — Three founder answers land before the first phase
+  runs.** (1) **Arbitration ruled**: never — the owner resolves; Phase
+  5's owner-only design is doctrine now, signed in `data-model.md`.
+  (2) **The demo gate closed**: the founder questioned the recording's
+  necessity and `a-room-you-can-trust` accepted on substituted
+  evidence; Track D reframed from gate-serving to demo material.
+  (3) **The sibling door**: asked to choose a default, the founder
+  asked for the strategy-aligned recommendation instead. It is
+  **flip to opt-in**, for three register-grounded reasons: the queue's
+  own sequencing makes the flip a precondition of any room-read surface
+  (room content must never reach eight profiles unconsented); the
+  product's identity is deliberate, consent-visible memory, and a
+  latent open channel is the one fact in the codebase that contradicts
+  it; and the flip is cheapest now, before any population inherits the
+  open default as an expectation. The default flip remains the
+  founder's word; Phase 6 builds everything up to it either way. Also
+  answered: the branch keeps accumulating — no pull request yet.
 
 - **2026-08-23 — Created, Phase 0 passed at birth.** Every claim above
   verified against code today; wedge register corrected in the same

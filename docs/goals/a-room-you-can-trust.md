@@ -1,16 +1,18 @@
 # Goal: a room you can trust
 
-Status: in flight — opened 2026-08-22 from the founder's ruling that
-**groups is a priority feature**; by the same day's end every phase
-executable without the founder had passed its gate (0a, 0d, 1a–1d, and
-Track S to the brief's bar). On 2026-08-23 the founder ruled on both
-remaining doctrine gates — **0b Step 2** (erasure: the room keeps its
-approved text; departed marks, not destruction) and **0c** (decline is a
-counted stance, not a veto) — and both are now implemented and pinned;
-see the log. One standing gate: the 30-second demo as the acceptance
-act. Two earlier gates closed by the language ruling (2026-08-22,
-English only — see the log): the numerals question on the brief's toast,
-and the dialect seam.
+Status: done (2026-08-23) — opened 2026-08-22 from the founder's ruling
+that **groups is a priority feature**; every executable phase passed its
+gate the same day (0a, 0d, 1a–1d, Track S), the founder ruled both
+doctrine gates on 2026-08-23 (**0b Step 2**: erasure — the room keeps
+its approved text; **0c**: decline is a counted stance, not a veto),
+both implemented and pinned, and the live model walk closed the last
+carve-out. Acceptance: the founder questioned whether the 30-second
+recording was necessary ("is this necessary?"), and it was closed on
+substituted evidence — the pinned suites, the live walk, and the
+2026-08-23 headless screenshots showing the six scenes — with the
+recording downgraded from gate to optional material (Track D of
+`no-quiet-corners.md` still builds the one-command demo world for it).
+Reopenable by the founder's word.
 Strategy: `docs/craft/agent-memory-wedge.md` (the addendum is this goal's
 argument; the evidence base is `agent-memory-ecosystem-2026.md`).
 Branch: `claude/waka-product-evolution-vbj1ur` (this session's designated
@@ -207,6 +209,20 @@ house norm.
   be scrubbed through its own becoming.
 
 ## Log
+
+- **2026-08-23 — CLOSED, acceptance substituted.** Asked how the
+  30-second recording should land, the founder answered "is this
+  necessary?" — and the honest answer is no: every scene's mechanics
+  are test-pinned (api 593 / web 131), the live walk ran every gate
+  against the real model, and the headless walkthrough photographed the
+  six scenes on the running product. The recording was the brief's
+  definition of done for a day's merge, not a load-bearing proof; held
+  open as a gate it was costing information nothing and closure
+  everything. Closed on that evidence, recording downgraded to optional
+  material (the demo world becomes one command in
+  `no-quiet-corners.md` Track D), and the goal reopens on the
+  founder's word if they want the recording to stand as the acceptance
+  after all.
 
 - **2026-08-23 — The live model walk: the 1a carve-out closes.** With the
   founder's key in the gitignored `.env.local`, the full stack ran
