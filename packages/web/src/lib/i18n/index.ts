@@ -58,7 +58,6 @@ export const messageCatalogs = {
   "ko-KR": exactCatalog(koKrMessages),
 } satisfies Record<SupportedLocale, Record<MessageKey, string>>;
 
-export const translationKeys = Object.keys(enUsMessages).sort() as MessageKey[];
 
 export function t(locale: unknown, key: MessageKey): string {
   return messageCatalogs[normalizeSupportedLocale(locale)][key];
@@ -89,7 +88,6 @@ export function formatSavedCount(locale: SupportedLocale | null | undefined, cou
   return formatMessage(locale, "savedCount", { count });
 }
 
-export const formatInspirationSavedCount = formatSavedCount;
 
 export function formatResultsCount(
   locale: SupportedLocale | null | undefined,
@@ -99,18 +97,11 @@ export function formatResultsCount(
   return formatMessage(locale, "resultsCount", { totalCount, filteredCount });
 }
 
-export function formatResultCount(
-  locale: SupportedLocale | null | undefined,
-  counts: { total: number; filtered: number },
-): string {
-  return formatResultsCount(locale, counts.total, counts.filtered);
-}
 
 export function formatBestRecentMirrorMoments(locale: SupportedLocale | null | undefined, count: number): string {
   return formatMessage(locale, "bestRecentMirrorMomentsShownCount", { count });
 }
 
-export const formatBestRecentMirrorMomentsShown = formatBestRecentMirrorMoments;
 
 export function formatGeneratedFieldCounts(
   locale: SupportedLocale | null | undefined,
