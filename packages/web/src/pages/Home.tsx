@@ -108,6 +108,7 @@ import {
 import {
   bakeBeing,
   buildPalette,
+  MACHINE_CELLS,
   type BeingSprites,
   type Palette,
 } from "../canvas/palette";
@@ -404,6 +405,16 @@ const RELIGHT_MS = 900;
 const SPIN_TURNS = 2;
 /** Let go and it eases back to front-facing, the short way round. */
 const UNWIND_MS = 650;
+/**
+ * HOW LONG THE COMPANION TAKES TO BECOME THE ONE WHOSE WALL THIS IS.
+ *
+ * Shorter than UNWIND_MS on purpose: the change starts on the arrival beat
+ * and is finished before the creature has turned back to face you, so what
+ * you witness is a companion that turned away as one and came back as the
+ * other. A dissolve longer than the turn would still be resolving after it
+ * is looking at you, which is the double-exposure this exists to avoid.
+ */
+const FORM_FADE_MS = 320;
 /**
  * The turn is a PLANET, not a card: the silhouette never changes, and it is
  * the features that travel across it. An eye sits on the equator at this
@@ -2912,6 +2923,8 @@ function HomeExperience(): JSX.Element {
       blink: 0,
       /** The occasional clock: a look-around every 30–60s, on any archive. */
       idleAt: 0,
+      /** The memory it looked at last, so the idle glance never repeats it. */
+      lastGaze: "",
       /** The last thing it said, so it never says the same thing twice running. */
       lastSaid: "",
       /** the pairable set as a string, so React only hears about real changes */
@@ -3223,9 +3236,10 @@ function HomeExperience(): JSX.Element {
      * the one mark that separates a kind of mind from an individual, and the
      * owner's smooth hand-made form is never producible by any hash.
      *
-     * It reads off the LIVE camera column, not the arrival state, so the form
-     * turns over mid-crossing: the travel is what explains the change, which
-     * is the only way this world is allowed to change anything.
+     * It USED TO read off the live camera column, so the form turned over
+     * mid-crossing on the theory that the travel is what explains the change.
+     * The block below supersedes that and says why; this paragraph is kept
+     * only so the reasoning it replaced is still legible.
      *
      * `bakeBeing` caches by key, so this is a Map lookup after the first
      * frame on a wall — no gradient is ever made inside the loop.
@@ -3266,9 +3280,24 @@ function HomeExperience(): JSX.Element {
      */
     const wornBeing = (): Being =>
       curWall().kind === "agent" ? agentBeing(curWall().id) : OWNER_BEING;
+    /**
+     * THE FEATURES SWAP ON THE SAME SIGNAL AS THE FORM.
+     *
+     * `machine` is returned rather than re-derived at the draw site, and that
+     * is the whole point: the body sprite is pixelated iff this is an agent's
+     * wall, so anything drawn ON the body has to read the identical boolean or
+     * the two can disagree for a frame. It is deliberately NOT `mech`, which
+     * eases continuously across a travel — a stepped body wearing eyes that
+     * are 40% quantized is not a thing that can be drawn.
+     */
     const worn = (
       pal: Palette,
-    ): { be: Being; body: HTMLCanvasElement[]; aura: HTMLCanvasElement[] } => {
+    ): {
+      be: Being;
+      body: HTMLCanvasElement[];
+      aura: HTMLCanvasElement[];
+      machine: boolean;
+    } => {
       const w = curWall();
       /* REVERTED: a machine's ROOM does not re-body the companion.
          Two attempts at giving a room a pixelated body both shipped a broken
@@ -3279,13 +3308,53 @@ function HomeExperience(): JSX.Element {
          by borrowing the agent path. Until then the companion is unchanged in
          a room, and the room still says what it is through its typography and
          its quantized motion, which both work. */
-      if (w.kind !== "agent") return { be: OWNER_BEING, body: pal.body, aura: pal.auraLayers };
+      if (w.kind !== "agent")
+        return { be: OWNER_BEING, body: pal.body, aura: pal.auraLayers, machine: false };
       const be = agentBeing(w.id);
       const s = bakeBeing(pal, `${w.kind}:${w.id}`, be, true, true);
       /* the AURA is never pixelated: its colour temperature is one of the two
          invariants that say this is still the same companion, and a stepped
          halo would break the one thing carrying continuity across the change */
-      return { be, body: s.body, aura: pal.auraLayers };
+      return { be, body: s.body, aura: pal.auraLayers, machine: true };
+    };
+    /**
+     * THE CHANGE OF FORM IS A DISSOLVE, NOT A CUT.
+     *
+     * `worn()` above reads the wall the traveller has ARRIVED at, which was
+     * the right call and did not go far enough. `trip.col = trip.dest` lands
+     * on the same frame `arriveColumn()` starts the unwind — so the body was
+     * swapping while the creature was still turned a quarter turn and still
+     * riding up to 190px of travel lead, and only THEN spending UNWIND_MS
+     * turning back to face you. One frame changed the silhouette from stepped
+     * to smooth AND the body from cold to warm, in the middle of a gesture
+     * that was still in flight. Everything else about a travel eases; this
+     * one thing cut, and a cut inside a continuous motion is read as a fault
+     * in the world rather than as an event in it.
+     *
+     * The doc above already names the fix without implementing it: Pokémon
+     * carries an evolution through a light envelope that never cuts. Here the
+     * envelope is the turn itself. The dissolve starts on the arrival beat and
+     * finishes inside the unwind, so the companion turns away as yours and
+     * comes back as theirs, and there is no frame at which two different
+     * creatures are both in focus.
+     *
+     * The aura is deliberately NOT part of this: it is identical either way
+     * (see `bakeBeing`), which is what makes it the thing that visibly carries
+     * across while the body is mid-change.
+     */
+    /* last frame's form, so the dissolve has something to come FROM */
+    let wornPrevBody: HTMLCanvasElement[] | null = null;
+    let wornPrevBe: Being = OWNER_BEING;
+    let wornPrevMachine = false;
+    const form = {
+      /** the wall whose form is being worn; "" until the first frame */
+      key: "",
+      /** the outgoing sprite sheet, held only while a dissolve is running */
+      prevBody: null as HTMLCanvasElement[] | null,
+      prevBe: OWNER_BEING as Being,
+      prevMachine: false,
+      /** when the dissolve began, in performance.now() ms */
+      at: 0,
     };
     const colLo = () => wallsRef.current[0]?.col ?? 0;
     const colHi = () => wallsRef.current[wallsRef.current.length - 1]?.col ?? 0;
@@ -3979,6 +4048,22 @@ function HomeExperience(): JSX.Element {
          across the peek line. Below CHAR_MIN the body stops reading as a body,
          so that is where it stops. */
       if (companion.size > avail) companion.size = Math.max(Math.min(avail, companion.size), CHAR_MIN);
+      /*
+       * NO GRID SNAP HERE, AND THE REASON IS WORTH KEEPING.
+       *
+       * A previous pass floored this to a whole number of MACHINE_CELLS, to
+       * buy an integer cell for an agent's stepped body. It bought nothing and
+       * cost something. Nothing, because the body is drawn at `bw = size *
+       * (1 + sq)` with the bob's squash breathing ±2.2% every frame, so the
+       * visible cell was fractional and moving whatever `size` was. Something,
+       * because `Math.max(2, …)` put a 40px floor UNDER the `avail` clamp
+       * directly above — the clamp that keeps the body off the peek line on a
+       * short viewport, and the exact regression the comment above it says had
+       * already been fixed twice.
+       *
+       * The features quantise against the body's own live cell instead (see
+       * the eye and nub passes), which is what actually makes them agree.
+       */
       const lo = hqH + companion.size * 0.5 + gap;
       const hi = seam - companion.size * 0.5 - gap;
       /*
@@ -4586,6 +4671,45 @@ function HomeExperience(): JSX.Element {
          silhouette its features clip to, and the halo, all from one place so
          they can never disagree about which being is on screen. */
       const wear = worn(pal);
+      /* THE DISSOLVE, ARMED AND MEASURED. The key change is detected here
+         rather than at the arrival commit, so it cannot be missed by a code
+         path that lands on a wall without going through `arriveColumn` — a
+         resume, a deep link, a reduced-motion travel. The very first frame
+         arms nothing: there is no previous form to come from. */
+      {
+        const key = spaceKey(curWall());
+        if (form.key !== key) {
+          /* ONLY A REAL CHANGE OF FORM IS WORTH DISSOLVING. `worn()` hands
+             back `pal.body` itself for every wall that is not an agent's, so
+             self→group and group→group travels would otherwise dissolve a
+             sprite into the identical sprite — work, and a state flip, for a
+             frame that cannot look different. Reference equality is the exact
+             test: the bake is cached per being, so the same form is the same
+             array. */
+          if (form.key !== "" && !view.reduced && wornPrevBody !== wear.body) {
+            form.prevBody = wornPrevBody;
+            form.prevBe = wornPrevBe;
+            form.prevMachine = wornPrevMachine;
+            form.at = now;
+          } else {
+            form.prevBody = null;
+          }
+          form.key = key;
+        }
+        wornPrevBody = wear.body;
+        wornPrevBe = wear.be;
+        wornPrevMachine = wear.machine;
+      }
+      /* 0 → 1 across FORM_FADE_MS; 1 whenever nothing is dissolving */
+      const formMix = form.prevBody ? clamp01((now - form.at) / FORM_FADE_MS) : 1;
+      if (formMix >= 1) form.prevBody = null;
+      /* WHICH FORM THE FEATURES BELONG TO. The eyes and the nubs are drawn
+         live and clipped to a silhouette, so they cannot dissolve — they
+         follow whichever body is the louder one this frame, and swap at the
+         midpoint where both are at half and the swap is least visible. */
+      const showPrev = formMix < 0.5 && form.prevBody !== null;
+      const formBe = showPrev ? form.prevBe : wear.be;
+      const formMachine = showPrev ? form.prevMachine : wear.machine;
       if (companion.y - cam.y > -companion.size * 2 && companion.y - cam.y < view.h + companion.size * 2) {
         /* the bob rides its own integrated phase: while the companion leads
            it quickens toward a walk, and at rest it is the hover it was */
@@ -4702,24 +4826,49 @@ function HomeExperience(): JSX.Element {
          * is the light channel expressed as body language" was supposed to
          * mean — an inflection, not an existence test.
          */
-        const nubOn = true;
+        /* `nubOn` used to gate all of this and was last left as a literal
+           `true`, so the guard inside drawNub and both null branches below
+           were unreachable. The paragraph above is the decision that made it
+           dead — the nubs are anatomy, so there is no state in which they are
+           not painted — and the constant was the only thing still implying
+           otherwise. */
         const nubR = companion.size * lerp(0.062, 0.1, bodyLit);
-        /* the colour work is skipped outright when there is no nub to paint —
-           it used to allocate five arrays and two strings every frame,
-           including on every frame where `nubOn` was false */
-        const nubRgb = nubOn ? mix([166, 163, 156], [214, 209, 197], bodyLit) : null;
-        const nubFront = nubRgb ? rgbCss(nubRgb, 1) : "";
+        const nubRgb = mix([166, 163, 156], [214, 209, 197], bodyLit);
+        const nubFront = rgbCss(nubRgb, 1);
         /* the far side of a form is darker than the near side */
-        const nubBack = nubRgb ? rgbCss(mix(nubRgb, [0, 0, 0], 0.15), 1) : "";
+        const nubBack = rgbCss(mix(nubRgb, [0, 0, 0], 0.15), 1);
         const drawNub = (lon: number, behind: boolean) => {
-          if (!nubOn) return;
           const a = companion.yaw + lon;
           if (Math.cos(a) < 0 !== behind) return;
           const s = Math.sin(a);
           /* pointing at or away from you, a nub reads smaller */
           ctx!.fillStyle = behind ? nubBack : nubFront;
+          const nx = s * bw * 0.42;
+          const ny = bh * 0.24;
+          const nr = nubR * Math.max(Math.abs(s), 0.35);
+          if (formMachine) {
+            /* A NUB IS MADE OF THE SAME CELLS THE BODY IS. It used to be a
+               smooth arc laid over a stepped form, which is the machine idea
+               contradicted at the two places furthest from the centre.
+               THE CELL IS NOT SQUARE: the sprite is baked on a MACHINE_CELLS
+               grid and then drawn at bw × bh, and the bob squashes those in
+               opposite directions, so a cell on screen is bw/N wide and bh/N
+               tall. Snapping y to the x-cell put the nubs off the body's own
+               grid by up to half a cell at the extremes of the breath. */
+            const cx = bw / MACHINE_CELLS;
+            const cy = bh / MACHINE_CELLS;
+            const wCells = Math.max(1, Math.round((nr * 2) / cx));
+            const hCells = Math.max(1, Math.round((nr * 2) / cy));
+            ctx!.fillRect(
+              Math.round((nx - (wCells * cx) / 2) / cx) * cx,
+              Math.round((ny - (hCells * cy) / 2) / cy) * cy,
+              wCells * cx,
+              hCells * cy,
+            );
+            return;
+          }
           ctx!.beginPath();
-          ctx!.arc(s * bw * 0.42, bh * 0.24, nubR * Math.max(Math.abs(s), 0.35), 0, TAU);
+          ctx!.arc(nx, ny, nr, 0, TAU);
           ctx!.fill();
         };
         ctx!.globalAlpha = 1;
@@ -4727,13 +4876,38 @@ function HomeExperience(): JSX.Element {
         drawNub(Math.PI / 2, true);
 
         const bodyTier = Math.round(bodyLit * (BODY_TIERS - 1));
-        ctx!.drawImage(wear.body[bodyTier], -bw / 2, -bh / 2, bw, bh);
+        if (form.prevBody) {
+          /*
+           * THE OUTGOING FORM IS THE GROUND, NOT HALF OF A PAIR.
+           *
+           * Drawing prev at `1 - m` and cur at `m` is the obvious crossfade
+           * and it is wrong here: two draws at those alphas composite to a
+           * coverage of `1 - m + m²`, which bottoms out at 0.75 halfway
+           * through. That is a body going 25% transparent for 160ms — the
+           * ground shows through the torso, and the far nubs laid down above
+           * (opaque, on the understanding that the body would hide them) bleed
+           * straight through it.
+           *
+           * Prev opaque with cur faded in over it is a coverage of exactly 1
+           * at every value of m, so the body is never see-through and the
+           * occlusion contract above still holds. The residue is that a region
+           * belonging to prev's silhouette and not cur's stays solid until m
+           * reaches 1 — a few pixels at the edge of a bounded envelope, at the
+           * end of a dissolve that is happening mid-turn.
+           */
+          ctx!.drawImage(form.prevBody[bodyTier], -bw / 2, -bh / 2, bw, bh);
+          ctx!.globalAlpha = formMix;
+          ctx!.drawImage(wear.body[bodyTier], -bw / 2, -bh / 2, bw, bh);
+          ctx!.globalAlpha = 1;
+        } else {
+          ctx!.drawImage(wear.body[bodyTier], -bw / 2, -bh / 2, bw, bh);
+        }
 
         /* everything ON the form is clipped to the form — to THIS form, so a
            machine's features stop at a machine's stepped edge rather than at
            the owner's curve */
         ctx!.save();
-        bodyPath(ctx!, bw, bh, wear.be);
+        bodyPath(ctx!, bw, bh, formBe);
         ctx!.clip();
 
         /* looking at the back of its head: a gentle overall shading, so the
@@ -4781,9 +4955,47 @@ function HomeExperience(): JSX.Element {
           /* at the edge a blink is a flicker, so it is suppressed there */
           const eh = ca < 0.3 ? 1 : Math.max(0.12, 1 - companion.blink);
           ctx!.globalAlpha = clamp01(ca / Math.sin(0.25));
+          const ex = Math.sin(a) * bw * FACE_R * cosLat + companion.eyeX * ca;
+          if (formMachine) {
+            /*
+             * A MACHINE'S EYE IS MADE OF CELLS, AND SO IS ITS BLINK.
+             *
+             * This was the one place the whole machine grammar was not said:
+             * a body quantized to MACHINE_CELLS wore two flawless antialiased
+             * ellipses, and `mech` already stepped where they SAT without ever
+             * stepping what they WERE — a face that moved like a machine and
+             * was drawn like an animal. It is also the first thing anyone
+             * looks at, so it is the worst place to leave the contradiction.
+             *
+             * The blink cannot be the smooth squash the owner's is. At this
+             * resolution an eye is about a cell and a half across, so a
+             * continuous squash to 0.12 is a single cell winking out of
+             * existence — a glitch, not a blink. So the eye is TWO cells at
+             * rest and ONE while it is shut: the blink becomes a change of
+             * resolution, which is the same sentence the stepped tick and the
+             * quantized gaze already say, in the last place that had not
+             * heard it. Two cells is also slightly larger than the owner's
+             * eye, and that is the cost of the grid rather than a choice —
+             * one cell cannot both foreshorten and close.
+             */
+            /* the body's own cell, which the bob makes non-square — see the
+               nub pass for why snapping y to the x-cell is wrong */
+            const cx = bw / MACHINE_CELLS;
+            const cy = bh / MACHINE_CELLS;
+            const wC = Math.max(1, Math.round(2 * Math.max(ca * cosLat, 0.5)));
+            const shut = ca >= 0.3 && companion.blink > 0.5;
+            const hC = shut ? 1 : Math.max(1, Math.round(2 * Math.max(cosLat, 0.5)));
+            ctx!.fillRect(
+              Math.round((ex - (wC * cx) / 2) / cx) * cx,
+              Math.round((eyY - (hC * cy) / 2) / cy) * cy,
+              wC * cx,
+              hC * cy,
+            );
+            continue;
+          }
           ctx!.beginPath();
           ctx!.ellipse(
-            Math.sin(a) * bw * FACE_R * cosLat + companion.eyeX * ca,
+            ex,
             eyY,
             er * Math.max(ca * cosLat, 0.2),
             er * eh * Math.max(cosLat, 0.35),
@@ -5188,9 +5400,25 @@ function HomeExperience(): JSX.Element {
         if (companion.idleAt === 0) companion.idleAt = now + 22000 + Math.random() * 14000;
         if (now >= companion.idleAt) {
           companion.idleAt = now + 30000 + Math.random() * 30000;
-          companion.glanceUntil = now + 900;
-          /* it looks somewhere of its own choosing, not at you */
-          companion.eyeTX = (Math.random() - 0.5) * 1.6;
+          const subject = idleSubject();
+          if (subject) {
+            /* it looks at a MEMORY of yours, chosen for being alive and near.
+               `attendTo` is the same turn-and-lean the world already uses when
+               you send it somewhere — reused rather than reinvented, so a
+               glance it chose and a glance you caused move identically. The
+               lean matters as much as the eyes here: Elizabeth's other lesson
+               is that a behaviour nobody notices did not happen, and two
+               pixels of eye drift on an 84-pixel body is not noticeable. */
+            attendTo(subject.x, subject.y);
+            companion.lastGaze = subject.id;
+          } else {
+            /* nothing awake to look at: it looks away, as it always did.
+               No `glanceUntil` here — the forming branch below zeroes it in
+               this same frame whenever the sky is empty, which is the normal
+               case, so setting it was a statement that read as live and did
+               nothing. The horizontal drift is the whole of this gesture. */
+            companion.eyeTX = (Math.random() - 0.5) * 1.6;
+          }
         }
         const forming = sky.nebs.length > 0;
         if (forming) {
@@ -5704,6 +5932,76 @@ function HomeExperience(): JSX.Element {
      * instead of taking the shortest path. So the look overshoots slightly and
      * settles, and the body follows the eyes rather than arriving with them.
      */
+    /**
+     * WHAT IT LOOKS AT WHEN NOTHING IS HAPPENING.
+     *
+     * The occasional clock used to fire `eyeTX = (Math.random() - 0.5) * 1.6`
+     * — the comment beside it called it "a gaze with no subject", which is
+     * exactly what it was. A creature looking at a randomly chosen angle is
+     * not looking at anything, and after the second or third time you can see
+     * that it isn't.
+     *
+     * Irrational's postmortem on Elizabeth reports that scattering INTEREST
+     * POINTS through the world — markers whose only job is to give a companion
+     * something to do in the downtime — did more for how alive she read than
+     * any of the larger systems around it. This world does not have to author
+     * any: the field is already a ground full of objects each broadcasting a
+     * scalar, which is precisely the input The Sims' advertisement model takes.
+     * A memory advertises its aliveness; the companion weights that by how far
+     * away it is and looks at whatever wins. Will Wright called it a proximity
+     * pheromone, and it needs no new data, no new state on an orb, and no
+     * authored list.
+     *
+     * The jitter is a real `Math.random`, unlike everything positional in this
+     * file: `b.frac` is a STABLE per-ball draw, so scoring with it would pick
+     * the same memory every time forever, which is staring rather than
+     * looking. Where the ground rests must be deterministic; where a creature
+     * happens to glance must not be.
+     */
+    function idleSubject(): Ball | null {
+      const bag = ballsRef.current;
+      if (!bag) return null;
+      const cx = cam.x + view.w / 2;
+      const cy = companion.y;
+      /* how far the light of a memory carries; also what keeps a neighbouring
+         column's field from pulling its gaze through a wall */
+      const reach = Math.max(view.w * 0.35, 1);
+      /*
+       * TWO PLACES, NOT ONE. "Don't look at the same memory twice running" was
+       * written as an unconditional `continue`, which on a ground with a
+       * single eligible orb means it is looked at once and then skipped for
+       * the rest of the session — the companion goes back to a gaze with no
+       * subject forever, which is the bug this function exists to remove.
+       * Keeping the runner-up makes the rule what it was meant to be: prefer
+       * something else IF there is something else.
+       */
+      let best: Ball | null = null;
+      let bestScore = 0;
+      let next: Ball | null = null;
+      let nextScore = 0;
+      for (const b of bag.list) {
+        if (!b.active || b.leaving || b.gone > 0 || b.spawnAt >= 0) continue;
+        if (Math.abs(b.x - cx) > view.w * 0.6) continue;
+        const d = Math.hypot(b.x - cx, b.y - cy);
+        const score = b.alive * Math.exp(-d / reach) * (0.7 + Math.random() * 0.6);
+        if (score > bestScore) {
+          next = best;
+          nextScore = bestScore;
+          best = b;
+          bestScore = score;
+        } else if (score > nextScore) {
+          next = b;
+          nextScore = score;
+        }
+      }
+      if (best && best.id === companion.lastGaze && next && nextScore > 0.02) {
+        return next;
+      }
+      /* a ground with nothing awake on it advertises nothing, and the honest
+         answer to that is to keep looking away rather than to invent a subject */
+      return bestScore > 0.02 ? best : null;
+    }
+
     function attendTo(wx: number, wy: number) {
       const dx = wx - (cam.x + view.w / 2);
       const dy = wy - companion.y;

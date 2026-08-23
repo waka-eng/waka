@@ -392,7 +392,7 @@ export interface BeingSprites {
  * to across its width — low enough to be unmistakable at a glance on a phone,
  * high enough that the silhouette is still the same species.
  */
-const MACHINE_CELLS = 20;
+export const MACHINE_CELLS = 20;
 /**
  * SNAP A BAKED FORM TO A GRID.
  *
