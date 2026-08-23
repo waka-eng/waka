@@ -230,6 +230,20 @@
   color: var(--jar-ink);
 }
 
+/* THE SECOND QUIET LINE NEEDS ITS OWN ROW.
+   `.jar-forming-line` is `inline-block` because for most of its life there
+   was only ever one of them. A second sibling therefore set flush against
+   the first and rendered as `TWO PATTERNS ARE FORMINGHOW YOU CHOOSE` — two
+   separate ways in, read as one broken word.
+   It takes a row of its own rather than a separator: these are two different
+   layers (the sky above, and how you choose where you stand), and a middot
+   between them would imply they are the same kind of thing. The smaller top
+   margin keeps them a pair. */
+.jar-forming-line--choose {
+  display: block;
+  margin-top: 8px;
+}
+
 /* ---------- the companion's whisper line ---------- */
 .jar-char-say {
   position: absolute;
@@ -1106,79 +1120,7 @@
 
    `margin-left: auto` rather than absolute positioning: `.jar-topbar` is
    already a flex row, so this rides its layout instead of fighting it. */
-/* ---------- scaffolding: the screens the world has no home for ----------
-   Temporary. See the comment on `.jar-flatmenu` in Home.tsx. Absolutely
-   positioned rather than a third flex child, because `.jar-topbar` is
-   space-between and a third child would push the two ends off their corners —
-   and those corners are load-bearing: the way out and the account must never
-   crowd each other. */
-.jar-flatmenu {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  /* BELOW the bar's own row, not on it. `.jar-topbar` is space-between, so
-     what sits at its centre depends on how many children it has — the offline
-     notice is a fourth one and pushes `.jar-account` from the right edge into
-     the middle, exactly where this is. Dropping a row means this can never
-     collide with whatever the bar's flow puts there, on any viewport. */
-  top: calc(56px + env(safe-area-inset-top));
-  z-index: 5;
-  pointer-events: auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
-.jar-flatmenu-toggle {
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  background: transparent;
-  color: var(--jar-ink-soft, var(--jar-ink));
-  opacity: 0.55;
-  cursor: pointer;
-  padding: 4px 10px;
-  font-size: 15px;
-  line-height: 1;
-  transition: opacity 0.2s ease;
-}
-.jar-flatmenu-toggle:hover,
-.jar-flatmenu-toggle[aria-expanded="true"] {
-  opacity: 1;
-}
-/* OPAQUE, BECAUSE IT LANDS ON THE ONE SENTENCE THE WORLD IS FOR.
-   This was 88% with an 8px blur, and 12% of a 48px headline reads straight
-   through six lines of 11px menu type: the sentence is smeared and the menu
-   is unreadable, both at once, and the thing obscured is the top of mind —
-   the single line this whole surface exists to present.
-   Translucency is right for something floating IN the world. This is not in
-   the world; it is chrome laid over it, and chrome occludes. The hairline and
-   the shadow are what say "above" now that the blur no longer has to. */
-.jar-flatmenu-sheet {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 6px 4px;
-  border-radius: 10px;
-  background: var(--jar-paper, #0b0a16);
-  border: 1px solid color-mix(in srgb, var(--jar-ink, #f4f1ea) 14%, transparent);
-  box-shadow: 0 10px 30px color-mix(in srgb, #000 55%, transparent);
-}
-.jar-flatmenu-item {
-  display: block;
-  padding: 5px 14px;
-  white-space: nowrap;
-  text-align: center;
-  color: var(--jar-ink-soft, var(--jar-ink));
-  opacity: 0.7;
-  text-decoration: none;
-  transition: opacity 0.15s ease;
-}
-.jar-flatmenu-item:hover,
-.jar-flatmenu-item:focus-visible {
-  opacity: 1;
-  text-decoration: underline;
-}
+
 .jar-account {
   pointer-events: auto;
   margin-left: auto;

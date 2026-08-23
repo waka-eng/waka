@@ -173,6 +173,7 @@ import {
   declineGroupProposal,
   createInspiration,
   createGroup,
+  fetchPrinciples,
   createProfile,
   createReflection,
   deleteReflection,
@@ -207,6 +208,7 @@ import {
   type ApiGroupProposal,
   type ApiGroupMember,
   type ApiGroupSummary,
+  type ApiPrinciple,
   type ApiGroupFieldInspiration,
   type ApiGroupWallSignal,
   type ApiTopOfMindVersion,
@@ -1291,6 +1293,22 @@ function HomeExperience(): JSX.Element {
   /** The rooms, newest first: the columns to the RIGHT. */
   const [groups, setGroups] = useState<ApiGroupSummary[]>([]);
   /**
+   * LAYER 4, WHERE YOU STAND — NOT A FOURTH REGION.
+   *
+   * The world draws three sections because the canon's first three are
+   * places: memories below, statements above, and the sentence you are
+   * standing in. Layer 4 is not a fourth place. A principle is what is left
+   * of the top of mind once the weather has passed — the same material,
+   * further along — so it belongs where the top of mind already is: one quiet
+   * line under it, opened the way the sky is opened.
+   *
+   * This is what emptied the last entry out of the `≡` holding pen. Before
+   * it, `/principles` was the only layer with no address in the world at all,
+   * and the menu existed largely to carry it.
+   */
+  const [principles, setPrinciples] = useState<ApiPrinciple[]>([]);
+  const [principlesOpen, setPrinciplesOpen] = useState(false);
+  /**
    * The agents: the columns to the LEFT. Mock until the endpoints land.
    * Null until the answer is in — the field is built from the owner's inspirations
    * AND the agents' kept memories together, and it is built once, whole.
@@ -1814,6 +1832,20 @@ function HomeExperience(): JSX.Element {
        they were saved in. That is the canon's privacy line and it is why a
        room's orbit can say WHO fed an entry but never WHICH memory did. */
     (async () => {
+      /* Layer 4 rides along with the rooms load rather than opening its own
+         effect: both are account-level, both are wanted before the first
+         paint settles, and a second effect would be a second thing to keep
+         in step with sign-out. A failure here is silent on purpose — an
+         empty set and the line simply does not appear, which is the same
+         thing a profile with no principles yet shows. */
+      fetchPrinciples()
+        .then((rows) => {
+          if (!dead && !offlineRef.current) setPrinciples(rows);
+        })
+        .catch(() => {
+          /* no principles is a real state, not an error worth a banner */
+        });
+
       const rows = await fetchGroups();
       if (offlineRef.current) return;
       /* The map (v8): rooms line up to the right of your own wall,
@@ -7992,9 +8024,6 @@ function HomeExperience(): JSX.Element {
    * have.
    */
   const [accountOpen, setAccountOpen] = useState(false);
-  /* TEMPORARY. See `.jar-flatmenu` in the JSX below — this is scaffolding for
-     the screens the world has no home for yet, and it goes when they do. */
-  const [flatMenuOpen, setFlatMenuOpen] = useState(false);
   /** The rename box, while it is open: null when nobody is renaming. */
   const [renaming, setRenaming] = useState<{ id: string; text: string; busy: boolean } | null>(
     null,
@@ -8684,6 +8713,57 @@ function HomeExperience(): JSX.Element {
                       >
                         {c.forming}
                       </button>
+                    ) : null}
+                    {/* HOW YOU CHOOSE — layer 4, in the place layer 3 already
+                        occupies.
+
+                        It is the second quiet line, deliberately built from
+                        the same two pieces as the first: a `jar-forming-line`
+                        that opens something, and the `jar-prov` band the
+                        poster already opens into. A person who has learned
+                        that the forming line takes them up to the sky has
+                        already learned this one.
+
+                        Only on your own wall, and only when there are
+                        principles. A room does not choose and an agent's
+                        principles are its own; and a wall with none says
+                        nothing rather than showing an empty band — the same
+                        rule the poster follows about never inventing a
+                        placeholder.
+
+                        NO COUNT. "States render, numerals never" — the line
+                        says that there is a way you choose, not how many
+                        ways. */}
+                    {here && w.kind === "self" && principles.length > 0 ? (
+                      <button
+                        type="button"
+                        className="jar-forming-line jar-forming-line--choose jar-label"
+                        data-jar-chrome="1"
+                        aria-expanded={principlesOpen}
+                        onClick={() => setPrinciplesOpen((v) => !v)}
+                      >
+                        how you choose
+                      </button>
+                    ) : null}
+                    {here && w.kind === "self" && principlesOpen ? (
+                      <div className="jar-prov jar-prov--poster" data-jar-chrome="1">
+                        {/* Ranked, and the rank is the order — never a number
+                            beside a statement. */}
+                        {[...principles]
+                          .sort((a, b) => a.rank - b.rank)
+                          .map((pr) => (
+                            <p key={pr.id} className="jar-was">
+                              {pr.statement}
+                              {pr.state === "aspirational" ? (
+                                /* The one distinction worth carrying up here:
+                                   declared-but-not-yet-demonstrated is a
+                                   different claim from earned, and the canon
+                                   already has the word for it. */
+                                <span className="jar-poster-away"> aspirational</span>
+                              ) : null}
+                            </p>
+                          ))}
+                      </div>
                     ) : null}
                     {/* THE BOARD'S OWN VERBS — and this is what makes the
                         layout an instrument rather than a display.
@@ -9637,92 +9717,6 @@ function HomeExperience(): JSX.Element {
             the same slot the moment the room's name needed somewhere to live,
             and putting them at opposite ends means neither can ever hide the
             other — which is exactly the bug the ternary here used to cause. */}
-        {/* SCAFFOLDING, AND NAMED AS SUCH.
-            Everything else in this bar earned its place by being a fact about
-            where you are standing. This did not: it is a drawer, and the
-            comments above are right that a toolbar is what this layout was
-            built to not have.
-
-            It exists because `dev` grew screens the world has no geometry for.
-            /principles is layer 4 — declared statements resting on signals —
-            and the world draws three layers, not four, so there is nowhere to
-            put it. The list views are the same memories in another register,
-            which the archive comment above already calls a thing that "goes
-            away once the layout can do everything it can".
-
-            So they are reachable rather than orphaned, from one control that
-            admits what it is. Top centre because the two ends of this bar are
-            taken and neither may be crowded — the way out is on the left and
-            the account is on the right, and the bug that produced this comment
-            once was exactly one of them hiding the other.
-
-            DELETE THIS when /principles has a home in the world. That is the
-            real fix; this is the placeholder that keeps it usable meanwhile. */}
-        <div className="jar-flatmenu" data-jar-chrome="1">
-          <button
-            type="button"
-            className="jar-flatmenu-toggle jar-label"
-            aria-expanded={flatMenuOpen}
-            aria-haspopup="menu"
-            aria-label="Other screens"
-            onClick={() => {
-              setFlatMenuOpen((v) => !v);
-              setAccountOpen(false);
-              setSettingsFor(null);
-            }}
-          >
-            <span aria-hidden="true">≡</span>
-          </button>
-          {flatMenuOpen ? (
-            <div className="jar-flatmenu-sheet" role="menu">
-              {[
-                /* WHAT IS LEFT IN HERE IS WHAT THE WORLD CANNOT DO YET.
-                   This menu is a holding pen, not a navigation model: a
-                   feature parks here until it has been designed into the
-                   world, and leaves the moment it has. It empties; it does
-                   not grow.
-
-                   Four left on 2026-08-22, each removed only after its world
-                   equivalent was driven in a browser and seen to work:
-
-                     capture       KEEP SOMETHING opens an inline
-                                   "Something worth keeping" field
-                     signals       TWO PATTERNS ARE FORMING opens the sky,
-                                   every statement standing in it
-                     inspirations  an orb in the field opens that memory,
-                                   with `reflect on this · more`
-                     top of mind   the headline you are standing in — and
-                                   this entry was always circular anyway:
-                                   `surface-route.ts` resolves the wall view
-                                   to "/", so it linked to the world from
-                                   inside the world
-
-                   The routes stay addressable. A bookmark to /inspirations
-                   still opens the list; what is gone is the world implying it
-                   needed one.
-
-                   These two remain because the world genuinely has nowhere to
-                   put them yet. `rooms` has MAKE A ROOM but no way to walk
-                   into one — they are walls, so the axis along the bottom is
-                   where they belong. `principles` is layer 4 and the world
-                   draws three; that is a design question, not a move.
-                   DELETE THIS WHOLE CONTROL when both have landed. */
-                ["/rooms", "rooms"],
-                ["/principles", "principles"],
-              ].map(([to, label]) => (
-                <Link
-                  key={to}
-                  to={to}
-                  role="menuitem"
-                  className="jar-flatmenu-item jar-label"
-                  onClick={() => setFlatMenuOpen(false)}
-                >
-                  {label}
-                </Link>
-              ))}
-            </div>
-          ) : null}
-        </div>
 
         <button
           type="button"

@@ -1,6 +1,6 @@
 # Goal: everything in the world
 
-Status: **v1 (2026-08-22).** Replaces `one-world.md`, whose premise was wrong.
+Status: **Phase 1 passed (2026-08-22).** Phase 2 next. Replaces `one-world.md`, whose premise was wrong.
 Branch: `claude/repo-sync-qlndc3`. Base `dev` @ `c6a64b2`.
 Source: `docs/craft/e2e-experience-audit.md` — thirteen findings, driven
 against a real stack. **Three closed, ten open.** Every phase below closes
@@ -36,7 +36,7 @@ Measured, not remembered — every row re-checked against the tree at v1:
 | 1 | The world blanks when a font CDN is unreachable | **closed** — `SurfaceBoundary` + `preload-recovery`, gated by `e2e:first-paint` |
 | 2 | `pnpm demo:seed` broken by migration `0007` | **closed** |
 | 3 | A declared principle silently filed as a note | **closed** — `503 retryable`, nothing written |
-| 6 | The `≡` menu | **two of six entries left**: rooms, principles |
+| 6 | The `≡` menu | **closed** — the control is gone; nothing matches `jar-flatmenu` in `packages/web/src` |
 | 4 | Two palettes — world dark, flat screens near-white | open |
 | 5 | Sign-in's submit is the weakest control; no password recovery | open (lockout copy fixed) |
 | 7 | Keeping something confirms almost invisibly | open |
@@ -451,3 +451,65 @@ are how this goal gets fooled.
 Re-measured against the tree at v1 rather than carried over: 3 findings
 closed, 2 out of scope, **8 open**, and the holding pen down to rooms and
 principles.
+
+### 2026-08-22 — Phase 1 passed: the holding pen is gone
+
+`≡`, `jar-flatmenu` and `aria-label="Other screens"` no longer appear in
+`packages/web/src`. 84 lines of JSX, 73 of CSS, and one piece of state.
+
+**Rooms were already there, and my note saying otherwise was wrong.** The
+goal said "there is no way to walk into one." `walls` has pushed
+`kind: "group"` for every group since before this goal existed
+(`Home.tsx:1472`) — agents left, you at the origin, rooms right. The demo
+account simply had zero rooms, so the right-hand side of the axis was empty
+and I read an empty axis as a missing feature. Driven:
+
+    axis before   ["ME"]
+    make a room from the world, "What is it about?"
+    axis after    ["ME", "THE READING ROOM"]
+    travel in     THE READING ROOM · Forming — nothing read together yet · ‹ ME
+
+Create, join and travel were all already in the world (`submitGroup` handles
+both `make` and `join`). Nothing was built for rooms. The entry left because
+it never needed to be there.
+
+**Principles needed a design, and this is it: layer 4 lives where you stand.**
+
+The world draws three sections because the canon's first three are *places* —
+memories below, statements above, the sentence you are standing in. Layer 4 is
+not a fourth place. A principle is what is left of the top of mind once the
+weather has passed: the same material, further along. So it belongs where the
+top of mind already is.
+
+It is built from two pieces the page already had, on purpose: a
+`jar-forming-line` (the quiet line that opens the sky) and the `jar-prov` band
+(what the poster opens into). Somebody who learned that the forming line takes
+them up has already learned this one.
+
+- **`how you choose`**, under the top of mind, on your own wall only. A room
+  does not choose; an agent's principles are its own.
+- **No count.** *States render, numerals never* — the line says there is a way
+  you choose, not how many. Asserted: no `N. ` numbering in the rendered text.
+- **Nothing when there are none**, rather than an empty band — the same rule
+  the poster follows about never inventing a placeholder.
+- `aspirational` carried through, because declared-but-not-yet-demonstrated is
+  a different claim from earned and the canon already has the word.
+
+One craft defect found and fixed by looking rather than reasoning:
+`.jar-forming-line` is `inline-block` because there had only ever been one, so
+the second rendered flush against the first — **`TWO PATTERNS ARE
+FORMINGHOW YOU CHOOSE`**, two ways in read as one broken word. It takes its own
+row now via a modifier, not a separator: these are two different layers, and a
+middot between them would say they are the same kind of thing.
+
+#### Gate
+
+    ≡ present                     0
+    capture / signals / principles / make a room, from "/"   all present
+    wall axis                     ["DEMO AGENT","ME"]
+    canvas                        1
+    /capture /inspirations /signals /top-of-mind /rooms /principles   all 200
+
+The routes stay addressable, which was always the point: the parking lot keeps
+working, and nothing needs it. Regression: `e2e:journeys` 7/7,
+`e2e:first-paint` 2/2, web 130/130, vocabulary and seams clean.
