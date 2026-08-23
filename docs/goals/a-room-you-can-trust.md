@@ -208,6 +208,34 @@ house norm.
 
 ## Log
 
+- **2026-08-23 — The live model walk: the 1a carve-out closes.** With the
+  founder's key in the gitignored `.env.local`, the full stack ran
+  locally (`dev:local`, real Postgres, real Gemini through the session's
+  egress proxy) and every live gate walked:
+  **organic** — all eight steps proven across two runs: run one (filler
+  205) passed 1–6 including buried-past-the-window search and tenant
+  isolation, while 7–8 starved behind the model budget (205 filler
+  derivations ate the account's 60-jobs/hour window — the budget doing
+  its documented job against the harness's own arithmetic, not a
+  product failure); run two (filler 8) passed 7–8 live — page-body
+  enrichment with the marker present and boilerplate absent, and a real
+  image transcription — while 4 reported its own precondition, as
+  designed. **groups 9/9** — the proposal→affirm→carry→materialize loop
+  through the new stance machinery, non-members get 404 not 403, agents
+  refused at the wall and the door. **signals 6/6** — including a
+  locked statement byte-identical across live regeneration and
+  citation-loss retirement. **top-of-mind 8/8** — locked entry carried
+  verbatim, explicit no-change on the record, exactly one live version.
+  **principles 5/5 + 1 documented skip** (the promotion path is
+  nightly-cron-only by design and needs boot-time overrides).
+  **cold-start 1/1.** And the carve-out itself:
+  **waka-mcp `test:live` 9/9** — the real CLI consent flow, capture
+  through the MCP client, layer-2 recall in both profiles, both top of
+  minds, and the principles matrix with curation refusing to cross
+  profiles. A live mint is on the record
+  ("status=derived candidates=1 matched=0 minted=1"). Nothing under
+  this goal still waits on a model key.
+
 - **2026-08-23 — Phases 0b Step 2 and 0c: PASS, on the founder's
   rulings.** Both doctrine gates opened and both landed the same day.
   **0c (decline = counted stance):** `stance` column on the answers
