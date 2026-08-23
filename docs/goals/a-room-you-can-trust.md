@@ -3,11 +3,14 @@
 Status: in flight — opened 2026-08-22 from the founder's ruling that
 **groups is a priority feature**; by the same day's end every phase
 executable without the founder had passed its gate (0a, 0d, 1a–1d, and
-Track S to the brief's bar). Standing gates, all founder-owned: 0b Step 2
-(erasure doctrine + counsel), 0c (the decline ruling), and the 30-second
-demo as the acceptance act. Two former gates closed by the language
-ruling (2026-08-22, English only — see the log): the numerals question
-on the brief's toast, and the dialect seam.
+Track S to the brief's bar). On 2026-08-23 the founder ruled on both
+remaining doctrine gates — **0b Step 2** (erasure: the room keeps its
+approved text; departed marks, not destruction) and **0c** (decline is a
+counted stance, not a veto) — and both are now implemented and pinned;
+see the log. One standing gate: the 30-second demo as the acceptance
+act. Two earlier gates closed by the language ruling (2026-08-22,
+English only — see the log): the numerals question on the brief's toast,
+and the dialect seam.
 Strategy: `docs/craft/agent-memory-wedge.md` (the addendum is this goal's
 argument; the evidence base is `agent-memory-ecosystem-2026.md`).
 Branch: `claude/waka-product-evolution-vbj1ur` (this session's designated
@@ -204,6 +207,39 @@ house norm.
   be scrubbed through its own becoming.
 
 ## Log
+
+- **2026-08-23 — Phases 0b Step 2 and 0c: PASS, on the founder's
+  rulings.** Both doctrine gates opened and both landed the same day.
+  **0c (decline = counted stance):** `stance` column on the answers
+  table (migration `0015_no_veto`), upsert latest-wins per (proposal,
+  member); carry unchanged (strict majority of yeses against the current
+  roll); a proposal falls only when `fallsToDeclines` says a yes-majority
+  is impossible (declines × 2 ≥ members — a room of two still settles on
+  one refusal, as arithmetic); the author's decline alone still
+  withdraws. The approval surface now shows three states — agreed at
+  full ink, refused in the dimmest ink struck through, unanswered dimmed
+  — and an open answer offers its opposite ("not us after all" / "yes,
+  that is us after all"). Gate measured by `room-decline.db.test.ts` on
+  real Postgres: 5/5. **0b Step 2 (erasure keeps the room):**
+  `eraseAccount` no longer deletes any group artifact — the delete that
+  could unwrite a room's whole version history is gone. Versions,
+  entries, settled proposals, settled stances, and door marks survive as
+  departed marks (profiles FKs now `set null`, migration
+  `0016_the_departed_keep_their_marks`; serializers left-join so the
+  departed don't silently drop; the world renders "someone"). Open asks
+  and live stances are withdrawn in the erasure transaction; a `left`
+  door mark is written per seat; ownership still hands to the
+  longest-standing survivor; the person's own stack, name, and bytes go
+  completely. Gate measured by `account-erasure.db.test.ts` on real
+  Postgres (the old mock-chain suite, which pinned the destructive
+  doctrine call-by-call, is retired): 3/3. Suite totals after both:
+  api 50 files / 593 tests, web 18 files / 131 tests, all gates green.
+  Also this day: the founder's `GEMINI_API_KEY` arrived and verified
+  live against both pinned models (generation `gemini-3.1-flash-lite`,
+  embedding `gemini-embedding-001` — 200s); it lives in the gitignored
+  `.env.local` only. Rulings signed in `docs/data-model.md`'s decision
+  log. The one gate still standing is the 30-second demo — the
+  founder's acceptance act.
 
 - **2026-08-22 — Founder ruling: the product speaks English only.** Every
   Korean string on a product surface translated in place (the entrust

@@ -118,22 +118,25 @@ identically by any future WAKA.
    transcripts. Write-side provenance is unusually rich; the read side is
    blank — and every field a serve log needs is already in the
    authenticated request context.
-4. **Erasure burns the room's history.** Account erasure hard-deletes
-   *every version* of every group top-of-mind the departing member
-   touched (`lib/account-erasure.ts:161-163`). One member's GDPR right
-   destroys the whole room's co-authored, majority-approved record — the
-   one true exception to "fading never deletes," and it is undocumented.
+4. ~~**Erasure burns the room's history.**~~ **CLOSED 2026-08-23** by
+   founder ruling: a sentence the room approved belongs to the room.
+   `eraseAccount` no longer touches group artifacts — settled records
+   survive as departed marks (`set null` FKs, "someone" on the surface),
+   live hands are withdrawn, the person's own stack goes completely.
+   "Fading never deletes" holds for rooms; see `data-model.md`'s
+   decision log and `account-erasure.db.test.ts`.
 5. **The sibling-agent channel is open by default.**
    `resolveProfileAccess` (`lib/middleware.ts:140-150`) grants an
    agent-bound session read+capture on *every* profile in the account —
    sibling agents included, up to eight — not just the human's. One
    poisoned agent can read every sibling's memory. Nobody consented to
    this; it is a latent default.
-6. **One member can veto what a majority must approve.** Any single
-   member can unilaterally decline any open proposal
-   (`groups-proposals.ts:417`) while acceptance needs a strict majority —
-   an undocumented asymmetry that becomes a governance denial-of-service
-   the day any non-human mind can touch a room.
+6. ~~**One member can veto what a majority must approve.**~~ **CLOSED
+   2026-08-23** by founder ruling: refusal is a counted stance. A no is
+   recorded beside the yeses; a proposal falls only when the nos make a
+   yes-majority impossible (`fallsToDeclines`); only the author's own
+   decline withdraws alone. The governance denial-of-service is gone;
+   see `data-model.md`'s decision log and `room-decline.db.test.ts`.
 
 Also stale in our own heads: the versions UI exists now (the poster
 fetches its history, `Home.tsx:7061`); `MAX_AGENT_PROFILES = 8` is live

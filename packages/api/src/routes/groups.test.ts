@@ -77,10 +77,15 @@ const proposalView: GroupProposalView = {
   rationale: "Both of us keep circling instruction.",
   proposedByProfileId: profileId,
   proposedByName: "Ada",
-  affirmations: [
-    { profileId, name: "Ada", createdAt: "2026-08-11T00:00:00.000Z" },
+  stances: [
+    {
+      profileId,
+      name: "Ada",
+      value: "affirmed",
+      createdAt: "2026-08-11T00:00:00.000Z",
+    },
   ],
-  viewerAffirmed: true,
+  viewerStance: "affirmed",
   resolvedAt: null,
   createdAt: "2026-08-11T00:00:00.000Z",
 };

@@ -17,11 +17,26 @@
  *      evidence and shares, personal top-of-mind artifacts, group
  *      memberships, background jobs, feedback, sessions, CLI login codes.
  *
- * What cascades cannot reach is anything owned by a *group*: a group's top of
- * mind is generated from its members' shared signals, so its prose can carry
- * a departing member's thinking while belonging to a row the member does not
- * own. Those artifacts are removed explicitly below and regenerate clean from
- * the remaining members' signals.
+ * What cascades cannot reach is anything owned by a *group* — and the
+ * erasure doctrine (founder ruling, 2026-08-23) is that it MUST NOT reach
+ * it: a sentence the room approved belongs to the room. This function used
+ * to delete every group artifact the person was ever cited in, "to
+ * regenerate clean" — one member erasing themselves destroyed the room's
+ * settled record, the exact class of destruction Phase 0a closed at every
+ * other door. Now:
+ *
+ *   - **The room's record stays whole.** Versions, entries, settled
+ *     proposals, settled stances, and door marks all survive; the FKs to
+ *     `profiles` are `set null`, so each becomes a departed mark — the
+ *     surface reads "someone" where a name used to be. The name is what
+ *     erasure removes; the fact that someone was here is the room's.
+ *   - **Live hands are withdrawn.** The erased person's OPEN proposals and
+ *     their stances on anyone's OPEN proposals are deleted in the same
+ *     transaction — an unanswered ask leaves with the asker, the same way
+ *     removal from a room withdraws a live vote (the 0a rule).
+ *   - **The door is marked.** Erasing is leaving every room at once, so a
+ *     `left` event is written per membership before the cascade takes the
+ *     seat.
  */
 
 import {
@@ -35,10 +50,10 @@ import {
   accounts,
   attachments,
   groupMembers,
+  groupMembershipEvents,
+  groupTopOfMindAffirmations,
+  groupTopOfMindProposals,
   profiles,
-  topOfMindEntries,
-  topOfMindEntrySignals,
-  topOfMinds,
 } from "../db/index.js";
 import { getDb } from "./db.js";
 
@@ -108,36 +123,14 @@ export async function eraseAccount(
   const profileIds = profileRows.map((row) => row.id);
 
   let attachmentKeys: string[] = [];
-  let groupIds: string[] = [];
 
   if (profileIds.length > 0) {
-    const [attachmentRows, membershipRows, citedGroupRows] = await Promise.all([
-      db
-        .select({ s3Key: attachments.s3Key })
-        .from(attachments)
-        .where(
-          and(
-            inArray(attachments.profileId, profileIds),
-            isNotNull(attachments.s3Key),
-          ),
-        ),
-      db
-        .select({ groupId: groupMembers.groupId })
-        .from(groupMembers)
-        .where(inArray(groupMembers.profileId, profileIds)),
-      // Membership alone is insufficient: leaving a group deliberately keeps
-      // its board intact, so a former group is only reachable through the
-      // citations that still credit this account's signals.
-      db
-        .select({ groupId: topOfMinds.groupId })
-        .from(topOfMindEntrySignals)
-        .innerJoin(
-          topOfMindEntries,
-          eq(topOfMindEntrySignals.entryId, topOfMindEntries.id),
-        )
-        .innerJoin(topOfMinds, eq(topOfMindEntries.topOfMindId, topOfMinds.id))
-        .where(inArray(topOfMindEntrySignals.ownerProfileId, profileIds)),
-    ]);
+    const attachmentRows = await db
+      .select({ s3Key: attachments.s3Key })
+      .from(attachments)
+      .where(
+        and(inArray(attachments.profileId, profileIds), isNotNull(attachments.s3Key)),
+      );
 
     attachmentKeys = [
       ...new Set(
@@ -146,21 +139,55 @@ export async function eraseAccount(
           .filter((key): key is string => typeof key === "string" && key.length > 0),
       ),
     ];
-
-    groupIds = [
-      ...new Set(
-        [...membershipRows, ...citedGroupRows]
-          .map((row) => row.groupId)
-          .filter((id): id is string => typeof id === "string" && id.length > 0),
-      ),
-    ];
   }
 
   await (deps.deleteAttachmentObjects ?? deleteAttachmentObjectsFromS3)(attachmentKeys);
 
   await db.transaction(async (tx) => {
-    if (groupIds.length > 0) {
-      await tx.delete(topOfMinds).where(inArray(topOfMinds.groupId, groupIds));
+    if (profileIds.length > 0) {
+      /* THE DOOR IS MARKED BEFORE THE SEAT GOES. Erasing is leaving every
+         room at once; the ledger records it the way `leaveGroup` would, and
+         the profile delete below then sets the mark's name null — the room
+         keeps "someone left", which is exactly what erasure leaves behind. */
+      const seats = await tx
+        .select({ groupId: groupMembers.groupId, profileId: groupMembers.profileId })
+        .from(groupMembers)
+        .where(inArray(groupMembers.profileId, profileIds));
+      if (seats.length > 0) {
+        await tx.insert(groupMembershipEvents).values(
+          seats.map((seat) => ({
+            groupId: seat.groupId,
+            profileId: seat.profileId,
+            kind: "left" as const,
+          })),
+        );
+      }
+
+      /* LIVE HANDS ARE WITHDRAWN; SETTLED ONES ARE HISTORY. An open
+         proposal is an unanswered ask — it leaves with the asker. A stance
+         on someone else's open proposal is a live vote — it goes the way a
+         removed member's does (the 0a rule). Everything already settled
+         stays, and the profile cascade turns its names into departed marks. */
+      const openProposalIds = tx
+        .select({ id: groupTopOfMindProposals.id })
+        .from(groupTopOfMindProposals)
+        .where(eq(groupTopOfMindProposals.status, "open"));
+      await tx
+        .delete(groupTopOfMindAffirmations)
+        .where(
+          and(
+            inArray(groupTopOfMindAffirmations.profileId, profileIds),
+            inArray(groupTopOfMindAffirmations.proposalId, openProposalIds),
+          ),
+        );
+      await tx
+        .delete(groupTopOfMindProposals)
+        .where(
+          and(
+            inArray(groupTopOfMindProposals.proposedByProfileId, profileIds),
+            eq(groupTopOfMindProposals.status, "open"),
+          ),
+        );
     }
 
     /**

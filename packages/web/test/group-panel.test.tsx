@@ -44,7 +44,8 @@ function proposal(input: {
   body: string;
   by: { profileId: string; name: string };
   affirmedBy: Array<{ profileId: string; name: string }>;
-  viewerAffirmed: boolean;
+  declinedBy?: Array<{ profileId: string; name: string }>;
+  viewerStance?: "affirmed" | "declined" | null;
 }): ApiGroupProposal {
   return {
     id: input.id,
@@ -55,8 +56,15 @@ function proposal(input: {
     rationale: null,
     proposedByProfileId: input.by.profileId,
     proposedByName: input.by.name,
-    affirmations: input.affirmedBy.map((a) => ({ ...a, createdAt: "" })),
-    viewerAffirmed: input.viewerAffirmed,
+    stances: [
+      ...input.affirmedBy.map((a) => ({ ...a, value: "affirmed" as const, createdAt: "" })),
+      ...(input.declinedBy ?? []).map((a) => ({
+        ...a,
+        value: "declined" as const,
+        createdAt: "",
+      })),
+    ],
+    viewerStance: input.viewerStance ?? null,
     resolvedAt: null,
     createdAt: "",
   } as ApiGroupProposal;
@@ -107,7 +115,7 @@ const CY = { profileId: "00000000-0000-4000-8000-000000000003", name: "Cy Park" 
 const DEE = { profileId: "00000000-0000-4000-8000-000000000004", name: "Dee Song" };
 
 describe("the approval surface", () => {
-  it("signs the proposal, lights the whole four-person room, and prints no numeral", () => {
+  it("signs the proposal, lights the whole four-person room in three states, and prints no numeral", () => {
     const el = renderPanel({
       members: new Map([
         [
@@ -124,7 +132,7 @@ describe("the approval surface", () => {
               body: "We keep choosing walks over meetings.",
               by: ARI,
               affirmedBy: [ARI, BO],
-              viewerAffirmed: false,
+              declinedBy: [CY],
             }),
           ],
         ],
@@ -134,11 +142,15 @@ describe("the approval surface", () => {
     expect(el.textContent, "the proposal arrived unsigned").toContain("Ari put this to the room");
 
     const said = [...el.querySelectorAll(".jar-said")].map((n) => n.textContent?.trim());
+    const saidNo = [...el.querySelectorAll(".jar-said-no")].map((n) => n.textContent?.trim());
     const notSaid = [...el.querySelectorAll(".jar-not-said")].map((n) => n.textContent?.trim());
     expect(said.join(" ")).toContain("Ari");
     expect(said.join(" ")).toContain("Bo");
-    expect(notSaid.join(" "), "the missing approvals are not visible as people").toContain("Cy");
-    expect(notSaid.join(" ")).toContain("Dee");
+    expect(
+      saidNo.join(" "),
+      "a recorded no must stand in the room as a person, not vanish (the counted-stance ruling)",
+    ).toContain("Cy");
+    expect(notSaid.join(" "), "the missing approvals are not visible as people").toContain("Dee");
 
     expect(
       /\d/.test(el.textContent ?? ""),
@@ -160,7 +172,7 @@ describe("the approval surface", () => {
               body: "Two of us is already a room.",
               by: ARI,
               affirmedBy: [ARI],
-              viewerAffirmed: false,
+
             }),
           ],
         ],
@@ -189,7 +201,7 @@ describe("the approval surface", () => {
               body: "We keep choosing walks over meetings.",
               by: ARI,
               affirmedBy: [ARI],
-              viewerAffirmed: false,
+
             }),
           ],
         ],
@@ -255,7 +267,7 @@ describe("the approval surface", () => {
               body: "Two of us is already a room.",
               by: ARI,
               affirmedBy: [ARI, BO],
-              viewerAffirmed: true,
+              viewerStance: "affirmed",
             }),
           ],
         ],
@@ -264,5 +276,38 @@ describe("the approval surface", () => {
 
     expect(el.textContent).toContain("you agreed");
     expect(el.textContent).not.toContain("yes, that is us");
+    // ...but the open question still offers the other answer (the
+    // counted-stance ruling: an answer is not a door that locks behind you)
+    expect(el.textContent).toContain("not us after all");
+  });
+
+  it("a recorded no says so, and offers the yes back", () => {
+    const el = renderPanel({
+      members: new Map([
+        [GROUP_ID, [member(ARI.profileId, ARI.name, "owner"), member(BO.profileId, BO.name, "member"), member(CY.profileId, CY.name, "member")]],
+      ]),
+      openProposals: new Map([
+        [
+          GROUP_ID,
+          [
+            proposal({
+              id: "00000000-0000-4000-8000-00000000bbbb",
+              body: "Two of us is already a room.",
+              by: ARI,
+              affirmedBy: [ARI],
+              declinedBy: [BO],
+              viewerStance: "declined",
+            }),
+          ],
+        ],
+      ]),
+    });
+
+    expect(el.textContent).toContain("you said not us");
+    expect(el.textContent).toContain("yes, that is us after all");
+    expect(
+      /\d/.test(el.textContent ?? ""),
+      "a numeral appeared on the approval surface",
+    ).toBe(false);
   });
 });

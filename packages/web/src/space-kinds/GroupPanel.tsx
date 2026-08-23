@@ -101,7 +101,7 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
           believe a thing — reading it without knowing who is asking is
           reading a petition with the signature torn off. */}
       <p className="jar-label">
-        {givenName(p.proposedByName)}
+        {p.proposedByName ? givenName(p.proposedByName) : "someone"}
         {" put this to the room"}
       </p>
       <p className="jar-proposal-body">{p.body}</p>
@@ -110,20 +110,35 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
           a growing list with no end — you could not tell whether one
           more was needed or three. A proposal carries on a MAJORITY,
           so the useful thing is the room itself: everyone in it, those
-          who agreed at full strength and those who have not yet dimmed
-          beside them.
+          who agreed at full strength, those who said no in the layout's
+          dimmest ink and struck through — still there, because a
+          recorded no is an answer, not an absence (the counted-stance
+          ruling) — and those who have not answered dimmed beside them.
 
           Still no tally. The count is legible because the PEOPLE are,
           which is the only way this layout is allowed to say a number —
           and you can see at a glance whether the missing one is you. */}
       <p className="jar-proposal-who jar-label">
         {(members.get(groupPanel) ?? []).map((m, i) => {
-          const said = p.affirmations.some((a) => a.profileId === m.profileId);
+          const said =
+            p.stances.find((a) => a.profileId === m.profileId)?.value ?? null;
           return (
             <span
               key={m.profileId}
-              className={said ? "jar-said" : "jar-not-said"}
-              title={said ? "agreed" : "has not answered yet"}
+              className={
+                said === "affirmed"
+                  ? "jar-said"
+                  : said === "declined"
+                    ? "jar-said-no"
+                    : "jar-not-said"
+              }
+              title={
+                said === "affirmed"
+                  ? "agreed"
+                  : said === "declined"
+                    ? "said not us"
+                    : "has not answered yet"
+              }
             >
               {i > 0 ? " · " : ""}
               {givenName(m.name)}
@@ -131,9 +146,24 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
           );
         })}
       </p>
-      {p.viewerAffirmed ? (
+      {/* AN ANSWER IS NOT A DOOR THAT LOCKS BEHIND YOU. While the question
+          is open, either answer shows itself and offers the other — changing
+          your mind is answering again, and the record keeps only the latest. */}
+      {p.viewerStance === "affirmed" ? (
         <p className="jar-neb-ask">
           <span>you agreed</span>
+          <span aria-hidden="true"> · </span>
+          <button type="button" onClick={() => answerProposal(groupPanel, p.id, false)}>
+            not us after all
+          </button>
+        </p>
+      ) : p.viewerStance === "declined" ? (
+        <p className="jar-neb-ask">
+          <span>you said not us</span>
+          <span aria-hidden="true"> · </span>
+          <button type="button" onClick={() => answerProposal(groupPanel, p.id, true)}>
+            yes, that is us after all
+          </button>
         </p>
       ) : (
         <p className="jar-neb-ask">
@@ -185,9 +215,12 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
                     : "the room re-read itself",
           })),
         ...timeline.doorMarks.map((m) => ({
-          key: `d:${m.profileId}:${m.occurredAt}`,
+          key: `d:${m.profileId ?? "departed"}:${m.kind}:${m.occurredAt}`,
           at: Date.parse(m.occurredAt) || 0,
-          line: `${givenName(m.name)} ${
+          /* a mark whose person has since erased their account keeps its
+             place in the story as "someone" — the name is what erasure
+             removes, the fact that someone was here is the room's */
+          line: `${m.name ? givenName(m.name) : "someone"} ${
             m.kind === "joined" ? "arrived" : m.kind === "left" ? "left" : "was removed"
           }`,
         })),

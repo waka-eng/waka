@@ -1868,8 +1868,10 @@ function HomeExperience(): JSX.Element {
                 changeSummary: open.rationale,
                 createdMs: Date.parse(open.createdAt) || 0,
                 /* Who stands behind it, not what it was made of: the room can
-                   name its contributors and must not name their memories. */
-                evidence: open.affirmations.map((a) => ({
+                   name its contributors and must not name their memories.
+                   Only the yeses stand behind a sentence — a recorded no
+                   (the counted-stance ruling) is an answer, not backing. */
+                evidence: open.stances.filter((a) => a.value === "affirmed").map((a) => ({
                   signalId: `${open.id}:${a.profileId}`,
                   groupId: g.id,
                   authorUserId: a.profileId,

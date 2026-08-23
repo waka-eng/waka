@@ -177,12 +177,13 @@ const OPEN_PROPOSAL = {
   rationale: null,
   proposedByProfileId: AFFIRMERS[0].profileId,
   proposedByName: AFFIRMERS[0].name,
-  affirmations: AFFIRMERS.map((a, i) => ({
+  stances: AFFIRMERS.map((a, i) => ({
     profileId: a.profileId,
     name: a.name,
+    value: "affirmed" as const,
     createdAt: iso(i + 1),
   })),
-  viewerAffirmed: false,
+  viewerStance: null,
   resolvedAt: null,
   createdAt: iso(3),
 };

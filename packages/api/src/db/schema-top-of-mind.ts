@@ -191,10 +191,14 @@ export const topOfMindEntrySignals = pgTable(
 
     /**
      * Which member's signal fed a group entry. Null on personal artifacts,
-     * where the answer is never in question.
+     * where the answer is never in question — and null after the owner
+     * erases their account: the erasure doctrine (founder ruling,
+     * 2026-08-23) says a sentence the room approved belongs to the room,
+     * so the citation survives as a departed mark rather than cascading
+     * away with the person.
      */
     ownerProfileId: uuid("owner_profile_id").references(() => profiles.id, {
-      onDelete: "cascade",
+      onDelete: "set null",
     }),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

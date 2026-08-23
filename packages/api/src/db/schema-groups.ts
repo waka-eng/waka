@@ -136,9 +136,14 @@ export const groupMembershipEvents = pgTable(
       .notNull()
       .references(() => groups.id, { onDelete: "cascade" }),
 
-    profileId: uuid("profile_id")
-      .notNull()
-      .references(() => profiles.id, { onDelete: "cascade" }),
+    /**
+     * Nullable since the erasure doctrine (founder ruling, 2026-08-23): the
+     * room's door ledger outlives its people. Erasing an account sets this
+     * null — the mark stays, the name goes, and the surface reads "someone".
+     */
+    profileId: uuid("profile_id").references(() => profiles.id, {
+      onDelete: "set null",
+    }),
 
     kind: groupMembershipEventKindEnum("kind").notNull(),
 

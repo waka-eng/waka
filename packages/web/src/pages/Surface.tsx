@@ -1906,12 +1906,15 @@ export default function SurfacePage(): JSX.Element {
                           </p>
                           <p className="gr-proposal-meta">
                             {t(locale, "roomBy")} {proposal.proposedByName}
-                            {proposal.affirmations.length > 0
-                              ? ` · ${proposal.affirmations.map((a) => a.name).join(", ")}`
+                            {proposal.stances.some((a) => a.value === "affirmed")
+                              ? ` · ${proposal.stances
+                                  .filter((a) => a.value === "affirmed")
+                                  .map((a) => a.name)
+                                  .join(", ")}`
                               : ""}
                           </p>
                           <div className="gr-proposal-acts">
-                            {proposal.viewerAffirmed ? (
+                            {proposal.viewerStance === "affirmed" ? (
                               <span className="gr-affirmed">{t(locale, "roomAffirmed")}</span>
                             ) : (
                               <button
@@ -1922,13 +1925,15 @@ export default function SurfacePage(): JSX.Element {
                                 {t(locale, "roomAffirm")}
                               </button>
                             )}
-                            <button
-                              type="button"
-                              className="gr-quiet"
-                              onClick={() => declineRoomProposal(proposal)}
-                            >
-                              {t(locale, "roomDecline")}
-                            </button>
+                            {proposal.viewerStance === "declined" ? null : (
+                              <button
+                                type="button"
+                                className="gr-quiet"
+                                onClick={() => declineRoomProposal(proposal)}
+                              >
+                                {t(locale, "roomDecline")}
+                              </button>
+                            )}
                           </div>
                         </div>
                       ))}

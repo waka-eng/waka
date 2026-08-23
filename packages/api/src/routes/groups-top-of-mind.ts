@@ -67,10 +67,13 @@ export interface GroupTimelineView {
     createdAt: string;
   }>;
   /** The door's ledger, oldest first: who arrived, who left, who was
-      removed — named, because the room reads people, not counts. */
+      removed — named, because the room reads people, not counts. Null
+      profile and name mean the person has since erased their account: the
+      mark outlives them (the erasure doctrine) and the surface says
+      "someone". */
   doorMarks: Array<{
-    profileId: string;
-    name: string;
+    profileId: string | null;
+    name: string | null;
     kind: GroupMembershipEventKind;
     occurredAt: string;
   }>;
@@ -114,7 +117,10 @@ export async function loadGroupTimeline(
         occurredAt: groupMembershipEvents.occurredAt,
       })
       .from(groupMembershipEvents)
-      .innerJoin(profiles, eq(profiles.id, groupMembershipEvents.profileId))
+      // LEFT join: a mark whose person has erased their account has no
+      // profile row any more, and an inner join would silently drop it —
+      // unwriting the door's ledger, which is the destruction 0a closed.
+      .leftJoin(profiles, eq(profiles.id, groupMembershipEvents.profileId))
       .where(eq(groupMembershipEvents.groupId, groupId))
       .orderBy(asc(groupMembershipEvents.occurredAt), asc(groupMembershipEvents.id))
       .limit(MAX_DOOR_MARKS),
@@ -138,7 +144,9 @@ export async function loadGroupTimeline(
   }
 
   const labels = labelMembersByProfileId(
-    markRows.map((row) => ({ profileId: row.profileId, name: row.name })),
+    markRows.flatMap((row) =>
+      row.profileId ? [{ profileId: row.profileId, name: row.name }] : [],
+    ),
   );
 
   return {
@@ -152,7 +160,9 @@ export async function loadGroupTimeline(
     })),
     doorMarks: markRows.map((row) => ({
       profileId: row.profileId,
-      name: labels.get(row.profileId)?.displayName ?? row.name,
+      name: row.profileId
+        ? (labels.get(row.profileId)?.displayName ?? row.name)
+        : null,
       kind: row.kind,
       occurredAt: row.occurredAt.toISOString(),
     })),

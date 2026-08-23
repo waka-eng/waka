@@ -108,10 +108,18 @@ export interface ApiGroupProposal {
   entryId: string | null;
   body: string | null;
   rationale: string | null;
-  proposedByProfileId: string;
-  proposedByName: string;
-  affirmations: Array<{ profileId: string; name: string; createdAt: string }>;
-  viewerAffirmed: boolean;
+  /** Null when the proposer erased their account after a settled decision —
+      the record outlives its author and the world says "someone". */
+  proposedByProfileId: string | null;
+  proposedByName: string | null;
+  /** Every recorded answer, yes and no alike — one per member, latest wins. */
+  stances: Array<{
+    profileId: string | null;
+    name: string | null;
+    value: "affirmed" | "declined";
+    createdAt: string;
+  }>;
+  viewerStance: "affirmed" | "declined" | null;
   resolvedAt: string | null;
   createdAt: string;
 }
@@ -326,8 +334,10 @@ export interface ApiGroupTimelineVersion {
 }
 
 export interface ApiGroupDoorMark {
-  profileId: string;
-  name: string;
+  /** Null when the person has since erased their account: the mark outlives
+      them (the erasure doctrine) and the world says "someone". */
+  profileId: string | null;
+  name: string | null;
   kind: "joined" | "left" | "removed";
   occurredAt: string;
 }

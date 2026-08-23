@@ -231,7 +231,7 @@ describe("a vote is a statement by someone in the room", () => {
       viewerProfileId: here.owner,
     });
     expect(
-      seenHere?.affirmations.map((a) => a.profileId),
+      seenHere?.stances.map((a) => a.profileId),
       "the removed member's vote is still on the proposal in the room they were removed from",
     ).toEqual([here.owner]);
 
@@ -240,12 +240,12 @@ describe("a vote is a statement by someone in the room", () => {
       viewerProfileId: here.other,
     });
     expect(
-      seenElsewhere?.affirmations.map((a) => a.profileId).sort(),
+      seenElsewhere?.stances.map((a) => a.profileId).sort(),
       "removing them from one room destroyed their vote in another room, whose owner never touched them",
     ).toEqual([elsewhere.host, here.other].sort());
     expect(
-      seenElsewhere?.viewerAffirmed,
+      seenElsewhere?.viewerStance,
       "the other room now shows them as never having agreed to something they did agree to",
-    ).toBe(true);
+    ).toBe("affirmed");
   });
 });

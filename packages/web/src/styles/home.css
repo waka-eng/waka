@@ -2009,15 +2009,22 @@
   justify-content: center;
 }
 
-/* WHO HAS SAID YES, AND WHO HAS NOT — the room read as people rather than as
-   a score. Agreed is full ink; not yet is the same name at the weight of
-   something still waiting. No count is printed anywhere: the arithmetic is
-   visible because the members are. */
+/* WHO HAS SAID YES, WHO HAS SAID NO, AND WHO HAS NOT — the room read as
+   people rather than as a score. Agreed is full ink; not yet is the same
+   name at the weight of something still waiting; a recorded no is the
+   dimmest ink and struck through — the same register a disagreed statement
+   keeps, still there because an answer is not an absence. No count is
+   printed anywhere: the arithmetic is visible because the members are. */
 .jar-said {
   color: var(--jar-ink);
 }
 .jar-not-said {
   color: var(--jar-faint);
+}
+.jar-said-no {
+  color: var(--jar-faint);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
 }
 
 /* WHEN THIS SENTENCE LAST CHANGED. Dates, in the register the world keeps for

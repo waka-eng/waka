@@ -426,6 +426,37 @@ follows the permission matrix.
   against is assured, or on timeout — so "a member is a member" holds
   for both verbs. Gated on the founder (`goals/a-room-you-can-trust.md`,
   Phase 0c); the code keeps today's rule until the ruling lands.
+- **2026-08-23** — **RULED (founder): a sentence the room approved belongs
+  to the room.** The erasure question above is closed. Erasure stays the
+  one true delete for everything the person OWNS — profiles, inspirations,
+  signals, sessions, uploaded bytes — and now touches nothing the room
+  settled: versions, entries, settled proposals, settled stances, and door
+  marks all survive as **departed marks** (their `profiles` FKs are
+  `set null`; the surface reads "someone" where a name was). The name is
+  what erasure removes; the fact that someone was here is the room's.
+  Live hands are withdrawn in the same transaction — the erased person's
+  open proposals, and their stances on anyone's open proposals, go the way
+  a removed member's do — and a `left` door mark is written per seat.
+  "Fading never deletes" no longer has an exception for rooms.
+  Implemented in `lib/account-erasure.ts`, migration
+  `0016_the_departed_keep_their_marks`, pinned by
+  `lib/account-erasure.db.test.ts` on real Postgres.
+
+- **2026-08-23** — **RULED (founder): refusal is a counted stance, not a
+  veto.** The decline asymmetry above is closed, in the direction
+  proposed. A "not us" is recorded per member beside the yeses
+  (`group_top_of_mind_affirmations.stance`: affirmed | declined; one row
+  per member per proposal, answering again replaces the answer). A
+  proposal carries on a strict majority of yeses against the current
+  roll, exactly as before; it falls only when the nos make that majority
+  arithmetically impossible (`fallsToDeclines`: declines × 2 ≥ members —
+  in a room of two, one refusal still settles the question, now as
+  arithmetic rather than as a veto). The author's own decline still
+  resolves alone: withdrawing your own sentence is not a veto over
+  anyone else. "A member is a member" now holds for both verbs.
+  Implemented in `routes/groups-proposals.ts`, migration `0015_no_veto`,
+  pinned by `routes/room-decline.db.test.ts` on real Postgres.
+
 - **2026-08-22** — **The room's record survives its members** (Phase 0a
   of `goals/a-room-you-can-trust.md`): membership events are append-only
   history (`group_membership_events` — joined/left/removed; the seat row
