@@ -607,13 +607,17 @@ async function readImageBytes(
   attachment: AttachmentRow,
 ): Promise<{ bytes: Uint8Array; contentType: string }> {
   if (attachment.s3Key) {
-    const { GetObjectCommand, S3Client } = await import("@aws-sdk/client-s3");
-    const region =
-      process.env.ATTACHMENTS_REGION || process.env.AWS_REGION || "us-west-2";
+    /* Both imports stay LAZY. The SDK is only pulled in when an image with an
+       s3 key is actually described, which is the reason this was a dynamic
+       import before the client moved to `lib/s3-client.ts` — hoisting the
+       helper to the top of the file would drag the SDK back into every path
+       that merely loads this module. */
+    const { GetObjectCommand } = await import("@aws-sdk/client-s3");
+    const { makeAttachmentsS3Client } = await import("./s3-client.js");
     const bucket = process.env.ATTACHMENTS_BUCKET;
     if (!bucket) throw new Error("attachments_bucket_unconfigured");
 
-    const object = await new S3Client({ region }).send(
+    const object = await makeAttachmentsS3Client().send(
       new GetObjectCommand({ Bucket: bucket, Key: attachment.s3Key }),
     );
     const bytes = await object.Body!.transformToByteArray();

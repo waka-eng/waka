@@ -1040,7 +1040,20 @@ const STEPS: Step[] = [
   {
     title: "a saved link is enriched from the page body",
     run: async (state) => {
-      const session = state.primary!;
+      /* ITS OWN ACCOUNT, BECAUSE STEP 4 SPENDS THIS ONE'S BUDGET.
+         `MODEL_BUDGET_JOBS_PER_ACCOUNT` is 60 per rolling hour
+         (`lib/model-budget.ts`). Step 4 buries its marker under 205 filler
+         captures, each of which enqueues a `derive_signals` job, so by the
+         time these steps run the primary account has started exactly 60 and
+         the queue has deferred its ENTIRE remaining backlog — including this
+         enrichment job — to the next window boundary, an hour out.
+         Measured 2026-08-22: with `--filler 205` these two steps failed after
+         90s each; with `--filler 12` they passed in 1.5s each. Nothing about
+         enrichment was ever broken. The harness was competing with itself,
+         and the timeout could not say so.
+         A fresh account carries a fresh budget and needs two jobs of it. */
+      const session = await newAccount(state, "enrichment link");
+
       const inspiration = await capture(session, {
         text: "Saving this to read properly later.",
         kind: "link",
@@ -1089,7 +1102,8 @@ const STEPS: Step[] = [
   {
     title: "a saved image is enriched from what it depicts",
     run: async (state) => {
-      const session = state.primary!;
+      /* Its own account, for the reason spelled out on the link step above. */
+      const session = await newAccount(state, "enrichment image");
       const inspiration = await capture(session, {
         text: "A screenshot I want findable by what it says.",
         kind: "image",

@@ -57,8 +57,8 @@ unproven in a browser.**
 | A3 | Sign in with Google | **nothing** |
 | A4 | Password recovery | **does not exist** |
 | B1 | Capture text | API + **Browser** (`journeys:keep`) ✅ |
-| B2 | Capture a link, enriched from its page | API (`organic`, fixture server) |
-| B3 | Capture an image, described so it is searchable | **nothing** (no bucket) |
+| B2 | Capture a link, enriched from its page | API (`organic` step 7) ✅ — was wrongly logged unproven; see the 2026-08-22 correction |
+| B3 | Capture an image, described so it is searchable | by URL: API (`organic` step 8) ✅. Real upload (presign→PUT→HEAD): **still unproven** — `s3-stub` now makes it possible |
 | C1 | Search and recall across the archive | API + **Browser** (`journeys:seek`) ✅ |
 | C2 | Open, edit, delete an inspiration | API + **Browser** (`journeys:let-go`) ✅ |
 | C3 | Reflect on an inspiration | **Browser** (`journeys:reflect`) ✅ |
@@ -359,3 +359,64 @@ became `Array.from` so the file typechecks without `dom.iterable`.
 A3 Google OAuth · B3 attachments (no bucket) · E2 top-of-mind entry actions
 and undo · J2 connections · J3 account deletion · J1's locale switch and
 public page. Phase 3 owns them.
+
+### 2026-08-22 — Phase 1's triage was WRONG, and here is the real cause
+
+**Correction, stated first because the wrong version is written above.** Phase
+1 recorded `organic` steps 7 and 8 as failing for want of an attachments
+bucket. That was wrong, and re-reading the harness is all it would have taken:
+step 7 calls `attachLink` — `type: "link"`, a URL, no object store touched —
+and step 8 calls `attachImageByUrl`, whose own doc comment says it "needs no
+object store, so the enrichment steps can run against a plain local stack."
+The bucket was never involved. The evidence I cited (zero rows in
+`attachments`) was real and meant something else: `organic` erases its
+accounts on the way out unless `--keep-data` is passed.
+
+**The real cause is the model budget, and the harness competes with itself for
+it.** `MODEL_BUDGET_JOBS_PER_ACCOUNT` is **60 per rolling hour**
+(`lib/model-budget.ts:45`). Step 4 buries its marker under **205 filler
+captures**, each enqueuing a `derive_signals` job. Measured on the run:
+
+    account 2b6c75a3…   derive_signals 212   enrich_attachment 2   started_in_window 60
+
+Sixty is exactly the cap. On hitting it the drain calls
+`deferAccountBacklogForBudget` (`queue.ts:1015`), which moves that account's
+**entire** due backlog — both enrichment jobs with it — to the next window
+boundary. All 155 pending jobs shared one `run_after`, `07:00:08.135`, about
+an hour out. Steps 7 and 8 then waited 90 seconds for work scheduled for the
+next hour.
+
+Proof, same stack and code, only the filler changed:
+
+| `--filler` | step 7 | step 8 |
+|---|---|---|
+| 205 (default) | FAIL after 90.4s | FAIL after 90.4s |
+| 12 | **PASS in 1.5s** | **PASS in 1.5s** |
+
+**Enrichment was never broken.** B2 was working the whole time and this goal
+recorded it as unproven for a day.
+
+**Fixed** by giving steps 7 and 8 their own accounts — a fresh budget for the
+two jobs they need — with the measurement written at the site. `organic` now
+passes **8 of 8 at default settings**, which it had never done here.
+
+#### What this says about the harness, beyond the bug
+
+A 90-second timeout could not distinguish "enrichment is broken" from "this
+account is over its model budget and everything it owns is deferred for an
+hour" — and the second was visible in the database the whole time: the job
+existed, `pending`, `run_after` an hour out, `attempts = 0`. This is the same
+shape as the Phase 1 finding about the missing-bucket message: the harness
+times out where it could name the condition. Filed for Phase 3.
+
+#### The S3 work landed anyway, and is honest about what it is for
+
+I built `lib/s3-client.ts` and `tools/e2e/s3-stub.ts` to fix steps 7 and 8.
+They did not fix them, because those steps never needed a bucket. Both are
+kept because they make a **different** row provable — B3, the real upload path
+(`attachImage`: presign → PUT → HEAD → finalize), which nothing exercises and
+which genuinely does need an object store. `lib/s3-client.ts` also collapses
+four byte-identical copies of the region ladder into one.
+
+The stub verifies no signatures and stores objects in memory. B3 will be
+recorded as **proven against a stub**, never as proven outright.
