@@ -1,6 +1,6 @@
 # Goal: everything in the world
 
-Status: **Phase 2 in progress (2026-08-23).** Its failing case is written and reproduces; the fix is not done. Replaces `one-world.md`, whose premise was wrong.
+Status: **Phase 2 passed (2026-08-23).** Phase 3 next. Replaces `one-world.md`, whose premise was wrong.
 Branch: `claude/repo-sync-qlndc3`. Base `dev` @ `c6a64b2`.
 Source: `docs/craft/e2e-experience-audit.md` — thirteen findings, driven
 against a real stack. **Three closed, ten open.** Every phase below closes
@@ -39,9 +39,9 @@ Measured, not remembered — every row re-checked against the tree at v1:
 | 6 | The `≡` menu | **closed** — the control is gone; nothing matches `jar-flatmenu` in `packages/web/src` |
 | 4 | Two palettes — world dark, flat screens near-white | open |
 | 5 | Sign-in's submit is the weakest control; no password recovery | open (lockout copy fixed) |
-| 7 | Keeping something confirms almost invisibly | open — and **worse in the world than on the flat screen**: see finding 15 |
+| 7 | Keeping something confirms almost invisibly | **closed in the world** — the orb now arrives, which is the confirmation the design always intended. The flat screen's quiet "kept" is untouched and no longer the path that matters |
 | 14 | **Nobody knows the world can be moved through** — real user feedback, 2026-08-23 | open, unstarted |
-| 15 | **The first memory a person ever keeps does not appear until reload** | open — failing case written |
+| 15 | The first memory a person ever keeps does not appear until reload | **closed** — a clock-skew bug; `journeys:first-keep` gates it |
 | 8 | 21–22 touch targets under 44px; destructive ones at 20px | open |
 | 9 | The world is one unlabelled canvas | **out of scope, by decision** |
 | 10 | Three product nouns on the sign-in screen | open |
@@ -589,3 +589,78 @@ sky is reachable from the forming line, and neither apparently reads as "you
 can go there". Owned by this goal; it needs its own phase and probably its own
 measurement, because "did they know they could move" is not something the
 existing gates can see.
+
+### 2026-08-23 — Phase 2 passed: it was a clock-skew bug, and it hit everyone
+
+The confirmation the design always intended now happens. **One line of code,
+after two hours of looking in the wrong place** — worth writing down, because
+the wrong places were all plausible.
+
+#### The instrument was already in the repo
+
+Pixel-reading the canvas from outside told me *that* nothing was drawn and
+never *why*. `SimApi.audit()` has existed all along and is reachable as
+`window.wakaField()` behind `showsDebug()` — so `VITE_SHOW_INTERNAL=1 pnpm
+dev:local` puts it in a real build. It answered in one run:
+
+    after keep    owners {"(none)":1}   present 0   drawn.active 0
+    after reload  present 1  onScreen 1  drawn.active 1  highest 804  lowest 888
+
+The ball **was in the list**. `assignHomes` was filtering it out.
+
+#### The cause
+
+`assignHomes` places only what exists at the dial's time —
+`b.capturedMs <= TRef.current`. That is correct and is what lets the dial wind
+history back. `TRef` starts at `Date.now()` on mount and is advanced in
+exactly two places: the dial, and `born`.
+
+`born` advances it with the **client's** optimistic stamp. The row that comes
+back carries the **server's** `createdAt`. Measured on one machine:
+
+    client before POST  1787525750805
+    server createdAt    1787525750811     <- +6ms AHEAD
+    client after  POST  1787525750820
+
+And `inspirations` is a dependency of the sim effect, so the keep's own
+`setInspirations` tears the loop down and rebuilds it — rebuilding that ball
+from the server's timestamp, now sitting in the future of a dial that had only
+ever been told about the client's. Six milliseconds was enough. Across a
+network it is routinely far more.
+
+#### It hit every keep, not just the first
+
+This is the part I had wrong all afternoon. The newest orb was dropped on
+**every** capture, on every account. It was only *visible* on the first,
+because with fifty memories already in the ground `present` is 49-of-50 and
+the field still lights, while with none it is 0-of-1 and the world answers a
+person's first capture with nothing at all. I had recorded it as "born fails
+when the field is empty", which was the symptom and not the bug.
+
+#### The fix
+
+One clamp, where the list and the clock meet: whatever the loop was just
+handed, the dial's now is at least as late as the newest thing in it. It only
+ever moves `TRef` forward, and only to something that exists, so winding back
+is untouched.
+
+    for (const b of list) TRef.current = Math.max(TRef.current, b.capturedMs);
+
+#### Gate
+
+    positive   fieldLight 0.03 -> 1.12   PASS   (reload shows ~1.95)
+    negative   fieldLight 0.03 -> 0.04   journey fails, as required
+
+Regression: `e2e:journeys` **8/8**, `e2e:first-paint` 2/2, web 130/130,
+vocabulary and seams clean.
+
+#### What this leaves of finding 14
+
+The world's one self-teaching moment now works: you keep something and watch
+it drop into the field below you. That was the whole of "the geography teaches
+itself in one beat", and for every new user the beat was missing.
+
+How much of *"no idea they can go left, right, up, bottom"* that closes is now
+an open question rather than a guess — and it needs to be asked of a person,
+not of a harness. Left/right along the wall axis and up to the sky are still
+unaddressed. Finding 14 stays open and unstarted.

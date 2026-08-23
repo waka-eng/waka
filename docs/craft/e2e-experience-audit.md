@@ -59,7 +59,7 @@ Each finding carries how it was established:
 | 12 | **Minor** | The demo fixture describes a signal state the product forbids creating |
 | 13 | **Minor** | The consent page has no decline control |
 | 14 | **Major** | Nobody knows the world can be moved through — user feedback, 2026-08-23 |
-| 15 | **Major** | The first memory a person ever keeps does not appear until reload |
+| 15 | **Major** | The first memory a person ever keeps does not appear until reload — **fixed 2026-08-23**; a clock-skew bug that silently dropped the newest orb on *every* keep |
 
 Working well, and worth not breaking: Korean coverage is genuinely complete;
 capture round-trips correctly; no surface overflows horizontally on a phone;

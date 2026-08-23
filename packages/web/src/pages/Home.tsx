@@ -2557,6 +2557,43 @@ function HomeExperience(): JSX.Element {
     ].sort((a, b) => a.capturedMs - b.capturedMs);
     const byId = new Map(list.map((b) => [b.id, b] as const));
     ballsRef.current = { list, byId };
+
+    /**
+     * THE DIAL'S NOW IS NEVER BEHIND THE NEWEST MEMORY. THIS IS NOT A GUARD;
+     * IT IS THE BUG.
+     *
+     * `assignHomes` places only what already exists at the dial's time —
+     * `b.capturedMs <= TRef.current` — which is right, and is what lets the
+     * dial wind history back. `TRef` starts at `Date.now()` when the page
+     * mounts and is advanced in exactly two places: the dial, and `born`.
+     *
+     * `born` advances it with the CLIENT's optimistic stamp. The row that
+     * comes back carries the SERVER's `createdAt`. Measured on one machine on
+     * 2026-08-23, the server was **+6ms ahead**; across a network it is
+     * routinely far more. And `inspirations` is a dependency of this effect,
+     * so the keep's own `setInspirations` tears this loop down and rebuilds
+     * it — rebuilding that ball from the server's timestamp, now sitting in
+     * the future of a dial that was only ever told about the client's.
+     *
+     * `assignHomes` then filtered it out and it was never drawn. The audit
+     * said so exactly: `owners {"(none)":1}` — the ball is here — with
+     * `present: 0` and `drawn.active: 0`. A reload re-seeded `TRef` from a
+     * later `Date.now()` and the memory appeared, which is why this read as
+     * "it only shows up if you refresh".
+     *
+     * WHO IT ACTUALLY HIT. Everyone, on every keep. It was only VISIBLE to
+     * somebody keeping their first memory, because with fifty already in the
+     * ground `present` is 49-of-50 and the field still lights; with none it is
+     * 0-of-1 and the world answers a person's first capture with nothing at
+     * all. `journeys:first-keep` is written against exactly that moment.
+     *
+     * Clamping here rather than in `born` because here is where the list and
+     * the clock meet: whatever the loop was just handed, the dial's now is at
+     * least as late as the newest thing in it. Winding BACK is untouched —
+     * this only ever moves `TRef` forward, and only to something that exists.
+     */
+    for (const b of list) TRef.current = Math.max(TRef.current, b.capturedMs);
+
     for (const b of list) colorBall(b, TRef.current);
     /* Sprites for any image URLs that resolved before this bag existed
        (inspirations winning the network race must not lose their imagery). */
