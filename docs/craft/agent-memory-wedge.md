@@ -100,17 +100,20 @@ Each of these is a doctrine claim one code-read away from embarrassment.
 They are the real build list, and every one is strategy-proof — needed
 identically by any future WAKA.
 
-1. **No unlock path exists anywhere.** `data-model.md` promises
-   "unlocking is an explicit human act (revert to generated, or
-   delete)"; no route clears `lockedAt` on a signal, entry, or
-   principle. Locking is one-way, and by the canon's own supremacy rule
-   the code is wrong.
+1. **~~No unlock path exists anywhere.~~ HALF CLOSED 2026-08-22 by
+   Track S:** **release** shipped on both layers (`POST
+   /api/signals/:id/release`, `/api/top-of-mind/entries/:id/release`) —
+   the person's words stand, the generator regains jurisdiction,
+   releasing unsupported words retires them. The other verb, **revert**
+   (the machine's statement back byte-for-byte), remains impossible
+   until debt 2 gives L2 a chain to revert from — now Phase 2 of
+   `goals/no-quiet-corners.md`.
 2. **L2 and L4 overwrite in place.** A human edit destroys the machine's
    prior statement, so "what did WAKA think before I corrected it" is
    unanswerable, revert-to-generated is impossible even in principle,
    and the Misattribution Gap applies to us: a bad correction is
    indistinguishable from a bad synthesis. Only L3 has the supersede
-   chain.
+   chain. (Scheduled: `goals/no-quiet-corners.md` Phase 2.)
 3. **Nothing logs reads.** `sessions.lastSeenAt` is the entire read-side
    trace. No record exists of which session was served which
    `principles.md` rendering or top-of-mind version, and the p-id
@@ -544,10 +547,10 @@ Three consequences of the call:
 **Phase 0 — make the room's record safe to trust** (before inviting
 anyone new):
 
-- **Merge wall-that-evolves Step 1.** Refresh currently destroys wall
-  history in production; the fix is built, tested, CI-green, and
-  unmerged. This is the graveyard's Evernote-2013 class of trust shock,
-  already paid for. Merge it.
+- ~~**Merge wall-that-evolves Step 1.**~~ **ABSORBED 2026-08-22 by
+  `a-room-you-can-trust` Phase 0a:** versions survive refresh,
+  proposals, and membership churn, pinned on real Postgres by
+  `room-history.db.test.ts`.
 - **Erasure redaction, both steps.** The decision-log entry naming the
   exception lands now; the departed-state redaction (versions survive,
   the departed member's traces go nameless) gets the founder doctrine
