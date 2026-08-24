@@ -2474,6 +2474,13 @@
     border-bottom: 0;
     outline: none;
     background: none;
+    /* AND THE PADDING, which the first pass at this block forgot. `chrome.css`
+       gives every bare textarea `padding: 9px 0` from the same layer, so the
+       zero declared up in `product` lost and the quick line carried eighteen
+       pixels of vertical air it had explicitly given up — measured invisibly,
+       because the field's height is written from its own scrollHeight, but it
+       pushed the words that far off the seam they are supposed to hang from. */
+    padding: 0;
     /* the resting phrase's own face, so opening the mouth is not a change of
        instrument */
     font-size: 10px;
