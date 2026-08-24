@@ -70,16 +70,17 @@ are out of scope by decision, and the password-recovery half of finding 5,
 which waits on a mail provider and is the only item here that can lock a real
 person out of their own memory.
 
-**The pattern across all seventeen.** Not one of these threw an exception,
+**The pattern across all eighteen.** Not one of these threw an exception,
 failed an assertion, or turned a suite red. A blank world, a keep that never
 appeared, a hover that could never fire, six screens you could reach and not
 leave, a page of near-white text on near-white paper — every one of them
-shipped past a fully green build. Two of them (16 and 17) were found only
-because someone was measuring something else at the time. The gates added
-along the way exist to make that class of failure loud: `e2e:first-paint` and
-`e2e:journeys` now run in CI, and each journey is put through its own sabotage
-and must fail, because a check that cannot fail is indistinguishable from one
-that is passing.
+shipped past a fully green build. Three of them (16, 17 and 18) were found
+only because someone was measuring something else at the time — none was
+looked for, which is the strongest thing this table says about how much is
+left unmeasured. The gates added along the way exist to make that class of
+failure loud: `e2e:first-paint` and `e2e:journeys` now run in CI, and each
+journey is put through its own sabotage and must fail, because a check that
+cannot fail is indistinguishable from one that is passing.
 
 Working well, and worth not breaking: Korean coverage is genuinely complete;
 capture round-trips correctly; no surface overflows horizontally on a phone;
