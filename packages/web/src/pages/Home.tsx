@@ -465,9 +465,34 @@ const MOOD_OF: Partial<Record<Moment, number>> = {
 };
 /** How far mood may bend each rhythm. Small on purpose: this is a disposition
     read at a glance, not a readout, and a legible one would be a legend. */
-const MOOD_BOB = 0.28;
-const MOOD_BLINK = 0.18;
-const MOOD_GLANCE = 0.25;
+const MOOD_BOB = 1;
+/**
+ * AND THE BREATH NEVER STOPS.
+ *
+ * At full gain a mood of -1 multiplies the bob's amplitude by zero, and
+ * measuring it is the only reason that was caught: 0.0px of travel, a
+ * companion holding perfectly still. The settle already refuses this a few
+ * lines down — "never below a fifth — still breathing, never frozen" —
+ * because a creature that stops moving does not read as low, it reads as
+ * crashed. Low mood is quieter, never absent.
+ */
+const MOOD_BOB_FLOOR = 0.4;
+/**
+ * AND THE RATE, WHICH IS THE ONE READ AT A GLANCE.
+ *
+ * Amplitude alone was not enough and the arithmetic says why: the bob is a
+ * squash of 0.022, so on a 140px body it is ±3px, and a quarter of three
+ * pixels is nothing. Restraint that lands below perception is not restraint,
+ * it is an effect that does not exist.
+ *
+ * SPEED is the channel a person reads instantly — sluggish against lively is
+ * legible in a second, long before an amplitude difference is. It is also the
+ * honest one for a disposition: what changes when someone is flat is not how
+ * far they move, it is how readily.
+ */
+const MOOD_RATE = 0.45;
+const MOOD_BLINK = 0.4;
+const MOOD_GLANCE = 0.45;
 /**
  * HOW LONG THE COMPANION TAKES TO BECOME THE ONE WHOSE WALL THIS IS.
  *
@@ -4805,7 +4830,9 @@ function HomeExperience(): JSX.Element {
            bloom; this is the body, and a body may act.) */
         const sq = view.reduced
           ? 0
-          : Math.sin(companion.bobPh + 1.5) * 0.022 * (1 + companion.mood * MOOD_BOB) -
+          : Math.sin(companion.bobPh + 1.5) *
+              0.022 *
+              Math.max(MOOD_BOB_FLOOR, 1 + companion.mood * MOOD_BOB) -
             companion.pitch * PITCH_STRETCH +
             companion.ant;
         const bw = companion.size * (1 + sq);
@@ -5321,7 +5348,12 @@ function HomeExperience(): JSX.Element {
         dt *
         wornBeing().bobRate *
         (1 + 0.6 * clamp01(Math.abs(companion.off) / DRAG_LEAD_PX)) *
-        (1 + 0.45 * companion.pitch);
+        (1 + 0.45 * companion.pitch) *
+        /* the disposition, on the term it is most legible on. Multiplied with
+           the being's own rate rather than replacing it, so a slow creature in
+           a good mood is still slower than a quick one in a bad one — identity
+           underneath, disposition on top, the same order as the blink. */
+        (1 + companion.mood * MOOD_RATE);
       /* arrived before the data: the wall holds still until it can wake whole */
       if (trip.awaitingWake && !trip.active) tryWakeWall();
 
