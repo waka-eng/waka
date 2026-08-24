@@ -663,19 +663,18 @@ Source: `packages/web/src/lib/aliveness.ts`.
 | `FIELD_DECAY_HALF_LIFE_DAYS` | 7 | Half-life of an untended memory's light |
 | `FIELD_REFLECTION_SATURATION` | 2 | Attention stops adding light past this many reflections |
 | `FIELD_REFLECTION_WEIGHT` | 0.25 | What each reflection adds, as a fraction of current decay |
-| `FIELD_FLOOR_CITED` | 0.34 | A memory a signal rests on cannot sink below this |
+| `FIELD_FLOOR_CITED` | 0.15 | A memory a signal rests on cannot sink below this |
 | `FIELD_FLOOR_ANSWERED` | 0.18 | Nor one you answered in your own words |
 | `FIELD_FLOOR_IN_GROUP` | 0.1 | Nor one that is out loud in a group |
-| `FIELD_CITED_LIFT` | 0.12 | Being cited also lifts a memory above its floor |
 | `FIELD_FRONTIER_DAYS` | 3 | Untouched longer than this and cited by nothing = a frontier |
 | `FIELD_CARRY_ROOT_SATURATION` | 3 | Roots stop adding carry past this many citing patterns |
-| `FIELD_CARRY_ROOTS_SHARE` | 0.3 | Carry: the share held by how many patterns cite it |
+| `FIELD_CARRY_ROOTS_SHARE` | 0.2 | Carry: the share held by how many patterns cite it |
 | `FIELD_CARRY_PROMOTED_SHARE` | 0.2 | Carry: the share held by being under a promoted pattern |
-| `FIELD_CARRY_POSTER_SHARE` | 0.25 | Carry: the share held by reaching the live top of mind |
+| `FIELD_CARRY_POSTER_SHARE` | 0.35 | Carry: the share held by reaching the live top of mind |
 | `FIELD_CARRY_PRINCIPLE_SHARE` | 0.25 | Carry: the share held by reaching a principle |
-| `FIELD_CARRY_SPAN` | 0.5 | Extra light a fully-carrying memory holds over a barely-cited one |
+| `FIELD_CARRY_SPAN` | 0.75 | Extra light a fully-carrying memory holds over a barely-cited one |
 | `FIELD_ATTENTION_SPAN` | 0.16 | Extra floor for coming back to a memory, graded by how often |
-| `FIELD_RECENCY_MAX` | 0.55 | Freshness alone cannot pass this; the room above belongs to use |
+| `FIELD_RECENCY_WEIGHT` | 0.25 | The share of the range freshness may spend; the rest belongs to use |
 | `FIELD_TIER_CEILING` | 1 | Aliveness at or above this draws in the brightest band |
 | `FIELD_TIER_GAMMA` | 0.7 | Bends the banding so the dim half gets the larger share of bands |
 

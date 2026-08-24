@@ -45,7 +45,7 @@ export const FIELD_REFLECTION_WEIGHT = 0.25;
  * your own words, or out loud in a group. Animal Crossing's rule — weeds grow
  * where you never built, never where you did.
  */
-export const FIELD_FLOOR_CITED = 0.34;
+export const FIELD_FLOOR_CITED = 0.15;
 export const FIELD_FLOOR_ANSWERED = 0.18;
 export const FIELD_FLOOR_IN_GROUP = 0.1;
 
@@ -64,33 +64,39 @@ export const FIELD_FLOOR_IN_GROUP = 0.1;
 export const FIELD_ATTENTION_SPAN = 0.16;
 
 /**
- * RECENCY ALONE CANNOT REACH FULL LIGHT (founder, twice, 2026-08-24: "still
- * all same brightness").
+ * HOW MUCH OF THE RANGE FRESHNESS MAY SPEND — measured, not guessed.
  *
- * The first banding fix rescued OLD archives — weeks of decay now spread
- * across the bands instead of collapsing into the bottom one. It did nothing
- * for a YOUNG one: everything kept this week had decay near one, the max
- * with the floors clamped to one, and the whole field saturated the top band
- * — uniform again, from the other end. The founder's field is days old, and
- * that is the field they were looking at.
+ * This was a CAP at 0.55, and a cap was the wrong instrument twice over.
+ * Driving a real derived archive through `colorBall` and `tierOf` and
+ * printing the histogram (five memories, four of them on the poster) gave
+ * tier 6 and tier 7 — ONE band apart out of nine, both crowded at the top,
+ * which is exactly the "all same brightness" the founder kept reporting. Two
+ * causes, both visible in that measurement:
  *
- * So recency tops out HERE, below full, and the room above it belongs to
- * use: the carry (roots, the poster, a principle) is what reaches the top.
- * Which is the ruling itself — brightness says how much of you stands on a
- * memory, and "I kept it this morning" is not standing on it.
+ *   A CAP FLATTENS THE THING IT LIMITS. `min(decay, 0.55)` returns 0.55 for
+ *   anything kept in the last week — decay is 1.0 today and 0.5 at seven
+ *   days — so every recent memory came out at the identical value and the
+ *   passage of time stopped being visible at the exact end of the archive a
+ *   person looks at most.
+ *
+ *   AND IT LEFT NO ROOM. With the cited floor and the old cited lift, an
+ *   ordinary memory already sat at 0.72 before the carry contributed
+ *   anything, so the whole carry range was squeezed into the top eighth.
+ *
+ * A WEIGHT instead: freshness scales across its own share of the range and
+ * keeps its gradient, and the rest of the range belongs to use. Brightness
+ * says how much of you stands on a memory; "I kept it this morning" is not
+ * standing on it, but it is not nothing either.
  */
-export const FIELD_RECENCY_MAX = 0.55;
+export const FIELD_RECENCY_WEIGHT = 0.25;
 
-/**
- * A citation lifts a memory ABOVE its floor as well as setting one.
- *
- * This was a second `+0.12` for `hasNotes` in the same expression that already
- * counted it at 0.34 — the same fact twice, and no way to tell whether that
- * was deliberate. It is deliberate: being cited both stops a memory sinking
- * AND makes it brighter than an equally old one that is not. Named so the
- * double counting is a decision rather than a suspicion.
- */
-export const FIELD_CITED_LIFT = 0.12;
+/* `FIELD_CITED_LIFT` was here: a second, flat +0.12 for being cited at all,
+   on top of the cited floor. It was deliberate when the floor was the only
+   other thing citation bought — but `carryOf` now grades exactly that, from
+   the first root upward, and the flat term was pure baseline inflation: it
+   pushed every cited memory into the top bands before the grading had said
+   anything. Removed with its doc row rather than zeroed, so nothing carries
+   a constant that means nothing. */
 
 /** Untouched for longer than this, and cited by nothing, is a frontier. */
 export const FIELD_FRONTIER_DAYS = 3;
@@ -151,7 +157,17 @@ export const FIELD_TIER_GAMMA = 0.7;
  * argument for having a single channel.
  */
 export const FIELD_CARRY_ROOT_SATURATION = 3;
-export const FIELD_CARRY_ROOTS_SHARE = 0.3;
+/**
+ * THE FOUR SHARES ARE WEIGHTED BY WHAT THEY MEAN, and the weighting was
+ * settled by measurement rather than taste. An even-ish split gave a real
+ * archive a one-band spread — every memory cited once, four of the five on
+ * the poster, so the ONLY distinction available was poster membership and
+ * one share bought one step out of nine, which reads as no difference at
+ * all. Reaching what currently matters is the strongest thing a memory can
+ * be doing, so it carries the largest share; a settled principle is next;
+ * promotion and sheer count of roots are the quieter two.
+ */
+export const FIELD_CARRY_ROOTS_SHARE = 0.2;
 /**
  * A PROMOTED PATTERN IS A HEAVIER THING TO HOLD UP — and this share is what
  * makes the light move at all in a young archive.
@@ -172,7 +188,7 @@ export const FIELD_CARRY_ROOTS_SHARE = 0.3;
  * "how active this one is being used to form signals" means.
  */
 export const FIELD_CARRY_PROMOTED_SHARE = 0.2;
-export const FIELD_CARRY_POSTER_SHARE = 0.25;
+export const FIELD_CARRY_POSTER_SHARE = 0.35;
 export const FIELD_CARRY_PRINCIPLE_SHARE = 0.25;
 
 /**
@@ -183,7 +199,7 @@ export const FIELD_CARRY_PRINCIPLE_SHARE = 0.25;
  * above that floor, so the field reads as a gradient of load rather than as
  * two brightnesses.
  */
-export const FIELD_CARRY_SPAN = 0.5;
+export const FIELD_CARRY_SPAN = 0.75;
 
 /** What a memory is holding up, in 0..1. Pure; the field's only reader. */
 export function carryOf(input: {
@@ -192,9 +208,15 @@ export function carryOf(input: {
   onPoster: boolean;
   underPrinciple: boolean;
 }): number {
-  const roots =
+  /* THE FIRST ROOT IS THE ONE THAT MEANS MOST. Counting roots linearly made
+     a single citation worth a third of its share — measured, less than one
+     band, so "the loop read this and made something of it" looked exactly
+     like "nothing came of this". The step from none to one is the largest
+     step there is; the second and third refine it. */
+  const roots = Math.sqrt(
     Math.min(Math.max(input.roots, 0), FIELD_CARRY_ROOT_SATURATION) /
-    FIELD_CARRY_ROOT_SATURATION;
+      FIELD_CARRY_ROOT_SATURATION,
+  );
   const carry =
     FIELD_CARRY_ROOTS_SHARE * roots +
     (input.underPromoted ? FIELD_CARRY_PROMOTED_SHARE : 0) +

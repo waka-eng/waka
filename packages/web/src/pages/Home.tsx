@@ -10748,8 +10748,10 @@ function HomeExperience(): JSX.Element {
                 value={draft}
                 rows={1}
                 spellCheck={false}
-                aria-label="something worth keeping"
-                placeholder="Something worth keeping"
+                aria-label="keep something"
+                /* the resting phrase, kept — opening the mouth changes
+                   nothing about it (founder, 2026-08-24) */
+                placeholder="Keep something"
                 onChange={(e) => {
                   setDraft(e.target.value);
                   if (mouthNote !== "") setMouthNote("");

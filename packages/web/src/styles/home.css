@@ -2398,3 +2398,63 @@
 .jar-here-row.is-here {
   color: var(--jar-ink);
 }
+
+/* ================= the mouth is chrome, not a form =================
+   THE LAYER COLLISION THAT SURVIVED THREE ATTEMPTED FIXES.
+
+   `layers.css` declares `@layer base, product, chrome`, so the chrome layer
+   beats the product layer NO MATTER THE SPECIFICITY — that is the whole
+   point of an explicit order. Everything above in this file is in `product`.
+   And `chrome.css` styles bare elements for the flat screens:
+
+       textarea { border-bottom: 1px solid var(--w-edge); font-size: 16px; }
+       body textarea { font-size: 15px; }
+
+   The world's mouth is a `<textarea>`, so it was being given a form's
+   underline and a form's size by a stylesheet meant for the login page. The
+   founder reported both — "keep this font and size, and dont add the
+   underline when typing in here" — and the fix went into the product layer
+   three times, where it could not possibly win. Measured in a real browser
+   at f4e0f93: `font-size: 15px`, `border-bottom: 1px solid`, while the
+   letter-spacing and text-transform from the product rule DID apply, because
+   chrome does not set those. That asymmetry is the layer order, visible.
+
+   So the mouth states its own face from inside the chrome layer, where it
+   belongs: it is not a form control on a page of forms, it is the one place
+   the world listens. Nothing else in here reaches beyond the mouth. */
+@layer chrome {
+  .jar-mouth-field {
+    /* no form furniture: the world's single interactivity signal is not for
+       the control you are already inside */
+    border: 0;
+    border-bottom: 0;
+    outline: none;
+    background: none;
+    /* the resting phrase's own face, so opening the mouth is not a change of
+       instrument */
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    line-height: 1.9;
+    text-align: center;
+    color: var(--jar-ink);
+  }
+  .jar-mouth-field::placeholder {
+    color: var(--jar-faint);
+    text-transform: uppercase;
+  }
+  /* and the drawer's prose face, which must also outrank the flat screens */
+  .jar-mouth-slot--note .jar-mouth-field {
+    font-size: 15px;
+    font-weight: 400;
+    letter-spacing: normal;
+    text-transform: none;
+    line-height: 1.62;
+    text-align: left;
+  }
+  .jar-mouth-slot--note .jar-mouth-field::placeholder {
+    text-transform: none;
+    letter-spacing: normal;
+  }
+}

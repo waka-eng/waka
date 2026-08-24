@@ -53,12 +53,7 @@
 import { act } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  carryOf,
-  FIELD_CARRY_SPAN,
-  FIELD_CITED_LIFT,
-  FIELD_FLOOR_CITED,
-} from "../src/lib/aliveness";
+import { carryOf, FIELD_CARRY_SPAN, FIELD_FLOOR_CITED } from "../src/lib/aliveness";
 import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
 import {
   apiMockFrom,
@@ -205,8 +200,8 @@ afterEach(() => {
  */
 const CITED_LIGHT =
   FIELD_FLOOR_CITED +
-  FIELD_CARRY_SPAN * carryOf({ roots: 1, onPoster: false, underPrinciple: false }) +
-  FIELD_CITED_LIFT;
+  FIELD_CARRY_SPAN *
+    carryOf({ roots: 1, underPromoted: false, onPoster: false, underPrinciple: false });
 
 describe("a memory a pattern rests on", () => {
   /**

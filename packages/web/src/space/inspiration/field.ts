@@ -16,8 +16,7 @@ import {
   carryOf,
   FIELD_ATTENTION_SPAN,
   FIELD_CARRY_SPAN,
-  FIELD_RECENCY_MAX,
-  FIELD_CITED_LIFT,
+  FIELD_RECENCY_WEIGHT,
   FIELD_DECAY_HALF_LIFE_DAYS,
   FIELD_FLOOR_ANSWERED,
   FIELD_FLOOR_CITED,
@@ -123,18 +122,20 @@ export function colorBall(b: Ball, T: number): void {
      whichever of recency and the floors is winning, so a cited memory
      outshines an uncited twin whatever their shared age is — which is the
      founder's ruling, at both ends of an archive's life. */
-  const recency = Math.min(
-    decay +
-      FIELD_REFLECTION_WEIGHT *
-        Math.min(b.reflections, FIELD_REFLECTION_SATURATION) *
-        decay,
-    FIELD_RECENCY_MAX,
-  );
-  const a = clamp01(
-    Math.max(recency, tended) +
-      FIELD_CARRY_SPAN * carry +
-      (b.hasNotes ? FIELD_CITED_LIFT : 0),
-  );
+  /* Freshness SCALES across its own share of the range rather than being
+     capped into it — a cap returned the same value for everything kept in
+     the last week and erased the gradient at the end of the archive a person
+     reads most (see FIELD_RECENCY_WEIGHT, and the measurement in its note). */
+  const recency =
+    FIELD_RECENCY_WEIGHT *
+    Math.min(
+      decay +
+        FIELD_REFLECTION_WEIGHT *
+          Math.min(b.reflections, FIELD_REFLECTION_SATURATION) *
+          decay,
+      1,
+    );
+  const a = clamp01(Math.max(recency, tended) + FIELD_CARRY_SPAN * carry);
   b.alive = a;
   b.alivePow = Math.pow(a, 1.4);
   /**
