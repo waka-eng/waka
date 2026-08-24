@@ -43,6 +43,7 @@ import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
 
 import {
   attachments,
+  inspirationEmbeddings,
   inspirations,
   profiles,
   reflections,
@@ -55,10 +56,18 @@ import {
   GeminiEmbeddingHttpClient,
 } from "./inspiration-embeddings.js";
 import { normalizeSupportedLocale } from "./locales.js";
-import { getDefaultModelProvider, type ModelProvider } from "./model-provider.js";
+import {
+  getDefaultModelProvider,
+  type ModelProvider,
+  type RelatedInspirationContext,
+  type SignalCandidate,
+} from "./model-provider.js";
 import { quoteForEvidence } from "./salience.js";
 import {
   MATCH_CANDIDATE_SCAN_LIMIT,
+  RELATED_INSPIRATION_CONTEXT_LIMIT,
+  RELATED_INSPIRATION_MIN_COSINE,
+  RELATED_INSPIRATION_SCAN_LIMIT,
   SIGNAL_BATCH_DEDUPE_MIN_COSINE,
 } from "./signal-derivation-thresholds.js";
 import type { StatementEmbeddingClient } from "./signal-embeddings.js";
@@ -199,6 +208,29 @@ export async function deriveSignalsForInspiration(
       .limit(MATCH_CANDIDATE_SCAN_LIMIT),
   ]);
 
+  /*
+    The capture's own vector, BEFORE extraction — the reorder is the feature.
+    It was always computed in this pass (layer-1 recall keeps it warm even
+    when a capture yields nothing); computing it first lets this same pass
+    ask the one question per-capture extraction is structurally blind to:
+    which of the person's EARLIER captures sit near this one? A pattern that
+    returns months later, worded differently, is invisible to a reader shown
+    one capture at a time — and that is most of how people actually recur.
+    Same model-call count as before; the vector was never optional.
+  */
+  const inspirationEmbedding = await ensureInspirationEmbedding({
+    profileId,
+    inspirationId: inspiration.id,
+  });
+  const relatedInspirations = inspirationEmbedding.embedding
+    ? await findRelatedInspirations(db, {
+        profileId,
+        inspirationId: inspiration.id,
+        embedding: inspirationEmbedding.embedding.embedding,
+        model: inspirationEmbedding.embedding.model,
+      })
+    : [];
+
   const extraction = await provider.extractSignalCandidates({
     profileId,
     // Statements come back in the owner's language; the locale is the hint
@@ -220,11 +252,8 @@ export async function deriveSignalsForInspiration(
         : [],
     ),
     existingStatements,
+    relatedInspirations,
   });
-
-  // The capture's own vector is layer-1 machinery (recall, future matching),
-  // and it is worth keeping current even when this capture yielded nothing.
-  await ensureInspirationEmbedding({ profileId, inspirationId: inspiration.id });
 
   /*
     THE QUOTE IS CHECKED BEFORE IT IS KEPT.
@@ -259,6 +288,7 @@ export async function deriveSignalsForInspiration(
         { text: inspiration.text, enrichment: enrichmentText },
         MAX_QUOTE_LENGTH,
       ),
+      relatedEvidence: resolveRelatedEvidence(candidate, relatedInspirations, MAX_QUOTE_LENGTH),
     }))
     .filter((candidate) => candidate.statement.length > 0);
 
@@ -305,6 +335,86 @@ export async function deriveSignalsForInspiration(
     candidateCount: embedded.length,
     ...outcome,
   };
+}
+
+/**
+ * The current capture's nearest earlier captures, by stored inspiration
+ * vectors — the recurrence the extractor is allowed to see. In-memory cosine
+ * over the same bounded scan match-or-mint uses; no model call, the vectors
+ * already exist. Ordered strongest first, floored, and capped to context
+ * size, so the current capture stays the loudest thing in the prompt.
+ */
+async function findRelatedInspirations(
+  db: WakaDb,
+  input: {
+    profileId: string;
+    inspirationId: string;
+    embedding: number[];
+    model: string;
+  },
+): Promise<RelatedInspirationContext[]> {
+  const rows = await db
+    .select({
+      id: inspirations.id,
+      text: inspirations.text,
+      createdAt: inspirations.createdAt,
+      embedding: inspirationEmbeddings.embedding,
+    })
+    .from(inspirationEmbeddings)
+    .innerJoin(inspirations, eq(inspirations.id, inspirationEmbeddings.inspirationId))
+    .where(
+      and(
+        eq(inspirationEmbeddings.profileId, input.profileId),
+        eq(inspirationEmbeddings.model, input.model),
+      ),
+    )
+    .orderBy(desc(inspirations.createdAt))
+    .limit(RELATED_INSPIRATION_SCAN_LIMIT);
+
+  return rows
+    .filter((row) => row.id !== input.inspirationId)
+    .map((row) => ({
+      row,
+      similarity: cosineSimilarity(input.embedding, row.embedding) ?? -1,
+    }))
+    .filter((scored) => scored.similarity >= RELATED_INSPIRATION_MIN_COSINE)
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, RELATED_INSPIRATION_CONTEXT_LIMIT)
+    .map(({ row }) => ({ id: row.id, text: row.text, createdAt: row.createdAt }));
+}
+
+/**
+ * Which of a candidate's related-capture citations survive code's checks.
+ * Pure, so the two rules are testable without a database:
+ *
+ *   - the cited id must be one that was actually OFFERED — the model cannot
+ *     conjure evidence from a capture it was never shown;
+ *   - the quote must genuinely appear in THAT capture's own text (same
+ *     verbatim rule as the primary quote, via `quoteForEvidence`), and a
+ *     citation whose quote fails is dropped whole. The quote is not
+ *     decoration here: it is the only thing standing between "these two
+ *     captures share a theme" and "this capture is evidence of this
+ *     pattern", and the model asserting the second must prove it in the
+ *     capture's own words.
+ */
+export function resolveRelatedEvidence(
+  candidate: Pick<SignalCandidate, "relatedEvidence">,
+  offered: RelatedInspirationContext[],
+  maxQuoteLength: number,
+): Array<{ inspirationId: string; quote: string }> {
+  if (!candidate.relatedEvidence?.length || offered.length === 0) return [];
+  const offeredById = new Map(offered.map((row) => [row.id, row]));
+
+  return candidate.relatedEvidence.flatMap((cited) => {
+    const witness = offeredById.get(cited.inspirationId);
+    if (!witness) return [];
+    const quote = quoteForEvidence(
+      cited.quote,
+      { text: witness.text, enrichment: null },
+      maxQuoteLength,
+    );
+    return quote ? [{ inspirationId: witness.id, quote }] : [];
+  });
 }
 
 /** Exposed for callers that summarize a pass without re-reading the rows. */

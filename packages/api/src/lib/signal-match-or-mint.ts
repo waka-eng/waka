@@ -27,6 +27,7 @@
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import {
+  inspirations,
   signalEmbeddings,
   signalEvidence,
   signals,
@@ -80,6 +81,15 @@ export interface ResolvedCandidate {
   reason: string | null;
   quote: string | null;
   embedding: number[];
+  /**
+   * Earlier captures of the same profile that co-witness this pattern —
+   * already validated upstream (`resolveRelatedEvidence`): each id was one
+   * the extractor was actually shown, and each quote is a verified verbatim
+   * span of that capture's own text. Attached as ordinary evidence rows for
+   * whatever signal this candidate lands on, dated by their own capture
+   * dates via the lifecycle read.
+   */
+  relatedEvidence: Array<{ inspirationId: string; quote: string }>;
 }
 
 interface ApplyCandidatesInput {
@@ -135,6 +145,11 @@ export async function applyCandidates(
         reason: candidate.reason,
         quote: candidate.quote,
       });
+      await attachRelatedEvidence(
+        tx,
+        { profileId: input.profileId, signalId: match.target.id },
+        candidate.relatedEvidence,
+      );
 
       // An emerging signal is a first draft read from a single capture; the
       // capture that confirms it usually names the pattern better. Once a
@@ -188,6 +203,11 @@ export async function applyCandidates(
       reason: candidate.reason,
       quote: candidate.quote,
     });
+    await attachRelatedEvidence(
+      tx,
+      { profileId: input.profileId, signalId: minted.id },
+      candidate.relatedEvidence,
+    );
 
     mintedSignalIds.push(minted.id);
     touched.add(minted.id);
@@ -289,6 +309,49 @@ async function attachEvidence(
       quote: input.quote,
     })
     .onConflictDoNothing();
+}
+
+/**
+ * The cited earlier captures become evidence of the same signal. Validated
+ * upstream (offered ids only, verified quotes), and re-checked here against
+ * the database inside the transaction: a cited capture deleted between
+ * retrieval and this write is silently skipped rather than aborting the
+ * whole pass on its foreign key. Reason stays null — the quote IS the
+ * grounding, and a reason describing the current capture would be attributed
+ * to the wrong one. The unique (signal, inspiration) index makes re-runs and
+ * already-evidencing captures a no-op, as everywhere else.
+ */
+async function attachRelatedEvidence(
+  tx: WakaTx,
+  input: { profileId: string; signalId: string },
+  cited: ResolvedCandidate["relatedEvidence"],
+): Promise<void> {
+  if (cited.length === 0) return;
+
+  const stillPresent = await tx
+    .select({ id: inspirations.id })
+    .from(inspirations)
+    .where(
+      and(
+        eq(inspirations.profileId, input.profileId),
+        inArray(
+          inspirations.id,
+          cited.map((row) => row.inspirationId),
+        ),
+      ),
+    );
+  const presentIds = new Set(stillPresent.map((row) => row.id));
+
+  for (const row of cited) {
+    if (!presentIds.has(row.inspirationId)) continue;
+    await attachEvidence(tx, {
+      profileId: input.profileId,
+      signalId: input.signalId,
+      inspirationId: row.inspirationId,
+      reason: null,
+      quote: row.quote,
+    });
+  }
 }
 
 /**

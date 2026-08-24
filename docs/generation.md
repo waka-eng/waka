@@ -46,24 +46,31 @@ the platform-team offer. I keep choosing depth over breadth."*
    enrichment) and proposes at most three candidate statements — here, likely
    one: "You keep choosing depth over breadth." Zero would also be a valid
    answer; a grocery list yields nothing.
-3. **Match or mint.** The candidate is embedded and compared against your
+3. **Related captures.** Before reading, your save's vector is compared
+   against your earlier saves'. The nearest few are shown to the extractor as
+   context — so if you wrote about quitting piano "because practice felt like
+   performance" months ago, today's save about abandoning the blog for the
+   same reason can cite it, and both become evidence of one pattern neither
+   save could witness alone. A citation only survives with a verbatim quote
+   from the old save, verified in code.
+4. **Match or mint.** The candidate is embedded and compared against your
    existing signals. If you have said this before in other words, the cosine
    is high and the capture **attaches as evidence** to that signal. In the
    ambiguous band the judge is asked once. Otherwise a new signal is born
    `emerging`.
-4. **Recurrence decides.** At three pieces of evidence the signal promotes to
+5. **Recurrence decides.** At three pieces of evidence the signal promotes to
    `active`. One mention is a thought; three are a pattern.
-5. **Confidence follows the evidence** — how much, how spread out, how
+6. **Confidence follows the evidence** — how much, how spread out, how
    recent, whether an agent corroborated it — computed fresh at every read,
    so a pattern you stop feeding fades without anyone touching it.
-6. **Selection.** When the signal set changes, a refresh scores every
+7. **Selection.** When the signal set changes, a refresh scores every
    eligible signal and takes the strongest twelve. New profiles borrow their
    best still-forming signals so the board is never blank.
-7. **Synthesis.** One model call returns the whole artifact — at most seven
+8. **Synthesis.** One model call returns the whole artifact — at most seven
    entries, each citing the signals it rests on. Code then validates every
    citation, restores your locked entries byte-for-byte, and writes the next
    **version** of your top of mind. The old one is superseded, never erased.
-8. **You push back.** Edit an entry (it locks), dismiss it, pin it, or mark
+9. **You push back.** Edit an entry (it locks), dismiss it, pin it, or mark
    it *not true* — and the next synthesis is told, with your correction
    outranking the model's phrasing. Delete the original inspiration and the
    whole chain unwinds: evidence gone, signal retired or marked unsupported,
@@ -135,8 +142,30 @@ The contract, enforced by prompt and checked where code can check:
 - Temperature 0, JSON schema-constrained output, statements clipped to 500
   chars in code regardless of what the model returns.
 
+**Related captures — recurrence the extractor is allowed to see.** Per-capture
+reading is structurally blind to the pattern a person actually produces: the
+same theme returning months later, worded differently, across saves that
+individually look like nothing. So before extraction, the capture's own
+vector (already maintained for layer-1 recall — the reorder costs no extra
+call) is compared against the profile's stored capture vectors: the
+`RELATED_INSPIRATION_SCAN_LIMIT` (500) most recent are scanned, anything at or
+above `RELATED_INSPIRATION_MIN_COSINE` (0.6) qualifies, and the strongest
+`RELATED_INSPIRATION_CONTEXT_LIMIT` (5) enter the prompt as fenced context, each
+with its id and date. The instruction is explicit that they are context, not
+material: every statement must be grounded in the current capture first, a
+pattern living only in the earlier captures is not the model's to name, and
+citing none is the normal answer. When an earlier capture *does* independently
+witness a statement, the model may cite it — at most
+`MAX_RELATED_INSPIRATION_CITATIONS` (2) per statement, each citation carrying a
+verbatim quote from THAT capture's own text.
+
 The model does **not** decide matching. It proposes statements; distance does
-the rest.
+the rest — and it does not decide citations either: code drops any cited id
+that was not actually offered, and verifies each citation's quote against the
+cited capture's text with the same verifier the primary quote passes through
+(`resolveRelatedEvidence`); a citation whose quote fails is dropped whole.
+"These two share a theme" is not "this capture witnesses this pattern", and
+the verbatim quote is the difference.
 
 ### 4. Match-or-mint: where dedupe actually happens
 
@@ -170,6 +199,18 @@ owner can merge or delete. When this system errs, it errs recoverably.
 Attaching writes a row in `signal_evidence` (M:N: one capture can evidence
 several signals, one signal accumulates many captures), unique per
 (signal, inspiration) pair so re-derivation never double-counts.
+
+Surviving related-capture citations attach the same way, to whichever signal
+the candidate landed on — matched or minted: each cited earlier capture
+becomes an ordinary evidence row of that signal, quote carried, reason null
+(the quote is the grounding, and a reason written about the current capture
+would be attributed to the wrong one). Cited captures are re-checked inside
+the transaction — one deleted between retrieval and the write is skipped, not
+an abort — and because evidence is dated by the capture that witnesses it
+(see "How time is applied"), an old citation widens the signal's spread with
+its own date rather than masquerading as fresh evidence. This is how a theme
+scattered across months of saves reaches `SIGNAL_PROMOTION_MIN_EVIDENCE` (3)
+honestly: the recurrence happened; derivation is finally allowed to notice.
 
 ### 5. Confidence, promotion, lifecycle
 
@@ -520,6 +561,9 @@ The authoritative values. Machine-checked against code — see
 | `CONFIDENCE_RECENCY_HALF_LIFE_DAYS` | 45 | Recency half-life |
 | `CONFIDENCE_SOURCE_DIVERSITY_BONUS` | 8 | Added when app and agent evidence corroborate |
 | `MATCH_CANDIDATE_SCAN_LIMIT` | 500 | Most-recently-evidenced signals scanned per match |
+| `RELATED_INSPIRATION_SCAN_LIMIT` | 500 | Most recent capture vectors scanned for relatedness |
+| `RELATED_INSPIRATION_MIN_COSINE` | 0.6 | Floor below which an earlier capture is not offered as context |
+| `RELATED_INSPIRATION_CONTEXT_LIMIT` | 5 | Related captures the extractor is shown, strongest first |
 
 ### Layer 3 — synthesis (`packages/api/src/lib/top-of-mind-selection.ts`)
 
@@ -557,6 +601,7 @@ The authoritative values. Machine-checked against code — see
 | `GEMINI_EMBEDDING_DIMENSIONS` | 768 | Vector width |
 | `MAX_GEMINI_EMBEDDING_VALUES` | 4096 | Sanity ceiling on values accepted back per vector |
 | `MAX_SIGNAL_CANDIDATES` | 3 | Statements one extraction may propose |
+| `MAX_RELATED_INSPIRATION_CITATIONS` | 2 | Earlier captures one statement may cite as co-witnesses |
 | `MAX_TOP_OF_MIND_ENTRIES` | 7 | Entries one artifact may hold |
 
 All generation calls run at temperature 0 with schema-constrained JSON
