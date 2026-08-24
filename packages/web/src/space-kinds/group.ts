@@ -28,8 +28,10 @@ export interface GroupEvidence {
   quote: string | null;
   kind: string | null;
   createdMs: number;
-  authorUserId: string;
-  authorName: string;
+  /** the LEAD contributor of a room-grown statement; null when the room
+      served no names (never on a gated wall, defensive elsewhere) */
+  authorUserId: string | null;
+  authorName: string | null;
   /** Every reading of the room's that cited it — the panel's links sentence. */
   citedBy: string[];
 }
@@ -68,15 +70,20 @@ export function groupWallOrbs(wall: ApiGroupWallSignal[], top: ApiGroupTopOfMind
   const seen = new Map<string, GroupEvidence>();
   for (const s of wall) {
     if (seen.has(s.signalId)) continue;
+    /* a room-grown statement leads with its first contributor — the member
+       whose memory reached it first — and the board's citedBy is collected
+       across every contributor, since the entry may credit any of them */
+    const lead = s.contributors[0] ?? null;
+    const cited = s.contributors.flatMap((c) => fedBy.get(c.profileId) ?? []);
     seen.set(s.signalId, {
       signalId: s.signalId,
       textPreview: s.statement,
       quote: null,
       kind: null,
       createdMs: Date.parse(s.sharedAt) || Date.now(),
-      authorUserId: s.ownerProfileId,
-      authorName: s.ownerName,
-      citedBy: fedBy.get(s.ownerProfileId) ?? [],
+      authorUserId: lead?.profileId ?? null,
+      authorName: lead?.name ?? null,
+      citedBy: [...new Set(cited)],
     });
   }
   return [...seen.values()];
@@ -157,7 +164,7 @@ export function makeGroupBall(
     imgUrl: null,
     col: colIdx,
     sigId: ev.signalId,
-    authorName: ev.authorName,
+    authorName: ev.authorName ?? undefined,
     own: viewerId !== null && ev.authorUserId === viewerId,
     citedBy: ev.citedBy,
     origin: "human",

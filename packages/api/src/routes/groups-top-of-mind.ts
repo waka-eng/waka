@@ -13,6 +13,7 @@ import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import {
   groupMembers,
   groupMembershipEvents,
+  signalEvidence,
   profiles,
   topOfMindEntries,
   topOfMindEntrySignals,
@@ -257,19 +258,65 @@ export async function loadGroupTopOfMind(
       .where(inArray(topOfMindEntrySignals.entryId, entryIds))
       .orderBy(asc(topOfMindEntrySignals.entryId));
 
-    const labels = labelMembersByProfileId(
-      citationRows.flatMap((row) =>
+    /**
+     * ROOM-GROWN CITATIONS carry a null owner — the signal is the room's,
+     * not any member's — so their contribution is derived from the
+     * EVIDENCE: whose memories stand under the cited signal. This is the
+     * canon's evidence asymmetry doing its narrow job (a room's entries may
+     * name what fed them; a person's own top of mind keeps that-never-
+     * which), and it names PEOPLE, never memories: no text, quote, or
+     * memory id crosses here.
+     */
+    const grownRows = await db
+      .selectDistinct({
+        entryId: topOfMindEntrySignals.entryId,
+        contributorProfileId: signalEvidence.ownerProfileId,
+        contributorName: profiles.name,
+      })
+      .from(topOfMindEntrySignals)
+      .innerJoin(
+        signalEvidence,
+        eq(signalEvidence.signalId, topOfMindEntrySignals.signalId),
+      )
+      .innerJoin(profiles, eq(profiles.id, signalEvidence.ownerProfileId))
+      .where(
+        and(
+          inArray(topOfMindEntrySignals.entryId, entryIds),
+          isNull(topOfMindEntrySignals.ownerProfileId),
+        ),
+      )
+      .orderBy(asc(topOfMindEntrySignals.entryId));
+
+    const labels = labelMembersByProfileId([
+      ...citationRows.flatMap((row) =>
         row.ownerProfileId
           ? [{ profileId: row.ownerProfileId, name: row.ownerName }]
           : [],
       ),
-    );
-    for (const row of citationRows) {
-      if (!row.ownerProfileId) continue;
-      const list = contributorsByEntry.get(row.entryId) ?? [];
+      ...grownRows.map((row) => ({
+        profileId: row.contributorProfileId,
+        name: row.contributorName,
+      })),
+    ]);
+    const merged = [
+      ...citationRows.flatMap((row) =>
+        row.ownerProfileId
+          ? [{ entryId: row.entryId, profileId: row.ownerProfileId, name: row.ownerName }]
+          : [],
+      ),
+      ...grownRows.map((row) => ({
+        entryId: row.entryId,
+        profileId: row.contributorProfileId,
+        name: row.contributorName,
+      })),
+    ];
+    for (const row of merged) {
+      const already = contributorsByEntry.get(row.entryId);
+      if (already?.some((c) => c.profileId === row.profileId)) continue;
+      const list = already ?? [];
       list.push({
-        profileId: row.ownerProfileId,
-        name: labels.get(row.ownerProfileId)?.displayName ?? row.ownerName,
+        profileId: row.profileId,
+        name: labels.get(row.profileId)?.displayName ?? row.name,
       });
       contributorsByEntry.set(row.entryId, list);
     }

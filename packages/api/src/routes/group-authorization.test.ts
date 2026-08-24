@@ -264,9 +264,13 @@ describe("what a group can publish", () => {
     signalId,
     statement: "Rooms that instruct without speaking",
     confidenceAsWritten: 72,
+    locked: false,
     reactions: [],
-    ownerProfileId: otherProfileId,
-    ownerName: "Grace",
+    contributors: [
+      /* a contributor is a NAME — a leaky loader smuggling the memory behind
+         the name must lose it at the route's field list */
+      { profileId: otherProfileId, name: "Grace", quote: RAW_INSPIRATION },
+    ],
     sharedAt: "2026-08-10T00:00:00.000Z",
     inspirationText: RAW_INSPIRATION,
     quote: RAW_INSPIRATION,
@@ -318,16 +322,21 @@ describe("what a group can publish", () => {
     );
 
     expect(response.status).toBe(200);
-    const body = (await response.json()) as { wall: Array<Record<string, unknown>> };
+    const body = (await response.json()) as {
+      wall: Array<Record<string, unknown> & { contributors: Array<Record<string, unknown>> }>;
+    };
     expect(Object.keys(body.wall[0]!).sort()).toEqual([
       "confidenceAsWritten",
-      "ownerName",
-      "ownerProfileId",
+      "contributors",
+      "locked",
       "reactions",
       "sharedAt",
       "signalId",
       "statement",
     ]);
+    /* a contributor is a profile id and a display name; the quote a leaky
+       loader attached is not asked for */
+    expect(Object.keys(body.wall[0]!.contributors[0]!).sort()).toEqual(["name", "profileId"]);
     // No field for the capture behind the statement, under any name.
     expect(body.wall[0]).not.toHaveProperty("inspirationText");
     expect(body.wall[0]).not.toHaveProperty("quote");
@@ -457,8 +466,16 @@ describe("the group module itself", () => {
   it("reads layer 1 only through the public-visibility gate", () => {
     const { code } = groupModuleSource();
 
-    // Evidence and its join key stay out entirely.
-    expect(code).not.toMatch(/\bsignalEvidence\b/);
+    /**
+     * THE EVIDENCE BOUNDARY, restated for the room-grown wall (2026-08-24).
+     * The wall and the board may now read `signalEvidence` — the two-voices
+     * gate and the contributor names live there — but only its WHO and WHEN.
+     * What must never cross is the text: the quote, the reason, and the
+     * memory behind the citation. So the ban narrows from the table to its
+     * text columns and its join key into layer 1.
+     */
+    expect(code).not.toMatch(/signalEvidence\.quote\b/);
+    expect(code).not.toMatch(/signalEvidence\.reason\b/);
     expect(code).not.toMatch(/\binspirationId\b/);
 
     // A room's field reads layer 1 by design, so the read must be found. If it

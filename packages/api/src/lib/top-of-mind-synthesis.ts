@@ -47,6 +47,7 @@ import {
 } from "../db/index.js";
 import { getDb } from "./db.js";
 import { computeSignalConfidence } from "./signal-derivation.js";
+import { GROUP_SIGNAL_MIN_VOICES } from "./signal-derivation-thresholds.js";
 import { normalizeSupportedLocale } from "./locales.js";
 import {
   getDefaultModelProvider,
@@ -953,7 +954,15 @@ interface GroupSharedSignal {
   confidence: number;
   evidenceCount: number;
   lastEvidenceAt: Date | null;
-  ownerProfileId: string;
+  /**
+   * Null since 2026-08-24: a ROOM-GROWN signal belongs to the mind of the
+   * group, not to any member. The type name kept "Shared" through the
+   * transition so every reader did not churn in one commit; the loader
+   * below says what actually fills it now.
+   */
+  ownerProfileId: string | null;
+  /** whose memories stand under it (room-grown); empty for legacy rows */
+  contributorNames: string[];
 }
 
 export interface GroupProposalToApply {
@@ -1086,54 +1095,63 @@ async function loadLiveGroupArtifact(
 }
 
 /**
- * The wall, with live confidence. Same at-read computation as the personal
- * selector: the stored column froze the decay term the moment evidence last
- * landed, and a wall ranked by it would keep a long-quiet signal looking
- * current.
+ * THE WALL IS THE SELECTION — and the wall is the ROOM'S OWN LAYER 2 now
+ * (founder rulings, 2026-08-24). This reads the live signals of the group's
+ * mind, gated exactly as the wall gates them: at least
+ * `GROUP_SIGNAL_MIN_VOICES` distinct CURRENT members' memories under each.
+ * A one-member pattern is that member's own, and a departed member's voice
+ * no longer carries — the same withdrawal rule the share wall applied.
+ * Confidence is computed live from the evidence rows, which this loader may
+ * now touch because they are the room's rows.
  */
 async function loadGroupSharedSignals(
   db: WakaDb,
   groupId: string,
   now: Date,
 ): Promise<GroupSharedSignal[]> {
-  /**
-   * THE WALL IS THE SELECTION — so this reads exactly what the wall shows.
-   * A share whose owner has left is withdrawn (leaving ends the standing
-   * choice), and a retired signal has sunk. This loader used to read every
-   * share row bare, which made synthesis select from a SUPERSET of the wall:
-   * a departed member's statement could feed the room's next reading after
-   * the wall had already stopped showing it.
-   */
+  const mindRows = await db
+    .select({ mindId: profiles.id })
+    .from(profiles)
+    .where(and(eq(profiles.groupId, groupId), eq(profiles.type, "group")))
+    .limit(1);
+  const mind = mindRows[0];
+  if (!mind) return [];
+
   const rows = await db
     .select({
       id: signals.id,
       statement: signals.statement,
       lastEvidenceAt: signals.lastEvidenceAt,
-      ownerProfileId: signals.profileId,
     })
-    .from(signalShares)
-    .innerJoin(
-      signals,
-      and(eq(signals.id, signalShares.signalId), ne(signals.status, "retired")),
-    )
-    .innerJoin(
-      groupMembers,
+    .from(signals)
+    .where(
       and(
-        eq(groupMembers.groupId, signalShares.groupId),
-        eq(groupMembers.profileId, signalShares.profileId),
+        eq(signals.profileId, mind.mindId),
+        ne(signals.status, "retired"),
+        isNull(signals.dismissedAt),
       ),
-    )
-    .where(eq(signalShares.groupId, groupId));
+    );
   if (rows.length === 0) return [];
 
   const evidenceRows = await db
     .select({
       signalId: signalEvidence.signalId,
-      createdAt: inspirations.createdAt,
+      createdAt: signalEvidence.createdAt,
       source: inspirations.source,
+      ownerProfileId: signalEvidence.ownerProfileId,
+      ownerName: profiles.name,
+      memberProfileId: groupMembers.profileId,
     })
     .from(signalEvidence)
     .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
+    .innerJoin(profiles, eq(profiles.id, signalEvidence.ownerProfileId))
+    .leftJoin(
+      groupMembers,
+      and(
+        eq(groupMembers.groupId, groupId),
+        eq(groupMembers.profileId, signalEvidence.ownerProfileId),
+      ),
+    )
     .where(
       inArray(
         signalEvidence.signalId,
@@ -1141,24 +1159,39 @@ async function loadGroupSharedSignals(
       ),
     );
 
-  const evidenceBySignal = new Map<string, Array<{ createdAt: Date; source: "app" | "agent" }>>();
+  const evidenceBySignal = new Map<
+    string,
+    Array<{ createdAt: Date; source: "app" | "agent" }>
+  >();
+  const voicesBySignal = new Map<string, Map<string, string>>();
   for (const row of evidenceRows) {
     const bucket = evidenceBySignal.get(row.signalId);
     if (bucket) bucket.push(row);
     else evidenceBySignal.set(row.signalId, [row]);
+    /* a voice counts only while its member is in the room */
+    if (row.memberProfileId) {
+      const voices = voicesBySignal.get(row.signalId) ?? new Map<string, string>();
+      voices.set(row.ownerProfileId, row.ownerName);
+      voicesBySignal.set(row.signalId, voices);
+    }
   }
 
   return rows
-    .map((row) => {
+    .flatMap((row) => {
+      const voices = voicesBySignal.get(row.id);
+      if (!voices || voices.size < GROUP_SIGNAL_MIN_VOICES) return [];
       const evidence = evidenceBySignal.get(row.id) ?? [];
-      return {
-        id: row.id,
-        statement: row.statement,
-        confidence: computeSignalConfidence(evidence, now),
-        evidenceCount: evidence.length,
-        lastEvidenceAt: row.lastEvidenceAt,
-        ownerProfileId: row.ownerProfileId,
-      };
+      return [
+        {
+          id: row.id,
+          statement: row.statement,
+          confidence: computeSignalConfidence(evidence, now),
+          evidenceCount: evidence.length,
+          lastEvidenceAt: row.lastEvidenceAt,
+          ownerProfileId: null,
+          contributorNames: [...voices.values()],
+        },
+      ];
     })
     .sort((a, b) => {
       if (b.confidence !== a.confidence) return b.confidence - a.confidence;
@@ -1445,7 +1478,12 @@ export async function refreshTopOfMindForGroup(
         confidence: signal.confidence,
         evidenceCount: signal.evidenceCount,
         lastEvidenceAt: signal.lastEvidenceAt,
-        ownerName: memberNameById.get(signal.ownerProfileId) ?? "a former member",
+        /* a room-grown statement is the room's, standing on named voices; a
+           legacy shared one still names its owner */
+        ownerName:
+          signal.ownerProfileId === null
+            ? signal.contributorNames.join(" & ") || "the room"
+            : memberNameById.get(signal.ownerProfileId) ?? "a former member",
       })),
       lockedEntries: lockedNow.map((entry, index) => ({
         id: `${liveBefore?.id ?? "pending"}:${index}`,
@@ -1512,7 +1550,11 @@ export async function refreshTopOfMindForGroup(
             : "regenerated";
 
     const ownerBySignalId = new Map<string, string>(previous?.citationOwners ?? []);
-    for (const signal of shared) ownerBySignalId.set(signal.id, signal.ownerProfileId);
+    for (const signal of shared) {
+      /* a room-grown signal has no single owner: its citation row carries a
+         null owner and the board derives contributors from the evidence */
+      if (signal.ownerProfileId !== null) ownerBySignalId.set(signal.id, signal.ownerProfileId);
+    }
 
     const created = await writeGroupVersion(tx, {
       groupId: input.groupId,

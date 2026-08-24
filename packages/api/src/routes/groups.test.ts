@@ -64,8 +64,10 @@ const wallSignal: GroupWallSignal = {
   confidenceAsWritten: 72,
   locked: false,
   reactions: [],
-  ownerProfileId: otherProfileId,
-  ownerName: "Grace",
+  contributors: [
+    { profileId: otherProfileId, name: "Grace" },
+    { profileId, name: "Ada" },
+  ],
   sharedAt: "2026-08-10T00:00:00.000Z",
 };
 
@@ -391,7 +393,7 @@ describe("GET /api/groups/:groupId/members", () => {
 });
 
 describe("GET /api/groups/:groupId/wall", () => {
-  it("returns members' shared signals, statement and owner only", async () => {
+  it("returns the room's grown statements — statement, contributors, stances, nothing beneath", async () => {
     const loadWall = vi.fn(async () => [wallSignal]);
     const app = mountWith({ loadWall });
 
@@ -405,8 +407,11 @@ describe("GET /api/groups/:groupId/wall", () => {
           signalId,
           statement: "Rooms that instruct without speaking",
           confidenceAsWritten: 72,
-          ownerProfileId: otherProfileId,
-          ownerName: "Grace",
+          locked: false,
+          contributors: [
+            { profileId: otherProfileId, name: "Grace" },
+            { profileId, name: "Ada" },
+          ],
           sharedAt: "2026-08-10T00:00:00.000Z",
           reactions: [],
         },

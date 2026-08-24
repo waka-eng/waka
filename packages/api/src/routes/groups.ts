@@ -420,8 +420,11 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
         signalId: shared.signalId,
         statement: shared.statement,
         confidenceAsWritten: shared.confidenceAsWritten,
-        ownerProfileId: shared.ownerProfileId,
-        ownerName: shared.ownerName,
+        locked: shared.locked,
+        contributors: shared.contributors.map((c) => ({
+          profileId: c.profileId,
+          name: c.name,
+        })),
         sharedAt: shared.sharedAt,
         reactions: shared.reactions.map((reaction) => ({
           profileId: reaction.profileId,

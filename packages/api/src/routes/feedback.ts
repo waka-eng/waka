@@ -28,6 +28,7 @@ import {
   feedbackTargetTypeValues,
   feedbackValueValues,
   groupMembers,
+  profiles,
   signalShares,
   signals,
   topOfMindEntries,
@@ -227,7 +228,38 @@ async function targetBelongsToProfile(
       )
       .where(eq(signalShares.signalId, input.targetId))
       .limit(1);
-    return mayAnswerSignal({ ownsIt, sharedIntoARoomYouAreIn: Boolean(shared) });
+
+    /**
+     * A STATEMENT YOUR ROOM GREW CAN BE ANSWERED (2026-08-24). A room-grown
+     * signal belongs to the room's mind, so the share join above never sees
+     * it — its standing rule is simpler: you are a current member of the
+     * room whose mind holds it, and it still stands. Two joins, two facts.
+     * The two-voices serve gate is a WALL rule, deliberately not repeated
+     * here: a member who saw a statement on the wall a moment ago may still
+     * answer it while a co-contributor's departure has it below the bar —
+     * a stance filed on something the room genuinely grew is never invalid.
+     */
+    const [grown] = await db
+      .select({ id: signals.id })
+      .from(signals)
+      .innerJoin(
+        profiles,
+        and(eq(profiles.id, signals.profileId), eq(profiles.type, "group")),
+      )
+      .innerJoin(
+        groupMembers,
+        and(
+          eq(groupMembers.groupId, profiles.groupId),
+          eq(groupMembers.profileId, input.profileId),
+        ),
+      )
+      .where(and(eq(signals.id, input.targetId), ne(signals.status, "retired")))
+      .limit(1);
+
+    return mayAnswerSignal({
+      ownsIt,
+      sharedIntoARoomYouAreIn: Boolean(shared) || Boolean(grown),
+    });
   }
 
   if (input.targetType === "principle") {

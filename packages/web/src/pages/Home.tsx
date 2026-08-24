@@ -200,8 +200,6 @@ import {
   presignAttachment,
   uploadToPresignedUrl,
   joinGroup,
-  shareSignal,
-  unshareSignal,
   deleteInspiration,
   createFeedback,
   dismissSignal,
@@ -9018,23 +9016,30 @@ function HomeExperience(): JSX.Element {
           locked: Boolean(s.locked),
           wallTarget: {
             signalId: s.signalId,
-            mine: s.ownerProfileId === viewerIdRef.current,
+            /* nobody owns a room-grown statement, so nobody is barred from
+               answering it: a contributor's stance is an act toward the
+               ROOM's sentence, not curation of their own */
+            mine: false,
             reactions: s.reactions ?? [],
           },
-          evidence: [
-            {
-              signalId: `${g.id}:${s.signalId}`,
-              groupId: g.id,
-              authorUserId: s.ownerProfileId,
-              authorName: s.ownerName,
-              textPreview: s.statement,
-              quote: null,
-              kind: null,
-              createdMs: Date.parse(s.sharedAt) || Date.now(),
-              dated: true,
-              resonance: 0,
-            },
-          ],
+          /* one satellite per CONTRIBUTOR: the people whose memories stand
+             under the statement, named — which is what the ring of a room
+             statement has always meant */
+          evidence: (s.contributors.length > 0
+            ? s.contributors
+            : [{ profileId: "", name: "" }]
+          ).map((contributor, ci) => ({
+            signalId: `${g.id}:${s.signalId}:${contributor.profileId || ci}`,
+            groupId: g.id,
+            authorUserId: contributor.profileId || null,
+            authorName: contributor.name || null,
+            textPreview: s.statement,
+            quote: null,
+            kind: null,
+            createdMs: Date.parse(s.sharedAt) || Date.now(),
+            dated: true,
+            resonance: 0,
+          })),
           spanMs: null,
           adopt: null,
           originIds: [],
@@ -9560,18 +9565,14 @@ function HomeExperience(): JSX.Element {
      WHERE YOUR PATTERNS AND OTHER PEOPLE'S MEET.
 
      The canon draws the line and the whole feature follows from it: what is
-     shared is a SIGNAL — a distilled statement — and never an inspiration.
-     Your raw memories do not cross an account boundary, are never cited to
-     another member, and are never exported by a group flow. So a room is a
-     wall of statements, and the only act that fills it is you deciding a
-     pattern of yours is worth saying out loud.
-
-     That is why sharing comes first here. Room creation, invites, members and
-     the shared board are all stagecraft until something can be put on a wall.
+     on a wall is a STATEMENT — since 2026-08-24 one the room GREW from its
+     members' pooled public memories (two voices or more under each), no
+     longer one a member shared in. What crosses the boundary is still never
+     a raw memory: the wall serves sentences and contributor names, and the
+     evidence text stays home. The act that reaches a room is the mouth's
+     "going to your rooms" switch, at the memory.
   */
 
-  /** Which pattern is being offered to a room, and to which rooms so far. */
-  const [sharing, setSharing] = useState<string | null>(null);
 
   /**
    * THE STAR'S OTHER HALF — handing a sentence back.
@@ -9608,51 +9609,6 @@ function HomeExperience(): JSX.Element {
         setEntrusting(null);
       })
       .catch(() => setEntrusting(null));
-  }, []);
-
-  /**
-   * SAY THIS ONE OUT LOUD — or take it back.
-   *
-   * Per-signal, per-room, and reversible. The statement appears on that
-   * room's wall with your name on it; the memories it rests on stay here.
-   * Members see the pattern, never the inspirations.
-   */
-  const shareTo = useCallback((signalId: string, groupId: string, on: boolean) => {
-    /* only on the way out — taking a statement back is not an announcement */
-    if (on) simApiRef.current?.acknowledge("shared");
-    setSignals((prev) =>
-      prev
-        ? prev.map((p) =>
-            p.id === signalId
-              ? {
-                  ...p,
-                  sharedGroupIds: on
-                    ? [...p.sharedGroupIds, groupId]
-                    : p.sharedGroupIds.filter((g) => g !== groupId),
-                }
-              : p,
-          )
-        : prev,
-    );
-    if (offlineRef.current) return;
-    const call = on ? shareSignal(signalId, groupId) : unshareSignal(signalId, groupId);
-    call.catch(() => {
-      /* it did not land, so the pattern must not claim it is out loud */
-      setSignals((prev) =>
-        prev
-          ? prev.map((p) =>
-              p.id === signalId
-                ? {
-                    ...p,
-                    sharedGroupIds: on
-                      ? p.sharedGroupIds.filter((g) => g !== groupId)
-                      : [...p.sharedGroupIds, groupId],
-                  }
-                : p,
-            )
-          : prev,
-      );
-    });
   }, []);
 
   /** Making a room, joining one, and the state of asking about either. */
@@ -11290,20 +11246,12 @@ function HomeExperience(): JSX.Element {
                     <span aria-hidden="true"> · </span>
                   </>
                 ) : null}
-                {/* SAY IT OUT LOUD. The only act that puts anything on a
-                    room's wall, so it lives on the pattern itself rather than
-                    in a share menu somewhere else. Your own wall only: an
-                    agent's statements are its own to make public. */}
-                {atWall.kind === "self" && groups.length > 0 ? (
-                  <>
-                    <button type="button" onClick={() => setSharing(sharing === c.id ? null : c.id)}>
-                      {(signals ?? []).find((p) => p.id === c.id)?.sharedGroupIds.length
-                        ? "out loud in"
-                        : "say out loud"}
-                    </button>
-                    <span aria-hidden="true"> · </span>
-                  </>
-                ) : null}
+                {/* "SAY OUT LOUD" RETIRED HERE (founder, 2026-08-24): a
+                    room's wall is no longer fed by sharing formed statements
+                    in — the room GROWS its own from members' public
+                    memories, so the act that reaches a room is the mouth's
+                    "going to your rooms" switch, at the memory, where it
+                    always was. */}
                 <button type="button" onClick={() => sayVerdict(c.id, "true", c.wallTarget?.signalId)}>yes</button>
                 <span aria-hidden="true"> · </span>
                 <button type="button" onClick={() => sayVerdict(c.id, "partly", c.wallTarget?.signalId)}>partly</button>
@@ -11363,29 +11311,6 @@ function HomeExperience(): JSX.Element {
                   <button type="button" onClick={editing.leave}>
                     leave it
                   </button>
-                </p>
-              </div>
-            ) : null}
-            {/* WHICH ROOMS IT IS OUT LOUD IN. One line per room, each a
-                toggle — the same statement can be said in several rooms and
-                taken back from any one of them independently. */}
-            {sharing === c.id ? (
-              <div className="jar-share">
-                {groups.map((g) => {
-                  const on = (signals ?? []).find((p) => p.id === c.id)?.sharedGroupIds.includes(g.id) ?? false;
-                  return (
-                    <button
-                      key={g.id}
-                      type="button"
-                      className={on ? "jar-share-row jar-share-row--on" : "jar-share-row"}
-                      onClick={() => shareTo(c.id, g.id, !on)}
-                    >
-                      {g.name}
-                    </button>
-                  );
-                })}
-                <p className="jar-share-note">
-                  They read the statement. The memories under it stay here.
                 </p>
               </div>
             ) : null}

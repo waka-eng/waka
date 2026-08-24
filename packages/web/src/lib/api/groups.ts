@@ -68,14 +68,20 @@ export interface ApiGroupWallReaction {
 export interface ApiGroupWallSignal {
   signalId: string;
   statement: string;
-  /** As the owner's system last wrote it — a snapshot, not a live value. */
+  /** The room's own confidence, as its lifecycle last wrote it. */
   confidenceAsWritten: number;
-  /** The owner holds these words — the star renders where they are read. */
+  /** The words are held (locked) — the star renders where they are read. */
   locked: boolean;
-  ownerProfileId: string;
-  ownerName: string;
+  /**
+   * WHOSE MEMORIES STAND UNDER IT (2026-08-24). A wall statement is the
+   * ROOM'S — grown from its members' pooled public memories — so it carries
+   * contributors rather than an owner: at least two current members, in
+   * first-contributed order, by the serve gate.
+   */
+  contributors: Array<{ profileId: string; name: string }>;
+  /** When the room first held this statement. */
   sharedAt: string;
-  /** Latest verdict per current member; the reactor is never the owner. */
+  /** Latest verdict per current member — contributors' stances count too. */
   reactions: ApiGroupWallReaction[];
 }
 

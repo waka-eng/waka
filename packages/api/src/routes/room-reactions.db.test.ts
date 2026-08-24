@@ -55,6 +55,31 @@ async function seedSignal(profileId: string, statement: string): Promise<string>
   return row.id as string;
 }
 
+/**
+ * A signal the ROOM GREW: owned by the room's mind, standing on one public
+ * memory from each named member — the two-voices shape the wall and the
+ * synthesis serve since the 2026-08-24 rulings.
+ */
+async function seedGrownSignal(
+  groupId: string,
+  statement: string,
+  voices: string[],
+): Promise<string> {
+  const [mind] = await t.sql`
+    SELECT id FROM profiles WHERE group_id = ${groupId} AND type = 'group'`;
+  const [sig] = await t.sql`
+    INSERT INTO signals (profile_id, statement) VALUES (${mind!.id}, ${statement}) RETURNING id`;
+  for (const voice of voices) {
+    const [memory] = await t.sql`
+      INSERT INTO inspirations (profile_id, text, visibility)
+      VALUES (${voice}, ${`a memory behind: ${statement}`}, 'public') RETURNING id`;
+    await t.sql`
+      INSERT INTO signal_evidence (profile_id, owner_profile_id, signal_id, inspiration_id)
+      VALUES (${mind!.id}, ${voice}, ${sig!.id}, ${memory!.id})`;
+  }
+  return sig!.id as string;
+}
+
 async function seedGroup(): Promise<{ groupId: string; a: string; b: string }> {
   const a = await seedPerson("Ari");
   const b = await seedPerson("Bo");
@@ -140,21 +165,26 @@ describe("standing mirrors the wall", () => {
     ).toBeNull();
   });
 
-  it("shows who answered on the wall — latest verdict, named, never the owner's own, nothing beneath", async () => {
+  it("shows who answered on the wall — latest verdict per member, named, nothing beneath", async () => {
     const g = await seedGroup();
-    const signalId = await seedSignal(g.a, "keeps choosing depth over breadth");
-    await shareSignalWithGroup(t.db as never, { profileId: g.a, signalId, groupId: g.groupId });
+    const signalId = await seedGrownSignal(g.groupId, "keeps choosing depth over breadth", [
+      g.a,
+      g.b,
+    ]);
 
-    // Bo answers twice — the later word stands. Ari's self-verdict is
-    // private curation and must not surface as a reaction the room heard.
+    // Bo answers twice — the later word stands. Ari's stance surfaces too:
+    // a room-grown statement has no single owner whose self-verdict would be
+    // private curation, so every member's answer is a reaction the room heard.
     await react(g.b, signalId, "true");
     await react(g.b, signalId, "partly");
     await react(g.a, signalId, "not_true");
 
     const wall = await loadGroupWall(t.db as never, g.groupId);
     expect(wall).toHaveLength(1);
-    expect(wall[0]!.reactions).toHaveLength(1);
-    expect(wall[0]!.reactions[0]).toMatchObject({ profileId: g.b, value: "partly" });
+    expect(wall[0]!.contributors.map((c) => c.profileId).sort()).toEqual([g.a, g.b].sort());
+    const byMember = new Map(wall[0]!.reactions.map((r) => [r.profileId, r.value]));
+    expect(byMember.get(g.b), "the later word stands").toBe("partly");
+    expect(byMember.get(g.a), "a contributor's stance counts like anyone's").toBe("not_true");
     expect(
       Object.keys(wall[0]!.reactions[0]!).sort(),
       "a reaction row carries a name and a verdict, never anything more",
@@ -172,30 +202,27 @@ describe("the first draft waits for affirmed material", () => {
     const g = await seedGroup();
     const signalIds: string[] = [];
     for (let i = 0; i < GROUP_DRAFT_MIN_AFFIRMED; i += 1) {
-      const signalId = await seedSignal(g.a, `pattern number ${i + 1}`);
-      await shareSignalWithGroup(t.db as never, {
-        profileId: g.a,
-        signalId,
-        groupId: g.groupId,
-      });
-      signalIds.push(signalId);
+      signalIds.push(
+        await seedGrownSignal(g.groupId, `pattern number ${i + 1}`, [g.a, g.b]),
+      );
     }
 
-    // Shared but unaffirmed: the room does not speak, and says why.
+    // Grown but unaffirmed: the room does not speak, and says why.
     expect((await draft(g.groupId)).status).toBe("waiting_for_affirmations");
 
-    // Two affirmations — still short by one, and the owner cannot make up
-    // the difference by agreeing with themselves.
+    // Two statements affirmed — still short by one. A room-grown statement
+    // has no owner, so ANY member's "true" affirms it, contributors included;
+    // what cannot happen is the same statement counting twice.
     await react(g.b, signalIds[0]!, "true");
     await react(g.b, signalIds[1]!, "true");
-    await react(g.a, signalIds[2]!, "true");
     expect(
       (await draft(g.groupId)).status,
-      "an owner's self-agreement counted toward the room's bar",
+      "two affirmed statements crossed a bar of three",
     ).toBe("waiting_for_affirmations");
 
-    // The third genuine affirmation crosses the bar; the room speaks.
-    await react(g.b, signalIds[2]!, "true");
+    // The third statement is affirmed — by the other member, which counts
+    // the same; the room speaks.
+    await react(g.a, signalIds[2]!, "true");
     const spoken = await draft(g.groupId);
     expect(spoken.status).toBe("versioned");
     expect(spoken.reason).toBe("initial");
@@ -214,12 +241,10 @@ describe("the first draft waits for affirmed material", () => {
     const g = await seedGroup();
     const signalIds: string[] = [];
     for (let i = 0; i < GROUP_DRAFT_MIN_AFFIRMED; i += 1) {
-      const signalId = await seedSignal(g.a, `pattern number ${i + 1}`);
-      await shareSignalWithGroup(t.db as never, {
-        profileId: g.a,
-        signalId,
-        groupId: g.groupId,
-      });
+      const signalId = await seedGrownSignal(g.groupId, `pattern number ${i + 1}`, [
+        g.a,
+        g.b,
+      ]);
       signalIds.push(signalId);
       await react(g.b, signalId, "true");
     }

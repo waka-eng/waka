@@ -161,13 +161,22 @@ export function apiMockFrom(facts: WorldFacts) {
     },
     fetchGroupWall: async (groupId: string) => {
       const g = facts.groups.find((x) => x.id === groupId);
+      /* the wall is ROOM-GROWN now (2026-08-24): one statement standing on
+         every member as its contributors, which is also the smallest wall
+         that satisfies the serve gate's two-voices rule */
+      const contributors = [
+        ...new Map(
+          (g?.field ?? []).map((f) => [f.ownerProfileId, f.ownerName]),
+        ).entries(),
+      ].map(([profileId, name]) => ({ profileId, name }));
       return (g?.field ?? []).map((f, i) => ({
         signalId: `sig-${f.id}`,
-        statement: `a statement from ${f.ownerName}`,
-        confidence: 50,
-        ownerProfileId: f.ownerProfileId,
-        ownerName: f.ownerName,
+        statement: `a statement the room grew near ${f.ownerName}`,
+        confidenceAsWritten: 50,
+        locked: false,
+        contributors,
         sharedAt: iso(f.daysAgo + i),
+        reactions: [],
       }));
     },
     fetchGroupProposals: none,

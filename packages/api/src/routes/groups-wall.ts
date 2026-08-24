@@ -1,23 +1,30 @@
 /**
- * A room's wall — the signals its members have shared into it.
+ * A room's wall — the signals the ROOM GREW from its members' pooled ground.
  *
- * This is layer 2 crossing between people, and the query is written to stop
- * there. It joins shares to signals and goes no further: `inspirations` and
- * `signal_evidence` are not reachable from this file and must not become so.
- * A member sees the pattern someone arrived at, never the raw captures it was
- * distilled from.
+ * Rewritten 2026-08-24 on the founder's rulings: a room distils its own
+ * signals from its members' public memories (x+y+z), a signal appears only
+ * once memories from at least two different CURRENT members stand under it,
+ * and "say out loud" retires as the way statements reach a room. The
+ * `signal_shares` record survives as history — the export carries it — but
+ * the wall reads the room's own layer 2 now.
+ *
+ * The boundary holds in its new shape: the wall serves statements and WHO
+ * CONTRIBUTED, never the raw captures. Evidence is reached here for exactly
+ * two facts — the distinct-owner count that gates a signal onto the wall,
+ * and the contributor names — and no text, quote, or memory id crosses.
  */
 
-import { and, asc, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 
 import {
   feedback,
   groupMembers,
   profiles,
-  signalShares,
+  signalEvidence,
   signals,
   type FeedbackValue,
 } from "../db/index.js";
+import { GROUP_SIGNAL_MIN_VOICES } from "../lib/signal-derivation-thresholds.js";
 import { getDb } from "../lib/db.js";
 import { labelMembersByProfileId } from "../lib/member-labels.js";
 
@@ -26,17 +33,11 @@ type WakaDb = ReturnType<typeof getDb>;
 const MAX_WALL_SIGNALS = 200;
 
 /**
- * One shared signal on a group's wall.
- *
- * The distilled statement and who it belongs to — nothing else. There is
- * deliberately no field here for what the statement was derived from.
- */
-/**
  * One member's answer to a statement on the wall — the latest they gave.
  * Named, per the founder's law: the room reads WHO stands where, never a
- * tally. The owner's own verdicts on their own statement do not appear
- * here — answering yourself is private curation, not a reaction the room
- * heard.
+ * tally. Every current member's stance counts, contributors included — a
+ * room-grown statement has no single owner whose self-reaction would be
+ * private curation.
  */
 export interface GroupWallReaction {
   profileId: string;
@@ -48,115 +49,152 @@ export interface GroupWallSignal {
   signalId: string;
   statement: string;
   /**
-   * Confidence AS THE OWNER'S SYSTEM LAST WROTE IT — the one documented
-   * staleness in the system, named so no consumer mistakes it for a live
-   * value. Live confidence is a pure function of the evidence rows and the
-   * clock, and this query is deliberately unable to reach those rows (a
-   * member must never touch another member's private layers), so the wall
-   * serves the snapshot written when the evidence last changed. A signal
-   * that has gone quiet since then reads stronger here than it is.
+   * The room's own confidence, as its lifecycle last wrote it. The old
+   * caveat ("stale by design — a member must never touch another member's
+   * private layers") retired with the share channel: this is the ROOM's
+   * signal, and its evidence lives with the room's mind.
    */
   confidenceAsWritten: number;
-  /** The owner holds these words (locked). The lock is a fact ABOUT the
-      statement — no-quiet-corners Phase 8: the star must render exactly
-      where other people read the sentence. */
+  /** The words are held (locked). No room verb sets this yet; served so the
+      day one does, the wall already tells it. */
   locked: boolean;
-  ownerProfileId: string;
-  ownerName: string;
+  /**
+   * WHOSE MEMORIES STAND UNDER IT — current members only, in first-contributed
+   * order. Two or more by construction: fewer voices and the signal is not
+   * on the wall at all (`GROUP_SIGNAL_MIN_VOICES`).
+   */
+  contributors: Array<{ profileId: string; name: string }>;
+  /** When the room first held this statement. */
   sharedAt: string;
-  /** Latest verdict per current member; the reactor is never the owner. */
+  /** Latest verdict per current member. */
   reactions: GroupWallReaction[];
 }
 
-/**
- * The group's wall: the signals its members have shared here.
- *
- * Evidence stays with its owner. This query joins shares to signals and stops
- * — `inspirations` and `signal_evidence` are not reachable from it, and must
- * not become so. A member sees the pattern someone arrived at, never the raw
- * captures it was distilled from.
- *
- * Shares are filtered to *current* members: a share is a standing choice made
- * from inside the group, so leaving withdraws it from the wall even though the
- * row survives. Retired signals drop off too — the owner hid it or its support
- * disappeared, and neither is something a wall should keep displaying.
- */
 export async function loadGroupWall(
   db: WakaDb,
   groupId: string,
 ): Promise<GroupWallSignal[]> {
+  /* the room's own layer 2: live signals of the room's mind */
+  const mindRows = await db
+    .select({ mindId: profiles.id })
+    .from(profiles)
+    .where(and(eq(profiles.groupId, groupId), eq(profiles.type, "group")))
+    .limit(1);
+  const mind = mindRows[0];
+  if (!mind) return [];
+
   const rows = await db
     .select({
       signalId: signals.id,
       statement: signals.statement,
       confidence: signals.confidence,
       lockedAt: signals.lockedAt,
-      ownerProfileId: signalShares.profileId,
-      ownerName: profiles.name,
-      sharedAt: signalShares.createdAt,
+      createdAt: signals.createdAt,
     })
-    .from(signalShares)
-    .innerJoin(signals, eq(signals.id, signalShares.signalId))
+    .from(signals)
+    .where(
+      and(
+        eq(signals.profileId, mind.mindId),
+        ne(signals.status, "retired"),
+        isNull(signals.dismissedAt),
+      ),
+    )
+    .orderBy(desc(signals.lastEvidenceAt), asc(signals.id))
+    .limit(MAX_WALL_SIGNALS);
+  if (rows.length === 0) return [];
+
+  /**
+   * THE TWO-VOICES GATE, counted over CURRENT members. A pattern one
+   * person's memories support is that person's own signal, already forming
+   * on their own wall, and must not wear the room's name — and a departed
+   * member's voice no longer carries, the same rule the old wall applied to
+   * a departed member's share. The signal row survives below the bar; it is
+   * simply not served.
+   */
+  const voiceRows = await db
+    .select({
+      signalId: signalEvidence.signalId,
+      ownerProfileId: signalEvidence.ownerProfileId,
+      ownerName: profiles.name,
+      firstAt: sql<Date>`min(${signalEvidence.createdAt})`,
+    })
+    .from(signalEvidence)
     .innerJoin(
       groupMembers,
       and(
-        eq(groupMembers.groupId, signalShares.groupId),
-        eq(groupMembers.profileId, signalShares.profileId),
+        eq(groupMembers.groupId, groupId),
+        eq(groupMembers.profileId, signalEvidence.ownerProfileId),
       ),
     )
-    .innerJoin(profiles, eq(profiles.id, signalShares.profileId))
-    .where(and(eq(signalShares.groupId, groupId), ne(signals.status, "retired")))
-    .orderBy(desc(signalShares.createdAt), asc(signals.id))
-    .limit(MAX_WALL_SIGNALS);
+    .innerJoin(profiles, eq(profiles.id, signalEvidence.ownerProfileId))
+    .where(
+      inArray(
+        signalEvidence.signalId,
+        rows.map((row) => row.signalId),
+      ),
+    )
+    .groupBy(signalEvidence.signalId, signalEvidence.ownerProfileId, profiles.name);
+
+  const contributorsBySignal = new Map<
+    string,
+    Array<{ profileId: string; name: string; firstAt: number }>
+  >();
+  for (const row of voiceRows) {
+    const bucket = contributorsBySignal.get(row.signalId);
+    const entry = {
+      profileId: row.ownerProfileId,
+      name: row.ownerName,
+      firstAt: new Date(row.firstAt).getTime(),
+    };
+    if (bucket) bucket.push(entry);
+    else contributorsBySignal.set(row.signalId, [entry]);
+  }
+
+  const served = rows.filter(
+    (row) => (contributorsBySignal.get(row.signalId)?.length ?? 0) >= GROUP_SIGNAL_MIN_VOICES,
+  );
+  if (served.length === 0) return [];
 
   const labels = labelMembersByProfileId(
-    rows.map((row) => ({ profileId: row.ownerProfileId, name: row.ownerName })),
+    [...contributorsBySignal.values()].flat().map((c) => ({
+      profileId: c.profileId,
+      name: c.name,
+    })),
   );
 
   /**
-   * WHO ANSWERED WHAT. Feedback is the one thing this file may reach beyond
-   * the share itself, because a reaction is a statement-level fact the room
-   * is meant to hear — it names no memory and carries no span. The reach is
-   * scoped twice: only verdicts by CURRENT members of this group (leaving a
-   * room ends your voice in it, same as the tally), and only the latest per
-   * member per statement, because feedback is append-only history and the
-   * newest word is the one that stands. The owner's own verdicts are
-   * filtered below: those are private curation. `inspirations` and
-   * `signal_evidence` remain unreachable from this file, as the header
-   * promises.
+   * WHO ANSWERED WHAT. Only verdicts by CURRENT members of this group
+   * (leaving a room ends your voice in it), and only the latest per member
+   * per statement, because feedback is append-only history and the newest
+   * word is the one that stands. Contributors' stances count like anyone
+   * else's: affirming a statement the room grew partly from your memories
+   * is an act toward the ROOM's statement, not curation of your own.
    */
-  const reactionRows =
-    rows.length === 0
-      ? []
-      : await db
-          .select({
-            targetId: feedback.targetId,
-            reactorProfileId: feedback.profileId,
-            reactorName: profiles.name,
-            value: feedback.value,
-            createdAt: feedback.createdAt,
-          })
-          .from(feedback)
-          .innerJoin(
-            groupMembers,
-            and(
-              eq(groupMembers.groupId, groupId),
-              eq(groupMembers.profileId, feedback.profileId),
-            ),
-          )
-          .innerJoin(profiles, eq(profiles.id, feedback.profileId))
-          .where(
-            and(
-              eq(feedback.targetType, "signal"),
-              inArray(
-                feedback.targetId,
-                rows.map((row) => row.signalId),
-              ),
-            ),
-          )
-          .orderBy(desc(feedback.createdAt));
+  const reactionRows = await db
+    .select({
+      targetId: feedback.targetId,
+      reactorProfileId: feedback.profileId,
+      reactorName: profiles.name,
+      value: feedback.value,
+      createdAt: feedback.createdAt,
+    })
+    .from(feedback)
+    .innerJoin(
+      groupMembers,
+      and(eq(groupMembers.groupId, groupId), eq(groupMembers.profileId, feedback.profileId)),
+    )
+    .innerJoin(profiles, eq(profiles.id, feedback.profileId))
+    .where(
+      and(
+        eq(feedback.targetType, "signal"),
+        inArray(
+          feedback.targetId,
+          served.map((row) => row.signalId),
+        ),
+      ),
+    )
+    .orderBy(desc(feedback.createdAt));
 
-  const ownerBySignal = new Map(rows.map((row) => [row.signalId, row.ownerProfileId]));
   const reactorLabels = labelMembersByProfileId(
     reactionRows.map((row) => ({ profileId: row.reactorProfileId, name: row.reactorName })),
   );
@@ -164,7 +202,6 @@ export async function loadGroupWall(
   const latestBySignal = new Map<string, GroupWallReaction[]>();
   const seenPair = new Set<string>();
   for (const row of reactionRows) {
-    if (ownerBySignal.get(row.targetId) === row.reactorProfileId) continue;
     const pair = `${row.targetId}:${row.reactorProfileId}`;
     if (seenPair.has(pair)) continue;
     seenPair.add(pair);
@@ -178,14 +215,18 @@ export async function loadGroupWall(
     else latestBySignal.set(row.targetId, [reaction]);
   }
 
-  return rows.map((row) => ({
+  return served.map((row) => ({
     signalId: row.signalId,
     statement: row.statement,
     confidenceAsWritten: row.confidence,
     locked: row.lockedAt !== null,
-    ownerProfileId: row.ownerProfileId,
-    ownerName: labels.get(row.ownerProfileId)?.displayName ?? row.ownerName,
-    sharedAt: row.sharedAt.toISOString(),
+    contributors: (contributorsBySignal.get(row.signalId) ?? [])
+      .sort((a, b) => a.firstAt - b.firstAt || (a.profileId < b.profileId ? -1 : 1))
+      .map((c) => ({
+        profileId: c.profileId,
+        name: labels.get(c.profileId)?.displayName ?? c.name,
+      })),
+    sharedAt: row.createdAt.toISOString(),
     reactions: latestBySignal.get(row.signalId) ?? [],
   }));
 }

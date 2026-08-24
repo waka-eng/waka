@@ -234,8 +234,13 @@ vi.mock("../src/lib/api", async (importOriginal) => {
               statement: "The room holds my own words, starred.",
               confidenceAsWritten: 70,
               locked: true,
-              ownerProfileId: VIEWER_ID,
-              ownerName: "You",
+              /* room-grown shape (2026-08-24): the statement is the room's,
+                 standing on two voices — the star still renders exactly
+                 where other people read the sentence */
+              contributors: [
+                { profileId: VIEWER_ID, name: "You" },
+                { profileId: "profile-hana", name: "Hana Ko" },
+              ],
               sharedAt: new Date(BASE - DAY).toISOString(),
               reactions: [],
             },

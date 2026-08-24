@@ -59,7 +59,6 @@ import {
   refreshGroupTopOfMind,
   reorderPrinciples,
   shareSignal,
-  unshareSignal,
   updatePrinciple,
   createReflection,
   deleteInspiration,
@@ -537,28 +536,6 @@ export default function SurfacePage(): JSX.Element {
       }
     })();
   }, [roomId, sharePick, locale, reloadRoomWall]);
-
-  const takeDownSharedSignal = useCallback(
-    (signalId: string): void => {
-      if (!roomId) return;
-      void (async () => {
-        try {
-          await unshareSignal(signalId, roomId);
-          setRoomShareables((current) =>
-            current.map((row) =>
-              row.id === signalId
-                ? { ...row, sharedGroupIds: row.sharedGroupIds.filter((g) => g !== roomId) }
-                : row,
-            ),
-          );
-          await reloadRoomWall(roomId);
-        } catch (err) {
-          setNotice(errorMessage(err, t(locale, "roomError")));
-        }
-      })();
-    },
-    [roomId, locale, reloadRoomWall],
-  );
 
   /* Same contract as the personal reread: wait for the version to move, and
      say so honestly when it does not. Shared with the accepted-proposal path,
@@ -1975,31 +1952,14 @@ export default function SurfacePage(): JSX.Element {
                     <div key={row.signalId} className="gr-shared">
                       <p className="gr-shared-statement">{row.statement}</p>
                       <span className="sf-provenance">
-                        {/* the same swap on the group wall, where the number
-                            was even less readable: this one is the owner's
-                            last-written snapshot rather than a live read (see
-                            docs/generation.md — the wall cannot reach another
-                            member's evidence), so a precise-looking percentage
-                            was overstating what it knew */}
-                        {row.ownerName} · {t(locale, confidenceBandKey(row.confidenceAsWritten))}
+                        {/* a room-grown statement stands on named voices —
+                            the contributors — and the room's own confidence
+                            band; there is no owner and no take-down verb any
+                            more (a room statement is retired by the room's
+                            own lifecycle, not by one member) */}
+                        {row.contributors.map((c) => c.name).join(" · ")} ·{" "}
+                        {t(locale, confidenceBandKey(row.confidenceAsWritten))}
                       </span>
-                      {row.ownerProfileId === profile?.id ? (
-                        <button
-                          type="button"
-                          className="sf-act"
-                          title={t(locale, "roomTakeDown")}
-                          aria-label={t(locale, "roomTakeDown")}
-                          onClick={() => takeDownSharedSignal(row.signalId)}
-                        >
-                          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                            <path d="M4 7h16" />
-                            <path d="M10 11v6" />
-                            <path d="M14 11v6" />
-                            <path d="M6.5 7 7.4 20h9.2l.9-13" />
-                            <path d="M9 7V4.8h6V7" />
-                          </svg>
-                        </button>
-                      ) : null}
                     </div>
                   ))}
                   {shareCandidates.length > 0 ? (
