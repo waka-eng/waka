@@ -37,7 +37,6 @@ import {
   profiles,
   signalEvidence,
   signals,
-  signalShares,
   topOfMindEntries,
   topOfMindEntrySignals,
   topOfMinds,
@@ -1138,6 +1137,7 @@ async function loadGroupSharedSignals(
       signalId: signalEvidence.signalId,
       createdAt: signalEvidence.createdAt,
       source: inspirations.source,
+      visibility: inspirations.visibility,
       ownerProfileId: signalEvidence.ownerProfileId,
       ownerName: profiles.name,
       memberProfileId: groupMembers.profileId,
@@ -1168,8 +1168,12 @@ async function loadGroupSharedSignals(
     const bucket = evidenceBySignal.get(row.signalId);
     if (bucket) bucket.push(row);
     else evidenceBySignal.set(row.signalId, [row]);
-    /* a voice counts only while its member is in the room */
-    if (row.memberProfileId) {
+    /* a voice counts only while its member is in the room AND the memory
+       behind it is still public: sharing IS visibility, so taking a memory
+       private has to take its voice out of the room's count too. Read here
+       rather than withdrawn from the table, so flipping public again puts
+       the voice back. */
+    if (row.memberProfileId && row.visibility === "public") {
       const voices = voicesBySignal.get(row.signalId) ?? new Map<string, string>();
       voices.set(row.ownerProfileId, row.ownerName);
       voicesBySignal.set(row.signalId, voices);

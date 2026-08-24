@@ -19,6 +19,7 @@ import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import {
   feedback,
   groupMembers,
+  inspirations,
   profiles,
   signalEvidence,
   signals,
@@ -31,6 +32,19 @@ import { labelMembersByProfileId } from "../lib/member-labels.js";
 type WakaDb = ReturnType<typeof getDb>;
 
 const MAX_WALL_SIGNALS = 200;
+
+/**
+ * How many of the room's live statements are considered before the gate.
+ *
+ * The serve limit cannot be the fetch limit. Every statement the room mints
+ * starts with ONE voice under it, and most never get a second — so the rows
+ * nearest the top of `lastEvidenceAt` are mostly statements that will not be
+ * served. Cutting at 200 before the gate lets that ordinary sediment push a
+ * genuinely two-voiced statement off the wall for no reason a member could
+ * ever see. The gate runs over this wider window and the serve limit is
+ * applied to what survives it.
+ */
+const MAX_WALL_SIGNALS_SCANNED = MAX_WALL_SIGNALS * 10;
 
 /**
  * One member's answer to a statement on the wall — the latest they gave.
@@ -100,16 +114,25 @@ export async function loadGroupWall(
       ),
     )
     .orderBy(desc(signals.lastEvidenceAt), asc(signals.id))
-    .limit(MAX_WALL_SIGNALS);
+    .limit(MAX_WALL_SIGNALS_SCANNED);
   if (rows.length === 0) return [];
 
   /**
-   * THE TWO-VOICES GATE, counted over CURRENT members. A pattern one
-   * person's memories support is that person's own signal, already forming
-   * on their own wall, and must not wear the room's name — and a departed
-   * member's voice no longer carries, the same rule the old wall applied to
-   * a departed member's share. The signal row survives below the bar; it is
-   * simply not served.
+   * THE TWO-VOICES GATE, counted over CURRENT members and PUBLIC memories.
+   * A pattern one person's memories support is that person's own signal,
+   * already forming on their own wall, and must not wear the room's name —
+   * and a departed member's voice no longer carries, the same rule the old
+   * wall applied to a departed member's share. The signal row survives below
+   * the bar; it is simply not served.
+   *
+   * The visibility join is the other half of the one switch. Sharing is a
+   * memory being public — it fans out to every room its keeper is in — so
+   * turning it private has to take the voice back, and the only honest place
+   * for that is here, where the voice is counted. A withdrawal that deleted
+   * evidence rows would be one-way: flipping public again would leave the
+   * room silent until something re-derived it. Reading visibility at serve
+   * time makes the switch work in both directions and leaves the record
+   * intact, which is the law about fading.
    */
   const voiceRows = await db
     .select({
@@ -127,6 +150,13 @@ export async function loadGroupWall(
       ),
     )
     .innerJoin(profiles, eq(profiles.id, signalEvidence.ownerProfileId))
+    .innerJoin(
+      inspirations,
+      and(
+        eq(inspirations.id, signalEvidence.inspirationId),
+        eq(inspirations.visibility, "public"),
+      ),
+    )
     .where(
       inArray(
         signalEvidence.signalId,
@@ -150,9 +180,11 @@ export async function loadGroupWall(
     else contributorsBySignal.set(row.signalId, [entry]);
   }
 
-  const served = rows.filter(
-    (row) => (contributorsBySignal.get(row.signalId)?.length ?? 0) >= GROUP_SIGNAL_MIN_VOICES,
-  );
+  const served = rows
+    .filter(
+      (row) => (contributorsBySignal.get(row.signalId)?.length ?? 0) >= GROUP_SIGNAL_MIN_VOICES,
+    )
+    .slice(0, MAX_WALL_SIGNALS);
   if (served.length === 0) return [];
 
   const labels = labelMembersByProfileId(

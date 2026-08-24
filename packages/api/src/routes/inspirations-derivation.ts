@@ -58,6 +58,16 @@ export function requestSignalDerivation(input: {
  * and the one that forgot would silently derive private memories into
  * rooms — the exact failure a read here makes impossible. A private keep
  * costs one SELECT and fans out to nothing.
+ *
+ * OWNERSHIP IS READ FROM THE SAME ROW, for the same reason and one more.
+ * Fanning out sends a memory to the rooms `profileId` belongs to, so a
+ * mismatched pair would put one person's memory on another person's rooms'
+ * ground. All three callers do establish ownership before they get here —
+ * this is not a live hole — but the argument above is that a check the
+ * callers each have to remember is a check that will eventually be
+ * forgotten, and that argument does not distinguish between the two
+ * columns. Reading both makes the pair unforgeable at the only point where
+ * getting it wrong crosses a tenancy line.
  */
 async function fanOutToGroups(input: {
   profileId: string;
@@ -68,7 +78,12 @@ async function fanOutToGroups(input: {
   const [row] = await db
     .select({ visibility: inspirations.visibility })
     .from(inspirations)
-    .where(eq(inspirations.id, input.inspirationId))
+    .where(
+      and(
+        eq(inspirations.id, input.inspirationId),
+        eq(inspirations.profileId, input.profileId),
+      ),
+    )
     .limit(1);
   if (row?.visibility !== "public") return;
 

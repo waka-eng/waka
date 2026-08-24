@@ -467,16 +467,48 @@ describe("the group module itself", () => {
     const { code } = groupModuleSource();
 
     /**
-     * THE EVIDENCE BOUNDARY, restated for the room-grown wall (2026-08-24).
-     * The wall and the board may now read `signalEvidence` — the two-voices
-     * gate and the contributor names live there — but only its WHO and WHEN.
-     * What must never cross is the text: the quote, the reason, and the
-     * memory behind the citation. So the ban narrows from the table to its
-     * text columns and its join key into layer 1.
+     * THE EVIDENCE BOUNDARY, restated twice.
+     *
+     * 2026-08-24, for the room-grown wall: the wall and the board may read
+     * `signalEvidence` — the two-voices gate and the contributor names live
+     * there — but only its WHO and WHEN. What must never cross is the text:
+     * the quote, the reason, and the memory behind the citation.
+     *
+     * Restated again when the visibility gate arrived. `inspirationId` was
+     * banned outright, which was right while the wall had no business in
+     * layer 1 at all. It has one now, and it is a PRIVACY business: a voice
+     * counts only while the memory under it is still public, and asking that
+     * question means joining evidence to `inspirations` through exactly this
+     * key. A blanket ban would have forced the choice between the guard and
+     * the gate.
+     *
+     * So the rule sharpens instead of loosening. The key may NARROW a query
+     * and may never LEAVE one: every occurrence must be the join predicate
+     * itself, and no projection may name it. A loader that selected the
+     * column would still be publishing one member's memory id to another,
+     * and would still fail here.
      */
     expect(code).not.toMatch(/signalEvidence\.quote\b/);
     expect(code).not.toMatch(/signalEvidence\.reason\b/);
-    expect(code).not.toMatch(/\binspirationId\b/);
+
+    const JOIN_PREDICATE = /eq\(\s*inspirations\.id\s*,\s*signalEvidence\.inspirationId\s*\)/g;
+    const mentions = code.match(/\binspirationId\b/g) ?? [];
+    const predicates = code.match(JOIN_PREDICATE) ?? [];
+    expect(
+      predicates.length,
+      "every mention of the layer-1 join key must BE the join predicate — a " +
+        "mention that is not one is the key being carried somewhere it does " +
+        "not narrow anything",
+    ).toBe(mentions.length);
+
+    /* And never in a projection: `.select({ ... })` is what leaves the
+       process, so the ban stands there whatever the join is doing. */
+    for (const projection of code.match(/\.select(?:Distinct)?\(\{[\s\S]*?\}\)/g) ?? []) {
+      expect(
+        projection,
+        "a room's wall or board must never select the memory id behind a citation",
+      ).not.toMatch(/\binspirationId\b/);
+    }
 
     // A room's field reads layer 1 by design, so the read must be found. If it
     // is not, the scan has lost the code rather than the code having lost the

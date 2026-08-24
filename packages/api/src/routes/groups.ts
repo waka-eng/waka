@@ -1,11 +1,14 @@
 /**
- * `/api/groups` — groups, their wall of shared signals, and the top of mind
+ * `/api/groups` — groups, the wall of signals they GROW, and the top of mind
  * they co-edit.
  *
- * A group is where layer 2 crosses between people. Members share **signals**
- * to it; the group's single top-of-mind artifact is generated from those
- * shared statements; members change that artifact together through proposals
- * and affirmations.
+ * A group is where layer 2 crosses between people. Members do not hand
+ * statements to it: they keep memories publicly, the group distils its own
+ * signals from that pooled ground (2026-08-24), and a signal reaches the
+ * wall only once memories from two different current members stand under it.
+ * The group's single top-of-mind artifact is generated from those grown
+ * statements; members change that artifact together through proposals and
+ * affirmations.
  *
  * This file is the HTTP surface only — the schemas a request is checked
  * against, the two gates in front of every handler, and the handlers
@@ -17,7 +20,8 @@
  *                            them in — the answer to "may I?"
  *   `groups-field.ts`        a room's ground: layer 1, and the ONLY read of
  *                            layer 1 anywhere in the group module
- *   `groups-wall.ts`         a room's wall: the signals members shared in
+ *   `groups-wall.ts`         a room's wall: the signals the room grew, and
+ *                            the two-voices gate that decides what is served
  *   `groups-top-of-mind.ts`  the artifact a room co-owns, and its refresh
  *   `groups-proposals.ts`    proposals, affirmations, and what carries
  *
@@ -398,7 +402,8 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
     return c.json({ members });
   });
 
-  // GET /api/groups/:groupId/wall — members' shared signals.
+  // GET /api/groups/:groupId/wall — the signals the room grew from its
+  // members' pooled public memories.
   routes.get("/:groupId/wall", async (c) => {
     const parsedParams = groupParamsSchema.safeParse(c.req.param());
     if (!parsedParams.success) return c.json({ error: "Invalid group id" }, 400);

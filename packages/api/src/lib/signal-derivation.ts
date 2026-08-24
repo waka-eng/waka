@@ -121,7 +121,7 @@ export interface SignalDerivationDependencies {
 }
 
 export interface SignalDerivationResult {
-  status: "derived" | "missing_inspiration" | "no_candidates";
+  status: "derived" | "missing_inspiration" | "no_candidates" | "not_public";
   inspirationId: string;
   profileId: string | null;
   candidateCount: number;
@@ -175,6 +175,33 @@ export async function deriveSignalsForInspiration(
      exception is the capture's own layer-1 embedding, which stays with the
      memory's owner wherever the pass is landing. */
   const profileId = input.deriveIntoProfileId ?? inspiration.profileId;
+
+  /**
+   * A ROOM PASS RE-READS THE SWITCH IT WAS ENQUEUED ON.
+   *
+   * The fan-out reads `visibility` when it enqueues, and then the job waits
+   * in a queue — behind a backlog, a deferral, a retry. In that gap the
+   * keeper can turn the memory private, and without this check the room
+   * would read it anyway: the enqueue-time check would have been a promise
+   * about a value that had already changed. A memory going private is the
+   * one thing that must be true at the moment of reading, not at the moment
+   * of asking, so it is read here, against the row the pass is about to use.
+   *
+   * Personal passes are untouched: your own memory is yours to distil at any
+   * visibility, and `deriveIntoProfileId` is exactly the flag for "this pass
+   * is landing somewhere other than the keeper's own stack".
+   */
+  if (input.deriveIntoProfileId && inspiration.visibility !== "public") {
+    return {
+      status: "not_public",
+      inspirationId: input.inspirationId,
+      profileId,
+      candidateCount: 0,
+      matchedSignalIds: [],
+      mintedSignalIds: [],
+      promotedSignalIds: [],
+    };
+  }
 
   const [profileRows, reflectionRows, attachmentRows, existingStatements] = await Promise.all([
     db

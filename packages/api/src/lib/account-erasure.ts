@@ -39,11 +39,7 @@
  *     seat.
  */
 
-import {
-  DeleteObjectsCommand,
-  S3Client,
-  type ObjectIdentifier,
-} from "@aws-sdk/client-s3";
+import { DeleteObjectsCommand, type ObjectIdentifier } from "@aws-sdk/client-s3";
 
 import { makeAttachmentsS3Client } from "./s3-client.js";
 import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";

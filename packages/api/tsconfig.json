@@ -5,6 +5,11 @@
     "moduleResolution": "Bundler",
     "lib": ["ES2022"],
     "strict": true,
+    /* Web has carried these since it was written; api had not, which is how
+       three dead declarations survived a rewrite each. They cost nothing and
+       they catch the residue a refactor leaves behind. */
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,

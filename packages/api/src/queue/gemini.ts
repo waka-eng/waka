@@ -793,21 +793,6 @@ const topOfMindSynthesisResponseSchema: ResponseSchema = {
   required: ["entries"],
 };
 
-const synthesizedArtifactSchema = z.object({
-  noChange: z.boolean().optional(),
-  entries: z
-    .array(
-      z.object({
-        type: z.enum(topOfMindEntryTypeValues),
-        body: z.string(),
-        belief: z.string().optional(),
-        prompt: z.string().optional(),
-        citedSignalIds: z.array(z.string()).optional(),
-      }),
-    )
-    .optional(),
-});
-
 function buildTopOfMindSynthesisPrompt(input: TopOfMindSynthesisInput): string {
   const sections: string[] = [];
 

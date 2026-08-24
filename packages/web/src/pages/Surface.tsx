@@ -58,7 +58,6 @@ import {
   leaveGroup,
   refreshGroupTopOfMind,
   reorderPrinciples,
-  shareSignal,
   updatePrinciple,
   createReflection,
   deleteInspiration,
@@ -380,8 +379,6 @@ export default function SurfacePage(): JSX.Element {
   const [roomRereading, setRoomRereading] = useState(false);
   const [roomEntryDrafts, setRoomEntryDrafts] = useState<Record<string, string>>({});
   const [roomProposeDraft, setRoomProposeDraft] = useState("");
-  const [roomShareables, setRoomShareables] = useState<ApiSignal[]>([]);
-  const [sharePick, setSharePick] = useState("");
 
   const roomId = route.view === "room" ? route.entityId : null;
   const room = roomId ? (groupsList.find((row) => row.id === roomId) ?? null) : null;
@@ -424,22 +421,19 @@ export default function SurfacePage(): JSX.Element {
     setRoomProposals([]);
     setRoomEntryDrafts({});
     setRoomProposeDraft("");
-    setSharePick("");
     (async () => {
       try {
-        const [wall, tom, members, proposals, mine] = await Promise.all([
+        const [wall, tom, members, proposals] = await Promise.all([
           fetchGroupWall(roomId),
           fetchGroupTopOfMind(roomId),
           fetchGroupMembers(roomId),
           fetchGroupProposals(roomId),
-          fetchSignals({ limit: 100 }),
         ]);
         if (cancelled) return;
         setRoomWall(wall);
         setRoomTom(tom);
         setRoomMembers(members);
         setRoomProposals(proposals);
-        setRoomShareables(mine);
       } catch (err) {
         if (!cancelled) setNotice(errorMessage(err, "This room could not be loaded."));
       } finally {
@@ -509,33 +503,9 @@ export default function SurfacePage(): JSX.Element {
     })();
   }, [room, locale, navigateSurface]);
 
-  const reloadRoomWall = useCallback(async (id: string): Promise<void> => {
-    setRoomWall(await fetchGroupWall(id));
-  }, []);
-
   const reloadRoomProposals = useCallback(async (id: string): Promise<void> => {
     setRoomProposals(await fetchGroupProposals(id));
   }, []);
-
-  const bringSignal = useCallback((): void => {
-    if (!roomId || !sharePick) return;
-    void (async () => {
-      try {
-        await shareSignal(sharePick, roomId);
-        setRoomShareables((current) =>
-          current.map((row) =>
-            row.id === sharePick
-              ? { ...row, sharedGroupIds: [...row.sharedGroupIds, roomId] }
-              : row,
-          ),
-        );
-        setSharePick("");
-        await reloadRoomWall(roomId);
-      } catch (err) {
-        setNotice(errorMessage(err, t(locale, "roomError")));
-      }
-    })();
-  }, [roomId, sharePick, locale, reloadRoomWall]);
 
   /* Same contract as the personal reread: wait for the version to move, and
      say so honestly when it does not. Shared with the accepted-proposal path,
@@ -629,18 +599,6 @@ export default function SurfacePage(): JSX.Element {
       })();
     },
     [roomId, locale, reloadRoomProposals],
-  );
-
-  /* What the picker offers: signals still standing, not already up here. */
-  const shareCandidates = useMemo(
-    () =>
-      roomId
-        ? roomShareables.filter(
-            (signal) =>
-              signal.status !== "retired" && !signal.sharedGroupIds.includes(roomId),
-          )
-        : [],
-    [roomShareables, roomId],
   );
 
   // Layer 2 — the signals.
@@ -1962,30 +1920,12 @@ export default function SurfacePage(): JSX.Element {
                       </span>
                     </div>
                   ))}
-                  {shareCandidates.length > 0 ? (
-                    <div className="gr-new">
-                      <select
-                        className="gr-input"
-                        value={sharePick}
-                        aria-label={t(locale, "roomBringPick")}
-                        onChange={(event) => setSharePick(event.currentTarget.value)}
-                      >
-                        <option value="">{t(locale, "roomBringPick")}</option>
-                        {shareCandidates.map((signal) => (
-                          <option key={signal.id} value={signal.id}>
-                            {signal.statement}
-                          </option>
-                        ))}
-                      </select>
-                      {sharePick ? (
-                        <button type="button" className="pr-action" onClick={bringSignal}>
-                          {t(locale, "roomBring")}
-                        </button>
-                      ) : null}
-                    </div>
-                  ) : !roomLoading &&
-                    !roomShareables.some((signal) => signal.status !== "retired") ? (
-                    <p className="sf-empty">{t(locale, "roomBringEmpty")}</p>
+                  {/* No verb here any more. Statements are not handed to a
+                      room; the room grows them from what its members keep
+                      publicly, and says so rather than offering a control
+                      that would write a row nothing reads. */}
+                  {!roomLoading ? (
+                    <p className="sf-empty">{t(locale, "roomGrows")}</p>
                   ) : null}
                 </div>
 

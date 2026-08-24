@@ -602,8 +602,6 @@
 .jar-share-row:hover { color: var(--jar-ink); }
 /* out loud: the statement is on that wall, and the row wears the page's one
    light rather than a tick or a colour */
-.jar-share-row--on { color: var(--jar-ink); }
-.jar-share-row--on::before { content: "— "; }
 .jar-share-hint { font-size: 11px; opacity: 0.55; }
 .jar-share-note {
   margin: 8px 0 0;

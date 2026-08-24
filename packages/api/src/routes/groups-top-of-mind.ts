@@ -13,6 +13,7 @@ import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import {
   groupMembers,
   groupMembershipEvents,
+  inspirations,
   signalEvidence,
   profiles,
   topOfMindEntries,
@@ -266,6 +267,17 @@ export async function loadGroupTopOfMind(
      * name what fed them; a person's own top of mind keeps that-never-
      * which), and it names PEOPLE, never memories: no text, quote, or
      * memory id crosses here.
+     *
+     * The two joins that narrow it are the same two the wall applies, and
+     * for the same reasons — this list is a NAMING, and a board that named
+     * someone the wall had already stopped naming would be the room telling
+     * two different stories about who is in it:
+     *
+     *   - CURRENT MEMBERS ONLY. A person who left the room stops being
+     *     credited by it; their statement-shaping is over the moment their
+     *     seat is.
+     *   - PUBLIC MEMORIES ONLY. Being credited here is the visible half of
+     *     sharing, so taking the memory private takes the credit with it.
      */
     const grownRows = await db
       .selectDistinct({
@@ -279,6 +291,20 @@ export async function loadGroupTopOfMind(
         eq(signalEvidence.signalId, topOfMindEntrySignals.signalId),
       )
       .innerJoin(profiles, eq(profiles.id, signalEvidence.ownerProfileId))
+      .innerJoin(
+        inspirations,
+        and(
+          eq(inspirations.id, signalEvidence.inspirationId),
+          eq(inspirations.visibility, "public"),
+        ),
+      )
+      .innerJoin(
+        groupMembers,
+        and(
+          eq(groupMembers.groupId, groupId),
+          eq(groupMembers.profileId, signalEvidence.ownerProfileId),
+        ),
+      )
       .where(
         and(
           inArray(topOfMindEntrySignals.entryId, entryIds),
