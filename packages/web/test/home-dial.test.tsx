@@ -97,9 +97,11 @@ const FACTS = {
     daysAgo,
   })),
   /**
-   * No groups. The dial stays out of a group — a group's ground is many
-   * people's and there is no one history to wind — so a group on the axis
-   * would only add a wall this file never stands on.
+   * No groups. A room has a dial of its own now — it winds the room's board
+   * along the room's own chain — but that is a different rail with a
+   * different span, and it is `group-dial.test.tsx`'s subject. Every case
+   * here is about YOUR archive, so a group on the axis would only add a wall
+   * this file never stands on.
    */
   groups: [],
 };

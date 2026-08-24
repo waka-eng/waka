@@ -184,6 +184,7 @@ import {
   fetchGroupMembers,
   fetchGroupTimeline,
   type ApiGroupTimeline,
+  type ApiGroupTopOfMind,
   leaveGroup,
   removeGroupMember,
   renameGroup,
@@ -1886,6 +1887,28 @@ function HomeExperience(): JSX.Element {
   const groupBallsRef = useRef<Map<string, Ball>>(new Map());
   /** Rooms whose orbs have already poured this session: no re-pour on return. */
   const groupVisitedRef = useRef<Set<string>>(new Set());
+  /**
+   * THE ROOM'S OWN BECOMING, so the dial has something to wind.
+   *
+   * The chain of boards with their reasons, and the door's ledger of arrivals
+   * and departures. `groupTimelines` (below, where the room's other arrival
+   * fetches live) is the state that owns this; this ref is its mirror, and it
+   * exists because the dial and the poster are derived far above that
+   * declaration and cannot reach forward to it.
+   */
+  const groupTimelineRef = useRef<Map<string, ApiGroupTimeline>>(new Map());
+  /**
+   * A room's board at a version it no longer stands at, fetched once and kept.
+   *
+   * Keyed `groupId:version`. Winding back and forth across the same month must
+   * not re-ask the server for a sentence that cannot have changed — a version
+   * is immutable by construction, superseded rather than edited.
+   */
+  const groupBoardAtRef = useRef<Map<string, ApiGroupTopOfMind>>(new Map());
+  /** Versions currently in flight, so one wind of the rail asks once. */
+  const groupBoardPendingRef = useRef<Set<string>>(new Set());
+  /** Both refs' change signal — they are filled from promises. */
+  const [groupPastTick, setGroupPastTick] = useState(0);
 
   /**
    * Fetch one room's jar — its readings' evidence plus its direction —
@@ -2579,18 +2602,8 @@ function HomeExperience(): JSX.Element {
     return m;
   }, [inspirations]);
 
-  const dial = useMemo(() => {
-    if (!inspirations || inspirations.length === 0) return null;
-    let earliest = Infinity;
-    for (const s of inspirations) {
-      const ms = s.capturedMs;
-      if (Number.isFinite(ms) && ms > 0 && ms < earliest) earliest = ms;
-    }
-    if (!Number.isFinite(earliest)) return null;
-    const start = earliest - 3 * DAY_MS;
-    /* now — and `now` moves when something is kept now (see clockMs) */
-    const end = clockMs;
-    const span = Math.max(end - start, DAY_MS);
+  /** The rail's month labels for whatever span it is currently covering. */
+  const monthMajors = useCallback((start: number, end: number, span: number) => {
     const majors: Array<{ pct: number; label: string }> = [];
     const cursor = new Date(start);
     cursor.setDate(1);
@@ -2603,8 +2616,86 @@ function HomeExperience(): JSX.Element {
       });
       cursor.setMonth(cursor.getMonth() + 1);
     }
-    return { start, end, span, majors };
-  }, [inspirations, clockMs]);
+    return majors;
+  }, []);
+
+  const dial = useMemo(() => {
+    /* A ROOM'S RAIL IS THE ROOM'S OWN LIFE, NOT YOURS.
+       The dial winds the wall you are standing on, and standing in a room it
+       has to span that room's history — the day it opened to the present —
+       rather than the day YOU first kept something. Your archive can predate
+       a room by years, and a rail whose whole left half is a room that did
+       not exist is a rail that lies about where its own marks are. */
+    if (atWall.kind === "group") {
+      const timeline = groupTimelineRef.current.get(atWall.id);
+      if (!timeline) return null;
+      let first = Infinity;
+      for (const mark of timeline.doorMarks) {
+        const ms = Date.parse(mark.occurredAt);
+        if (Number.isFinite(ms) && ms > 0 && ms < first) first = ms;
+      }
+      for (const version of timeline.versions) {
+        const ms = Date.parse(version.createdAt);
+        if (Number.isFinite(ms) && ms > 0 && ms < first) first = ms;
+      }
+      /* A room with no marks and no versions has no history to scrub, and an
+         empty rail under your finger is worse than no rail. */
+      if (!Number.isFinite(first)) return null;
+      const start = first - 3 * DAY_MS;
+      const end = clockMs;
+      const span = Math.max(end - start, DAY_MS);
+      return { start, end, span, majors: monthMajors(start, end, span), onGroup: atWall.id };
+    }
+    if (!inspirations || inspirations.length === 0) return null;
+    let earliest = Infinity;
+    for (const s of inspirations) {
+      const ms = s.capturedMs;
+      if (Number.isFinite(ms) && ms > 0 && ms < earliest) earliest = ms;
+    }
+    if (!Number.isFinite(earliest)) return null;
+    const start = earliest - 3 * DAY_MS;
+    /* now — and `now` moves when something is kept now (see clockMs) */
+    const end = clockMs;
+    const span = Math.max(end - start, DAY_MS);
+    return { start, end, span, majors: monthMajors(start, end, span), onGroup: null };
+    /* `groupPastTick` is the timeline ref's change signal: the room's history
+       lands a request after arrival, and the rail must re-span when it does. */
+  }, [inspirations, clockMs, atWall, groupPastTick]);
+
+  /**
+   * THE DOOR'S MARKS, ON THE RAIL.
+   *
+   * `goals/room-timeline.md` names this as the phase's unmet thesis: "join
+   * marks are not hinges — every stop renders the same class, so a join is
+   * visually identical to a refresh." A room's story turns on who walked in
+   * and who walked out, and a rail that draws those the same as a nightly
+   * re-reading is a rail that says nothing about the room.
+   *
+   * So the marks are the door's alone. A version boundary is not one: the
+   * board changing is what you SEE when you wind past it — the sentence over
+   * the room becomes a different sentence — and drawing a tick for it too
+   * would be the same fact in two channels, which is how a legend gets born.
+   */
+  const doorHinges = useMemo(() => {
+    if (!dial || dial.onGroup === null) return [];
+    const timeline = groupTimelineRef.current.get(dial.onGroup);
+    if (!timeline) return [];
+    return timeline.doorMarks.flatMap((mark) => {
+      const ms = Date.parse(mark.occurredAt);
+      if (!Number.isFinite(ms) || ms < dial.start || ms > dial.end) return [];
+      return [
+        {
+          pct: (ms - dial.start) / dial.span,
+          /* An arrival and a departure are the same KIND of event — the room
+             changed who it is — so they wear one mark. Which of the two it
+             was is what the name beside it says, and light is not spent on
+             sorting people into good news and bad. */
+          who: mark.name ?? "someone",
+          kind: mark.kind,
+        },
+      ];
+    });
+  }, [dial, groupPastTick]);
 
   /* ------------- palette: resolve vars once, re-raster sprites ------------- */
   useEffect(() => {
@@ -2691,6 +2782,89 @@ function HomeExperience(): JSX.Element {
   );
 
   /* ------------- HQ chrome derived from time T (discrete facts only) ------------- */
+  /**
+   * THE ROOM AS IT STOOD AT T.
+   *
+   * The one thing a history must never do is print today's sentence over a
+   * month that had a different one — or over a month that had none at all. So
+   * this never falls back to the live board: if the version that was up at T
+   * is not in hand yet, the wall says the room's name and waits, and if the
+   * room had no board at T it says so honestly with the month beside it.
+   *
+   * A version is immutable by construction — superseded, never edited — so
+   * one that has been fetched is kept for the session, and winding back and
+   * forth across the same month never asks twice.
+   */
+  const groupChromeAt = useCallback(
+    (groupId: string, name: string, T: number, nowMs: number): WallChrome => {
+      const live = groupChromeRef.current.get(groupId) ?? null;
+      const blank = (asOf: string | null): WallChrome => ({
+        text: null,
+        eyebrow: name,
+        awayFrom: null,
+        formingAlt: asOf === null ? null : "Nothing read together yet",
+        asOf,
+        forming: null,
+        empty: false,
+        prevText: null,
+      });
+      const timeline = groupTimelineRef.current.get(groupId);
+      /* At now, or before the room's history is in hand, the room is simply
+         itself: the live chrome, forming line and all. */
+      if (!timeline || nowMs - T < DAY_MS / 2) return live ?? blank(null);
+
+      /* Newest first, as the endpoint serves them. */
+      const then = timeline.versions.find((v) => (Date.parse(v.createdAt) || 0) <= T);
+      if (!then) return blank(monthTag(T));
+
+      const latest = timeline.versions[0];
+      const stillStanding = latest !== undefined && then.version === latest.version;
+      if (stillStanding && live) {
+        /* The board has not moved since T, so what is up now is what was up
+           then — and there is nothing to date-stamp, because nothing changed. */
+        return { ...live, forming: null, asOf: null };
+      }
+
+      const key = `${groupId}:${then.version}`;
+      const held = groupBoardAtRef.current.get(key);
+      if (!held) {
+        if (!groupBoardPendingRef.current.has(key)) {
+          groupBoardPendingRef.current.add(key);
+          fetchGroupTopOfMind(groupId, then.version)
+            .then((board) => {
+              groupBoardAtRef.current.set(key, board);
+              setGroupPastTick((n) => n + 1);
+            })
+            .catch(() => undefined)
+            .finally(() => {
+              groupBoardPendingRef.current.delete(key);
+            });
+        }
+        return blank(monthTag(T));
+      }
+
+      const lead = held.entries.find((e) => e.pinnedAt) ?? held.entries[0] ?? null;
+      const text = lead?.body ?? null;
+      return {
+        eyebrow: name,
+        text,
+        awayFrom: null,
+        formingAlt: text ? null : "Nothing read together yet",
+        /* WHEN THIS WAS THE ROOM. Stamped only when the sentence differs from
+           the one up now, exactly as your own wall stamps its own past: a date
+           on an unchanged sentence would report a change that did not happen. */
+        asOf: text && text !== (live?.text ?? null) ? monthTag(T) : null,
+        /* NOTHING IS FORMING IN THE PAST. An open proposal is a thing on its
+           way to becoming what the room believes, and in March it either
+           became it or it did not — either way it is not still on its way. */
+        forming: null,
+        empty: false,
+        prevText: null,
+      };
+    },
+    [],
+  );
+
   const applyChrome = useCallback(
     (T: number) => {
       const nowMs = dial ? dial.end : Date.now();
@@ -2724,16 +2898,7 @@ function HomeExperience(): JSX.Element {
                honestly blank — it says its own name and nothing else, rather
                than showing someone else's ambition under it. */
             atWall.kind === "group"
-            ? groupChromeRef.current.get(atWall.id) ?? {
-                text: null,
-                eyebrow: atWall.name,
-                awayFrom: null,
-                formingAlt: null,
-                asOf: null,
-                forming: null,
-                empty: false,
-                prevText: null,
-              }
+            ? groupChromeAt(atWall.id, atWall.name, T, nowMs)
             : (() => {
               const current = deriveAmbition(nowMs, adopted, notes);
               const at = deriveAmbition(T, adopted, notes);
@@ -9550,9 +9715,15 @@ function HomeExperience(): JSX.Element {
   useEffect(() => {
     if (atWall.kind !== "group") return;
     let dead = false;
-    fetchGroupTimeline(atWall.id)
+    const wallGroupId = atWall.id;
+    fetchGroupTimeline(wallGroupId)
       .then((timeline) => {
-        if (!dead) setGroupTimelines((prev) => new Map(prev).set(atWall.id, timeline));
+        if (dead) return;
+        /* the mirror the dial reads: it is derived hundreds of lines above
+           this declaration and cannot reach forward to the state */
+        groupTimelineRef.current.set(wallGroupId, timeline);
+        setGroupPastTick((n) => n + 1);
+        setGroupTimelines((prev) => new Map(prev).set(wallGroupId, timeline));
       })
       .catch(() => undefined);
     return () => {
@@ -11712,6 +11883,22 @@ function HomeExperience(): JSX.Element {
               >
                 {m.label}
               </span>
+            ))}
+            {/* THE DOOR'S MARKS. A room's story turns on who walked in and who
+                walked out, and until now every stop on a rail looked like
+                every other, so a join read exactly like a nightly re-reading
+                (`goals/room-timeline.md`, the phase's own unmet thesis). These
+                are the door's alone: a version boundary gets no tick, because
+                winding past one already SHOWS you the sentence changing, and
+                the same fact in two channels is how a legend gets born. */}
+            {doorHinges.map((h) => (
+              <span
+                key={`${h.kind}-${h.pct}`}
+                className="jar-hinge"
+                style={{ top: `${(h.pct * 100).toFixed(2)}%` }}
+                title={h.kind === "joined" ? `${h.who} arrived` : `${h.who} left`}
+                aria-hidden="true"
+              />
             ))}
             {/* the date exists only while a finger is on the dial: it answers
                 the scrub and then goes, and there is no second affordance for

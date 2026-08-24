@@ -1555,6 +1555,22 @@
   transform: translateY(-50%);
   pointer-events: none;
 }
+/* THE DOOR'S MARK ON THE RAIL — the one thing a room's history turns on.
+   A short rule across the track, at full ink, so it reads as a HINGE rather
+   than as another month label: months are words beside the rail, this is a
+   notch in it. Arrivals and departures wear the same mark on purpose — the
+   fact is "the room changed who it is", and light is not spent sorting people
+   into good news and bad. Which of the two it was is what the name says. */
+.jar-hinge {
+  position: absolute;
+  left: 50%;
+  width: 11px;
+  height: 1px;
+  margin-left: -5.5px;
+  transform: translateY(-50%);
+  background: var(--jar-ink);
+  pointer-events: none;
+}
 /* the handle is a small neutral bubble — no accent, no purple glow */
 .jar-dial-handle {
   position: absolute;

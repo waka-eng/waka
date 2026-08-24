@@ -244,6 +244,54 @@ Postgres. No new infrastructure, no new dependencies.
 
 ## Log
 
+- **2026-08-24 — Phase 8: a fourth debt paid — the dial winds a room.** The
+  brief's line was "dial-scrubbing the room's history (the timeline is
+  served and told — the dial does not yet wind it)", and it was owed on
+  both sides. **The API could not open a version.**
+  `loadGroupTimeline` says of itself "entry counts, never entry bodies —
+  an old version's words are read by OPENING it", and nothing could: the
+  chain was served, the door's marks were served, and the only board a
+  caller could read was the live one, so a room's history was a list of
+  dates with nothing behind them. `GET /api/groups/:id/top-of-mind?version=N`
+  now reads that version — same shape, same gate, group id kept in the
+  predicate (a version number is unique only within a room, so matching
+  on the integer alone would hand any member any room's board), a missing
+  version read as an empty board rather than as the live one, and a
+  non-integer version a 400 rather than a silent fall back to now.
+  **And the world had ruled itself out of it**: `hasDial` refused a group
+  on the written reasoning that "a group is several people's statements
+  arriving on their own clocks — there is no single history there to
+  scrub". True of a room's FIELD, never true of what the dial governs: a
+  room's board is one chain hung on one door ledger. So the dial winds
+  every space now, and in a room it winds the BOARD — the ground below
+  stays your own memories at present time, because whose memories those
+  are is a ruling and not a matter of when. Three things came with it:
+  the rail spans the ROOM'S life (its first mark to now) rather than your
+  archive, which can predate a room by months; a version the room never
+  had reads as an honest blank wall with the month beside it, never as
+  today's sentence over a month that did not have it; and **the door's
+  marks are hinges** — `goals/room-timeline.md` names that as the phase's
+  unmet thesis ("a join is visually identical to a refresh"), and they
+  are now a notch in the rail at full ink while a version boundary gets
+  no tick, because winding past one already SHOWS the sentence change and
+  the same fact in two channels is how a legend gets born. Gate measured:
+  `room-history.db.test.ts` 8/8 on real Postgres (opens a superseded
+  version and reads its own words and contributors; refuses the
+  neighbouring room's version 1; reads a missing version blank), api 61
+  files / 660 tests; new `group-dial.test.tsx` 5/5 pins the rail's span
+  against a room younger than the archive, the door's marks, the past
+  sentence, the honest blank before the first board, and the return to
+  now — web 27 files / 179 tests, vocabulary, seams and measure-groups
+  clean. **Deliberately not done: the drawn sky→field root lines.** The
+  founder killed the orbiting connectors this session ("dont like this
+  orbitting thing") and chose "light them in the field"; the loop already
+  carries their earlier ruling against connection visuals verbatim ("I
+  don't want the connections with the other balls to appear. It's
+  confusing"). Drawing lines now would re-add what they just removed and
+  would spend a second channel against their own law that light is the
+  only one. It stays listed, and it stays theirs to call.
+
+
 - **2026-08-24 — Phase 8: three of five debts paid; HOLDS at the
   founder's motion gate.** Landed: **(1) contrast, measured** —
   `contrast.test.ts` computes WCAG ratios from `home.css`'s own tokens on

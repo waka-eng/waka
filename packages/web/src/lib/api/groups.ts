@@ -305,12 +305,21 @@ export async function fetchGroupField(groupId: string): Promise<ApiGroupFieldIns
 // A group's top of mind, and the proposals that change it
 // ---------------------------------------------------------------------------
 
-/** GET /groups/:id/top-of-mind — the group's own artifact. */
+/**
+ * GET /groups/:id/top-of-mind — the group's own artifact.
+ *
+ * Naming a version reads the room AS IT STOOD at that version instead of as
+ * it stands now: the same shape, the same gate, and an honest empty board for
+ * a version the room never had. Absent, it reads the live one, which is every
+ * caller that existed before the dial reached in here.
+ */
 export async function fetchGroupTopOfMind(
   groupId: string,
+  version?: number,
 ): Promise<ApiGroupTopOfMind> {
+  const at = version === undefined ? "" : `?version=${encodeURIComponent(String(version))}`;
   const body = await getJson<ApiGroupTopOfMind>(
-    apiPath(`/groups/${encodeURIComponent(groupId)}/top-of-mind`),
+    apiPath(`/groups/${encodeURIComponent(groupId)}/top-of-mind${at}`),
     "Failed to load this group's top of mind",
   );
   return { topOfMind: body.topOfMind ?? null, entries: body.entries ?? [] };

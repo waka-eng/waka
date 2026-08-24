@@ -66,11 +66,24 @@ export const hasSky = (k: SpaceKind): boolean =>
   k === "self" || k === "agent" || k === "group";
 
 /**
- * The dial stays out of a group. It winds ONE archive through time, and a
- * group is several people's statements arriving on their own clocks — there
- * is no single history there to scrub.
+ * THE DIAL WINDS EVERY SPACE, INCLUDING A ROOM — AND IN A ROOM IT WINDS THE
+ * BOARD, NOT THE GROUND.
+ *
+ * It used to stay out of a group, and the reason written here was that a
+ * group is several people's statements arriving on their own clocks so there
+ * is no single history to scrub. That is true of a room's FIELD and it was
+ * never true of the thing the dial actually governs. A room's board is one
+ * chain — version one superseded by version two superseded by version three,
+ * each with a reason — hung on one door ledger of arrivals and departures.
+ * That is a single history, and it is the room's own.
+ *
+ * The founder's line in `goals/room-timeline.md` is "scrubber before dial":
+ * the flat surface's rail came first, the world's dial second. This is the
+ * second one. What it winds is the sentence over the room and the marks on
+ * its door; the ground below stays your own memories at present time, because
+ * whose memories those are is a ruling and not a matter of when.
  */
-export const hasDial = (k: SpaceKind): boolean => k !== "group";
+export const hasDial = (_k: SpaceKind): boolean => true;
 
 /**
  * Whether this space is a machine's. The predicate lives here so the body,
