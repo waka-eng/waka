@@ -244,6 +244,29 @@ Postgres. No new infrastructure, no new dependencies.
 
 ## Log
 
+- **2026-08-24 — Track D: PASS.** The demo kit is committed. `tools/demo/`
+  holds the three pieces: `seed.ts` — one command against a fresh local
+  stack, through the public API only (sign-ups, captures, the live-model
+  derivation, the star edit, the room, the shares, the answered
+  statement, the declined proposal, the carried one, the removal), so
+  every frame shows the product and never a hand-arranged database;
+  `README.md` — the six-scene shot list in the product's English (the
+  poster; what it stands on; how it reads you; the room; the counted
+  stance; the door) plus the cast and the exact run commands; and
+  `walk.mjs` — the committed form of the headless walk that produced the
+  2026-08-23 screenshots: logs in with the seed's own credentials,
+  drives the world by its own gestures (the poster press, the ≡ menu,
+  the bottom axis — the product's pointer route to travel, which is what
+  the walk settled on after the side edges proved to be the wrong
+  handle), screenshots each scene, and exits non-zero naming any scene
+  whose marker is not on screen. Gate measured: seed run against a
+  fresh stack on current code (live model, ~two minutes), then the walk
+  — **six scenes, six OK, well inside the minute**; the door frame alone
+  shows the room's spoken poster, the members, Cy's struck-through
+  counted stance, and "Dee was removed · August twenty-fourth" in
+  worded dates. The founder's thirty-second recording, whenever they
+  want it, now costs one seed and one login.
+
 - **2026-08-24 — Phase 7: PASS.** The queue is fair. The claim loop's one
   shared ordering (`RUNNABLE_JOB_ORDER`, used identically by the head
   peek and the claim — the coherence the budget stands on) now serves
