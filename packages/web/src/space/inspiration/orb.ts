@@ -42,6 +42,9 @@ export interface Ball {
    * MUCH of a person stands on a memory, not merely whether anything does.
    */
   roots: number;
+  /** one of those patterns has been promoted — the distinction that exists
+      from the first week, long before a poster or a principle does */
+  underPromoted: boolean;
   onPoster: boolean;
   underPrinciple: boolean;
   /** Nothing rests on this memory yet, and it is old enough that something
@@ -243,6 +246,7 @@ export interface SignalSeed {
   /** The same fact, counted, plus how far up the stack those patterns reach.
       Together they are the memory's CARRY — see lib/aliveness.ts. */
   roots: number;
+  underPromoted: boolean;
   onPoster: boolean;
   underPrinciple: boolean;
   /** True when a pattern citing it is shared to a room. Captures themselves
@@ -292,6 +296,10 @@ export interface SkyOverInspiration {
   cited: boolean;
   /** How many patterns cite it — the boolean above, counted. */
   roots: number;
+  /** A pattern citing it has been PROMOTED — three memories said the same
+      thing, so this one is under something the loop confirmed rather than
+      under a guess. The distinction that exists from the first week. */
+  underPromoted: boolean;
   /** A pattern citing it is cited by the live top of mind. */
   onPoster: boolean;
   /** A pattern citing it is cited by a principle. */
@@ -325,6 +333,7 @@ export function skyOf(
   return {
     cited: cites.length > 0,
     roots,
+    underPromoted: above.some((p) => p.status === "active"),
     onPoster: posterSignalIds ? above.some((p) => posterSignalIds.has(p.id)) : false,
     underPrinciple: principleSignalIds
       ? above.some((p) => principleSignalIds.has(p.id))
@@ -370,6 +379,7 @@ export function makeBall(s: SignalSeed, agentId = ""): Ball {
     reflections: s.reflectionCount,
     hasNotes: s.cited,
     roots: s.roots,
+    underPromoted: s.underPromoted,
     onPoster: s.onPoster,
     underPrinciple: s.underPrinciple,
     frontier: false,
@@ -479,6 +489,7 @@ export function makeAgentBall(s: ApiAgentSignal): Ball {
        principles say nothing about it, and the agent's are its own business.
        Zero is the truthful answer here, not a missing one. */
     roots: 0,
+    underPromoted: false,
     onPoster: false,
     underPrinciple: false,
     frontier: false,

@@ -100,7 +100,12 @@ export function colorBall(b: Ball, T: number): void {
    * says how much of this person is standing here. Founder, 2026-08-24.
    */
   const carry = b.hasNotes
-    ? carryOf({ roots: b.roots, onPoster: b.onPoster, underPrinciple: b.underPrinciple })
+    ? carryOf({
+        roots: b.roots,
+        underPromoted: b.underPromoted,
+        onPoster: b.onPoster,
+        underPrinciple: b.underPrinciple,
+      })
     : 0;
   const tended =
     (b.hasNotes ? FIELD_FLOOR_CITED : 0) +

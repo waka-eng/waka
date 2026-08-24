@@ -32,6 +32,7 @@ import {
   carryOf,
   FIELD_CARRY_POSTER_SHARE,
   FIELD_CARRY_PRINCIPLE_SHARE,
+  FIELD_CARRY_PROMOTED_SHARE,
   FIELD_CARRY_ROOT_SATURATION,
   FIELD_CARRY_ROOTS_SHARE,
 } from "../src/lib/aliveness";
@@ -193,22 +194,36 @@ describe("the carry: how much of a person a memory holds up", () => {
   });
 
   it("keeps the carry a clean nought-to-one, saturating where the doc says", () => {
-    expect(carryOf({ roots: 0, onPoster: false, underPrinciple: false })).toBe(0);
+    expect(
+      carryOf({ roots: 0, underPromoted: false, onPoster: false, underPrinciple: false }),
+    ).toBe(0);
     expect(
       carryOf({
         roots: FIELD_CARRY_ROOT_SATURATION,
+        underPromoted: true,
         onPoster: true,
         underPrinciple: true,
       }),
-      "the three shares sum to one, so full carry is exactly one",
+      "the four shares sum to one, so full carry is exactly one",
     ).toBeCloseTo(1, 10);
     expect(
-      FIELD_CARRY_ROOTS_SHARE + FIELD_CARRY_POSTER_SHARE + FIELD_CARRY_PRINCIPLE_SHARE,
+      FIELD_CARRY_ROOTS_SHARE +
+        FIELD_CARRY_PROMOTED_SHARE +
+        FIELD_CARRY_POSTER_SHARE +
+        FIELD_CARRY_PRINCIPLE_SHARE,
     ).toBeCloseTo(1, 10);
     expect(
-      carryOf({ roots: 99, onPoster: false, underPrinciple: false }),
+      carryOf({ roots: 99, underPromoted: false, onPoster: false, underPrinciple: false }),
       "roots stop adding past the saturation — a memory is not a scoreboard",
-    ).toBeCloseTo(carryOf({ roots: FIELD_CARRY_ROOT_SATURATION, onPoster: false, underPrinciple: false }), 10);
+    ).toBeCloseTo(
+      carryOf({
+        roots: FIELD_CARRY_ROOT_SATURATION,
+        underPromoted: false,
+        onPoster: false,
+        underPrinciple: false,
+      }),
+      10,
+    );
   });
   it("bands a SAME-DAY archive by use — the young field is not one flat top band", () => {
     /* The founder's complaint, verbatim twice: "still all same brightness."
@@ -222,6 +237,7 @@ describe("the carry: how much of a person a memory holds up", () => {
     const freshLit = (input: {
       id: string;
       citingSignalIds: string[];
+      promoted?: boolean;
       posterSignalIds?: string[];
       principleSignalIds?: string[];
     }) => {
@@ -229,7 +245,16 @@ describe("the carry: how much of a person a memory holds up", () => {
         [input.id, input.citingSignalIds.map((sig) => cites(sig, input.id))],
       ]);
       const signals = new Map(
-        input.citingSignalIds.map((sig) => [sig, pattern(sig)] as const),
+        input.citingSignalIds.map(
+          (sig) =>
+            [
+              sig,
+              {
+                ...pattern(sig),
+                status: (input.promoted ? "active" : "emerging") as Signal["status"],
+              },
+            ] as const,
+        ),
       );
       const ball = makeBall(
         seedOf(
@@ -245,19 +270,31 @@ describe("the carry: how much of a person a memory holds up", () => {
     };
 
     const nothing = freshLit({ id: "f-none", citingSignalIds: [] });
-    const rooted = freshLit({ id: "f-one", citingSignalIds: ["s1", "s2", "s3"] });
+    /* ONE root, EMERGING — the shape of nearly every memory in a real first
+       week, and the case that was uniform: each capture derives its own lone
+       candidate, nothing is adopted, no principles exist. */
+    const guess = freshLit({ id: "f-guess", citingSignalIds: ["s1"], promoted: false });
+    /* one root, but the pattern PROMOTED — three memories said the same
+       thing. The only distinction a young archive has, and the one that has
+       to move the light or the founder sees thirty identical orbs. */
+    const confirmed = freshLit({ id: "f-conf", citingSignalIds: ["s1"], promoted: true });
     const settled = freshLit({
       id: "f-settled",
       citingSignalIds: ["s1", "s2", "s3"],
+      promoted: true,
       posterSignalIds: ["s1"],
       principleSignalIds: ["s2"],
     });
 
-    expect(rooted, "a cited memory must be a visibly different BAND, same day").toBeGreaterThan(
+    expect(guess, "a cited memory must be a visibly different BAND, same day").toBeGreaterThan(
       nothing,
     );
+    expect(
+      confirmed,
+      "and holding up a CONFIRMED pattern outshines holding up a guess",
+    ).toBeGreaterThan(guess);
     expect(settled, "and what reaches the poster and a principle sits above that").toBeGreaterThan(
-      rooted,
+      confirmed,
     );
   });
 });

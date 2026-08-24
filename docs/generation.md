@@ -669,9 +669,10 @@ Source: `packages/web/src/lib/aliveness.ts`.
 | `FIELD_CITED_LIFT` | 0.12 | Being cited also lifts a memory above its floor |
 | `FIELD_FRONTIER_DAYS` | 3 | Untouched longer than this and cited by nothing = a frontier |
 | `FIELD_CARRY_ROOT_SATURATION` | 3 | Roots stop adding carry past this many citing patterns |
-| `FIELD_CARRY_ROOTS_SHARE` | 0.4 | Carry: the share held by how many patterns cite it |
-| `FIELD_CARRY_POSTER_SHARE` | 0.3 | Carry: the share held by reaching the live top of mind |
-| `FIELD_CARRY_PRINCIPLE_SHARE` | 0.3 | Carry: the share held by reaching a principle |
+| `FIELD_CARRY_ROOTS_SHARE` | 0.3 | Carry: the share held by how many patterns cite it |
+| `FIELD_CARRY_PROMOTED_SHARE` | 0.2 | Carry: the share held by being under a promoted pattern |
+| `FIELD_CARRY_POSTER_SHARE` | 0.25 | Carry: the share held by reaching the live top of mind |
+| `FIELD_CARRY_PRINCIPLE_SHARE` | 0.25 | Carry: the share held by reaching a principle |
 | `FIELD_CARRY_SPAN` | 0.5 | Extra light a fully-carrying memory holds over a barely-cited one |
 | `FIELD_ATTENTION_SPAN` | 0.16 | Extra floor for coming back to a memory, graded by how often |
 | `FIELD_RECENCY_MAX` | 0.55 | Freshness alone cannot pass this; the room above belongs to use |
@@ -687,6 +688,14 @@ an archive with months in it rendered as one flat grey. `FIELD_TIER_GAMMA`
 bends the mapping toward the dim half, and `TIERS` (in
 `packages/web/src/canvas/sprites.ts`) widened from five bands to nine. Neither
 changes what a memory IS — only how finely the eye can read it.
+
+**Why promotion is one of the shares.** Roots, the poster and a principle are
+all the same number for every memory in a young archive: nothing is adopted
+yet, no principles exist, and each capture derives its own lone candidate — so
+every memory has exactly one root and the light has nothing to say. Promotion
+is the one distinction that exists from the first week: a signal turns `active`
+when three memories say the same thing, so a memory under one is holding up
+something the loop has confirmed rather than a guess.
 
 **Why the carry is graded and the floor is not.** `FIELD_FLOOR_CITED` is what
 being cited AT ALL is worth: one root and nothing above it, and the memory can

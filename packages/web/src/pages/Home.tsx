@@ -1188,6 +1188,39 @@ function HomeExperience(): JSX.Element {
   }
   const offlineRef = useRef(false);
   const [inspirations, setInspirations] = useState<Inspiration[] | null>(null);
+  /**
+   * THE POUR READS THIS; THE POUR DOES NOT DEPEND ON IT.
+   *
+   * `inspirations` is a dependency of the frame loop's setup effect, so every
+   * keep tore the whole world down and built it again: new Float32Arrays for
+   * the starfield and the dust, every orb reconstructed, the canvas backing
+   * store reallocated, the light re-eased from zero. That is the brightening
+   * and the reshuffled stars the founder reported four times — and an earlier
+   * session diagnosed the rebuild exactly, then guarded the canvas resize
+   * instead of stopping the rebuild, writing in the comment there that it was
+   * "not a fix for that symptom".
+   *
+   * It is a fix now, and at the cause: `simApi.born()` ALREADY puts the new
+   * orb in the world the instant you keep, so the rebuild that follows is
+   * pure waste — it reproduces a world that is already correct. The loop's
+   * dependency becomes a signature that ignores memories this session has
+   * already born, so keeping something no longer rebuilds anything, and a
+   * real change to the archive (a reload, an agent's capture, a deletion)
+   * still does.
+   */
+  const inspirationsRef = useRef<Inspiration[] | null>(null);
+  inspirationsRef.current = inspirations;
+  /** server ids of memories born in THIS session; the world already has them */
+  const bornIdsRef = useRef<Set<string>>(new Set());
+  const pourSig = useMemo(
+    () =>
+      (inspirations ?? [])
+        .map((c) => c.id)
+        .filter((id) => !bornIdsRef.current.has(id))
+        .sort()
+        .join(","),
+    [inspirations],
+  );
   const [notes, setNotes] = useState<JarNote[] | null>(null);
   /**
    * THE SKY, IN THE CANON'S SENSE — layer 2. Each is an evidence-backed
@@ -1414,6 +1447,8 @@ function HomeExperience(): JSX.Element {
   );
   /** Whether the axis is offering the two ways to make another place. */
   const [addOpen, setAddOpen] = useState(false);
+  /** Whether the top-left split button is listing the other walls. */
+  const [wallPick, setWallPick] = useState(false);
   /** Which pattern in the sky is being read. Its verdict row belongs to it. */
   const [focusCandId, setFocusCandId] = useState<string | null>(null);
   /**
@@ -2370,8 +2405,10 @@ function HomeExperience(): JSX.Element {
         const spoken = (day?.sentences ?? [])
           .filter((sentence) => sentence.text !== "the sky held")
           .map((sentence) => sentence.text);
+        /* the day label leads and "the sky held" stays out — the founder
+           struck both, then asked for the label back */
         if (spoken.length > 0) {
-          setCharSay(`${spoken.join("; ")}.`);
+          setCharSay(`${day?.label ?? "today"} — ${spoken.join("; ")}.`);
         } else {
           setCharSay(fallback());
         }
@@ -2904,7 +2941,8 @@ function HomeExperience(): JSX.Element {
        having an agent arrive would make your own memory vanish. Anything the
        archive has already fetched back under either id wins, so a reload can
        never double it. */
-    const fetched = new Set(inspirations.map((s) => s.id));
+    const poured = inspirationsRef.current ?? [];
+    const fetched = new Set(poured.map((s) => s.id));
     const kept = bornRef.current.filter(
       (s) => !fetched.has(s.id) && !(s.sigId !== undefined && fetched.has(s.sigId)),
     );
@@ -2972,7 +3010,7 @@ function HomeExperience(): JSX.Element {
       b.hue = b.ownerProfileId ? hueOf.get(b.ownerProfileId) ?? -1 : -1;
     }
     const list = [
-      ...inspirations.map((c) =>
+      ...poured.map((c) =>
         makeBall(
           seedOf(
             c,
@@ -5740,14 +5778,20 @@ function HomeExperience(): JSX.Element {
         hq.style.transform = `translate3d(${(-cam.x).toFixed(1)}px, ${(-cam.y).toFixed(1)}px, 0)`;
       const atmos = measured.atmos.current;
       if (atmos) atmos.style.transform = `translate3d(0, ${(-cam.y).toFixed(1)}px, 0)`;
-      /* The mouth rides BOTH axes, like headquarters — it stands on your own
-         wall's seam, so it slides away when you travel and scrolls away when
-         you descend. It is a sibling of .jar-hq rather than a child of it
-         only because it has to sit ABOVE the canvas: a field you are typing
-         into cannot have orbs drawn over the words. */
+      /* THE MOUTH RIDES THE VERTICAL ONLY. It used to ride both axes like
+         headquarters, standing on your own wall's seam — so travelling to a
+         room slid it off the screen and there was no way to keep anything
+         while you were there (founder, 2026-08-24: "keep something should be
+         available in every room"). Keeping is a fact about YOU, not about
+         the wall you happen to be looking at: what you save is always yours,
+         and where it goes is the one line under the field. So it stays put
+         horizontally and still scrolls away as you descend, which is the
+         axis that genuinely changes what it means.
+         It is a sibling of .jar-hq rather than a child of it only because it
+         has to sit ABOVE the canvas: a field you are typing into cannot have
+         orbs drawn over the words. */
       const mouth = measured.mouth.current;
-      if (mouth)
-        mouth.style.transform = `translate3d(${(-cam.x).toFixed(1)}px, ${(-cam.y).toFixed(1)}px, 0)`;
+      if (mouth) mouth.style.transform = `translate3d(0, ${(-cam.y).toFixed(1)}px, 0)`;
       /* the companion's whisper is screen-anchored, like the companion */
       const say = measured.charSay.current;
       if (say) say.style.transform = `translate3d(${cam.x.toFixed(1)}px, 0, 0)`;
@@ -8037,7 +8081,7 @@ function HomeExperience(): JSX.Element {
      * honest — the pour reads the sky through a ref, so it sees what is true at
      * the moment it pours rather than closing over a value that moves.
      */
-  }, [inspirations, agents, walls, groupFieldTick]);
+  }, [pourSig, agents, walls, groupFieldTick]);
 
   /**
    * AND WHEN THE SKY LANDS, THE GROUND IS LIT AGAIN — IN PLACE.
@@ -8100,6 +8144,7 @@ function HomeExperience(): JSX.Element {
       b.hasNotes = above.cited;
       /* the three facts the light grades by — see carryOf */
       b.roots = above.roots;
+      b.underPromoted = above.underPromoted;
       b.onPoster = above.onPoster;
       b.underPrinciple = above.underPrinciple;
       b.hasGroup = above.inGroup;
@@ -8969,6 +9014,7 @@ function HomeExperience(): JSX.Element {
          out to hold up. */
       cited: false,
       roots: 0,
+      underPromoted: false,
       onPoster: false,
       underPrinciple: false,
       inGroup: false,
@@ -9004,6 +9050,9 @@ function HomeExperience(): JSX.Element {
            Adopting it here means a reload finds the same memory rather than a
            duplicate, which is what `fetched` upstream is checking. */
         seed.sigId = made.id;
+        /* the world already has this orb (`born` above); recording the id
+           keeps it out of the pour signature so nothing is rebuilt */
+        bornIdsRef.current.add(made.id);
         setKeepPublic(false);
         simApiRef.current?.identify(seed.id, made.id);
         /* AND IT JOINS THE ARCHIVE, NOT ONLY THE GROUND.
@@ -10086,17 +10135,14 @@ function HomeExperience(): JSX.Element {
                         the panel's header says "opened by tapping a group's
                         wall", and until this button existed nothing anywhere
                         called it — a finished, tested surface with no way in. */}
-                    {w.kind === "group" && here ? (
-                      <button
-                        type="button"
-                        className="jar-eyebrow jar-label jar-eyebrow-door"
-                        onClick={() => setGroupPanel(w.id)}
-                      >
-                        {c.eyebrow}
-                      </button>
-                    ) : (
-                      <div className="jar-eyebrow jar-label">{c.eyebrow}</div>
-                    )}
+                    {/* NOT A DOOR ANY MORE (founder, 2026-08-24). The name
+                        above the poster was also the way into the room's
+                        panel, so the same panel had two entrances and the
+                        one over the poster looked like a label until you
+                        happened to press it. The button at the top left is
+                        the single way in — for every wall, not only a room —
+                        and this is a fact about where you are standing. */}
+                    <div className="jar-eyebrow jar-label">{c.eyebrow}</div>
                     {c.text ? (
                       /* A STABLE KEY, AND A CARRIED/NEW SPLIT INSIDE IT.
                          The whole h1 used to be keyed by its words, so every
@@ -10734,10 +10780,31 @@ function HomeExperience(): JSX.Element {
                 Private is the resting state and the one you get by not
                 touching this, which is the whole safety property: the only
                 way to publish is to say so. */}
+            {/* BOTH WORDS, ALWAYS — the chosen one lit, the other dimmed.
+                One word that swapped when pressed gave no sign it could be
+                pressed at all: "kept to yourself" read as a statement of
+                fact, and the founder said so. A pair says there is a choice
+                and which way it currently sits, in the one channel this
+                world has. Private is still the resting state and still the
+                one you get by not touching it. */}
             {mouthOpen && draft.trim() !== "" ? (
               <p className="jar-neb-ask jar-neb-ask--row jar-mouth-where">
-                <button type="button" onClick={() => setKeepPublic((v) => !v)}>
-                  {keepPublic ? "going to your rooms" : "kept to yourself"}
+                <button
+                  type="button"
+                  className={keepPublic ? "jar-where-off" : "jar-where-on"}
+                  aria-pressed={!keepPublic}
+                  onClick={() => setKeepPublic(false)}
+                >
+                  kept to yourself
+                </button>
+                <span aria-hidden="true"> · </span>
+                <button
+                  type="button"
+                  className={keepPublic ? "jar-where-on" : "jar-where-off"}
+                  aria-pressed={keepPublic}
+                  onClick={() => setKeepPublic(true)}
+                >
+                  going to your rooms
                 </button>
               </p>
             ) : null}
@@ -11445,18 +11512,62 @@ function HomeExperience(): JSX.Element {
                disappears the way the account link used to — and settings are
                PER SPACE, because renaming a room, taking someone out of it or
                closing it are all facts about the space you are standing in. */
-            <button
-              type="button"
-              className="jar-here jar-back jar-label"
-              aria-expanded={settingsFor === spaceKey(atWall)}
-              onClick={() =>
-                setSettingsFor(settingsFor === spaceKey(atWall) ? null : spaceKey(atWall))
-              }
-            >
-              {atWall.kind === "group"
-                ? groups.find((g) => g.id === atWall.id)?.name ?? atWall.name
-                : atWall.name}
-            </button>
+            /* A SPLIT BUTTON: the name opens where you are, the caret opens
+               where else you could be (founder, 2026-08-24). This is the one
+               way into a wall's own panel now — the name over the poster
+               stopped being a second door — and the right half answers the
+               question that used to need a walk to the edge of the world:
+               which other walls exist, and take me there. */
+            <span className="jar-here-split">
+              <button
+                type="button"
+                className="jar-here jar-back jar-label"
+                aria-expanded={settingsFor === spaceKey(atWall)}
+                onClick={() => {
+                  setWallPick(false);
+                  setSettingsFor(
+                    settingsFor === spaceKey(atWall) ? null : spaceKey(atWall),
+                  );
+                }}
+              >
+                {atWall.kind === "group"
+                  ? groups.find((g) => g.id === atWall.id)?.name ?? atWall.name
+                  : atWall.name}
+              </button>
+              <button
+                type="button"
+                className="jar-here-more jar-back jar-label"
+                aria-expanded={wallPick}
+                aria-label="go to another wall"
+                onClick={() => {
+                  setSettingsFor(null);
+                  setWallPick((v) => !v);
+                }}
+              >
+                <span aria-hidden="true">▾</span>
+              </button>
+              {wallPick ? (
+                <span className="jar-here-list" role="menu">
+                  {walls.map((w) => {
+                    const mine = w.kind === atWall.kind && w.id === atWall.id;
+                    return (
+                      <button
+                        key={spaceKey(w)}
+                        type="button"
+                        role="menuitem"
+                        className={`jar-here-row jar-label${mine ? " is-here" : ""}`}
+                        onClick={() => {
+                          setWallPick(false);
+                          simApiRef.current?.goToWall(w.col);
+                        }}
+                      >
+                        {w.name}
+                      </button>
+                    );
+                  })}
+                </span>
+              ) : null}
+            </span>
           }
         </div>
 

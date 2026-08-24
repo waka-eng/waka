@@ -151,9 +151,29 @@ export const FIELD_TIER_GAMMA = 0.7;
  * argument for having a single channel.
  */
 export const FIELD_CARRY_ROOT_SATURATION = 3;
-export const FIELD_CARRY_ROOTS_SHARE = 0.4;
-export const FIELD_CARRY_POSTER_SHARE = 0.3;
-export const FIELD_CARRY_PRINCIPLE_SHARE = 0.3;
+export const FIELD_CARRY_ROOTS_SHARE = 0.3;
+/**
+ * A PROMOTED PATTERN IS A HEAVIER THING TO HOLD UP — and this share is what
+ * makes the light move at all in a young archive.
+ *
+ * The first three shares were roots, the poster, and a principle. Measured
+ * against a real early account they are all the SAME NUMBER for every
+ * memory: nothing is adopted yet, so the poster cites nothing; there are no
+ * principles yet either; and each capture derived its own lone candidate, so
+ * every memory has exactly one root. Three terms, zero variance, and the
+ * founder looking at thirty identical orbs saying "why all same brightness"
+ * for the fourth time. The math was right and had nothing to say.
+ *
+ * Promotion is the one distinction that exists from the very first week: a
+ * signal turns `active` when three memories say the same thing, so a memory
+ * under one is holding up something the loop has CONFIRMED, and a memory
+ * under a lone emerging candidate is holding up a guess. That difference
+ * appears long before a poster or a principle does, and it is exactly what
+ * "how active this one is being used to form signals" means.
+ */
+export const FIELD_CARRY_PROMOTED_SHARE = 0.2;
+export const FIELD_CARRY_POSTER_SHARE = 0.25;
+export const FIELD_CARRY_PRINCIPLE_SHARE = 0.25;
 
 /**
  * The extra light a fully-carrying memory holds over a barely-cited one.
@@ -168,6 +188,7 @@ export const FIELD_CARRY_SPAN = 0.5;
 /** What a memory is holding up, in 0..1. Pure; the field's only reader. */
 export function carryOf(input: {
   roots: number;
+  underPromoted: boolean;
   onPoster: boolean;
   underPrinciple: boolean;
 }): number {
@@ -176,6 +197,7 @@ export function carryOf(input: {
     FIELD_CARRY_ROOT_SATURATION;
   const carry =
     FIELD_CARRY_ROOTS_SHARE * roots +
+    (input.underPromoted ? FIELD_CARRY_PROMOTED_SHARE : 0) +
     (input.onPoster ? FIELD_CARRY_POSTER_SHARE : 0) +
     (input.underPrinciple ? FIELD_CARRY_PRINCIPLE_SHARE : 0);
   return Math.min(Math.max(carry, 0), 1);

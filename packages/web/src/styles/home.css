@@ -1064,26 +1064,72 @@
    and returns to the line when the text shrinks again. It is the SAME
    field throughout: nothing is remounted, no caret is lost, no keystroke
    is dropped at the moment it changes. */
+/* A DRAWER, NOT A BLOCK OF TEXT OVER THE WORLD.
+   The quick slot hangs off the seam and grows UPWARD (`translateY(-100%)`),
+   which is right for one line and catastrophic for a page: a long paste
+   climbed up the screen and printed straight over the companion, the sky and
+   everything else, with no ground of its own. The founder said "don't cover
+   like this" — four times, because the first fix only changed the FACE and
+   inherited that geometry.
+   So the note state stops being a taller version of the line and becomes a
+   real sheet: released from the seam, anchored to the bottom of the frame,
+   full width, its own opaque ground, its own height. It rises from the
+   bottom the way a notes app does, and nothing above it is obscured. */
 .jar-mouth-slot--note {
-  padding-bottom: 18px;
+  top: auto;
+  bottom: 0;
+  transform: none;
+  padding: 0;
+  background: var(--jar-panel);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-radius: 20px 20px 0 0;
+  box-shadow:
+    0 0 0 1px var(--jar-panel-edge),
+    0 -24px 60px -30px rgba(0, 0, 0, 0.9);
+  animation: jar-drawer-up 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes jar-drawer-up {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+/* the handle: one short rule at the top edge, the way a sheet says which way
+   it came from. Not a control — the drawer is driven by the text alone. */
+.jar-mouth-slot--note::before {
+  content: "";
+  display: block;
+  width: 36px;
+  height: 3px;
+  margin: 10px auto 4px;
+  border-radius: 999px;
+  background: var(--jar-scroll);
 }
 .jar-mouth-slot--note .jar-mouth-field {
-  max-width: 62ch;
-  max-height: min(46vh, 340px);
-  padding: 16px 18px;
-  border-radius: 16px;
-  background: var(--jar-row);
+  max-width: 68ch;
+  /* it OWNS this height rather than growing into the world above it */
+  height: min(42vh, 380px);
+  max-height: min(42vh, 380px);
+  padding: 12px 24px 20px;
   font-weight: 400;
   font-size: 15px;
   letter-spacing: normal;
   text-transform: none;
   line-height: 1.62;
   text-align: left;
-  transition: max-width 0.28s ease, max-height 0.28s ease, background 0.28s ease;
 }
 .jar-mouth-slot--note .jar-mouth-field::placeholder {
   text-transform: none;
   letter-spacing: normal;
+}
+/* the where-it-goes line sits inside the sheet, on its own ground */
+.jar-mouth-slot--note .jar-mouth-where {
+  padding-bottom: calc(14px + env(safe-area-inset-bottom));
 }
 .jar-mouth-field::-webkit-scrollbar {
   width: 6px;
@@ -2279,5 +2325,76 @@
    standing line whose meaning can change under you. It settles back to the
    quiet register the moment you climb: seeing is what clears it. */
 .jar-forming-line--new {
+  color: var(--jar-ink);
+}
+
+/* WHERE THIS ONE IS GOING — both words, the chosen one in full ink and the
+   other at the faint tier. Light says which is selected; nothing else does. */
+.jar-where-on {
+  color: var(--jar-ink);
+}
+.jar-where-off {
+  color: var(--jar-faint);
+}
+
+/* ================= the split button, top left =================
+   One control, two questions: the name opens the wall you are standing on,
+   the caret opens the list of the others. They share a ground so they read
+   as one thing, with a hairline between them so the halves are separable. */
+.jar-here-split {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  pointer-events: auto;
+}
+.jar-here-split .jar-here {
+  border-radius: 999px 0 0 999px;
+  padding-right: 8px;
+}
+.jar-here-more {
+  border-radius: 0 999px 999px 0;
+  padding: 6px 10px 6px 8px;
+  font-size: 9px;
+  box-shadow: inset 1px 0 0 0 var(--jar-panel-edge);
+}
+.jar-here-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 100%;
+  padding: 6px;
+  border-radius: 14px;
+  background: var(--jar-panel);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow:
+    0 0 0 1px var(--jar-panel-edge),
+    0 18px 44px -26px rgba(0, 0, 0, 0.8);
+}
+.jar-here-row {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: none;
+  padding: 7px 12px;
+  border-radius: 9px;
+  text-align: left;
+  white-space: nowrap;
+  color: var(--jar-muted);
+  cursor: pointer;
+  pointer-events: auto;
+}
+.jar-here-row:hover,
+.jar-here-row:focus-visible {
+  background: var(--jar-row-hover);
+  color: var(--jar-ink);
+  outline: none;
+}
+/* the wall you are already on, said in light like everything else */
+.jar-here-row.is-here {
   color: var(--jar-ink);
 }
