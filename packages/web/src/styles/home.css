@@ -92,7 +92,6 @@
   --jar-panel: rgba(11, 14, 20, 0.95);
   --jar-panel-edge: rgba(255, 255, 255, 0.08);
   --jar-scroll: rgba(232, 237, 244, 0.16);
-  --jar-quote: rgba(255, 255, 255, 0.05);
   --jar-row: rgba(255, 255, 255, 0.045);
   --jar-row-hover: rgba(255, 255, 255, 0.1);
 
@@ -188,23 +187,6 @@
 }
 .jar-eyebrow {
   margin: 0 0 16px;
-}
-/* The room's name as its door: same slot, same face — a button only in that
-   it answers a tap, because a control dressed as chrome is the only kind of
-   button this layout allows beside a poster. */
-.jar-eyebrow-door {
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  text-align: inherit;
-  color: inherit;
-  cursor: pointer;
-  /* the chrome layer is pointer-inert by default; a door must answer */
-  pointer-events: auto;
-  position: relative;
-  z-index: 3;
 }
 .jar-poster {
   margin: 0;
@@ -745,23 +727,6 @@
 }
 .jar-proposal-who { margin: 8px 0 0; }
 
-.jar-out {
-  position: absolute;
-  z-index: 6;
-  top: calc(58px + env(safe-area-inset-top));
-  left: 16px;
-  padding: 14px 18px;
-  background: var(--jar-panel);
-  border: 1px solid var(--jar-panel-edge);
-  border-radius: 4px;
-  backdrop-filter: blur(18px);
-  pointer-events: auto;
-}
-.jar-out .jar-neb-ask { margin: 0; }
-.jar-out .jar-neb-ask + .jar-neb-ask { margin-top: 8px; }
-.jar-out a { color: inherit; text-decoration: none; }
-.jar-out a:hover { color: var(--jar-ink); }
-
 .jar-roomform {
   position: absolute;
   z-index: 6;
@@ -878,27 +843,6 @@
   position: absolute;
   top: 0;
   width: var(--jar-vw, 100vw);
-}
-/* an empty room's jar: bare ground and one whisper, down in its section B */
-.jar-room-empty {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: calc(var(--jar-vh, 100vh) * 1.42);
-  margin: 0;
-  padding: 0 36px;
-  text-align: center;
-  font-size: 14px;
-  color: var(--jar-faint);
-}
-/* the room could not be reached: the column says so, quietly */
-.jar-room-hold {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: calc(var(--jar-vh, 100vh) * 0.46);
-  margin: 0;
-  text-align: center;
 }
 /* THE WAY OUT: a neighbour's name waiting at the side it lives past.
    Underline is the page's single interactivity signal; the label register
@@ -1335,10 +1279,12 @@
    leave; at opposite ends neither can hide the other, which is what happened
    when one slot tried to be both.
 
-   NOT `.jar-out` — that name was already taken by an unrelated absolutely
-   positioned panel at the top of this file, and reusing it inherited its
-   `position: absolute; left: 16px; top: 58px` and dropped this pill onto a
-   second row.
+   NOT `.jar-out`: that name once belonged to an unrelated absolutely
+   positioned panel earlier in this file, and reusing it inherited that
+   panel's `position: absolute; left: 16px; top: 58px` and dropped this pill
+   onto a second row. The panel itself has since been removed as dead code,
+   so the collision is gone — the name stays retired anyway, because it
+   describes a slot rather than a thing.
 
    `margin-left: auto` rather than absolute positioning: `.jar-topbar` is
    already a flex row, so this rides its layout instead of fighting it. */
@@ -1794,48 +1740,6 @@
 }
 .jar-reflect-box:focus {
   background: var(--jar-row-hover);
-}
-.jar-panel-h {
-  margin: 26px 0 12px;
-}
-.jar-quote {
-  margin: 0 0 8px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: var(--jar-quote);
-  font-size: 14px;
-  font-style: italic;
-  line-height: 1.5;
-  color: var(--jar-ink);
-}
-/* A nearby row carries captured text, so it stays in Pretendard: `all: unset`
-   returns the inherited value for font-family, which is the panel's. */
-.jar-row {
-  all: unset;
-  box-sizing: border-box;
-  display: block;
-  width: 100%;
-  cursor: pointer;
-  margin-bottom: 8px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: var(--jar-row);
-  font-size: 14px;
-  line-height: 1.45;
-  color: var(--jar-ink);
-  transition: background 0.18s ease;
-}
-.jar-row:hover {
-  background: var(--jar-row-hover);
-}
-.jar-row-sub {
-  display: block;
-  margin-top: 5px;
-}
-.jar-panel-empty {
-  margin: 0;
-  font-size: 14px;
-  color: var(--jar-faint);
 }
 
 /* ---------- skeleton / failure whispers ---------- */

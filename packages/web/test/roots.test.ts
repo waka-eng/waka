@@ -227,6 +227,44 @@ describe("a pattern's roots", () => {
     );
   });
 
+  it("keeps the line pointing at a memory that sits inside the cloud's body", () => {
+    /* A dense field puts a memory closer to the cloud's centre than the
+       cloud's own radius. The origin is offset along the line by that radius,
+       so without a clamp it lands PAST the memory: the gradient then runs
+       backwards — brightest where the memory is, faint at the cloud — which
+       states the reverse of what a root means. The line must still leave the
+       cloud and arrive at the memory, in that order. */
+    const { ctx, strokes } = recorder();
+    const r = 200;
+    const dist = 60;
+    paintRoots({
+      ctx,
+      ramp: RAMP,
+      from: { x: 500, y: 100, r },
+      to: [target(500, 100 + dist)],
+      cam: CAM,
+      view: VIEW,
+      ease: 1,
+    });
+
+    const stroke = strokes[0];
+    expect(stroke, "a memory inside the body is still a memory it stands on").toBeDefined();
+    const startY = stroke!.from[1];
+    const endY = stroke!.to[1];
+    expect(endY, "the far end is the memory itself, wherever the start landed").toBeCloseTo(
+      100 + dist,
+      6,
+    );
+    expect(
+      startY,
+      "the start must stay between the cloud's centre and the memory — past it " +
+        "and the root is drawn backwards",
+    ).toBeLessThan(endY);
+    expect(startY, "and it still leaves the centre rather than starting on it").toBeGreaterThan(
+      100,
+    );
+  });
+
   it("draws in WORLD space and culls in screen space — the two are not the same", () => {
     /* THE BUG THIS CASE WAS WRITTEN AFTER, and it was in this file too.
        The canvas already carries the camera: the frame clears with

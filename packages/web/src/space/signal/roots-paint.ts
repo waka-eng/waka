@@ -107,6 +107,17 @@ export const ROOT_HOLD = 0.12;
  */
 export const ROOT_ARRIVAL = 0.5;
 /** A root of a dormant memory still draws — dimmer, never absent. */
+/**
+ * How far down a root its origin may be pushed by the cloud's radius.
+ *
+ * The origin sits on the cloud's edge, which is right whenever the memory is
+ * further away than the cloud is wide. When it is not — a memory inside the
+ * body — the offset has to yield, or the line reverses. Seven tenths keeps a
+ * visible run of line in the worst case while leaving the ordinary case
+ * (`from.r` far smaller than the distance) completely untouched.
+ */
+export const ROOT_MAX_ORIGIN_SHARE = 0.7;
+
 export const ROOT_FLOOR = 0.35;
 
 const rgb = (c: [number, number, number]): string => `${c[0]}, ${c[1]}, ${c[2]}`;
@@ -173,9 +184,18 @@ export function paintRoots(p: RootsPaint): void {
 
     /* Start at the cloud's EDGE, not its centre: a line emerging from inside
        the body would read as something drawn on top of the cloud rather than
-       as something leaving it. */
-    const ox = from.x + (dx / len) * from.r;
-    const oy = from.y + (dy / len) * from.r;
+       as something leaving it.
+
+       Clamped, because a memory can sit CLOSER to the cloud's centre than the
+       cloud's own radius — a dense field puts one inside the body — and an
+       unclamped offset would then land the origin past the memory and draw
+       the gradient backwards: brightest at the memory, faint at the cloud,
+       which states the opposite of what the line means. The clamp keeps the
+       origin short of the target, so a root that starts inside the body
+       still runs the right way. */
+    const reach = Math.min(from.r, len * ROOT_MAX_ORIGIN_SHARE);
+    const ox = from.x + (dx / len) * reach;
+    const oy = from.y + (dy / len) * reach;
 
     const carry = ROOT_FLOOR + (1 - ROOT_FLOOR) * clamp01(target.alivePow);
     const peak = ROOT_PEAK_ALPHA * carry * ease;

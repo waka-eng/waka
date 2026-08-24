@@ -752,6 +752,28 @@ Source: `packages/web/src/lib/aliveness.ts`.
 | `FIELD_TIER_CEILING` | 1 | Aliveness at or above this draws in the brightest band |
 | `FIELD_TIER_GAMMA` | 0.7 | Bends the banding so the dim half gets the larger share of bands |
 
+### The roots — `packages/web/src/space/signal/roots-paint.ts`
+
+A focused pattern draws a line down to each memory it stands on. The line
+says WHICH WAY; the orb at the end of it says how much, so the light falls
+away as it travels rather than arriving at full strength and drawing a second
+ring around something the field has already answered for.
+
+| Constant | Value | What it does |
+| --- | --- | --- |
+| `ROOT_PEAK_ALPHA` | 0.55 | Alpha at the cloud, before carry and the reading's ease |
+| `ROOT_HOLD` | 0.12 | How far down the line holds near its peak before falling |
+| `ROOT_ARRIVAL` | 0.5 | Share of the peak still alight where the line meets the memory |
+| `ROOT_FLOOR` | 0.35 | Alpha floor: a root that carries little dims, and never goes out |
+| `ROOT_MAX_ORIGIN_SHARE` | 0.7 | Cap on how far the cloud's radius may push the line's origin |
+
+`ROOT_ARRIVAL` was 0.12 first, which put the faintest part of the gradient
+exactly where the eye looks — at the memory — and the lines read as though
+they had not been drawn at all. `ROOT_MAX_ORIGIN_SHARE` exists because a
+dense field can put a memory closer to the cloud's centre than the cloud's
+own radius: unclamped, the edge offset lands past the memory and the gradient
+runs backwards, stating the reverse of what a root means.
+
 **Why the light is banded through a curve.** An orb is drawn from a pre-baked
 sprite, so the aliveness continuum is quantised. That mapping was linear while
 aliveness is exponential in age: with a seven-day half-life a fortnight sits at

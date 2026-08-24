@@ -83,13 +83,26 @@ const MODULES: Record<string, Record<string, unknown>> = {
  * is enough, and it fails loudly if the file moves — which is the correct
  * outcome, since the doc names its path.
  */
-const WEB_TUNING = new URL("../../../web/src/lib/aliveness.ts", import.meta.url);
+/*
+ * More than one file, because the lock covered `aliveness.ts` alone while the
+ * roots painter beside it exported five tuning constants of exactly the same
+ * kind — numbers a founder would tune by eye and a document would then quietly
+ * stop describing. A list that a new painter must be added to is a weaker
+ * guarantee than a glob, but it is an honest one: the test names the files it
+ * reads, and the doc names the same paths.
+ */
+const WEB_TUNING = [
+  new URL("../../../web/src/lib/aliveness.ts", import.meta.url),
+  new URL("../../../web/src/space/signal/roots-paint.ts", import.meta.url),
+];
 
 function webTuningExports(): Map<string, string> {
   const out = new Map<string, string>();
-  const src = readFileSync(fileURLToPath(WEB_TUNING), "utf8");
-  for (const m of src.matchAll(/^export const ([A-Z][A-Z0-9_]+) = ([0-9.]+);/gm)) {
-    out.set(m[1] as string, String(m[2]));
+  for (const file of WEB_TUNING) {
+    const src = readFileSync(fileURLToPath(file), "utf8");
+    for (const m of src.matchAll(/^export const ([A-Z][A-Z0-9_]+) = ([0-9.]+);/gm)) {
+      out.set(m[1] as string, String(m[2]));
+    }
   }
   return out;
 }
