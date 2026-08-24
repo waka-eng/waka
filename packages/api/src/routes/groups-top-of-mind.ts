@@ -178,9 +178,28 @@ export async function loadGroupTimeline(
  * entries are left out — the group took them down; they stay in the record
  * rather than on the wall.
  */
+/**
+ * READING THE ROOM AS IT STOOD.
+ *
+ * `loadGroupTimeline` says of itself: "entry counts, never entry bodies — an
+ * old version's words are read by OPENING it, not skimmed in a list." Nothing
+ * could open one. The chain was served, the door's marks were served, and the
+ * only artifact a caller could actually read was the live one, so a room's
+ * history was a list of dates with nothing behind them.
+ *
+ * Naming a version reads that version instead — the same shape, the same
+ * serialization, the same membership gate. Absent, it reads the live one, so
+ * every existing caller is untouched.
+ */
+export interface GroupTopOfMindQuery {
+  /** Which version to read. Absent = whatever is live now. */
+  version?: number;
+}
+
 export async function loadGroupTopOfMind(
   db: WakaDb,
   groupId: string,
+  query: GroupTopOfMindQuery = {},
 ): Promise<GroupTopOfMindView> {
   const [artifact] = await db
     .select({
@@ -191,7 +210,15 @@ export async function loadGroupTopOfMind(
       createdAt: topOfMinds.createdAt,
     })
     .from(topOfMinds)
-    .where(and(eq(topOfMinds.groupId, groupId), eq(topOfMinds.status, "live")))
+    .where(
+      /* BY VERSION, AND STILL BY ROOM. The group id stays in the predicate
+         when a version is named — a version number is only unique within a
+         room, so matching on it alone would serve another room's board to
+         anyone who could guess an integer. */
+      query.version === undefined
+        ? and(eq(topOfMinds.groupId, groupId), eq(topOfMinds.status, "live"))
+        : and(eq(topOfMinds.groupId, groupId), eq(topOfMinds.version, query.version)),
+    )
     .limit(1);
   if (!artifact) return { topOfMind: null, entries: [] };
 

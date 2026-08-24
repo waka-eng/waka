@@ -494,7 +494,22 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
     });
     if (!membership) return c.json({ error: "Group not found" }, 404);
 
-    const view = await loadTopOfMind(getDatabase(), groupId);
+    /* WHICH VERSION — absent means the live one, which is every existing
+       caller. A version that is not this room's reads as an empty board
+       rather than as another room's, because the loader keeps the group id
+       in the predicate; a version that is not a number at all is a bad
+       request, not a silent fall back to now. */
+    const versionParam = c.req.query("version");
+    let version: number | undefined;
+    if (versionParam !== undefined) {
+      const parsed = Number(versionParam);
+      if (!Number.isInteger(parsed) || parsed < 1) {
+        return c.json({ error: "Invalid version" }, 400);
+      }
+      version = parsed;
+    }
+
+    const view = await loadTopOfMind(getDatabase(), groupId, { version });
     // Serialized field by field for the same reason as the wall: this is a
     // read across an account boundary, and it must publish exactly the fields
     // it means to, not whatever a loader's select list grows into.

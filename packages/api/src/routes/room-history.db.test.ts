@@ -39,7 +39,7 @@ import {
   leaveGroup,
   removeGroupMember,
 } from "./groups-membership.js";
-import { loadGroupTimeline } from "./groups-top-of-mind.js";
+import { loadGroupTimeline, loadGroupTopOfMind } from "./groups-top-of-mind.js";
 
 let t: TestDatabase;
 let seq = 0;
@@ -246,6 +246,98 @@ describe("the gate: refresh, acceptance, removal, re-join — everything prior s
       timeline.doorMarks.map((m) => m.kind),
       "the door's story, oldest first",
     ).toEqual(["joined", "joined", "removed", "joined"]);
+  });
+
+  it("opens an old version — the room as it stood, not a date with nothing behind it", async () => {
+    /* `loadGroupTimeline` says of itself: "entry counts, never entry bodies —
+       an old version's words are read by OPENING it." Nothing could open one.
+       The chain was served, the door's marks were served, and the only board a
+       caller could read was the live one, so the room's history was a list of
+       dates with nothing behind them and the dial had nothing to wind. */
+    const g = await seedGroup();
+    const [signal] = await t.sql`
+      INSERT INTO signals (profile_id, statement)
+      VALUES (${g.a}, 'keeps choosing depth over breadth') RETURNING id`;
+
+    const [v1] = await t.sql`
+      INSERT INTO top_of_minds (group_id, version, status, reason)
+      VALUES (${g.groupId}, 1, 'superseded', 'initial') RETURNING id`;
+    const [v2] = await t.sql`
+      INSERT INTO top_of_minds (group_id, version, status, reason)
+      VALUES (${g.groupId}, 2, 'live', 'member_proposal') RETURNING id`;
+    await t.sql`
+      UPDATE top_of_minds SET replaced_by_id = ${v2.id}, replaced_at = now() WHERE id = ${v1.id}`;
+    for (const [versionId, body] of [
+      [v1.id, "what the room read in March"],
+      [v2.id, "what the room reads now"],
+    ] as const) {
+      const [entry] = await t.sql`
+        INSERT INTO top_of_mind_entries (top_of_mind_id, type, body, sort_order)
+        VALUES (${versionId}, 'pattern', ${body}, 0) RETURNING id`;
+      await t.sql`
+        INSERT INTO top_of_mind_entry_signals (entry_id, signal_id, owner_profile_id)
+        VALUES (${entry.id}, ${signal.id}, ${g.a})`;
+    }
+
+    const live = await loadGroupTopOfMind(t.db as never, g.groupId);
+    expect(live.topOfMind?.version, "no version named reads the live one").toBe(2);
+    expect(live.entries.map((e) => e.body)).toEqual(["what the room reads now"]);
+
+    const then = await loadGroupTopOfMind(t.db as never, g.groupId, { version: 1 });
+    expect(then.topOfMind?.version).toBe(1);
+    expect(then.topOfMind?.status, "and it is honest about being superseded").toBe(
+      "superseded",
+    );
+    expect(
+      then.entries.map((e) => e.body),
+      "the words the room actually had up, not today's",
+    ).toEqual(["what the room read in March"]);
+    expect(
+      then.entries[0]?.contributors.map((c) => c.profileId),
+      "and who fed it, as it stood",
+    ).toEqual([g.a]);
+  });
+
+  it("will not serve another room's version to someone who guesses an integer", async () => {
+    /* A version number is only unique WITHIN a room. Matching on it alone
+       would hand any member of any room the board of a room they have never
+       been in, for the price of guessing a small integer — so the group id
+       stays in the predicate beside it. */
+    const mine = await seedGroup();
+    const theirs = await seedGroup();
+    const [ours] = await t.sql`
+      INSERT INTO top_of_minds (group_id, version, status, reason)
+      VALUES (${mine.groupId}, 1, 'live', 'initial') RETURNING id`;
+    await t.sql`
+      INSERT INTO top_of_mind_entries (top_of_mind_id, type, body, sort_order)
+      VALUES (${ours.id}, 'pattern', 'ours', 0)`;
+    const [alsoOne] = await t.sql`
+      INSERT INTO top_of_minds (group_id, version, status, reason)
+      VALUES (${theirs.groupId}, 1, 'live', 'initial') RETURNING id`;
+    await t.sql`
+      INSERT INTO top_of_mind_entries (top_of_mind_id, type, body, sort_order)
+      VALUES (${alsoOne.id}, 'pattern', 'theirs', 0)`;
+
+    const read = await loadGroupTopOfMind(t.db as never, mine.groupId, { version: 1 });
+    expect(read.entries.map((e) => e.body)).toEqual(["ours"]);
+  });
+
+  it("reads a version the room never had as an empty board, not as the live one", async () => {
+    /* The dial can be wound to a moment before this room synthesized
+       anything. The honest answer is a blank wall — falling back to the live
+       board would print today's sentence over a month that never had one,
+       which is the one thing a history must never do. */
+    const g = await seedGroup();
+    const [live] = await t.sql`
+      INSERT INTO top_of_minds (group_id, version, status, reason)
+      VALUES (${g.groupId}, 1, 'live', 'initial') RETURNING id`;
+    await t.sql`
+      INSERT INTO top_of_mind_entries (top_of_mind_id, type, body, sort_order)
+      VALUES (${live.id}, 'pattern', 'what the room reads now', 0)`;
+
+    const missing = await loadGroupTopOfMind(t.db as never, g.groupId, { version: 9 });
+    expect(missing.topOfMind).toBeNull();
+    expect(missing.entries).toEqual([]);
   });
 
   it("records a voluntary departure as left, not as removal", async () => {
