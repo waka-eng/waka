@@ -903,7 +903,12 @@ const JOURNEYS: Journey[] = [
       const notes: string[] = [];
       /* the controls this journey actually exists for — if none of them are
          on any page, the walk proved nothing and has to say so */
-      let marks = 0;
+      const FAMILIES = ["postit", "principle", "reread"] as const;
+      const marks: Record<(typeof FAMILIES)[number], number> = {
+        postit: 0,
+        principle: 0,
+        reread: 0,
+      };
 
       for (const path of ROUTES) {
         await goSurface(page, base, path);
@@ -998,7 +1003,17 @@ const JOURNEYS: Journey[] = [
               });
             return {
               count: boxes.length,
-              marks: document.querySelectorAll(".sf-act, .pr-action, .sf-reread").length,
+              /* PER FAMILY, NOT ONE TOTAL. Declaring a principle needs a
+                 model call, so on a stack with no key the principle verbs —
+                 the 11x20 arrows, the worst case this journey exists for —
+                 simply are not on the page, while the post-it marks are. One
+                 combined count would stay comfortably above zero and the
+                 narrower coverage would never be said out loud. */
+              marks: {
+                postit: document.querySelectorAll(".sf-act").length,
+                principle: document.querySelectorAll(".pr-action").length,
+                reread: document.querySelectorAll(".sf-reread").length,
+              },
               tooSmall,
               crowded,
               sentences,
@@ -1025,20 +1040,26 @@ const JOURNEYS: Journey[] = [
           problems.push(`${path}: unreadable — ${faint.slice(0, 3).join("; ")}`);
         }
         notes.push(`${path}:${found.count}`);
-        marks += found.marks;
+        for (const family of FAMILIES) marks[family] += found.marks[family];
       }
 
       /* A CLEAN WALK OVER NOTHING IS NOT A CLEAN WALK. */
-      if (marks === 0) {
+      const total = FAMILIES.reduce((n, family) => n + marks[family], 0);
+      if (total === 0) {
         problems.push(
           "no post-it mark, principle verb or re-read on any screen — this walk measured only chrome",
         );
       }
+      /* …and a walk that covered SOME of them says which it missed, rather
+         than reporting a round number that reads like full coverage. */
+      const missing = FAMILIES.filter((family) => marks[family] === 0);
+      const seen = FAMILIES.map((family) => `${family}:${marks[family]}`).join(" ");
+      const gap = missing.length > 0 ? ` — NOT CHECKED: ${missing.join(", ")}` : "";
       return {
         ok: problems.length === 0,
         detail:
           problems.length === 0
-            ? `every control >= ${MIN_SIZE}px, no sub-${MIN_APART}px pair crowded, every sentence readable — ${marks} marks over ${notes.join(" ")}`
+            ? `every control >= ${MIN_SIZE}px, no sub-${MIN_APART}px pair crowded, every sentence readable — ${seen}${gap} over ${notes.join(" ")}`
             : problems.slice(0, 4).join(" | "),
       };
     },

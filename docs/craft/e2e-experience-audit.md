@@ -45,23 +45,40 @@ Each finding carries how it was established:
 
 | # | Severity | Finding |
 |---|---|---|
-| 1 | **Blocking** | The world is a blank black screen whenever either font CDN is unreachable |
-| 2 | **Blocking** | `pnpm demo:seed` — the documented way in — fails against current migrations |
-| 3 | **Major** | A declared principle is silently filed as a note when the model call fails |
+| 1 | **Blocking** | The world is a blank black screen whenever either font CDN is unreachable — **fixed 2026-08-22**; `SurfaceBoundary` + a narrow preload recovery, gated by `e2e:first-paint` |
+| 2 | **Blocking** | `pnpm demo:seed` — the documented way in — fails against current migrations — **fixed 2026-08-22** |
+| 3 | **Major** | A declared principle is silently filed as a note when the model call fails — **fixed 2026-08-22**; `503 retryable`, and nothing written. There were *two* silent conversions, and a test had encoded one as intent |
 | 4 | **Major** | The product is two themes: near-black world, near-white surfaces — **resolved 2026-08-24**; the crossing that caused it is gone, and removing it had stranded all six flat screens with no way back |
 | 5 | **Major** | Sign-in's primary action is the weakest thing on the screen; no password recovery exists — **rank fixed 2026-08-24** (648px² → 26,304px², and asked first); recovery deferred by decision, no mail provider |
-| 6 | **Moderate** | The "other screens" menu opens on top of the sentence it obscures |
-| 7 | **Moderate** | Keeping something — the core act — confirms almost invisibly |
+| 6 | **Moderate** | The "other screens" menu opens on top of the sentence it obscures — **fixed 2026-08-23**; the control is gone and its contents live in the world |
+| 7 | **Moderate** | Keeping something — the core act — confirms almost invisibly — **fixed in the world 2026-08-23**; the orb now arrives, which is the confirmation the design always intended |
 | 8 | **Moderate** | 21–22 touch targets per surface under 44px, destructive ones at 20px — **fixed 2026-08-24**; `/top-of-mind` went 11-of-20 under 44px to 0-of-20 |
-| 9 | **Moderate** | The world is one unlabelled canvas to assistive technology |
+| 9 | **Moderate** | The world is one unlabelled canvas to assistive technology — **out of scope by founder decision** |
 | 10 | **Minor** | Three product nouns on the sign-in screen — **fixed 2026-08-24** |
-| 11 | **Minor** | `/signals` prints a raw confidence percentage with nothing to read it against |
-| 12 | **Minor** | The demo fixture describes a signal state the product forbids creating |
-| 13 | **Minor** | The consent page has no decline control |
+| 11 | **Minor** | `/signals` prints a raw confidence percentage with nothing to read it against — **fixed 2026-08-24**; `42%` → `steady` |
+| 12 | **Minor** | The demo fixture describes a signal state the product forbids creating — **fixed 2026-08-24**; a third evidence row, not a demotion |
+| 13 | **Minor** | The consent page has no decline control — **out of scope**; real but small, and it resolves through the client's timeout |
 | 14 | **Major** | Nobody knows the world can be moved through — user feedback; **fixed 2026-08-24**, three separate invisible failures |
 | 15 | **Major** | The first memory a person ever keeps does not appear until reload — **fixed 2026-08-23**; a clock-skew bug that silently dropped the newest orb on *every* keep |
 | 16 | **Blocking (mobile)** | `/signals` renders as a column of single letters on a phone — found and **fixed 2026-08-24** |
 | 17 | **Blocking** | Near-white on near-white at 1.15:1 — every signal sentence, and every surface's page title, by two different roads — found and **fixed 2026-08-24** |
+
+**Where this stands: 15 of 17 addressed, 2 out of scope by decision, 1 part
+deferred.** Everything above is fixed except finding 9 and finding 13, which
+are out of scope by decision, and the password-recovery half of finding 5,
+which waits on a mail provider and is the only item here that can lock a real
+person out of their own memory.
+
+**The pattern across all seventeen.** Not one of these threw an exception,
+failed an assertion, or turned a suite red. A blank world, a keep that never
+appeared, a hover that could never fire, six screens you could reach and not
+leave, a page of near-white text on near-white paper — every one of them
+shipped past a fully green build. Two of them (16 and 17) were found only
+because someone was measuring something else at the time. The gates added
+along the way exist to make that class of failure loud: `e2e:first-paint` and
+`e2e:journeys` now run in CI, and each journey is put through its own sabotage
+and must fail, because a check that cannot fail is indistinguishable from one
+that is passing.
 
 Working well, and worth not breaking: Korean coverage is genuinely complete;
 capture round-trips correctly; no surface overflows horizontally on a phone;
@@ -460,6 +477,39 @@ The flat screens are explicitly not the world. It is that this particular
 numeral has no legend anywhere near it, while "3 behind it" and "still
 forming" — beside it, in the same row — are both legible without one.
 
+
+### Fixed 2026-08-24
+
+`42%` was a quantity with no unit and no scale in sight — 42% of what, out of
+what, good or bad — sitting between two things on the same line that were
+already states in words. The law is that states render and numerals never, and
+`docs/data-model.md` says what this number is: **confidence is the light.** In
+the world that is literal. A flat surface has no light channel, so it says it
+in a word.
+
+| | |
+|---|---|
+| before | `3 behind it · 42% · still forming` |
+| after | `3 behind it · steady · still forming` |
+
+Three bands, cut where the formula has structure rather than at thirds
+(`lib/confidence.ts` carries the arithmetic): **40** is just above where a
+pattern lands the day it is born — three captures, no span, is about 42, which
+is exactly the number that was on screen — and **70** is past what support
+alone can buy, so nothing reaches `strong` without having recurred across time.
+The words order themselves in plain English, which is the whole of what `42%`
+failed to do.
+
+Deliberately not merged with `status`: `emerging`/`active` is a threshold on a
+count, this is how hard the pattern holds now, and `steady · still forming` is
+two facts rather than a contradiction.
+
+Two things came out of doing it. The rest of that line was hardcoded English
+while the surface around it was localized, so one translated word would have
+made it a mix — all of it speaks the reader's language now. And the count
+needed `formatMessage` rather than `{n} {suffix}`: the suffix form renders
+`3 개가 뒷받침` in Korean, where the counter has to attach and the word order
+differs. It reads `근거 3개` now, verified in a browser in both languages.
 ---
 
 ## 12. The demo fixture describes a state the product forbids creating
@@ -478,6 +528,25 @@ signal either. Seeding it directly would invent a history that never happened.
 
 The seeder now warns by name and seeds it `emerging` rather than lying. The
 data decision is open: give it a third evidence row, or declare it emerging.
+
+### Decided 2026-08-24 — a third evidence row
+
+Demoting it was the cheaper option and the wrong one: a top-of-mind card cites
+this signal, so `emerging` left the demo standing on a claim its own rules say
+is not a pattern yet.
+
+Force-fitting one of the existing eight was equally wrong — the nearest,
+Trello's card aging, is about neglect announcing itself, not about shareable
+personal data, and reaching a count with filler is the same lie in a different
+place.
+
+So the pattern gets the case its own sentence was missing. It names a tension —
+*"drawn to personal data made shareable, and suspicious of it the moment the
+person cannot turn it down"* — and had only the two halves that are done **to**
+you: Wrapped (delight) and the streak freeze (pressure). The third is Strava's
+privacy zones, where the volume knob exists. Reseeded: **11 inspirations, 4
+signals over 11 evidence links, and no warning.** The signal now reads
+`3 behind it · steady` rather than `· still forming`.
 
 ---
 

@@ -124,3 +124,146 @@ jobs:
 
       - name: Web tests
         run: pnpm --filter @waka/web test
+
+  # ---------------------------------------------------------------------------
+  # THE TWO GATES THAT OPEN A BROWSER, AND WHY THEY ARE A SEPARATE JOB
+  # ---------------------------------------------------------------------------
+  #
+  # `e2e:first-paint` and `e2e:journeys` both existed and both failed correctly
+  # on the commit before the fixes they gate — and neither ran automatically,
+  # so every regression they are shaped against could still ship. That is the
+  # whole gap this job closes.
+  #
+  # They are the only checks in this repo that answer "can a person do this",
+  # as opposed to "does this function return the right value". The defects they
+  # were written for — a world that renders as a blank black screen, a keep
+  # that never appears, six screens you can reach and not leave, a sign-in
+  # whose submit is a footnote, a page of near-white text on near-white paper —
+  # every one of them threw nothing, failed no assertion, and left every count
+  # in the `check` job green.
+  #
+  # SEPARATE FROM `check` ON PURPOSE. This one needs a built web bundle and a
+  # running server, which `check` needs for nothing else; a browser download;
+  # and about three minutes. Keeping them apart means a typecheck failure still
+  # reports in seconds, and this job's own failure names itself rather than
+  # hiding inside a long unit-test log.
+  browser:
+    name: Browser gates (first paint, journeys)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: waka_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DB_CONNECTION_URL: postgres://postgres:postgres@localhost:5432/waka_e2e
+      AUTH_SECRET: ci-test-secret-not-a-real-key-000000
+      JWT_SECRET: ci-test-secret-not-a-real-key-000000
+      # The stack these gates drive is the same one `pnpm dev:local` boots: one
+      # origin serving both the API and the built bundle, which is what makes
+      # cookies and same-origin fetches behave the way they do in a browser.
+      WAKA_LOCAL_PORT: "3010"
+      # A one-off build. The watcher exists so a developer's edits reach the
+      # page without a manual rebuild; in CI nothing edits anything, and a
+      # rebuild loop would keep the job alive after the tests finish.
+      WAKA_NO_WATCH: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Apply migrations
+        run: |
+          psql "$DB_CONNECTION_URL" -c 'CREATE EXTENSION IF NOT EXISTS vector;'
+          pnpm db:migrate
+
+      # `dev:local` builds the web bundle and then serves it alongside the API
+      # from one process. Backgrounded, with its output kept, because when this
+      # job fails the server's log is usually the thing that says why.
+      - name: Boot the local stack
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          pnpm dev:local > /tmp/waka-stack.log 2>&1 &
+          echo $! > /tmp/waka-stack.pid
+
+      # A fixed sleep would be either flaky or wasteful, and the build in front
+      # of the server takes most of the time. Poll, with a ceiling, and print
+      # the log on the way out so a boot failure is legible rather than a bare
+      # timeout.
+      - name: Wait for the stack
+        run: |
+          for i in $(seq 1 120); do
+            if curl -fsS "http://127.0.0.1:3010/api/health" > /dev/null 2>&1; then
+              echo "stack healthy after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::the local stack never became healthy"
+          cat /tmp/waka-stack.log
+          exit 1
+
+      # No sign-in, no database rows: this one asks whether the world draws at
+      # all when every third-party host is unreachable. It is first because if
+      # it fails, nothing after it means anything.
+      - name: First paint
+        run: pnpm e2e:first-paint
+
+      # WHY THIS IS BLOCKING RATHER THAN NON-BLOCKING. Every journey drives
+      # paths that need only Postgres — sign-up, capture, search (which is
+      # `to_tsvector` and `ilike`, not embeddings), reflect, delete, rename,
+      # navigation, geometry, contrast. `GEMINI_API_KEY` is passed through
+      # because declaring a principle routes through the model, but its absence
+      # narrows one journey's coverage rather than failing it — and `the-hand`
+      # prints `NOT CHECKED: principle` when that happens, so a thinner run
+      # says so in its own result line instead of passing quietly.
+      - name: Journeys
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: pnpm e2e:journeys
+
+      # The negative run is what keeps the journeys honest: each one is put
+      # through its own sabotage and MUST fail. A journey that survives is
+      # reported as decoration, and it has caught two of these already.
+      - name: Journeys, sabotaged (each must fail)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: pnpm e2e:journeys --negative
+
+      - name: Stack log
+        if: always()
+        run: tail -n 200 /tmp/waka-stack.log || true
+
+      - name: Stop the stack
+        if: always()
+        run: kill "$(cat /tmp/waka-stack.pid)" 2>/dev/null || true

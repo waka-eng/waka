@@ -110,6 +110,35 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     ],
   },
   {
+    /* THE THIRD CASE FOR `personal-data-needs-a-volume-knob`, AND THE REASON
+       IT EXISTS. That signal was seeded `active` on TWO evidence rows against
+       a promotion bar of three — a state the product can arrive at (a locked
+       signal whose footnotes were deleted) but can never be ENTERED, so
+       seeding it directly invented a history that never happened. The seeder
+       caught it, warned by name, and seeded it `emerging` instead; a
+       top-of-mind card cites it, so the demo then stood on a claim its own
+       rules said was not a pattern yet.
+
+       None of the other eight inspirations was an honest third — the nearest,
+       Trello's card aging, is about neglect announcing itself, not about
+       shareable personal data — and force-fitting one to reach a count is the
+       same lie in a different place. So the pattern gets the case its own
+       sentence is missing. Wrapped is the delight half, the streak freeze is
+       the pressure half, and both are things done TO you. This is the one
+       where the volume knob exists. */
+    slug: "strava-privacy-zones",
+    kind: "note",
+    source: "app",
+    text: "Strava's privacy zones blur the start and end of a route, so the map is still worth sharing and your front door is not part of it.",
+    reflections: [
+      {
+        question: "What is this actually protecting?",
+        answer:
+          "Not the data — the choice. The run is still public; where I live is the part I get to keep.",
+      },
+    ],
+  },
+  {
     slug: "museum-audio-detours",
     kind: "note",
     source: "app",
@@ -175,6 +204,11 @@ export const DEMO_SIGNALS: DemoSignalSeed[] = [
       {
         inspirationSlug: "duolingo-streak-freeze",
         reason: "The pressure case: the same mechanism, with a cost attached.",
+      },
+      {
+        inspirationSlug: "strava-privacy-zones",
+        reason: "The control case: the same exposure, with the volume knob attached.",
+        quote: "your front door is not part of it",
       },
     ],
   },

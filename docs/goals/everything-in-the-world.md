@@ -47,8 +47,8 @@ Measured, not remembered — every row re-checked against the tree at v1:
 | 17 | **Every signal sentence was near-white on near-white, 1.15:1** — found by this phase | **fixed 2026-08-24** |
 | 9 | The world is one unlabelled canvas | **out of scope, by decision** |
 | 10 | Three product nouns on the sign-in screen | **closed 2026-08-24** — eyebrow is `WAKA`, no canon layer name at the door, in either language |
-| 11 | `/signals` prints a raw `43%` with no legend | open |
-| 12 | The demo fixture declares an impossible signal state | open — a data call |
+| 11 | `/signals` prints a raw `43%` with no legend | **closed 2026-08-24** — `42%` → `steady`, three bands cut where the formula has structure |
+| 12 | The demo fixture declares an impossible signal state | **closed 2026-08-24** — a third evidence row, not a demotion; the seeder no longer warns |
 | 13 | The consent page has no decline control | out of scope — too small for a phase |
 
 ## Shape of the work
@@ -978,3 +978,94 @@ assumed: replayed against the old fall-through it reports 1.15:1 against a
 4.5:1 threshold.
 
 Regression: web 130/130.
+
+### 2026-08-24 — Phase 6, the gates
+
+#### `42%` (finding 11)
+
+A quantity with no unit and no scale in sight, between two things on the same
+line that were already states in words. The law is that states render and
+numerals never, and `docs/data-model.md` says what the number is: **confidence
+is the light.** In the world that is literal; a flat surface with no light
+channel says it in a word.
+
+    before   3 behind it · 42% · still forming
+    after    3 behind it · steady · still forming
+
+Three bands, cut where the formula has structure rather than at thirds.
+**40** is just above where a pattern lands the day it is born — three captures,
+no span, full recency is about 42, which is exactly the number that was on
+screen when this was written. **70** is past what support alone can buy, so
+nothing reaches `strong` without recurring across time. `lib/confidence.ts`
+carries the arithmetic and the reasoning. The words order themselves in plain
+English, which is the whole of what `42%` failed to do.
+
+Not merged with `status`: `emerging`/`active` is a threshold on a COUNT, this
+is how hard the pattern holds now, and `steady · still forming` is two facts
+rather than a contradiction.
+
+Two things fell out of doing it. The rest of that line was hardcoded English
+while the surface around it was localized, so introducing one translated word
+would have made it a mix — all of it speaks the reader's language now. And the
+count needed `formatMessage` rather than `{n} {suffix}`: the suffix form
+renders `3 개가 뒷받침`, where the counter has to attach and the word order
+differs. It reads `근거 3개` now, checked in a browser in both languages rather
+than read off the source.
+
+(One dead end worth recording: the first Korean attempt used an ICU plural with
+the count nested inside a branch, `{count, plural, other {{count} behind it}}`.
+`formatMessage`'s plural regex cannot match a nested placeholder, so the raw
+ICU string rendered on screen. Every existing plural in the message files keeps
+the placeholder OUTSIDE the branch — that is the convention, and mine was the
+odd one out.)
+
+#### The fixture (finding 12)
+
+Demoting it was cheaper and wrong: a top-of-mind card cites this signal, so
+`emerging` left the demo standing on a claim its own rules say is not a pattern
+yet. Force-fitting one of the existing eight was equally wrong — the nearest is
+about neglect announcing itself, not shareable personal data, and reaching a
+count with filler is the same lie somewhere else.
+
+So the pattern got the case its own sentence was missing. It names a tension —
+"drawn to personal data made shareable, and suspicious of it the moment the
+person cannot turn it down" — and had only the two halves done TO you: Wrapped
+(delight) and the streak freeze (pressure). The third is Strava's privacy
+zones, where the volume knob exists.
+
+Reseeded: **11 inspirations, 4 signals over 11 evidence links, no warning.**
+The signal reads `3 behind it · steady` now, with the `· still forming` gone
+because it was actually earned.
+
+#### The suites nobody could name
+
+`cold-start`, `signals`, `top-of-mind`, `principles` and `groups` ran only as
+raw `tsx` invocations. A gate nobody can name is a gate nobody runs. All five
+have `e2e:` scripts now, and each was launched to prove the script resolves.
+
+#### The browser gates in CI
+
+`e2e:first-paint` and `e2e:journeys` both existed, both failed correctly on the
+commit before the fixes they gate, and neither ran automatically — so every
+regression they are shaped against could still ship.
+
+They are a separate `browser` job rather than more steps in `check`, because
+they need a built bundle, a running server and a browser download that nothing
+else in `check` needs; keeping them apart means a typecheck failure still
+reports in seconds. The stack is the same one `pnpm dev:local` boots — one
+origin for the API and the bundle, which is what makes cookies and same-origin
+fetches behave the way a browser does.
+
+**Blocking, not `continue-on-error`.** Every journey drives paths that need
+only Postgres: sign-up, capture, search (which is `to_tsvector` and `ilike`,
+checked — not embeddings), reflect, delete, rename, navigation, geometry,
+contrast. `GEMINI_API_KEY` is passed through because declaring a principle
+routes through the model, but its absence narrows one journey rather than
+failing it — and `the-hand` now counts marks PER FAMILY and prints
+`NOT CHECKED: principle` when the arrows are not on the page, so a thinner run
+says so in its own result line instead of reporting a round number that reads
+like full coverage.
+
+The `--negative` run is a step of its own: each journey is put through its own
+sabotage and must fail. It has caught two journeys as decoration already, and
+a gate that cannot fail is the thing this whole goal exists to prevent.
