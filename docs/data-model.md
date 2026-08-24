@@ -154,6 +154,19 @@ evidence.
   shared signal appears on that group's wall as its distilled statement.
   Its evidence (the underlying inspirations) stays private — members see
   the pattern, never the raw captures.
+- **Disagreement, in three words** (no-quiet-corners Phase 5). A
+  **tension** is two patterns held on purpose — both true, pulling against
+  each other; it is layer-3 material, never a defect. **Contested** is an
+  unresolved conflict: the three-way merge judge answered *opposed* in the
+  ambiguous band, the new signal minted anyway, and an undirected
+  `contradicts` pair (`signal_contradictions`) holds the dispute — both
+  sides serve as contested until arbitration. Resolution comes **only from
+  an owner act** — a lock, a verdict (`true` settles for the answered
+  side, `not_true` against it; `partly` settles nothing), or a dismissal —
+  never from evidence weight, however lopsided (founder ruling 2026-08-23,
+  decision log below). The loser becomes **yielded**: a state read off the
+  resolved pair at serve time, its row and evidence untouched. A state,
+  never a deletion.
 
 ## Top of mind (layer 3)
 

@@ -37,6 +37,7 @@ import {
   principles,
   profiles,
   reflections,
+  signalContradictions,
   signalEvidence,
   signalShares,
   signalStatements,
@@ -98,6 +99,11 @@ export async function assembleProfileExport(db: WakaDb, profileId: string) {
     .from(signalShares)
     .where(eq(signalShares.profileId, profileId))
     .orderBy(asc(signalShares.createdAt), asc(signalShares.id));
+  const contradictionRows = await db
+    .select()
+    .from(signalContradictions)
+    .where(eq(signalContradictions.profileId, profileId))
+    .orderBy(asc(signalContradictions.createdAt), asc(signalContradictions.id));
 
   const topOfMindRows = await db
     .select()
@@ -167,6 +173,7 @@ export async function assembleProfileExport(db: WakaDb, profileId: string) {
     signalEvidence: evidenceRows,
     signalStatements: signalStatementRows,
     signalShares: shareRows,
+    signalContradictions: contradictionRows,
     topOfMinds: topOfMindRows,
     topOfMindEntries: entryRows,
     topOfMindEntrySignals: entrySignalRows,

@@ -159,6 +159,17 @@ async function seedStack(profileId: string): Promise<Record<string, string[]>> {
       INSERT INTO feedback (profile_id, target_type, target_id, value)
       VALUES (${profileId}, 'signal', ${sig.id}, 'true') RETURNING id`,
   );
+  const [otherSide] = await t.sql`
+    INSERT INTO signals (profile_id, statement, status, confidence)
+    VALUES (${profileId}, ${"You avoid depth."}, 'emerging', 0) RETURNING id`;
+  ids.signals!.push(otherSide.id as string);
+  await one(
+    "signalContradictions",
+    await t.sql`
+      INSERT INTO signal_contradictions (profile_id, a_signal_id, b_signal_id)
+      VALUES (${profileId}, LEAST(${sig.id}::uuid, ${otherSide.id}::uuid),
+              GREATEST(${sig.id}::uuid, ${otherSide.id}::uuid)) RETURNING id`,
+  );
   const [decision] = await t.sql`
     INSERT INTO inspirations (profile_id, text, kind, source)
     VALUES (${profileId}, ${"chose the smaller scope"}, 'decision', 'agent') RETURNING id`;
@@ -173,16 +184,20 @@ async function seedStack(profileId: string): Promise<Record<string, string[]>> {
   return ids;
 }
 
-function appFor(person: Person): Hono {
+function appFor(person: Person): Hono<AuthEnv> {
   const app = new Hono<AuthEnv>();
+  const authAs = async (
+    c: { set: (k: "session", v: AuthenticatedSession) => void },
+    next: () => Promise<void>,
+  ) => {
+    c.set("session", person.session);
+    await next();
+  };
   app.route(
     "/api/export",
     createExportRoute({
       getDatabase: () => t.db as never,
-      authMiddleware: (async (c, next) => {
-        c.set("session", person.session);
-        await next();
-      }) as never,
+      authMiddleware: authAs as never,
     }),
   );
   return app;

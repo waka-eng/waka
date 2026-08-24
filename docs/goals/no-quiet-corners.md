@@ -244,6 +244,43 @@ Postgres. No new infrastructure, no new dependencies.
 
 ## Log
 
+- **2026-08-24 — Phase 5: PASS.** Contested pairs are held, and only the
+  owner settles them. The merge judge's contract is three-way —
+  `relation: same | independent | opposed`, schema-constrained with the
+  enum in the response schema, fenced statements, temperature zero — and
+  every failure direction lands on `independent`: a wrong same fuses
+  invisibly, a wrong opposed manufactures a dispute the person never had
+  (`gemini-judge.test.ts` re-pinned; the `samePattern` wire key is
+  retired everywhere in one commit, exactly as the vocabulary gate's own
+  allowlist entry predicted it would have to be — that entry is deleted
+  and its meta-test re-anchored). In the band, `opposed` mints AND
+  records the undirected `signal_contradictions` pair (normalized a<b,
+  one row per pair, migration `0022`); both sides serve `contested`,
+  computed from the pair rows at serve time like every other standing.
+  Resolution (`lib/contested-pairs.ts`) comes only from an owner act —
+  lock and an owner's `true` settle for the acted side, an owner's
+  `not_true` against it, dismissal against the thrown-out side; `partly`
+  settles nothing, and another member's verdict on a shared statement
+  settles nothing (standing to answer is not standing to arbitrate).
+  The loser serves `yielded` off the resolved pair — a state, never a
+  deletion, its row and evidence untouched; a resolved pair is not
+  reopened by re-derivation (the machine re-litigating would be the
+  machine arbitrating). Vocabulary written into `data-model.md`'s signal
+  section (tension / contested / yielded); the export bundle carries the
+  pair record. Gate measured: `contested-pairs.db.test.ts` 6/6 on real
+  Postgres through the real `applyCandidates`, lock, feedback and
+  dismiss paths; judge-contract suite re-pinned (three verdicts,
+  tension-is-not-opposition and uncertainty-means-independent asserted
+  against the prompt itself); LIVE three-way spot-check on
+  `gemini-3.1-flash-lite`: nine pairs, nine agreements, nine calls —
+  three opposed, two same, two independent, and both held-tension probes
+  ("loves rich food / keeps weekday meals plain", "ship fast / refuse
+  untested") correctly independent, never opposed. api 57 files / 632
+  tests, web 146, vocabulary and seams clean. Deliberately excluded: any
+  synthesis-prompt change — selection already carries contested signals,
+  and the artifact-side naming of tensions rides the existing entry
+  types. Register item 4 (agent-memory-wedge) closed.
+
 - **2026-08-24 — Phase 3: PASS.** Everything visible. `GET /api/export`
   serves the whole human profile as one deterministic bundle
   (`lib/profile-export.ts`): principles verbatim with citations and

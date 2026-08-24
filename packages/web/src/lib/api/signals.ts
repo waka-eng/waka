@@ -41,6 +41,11 @@ export interface ApiSignal {
   /** Thrown out by its owner — the row and evidence stay, and the server
       refuses new candidates near it, on the record. Reads as `retired`. */
   dismissed: boolean;
+  /** Standing in an unresolved contradicts pair — awaiting the owner's
+      arbitration, the only kind there is. */
+  contested: boolean;
+  /** Gave way when its owner settled a pair — a state, never a deletion. */
+  yielded: boolean;
   sharedGroupIds: string[];
   createdAt: string;
 }

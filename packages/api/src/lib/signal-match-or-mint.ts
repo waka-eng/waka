@@ -56,6 +56,7 @@ import {
   SIGNAL_MERGE_JUDGE_MIN_COSINE,
   SIGNAL_SUPPRESSION_MIN_COSINE,
 } from "./signal-derivation-thresholds.js";
+import { recordContradiction } from "./contested-pairs.js";
 import { writeSignalEmbedding } from "./signal-embeddings.js";
 import { refreshSignalLifecycle } from "./signal-lifecycle.js";
 import { writeSignalStatementChain } from "./statement-chains.js";
@@ -138,21 +139,26 @@ export async function applyCandidates(
 
     const nearest = findBestMatch(candidate.embedding, targets);
     let decision = classifyMatch(nearest?.similarity ?? null);
+    /** Set when the judge answers `opposed`: the mint below also records
+        the contested pair — the dispute is held, never dissolved by
+        whichever statement arrived second. */
+    let opposesSignalId: string | null = null;
 
     if (decision === "judge" && nearest) {
       // One bounded model call, held under the per-profile derivation lock.
       // Serializing a ~second of judgement is the price of the lock's whole
       // point: two concurrent captures must not each mint the same pattern.
-      // A judge failure falls through to minting — the duplicate is the
-      // recoverable mistake, and the fallthrough is the same verdict the
-      // judge itself returns when uncertain.
+      // A judge failure falls through to minting as `independent` — the
+      // duplicate is the recoverable mistake, and a phantom opposition
+      // would put a dispute on the record no one ever had.
       try {
         const judged = await input.provider.judgeSignalMatch({
           preferredLocale: input.preferredLocale,
           candidateStatement: candidate.statement,
           existingStatement: nearest.target.statement,
         });
-        decision = judged.samePattern ? "attach" : "mint";
+        decision = judged.relation === "same" ? "attach" : "mint";
+        if (judged.relation === "opposed") opposesSignalId = nearest.target.id;
       } catch {
         decision = "mint";
       }
@@ -235,6 +241,18 @@ export async function applyCandidates(
       reason: "derived",
       now: input.now,
     });
+
+    // An opposed verdict mints AND holds the dispute: both sides now serve
+    // as contested until the owner arbitrates — never the machine
+    // (goals/no-quiet-corners.md Phase 5, founder-ruled).
+    if (opposesSignalId) {
+      await recordContradiction(tx, {
+        profileId: input.profileId,
+        signalId: minted.id,
+        opposesSignalId,
+        now: input.now,
+      });
+    }
 
     await attachEvidence(tx, {
       profileId: input.profileId,

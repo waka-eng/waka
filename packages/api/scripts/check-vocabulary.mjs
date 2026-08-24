@@ -401,32 +401,13 @@ const ALLOWED = [
       "pattern. Renaming it would make the function lie about what the " +
       "language it is speaking calls the thing it returns",
   },
-  {
-    name: "samePattern",
-    files: [
-      "src/queue/gemini.ts",
-      "src/queue/gemini-judge.test.ts",
-      "src/lib/model-provider.ts",
-      "src/lib/model-provider.test.ts",
-      "src/lib/signal-match-or-mint.ts",
-      "scripts/verify-merge-judge.ts",
-    ],
-    disposition: "rename",
-    to: "sameSignal",
-    why:
-      "the judge that decides whether a new inspiration is evidence for an " +
-      "existing signal. The layer it names IS the signal, so `pattern` is the " +
-      "world's word in the one package that must not use it. Harder than the " +
-      "others because the name is also the JSON key in the Gemini " +
-      "responseSchema and in the prompt: the schema, the parser, the callers " +
-      "and the fixtures have to move in one commit or the model's answer stops " +
-      "parsing at runtime, where no test would see it. The last two paths were " +
-      "added when the gate learned to check allowances per file: the code moved " +
-      "out of `src/lib/signal-derivation.ts` into `signal-match-or-mint.ts` and " +
-      "the old path sat here unnoticed, and `scripts/` was not being scanned at " +
-      "all, so the sixth site was invisible. Both are the reason this entry is " +
-      "the one the per-file staleness check was aimed at",
-  },
+  /* `samePattern` — the entry that used to stand here — was retired
+     2026-08-24 by the three-way judge (no-quiet-corners Phase 5): the JSON
+     key, the schema, the parser, the callers and the fixtures all moved to
+     `relation` in one commit, exactly the way this entry's own note said
+     they would have to. The one survivor is a deliberately-malformed probe
+     in `gemini-judge.test.ts`, as a quoted string key — a string, not an
+     identifier, per this gate's own doctrine. */
   {
     name: "sourceForCapture",
     files: [

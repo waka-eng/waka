@@ -236,9 +236,20 @@ labeled which; move the 500-char clip after verification
 invented one becomes impossible. "No invented quotes, ever" — against
 platforms whose synthesis shows no sources at all.
 
-**4. Contested pairs at L2** (M). The match-or-mint judge already fires
+**4. Contested pairs at L2** (M). **Shipped 2026-08-24**
+(`goals/no-quiet-corners.md` Phase 5): the judge contract is three-way
+(`relation: same | independent | opposed`, schema-constrained, every
+malformed answer landing on independent), an opposed verdict mints plus
+an undirected `signal_contradictions` row, both sides serve `contested`
+computed from the pair at serve time, owner acts resolve (lock, verdict,
+dismissal — `partly` settles nothing, another member's verdict on a
+shared statement settles nothing), the loser serves `yielded` with its
+row intact, and the vocabulary is in `data-model.md`. Live three-way
+spot-check on the real model: nine pairs, nine agreements — including
+both held-tension probes refusing to read tension as opposition.
+Original brief: the match-or-mint judge already fires
 in the 0.7–0.86 band where negated statements disproportionately land —
-extend its contract from the binary `samePattern` to
+extend its contract from the binary answer to
 `same | independent | opposed` (the vocabulary L4 principle judging
 already uses; this is real work on the judge contract, not an enum
 one-liner) and mint an undirected `contradicts` relation alongside the

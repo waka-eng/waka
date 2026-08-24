@@ -394,6 +394,7 @@ export async function createTestDatabase(): Promise<TestDatabase> {
    * a future test mutates `search_path` mid-run.
    */
   const truncatableTables = [
+    "signal_contradictions",
     "signal_statements",
     "principle_statements",
     "suppressions",

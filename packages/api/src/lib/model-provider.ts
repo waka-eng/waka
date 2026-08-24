@@ -184,9 +184,17 @@ export interface SignalMatchJudgementInput {
   existingStatement: string;
 }
 
+/**
+ * Three-way since no-quiet-corners Phase 5 — the vocabulary principle
+ * judging already used, brought down to layer 2: `same` attaches, and
+ * `opposed` mints WITH an undirected `contradicts` relation so the dispute
+ * is held on the record instead of dissolved by whichever statement came
+ * second. `independent` is the conservative middle and every failure mode
+ * lands there: a duplicate is visible and mergeable, a phantom opposition
+ * manufactures a dispute the person never had.
+ */
 export interface SignalMatchJudgement {
-  /** True when both statements name the same durable pattern. */
-  samePattern: boolean;
+  relation: "same" | "independent" | "opposed";
 }
 
 // ---------------------------------------------------------------------------

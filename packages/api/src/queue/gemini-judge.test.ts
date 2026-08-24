@@ -1,8 +1,10 @@
 /**
- * The merge judge's request and its reading of the answer. The judge decides
- * whether two statements are one pattern, and both of its failure directions
- * are asymmetric: a wrong "same" fuses patterns invisibly, so everything
- * uncertain or malformed must land on "different".
+ * The merge judge's request and its reading of the answer — three-way since
+ * no-quiet-corners Phase 5. The judge names the relation between two
+ * statements (same | independent | opposed), and its failure directions are
+ * still asymmetric: a wrong `same` fuses patterns invisibly, and a wrong
+ * `opposed` manufactures a dispute the person never had — so everything
+ * uncertain or malformed must land on `independent`.
  */
 
 import { describe, expect, it } from "vitest";
@@ -20,13 +22,16 @@ const INPUT = {
 };
 
 describe("buildSignalMatchJudgementRequest", () => {
-  it("asks a comparison at temperature zero with a boolean schema", () => {
+  it("asks a comparison at temperature zero with the three-way enum schema", () => {
     const request = buildSignalMatchJudgementRequest(INPUT);
 
     expect(request.generationConfig.temperature).toBe(0);
     expect(request.generationConfig.responseSchema).toMatchObject({
       type: "OBJECT",
-      required: ["samePattern"],
+      required: ["relation"],
+      properties: {
+        relation: { type: "STRING", enum: ["same", "independent", "opposed"] },
+      },
     });
   });
 
@@ -41,25 +46,35 @@ describe("buildSignalMatchJudgementRequest", () => {
     expect(prompt.match(/<<<end>>>/g)).toHaveLength(2);
   });
 
-  it("tells the judge that uncertainty means different", () => {
-    expect(SIGNAL_MATCH_JUDGE_SYSTEM_INSTRUCTION).toMatch(/uncertain, answer false/i);
+  it("tells the judge all three verdicts, that tension is not opposition, and that uncertainty means independent", () => {
+    expect(SIGNAL_MATCH_JUDGE_SYSTEM_INSTRUCTION).toMatch(/^same — /m);
+    expect(SIGNAL_MATCH_JUDGE_SYSTEM_INSTRUCTION).toMatch(/^opposed — /m);
+    expect(SIGNAL_MATCH_JUDGE_SYSTEM_INSTRUCTION).toMatch(/^independent — /m);
+    expect(SIGNAL_MATCH_JUDGE_SYSTEM_INSTRUCTION).toMatch(/tension is NOT opposition/);
+    expect(SIGNAL_MATCH_JUDGE_SYSTEM_INSTRUCTION).toMatch(/uncertain, answer independent/i);
   });
 });
 
 describe("parseSignalMatchJudgement", () => {
-  it("reads a clear yes", () => {
-    expect(parseSignalMatchJudgement({ samePattern: true })).toEqual({ samePattern: true });
+  it("reads each clear verdict", () => {
+    expect(parseSignalMatchJudgement({ relation: "same" })).toEqual({ relation: "same" });
+    expect(parseSignalMatchJudgement({ relation: "opposed" })).toEqual({
+      relation: "opposed",
+    });
+    expect(parseSignalMatchJudgement({ relation: "independent" })).toEqual({
+      relation: "independent",
+    });
   });
 
   it.each([
-    { samePattern: false },
-    { samePattern: "true" },
-    { same: true },
+    { relation: "conflicting" },
+    { relation: true },
+    { "samePattern": true },
     {},
     null,
-    "yes",
+    "opposed",
     42,
-  ])("lands %j on different", (payload) => {
-    expect(parseSignalMatchJudgement(payload)).toEqual({ samePattern: false });
+  ])("lands %j on independent — the conservative middle", (payload) => {
+    expect(parseSignalMatchJudgement(payload)).toEqual({ relation: "independent" });
   });
 });

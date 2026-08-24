@@ -36,6 +36,7 @@ import {
   type FeedbackTargetType,
   type FeedbackValue,
 } from "../db/index.js";
+import { resolveContestedPairs } from "../lib/contested-pairs.js";
 import { getDb } from "../lib/db.js";
 import { enqueueGroupTopOfMindRefresh } from "../lib/queue.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
@@ -269,6 +270,30 @@ export async function createFeedbackForProfile(
       correctionText: input.correctionText ?? null,
     })
     .returning();
+
+  // A verdict on the owner's OWN signal arbitrates any contested pair it
+  // stands in: true → the other side yields, not_true → this side yields,
+  // partly → nothing (an invitation to sharpen, not an arbitration). Owner
+  // only — a room member answering a shared statement judges the statement,
+  // not the owner's disputes, so the ownership check is explicit here.
+  if (
+    row &&
+    input.targetType === "signal" &&
+    (input.value === "true" || input.value === "not_true")
+  ) {
+    const [ownSignal] = await db
+      .select({ id: signals.id })
+      .from(signals)
+      .where(and(eq(signals.id, input.targetId), eq(signals.profileId, input.profileId)))
+      .limit(1);
+    if (ownSignal) {
+      await resolveContestedPairs(db, {
+        profileId: input.profileId,
+        signalId: input.targetId,
+        act: input.value === "true" ? "affirm" : "deny",
+      });
+    }
+  }
 
   // The owner's dispute marks the principle contested at feedback time —
   // immediate state maintenance, deliberately outside the nightly cadence:

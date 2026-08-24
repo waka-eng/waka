@@ -230,6 +230,76 @@ export type SignalShare = typeof signalShares.$inferSelect;
 export type NewSignalShare = typeof signalShares.$inferInsert;
 
 // ---------------------------------------------------------------------------
+// signal_contradictions — contested pairs, held on the record
+// ---------------------------------------------------------------------------
+
+/** What owner act settled a contested pair. */
+export const contradictionResolutionValues = ["lock", "verdict", "dismissal"] as const;
+export type ContradictionResolution = (typeof contradictionResolutionValues)[number];
+export const contradictionResolutionEnum = pgEnum(
+  "contradiction_resolution",
+  contradictionResolutionValues,
+);
+
+/**
+ * An undirected `contradicts` relation between two of one profile's signals,
+ * minted when the three-way judge answers `opposed` in the ambiguous cosine
+ * band (goals/no-quiet-corners.md Phase 5). While `resolvedAt` is null both
+ * sides serve as CONTESTED — an unresolved conflict awaiting arbitration.
+ *
+ * Resolution comes ONLY from an owner act — a lock, a verdict, a dismissal.
+ * That is doctrine, not design: ruled by the founder 2026-08-23 ("never —
+ * the owner resolves", signed in docs/data-model.md's decision log). No
+ * evidence weight, however lopsided, resolves a pair on its own. The loser
+ * becomes YIELDED — `yieldedSignalId`, a state read off this row — and its
+ * signal row stands untouched: a state, never a deletion.
+ *
+ * Undirected: the pair is stored once with `aSignalId < bSignalId`
+ * (normalized by the writer in lib/contested-pairs.ts), so "A contradicts
+ * B" and "B contradicts A" cannot drift into two rows.
+ */
+export const signalContradictions = pgTable(
+  "signal_contradictions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+
+    profileId: uuid("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+
+    aSignalId: uuid("a_signal_id").notNull(),
+    bSignalId: uuid("b_signal_id").notNull(),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    /** The side that yielded; one of a/b, null while unresolved. */
+    yieldedSignalId: uuid("yielded_signal_id"),
+    resolvedBy: contradictionResolutionEnum("resolved_by"),
+  },
+  (table) => ({
+    pairUnique: uniqueIndex("signal_contradictions_pair_unique_idx").on(
+      table.aSignalId,
+      table.bSignalId,
+    ),
+    aIdx: index("signal_contradictions_a_idx").on(table.aSignalId),
+    bIdx: index("signal_contradictions_b_idx").on(table.bSignalId),
+    aFk: foreignKey({
+      columns: [table.profileId, table.aSignalId],
+      foreignColumns: [signals.profileId, signals.id],
+      name: "signal_contradictions_a_fk",
+    }).onDelete("cascade"),
+    bFk: foreignKey({
+      columns: [table.profileId, table.bSignalId],
+      foreignColumns: [signals.profileId, signals.id],
+      name: "signal_contradictions_b_fk",
+    }).onDelete("cascade"),
+  }),
+);
+
+export type SignalContradiction = typeof signalContradictions.$inferSelect;
+
+// ---------------------------------------------------------------------------
 // suppressions — the ground's refusals, on the record
 // ---------------------------------------------------------------------------
 

@@ -621,7 +621,7 @@ describe("the vocabulary gate, when the mistake is in the gate", () => {
      * hole reclassifying itself as permanent, in the number this gate is read by.
      */
     const script = mutantGate("a disposition is mistyped", [
-      ['    disposition: "rename",\n    to: "sameSignal",', '    disposition: "permanant",\n    to: "sameSignal",'],
+      ['    disposition: "rename",\n    to: "sourceForInspiration",', '    disposition: "permanant",\n    to: "sourceForInspiration",'],
     ]);
 
     const run = runGate(script);

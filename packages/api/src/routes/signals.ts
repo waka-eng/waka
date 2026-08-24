@@ -21,7 +21,7 @@
  */
 
 import { recordConsultation } from "../lib/consultations.js";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
@@ -31,6 +31,7 @@ import {
   profiles,
   signalEvidence,
   signalShares,
+  signalContradictions,
   signalStatusValues,
   signals,
   type SignalStatus,
@@ -49,6 +50,7 @@ import {
   dropSignalEmbedding,
   refreshSignalLifecycle,
 } from "../lib/signal-derivation.js";
+import { resolveContestedPairs } from "../lib/contested-pairs.js";
 import {
   revertSignalStatement,
   writeSignalStatementChain,
@@ -133,6 +135,13 @@ export interface SignalSummary {
       suppression anchor — derivation refuses candidates near it, on the
       record. Dismissed rows also read `status: "retired"`. */
   dismissed: boolean;
+  /** Standing in an unresolved contradicts pair — awaiting the owner's
+      arbitration, which is the only kind there is. Computed from the pair
+      rows at serve time, never stored on the signal. */
+  contested: boolean;
+  /** The side that gave way when its owner settled a pair — a state read
+      off the resolution, never a deletion. */
+  yielded: boolean;
   sharedGroupIds: string[];
   createdAt: string;
 }
@@ -202,7 +211,7 @@ async function decorateSignals(
   if (rows.length === 0) return [];
   const ids = rows.map((row) => row.id);
 
-  const [evidenceRows, shareRows] = await Promise.all([
+  const [evidenceRows, shareRows, pairRows] = await Promise.all([
     db
       .select({
         signalId: signalEvidence.signalId,
@@ -216,7 +225,35 @@ async function decorateSignals(
       .select({ signalId: signalShares.signalId, groupId: signalShares.groupId })
       .from(signalShares)
       .where(inArray(signalShares.signalId, ids)),
+    db
+      .select({
+        aSignalId: signalContradictions.aSignalId,
+        bSignalId: signalContradictions.bSignalId,
+        resolvedAt: signalContradictions.resolvedAt,
+        yieldedSignalId: signalContradictions.yieldedSignalId,
+      })
+      .from(signalContradictions)
+      .where(
+        or(
+          inArray(signalContradictions.aSignalId, ids),
+          inArray(signalContradictions.bSignalId, ids),
+        ),
+      ),
   ]);
+
+  // Contested and yielded are read off the pair rows at serve time — the
+  // relation is the record, and the signal row is never mutated to mirror
+  // it (the same rule ratified standing follows on the poster).
+  const contestedIds = new Set<string>();
+  const yieldedIds = new Set<string>();
+  for (const pair of pairRows) {
+    if (pair.resolvedAt === null) {
+      contestedIds.add(pair.aSignalId);
+      contestedIds.add(pair.bSignalId);
+    } else if (pair.yieldedSignalId) {
+      yieldedIds.add(pair.yieldedSignalId);
+    }
+  }
 
   // Confidence is computed from the evidence at read time, not served from
   // the stored snapshot. The snapshot is written when evidence changes, which
@@ -270,6 +307,8 @@ async function decorateSignals(
     locked: row.lockedAt !== null,
     unsupported: row.unsupportedAt !== null,
     dismissed: row.dismissedAt !== null,
+    contested: contestedIds.has(row.id),
+    yielded: yieldedIds.has(row.id),
     sharedGroupIds: groupsBySignal.get(row.id) ?? [],
     createdAt: row.createdAt.toISOString(),
   }));
@@ -390,6 +429,14 @@ export async function updateSignalStatement(
       .update(signals)
       .set({ statement: input.statement, lockedAt: now, updatedAt: now })
       .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)));
+    /* holding these words is an arbitration: any pair this signal stands in
+       resolves in its favor — the owner's act, never evidence weight */
+    await resolveContestedPairs(tx, {
+      profileId: input.profileId,
+      signalId: input.signalId,
+      act: "lock",
+      now,
+    });
     return true;
   });
   if (!changed) return null;
@@ -454,6 +501,14 @@ export async function dismissProfileSignal(
     .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
     .returning({ id: signals.id });
   if (updated.length === 0) return null;
+
+  /* throwing a side out settles its disputes — that side yields. Leaving a
+     one-sided "contested" standing forever would be a quiet corner. */
+  await resolveContestedPairs(db, {
+    profileId: input.profileId,
+    signalId: input.signalId,
+    act: "dismiss",
+  });
 
   return getProfileSignal(db, { profileId: input.profileId, signalId: input.signalId });
 }

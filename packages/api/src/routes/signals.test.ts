@@ -50,6 +50,8 @@ const summary: SignalSummary = {
   locked: false,
   unsupported: false,
   dismissed: false,
+  contested: false,
+  yielded: false,
   sharedGroupIds: [groupId],
   createdAt: "2026-05-01T10:00:00.000Z",
 };
@@ -110,6 +112,8 @@ describe("GET /api/signals", () => {
           locked: false,
           unsupported: false,
           dismissed: false,
+          contested: false,
+          yielded: false,
           sharedGroupIds: [groupId],
           createdAt: "2026-05-01T10:00:00.000Z",
         },

@@ -525,26 +525,32 @@ export async function extractSignalCandidates(
  * whether the pattern is *true*, which is not its call.
  */
 export const SIGNAL_MATCH_JUDGE_SYSTEM_INSTRUCTION = `
-You compare two statements from one person's memory system and answer a single
-question: do they name the SAME durable pattern about this person?
+You compare two statements from one person's memory system and name their
+relation. Exactly one of three answers:
 
-Same pattern means a reader who held one would learn nothing new from the
-other — one is a rewording, a narrowing, or a broadening of the other.
+same — they name the SAME durable pattern: a reader who held one would learn
+nothing new from the other. One is a rewording, a narrowing, or a broadening
+of the other.
 
-Different means each could gain evidence the other could not: they concern
-different objects, different tensions, or different directions of pull, however
-much vocabulary they share.
+opposed — they cannot both hold: each denies what the other asserts about the
+same object or the same direction of pull. A held tension is NOT opposition —
+"loves rich food" and "keeps weekday meals plain" can both be true of one
+person. Opposed means a reader could not believe both.
 
-When genuinely uncertain, answer false. Wrongly fusing two patterns is
-invisible afterwards; a duplicate stays visible and can be merged.
+independent — anything else: each could gain evidence the other could not,
+however much vocabulary they share.
+
+When genuinely uncertain, answer independent. Wrongly fusing two patterns is
+invisible afterwards; a duplicate stays visible and can be merged; a phantom
+opposition manufactures a dispute the person never had.
 `.trim();
 
 const signalMatchJudgementResponseSchema: ResponseSchema = {
   type: "OBJECT",
   properties: {
-    samePattern: { type: "BOOLEAN" },
+    relation: { type: "STRING", enum: ["same", "independent", "opposed"] },
   },
-  required: ["samePattern"],
+  required: ["relation"],
 };
 
 export function buildSignalMatchJudgementRequest(
@@ -576,13 +582,15 @@ export function buildSignalMatchJudgementRequest(
 }
 
 export function parseSignalMatchJudgement(payload: unknown): SignalMatchJudgement {
-  const same =
-    typeof payload === "object" &&
-    payload !== null &&
-    (payload as { samePattern?: unknown }).samePattern === true;
-  // Anything malformed lands on "different", for the same reason the prompt
-  // does: the recoverable mistake is the duplicate.
-  return { samePattern: same };
+  const value =
+    typeof payload === "object" && payload !== null
+      ? (payload as { relation?: unknown }).relation
+      : null;
+  // Anything malformed lands on "independent", for the same reason the
+  // prompt does: the duplicate is the recoverable mistake, and a phantom
+  // opposition would put a dispute on the record no one ever had.
+  if (value === "same" || value === "opposed") return { relation: value };
+  return { relation: "independent" };
 }
 
 export async function judgeSignalMatch(
@@ -592,7 +600,7 @@ export async function judgeSignalMatch(
     buildSignalMatchJudgementRequest(input),
     "signal match judgement",
   );
-  if (payload === null) return { samePattern: false };
+  if (payload === null) return { relation: "independent" };
   return parseSignalMatchJudgement(payload);
 }
 
