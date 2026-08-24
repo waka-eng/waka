@@ -1,0 +1,189 @@
+# Goal: the legible loop
+
+Status: ready — created 2026-08-23 on the founder's instruction to build
+the whole loop-legibility experience as its own goal. Carved out of
+`no-quiet-corners.md` (its Phase 9, plus Phase 4 — the suppression
+substrate the receipts stand on); those phases now point here, so every
+work item keeps exactly one owner. **This goal runs first**;
+`no-quiet-corners` resumes at its Phase 2 when this one closes or
+halts.
+Strategy: `docs/craft/the-legible-loop.md` — the research is the
+argument; this document is only the build.
+Branch: `claude/waka-product-evolution-vbj1ur`.
+Depends on: nothing outside itself. The consultation record
+(`no-quiet-corners` Phase 1) already shipped and is this goal's read
+substrate.
+
+## Why
+
+People will not read every signal, the way a GEPA practitioner does not
+read every evolved candidate. They live at the poster and the
+principles — and what they need underneath is not more inspection but
+**trust in the loop**: to know how WAKA reads them, to see what it did
+and refused to do, and to correct its behavior without auditing rows.
+The research is unambiguous about how systems win or lose this: show
+the delta the loop caused, not its internals; make explanation and
+correction one gesture apart; treat gestures as laws and keep receipts
+that the law held; scope what counts as *you* without deleting; and
+never ship an explanation that is not mechanically true. Every phase
+below is one of those findings, landed in WAKA's world. The loop's
+world-name is **the weather**: the field is the ground, the sky holds
+the patterns, the poster is what the season amounts to, and the loop
+is the weather that moves between them — read, told as days, tended
+rather than programmed.
+
+## Laws that bind every phase
+
+- Light is the only meaning channel; states render, numerals never
+  (constants may arrive as words in prose, pinned — never as counters).
+- The world never moves unless the person moved it; the loop never
+  notifies — the reward for opening the world is seeing, and telling
+  first spends that.
+- Nothing here deletes anything; every silence this goal creates is a
+  logged, legible silence.
+- No new metaphors outside the field-and-sky universe; no dashboards,
+  no knobs, no sliders. The GLOSSARY gains its rows before any surface
+  ships a word.
+- Explanations render from the same constants the drift tests pin, so
+  the product is structurally incapable of describing itself wrongly.
+
+## Phase 1 — the reading ("How WAKA reads you")
+
+One page, one tap from the poster, in second person and present tense:
+"When three of your memories say the same thing, WAKA says it back as
+a pattern. A pattern nobody feeds begins to set. Your own words are
+never rewritten. When two patterns disagree, both stand until you
+settle it." Rendered FROM the drift-locked constants table — the same
+values `generation-doc.test.ts` pins against code — with each constant
+arriving as words. The same rendering ships in the wire format, because
+the reading contract is one contract for every kind of mind; the
+`waka` skill points agents at it.
+
+**Gate:** the rendering is pinned BOTH directions against the constants
+(a changed constant fails a test until the sentence changes); a web
+test renders the page and finds zero numerals; the served markdown and
+the world's panel derive from one rendering function, byte-identical in
+content. What would make this phase fail: any hand-written sentence
+about the loop that a constant does not back.
+
+## Phase 2 — gesture receipts
+
+Every existing gesture gains one line, at the moment of the act, naming
+what it taught the loop — the star already does this ("your own words —
+WAKA will not rewrite them"); it is the pattern to copy, not a new
+invention. Dismiss → "the ground will refuse anything this close from
+now on" (true only after Phase 3 — until then the line for dismiss
+stays as it is today, because a receipt for a law that does not exist
+yet is the advisory-button lie this goal exists to kill). Verdict →
+"this weighs on whether the pattern is spoken." Release → "WAKA may
+read this one again." No new controls anywhere.
+
+**Gate:** web tests pin each line at its gesture; a doc audit confirms
+every line's claim is enforced by a named test on the real pipeline
+(the star's by the lock contract, the verdict's by promotion, the
+dismissal's by Phase 3's suite). What would make this phase fail: a
+receipt whose claim no test enforces.
+
+## Phase 3 — the ground refuses, on the record
+
+(The suppression substrate — register item 7, moved here from
+`no-quiet-corners` Phase 4 because the receipts stand on it.) A
+dismissed signal keeps its row and evidence, and its embedding becomes
+a suppression anchor: a candidate at ≥ 0.86 cosine to it is dropped
+instead of minted, and EVERY suppression writes a record naming the
+anchor — the silence is legible. The word is dismissed, not tombstone.
+Zero new model calls. The dismiss receipt from Phase 2 switches on
+with this phase.
+
+**Gate:** a db test with stub embeddings — a near candidate is dropped
+and its suppression row names the anchor; a distant candidate mints
+normally; dismissal deletes nothing. The threshold joins
+`docs/generation.md`'s drift-locked table (and thereby Phase 1's
+reading). What would make this phase fail: a suppression that leaves no
+record, or a dismissal that mutates the signal's row.
+
+## Phase 4 — ratified light on the poster
+
+The poster's entries already carry roots; the light now tells whose
+they are: grounds the person has answered (a verdict, a star) hold
+full ink; grounds only the machine believes sit dimmer. One glance
+separates "what we have agreed about me" from "what it currently
+thinks," and recalibration becomes the obvious existing gesture —
+answer the dim ones. The loop asks; you answer; the light moves.
+
+**Gate:** the served entry payload carries the ratified standing per
+cited ground (computed, never stored denormalized); a web test pins
+both ink states and the absence of any badge, label, or numeral; the
+verdict round-trip moves the light in a jsdom test. What would make
+this phase fail: a third visual state creeping in, or standing computed
+anywhere but from the feedback and lock records.
+
+## Phase 5 — the weather report, and the antechamber
+
+Each pass leaves one told sentence, assembled ONLY from records that
+already exist (derivation summaries, explicit no-change versions,
+consultations, Phase 3 suppressions): "read two new memories; the sky
+held." · "a pattern grew a root." · "refused a candidate — too close
+to something you dismissed." The world tells it on arrival, riding the
+existing pan-the-edge return — never a notification, never a digest.
+On request, **the antechamber**: the dim place where read-but-not-kept
+candidates stand, built on the suppression log — the delta view the
+folk-theory research names as the single most theory-correcting
+surface.
+
+**Gate:** a seeded fortnight renders as told sentences with zero
+numerals and zero events that lack a backing record (the narration is
+a VIEW of the record, pinned by a test that deletes a record and
+watches its sentence vanish); the antechamber renders each suppression
+with its anchor reachable; arrival tells only after the world has
+drawn. What would make this phase fail: an invented sentence, a
+notification, or a counter.
+
+## Phase 6 — kept, not read (founder-gated)
+
+The one genuinely new lever: mark a memory — later a source, an agent,
+a season — as *kept but not evidence*. The row stays in the field
+(fading never deletes); derivation stops reading the person from it;
+the world renders it as a state the weather passes over; the exclusion
+is logged like a suppression, and it is reversible. **Gated on the
+founder before any code:** this changes what "evidence" means in the
+canon, and the ruling is requested in the research document. On the
+ruling, the phase lands as: an evidence-standing state on
+inspirations, one derivation-side exclusion, one rendered state, one
+GLOSSARY row.
+
+**Gate (ruling): the founder.** Gate (build): a db test proves an
+excluded memory feeds no candidate and no evidence while its row and
+attachments stay whole and recall still finds it; reversal restores it
+to the loop's sight on the next pass; the world state renders without
+the words hide, mute, or archive anywhere near it.
+
+## Acceptance
+
+- A person who never opens a signal can still say, accurately, how
+  WAKA reads them, what it did last week, what it refused to do and
+  why, and what their own gestures taught it — every sentence of that
+  answer backed by a record or a pinned constant.
+- Every gesture is a law with a receipt; no control in the product is
+  advisory.
+- The founder looks at the loop surfaces live on their machine (the
+  standing review ruling) and recognizes the thing they asked for on
+  2026-08-23: the loop, understandable and recalibratable, without
+  reading the rows.
+
+## Budget
+
+Zero new model calls in every phase (suppression is arithmetic above
+generation; the reading and the diary are renderings of stored
+records). Demo-seed runs for gates as needed (~10 derivations per
+run). No new dependencies, no new infrastructure.
+
+## Log
+
+- **2026-08-23 — Created on the founder's instruction** ("create /goal
+  to build this all"), from the research in
+  `docs/craft/the-legible-loop.md`. Owns what was `no-quiet-corners`
+  Phase 9 (a/b/c) and Phase 4; those now point here. Queue position:
+  first — `no-quiet-corners` resumes at its Phase 2 when this goal
+  closes or halts. Phase 6 awaits the founder's evidence ruling;
+  everything else is executable without them.

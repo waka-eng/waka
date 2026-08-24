@@ -1,6 +1,6 @@
 # Goal: no quiet corners
 
-Status: in flight — go given 2026-08-23; created 2026-08-23 on the founder's instruction to fill
+Status: in flight, yielding — first place in the queue handed to goals/the-legible-loop.md on 2026-08-23; this goal resumes at Phase 2 when it closes or halts. Go given 2026-08-23; created 2026-08-23 on the founder's instruction to fill
 all remaining gaps. Phase 0 (the register stops lying) passed at
 creation: this document's claims were verified against code the day it
 was written, and the wedge register's two stale entries were corrected
@@ -105,22 +105,13 @@ contains every row of every layer for that profile and zero rows of any
 other (the tenancy read applied to egress); an agent-bound credential
 is refused, pinned in the live matrix suite.
 
-## Phase 4 — refusal reaches the ground
+## Phase 4 — refusal reaches the ground (moved)
 
-Register item 7: dismissal descends to L2. Today deleting or dismissing
-does nothing to stop the same pattern re-minting — the forgetting axis
-nobody passes, and we score zero. A dismissed signal keeps its row and
-evidence, and its embedding becomes a suppression anchor: a candidate
-at ≥ 0.86 cosine to it is dropped instead of minted, **with every
-suppression logged so the silence is legible**. The word is dismissed,
-not tombstone — nothing is buried, something is remembered. Zero new
-model calls.
-
-**Gate:** a db test with stub embeddings — a candidate near a dismissed
-signal's anchor is dropped and writes a suppression record naming the
-anchor; a distant candidate mints normally; dismissing never deletes
-the signal's row or evidence. The tuning constant joins
-`docs/generation.md`'s drift-locked table.
+**Moved 2026-08-23 to `goals/the-legible-loop.md` Phase 3** when the
+founder promoted the loop-legibility work to its own goal: the
+suppression log is the substrate the gesture receipts stand on, so it
+travels with them. The register item (7, the forgetting axis) keeps
+one owner — there.
 
 ## Phase 5 — contested pairs
 
@@ -194,50 +185,12 @@ exception argued in writing); **the motion is founder-gated** — the
 founder's eyes accept the star turn and root lines, because motion is a
 founder law and taste is not delegable.
 
-## Phase 9 — the loop shows its hands
+## Phase 9 — the loop shows its hands (moved)
 
-**Build order, set 2026-08-23 after the research
-(`docs/craft/the-legible-loop.md`):** this phase splits in three and
-does not wait its turn in the document. **9a** (the reading, gesture
-receipts, ratified light) has no dependencies and is pulled forward to
-run immediately after Phase 2 — it is the highest trust-per-line work
-in the goal. **9b** (the weather report and the antechamber) needs
-Phase 4's suppression log and runs after it. **9c** ("kept, not read")
-is founder-gated: it changes what evidence means, and the ruling is
-asked for in the research document.
-
-Added mid-flight from the founder's own ask (2026-08-23): *"people are
-not going to look at every single signal … they would look at the
-principles and top of mind … what they should do instead is be able to
-recalibrate and understand the loop that is creating it — and for our
-product that is not as clear."* That is the deepest form of this goal's
-thesis: row-level legibility exists (roots, citations, receipts), but
-the LOOP — what reads you, by what rules, and what your gestures teach
-it — has no surface. Three parts:
-
-1. **The rules, readable.** A "how WAKA reads you" rendering built FROM
-   the same constants `generation-doc.test.ts` already drift-locks —
-   when a pattern is spoken, when it fades, when the first draft waits,
-   (after Phase 4) when a candidate is refused — as sentences, never
-   numerals. It cannot lie: the same table pins the code and the copy.
-2. **The loop's diary.** Recent passes told as events, assembled from
-   what already lands on the record — derivation summaries, explicit
-   no-change versions, (Phase 1) consultations, (Phase 4) suppressions
-   — "read three new memories, added nothing; refused a candidate it
-   had been told to drop." States render; counters never.
-3. **Recalibration through gestures, named.** The loop-level levers are
-   the existing gestures made legible as teaching: dismiss becomes a
-   standing refusal (Phase 4's anchor), a verdict weighs promotion, the
-   star freezes, release returns jurisdiction. The surface names what
-   each gesture taught the loop — closing the gap between act and
-   effect — instead of adding abstract knobs a person cannot predict.
-
-**Gate:** the rules rendering is pinned both directions against the
-drift-locked constants table (changed constant → failing test → changed
-sentence); the diary renders a seeded fortnight with zero numerals; web
-tests pin all three parts; **the founder's eyes accept the surface** —
-their instinct originated it, so their read is the measure of whether
-the loop finally feels understandable.
+**Moved 2026-08-23 to `goals/the-legible-loop.md`** — the founder
+promoted it to its own goal ("create /goal to build this all") after
+the research in `docs/craft/the-legible-loop.md`. That goal runs
+first; this one resumes at Phase 2 when it closes or halts.
 
 ## Track D — the demo kit
 
