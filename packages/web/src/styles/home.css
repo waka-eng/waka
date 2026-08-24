@@ -451,23 +451,42 @@
    the ambition is the thing being read, these are what you may do about it.
    Revealed on hover/focus like the sky's one action, and always visible where
    there is no hover to reveal them. */
+/* THE SAME DEAD SELECTOR AS THE WAYS OUT, AND IT WAS FOUND A DAY LATER.
+   `.jar-hq` carries `pointer-events: none` so the world underneath stays
+   draggable, and an element that takes no pointer CANNOT MATCH `:hover` — so
+   `.jar-hq:hover .jar-board-acts` never fired, on any pointer device, ever.
+   These four are what a person can DO about the one sentence the machine has
+   concluded about them: read it again, keep this one up, say it in my words,
+   not this. All four sat at `opacity: 0` with `pointer-events: none`, in the
+   DOM and unreachable, on every desktop. Only the `hover: none` rule below
+   made them work at all, which is why they worked on a phone.
+
+   Finding 14 fixed exactly this bug for `.jar-edge` and did not sweep the
+   file for the other rule that shared the selector. One grep would have found
+   it. That is why the gate for this one asserts the CONTROLS ARE CLICKABLE
+   rather than that a particular class is styled: the next thing to inherit
+   this mistake will not be named `.jar-edge` either.
+
+   They rest quiet and brighten under the pointer, like every other word in
+   this layout. */
 .jar-board-acts {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 18px;
   margin-top: 26px;
-  opacity: 0;
-  pointer-events: none;
+  opacity: 0.72;
+  /* EXPLICIT, because `pointer-events` INHERITS and `.jar-hq` is `none`.
+     Dropping the old `pointer-events: none` here was not enough: with nothing
+     declared, these inherit the parent's `none` and stay unclickable while
+     looking perfectly fine. That is the same failure wearing a new hat, so it
+     is stated rather than implied. */
+  pointer-events: auto;
   transition: opacity 0.25s ease;
 }
-.jar-hq:hover .jar-board-acts,
+.jar-board-acts:hover,
 .jar-hq:focus-within .jar-board-acts {
   opacity: 1;
-  pointer-events: auto;
-}
-@media (hover: none) {
-  .jar-board-acts { opacity: 1; pointer-events: auto; }
 }
 .jar-board-act {
   appearance: none;

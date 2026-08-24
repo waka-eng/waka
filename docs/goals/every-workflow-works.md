@@ -54,11 +54,11 @@ unproven in a browser.**
 |---|---|---|
 | A1 | Sign up → onboarding → first capture | API + **Browser** (`journeys:cold-start`) ✅ |
 | A2 | Sign in / sign out, email + password | API (`organic`) |
-| A3 | Sign in with Google | **nothing** |
+| A3 | Sign in with Google | **nothing** — needs OAuth configured; blocked on a founder decision, not on effort |
 | A4 | Password recovery | **does not exist** |
 | B1 | Capture text | API + **Browser** (`journeys:keep`) ✅ |
 | B2 | Capture a link, enriched from its page | API (`organic` step 7) ✅ — was wrongly logged unproven; see the 2026-08-22 correction |
-| B3 | Capture an image, described so it is searchable | by URL: API (`organic` step 8) ✅. Real upload (presign→PUT→HEAD): **still unproven** — `s3-stub` now makes it possible |
+| B3 | Capture an image, described so it is searchable | by URL: API (`organic` step 8) ✅. Real upload (presign→PUT→HEAD): **proven 2026-08-24 against the stub** (`erasure` step 1–2) — the object lands, enrichment reads it back. Nothing about S3's own IAM or durability |
 | C1 | Search and recall across the archive | API + **Browser** (`journeys:seek`) ✅ |
 | C2 | Open, edit, delete an inspiration | API + **Browser** (`journeys:let-go`) ✅ |
 | C3 | Reflect on an inspiration | **Browser** (`journeys:reflect`) ✅ |
@@ -66,7 +66,7 @@ unproven in a browser.**
 | D2 | Lock, edit, let go a signal | API (`signals`) |
 | D3 | Cascade when the evidence under a signal is deleted | API (`signals`) |
 | E1 | Top of mind synthesised, versioned, citations resolve | API (`top-of-mind`) |
-| E2 | Entry actions — read again, say in my words, not this, undo | **nothing** |
+| E2 | Entry actions — read again, say in my words, not this, undo | **Browser** (`journeys:entry-actions`) ✅ 2026-08-24 — and proving it found all four unreachable on every desktop; see finding 18 |
 | F1 | Principles minted nightly under the five tests | API (`principles`) |
 | F2 | Declare a principle — both destinations | API (`principles`), fixed 2026-08-22 |
 | F3 | Edit, reorder, delete; `principles.md` renders | API (`principles`) |
@@ -79,8 +79,8 @@ unproven in a browser.**
 | I1 | Terminal consent, credential binding | API (MCP live gate) |
 | I2 | Capture and recall from a terminal | API (MCP live gate) |
 | J1 | Rename, locale, make a public page | **Browser** (`journeys:account`) — rename only; locale and public page still unproven |
-| J2 | List and revoke connections | **nothing** |
-| J3 | Delete the account | **nothing** |
+| J2 | List and revoke connections | API (`connections`) ✅ 2026-08-24 — 7 checks, no model calls |
+| J3 | Delete the account | API (`erasure`) ✅ 2026-08-24 — 11 checks, including the bytes, the room's own artifact, and that the bystander keeps everything |
 | K1 | The world renders on a hostile network | Browser (`first-paint`) ✅ |
 
 ~~Twenty-one proven at the API. One proven in a browser. Seven by nothing.~~
@@ -423,3 +423,77 @@ four byte-identical copies of the region ladder into one.
 
 The stub verifies no signatures and stores objects in memory. B3 will be
 recorded as **proven against a stub**, never as proven outright.
+
+### 2026-08-24 — the three rows that said "nothing"
+
+J2, J3 and E2 were each proven by nothing. All three are now covered, and one
+of them turned out to be broken.
+
+#### J3, erasure — 11 passed
+
+The highest-stakes path in the product, and the failure is invisible by
+construction: the person is gone, they cannot check, and every surface 404s
+whether or not the work was done. `lib/account-erasure.ts` makes five promises
+and three of them fail quietly — the bytes going FIRST while the rows still
+list them (the rows are the only inventory), the group artifact deleted
+EXPLICITLY because a cascade cannot reach a room's own top of mind, and no room
+left without an owner.
+
+`tools/e2e/erasure.ts` drives two people, a shared room, a real uploaded image
+and a synthesised room artifact that actually cites the leaver, then erases one
+account and checks all five — plus the failure in the other direction,
+over-deletion, by holding the bystander to the same standard. The last step
+searches seven surfaces for a phrase that exists in exactly one capture on the
+stack, because a field check only ever finds the leak you thought of.
+
+    bytes HEAD 404 · the citing entry gone · the room still owned ·
+    the bystander's 3 memories and 2 signals untouched
+
+#### J2, connections — 7 passed
+
+A revoke that returns 200 and leaves the token working is the entire failure,
+and every screen would keep saying the connection ended. No model calls, so
+there is no reason it should not run on every change. The two that matter
+most: revoking actually stops the token rather than just deleting a row, and a
+stranger's revoke answers 404 — the same answer a nonexistent id gets, because
+a 403-here-404-there difference is an oracle that hands out real session ids
+one guess at a time.
+
+#### B3, the real upload — proven on the way
+
+Erasure needs a real object to delete, so it takes the whole path: presign,
+PUT, the object landing in the store, enrichment reading it back. Against the
+stub, which verifies no signatures — the row stays honest about that.
+
+#### E2 — and the bug that writing it found
+
+All four entry actions were `opacity: 0; pointer-events: none`, revealed by
+`.jar-hq:hover .jar-board-acts`. `.jar-hq` carries `pointer-events: none` so
+the world underneath stays draggable, and **an element that takes no pointer
+cannot match `:hover`**. On every desktop, the four things a person can do
+about the one sentence the machine concluded about them — read it again, keep
+this one up, say it in my words, not this — were in the DOM and unreachable.
+
+That is finding 14 exactly, in a second place. Fixing finding 14 patched
+`.jar-edge` and never swept the file for the other rule that shared the
+selector; one grep would have found it. Recorded as finding 18.
+
+The fix also had a second half that would have shipped silently:
+`pointer-events` INHERITS, so dropping the parent's `none` was not enough —
+with nothing declared the children inherit it and stay unclickable while
+looking perfectly fine.
+
+**So the gate asserts hit-testing, not style.** `elementFromPoint` at each
+control's own centre must come back as that control. The `--negative` run
+proves why: under the original rule three of the four report **opacity 1**,
+because the sabotage sits on the parent. An opacity check would have passed.
+
+    positive   4 entry actions, all hit-testable; "read it again" previews
+               its consequence
+    negative   "READ IT AGAIN" cannot be hit at its own centre (opacity 1) …
+
+#### What is left
+
+A3 (Google) needs OAuth configured — blocked on a decision, not on effort. A4
+(password recovery) does not exist and waits on a mail provider. J1's locale
+and public-page halves, and G4's rotation, remain partial.

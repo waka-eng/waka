@@ -866,12 +866,22 @@ const JOURNEYS: Journey[] = [
       await page.click('button:has-text("keep")');
       await page.waitForTimeout(4_000);
 
+      /* A REAL DIRECTIVE, WITH NO UNIQUE SUFFIX. The first version appended
+         `uniq()` out of habit, and `routeDeclaration` correctly refused to
+         call a sentence ending in a random number a principle — it filed it
+         as an inspiration instead, `201 {"created":"inspiration"}`, so the
+         principle verbs this journey exists to measure were never on the
+         page. Nothing needs to be unique here: the account is new every run.
+
+         The failure was silent by construction and the per-family count is
+         the only reason it surfaced — one combined total stayed comfortably
+         above zero on the post-it marks alone. */
       await goSurface(page, base, "/principles");
       const declare = await page.$(".pr-declare-input");
       if (declare) {
-        await declare.fill(`prefer the small tool over the platform ${uniq()}`);
+        await declare.fill("prefer the small tool over the platform, always");
         await declare.press("Enter");
-        await page.waitForTimeout(4_000);
+        await page.waitForTimeout(6_000);
       }
 
       /* A PHONE, MEASURED AS GEOMETRY, AND ONLY NOW — the setting up above
@@ -1061,6 +1071,161 @@ const JOURNEYS: Journey[] = [
           problems.length === 0
             ? `every control >= ${MIN_SIZE}px, no sub-${MIN_APART}px pair crowded, every sentence readable — ${seen}${gap} over ${notes.join(" ")}`
             : problems.slice(0, 4).join(" | "),
+      };
+    },
+  },
+
+  {
+    id: "entry-actions",
+    name: "you can answer back to what the machine decided about you",
+    /* WHAT THIS IS FOR. `every-workflow-works.md` carried E2 — "Entry actions
+       — read again, say in my words, not this, undo" — as proven by
+       **nothing**. Writing this found out why it needed proving.
+
+       All four sat at `opacity: 0` with `pointer-events: none`, revealed by
+       `.jar-hq:hover .jar-board-acts`. `.jar-hq` carries
+       `pointer-events: none` so the world underneath stays draggable, and an
+       element that takes no pointer CANNOT MATCH `:hover`. So on every
+       desktop the four things a person can do about the one sentence the
+       machine has concluded about them were in the DOM and unreachable. Only
+       the `@media (hover: none)` fallback made them work, which is why they
+       worked on a phone.
+
+       That is finding 14 exactly, in a second place. Fixing finding 14 patched
+       `.jar-edge` and never swept the file for the other rule that shared the
+       selector — one grep would have found it.
+
+       SO THIS ASSERTS HIT-TESTING, NOT STYLE. `elementFromPoint` at each
+       control's own centre has to come back as that control. That catches
+       `opacity: 0`, an inherited `pointer-events: none`, and anything lying
+       on top of it — including whatever the next version of this mistake
+       turns out to be, which will not be named `.jar-edge` either. */
+    breaks: async (ctx) => {
+      await ctx.addInitScript(() => {
+        window.addEventListener("load", () => {
+          const style = document.createElement("style");
+          style.setAttribute("data-sabotage", "acts-unreachable");
+          /* the rule exactly as it shipped */
+          style.textContent =
+            ".jar-board-acts { opacity: 0 !important; pointer-events: none !important; }";
+          document.head.appendChild(style);
+        });
+      });
+    },
+    run: async (page, base) => {
+      await signUp(page, base);
+
+      /* A board needs something to read. Four unrelated thoughts is what
+         `e2e:cold-start` proves is enough — a top of mind is built from
+         FORMING signals, so this does not have to wait out the promotion bar
+         at three evidence each. */
+      const SITTING = [
+        "I want to spend a month somewhere I do not speak the language.",
+        "The best conversations I have are the ones where nobody is trying to be useful.",
+        "I keep buying notebooks I never write in.",
+        "I would rather be early and wrong than late and certain.",
+      ];
+      await goSurface(page, base, "/capture");
+      for (const text of SITTING) {
+        await page.fill('textarea[aria-label="What caught you?"]', text);
+        await page.click('button:has-text("keep")');
+        await page.waitForTimeout(1_200);
+      }
+
+      await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+      /* The board arrives out of band. Poll rather than sleep, and say so if
+         it never comes — a walk with no board proves nothing about buttons
+         that only exist beside one. */
+      let appeared = false;
+      for (let i = 0; i < 60; i += 1) {
+        appeared = await page.evaluate(
+          () => document.querySelectorAll(".jar-board-act").length >= 3,
+        );
+        if (appeared) break;
+        await page.waitForTimeout(2_000);
+      }
+      if (!appeared) {
+        return {
+          ok: false,
+          detail: "no board arrived within 120s — there was nothing to answer back to",
+        };
+      }
+
+      const reachable = await page.evaluate(() => {
+        const acts = Array.from(document.querySelectorAll<HTMLElement>(".jar-board-act"));
+        return acts.map((el) => {
+          const r = el.getBoundingClientRect();
+          const cx = Math.round(r.left + r.width / 2);
+          const cy = Math.round(r.top + r.height / 2);
+          const hit = document.elementFromPoint(cx, cy);
+          return {
+            label: (el.innerText || "").trim(),
+            /* a span, not a button, is the "Held up" state — present and
+               deliberately not pressable, so it is reported, not required */
+            pressable: el.tagName === "BUTTON",
+            onScreen: r.width > 0 && r.height > 0,
+            opacity: Number(getComputedStyle(el).opacity),
+            /* the real question: if a person aimed here, would they hit it */
+            hit: hit === el || (hit !== null && el.contains(hit)),
+          };
+        });
+      });
+
+      const problems: string[] = [];
+      if (reachable.length < 3) problems.push(`only ${reachable.length} entry actions rendered`);
+      for (const act of reachable) {
+        if (!act.onScreen) problems.push(`"${act.label}" has no box`);
+        else if (!act.hit) {
+          problems.push(
+            `"${act.label}" cannot be hit at its own centre (opacity ${act.opacity})`,
+          );
+        }
+      }
+
+      /* AND ONE OF THEM IS ACTUALLY PRESSED. Reachable is not the same as
+         wired: "Read it again" must open its confirmation, which is also the
+         one action that previews its consequence before committing to it. */
+      if (problems.length === 0) {
+        const readAgain = reachable.find((a) => /read it again/i.test(a.label));
+        if (!readAgain) problems.push("no 'read it again' among the entry actions");
+        else {
+          for (const el of await page.$$(".jar-board-act")) {
+            if (/read it again/i.test((await el.innerText()).trim())) {
+              await el.click();
+              break;
+            }
+          }
+          await page.waitForTimeout(900);
+          const confirmed = await page.evaluate(() => ({
+            warn: document.querySelector(".jar-board-warn")?.textContent?.trim() ?? "",
+            acts: Array.from(document.querySelectorAll(".jar-board-act")).map((e) =>
+              (e.textContent || "").trim(),
+            ),
+          }));
+          if (confirmed.warn.length === 0) {
+            problems.push("'read it again' did not say what would change before changing it");
+          }
+          /* Backed out rather than committed: a regeneration is a model call,
+             and what this journey is about is whether the control reaches its
+             own machinery at all. */
+          for (const el of await page.$$(".jar-board-act")) {
+            if (/leave it/i.test((await el.textContent()) ?? "")) {
+              await el.click();
+              break;
+            }
+          }
+          await page.waitForTimeout(500);
+        }
+      }
+
+      return {
+        ok: problems.length === 0,
+        detail:
+          problems.length === 0
+            ? `${reachable.length} entry actions, all hit-testable — ${reachable
+                .map((a) => a.label.toLowerCase())
+                .join(", ")}; "read it again" previews its consequence`
+            : problems.slice(0, 4).join("; "),
       };
     },
   },

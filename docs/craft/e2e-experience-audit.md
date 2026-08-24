@@ -62,8 +62,9 @@ Each finding carries how it was established:
 | 15 | **Major** | The first memory a person ever keeps does not appear until reload — **fixed 2026-08-23**; a clock-skew bug that silently dropped the newest orb on *every* keep |
 | 16 | **Blocking (mobile)** | `/signals` renders as a column of single letters on a phone — found and **fixed 2026-08-24** |
 | 17 | **Blocking** | Near-white on near-white at 1.15:1 — every signal sentence, and every surface's page title, by two different roads — found and **fixed 2026-08-24** |
+| 18 | **Major** | The four entry actions on the top-of-mind headline were unreachable on every desktop — finding 14's bug in a second place, missed by its own fix — found and **fixed 2026-08-24** |
 
-**Where this stands: 15 of 17 addressed, 2 out of scope by decision, 1 part
+**Where this stands: 16 of 18 addressed, 2 out of scope by decision, 1 part
 deferred.** Everything above is fixed except finding 9 and finding 13, which
 are out of scope by decision, and the password-recovery half of finding 5,
 which waits on a mail provider and is the only item here that can lock a real
@@ -828,6 +829,59 @@ console error. The audit's own contrast pass sampled labelled text and never
 looked at the field that carries the sentence. A screen can be fully rendered,
 fully populated, and completely unusable, and nothing but a person or a
 measurement aimed at the right element will say so.
+
+---
+
+## 18. The four things you can do about the machine's conclusion were unreachable
+
+**Major.** [measured] — found 2026-08-24 while proving workflow E2, **fixed the
+same day.**
+
+The same bug as finding 14, in a second place, found a day later.
+
+Beside the top-of-mind headline sit the four things a person can do about the
+one sentence the machine has concluded about them: **read it again**, **keep
+this one up**, **say it in my words**, **not this**. All four were
+`opacity: 0; pointer-events: none`, revealed by:
+
+```css
+.jar-hq:hover .jar-board-acts { opacity: 1; pointer-events: auto; }
+```
+
+`.jar-hq` carries `pointer-events: none` so the world underneath stays
+draggable, and **an element that takes no pointer can never match `:hover`.**
+Measured: no pointer position on the page revealed them. They worked only under
+the `@media (hover: none)` fallback — so, as with finding 14, they worked on a
+phone and had never once been reachable on a desktop.
+
+**This is my miss, not a new class of bug.** Finding 14 diagnosed exactly this
+and fixed `.jar-edge`; it never swept the file for the other rule that shared
+the selector. `grep 'jar-hq:hover'` returns two, and only one was fixed.
+
+The fix had a second half that would have shipped just as quietly:
+`pointer-events` **inherits**. Removing the parent's `none` was not enough —
+with nothing declared, the children inherit it and stay unclickable while
+looking entirely correct. It is stated explicitly now.
+
+### The gate, and why it asserts hit-testing rather than style
+
+`journeys:entry-actions` calls `document.elementFromPoint` at each control's
+own centre and requires it to come back as that control. That catches
+`opacity: 0`, an inherited `pointer-events: none`, and anything lying on top —
+including whatever the next version of this mistake turns out to be, which will
+not be named `.jar-edge` either.
+
+The `--negative` run proves the choice was necessary. Under the original rule:
+
+```
+"READ IT AGAIN" cannot be hit at its own centre (opacity 1)
+"KEEP THIS ONE UP" cannot be hit at its own centre (opacity 1)
+"SAY IT IN MY WORDS" cannot be hit at its own centre (opacity 1)
+```
+
+**Opacity 1** — because the sabotage sits on the parent while the check reads
+the child. An opacity assertion would have passed with all four controls
+invisible and dead.
 
 ---
 

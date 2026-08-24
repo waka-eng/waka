@@ -179,6 +179,13 @@ jobs:
       # page without a manual rebuild; in CI nothing edits anything, and a
       # rebuild loop would keep the job alive after the tests finish.
       WAKA_NO_WATCH: "1"
+      # `showsDebug()` gates `window.wakaField()`, and two journeys read it to
+      # check things no DOM assertion can reach — whether the sky is actually
+      # leaning into headquarters, and how far each statement came. Without it
+      # `ways-out` reports "sky NOT CHECKED (no audit on this build)" and
+      # passes on the horizontal half alone. It says so rather than pretending,
+      # which is how this gap was noticed; setting it here is what closes it.
+      VITE_SHOW_INTERNAL: "1"
 
     steps:
       - name: Checkout
@@ -209,9 +216,30 @@ jobs:
       # `dev:local` builds the web bundle and then serves it alongside the API
       # from one process. Backgrounded, with its output kept, because when this
       # job fails the server's log is usually the thing that says why.
+      # BEFORE THE STACK, because the API reads the endpoint at boot. Setting
+      # it on the erasure step instead would configure the test process and
+      # leave the server still talking to real S3 — which, with no
+      # credentials, means every upload fails and the suite reports a broken
+      # bucket rather than anything about erasure.
+      - name: Start the object store stub
+        run: |
+          pnpm e2e:s3-stub --port 8792 > /tmp/waka-s3-stub.log 2>&1 &
+          echo $! > /tmp/waka-s3-stub.pid
+          # any HTTP answer means it is listening; a 404 for a key that does
+          # not exist is a healthy stub. Only a refused connection is "not yet".
+          for i in $(seq 1 30); do
+            curl -sS -o /dev/null "http://127.0.0.1:8792/waka-ci/probe" && exit 0
+            sleep 1
+          done
+          echo "::error::the object store stub never came up"
+          cat /tmp/waka-s3-stub.log
+          exit 1
+
       - name: Boot the local stack
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ATTACHMENTS_BUCKET: waka-ci
+          ATTACHMENTS_ENDPOINT: http://127.0.0.1:8792
         run: |
           pnpm dev:local > /tmp/waka-stack.log 2>&1 &
           echo $! > /tmp/waka-stack.pid
@@ -260,10 +288,48 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: pnpm e2e:journeys --negative
 
+      # No model calls and no object store — just Postgres and the API. It is
+      # the cheapest suite in the repo and one of the most security-relevant:
+      # a revoke that returns 200 and leaves the token working would pass every
+      # other check here. There is no reason it should not run on every change.
+      - name: Connections (list and revoke)
+        run: pnpm e2e:connections --base-url http://127.0.0.1:3010
+
+      # ERASURE NEEDS TWO THINGS THIS WORKFLOW MAY NOT HAVE, so it asks first.
+      #
+      # An object store, because the promise that fails most quietly is that
+      # the BYTES go before the rows that inventory them — `s3-stub.ts` is
+      # enough to prove our half of that. And a model key, because a room has
+      # to actually synthesise something that cites the leaving account before
+      # there is a citation for erasure to remove. Without the key the suite
+      # would sit through two five-minute derivation waits and then fail for a
+      # reason that has nothing to do with erasure, so it is skipped visibly
+      # rather than run into a timeout.
+      # The suite needs the same two variables the server was booted with, so
+      # it can HEAD the object directly and see for itself whether the bytes
+      # went. Without them it reports the byte checks as NOT RUN rather than
+      # passing over them.
+      - name: Erasure (needs a model key)
+        if: ${{ secrets.GEMINI_API_KEY != '' }}
+        env:
+          ATTACHMENTS_BUCKET: waka-ci
+          ATTACHMENTS_ENDPOINT: http://127.0.0.1:8792
+        run: pnpm e2e:erasure --base-url http://127.0.0.1:3010
+
+      - name: Erasure — NOT RUN
+        if: ${{ secrets.GEMINI_API_KEY == '' }}
+        run: |
+          echo "::warning::e2e:erasure was NOT RUN — no GEMINI_API_KEY."
+          echo "Account deletion is the highest-stakes path in the product and"
+          echo "its failures are invisible from every surface. Add the secret"
+          echo "to turn this into a gate."
+
       - name: Stack log
         if: always()
         run: tail -n 200 /tmp/waka-stack.log || true
 
       - name: Stop the stack
         if: always()
-        run: kill "$(cat /tmp/waka-stack.pid)" 2>/dev/null || true
+        run: |
+          kill "$(cat /tmp/waka-stack.pid)" 2>/dev/null || true
+          kill "$(cat /tmp/waka-s3-stub.pid)" 2>/dev/null || true
