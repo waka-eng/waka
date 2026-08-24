@@ -186,8 +186,10 @@ export interface Entry {
   dismissed: boolean;
   sortOrder: number;
   /** The signals beneath this statement, named. This is the provenance the
-      headquarters peek draws, and it points at layer 2 — not at inspirations. */
-  citedSignals: Array<{ id: string; statement: string }>;
+      headquarters peek draws, and it points at layer 2 — not at inspirations.
+      `answered` is the ground's ratified standing: the owner has spoken to it
+      (a verdict, a star) — false while only the machine believes it. */
+  citedSignals: Array<{ id: string; statement: string; answered: boolean }>;
   createdMs: number;
 }
 
@@ -264,7 +266,11 @@ function toEntry(row: ApiTopOfMindEntry): Entry {
     pinned: Boolean(row.pinned),
     dismissed: Boolean(row.dismissed),
     sortOrder: row.sortOrder ?? 0,
-    citedSignals: Array.isArray(row.citedSignals) ? row.citedSignals : [],
+    /* an older payload without the standing must read as unanswered — dim is
+       the honest default, never falsely lit */
+    citedSignals: Array.isArray(row.citedSignals)
+      ? row.citedSignals.map((c) => ({ ...c, answered: Boolean(c.answered) }))
+      : [],
     createdMs: ms(row.createdAt),
   };
 }

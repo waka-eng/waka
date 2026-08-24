@@ -170,8 +170,12 @@ function board(body: string) {
         dismissed: false,
         sortOrder: 0,
         citedSignals: [
-          { id: SPEC, statement: "the spec is read as the promise" },
-          { id: CODE, statement: "the code is read as the truth" },
+          /* one ground the person has answered, one only the machine holds —
+             the pair the ratified-light cases below stand on. The truth of
+             the flag itself is the API's business, pinned against real rows
+             in ratified-light.db.test.ts; here it is a served fact. */
+          { id: SPEC, statement: "the spec is read as the promise", answered: true },
+          { id: CODE, statement: "the code is read as the truth", answered: false },
         ],
         createdMs: at(2),
       },
@@ -269,6 +273,11 @@ vi.mock("../src/lib/api", async (importOriginal) => {
       id: entryId,
       body: input.body,
     }),
+    /* The write behind answering a ground. Unmocked it would reach a network
+       that is not there, and the page — honestly — would take the answer
+       back off the map when the request died, unlighting the ground the
+       round-trip case just lit. */
+    createFeedback: async () => ({ id: "feedback-1" }),
   };
 });
 
@@ -574,8 +583,12 @@ describe("what the poster is standing on", () => {
     await press('h1.jar-poster[data-jar-chrome="1"]', /./);
     await layout.step(5);
 
-    const lead = layout.container.querySelector(".jar-prov--poster .jar-prov-lead");
-    expect(lead?.textContent, "the poster was asked and answered with nothing").toBe("built from");
+    /* the standing-on band (Phase 4) opens above this one, so the lead is
+       found by its words rather than by being first */
+    const leads = [...layout.container.querySelectorAll(".jar-prov--poster .jar-prov-lead")].map(
+      (n) => (n.textContent ?? "").trim(),
+    );
+    expect(leads, "the poster was asked and answered with nothing").toContain("built from");
 
     const rows = [...layout.container.querySelectorAll(".jar-prov--poster .jar-prov-row")].map(
       (n) => (n.textContent ?? "").trim(),
@@ -616,5 +629,67 @@ describe("board acts leave receipts", () => {
       row?.parentElement?.textContent,
       "the receipt and the way back must share one breath",
     ).toContain("put it back");
+  });
+});
+
+describe("ratified light: the poster's grounds are lit by who holds them", () => {
+  /**
+   * goal: the-legible-loop, Phase 4. The board's sentence stands on named
+   * patterns, and the light must say whose each is: full ink where the
+   * person has answered (a verdict, a star — the SERVED flag, whose truth
+   * `ratified-light.db.test.ts` pins against real rows), dim where only the
+   * machine believes it. Light is the only channel: no badge, no label, no
+   * numeral. And answering must be one gesture away — pressing a dim ground
+   * opens the same yes/partly/not-true row the sky gives a pattern, and the
+   * answer moves the light in the same beat, before any refetch.
+   */
+  it("renders both ink states, and nothing but light tells them apart", async () => {
+    await press('h1.jar-poster[data-jar-chrome="1"]', /./);
+
+    const grounds = [...layout.container.querySelectorAll<HTMLElement>(".jar-ground")];
+    expect(grounds, "the poster hid what it stands on").toHaveLength(2);
+
+    const byText = new Map(grounds.map((g) => [(g.textContent ?? "").trim(), g]));
+    const answered = byText.get("the spec is read as the promise");
+    const machineOnly = byText.get("the code is read as the truth");
+    expect(answered, "the answered ground is missing").toBeTruthy();
+    expect(machineOnly, "the machine-only ground is missing").toBeTruthy();
+
+    expect(
+      answered!.classList.contains("jar-ground--answered"),
+      "an answered ground must hold full ink",
+    ).toBe(true);
+    expect(
+      machineOnly!.classList.contains("jar-ground--answered"),
+      "a ground only the machine believes must sit dim",
+    ).toBe(false);
+
+    /* light only: the band carries the lead line and the statements, and not
+       one digit, badge or count anywhere in it */
+    const band = answered!.closest(".jar-prov--poster");
+    expect(/\d/.test(band?.textContent ?? ""), "a numeral crept into the standing").toBe(false);
+  });
+
+  it("answering a dim ground moves the light in the same beat", async () => {
+    await press('h1.jar-poster[data-jar-chrome="1"]', /./);
+
+    /* the dim ground opens its own ask row — correction one gesture from
+       the explanation, the same verbs the sky uses */
+    await press(".jar-ground", /the code is read as the truth/);
+    await press(".jar-neb-ask button", /^yes$/);
+
+    const lit = [...layout.container.querySelectorAll<HTMLElement>(".jar-ground")].find((g) =>
+      (g.textContent ?? "").includes("the code is read as the truth"),
+    );
+    expect(
+      lit?.classList.contains("jar-ground--answered"),
+      "the verdict did not move the light",
+    ).toBe(true);
+
+    /* and the act left its receipt, at the place the act happened */
+    const receipt = [...layout.container.querySelectorAll(".jar-receipt")].map(
+      (r) => r.textContent ?? "",
+    );
+    expect(receipt, "the answer taught silently").toContain(RECEIPTS.verdictKept.text);
   });
 });

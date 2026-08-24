@@ -7069,6 +7069,13 @@ function HomeExperience(): JSX.Element {
   const [provTick, setProvTick] = useState(0);
   /* whether the poster is showing what it was built from */
   const [posterAsk, setPosterAsk] = useState(false);
+  /** Which ground in the poster's standing-on band is being asked about —
+      its verdict row belongs to it, exactly as `focusCandId` gives the sky's
+      pattern its own. Closing the band lets it go. */
+  const [groundAsk, setGroundAsk] = useState<string | null>(null);
+  useEffect(() => {
+    if (!posterAsk) setGroundAsk(null);
+  }, [posterAsk]);
   /**
    * THE POSTER'S OWN HISTORY.
    *
@@ -7242,6 +7249,35 @@ function HomeExperience(): JSX.Element {
       }
     return out;
   }, [atWall, agents, notes, provTick, wokenGroups]);
+
+  /**
+   * THE GROUNDS THEMSELVES, AND WHOSE LIGHT EACH HOLDS.
+   *
+   * The chain above flattens to memories; this is the layer it walks
+   * through — the patterns the poster's sentence stands on. Each carries its
+   * ratified standing: full ink where the person has answered (a verdict, a
+   * star), dim where only the machine believes it. One glance separates
+   * "what we have agreed about me" from "what it currently thinks", and the
+   * dim ones are the recalibration queue — answering them is the existing
+   * gesture, up in the sky. goals/the-legible-loop.md Phase 4.
+   *
+   * The served flag is the record's truth at load; the union with this
+   * session's own verdicts is what lets the light move in the same beat as
+   * the answer, before any refetch. Your own wall only: a room's board
+   * stands on shared statements (its chain says who said each), and an
+   * agent's board grounds itself in its own memories.
+   */
+  const posterGrounds = useMemo<Array<{ id: string; statement: string; answered: boolean }>>(() => {
+    if (atWall.kind !== "self") return [];
+    const board = notes ?? [];
+    const lead = board.find((e) => e.pinned) ?? board[0];
+    if (!lead) return [];
+    return lead.citedSignals.map((cited) => ({
+      id: cited.id,
+      statement: cited.statement,
+      answered: cited.answered || verdicts.has(cited.id),
+    }));
+  }, [atWall, notes, verdicts]);
 
   /**
    * The evidence under a pattern. Candidates are a union — a server pattern, a
@@ -8803,6 +8839,75 @@ function HomeExperience(): JSX.Element {
                         built from, each with the span that carried it at full
                         ink and the surround dimmed. Pressing one travels to
                         that memory in the field. */}
+                    {/* THE PATTERNS IT STANDS ON, LIT BY WHO HOLDS THEM.
+                        Full ink: you have answered this ground — a verdict, a
+                        star. Dim: only the machine believes it. Light is the
+                        only difference — no badge, no label, no count — and
+                        pressing a ground opens the same ask row the sky
+                        gives a pattern being read, because explanation and
+                        correction belong one gesture apart: the dim ones are
+                        the recalibration queue, and answering is the
+                        existing verb, not a new control. */}
+                    {here && posterAsk && posterGrounds.length > 0 ? (
+                      <div className="jar-prov jar-prov--poster" data-jar-chrome="1">
+                        <p className="jar-prov-lead jar-label">standing on</p>
+                        {posterGrounds.map((ground) => (
+                          <div key={ground.id}>
+                            <button
+                              type="button"
+                              className={
+                                ground.answered
+                                  ? "jar-ground jar-ground--answered"
+                                  : "jar-ground"
+                              }
+                              onClick={() =>
+                                setGroundAsk((cur) => (cur === ground.id ? null : ground.id))
+                              }
+                            >
+                              {ground.statement}
+                            </button>
+                            {groundAsk === ground.id ? (
+                              <p className="jar-neb-ask">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setGroundAsk(null);
+                                    sayVerdict(ground.id, "true");
+                                  }}
+                                >
+                                  yes
+                                </button>
+                                <span aria-hidden="true"> · </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setGroundAsk(null);
+                                    sayVerdict(ground.id, "partly");
+                                  }}
+                                >
+                                  partly
+                                </button>
+                                <span aria-hidden="true"> · </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setGroundAsk(null);
+                                    sayVerdict(ground.id, "not_true");
+                                  }}
+                                >
+                                  not true
+                                </button>
+                              </p>
+                            ) : null}
+                            {verdictReceipt?.id === ground.id ? (
+                              <p className="jar-neb-ask">
+                                <span className="jar-receipt">{verdictReceipt.text}</span>
+                              </p>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                     {here && posterAsk ? (
                       posterChain.length > 0 ? (
                         <div className="jar-prov jar-prov--poster" data-jar-chrome="1">

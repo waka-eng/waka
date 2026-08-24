@@ -24,6 +24,7 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
 import {
+  feedback,
   signals,
   topOfMindEntries,
   topOfMindEntrySignals,
@@ -103,8 +104,14 @@ export interface TopOfMindEntryView {
   pinned: boolean;
   dismissed: boolean;
   sortOrder: number;
-  /** What the entry rests on. Every id here is a signal the profile holds. */
-  citedSignals: Array<{ id: string; statement: string }>;
+  /** What the entry rests on. Every id here is a signal the profile holds.
+      `answered` is the RATIFIED standing of that ground: true when the owner
+      has spoken to it — a verdict (any feedback on the signal) or a star
+      (their own locked words) — false while only the machine believes it.
+      Computed from the feedback and lock records at serve time, never
+      stored: the light must move the moment the person answers
+      (goals/the-legible-loop.md Phase 4). */
+  citedSignals: Array<{ id: string; statement: string; answered: boolean }>;
   createdAt: string;
 }
 
@@ -137,6 +144,7 @@ function toIso(value: Date | null): string | null {
 
 async function loadEntries(
   db: WakaDb,
+  profileId: string,
   topOfMindId: string,
   includeDismissed: boolean,
 ): Promise<TopOfMindEntryView[]> {
@@ -156,6 +164,9 @@ async function loadEntries(
       entryId: topOfMindEntrySignals.entryId,
       signalId: topOfMindEntrySignals.signalId,
       statement: signals.statement,
+      // The star half of the ratified standing rides the join it needs no
+      // extra query for: the owner's locked words are their answer.
+      lockedAt: signals.lockedAt,
     })
     .from(topOfMindEntrySignals)
     .innerJoin(signals, eq(signals.id, topOfMindEntrySignals.signalId))
@@ -166,12 +177,46 @@ async function loadEntries(
       ),
     );
 
-  const citationsByEntry = new Map<string, Array<{ id: string; statement: string }>>();
+  // The verdict half: which of these grounds the owner has answered. Read
+  // from the feedback rows at serve time — computed, never stored — so a
+  // verdict given a second ago already moves the light on this serve. Any
+  // verdict counts, not_true included: ratified means "we have spoken about
+  // this", not "it is true".
+  const citedIds = [
+    ...new Set(
+      citationRows
+        .map((row) => row.signalId)
+        .filter((id): id is string => id !== null),
+    ),
+  ];
+  const answeredIds = new Set<string>();
+  if (citedIds.length > 0) {
+    const verdictRows = await db
+      .selectDistinct({ targetId: feedback.targetId })
+      .from(feedback)
+      .where(
+        and(
+          eq(feedback.profileId, profileId),
+          eq(feedback.targetType, "signal"),
+          inArray(feedback.targetId, citedIds),
+        ),
+      );
+    for (const row of verdictRows) answeredIds.add(row.targetId);
+  }
+
+  const citationsByEntry = new Map<
+    string,
+    Array<{ id: string; statement: string; answered: boolean }>
+  >();
   for (const row of citationRows) {
     // The inner join already excludes citations whose signal was deleted;
     // this narrows the type to match.
     if (row.signalId === null) continue;
-    const cited = { id: row.signalId, statement: row.statement };
+    const cited = {
+      id: row.signalId,
+      statement: row.statement,
+      answered: row.lockedAt !== null || answeredIds.has(row.signalId),
+    };
     const bucket = citationsByEntry.get(row.entryId);
     if (bucket) bucket.push(cited);
     else citationsByEntry.set(row.entryId, [cited]);
@@ -208,7 +253,7 @@ export async function getLiveTopOfMind(
     version: artifact.version,
     reason: artifact.reason,
     createdAt: artifact.createdAt.toISOString(),
-    entries: await loadEntries(db, artifact.id, input.includeDismissed === true),
+    entries: await loadEntries(db, input.profileId, artifact.id, input.includeDismissed === true),
   };
 }
 
@@ -299,7 +344,7 @@ export async function updateLiveEntry(
   });
 
   if (topOfMindId === null) return null;
-  const entries = await loadEntries(db, topOfMindId.topOfMindId, true);
+  const entries = await loadEntries(db, input.profileId, topOfMindId.topOfMindId, true);
   return entries.find((row) => row.id === topOfMindId.entryId) ?? null;
 }
 

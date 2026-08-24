@@ -1896,6 +1896,36 @@
   /* the surround: present, readable, clearly not the point */
   color: var(--jar-faint);
 }
+/* A GROUND THE POSTER STANDS ON, LIT BY WHO HOLDS IT. Same face, same size,
+   same rule down the left as any quotation you can walk into — light is the
+   only difference between "what we have agreed about me" (answered: full
+   ink) and "what it currently thinks" (dim). No badge, no label, no count. */
+.jar-ground {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0 0 0 12px;
+  border: 0;
+  border-left: 1px solid var(--jar-edge, rgba(255, 255, 255, 0.08));
+  background: none;
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.62;
+  text-align: left;
+  cursor: pointer;
+  color: var(--jar-faint);
+  transition: border-color 0.2s ease;
+}
+.jar-ground:hover,
+.jar-ground:focus-visible {
+  border-left-color: var(--jar-muted, rgba(232, 237, 244, 0.55));
+  outline: none;
+}
+.jar-ground--answered {
+  color: var(--jar-ink);
+  text-shadow: 0 0 12px rgba(232, 237, 244, 0.16);
+}
+
 /* THE WORDS THAT DID THE READING. <mark> is the correct element — this is
    text marked for relevance in another context — but its default is a yellow
    block, so it is stripped back to what this world uses instead: light. */

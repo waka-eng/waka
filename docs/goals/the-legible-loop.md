@@ -1,6 +1,7 @@
 # Goal: the legible loop
 
-Status: in flight — Phases 1–3 passed; next is Phase 4 (ratified light).
+Status: in flight — Phases 1–4 passed; next is Phase 5 (the weather
+report, and the antechamber).
 Created 2026-08-23 on the founder's instruction to build
 the whole loop-legibility experience as its own goal. Carved out of
 `no-quiet-corners.md` (its Phase 9, plus Phase 4 — the suppression
@@ -180,6 +181,36 @@ records). Demo-seed runs for gates as needed (~10 derivations per
 run). No new dependencies, no new infrastructure.
 
 ## Log
+
+- **2026-08-24 — Phase 4: PASS.** Ratified light on the poster. The served
+  entry payload's `citedSignals` now carry `answered` — true when the owner
+  has spoken to that ground (any verdict on the signal, not_true included,
+  or their own locked words), false while only the machine believes it —
+  computed in `loadEntries` from the feedback and lock records at serve
+  time, never stored, so a verdict given a second ago already moves the
+  light on the next serve; the wire carries it to every kind of mind. The
+  world: the poster's ask now opens a **standing on** band above "built
+  from" — the grounds themselves, the layer the memory chain walks
+  through — full ink (`jar-ground--answered`, the same half-step lift the
+  quoted spans use) where answered, dim where machine-only, and light is
+  the only difference: no badge, no label, no numeral. Pressing a ground
+  opens the same yes/partly/not-true row the sky gives a pattern being
+  read — explanation and correction one gesture apart, the existing verb
+  at a new site rather than a new control (necessary, not convenient: only
+  EMERGING signals hang in the sky, so an active ground had no answering
+  site anywhere) — and the answer moves the light in the same beat through
+  the session's own verdicts, with the verdict receipt printed at the act.
+  GLOSSARY gained the agreed-light row. Gate measured:
+  `ratified-light.db.test.ts` 4/4 on real Postgres (machine-only serves
+  false; a verdict flips it with the entry row's `updated_at` untouched —
+  computed, not stored; a star answers; another profile's verdict moves
+  nothing; a structural case proves no artifact table even has a column to
+  denormalize into), `home-poster` 10/10 (both ink states pinned with a
+  no-digit sweep of the band; the round-trip case answers a dim ground and
+  watches it light), api 53 files / 612 tests, web 20 files / 141 tests,
+  vocabulary and seams clean. Deliberately excluded: any third visual
+  state, and any standing on a room's board — a room's grounds are shared
+  statements whose chain already names who said each.
 
 - **2026-08-24 — Phase 3: PASS.** The ground refuses, on the record.
   Dismissing a signal now deletes nothing: the row keeps `status:
