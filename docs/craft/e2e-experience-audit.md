@@ -916,28 +916,19 @@ cross-profile write denial, which is the one that matters most.
 
 ## What was not covered
 
-Named so the gaps are not mistaken for clean results. Three of the five gaps
-this section opened with have since been closed, and are kept here with what
-closed them rather than deleted — a gap that quietly disappears reads as one
-that was never real.
+Named so the gaps are not mistaken for clean results. Closed gaps stay here,
+under *Closed since*, with the thing that closed them — a gap that quietly
+disappears reads as one that was never real, and a reader who cannot see what
+used to be open has no way to judge how fast the list is actually moving. The
+two lists are kept rather than a count, because a count in prose goes stale
+the first time either list changes and this document has already been wrong
+that way twice.
 
 **Still open:**
 
 - **Google OAuth.** Not configured; the button was never pressed. No harness
   can close this one without a real Google project, so it stays open by
   nature rather than by neglect.
-- **The sky's arrival, on a real sky.** `ways-out` checks that the sky leans
-  — `lean` is the camera's own scalar and exists on an empty account, so
-  ripping the peek out fails the journey. What it cannot check on a fresh
-  account is that an elected statement *arrives* near the seam, which is the
-  exact bug that shipped: the peek elected correctly, eased correctly, and
-  parked every cloud in the part of its own sprite that has no light left in
-  it. The journey says `sky leaning (1) but EMPTY` when it walks that half
-  without measuring it. **This is structural, not an oversight.** A sky needs
-  signals, signals only ever come from derivation, and there is no route that
-  writes one — so a key-free suite cannot produce one, and `journeys` has to
-  stay key-free to run on every pull request. Closing it means a browser pass
-  gated on the key, the way `e2e:erasure` is gated.
 - **Password recovery.** Deferred by decision, no mail provider. The one item
   in this document that can lock a real person out of their own memory.
 - **Findings 9 and 13.** Out of scope by founder decision: the world as one
@@ -946,6 +937,37 @@ that was never real.
 
 **Closed since:**
 
+- **The sky, measured in light.** This was the newest entry in the *still
+  open* list above and it is closed by `e2e:sky`, gated on a key the way
+  `e2e:erasure` is. `ways-out` had said `sky leaning (1) but EMPTY` on every
+  run since it was written, and that was structural: a sky is made of
+  signals, signals only ever come from derivation, no route writes one, and
+  `journeys` has to stay key-free to run on every pull request.
+
+  What makes the new suite worth the model calls is *what* it measures. Every
+  model-level assertion — a statement elected, `peekY` reached, `skyPeek()`
+  at 1 — was **green on the build that shipped broken**, because
+  `SKY_PEEK_DEPTH = 0.62` parked each cloud inside its own sprite's dead zone:
+  elected, arrived, invisible. So the gate is a photometer on the top 12% of
+  the canvas, read against a second account signed up in the same run with
+  nothing captured and therefore no sky. Measured both directions:
+
+  | reading | control band | subject band | verdict |
+  |---|---|---|---|
+  | real sky, 5 statements up | 0.02 | **0.87** | pass |
+  | sky emptied (`--negative`) | 0.01 | **0.05** | fails, as required |
+
+  That 0.05 is the same reading the `0.62` build produced, so the sabotage
+  reproduces the shipped bug's photometry rather than approximating it.
+
+  Two wrong controls are recorded in the suite's header because both were
+  written before being caught: there is no "reach for the top edge" to A/B
+  against (`skyPeek()` is `1 - cam.y / minCam` — the camera, never the
+  pointer, so at headquarters it is already 1), and moving the camera gives no
+  dark frame either. It also must wait for **one emerging signal, not a
+  well-evidenced one** — the sky *is* the emerging signals, promotion is at
+  three evidence, so a well-evidenced signal is precisely the one that has
+  already left the sky.
 - **Rooms with more than one member.** Now driven, not read. `e2e:rooms` runs
   nine checks across four accounts and proves the thing this entry called the
   highest-stakes surface in the product: removal re-keys the door and leaving
