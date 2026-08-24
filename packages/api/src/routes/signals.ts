@@ -191,7 +191,7 @@ async function decorateSignals(
     db
       .select({
         signalId: signalEvidence.signalId,
-        createdAt: signalEvidence.createdAt,
+        createdAt: inspirations.createdAt,
         source: inspirations.source,
       })
       .from(signalEvidence)
@@ -314,13 +314,13 @@ export async function getProfileSignal(
       inspirationId: signalEvidence.inspirationId,
       reason: signalEvidence.reason,
       quote: signalEvidence.quote,
-      createdAt: signalEvidence.createdAt,
+      createdAt: inspirations.createdAt,
       text: inspirations.text,
     })
     .from(signalEvidence)
     .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
     .where(eq(signalEvidence.signalId, input.signalId))
-    .orderBy(desc(signalEvidence.createdAt));
+    .orderBy(desc(inspirations.createdAt));
 
   return {
     ...summary,

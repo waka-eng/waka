@@ -391,6 +391,14 @@ speaks in its creator's preferred locale until groups carry their own.
 
 ## How time is applied
 
+**Evidence is dated by the capture that witnesses it** — `inspirations
+.created_at`, never the evidence row's own insert time. The two diverge
+exactly when it matters: an old save cited retroactively (a related capture
+named at a later derivation) arrives carrying its own date, so it widens the
+spread term instead of collapsing it and cannot masquerade as fresh recency.
+Confidence, selection, the principle span bar, and the read routes all apply
+this one rule.
+
 Four terms read the clock; nothing else does. What matters is *when* each is
 evaluated — a decay term only exists if something actually runs it.
 
