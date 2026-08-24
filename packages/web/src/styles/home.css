@@ -601,62 +601,29 @@
    still behind it. */
 /* Searching: one line at the top of the world, and the answer is the field
    itself lighting up. No panel, no result rows, no count. */
-/* The edge of the world: a signpost hard against the margin it names, in the
-   quiet label register, vertically centred so it reads as a boundary rather
-   than as a sentence about your ambition. */
-.jar-edge {
-  position: absolute;
-  /* BELOW THE WAY OUT, NOT THROUGH IT. Each margin carries two things —
-     the wall that is already over there (`.jar-way`, at eye level) and the
-     offer to grow the axis in that direction (this). Both sat within a
-     pixel of `46vh` and printed straight through each other, which nobody
-     could see while the whole set was stuck at zero opacity and which was
-     the first thing on screen once it was not. Travel keeps eye level:
-     going somewhere that exists is the commoner act. */
-  top: 60vh;
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  padding: 8px 4px;
-  background: none;
-  font: inherit;
-  font-weight: 500;
-  font-size: 9px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  /* a rail is ONE column of letters. It used to borrow this from the
-     `.jar-edge` block further down that has since become `.jar-way`, and
-     without it "Make a room" wraps into three vertical columns. */
-  white-space: nowrap;
-  color: var(--jar-faint);
-  cursor: pointer;
-  pointer-events: auto;
-  writing-mode: vertical-rl;
-  transition: opacity 0.3s ease, color 0.2s ease;
+/* THE WAYS OUT — the neighbour waiting past each margin, and they have to be
+   READABLE.
+
+   The two vertical create rails that shared these margins are gone (the axis
+   at the bottom offers a `+` instead, beside the places it would join), so
+   each side now carries exactly one thing: the name of the wall that is over
+   there. That is a fact about where you are standing, and it was set at the
+   faintest tier this world has at seven-tenths opacity — a grey whisper on
+   near-black that the founder could barely find on their own screen.
+
+   A person once told us they had no idea they could go left or right. The
+   fix then was making these rest visible at all; this is the other half of
+   it. Muted rather than faint, at full opacity, with the chevron carrying
+   the direction — still the quiet label register, still nothing like a
+   button, but legible without being hunted for. */
+.jar-way {
+  opacity: 1;
+  color: var(--jar-muted);
 }
-.jar-edge--r { right: 10px; }
-.jar-edge--l { left: 10px; transform: rotate(180deg); }
-/* THE SIGNPOST RESTS VISIBLE. IT USED TO REST AT ZERO.
-   `.jar-hq` carries `pointer-events: none` — the world beneath it has to
-   stay reachable — and an element that takes no pointer CANNOT MATCH
-   `:hover`. So `.jar-hq:hover .jar-edge` never fired once, on any pointer
-   device, and the only thing keeping these on screen was a `hover: none`
-   rule: the ways out of a wall were visible on a phone and invisible on
-   every desktop there has ever been.
-
-   A person told us they had no idea they could go left or right. They were
-   right, and this selector was the whole reason — the affordance that
-   teaches you the world is wider was itself gated behind already knowing.
-
-   It rests at the weight touch always had, which is the axis map's own law
-   further down this file — everything you could reach is visible without
-   moving — and brightens under the pointer like any other word here. */
-.jar-edge,
-.jar-way { opacity: 0.7; }
-.jar-edge:hover,
-.jar-edge:focus-visible,
 .jar-way:hover,
-.jar-way:focus-visible { opacity: 1; color: var(--jar-ink); }
+.jar-way:focus-visible {
+  color: var(--jar-ink);
+}
 
 /* ================= the axis map =================
    The bottom edge maps the horizontal axis and nothing else. One mark per
@@ -701,6 +668,22 @@
 .jar-axis-mark:hover { opacity: 1; color: var(--jar-muted); }
 /* where you are: the page's own light, and the only lit mark on the strip */
 .jar-axis-mark.is-here { opacity: 1; color: var(--jar-ink); }
+/* THE WAY TO MAKE ANOTHER PLACE. It reads as one more mark on the axis
+   because that is what it will produce — a place on this axis. Slightly
+   brighter than a wall at rest so it is findable, never brighter than the
+   wall you are standing on: where you ARE outranks what you could make. */
+.jar-axis-add {
+  opacity: 0.75;
+  font-size: 12px;
+  letter-spacing: 0;
+  padding: 6px 10px;
+}
+.jar-axis-add:hover,
+.jar-axis-add:focus-visible { opacity: 1; color: var(--jar-ink); }
+/* the two words the `+` opens: the same register, one step in from it */
+.jar-axis-make { opacity: 0.85; color: var(--jar-muted); }
+.jar-axis-make:hover,
+.jar-axis-make:focus-visible { opacity: 1; color: var(--jar-ink); }
 .jar-axis-mark.is-here .jar-axis-name { box-shadow: inset 0 -1px 0 0 currentColor; }
 /* an agent is a different KIND of wall, said the way the companion says it:
    letterform, not colour */
@@ -1836,7 +1819,6 @@
   .jar-back,
   .jar-dial-handle,
   .jar-forming-line,
-  .jar-edge,
   .jar-way,
   .jar-mouth-rest,
   .jar-mouth-slot {

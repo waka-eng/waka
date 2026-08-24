@@ -1360,6 +1360,8 @@ function HomeExperience(): JSX.Element {
      standing in it (the dial has no meaning among candidates), and which
      nebulae have been drawn together. */
   const [inSky, setInSky] = useState(false);
+  /** Whether the axis is offering the two ways to make another place. */
+  const [addOpen, setAddOpen] = useState(false);
   /** Which pattern in the sky is being read. Its verdict row belongs to it. */
   const [focusCandId, setFocusCandId] = useState<string | null>(null);
   /**
@@ -10463,28 +10465,12 @@ function HomeExperience(): JSX.Element {
                     layout runs out, not a sentence in the middle of the room.
                     Centred under the poster it read as a statement about your
                     ambition, which it is not. */}
-                {ready ? (
-                  <>
-                    <button
-                      type="button"
-                      className="jar-edge jar-edge--r jar-label"
-                      data-jar-chrome="1"
-                      onClick={() =>
-                        setGroupForm({ mode: "make", text: "", busy: false, error: null })
-                      }
-                    >
-                      Make a room
-                    </button>
-                    <button
-                      type="button"
-                      className="jar-edge jar-edge--l jar-label"
-                      data-jar-chrome="1"
-                      onClick={() => setAgentName("")}
-                    >
-                      Add an agent
-                    </button>
-                  </>
-                ) : null}
+                {/* The two create rails that hung in these margins are gone
+                    (founder, 2026-08-24). Making a room and adding an agent
+                    both mean "a new place appears on the axis", and the axis
+                    is along the bottom — so they are a `+` at the end of it,
+                    beside the places they would join, instead of two words
+                    printed sideways down the sides of the world. */}
               </div>
             );
           })}
@@ -10515,9 +10501,12 @@ function HomeExperience(): JSX.Element {
               exactly as it should, since there is nothing different to travel
               to down there.
 
-              `.jar-way`, not `.jar-edge`. These and the create rails above
-              shared that one class through two whole conflicting stylesheets
-              and neither of them got the layout it was written for. */}
+              `.jar-way` is now the ONLY thing in these margins: the create
+              rails that shared them moved to the axis at the bottom, beside
+              the places they would join. The two once shared a class name
+              through two whole conflicting stylesheets and neither got the
+              layout it was written for; there is nothing left to collide
+              with. */}
           {walls.map((w, i) => {
             const left = walls[i - 1] ?? null;
             const right = walls[i + 1] ?? null;
@@ -11539,6 +11528,45 @@ function HomeExperience(): JSX.Element {
             </button>
           );
         })}
+        {/* AND THE WAY TO MAKE ANOTHER ONE, at the end of the row of them.
+            A room and an agent are both A NEW PLACE ON THIS AXIS, so the
+            offer belongs where the axis already is rather than printed
+            sideways down the margins of the world, which is where it used
+            to live and where nobody found it. One mark, in the strip's own
+            register — it opens two words and closes again. */}
+        <button
+          type="button"
+          className={`jar-axis-mark jar-axis-add${addOpen ? " is-here" : ""}`}
+          aria-expanded={addOpen}
+          aria-label="make another place"
+          onClick={() => setAddOpen((v) => !v)}
+        >
+          <span aria-hidden="true">+</span>
+        </button>
+        {addOpen ? (
+          <>
+            <button
+              type="button"
+              className="jar-axis-mark jar-axis-make"
+              onClick={() => {
+                setAddOpen(false);
+                setAgentName("");
+              }}
+            >
+              <span className="jar-axis-name">an agent</span>
+            </button>
+            <button
+              type="button"
+              className="jar-axis-mark jar-axis-make"
+              onClick={() => {
+                setAddOpen(false);
+                setGroupForm({ mode: "make", text: "", busy: false, error: null });
+              }}
+            >
+              <span className="jar-axis-name">a room</span>
+            </button>
+          </>
+        ) : null}
       </nav>
 
       {/* SEARCHING, AND IT IS ONE LINE. No results panel, no counts, no list —
