@@ -1433,6 +1433,45 @@ function HomeExperience(): JSX.Element {
    * wall by the data you asked for is not.
    */
   const headingRef = useRef<number | null>(null);
+  /**
+   * WHAT A REBUILD OF THE LOOP MUST NOT FORGET.
+   *
+   * `headingRef` above is this idea applied to one field, and the comment on
+   * it explains why it had to exist: the loop is rebuilt when a destination's
+   * data arrives mid-crossing, and it used to resume at column zero. That
+   * fixed WHERE the loop resumed. It did not fix the fact that everything
+   * else about the crossing — the camera, whether a crossing was even running,
+   * and the creature's whole pose — is declared inside the effect and so is
+   * replaced by a fresh object on every rebuild.
+   *
+   * The visible cost, measured off a screen recording: travelling into a room
+   * for the first time after a hard refresh, the companion rides out to its
+   * full 190px lead, holds there while the fetch lands, and then teleports
+   * 288px back to centre in a single frame as the rebuilt state takes over.
+   * The ease that is supposed to bring it home moves 7.4% per frame and
+   * cannot produce that jump; the creature was not eased, it was replaced.
+   *
+   * So the crossing and the creature are snapshotted on teardown and restored
+   * on setup. Three things are deliberately NOT carried:
+   *
+   *   `gesture` — a pointer that was down before a rebuild is not down after
+   *     one. Restoring it would strand the world mid-drag with no pointer.
+   *   `pour` and `view.primed` — these are exactly what the dependency list
+   *     exists to reset. A rebuild happens because there is new data, and new
+   *     memories have to be allowed to arrive. Carrying them would trade this
+   *     bug for a field that never shows what just loaded.
+   *   `view.w/h/layout` — re-measured on setup, and must be: a rebuild can
+   *     straddle a resize.
+   */
+  const carryRef = useRef<{
+    cam: unknown;
+    trip: unknown;
+    companion: unknown;
+    /** the world has been sized, so a rebuild must not re-stage it */
+    primed: boolean;
+    /** where every memory had drifted to, by id */
+    balls: Map<string, { x: number; y: number }>;
+  } | null>(null);
   /** The camera is over a wall that has no dial: the dial fades, as in the sky. */
   const [dialAway, setDialAway] = useState(false);
   /** Drafts assembled here, in this session. They live nowhere else. */
@@ -2669,6 +2708,12 @@ function HomeExperience(): JSX.Element {
       /* the dust has been scattered once; it is ambient and never re-placed */
       motesPlaced: false,
     };
+    /* A REBUILD HAS ALREADY BEEN SIZED. `measure()` snaps every memory back to
+       its home while `primed` is false, which is the arrival animation
+       replaying for orbs that never moved. `motesPlaced` is deliberately NOT
+       carried: the mote arrays are rebuilt with the loop, so skipping the
+       scatter would leave the dust stacked at the origin. See `carryRef`. */
+    if (carryRef.current) view.primed = carryRef.current.primed;
     /* ---- the horizontal axis (v8): columns of jars, one room each ----
        Column zero is the personal jar; column c ≥ 1 is groupsRef[c-1]. The
        camera gains cam.x = column × view.w with the same snap discipline as
@@ -2735,6 +2780,33 @@ function HomeExperience(): JSX.Element {
       /** how long this crossing takes; a held drag can stretch it */
       ms: TRAVEL_MS,
     };
+    /* THE CROSSING SURVIVES A REBUILD. Restored here rather than after the
+       whole preamble because `measure()` reads both: it resets `cam.x` to
+       `trip.col * view.w` unless a crossing is running, so a `trip` that has
+       forgotten it was mid-flight is what walks the camera back to the column
+       it started from. See `carryRef`. */
+    if (carryRef.current) {
+      Object.assign(cam, carryRef.current.cam as Partial<typeof cam>);
+      Object.assign(trip, carryRef.current.trip as Partial<typeof trip>);
+      /* A REBUILD CAN COME FROM THE WALLS THEMSELVES CHANGING — `walls` is on
+         the dependency list. A crossing whose start or destination no longer
+         exists is not resumable, and resuming it would aim the camera at a
+         column that is not there, which is worse than the jump this is here to
+         remove. Fall back to where React says you are and stand still; the
+         camera is deliberately left to `measure()`, which sets it from
+         `trip.col` once the viewport has a real width. */
+      const cols = wallsRef.current;
+      const lo = cols[0]?.col ?? 0;
+      const hi = cols[cols.length - 1]?.col ?? 0;
+      const stranded = (c: number) => c < lo || c > hi;
+      if (cols.length === 0 || stranded(trip.col) || (trip.active && stranded(trip.dest))) {
+        trip.col = atWallRef.current.col;
+        trip.active = false;
+        trip.awaitingWake = false;
+        cam.xBack = false;
+        cam.aiming = false;
+      }
+    }
 
     /** Which one-time hints have already been said, so they are said once. */
     const hinted = {
@@ -3030,6 +3102,12 @@ function HomeExperience(): JSX.Element {
       /** the slow one: -1 … 1, half-life MOOD_HALF_LIFE_MS, rhythm only */
       mood: 0,
     };
+    /* AND SO DOES THE CREATURE. Every field above is a number, a boolean or a
+       string — no canvas, no node, nothing bound to the palette this run baked
+       — so the pose carries across whole. See `carryRef`. */
+    if (carryRef.current) {
+      Object.assign(companion, carryRef.current.companion as Partial<typeof companion>);
+    }
 
     /* motes rising off the aura when the companion is genuinely inspired */
     const upX = new Float32Array(10);
@@ -6587,14 +6665,60 @@ function HomeExperience(): JSX.Element {
     measure();
     /* `measure` is the first moment `vw` is real, so the horizontal camera can
        only be placed here — before it, `col * vw` is a column times one pixel. */
-    cam.x = trip.col * view.w;
-    cam.xTarget = cam.x;
+    /* NOT UNDER A CROSSING THAT IS STILL RUNNING. This is unconditional on a
+       first open, and has to be — before `measure()` there is no real viewport
+       and `col * vw` is a column times one pixel. But a rebuild that resumed a
+       crossing already has a camera partway across, and re-placing it here
+       restarts the slide from the column it set off from. `measure()` sets
+       `xTarget` from `trip.dest` on its own while a crossing is live. */
+    if (!trip.active) {
+      cam.x = trip.col * view.w;
+      cam.xTarget = cam.x;
+    }
     /* Resumed mid-journey: nobody ran the arrival, so run it now — the wall
        needs its ground solved, poured and woken exactly as a glide would. */
     if (resumedAt !== null) arriveColumn();
     measure();
     if (view.reduced) settleInstantly();
-    else primePour();
+    else if (carryRef.current) {
+      /*
+       * A REBUILD IS NOT AN ARRIVAL.
+       *
+       * `primePour()` with no argument stages the WHOLE archive, and on a
+       * rebuild that means every memory you were already looking at falls in
+       * from above again — the pour is how the field explains that something
+       * has arrived, and nothing has. But the rebuild happened BECAUSE there
+       * is new data, and those memories genuinely are arriving, so the answer
+       * is not to skip the pour: it is to pour only what this run did not
+       * already have.
+       *
+       * Identity is the ball's id. The objects are rebuilt from scratch every
+       * run, so the id is the only thing that survives, and it is what says
+       * whether a memory is new to the FIELD rather than new to this array.
+       */
+      const carried = carryRef.current.balls;
+      const fresh: Ball[] = [];
+      for (const b of list) {
+        const was = carried.get(b.id);
+        if (!was) {
+          fresh.push(b);
+          continue;
+        }
+        b.x = was.x;
+        b.y = was.y;
+        b.arrive = 1;
+        b.spawnAt = -1;
+        /* recomputed, never carried: `ground` is effect-local and resets, so a
+           carried `active` could disagree with whose ground is being stood in */
+        b.active = b.capturedMs <= TRef.current && onThisWall(b);
+      }
+      if (fresh.length > 0) primePour(fresh);
+      else {
+        pour.active = false;
+        pour.done = true;
+      }
+      computeInspiration();
+    } else primePour();
 
     simApiRef.current = {
       /**
@@ -7232,6 +7356,16 @@ function HomeExperience(): JSX.Element {
       window.removeEventListener("keydown", onKey);
       document.removeEventListener("visibilitychange", onVis);
       mq.removeEventListener("change", onMq);
+      /* HAND THE WORLD TO WHOEVER REBUILDS THIS LOOP. Copies, not the live
+         objects: the next run mutates what it is given from its first frame,
+         and a teardown must not be able to reach into it. See `carryRef`. */
+      carryRef.current = {
+        cam: { ...cam },
+        trip: { ...trip },
+        companion: { ...companion },
+        primed: view.primed,
+        balls: new Map(list.map((b) => [b.id, { x: b.x, y: b.y }] as const)),
+      };
       simApiRef.current = null;
       ballsRef.current = null;
       /* room orbs belong to this run of the loop; the DATA cache stays */
