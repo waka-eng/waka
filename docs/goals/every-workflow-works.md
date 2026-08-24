@@ -67,7 +67,7 @@ unproven in a browser.**
 | D3 | Cascade when the evidence under a signal is deleted | API (`signals`) |
 | E1 | Top of mind synthesised, versioned, citations resolve | API (`top-of-mind`) |
 | E2 | Entry actions — read again, say in my words, not this, undo | **Browser** (`journeys:entry-actions`) ✅ 2026-08-24 — and proving it found all four unreachable on every desktop; see finding 18 |
-| F1 | Principles minted nightly under the five tests | API (`principles`) |
+| F1 | Principles minted nightly under the five tests | API (`principles` step 6), **partly, and flaky by nature** — 2026-08-24. The row overstated itself until then: the step skips unless the stack carries four overrides, so the suite printed 5 passed and F1 read as proven while the path had never run. A pass proves the promotion path end to end; it fails about one run in two because the distiller returns no candidate, which no wait fixes — so this is a diagnostic, not a gate, and its failures now name their own cause. **Minting from nothing stays unproven**: step 2's declaration collides with the fixture by design, so the judge matches and redeems rather than minting |
 | F2 | Declare a principle — both destinations | API (`principles`), fixed 2026-08-22 |
 | F3 | Edit, reorder, delete; `principles.md` renders | API (`principles`) |
 | G1 | Create a room, join by code | API (`groups`) |
@@ -545,3 +545,96 @@ harness can fix:
 - **A4, password recovery** — there is nothing to prove. No route, no token
   table, no mail transport. Deferred by founder decision pending a provider,
   and the only row here that can lock a real person out of their own memory.
+
+### 2026-08-24 — the suite pass, and a row that had been overstating itself
+
+All five model-spending suites run, on the merged branch: `cold-start` 1/1,
+`signals` 6/6, `top-of-mind` 8/8, `groups` 9/9, `principles` 6/6. `groups`
+passing also confirms lifting `mintAgentToken` into `organic.ts` did not break
+its original caller, which was the one risk in that move.
+
+#### F1 was reading as proven while its proof had never run
+
+`principles` step 6 — *promotion: months of signals mint a held principle* —
+**skips unless the stack is booted with four env overrides.** The suite then
+prints "5 passed, 0 failed", and the inventory row for F1 read `API
+(principles)` as though the promotion path were covered. It was not. A skip
+that reports itself honestly is still a skip, and a row that reads the summary
+line instead of the step list will believe it.
+
+Booted with the overrides, the step **failed** — 184s, `principles: 2,
+minted+held: 0`.
+
+#### Two wrong diagnoses before the right one, and the third run is what found it
+
+Worth writing down in order, because the first two were confident.
+
+**First: "the documented override set is incomplete."** All three bars — SPAN,
+SIGNALS, TOM — take env overrides through the same `bar()` helper, and the
+suite's header named two. True, and a real trap for the next reader, so it is
+fixed. It was **not** the cause: a re-run with all three failed identically.
+
+**Second: "the assertion demands a duplicate the design prevents."** The
+trigger had logged `status: evaluated, attached: 3, redeemed: 1, minted: 0` —
+`distill` judges each candidate against the principles already standing, and
+when one is the SAME it attaches the citations there and redeems an
+aspirational one rather than minting a near-duplicate. The collision is
+genuine and by design: step 2 declares *"Have something working before you put
+more money in"* and the fixture says *"I cap spending until something ships"*.
+So the assertion was widened to what the step's title claims — a principle
+**held on its evidence**, by either road, reporting which.
+
+It passed in 6.4s. **And the confirming run failed again at 184s**, which is
+the only reason that explanation did not get committed as the answer.
+
+**Third: the step raced a bar it never waited for.** Two failing runs logged
+`status: below_bar` — no model work at all — against `evaluated` on the one
+that passed. `computeCitationEligibility` gates on three things and the third
+is **top-of-mind appearances**: how many distinct top-of-mind versions a citing
+signal has been selected into. Waiting for signals to go active satisfies the
+first two and says nothing about the third. It waits for the artifact now.
+
+**Fourth: the suite held out for a stricter bar than the one under test.** It
+waited for three active signals because `PRINCIPLE_MIN_SIGNALS` is 3 — while
+talking to a stack where that bar is overridden, which is the only reason the
+step can run at all. So it depended on the model grouping a fixed set of
+captures into exactly three signals rather than two; one run stalled at two for
+four full minutes. It reads the same override the server reads now.
+
+**And then, with all four fixed, it still failed about half the time.** The
+next failing run logged `status: no_candidates`: the bar passed, the distiller
+ran, and the model returned nothing from the same fixture. Across eight runs
+all three statuses appeared — `below_bar`, `no_candidates`, `evaluated`.
+
+#### Where this lands: flaky by nature, and now honest about it
+
+Three of the four fixes removed real harness faults and stay. The residual is
+the model, and no wait fixes it, so two things changed instead.
+
+**It asks three times, with a pause.** A single trigger is not what production
+does — the nightly cron asks again every night, and a theme that yields no
+candidate tonight yields one later. That is a faithful simulation of a
+recurring job, not a retry hiding a failure.
+
+**And a failure now names its own cause.** The trigger answers 202 and logs its
+verdict server-side, so the suite cannot read it — which is why every diagnosis
+above needed the server log beside it, and why two of the four wrong answers
+were confidently reached. A failure now reports what it could see:
+
+    no principle became held after three passes — active signals: 3 (bar 1),
+    top-of-mind entries: 3, principles: [declared/aspirational/0cit, …].
+    Everything the bar needs was present, so the distiller returned no
+    candidate this time — which it does, and no wait fixes.
+
+Measured after all of it: **still roughly one failure in two.** That makes this
+unsuitable as a blocking gate and useful as a diagnostic, which is what the F1
+row says. A pass proves the promotion path end to end; a failure of this shape
+is the model declining, not a regression.
+
+#### What four wrong turns have in common
+
+Each was a confident reading of the evidence in front of me, and the evidence
+in front of me was a bare timeout. The verdict that would have settled it in
+one step existed the whole time — in the server's log, not the suite's output.
+That is the lesson worth keeping: **a gate that cannot say why it failed will
+be diagnosed wrongly, repeatedly, by whoever is most sure they understand it.**
