@@ -7411,7 +7411,31 @@ function HomeExperience(): JSX.Element {
         trip: { ...trip },
         companion: { ...companion },
         primed: view.primed,
-        balls: new Map(list.map((b) => [b.id, { x: b.x, y: b.y }] as const)),
+        /*
+         * A MEMORY IS CARRIED UNDER BOTH OF ITS NAMES.
+         *
+         * A keep exists twice before it settles: the local seed born at the
+         * mouth, `kept-…`, and the row the server hands back with an id of its
+         * own. The pour builder drops the seed the moment `inspirations`
+         * contains either name (see `kept` above), so on the rebuild that
+         * arrival causes, the local ball LEAVES the list and the server ball
+         * ENTERS it — and keyed only by the local id, the carry has nothing to
+         * say about the newcomer. It reads as a memory that has never been
+         * seen, so it pours: falling in from above a second after you watched
+         * the same words fall out of the sentence.
+         *
+         * Filing each position under `sigId` as well is what lets the second
+         * name find the first one's place. It is the same memory; it should
+         * arrive once.
+         */
+        balls: new Map(
+          list.flatMap((b) => {
+            const at = { x: b.x, y: b.y };
+            const under: [string, { x: number; y: number }][] = [[b.id, at]];
+            if (b.sigId && b.sigId !== b.id) under.push([b.sigId, at]);
+            return under;
+          }),
+        ),
       };
       simApiRef.current = null;
       ballsRef.current = null;
