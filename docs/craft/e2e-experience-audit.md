@@ -63,21 +63,24 @@ Each finding carries how it was established:
 | 16 | **Blocking (mobile)** | `/signals` renders as a column of single letters on a phone — found and **fixed 2026-08-24** |
 | 17 | **Blocking** | Near-white on near-white at 1.15:1 — every signal sentence, and every surface's page title, by two different roads — found and **fixed 2026-08-24** |
 | 18 | **Major** | The four entry actions on the top-of-mind headline were unreachable on every desktop — finding 14's bug in a second place, missed by its own fix — found and **fixed 2026-08-24** |
+| 19 | **Moderate** | A language you chose is remembered on one machine and nowhere else — a rejected save still stuck locally — found and **fixed 2026-08-24**. `[static]`, not `[driven]`: the sabotage that was supposed to drive it was aimed at a route the client never calls, which is its own finding |
 
-**Where this stands: 16 of 18 addressed, 2 out of scope by decision, 1 part
+**Where this stands: 17 of 19 addressed, 2 out of scope by decision, 1 part
 deferred.** Everything above is fixed except finding 9 and finding 13, which
 are out of scope by decision, and the password-recovery half of finding 5,
 which waits on a mail provider and is the only item here that can lock a real
 person out of their own memory.
 
-**The pattern across all eighteen.** Not one of these threw an exception,
+**The pattern across all nineteen.** Not one of these threw an exception,
 failed an assertion, or turned a suite red. A blank world, a keep that never
 appeared, a hover that could never fire, six screens you could reach and not
 leave, a page of near-white text on near-white paper — every one of them
-shipped past a fully green build. Three of them (16, 17 and 18) were found
+shipped past a fully green build. Four of them (16, 17, 18 and 19) were found
 only because someone was measuring something else at the time — none was
 looked for, which is the strongest thing this table says about how much is
-left unmeasured. The gates added along the way exist to make that class of
+left unmeasured. And in the two cases where a `--negative` run raised the
+alarm rather than an assertion, the red line was itself misleading once and
+had to be traced rather than believed: see finding 19. The gates added along the way exist to make that class of
 failure loud: `e2e:first-paint` and `e2e:journeys` now run in CI, and each
 journey is put through its own sabotage and must fail, because a check that
 cannot fail is indistinguishable from one that is passing.
@@ -883,6 +886,82 @@ The `--negative` run proves the choice was necessary. Under the original rule:
 **Opacity 1** — because the sabotage sits on the parent while the check reads
 the child. An opacity assertion would have passed with all four controls
 invisible and dead.
+
+---
+
+## 19. A language you chose is remembered on one machine and nowhere else
+
+**Moderate.** [static] — found and **fixed 2026-08-24.**
+
+`/profile` has a language picker. Choose Korean, submit, and if the save
+fails the page says so — in Korean. Reload, and it is still Korean, because
+the choice was written to local storage before the server was ever asked.
+Sign in anywhere else and it is English, with nothing on either machine
+saying the choice did not take.
+
+**Tagged [static] deliberately, and the reason is itself a finding.** This
+was read out of the source, not driven, because the run that was supposed to
+drive it did not: see below.
+
+**What was actually wrong.** The picker's `onChange` called
+`writeStoredLocale(next)` the moment it changed, and the submit handler
+called it *again* after `updateProfile` resolved. The second call was
+correct. The first made the choice durable on that browser before anything
+had been asked of the server, so a rejected save left the two stores
+disagreeing permanently — and the one the person can see was the one that
+was wrong.
+
+A half-saved preference is worse than one that plainly failed. A failure is
+legible: it says so, and you try again. This said "could not save" while
+visibly behaving as though it had, so the only way to discover the truth was
+to open the product somewhere else, later, and find it speaking a language
+you thought you had changed.
+
+**The fix** is a deletion. The picker keeps re-rendering the form in the new
+language as you let go of it — that is `locale` derived from component state,
+and it is the reason the picker is on the form rather than behind a
+confirmation — but it no longer writes anything down. Persistence happens once,
+in the submit handler, after the server has agreed. `Login.tsx` still writes
+on change and is correct to: before there is an account, local storage is the
+only store there is.
+
+### How this was found, and the wrong reason it was nearly credited to
+
+The `locale` journey was written to close J1's last unproven half. It passed
+on the first run, and `--negative` then reported it as decoration:
+
+    FAIL 1. the product speaks the language you chose, and still does tomorrow
+      — Korean survived a reload and holds across 6 surfaces; no raw ICU, no
+      bare keys  << survived sabotage; this journey is decoration
+
+Reading the code to explain that survival is what turned up the premature
+`writeStoredLocale`, and the obvious story — *the sabotage broke the save,
+local storage kept the choice anyway, that is why it survived* — was written
+down here before it was checked. **It was wrong.** The sabotage broke
+`/api/auth/me/preferences`, a path that exists in an API test file and
+nowhere in the web client; the client PATCHes `/api/auth/me/profile`. Nothing
+was ever sabotaged. The save succeeded and the journey passed honestly.
+
+So two defects came out of one red line, and they are worth separating:
+
+- **A sabotage aimed at a route that does not exist**, which is
+  indistinguishable from no sabotage and fails silently towards green. This
+  is the same class as the two `--negative` findings before it, and the third
+  time in this repo that a check turned out to be measuring nothing.
+- **The premature local write**, which is real on inspection and is fixed —
+  but is tagged `[static]` and not `[driven]`, because the run that would
+  have driven it never broke anything. Asserting `[driven]` here would have
+  been the same error as the audit line this document already corrects: a
+  pass that sampled the wrong thing and was reported as coverage.
+
+The journey now breaks the right route and signs in from a **fresh browser
+context with empty storage**, because "remembered" means a second device and
+not a second page load, and the server is the only channel that reaches one.
+
+That makes four findings in this document discovered while measuring
+something else. It also makes a fourth harness defect found by the sabotage
+run, and the first one where the sabotage's own failure — not the product's —
+was what the red line was reporting.
 
 ---
 

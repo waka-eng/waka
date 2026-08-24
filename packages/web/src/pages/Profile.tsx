@@ -392,9 +392,26 @@ export default function ProfilePage(): JSX.Element {
               value={preferredLocale}
               disabled={submitting || deleting}
               onChange={(event) => {
-                const next = normalizeSupportedLocale(event.currentTarget.value);
-                setPreferredLocale(next);
-                writeStoredLocale(next);
+                /* PREVIEW, NOT A PROMISE. Choosing here re-renders the form in
+                   the new language immediately — `locale` is derived from this
+                   state, so the label under your hand changes as you let go,
+                   which is the whole point of putting the picker on the form.
+
+                   What it deliberately does NOT do any more is persist. It
+                   used to call `writeStoredLocale(next)` right here, and that
+                   made a language change durable on THIS browser whether or
+                   not the save that follows ever reached the server: submit,
+                   get a 500, read "could not save", reload — and the product
+                   is still in Korean, while every other device the person owns
+                   is still in English. A preference that is half-saved is
+                   worse than one that plainly failed, because nothing on
+                   screen disagrees with itself.
+
+                   The write now happens once, in the submit handler, after
+                   `updateProfile` resolves — so what is stored locally is
+                   always what the server was told. Found by the `locale`
+                   journey surviving its own sabotage. */
+                setPreferredLocale(normalizeSupportedLocale(event.currentTarget.value));
               }}
             >
               {supportedLocales.map((option) => (
