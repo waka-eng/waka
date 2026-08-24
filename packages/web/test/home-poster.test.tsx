@@ -68,6 +68,7 @@
  */
 import { act } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { RECEIPTS } from "../src/lib/receipts";
 
 import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
 import {
@@ -584,5 +585,36 @@ describe("what the poster is standing on", () => {
        explanation, and one without the reason is just a list of text */
     expect(rows.filter((r) => /read as sig-(spec|code)/.test(r))).toHaveLength(CHAIN_SIZE);
     expect(rows.some((r) => r.includes("something I kept, 3"))).toBe(true);
+  });
+});
+
+describe("board acts leave receipts", () => {
+  /**
+   * goal: the-legible-loop, Phase 2. A gesture on the board says what it
+   * taught the loop, in the registry's exact words — and the registry pins
+   * each claim to the API test that enforces it (`receipts.test.ts`), so
+   * these two cases close the loop from press to law.
+   */
+  it("pinning says it will be held through rewrites", async () => {
+    await press(".jar-board-act", /keep this one up/i);
+    const toast = layout.container.querySelector('[role="status"]');
+    expect(
+      toast?.textContent,
+      "the pin left no receipt — the gesture taught silently",
+    ).toBe(RECEIPTS.pinned.text);
+  });
+
+  it("dismissing states the law beside its own undo", async () => {
+    await press(".jar-board-act", /not this/i);
+    const row = layout.container.querySelector(".jar-receipt");
+    expect(
+      row?.textContent,
+      "the dismissal left no receipt beside the undo",
+    ).toBe(RECEIPTS.dismissed.text);
+    /* reversible is part of the stated law — the undo shares the line */
+    expect(
+      row?.parentElement?.textContent,
+      "the receipt and the way back must share one breath",
+    ).toContain("put it back");
   });
 });

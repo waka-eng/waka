@@ -87,6 +87,7 @@
  * one. Sweeping asks the product where its own satellites are.
  */
 import { act } from "react";
+import { RECEIPTS } from "../src/lib/receipts";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
@@ -1189,5 +1190,34 @@ describe("changing a memory's words", () => {
       layout.container.querySelector(".jar-panel--in"),
       "a kept memory closes its panel: the words on screen are no longer the words behind them",
     ).toBeNull();
+  });
+});
+
+describe("a verdict leaves a receipt", () => {
+  /**
+   * goal: the-legible-loop, Phase 2. An answer must say what it taught the
+   * loop, at the place the answer happened, in the registry's exact words —
+   * and the registry (`lib/receipts.ts`) pins each claim to the API test
+   * that enforces it, so this case closes the loop from click to law.
+   */
+  it("prints the not-true receipt under the answered statement", async () => {
+    await climbToSky();
+    const el = await tapSentence(NAMING);
+
+    const acts = [...el.querySelectorAll<HTMLElement>(".jar-neb-ask button")];
+    const no = acts.find((b) => (b.textContent ?? "").trim() === "not true");
+    if (!no) throw new Error("no 'not true' under the subject");
+    await act(async () => no.click());
+
+    const receipt = el.querySelector(".jar-receipt");
+    expect(
+      receipt?.textContent,
+      "the answer left no receipt — the gesture taught silently",
+    ).toBe(RECEIPTS.verdictNo.text);
+    /* the law binds the chrome, not the person's own words — a memory may
+       carry digits, the receipt may not */
+    expect(/\d/.test(receipt?.textContent ?? ""), "a numeral rode in with the receipt").toBe(
+      false,
+    );
   });
 });

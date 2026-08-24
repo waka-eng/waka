@@ -180,6 +180,26 @@ run). No new dependencies, no new infrastructure.
 
 ## Log
 
+- **2026-08-23 — Phase 2: PASS.** Every gesture now says what it taught,
+  and may say only what a test enforces. `lib/receipts.ts` is the
+  registry — seven receipts, each naming its enforcing test —
+  and `receipts.test.ts` fails the suite when a named test disappears or
+  a digit sneaks into a line. Wired: a verdict prints its receipt under
+  the answered statement ("on the record" / "steps far back in the
+  choosing — never erased" / for a group's statement, "answered — the
+  room reads who stands where"); the pin speaks through the board's own
+  status channel ("held at the front — rewrites keep it there"); the
+  dismissal's receipt rides beside its undo ("set aside — it will not
+  return to the poster · put it back") because reversible is part of the
+  law being stated; and the star's standing line plus the release
+  confirm now render FROM the registry, so their wording cannot fork.
+  The dismiss receipt deliberately claims only the poster (its L3
+  truth) — the ground-level claim waits for Phase 3, per the phase's
+  own no-advisory rule. Gate measured: registry suite 2/2, verdict
+  receipt pinned in `home-sky` (14/14), pin + dismiss receipts pinned
+  in `home-poster` (8/8), api 602, web 20 files / 138 tests, vocabulary
+  and seams clean.
+
 - **2026-08-23 — Phase 1: PASS.** The reading exists and cannot lie.
   `lib/the-reading.ts` holds the registry — eight constant-backed
   sentences (each importing its LIVE value, worded: three, twelve, a

@@ -220,6 +220,7 @@ import {
   ApiError,
 } from "../lib/api";
 import { ReadingPanel } from "../components/ReadingPanel";
+import { RECEIPTS } from "../lib/receipts";
 import {
   loadInspiration,
   loadInspirations,
@@ -1260,6 +1261,9 @@ function HomeExperience(): JSX.Element {
     setNotes((prev) =>
       prev ? prev.map((n) => (n.id === entry.id ? { ...n, pinned: true } : n)) : prev,
     );
+    /* the receipt for the pin — the board's own quiet channel */
+    setBoardToast(RECEIPTS.pinned.text);
+    window.setTimeout(() => setBoardToast(null), 6000);
     if (offlineRef.current) return;
     holdTopOfMindEntry(entry.id).catch(() => {
       setNotes((prev) =>
@@ -7854,6 +7858,19 @@ function HomeExperience(): JSX.Element {
   const sayVerdict = useCallback(
     (id: string, value: "true" | "partly" | "not_true", targetId?: string) => {
       setVerdicts((prev) => new Map(prev).set(id, value));
+      /* the receipt: what this answer taught the loop, said where the act
+         happened, worded only as strongly as its enforcing test allows —
+         goals/the-legible-loop.md Phase 2 */
+      const receipt = targetId
+        ? RECEIPTS.verdictGroup.text
+        : value === "not_true"
+          ? RECEIPTS.verdictNo.text
+          : RECEIPTS.verdictKept.text;
+      setVerdictReceipt({ id, text: receipt });
+      window.setTimeout(
+        () => setVerdictReceipt((r) => (r?.id === id ? null : r)),
+        7000,
+      );
       if (offlineRef.current) return;
       createFeedback({ targetType: "signal", targetId: targetId ?? id, value }).catch(() => {
         /* it did not land, and the row should not claim it did */
@@ -7865,6 +7882,11 @@ function HomeExperience(): JSX.Element {
       });
     },
     [],
+  );
+
+  /** The verdict's receipt, shown briefly under the answered statement. */
+  const [verdictReceipt, setVerdictReceipt] = useState<{ id: string; text: string } | null>(
+    null,
   );
 
   /** Throw out a pattern of your own. The memories under it stay. */
@@ -8859,6 +8881,10 @@ function HomeExperience(): JSX.Element {
                     ) : null}
                     {w.kind === "self" && undrop ? (
                       <p className="jar-neb-ask jar-neb-ask--after" data-jar-chrome="1">
+                        {/* the dismissal's receipt rides beside its undo —
+                            reversible is part of the law being stated */}
+                        <span className="jar-receipt">{RECEIPTS.dismissed.text}</span>
+                        <span aria-hidden="true"> · </span>
                         <button type="button" onClick={restoreLead}>
                           put it back
                         </button>
@@ -8936,7 +8962,7 @@ function HomeExperience(): JSX.Element {
                               entrusting === lead.id ? (
                                 <>
                                   <span className="jar-board-warn">
-                                    WAKA will be allowed to rewrite this sentence
+                                    {RECEIPTS.releaseOffer.text}
                                   </span>
                                   <button
                                     type="button"
@@ -9243,8 +9269,8 @@ function HomeExperience(): JSX.Element {
                 <button
                   type="button"
                   className="jar-star"
-                  title="your own words — WAKA will not rewrite them"
-                  aria-label="your own words — WAKA will not rewrite them"
+                  title={RECEIPTS.starHeld.text}
+                  aria-label={RECEIPTS.starHeld.text}
                   onClick={(ev) => {
                     ev.stopPropagation();
                     if (atWall.kind === "self" && c.kind === "reading")
@@ -9256,7 +9282,7 @@ function HomeExperience(): JSX.Element {
             </p>
             {entrusting === c.id && c.locked ? (
               <p className="jar-neb-ask">
-                <span className="jar-star-plain">WAKA will be allowed to rewrite this sentence</span>
+                <span className="jar-star-plain">{RECEIPTS.releaseOffer.text}</span>
                 <button type="button" onClick={() => entrustSignal(c.id)}>
                   hand it back
                 </button>
@@ -9419,6 +9445,11 @@ function HomeExperience(): JSX.Element {
                     </button>
                   </>
                 ) : null}
+              </p>
+            ) : null}
+            {verdictReceipt?.id === c.id ? (
+              <p className="jar-neb-ask">
+                <span className="jar-receipt">{verdictReceipt.text}</span>
               </p>
             ) : null}
             {editing.open?.kind === "signal" && editing.open.id === c.id ? (

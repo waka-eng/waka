@@ -733,6 +733,12 @@
   margin: 16px 0 0;
   color: var(--jar-faint);
 }
+/* A gesture's receipt: the same quiet register as the panel's meta lines —
+   it states, it never celebrates. */
+.jar-receipt {
+  color: var(--jar-faint);
+  font-size: 12.5px;
+}
 .jar-roomform-tabs { display: flex; gap: 18px; margin-bottom: 16px; }
 .jar-roomform-tabs button {
   appearance: none;
