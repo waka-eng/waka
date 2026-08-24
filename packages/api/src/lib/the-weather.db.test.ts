@@ -63,7 +63,7 @@ describe("the weather is a view of the record", () => {
     await t.truncateAll();
   });
 
-  it("tells a seeded fortnight as worded days with zero numerals, every sentence backed", async () => {
+  it("tells a seeded fortnight as worded days, counting exactly, every sentence backed", async () => {
     const profileId = await seedProfile();
 
     // Two days ago: two memories kept, a pattern spoken, a root grown.
@@ -93,7 +93,7 @@ describe("the weather is a view of the record", () => {
     const weather = await assembleTheWeather(t.db as never, { profileId, now: NOW });
     const lines = sentencesOf(weather);
 
-    expect(lines).toContain("two days ago: you kept two memories");
+    expect(lines).toContain("two days ago: you kept 2 memories");
     expect(lines).toContain("two days ago: a new pattern was spoken");
     expect(lines).toContain("two days ago: a pattern grew a root");
     expect(lines).toContain(
@@ -102,12 +102,19 @@ describe("the weather is a view of the record", () => {
     expect(lines).toContain("yesterday: everything was read again, and the poster held");
     expect(lines).toContain("today: your memory was consulted");
 
-    /* zero numerals, in every sentence, every label, and the rendering */
-    for (const line of lines) {
-      expect(/\d/.test(line), `a numeral crept into "${line}"`).toBe(false);
+    /* A COUNT IS COUNTED; A DAY IS SAID. Founder ruling, 2026-08-24: the
+       telling used to spell counts out and saturate into "many", which made
+       it vaguer than the rows it is a view of. Counts are now exact, and the
+       assertion that used to forbid every digit forbids them only where a
+       label belongs — the day names, which are WHEN and not how many. */
+    const labels = weather.days.map((d) => d.label);
+    expect(labels, "the days are said, not numbered").toEqual(
+      expect.arrayContaining(["today", "yesterday", "two days ago"]),
+    );
+    for (const label of labels) {
+      expect(/\d/.test(label), `a numeral crept into the day label "${label}"`).toBe(false);
     }
     const md = renderTheWeather(weather);
-    expect(/\d/.test(md), "a numeral crept into the markdown telling").toBe(false);
     expect(md).toContain("- refused a candidate — too close to what you dismissed.");
   });
 
@@ -152,8 +159,7 @@ describe("the weather is a view of the record", () => {
       since: new Date(daysAgo(5)),
     });
     /* memories were kept and no pattern moved: the sky held rides along */
-    expect(away.told).toBe("you kept two memories; the sky held.");
-    expect(/\d/.test(away.told ?? "")).toBe(false);
+    expect(away.told).toBe("you kept 2 memories; the sky held.");
 
     const quiet = await assembleTheWeather(t.db as never, {
       profileId,

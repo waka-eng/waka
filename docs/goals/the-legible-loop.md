@@ -133,13 +133,24 @@ candidates stand, built on the suppression log — the delta view the
 folk-theory research names as the single most theory-correcting
 surface.
 
-**Gate:** a seeded fortnight renders as told sentences with zero
-numerals and zero events that lack a backing record (the narration is
-a VIEW of the record, pinned by a test that deletes a record and
-watches its sentence vanish); the antechamber renders each suppression
-with its anchor reachable; arrival tells only after the world has
-drawn. What would make this phase fail: an invented sentence, a
-notification, or a counter.
+**Gate:** a seeded fortnight renders as told sentences with worded day
+labels, exact counts, and zero events that lack a backing record (the
+narration is a VIEW of the record, pinned by a test that deletes a
+record and watches its sentence vanish); the antechamber renders each
+suppression with its anchor reachable; arrival tells only after the
+world has drawn. What would make this phase fail: an invented sentence,
+a notification, or a standing counter in the chrome.
+
+**Amended 2026-08-24 (founder).** The counts were first spelled out and
+saturated at twenty into "many", which made the telling vaguer than the
+rows it is a view of — "you kept many memories; your memory was
+consulted many times". The ruling: *"just show 'your memory was
+consulted x times' with x always being an accurate number."* "States
+render, numerals never" governs STATES — a confidence, a score, a tally
+of people standing somewhere — where a number turns a fact about a
+person into a readout. How many times WAKA was read is not a state: it
+is a thing that happened, as countable as a date, and a record that
+will not say how many is not a record. Day labels stay words.
 
 ## Phase 6 — kept, not read (founder-gated)
 
@@ -207,7 +218,8 @@ run). No new dependencies, no new infrastructure.
   passing: `fetchTheReading` was requesting `/api/api/reading.md` (apiPath
   already prefixes) — a latent 404 from Phase 1 that no live click had yet
   exercised. Gate measured: `the-weather.db.test.ts` 5/5 on real Postgres
-  (seeded fortnight worded with zero numerals; DELETING a suppression and
+  (seeded fortnight worded by day, counted exactly — see the amendment in
+  Phase 5, which this line was rewritten for; DELETING a suppression and
   a no-change version deletes exactly their sentences — the narration
   cannot outlive its rows; the away-window tells in one sentence and holds
   its tongue when quiet; the antechamber row keeps a departed anchor's

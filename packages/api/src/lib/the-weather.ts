@@ -9,10 +9,21 @@
  * the row and the sentence vanishes, which is exactly what
  * `the-weather.db.test.ts` proves.
  *
- * Zero numerals anywhere in a rendered sentence or day label — counts and
- * distances arrive as words ("three roots", "two days ago"). The law binds
- * the telling, not the archive: the JSON payload may carry ids and
- * timestamps for the world to act on.
+ * COUNTS ARE COUNTED, AND EXACTLY (founder ruling, 2026-08-24: "just show
+ * 'your memory was consulted x times' with x always being an accurate
+ * number"). The telling first spelled every count out and saturated at
+ * twenty into "many", which made the sentence VAGUER THAN THE RECORD IT IS
+ * A VIEW OF — "you kept many memories; your memory was consulted many
+ * times" says less than the rows behind it and is precisely the vague
+ * explanation the research (finding 8) shows is worse than none. "States
+ * render, numerals never" is about STATES: a confidence, a score, a tally
+ * of people standing somewhere, where a number turns a fact about a person
+ * into a readout. How many times WAKA was read is not a state of the
+ * person — it is a thing that happened, as countable as a date, and a
+ * record that will not say how many is not a record.
+ *
+ * Day labels stay words ("today", "yesterday", "three days ago"): those are
+ * WHEN, and a person says them that way.
  *
  * The vague-explanation research (docs/craft/the-legible-loop.md, findings
  * 2 and 8) is why the shape is "what changed", never "how it felt": a delta
@@ -39,7 +50,7 @@ export const WEATHER_WINDOW_DAYS = 14;
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-const COUNT_WORDS = [
+const DAY_WORDS = [
   "zero",
   "one",
   "two",
@@ -55,30 +66,30 @@ const COUNT_WORDS = [
   "twelve",
   "thirteen",
   "fourteen",
-  "fifteen",
-  "sixteen",
-  "seventeen",
-  "eighteen",
-  "nineteen",
-  "twenty",
 ] as const;
 
-/** A count as words, never digits. Beyond the table it is honestly "many". */
-export function wordedCount(n: number): string {
-  return COUNT_WORDS[n] ?? "many";
+/**
+ * A count, exactly, as the record holds it. See the ruling in the header:
+ * a telling that rounds its own rows off into "many" is a worse record than
+ * the rows.
+ */
+export function exactCount(n: number): string {
+  return String(n);
 }
 
-function wordedTimes(n: number): string {
+function exactTimes(n: number): string {
   if (n === 1) return "once";
   if (n === 2) return "twice";
-  return `${wordedCount(n)} times`;
+  return `${exactCount(n)} times`;
 }
 
 /** "today", "yesterday", "two days ago" … — the day labels of the telling. */
 export function wordedDaysAgo(daysAgo: number): string {
   if (daysAgo <= 0) return "today";
   if (daysAgo === 1) return "yesterday";
-  return `${wordedCount(daysAgo)} days ago`;
+  /* the window is a fortnight, so the table covers every label it can ever
+     produce; past it the honest thing is the number, same as a count */
+  return `${DAY_WORDS[daysAgo] ?? String(daysAgo)} days ago`;
 }
 
 export interface WeatherSentence {
@@ -147,7 +158,7 @@ function tellCounts(c: WindowCounts): WeatherSentence[] {
       text:
         c.kept === 1
           ? "you kept a memory"
-          : `you kept ${wordedCount(c.kept)} memories`,
+          : `you kept ${exactCount(c.kept)} memories`,
       backing: "inspirations",
     });
   }
@@ -156,7 +167,7 @@ function tellCounts(c: WindowCounts): WeatherSentence[] {
       text:
         c.minted === 1
           ? "a new pattern was spoken"
-          : `${wordedCount(c.minted)} new patterns were spoken`,
+          : `${exactCount(c.minted)} new patterns were spoken`,
       backing: "signals",
     });
   }
@@ -165,7 +176,7 @@ function tellCounts(c: WindowCounts): WeatherSentence[] {
       text:
         c.roots === 1
           ? "a pattern grew a root"
-          : `your patterns grew ${wordedCount(c.roots)} roots`,
+          : `your patterns grew ${exactCount(c.roots)} roots`,
       backing: "signal_evidence",
     });
   }
@@ -174,7 +185,7 @@ function tellCounts(c: WindowCounts): WeatherSentence[] {
       text:
         c.refusals === 1
           ? "refused a candidate — too close to what you dismissed"
-          : `refused ${wordedCount(c.refusals)} candidates — too close to what you dismissed`,
+          : `refused ${exactCount(c.refusals)} candidates — too close to what you dismissed`,
       backing: "suppressions",
     });
   }
@@ -191,7 +202,7 @@ function tellCounts(c: WindowCounts): WeatherSentence[] {
       text:
         c.posterRewrites === 1
           ? "the poster was rewritten"
-          : `the poster was rewritten ${wordedTimes(c.posterRewrites)}`,
+          : `the poster was rewritten ${exactTimes(c.posterRewrites)}`,
       backing: "top_of_minds",
     });
   }
@@ -209,7 +220,7 @@ function tellCounts(c: WindowCounts): WeatherSentence[] {
       text:
         c.consulted === 1
           ? "your memory was consulted"
-          : `your memory was consulted ${wordedTimes(c.consulted)}`,
+          : `your memory was consulted ${exactTimes(c.consulted)}`,
       backing: "consultations",
     });
   }

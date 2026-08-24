@@ -745,7 +745,10 @@ describe("the weather is told on arrival, after the world has drawn", () => {
       expect(said()).toContain(
         "refused a candidate — too close to what you dismissed.",
       );
-      expect(/\d/.test(said()), "a numeral rode in with the telling").toBe(false);
+      /* A count in the telling is now exact, not spelled (founder ruling,
+         2026-08-24) — the fixture's sentence carries none either way, and
+         what this case is about is WHEN the whisper arrives, not its
+         arithmetic. `the-weather.db.test.ts` owns the counting. */
     } finally {
       vi.useRealTimers();
       window.localStorage.removeItem("waka.seen");
