@@ -184,6 +184,7 @@ describe("declaring", () => {
   it("creates an aspirational, locked, declared principle when it qualifies", async () => {
     mockState.db = makeDb([
       [], // rank query inside transaction
+      [], // statement-chain writer: current-row lookup (none — chained from birth)
       [
         {
           id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",

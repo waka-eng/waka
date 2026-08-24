@@ -49,6 +49,10 @@ import {
   dropSignalEmbedding,
   refreshSignalLifecycle,
 } from "../lib/signal-derivation.js";
+import {
+  revertSignalStatement,
+  writeSignalStatementChain,
+} from "../lib/statement-chains.js";
 import type { AuthenticatedSession } from "../lib/session.js";
 
 type WakaDb = ReturnType<typeof getDb>;
@@ -354,21 +358,41 @@ export async function getProfileSignal(
  * A human edit freezes the statement. `lockedAt` is set in the same statement
  * that writes the text so there is no window in which an edited signal is
  * unlocked and a concurrent regeneration could overwrite it.
+ *
+ * The edit also joins the statement chain — and the sentence it replaces is
+ * seeded into the chain first when nothing recorded it yet and the machine
+ * was still its author (unlocked), so the machine's original survives the
+ * very edit that would have destroyed it (no-quiet-corners Phase 2).
  */
 export async function updateSignalStatement(
   db: WakaDb,
   input: { profileId: string; signalId: string; statement: string; now?: Date },
 ): Promise<SignalDetail | null> {
-  const updated = await db
-    .update(signals)
-    .set({
+  const now = input.now ?? new Date();
+  const changed = await db.transaction(async (tx) => {
+    const [before] = await tx
+      .select({ statement: signals.statement, lockedAt: signals.lockedAt })
+      .from(signals)
+      .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
+      .limit(1);
+    if (!before) return false;
+
+    await writeSignalStatementChain(tx, {
+      profileId: input.profileId,
+      signalId: input.signalId,
       statement: input.statement,
-      lockedAt: input.now ?? new Date(),
-      updatedAt: input.now ?? new Date(),
-    })
-    .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
-    .returning({ id: signals.id });
-  if (updated.length === 0) return null;
+      reason: "edited",
+      /* only an unlocked pre-edit sentence is the machine's to seed */
+      seedStatement: before.lockedAt === null ? before.statement : null,
+      now,
+    });
+    await tx
+      .update(signals)
+      .set({ statement: input.statement, lockedAt: now, updatedAt: now })
+      .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)));
+    return true;
+  });
+  if (!changed) return null;
 
   return getProfileSignal(db, { profileId: input.profileId, signalId: input.signalId });
 }
@@ -858,6 +882,65 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
     if (!signal) return c.json({ error: "Signal not found" }, 404);
 
     scheduleRefresh(scope.profileId);
+    return c.json({ signal }, 200);
+  });
+
+  /**
+   * The lock's third verb. Release keeps the person's words and returns
+   * jurisdiction; revert restores the machine's sentence byte-for-byte from
+   * the statement chain and clears the lock. Same embedding maintenance as
+   * the edit, and for the same reason: the stored vector now describes
+   * wording the row no longer carries.
+   */
+  routes.post("/:signalId/revert", async (c) => {
+    const parsedParams = signalParamsSchema.safeParse(c.req.param());
+    if (!parsedParams.success) {
+      return c.json(
+        { error: "Invalid signal id", details: parsedParams.error.flatten().fieldErrors },
+        400,
+      );
+    }
+    const parsedQuery = signalScopeQuerySchema.safeParse(c.req.query());
+    if (!parsedQuery.success) {
+      return c.json(
+        { error: "Invalid signal query", details: parsedQuery.error.flatten().fieldErrors },
+        400,
+      );
+    }
+
+    const db = getDatabase();
+    const scope = await resolveProfileScope(
+      db,
+      c.get("session"),
+      parsedQuery.data.profile,
+      "write",
+      loadProfile,
+    );
+    if (!scope.ok) return c.json(scope.body, scope.status);
+
+    const result = await revertSignalStatement(db, {
+      profileId: scope.profileId,
+      signalId: parsedParams.data.signalId,
+    });
+    if (result.outcome === "not_found") return c.json({ error: "Signal not found" }, 404);
+    if (result.outcome === "nothing_to_revert") {
+      return c.json(
+        { error: "No machine statement to return to — the chain holds only your own words" },
+        409,
+      );
+    }
+
+    await dropEmbedding(db, {
+      profileId: scope.profileId,
+      signalId: parsedParams.data.signalId,
+    });
+    await scheduleReembed(scope.profileId, parsedParams.data.signalId);
+    scheduleRefresh(scope.profileId);
+
+    const signal = await getSignal(db, {
+      profileId: scope.profileId,
+      signalId: parsedParams.data.signalId,
+    });
     return c.json({ signal }, 200);
   });
 

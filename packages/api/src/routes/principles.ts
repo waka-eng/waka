@@ -40,6 +40,10 @@ import {
 import { getDb } from "../lib/db.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
 import {
+  revertPrincipleStatement,
+  writePrincipleStatementChain,
+} from "../lib/statement-chains.js";
+import {
   getDefaultModelProvider,
   type ModelProvider,
 } from "../lib/model-provider.js";
@@ -305,6 +309,14 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
           lockedAt: new Date(),
         })
         .returning();
+      // Chained from birth too — as the owner's words, so revert has
+      // nothing machine-side to reach for on a declaration, by design.
+      await writePrincipleStatementChain(tx, {
+        profileId: scope.profileId,
+        principleId: row!.id,
+        statement: parsed.data.statement,
+        reason: "declared",
+      });
       return row!;
     });
     const [view] = await loadPrincipleViews(db, scope.profileId).then((views) =>
@@ -334,17 +346,87 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
     );
     if (!scope.ok) return c.json(scope.body, scope.status);
 
-    const [updated] = await db
-      .update(principles)
-      .set({ statement: parsed.data.statement, lockedAt: new Date(), updatedAt: new Date() })
-      .where(
-        and(eq(principles.id, params.data.principleId), eq(principles.profileId, scope.profileId)),
-      )
-      .returning({ id: principles.id });
+    /* The edit joins the statement chain, and the sentence it replaces is
+       seeded first when the machine was still its author (unlocked) and
+       nothing recorded it yet — the machine's original survives the very
+       edit that would have destroyed it (no-quiet-corners Phase 2). */
+    const now = new Date();
+    const updated = await db.transaction(async (tx) => {
+      const [before] = await tx
+        .select({ statement: principles.statement, lockedAt: principles.lockedAt })
+        .from(principles)
+        .where(
+          and(
+            eq(principles.id, params.data.principleId),
+            eq(principles.profileId, scope.profileId),
+          ),
+        )
+        .limit(1);
+      if (!before) return false;
+
+      await writePrincipleStatementChain(tx, {
+        profileId: scope.profileId,
+        principleId: params.data.principleId,
+        statement: parsed.data.statement,
+        reason: "edited",
+        seedStatement: before.lockedAt === null ? before.statement : null,
+        now,
+      });
+      await tx
+        .update(principles)
+        .set({ statement: parsed.data.statement, lockedAt: now, updatedAt: now })
+        .where(
+          and(
+            eq(principles.id, params.data.principleId),
+            eq(principles.profileId, scope.profileId),
+          ),
+        );
+      return true;
+    });
     if (!updated) return c.json({ error: "Principle not found" }, 404);
 
     const [view] = await loadPrincipleViews(db, scope.profileId).then((views) =>
-      views.filter((v) => v.id === updated.id),
+      views.filter((v) => v.id === params.data.principleId),
+    );
+    return c.json({ principle: view });
+  });
+
+  /**
+   * The lock's third verb, at layer 4. Restores the machine's minted
+   * sentence byte-for-byte from the chain and clears the lock. A declared
+   * principle has no machine original — the chain holds only the owner's
+   * words — and the verb says so rather than inventing one.
+   */
+  routes.post("/:principleId/revert", async (c) => {
+    const params = principleParamsSchema.safeParse(c.req.param());
+    if (!params.success) return c.json({ error: "Principle not found" }, 404);
+    const parsedQuery = scopeQuerySchema.safeParse(c.req.query());
+    if (!parsedQuery.success) return c.json({ error: "Invalid query" }, 400);
+
+    const db = getDatabase();
+    const scope = await resolveProfileScope(
+      db,
+      c.get("session"),
+      parsedQuery.data.profile,
+      "write",
+      loadProfile,
+    );
+    if (!scope.ok) return c.json(scope.body, scope.status);
+
+    const result = await revertPrincipleStatement(db, {
+      profileId: scope.profileId,
+      principleId: params.data.principleId,
+    });
+    if (result.outcome === "not_found") return c.json({ error: "Principle not found" }, 404);
+    if (result.outcome === "nothing_to_revert") {
+      return c.json(
+        { error: "No machine statement to return to — the chain holds only your own words" },
+        409,
+      );
+    }
+
+    const [view] = await loadPrincipleViews(db, scope.profileId).then((views) =>
+      views.filter((v) => v.id === params.data.principleId),
     );
     return c.json({ principle: view });
   });

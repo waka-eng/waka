@@ -33,6 +33,7 @@ import {
 } from "../db/index.js";
 import { getDb } from "./db.js";
 import { normalizeSupportedLocale } from "./locales.js";
+import { writePrincipleStatementChain } from "./statement-chains.js";
 import {
   getDefaultModelProvider,
   type ModelProvider,
@@ -395,6 +396,15 @@ export async function refreshPrinciplesForProfile(
           signalId,
         })),
       );
+      // The chain begins at birth — the machine's sentence every later
+      // revert returns to (no-quiet-corners Phase 2).
+      await writePrincipleStatementChain(tx, {
+        profileId: input.profileId,
+        principleId: row!.id,
+        statement: candidate.statement,
+        reason: "minted",
+        now,
+      });
       return row!;
     });
     existing.push(minted);

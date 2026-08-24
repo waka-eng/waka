@@ -244,6 +244,39 @@ Postgres. No new infrastructure, no new dependencies.
 
 ## Log
 
+- **2026-08-24 — Phase 2: PASS.** The machine's original survives.
+  Migration `0020_the-machines-original-survives`: `signal_statements`
+  and `principle_statements`, the L3 writer pattern extended down and
+  up — supersede chain, forward pointer filled the moment the successor
+  exists, partial unique index holding exactly one current row per
+  parent, and a `statement_reason` enum that says whose hand wrote each
+  row (derived/restated/minted the machine's; declared/edited the
+  owner's; reverted the machine's sentence returned by the owner's own
+  act). One writer (`lib/statement-chains.ts`) serves both layers and
+  never deletes; chains begin at birth (mint writes `derived`/`minted`,
+  a declaration writes `declared` — the owner's words from the first
+  row, so revert correctly finds nothing machine-side there), the
+  machine's restatement of an emerging signal writes `restated`, and
+  the first post-migration edit of a PRE-chain row seeds the pre-edit
+  sentence as the machine's before replacing it — the original becomes
+  recoverable for old rows too, from the very edit that would have
+  destroyed it. The verb pair completes: `POST /api/signals/:id/revert`
+  and `POST /api/principles/:id/revert` restore the newest machine-side
+  statement byte-for-byte, clear the lock, chain the restoration, and
+  (signals) drop the stale vector and enqueue the re-embed exactly as
+  the edit path does; a chain holding only the owner's words answers
+  409 rather than inventing an original. Gate measured:
+  `statement-chain-contract.db.test.ts` 5/5 on real Postgres through
+  the real writers (derive → edit → revert byte-identical with the edit
+  surviving as history; revert returns the newest machine statement —
+  a restatement, not the first draft; pre-chain seeding; declared
+  principles refuse; a minted principle edited and reverted at layer
+  four), release's own Track S contract suite untouched and green,
+  `generation-doc.test.ts` green both directions, api 55 files / 622
+  tests, web 146, vocabulary and seams clean. Deliberately excluded: a
+  world door for revert — the API verb is live for every kind of mind,
+  and the world's own gesture rides with Phase 8's craft pass.
+
 - **2026-08-23 — Phase 1: PASS.** The read side answers for itself.
   `consultations` table (migration `0017_the_read_side_gets_a_record`)
   written awaited — a serve that cannot be recorded fails loudly rather

@@ -58,6 +58,7 @@ import {
 } from "./signal-derivation-thresholds.js";
 import { writeSignalEmbedding } from "./signal-embeddings.js";
 import { refreshSignalLifecycle } from "./signal-lifecycle.js";
+import { writeSignalStatementChain } from "./statement-chains.js";
 
 type WakaDb = ReturnType<typeof getDb>;
 type WakaTx = Parameters<Parameters<WakaDb["transaction"]>[0]>[0];
@@ -182,6 +183,17 @@ export async function applyCandidates(
             embedding: candidate.embedding,
             model: input.embeddingModel,
           });
+          // The restatement joins the chain: the sentence it replaced was
+          // seeded at mint (or is seeded here for pre-chain rows), so "what
+          // did it say before" stays answerable — no-quiet-corners Phase 2.
+          await writeSignalStatementChain(tx, {
+            profileId: input.profileId,
+            signalId: match.target.id,
+            statement: candidate.statement,
+            reason: "restated",
+            seedStatement: match.target.statement,
+            now: input.now,
+          });
           match.target.statement = candidate.statement;
           match.target.embedding = candidate.embedding;
         }
@@ -212,6 +224,16 @@ export async function applyCandidates(
       statement: candidate.statement,
       embedding: candidate.embedding,
       model: input.embeddingModel,
+    });
+
+    // The chain begins at birth: the machine's first sentence is the row
+    // every later revert returns to.
+    await writeSignalStatementChain(tx, {
+      profileId: input.profileId,
+      signalId: minted.id,
+      statement: candidate.statement,
+      reason: "derived",
+      now: input.now,
     });
 
     await attachEvidence(tx, {
