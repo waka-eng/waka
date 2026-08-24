@@ -8182,23 +8182,11 @@ function HomeExperience(): JSX.Element {
     };
   }, [selectedId, loadDetail]);
 
-  /* Placement: solved from the viewport and the orb alone (the panel's size is
-     declared, not measured), so it is written before the first paint and never
-     moves again while it is open. */
-  useLayoutEffect(() => {
-    if (!panel || !panelOpen) return undefined;
-    const place = () => {
-      const el = panelRef.current;
-      const spot = simApiRef.current?.place();
-      if (!el || !spot) return;
-      el.style.left = `${spot.left}px`;
-      el.style.top = spot.top === null ? "auto" : `${spot.top}px`;
-      el.style.bottom = spot.bottom === null ? "auto" : `${spot.bottom}px`;
-    };
-    place();
-    window.addEventListener("resize", place);
-    return () => window.removeEventListener("resize", place);
-  }, [panel, panelOpen]);
+  /* Placement is the stylesheet's now: the panel opens in the middle of the
+     frame, always (founder, 2026-08-24). It used to be solved from the orb
+     and placed beside it, which put the same thing in a different place on
+     every tap — see the note on `.jar-panel`. `simApi.place()` survives for
+     the sim's own use; nothing in the page asks it where to put a panel. */
 
   /* the companion's line is a whisper, not a status bar: it goes after 4s */
   useEffect(() => {

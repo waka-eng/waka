@@ -1518,6 +1518,18 @@
 .jar-panel {
   position: absolute;
   z-index: 6;
+  /* IT OPENS IN THE MIDDLE, ALWAYS (founder, 2026-08-24).
+     It used to be solved from the orb it belonged to and placed beside it,
+     which sounds right and reads wrong: the panel landed wherever in the
+     frame that memory happened to have drifted, so the same gesture put the
+     same thing in a different place every time and your eyes had to go find
+     it. A memory you opened is the only thing you are reading, and the
+     middle is where a person already is. The chain from the orb to the
+     panel is carried by the orb staying lit, not by adjacency. */
+  left: 50%;
+  top: 50%;
+  --jar-panel-rise: 0px;
+  transform: translate(-50%, calc(-50% + var(--jar-panel-rise)));
   /* A READING MEASURE THAT GROWS WITH WHAT IT HOLDS.
      A memory can be a line or a whole pasted page. The measure caps where
      prose stops being trackable (~70 characters) and the height takes most of
@@ -1767,25 +1779,29 @@
 }
 
 /* the panel's whole vocabulary: fade up 6px in, fade back down out */
+/* The rise is a VARIABLE rather than a transform, because the transform slot
+   is spoken for: it is what centres the panel. Animating `transform` here
+   would throw the centring away for the length of the animation and snap it
+   back at the end. */
 @keyframes jar-panel-in {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    --jar-panel-rise: 6px;
   }
   to {
     opacity: 1;
-    transform: none;
+    --jar-panel-rise: 0px;
   }
 }
 
 @keyframes jar-panel-out {
   from {
     opacity: 1;
-    transform: none;
+    --jar-panel-rise: 0px;
   }
   to {
     opacity: 0;
-    transform: translateY(6px);
+    --jar-panel-rise: 6px;
   }
 }
 
