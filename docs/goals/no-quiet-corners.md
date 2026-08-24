@@ -244,6 +244,27 @@ Postgres. No new infrastructure, no new dependencies.
 
 ## Log
 
+- **2026-08-24 — Phase 7: PASS.** The queue is fair. The claim loop's one
+  shared ordering (`RUNNABLE_JOB_ORDER`, used identically by the head
+  peek and the claim — the coherence the budget stands on) now serves
+  each (profile, kind) line in turn: rows sort by their kind's
+  `last_started` (read off `started_at`, the meter the claim stamps and
+  never clears — so the fairness carries ACROSS claims; a snapshot rank
+  was tried first and recomputed itself away, the next derivation
+  becoming first-of-its-kind the moment one was claimed), never-served
+  kinds first of all, then oldest due, then oldest made — plain FIFO
+  within one kind, exactly as before. The aggregate forced the claim's
+  FOR UPDATE into a derived-table join with the lock on the base row.
+  The budget's totals are untouched: fairness decides only WHICH due job
+  spends the budget next, and `queue-model-budget.test.ts` is unchanged
+  and green, as the gate demands. Gate measured:
+  `queue-fairness.db.test.ts` 3/3 on the REAL store against real
+  Postgres (one hundred derivations enqueued ahead of one enrichment —
+  the enrichment is claimed second, within the first drain pass, and the
+  burst's own oldest job still goes first; one kind alone is strict age
+  order; peek and claim choose the same row), api 59 files / 640 tests,
+  vocabulary clean.
+
 - **2026-08-24 — Phase 6: PASS.** The sibling door has a hand on it, and
   the open default is retired — the flip the founder ruled 2026-08-23
   ships exactly as ruled: no flag, no dark machinery. The matrix

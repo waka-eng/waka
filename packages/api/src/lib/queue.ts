@@ -941,8 +941,48 @@ function runnableBackgroundJobPredicate(nowIso: string) {
   `;
 }
 
-/** The same order the claim takes rows in: oldest due first, then oldest made. */
-const RUNNABLE_JOB_ORDER = sql`ORDER BY candidate.run_after ASC, candidate.created_at ASC`;
+/**
+ * The runnable rows, RANKED FAIRLY BY KIND — the one ordering both readers
+ * share, written once for the same reason the predicate is.
+ *
+ * `last_started` is when a row's own (profile, kind) line last got a turn —
+ * read off `started_at`, the meter the claim stamps and never clears, so
+ * the fairness carries across claims instead of recomputing itself away: a
+ * snapshot rank (first-of-each-kind first) looked right and was not,
+ * because the moment a derivation is claimed the NEXT derivation becomes
+ * first-of-its-kind again and the lone enrichment never surfaces. Ordering
+ * by longest-unserved kind first is a genuine round-robin: claim a
+ * derivation and that whole line steps behind the enrichment that has
+ * never run. Measured live on 2026-08-23: two hundred and five bulk
+ * derivations starved two enrichment jobs for the account's whole budget
+ * window, indistinguishable from breakage. Within one kind, oldest due
+ * first, then oldest made, exactly as before; the per-account budget's
+ * totals are untouched — fairness decides only WHICH due job spends the
+ * budget next.
+ */
+function rankedRunnableJobs(nowIso: string) {
+  return sql`
+    SELECT
+      candidate.id,
+      candidate.profile_id,
+      (candidate.status = 'running'::background_job_status) AS reclaimed,
+      turn.last_started,
+      candidate.run_after,
+      candidate.created_at
+    FROM background_jobs AS candidate
+    LEFT JOIN (
+      SELECT prior.profile_id, prior.type, max(prior.started_at) AS last_started
+      FROM background_jobs AS prior
+      GROUP BY prior.profile_id, prior.type
+    ) AS turn
+      ON turn.profile_id = candidate.profile_id AND turn.type = candidate.type
+    WHERE ${runnableBackgroundJobPredicate(nowIso)}
+  `;
+}
+
+/** The same order the claim takes rows in: longest-unserved kind first
+    (never-served first of all), then oldest due, then oldest made. */
+const RUNNABLE_JOB_ORDER = sql`ORDER BY fair.last_started ASC NULLS FIRST, fair.run_after ASC, fair.created_at ASC`;
 
 /**
  * Read the head of the queue and whose account owns it, taking nothing.
@@ -955,12 +995,11 @@ async function readBackgroundJobQueueHead(now: Date): Promise<RunnableJobHead | 
   const nowIso = now.toISOString();
   const rows = await getDb().execute(sql<RunnableJobHead>`
     SELECT
-      candidate.id AS "jobId",
+      fair.id AS "jobId",
       profile.account_id AS "accountId",
-      (candidate.status = 'running'::background_job_status) AS "reclaimed"
-    FROM background_jobs AS candidate
-    JOIN profiles AS profile ON profile.id = candidate.profile_id
-    WHERE ${runnableBackgroundJobPredicate(nowIso)}
+      fair.reclaimed AS "reclaimed"
+    FROM (${rankedRunnableJobs(nowIso)}) AS fair
+    JOIN profiles AS profile ON profile.id = fair.profile_id
     ${RUNNABLE_JOB_ORDER}
     LIMIT 1
   `);
@@ -1058,12 +1097,16 @@ async function claimNextBackgroundJob(now = new Date()): Promise<BackgroundJob |
       started_at = ${nowIso}::timestamptz,
       updated_at = ${nowIso}::timestamptz
     WHERE job.id = (
-      SELECT candidate.id
-      FROM background_jobs AS candidate
-      WHERE ${runnableBackgroundJobPredicate(nowIso)}
+      -- The aggregate that ranks fairness cannot sit in a FOR UPDATE
+      -- query, so the ranking is a derived table and the lock lands on the
+      -- base row it joins back to. Same snapshot, same predicate, same
+      -- order as the head peek — the coherence fact the header relies on.
+      SELECT locked.id
+      FROM (${rankedRunnableJobs(nowIso)}) AS fair
+      JOIN background_jobs AS locked ON locked.id = fair.id
       ${RUNNABLE_JOB_ORDER}
       LIMIT 1
-      FOR UPDATE SKIP LOCKED
+      FOR UPDATE OF locked SKIP LOCKED
     )
     RETURNING
       job.id,
