@@ -461,6 +461,16 @@ async function tapSentence(startsWith: string): Promise<HTMLElement> {
   return el;
 }
 
+/** Open a read pattern's grounds — the tap the one-line rule put them behind. */
+async function whereFrom(startsWith: string): Promise<void> {
+  const el = cloud(startsWith);
+  const verb = [...el.querySelectorAll<HTMLElement>(".jar-neb-ask button")].find(
+    (b) => (b.textContent ?? "").trim() === "where from",
+  );
+  if (!verb) throw new Error(`no 'where from' under ${startsWith}`);
+  await act(async () => verb.click());
+}
+
 async function tapEmptySky() {
   await pressOn(canvas(), 30, 30);
   await liftAt(30, 30);
@@ -687,13 +697,25 @@ describe("the focus rule: one subject at a time", () => {
     await climbToSky();
     expect(layout.container.querySelectorAll(".jar-sky .jar-prov").length).toBe(0);
 
+    /* ONE LINE AT A TIME (founder ruling, 2026-08-24). Reading a pattern no
+       longer prints its grounds, its verbs and its receipt all at once; the
+       grounds are one tap away on the line that is already there, which is
+       what `where from` is. The rest of this case is unchanged, and its
+       claim is the one that matters: whatever the sky is showing, it is
+       showing it for exactly ONE pattern. */
     await tapSentence(NAMING);
+    await whereFrom(NAMING);
     const one = [...layout.container.querySelectorAll(".jar-sky .jar-prov")];
     expect(one.length, "exactly one candidate is showing what it rests on").toBe(1);
     expect(cloud(NAMING).contains(one[0]), "and it is the subject's own").toBe(true);
     expect(one[0].querySelectorAll(".jar-prov-row").length, "the memories it was read from").toBe(3);
 
     await tapSentence(PROOF);
+    expect(
+      layout.container.querySelectorAll(".jar-sky .jar-prov").length,
+      "reading another pattern closes the last one's grounds",
+    ).toBe(0);
+    await whereFrom(PROOF);
     const two = [...layout.container.querySelectorAll(".jar-sky .jar-prov")];
     expect(two.length, "still exactly one — the sky does not accumulate evidence").toBe(1);
     expect(cloud(PROOF).contains(two[0])).toBe(true);
@@ -1189,6 +1211,8 @@ describe("changing a memory's words", () => {
   it("keeps the person's own text on the memory the sky was read from", async () => {
     await climbToSky();
     const el = await tapSentence(NAMING);
+    /* the grounds are a tap away now — see the one-line rule */
+    await whereFrom(NAMING);
 
     const row = el.querySelector<HTMLElement>(".jar-prov-row");
     if (!row) throw new Error("the subject lists nothing it was read from");

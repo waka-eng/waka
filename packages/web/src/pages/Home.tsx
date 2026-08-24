@@ -1362,6 +1362,32 @@ function HomeExperience(): JSX.Element {
   const [inSky, setInSky] = useState(false);
   /** Which pattern in the sky is being read. Its verdict row belongs to it. */
   const [focusCandId, setFocusCandId] = useState<string | null>(null);
+  /**
+   * WHOSE GROUNDS ARE OPEN — and why the grounds are not simply always shown.
+   *
+   * A pattern being read used to print, all at once and all at rest: the
+   * memories it was read from, the honest-empty line when it had none, who in
+   * the room had answered it, the verbs to answer it yourself, and then the
+   * receipt for the answer you just gave. Five things under one sentence.
+   * "So confusing" was the founder's whole review of it, and they were right:
+   * a claim about you buried under its own apparatus is not legible, it is
+   * just dense.
+   *
+   * So the rule is ONE LINE AT A TIME (founder ruling, 2026-08-24): the ask
+   * before you answer, the receipt after — and the grounds one tap away on
+   * the same line, never stacked beneath it. This is the sky obeying the rule
+   * the poster already obeys, where pressing the sentence is what asks it
+   * where it came from.
+   */
+  const [chainOpen, setChainOpen] = useState<string | null>(null);
+  const openChain = useCallback((id: string) => {
+    setChainOpen((cur) => (cur === id ? null : id));
+  }, []);
+  /* reading a different pattern closes the last one's grounds: the sky shows
+     one set at a time, the way it focuses one statement at a time */
+  useEffect(() => {
+    setChainOpen((cur) => (cur === focusCandId ? cur : null));
+  }, [focusCandId]);
   /** Patterns with a neighbour close enough to join. Pushed from the loop so
       the one word that teaches the gesture can exist in the DOM. */
   const [pairableIds, setPairableIds] = useState<ReadonlySet<string>>(() => new Set());
@@ -10648,7 +10674,7 @@ function HomeExperience(): JSX.Element {
 
                 And each is pressable: it travels to that memory in the field
                 and opens it, so the chain runs downward as well as upward. */}
-            {focusCandId === c.id && evidenceFor(c).length > 0 ? (
+            {chainOpen === c.id && evidenceFor(c).length > 0 ? (
               <div className="jar-prov">
                 <p className="jar-prov-lead jar-label">read from</p>
                 {evidenceFor(c).map((e) => (
@@ -10668,7 +10694,7 @@ function HomeExperience(): JSX.Element {
                 (rows from before the chain was kept) says so, rather than
                 rendering no section — the absence of receipts is itself a
                 fact worth a line. */}
-            {focusCandId === c.id &&
+            {chainOpen === c.id &&
             c.kind === "reading" &&
             !c.wallTarget &&
             evidenceFor(c).length === 0 &&
@@ -10687,7 +10713,7 @@ function HomeExperience(): JSX.Element {
             {/* WHO HAS ANSWERED A ROOM'S STATEMENT — named, lit or dimmed,
                 never a tally. The same law the proposal panel obeys: the
                 count is legible because the people are. */}
-            {focusCandId === c.id && c.wallTarget && c.wallTarget.reactions.length > 0 ? (
+            {chainOpen === c.id && c.wallTarget && c.wallTarget.reactions.length > 0 ? (
               <p className="jar-prov-lead jar-label">
                 {"answered by "}
                 {c.wallTarget.reactions.map((reaction, i) => (
@@ -10788,11 +10814,26 @@ function HomeExperience(): JSX.Element {
                     </button>
                   </>
                 ) : null}
+                <span aria-hidden="true"> · </span>
+                <button type="button" onClick={() => openChain(c.id)}>
+                  {chainOpen === c.id ? "enough" : "where from"}
+                </button>
               </p>
             ) : null}
-            {verdictReceipt?.id === c.id ? (
+            {/* AND ONCE ANSWERED, THE ONE LINE IS THE RECEIPT — with the way
+                to the chain still on it, because the verbs above are gone by
+                then and the grounds must not go with them. */}
+            {focusCandId === c.id && verdicts.has(c.id) && verdicts.get(c.id) !== "gone" ? (
               <p className="jar-neb-ask">
-                <span className="jar-receipt">{verdictReceipt.text}</span>
+                {verdictReceipt?.id === c.id ? (
+                  <>
+                    <span className="jar-receipt">{verdictReceipt.text}</span>
+                    <span aria-hidden="true"> · </span>
+                  </>
+                ) : null}
+                <button type="button" onClick={() => openChain(c.id)}>
+                  {chainOpen === c.id ? "enough" : "where from"}
+                </button>
               </p>
             ) : null}
             {editing.open?.kind === "signal" && editing.open.id === c.id ? (
