@@ -106,7 +106,7 @@ export function makeGroupBall(
        never reach into another member's layers to find one. Nothing above it
        here is the honest reading, not a placeholder. */
     roots: 0,
-    underPromoted: false,
+    promotion: 0,
     onPoster: false,
     underPrinciple: false,
     frontier: false,

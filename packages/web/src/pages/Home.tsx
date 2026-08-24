@@ -8144,7 +8144,7 @@ function HomeExperience(): JSX.Element {
       b.hasNotes = above.cited;
       /* the three facts the light grades by — see carryOf */
       b.roots = above.roots;
-      b.underPromoted = above.underPromoted;
+      b.promotion = above.promotion;
       b.onPoster = above.onPoster;
       b.underPrinciple = above.underPrinciple;
       b.hasGroup = above.inGroup;
@@ -9014,7 +9014,7 @@ function HomeExperience(): JSX.Element {
          out to hold up. */
       cited: false,
       roots: 0,
-      underPromoted: false,
+      promotion: 0,
       onPoster: false,
       underPrinciple: false,
       inGroup: false,

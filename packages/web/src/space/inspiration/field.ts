@@ -101,7 +101,7 @@ export function colorBall(b: Ball, T: number): void {
   const carry = b.hasNotes
     ? carryOf({
         roots: b.roots,
-        underPromoted: b.underPromoted,
+        promotion: b.promotion,
         onPoster: b.onPoster,
         underPrinciple: b.underPrinciple,
       })
@@ -135,7 +135,17 @@ export function colorBall(b: Ball, T: number): void {
           decay,
       1,
     );
-  const a = clamp01(Math.max(recency, tended) + FIELD_CARRY_SPAN * carry);
+  /* AGE SITS ON TOP OF THE FLOORS RATHER THAN COMPETING WITH THEM, and the
+     `Math.max` this replaces was a dead channel with a date on it: freshness
+     can only ever reach `FIELD_RECENCY_WEIGHT`, the cited floor is already
+     most of the way there, so past about five days the max returned the floor
+     and AGE CONTRIBUTED EXACTLY ZERO — forever, for every cited memory in the
+     archive — against this module's own header, which calls showing the
+     passage of time the one job it has. Now freshness spends its share of
+     whatever room is left above the floor: a memory that is cited, answered
+     and in a room has less of that room to spend, which is right, because by
+     then what it is holding up matters more than when it arrived. */
+  const a = clamp01(tended + (1 - tended) * recency + FIELD_CARRY_SPAN * carry);
   b.alive = a;
   b.alivePow = Math.pow(a, 1.4);
   /**

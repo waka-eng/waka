@@ -167,29 +167,40 @@ export const FIELD_CARRY_ROOT_SATURATION = 3;
  * be doing, so it carries the largest share; a settled principle is next;
  * promotion and sheer count of roots are the quieter two.
  */
-export const FIELD_CARRY_ROOTS_SHARE = 0.2;
+export const FIELD_CARRY_ROOTS_SHARE = 0.1;
 /**
- * A PROMOTED PATTERN IS A HEAVIER THING TO HOLD UP — and this share is what
- * makes the light move at all in a young archive.
+ * HOW FAR THE PATTERN ABOVE THIS MEMORY HAS GOT — and this is the term that
+ * makes the light move at all in a young archive, which is the one the
+ * founder has been looking at.
  *
- * The first three shares were roots, the poster, and a principle. Measured
- * against a real early account they are all the SAME NUMBER for every
- * memory: nothing is adopted yet, so the poster cites nothing; there are no
- * principles yet either; and each capture derived its own lone candidate, so
- * every memory has exactly one root. Three terms, zero variance, and the
- * founder looking at thirty identical orbs saying "why all same brightness"
- * for the fourth time. The math was right and had nothing to say.
+ * It used to be a BOOLEAN: true once a citing signal reached `active`. That
+ * is a cliff at three pieces of evidence with nothing on either side of it,
+ * and a young archive lives entirely on the near side — every capture derives
+ * its own lone candidate, so no signal is active, so the term is false for
+ * every memory and contributes exactly zero variance. Re-running the real
+ * modules over the repo's own fixture: thirteen of fourteen cited memories,
+ * spanning nine to ninety-one days, landed on the IDENTICAL aliveness. The
+ * math was right and had nothing to say, which is what "why all same
+ * brightness" means, said four times.
  *
- * Promotion is the one distinction that exists from the very first week: a
- * signal turns `active` when three memories say the same thing, so a memory
- * under one is holding up something the loop has CONFIRMED, and a memory
- * under a lone emerging candidate is holding up a guess. That difference
- * appears long before a poster or a principle does, and it is exactly what
- * "how active this one is being used to form signals" means.
+ * So it grades. A candidate with one memory behind it is a guess; with two,
+ * something the loop is starting to believe; at three it promotes and the
+ * term is full. That is a distinction that exists from the first week,
+ * moves on every keep, and is exactly what "how active this one is being
+ * used to form signals" asks for — so it holds the largest share.
  */
-export const FIELD_CARRY_PROMOTED_SHARE = 0.2;
-export const FIELD_CARRY_POSTER_SHARE = 0.35;
-export const FIELD_CARRY_PRINCIPLE_SHARE = 0.25;
+export const FIELD_CARRY_PROMOTED_SHARE = 0.45;
+export const FIELD_CARRY_POSTER_SHARE = 0.25;
+export const FIELD_CARRY_PRINCIPLE_SHARE = 0.2;
+/**
+ * THE EVIDENCE THAT FILLS THE PROMOTION TERM, and it is not a free number:
+ * it is the loop's own promotion threshold — a signal turns `active` when
+ * three memories say the same thing (`docs/generation.md`). Grading toward
+ * it rather than past it means the light and the lifecycle agree about what
+ * "confirmed" is, and a signal that HAS promoted lands at a full term
+ * without the field having to special-case it.
+ */
+export const FIELD_CARRY_PROMOTION_EVIDENCE = 3;
 
 /**
  * The extra light a fully-carrying memory holds over a barely-cited one.
@@ -199,12 +210,18 @@ export const FIELD_CARRY_PRINCIPLE_SHARE = 0.25;
  * above that floor, so the field reads as a gradient of load rather than as
  * two brightnesses.
  */
-export const FIELD_CARRY_SPAN = 0.75;
+export const FIELD_CARRY_SPAN = 0.85;
 
-/** What a memory is holding up, in 0..1. Pure; the field's only reader. */
+/** What a memory is holding up, in 0..1. Pure; the field's only reader.
+ *
+ * EVERY TERM THAT CAN BE GRADED IS GRADED, and the shares are sized so that
+ * one step of any of them clears one band of the drawn tier. A share that
+ * buys less than a band is arithmetic nobody can see — which is how four
+ * correct terms produced one flat field. */
 export function carryOf(input: {
   roots: number;
-  underPromoted: boolean;
+  /** How far the furthest-along pattern above this memory has got, 0..1. */
+  promotion: number;
   onPoster: boolean;
   underPrinciple: boolean;
 }): number {
@@ -219,7 +236,7 @@ export function carryOf(input: {
   );
   const carry =
     FIELD_CARRY_ROOTS_SHARE * roots +
-    (input.underPromoted ? FIELD_CARRY_PROMOTED_SHARE : 0) +
+    FIELD_CARRY_PROMOTED_SHARE * Math.min(Math.max(input.promotion, 0), 1) +
     (input.onPoster ? FIELD_CARRY_POSTER_SHARE : 0) +
     (input.underPrinciple ? FIELD_CARRY_PRINCIPLE_SHARE : 0);
   return Math.min(Math.max(carry, 0), 1);

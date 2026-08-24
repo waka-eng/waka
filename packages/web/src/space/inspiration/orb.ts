@@ -26,6 +26,7 @@
 import { Inspiration, type Evidence, type Signal } from "../../lib/data";
 import { hashStr, mix32, TAU } from "../../lib/num";
 import { type ApiAgentSignal } from "../../lib/agent-contract";
+import { FIELD_CARRY_PROMOTION_EVIDENCE } from "../../lib/aliveness";
 
 
 export interface Ball {
@@ -44,7 +45,7 @@ export interface Ball {
   roots: number;
   /** one of those patterns has been promoted — the distinction that exists
       from the first week, long before a poster or a principle does */
-  underPromoted: boolean;
+  promotion: number;
   onPoster: boolean;
   underPrinciple: boolean;
   /** Nothing rests on this memory yet, and it is old enough that something
@@ -246,7 +247,7 @@ export interface SignalSeed {
   /** The same fact, counted, plus how far up the stack those patterns reach.
       Together they are the memory's CARRY — see lib/aliveness.ts. */
   roots: number;
-  underPromoted: boolean;
+  promotion: number;
   onPoster: boolean;
   underPrinciple: boolean;
   /** True when a pattern citing it is shared to a room. Captures themselves
@@ -299,7 +300,7 @@ export interface SkyOverInspiration {
   /** A pattern citing it has been PROMOTED — three memories said the same
       thing, so this one is under something the loop confirmed rather than
       under a guess. The distinction that exists from the first week. */
-  underPromoted: boolean;
+  promotion: number;
   /** A pattern citing it is cited by the live top of mind. */
   onPoster: boolean;
   /** A pattern citing it is cited by a principle. */
@@ -333,7 +334,27 @@ export function skyOf(
   return {
     cited: cites.length > 0,
     roots,
-    underPromoted: above.some((p) => p.status === "active"),
+    /* HOW FAR THE FURTHEST-ALONG PATTERN ABOVE THIS ONE HAS GOT, graded
+       rather than a cliff. `some(status === "active")` was true for nothing
+       in a young archive — no signal has three memories behind it yet — so
+       the term that was supposed to move the light contributed nothing and
+       the whole field came out one brightness. Progress toward promotion is
+       the same fact with a slope: one memory behind the candidate is a
+       guess, two is the loop starting to believe it, three promotes.
+       A signal that HAS promoted reads full without depending on the count,
+       so a row served without `evidenceCount` cannot dim a confirmed
+       pattern's memories. */
+    promotion: above.reduce(
+      (best, p) =>
+        Math.max(
+          best,
+          p.status === "active"
+            ? 1
+            : Math.min(p.evidenceCount ?? 0, FIELD_CARRY_PROMOTION_EVIDENCE) /
+                FIELD_CARRY_PROMOTION_EVIDENCE,
+        ),
+      0,
+    ),
     onPoster: posterSignalIds ? above.some((p) => posterSignalIds.has(p.id)) : false,
     underPrinciple: principleSignalIds
       ? above.some((p) => principleSignalIds.has(p.id))
@@ -379,7 +400,7 @@ export function makeBall(s: SignalSeed, agentId = ""): Ball {
     reflections: s.reflectionCount,
     hasNotes: s.cited,
     roots: s.roots,
-    underPromoted: s.underPromoted,
+    promotion: s.promotion,
     onPoster: s.onPoster,
     underPrinciple: s.underPrinciple,
     frontier: false,
@@ -489,7 +510,7 @@ export function makeAgentBall(s: ApiAgentSignal): Ball {
        principles say nothing about it, and the agent's are its own business.
        Zero is the truthful answer here, not a missing one. */
     roots: 0,
-    underPromoted: false,
+    promotion: 0,
     onPoster: false,
     underPrinciple: false,
     frontier: false,

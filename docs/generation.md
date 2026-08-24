@@ -668,11 +668,12 @@ Source: `packages/web/src/lib/aliveness.ts`.
 | `FIELD_FLOOR_IN_GROUP` | 0.1 | Nor one that is out loud in a group |
 | `FIELD_FRONTIER_DAYS` | 3 | Untouched longer than this and cited by nothing = a frontier |
 | `FIELD_CARRY_ROOT_SATURATION` | 3 | Roots stop adding carry past this many citing patterns |
-| `FIELD_CARRY_ROOTS_SHARE` | 0.2 | Carry: the share held by how many patterns cite it |
-| `FIELD_CARRY_PROMOTED_SHARE` | 0.2 | Carry: the share held by being under a promoted pattern |
-| `FIELD_CARRY_POSTER_SHARE` | 0.35 | Carry: the share held by reaching the live top of mind |
-| `FIELD_CARRY_PRINCIPLE_SHARE` | 0.25 | Carry: the share held by reaching a principle |
-| `FIELD_CARRY_SPAN` | 0.75 | Extra light a fully-carrying memory holds over a barely-cited one |
+| `FIELD_CARRY_ROOTS_SHARE` | 0.1 | Carry: the share held by how many patterns cite it |
+| `FIELD_CARRY_PROMOTED_SHARE` | 0.45 | Carry: the share held by how far the pattern above it has got |
+| `FIELD_CARRY_PROMOTION_EVIDENCE` | 3 | Evidence that fills the promotion share — the loop's own promote-at |
+| `FIELD_CARRY_POSTER_SHARE` | 0.25 | Carry: the share held by reaching the live top of mind |
+| `FIELD_CARRY_PRINCIPLE_SHARE` | 0.2 | Carry: the share held by reaching a principle |
+| `FIELD_CARRY_SPAN` | 0.85 | Extra light a fully-carrying memory holds over a barely-cited one |
 | `FIELD_ATTENTION_SPAN` | 0.16 | Extra floor for coming back to a memory, graded by how often |
 | `FIELD_RECENCY_WEIGHT` | 0.25 | The share of the range freshness may spend; the rest belongs to use |
 | `FIELD_TIER_CEILING` | 1 | Aliveness at or above this draws in the brightest band |
@@ -688,13 +689,35 @@ bends the mapping toward the dim half, and `TIERS` (in
 `packages/web/src/canvas/sprites.ts`) widened from five bands to nine. Neither
 changes what a memory IS — only how finely the eye can read it.
 
-**Why promotion is one of the shares.** Roots, the poster and a principle are
-all the same number for every memory in a young archive: nothing is adopted
-yet, no principles exist, and each capture derives its own lone candidate — so
-every memory has exactly one root and the light has nothing to say. Promotion
-is the one distinction that exists from the first week: a signal turns `active`
-when three memories say the same thing, so a memory under one is holding up
-something the loop has confirmed rather than a guess.
+**Why promotion is the largest share, and why it grades.** Roots, the poster
+and a principle are all the same number for every memory in a young archive:
+nothing is adopted yet, no principles exist, and each capture derives its own
+lone candidate — so every memory has exactly one root and the light has nothing
+to say. Promotion is the one distinction that exists from the first week: a
+signal turns `active` when three memories say the same thing, so a memory under
+one is holding up something the loop has confirmed rather than a guess.
+
+It was a BOOLEAN first, and that was the same failure one level down. `active`
+is a cliff at three pieces of evidence, and a young archive lives entirely on
+the near side of it — no signal has three memories behind it yet, so the term
+was false for every memory and contributed exactly zero variance. Running the
+real modules over this repo's own fixture: thirteen of fourteen cited memories,
+spanning nine to ninety-one days, landed on the identical aliveness. So the
+share grades toward the threshold instead of switching at it — one memory
+behind the candidate is a guess, two is the loop starting to believe it, three
+promotes and the term is full — and it is sized so that each of those steps
+clears a whole band of `TIERS`. A share that buys less than a band is
+arithmetic nobody can see, which is how four correct terms produced one flat
+field.
+
+**What the nine bands are spent on.** Measured through the real pipeline at
+twenty days: uncited draws band 1; under one emerging candidate, 4; under a
+candidate with two behind it, 5; under a promoted one, 6; reaching the live top
+of mind, 7; and under a settled principle, 8. `FIELD_CARRY_ROOTS_SHARE` is
+deliberately smaller than a band — how many patterns rest on a memory refines
+its light WITHIN a band rather than moving it, because there are more
+distinctions worth drawing than there are bands to draw them in, and how far
+the loop has got with a memory beats how many times it has tried.
 
 **Why the carry is graded and the floor is not.** `FIELD_FLOOR_CITED` is what
 being cited AT ALL is worth: one root and nothing above it, and the memory can
@@ -721,10 +744,23 @@ different things. `SELECTION_EVIDENCE_SATURATION` counts a pattern accumulating
 across many memories; `FIELD_REFLECTION_SATURATION` counts one person returning
 to a single memory. Two returns to the same thought is already unusual.
 
-**Why `hasNotes` appears twice.** A citation both sets a floor
-(`FIELD_FLOOR_CITED`) and lifts the result (`FIELD_CITED_LIFT`): being rested
-upon stops a memory sinking AND makes it brighter than an equally old one that
-is not. Deliberate, and named so it reads as a decision rather than a bug.
+**Why freshness is added to the floors rather than raced against them.**
+`colorBall` took `Math.max(recency, tended)` and that made age a dead channel
+with a date on it. Freshness can only ever reach `FIELD_RECENCY_WEIGHT`; the
+cited floor is already most of the way there; so past about five days the max
+returned the floor and a cited memory's age CONTRIBUTED EXACTLY ZERO — forever,
+for every cited memory in the archive. Now freshness spends its share of
+whatever room is left above the floor: `tended + (1 - tended) * recency`. An
+uncited memory is unaffected (its floor is nought, so it gets the whole share,
+exactly as before); a memory that is cited, answered and out loud in a room has
+less room to spend on being new, which is right, because by then what it holds
+up matters more than when it arrived.
+
+Age still saturates: with a seven-day half-life a memory three months old and
+one a year old are both simply old, and the light says so. That is deliberate.
+The founder's ask was that brightness track "how active this one is being used
+to form signals, top of mind, and principle" — use is the meaning, and age is
+the gradient underneath it.
 
 ## How this doc stays true
 

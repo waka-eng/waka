@@ -33,6 +33,7 @@ import {
   FIELD_CARRY_POSTER_SHARE,
   FIELD_CARRY_PRINCIPLE_SHARE,
   FIELD_CARRY_PROMOTED_SHARE,
+  FIELD_CARRY_PROMOTION_EVIDENCE,
   FIELD_CARRY_ROOT_SATURATION,
   FIELD_CARRY_ROOTS_SHARE,
 } from "../src/lib/aliveness";
@@ -195,12 +196,12 @@ describe("the carry: how much of a person a memory holds up", () => {
 
   it("keeps the carry a clean nought-to-one, saturating where the doc says", () => {
     expect(
-      carryOf({ roots: 0, underPromoted: false, onPoster: false, underPrinciple: false }),
+      carryOf({ roots: 0, promotion: 0, onPoster: false, underPrinciple: false }),
     ).toBe(0);
     expect(
       carryOf({
         roots: FIELD_CARRY_ROOT_SATURATION,
-        underPromoted: true,
+        promotion: 1,
         onPoster: true,
         underPrinciple: true,
       }),
@@ -213,12 +214,12 @@ describe("the carry: how much of a person a memory holds up", () => {
         FIELD_CARRY_PRINCIPLE_SHARE,
     ).toBeCloseTo(1, 10);
     expect(
-      carryOf({ roots: 99, underPromoted: false, onPoster: false, underPrinciple: false }),
+      carryOf({ roots: 99, promotion: 0, onPoster: false, underPrinciple: false }),
       "roots stop adding past the saturation — a memory is not a scoreboard",
     ).toBeCloseTo(
       carryOf({
         roots: FIELD_CARRY_ROOT_SATURATION,
-        underPromoted: false,
+        promotion: 0,
         onPoster: false,
         underPrinciple: false,
       }),
@@ -252,6 +253,14 @@ describe("the carry: how much of a person a memory holds up", () => {
               {
                 ...pattern(sig),
                 status: (input.promoted ? "active" : "emerging") as Signal["status"],
+                /* AND THE EVIDENCE WITH IT. This flipped the status alone and
+                   left `pattern()`'s three pieces of evidence in place, so
+                   the "guess" was a candidate three memories deep wearing an
+                   emerging label — and once the promotion term graded off the
+                   evidence rather than the label, the guess and the confirmed
+                   pattern came out identical. A fixture that contradicts
+                   itself will happily prove the thing it contradicts. */
+                evidenceCount: input.promoted ? FIELD_CARRY_PROMOTION_EVIDENCE : 1,
               },
             ] as const,
         ),
@@ -296,5 +305,84 @@ describe("the carry: how much of a person a memory holds up", () => {
     expect(settled, "and what reaches the poster and a principle sits above that").toBeGreaterThan(
       confirmed,
     );
+  });
+
+  it("bands an AGED archive by how far the pattern above each memory has got", () => {
+    /* THE HOLE EVERY OTHER CASE IN THIS FILE LEFT OPEN, and the founder was
+       standing in it.
+
+       The same-day case above asserts tiers, but only across the
+       promoted/poster/principle boundaries. The aged case asserts the twenty
+       day archive, but reads `ball.alive` — so it green-lights exactly the
+       differences that are too small to cross a band and therefore cannot be
+       seen. Between them sat the actual population of a real archive: cited
+       memories, none adopted, no principles, every candidate still emerging,
+       differing only in HOW MUCH EVIDENCE has gathered under it. Running the
+       real modules over the repo's own fixture, thirteen of fourteen such
+       memories — nine to ninety-one days old — landed on one identical
+       aliveness.
+
+       So: same age, same everything, one emerging candidate each, and the
+       drawn TIER must climb with the evidence behind it. */
+    const byEvidence = (id: string, evidenceCount: number) => {
+      const citations = new Map<string, Evidence[]>([[id, [cites("s1", id)]]]);
+      const signals = new Map([
+        [
+          "s1",
+          {
+            ...pattern("s1"),
+            status: "emerging" as Signal["status"],
+            evidenceCount,
+          },
+        ],
+      ]);
+      const ball = makeBall(seedOf(memory(id), citations, signals, new Set(), new Set()));
+      colorBall(ball, NOW);
+      return tierOf(ball);
+    };
+
+    const tiers = [1, 2, FIELD_CARRY_PROMOTION_EVIDENCE].map((n) =>
+      byEvidence(`aged-${n}`, n),
+    );
+    for (let i = 1; i < tiers.length; i += 1) {
+      expect(
+        tiers[i],
+        `evidence ${i + 1} must draw from a brighter band than evidence ${i}`,
+      ).toBeGreaterThan(tiers[i - 1]);
+    }
+  });
+
+  it("never lets age go silent — the passage of time is the one job it has", () => {
+    /* `Math.max(recency, tended)` made this exactly zero. Freshness can only
+       reach `FIELD_RECENCY_WEIGHT`; the cited floor is most of the way there
+       already; so past about five days the max returned the floor and a
+       cited memory's age stopped mattering FOREVER. Same carry, same
+       everything, four ages: the light has to fall, every time, not merely
+       eventually. */
+    const atAge = (days: number) => {
+      const id = `age-${days}`;
+      const kept = NOW - days * DAY;
+      const citations = new Map<string, Evidence[]>([[id, [cites("s1", id)]]]);
+      const signals = new Map([["s1", pattern("s1")]]);
+      const ball = makeBall(
+        seedOf(
+          { ...memory(id), capturedMs: kept, updatedMs: kept },
+          citations,
+          signals,
+          new Set(),
+          new Set(),
+        ),
+      );
+      colorBall(ball, NOW);
+      return ball.alive;
+    };
+
+    const ages = [0, 7, 20, 90].map(atAge);
+    for (let i = 1; i < ages.length; i += 1) {
+      expect(
+        ages[i],
+        `a cited memory ${[0, 7, 20, 90][i]} days old must be dimmer than one ${[0, 7, 20, 90][i - 1]} days old`,
+      ).toBeLessThan(ages[i - 1]);
+    }
   });
 });
