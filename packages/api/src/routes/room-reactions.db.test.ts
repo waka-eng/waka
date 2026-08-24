@@ -34,7 +34,6 @@ import {
   leaveGroup,
 } from "./groups-membership.js";
 import { loadGroupWall } from "./groups-wall.js";
-import { shareSignalWithGroup } from "./signals.js";
 
 let t: TestDatabase;
 let seq = 0;
@@ -117,6 +116,26 @@ const draft = (groupId: string) =>
     },
   );
 
+/**
+ * A share, written straight into the table.
+ *
+ * The verb that used to create these retired on 2026-08-24 — a room grows its
+ * own statements now — but the ROWS are still real: they are a person's own
+ * history, the export carries them, and `routes/feedback.ts` still honours an
+ * old share as standing to answer the statement it put up. That standing is
+ * what these cases hold, so they write the history directly rather than
+ * through a door the product no longer has.
+ */
+async function seedLegacyShare(input: {
+  profileId: string;
+  signalId: string;
+  groupId: string;
+}): Promise<void> {
+  await t.sql`
+    INSERT INTO signal_shares (profile_id, signal_id, group_id)
+    VALUES (${input.profileId}, ${input.signalId}, ${input.groupId})`;
+}
+
 afterAll(async () => {
   await t?.cleanup();
 });
@@ -130,13 +149,7 @@ describe("standing mirrors the wall", () => {
   it("lets a member answer another member's shared statement, and nobody else", async () => {
     const g = await seedGroup();
     const signalId = await seedSignal(g.a, "keeps choosing depth over breadth");
-    expect(
-      await shareSignalWithGroup(t.db as never, {
-        profileId: g.a,
-        signalId,
-        groupId: g.groupId,
-      }),
-    ).toBe("shared");
+    await seedLegacyShare({ profileId: g.a, signalId, groupId: g.groupId });
 
     const answered = await react(g.b, signalId, "true");
     expect(answered, "a member could not answer a statement said in their room").not.toBeNull();
@@ -151,7 +164,7 @@ describe("standing mirrors the wall", () => {
   it("withdraws answerability when the owner leaves — the wall already withdrew the statement", async () => {
     const g = await seedGroup();
     const signalId = await seedSignal(g.a, "keeps choosing depth over breadth");
-    await shareSignalWithGroup(t.db as never, { profileId: g.a, signalId, groupId: g.groupId });
+    await seedLegacyShare({ profileId: g.a, signalId, groupId: g.groupId });
 
     await leaveGroup(t.db as never, { profileId: g.a, groupId: g.groupId });
 
@@ -162,6 +175,33 @@ describe("standing mirrors the wall", () => {
     expect(
       await react(g.b, signalId, "true"),
       "a verdict was filed against a statement the room can no longer see",
+    ).toBeNull();
+  });
+
+  it("stops taking answers once the room has set a statement aside", async () => {
+    /* A dismissal is the room putting a statement down, and the wall stops
+       serving it the moment it happens — so nobody can be looking at one.
+       Accepting a stance on it would file an answer to something that will
+       never be shown back. (The two-voices gate is deliberately NOT applied
+       to answerability: that is a statement drifting below the bar while
+       somebody had it on screen, which is a race worth forgiving. This is a
+       decision, and there is nothing to forgive.) */
+    const g = await seedGroup();
+    const mindRows = await t.sql`
+      SELECT id FROM profiles WHERE group_id = ${g.groupId} AND type = 'group'`;
+    const mind = mindRows[0]!.id as string;
+    const signalId = await seedSignal(mind, "this room keeps choosing depth over breadth");
+
+    expect(
+      await react(g.b, signalId, "true"),
+      "a member could not answer a statement their own room grew",
+    ).not.toBeNull();
+
+    await t.sql`UPDATE signals SET dismissed_at = now() WHERE id = ${signalId}`;
+
+    expect(
+      await react(g.a, signalId, "true"),
+      "a verdict was filed against a statement the room had already put down",
     ).toBeNull();
   });
 

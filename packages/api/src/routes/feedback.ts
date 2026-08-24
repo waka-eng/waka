@@ -17,7 +17,7 @@
  * private verdict on a shared entry would be a vote nobody else can see.
  */
 
-import { and, desc, eq, ne } from "drizzle-orm";
+import { and, desc, eq, isNull, ne } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
@@ -253,7 +253,21 @@ async function targetBelongsToProfile(
           eq(groupMembers.profileId, input.profileId),
         ),
       )
-      .where(and(eq(signals.id, input.targetId), ne(signals.status, "retired")))
+      .where(
+        and(
+          eq(signals.id, input.targetId),
+          ne(signals.status, "retired"),
+          /* AND NOT SET ASIDE. The wall refuses to serve a dismissed
+             statement, so a member cannot be looking at one; accepting a
+             stance on it would file an answer to something the room has
+             already put down, and nothing would ever show it back. The
+             two-voices gate is deliberately NOT repeated here (see above) —
+             that one is about a statement drifting below the bar while
+             somebody had it on screen, which is a race worth forgiving.
+             A dismissal is a decision, and there is nothing to forgive. */
+          isNull(signals.dismissedAt),
+        ),
+      )
       .limit(1);
 
     return mayAnswerSignal({

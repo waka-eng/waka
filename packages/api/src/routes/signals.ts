@@ -26,7 +26,6 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
 import {
-  groupMembers,
   inspirations,
   profiles,
   signalEvidence,
@@ -98,11 +97,6 @@ const signalParamsSchema = z.object({
   signalId: z.string().uuid("signalId must be a uuid"),
 });
 
-const shareParamsSchema = z.object({
-  signalId: z.string().uuid("signalId must be a uuid"),
-  groupId: z.string().uuid("groupId must be a uuid"),
-});
-
 const updateSignalBodySchema = z
   .object({
     statement: z
@@ -111,10 +105,6 @@ const updateSignalBodySchema = z
       .min(1, "statement cannot be empty")
       .max(MAX_STATEMENT_LENGTH, `statement must be <= ${MAX_STATEMENT_LENGTH} characters`),
   })
-  .strict();
-
-const createShareBodySchema = z
-  .object({ groupId: z.string().uuid("groupId must be a uuid") })
   .strict();
 
 // ---------------------------------------------------------------------------
@@ -559,57 +549,6 @@ export async function deleteProfileSignal(
   return deleted.length > 0;
 }
 
-export async function shareSignalWithGroup(
-  db: WakaDb,
-  input: { profileId: string; signalId: string; groupId: string },
-): Promise<"shared" | "not_found" | "not_a_member"> {
-  const [signal] = await db
-    .select({ id: signals.id })
-    .from(signals)
-    .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
-    .limit(1);
-  if (!signal) return "not_found";
-
-  const [membership] = await db
-    .select({ id: groupMembers.id })
-    .from(groupMembers)
-    .where(
-      and(eq(groupMembers.groupId, input.groupId), eq(groupMembers.profileId, input.profileId)),
-    )
-    .limit(1);
-  if (!membership) return "not_a_member";
-
-  // Re-sharing is not an error: the caller wanted this signal on that wall,
-  // and after this call it is.
-  await db
-    .insert(signalShares)
-    .values({
-      profileId: input.profileId,
-      signalId: input.signalId,
-      groupId: input.groupId,
-    })
-    .onConflictDoNothing();
-
-  return "shared";
-}
-
-export async function unshareSignalFromGroup(
-  db: WakaDb,
-  input: { profileId: string; signalId: string; groupId: string },
-): Promise<boolean> {
-  const removed = await db
-    .delete(signalShares)
-    .where(
-      and(
-        eq(signalShares.signalId, input.signalId),
-        eq(signalShares.groupId, input.groupId),
-        eq(signalShares.profileId, input.profileId),
-      ),
-    )
-    .returning({ id: signalShares.id });
-  return removed.length > 0;
-}
-
 // ---------------------------------------------------------------------------
 // Profile scoping
 // ---------------------------------------------------------------------------
@@ -692,8 +631,6 @@ export interface SignalRouteDependencies {
   dismissSignal?: typeof dismissProfileSignal;
   restoreSignal?: typeof restoreProfileSignal;
   deleteSignal?: typeof deleteProfileSignal;
-  shareSignal?: typeof shareSignalWithGroup;
-  unshareSignal?: typeof unshareSignalFromGroup;
   loadProfile?: typeof loadProfileTarget;
   dropEmbedding?: typeof dropSignalEmbedding;
   requestReembed?: typeof enqueueSignalReembed;
@@ -712,8 +649,6 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
   const dismissSignal = deps.dismissSignal ?? dismissProfileSignal;
   const restoreSignal = deps.restoreSignal ?? restoreProfileSignal;
   const deleteSignal = deps.deleteSignal ?? deleteProfileSignal;
-  const shareSignal = deps.shareSignal ?? shareSignalWithGroup;
-  const unshareSignal = deps.unshareSignal ?? unshareSignalFromGroup;
   const loadProfile = deps.loadProfile ?? loadProfileTarget;
   const dropEmbedding = deps.dropEmbedding ?? dropSignalEmbedding;
   const requestReembed = deps.requestReembed ?? enqueueSignalReembed;
@@ -1129,59 +1064,23 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
     return c.json({ deleted: true }, 200);
   });
 
-  /**
-   * Sharing is the owner's act. Group membership is between human profiles,
-   * and a share attributes a statement to the member who holds it, so the
-   * signal must belong to the session's own profile — an admin curating an
-   * agent's memory is not the same thing as publishing on its behalf.
+  /*
+   * THERE IS NO VERB HERE ANY MORE.
+   *
+   * `POST /:signalId/shares` and its delete used to be how a statement
+   * reached a room. The founder retired that on 2026-08-24: a room grows its
+   * own statements from its members' pooled public memories, and the wall
+   * stopped reading `signal_shares` the same day. The endpoints outlived the
+   * wall by a few hours and were doing real damage in that state — a caller
+   * got 201, the row landed, and nothing anywhere ever showed it, which is
+   * the worst answer an API can give.
+   *
+   * The TABLE stays, and so does everything that reads it: the export carries
+   * a person's shares as their own history, and `routes/feedback.ts` still
+   * honours an old share as standing to answer the statement it put up. What
+   * is gone is the ability to make a NEW one. Sharing is a memory being
+   * public now, and that switch lives on the memory.
    */
-  routes.post("/:signalId/shares", async (c) => {
-    const parsedParams = signalParamsSchema.safeParse(c.req.param());
-    if (!parsedParams.success) {
-      return c.json(
-        { error: "Invalid signal id", details: parsedParams.error.flatten().fieldErrors },
-        400,
-      );
-    }
-
-    const rawBody = await c.req.json().catch(() => null);
-    const parsedBody = createShareBodySchema.safeParse(rawBody);
-    if (!parsedBody.success) {
-      return c.json(
-        { error: "Invalid share request", details: parsedBody.error.flatten().fieldErrors },
-        400,
-      );
-    }
-
-    const outcome = await shareSignal(getDatabase(), {
-      profileId: c.get("session").profile.id,
-      signalId: parsedParams.data.signalId,
-      groupId: parsedBody.data.groupId,
-    });
-    if (outcome === "not_found") return c.json({ error: "Signal not found" }, 404);
-    if (outcome === "not_a_member") {
-      return c.json({ error: "Not a member of this group" }, 403);
-    }
-    return c.json({ shared: true, groupId: parsedBody.data.groupId }, 201);
-  });
-
-  routes.delete("/:signalId/shares/:groupId", async (c) => {
-    const parsedParams = shareParamsSchema.safeParse(c.req.param());
-    if (!parsedParams.success) {
-      return c.json(
-        { error: "Invalid share id", details: parsedParams.error.flatten().fieldErrors },
-        400,
-      );
-    }
-
-    const removed = await unshareSignal(getDatabase(), {
-      profileId: c.get("session").profile.id,
-      signalId: parsedParams.data.signalId,
-      groupId: parsedParams.data.groupId,
-    });
-    if (!removed) return c.json({ error: "Share not found" }, 404);
-    return c.json({ shared: false, groupId: parsedParams.data.groupId }, 200);
-  });
 
   return routes;
 }

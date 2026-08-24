@@ -1,3 +1,34 @@
+-- OPERATIONAL NOTE, added on review (2026-08-24).
+--
+-- Three statements below rewrite or re-scan `signal_evidence`, the largest
+-- table in the system: `SET NOT NULL` scans it, re-adding the composite
+-- foreign key validates every row, and the new index builds under a lock that
+-- blocks writes. On an empty or young table that is milliseconds. On a large
+-- one it is minutes of ACCESS EXCLUSIVE, and the danger is not the wait
+-- itself — it is the QUEUE. A lock request waits behind whatever is running,
+-- and every reader and writer that arrives afterwards waits behind the lock
+-- request. One slow query at the wrong moment turns a fast migration into a
+-- full stop on the table.
+--
+-- `lock_timeout` is the fix that fits here. drizzle runs an entire migration
+-- set inside ONE transaction, so splitting this into `NOT VALID` + `VALIDATE`
+-- would buy nothing: the locks are held until the commit either way. What a
+-- timeout does buy is a clean, immediate failure instead of a pileup — the
+-- transaction rolls back, nothing is half-applied, and the deploy is retried
+-- in a quieter minute. A plain `SET` is the right form: PostgreSQL rolls it
+-- back with the transaction if this fails, and the `RESET` at the foot
+-- returns the pooled connection to normal when it succeeds.
+--
+-- IF THIS EVER TIMES OUT ON A LARGE TABLE, the escape hatch is to do the work
+-- outside the migrator, where a transaction is not being held for you:
+-- add the column, backfill in batches, add the FK `NOT VALID` and then
+-- `VALIDATE CONSTRAINT` it, `CREATE INDEX CONCURRENTLY` (which cannot run in
+-- a transaction at all, and so can never be in this file), and finally insert
+-- this migration's row into `drizzle.__drizzle_migrations` by hand so the
+-- migrator skips it. The migrator compares only `created_at` against the
+-- journal, never the hash, so a hand-applied migration is indistinguishable
+-- from a replayed one.
+SET lock_timeout = '5s';--> statement-breakpoint
 -- The room's mind, and the ground it borrows.
 --
 -- Founder rulings, 2026-08-24, all four in one sitting:
@@ -57,3 +88,5 @@ INSERT INTO "profiles" ("account_id", "type", "name", "group_id")
 SELECT NULL, 'group', g."name", g."id"
 FROM "groups" g
 WHERE NOT EXISTS (SELECT 1 FROM "profiles" p WHERE p."group_id" = g."id");
+--> statement-breakpoint
+RESET lock_timeout;

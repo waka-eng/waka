@@ -183,33 +183,4 @@ export async function deleteSignal(id: string): Promise<void> {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Sharing one into a group
-// ---------------------------------------------------------------------------
 
-/**
- * POST /signals/:id/shares
- *
- * Sharing is per-signal and per-group. What reaches the group is the
- * statement; the captures underneath it never leave the account.
- */
-export async function shareSignal(id: string, groupId: string): Promise<void> {
-  await requestVoid(
-    apiPath(`/signals/${encodeURIComponent(id)}/shares`),
-    "POST",
-    { groupId },
-    "Failed to share this signal",
-  );
-}
-
-/** DELETE /signals/:id/shares/:groupId */
-export async function unshareSignal(id: string, groupId: string): Promise<void> {
-  await requestVoid(
-    apiPath(
-      `/signals/${encodeURIComponent(id)}/shares/${encodeURIComponent(groupId)}`,
-    ),
-    "DELETE",
-    undefined,
-    "Failed to stop sharing this signal",
-  );
-}

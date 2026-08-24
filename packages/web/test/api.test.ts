@@ -36,7 +36,6 @@ import {
   fetchTopOfMind,
   refreshTopOfMind,
   holdTopOfMindEntry,
-  shareSignal,
   updateAuthPreferences,
   updateSignal,
   updateTopOfMindEntry,
@@ -332,17 +331,6 @@ describe("signals", () => {
     });
   });
 
-  it("shares one signal with one group", async () => {
-    stubFetch(Response.json({ shared: true, groupId: "group-1" }, { status: 201 }));
-
-    await expect(shareSignal("signal-1", "group-1")).resolves.toBeUndefined();
-    expect(fetch).toHaveBeenCalledWith("/api/signals/signal-1/shares", {
-      method: "POST",
-      credentials: "include",
-      headers: { Accept: "application/json", "Content-Type": "application/json" },
-      body: JSON.stringify({ groupId: "group-1" }),
-    });
-  });
 });
 
 describe("top of mind", () => {
