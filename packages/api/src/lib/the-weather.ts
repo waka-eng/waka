@@ -385,7 +385,14 @@ export async function assembleTheWeather(
     for (const s of stamps) {
       if (s.at.getTime() > sinceMs) away[s.kind] += 1;
     }
-    const clauses = tellCounts(away).map((s) => s.text);
+    /* THE SPOKEN LINE IS COUNTS ONLY (founder, 2026-08-24: "just drop
+       today and the sky held"). "The sky held" is a fact about absence and
+       earns its place in the record — the days, the markdown — but the
+       creature's one line is what HAPPENED, counted. The label is the
+       world's to add or omit; none is baked in here. */
+    const clauses = tellCounts(away)
+      .filter((s) => s.text !== "the sky held")
+      .map((s) => s.text);
     told = clauses.length > 0 ? `${clauses.join("; ")}.` : null;
   }
 

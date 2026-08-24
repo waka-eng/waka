@@ -16,6 +16,7 @@ import {
   carryOf,
   FIELD_ATTENTION_SPAN,
   FIELD_CARRY_SPAN,
+  FIELD_RECENCY_MAX,
   FIELD_CITED_LIFT,
   FIELD_DECAY_HALF_LIFE_DAYS,
   FIELD_FLOOR_ANSWERED,
@@ -102,7 +103,7 @@ export function colorBall(b: Ball, T: number): void {
     ? carryOf({ roots: b.roots, onPoster: b.onPoster, underPrinciple: b.underPrinciple })
     : 0;
   const tended =
-    (b.hasNotes ? FIELD_FLOOR_CITED + FIELD_CARRY_SPAN * carry : 0) +
+    (b.hasNotes ? FIELD_FLOOR_CITED : 0) +
     (b.reflections > 0
       ? FIELD_FLOOR_ANSWERED +
         FIELD_ATTENTION_SPAN *
@@ -110,14 +111,24 @@ export function colorBall(b: Ball, T: number): void {
             FIELD_REFLECTION_SATURATION)
       : 0) +
     (b.hasGroup ? FIELD_FLOOR_IN_GROUP : 0);
+  /* RECENCY IS CAPPED; THE CARRY RIDES ABOVE EVERYTHING. A memory kept this
+     morning used to hit the max and clamp the whole young field to one flat
+     top band (see FIELD_RECENCY_MAX). Now freshness can only carry a memory
+     so far, and the room above belongs to use: the carry is ADDED on top of
+     whichever of recency and the floors is winning, so a cited memory
+     outshines an uncited twin whatever their shared age is — which is the
+     founder's ruling, at both ends of an archive's life. */
+  const recency = Math.min(
+    decay +
+      FIELD_REFLECTION_WEIGHT *
+        Math.min(b.reflections, FIELD_REFLECTION_SATURATION) *
+        decay,
+    FIELD_RECENCY_MAX,
+  );
   const a = clamp01(
-    Math.max(
-      decay +
-        FIELD_REFLECTION_WEIGHT *
-          Math.min(b.reflections, FIELD_REFLECTION_SATURATION) *
-          decay,
-      tended,
-    ) + (b.hasNotes ? FIELD_CITED_LIFT : 0),
+    Math.max(recency, tended) +
+      FIELD_CARRY_SPAN * carry +
+      (b.hasNotes ? FIELD_CITED_LIFT : 0),
   );
   b.alive = a;
   b.alivePow = Math.pow(a, 1.4);

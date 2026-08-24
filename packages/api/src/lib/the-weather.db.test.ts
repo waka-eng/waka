@@ -159,7 +159,9 @@ describe("the weather is a view of the record", () => {
       since: new Date(daysAgo(5)),
     });
     /* memories were kept and no pattern moved: the sky held rides along */
-    expect(away.told).toBe("you kept 2 memories; the sky held.");
+    /* the spoken line is counts only — "the sky held" stays in the days
+       and the markdown, where the record lives */
+    expect(away.told).toBe("you kept 2 memories.");
 
     const quiet = await assembleTheWeather(t.db as never, {
       profileId,

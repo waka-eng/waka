@@ -674,8 +674,9 @@ Source: `packages/web/src/lib/aliveness.ts`.
 | `FIELD_CARRY_PRINCIPLE_SHARE` | 0.3 | Carry: the share held by reaching a principle |
 | `FIELD_CARRY_SPAN` | 0.5 | Extra light a fully-carrying memory holds over a barely-cited one |
 | `FIELD_ATTENTION_SPAN` | 0.16 | Extra floor for coming back to a memory, graded by how often |
-| `FIELD_TIER_CEILING` | 0.6 | Aliveness at or above this draws in the brightest band |
-| `FIELD_TIER_GAMMA` | 0.55 | Bends the banding so the dim half gets most of the bands |
+| `FIELD_RECENCY_MAX` | 0.55 | Freshness alone cannot pass this; the room above belongs to use |
+| `FIELD_TIER_CEILING` | 1 | Aliveness at or above this draws in the brightest band |
+| `FIELD_TIER_GAMMA` | 0.7 | Bends the banding so the dim half gets the larger share of bands |
 
 **Why the light is banded through a curve.** An orb is drawn from a pre-baked
 sprite, so the aliveness continuum is quantised. That mapping was linear while

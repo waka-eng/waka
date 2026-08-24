@@ -36,7 +36,7 @@ import {
   FIELD_CARRY_ROOTS_SHARE,
 } from "../src/lib/aliveness";
 import type { Evidence, Inspiration, Signal } from "../src/lib/data";
-import { colorBall } from "../src/space/inspiration/field";
+import { colorBall, tierOf } from "../src/space/inspiration/field";
 import { makeBall, seedOf, skyOf } from "../src/space/inspiration/orb";
 
 const NOW = Date.UTC(2026, 7, 24);
@@ -209,5 +209,55 @@ describe("the carry: how much of a person a memory holds up", () => {
       carryOf({ roots: 99, onPoster: false, underPrinciple: false }),
       "roots stop adding past the saturation — a memory is not a scoreboard",
     ).toBeCloseTo(carryOf({ roots: FIELD_CARRY_ROOT_SATURATION, onPoster: false, underPrinciple: false }), 10);
+  });
+  it("bands a SAME-DAY archive by use — the young field is not one flat top band", () => {
+    /* The founder's complaint, verbatim twice: "still all same brightness."
+       Their archive was kept this week, so decay sat at one for every orb,
+       the max clamped everything to full, and no amount of carry could show
+       through — the first banding fix rescued old archives and left young
+       ones saturated from the other end. This case is that field: everything
+       kept TODAY, differing only in what stands on it, asserted at the TIER
+       — the band the sprite is actually drawn from — because alive values
+       that differ inside one band still render as the founder's flat grey. */
+    const freshLit = (input: {
+      id: string;
+      citingSignalIds: string[];
+      posterSignalIds?: string[];
+      principleSignalIds?: string[];
+    }) => {
+      const citations = new Map<string, Evidence[]>([
+        [input.id, input.citingSignalIds.map((sig) => cites(sig, input.id))],
+      ]);
+      const signals = new Map(
+        input.citingSignalIds.map((sig) => [sig, pattern(sig)] as const),
+      );
+      const ball = makeBall(
+        seedOf(
+          { ...memory(input.id), capturedMs: NOW, updatedMs: NOW },
+          citations,
+          signals,
+          new Set(input.posterSignalIds ?? []),
+          new Set(input.principleSignalIds ?? []),
+        ),
+      );
+      colorBall(ball, NOW);
+      return tierOf(ball);
+    };
+
+    const nothing = freshLit({ id: "f-none", citingSignalIds: [] });
+    const rooted = freshLit({ id: "f-one", citingSignalIds: ["s1", "s2", "s3"] });
+    const settled = freshLit({
+      id: "f-settled",
+      citingSignalIds: ["s1", "s2", "s3"],
+      posterSignalIds: ["s1"],
+      principleSignalIds: ["s2"],
+    });
+
+    expect(rooted, "a cited memory must be a visibly different BAND, same day").toBeGreaterThan(
+      nothing,
+    );
+    expect(settled, "and what reaches the poster and a principle sits above that").toBeGreaterThan(
+      rooted,
+    );
   });
 });

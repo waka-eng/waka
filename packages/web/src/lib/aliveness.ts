@@ -64,6 +64,24 @@ export const FIELD_FLOOR_IN_GROUP = 0.1;
 export const FIELD_ATTENTION_SPAN = 0.16;
 
 /**
+ * RECENCY ALONE CANNOT REACH FULL LIGHT (founder, twice, 2026-08-24: "still
+ * all same brightness").
+ *
+ * The first banding fix rescued OLD archives — weeks of decay now spread
+ * across the bands instead of collapsing into the bottom one. It did nothing
+ * for a YOUNG one: everything kept this week had decay near one, the max
+ * with the floors clamped to one, and the whole field saturated the top band
+ * — uniform again, from the other end. The founder's field is days old, and
+ * that is the field they were looking at.
+ *
+ * So recency tops out HERE, below full, and the room above it belongs to
+ * use: the carry (roots, the poster, a principle) is what reaches the top.
+ * Which is the ruling itself — brightness says how much of you stands on a
+ * memory, and "I kept it this morning" is not standing on it.
+ */
+export const FIELD_RECENCY_MAX = 0.55;
+
+/**
  * A citation lifts a memory ABOVE its floor as well as setting one.
  *
  * This was a second `+0.12` for `hasNotes` in the same expression that already
@@ -90,14 +108,15 @@ export const FIELD_FRONTIER_DAYS = 3;
  * was looking at, and no amount of extra meaning upstream could have shown
  * through it.
  *
- * The ceiling is where a memory is simply at full light; the gamma bends the
- * mapping so the dim half — which is most of any real archive — gets most of
- * the bands. Together with a wider `TIERS` they resolve two months of decay
+ * The ceiling is where a memory is simply at full light — the whole range,
+ * now that recency is capped and only a carried memory can reach the top of
+ * it; the gamma bends the mapping so the dim half — which is most of any
+ * real archive — still gets the larger share of the bands. Together with a wider `TIERS` they resolve two months of decay
  * as a gradient instead of a cliff. Perception, not scoring: neither number
  * changes what a memory IS, only how finely the eye can read it.
  */
-export const FIELD_TIER_CEILING = 0.6;
-export const FIELD_TIER_GAMMA = 0.55;
+export const FIELD_TIER_CEILING = 1;
+export const FIELD_TIER_GAMMA = 0.7;
 
 /**
  * THE CARRY — how much of this person's self-knowledge a memory is holding up.

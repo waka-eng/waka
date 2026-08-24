@@ -65,7 +65,7 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 
 import { hueCss } from "../lib/appearance";
-import { clamp, clamp01, DAY_MS, easeOut, kd, lerp, TAU } from "../lib/num";
+import { clamp, clamp01, DAY_MS, easeOut, hashStr, kd, lerp, mix32, TAU } from "../lib/num";
 import {
   GRAIN_PX,
   GRAIN_TILE,
@@ -1373,6 +1373,45 @@ function HomeExperience(): JSX.Element {
      standing in it (the dial has no meaning among candidates), and which
      nebulae have been drawn together. */
   const [inSky, setInSky] = useState(false);
+  /**
+   * WHEN THE SKY LAST HAD YOUR EYES ON IT — so the way up can say, quietly,
+   * that it is worth taking again (founder, 2026-08-24: "when something
+   * changes in the sky, add feedback on the top of this page to encourage
+   * user to go up").
+   *
+   * Not a notification and not a badge: the forming line is already the door
+   * to the sky, and this only changes the door's LIGHT and adds three words
+   * while there is something up there you have not seen. Climbing is what
+   * puts it out — the reward for going up is seeing, and the mark clears at
+   * the moment of seeing, never on a timer. First visit reads as fresh on
+   * purpose: everything overhead is something you have not seen.
+   */
+  const [skySeenMs, setSkySeenMs] = useState(() => {
+    try {
+      return Number(window.localStorage.getItem("waka.skySeen")) || 0;
+    } catch {
+      return 0;
+    }
+  });
+  useEffect(() => {
+    if (!inSky) return;
+    const now = Date.now();
+    setSkySeenMs(now);
+    try {
+      window.localStorage.setItem("waka.skySeen", String(now));
+    } catch {
+      /* private mode: the mark simply returns next visit */
+    }
+  }, [inSky]);
+  const skyFresh = useMemo(
+    () =>
+      (signals ?? []).some(
+        (p) =>
+          p.status === "emerging" &&
+          Math.max(p.createdMs, p.lastEvidenceMs) > skySeenMs,
+      ),
+    [signals, skySeenMs],
+  );
   /** Whether the axis is offering the two ways to make another place. */
   const [addOpen, setAddOpen] = useState(false);
   /** Which pattern in the sky is being read. Its verdict row belongs to it. */
@@ -2325,8 +2364,14 @@ function HomeExperience(): JSX.Element {
     fetchTheWeather({ antechamber: false })
       .then((weather) => {
         const day = weather.days[0];
-        if (day && day.sentences.length > 0) {
-          setCharSay(`${day.label} — ${day.sentences.map((s) => s.text).join("; ")}.`);
+        /* counts only, and no day label — the founder liked the sentence
+           and struck the preamble ("just drop today and the sky held").
+           The full record keeps both; this is the spoken register. */
+        const spoken = (day?.sentences ?? [])
+          .filter((sentence) => sentence.text !== "the sky held")
+          .map((sentence) => sentence.text);
+        if (spoken.length > 0) {
+          setCharSay(`${spoken.join("; ")}.`);
         } else {
           setCharSay(fallback());
         }
@@ -2354,12 +2399,30 @@ function HomeExperience(): JSX.Element {
    * the loop did nothing is told with silence
    * (goals/the-legible-loop.md Phase 5).
    */
+  /**
+   * ONE GREETING PER VISIT — this is an ARRIVAL, and it must know that.
+   *
+   * The effect depends on `inspirations` because the glide cannot run before
+   * the archive is in hand — but the archive also changes every time you KEEP
+   * something, and `lastSeenRef` was read once at mount and never advanced
+   * when `stamp()` wrote the new time. So each save re-ran the greeting
+   * against the mount-time clock, found "something new since you were away"
+   * — the memory you had typed four seconds ago — glid the camera to it and
+   * opened its card over the mouth (founder, 2026-08-24: "dont show the
+   * thing i save in card format after saving"). Greeted once, and stamp
+   * advances the ref with the storage so nothing later re-reads a stale
+   * "away".
+   */
+  const greetedRef = useRef(false);
   useEffect(() => {
     if (!inspirations || phase !== "ready" || offlineRef.current) return undefined;
+    if (greetedRef.current) return undefined;
+    greetedRef.current = true;
     const since = lastSeenRef.current;
     const stamp = () => {
+      lastSeenRef.current = Date.now();
       try {
-        window.localStorage.setItem("waka.seen", String(Date.now()));
+        window.localStorage.setItem("waka.seen", String(lastSeenRef.current));
       } catch {
         /* private mode: every visit is a first visit, which is survivable */
       }
@@ -3297,15 +3360,25 @@ function HomeExperience(): JSX.Element {
     }
     /* A static scatter of very dim points in the deep background. Fractions
        of the viewport, so they survive a resize without being re-rolled. */
+    /* THE NIGHT SKY HOLDS STILL. These were Math.random, and the whole sim
+       effect re-runs whenever the archive list changes — so every KEEP
+       rerolled the starfield behind the world, and the founder watched the
+       background rearrange itself each time they saved (2026-08-24). The
+       world never moves unless the person moved it, and saving a memory is
+       not moving the stars. Seeded off each spark's own index — the same
+       stable-identity law every orb's scatter already obeys — so a rebuild
+       reproduces the identical sky. */
     const sparkX = new Float32Array(SPARKS);
     const sparkY = new Float32Array(SPARKS);
     const sparkR = new Float32Array(SPARKS);
     const sparkA = new Float32Array(SPARKS);
+    const sparkSeed = (i: number, salt: string) =>
+      (mix32(hashStr(`spark:${salt}:${i}`)) >>> 8) / 0x1000000;
     for (let i = 0; i < SPARKS; i++) {
-      sparkX[i] = Math.random();
-      sparkY[i] = Math.random();
-      sparkR[i] = 0.7 + Math.random() * 1.1;
-      sparkA[i] = 0.05 + Math.random() * 0.07;
+      sparkX[i] = sparkSeed(i, "x");
+      sparkY[i] = sparkSeed(i, "y");
+      sparkR[i] = 0.7 + sparkSeed(i, "r") * 1.1;
+      sparkA[i] = 0.05 + sparkSeed(i, "a") * 0.07;
     }
     /**
      * THE COMPANION — everything the character is doing right now.
@@ -4709,9 +4782,10 @@ function HomeExperience(): JSX.Element {
       }
       if (!view.motesPlaced) {
         view.motesPlaced = true;
+        /* the same stillness for the dust: a save must not re-scatter it */
         for (let i = 0; i < MOTES; i++) {
-          moteX[i] = Math.random() * view.w;
-          moteY[i] = Math.random() * view.h;
+          moteX[i] = ((mix32(hashStr(`mote:x:${i}`)) >>> 8) / 0x1000000) * view.w;
+          moteY[i] = ((mix32(hashStr(`mote:y:${i}`)) >>> 8) / 0x1000000) * view.h;
         }
       }
       cam.y = clamp(cam.y, minCamNow(), view.layout.maxCam);
@@ -10199,7 +10273,9 @@ function HomeExperience(): JSX.Element {
                     {c.forming ? (
                       <button
                         type="button"
-                        className="jar-forming-line jar-label"
+                        className={`jar-forming-line jar-label${
+                          w.kind === "self" && skyFresh ? " jar-forming-line--new" : ""
+                        }`}
                         data-jar-chrome="1"
                         onClick={() => {
                           simApiRef.current?.acknowledge();
@@ -10207,6 +10283,7 @@ function HomeExperience(): JSX.Element {
                         }}
                       >
                         {c.forming}
+                        {w.kind === "self" && skyFresh ? " — new overhead" : ""}
                       </button>
                     ) : null}
                     {/* HOW YOU CHOOSE — layer 4, in the place layer 3 already
