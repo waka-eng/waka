@@ -1031,10 +1031,24 @@
   max-height: min(24vh, 132px);
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* OPENING IT IS NOT A CHANGE OF INSTRUMENT. The quick line wears the
+     resting phrase's own face — same size, same tracking, same letters — so
+     the mouth you pressed is the mouth you are typing in. It used to become
+     fifteen-pixel sentence case the instant it opened, which read as a form
+     appearing where a phrase had been (founder, 2026-08-24). A long paste
+     gets the prose face it needs, in the drawer below. */
   font-family: inherit;
-  font-weight: 400;
-  font-size: 15px;
-  line-height: 1.6;
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  line-height: 1.9;
+  /* Never underlined, in any state. The platform draws its own decorations
+     inside a text field — a spelling rule, an autocorrect mark, a focus
+     line — and this world's single interactivity signal is not for the
+     control you are already inside. */
+  text-decoration: none;
+  -webkit-text-decorations-in-effect: none;
   text-align: center;
   color: var(--jar-ink);
   /* the caret is the one warm mark on screen that is not a memory — it is
@@ -1052,6 +1066,41 @@
 .jar-mouth-field::placeholder {
   color: var(--jar-faint);
   opacity: 1;
+}
+.jar-mouth-rest {
+  text-decoration: none;
+}
+
+/* ================= the drawer =================
+   THE NOTEPAD THE QUICK LINE GROWS INTO.
+
+   One tracked centred line is right for a sentence and hopeless for a
+   pasted page: the tracking that makes a phrase read as a phrase makes a
+   paragraph read as a ransom note. So past a few lines the slot becomes a
+   sheet — wider measure, prose face, left-aligned, its own quiet ground —
+   and returns to the line when the text shrinks again. It is the SAME
+   field throughout: nothing is remounted, no caret is lost, no keystroke
+   is dropped at the moment it changes. */
+.jar-mouth-slot--note {
+  padding-bottom: 18px;
+}
+.jar-mouth-slot--note .jar-mouth-field {
+  max-width: 62ch;
+  max-height: min(46vh, 340px);
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: var(--jar-row);
+  font-weight: 400;
+  font-size: 15px;
+  letter-spacing: normal;
+  text-transform: none;
+  line-height: 1.62;
+  text-align: left;
+  transition: max-width 0.28s ease, max-height 0.28s ease, background 0.28s ease;
+}
+.jar-mouth-slot--note .jar-mouth-field::placeholder {
+  text-transform: none;
+  letter-spacing: normal;
 }
 .jar-mouth-field::-webkit-scrollbar {
   width: 6px;

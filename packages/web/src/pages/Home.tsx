@@ -1650,6 +1650,22 @@ function HomeExperience(): JSX.Element {
   /** The one honest line: it did not keep. Never a modal, never a silence. */
   const [mouthNote, setMouthNote] = useState("");
   /**
+   * WHEN THE MOUTH HAS OUTGROWN THE QUICK LINE.
+   *
+   * Measured off the text itself rather than off the element's height,
+   * because the two disagree at exactly the wrong moment: the height only
+   * changes AFTER the face has already reflowed, so a threshold read from it
+   * flickers on the character that crosses it. A count and a newline are
+   * both known before paint.
+   *
+   * Deliberately generous. A tweet-length thought, a pasted link, a line of
+   * quotation — all of those are things you say on the way past, and none of
+   * them should summon a notepad. This is the length at which a single
+   * tracked line stops being readable, not the length at which writing gets
+   * serious.
+   */
+  const mouthLong = draft.length > 140 || draft.includes("\n");
+  /**
    * THE DIAL'S RIGHT-HAND END IS NOW, AND KEEPING SOMETHING HAPPENS NOW.
    *
    * It was fixed at the moment the archive loaded, so a memory kept ten
@@ -10551,7 +10567,23 @@ function HomeExperience(): JSX.Element {
           and to the seam exactly as if it lived there. */}
       {phase === "ready" ? (
         <div ref={measured.mouth} className="jar-mouth" data-jar-chrome="1">
-          <div className={`jar-mouth-slot${atNow ? "" : " jar-mouth-slot--away"}`}>
+          {/* QUICK BY DEFAULT, A NOTEPAD WHEN IT HAS TO BE.
+              The mouth is for a few sentences, a link, an image — the thing
+              you say on the way past. So it keeps the resting phrase's own
+              face while you type: same size, same tracking, same letters, so
+              opening it is not a change of instrument (founder, 2026-08-24).
+
+              But a long paste has nowhere to go in one tracked line. Past a
+              few lines it GROWS — the bar slides up into a notepad with a
+              prose face, and slides back down when the text shrinks. It
+              opens itself rather than offering a handle: quick save must
+              stay quick, and a control you have to find first is not quick.
+              (Founder's choice of the three.) */}
+          <div
+            className={`jar-mouth-slot${atNow ? "" : " jar-mouth-slot--away"}${
+              mouthLong ? " jar-mouth-slot--note" : ""
+            }`}
+          >
             {mouthOpen ? (
               <textarea
                 ref={(el) => {
