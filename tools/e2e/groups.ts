@@ -31,17 +31,41 @@ const DERIVATION_TIMEOUT_MS = 5 * 60 * 1000;
  */
 const SECRET_PHRASE = "the porcelain kestrel on my grandmother's windowsill";
 
+/*
+ * TWO ARCHIVES THAT MEET. A room's statement is served only where memories
+ * from two different members stand under the SAME one, so these two say the
+ * same thing — an object matters because it was USED, not because it was
+ * kept — in two people's different words. Archives that merely share a topic
+ * mint two statements with one voice each and serve neither, which would make
+ * this harness fail for a reason that is not a defect.
+ *
+ * The owner's first line carries `SECRET_PHRASE`, which the leak step later
+ * hunts for across every group surface: raw capture text must never cross to
+ * another member, however much of the room grew out of it.
+ */
 const OWNER_ARCHIVE = [
   `I keep coming back to ${SECRET_PHRASE}, and I still cannot say why it matters to me.`,
   "Small inherited objects carry more of a person than any photograph I own.",
   "I would rather keep one thing that was held daily than a shelf of things that were displayed.",
+  "The teacup my grandmother used every morning means more than the set nobody touched.",
+  "What makes an heirloom is the wear on it — the handling, not the keeping.",
 ];
 
 const MEMBER_ARCHIVE = [
   "My father's tools are the only inheritance I actually use. The rest sits in a box.",
   "An object earns its place by being used, not by being kept.",
   "I am slowly giving away everything I own that I do not touch.",
+  "The chair he sat in every evening is the only thing of his I wanted.",
+  "A thing that was handled daily holds a person; a thing on display holds nothing.",
 ];
+
+/** A row the wall serves: the room's own statement, and who stands under it. */
+interface WallRow {
+  signalId: string;
+  statement: string;
+  contributors: Array<{ profileId: string; name: string }>;
+  reactions?: Array<{ profileId: string; name: string; value: string }>;
+}
 
 const results: Array<{ ok: boolean }> = [];
 
@@ -116,8 +140,15 @@ async function main(): Promise<void> {
     await step("two people each build an archive and meet in a group", async () => {
       owner = await signUp({ baseUrl });
       member = await signUp({ baseUrl });
-      for (const text of OWNER_ARCHIVE) await capture(owner, { text, kind: "note" });
-      for (const text of MEMBER_ARCHIVE) await capture(member, { text, kind: "note" });
+      /* PUBLIC, because a room reads its members' public memories and grows
+         its own statements from them; a private archive leaves the wall
+         correctly empty and this harness with nothing to check. */
+      for (const text of OWNER_ARCHIVE) {
+        await capture(owner, { text, kind: "note", visibility: "public" });
+      }
+      for (const text of MEMBER_ARCHIVE) {
+        await capture(member, { text, kind: "note", visibility: "public" });
+      }
 
       const created = await api<{ group: { id: string; joinCode: string } }>(
         owner,
@@ -140,44 +171,87 @@ async function main(): Promise<void> {
       return `group ${groupId.slice(0, 8)}, two members`;
     });
 
-    let ownerSignal: Signal | undefined;
-    await step("each member shares one of their own signals to the wall", async () => {
-      ownerSignal = await waitForSignal(owner!, "the owner's first signal");
-      const memberSignal = await waitForSignal(member!, "the member's first signal");
+    let wallSignalId = "";
+    await step("the room grows its own statements from the pooled ground", async () => {
+      /* Nobody puts anything up. Forming the room asked it to read the ground
+         both members already stood on, and a statement appears where their
+         memories meet — so this waits for the model rather than asserting the
+         wall instantly. Their own signals form first; waiting for those keeps
+         a slow personal derivation from reading as a failed room. */
+      await waitForSignal(owner!, "the owner's first signal");
+      await waitForSignal(member!, "the member's first signal");
 
-      for (const [session, signal] of [
-        [owner!, ownerSignal],
-        [member!, memberSignal],
-      ] as const) {
-        const shared = await api(session, `/api/signals/${signal.id}/shares`, {
-          method: "POST",
-          body: JSON.stringify({ groupId }),
-        });
-        if (shared.status !== 200 && shared.status !== 201) {
-          throw new Error(`share → ${shared.status}: ${shared.raw.slice(0, 200)}`);
+      const wall = await waitFor(
+        async ({ note }) => {
+          const seen = await api<{ wall: WallRow[] }>(
+            member!,
+            `/api/groups/${groupId}/wall`,
+          );
+          if (seen.status !== 200) throw new Error(`wall → ${seen.status}`);
+          note(`${seen.body.wall.length} statements the room grew`);
+          return seen.body.wall.length > 0 ? seen.body.wall : null;
+        },
+        { timeoutMs: 240_000, label: "the room's first statement of its own" },
+      );
+
+      wallSignalId = wall[0]!.signalId;
+      return `${wall.length} statements`;
+    });
+
+    await step("every statement on the wall stands on two members, named", async () => {
+      const wall = await api<{ wall: WallRow[] }>(member!, `/api/groups/${groupId}/wall`);
+      if (wall.status !== 200) throw new Error(`wall → ${wall.status}`);
+      if (wall.body.wall.length === 0) throw new Error("the wall emptied between steps");
+
+      /* THE TWO-VOICES GATE, from outside. A statement one member's memories
+         support is that member's own — already on their own wall — and must
+         never wear the room's name. The wall is where that rule is visible,
+         so it is checked here rather than trusted. */
+      for (const row of wall.body.wall) {
+        const voices = new Set(row.contributors.map((c) => c.profileId));
+        if (voices.size < 2) {
+          throw new Error(
+            `"${row.statement.slice(0, 60)}" is served with ${voices.size} voice(s)`,
+          );
+        }
+        if (row.contributors.some((c) => !c.name)) {
+          throw new Error("a contributor reached the wall unnamed");
         }
       }
-      return `two signals shared`;
-    });
 
-    await step("the wall shows statements, attributed to their owners", async () => {
-      const wall = await api<{ wall: Array<{ statement: string; ownerProfileId: string }> }>(
-        member!,
-        `/api/groups/${groupId}/wall`,
+      const everyone = new Set(
+        wall.body.wall.flatMap((row) => row.contributors.map((c) => c.profileId)),
       );
-      if (wall.status !== 200) throw new Error(`wall → ${wall.status}`);
-      if (wall.body.wall.length < 2) {
-        throw new Error(`expected two shared signals, saw ${wall.body.wall.length}`);
-      }
-      const owners = new Set(wall.body.wall.map((row) => row.ownerProfileId));
-      if (owners.size < 2) throw new Error("both entries attributed to one profile");
-      return `${wall.body.wall.length} statements from ${owners.size} members`;
+      return `${wall.body.wall.length} statements, ${everyone.size} members standing under them`;
     });
 
-    /**
-     * The boundary that matters. Every group surface the member can reach is
-     * fetched and searched for the owner's secret phrase.
-     */
+    await step("a member can answer a statement the room grew", async () => {
+      /* Answerability used to come from the share: you may answer what
+         somebody put up. A room-grown statement was put up by nobody, so the
+         rule is now membership — you are in the room whose mind holds it.
+         Checked from outside because it is the one authorization rule the
+         room-grown wall added. */
+      const answered = await api(member!, "/api/feedback", {
+        method: "POST",
+        body: JSON.stringify({
+          targetType: "signal",
+          targetId: wallSignalId,
+          value: "true",
+        }),
+      });
+      if (answered.status !== 200 && answered.status !== 201) {
+        throw new Error(`feedback → ${answered.status}: ${answered.raw.slice(0, 200)}`);
+      }
+
+      const wall = await api<{ wall: WallRow[] }>(member!, `/api/groups/${groupId}/wall`);
+      const row = wall.body.wall.find((candidate) => candidate.signalId === wallSignalId);
+      if (!row) throw new Error("the answered statement left the wall");
+      if (!row.reactions?.some((r) => r.value === "true")) {
+        throw new Error("the answer did not come back on the wall");
+      }
+      return `answered, and named on the wall`;
+    });
+
     await step("no group surface exposes another member's raw capture", async () => {
       const surfaces = [
         `/api/groups`,

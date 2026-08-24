@@ -396,6 +396,12 @@ export interface CaptureInput {
   reflections?: Array<{ question: string; answer?: string; skipped?: boolean }>;
   /** Capture into another profile of the same account, per the matrix. */
   profile?: string;
+  /**
+   * Public is what puts a memory on the ground of every room its keeper is
+   * in — since 2026-08-24 there is no other way a statement reaches a room,
+   * so a harness that wants a room to have anything to say must say this.
+   */
+  visibility?: "private" | "public";
 }
 
 export async function capture(session: Session, input: CaptureInput): Promise<Inspiration> {

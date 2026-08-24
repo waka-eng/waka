@@ -48,6 +48,13 @@ async function api<T>(
   return raw ? (JSON.parse(raw) as T) : (undefined as T);
 }
 
+/** What the wall serves: the room's own statement, and who stands under it. */
+interface WallSignal {
+  signalId: string;
+  statement: string;
+  contributors: Array<{ profileId: string; name: string }>;
+}
+
 async function firstSignal(session: Session, label: string) {
   return waitFor(
     async ({ note }) => {
@@ -71,7 +78,11 @@ async function main() {
   const cy = await signUp({ baseUrl: BASE, name: "Cy", password });
   const dee = await signUp({ baseUrl: BASE, name: "Dee", password });
 
-  // Yunji's archive — coherent enough that the live model mints a pattern.
+  /* Yunji's archive — coherent enough that the live model mints a pattern.
+     PUBLIC, because since 2026-08-24 a room reads its members' public
+     memories and grows its own statements from them; a private archive
+     leaves the demo's room with a wall that is correctly, and unhelpfully,
+     empty. */
   for (const text of [
     "Skipped the team dinner to walk the river path again. Third time this month choosing a walk over a crowd.",
     "Turned down the conference invite. A quiet afternoon reading beat the networking hall, again.",
@@ -79,17 +90,28 @@ async function main() {
     "Planned another depth day — one topic, no tabs. The wide-open days leave nothing behind.",
     "Said no to the group trip. Two friends, one trail, real talk.",
   ]) {
-    await capture(yunji, { text });
+    await capture(yunji, { text, visibility: "public" });
   }
+  /* Bo's ground has to MEET Yunji's, not merely exist beside it: a room
+     statement is served only where two members' memories stand under the
+     same one, so these say the same thing about crowds and walking that
+     hers do, in his own words. His shipping-small memories stay too — they
+     are his own pattern, and a room that grew one statement rather than
+     every statement is the honest demo. */
   for (const text of [
     "Shipped the tiny version today instead of polishing the grand one. It already taught me more.",
     "Cut the feature list in half and the demo got better. Small and finished beats big and imagined.",
+    "Left the launch party after twenty minutes and walked home along the canal instead.",
+    "Skipped the all-hands and took the long walk. The thinking happened on the walk, as usual.",
+    "Turned down another mixer. One friend, one trail, and an actual conversation.",
   ]) {
-    await capture(bo, { text });
+    await capture(bo, { text, visibility: "public" });
   }
 
   const yunjiSignal = await firstSignal(yunji, "Yunji's first signal");
-  const boSignal = await firstSignal(bo, "Bo's first signal");
+  /* Awaited but unused: the demo needs Bo's own layer 2 to have formed before
+     the room is asked for anything, or the room's read races his derivation. */
+  await firstSignal(bo, "Bo's first signal");
 
   // The star: Yunji says it in her own words — the edit locks.
   await api(yunji, `/api/signals/${yunjiSignal.id}`, {
@@ -111,13 +133,23 @@ async function main() {
   // Dee passes through — a removal mark on the door.
   await api(yunji, `/api/groups/${groupId}/members/${dee.profileId}`, { method: "DELETE" });
 
-  // The wall: two statements, owned.
-  await api(yunji, `/api/signals/${yunjiSignal.id}/shares`, { body: { groupId } });
-  await api(bo, `/api/signals/${boSignal.id}/shares`, { body: { groupId } });
+  /* THE WALL FILLS ITSELF. Nobody puts a statement up any more: forming the
+     room asked it to read the ground its members already stood on, and the
+     room mints its own statements from where Yunji's memories and Bo's meet.
+     A statement is served once two members stand under it, so this waits for
+     the model to get there rather than asserting it instantly. */
+  const wall = await waitFor(
+    async ({ note }) => {
+      const seen = await api<{ wall: WallSignal[] }>(yunji, `/api/groups/${groupId}/wall`);
+      note(`${seen.wall.length} statements the room grew`);
+      return seen.wall.length > 0 ? seen.wall : null;
+    },
+    { timeoutMs: 240_000, label: "the room's first statement of its own" },
+  );
 
-  // Bo answers Yunji's statement — a named reaction, lit on the wall.
+  // Bo answers a statement the room grew — a named reaction, lit on the wall.
   await api(bo, "/api/feedback", {
-    body: { targetType: "signal", targetId: yunjiSignal.id, value: "true" },
+    body: { targetType: "signal", targetId: wall[0]!.signalId, value: "true" },
   });
 
   // Bo puts a sentence to the room; Cy says no — one counted stance of

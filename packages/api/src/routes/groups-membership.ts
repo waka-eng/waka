@@ -27,12 +27,15 @@ import {
   groups,
   groupTopOfMindAffirmations,
   groupTopOfMindProposals,
+  inspirations,
   profiles,
   type GroupMemberRole,
   type GroupMembershipEventKind,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import { labelMembersByProfileId } from "../lib/member-labels.js";
+import { enqueueDeriveSignals } from "../lib/queue.js";
+import { GROUP_JOIN_BACKFILL_LIMIT } from "../lib/signal-derivation-thresholds.js";
 
 type WakaDb = ReturnType<typeof getDb>;
 type WakaTx = Parameters<Parameters<WakaDb["transaction"]>[0]>[0];
@@ -179,9 +182,116 @@ function generateJoinCode(): string {
 }
 
 /** Create a group; the caller takes the owner seat. */
+/**
+ * THE GROUND A PERSON ARRIVES CARRYING.
+ *
+ * A room distils from its members' pooled public memories, and the fan-out
+ * that feeds it fires when a memory is KEPT. On its own that means a room
+ * only ever sees what its members keep after they join — so somebody who
+ * joins with a full archive contributes nothing, possibly forever, and a room
+ * of such people stays empty while every memory that would have converged
+ * sits one table away. Joining has to reach back.
+ *
+ * One derivation pass per existing public memory, aimed at the room's mind,
+ * newest first and capped by `GROUP_JOIN_BACKFILL_LIMIT`. Three properties
+ * make this safe to fire and forget:
+ *
+ *   - IT IS THE JOINER'S SPEND. The jobs are owned by the joining profile, so
+ *     the per-account model budget and the queue's fairness bill the person
+ *     whose arrival asked for the work.
+ *   - IT IS IDEMPOTENT. The idempotency key already carries the target mind,
+ *     so re-joining a room, or a retry, collapses onto the jobs that exist
+ *     rather than deriving the same memory twice.
+ *   - IT NEVER FAILS THE JOIN. Being seated is the thing the person asked
+ *     for; a queue insert that fails is a room that fills late, which is
+ *     recoverable, while a 5xx on the join is a door that did not open.
+ *
+ * Visibility is read here and re-read by the worker: a memory turned private
+ * between the two is refused there, which is what makes this bound to the
+ * switch rather than to the moment somebody happened to arrive.
+ */
+export interface GroundBackfillDependencies {
+  /**
+   * How a memory is asked for. Seams here because `enqueueDeriveSignals`
+   * writes through the process-wide database handle rather than the one this
+   * function was handed, so a schema-isolated test cannot see what it wrote.
+   * What is worth holding is WHICH memories a room is asked to read — whose,
+   * how many, in what order — and that is this function's own work.
+   */
+  enqueueDerive?: typeof enqueueDeriveSignals;
+}
+
+async function backfillGroundIntoMind(
+  db: WakaDb,
+  input: { profileId: string; groupId: string },
+  deps: GroundBackfillDependencies = {},
+): Promise<void> {
+  const enqueue = deps.enqueueDerive ?? enqueueDeriveSignals;
+  const [mind] = await db
+    .select({ id: profiles.id })
+    .from(profiles)
+    .where(and(eq(profiles.groupId, input.groupId), eq(profiles.type, "group")))
+    .limit(1);
+  if (!mind) return;
+
+  /* HUMAN ONLY, joined rather than assumed. `docs/data-model.md` rule 5:
+     membership is between people, and an agent's memory is its own stack, not
+     ground a room may stand on. The join routes already refuse an agent a
+     seat — but this is the second path by which a profile's memories reach a
+     room, and a rule enforced only where somebody remembered to enforce it is
+     the rule that put six agent-seated rows in the dev database. So the read
+     carries the gate itself. */
+  const ground = await db
+    .select({ id: inspirations.id })
+    .from(inspirations)
+    .innerJoin(
+      profiles,
+      and(eq(profiles.id, inspirations.profileId), eq(profiles.type, "human")),
+    )
+    .where(
+      and(
+        eq(inspirations.profileId, input.profileId),
+        eq(inspirations.visibility, "public"),
+      ),
+    )
+    .orderBy(desc(inspirations.createdAt), desc(inspirations.id))
+    .limit(GROUP_JOIN_BACKFILL_LIMIT);
+
+  for (const memory of ground) {
+    await enqueue(input.profileId, memory.id, "created", mind.id);
+  }
+}
+
+/**
+ * Ask for the backfill without ever letting it fail the seating.
+ *
+ * Awaited rather than fired and forgotten. The work is a bounded run of queue
+ * inserts — no model call happens here, the drain does that later — so the
+ * cost to the join is milliseconds, and in exchange the room's state after a
+ * join is a fact rather than a race. An unawaited promise would also outlive
+ * the request into whatever ran next, which in a test suite is the next
+ * test's truncation.
+ */
+async function requestGroundBackfill(
+  db: WakaDb,
+  input: { profileId: string; groupId: string },
+  deps: GroundBackfillDependencies = {},
+): Promise<void> {
+  try {
+    await backfillGroundIntoMind(db, input, deps);
+  } catch (err: unknown) {
+    console.error("[groups] failed to backfill a member's ground into the room:", {
+      groupId: input.groupId,
+      profileId: input.profileId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 export async function createGroupForProfile(
   db: WakaDb,
   input: { profileId: string; name: string },
+  deps: GroundBackfillDependencies = {},
 ): Promise<GroupSummary> {
   const now = new Date();
   let lastError: unknown;
@@ -236,6 +346,10 @@ export async function createGroupForProfile(
         return group;
       });
 
+      /* The maker is the room's first member, and they arrive carrying the
+         same ground anyone else would. */
+      await requestGroundBackfill(db, { profileId: input.profileId, groupId: created.id }, deps);
+
       return {
         id: created.id,
         name: created.name,
@@ -262,6 +376,7 @@ export async function createGroupForProfile(
 export async function joinGroupByCode(
   db: WakaDb,
   input: { profileId: string; joinCode: string },
+  deps: GroundBackfillDependencies = {},
 ): Promise<JoinGroupResult> {
   const normalized = input.joinCode.trim().toUpperCase();
   const [group] = await db
@@ -301,6 +416,12 @@ export async function joinGroupByCode(
   // removal, a deleted group. Say not-found rather than answering 200 with an
   // undefined group attached.
   if (!summary) return { ok: false, reason: "not_found" };
+  /* Only for a genuine arrival: re-submitting a join is not a second arrival,
+     and the enqueue is idempotent anyway, but asking for nothing is cheaper
+     than asking for a hundred jobs the queue will collapse. */
+  if (!existing) {
+    await requestGroundBackfill(db, { profileId: input.profileId, groupId: group.id }, deps);
+  }
   return { ok: true, group: summary, alreadyMember: Boolean(existing) };
 }
 

@@ -616,6 +616,7 @@ The authoritative values. Machine-checked against code — see
 | `SIGNAL_BATCH_DEDUPE_MIN_COSINE` | 0.94 | Within one extraction batch, collapse near-identical candidates |
 | `SIGNAL_PROMOTION_MIN_EVIDENCE` | 3 | Evidence count where emerging becomes active |
 | `GROUP_SIGNAL_MIN_VOICES` | 2 | Distinct members' memories a room signal needs before it is served |
+| `GROUP_JOIN_BACKFILL_LIMIT` | 100 | Existing public memories a room is asked to read when a member arrives |
 | `CONFIDENCE_SUPPORT_WEIGHT` | 55 | Confidence: weight of evidence count |
 | `CONFIDENCE_SPREAD_WEIGHT` | 30 | Confidence: weight of time spread |
 | `CONFIDENCE_RECENCY_WEIGHT` | 15 | Confidence: weight of recency |

@@ -88,16 +88,28 @@ const LEAVER_PHRASE = "the brass sextant my uncle never once used at sea";
 /** Chosen, not generated, so the suite can prove it stops working. */
 const LEAVER_PASSWORD = "e2e-erasure-leaver-password-1";
 
+/*
+ * TWO ARCHIVES THAT MEET. A room's statement is served only where memories
+ * from two different members stand under the SAME one, so both of these say
+ * that an object earns its place by being used. Archives that merely share a
+ * subject mint two statements with one voice each and serve neither, and this
+ * suite needs a served statement: a citation is what makes the room's
+ * artifact reachable from the leaver's profile at erasure time.
+ */
 const LEAVER_ARCHIVE = [
   `I keep returning to ${LEAVER_PHRASE}, and I cannot decide if that is sentiment or shame.`,
   "An instrument that was never used is a different kind of object from one that wore out.",
   "I would rather own one thing that did its work than five that were admired.",
+  "The plane with the worn handle is worth more to me than the boxed set beside it.",
+  "Use is what makes a thing mine — the ones I never reach for were never really mine.",
 ];
 
 const STAYER_ARCHIVE = [
   "My mother's sewing machine still runs, and that is the only reason I kept it.",
   "A tool earns its shelf by being reached for, not by being inherited.",
   "I am slowly letting go of everything I own that I do not actually touch.",
+  "The pan she cooked in every night is the only thing of hers I use.",
+  "A thing that gets handled holds a person; a thing that gets displayed holds nothing.",
 ];
 
 /** A real 1x1 PNG — the bytes that land should be a decodable image. */
@@ -229,9 +241,20 @@ async function main(): Promise<void> {
     leaver = await signUp({ baseUrl, password: LEAVER_PASSWORD });
     stayer = await signUp({ baseUrl });
 
-    const first = await capture(leaver, { text: LEAVER_ARCHIVE[0]!, kind: "note" });
-    for (const text of LEAVER_ARCHIVE.slice(1)) await capture(leaver, { text, kind: "note" });
-    for (const text of STAYER_ARCHIVE) await capture(stayer, { text, kind: "note" });
+    /* PUBLIC, because a room reads its members' public memories and grows its
+       own statements from them; a private archive leaves the room with
+       nothing to say and this suite with no citation to follow. */
+    const first = await capture(leaver, {
+      text: LEAVER_ARCHIVE[0]!,
+      kind: "note",
+      visibility: "public",
+    });
+    for (const text of LEAVER_ARCHIVE.slice(1)) {
+      await capture(leaver, { text, kind: "note", visibility: "public" });
+    }
+    for (const text of STAYER_ARCHIVE) {
+      await capture(stayer, { text, kind: "note", visibility: "public" });
+    }
 
     const attachment = await attachImage(leaver, {
       inspirationId: first.id,
@@ -257,7 +280,7 @@ async function main(): Promise<void> {
     { skip: storeReachable ? undefined : "ATTACHMENTS_ENDPOINT / ATTACHMENTS_BUCKET are unset" },
   );
 
-  await step("they share a room, and the leaver puts a signal on its wall", async () => {
+  await step("they share a room, and the room grows a statement from both", async () => {
     const created = await api<{ group: { id: string; joinCode: string } }>(
       leaver!,
       "/api/groups",
@@ -276,26 +299,29 @@ async function main(): Promise<void> {
       throw new Error(`join → ${joined.status}: ${joined.raw.slice(0, 200)}`);
     }
 
-    /* Both archives have to become patterns before either can be shared —
-       this is the model spend this suite cannot avoid, because a citation is
-       the only thing that makes the room's artifact reachable from the
-       leaver's profile at erasure time. */
-    const leaverSignal = await firstSignal(leaver!, "the leaver's first signal");
-    const stayerSignal = await firstSignal(stayer!, "the stayer's first signal");
+    /* Both archives have to become patterns, and the room has to grow one of
+       its own from where they meet — this is the model spend this suite
+       cannot avoid, because a citation is the only thing that makes the
+       room's artifact reachable from the leaver's profile at erasure time.
+       Nobody puts anything up any more (2026-08-24): forming the room asked
+       it to read the ground both members already stood on. */
+    await firstSignal(leaver!, "the leaver's first signal");
+    await firstSignal(stayer!, "the stayer's first signal");
 
-    for (const [session, signal] of [
-      [leaver!, leaverSignal],
-      [stayer!, stayerSignal],
-    ] as const) {
-      const shared = await api(session, `/api/signals/${signal.id}/shares`, {
-        method: "POST",
-        body: JSON.stringify({ groupId }),
-      });
-      if (shared.status !== 200 && shared.status !== 201) {
-        throw new Error(`share → ${shared.status}: ${shared.raw.slice(0, 200)}`);
-      }
-    }
-    return `room ${groupId.slice(0, 8)}, two members, two signals on the wall`;
+    const wall = await waitFor(
+      async ({ note }) => {
+        const seen = await api<{ wall: Array<{ signalId: string }> }>(
+          stayer!,
+          `/api/groups/${groupId}/wall`,
+        );
+        if (seen.status !== 200) throw new Error(`wall → ${seen.status}`);
+        note(`${seen.body.wall.length} statements the room grew`);
+        return seen.body.wall.length > 0 ? seen.body.wall : null;
+      },
+      { timeoutMs: 240_000, label: "the room's first statement of its own" },
+    );
+
+    return `room ${groupId.slice(0, 8)}, two members, ${wall.length} statements it grew`;
   });
 
   let citedBefore = 0;
