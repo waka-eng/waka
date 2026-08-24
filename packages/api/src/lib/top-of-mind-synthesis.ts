@@ -263,7 +263,7 @@ async function selectSignals(
   const evidenceRows = await db
     .select({
       signalId: signalEvidence.signalId,
-      createdAt: signalEvidence.createdAt,
+      createdAt: inspirations.createdAt,
       source: inspirations.source,
     })
     .from(signalEvidence)
@@ -1109,7 +1109,7 @@ async function loadGroupSharedSignals(
   const evidenceRows = await db
     .select({
       signalId: signalEvidence.signalId,
-      createdAt: signalEvidence.createdAt,
+      createdAt: inspirations.createdAt,
       source: inspirations.source,
     })
     .from(signalEvidence)

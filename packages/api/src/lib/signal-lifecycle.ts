@@ -94,8 +94,19 @@ export async function refreshSignalLifecycle(
     .limit(1);
   if (!current) return false;
 
+  /*
+    EVIDENCE IS DATED BY THE CAPTURE THAT WITNESSES IT — `inspirations
+    .createdAt`, never the evidence row's own timestamp. The row's createdAt
+    is merely when the LINK was noticed, and the two diverge exactly when it
+    matters: a capture from months ago cited retroactively (a related capture
+    named at a later derivation) would otherwise register as fresh evidence
+    today — inflating the recency term and collapsing the spread term in the
+    same stroke. Confidence claims to measure the pattern's life in the
+    person's history; the capture date is when that life happened. Selection,
+    the principle span bar, and the read routes all follow this same rule.
+  */
   const evidenceRows = await tx
-    .select({ createdAt: signalEvidence.createdAt, source: inspirations.source })
+    .select({ createdAt: inspirations.createdAt, source: inspirations.source })
     .from(signalEvidence)
     .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
     .where(eq(signalEvidence.signalId, signalId));
@@ -168,7 +179,7 @@ export async function reconcileSignalsAfterEvidenceLoss(
     if (!signal || signal.status === "retired") continue;
 
     const remaining = await db
-      .select({ createdAt: signalEvidence.createdAt, source: inspirations.source })
+      .select({ createdAt: inspirations.createdAt, source: inspirations.source })
       .from(signalEvidence)
       .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
       .where(eq(signalEvidence.signalId, signalId));

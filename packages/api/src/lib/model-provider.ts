@@ -37,6 +37,19 @@ export interface AttachmentEnrichmentContext {
   text: string;
 }
 
+/**
+ * An earlier capture of the same profile, offered to extraction because its
+ * vector sits near the current capture's. Context the model may CITE, never
+ * material it may derive from alone: every statement must be grounded in the
+ * current capture first, and a citation survives only with a verbatim quote
+ * from this capture's own text, verified in code downstream.
+ */
+export interface RelatedInspirationContext {
+  id: string;
+  text: string;
+  createdAt: Date;
+}
+
 export interface SignalCandidateExtractionInput {
   profileId: string;
   /** Statements come back in the profile owner's language, not the prompt's. */
@@ -57,6 +70,8 @@ export interface SignalCandidateExtractionInput {
    * match-or-mint decision is made by cosine distance, not by the model.
    */
   existingStatements: Array<{ id: string; statement: string }>;
+  /** Nearest earlier captures by embedding, strongest first. Often empty. */
+  relatedInspirations: RelatedInspirationContext[];
 }
 
 export interface SignalCandidate {
@@ -65,6 +80,13 @@ export interface SignalCandidate {
   reason?: string;
   /** A verbatim span. Absent is honest; invented is not. */
   quote?: string;
+  /**
+   * Earlier captures that independently witness this same pattern — each an
+   * id from `relatedInspirations` plus a verbatim span of THAT capture's text.
+   * Code validates both halves: unknown ids are dropped, and a quote that is
+   * not genuinely in the cited capture drops the citation with it.
+   */
+  relatedEvidence?: Array<{ inspirationId: string; quote: string }>;
 }
 
 export interface SignalCandidateExtractionResult {

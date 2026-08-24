@@ -22,6 +22,7 @@ import { and, eq, inArray } from "drizzle-orm";
 
 import {
   type Principle,
+  inspirations,
   principles,
   principleSignals,
   signals,
@@ -184,9 +185,14 @@ async function loadCitationEvidence(
     out.set(id, { signalId: id, evidenceAt: [], tomVersionIds: [] });
   }
 
+  // Dated by the CAPTURE that witnesses it, not by when the link was noticed
+  // — same rule as confidence and selection. The 45-day span bar measures the
+  // theme's lifetime in the person's history; a retroactively cited old save
+  // must widen it with its own date, not collapse it to the day of noticing.
   const evidenceRows = await db
-    .select({ signalId: signalEvidence.signalId, createdAt: signalEvidence.createdAt })
+    .select({ signalId: signalEvidence.signalId, createdAt: inspirations.createdAt })
     .from(signalEvidence)
+    .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
     .where(
       and(eq(signalEvidence.profileId, profileId), inArray(signalEvidence.signalId, signalIds)),
     );
