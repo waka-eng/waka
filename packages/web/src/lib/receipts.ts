@@ -45,6 +45,14 @@ export const RECEIPTS = {
     text: "set aside — it will not return to the poster",
     enforcedBy: "packages/api/src/lib/top-of-mind-synthesis.test.ts",
   },
+  /** "then let it go" on a pattern of your own — the ground-level law:
+      dismissal anchors a refusal, deletes nothing, and is reversible.
+      Switched on by the-legible-loop Phase 3; until that phase shipped, the
+      claim would have been the advisory-button lie. */
+  groundRefuses: {
+    text: "the ground will refuse anything this close from now on",
+    enforcedBy: "packages/api/src/lib/signal-suppression.db.test.ts",
+  },
   /** the star's standing line, already on screen — documented here */
   starHeld: {
     text: "your own words — WAKA will not rewrite them",

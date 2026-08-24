@@ -183,6 +183,29 @@ describe("the doc's [checked] structural claims", () => {
     );
   });
 
+  it("keeps the ground's refusal ahead of the match", () => {
+    // The doc claims a candidate near a dismissed anchor is refused BEFORE
+    // the match is even looked at — so a refused pattern cannot re-enter as
+    // evidence for something else, and a refused candidate never spends a
+    // judge call. The behavior is proven on a real database in
+    // signal-suppression.db.test.ts; this pins the code shape the ordering
+    // claim rests on, the way the queue's `changed` check is pinned below.
+    const source = readFileSync(
+      resolve(REPO_ROOT, "packages/api/src/lib/signal-match-or-mint.ts"),
+      "utf8",
+    );
+    const refusal = source.indexOf("findSuppressionAnchor(candidate.embedding");
+    const match = source.indexOf("findBestMatch(candidate.embedding");
+    expect(refusal).toBeGreaterThan(-1);
+    expect(match).toBeGreaterThan(-1);
+    expect(refusal).toBeLessThan(match);
+    // A refusal bar below the judge band would silence candidates the match
+    // would not even have asked about.
+    expect(derivation.SIGNAL_SUPPRESSION_MIN_COSINE).toBeGreaterThanOrEqual(
+      derivation.SIGNAL_MERGE_JUDGE_MIN_COSINE,
+    );
+  });
+
   it("keeps confidence weights summing to 100, with diversity as a bonus outside them", () => {
     expect(
       derivation.CONFIDENCE_SUPPORT_WEIGHT +

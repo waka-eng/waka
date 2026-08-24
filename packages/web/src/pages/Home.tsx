@@ -200,7 +200,8 @@ import {
   unshareSignal,
   deleteInspiration,
   createFeedback,
-  deleteSignal,
+  dismissSignal,
+  restoreSignal,
   dismissTopOfMindEntry,
   restoreTopOfMindEntry,
   releaseTopOfMindEntry,
@@ -1194,15 +1195,12 @@ function HomeExperience(): JSX.Element {
    *
    * The server keeps the feedback; this is only so the row can answer in the
    * same beat rather than sitting inert until a refetch. `gone` is a pattern
-   * you deleted — it leaves the sky at once, and never comes back on a stale
-   * render.
+   * you let go — nothing is deleted: the star sinks to the retired layer, its
+   * spot carries the receipt and the way back.
    */
   const [verdicts, setVerdicts] = useState<Map<string, "true" | "partly" | "not_true" | "gone">>(
     () => new Map(),
   );
-  /** Which pattern the let-go has already been pressed for, so the word can
-      change to "gone" while the request is in flight. */
-  const [dropAsk] = useState<string | null>(null);
   /** The board's own state: at rest, asked about, or being rewritten. */
   const [board, setBoard] = useState<{ step: "rest" | "asking" | "working" }>({ step: "rest" });
   const [boardToast, setBoardToast] = useState<string | null>(null);
@@ -7889,20 +7887,41 @@ function HomeExperience(): JSX.Element {
     null,
   );
 
-  /** Throw out a pattern of your own. The memories under it stay. */
+  /** Let a pattern of your own go. Nothing is deleted: the row, the memories
+      under it and its vector all stay on the server — the vector as the
+      anchor the ground refuses by. Like the poster's own set-aside, the
+      sentence HOLDS ITS PLACE here, carrying the receipt and the way back;
+      it sinks to the retired layer on the next arrival, not out from under
+      the person mid-thought. */
   const dropSignal = useCallback((id: string) => {
     setVerdicts((prev) => new Map(prev).set(id, "gone"));
     if (offlineRef.current) return;
-    deleteSignal(id)
+    dismissSignal(id).catch(() => {
+      /* it did not land, and the row should not claim it did */
+      setVerdicts((prev) => {
+        const next = new Map(prev);
+        next.delete(id);
+        return next;
+      });
+    });
+  }, []);
+
+  /** The letting-go undone: the refusals stop, the pattern stands back up
+      wherever its evidence puts it. */
+  const undropSignal = useCallback((id: string) => {
+    if (offlineRef.current) return;
+    restoreSignal(id)
       .then(() => {
-        setSignals((prev) => (prev ? prev.filter((p) => p.id !== id) : prev));
-      })
-      .catch(() => {
         setVerdicts((prev) => {
+          /* back to the answer that opened the door, so "then let it go" is
+             offered again rather than a blank ask-row */
           const next = new Map(prev);
-          next.delete(id);
+          next.set(id, "not_true");
           return next;
         });
+      })
+      .catch(() => {
+        /* it did not come back; the state on screen stays honest */
       });
   }, []);
 
@@ -9495,18 +9514,31 @@ function HomeExperience(): JSX.Element {
                 </p>
               </div>
             ) : null}
-            {/* AND ONLY THEN MAY IT GO. Throwing out a reading of yourself is
+            {/* AND ONLY THEN MAY IT GO. Letting go of a reading of yourself is
                 offered after you have said it is untrue, not alongside the
-                question — a sequence rather than a menu, so the destructive
-                option is never sitting next to the harmless ones. */}
+                question — a sequence rather than a menu, so the heaviest
+                option is never sitting next to the harmless ones. Once let
+                go, the same spot carries the receipt (what the act taught
+                the loop: the ground refuses near-patterns from now on) and
+                its undo — reversible is part of the law being stated. */}
             {c.kind === "reading" &&
             focusCandId === c.id &&
             atWall.kind === "self" &&
-            verdicts.get(c.id) === "not_true" ? (
+            (verdicts.get(c.id) === "not_true" || verdicts.get(c.id) === "gone") ? (
               <p className="jar-neb-ask jar-neb-ask--after">
-                <button type="button" onClick={() => dropSignal(c.id)}>
-                  {dropAsk === c.id ? "gone" : "then let it go"}
-                </button>
+                {verdicts.get(c.id) === "gone" ? (
+                  <>
+                    <span className="jar-receipt">{RECEIPTS.groundRefuses.text}</span>
+                    {" · "}
+                    <button type="button" onClick={() => undropSignal(c.id)}>
+                      put it back
+                    </button>
+                  </>
+                ) : (
+                  <button type="button" onClick={() => dropSignal(c.id)}>
+                    then let it go
+                  </button>
+                )}
               </p>
             ) : null}
           </div>

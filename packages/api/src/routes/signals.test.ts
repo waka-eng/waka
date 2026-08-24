@@ -49,6 +49,7 @@ const summary: SignalSummary = {
   lastEvidenceAt: "2026-05-30T12:00:00.000Z",
   locked: false,
   unsupported: false,
+  dismissed: false,
   sharedGroupIds: [groupId],
   createdAt: "2026-05-01T10:00:00.000Z",
 };
@@ -108,6 +109,7 @@ describe("GET /api/signals", () => {
           lastEvidenceAt: "2026-05-30T12:00:00.000Z",
           locked: false,
           unsupported: false,
+          dismissed: false,
           sharedGroupIds: [groupId],
           createdAt: "2026-05-01T10:00:00.000Z",
         },

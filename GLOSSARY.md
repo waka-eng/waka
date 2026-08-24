@@ -35,6 +35,7 @@ before it gets a name anywhere else.
 | Shared space | `space`, `membership` | **campfire** | a memory you tend together | Governed shared spaces | reserved |
 | Access control | `permissions` | **door** | you decide whose door opens | Access control | reserved |
 | Decay / retirement | `dormant_at` | **setting** | a signal long unused sets like dusk | Decay / retirement policy | reserved |
+| Suppression (owner-refused pattern) | `dismissed_at`, `suppressions` — `anchor_signal_id`, `candidate_statement` | **refused ground** | the ground will refuse anything this close from now on | Suppression record (logged, reversible, deletes nothing) | **today** |
 | Decision attribution | `decision_trace` | **roots of a choice** | which memories this choice came from | Attribution / decision audit | reserved |
 
 ## Words banned from the UI

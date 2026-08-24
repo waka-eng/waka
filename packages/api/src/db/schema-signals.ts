@@ -21,6 +21,7 @@
 
 import { relations } from "drizzle-orm";
 import {
+  doublePrecision,
   foreignKey,
   index,
   integer,
@@ -82,6 +83,19 @@ export const signals = pgTable(
      * deserve to know that rather than seeing a confident orphan.
      */
     unsupportedAt: timestamp("unsupported_at", { withTimezone: true }),
+
+    /**
+     * Set when the owner throws the pattern out. The row, its evidence and
+     * its embedding all stay — dismissal deletes nothing — and from this
+     * moment the embedding is a SUPPRESSION ANCHOR: derivation refuses any
+     * candidate near it instead of minting, and writes a `suppressions` row
+     * naming this signal. Dismissed rows also carry `status = retired`, which
+     * is what already keeps them out of the match scan and the top of mind;
+     * this timestamp is the extra fact — refused by their owner, anchoring
+     * the ground — and clearing it (the restore verb) returns the pattern to
+     * the loop's sight. goals/the-legible-loop.md Phase 3.
+     */
+    dismissedAt: timestamp("dismissed_at", { withTimezone: true }),
 
     /**
      * Denormalized recency of the newest evidence link. Ranking reads it on
@@ -216,6 +230,72 @@ export type SignalShare = typeof signalShares.$inferSelect;
 export type NewSignalShare = typeof signalShares.$inferInsert;
 
 // ---------------------------------------------------------------------------
+// suppressions — the ground's refusals, on the record
+// ---------------------------------------------------------------------------
+
+/**
+ * One row per candidate the ground refused: derivation found the candidate at
+ * or above `SIGNAL_SUPPRESSION_MIN_COSINE` to a DISMISSED signal's vector and
+ * dropped it instead of minting. Every refusal is written here — a silence
+ * this system creates is a logged, legible silence, never a quiet one
+ * (goals/the-legible-loop.md Phase 3; the antechamber in Phase 5 renders
+ * these rows).
+ *
+ * FK doctrine, same as consultations: the record belongs to the profile whose
+ * ground refused (cascade — erasing the person takes their record). The
+ * anchor and the capture are simple set-null references — the mark outlives
+ * both, which is why the two statements are snapshotted as text: "what was
+ * refused, and how close to what" must stay answerable after either row is
+ * truly deleted.
+ */
+export const suppressions = pgTable(
+  "suppressions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+
+    profileId: uuid("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+
+    /** The dismissed signal whose vector refused this candidate. */
+    anchorSignalId: uuid("anchor_signal_id").references(() => signals.id, {
+      onDelete: "set null",
+    }),
+    /** What the anchor said at the moment it refused — survives its deletion. */
+    anchorStatement: text("anchor_statement").notNull(),
+
+    /** The capture whose derivation produced the refused candidate. */
+    inspirationId: uuid("inspiration_id").references(() => inspirations.id, {
+      onDelete: "set null",
+    }),
+    /** The refused candidate's words — what the antechamber shows. */
+    candidateStatement: text("candidate_statement").notNull(),
+
+    /**
+     * The cosine that decided, at decision time. Stored because it cannot be
+     * recomputed later (vectors move when statements are re-embedded) and a
+     * refusal a person cannot audit is not a record. Renders nowhere — the
+     * numeral law binds the chrome, not the archive.
+     */
+    similarity: doublePrecision("similarity").notNull(),
+
+    suppressedAt: timestamp("suppressed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    // The antechamber and the weather report both read one profile's
+    // refusals newest-first.
+    profileSuppressedIdx: index("suppressions_profile_suppressed_idx").on(
+      table.profileId,
+      table.suppressedAt,
+    ),
+    anchorIdx: index("suppressions_anchor_idx").on(table.anchorSignalId),
+  }),
+);
+
+export type Suppression = typeof suppressions.$inferSelect;
+export type NewSuppression = typeof suppressions.$inferInsert;
+
+// ---------------------------------------------------------------------------
 // Relations
 // ---------------------------------------------------------------------------
 
@@ -235,6 +315,21 @@ export const signalEvidenceRelations = relations(signalEvidence, ({ one }) => ({
   }),
   inspiration: one(inspirations, {
     fields: [signalEvidence.inspirationId],
+    references: [inspirations.id],
+  }),
+}));
+
+export const suppressionsRelations = relations(suppressions, ({ one }) => ({
+  profile: one(profiles, {
+    fields: [suppressions.profileId],
+    references: [profiles.id],
+  }),
+  anchorSignal: one(signals, {
+    fields: [suppressions.anchorSignalId],
+    references: [signals.id],
+  }),
+  inspiration: one(inspirations, {
+    fields: [suppressions.inspirationId],
     references: [inspirations.id],
   }),
 }));

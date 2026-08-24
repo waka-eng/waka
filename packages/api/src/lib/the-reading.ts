@@ -169,6 +169,14 @@ export const READING_LINES: ReadingLine[] = [
   },
   {
     sentence:
+      "A pattern you let go is refused ground: nothing is deleted, nothing that close grows there again, and every refusal is written down — until you put it back.",
+    backing: {
+      kind: "contract",
+      testPath: "packages/api/src/lib/signal-suppression.db.test.ts",
+    },
+  },
+  {
+    sentence:
       "A room's poster changes only when more than half the room carries the change — a no is counted, never a veto.",
     backing: {
       kind: "contract",

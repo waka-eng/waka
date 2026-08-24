@@ -241,6 +241,18 @@ vi.mock("../src/lib/api", async (importOriginal) => {
       id: signalId,
       statement: input.statement,
     }),
+    /* The write behind every verdict. Unmocked it would reach a network that
+       is not there, and the page — honestly — would take the answer back off
+       the row when the request died, which would strand the let-go case
+       below: "then let it go" is only offered while the not-true stands. */
+    createFeedback: async () => ({ id: "feedback-1" }),
+    /* The writes behind "then let it go" and "put it back". The page reads
+       only `status` from the restore's result; the dismissal's result is not
+       read at all — what matters is that neither reaches a network that is
+       not there. The real law they enact is pinned server-side by
+       signal-suppression.db.test.ts. */
+    dismissSignal: async (signalId: string) => ({ id: signalId, status: "retired" }),
+    restoreSignal: async (signalId: string) => ({ id: signalId, status: "emerging" }),
     fetchGroupProposals: async (groupId: string) => (groupId === GROUP_ID ? [OPEN_PROPOSAL] : []),
     affirmGroupProposal: async () => ({
       proposal: { ...OPEN_PROPOSAL, status: "accepted" as const },
@@ -1219,5 +1231,43 @@ describe("a verdict leaves a receipt", () => {
     expect(/\d/.test(receipt?.textContent ?? ""), "a numeral rode in with the receipt").toBe(
       false,
     );
+  });
+
+  /**
+   * goal: the-legible-loop, Phase 3. Letting a pattern go must say the
+   * ground-level law it just enacted — the registry's words, whose claim
+   * `signal-suppression.db.test.ts` enforces on the real pipeline — and must
+   * carry its own undo in the same breath, because reversible is part of
+   * the law being stated. Nothing here asserts disappearance: nothing
+   * disappears.
+   */
+  it("prints the refused-ground receipt with its undo when a pattern is let go", async () => {
+    await climbToSky();
+    const el = await tapSentence(NAMING);
+
+    const no = [...el.querySelectorAll<HTMLElement>(".jar-neb-ask button")].find(
+      (b) => (b.textContent ?? "").trim() === "not true",
+    );
+    if (!no) throw new Error("no 'not true' under the subject");
+    await act(async () => no.click());
+
+    const letGo = [...el.querySelectorAll<HTMLElement>(".jar-neb-ask button")].find(
+      (b) => (b.textContent ?? "").trim() === "then let it go",
+    );
+    if (!letGo) throw new Error("saying not-true did not offer the letting-go");
+    await act(async () => letGo.click());
+
+    const receipts = [...el.querySelectorAll<HTMLElement>(".jar-receipt")].map(
+      (r) => r.textContent ?? "",
+    );
+    expect(
+      receipts,
+      "letting go left no ground receipt — the law enacted silently",
+    ).toContain(RECEIPTS.groundRefuses.text);
+
+    const undo = [...el.querySelectorAll<HTMLElement>(".jar-neb-ask button")].find(
+      (b) => (b.textContent ?? "").trim() === "put it back",
+    );
+    expect(undo, "the receipt arrived without its undo").toBeTruthy();
   });
 });

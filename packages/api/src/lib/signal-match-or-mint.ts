@@ -22,14 +22,22 @@
  * The lock rule is enforced downstream of the match: a signal whose `lockedAt`
  * is set never has its statement rewritten here, no matter how the candidate
  * that matched it is worded. See `restateSignal`.
+ *
+ * Upstream of the match sits the ground's refusal: a candidate at or above
+ * `SIGNAL_SUPPRESSION_MIN_COSINE` to a DISMISSED signal's vector is dropped
+ * before any of the above runs, and every refusal writes a `suppressions`
+ * row naming its anchor. Arithmetic only, no model — and checked first, so a
+ * pattern the owner threw out cannot re-enter as evidence for something else
+ * (goals/the-legible-loop.md Phase 3).
  */
 
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 
 import {
   signalEmbeddings,
   signalEvidence,
   signals,
+  suppressions,
   type SignalStatus,
 } from "../db/index.js";
 import { cosineSimilarity } from "../scoring/vector.js";
@@ -46,6 +54,7 @@ import {
   classifyMatch,
   MATCH_CANDIDATE_SCAN_LIMIT,
   SIGNAL_MERGE_JUDGE_MIN_COSINE,
+  SIGNAL_SUPPRESSION_MIN_COSINE,
 } from "./signal-derivation-thresholds.js";
 import { writeSignalEmbedding } from "./signal-embeddings.js";
 import { refreshSignalLifecycle } from "./signal-lifecycle.js";
@@ -99,12 +108,33 @@ export async function applyCandidates(
   input: ApplyCandidatesInput,
 ): Promise<Pick<SignalDerivationResult, "matchedSignalIds" | "mintedSignalIds" | "promotedSignalIds">> {
   const targets = await loadMatchTargets(tx, input.profileId, input.embeddingModel);
+  const anchors = await loadSuppressionAnchors(tx, input.profileId, input.embeddingModel);
 
   const matchedSignalIds: string[] = [];
   const mintedSignalIds: string[] = [];
   const touched = new Set<string>();
 
   for (const candidate of input.candidates) {
+    // The ground refuses first, before the match is even looked at. A
+    // dismissed signal is a pattern its owner threw out; a candidate this
+    // close to one IS that pattern, and letting the match see it would
+    // re-admit it as evidence for something else — or spend a judge call
+    // deciding the fate of a sentence whose fate the owner already decided.
+    // Every refusal is written down: the silence this creates is a logged,
+    // legible silence, and restoring the anchor ends it.
+    const refused = findSuppressionAnchor(candidate.embedding, anchors);
+    if (refused) {
+      await tx.insert(suppressions).values({
+        profileId: input.profileId,
+        anchorSignalId: refused.anchor.id,
+        anchorStatement: refused.anchor.statement,
+        inspirationId: input.inspirationId,
+        candidateStatement: candidate.statement,
+        similarity: refused.similarity,
+      });
+      continue;
+    }
+
     const nearest = findBestMatch(candidate.embedding, targets);
     let decision = classifyMatch(nearest?.similarity ?? null);
 
@@ -264,6 +294,58 @@ function findBestMatch(
     const similarity = cosineSimilarity(embedding, target.embedding);
     if (similarity === null || similarity < SIGNAL_MERGE_JUDGE_MIN_COSINE) continue;
     if (!best || similarity > best.similarity) best = { target, similarity };
+  }
+
+  return best;
+}
+
+interface SuppressionAnchor {
+  id: string;
+  statement: string;
+  embedding: number[];
+}
+
+/**
+ * The vectors of the profile's dismissed signals. A dismissed row also
+ * carries `status = retired`, so `loadMatchTargets` never sees it — this is
+ * the other half of what dismissal means: the pattern stops being a home for
+ * evidence AND becomes ground that refuses. Bounded and ordered like the
+ * match scan, newest refusals first.
+ */
+async function loadSuppressionAnchors(
+  tx: WakaTx,
+  profileId: string,
+  embeddingModel: string,
+): Promise<SuppressionAnchor[]> {
+  return tx
+    .select({
+      id: signals.id,
+      statement: signals.statement,
+      embedding: signalEmbeddings.embedding,
+    })
+    .from(signals)
+    .innerJoin(signalEmbeddings, eq(signalEmbeddings.signalId, signals.id))
+    .where(
+      and(
+        eq(signals.profileId, profileId),
+        isNotNull(signals.dismissedAt),
+        eq(signalEmbeddings.model, embeddingModel),
+      ),
+    )
+    .orderBy(desc(signals.dismissedAt))
+    .limit(MATCH_CANDIDATE_SCAN_LIMIT);
+}
+
+function findSuppressionAnchor(
+  embedding: number[],
+  anchors: SuppressionAnchor[],
+): { anchor: SuppressionAnchor; similarity: number } | null {
+  let best: { anchor: SuppressionAnchor; similarity: number } | null = null;
+
+  for (const anchor of anchors) {
+    const similarity = cosineSimilarity(embedding, anchor.embedding);
+    if (similarity === null || similarity < SIGNAL_SUPPRESSION_MIN_COSINE) continue;
+    if (!best || similarity > best.similarity) best = { anchor, similarity };
   }
 
   return best;

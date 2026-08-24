@@ -1,6 +1,7 @@
 # Goal: the legible loop
 
-Status: ready — created 2026-08-23 on the founder's instruction to build
+Status: in flight — Phases 1–3 passed; next is Phase 4 (ratified light).
+Created 2026-08-23 on the founder's instruction to build
 the whole loop-legibility experience as its own goal. Carved out of
 `no-quiet-corners.md` (its Phase 9, plus Phase 4 — the suppression
 substrate the receipts stand on); those phases now point here, so every
@@ -179,6 +180,40 @@ records). Demo-seed runs for gates as needed (~10 derivations per
 run). No new dependencies, no new infrastructure.
 
 ## Log
+
+- **2026-08-24 — Phase 3: PASS.** The ground refuses, on the record.
+  Dismissing a signal now deletes nothing: the row keeps `status:
+  retired` (which already excludes it from the match scan and the top of
+  mind) plus a `dismissed_at` mark, and its embedding becomes a
+  suppression anchor. In `applyCandidates` the refusal runs BEFORE the
+  match — a candidate at or above `SIGNAL_SUPPRESSION_MIN_COSINE` (0.86,
+  now a row in `generation.md`'s drift-locked table, with the
+  refusal-before-match ordering pinned as a `[checked]` claim) to any
+  dismissed anchor is dropped without minting, without attaching, and
+  without ever reaching the judge — zero model calls, refusals included —
+  and every refusal writes a `suppressions` row naming the anchor,
+  snapshotting both statements and the deciding cosine (the antechamber's
+  raw material for Phase 5; erasing the profile takes the record, deleting
+  the anchor or the capture leaves a departed mark). Verbs:
+  `POST /api/signals/:id/dismiss` and `/:id/restore` — restore clears the
+  mark, recomputes standing from the untouched evidence, and re-promotes
+  on the spot when the evidence clears the bar; ordinary retirement is not
+  restore's business. The world: "then let it go" now dismisses instead of
+  deleting, the sentence holds its place carrying the Phase 2-promised
+  receipt ("the ground will refuse anything this close from now on",
+  `RECEIPTS.groundRefuses`, enforced by the new suppression suite) with
+  "put it back" in the same breath, and the star sinks on the next arrival
+  rather than vanishing — fading never deletes, so the old hard-delete
+  local filter is gone. The reading gained its refused-ground sentence
+  (contract-backed by the same suite); GLOSSARY gained the refused-ground
+  row; register item 7 (agent-memory-wedge, the forgetting axis) is marked
+  shipped. Gate measured: `signal-suppression.db.test.ts` 5/5 on real
+  Postgres through the real `applyCandidates` (near candidate dropped +
+  row names anchor; distant mints with no refusal written; dismissal
+  leaves row, evidence and vector whole; restore ends refusals and the
+  same nearness attaches again; re-promotion follows evidence), api 53
+  files / 608 tests, web 20 files / 139 tests, vocabulary and seams
+  clean. DELETE stays for the person who truly wants the row gone.
 
 - **2026-08-23 — Phase 2: PASS.** Every gesture now says what it taught,
   and may say only what a test enforces. `lib/receipts.ts` is the

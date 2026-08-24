@@ -38,6 +38,9 @@ export interface ApiSignal {
   lastEvidenceAt: string | null;
   locked: boolean;
   unsupported: boolean;
+  /** Thrown out by its owner — the row and evidence stay, and the server
+      refuses new candidates near it, on the record. Reads as `retired`. */
+  dismissed: boolean;
   sharedGroupIds: string[];
   createdAt: string;
 }
@@ -130,6 +133,37 @@ export async function releaseSignal(id: string): Promise<ApiSignal> {
     apiPath(`/signals/${encodeURIComponent(id)}/release`),
     {},
     "Failed to hand this sentence back",
+  );
+  return body.signal;
+}
+
+/**
+ * POST /signals/:id/dismiss
+ *
+ * Throwing a pattern out, without deletion: the row, its evidence and its
+ * vector all stay, the signal reads as retired — and from this act on the
+ * server refuses any new candidate near it, writing every refusal down.
+ */
+export async function dismissSignal(id: string): Promise<ApiSignal> {
+  const body = await postJson<{ signal: ApiSignal }>(
+    apiPath(`/signals/${encodeURIComponent(id)}/dismiss`),
+    {},
+    "Failed to let this signal go",
+  );
+  return body.signal;
+}
+
+/**
+ * POST /signals/:id/restore
+ *
+ * The dismissal's undo: the refusals stop and the pattern returns to the
+ * loop's sight, standing wherever its evidence puts it.
+ */
+export async function restoreSignal(id: string): Promise<ApiSignal> {
+  const body = await postJson<{ signal: ApiSignal }>(
+    apiPath(`/signals/${encodeURIComponent(id)}/restore`),
+    {},
+    "Failed to put this signal back",
   );
   return body.signal;
 }

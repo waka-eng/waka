@@ -47,6 +47,7 @@ import { reconcilePrinciplesAfterSignalLoss } from "../lib/principle-generation.
 import {
   computeSignalConfidence,
   dropSignalEmbedding,
+  refreshSignalLifecycle,
 } from "../lib/signal-derivation.js";
 import type { AuthenticatedSession } from "../lib/session.js";
 
@@ -124,6 +125,10 @@ export interface SignalSummary {
   locked: boolean;
   /** Locked, but every capture behind it is gone. */
   unsupported: boolean;
+  /** Thrown out by the owner. The row and evidence stay; its vector is now a
+      suppression anchor — derivation refuses candidates near it, on the
+      record. Dismissed rows also read `status: "retired"`. */
+  dismissed: boolean;
   sharedGroupIds: string[];
   createdAt: string;
 }
@@ -186,6 +191,7 @@ async function decorateSignals(
     lastEvidenceAt: Date | null;
     lockedAt: Date | null;
     unsupportedAt: Date | null;
+    dismissedAt: Date | null;
     createdAt: Date;
   }>,
 ): Promise<SignalSummary[]> {
@@ -259,6 +265,7 @@ async function decorateSignals(
     lastEvidenceAt: toIso(row.lastEvidenceAt),
     locked: row.lockedAt !== null,
     unsupported: row.unsupportedAt !== null,
+    dismissed: row.dismissedAt !== null,
     sharedGroupIds: groupsBySignal.get(row.id) ?? [],
     createdAt: row.createdAt.toISOString(),
   }));
@@ -277,6 +284,7 @@ export async function listProfileSignals(
       lastEvidenceAt: signals.lastEvidenceAt,
       lockedAt: signals.lockedAt,
       unsupportedAt: signals.unsupportedAt,
+      dismissedAt: signals.dismissedAt,
       createdAt: signals.createdAt,
     })
     .from(signals)
@@ -304,6 +312,7 @@ export async function getProfileSignal(
       lastEvidenceAt: signals.lastEvidenceAt,
       lockedAt: signals.lockedAt,
       unsupportedAt: signals.unsupportedAt,
+      dismissedAt: signals.dismissedAt,
       createdAt: signals.createdAt,
     })
     .from(signals)
@@ -391,6 +400,68 @@ export async function releaseSignalStatement(
     .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
     .returning({ id: signals.id });
   if (updated.length === 0) return null;
+
+  return getProfileSignal(db, { profileId: input.profileId, signalId: input.signalId });
+}
+
+/**
+ * Throw a pattern out without deleting anything. The row, its evidence, its
+ * shares and its embedding all stay; what changes is standing: `retired`
+ * takes it out of the match scan and the top of mind (the exclusions retired
+ * rows already have), and `dismissedAt` makes its vector a SUPPRESSION
+ * ANCHOR — from this moment derivation refuses any candidate near it and
+ * writes the refusal down (goals/the-legible-loop.md Phase 3).
+ *
+ * `coalesce` keeps the FIRST dismissal time on a repeat: "since when has the
+ * ground refused this" is a fact about the owner's act, not about the last
+ * time a client retried the request.
+ */
+export async function dismissProfileSignal(
+  db: WakaDb,
+  input: { profileId: string; signalId: string },
+): Promise<SignalDetail | null> {
+  const updated = await db
+    .update(signals)
+    .set({
+      status: "retired",
+      dismissedAt: sql`coalesce(${signals.dismissedAt}, now())`,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
+    .returning({ id: signals.id });
+  if (updated.length === 0) return null;
+
+  return getProfileSignal(db, { profileId: input.profileId, signalId: input.signalId });
+}
+
+/**
+ * The dismissal's other half — every silence this system creates must be
+ * reversible. Clearing `dismissedAt` stops the refusals; standing is then
+ * recomputed from the evidence that never went anywhere: back to `emerging`,
+ * and the lifecycle pass re-promotes on the spot when the evidence already
+ * clears the bar. A signal that was not dismissed keeps its status — restore
+ * undoes dismissal, not ordinary retirement.
+ */
+export async function restoreProfileSignal(
+  db: WakaDb,
+  input: { profileId: string; signalId: string },
+): Promise<SignalDetail | null> {
+  const restored = await db.transaction(async (tx) => {
+    const updated = await tx
+      .update(signals)
+      .set({
+        status: sql`case when ${signals.dismissedAt} is null then ${signals.status} else 'emerging'::signal_status end`,
+        dismissedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
+      .returning({ id: signals.id });
+    if (updated.length === 0) return false;
+
+    await refreshSignalLifecycle(tx as never, input.signalId, new Date());
+    return true;
+  });
+  if (!restored) return null;
 
   return getProfileSignal(db, { profileId: input.profileId, signalId: input.signalId });
 }
@@ -531,6 +602,8 @@ export interface SignalRouteDependencies {
   getSignal?: typeof getProfileSignal;
   updateStatement?: typeof updateSignalStatement;
   releaseStatement?: typeof releaseSignalStatement;
+  dismissSignal?: typeof dismissProfileSignal;
+  restoreSignal?: typeof restoreProfileSignal;
   deleteSignal?: typeof deleteProfileSignal;
   shareSignal?: typeof shareSignalWithGroup;
   unshareSignal?: typeof unshareSignalFromGroup;
@@ -549,6 +622,8 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
   const getSignal = deps.getSignal ?? getProfileSignal;
   const updateStatement = deps.updateStatement ?? updateSignalStatement;
   const releaseStatement = deps.releaseStatement ?? releaseSignalStatement;
+  const dismissSignal = deps.dismissSignal ?? dismissProfileSignal;
+  const restoreSignal = deps.restoreSignal ?? restoreProfileSignal;
   const deleteSignal = deps.deleteSignal ?? deleteProfileSignal;
   const shareSignal = deps.shareSignal ?? shareSignalWithGroup;
   const unshareSignal = deps.unshareSignal ?? unshareSignalFromGroup;
@@ -777,6 +852,85 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
     if (!scope.ok) return c.json(scope.body, scope.status);
 
     const signal = await releaseStatement(db, {
+      profileId: scope.profileId,
+      signalId: parsedParams.data.signalId,
+    });
+    if (!signal) return c.json({ error: "Signal not found" }, 404);
+
+    scheduleRefresh(scope.profileId);
+    return c.json({ signal }, 200);
+  });
+
+  /**
+   * The dismiss verb — "then let it go", without deletion. Same write scope
+   * as the edit. The refresh is scheduled because the artifact may cite the
+   * signal that was just thrown out; the embedding is deliberately NOT
+   * dropped — it is the anchor the refusals stand on from here.
+   */
+  routes.post("/:signalId/dismiss", async (c) => {
+    const parsedParams = signalParamsSchema.safeParse(c.req.param());
+    if (!parsedParams.success) {
+      return c.json(
+        { error: "Invalid signal id", details: parsedParams.error.flatten().fieldErrors },
+        400,
+      );
+    }
+    const parsedQuery = signalScopeQuerySchema.safeParse(c.req.query());
+    if (!parsedQuery.success) {
+      return c.json(
+        { error: "Invalid signal query", details: parsedQuery.error.flatten().fieldErrors },
+        400,
+      );
+    }
+
+    const db = getDatabase();
+    const scope = await resolveProfileScope(
+      db,
+      c.get("session"),
+      parsedQuery.data.profile,
+      "write",
+      loadProfile,
+    );
+    if (!scope.ok) return c.json(scope.body, scope.status);
+
+    const signal = await dismissSignal(db, {
+      profileId: scope.profileId,
+      signalId: parsedParams.data.signalId,
+    });
+    if (!signal) return c.json({ error: "Signal not found" }, 404);
+
+    scheduleRefresh(scope.profileId);
+    return c.json({ signal }, 200);
+  });
+
+  /** The dismissal's undo: the refusals stop, the pattern returns to sight. */
+  routes.post("/:signalId/restore", async (c) => {
+    const parsedParams = signalParamsSchema.safeParse(c.req.param());
+    if (!parsedParams.success) {
+      return c.json(
+        { error: "Invalid signal id", details: parsedParams.error.flatten().fieldErrors },
+        400,
+      );
+    }
+    const parsedQuery = signalScopeQuerySchema.safeParse(c.req.query());
+    if (!parsedQuery.success) {
+      return c.json(
+        { error: "Invalid signal query", details: parsedQuery.error.flatten().fieldErrors },
+        400,
+      );
+    }
+
+    const db = getDatabase();
+    const scope = await resolveProfileScope(
+      db,
+      c.get("session"),
+      parsedQuery.data.profile,
+      "write",
+      loadProfile,
+    );
+    if (!scope.ok) return c.json(scope.body, scope.status);
+
+    const signal = await restoreSignal(db, {
       profileId: scope.profileId,
       signalId: parsedParams.data.signalId,
     });

@@ -272,7 +272,13 @@ already ruled an export door is a prerequisite of the
 default-destination claim; the platforms' one-time import doors make it
 distribution too.
 
-**7. Dismissal descends to L2** (M). Our one working negative memory —
+**7. Dismissal descends to L2** (M). **Shipped 2026-08-24**
+(`goals/the-legible-loop.md` Phase 3): `dismissed_at` on signals, the
+`suppressions` table, `SIGNAL_SUPPRESSION_MIN_COSINE` drift-locked in
+`generation.md`, refusal checked before the match, dismiss/restore verbs,
+and the world's receipt — enforced by
+`packages/api/src/lib/signal-suppression.db.test.ts`. The forgetting axis
+scores now. Original brief: our one working negative memory —
 L3 dismissals ride along every version and the generator cannot re-propose
 them — generalized down: a dismissed signal keeps its row and evidence,
 and its embedding becomes a suppression anchor; a candidate at ≥0.86

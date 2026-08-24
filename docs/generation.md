@@ -162,6 +162,17 @@ First, candidates within one batch are deduped against each other at
 `SIGNAL_BATCH_DEDUPE_MIN_COSINE` (0.94) — a model that says the same thing
 twice in one reply mints once.
 
+Next, the ground refuses: each candidate is compared against the vectors of
+the profile's **dismissed** signals (rows whose `dismissed_at` is set — the
+owner threw the pattern out, and the row, evidence and embedding all stayed).
+At or above `SIGNAL_SUPPRESSION_MIN_COSINE` (0.86) to any dismissed anchor,
+the candidate is dropped — no mint, no evidence, no judge call — and a
+`suppressions` row is written naming the anchor, snapshotting both statements
+and the cosine that decided. Every refusal is on the record; restoring the
+dismissed signal (clearing `dismissed_at`) returns the pattern to the loop's
+sight. Checked before the match on purpose: a pattern the owner refused must
+not re-enter as evidence for something else **[checked]**.
+
 Then, per candidate, the decision — this is `classifyMatch` in
 `packages/api/src/lib/signal-derivation-thresholds.ts`, applied by
 `packages/api/src/lib/signal-match-or-mint.ts` **[checked]**:
@@ -533,6 +544,7 @@ The authoritative values. Machine-checked against code — see
 |---|---|---|
 | `SIGNAL_MATCH_MIN_COSINE` | 0.86 | At or above: attach as evidence |
 | `SIGNAL_MERGE_JUDGE_MIN_COSINE` | 0.7 | Band floor: ask the judge instead of minting blind |
+| `SIGNAL_SUPPRESSION_MIN_COSINE` | 0.86 | At or above a dismissed signal's vector: refuse the candidate, on the record |
 | `SIGNAL_BATCH_DEDUPE_MIN_COSINE` | 0.94 | Within one extraction batch, collapse near-identical candidates |
 | `SIGNAL_PROMOTION_MIN_EVIDENCE` | 3 | Evidence count where emerging becomes active |
 | `CONFIDENCE_SUPPORT_WEIGHT` | 55 | Confidence: weight of evidence count |

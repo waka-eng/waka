@@ -58,6 +58,23 @@ export function classifyMatch(similarity: number | null): "attach" | "judge" | "
 }
 
 /**
+ * At or above this cosine to a DISMISSED signal's vector, a candidate is the
+ * pattern its owner already threw out, and the ground refuses it: no mint, no
+ * evidence, no judge call — one `suppressions` row naming the anchor instead.
+ * The refusal is checked BEFORE the match, so a refused pattern cannot
+ * re-enter as evidence for something else, and a refused candidate never
+ * spends a model call.
+ *
+ * Deliberately the same number as the match bar today: "close enough to be
+ * the same pattern" must mean one thing whether the pattern is wanted or
+ * refused. A separate export all the same, because the two may need to tune
+ * apart — a false refusal is visible in the antechamber and reversible by
+ * restore, while a false match is the invisible fusion the match bar is set
+ * high against.
+ */
+export const SIGNAL_SUPPRESSION_MIN_COSINE = 0.86;
+
+/**
  * Two candidates from the *same* capture this close are one pattern said
  * twice. Higher than the match bar because both came from one model call on
  * one input, so genuine distinctness needs more separation to be believable.
