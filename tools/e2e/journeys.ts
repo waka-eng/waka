@@ -151,6 +151,46 @@ async function goSurface(page: Page, base: string, path: string): Promise<void> 
 const bodyText = (page: Page): Promise<string> =>
   page.evaluate(() => document.body.innerText.trim());
 
+/**
+ * The page's words, MINUS anything inside a `<select>`.
+ *
+ * `/profile`'s language picker lists its options by native name — `English`
+ * and `한국어` — and that is correct: you should be able to find your own
+ * language whatever language the product is currently in. It also means the
+ * page contains Hangul at all times, so "is there Hangul on screen" is a
+ * question that cannot come back no on that route.
+ *
+ * That cost a false pass. The `locale` journey's fresh-browser check read
+ * `document.body.innerText`, found `한국어` in the picker, and reported a
+ * Korean product while every label around it said DISPLAY NAME and LANGUAGE.
+ * It was caught by tracing why only one of two assertions had fired, not by
+ * anything in the harness noticing.
+ */
+const translatableText = (page: Page): Promise<string> =>
+  /* NO CALLBACKS INSIDE `evaluate`, AND NOT FOR STYLE. The first version used
+     a TreeWalker with an `acceptNode` filter and died on `__name is not
+     defined` — esbuild's keep-names shim reaches into function expressions
+     passed to `page.evaluate` and the helper it references does not exist in
+     the page. Plain loops are the only reliable shape in here, and this is the
+     second place in this harness to learn it.
+
+     The selects are hidden in the LIVE document rather than stripped from a
+     clone, because `innerText` is what respects visibility and it returns
+     nothing useful on a detached node. They are put back immediately. */
+  page.evaluate(() => {
+    const selects = document.querySelectorAll<HTMLSelectElement>("select");
+    const previous: string[] = [];
+    for (let i = 0; i < selects.length; i += 1) {
+      previous.push(selects[i]!.style.display);
+      selects[i]!.style.display = "none";
+    }
+    const text = document.body.innerText.trim();
+    for (let i = 0; i < selects.length; i += 1) {
+      selects[i]!.style.display = previous[i]!;
+    }
+    return text;
+  });
+
 /** WCAG relative luminance of an `rgb(…)` / `rgba(…)` string. */
 function luminance(css: string): number {
   const [r, g, b] = (css.match(/[\d.]+/g) ?? ["0", "0", "0"]).slice(0, 3).map((raw) => {
@@ -1340,6 +1380,115 @@ const JOURNEYS: Journey[] = [
         detail:
           problems.length === 0
             ? `published at /${handle} with no capture text on it, and gone again when turned off`
+            : problems.join("; "),
+      };
+    },
+  },
+
+  {
+    id: "english",
+    name: "the product speaks English, in words rather than in keys",
+    /* THIS JOURNEY USED TO BE ITS OWN OPPOSITE, and the swap is a ruling, not
+       a refactor. It was `locale`: pick Korean on `/profile`, sign in on a
+       clean browser, and prove the choice reached the server rather than only
+       this machine. Then the founder ruled the product English only
+       (2026-08-24, verbatim: "i dont want any korean used in the product"),
+       the language picker left `Profile.tsx` with the second language, and a
+       journey that reaches for `select.field-input` on `/profile` now reports
+       "no language picker" on every run — a red gate defending a decision that
+       has been reversed.
+
+       So it holds the ruling instead. Two of the three failures the old shape
+       was against had nothing to do with which language it was, and they are
+       kept exactly as they were:
+
+         - RAW ICU REACHES THE SCREEN. `{count, plural, other {{count} behind
+           it}}` printed verbatim once, because ICU cannot nest a placeholder
+           inside a branch. Every message keeps the placeholder outside for
+           that reason and nothing was checking.
+         - A KEY PRINTS INSTEAD OF ITS MESSAGE. `t()` returns the key on a
+           miss, so a typo renders as `signalHoldFaint` — legible enough to
+           survive review, and not a word in any language.
+
+       And the third is inverted into the ruling's own guard: no second
+       language on screen, and no control offering one. Neither throws. All of
+       it is visible only to something that reads the rendered text.
+
+       THE POSITIVE HALF IS WHAT MAKES THE SABOTAGE MEAN ANYTHING. Every check
+       above is an ABSENCE, and a blank page satisfies all of them — so each
+       surface must also render a real amount of its own signed-in English.
+       Breaking the session read empties exactly that and leaves the absences
+       intact, which is the difference between a suite that is passing and one
+       that has stopped looking. */
+    breaks: (ctx) => breakRoute(ctx, (p, m) => p === "/api/auth/me" && m === "GET"),
+    run: async (page, base) => {
+      await signUp(page, base);
+
+      const problems: string[] = [];
+      await goSurface(page, base, "/profile");
+      if ((await page.locator("select.field-input").count()) > 0) {
+        problems.push(
+          "a language picker is back on /profile — the product is English only " +
+            "(founder, 2026-08-24)",
+        );
+      }
+
+      /* Every flat surface, not just one: a provider missed on a single route
+         would leave that surface rendering something else entirely while
+         /profile looked perfectly correct. */
+      const surfaces = [
+        "/profile",
+        "/capture",
+        "/inspirations",
+        "/signals",
+        "/top-of-mind",
+        "/rooms",
+        "/principles",
+      ];
+      /* Hangul, Kana, and the CJK block — the second language this product
+         used to carry, and any other that might arrive the same way. */
+      const otherScript = /[\uAC00-\uD7A3\u3040-\u30FF\u4E00-\u9FFF]/;
+      const foreign: string[] = [];
+      const rawIcu: string[] = [];
+      const bareKeys: string[] = [];
+      const silent: string[] = [];
+      for (const path of surfaces) {
+        await goSurface(page, base, path);
+        const text = await translatableText(page);
+        /* THE POSITIVE ASSERTION. A surface that rendered nothing passes every
+           other check on this list by saying nothing at all. */
+        if (text.replace(/\s+/g, " ").trim().length < 40) silent.push(path);
+        if (otherScript.test(text)) foreign.push(path);
+        /* `{` immediately followed by a word and a comma is ICU that never got
+           formatted. Plain prose does not contain it. */
+        if (/\{\s*\w+\s*,/.test(text)) rawIcu.push(path);
+        /* A message key that printed itself: lowerCamelCase, no spaces, long
+           enough not to be a variable name a person would write in prose, and
+           standing alone on its line. */
+        for (const line of text.split("\n")) {
+          const bare = line.trim();
+          if (/^[a-z][a-zA-Z]{11,}$/.test(bare)) bareKeys.push(`${path}:${bare}`);
+        }
+      }
+      if (silent.length > 0) {
+        problems.push(`rendered almost nothing: ${silent.join(", ")}`);
+      }
+      if (foreign.length > 0) {
+        problems.push(`a second language is on screen: ${foreign.join(", ")}`);
+      }
+      if (rawIcu.length > 0) problems.push(`unformatted ICU on screen: ${rawIcu.join(", ")}`);
+      if (bareKeys.length > 0) {
+        problems.push(
+          `message key printed instead of its message: ${bareKeys.slice(0, 3).join(", ")}`,
+        );
+      }
+
+      return {
+        ok: problems.length === 0,
+        detail:
+          problems.length === 0
+            ? `English on ${surfaces.length} surfaces, no second language offered or shown, ` +
+              "no raw ICU, no bare keys"
             : problems.join("; "),
       };
     },

@@ -63,21 +63,24 @@ Each finding carries how it was established:
 | 16 | **Blocking (mobile)** | `/signals` renders as a column of single letters on a phone — found and **fixed 2026-08-24** |
 | 17 | **Blocking** | Near-white on near-white at 1.15:1 — every signal sentence, and every surface's page title, by two different roads — found and **fixed 2026-08-24** |
 | 18 | **Major** | The four entry actions on the top-of-mind headline were unreachable on every desktop — finding 14's bug in a second place, missed by its own fix — found and **fixed 2026-08-24** |
+| 19 | **Moderate** | A language you chose is remembered on one machine and nowhere else — a rejected save still stuck locally — found and **fixed 2026-08-24**. `[static]`, not `[driven]`: the sabotage that was supposed to drive it was aimed at a route the client never calls, which is its own finding |
 
-**Where this stands: 16 of 18 addressed, 2 out of scope by decision, 1 part
+**Where this stands: 17 of 19 addressed, 2 out of scope by decision, 1 part
 deferred.** Everything above is fixed except finding 9 and finding 13, which
 are out of scope by decision, and the password-recovery half of finding 5,
 which waits on a mail provider and is the only item here that can lock a real
 person out of their own memory.
 
-**The pattern across all eighteen.** Not one of these threw an exception,
+**The pattern across all nineteen.** Not one of these threw an exception,
 failed an assertion, or turned a suite red. A blank world, a keep that never
 appeared, a hover that could never fire, six screens you could reach and not
 leave, a page of near-white text on near-white paper — every one of them
-shipped past a fully green build. Three of them (16, 17 and 18) were found
+shipped past a fully green build. Four of them (16, 17, 18 and 19) were found
 only because someone was measuring something else at the time — none was
 looked for, which is the strongest thing this table says about how much is
-left unmeasured. The gates added along the way exist to make that class of
+left unmeasured. And in the two cases where a `--negative` run raised the
+alarm rather than an assertion, the red line was itself misleading once and
+had to be traced rather than believed: see finding 19. The gates added along the way exist to make that class of
 failure loud: `e2e:first-paint` and `e2e:journeys` now run in CI, and each
 journey is put through its own sabotage and must fail, because a check that
 cannot fail is indistinguishable from one that is passing.
@@ -694,6 +697,16 @@ never read as a clean one. `FieldAudit` gained a `sky` block for the same
 reason `provenanceCount` is in it: this is a promise whose failure looks
 identical to a quiet screen.
 
+**And the sky half is now measured rather than only declared.** `ways-out`
+runs key-free, so on the fresh account it walks it has no statements to elect
+and prints `sky leaning (1) but EMPTY` — honest, and not a measurement.
+`pnpm e2e:sky` closes that: it grows a real sky and re-takes the table above
+automatically, against a second account with no sky as the dark reference.
+The reading it gates on is the same one that appears there — the top band,
+0.02 empty against 0.87 lit. See *What was not covered* for why this could not
+live inside `journeys`, and the suite's own header for the two controls that
+looked obvious and were wrong.
+
 Confirmed at 1440×900 and 390×844, and on the climb: the words resolve, and
 the clouds return to their own arrangement as you rise.
 
@@ -886,6 +899,98 @@ invisible and dead.
 
 ---
 
+## 19. A language you chose is remembered on one machine and nowhere else
+
+**Moderate.** [static] — found and **fixed 2026-08-24.**
+
+`/profile` has a language picker. Choose Korean, submit, and if the save
+fails the page says so — in Korean. Reload, and it is still Korean, because
+the choice was written to local storage before the server was ever asked.
+Sign in anywhere else and it is English, with nothing on either machine
+saying the choice did not take.
+
+**Tagged [static] deliberately, and the reason is itself a finding.** This
+was read out of the source, not driven, because the run that was supposed to
+drive it did not: see below.
+
+**What was actually wrong.** The picker's `onChange` called
+`writeStoredLocale(next)` the moment it changed, and the submit handler
+called it *again* after `updateProfile` resolved. The second call was
+correct. The first made the choice durable on that browser before anything
+had been asked of the server, so a rejected save left the two stores
+disagreeing permanently — and the one the person can see was the one that
+was wrong.
+
+A half-saved preference is worse than one that plainly failed. A failure is
+legible: it says so, and you try again. This said "could not save" while
+visibly behaving as though it had, so the only way to discover the truth was
+to open the product somewhere else, later, and find it speaking a language
+you thought you had changed.
+
+**The fix** is a deletion. The picker keeps re-rendering the form in the new
+language as you let go of it — that is `locale` derived from component state,
+and it is the reason the picker is on the form rather than behind a
+confirmation — but it no longer writes anything down. Persistence happens once,
+in the submit handler, after the server has agreed. `Login.tsx` still writes
+on change and is correct to: before there is an account, local storage is the
+only store there is.
+
+### How this was found, and the wrong reason it was nearly credited to
+
+> **Superseded 2026-08-24 by founder ruling.** The product is English
+> only; the language picker left `Profile.tsx`, and `locale` became
+> `english` — same two language-independent checks (no unformatted ICU,
+> no bare message key), the Korean half inverted into the ruling's own
+> guard, and a positive floor added so the list of absences cannot be
+> satisfied by a blank page. The finding below stands as the record of
+> what the original found; it is not a description of what runs now.
+
+The `locale` journey was written to close J1's last unproven half. It passed
+on the first run, and `--negative` then reported it as decoration:
+
+    FAIL 1. the product speaks the language you chose, and still does tomorrow
+      — Korean survived a reload and holds across 6 surfaces; no raw ICU, no
+      bare keys  << survived sabotage; this journey is decoration
+
+Reading the code to explain that survival is what turned up the premature
+`writeStoredLocale`, and the obvious story — *the sabotage broke the save,
+local storage kept the choice anyway, that is why it survived* — was written
+down here before it was checked. **It was wrong.** The sabotage broke
+`/api/auth/me/preferences`, a path that exists in an API test file and
+nowhere in the web client; the client PATCHes `/api/auth/me/profile`. Nothing
+was ever sabotaged. The save succeeded and the journey passed honestly.
+
+So two defects came out of one red line, and they are worth separating:
+
+- **A sabotage aimed at a route that does not exist**, which is
+  indistinguishable from no sabotage and fails silently towards green. This
+  is the same class as the two `--negative` findings before it, and the third
+  time in this repo that a check turned out to be measuring nothing.
+- **The premature local write**, which is real on inspection and is fixed —
+  but is tagged `[static]` and not `[driven]`, because the run that would
+  have driven it never broke anything. Asserting `[driven]` here would have
+  been the same error as the audit line this document already corrects: a
+  pass that sampled the wrong thing and was reported as coverage.
+
+The journey now breaks the right route and signs in from a **fresh browser
+context with empty storage**, because "remembered" means a second device and
+not a second page load, and the server is the only channel that reaches one.
+
+That makes four findings in this document discovered while measuring
+something else. The tally of *harness* defects caught the same way is
+deliberately not given: it has run to several across `ways-out`, `the-hand`,
+`a11y-floor`, `rooms` and now `locale`, and a number in prose here would go
+stale exactly the way the two this document has already had to correct did.
+
+What is new in this one is the direction of the lie. Every earlier case was a
+check that passed while measuring nothing, and `--negative` said so
+correctly. Here `--negative` was right that something was wrong and wrong
+about what — the red line was reporting its own broken sabotage, not the
+product. So a sabotage run is evidence that something needs tracing, and not
+yet evidence of what.
+
+---
+
 ## The MCP journey, gate by gate
 
 `pnpm test:live` from `waka-eng/waka-mcp`, pointed at this stack:
@@ -916,28 +1021,19 @@ cross-profile write denial, which is the one that matters most.
 
 ## What was not covered
 
-Named so the gaps are not mistaken for clean results. Three of the five gaps
-this section opened with have since been closed, and are kept here with what
-closed them rather than deleted — a gap that quietly disappears reads as one
-that was never real.
+Named so the gaps are not mistaken for clean results. Closed gaps stay here,
+under *Closed since*, with the thing that closed them — a gap that quietly
+disappears reads as one that was never real, and a reader who cannot see what
+used to be open has no way to judge how fast the list is actually moving. The
+two lists are kept rather than a count, because a count in prose goes stale
+the first time either list changes and this document has already been wrong
+that way twice.
 
 **Still open:**
 
 - **Google OAuth.** Not configured; the button was never pressed. No harness
   can close this one without a real Google project, so it stays open by
   nature rather than by neglect.
-- **The sky's arrival, on a real sky.** `ways-out` checks that the sky leans
-  — `lean` is the camera's own scalar and exists on an empty account, so
-  ripping the peek out fails the journey. What it cannot check on a fresh
-  account is that an elected statement *arrives* near the seam, which is the
-  exact bug that shipped: the peek elected correctly, eased correctly, and
-  parked every cloud in the part of its own sprite that has no light left in
-  it. The journey says `sky leaning (1) but EMPTY` when it walks that half
-  without measuring it. **This is structural, not an oversight.** A sky needs
-  signals, signals only ever come from derivation, and there is no route that
-  writes one — so a key-free suite cannot produce one, and `journeys` has to
-  stay key-free to run on every pull request. Closing it means a browser pass
-  gated on the key, the way `e2e:erasure` is gated.
 - **Password recovery.** Deferred by decision, no mail provider. The one item
   in this document that can lock a real person out of their own memory.
 - **Findings 9 and 13.** Out of scope by founder decision: the world as one
@@ -946,13 +1042,46 @@ that was never real.
 
 **Closed since:**
 
+- **The sky, measured in light.** This was the newest entry in the *still
+  open* list above and it is closed by `e2e:sky`, gated on a key the way
+  `e2e:erasure` is. `ways-out` had said `sky leaning (1) but EMPTY` on every
+  run since it was written, and that was structural: a sky is made of
+  signals, signals only ever come from derivation, no route writes one, and
+  `journeys` has to stay key-free to run on every pull request.
+
+  What makes the new suite worth the model calls is *what* it measures. Every
+  model-level assertion — a statement elected, `peekY` reached, `skyPeek()`
+  at 1 — was **green on the build that shipped broken**, because
+  `SKY_PEEK_DEPTH = 0.62` parked each cloud inside its own sprite's dead zone:
+  elected, arrived, invisible. So the gate is a photometer on the top 12% of
+  the canvas, read against a second account signed up in the same run with
+  nothing captured and therefore no sky. Measured both directions:
+
+  | reading | control band | subject band | verdict |
+  |---|---|---|---|
+  | real sky, 5 statements up | 0.02 | **0.87** | pass |
+  | sky emptied (`--negative`) | 0.01 | **0.05** | fails, as required |
+
+  That 0.05 is the same reading the `0.62` build produced, so the sabotage
+  reproduces the shipped bug's photometry rather than approximating it.
+
+  Two wrong controls are recorded in the suite's header because both were
+  written before being caught: there is no "reach for the top edge" to A/B
+  against (`skyPeek()` is `1 - cam.y / minCam` — the camera, never the
+  pointer, so at headquarters it is already 1), and moving the camera gives no
+  dark frame either. It also must wait for **one emerging signal, not a
+  well-evidenced one** — the sky *is* the emerging signals, promotion is at
+  three evidence, so a well-evidenced signal is precisely the one that has
+  already left the sky.
 - **Rooms with more than one member.** Now driven, not read. `e2e:rooms` runs
   nine checks across four accounts and proves the thing this entry called the
   highest-stakes surface in the product: removal re-keys the door and leaving
   does not, the old key is dead, only the owner can remove or close, and a
   removal reaches no further than the room it named.
-- **`tools/e2e/*.ts`.** All of them run, and there are eleven suites now
-  rather than four, plus two support servers they lean on. `docs/goals/every-workflow-works.md` carries the inventory, and
+- **`tools/e2e/*.ts`.** All of them run, and there are far more than the four
+  this entry was written against — `pnpm run | grep e2e:` is the list, and it
+  is deliberately not reproduced here as a number, because the last two
+  numbers in this document both went stale within the week. `docs/goals/every-workflow-works.md` carries the inventory, and
   every row in it reads either *proven by ‹suite›* or *unproven, because
   ‹reason›*.
 - **Attachments and images.** A local S3 stub (`pnpm e2e:s3-stub`) closed the
