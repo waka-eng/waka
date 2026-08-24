@@ -86,20 +86,6 @@ export function givenName(full: string): string {
   return first || full.trim();
 }
 /**
- * WHO IS HERE, IN WORDS AND NEVER AS A COUNT.
- *
- * "Three others" is a number wearing a sentence, and this page does not
- * render numerals. Names are what a person actually wants anyway. Past three
- * it says the first two and how many more — which is how anybody would say it
- * out loud.
- */
-export function whoWords(rows: ApiGroupMember[]): string {
-  const names = rows.map((r) => givenName(r.name)).filter(Boolean);
-  if (names.length === 0) return "Who is here";
-  if (names.length <= 3) return names.join(", ");
-  return `${names[0]}, ${names[1]} and ${numWords(names.length - 2)} more`;
-}
-/**
  * WHAT KIND OF COMPANY THIS IS.
  *
  * Four rooms with four different populations were four identical walls: the

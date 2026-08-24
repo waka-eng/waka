@@ -30,6 +30,7 @@ import { Check, Paperclip } from "lucide-react";
 
 import { contributorColor, contributorInitials } from "../components/faces";
 import { useAuth } from "../lib/auth-context";
+import { confidenceBandKey } from "../lib/confidence";
 import {
   formatMessage,
   readStoredLocale,
@@ -1427,15 +1428,40 @@ export default function SurfacePage(): JSX.Element {
                     onClick={() => openSignalDetail(signal)}
                     aria-expanded={openSignal?.id === signal.id}
                   >
-                    {signal.evidenceCount} behind it · {signal.confidence}%
+                    {/* `42%` USED TO BE HERE, AND IT HAD NO LEGEND.
+                        A quantity with no unit and no scale in sight — 42% of
+                        what, out of what, good or bad — sitting between two
+                        things that were already states in words. The law is
+                        that states render and numerals never; `confidence` is
+                        the light, and a flat surface with no light channel
+                        says it in a word instead. See lib/confidence.ts for
+                        where the bands are cut and why they are not thirds.
+
+                        The rest of this line was hardcoded English while the
+                        surface around it was localized, so introducing one
+                        translated word would have made it a mix. All of it
+                        speaks the reader's language now. */}
+                    {/* ONE KEY FOR THE WHOLE PHRASE, NOT A NUMBER PLUS A
+                        SUFFIX. `{n} {suffix}` puts a space between them that
+                        English wants and Korean does not — the first pass
+                        rendered `3 개가 뒷받침`, where the counter has to
+                        attach: `근거 3개`. Word order differs too, so only the
+                        message can decide it. `formatMessage` already carries
+                        placeholders and plurals; this line had never used
+                        them. */}
+                    {formatMessage(locale, "signalEvidenceBehind", {
+                      count: signal.evidenceCount,
+                    })}
+                    {" · "}
+                    {t(locale, confidenceBandKey(signal.confidence))}
                     {/* A still-forming pattern reads differently from a
                         settled one; without this an emerging signal looks
                         exactly like an active one it is not yet eligible to
                         become part of the top of mind. */}
-                    {signal.status === "emerging" ? " · still forming" : ""}
-                    {signal.status === "retired" ? " · retired" : ""}
-                    {signal.locked ? " · yours" : ""}
-                    {signal.unsupported ? " · unsupported" : ""}
+                    {signal.status === "emerging" ? ` · ${t(locale, "signalStillForming")}` : ""}
+                    {signal.status === "retired" ? ` · ${t(locale, "signalRetiredState")}` : ""}
+                    {signal.locked ? ` · ${t(locale, "signalYours")}` : ""}
+                    {signal.unsupported ? ` · ${t(locale, "signalUnsupported")}` : ""}
                   </button>
                   {signal.lastEvidenceAt ? (
                     <span className="sf-when">{whenShort(signal.lastEvidenceAt)}</span>
@@ -1948,14 +1974,15 @@ export default function SurfacePage(): JSX.Element {
                   {roomWall.map((row) => (
                     <div key={row.signalId} className="gr-shared">
                       <p className="gr-shared-statement">{row.statement}</p>
-                      {/* Whose statement it is — and nothing number-shaped.
-                          The wall's confidence is a snapshot from when the
-                          owner's evidence last changed (the wall must not
-                          reach their private layers to recompute it), and a
-                          stale number rendered as a current percent was the
-                          one documented lie on this surface. The owner's
-                          name is the wall's honest provenance. */}
-                      <span className="sf-provenance">{row.ownerName}</span>
+                      <span className="sf-provenance">
+                        {/* the same swap on the group wall, where the number
+                            was even less readable: this one is the owner's
+                            last-written snapshot rather than a live read (see
+                            docs/generation.md — the wall cannot reach another
+                            member's evidence), so a precise-looking percentage
+                            was overstating what it knew */}
+                        {row.ownerName} · {t(locale, confidenceBandKey(row.confidenceAsWritten))}
+                      </span>
                       {row.ownerProfileId === profile?.id ? (
                         <button
                           type="button"
@@ -2247,6 +2274,28 @@ export default function SurfacePage(): JSX.Element {
 
       <nav className="sf-foot">
         <div className="sf-verbs">
+          {/* THE WAY BACK, AND IT WAS MISSING.
+              These routes are a parking lot: the world is where the product
+              is, and these hold the few things not yet designed into it. The
+              `≡` menu used to be the door — and, because it opened from the
+              world, it was also the way home. Removing it took both.
+
+              Measured 2026-08-24 on the running build: the world has ZERO
+              links into any of these routes, and this footer had none back.
+              Land here from a bookmark, an old link, or the terminal flow and
+              the only exits were the browser's own back button and the URL
+              bar. Six surfaces you could arrive at and not leave.
+
+              First in the row and set apart, because it is the one word here
+              that LEAVES rather than switching a view — everything after it
+              is a door within this surface. */}
+          <button
+            type="button"
+            className="sf-primary-verb sf-verb-world"
+            onClick={() => navigate("/")}
+          >
+            ← the world
+          </button>
           {takenDown ? (
             <button type="button" className="sf-undo" onClick={putEntryBack}>
               took it down · put it back

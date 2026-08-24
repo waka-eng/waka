@@ -547,6 +547,81 @@ export async function attachLink(
  * that said plainly, rather than at some confusing point downstream.
  */
 /**
+ * MINT AN AGENT-BOUND CREDENTIAL, the way `waka-mcp` does.
+ *
+ * The loopback login end to end: open the consent page, submit its form as the
+ * signed-in human, follow the redirect for the one-time code, exchange it. What
+ * comes back is a token bound to ONE profile, and the last check here is that
+ * the profile it is bound to is the profile that was asked for — a consent
+ * screen that quietly bound a credential to the wrong profile would hand an
+ * agent somebody else's memory, and every response would still look correct.
+ *
+ * IT LIVES HERE RATHER THAN IN ONE SUITE. It was written inside `groups.ts`
+ * and a second suite needed it the moment there was a second question about
+ * what an agent may do. This file is where the e2e family keeps the things
+ * more than one of them speaks — and a rule with two copies is two places for
+ * it to drift, silently, in a direction nobody re-reads.
+ */
+export async function mintAgentToken(browser: Session, profileId: string): Promise<string> {
+  const callback = "http://127.0.0.1:65535/callback";
+  const state = "e2e-state";
+
+  const page = await fetch(
+    `${browser.baseUrl}/api/auth/cli/start?callback=${encodeURIComponent(callback)}` +
+      `&state=${state}&profile=${profileId}&device=e2e`,
+    { headers: { Authorization: `Bearer ${browser.token}` } },
+  );
+  if (!page.ok) throw new Error(`cli/start → ${page.status}`);
+  const html = await page.text();
+
+  const field = (name: string): string => {
+    const match = html.match(new RegExp(`name="${name}" value="([^"]*)"`));
+    if (!match) throw new Error(`consent form is missing ${name}`);
+    return match[1]!.replace(/&amp;/g, "&").replace(/&#39;/g, "'");
+  };
+
+  const form = new URLSearchParams({
+    callback: field("callback"),
+    state: field("state"),
+    device: field("device"),
+    consent: field("consent"),
+    profileId,
+  });
+
+  const consented = await fetch(`${browser.baseUrl}/api/auth/cli/consent`, {
+    method: "POST",
+    redirect: "manual",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: `Bearer ${browser.token}`,
+    },
+    body: form.toString(),
+  });
+  if (consented.status !== 302) throw new Error(`cli/consent → ${consented.status}`);
+
+  const code = new URL(consented.headers.get("location")!).searchParams.get("code");
+  if (!code) throw new Error("consent redirect carried no code");
+
+  const exchanged = await fetch(`${browser.baseUrl}/api/auth/cli/exchange`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
+  if (!exchanged.ok) throw new Error(`cli/exchange → ${exchanged.status}`);
+  const { token } = (await exchanged.json()) as { token: string };
+  const who = await fetch(`${browser.baseUrl}/api/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  }).then((r) => r.json() as Promise<{ profile: { id: string; type: string } }>);
+  if (who.profile.id !== profileId) {
+    throw new Error(
+      `consent bound the credential to ${who.profile.type} ${who.profile.id}, not the requested ${profileId}`,
+    );
+  }
+  return token;
+}
+
+
+/**
  * Record an image that already lives at a URL, the way a pasted image arrives.
  *
  * Distinct from {@link attachImage}, which uploads bytes: this path needs no
@@ -1040,7 +1115,20 @@ const STEPS: Step[] = [
   {
     title: "a saved link is enriched from the page body",
     run: async (state) => {
-      const session = state.primary!;
+      /* ITS OWN ACCOUNT, BECAUSE STEP 4 SPENDS THIS ONE'S BUDGET.
+         `MODEL_BUDGET_JOBS_PER_ACCOUNT` is 60 per rolling hour
+         (`lib/model-budget.ts`). Step 4 buries its marker under 205 filler
+         captures, each of which enqueues a `derive_signals` job, so by the
+         time these steps run the primary account has started exactly 60 and
+         the queue has deferred its ENTIRE remaining backlog — including this
+         enrichment job — to the next window boundary, an hour out.
+         Measured 2026-08-22: with `--filler 205` these two steps failed after
+         90s each; with `--filler 12` they passed in 1.5s each. Nothing about
+         enrichment was ever broken. The harness was competing with itself,
+         and the timeout could not say so.
+         A fresh account carries a fresh budget and needs two jobs of it. */
+      const session = await newAccount(state, "enrichment link");
+
       const inspiration = await capture(session, {
         text: "Saving this to read properly later.",
         kind: "link",
@@ -1089,7 +1177,8 @@ const STEPS: Step[] = [
   {
     title: "a saved image is enriched from what it depicts",
     run: async (state) => {
-      const session = state.primary!;
+      /* Its own account, for the reason spelled out on the link step above. */
+      const session = await newAccount(state, "enrichment image");
       const inspiration = await capture(session, {
         text: "A screenshot I want findable by what it says.",
         kind: "image",

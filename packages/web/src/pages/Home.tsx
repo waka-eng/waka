@@ -108,6 +108,7 @@ import {
 import {
   bakeBeing,
   buildPalette,
+  MACHINE_CELLS,
   type BeingSprites,
   type Palette,
 } from "../canvas/palette";
@@ -174,6 +175,7 @@ import {
   declineGroupProposal,
   createInspiration,
   createGroup,
+  fetchPrinciples,
   createProfile,
   createReflection,
   deleteReflection,
@@ -213,6 +215,7 @@ import {
   type ApiGroupProposal,
   type ApiGroupMember,
   type ApiGroupSummary,
+  type ApiPrinciple,
   type ApiGroupFieldInspiration,
   type ApiGroupWallSignal,
   type ApiTopOfMindVersion,
@@ -417,6 +420,16 @@ const RELIGHT_MS = 900;
 const SPIN_TURNS = 2;
 /** Let go and it eases back to front-facing, the short way round. */
 const UNWIND_MS = 650;
+/**
+ * HOW LONG THE COMPANION TAKES TO BECOME THE ONE WHOSE WALL THIS IS.
+ *
+ * Shorter than UNWIND_MS on purpose: the change starts on the arrival beat
+ * and is finished before the creature has turned back to face you, so what
+ * you witness is a companion that turned away as one and came back as the
+ * other. A dissolve longer than the turn would still be resolving after it
+ * is looking at you, which is the double-exposure this exists to avoid.
+ */
+const FORM_FADE_MS = 320;
 /**
  * The turn is a PLANET, not a card: the silhouette never changes, and it is
  * the features that travel across it. An eye sits on the equator at this
@@ -981,6 +994,26 @@ export interface FieldAudit {
     aliveMax: number;
     arriveMin: number;
   };
+  /**
+   * WHETHER THE SKY IS LEANING DOWN, AND HOW FAR EACH STATEMENT CAME.
+   *
+   * Here for the same reason `provenanceCount` is: this is a promise nothing
+   * else can see fail. The elected statements ease toward the top edge from
+   * off-screen homes, so a peek that is elected but never applied, or applied
+   * to a part of the cloud sprite that has no light left in it, looks
+   * IDENTICAL to a peek that was never built — an empty top edge either way.
+   * That is exactly how the first attempt at it spent a day looking broken
+   * while working: `peekY` was correct and the clouds were reaching it, and
+   * the band it put them in was invisible.
+   *
+   * `lean` is the camera's own scalar, 1 at headquarters and 0 up in the sky.
+   * A statement with `peekY === homeY` was not elected and never moves.
+   */
+  sky: {
+    lean: number;
+    minCam: number;
+    nebs: Array<{ y: number; homeY: number; peekY: number; r: number }>;
+  };
 }
 
 export default function HomePage(): JSX.Element {
@@ -1316,6 +1349,22 @@ function HomeExperience(): JSX.Element {
   /* ---- walls (v10): the columns either side of the owner's own ---- */
   /** The rooms, newest first: the columns to the RIGHT. */
   const [groups, setGroups] = useState<ApiGroupSummary[]>([]);
+  /**
+   * LAYER 4, WHERE YOU STAND — NOT A FOURTH REGION.
+   *
+   * The world draws three sections because the canon's first three are
+   * places: memories below, statements above, and the sentence you are
+   * standing in. Layer 4 is not a fourth place. A principle is what is left
+   * of the top of mind once the weather has passed — the same material,
+   * further along — so it belongs where the top of mind already is: one quiet
+   * line under it, opened the way the sky is opened.
+   *
+   * This is what emptied the last entry out of the `≡` holding pen. Before
+   * it, `/principles` was the only layer with no address in the world at all,
+   * and the menu existed largely to carry it.
+   */
+  const [principles, setPrinciples] = useState<ApiPrinciple[]>([]);
+  const [principlesOpen, setPrinciplesOpen] = useState(false);
   /**
    * The agents: the columns to the LEFT. Mock until the endpoints land.
    * Null until the answer is in — the field is built from the owner's inspirations
@@ -1840,6 +1889,20 @@ function HomeExperience(): JSX.Element {
        they were saved in. That is the canon's privacy line and it is why a
        room's orbit can say WHO fed an entry but never WHICH memory did. */
     (async () => {
+      /* Layer 4 rides along with the rooms load rather than opening its own
+         effect: both are account-level, both are wanted before the first
+         paint settles, and a second effect would be a second thing to keep
+         in step with sign-out. A failure here is silent on purpose — an
+         empty set and the line simply does not appear, which is the same
+         thing a profile with no principles yet shows. */
+      fetchPrinciples()
+        .then((rows) => {
+          if (!dead && !offlineRef.current) setPrinciples(rows);
+        })
+        .catch(() => {
+          /* no principles is a real state, not an error worth a banner */
+        });
+
       const rows = await fetchGroups();
       if (offlineRef.current) return;
       /* The map (v8): rooms line up to the right of your own wall,
@@ -2478,6 +2541,7 @@ function HomeExperience(): JSX.Element {
        the layout without a pointer in the way. Bisecting "the button did not
        work" from "the command did not work" is otherwise guesswork. */
     w.wakaSim = () => simApiRef.current;
+
     return () => {
       delete w.wakaField;
       delete w.wakaSim;
@@ -2585,6 +2649,43 @@ function HomeExperience(): JSX.Element {
     ].sort((a, b) => a.capturedMs - b.capturedMs);
     const byId = new Map(list.map((b) => [b.id, b] as const));
     ballsRef.current = { list, byId };
+
+    /**
+     * THE DIAL'S NOW IS NEVER BEHIND THE NEWEST MEMORY. THIS IS NOT A GUARD;
+     * IT IS THE BUG.
+     *
+     * `assignHomes` places only what already exists at the dial's time —
+     * `b.capturedMs <= TRef.current` — which is right, and is what lets the
+     * dial wind history back. `TRef` starts at `Date.now()` when the page
+     * mounts and is advanced in exactly two places: the dial, and `born`.
+     *
+     * `born` advances it with the CLIENT's optimistic stamp. The row that
+     * comes back carries the SERVER's `createdAt`. Measured on one machine on
+     * 2026-08-23, the server was **+6ms ahead**; across a network it is
+     * routinely far more. And `inspirations` is a dependency of this effect,
+     * so the keep's own `setInspirations` tears this loop down and rebuilds
+     * it — rebuilding that ball from the server's timestamp, now sitting in
+     * the future of a dial that was only ever told about the client's.
+     *
+     * `assignHomes` then filtered it out and it was never drawn. The audit
+     * said so exactly: `owners {"(none)":1}` — the ball is here — with
+     * `present: 0` and `drawn.active: 0`. A reload re-seeded `TRef` from a
+     * later `Date.now()` and the memory appeared, which is why this read as
+     * "it only shows up if you refresh".
+     *
+     * WHO IT ACTUALLY HIT. Everyone, on every keep. It was only VISIBLE to
+     * somebody keeping their first memory, because with fifty already in the
+     * ground `present` is 49-of-50 and the field still lights; with none it is
+     * 0-of-1 and the world answers a person's first capture with nothing at
+     * all. `journeys:first-keep` is written against exactly that moment.
+     *
+     * Clamping here rather than in `born` because here is where the list and
+     * the clock meet: whatever the loop was just handed, the dial's now is at
+     * least as late as the newest thing in it. Winding BACK is untouched —
+     * this only ever moves `TRef` forward, and only to something that exists.
+     */
+    for (const b of list) TRef.current = Math.max(TRef.current, b.capturedMs);
+
     for (const b of list) colorBall(b, TRef.current);
     /* Sprites for any image URLs that resolved before this bag existed
        (inspirations winning the network race must not lose their imagery). */
@@ -2972,6 +3073,8 @@ function HomeExperience(): JSX.Element {
       blink: 0,
       /** The occasional clock: a look-around every 30–60s, on any archive. */
       idleAt: 0,
+      /** The memory it looked at last, so the idle glance never repeats it. */
+      lastGaze: "",
       /** The last thing it said, so it never says the same thing twice running. */
       lastSaid: "",
       /** the pairable set as a string, so React only hears about real changes */
@@ -3211,6 +3314,24 @@ function HomeExperience(): JSX.Element {
     }
 
     /**
+     * THE SAME RULE, ACROSS THE SEAM: how far the SKY has leaned down into
+     * headquarters. One where you stand, nothing once you are up in it.
+     *
+     * `peekLift` is 1 at headquarters and 0 down in the field; this is 1 at
+     * headquarters and 0 up in the sky. Together they are one sentence — the
+     * section you are NOT in leans toward you — so both edges of the screen
+     * say there is somewhere to go. It exists because a person told us they
+     * had no idea the world could be moved through: the ground had always
+     * said so and the sky never had.
+     *
+     * Camera, never a timer. Standing in the field it stays 1 and costs
+     * nothing, because the sky is a whole viewport away and culled.
+     */
+    function skyPeek(): number {
+      return clamp01(1 - cam.y / Math.min(view.layout.minCam, -1));
+    }
+
+    /**
      * WHERE THE WORDS ARE, RIGHT NOW — read off the mouth itself rather than
      * guessed at from the seam constant, so a newborn leaves from the middle
      * of the sentence that made it however many lines it had wrapped to.
@@ -3283,9 +3404,10 @@ function HomeExperience(): JSX.Element {
      * the one mark that separates a kind of mind from an individual, and the
      * owner's smooth hand-made form is never producible by any hash.
      *
-     * It reads off the LIVE camera column, not the arrival state, so the form
-     * turns over mid-crossing: the travel is what explains the change, which
-     * is the only way this world is allowed to change anything.
+     * It USED TO read off the live camera column, so the form turned over
+     * mid-crossing on the theory that the travel is what explains the change.
+     * The block below supersedes that and says why; this paragraph is kept
+     * only so the reasoning it replaced is still legible.
      *
      * `bakeBeing` caches by key, so this is a Map lookup after the first
      * frame on a wall — no gradient is ever made inside the loop.
@@ -3326,9 +3448,24 @@ function HomeExperience(): JSX.Element {
      */
     const wornBeing = (): Being =>
       curWall().kind === "agent" ? agentBeing(curWall().id) : OWNER_BEING;
+    /**
+     * THE FEATURES SWAP ON THE SAME SIGNAL AS THE FORM.
+     *
+     * `machine` is returned rather than re-derived at the draw site, and that
+     * is the whole point: the body sprite is pixelated iff this is an agent's
+     * wall, so anything drawn ON the body has to read the identical boolean or
+     * the two can disagree for a frame. It is deliberately NOT `mech`, which
+     * eases continuously across a travel — a stepped body wearing eyes that
+     * are 40% quantized is not a thing that can be drawn.
+     */
     const worn = (
       pal: Palette,
-    ): { be: Being; body: HTMLCanvasElement[]; aura: HTMLCanvasElement[] } => {
+    ): {
+      be: Being;
+      body: HTMLCanvasElement[];
+      aura: HTMLCanvasElement[];
+      machine: boolean;
+    } => {
       const w = curWall();
       /* REVERTED: a machine's ROOM does not re-body the companion.
          Two attempts at giving a room a pixelated body both shipped a broken
@@ -3339,13 +3476,53 @@ function HomeExperience(): JSX.Element {
          by borrowing the agent path. Until then the companion is unchanged in
          a room, and the room still says what it is through its typography and
          its quantized motion, which both work. */
-      if (w.kind !== "agent") return { be: OWNER_BEING, body: pal.body, aura: pal.auraLayers };
+      if (w.kind !== "agent")
+        return { be: OWNER_BEING, body: pal.body, aura: pal.auraLayers, machine: false };
       const be = agentBeing(w.id);
       const s = bakeBeing(pal, `${w.kind}:${w.id}`, be, true, true);
       /* the AURA is never pixelated: its colour temperature is one of the two
          invariants that say this is still the same companion, and a stepped
          halo would break the one thing carrying continuity across the change */
-      return { be, body: s.body, aura: pal.auraLayers };
+      return { be, body: s.body, aura: pal.auraLayers, machine: true };
+    };
+    /**
+     * THE CHANGE OF FORM IS A DISSOLVE, NOT A CUT.
+     *
+     * `worn()` above reads the wall the traveller has ARRIVED at, which was
+     * the right call and did not go far enough. `trip.col = trip.dest` lands
+     * on the same frame `arriveColumn()` starts the unwind — so the body was
+     * swapping while the creature was still turned a quarter turn and still
+     * riding up to 190px of travel lead, and only THEN spending UNWIND_MS
+     * turning back to face you. One frame changed the silhouette from stepped
+     * to smooth AND the body from cold to warm, in the middle of a gesture
+     * that was still in flight. Everything else about a travel eases; this
+     * one thing cut, and a cut inside a continuous motion is read as a fault
+     * in the world rather than as an event in it.
+     *
+     * The doc above already names the fix without implementing it: Pokémon
+     * carries an evolution through a light envelope that never cuts. Here the
+     * envelope is the turn itself. The dissolve starts on the arrival beat and
+     * finishes inside the unwind, so the companion turns away as yours and
+     * comes back as theirs, and there is no frame at which two different
+     * creatures are both in focus.
+     *
+     * The aura is deliberately NOT part of this: it is identical either way
+     * (see `bakeBeing`), which is what makes it the thing that visibly carries
+     * across while the body is mid-change.
+     */
+    /* last frame's form, so the dissolve has something to come FROM */
+    let wornPrevBody: HTMLCanvasElement[] | null = null;
+    let wornPrevBe: Being = OWNER_BEING;
+    let wornPrevMachine = false;
+    const form = {
+      /** the wall whose form is being worn; "" until the first frame */
+      key: "",
+      /** the outgoing sprite sheet, held only while a dissolve is running */
+      prevBody: null as HTMLCanvasElement[] | null,
+      prevBe: OWNER_BEING as Being,
+      prevMachine: false,
+      /** when the dissolve began, in performance.now() ms */
+      at: 0,
     };
     const colLo = () => wallsRef.current[0]?.col ?? 0;
     const colHi = () => wallsRef.current[wallsRef.current.length - 1]?.col ?? 0;
@@ -4039,6 +4216,22 @@ function HomeExperience(): JSX.Element {
          across the peek line. Below CHAR_MIN the body stops reading as a body,
          so that is where it stops. */
       if (companion.size > avail) companion.size = Math.max(Math.min(avail, companion.size), CHAR_MIN);
+      /*
+       * NO GRID SNAP HERE, AND THE REASON IS WORTH KEEPING.
+       *
+       * A previous pass floored this to a whole number of MACHINE_CELLS, to
+       * buy an integer cell for an agent's stepped body. It bought nothing and
+       * cost something. Nothing, because the body is drawn at `bw = size *
+       * (1 + sq)` with the bob's squash breathing ±2.2% every frame, so the
+       * visible cell was fractional and moving whatever `size` was. Something,
+       * because `Math.max(2, …)` put a 40px floor UNDER the `avail` clamp
+       * directly above — the clamp that keeps the body off the peek line on a
+       * short viewport, and the exact regression the comment above it says had
+       * already been fixed twice.
+       *
+       * The features quantise against the body's own live cell instead (see
+       * the eye and nub passes), which is what actually makes them agree.
+       */
       const lo = hqH + companion.size * 0.5 + gap;
       const hi = seam - companion.size * 0.5 - gap;
       /*
@@ -4233,7 +4426,7 @@ function HomeExperience(): JSX.Element {
      */
     function step(dt: number, now: number) {
       const t = now / 1000;
-      stepSky(sky, view, stir, skyDeps, dt, now, t);
+      stepSky(sky, view, stir, skyDeps, dt, now, t, skyPeek());
 
       /* the arrival the founder likes, kept: oldest first, 60ms apart, each
          orb entering from above its home */
@@ -4646,6 +4839,45 @@ function HomeExperience(): JSX.Element {
          silhouette its features clip to, and the halo, all from one place so
          they can never disagree about which being is on screen. */
       const wear = worn(pal);
+      /* THE DISSOLVE, ARMED AND MEASURED. The key change is detected here
+         rather than at the arrival commit, so it cannot be missed by a code
+         path that lands on a wall without going through `arriveColumn` — a
+         resume, a deep link, a reduced-motion travel. The very first frame
+         arms nothing: there is no previous form to come from. */
+      {
+        const key = spaceKey(curWall());
+        if (form.key !== key) {
+          /* ONLY A REAL CHANGE OF FORM IS WORTH DISSOLVING. `worn()` hands
+             back `pal.body` itself for every wall that is not an agent's, so
+             self→group and group→group travels would otherwise dissolve a
+             sprite into the identical sprite — work, and a state flip, for a
+             frame that cannot look different. Reference equality is the exact
+             test: the bake is cached per being, so the same form is the same
+             array. */
+          if (form.key !== "" && !view.reduced && wornPrevBody !== wear.body) {
+            form.prevBody = wornPrevBody;
+            form.prevBe = wornPrevBe;
+            form.prevMachine = wornPrevMachine;
+            form.at = now;
+          } else {
+            form.prevBody = null;
+          }
+          form.key = key;
+        }
+        wornPrevBody = wear.body;
+        wornPrevBe = wear.be;
+        wornPrevMachine = wear.machine;
+      }
+      /* 0 → 1 across FORM_FADE_MS; 1 whenever nothing is dissolving */
+      const formMix = form.prevBody ? clamp01((now - form.at) / FORM_FADE_MS) : 1;
+      if (formMix >= 1) form.prevBody = null;
+      /* WHICH FORM THE FEATURES BELONG TO. The eyes and the nubs are drawn
+         live and clipped to a silhouette, so they cannot dissolve — they
+         follow whichever body is the louder one this frame, and swap at the
+         midpoint where both are at half and the swap is least visible. */
+      const showPrev = formMix < 0.5 && form.prevBody !== null;
+      const formBe = showPrev ? form.prevBe : wear.be;
+      const formMachine = showPrev ? form.prevMachine : wear.machine;
       if (companion.y - cam.y > -companion.size * 2 && companion.y - cam.y < view.h + companion.size * 2) {
         /* the bob rides its own integrated phase: while the companion leads
            it quickens toward a walk, and at rest it is the hover it was */
@@ -4762,24 +4994,49 @@ function HomeExperience(): JSX.Element {
          * is the light channel expressed as body language" was supposed to
          * mean — an inflection, not an existence test.
          */
-        const nubOn = true;
+        /* `nubOn` used to gate all of this and was last left as a literal
+           `true`, so the guard inside drawNub and both null branches below
+           were unreachable. The paragraph above is the decision that made it
+           dead — the nubs are anatomy, so there is no state in which they are
+           not painted — and the constant was the only thing still implying
+           otherwise. */
         const nubR = companion.size * lerp(0.062, 0.1, bodyLit);
-        /* the colour work is skipped outright when there is no nub to paint —
-           it used to allocate five arrays and two strings every frame,
-           including on every frame where `nubOn` was false */
-        const nubRgb = nubOn ? mix([166, 163, 156], [214, 209, 197], bodyLit) : null;
-        const nubFront = nubRgb ? rgbCss(nubRgb, 1) : "";
+        const nubRgb = mix([166, 163, 156], [214, 209, 197], bodyLit);
+        const nubFront = rgbCss(nubRgb, 1);
         /* the far side of a form is darker than the near side */
-        const nubBack = nubRgb ? rgbCss(mix(nubRgb, [0, 0, 0], 0.15), 1) : "";
+        const nubBack = rgbCss(mix(nubRgb, [0, 0, 0], 0.15), 1);
         const drawNub = (lon: number, behind: boolean) => {
-          if (!nubOn) return;
           const a = companion.yaw + lon;
           if (Math.cos(a) < 0 !== behind) return;
           const s = Math.sin(a);
           /* pointing at or away from you, a nub reads smaller */
           ctx!.fillStyle = behind ? nubBack : nubFront;
+          const nx = s * bw * 0.42;
+          const ny = bh * 0.24;
+          const nr = nubR * Math.max(Math.abs(s), 0.35);
+          if (formMachine) {
+            /* A NUB IS MADE OF THE SAME CELLS THE BODY IS. It used to be a
+               smooth arc laid over a stepped form, which is the machine idea
+               contradicted at the two places furthest from the centre.
+               THE CELL IS NOT SQUARE: the sprite is baked on a MACHINE_CELLS
+               grid and then drawn at bw × bh, and the bob squashes those in
+               opposite directions, so a cell on screen is bw/N wide and bh/N
+               tall. Snapping y to the x-cell put the nubs off the body's own
+               grid by up to half a cell at the extremes of the breath. */
+            const cx = bw / MACHINE_CELLS;
+            const cy = bh / MACHINE_CELLS;
+            const wCells = Math.max(1, Math.round((nr * 2) / cx));
+            const hCells = Math.max(1, Math.round((nr * 2) / cy));
+            ctx!.fillRect(
+              Math.round((nx - (wCells * cx) / 2) / cx) * cx,
+              Math.round((ny - (hCells * cy) / 2) / cy) * cy,
+              wCells * cx,
+              hCells * cy,
+            );
+            return;
+          }
           ctx!.beginPath();
-          ctx!.arc(s * bw * 0.42, bh * 0.24, nubR * Math.max(Math.abs(s), 0.35), 0, TAU);
+          ctx!.arc(nx, ny, nr, 0, TAU);
           ctx!.fill();
         };
         ctx!.globalAlpha = 1;
@@ -4787,13 +5044,38 @@ function HomeExperience(): JSX.Element {
         drawNub(Math.PI / 2, true);
 
         const bodyTier = Math.round(bodyLit * (BODY_TIERS - 1));
-        ctx!.drawImage(wear.body[bodyTier], -bw / 2, -bh / 2, bw, bh);
+        if (form.prevBody) {
+          /*
+           * THE OUTGOING FORM IS THE GROUND, NOT HALF OF A PAIR.
+           *
+           * Drawing prev at `1 - m` and cur at `m` is the obvious crossfade
+           * and it is wrong here: two draws at those alphas composite to a
+           * coverage of `1 - m + m²`, which bottoms out at 0.75 halfway
+           * through. That is a body going 25% transparent for 160ms — the
+           * ground shows through the torso, and the far nubs laid down above
+           * (opaque, on the understanding that the body would hide them) bleed
+           * straight through it.
+           *
+           * Prev opaque with cur faded in over it is a coverage of exactly 1
+           * at every value of m, so the body is never see-through and the
+           * occlusion contract above still holds. The residue is that a region
+           * belonging to prev's silhouette and not cur's stays solid until m
+           * reaches 1 — a few pixels at the edge of a bounded envelope, at the
+           * end of a dissolve that is happening mid-turn.
+           */
+          ctx!.drawImage(form.prevBody[bodyTier], -bw / 2, -bh / 2, bw, bh);
+          ctx!.globalAlpha = formMix;
+          ctx!.drawImage(wear.body[bodyTier], -bw / 2, -bh / 2, bw, bh);
+          ctx!.globalAlpha = 1;
+        } else {
+          ctx!.drawImage(wear.body[bodyTier], -bw / 2, -bh / 2, bw, bh);
+        }
 
         /* everything ON the form is clipped to the form — to THIS form, so a
            machine's features stop at a machine's stepped edge rather than at
            the owner's curve */
         ctx!.save();
-        bodyPath(ctx!, bw, bh, wear.be);
+        bodyPath(ctx!, bw, bh, formBe);
         ctx!.clip();
 
         /* looking at the back of its head: a gentle overall shading, so the
@@ -4841,9 +5123,47 @@ function HomeExperience(): JSX.Element {
           /* at the edge a blink is a flicker, so it is suppressed there */
           const eh = ca < 0.3 ? 1 : Math.max(0.12, 1 - companion.blink);
           ctx!.globalAlpha = clamp01(ca / Math.sin(0.25));
+          const ex = Math.sin(a) * bw * FACE_R * cosLat + companion.eyeX * ca;
+          if (formMachine) {
+            /*
+             * A MACHINE'S EYE IS MADE OF CELLS, AND SO IS ITS BLINK.
+             *
+             * This was the one place the whole machine grammar was not said:
+             * a body quantized to MACHINE_CELLS wore two flawless antialiased
+             * ellipses, and `mech` already stepped where they SAT without ever
+             * stepping what they WERE — a face that moved like a machine and
+             * was drawn like an animal. It is also the first thing anyone
+             * looks at, so it is the worst place to leave the contradiction.
+             *
+             * The blink cannot be the smooth squash the owner's is. At this
+             * resolution an eye is about a cell and a half across, so a
+             * continuous squash to 0.12 is a single cell winking out of
+             * existence — a glitch, not a blink. So the eye is TWO cells at
+             * rest and ONE while it is shut: the blink becomes a change of
+             * resolution, which is the same sentence the stepped tick and the
+             * quantized gaze already say, in the last place that had not
+             * heard it. Two cells is also slightly larger than the owner's
+             * eye, and that is the cost of the grid rather than a choice —
+             * one cell cannot both foreshorten and close.
+             */
+            /* the body's own cell, which the bob makes non-square — see the
+               nub pass for why snapping y to the x-cell is wrong */
+            const cx = bw / MACHINE_CELLS;
+            const cy = bh / MACHINE_CELLS;
+            const wC = Math.max(1, Math.round(2 * Math.max(ca * cosLat, 0.5)));
+            const shut = ca >= 0.3 && companion.blink > 0.5;
+            const hC = shut ? 1 : Math.max(1, Math.round(2 * Math.max(cosLat, 0.5)));
+            ctx!.fillRect(
+              Math.round((ex - (wC * cx) / 2) / cx) * cx,
+              Math.round((eyY - (hC * cy) / 2) / cy) * cy,
+              wC * cx,
+              hC * cy,
+            );
+            continue;
+          }
           ctx!.beginPath();
           ctx!.ellipse(
-            Math.sin(a) * bw * FACE_R * cosLat + companion.eyeX * ca,
+            ex,
             eyY,
             er * Math.max(ca * cosLat, 0.2),
             er * eh * Math.max(cosLat, 0.35),
@@ -4900,15 +5220,37 @@ function HomeExperience(): JSX.Element {
          frame: the canvas carries the light, the words stay crisp. */
       const els = measured.nebEls.current;
       if (els.size > 0) {
+        /**
+         * A LEANING STATEMENT COMES DOWN AS LIGHT, NOT AS WORDS.
+         *
+         * The clouds elected to wait at the top edge are half off the screen
+         * by construction — that is the whole point of them. Their sentences
+         * are DOM, centred on the cloud, so at full lean the reader got the
+         * bottom half of a line of body text sliced by the viewport and
+         * sitting under the chrome. That is overflow, not an invitation.
+         *
+         * So the words fade out as the cloud leans down and resolve as you
+         * climb to meet it. Light is the only thing that crosses the seam,
+         * which is the law this world already runs on; the reading is what
+         * going up there is FOR.
+         */
+        const lean = skyPeek();
         for (const n of sky.nebs) {
           const el = els.get(n.id);
           if (!el) continue;
+          /* zero for every statement that was not elected — its `peekY` IS
+             its `homeY`, so it never left home and has nothing to fade */
+          const leaning = n.peekY === n.homeY ? 0 : lean;
           /* the subject grows on the same curve and by the same amount its
              body and its orbit do — the candidate is one thing */
           const grow = 1 + FOCUS_POP * n.focus;
           el.style.transform = `translate3d(${(n.x - cam.x).toFixed(1)}px, ${(n.y - cam.y).toFixed(1)}px, 0) translate(-50%, -50%) scale(${grow.toFixed(3)})`;
           const op =
-            (1 - n.gone) * (n.condense > 0.5 ? 1 : 0) * n.dimS * lerp(1, FOCUS_DIM, n.dimN);
+            (1 - n.gone) *
+            (n.condense > 0.5 ? 1 : 0) *
+            n.dimS *
+            lerp(1, FOCUS_DIM, n.dimN) *
+            (1 - leaning);
           el.style.opacity = `${op}`;
           /* AND AN INVISIBLE SENTENCE IS STILL A TARGET. `.jar-neb` carries
              `pointer-events: auto` and starts at opacity zero until the loop
@@ -5043,17 +5385,6 @@ function HomeExperience(): JSX.Element {
           /* an uncommitted swipe eases home — the world and the companion
              spring back TOGETHER; nothing rests between columns */
           cam.x = view.reduced ? cam.xTarget : lerp(cam.x, cam.xTarget, kd(EASE_BAND, dt));
-        /* AND THE CROSSING ITSELF RESOLVES IN STEPS. Read after the camera
-           moves, so every other quantised thing this frame agrees about how
-           far into the machine's mind we are. */
-        mech = view.reduced ? mechAt(cam.x) : lerp(mech, mechAt(cam.x), kd(2e-3, dt));
-        /* ATTENTION EASES IN AND LETS GO. The target is the lean while the
-           attention is live and zero once it lapses; both directions run
-           through the same spring, so noticing and losing interest are the
-           same motion played in opposite directions. rps=0.02 is τ≈256ms:
-           quick enough to read as reacting, slow enough to be a turn. */
-        const attendWant = performance.now() < companion.attendUntil ? companion.attendLean : 0;
-        companion.attendHold = view.reduced ? attendWant : lerp(companion.attendHold, attendWant, kd(2e-2, dt));
           if (Math.abs(cam.x - cam.xTarget) < 0.6) {
             cam.x = cam.xTarget;
             cam.xBack = false;
@@ -5061,6 +5392,28 @@ function HomeExperience(): JSX.Element {
           clock.lastActive = now;
         }
       }
+      /* AND THE CROSSING ITSELF RESOLVES IN STEPS. Read after the camera
+         moves, so every other quantised thing this frame agrees about how
+         far into the machine's mind we are.
+
+         OUTSIDE THE TWO BRANCHES ABOVE, BECAUSE THE CAMERA MOVES IN BOTH.
+         These two lines sat one brace deeper, inside `if (cam.xBack)` — a
+         branch that means only "an uncommitted swipe is springing back". A
+         committed travel therefore never reached them, so `mech` stayed at
+         its initial 0 for the life of the session and every quantised thing
+         downstream read "not a machine": an agent's wall wore the same
+         smooth body as your own, and the stepped tick, the eye resolution
+         and the form dissolve were all unreachable. The camera is settled
+         for this frame either way by the time we get here, which is what
+         the paragraph above was always asking for. */
+      mech = view.reduced ? mechAt(cam.x) : lerp(mech, mechAt(cam.x), kd(2e-3, dt));
+      /* ATTENTION EASES IN AND LETS GO. The target is the lean while the
+         attention is live and zero once it lapses; both directions run
+         through the same spring, so noticing and losing interest are the
+         same motion played in opposite directions. rps=0.02 is τ≈256ms:
+         quick enough to read as reacting, slow enough to be a turn. */
+      const attendWant = performance.now() < companion.attendUntil ? companion.attendLean : 0;
+      companion.attendHold = view.reduced ? attendWant : lerp(companion.attendHold, attendWant, kd(2e-2, dt));
       /* THE VERTICAL TRAVELER. Read the camera's own speed rather than any
          input: a drag, a flick, the wheel, an arrow key and the forming
          line's glide into the sky all move the layout, and the companion
@@ -5248,9 +5601,25 @@ function HomeExperience(): JSX.Element {
         if (companion.idleAt === 0) companion.idleAt = now + 22000 + Math.random() * 14000;
         if (now >= companion.idleAt) {
           companion.idleAt = now + 30000 + Math.random() * 30000;
-          companion.glanceUntil = now + 900;
-          /* it looks somewhere of its own choosing, not at you */
-          companion.eyeTX = (Math.random() - 0.5) * 1.6;
+          const subject = idleSubject();
+          if (subject) {
+            /* it looks at a MEMORY of yours, chosen for being alive and near.
+               `attendTo` is the same turn-and-lean the world already uses when
+               you send it somewhere — reused rather than reinvented, so a
+               glance it chose and a glance you caused move identically. The
+               lean matters as much as the eyes here: Elizabeth's other lesson
+               is that a behaviour nobody notices did not happen, and two
+               pixels of eye drift on an 84-pixel body is not noticeable. */
+            attendTo(subject.x, subject.y);
+            companion.lastGaze = subject.id;
+          } else {
+            /* nothing awake to look at: it looks away, as it always did.
+               No `glanceUntil` here — the forming branch below zeroes it in
+               this same frame whenever the sky is empty, which is the normal
+               case, so setting it was a statement that read as live and did
+               nothing. The horizontal drift is the whole of this gesture. */
+            companion.eyeTX = (Math.random() - 0.5) * 1.6;
+          }
         }
         const forming = sky.nebs.length > 0;
         if (forming) {
@@ -5764,6 +6133,76 @@ function HomeExperience(): JSX.Element {
      * instead of taking the shortest path. So the look overshoots slightly and
      * settles, and the body follows the eyes rather than arriving with them.
      */
+    /**
+     * WHAT IT LOOKS AT WHEN NOTHING IS HAPPENING.
+     *
+     * The occasional clock used to fire `eyeTX = (Math.random() - 0.5) * 1.6`
+     * — the comment beside it called it "a gaze with no subject", which is
+     * exactly what it was. A creature looking at a randomly chosen angle is
+     * not looking at anything, and after the second or third time you can see
+     * that it isn't.
+     *
+     * Irrational's postmortem on Elizabeth reports that scattering INTEREST
+     * POINTS through the world — markers whose only job is to give a companion
+     * something to do in the downtime — did more for how alive she read than
+     * any of the larger systems around it. This world does not have to author
+     * any: the field is already a ground full of objects each broadcasting a
+     * scalar, which is precisely the input The Sims' advertisement model takes.
+     * A memory advertises its aliveness; the companion weights that by how far
+     * away it is and looks at whatever wins. Will Wright called it a proximity
+     * pheromone, and it needs no new data, no new state on an orb, and no
+     * authored list.
+     *
+     * The jitter is a real `Math.random`, unlike everything positional in this
+     * file: `b.frac` is a STABLE per-ball draw, so scoring with it would pick
+     * the same memory every time forever, which is staring rather than
+     * looking. Where the ground rests must be deterministic; where a creature
+     * happens to glance must not be.
+     */
+    function idleSubject(): Ball | null {
+      const bag = ballsRef.current;
+      if (!bag) return null;
+      const cx = cam.x + view.w / 2;
+      const cy = companion.y;
+      /* how far the light of a memory carries; also what keeps a neighbouring
+         column's field from pulling its gaze through a wall */
+      const reach = Math.max(view.w * 0.35, 1);
+      /*
+       * TWO PLACES, NOT ONE. "Don't look at the same memory twice running" was
+       * written as an unconditional `continue`, which on a ground with a
+       * single eligible orb means it is looked at once and then skipped for
+       * the rest of the session — the companion goes back to a gaze with no
+       * subject forever, which is the bug this function exists to remove.
+       * Keeping the runner-up makes the rule what it was meant to be: prefer
+       * something else IF there is something else.
+       */
+      let best: Ball | null = null;
+      let bestScore = 0;
+      let next: Ball | null = null;
+      let nextScore = 0;
+      for (const b of bag.list) {
+        if (!b.active || b.leaving || b.gone > 0 || b.spawnAt >= 0) continue;
+        if (Math.abs(b.x - cx) > view.w * 0.6) continue;
+        const d = Math.hypot(b.x - cx, b.y - cy);
+        const score = b.alive * Math.exp(-d / reach) * (0.7 + Math.random() * 0.6);
+        if (score > bestScore) {
+          next = best;
+          nextScore = bestScore;
+          best = b;
+          bestScore = score;
+        } else if (score > nextScore) {
+          next = b;
+          nextScore = score;
+        }
+      }
+      if (best && best.id === companion.lastGaze && next && nextScore > 0.02) {
+        return next;
+      }
+      /* a ground with nothing awake on it advertises nothing, and the honest
+         answer to that is to keep looking away rather than to invent a subject */
+      return bestScore > 0.02 ? best : null;
+    }
+
     function attendTo(wx: number, wy: number) {
       const dx = wx - (cam.x + view.w / 2);
       const dy = wy - companion.y;
@@ -6794,6 +7233,18 @@ function HomeExperience(): JSX.Element {
               arriveMin: Number(arriveMin.toFixed(2)),
             };
           })(),
+          /* the same question asked upward: is the sky leaning into
+             headquarters, and did each elected statement actually get there */
+          sky: {
+            lean: Number(skyPeek().toFixed(3)),
+            minCam: Math.round(view.layout.minCam),
+            nebs: sky.nebs.map((n) => ({
+              y: Math.round(n.y),
+              homeY: Math.round(n.homeY),
+              peekY: Math.round(n.peekY),
+              r: Math.round(n.r),
+            })),
+          },
         };
       },
     };
@@ -9025,6 +9476,57 @@ function HomeExperience(): JSX.Element {
                         {c.forming}
                       </button>
                     ) : null}
+                    {/* HOW YOU CHOOSE — layer 4, in the place layer 3 already
+                        occupies.
+
+                        It is the second quiet line, deliberately built from
+                        the same two pieces as the first: a `jar-forming-line`
+                        that opens something, and the `jar-prov` band the
+                        poster already opens into. A person who has learned
+                        that the forming line takes them up to the sky has
+                        already learned this one.
+
+                        Only on your own wall, and only when there are
+                        principles. A room does not choose and an agent's
+                        principles are its own; and a wall with none says
+                        nothing rather than showing an empty band — the same
+                        rule the poster follows about never inventing a
+                        placeholder.
+
+                        NO COUNT. "States render, numerals never" — the line
+                        says that there is a way you choose, not how many
+                        ways. */}
+                    {here && w.kind === "self" && principles.length > 0 ? (
+                      <button
+                        type="button"
+                        className="jar-forming-line jar-forming-line--choose jar-label"
+                        data-jar-chrome="1"
+                        aria-expanded={principlesOpen}
+                        onClick={() => setPrinciplesOpen((v) => !v)}
+                      >
+                        how you choose
+                      </button>
+                    ) : null}
+                    {here && w.kind === "self" && principlesOpen ? (
+                      <div className="jar-prov jar-prov--poster" data-jar-chrome="1">
+                        {/* Ranked, and the rank is the order — never a number
+                            beside a statement. */}
+                        {[...principles]
+                          .sort((a, b) => a.rank - b.rank)
+                          .map((pr) => (
+                            <p key={pr.id} className="jar-was">
+                              {pr.statement}
+                              {pr.state === "aspirational" ? (
+                                /* The one distinction worth carrying up here:
+                                   declared-but-not-yet-demonstrated is a
+                                   different claim from earned, and the canon
+                                   already has the word for it. */
+                                <span className="jar-poster-away"> aspirational</span>
+                              ) : null}
+                            </p>
+                          ))}
+                      </div>
+                    ) : null}
                     {/* THE BOARD'S OWN VERBS — and this is what makes the
                         layout an instrument rather than a display.
 
@@ -9318,11 +9820,15 @@ function HomeExperience(): JSX.Element {
               (`Ball.lens`) was never written from it, so it filtered nothing.
               The field field and the derive side survive for the rebuild. */}
 
-          {/* The edge affordances: a neighbour's name waiting at the side it
-              lives past. They live in headquarters' own chrome, so they scroll
-              away with it — which is also how the field section ends up with
-              none, exactly as it should, since there is nothing different to
-              travel to down there. */}
+          {/* THE WAYS OUT: a neighbour's name waiting at the side it lives
+              past. They live in headquarters' own chrome, so they scroll away
+              with it — which is also how the field section ends up with none,
+              exactly as it should, since there is nothing different to travel
+              to down there.
+
+              `.jar-way`, not `.jar-edge`. These and the create rails above
+              shared that one class through two whole conflicting stylesheets
+              and neither of them got the layout it was written for. */}
           {walls.map((w, i) => {
             const left = walls[i - 1] ?? null;
             const right = walls[i + 1] ?? null;
@@ -9331,7 +9837,7 @@ function HomeExperience(): JSX.Element {
                 {left ? (
                   <button
                     type="button"
-                    className="jar-edge jar-label"
+                    className="jar-way jar-label"
                     data-jar-chrome="1"
                     style={{ left: `calc(var(--jar-vw, 100vw) * ${w.col} + 16px)` }}
                     onPointerDown={() => loadWall(left)}
@@ -9343,7 +9849,7 @@ function HomeExperience(): JSX.Element {
                 {right ? (
                   <button
                     type="button"
-                    className="jar-edge jar-edge--r jar-label"
+                    className="jar-way jar-way--r jar-label"
                     data-jar-chrome="1"
                     style={{ left: `calc(var(--jar-vw, 100vw) * ${w.col + 1} - 16px)` }}
                     onPointerDown={() => loadWall(right)}

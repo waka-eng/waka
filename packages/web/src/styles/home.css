@@ -252,6 +252,20 @@
   color: var(--jar-ink);
 }
 
+/* THE SECOND QUIET LINE NEEDS ITS OWN ROW.
+   `.jar-forming-line` is `inline-block` because for most of its life there
+   was only ever one of them. A second sibling therefore set flush against
+   the first and rendered as `TWO PATTERNS ARE FORMINGHOW YOU CHOOSE` — two
+   separate ways in, read as one broken word.
+   It takes a row of its own rather than a separator: these are two different
+   layers (the sky above, and how you choose where you stand), and a middot
+   between them would imply they are the same kind of thing. The smaller top
+   margin keeps them a pair. */
+.jar-forming-line--choose {
+  display: block;
+  margin-top: 8px;
+}
+
 /* ---------- the companion's whisper line ---------- */
 .jar-char-say {
   position: absolute;
@@ -459,23 +473,42 @@
    the ambition is the thing being read, these are what you may do about it.
    Revealed on hover/focus like the sky's one action, and always visible where
    there is no hover to reveal them. */
+/* THE SAME DEAD SELECTOR AS THE WAYS OUT, AND IT WAS FOUND A DAY LATER.
+   `.jar-hq` carries `pointer-events: none` so the world underneath stays
+   draggable, and an element that takes no pointer CANNOT MATCH `:hover` — so
+   `.jar-hq:hover .jar-board-acts` never fired, on any pointer device, ever.
+   These four are what a person can DO about the one sentence the machine has
+   concluded about them: read it again, keep this one up, say it in my words,
+   not this. All four sat at `opacity: 0` with `pointer-events: none`, in the
+   DOM and unreachable, on every desktop. Only the `hover: none` rule below
+   made them work at all, which is why they worked on a phone.
+
+   Finding 14 fixed exactly this bug for `.jar-edge` and did not sweep the
+   file for the other rule that shared the selector. One grep would have found
+   it. That is why the gate for this one asserts the CONTROLS ARE CLICKABLE
+   rather than that a particular class is styled: the next thing to inherit
+   this mistake will not be named `.jar-edge` either.
+
+   They rest quiet and brighten under the pointer, like every other word in
+   this layout. */
 .jar-board-acts {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 18px;
   margin-top: 26px;
-  opacity: 0;
-  pointer-events: none;
+  opacity: 0.72;
+  /* EXPLICIT, because `pointer-events` INHERITS and `.jar-hq` is `none`.
+     Dropping the old `pointer-events: none` here was not enough: with nothing
+     declared, these inherit the parent's `none` and stay unclickable while
+     looking perfectly fine. That is the same failure wearing a new hat, so it
+     is stated rather than implied. */
+  pointer-events: auto;
   transition: opacity 0.25s ease;
 }
-.jar-hq:hover .jar-board-acts,
+.jar-board-acts:hover,
 .jar-hq:focus-within .jar-board-acts {
   opacity: 1;
-  pointer-events: auto;
-}
-@media (hover: none) {
-  .jar-board-acts { opacity: 1; pointer-events: auto; }
 }
 .jar-board-act {
   appearance: none;
@@ -573,7 +606,14 @@
    than as a sentence about your ambition. */
 .jar-edge {
   position: absolute;
-  top: 46vh;
+  /* BELOW THE WAY OUT, NOT THROUGH IT. Each margin carries two things —
+     the wall that is already over there (`.jar-way`, at eye level) and the
+     offer to grow the axis in that direction (this). Both sat within a
+     pixel of `46vh` and printed straight through each other, which nobody
+     could see while the whole set was stuck at zero opacity and which was
+     the first thing on screen once it was not. Travel keeps eye level:
+     going somewhere that exists is the commoner act. */
+  top: 60vh;
   appearance: none;
   -webkit-appearance: none;
   border: 0;
@@ -584,18 +624,39 @@
   font-size: 9px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
+  /* a rail is ONE column of letters. It used to borrow this from the
+     `.jar-edge` block further down that has since become `.jar-way`, and
+     without it "Make a room" wraps into three vertical columns. */
+  white-space: nowrap;
   color: var(--jar-faint);
   cursor: pointer;
   pointer-events: auto;
   writing-mode: vertical-rl;
-  opacity: 0;
   transition: opacity 0.3s ease, color 0.2s ease;
 }
 .jar-edge--r { right: 10px; }
 .jar-edge--l { left: 10px; transform: rotate(180deg); }
-.jar-hq:hover .jar-edge, .jar-edge:focus-visible { opacity: 1; }
-@media (hover: none) { .jar-edge { opacity: 0.7; } }
-.jar-edge:hover { color: var(--jar-ink); }
+/* THE SIGNPOST RESTS VISIBLE. IT USED TO REST AT ZERO.
+   `.jar-hq` carries `pointer-events: none` — the world beneath it has to
+   stay reachable — and an element that takes no pointer CANNOT MATCH
+   `:hover`. So `.jar-hq:hover .jar-edge` never fired once, on any pointer
+   device, and the only thing keeping these on screen was a `hover: none`
+   rule: the ways out of a wall were visible on a phone and invisible on
+   every desktop there has ever been.
+
+   A person told us they had no idea they could go left or right. They were
+   right, and this selector was the whole reason — the affordance that
+   teaches you the world is wider was itself gated behind already knowing.
+
+   It rests at the weight touch always had, which is the axis map's own law
+   further down this file — everything you could reach is visible without
+   moving — and brightens under the pointer like any other word here. */
+.jar-edge,
+.jar-way { opacity: 0.7; }
+.jar-edge:hover,
+.jar-edge:focus-visible,
+.jar-way:hover,
+.jar-way:focus-visible { opacity: 1; color: var(--jar-ink); }
 
 /* ================= the axis map =================
    The bottom edge maps the horizontal axis and nothing else. One mark per
@@ -840,11 +901,21 @@
   margin: 0;
   text-align: center;
 }
-/* The edge affordances: a neighbour's name waiting at the side it lives
-   past. Underline is the page's single interactivity signal; the label
-   register supplies the rest. They live in HQ's chrome, so they scroll away
-   with it — travel still works from the jar by swipe and by arrow key. */
-.jar-edge {
+/* THE WAY OUT: a neighbour's name waiting at the side it lives past.
+   Underline is the page's single interactivity signal; the label register
+   supplies the rest. They live in HQ's chrome, so they scroll away with it —
+   travel still works from the jar by swipe and by arrow key.
+
+   IT IS NOT A `.jar-edge`, AND FOR MOST OF ITS LIFE IT SAID IT WAS. This
+   block and the `.jar-edge` block 280 lines above it were two complete,
+   conflicting designs under one class name: that one is a VERTICAL RAIL hard
+   against a margin, this one is a HORIZONTAL NAME placed from its wall's own
+   column. Whichever came second in the file won, silently, property by
+   property — so a way out inherited `writing-mode: vertical-rl` and turned
+   into a 10px stripe, and the right-hand one inherited `right: 10px` on top
+   of its own inline `left`, was anchored twice, and stretched flat. Both
+   read as layout bugs and neither was: they were one name doing two jobs. */
+.jar-way {
   position: absolute;
   appearance: none;
   -webkit-appearance: none;
@@ -860,12 +931,10 @@
   pointer-events: auto;
   cursor: pointer;
   color: var(--jar-faint);
-  transition: color 0.2s ease;
+  transition: opacity 0.3s ease, color 0.2s ease;
 }
-.jar-edge:hover {
-  color: var(--jar-ink);
-}
-.jar-edge--r {
+/* placed by its wall's column, so the inline `left` is its RIGHT edge */
+.jar-way--r {
   transform: translateX(-100%);
 }
 
@@ -1153,70 +1222,7 @@
 
    `margin-left: auto` rather than absolute positioning: `.jar-topbar` is
    already a flex row, so this rides its layout instead of fighting it. */
-/* ---------- scaffolding: the screens the world has no home for ----------
-   Temporary. See the comment on `.jar-flatmenu` in Home.tsx. Absolutely
-   positioned rather than a third flex child, because `.jar-topbar` is
-   space-between and a third child would push the two ends off their corners —
-   and those corners are load-bearing: the way out and the account must never
-   crowd each other. */
-.jar-flatmenu {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  /* BELOW the bar's own row, not on it. `.jar-topbar` is space-between, so
-     what sits at its centre depends on how many children it has — the offline
-     notice is a fourth one and pushes `.jar-account` from the right edge into
-     the middle, exactly where this is. Dropping a row means this can never
-     collide with whatever the bar's flow puts there, on any viewport. */
-  top: calc(56px + env(safe-area-inset-top));
-  z-index: 5;
-  pointer-events: auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
-.jar-flatmenu-toggle {
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  background: transparent;
-  color: var(--jar-ink-soft, var(--jar-ink));
-  opacity: 0.55;
-  cursor: pointer;
-  padding: 4px 10px;
-  font-size: 15px;
-  line-height: 1;
-  transition: opacity 0.2s ease;
-}
-.jar-flatmenu-toggle:hover,
-.jar-flatmenu-toggle[aria-expanded="true"] {
-  opacity: 1;
-}
-.jar-flatmenu-sheet {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 6px 4px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--jar-paper, #0b0a16) 88%, transparent);
-  backdrop-filter: blur(8px);
-}
-.jar-flatmenu-item {
-  display: block;
-  padding: 5px 14px;
-  white-space: nowrap;
-  text-align: center;
-  color: var(--jar-ink-soft, var(--jar-ink));
-  opacity: 0.7;
-  text-decoration: none;
-  transition: opacity 0.15s ease;
-}
-.jar-flatmenu-item:hover,
-.jar-flatmenu-item:focus-visible {
-  opacity: 1;
-  text-decoration: underline;
-}
+
 .jar-account {
   pointer-events: auto;
   margin-left: auto;
@@ -1771,6 +1777,7 @@
   .jar-dial-handle,
   .jar-forming-line,
   .jar-edge,
+  .jar-way,
   .jar-mouth-rest,
   .jar-mouth-slot {
     transition: none;

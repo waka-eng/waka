@@ -250,7 +250,7 @@ describe("auth boundary", () => {
     const container = await renderAuthRoutes({ initialPath: "/login" });
 
     expect(container.textContent).toContain("Welcome");
-    expect(container.textContent).toContain("Sign in to return to your inspirations.");
+    expect(container.textContent).toContain("Sign in to return to what you kept.");
     expect(container.querySelector("#login-tab-login")?.textContent).toBe("Sign in");
     expect(container.textContent).not.toContain("PROTECTED HOME DATA");
   });
@@ -342,7 +342,7 @@ describe("auth boundary", () => {
 
     const container = await renderAuthRoutes({ initialPath: "/" });
 
-    expect(container.textContent).toContain("Sign in to return to your inspirations.");
+    expect(container.textContent).toContain("Sign in to return to what you kept.");
     expect(container.textContent).not.toContain("PROTECTED HOME DATA");
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
@@ -353,7 +353,7 @@ describe("auth boundary", () => {
 
     const container = await renderAuthRoutes({ initialPath: "/" });
 
-    expect(container.textContent).toContain("Sign in to return to your inspirations.");
+    expect(container.textContent).toContain("Sign in to return to what you kept.");
     expect(container.textContent).not.toContain("PROTECTED HOME DATA");
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
   });

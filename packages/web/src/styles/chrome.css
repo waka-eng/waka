@@ -331,6 +331,7 @@ a:hover {
   border: 1px solid rgba(0, 0, 0, 0.12);
 }
 
+
 /* ---------- no boxes ----------
    With the ground fixed, what was left were the outlines: every field, the
    tab pair and the submit all sat in their own bordered rectangle, inherited
@@ -640,9 +641,10 @@ a:hover {
   opacity: 0.45;
   cursor: default;
 }
-/* the save verb sits after the form, not across it */
-.login-form .btn-primary,
-.profile-card .btn-primary {
+/* the save verb sits after the form, not across it — but the doorway's own
+   submit is a full-width control, so it is not one of these */
+.login-form .btn-primary:not(.btn-doorway),
+.profile-card .btn-primary:not(.btn-doorway) {
   align-self: flex-start;
   margin-top: 8px;
 }
@@ -1023,6 +1025,73 @@ body .profile-card .btn-primary {
   font-size: 14px;
   letter-spacing: 0;
   text-transform: lowercase;
+}
+/* ---------- THE DOORWAY'S OWN VERB ----------
+
+   Measured on `/login`, ranked by area: a 548x48 white Google pill, then the
+   two tab labels, then the field labels — and last, at **40x16**, the submit
+   for the form the person had just filled in. The completion of the only
+   action on the screen was styled as a footnote and placed like one, bottom
+   left, under everything that navigates away from it.
+
+   IT DOES NOT SHOUT TO FIX THAT. The register law stands: this page has one
+   uppercase voice and it belongs to eyebrows, never to something you press.
+   So the weight comes from the two channels a lowercase word can still use —
+   GROUND and FOOTPRINT. It is the same size and shape as the pill that used
+   to out-rank it, filled in the page's own ink, and it sits at the end of the
+   form it completes with the alternative below it rather than above.
+
+   ONLY `/login`'s SUBMITS. `.login-card` is also worn by `/profile`,
+   onboarding and the surface error screen, and a settings save has no
+   business being the loudest thing on a settings page. So it is asked for by
+   name in `Login.tsx` rather than reached by an ancestor selector that would
+   sweep all four.
+
+   AND IT LIVES DOWN HERE RATHER THAN BESIDE `.btn-google`, WHICH IS WHERE IT
+   WAS FIRST WRITTEN. `button[type="submit"]` up in the actions block sets
+   `background: none`, `border: 0`, `padding: 0` and an underline, at the same
+   0,1,0 specificity this class has — and another `.btn-primary` in a sheet
+   that loads later wins the tie regardless of order here. The result was a
+   correctly sized, correctly positioned, completely invisible button: 548x48
+   at the right place with no ground and no border. This is the file's own
+   body-scoped override section, which exists for exactly that, so the whole
+   appearance is declared once, here, where it actually takes. */
+body .login-card .btn-doorway {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 48px;
+  margin-top: 26px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 999px;
+  /* the page's ink as GROUND, and the page's ground as ink — the rule above
+     puts light ink on every primary verb, which on a filled pill would be
+     light on light */
+  background: var(--w-ink);
+  color: var(--w-ground);
+  font-size: 15px;
+  /* the underline is the world's signal that a WORD can be pressed; a pill
+     already says so by being one, and both at once reads as a mistake */
+  text-decoration: none;
+  transition: opacity 0.18s ease;
+}
+body .login-card .btn-doorway:hover:not(:disabled) {
+  opacity: 0.88;
+}
+body .login-card .btn-doorway:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+/* AND THE DIVIDER NEEDS ROOM NOW THAT SOMETHING SOLID IS ABOVE IT.
+   It used to sit between a white pill and a row of text tabs, where the tabs'
+   own padding did the spacing. With a filled control on both sides its rules
+   ran straight into the pill's edge and read as an underline on it. Symmetric,
+   because it separates two peers. Scoped to the doorway: `/profile` has an
+   `.auth-divider` in a different composition and this is not about that. */
+body .login-card .login-divider {
+  margin: 22px 0;
 }
 
 /* ================= READABILITY AND ONE PLACE FOR ACTIONS =================

@@ -19,6 +19,8 @@ import {
   S3Client,
   type ObjectIdentifier,
 } from "@aws-sdk/client-s3";
+
+import { makeAttachmentsS3Client } from "../lib/s3-client.js";
 import { and, asc, eq, isNotNull } from "drizzle-orm";
 import { Hono } from "hono";
 
@@ -63,13 +65,7 @@ import {
 let cachedDeleteS3: S3Client | null = null;
 function getDeleteS3(): S3Client {
   if (cachedDeleteS3) return cachedDeleteS3;
-  cachedDeleteS3 = new S3Client({
-    region:
-      process.env.ATTACHMENTS_REGION ||
-      process.env.AWS_REGION ||
-      process.env.AWS_DEFAULT_REGION ||
-      "us-west-2",
-  });
+  cachedDeleteS3 = makeAttachmentsS3Client();
   return cachedDeleteS3;
 }
 

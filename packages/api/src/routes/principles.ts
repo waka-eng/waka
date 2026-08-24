@@ -16,6 +16,11 @@
  * kept as an inspiration — where they already belong, as evidence. The
  * response states what was created; no test verdict travels with it.
  *
+ * When the tests cannot RUN, that is not a routing outcome and is not
+ * reported as one: POST answers 503 `retryable` and writes nothing, so an
+ * outage can never be mistaken — by a person or by a later screen — for a
+ * judgment that their words were not a principle.
+ *
  * The matrix: curation is owner-side (the human session, who is admin of
  * every profile in the account; an agent session only on its own profile).
  * An agent session READS its human's principles — the conditioning use case —
@@ -38,6 +43,7 @@ import {
   signals,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
+import type { DeclarationRoute } from "../lib/model-provider.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
 import {
   revertPrincipleStatement,
@@ -268,14 +274,41 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
 
     const session = c.get("session");
     const provider = await getProvider();
-    // Internal routing — the tests run, the outcome is a destination, and no
-    // verdict travels back with the response.
-    const route = await provider
-      .routeDeclaration({
+    /* Internal routing — the tests run, the outcome is a destination, and no
+       verdict travels back with the response.
+
+       WHAT THIS USED TO DO, AND WHY IT WAS WRONG. It ended
+       `.catch(() => ({ route: "inspiration" }))`. Every failure of the
+       provider — a missing key, a rate limit, a timeout, a malformed
+       response — became the same row and the same 201 as a considered
+       rejection. A person told WAKA how they choose, WAKA said nothing, and
+       their words were filed as a note. Nothing distinguished that from a
+       judgment, so no screen built later could distinguish it either.
+
+       The product rule is that no REFUSAL is ever shown. It is not that
+       nothing is ever said. "We could not consider this yet" is the other
+       sentence, and it is the honest one when the judge never sat. The
+       statement is not written anywhere on this path: a declaration the
+       person can send again is better than a note they did not ask for. */
+    let route: DeclarationRoute;
+    try {
+      route = await provider.routeDeclaration({
         preferredLocale: normalizeSupportedLocale(session.profile.preferredLocale),
         statement: parsed.data.statement,
-      })
-      .catch(() => ({ route: "inspiration" as const, type: "maxim" as const }));
+      });
+    } catch (err) {
+      console.warn("[principles] declaration could not be routed", err);
+      return c.json(
+        {
+          error: "Not considered yet",
+          /* The client's cue to offer the words back rather than report a
+             verdict. Named as a state, not as a reason — the reason is an
+             infrastructure detail and is nobody's business on this side. */
+          retryable: true,
+        },
+        503,
+      );
+    }
 
     if (route.route === "inspiration") {
       const [row] = await db

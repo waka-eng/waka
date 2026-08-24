@@ -65,3 +65,49 @@ export function verifyQuote(
   }
   return null;
 }
+
+/**
+ * The whole rule for what may be stored on an evidence row, in one place a
+ * test can run.
+ *
+ * `verifyQuote` above answers "is this real, and whose words is it". This
+ * answers the question the derivation pass actually asks: "what, if
+ * anything, do I write to `signal_evidence.quote`" — and it exists as its
+ * own function because the answer has two ordering rules that are invisible
+ * when they are four inline lines, and both of them are wrong in the
+ * direction of attributing invented text to a person.
+ *
+ * ONLY THE PERSON'S OWN WORDS. An enrichment quote is real but it is the
+ * article speaking. There is no column recording which, and the world's
+ * renderer prints an unfound quote by itself inside the memory's card, so an
+ * enrichment quote would arrive indistinguishable from a sentence the member
+ * wrote. No quote is the honest answer until there is somewhere to put the
+ * provenance.
+ *
+ * CLIP AFTER VERIFYING — AND THE REASON IS NOT THE OBVIOUS ONE.
+ *
+ * The obvious reason would be that clipping first shortens an honest quote
+ * into something the source no longer contains. That is not true and it was
+ * worth finding out: a prefix of a span that appears verbatim also appears
+ * verbatim, so at any budget above `verifyQuote`'s twelve-character floor the
+ * two orders return the same answer. Mutating this function to clip first
+ * leaves every test below green, which is the honest state of affairs and is
+ * recorded here so the next reader does not add a comment claiming otherwise.
+ *
+ * The order is kept this way because it is the one that reads correctly —
+ * decide whether the words are the person's, then fit them — and because it
+ * keeps the budget a question of storage rather than of trust. What IS worth
+ * asserting is the property both orders happen to give: whatever is stored is
+ * a verbatim span of the person's own text. That is what the tests pin.
+ */
+export function quoteForEvidence(
+  quote: string | null | undefined,
+  memory: { text: string; enrichment: string | null },
+  maxLength: number,
+): string | null {
+  const verified = verifyQuote(quote, memory);
+  if (!verified || verified.source !== "own") return null;
+  return verified.quote.length > maxLength
+    ? verified.quote.slice(0, maxLength)
+    : verified.quote;
+}

@@ -15,6 +15,7 @@ import {
   deleteAccount,
   health,
   listSignals,
+  mintAgentToken,
   signUp,
   waitFor,
   type Session,
@@ -91,68 +92,6 @@ async function waitForSignal(session: Session, label: string): Promise<Signal> {
     },
     { timeoutMs: DERIVATION_TIMEOUT_MS, label },
   );
-}
-
-/**
- * Drive the loopback login the way waka-mcp does, binding the credential to a
- * chosen profile: open the consent page, submit its form, exchange the code.
- */
-async function mintAgentSession(browser: Session, profileId: string): Promise<string> {
-  const callback = "http://127.0.0.1:65535/callback";
-  const state = "e2e-state";
-
-  const page = await fetch(
-    `${browser.baseUrl}/api/auth/cli/start?callback=${encodeURIComponent(callback)}` +
-      `&state=${state}&profile=${profileId}&device=e2e`,
-    { headers: { Authorization: `Bearer ${browser.token}` } },
-  );
-  if (!page.ok) throw new Error(`cli/start → ${page.status}`);
-  const html = await page.text();
-
-  const field = (name: string): string => {
-    const match = html.match(new RegExp(`name="${name}" value="([^"]*)"`));
-    if (!match) throw new Error(`consent form is missing ${name}`);
-    return match[1]!.replace(/&amp;/g, "&").replace(/&#39;/g, "'");
-  };
-
-  const form = new URLSearchParams({
-    callback: field("callback"),
-    state: field("state"),
-    device: field("device"),
-    consent: field("consent"),
-    profileId,
-  });
-
-  const consented = await fetch(`${browser.baseUrl}/api/auth/cli/consent`, {
-    method: "POST",
-    redirect: "manual",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Authorization: `Bearer ${browser.token}`,
-    },
-    body: form.toString(),
-  });
-  if (consented.status !== 302) throw new Error(`cli/consent → ${consented.status}`);
-
-  const code = new URL(consented.headers.get("location")!).searchParams.get("code");
-  if (!code) throw new Error("consent redirect carried no code");
-
-  const exchanged = await fetch(`${browser.baseUrl}/api/auth/cli/exchange`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code }),
-  });
-  if (!exchanged.ok) throw new Error(`cli/exchange → ${exchanged.status}`);
-  const { token } = (await exchanged.json()) as { token: string };
-  const who = await fetch(`${browser.baseUrl}/api/auth/me`, {
-    headers: { Authorization: `Bearer ${token}` },
-  }).then((r) => r.json() as Promise<{ profile: { id: string; type: string } }>);
-  if (who.profile.id !== profileId) {
-    throw new Error(
-      `consent bound the credential to ${who.profile.type} ${who.profile.id}, not the requested ${profileId}`,
-    );
-  }
-  return token;
 }
 
 async function main(): Promise<void> {
@@ -353,7 +292,7 @@ async function main(): Promise<void> {
       // the same loopback flow the CLI uses. Asserting the gate against a
       // human session with a profile parameter would prove nothing: the
       // routes read the session's own profile, which is the point.
-      const agentToken = await mintAgentSession(owner!, created.body.profile.id);
+      const agentToken = await mintAgentToken(owner!, created.body.profile.id);
       const asAgent = await fetch(`${baseUrl}/api/groups/${groupId}/wall`, {
         headers: { Authorization: `Bearer ${agentToken}` },
       });

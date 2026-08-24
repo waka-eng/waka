@@ -456,6 +456,7 @@ export function makeNeb(c: Candidate, i: number, deps: SkyDeps): Neb {
     frac,
     homeX: 0,
     homeY: 0,
+    peekY: 0,
     x: 0,
     y: 0,
     ampX: 14 + frac * 10,
@@ -682,10 +683,92 @@ export function layoutSky(sky: SkyState, view: ViewState, deps: SkyDeps) {
       n.haloY = n.y;
     }
   }
+  /* THE SKY LEANS DOWN INTO HEADQUARTERS, THE WAY THE GROUND LEANS UP.
+     Elected here, once the homes are final, because it is a fact about the
+     arrangement and not about the frame. `stepSky` reads it against the
+     camera; every other statement has `peekY === homeY` and the lerp there
+     does nothing to it. See the field's own peek row for the original of
+     this idea — this is that, mirrored across the seam. */
+  electSkyPeek(sky, view);
+
   /* the orbits land with their clouds, in the same beat: a candidate and
      its satellites are one appearance, never a cloud that fills in later */
   const nowMs = performance.now();
   placeSats(sky, view, nowMs / 1000, nowMs);
+}
+
+/**
+ * HOW FAR ABOVE THE SEAM AN ELECTED STATEMENT WAITS, IN ITS OWN RADII.
+ *
+ * THIS NUMBER IS THE WHOLE FIX AND IT IS NOT A TASTE CALL. `rasterNebula`
+ * bakes a cloud whose alpha falls off as `peak * (1 - u)^2.4` and then masks
+ * it to nothing at the rim, so past about half a radius from the centre there
+ * is no light left to see. The first attempt at this hung the clouds at
+ * `0.62r`, which put the ENTIRE on-screen band inside that dead zone: the top
+ * edge measured 0.05 before the change and 0.07 after it, and the mechanism
+ * looked broken when it was in fact working perfectly on an invisible part of
+ * a sprite.
+ *
+ * At this depth the readable part of the cloud — its core and inner falloff —
+ * clears the seam, and the top edge carries real light. Above the eyebrow, so
+ * headquarters' own sentence is never competed with; the cloud's outer haze
+ * reaching behind a line of small caps is additive and costs it nothing.
+ *
+ * WHY NOT THE FIELD'S EXACT NUMBER. The ground's peek row is whole orbs of
+ * about 22px resting 96px clear of the dial — a fixed pixel promise, because
+ * an orb is small enough for one. A cloud is 135px in radius; a whole one
+ * standing in headquarters would be standing in the headline. So the promise
+ * is kept in the cloud's own units instead: the same FRACTION of the body
+ * shows, at every viewport, which is what the fixed 96 buys the field.
+ */
+const SKY_PEEK_DEPTH = 0.28;
+
+/**
+ * And the second one hangs this much higher, so the pair reads as a sky
+ * leaning down rather than as a row of two.
+ */
+const SKY_PEEK_STAGGER = 0.2;
+
+/**
+ * WHICH STATEMENTS SHOW AT THE TOP EDGE, AND WHY ANY DO.
+ *
+ * A person standing at headquarters had no way to learn the sky was there.
+ * The ground told them about itself — orbs cut by the bottom edge — and the
+ * top of the screen was empty black, so "no idea they can go up" is exactly
+ * what the world taught. This is the same sentence the field says, said
+ * upward: the lowest statement on each wall waits just above the top edge,
+ * cut by it, and rises back into its own arrangement as you climb.
+ *
+ * THE LOWEST TWO, NOT ALL OF THEM. The point is that something is up there,
+ * not to bring the sky down; hanging every statement over the seam would
+ * make headquarters a list and lose the one sentence it is for.
+ *
+ * NOT A NEW CHANNEL. No arrow, no hint, no words — the statement is simply
+ * where it can be seen, which is the layout's only way of saying anything.
+ */
+function electSkyPeek(sky: SkyState, view: ViewState): void {
+  for (const n of sky.nebs) n.peekY = n.homeY;
+
+  const byCol = new Map<number, Neb[]>();
+  for (const n of sky.nebs) {
+    const col = byCol.get(n.col);
+    if (col) col.push(n);
+    else byCol.set(n.col, [n]);
+  }
+
+  for (const nebs of byCol.values()) {
+    /* nearest headquarters first — the sky's y grows toward the seam */
+    const nearest = [...nebs].sort((a, b) => b.homeY - a.homeY).slice(0, 2);
+    nearest.forEach((n, i) => {
+      /* `Math.max` because this may only ever pull a statement DOWN toward
+         the seam. A cloud whose own home already sits lower than the peek
+         line — a kept position, a crowded ring relaxed downward — would
+         otherwise be dragged UP and away as you approached, which is the
+         opposite of the sentence this is trying to say. */
+      n.peekY = Math.max(n.homeY, -n.r * (SKY_PEEK_DEPTH + i * SKY_PEEK_STAGGER));
+    });
+  }
+  void view;
 }
 
 /**
@@ -822,6 +905,16 @@ export function stepSky(
   dt: number,
   now: number,
   t: number,
+  /**
+   * HOW FAR THE SKY HAS LEANED DOWN INTO HEADQUARTERS. One where you stand,
+   * zero once you are up in it — the camera's own position and never a
+   * timer, so the statements come to meet you as you leave and go back as
+   * you climb. The world moves only because you moved it.
+   *
+   * Optional, and zero by default, so a caller that has no camera to hand
+   * gets the sky exactly as it was before this existed.
+   */
+  peek = 0,
 ) {
   /**
    * WHAT THIS ONE WOULD JOIN IF YOU LET GO NOW.
@@ -976,7 +1069,9 @@ export function stepSky(
     const dy = view.reduced ? 0 : n.ampY * stir.amp * Math.sin(t * n.rateY + n.phY);
     const k = view.reduced ? 1 : kd(0.02, dt);
     n.x = lerp(n.x, n.homeX + dx, k);
-    n.y = lerp(n.y, n.homeY + dy, k);
+    /* the elected statements ease toward the seam instead of their own
+       home; for every other one `peekY === homeY` and this is `homeY` */
+    n.y = lerp(n.y, lerp(n.homeY, n.peekY, peek) + dy, k);
     /* At rest the halo simply is where the cloud is — and it catches up
        fast after a release, rather than sliding in from where the drag
        started. The softness that was wanted lives in the drift above.

@@ -240,8 +240,26 @@ describe("declaring", () => {
     expect(mockState.db.inserted[0]).toMatchObject({ kind: "note", source: "app" });
   });
 
-  /** An unreachable router keeps the words as a capture — never enshrined. */
-  it("falls back to inspiration when routing itself fails", async () => {
+  /**
+   * AN ABSENT JUDGE IS NOT A VERDICT, AND THIS CASE USED TO SAY IT WAS.
+   *
+   * It was called "falls back to inspiration when routing itself fails" and it
+   * asserted 201 + `created: "inspiration"` — the same response a considered
+   * rejection produces. So a missing key, a rate limit and a timeout were all
+   * recorded as "we looked at your words and they were not a principle". They
+   * went in with the inspirations, silently, and nothing in the row or the
+   * response distinguished them from a judgment, which meant no screen built
+   * afterwards could distinguish them either.
+   *
+   * The product rule it was defending is real but narrower than it was read:
+   * no REFUSAL is ever shown. Saying nothing at all is a different promise,
+   * and it is not one the product makes. "We could not consider this yet" is
+   * the honest sentence when the tests never ran.
+   *
+   * The words are deliberately NOT written on this path. A declaration the
+   * person can send again beats a note they did not ask for.
+   */
+  it("says it could not consider the words, rather than filing them as a note", async () => {
     mockState.provider.routeDeclaration = vi.fn(async () => {
       throw new Error("model down");
     });
@@ -250,8 +268,16 @@ describe("declaring", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ statement: "Anything at all." }),
     });
-    expect(res.status).toBe(201);
-    expect(((await res.json()) as { created: string }).created).toBe("inspiration");
+
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.retryable).toBe(true);
+    /* Nothing was written. This is the assertion that separates the fix from
+       a cosmetic status-code change. */
+    expect(mockState.db.inserted).toHaveLength(0);
+    /* And still no refusal vocabulary — the rule the old case was protecting
+       holds, it just no longer requires silence about an outage. */
+    expect(JSON.stringify(body)).not.toMatch(/refus|verdict|reject|not a principle/i);
   });
 });
 

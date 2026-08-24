@@ -1068,6 +1068,21 @@ describe("condensing", () => {
       clouds().some((n) => (n.querySelector(".jar-neb-text")?.textContent ?? "").startsWith(PROPOSAL)),
       "the adopted proposal is no longer a candidate overhead",
     ).toBe(false);
+
+    /* AND THE ANSWER IS READ FROM THE SKY, BECAUSE THAT IS WHERE IT MATTERS.
+       Adoption's handover glides the camera back down to headquarters — the
+       poster has the words now, and there is nothing left overhead to look
+       at. From down there the sky's statements lean toward the top edge and
+       their words go to nothing, deliberately: light crosses the seam, prose
+       does not, and a sentence sliced by the viewport under the chrome is
+       overflow rather than an invitation.
+
+       So this used to read `opacity` at headquarters and got what the CAMERA
+       was saying rather than what the DIM was. The state it guards — a sky
+       stuck sunk behind a candidate that no longer exists, with no way out of
+       it — is a state you would only ever meet by going back up. So it goes
+       back up. */
+    await climbToSky();
     for (const opening of [NAMING, PROOF])
       expect(
         opacityOf(cloud(opening)),

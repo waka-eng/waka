@@ -186,6 +186,24 @@ export interface Neb {
   frac: number;
   homeX: number;
   homeY: number;
+  /**
+   * WHERE THIS STATEMENT WAITS WHEN YOU ARE NOT IN THE SKY.
+   *
+   * The field has had this since it was built: some memories are elected to
+   * rise toward headquarters so the ground is CUT BY THE BOTTOM EDGE, and
+   * "there is more down there" needs no words. The sky never had it, so from
+   * headquarters the top edge was empty black and nothing said the sky
+   * existed at all.
+   *
+   * Measured 2026-08-23 standing at headquarters: the bottom edge read
+   * avg 7.20, the top edge avg 0.05 — the field announced itself 144x more
+   * loudly than the sky, and the sky's own lowest statement rested about
+   * 340px above the viewport.
+   *
+   * Equal to `homeY` for every statement that is not elected, so the lerp
+   * that reads it is a no-op for them.
+   */
+  peekY: number;
   x: number;
   y: number;
   ampX: number;

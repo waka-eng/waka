@@ -9,8 +9,16 @@
  *
  * The promotion step needs the stack booted with:
  *   WAKA_PRINCIPLE_MIN_SPAN_OVERRIDE=0
+ *   WAKA_PRINCIPLE_MIN_SIGNALS_OVERRIDE=1
  *   WAKA_PRINCIPLE_MIN_TOM_OVERRIDE=1
  *   WAKA_ENABLE_PRINCIPLES_TEST_TRIGGER=1
+ *
+ * All THREE bars have overrides — `principle-generation.ts` reads SPAN,
+ * SIGNALS and TOM through the same `bar()` helper — and this list named only
+ * two, so `distinctSignals >= 3` stayed at its production value while the
+ * others were relaxed. That was not what made the step fail, but a documented
+ * override set that omits one of the three bars is a trap for whoever reads it
+ * next.
  * Absent those (a deployed stage), the promotion step reports itself
  * skipped rather than pretending: deployed stages have no trigger — the
  * nightly cron is the sole enqueuer, which is the point.
@@ -190,37 +198,195 @@ async function main(): Promise<void> {
     for (const text of FRUGALITY_CAPTURES) {
       await capture(session!, { text, kind: "note" });
     }
-    // Wait for derivation + synthesis to settle (push-driven, seconds). The
-    // bar demands three distinct signals, so three must go active.
+    /*
+      WAIT FOR THE BAR THE SERVER ACTUALLY USES, NOT A COPY OF THE PRODUCTION
+      CONSTANT.
+
+      This waited for three active signals because `PRINCIPLE_MIN_SIGNALS` is
+      3 — and then the stack it is talking to has that bar OVERRIDDEN, which
+      is the only reason this step can run at all. So the harness was holding
+      out for a condition stricter than the one being tested, and whether it
+      got there depended on the model grouping a fixed set of captures into
+      exactly three distinct signals rather than two. Measured: one run
+      reached three, one stalled at two for the full four minutes.
+
+      Reading the same override the server reads removes that entirely. Absent
+      an override this is 3, exactly as before.
+    */
+    const signalsBar = Number.parseInt(
+      process.env.WAKA_PRINCIPLE_MIN_SIGNALS_OVERRIDE ?? "3",
+      10,
+    );
+    const needSignals = Number.isFinite(signalsBar) && signalsBar > 0 ? signalsBar : 3;
     await waitFor(
       async ({ note }) => {
         const signals = await api(session!, "/api/signals?status=active");
         const count = (signals.body as { signals: unknown[] }).signals.length;
-        note(`active signals: ${count}`);
-        return count >= 3 ? true : null;
+        note(`active signals: ${count}/${needSignals}`);
+        return count >= needSignals ? true : null;
       },
-      { timeoutMs: 240_000, label: "three active signals from the recurring themes" },
+      { timeoutMs: 240_000, label: `${needSignals} active signal(s) from the recurring themes` },
     );
 
-    const trigger = await api(session!, "/api/principles/refresh-test-trigger", {
-      method: "POST",
-    });
-    if (trigger.status !== 202) throw new Error(`test trigger → ${trigger.status}`);
+    /*
+      AND THE THIRD BAR IS NOT A SIGNAL COUNT, WHICH IS WHY THIS USED TO RACE.
+ 
+      `refreshPrinciplesForProfile` returns `below_bar` unless
+      `computeCitationEligibility` passes, and that checks THREE things:
+      distinct signals, span, and **top-of-mind appearances** — the number of
+      distinct top-of-mind versions any citing signal was selected into.
+      Waiting for signals to go active satisfies the first two and says
+      nothing about the third.
+ 
+      Measured across three runs: the one that reached the judge logged
+      `status: evaluated`; the two that did not logged `status: below_bar`,
+      having done no model work at all. The difference was whether synthesis
+      had happened to select those signals yet. So this waits for the artifact
+      as well, which is the condition the bar is actually about.
+    */
+    await waitFor(
+      async ({ note }) => {
+        const tom = await api(session!, "/api/top-of-mind");
+        const entries =
+          (tom.body as { topOfMind?: { entries?: unknown[] } }).topOfMind?.entries ?? [];
+        note(`top-of-mind entries: ${entries.length}`);
+        return entries.length > 0 ? true : null;
+      },
+      { timeoutMs: 240_000, label: "a top of mind the signals have been selected into" },
+    );
 
-    const minted = await waitFor(
+    /*
+      IT RUNS NIGHTLY, SO ONCE IS NOT HOW THE FEATURE WORKS.
+
+      Three sources of variance were found here, in this order, and only the
+      third is the model's:
+
+        1. The assertion demanded `origin === "minted"` while the judge
+           correctly REDEEMED a colliding declaration instead. Widened.
+        2. The step triggered as soon as signals went active, but the
+           eligibility gate also counts TOP-OF-MIND APPEARANCES — so runs that
+           beat synthesis logged `below_bar` and did no model work at all.
+           It waits for the artifact now.
+        3. With both fixed, a run still logged `status: no_candidates`: the
+           bar passed, the distiller ran, and the model returned nothing from
+           the same fixture. Across six runs all three statuses appeared.
+
+      Nothing in a harness fixes the third. But a single trigger is not what
+      production does — the nightly cron asks again every night, and a theme
+      that yields no candidate tonight yields one later. Asking three times
+      with a pause is that, faithfully; it is not a retry papering over a
+      failure, because the thing being tested is a recurring job.
+
+      If all three passes come back with nothing, that is reported as what it
+      is rather than as a timeout with no cause attached.
+    */
+    let lastTrigger = "";
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const trigger = await api(session!, "/api/principles/refresh-test-trigger", {
+        method: "POST",
+      });
+      if (trigger.status !== 202) throw new Error(`test trigger → ${trigger.status}`);
+      lastTrigger = `attempt ${attempt}`;
+      const settled = await waitFor(
+        async ({ note }) => {
+          const list = await api(session!, "/api/principles");
+          const rows = (list.body as {
+            principles: Array<{ state: string; citedSignals: unknown[] }>;
+          }).principles;
+          const earned = rows.find((r) => r.state === "held" && r.citedSignals.length > 0);
+          note(`${lastTrigger}: held with evidence: ${earned ? 1 : 0}`);
+          return earned ?? null;
+        },
+        { timeoutMs: 45_000, label: `a principle held on its evidence (${lastTrigger})` },
+      ).catch(() => null);
+      if (settled) break;
+    }
+
+    /*
+      HELD WITH CITATIONS — BY EITHER ROAD, BECAUSE THERE ARE TWO AND BOTH ARE
+      THE PROMISE WORKING.
+
+      This asserted `origin === "minted"` and failed for three minutes while
+      the system did something better. `distill` judges each candidate against
+      the principles already standing: if one is the SAME, it attaches the
+      citations to that one and, if it was aspirational, redeems it —
+      `state: "held"`, evidence attached — rather than minting a near-duplicate
+      beside it. The run reported `attached: 3, redeemed: 1, minted: 0`.
+
+      And it was deterministic, not luck. Step 2 of this same suite declares
+      "Have something working before you put more money in", and the captures
+      below say "I cap spending until something ships" and "I ship a working
+      slice before polishing". Those are one principle in three wordings, so
+      the judge was right and the assertion was wrong: it was demanding the
+      duplicate the design exists to avoid.
+
+      What the step's own title claims is that months of signals produce a HELD
+      principle. Both roads do. Which one ran is reported rather than required,
+      because that depends on what the person had already declared.
+
+      AND THIS FIXTURE ONLY EVER WALKS ONE OF THEM. Because step 2's
+      declaration collides with these captures by design, the road taken here
+      is redemption, every time — minting a principle from nothing is NOT
+      exercised by this suite, and the result line says which road ran so a
+      reader can never mistake one for both. Proving the other needs a fixture
+      whose captures land on a theme nothing standing already covers.
+    */
+    const held = await waitFor(
       async ({ note }) => {
         const list = await api(session!, "/api/principles");
         const rows = (list.body as {
           principles: Array<{ state: string; origin: string; citedSignals: unknown[] }>;
         }).principles;
-        const held = rows.find((row) => row.origin === "minted" && row.state !== "aspirational");
-        note(`principles: ${rows.length}, minted+held: ${held ? 1 : 0}`);
-        return held ?? null;
+        const earned = rows.find(
+          (row) => row.state === "held" && row.citedSignals.length > 0,
+        );
+        note(`principles: ${rows.length}, held with evidence: ${earned ? 1 : 0}`);
+        return earned ?? null;
       },
-      { timeoutMs: 180_000, label: "a minted principle" },
-    );
-    if (minted.citedSignals.length < 1) throw new Error("minted without citations");
-    return `minted with ${minted.citedSignals.length} citation(s)`;
+      {
+        timeoutMs: 30_000,
+        label: "a principle held on its evidence, after three nightly passes",
+      },
+    ).catch(async () => {
+      /*
+        A BARE TIMEOUT NAMES NOTHING, AND THIS STEP FAILS FOR THREE DIFFERENT
+        REASONS. The trigger answers 202 and logs its verdict server-side, so
+        the suite cannot read it — which meant a failure here said only "timed
+        out" and every diagnosis needed the server's log beside it. Twice that
+        cost an hour and a wrong answer.
+
+        So a failure states what it could see. It cannot name the verdict, but
+        it can name the shape that produced it: too few active signals is the
+        eligibility gate, no top of mind is the appearances bar, and everything
+        present with nothing held is the model returning no candidate.
+      */
+      const [signals, tom, principlesNow] = await Promise.all([
+        api(session!, "/api/signals?status=active"),
+        api(session!, "/api/top-of-mind"),
+        api(session!, "/api/principles"),
+      ]);
+      const activeCount = (signals.body as { signals: unknown[] }).signals.length;
+      const tomEntries =
+        (tom.body as { topOfMind?: { entries?: unknown[] } }).topOfMind?.entries?.length ?? 0;
+      const rows = (principlesNow.body as {
+        principles: Array<{ state: string; origin: string; citedSignals: unknown[] }>;
+      }).principles;
+      const shape = rows
+        .map((r) => `${r.origin}/${r.state}/${r.citedSignals.length}cit`)
+        .join(", ");
+      throw new Error(
+        `no principle became held after three passes — active signals: ${activeCount} ` +
+          `(bar ${needSignals}), top-of-mind entries: ${tomEntries}, principles: ` +
+          `[${shape || "none"}]. ` +
+          (activeCount < needSignals
+            ? "Too few active signals: the eligibility gate never opened."
+            : tomEntries === 0
+              ? "No top of mind: the appearances bar cannot be met."
+              : "Everything the bar needs was present, so the distiller returned no " +
+                "candidate this time — which it does, and no wait fixes."),
+      );
+    });
+    return `${held.origin === "minted" ? "minted" : "redeemed a declaration"} — held with ${held.citedSignals.length} citation(s)`;
   });
 
   if (session) await deleteAccount(session).catch(() => undefined);

@@ -44,6 +44,8 @@ import {
   S3Client,
   type ObjectIdentifier,
 } from "@aws-sdk/client-s3";
+
+import { makeAttachmentsS3Client } from "./s3-client.js";
 import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 
 import {
@@ -81,13 +83,7 @@ function attachmentBucketName(): string {
 
 async function deleteAttachmentObjectsFromS3(keys: string[]): Promise<void> {
   if (keys.length === 0) return;
-  const client = new S3Client({
-    region:
-      process.env.ATTACHMENTS_REGION ||
-      process.env.AWS_REGION ||
-      process.env.AWS_DEFAULT_REGION ||
-      "us-west-2",
-  });
+  const client = makeAttachmentsS3Client();
   const bucket = attachmentBucketName();
 
   for (let offset = 0; offset < keys.length; offset += 1_000) {

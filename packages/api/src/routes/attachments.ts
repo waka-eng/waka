@@ -35,8 +35,10 @@
  * either break that capture or let a key be replayed across profiles.
  */
 
-import { HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { HeadObjectCommand, PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+
+import { attachmentsRegion, makeAttachmentsS3Client } from "../lib/s3-client.js";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -221,12 +223,9 @@ function getBucketName(): string {
  * 301 PermanentRedirect. Lambda's own `AWS_REGION` is a fallback.
  */
 function getRegion(): string {
-  return (
-    process.env.ATTACHMENTS_REGION ||
-    process.env.AWS_REGION ||
-    process.env.AWS_DEFAULT_REGION ||
-    "us-west-2"
-  );
+  /* One resolver, in lib/s3-client.ts. This wrapper stays because the region
+     is read here for more than client construction. */
+  return attachmentsRegion();
 }
 
 /**
@@ -237,7 +236,7 @@ function getRegion(): string {
 let cachedS3: S3Client | null = null;
 function getS3(): S3Client {
   if (cachedS3) return cachedS3;
-  cachedS3 = new S3Client({ region: getRegion() });
+  cachedS3 = makeAttachmentsS3Client();
   return cachedS3;
 }
 
