@@ -673,6 +673,19 @@ Source: `packages/web/src/lib/aliveness.ts`.
 | `FIELD_CARRY_POSTER_SHARE` | 0.3 | Carry: the share held by reaching the live top of mind |
 | `FIELD_CARRY_PRINCIPLE_SHARE` | 0.3 | Carry: the share held by reaching a principle |
 | `FIELD_CARRY_SPAN` | 0.5 | Extra light a fully-carrying memory holds over a barely-cited one |
+| `FIELD_ATTENTION_SPAN` | 0.16 | Extra floor for coming back to a memory, graded by how often |
+| `FIELD_TIER_CEILING` | 0.6 | Aliveness at or above this draws in the brightest band |
+| `FIELD_TIER_GAMMA` | 0.55 | Bends the banding so the dim half gets most of the bands |
+
+**Why the light is banded through a curve.** An orb is drawn from a pre-baked
+sprite, so the aliveness continuum is quantised. That mapping was linear while
+aliveness is exponential in age: with a seven-day half-life a fortnight sits at
+0.25, three weeks at 0.125, four at 0.06 — so nearly every band went to the
+first week and everything past three weeks collapsed into the bottom one, and
+an archive with months in it rendered as one flat grey. `FIELD_TIER_GAMMA`
+bends the mapping toward the dim half, and `TIERS` (in
+`packages/web/src/canvas/sprites.ts`) widened from five bands to nine. Neither
+changes what a memory IS — only how finely the eye can read it.
 
 **Why the carry is graded and the floor is not.** `FIELD_FLOOR_CITED` is what
 being cited AT ALL is worth: one root and nothing above it, and the memory can

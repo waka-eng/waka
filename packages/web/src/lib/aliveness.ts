@@ -50,6 +50,20 @@ export const FIELD_FLOOR_ANSWERED = 0.18;
 export const FIELD_FLOOR_IN_GROUP = 0.1;
 
 /**
+ * ATTENTION PAID SURVIVES THE WEATHER (founder, 2026-08-24: brightness must
+ * say how active a memory is, and a field where nothing has been derived yet
+ * was uniformly dim).
+ *
+ * Returning to a memory used to be worth `FIELD_REFLECTION_WEIGHT × decay` —
+ * MULTIPLIED by the decay it was supposed to resist, so a memory you came
+ * back to three times a month ago is lit exactly like one you never opened.
+ * Attention is a thing you did; it does not un-happen because time passed.
+ * So the answered floor is graded by how often you came back, on the same
+ * saturation the additive term uses, and that grade does not decay.
+ */
+export const FIELD_ATTENTION_SPAN = 0.16;
+
+/**
  * A citation lifts a memory ABOVE its floor as well as setting one.
  *
  * This was a second `+0.12` for `hasNotes` in the same expression that already
@@ -62,6 +76,28 @@ export const FIELD_CITED_LIFT = 0.12;
 
 /** Untouched for longer than this, and cited by nothing, is a frontier. */
 export const FIELD_FRONTIER_DAYS = 3;
+
+/**
+ * HOW THE LIGHT IS BANDED — and why the field used to be a wall of one grey.
+ *
+ * An orb is drawn from a pre-baked sprite, so the aliveness continuum has to
+ * be quantised into bands. That mapping was LINEAR across 0.05–0.60 while
+ * aliveness itself is EXPONENTIAL in age, and the two do not meet: with a
+ * seven-day half-life a fortnight-old memory sits at 0.25, three weeks at
+ * 0.125, four at 0.06 — so nearly every band was spent on the first week and
+ * everything past three weeks collapsed into the bottom one. An archive with
+ * months in it rendered as one flat grey, which is exactly what the founder
+ * was looking at, and no amount of extra meaning upstream could have shown
+ * through it.
+ *
+ * The ceiling is where a memory is simply at full light; the gamma bends the
+ * mapping so the dim half — which is most of any real archive — gets most of
+ * the bands. Together with a wider `TIERS` they resolve two months of decay
+ * as a gradient instead of a cliff. Perception, not scoring: neither number
+ * changes what a memory IS, only how finely the eye can read it.
+ */
+export const FIELD_TIER_CEILING = 0.6;
+export const FIELD_TIER_GAMMA = 0.55;
 
 /**
  * THE CARRY — how much of this person's self-knowledge a memory is holding up.

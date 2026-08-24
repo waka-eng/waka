@@ -148,7 +148,17 @@ export const SIZE_R = [6, 8.5, 11.5, 15, 19, 23, 26.5, 29.5, 32];
 /** Sprite bleed so the rim arc's outer antialiasing is never clipped. */
 export const ORB_PAD = 2;
 
-export const TIERS = 5;
+/**
+ * How many bands the aliveness continuum is drawn in.
+ *
+ * Five could not resolve a real archive: with a seven-day half-life, two
+ * months of memories landed in the bottom two bands and the field read as one
+ * flat grey (founder, 2026-08-24). Nine, mapped through `FIELD_TIER_GAMMA`,
+ * makes a fortnight, three weeks and a month visibly different. The cost is
+ * sprites baked once per (hue, resolution) at first use — nine per size
+ * instead of five, still nothing per frame.
+ */
+export const TIERS = 9;
 
 /* the per-member hue system lives in lib/appearance.ts — see the note
    there for why, and docs/architecture.md for the seams generally */

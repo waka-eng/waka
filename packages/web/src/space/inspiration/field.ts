@@ -14,6 +14,7 @@
  */
 import {
   carryOf,
+  FIELD_ATTENTION_SPAN,
   FIELD_CARRY_SPAN,
   FIELD_CITED_LIFT,
   FIELD_DECAY_HALF_LIFE_DAYS,
@@ -23,6 +24,8 @@ import {
   FIELD_FRONTIER_DAYS,
   FIELD_REFLECTION_SATURATION,
   FIELD_REFLECTION_WEIGHT,
+  FIELD_TIER_CEILING,
+  FIELD_TIER_GAMMA,
 } from "../../lib/aliveness";
 import { clamp, clamp01, DAY_MS } from "../../lib/num";
 import { SIZE_R, TIERS } from "../../canvas/sprites";
@@ -100,7 +103,12 @@ export function colorBall(b: Ball, T: number): void {
     : 0;
   const tended =
     (b.hasNotes ? FIELD_FLOOR_CITED + FIELD_CARRY_SPAN * carry : 0) +
-    (b.reflections > 0 ? FIELD_FLOOR_ANSWERED : 0) +
+    (b.reflections > 0
+      ? FIELD_FLOOR_ANSWERED +
+        FIELD_ATTENTION_SPAN *
+          (Math.min(b.reflections, FIELD_REFLECTION_SATURATION) /
+            FIELD_REFLECTION_SATURATION)
+      : 0) +
     (b.hasGroup ? FIELD_FLOOR_IN_GROUP : 0);
   const a = clamp01(
     Math.max(
@@ -125,12 +133,14 @@ export function colorBall(b: Ball, T: number): void {
 }
 
 /**
- * The aliveness continuum, quantised to the baked sprite tiers. Five steps is
- * below what the eye resolves in a gradient this soft, so it still reads as a
- * continuum — and it keeps every appearance pre-rendered.
+ * The aliveness continuum, quantised to the baked sprite tiers — through a
+ * curve, because the continuum is exponential and a linear banding spent
+ * almost every step on the first week (see `FIELD_TIER_GAMMA`). Baked
+ * sprites still mean nothing is drawn per frame.
  */
 export function tierOf(b: Ball): number {
-  return Math.round(clamp01((b.alive - 0.05) / 0.55) * (TIERS - 1));
+  const lit = Math.pow(clamp01(b.alive / FIELD_TIER_CEILING), FIELD_TIER_GAMMA);
+  return Math.round(lit * (TIERS - 1));
 }
 
 /**
