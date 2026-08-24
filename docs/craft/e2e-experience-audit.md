@@ -959,9 +959,17 @@ context with empty storage**, because "remembered" means a second device and
 not a second page load, and the server is the only channel that reaches one.
 
 That makes four findings in this document discovered while measuring
-something else. It also makes a fourth harness defect found by the sabotage
-run, and the first one where the sabotage's own failure — not the product's —
-was what the red line was reporting.
+something else. The tally of *harness* defects caught the same way is
+deliberately not given: it has run to several across `ways-out`, `the-hand`,
+`a11y-floor`, `rooms` and now `locale`, and a number in prose here would go
+stale exactly the way the two this document has already had to correct did.
+
+What is new in this one is the direction of the lie. Every earlier case was a
+check that passed while measuring nothing, and `--negative` said so
+correctly. Here `--negative` was right that something was wrong and wrong
+about what — the red line was reporting its own broken sabotage, not the
+product. So a sabotage run is evidence that something needs tracing, and not
+yet evidence of what.
 
 ---
 
