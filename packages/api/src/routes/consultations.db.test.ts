@@ -34,6 +34,7 @@ import { createInspirationsRoutes } from "./inspirations.js";
 import { createPrincipleMarkdownRoute } from "./principles.js";
 import { createSignalRoutes } from "./signals.js";
 import { createTopOfMindRoutes } from "./top-of-mind.js";
+import { createWeatherRoute } from "./weather.js";
 
 let t: TestDatabase;
 let seq = 0;
@@ -90,6 +91,7 @@ function appFor(person: Person): Hono {
   app.route("/api/top-of-mind", createTopOfMindRoutes(deps));
   app.route("/api/principles.md", createPrincipleMarkdownRoute(deps));
   app.route("/api/inspirations", createInspirationsRoutes(deps));
+  app.route("/api/weather", createWeatherRoute(deps));
   return app as unknown as Hono;
 }
 
@@ -241,5 +243,32 @@ describe("the gate: every serve is on the record, and no citation can be invente
       }),
     });
     expect(res.status).toBe(400);
+  });
+  it("records the antechamber's serve, and lets the telling alone stay off the record", async () => {
+    /* The weather's two registers, split by what they carry. The full serve
+       hands over the antechamber — refused candidates, derived readings of
+       the person — so it is on the record like any serve of derived memory.
+       The telling alone (?antechamber=false) is event counts of the loop's
+       own moves: nothing of anyone's memory is served, so no consultation is
+       written — which is also what lets the companion be ASKED for the
+       weather without the asking inflating the very count it reports. */
+    const owner = await seedPerson("Owner");
+    const app = appFor(owner);
+
+    const lite = await app.request("/api/weather?antechamber=false");
+    expect(lite.status).toBe(200);
+    const liteBody = (await lite.json()) as { weather: { antechamber: unknown[] } };
+    expect(liteBody.weather.antechamber).toEqual([]);
+    expect(await consultationRows(owner.profileId)).toHaveLength(0);
+
+    const full = await app.request("/api/weather");
+    expect(full.status).toBe(200);
+    const rows = await consultationRows(owner.profileId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      surface: "weather",
+      session_id: owner.sessionId,
+      reader_profile_id: owner.profileId,
+    });
   });
 });

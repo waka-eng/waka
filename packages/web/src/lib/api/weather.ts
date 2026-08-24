@@ -41,9 +41,16 @@ export interface ApiWeather {
   antechamber: ApiAntechamberRow[];
 }
 
-export async function fetchTheWeather(options: { since?: Date } = {}): Promise<ApiWeather> {
+export async function fetchTheWeather(
+  options: { since?: Date; antechamber?: boolean } = {},
+): Promise<ApiWeather> {
   const params = new URLSearchParams();
   if (options.since) params.set("since", options.since.toISOString());
+  /* false = the telling only. Event counts carry no one's memory, so the
+     server writes no consultation for that serve — which is what lets the
+     companion be asked for the weather without the asking inflating the
+     very count it reports. */
+  if (options.antechamber === false) params.set("antechamber", "false");
   const query = params.toString();
   const body = await getJson<{ weather: ApiWeather }>(
     apiPath(`/weather${query ? `?${query}` : ""}`),

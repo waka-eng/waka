@@ -40,6 +40,13 @@ const weatherQuerySchema = z
       .datetime({ offset: true })
       .transform((value) => new Date(value))
       .optional(),
+    /** "false" = the telling only: told + days, no antechamber. Event
+        counts carry no one's memory, so that serve writes no consultation —
+        asking the companion must not inflate its own answer. */
+    antechamber: z
+      .enum(["true", "false"])
+      .transform((value) => value === "true")
+      .optional(),
   })
   .strict();
 
@@ -74,15 +81,23 @@ export function createWeatherRoute(deps: WeatherRouteDependencies = {}): Hono<Au
     );
     if (!scope.ok) return c.json(scope.body, scope.status);
 
+    const includeAntechamber = parsed.data.antechamber !== false;
     const weather = await assembleTheWeather(db, {
       profileId: scope.profileId,
       since: parsed.data.since ?? null,
+      includeAntechamber,
     });
-    await recordConsultation(db, {
-      profileId: scope.profileId,
-      session: c.get("session"),
-      surface: "weather",
-    });
+    /* The antechamber carries refused candidates — derived readings of the
+       person — so serving it is on the record. The telling alone is event
+       counts, and counts of the loop's own moves are the product speaking,
+       not anyone's memory being read. */
+    if (includeAntechamber) {
+      await recordConsultation(db, {
+        profileId: scope.profileId,
+        session: c.get("session"),
+        surface: "weather",
+      });
+    }
     return c.json({ weather }, 200);
   });
 

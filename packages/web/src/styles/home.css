@@ -2217,3 +2217,12 @@
 }
 
 }
+
+/* THE FLAT SCREENS' ROW IN THE ACCOUNT DROP. Six quiet doors in one line,
+   allowed to wrap — a list of places, not a toolbar, so no boxes and no
+   weight: the same face every other verb in this sheet wears. */
+.jar-settings-flats {
+  flex-wrap: wrap;
+  row-gap: 4px;
+  opacity: 0.75;
+}

@@ -247,9 +247,20 @@ describe("the approval surface", () => {
       el.textContent,
       "an honest no_change pass is not an event in the room's life",
     ).not.toContain("re-read itself");
+    /* Dates may be digits now — a calendar date is a LABEL a person reads,
+       not a state (the ruling refinement written into `dateWords`, folded in
+       from the world-craft session). What must stay worded is everything
+       that IS a state: versions are events, counts are words. So the sweep
+       strips the date labels and then insists on silence from digits. */
+    /* no trailing \b: textContent glues the date to the next word ("Aug
+       20Bo…"), and digit-to-letter is not a boundary */
+    const withoutDates = (el.textContent ?? "").replace(
+      /\b[A-Z][a-z]{2} \d{1,2}(, \d{4})?/g,
+      "",
+    );
     expect(
-      /\d/.test(el.textContent ?? ""),
-      "a numeral appeared on the timeline — dates are words, versions are events",
+      /\d/.test(withoutDates),
+      "a numeral appeared on the timeline beyond the date labels — versions are events, counts are words",
     ).toBe(false);
   });
 

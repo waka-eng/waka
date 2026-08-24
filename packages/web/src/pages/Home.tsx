@@ -2226,6 +2226,37 @@ function HomeExperience(): JSX.Element {
   loadDetailRef.current = loadDetail;
 
   /**
+   * THE CREATURE, ASKED. A tap on the companion is a question — "what has
+   * been happening?" — and the answer is the weather's most recent day,
+   * fetched at the moment of asking so the telling is the record's current
+   * truth (founder ask, 2026-08-24: "your memory was consulted…" should
+   * appear whenever the character is tapped). The telling-only serve: no
+   * antechamber, and therefore no consultation written — the creature must
+   * not inflate the very count it is about to report. When the fortnight is
+   * quiet, or the fetch dies, or the page is offline, it falls back to its
+   * own field-state lines: the creature always answers something, and never
+   * with a made-up weather.
+   */
+  const sayTheWeather = useCallback((fallback: () => string) => {
+    if (offlineRef.current) {
+      setCharSay(fallback());
+      return;
+    }
+    fetchTheWeather({ antechamber: false })
+      .then((weather) => {
+        const day = weather.days[0];
+        if (day && day.sentences.length > 0) {
+          setCharSay(`${day.label} — ${day.sentences.map((s) => s.text).join("; ")}.`);
+        } else {
+          setCharSay(fallback());
+        }
+      })
+      .catch(() => setCharSay(fallback()));
+  }, []);
+  const sayTheWeatherRef = useRef(sayTheWeather);
+  sayTheWeatherRef.current = sayTheWeather;
+
+  /**
    * WHAT ARRIVED WHILE YOU WERE GONE — shown by going there, not by saying so.
    *
    * Held until the pour has settled, so the world is whole before it moves;
@@ -2263,7 +2294,7 @@ function HomeExperience(): JSX.Element {
        the settled value from the ref. A failed fetch is a silent arrival —
        the weather is a courtesy, never a blocker. */
     const toldRef = { current: null as string | null };
-    void fetchTheWeather({ since: new Date(since) })
+    void fetchTheWeather({ since: new Date(since), antechamber: false })
       .then((weather) => {
         toldRef.current = weather.told;
       })
@@ -6355,10 +6386,12 @@ function HomeExperience(): JSX.Element {
     function tap(cx: number, cy: number) {
       /* mid-travel the page is the traveler's: taps wait for arrival */
       if (trip.active) return;
-      /* the companion answers first: it sits in front of the field */
+      /* the companion answers first: it sits in front of the field — and
+         what it answers with is the weather, its own lines only when the
+         record has nothing to tell */
       if (overChar(cx, cy + cam.y)) {
         companion.flare = 1;
-        setCharSay(sayLine());
+        sayTheWeatherRef.current(sayLine);
         wake();
         return;
       }
@@ -9208,9 +9241,6 @@ function HomeExperience(): JSX.Element {
    * have.
    */
   const [accountOpen, setAccountOpen] = useState(false);
-  /* TEMPORARY. See `.jar-flatmenu` in the JSX below — this is scaffolding for
-     the screens the world has no home for yet, and it goes when they do. */
-  const [flatMenuOpen, setFlatMenuOpen] = useState(false);
   /* the reading: fetched once on first open, held for the session — the
      rules do not change under a person mid-visit */
   const [readingOpen, setReadingOpen] = useState(false);
@@ -11185,109 +11215,10 @@ function HomeExperience(): JSX.Element {
             the same slot the moment the room's name needed somewhere to live,
             and putting them at opposite ends means neither can ever hide the
             other — which is exactly the bug the ternary here used to cause. */}
-        {/* SCAFFOLDING, AND NAMED AS SUCH.
-            Everything else in this bar earned its place by being a fact about
-            where you are standing. This did not: it is a drawer, and the
-            comments above are right that a toolbar is what this layout was
-            built to not have.
-
-            It exists because `dev` grew screens the world has no geometry for.
-            /principles is layer 4 — declared statements resting on signals —
-            and the world draws three layers, not four, so there is nowhere to
-            put it. The list views are the same memories in another register,
-            which the archive comment above already calls a thing that "goes
-            away once the layout can do everything it can".
-
-            So they are reachable rather than orphaned, from one control that
-            admits what it is. Top centre because the two ends of this bar are
-            taken and neither may be crowded — the way out is on the left and
-            the account is on the right, and the bug that produced this comment
-            once was exactly one of them hiding the other.
-
-            DELETE THIS when /principles has a home in the world. That is the
-            real fix; this is the placeholder that keeps it usable meanwhile. */}
-        <div className="jar-flatmenu" data-jar-chrome="1">
-          <button
-            type="button"
-            className="jar-flatmenu-toggle jar-label"
-            aria-expanded={flatMenuOpen}
-            aria-haspopup="menu"
-            aria-label="Other screens"
-            onClick={() => {
-              setFlatMenuOpen((v) => !v);
-              setAccountOpen(false);
-              setSettingsFor(null);
-            }}
-          >
-            <span aria-hidden="true">≡</span>
-          </button>
-          {flatMenuOpen ? (
-            <div className="jar-flatmenu-sheet" role="menu">
-              {[
-                /* The flat screen's own bottom bar, in its order and its
-                   words, so the two do not drift into naming the same screen
-                   two ways. `top of mind` is Surface's `wall` view, which
-                   `surface-route.ts` resolves to "/" — and "/" is the world,
-                   whose headquarters IS top of mind. So it lands on the same
-                   layer either way; it simply arrives in the world's rendering
-                   of it rather than the list's. */
-                ["/capture", "capture"],
-                ["/inspirations", "inspirations"],
-                ["/signals", "signals"],
-                ["/top-of-mind", "top of mind"],
-                ["/rooms", "rooms"],
-                ["/principles", "principles"],
-              ].map(([to, label]) => (
-                <Link
-                  key={to}
-                  to={to}
-                  role="menuitem"
-                  className="jar-flatmenu-item jar-label"
-                  onClick={() => setFlatMenuOpen(false)}
-                >
-                  {label}
-                </Link>
-              ))}
-              {/* THE READING — not a flat screen, so not a Link: it opens
-                  the loop's rules as a panel over the world, one tap from
-                  the poster (goals/the-legible-loop.md Phase 1). */}
-              <button
-                type="button"
-                role="menuitem"
-                className="jar-flatmenu-item jar-label"
-                onClick={() => {
-                  setFlatMenuOpen(false);
-                  setReadingOpen(true);
-                  if (!theReading) {
-                    fetchTheReading()
-                      .then(setTheReading)
-                      .catch(() => undefined);
-                  }
-                }}
-              >
-                how it reads you
-              </button>
-              {/* THE ANTECHAMBER — the dim place where the ground's refusals
-                  stand, on request (goals/the-legible-loop.md Phase 5). */}
-              <button
-                type="button"
-                role="menuitem"
-                className="jar-flatmenu-item jar-label"
-                onClick={() => {
-                  setFlatMenuOpen(false);
-                  setAntechamberOpen(true);
-                  setAntechamber(null);
-                  fetchTheWeather()
-                    .then((weather) => setAntechamber(weather.antechamber))
-                    .catch(() => setAntechamber([]));
-                }}
-              >
-                the antechamber
-              </button>
-            </div>
-          ) : null}
-        </div>
-
+        {/* The ≡ drawer that stood here is gone (founder ask, 2026-08-24).
+            It was scaffolding and said so; its rows did not vanish — the
+            flat screens and the loop's two doors now live in the account
+            drop, the one sheet this bar already had. */}
         {readingOpen ? (
           <ReadingPanel reading={theReading} onClose={() => setReadingOpen(false)} />
         ) : null}
@@ -11625,6 +11556,63 @@ function HomeExperience(): JSX.Element {
             <Link className="jar-settings-verb" to="/profile" onClick={() => setAccountOpen(false)}>
               open your account
             </Link>
+          </p>
+
+          {/* THE LOOP'S TWO DOORS. Not flat screens, so not Links: each opens
+              a panel over the world — the rules it reads you by, and the dim
+              place where its refusals stand. They lived in the ≡ drawer until
+              the founder removed it (2026-08-24); this sheet was already
+              here, so they moved in rather than growing a new toggle. */}
+          <p className="jar-neb-ask">
+            <button
+              type="button"
+              onClick={() => {
+                setAccountOpen(false);
+                setReadingOpen(true);
+                if (!theReading) {
+                  fetchTheReading()
+                    .then(setTheReading)
+                    .catch(() => undefined);
+                }
+              }}
+            >
+              how it reads you
+            </button>
+            <span aria-hidden="true"> · </span>
+            <button
+              type="button"
+              onClick={() => {
+                setAccountOpen(false);
+                setAntechamberOpen(true);
+                setAntechamber(null);
+                fetchTheWeather()
+                  .then((weather) => setAntechamber(weather.antechamber))
+                  .catch(() => setAntechamber([]));
+              }}
+            >
+              the antechamber
+            </button>
+          </p>
+
+          {/* THE FLAT SCREENS — the same memories in another register, still
+              scaffolding (they go when the world can do everything they do),
+              still reachable. In the flat bar's own order and words. */}
+          <p className="jar-neb-ask jar-settings-flats">
+            {[
+              ["/capture", "capture"],
+              ["/inspirations", "inspirations"],
+              ["/signals", "signals"],
+              ["/top-of-mind", "top of mind"],
+              ["/rooms", "rooms"],
+              ["/principles", "principles"],
+            ].map(([to, label], i) => (
+              <span key={to}>
+                {i > 0 ? <span aria-hidden="true"> · </span> : null}
+                <Link to={to} onClick={() => setAccountOpen(false)}>
+                  {label}
+                </Link>
+              </span>
+            ))}
           </p>
 
           {/* SIGNING OUT IS NOT DESTRUCTIVE, so it does not ask twice — nothing

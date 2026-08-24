@@ -328,7 +328,17 @@ const emptyCounts = (): WindowCounts => ({
  */
 export async function assembleTheWeather(
   db: WakaDb,
-  input: { profileId: string; now?: Date; since?: Date | null },
+  input: {
+    profileId: string;
+    now?: Date;
+    since?: Date | null;
+    /** false = the telling only. The told sentence and the days are event
+        counts — no statement, no memory content — so a serve without the
+        antechamber serves nothing derived, and the route writes no
+        consultation for it. This is what lets the companion be ASKED
+        without the asking inflating its own "consulted" count. */
+    includeAntechamber?: boolean;
+  },
 ): Promise<TheWeather> {
   const now = input.now ?? new Date();
   const windowStart = new Date(now.getTime() - WEATHER_WINDOW_DAYS * MS_PER_DAY);
@@ -368,20 +378,23 @@ export async function assembleTheWeather(
     told = clauses.length > 0 ? `${clauses.join("; ")}.` : null;
   }
 
-  const antechamberRows = await db
-    .select({
-      id: suppressions.id,
-      candidateStatement: suppressions.candidateStatement,
-      anchorSignalId: suppressions.anchorSignalId,
-      anchorStatement: suppressions.anchorStatement,
-      suppressedAt: suppressions.suppressedAt,
-      anchorDismissedAt: signals.dismissedAt,
-    })
-    .from(suppressions)
-    .leftJoin(signals, eq(signals.id, suppressions.anchorSignalId))
-    .where(eq(suppressions.profileId, input.profileId))
-    .orderBy(desc(suppressions.suppressedAt))
-    .limit(50);
+  const antechamberRows =
+    input.includeAntechamber === false
+      ? []
+      : await db
+          .select({
+            id: suppressions.id,
+            candidateStatement: suppressions.candidateStatement,
+            anchorSignalId: suppressions.anchorSignalId,
+            anchorStatement: suppressions.anchorStatement,
+            suppressedAt: suppressions.suppressedAt,
+            anchorDismissedAt: signals.dismissedAt,
+          })
+          .from(suppressions)
+          .leftJoin(signals, eq(signals.id, suppressions.anchorSignalId))
+          .where(eq(suppressions.profileId, input.profileId))
+          .orderBy(desc(suppressions.suppressedAt))
+          .limit(50);
 
   return {
     told,
