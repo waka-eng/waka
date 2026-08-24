@@ -1,47 +1,83 @@
 # Goal: make every space own its three layers
 
-Status: **plan (2026-08-17).** Not started. Decision:
+Status: **plan (2026-08-17), and its survey is now four months of work out
+of date — RESTATED 2026-08-24 against the branch rather than against
+`origin/dev`. Phases 2 to 4 propose an architecture the product has since
+deliberately built the opposite of. The fork below is the founder's and
+nothing is built past it.** Decision:
 `docs/decisions/every-space-owns-its-stack.md`.
 
-**Read the starting point below before the phases.** An earlier draft of this
-plan was written against `goal/frontend-you-can-read` and described its files as
-though they were the product. Several are not.
+**Read the starting point below before the phases.** The original plan said
+that of itself, about an earlier draft written against a branch whose files
+were not the product. It is true again, of the plan itself, for the same
+reason — so the survey is redone here rather than patched.
 
-## Where this actually starts
+## Where this actually starts — restated 2026-08-24
 
-Checked against `origin/dev`, not against the working branch.
+Checked against this branch, by reading the code, not by inspection of the
+older survey.
 
-**Already built and working — more than it looks:**
+**Built since the plan was written, and load-bearing:**
 
-- Your own space runs the whole chain: memories → signals → top of mind.
-- The distilling engine itself — match-or-mint by cosine distance on embeddings,
-  with a model call only as a tie-breaker inside the band between two
-  thresholds. This is reusable as-is and is the expensive part.
-- **A room's way of deciding together.** `groups-proposals.ts` implements
-  proposals, affirmations, a strict majority (`carriesMajority`), and a tally
-  that joins current membership so a departed member's vote stops counting. This
-  is the hardest social part of layer 3 and it is done. It simply has nothing to
-  act on.
+- **A room HAS a ground.** `routes/groups-field.ts` serves every current
+  member's public memories; the world fetches it on arrival and pours the
+  room's orbs. The plan lists this under "Missing" and as the first bullet
+  of Phase 3. It is done.
+- **`refreshTopOfMindForGroup` is NOT a stub.** `lib/top-of-mind-synthesis.ts`
+  implements it in full: the first-draft gate (`GROUP_DRAFT_MIN_AFFIRMED`),
+  members' affirmations counted newest-first with the owner's own reaction
+  excluded, unapplied proposals folded in, versioning with reasons, dropped
+  citations counted. The plan's Phase 4 is "build" it. It is built, and the
+  queue's jobs for it are neither logged nor discarded.
+- **The room's history is served AND wound.** The chain, the door's ledger,
+  a versioned read of any past board, and a dial that winds it.
+- **`signal_shares` is the room's spine.** The wall reads it, the synthesis
+  reads it, the export carries it, the contested pairs and the counted
+  stances stand on it. The plan's Phase 4 removes it by forward migration.
 
-**Missing:**
+**Still true as the plan describes it:**
 
-- A room has no ground. `loadGroupField` exists only on
-  `goal/frontend-you-can-read` (introduced by `5188af6`, not an ancestor of
-  `origin/dev`).
-- A signal can only belong to a profile. A room's signals have nowhere to live.
-- Nothing distils from a *space's* ground. Derivation is triggered per save, for
-  the saver.
-- `refreshTopOfMindForGroup` is a stub returning `not_implemented` — while the
-  queue enqueues refresh jobs for it on every membership change and share, which
-  run, log, and discard.
+- A signal belongs to a profile. A room-owned signal has nowhere to live.
+- Nothing distils from a room's GROUND. A room's board is synthesized from
+  the signals its members shared in, not from the memories underneath them.
 
-**Branch-only files this plan mentions.** These came from splitting large files
-on `goal/frontend-you-can-read` today and are not on `origin/dev`:
-`groups-field.ts`, `groups-wall.ts`, `groups-proposals.ts`,
-`signal-match-or-mint.ts`, `signal-lifecycle.ts`, `model-budget.ts`. The code is
-on `dev` inside `groups.ts`, `signal-derivation.ts` and `queue.ts`; only the
-filenames differ. **Whether that branch merges first changes where this work
-lands, not what it is.**
+## The fork this plan is now sitting on
+
+The plan and the product answer the same question two incompatible ways, and
+both answers are written down as rules rather than as accidents.
+
+**(A) What shipped — a room reuses the second layer.** `data-model.md`: "the
+group flow reuses the second layer: members share signals to a group wall,
+and the group's top of mind is generated from those shared signals". The code
+says it in the same voice: *a room never generates a signal — every statement
+here was formed on some member's own wall out of their own inspirations and
+then shared in*. Every statement in a room therefore belongs to a person, by
+construction, which is what makes "who agreed, who declined, who has not
+answered" nameable without any attribution machinery at all.
+
+**(B) What this plan proposes — a room distils its own.** A room's ground
+feeds a room's own signals, owned by the room and by no member, and
+`signal_shares` is deleted.
+
+They cannot both be true. B is not an increment on A: it removes the wall's
+source, the synthesis's input, a table the export publishes, and the object
+the proposals and affirmations act on — all of it currently green and all of
+it in the founder's hands this week.
+
+**The recommendation, and the reason.** Keep A. A room's statements being
+*someone's* is not a limitation the design is working around; it is the thing
+that makes a room legible — a shared statement carries a name, a stance
+against it carries a name, and nothing in the room is an unattributed claim
+about the people in it. B's room-owned signal is precisely an unattributed
+claim about the people in it, and every surface that currently says who
+thinks what would need a new answer for it.
+
+What A genuinely lacks is the thing B was reaching for: **a room's ground has
+no signals of its own overhead, so the memories that members made public in a
+room feed nothing.** That is a real gap and it does not need B to close it —
+the same ground can suggest to each member, on their own wall, in their own
+name, which keeps every statement attributed. That is a smaller, additive
+change and it is what a Phase 2 should be if the founder keeps A.
 
 ## The shape
 
