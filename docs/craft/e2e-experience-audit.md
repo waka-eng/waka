@@ -1060,8 +1060,10 @@ that way twice.
   highest-stakes surface in the product: removal re-keys the door and leaving
   does not, the old key is dead, only the owner can remove or close, and a
   removal reaches no further than the room it named.
-- **`tools/e2e/*.ts`.** All of them run, and there are eleven suites now
-  rather than four, plus two support servers they lean on. `docs/goals/every-workflow-works.md` carries the inventory, and
+- **`tools/e2e/*.ts`.** All of them run, and there are far more than the four
+  this entry was written against — `pnpm run | grep e2e:` is the list, and it
+  is deliberately not reproduced here as a number, because the last two
+  numbers in this document both went stale within the week. `docs/goals/every-workflow-works.md` carries the inventory, and
   every row in it reads either *proven by ‹suite›* or *unproven, because
   ‹reason›*.
 - **Attachments and images.** A local S3 stub (`pnpm e2e:s3-stub`) closed the
