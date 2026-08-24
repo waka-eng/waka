@@ -1771,6 +1771,25 @@ function HomeExperience(): JSX.Element {
    */
   const mouthLong = draft.length > 140 || draft.includes("\n");
   /**
+   * A DRAWER BELONGS TO THE SCREEN, NOT TO THE WORLD.
+   *
+   * The mouth layer takes the camera's offset every frame so the quick line
+   * hangs off the field's seam and scrolls away as you descend — right for a
+   * line of chrome that means "here", wrong for a sheet. Opened anywhere but
+   * the top of the world, the drawer inherited that offset and floated with
+   * dead space beneath it, which reads as a panel that failed to land rather
+   * than as a drawer that came out.
+   *
+   * The loop reads this to leave the layer alone while the drawer is open.
+   * A ref because the loop is a rAF closure and cannot see render state; the
+   * effect that mirrors it costs one frame, which the drawer's own 300ms
+   * arrival hides completely.
+   */
+  const mouthLongRef = useRef(mouthLong);
+  useEffect(() => {
+    mouthLongRef.current = mouthLong;
+  }, [mouthLong]);
+  /**
    * THE DIAL'S RIGHT-HAND END IS NOW, AND KEEPING SOMETHING HAPPENS NOW.
    *
    * It was fixed at the moment the archive loaded, so a memory kept ten
@@ -6002,7 +6021,13 @@ function HomeExperience(): JSX.Element {
          has to sit ABOVE the canvas: a field you are typing into cannot have
          orbs drawn over the words. */
       const mouth = measured.mouth.current;
-      if (mouth) mouth.style.transform = `translate3d(0, ${(-cam.y).toFixed(1)}px, 0)`;
+      if (mouth) {
+        /* ...except when it is a drawer, which is stuck to the bottom of the
+           SCREEN and must not ride the camera. See `mouthLongRef`. */
+        mouth.style.transform = mouthLongRef.current
+          ? "translate3d(0, 0, 0)"
+          : `translate3d(0, ${(-cam.y).toFixed(1)}px, 0)`;
+      }
       /* the companion's whisper is screen-anchored, like the companion */
       const say = measured.charSay.current;
       if (say) say.style.transform = `translate3d(${cam.x.toFixed(1)}px, 0, 0)`;

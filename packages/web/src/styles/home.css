@@ -1055,8 +1055,11 @@
   top: auto;
   bottom: 0;
   /* an object with two visible sides, not a band across the frame: the edges
-     are most of what says "component" */
-  width: min(100%, 640px);
+     are most of what says "component" — so it still stops short of the frame
+     at any width. 1040 rather than 640 because a paste is what summons this
+     thing, and 640 wrapped a pasted paragraph into a narrow column with the
+     whole screen empty either side of it. */
+  width: min(calc(100% - 32px), 1040px);
   margin: 0 auto;
   transform: none;
   padding: 0 0 calc(12px + env(safe-area-inset-bottom));
@@ -2429,9 +2432,11 @@
     max-width: none;
     margin: 0 auto;
     /* the well owns its height: a drawer whose depth changed with every line
-       you typed would be a growing block of text again, not a notepad */
-    height: min(34vh, 300px);
-    max-height: min(34vh, 300px);
+       you typed would be a growing block of text again, not a notepad. Deeper
+       than it was, for the same reason it is wider — the thing that opens
+       this is a long paste, and 300px showed about a third of one. */
+    height: min(52vh, 520px);
+    max-height: min(52vh, 520px);
     padding: 14px 16px;
     border-radius: 12px;
     background: var(--jar-sheet-well);
