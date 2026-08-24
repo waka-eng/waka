@@ -4104,10 +4104,50 @@ function HomeExperience(): JSX.Element {
       return null;
     }
 
+    /**
+     * The frame that was on screen a moment ago, held so a resize can put it
+     * back. ONE scratch surface for the page's whole life: a window being
+     * dragged fires a resize per frame, and allocating a viewport-sized
+     * canvas on each of them is a garbage-collection stall in the middle of
+     * the one interaction that most needs to stay smooth.
+     */
+    let carryC: HTMLCanvasElement | null = null;
+    function carry(w: number, h: number): HTMLCanvasElement | null {
+      if (!carryC) carryC = document.createElement("canvas");
+      if (carryC.width !== w || carryC.height !== h) {
+        carryC.width = w;
+        carryC.height = h;
+      }
+      const c2 = carryC.getContext("2d");
+      if (!c2) return null;
+      /* it is a copy, not a layer: whatever it held from the last resize has
+         to be gone, or a shrink leaves the old edges showing round the new */
+      c2.clearRect(0, 0, w, h);
+      c2.drawImage(canvas!, 0, 0);
+      return carryC;
+    }
+
     function measure() {
       const rect = root!.getBoundingClientRect();
-      view.w = Math.max(rect.width, 1);
-      view.h = Math.max(rect.height, 1);
+      /*
+       * A DEGENERATE RECT IS A LIE, NOT A SIZE.
+       *
+       * `.jar` is `position: fixed; inset: 0`. It is the viewport by
+       * construction and there is no state of the page in which it is one
+       * pixel wide — so a rect that small is a measurement taken while the
+       * subtree is mid-rebuild, and the old `Math.max(rect.width, 1)` wrote it
+       * straight through as a real size. That is the wobble the mutation log
+       * caught: three canvas resizes in two milliseconds on every keep, one of
+       * them to a viewport of nothing.
+       *
+       * The window's own dimensions are the honest answer here and cost no
+       * layout to read, so a rect that cannot be true defers to them rather
+       * than being clamped into a shape the loop will act on.
+       */
+      const trueW = rect.width >= 2 ? rect.width : window.innerWidth;
+      const trueH = rect.height >= 2 ? rect.height : window.innerHeight;
+      view.w = Math.max(trueW, 1);
+      view.h = Math.max(trueH, 1);
       const nextDpr = Math.min(window.devicePixelRatio || 1, 2);
       /*
        * ONLY WHEN THE SIZE ACTUALLY CHANGED.
@@ -4134,9 +4174,42 @@ function HomeExperience(): JSX.Element {
        */
       const cw = Math.round(view.w * nextDpr);
       const ch = Math.round(view.h * nextDpr);
+      /*
+       * AND WHEN IT DID CHANGE, CARRY THE PICTURE ACROSS.
+       *
+       * A recorded mutation log of a real keep settled what the paragraph
+       * above could not. The canvas is resized THREE times inside two
+       * milliseconds, six hundred milliseconds after the field closes —
+       * exactly when the server's row arrives and rebuilds the loop. The
+       * guard is working: three writes mean three genuinely different sizes,
+       * a measurement wobbling while the subtree is mid-rebuild. So the
+       * window is real, it is entered on every keep, and it is what the blink
+       * is.
+       *
+       * Chasing the wobble is the wrong repair. A resize is allowed to change
+       * the backing store — that is what it is for — and the world should
+       * survive one either way, including the honest ones nobody has
+       * complained about: dragging the window edge blanks the field today for
+       * the same reason. So the old surface is blitted into the new one before
+       * anything else can composite, and the frame on screen stays on screen
+       * until a real frame replaces it. Whatever makes the size move, there is
+       * no longer a blank to see.
+       *
+       * Stretched rather than re-laid out, on purpose: for the one frame this
+       * lives, a picture at slightly the wrong scale is invisible and a black
+       * screen is not. `draw` writes its own transform at the top of every
+       * pass, so the identity transform this blit needs cannot leak into it.
+       */
       if (canvas!.width !== cw || canvas!.height !== ch) {
+        const pw = canvas!.width;
+        const ph = canvas!.height;
+        const keep = pw > 0 && ph > 0 ? carry(pw, ph) : null;
         canvas!.width = cw;
         canvas!.height = ch;
+        if (keep) {
+          ctx!.setTransform(1, 0, 0, 1, 0, 0);
+          ctx!.drawImage(keep, 0, 0, pw, ph, 0, 0, cw, ch);
+        }
       }
       canvas!.style.width = `${view.w}px`;
       canvas!.style.height = `${view.h}px`;
