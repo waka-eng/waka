@@ -1208,12 +1208,48 @@ function HomeExperience(): JSX.Element {
    * pour, not this ref: the ref only keeps the pour honest about reading the
    * sky AT THE MOMENT IT POURS.
    */
+  /**
+   * LAYER 4, WHERE YOU STAND — NOT A FOURTH REGION.
+   *
+   * The world draws three sections because the canon's first three are
+   * places: memories below, statements above, and the sentence you are
+   * standing in. Layer 4 is not a fourth place. A principle is what is left
+   * of the top of mind once the weather has passed — the same material,
+   * further along — so it belongs where the top of mind already is: one quiet
+   * line under it, opened the way the sky is opened.
+   *
+   * This is what emptied the last entry out of the `≡` holding pen. Before
+   * it, `/principles` was the only layer with no address in the world at all,
+   * and the menu existed largely to carry it.
+   */
+  const [principles, setPrinciples] = useState<ApiPrinciple[]>([]);
+  const [principlesOpen, setPrinciplesOpen] = useState(false);
+
   const sky = useMemo(
     () => ({
       citations,
       signals: new Map((signals ?? []).map((p) => [p.id, p] as const)),
+      /**
+       * THE LAYERS ABOVE THE SKY, as the patterns they stand on.
+       *
+       * The field's light says how much of this person a memory holds up, and
+       * "how much" runs upward: a pattern (layer 2), what currently matters
+       * (layer 3), what has been settled (layer 4). Both sets are derived
+       * here, beside the sky they index into, so `skyOf` stays a pure lookup
+       * and there is exactly one place either can go stale.
+       *
+       * Layer 3 is the board's entries and NOT the poster's lead alone: the
+       * whole artifact is what currently matters, and a memory under its
+       * second entry is holding up the same thing as one under its first.
+       */
+      posterSignalIds: new Set(
+        (notes ?? []).flatMap((e) => e.citedSignals.map((c) => c.id)),
+      ) as ReadonlySet<string>,
+      principleSignalIds: new Set(
+        principles.flatMap((p) => p.citedSignals.map((c) => c.id)),
+      ) as ReadonlySet<string>,
     }),
-    [citations, signals],
+    [citations, signals, notes, principles],
   );
   const skyRef = useRef(sky);
   skyRef.current = sky;
@@ -1451,22 +1487,9 @@ function HomeExperience(): JSX.Element {
   /* ---- walls (v10): the columns either side of the owner's own ---- */
   /** The rooms, newest first: the columns to the RIGHT. */
   const [groups, setGroups] = useState<ApiGroupSummary[]>([]);
-  /**
-   * LAYER 4, WHERE YOU STAND — NOT A FOURTH REGION.
-   *
-   * The world draws three sections because the canon's first three are
-   * places: memories below, statements above, and the sentence you are
-   * standing in. Layer 4 is not a fourth place. A principle is what is left
-   * of the top of mind once the weather has passed — the same material,
-   * further along — so it belongs where the top of mind already is: one quiet
-   * line under it, opened the way the sky is opened.
-   *
-   * This is what emptied the last entry out of the `≡` holding pen. Before
-   * it, `/principles` was the only layer with no address in the world at all,
-   * and the menu existed largely to carry it.
-   */
-  const [principles, setPrinciples] = useState<ApiPrinciple[]>([]);
-  const [principlesOpen, setPrinciplesOpen] = useState(false);
+  /* Layer 4's state is declared UP with the sky, because the field's light
+     reads it: see `principles` there, and `carryOf` for why. Its surface —
+     the quiet line under the top of mind — is far below. */
   /**
    * The agents: the columns to the LEFT. Mock until the endpoints land.
    * Null until the answer is in — the field is built from the owner's inspirations
@@ -2829,7 +2852,17 @@ function HomeExperience(): JSX.Element {
       b.hue = b.ownerProfileId ? hueOf.get(b.ownerProfileId) ?? -1 : -1;
     }
     const list = [
-      ...inspirations.map((c) => makeBall(seedOf(c, pouredSky.citations, pouredSky.signals))),
+      ...inspirations.map((c) =>
+        makeBall(
+          seedOf(
+            c,
+            pouredSky.citations,
+            pouredSky.signals,
+            pouredSky.posterSignalIds,
+            pouredSky.principleSignalIds,
+          ),
+        ),
+      ),
       ...agentBalls,
       ...groupBalls,
       ...kept.map(bornBall),
@@ -7915,8 +7948,18 @@ function HomeExperience(): JSX.Element {
       /* A memory kept in this session is known to the server under `sigId`,
          and the citation index is keyed by the server's id — so a pattern
          that lands on something said into the mouth minutes ago finds it. */
-      const above = skyOf(b.sigId ?? b.id, sky.citations, sky.signals);
+      const above = skyOf(
+        b.sigId ?? b.id,
+        sky.citations,
+        sky.signals,
+        sky.posterSignalIds,
+        sky.principleSignalIds,
+      );
       b.hasNotes = above.cited;
+      /* the three facts the light grades by — see carryOf */
+      b.roots = above.roots;
+      b.onPoster = above.onPoster;
+      b.underPrinciple = above.underPrinciple;
       b.hasGroup = above.inGroup;
       b.quote = above.quote;
       b.terms = above.terms;
@@ -8777,8 +8820,13 @@ function HomeExperience(): JSX.Element {
       reflectionCount: 0,
       /* Nothing has read it yet, and the world does not pretend otherwise:
          distillation is a background pass on the server, so a memory a second
-         old is genuinely uncited and is drawn that way. */
+         old is genuinely uncited, carries nothing, and is drawn that way.
+         When the pass lands, the re-light effect gives it whatever it turns
+         out to hold up. */
       cited: false,
+      roots: 0,
+      onPoster: false,
+      underPrinciple: false,
       inGroup: false,
       terms: [],
     };

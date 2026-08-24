@@ -53,7 +53,12 @@
 import { act } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { FIELD_CITED_LIFT, FIELD_FLOOR_CITED } from "../src/lib/aliveness";
+import {
+  carryOf,
+  FIELD_CARRY_SPAN,
+  FIELD_CITED_LIFT,
+  FIELD_FLOOR_CITED,
+} from "../src/lib/aliveness";
 import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
 import {
   apiMockFrom,
@@ -187,8 +192,21 @@ afterEach(() => {
   layout?.unmount();
 });
 
-/** What a cited memory's light comes to: its floor, plus the lift above it. */
-const CITED_LIGHT = FIELD_FLOOR_CITED + FIELD_CITED_LIFT;
+/**
+ * What THIS cited memory's light comes to: its floor, plus what it carries,
+ * plus the lift above both.
+ *
+ * The carry term is not decoration in this file's arithmetic — it is the
+ * fixture stated honestly. One pattern rests on this memory, and that pattern
+ * is on no board and under no principle, so it holds up exactly one root's
+ * worth (see `carryOf`). Written as the expression rather than as a number so
+ * that the day a share is retuned this test moves with the product instead of
+ * failing for a reason that has nothing to do with what it is watching.
+ */
+const CITED_LIGHT =
+  FIELD_FLOOR_CITED +
+  FIELD_CARRY_SPAN * carryOf({ roots: 1, onPoster: false, underPrinciple: false }) +
+  FIELD_CITED_LIFT;
 
 describe("a memory a pattern rests on", () => {
   /**

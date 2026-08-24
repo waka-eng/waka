@@ -34,6 +34,16 @@ export interface Ball {
   updatedMs: number;
   reflections: number;
   hasNotes: boolean;
+  /**
+   * THE CARRY, AS THREE FACTS. How many patterns cite this memory, and
+   * whether any of them reaches layer 3 (the live poster) or layer 4 (a
+   * principle). `carryOf` in lib/aliveness.ts turns them into the light —
+   * being cited stopped being a boolean the day the field had to say how
+   * MUCH of a person stands on a memory, not merely whether anything does.
+   */
+  roots: number;
+  onPoster: boolean;
+  underPrinciple: boolean;
   /** Nothing rests on this memory yet, and it is old enough that something
       could have. The one place the field points forward instead of back. */
   frontier: boolean;
@@ -230,6 +240,11 @@ export interface SignalSeed {
   kind: string | null;
   /** True when at least one pattern cites this memory as evidence. */
   cited: boolean;
+  /** The same fact, counted, plus how far up the stack those patterns reach.
+      Together they are the memory's CARRY — see lib/aliveness.ts. */
+  roots: number;
+  onPoster: boolean;
+  underPrinciple: boolean;
   /** True when a pattern citing it is shared to a room. Captures themselves
       never cross an account boundary — only the patterns above them do. */
   inGroup: boolean;
@@ -275,6 +290,12 @@ export interface BornSeed extends SignalSeed {
  */
 export interface SkyOverInspiration {
   cited: boolean;
+  /** How many patterns cite it — the boolean above, counted. */
+  roots: number;
+  /** A pattern citing it is cited by the live top of mind. */
+  onPoster: boolean;
+  /** A pattern citing it is cited by a principle. */
+  underPrinciple: boolean;
   inGroup: boolean;
   quote: string | null;
   terms: string[];
@@ -284,13 +305,30 @@ export function skyOf(
   inspirationId: string,
   citations: Map<string, Evidence[]>,
   signalById: Map<string, Signal>,
+  /**
+   * The layers above the sky, as the ids of the patterns they stand on.
+   * Optional because two callers legitimately have no layer 3 or 4 to speak
+   * of — an agent's ground and a room's — and an absent set must read as
+   * "nothing above", never as an error.
+   */
+  posterSignalIds?: ReadonlySet<string>,
+  principleSignalIds?: ReadonlySet<string>,
 ): SkyOverInspiration {
   const cites = citations.get(inspirationId) ?? [];
   const above = cites
     .map((e) => signalById.get(e.signalId))
     .filter((p): p is Signal => Boolean(p));
+  /* Counted over the patterns that RESOLVE, not over the citation rows: a
+     citation whose pattern is not in hand is not a root the field can claim,
+     and counting it would light a memory for something invisible. */
+  const roots = above.length;
   return {
     cited: cites.length > 0,
+    roots,
+    onPoster: posterSignalIds ? above.some((p) => posterSignalIds.has(p.id)) : false,
+    underPrinciple: principleSignalIds
+      ? above.some((p) => principleSignalIds.has(p.id))
+      : false,
     /* A memory is never in a room. What can be is a PATTERN resting on it —
        so this says "something you shared out loud stands on this", which is
        true, without the memory itself having gone anywhere. */
@@ -305,6 +343,8 @@ export function seedOf(
   c: Inspiration,
   citations: Map<string, Evidence[]>,
   signalById: Map<string, Signal>,
+  posterSignalIds?: ReadonlySet<string>,
+  principleSignalIds?: ReadonlySet<string>,
 ): SignalSeed {
   return {
     id: c.id,
@@ -313,7 +353,7 @@ export function seedOf(
     reflectionCount: c.reflectionCount,
     textPreview: c.preview,
     kind: c.kind,
-    ...skyOf(c.id, citations, signalById),
+    ...skyOf(c.id, citations, signalById, posterSignalIds, principleSignalIds),
   };
 }
 
@@ -329,6 +369,9 @@ export function makeBall(s: SignalSeed, agentId = ""): Ball {
     updatedMs,
     reflections: s.reflectionCount,
     hasNotes: s.cited,
+    roots: s.roots,
+    onPoster: s.onPoster,
+    underPrinciple: s.underPrinciple,
     frontier: false,
     hasGroup: s.inGroup,
     textPreview: s.textPreview,
@@ -432,6 +475,12 @@ export function makeAgentBall(s: ApiAgentSignal): Ball {
     updatedMs: Date.parse(s.updatedAt) || capturedMs,
     reflections: 0,
     hasNotes: false,
+    /* An agent's own memory, on an agent's own wall: the viewer's poster and
+       principles say nothing about it, and the agent's are its own business.
+       Zero is the truthful answer here, not a missing one. */
+    roots: 0,
+    onPoster: false,
+    underPrinciple: false,
     frontier: false,
     hasGroup: false,
     textPreview: s.textPreview,

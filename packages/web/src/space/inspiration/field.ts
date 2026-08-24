@@ -13,6 +13,8 @@
  * page call them from inside the loop without the loop owning them.
  */
 import {
+  carryOf,
+  FIELD_CARRY_SPAN,
   FIELD_CITED_LIFT,
   FIELD_DECAY_HALF_LIFE_DAYS,
   FIELD_FLOOR_ANSWERED,
@@ -82,8 +84,22 @@ export function colorBall(b: Ball, T: number): void {
    * of the field still fades exactly as it did, which is where the passage
    * of time is supposed to be visible.
    */
+  /**
+   * AND HOW MUCH IT HOLDS UP DECIDES HOW FAR ABOVE THE FLOOR IT STANDS.
+   *
+   * Being cited was a boolean, so every load-bearing memory was lit exactly
+   * alike: the save a principle, the poster and three patterns all rest on
+   * looked the same as the one a single emerging pattern mentions once. The
+   * carry grades that (`carryOf`, lib/aliveness.ts) — roots, then the poster,
+   * then a principle — and the span it buys sits ON TOP of the cited floor,
+   * so being cited at all still means "cannot rot" and the rest of the range
+   * says how much of this person is standing here. Founder, 2026-08-24.
+   */
+  const carry = b.hasNotes
+    ? carryOf({ roots: b.roots, onPoster: b.onPoster, underPrinciple: b.underPrinciple })
+    : 0;
   const tended =
-    (b.hasNotes ? FIELD_FLOOR_CITED : 0) +
+    (b.hasNotes ? FIELD_FLOOR_CITED + FIELD_CARRY_SPAN * carry : 0) +
     (b.reflections > 0 ? FIELD_FLOOR_ANSWERED : 0) +
     (b.hasGroup ? FIELD_FLOOR_IN_GROUP : 0);
   const a = clamp01(

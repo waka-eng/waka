@@ -62,3 +62,66 @@ export const FIELD_CITED_LIFT = 0.12;
 
 /** Untouched for longer than this, and cited by nothing, is a frontier. */
 export const FIELD_FRONTIER_DAYS = 3;
+
+/**
+ * THE CARRY — how much of this person's self-knowledge a memory is holding up.
+ *
+ * Being cited used to be a BOOLEAN, and so every memory a pattern rested on
+ * was lit exactly alike: the one save that a principle, the poster and three
+ * patterns all stand on looked the same as the one a single emerging pattern
+ * mentions once. The field's only channel was answering "is anything above
+ * this?" when the question a person actually has is "how much of me is
+ * standing on this?" (founder, 2026-08-24).
+ *
+ * Three facts, one per layer above the ground, all of them already known to
+ * the client:
+ *
+ *   ROOTS      — how many patterns cite this memory (layer 2). Saturating at
+ *                the same count that promotes a signal, so a memory holding
+ *                up a full pattern's worth of evidence is at the top of this
+ *                term rather than at some number chosen for the light.
+ *   THE POSTER — a pattern citing it is cited by the live top of mind (layer
+ *                3): this memory is under what currently matters.
+ *   A PRINCIPLE— a pattern citing it is cited by a principle (layer 4): it is
+ *                under something the person has settled.
+ *
+ * The three shares sum to one, so `carryOf` returns a clean 0..1 and the
+ * spread it buys is one named constant rather than an emergent maximum.
+ *
+ * WHAT THIS DELIBERATELY IS NOT. It is not a score of the memory's worth, and
+ * it never renders as one — there is no badge, no count, no bar anywhere. It
+ * moves light, which is the world's only meaning channel, and light is a
+ * state: bright means load-bearing, dim means nothing rests here yet. A
+ * person reads the difference without being told a number, which is the whole
+ * argument for having a single channel.
+ */
+export const FIELD_CARRY_ROOT_SATURATION = 3;
+export const FIELD_CARRY_ROOTS_SHARE = 0.4;
+export const FIELD_CARRY_POSTER_SHARE = 0.3;
+export const FIELD_CARRY_PRINCIPLE_SHARE = 0.3;
+
+/**
+ * The extra light a fully-carrying memory holds over a barely-cited one.
+ *
+ * `FIELD_FLOOR_CITED` is still what being cited AT ALL is worth — one root
+ * and nothing above it, and the memory already cannot rot. This is the span
+ * above that floor, so the field reads as a gradient of load rather than as
+ * two brightnesses.
+ */
+export const FIELD_CARRY_SPAN = 0.5;
+
+/** What a memory is holding up, in 0..1. Pure; the field's only reader. */
+export function carryOf(input: {
+  roots: number;
+  onPoster: boolean;
+  underPrinciple: boolean;
+}): number {
+  const roots =
+    Math.min(Math.max(input.roots, 0), FIELD_CARRY_ROOT_SATURATION) /
+    FIELD_CARRY_ROOT_SATURATION;
+  const carry =
+    FIELD_CARRY_ROOTS_SHARE * roots +
+    (input.onPoster ? FIELD_CARRY_POSTER_SHARE : 0) +
+    (input.underPrinciple ? FIELD_CARRY_PRINCIPLE_SHARE : 0);
+  return Math.min(Math.max(carry, 0), 1);
+}

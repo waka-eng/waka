@@ -668,6 +668,22 @@ Source: `packages/web/src/lib/aliveness.ts`.
 | `FIELD_FLOOR_IN_GROUP` | 0.1 | Nor one that is out loud in a group |
 | `FIELD_CITED_LIFT` | 0.12 | Being cited also lifts a memory above its floor |
 | `FIELD_FRONTIER_DAYS` | 3 | Untouched longer than this and cited by nothing = a frontier |
+| `FIELD_CARRY_ROOT_SATURATION` | 3 | Roots stop adding carry past this many citing patterns |
+| `FIELD_CARRY_ROOTS_SHARE` | 0.4 | Carry: the share held by how many patterns cite it |
+| `FIELD_CARRY_POSTER_SHARE` | 0.3 | Carry: the share held by reaching the live top of mind |
+| `FIELD_CARRY_PRINCIPLE_SHARE` | 0.3 | Carry: the share held by reaching a principle |
+| `FIELD_CARRY_SPAN` | 0.5 | Extra light a fully-carrying memory holds over a barely-cited one |
+
+**Why the carry is graded and the floor is not.** `FIELD_FLOOR_CITED` is what
+being cited AT ALL is worth: one root and nothing above it, and the memory can
+no longer rot. `FIELD_CARRY_SPAN` is the range above that floor, spent by
+`carryOf` on how far up the stack the memory actually reaches — roots, then
+the poster, then a principle. Being cited stopped being a boolean the day the
+field had to answer "how much of me is standing on this?" rather than "is
+anything?". The three shares sum to one, so the carry is a clean 0–1 and the
+spread it buys is the one named constant above rather than an emergent
+maximum. It renders as light and never as a number: no badge, no count, no
+bar — bright means load-bearing, dim means nothing rests here yet.
 
 **Why the field decays faster than confidence.** 7 days against 45 and 30 is
 deliberate. Those govern what the machine concludes over months; this governs

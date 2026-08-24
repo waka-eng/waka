@@ -101,6 +101,13 @@ export function makeGroupBall(
     updatedMs: ev.createdMs,
     reflections: 0,
     hasNotes: false,
+    /* A room's evidence is a STATEMENT, not one of the viewer's memories, so
+       there is no citation chain under it to carry anything — and a room may
+       never reach into another member's layers to find one. Nothing above it
+       here is the honest reading, not a placeholder. */
+    roots: 0,
+    onPoster: false,
+    underPrinciple: false,
     frontier: false,
     hasGroup: false,
     textPreview: ev.textPreview,
