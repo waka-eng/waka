@@ -1463,6 +1463,8 @@ function HomeExperience(): JSX.Element {
    *   `view.w/h/layout` — re-measured on setup, and must be: a rebuild can
    *     straddle a resize.
    */
+  // @ts-expect-error TEMPORARY probe
+  window.__tick3 = () => setGroupFieldTick((n) => n + 1);
   const carryRef = useRef<{
     cam: unknown;
     trip: unknown;
@@ -4107,8 +4109,35 @@ function HomeExperience(): JSX.Element {
       view.w = Math.max(rect.width, 1);
       view.h = Math.max(rect.height, 1);
       const nextDpr = Math.min(window.devicePixelRatio || 1, 2);
-      canvas!.width = Math.round(view.w * nextDpr);
-      canvas!.height = Math.round(view.h * nextDpr);
+      /*
+       * ONLY WHEN THE SIZE ACTUALLY CHANGED.
+       *
+       * Assigning `canvas.width` or `canvas.height` CLEARS the canvas to
+       * transparent. The spec says so even when the value assigned is the one
+       * already there, which is the part that bit: `measure()` runs on every
+       * setup of the frame loop, and the loop is rebuilt whenever
+       * `inspirations` changes — which is what saving a memory does. So every
+       * keep threw away a full backing store, allocated an identical one, and
+       * left a window in which the world is blank until the next frame draws.
+       *
+       * WHETHER THAT WINDOW IS THE BLINK REPORTED AFTER A SAVE IS NOT
+       * ESTABLISHED. Recording the composited output either side of a forced
+       * rebuild showed the same brightness dip with this guard and without it,
+       * so it is committed as what it provably is — work that should not
+       * happen, and a blank frame that should not be possible — and not as a
+       * fix for that symptom.
+       *
+       * `draw` sets its own transform every frame (`ctx.setTransform` at the
+       * top of the pass), so nothing here relies on the state reset that
+       * resizing also performs. A real resize still clears, which is correct
+       * and unavoidable: the backing store genuinely changed.
+       */
+      const cw = Math.round(view.w * nextDpr);
+      const ch = Math.round(view.h * nextDpr);
+      if (canvas!.width !== cw || canvas!.height !== ch) {
+        canvas!.width = cw;
+        canvas!.height = ch;
+      }
       canvas!.style.width = `${view.w}px`;
       canvas!.style.height = `${view.h}px`;
       /* DPR changed (zoom / monitor move): halo sprites are rastered in
