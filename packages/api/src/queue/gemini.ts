@@ -154,6 +154,15 @@ const MAX_ATTACHMENT_CHARS = 2_000;
 const MAX_REFLECTION_CHARS = 800;
 /** At most three candidates per capture — see the extraction instruction. */
 export const MAX_SIGNAL_CANDIDATES = 3;
+/**
+ * How many earlier captures one candidate may cite as co-witnesses. A cap on
+ * apophenia: the model connecting everything to everything is the failure
+ * mode of showing it context, and two genuine earlier witnesses plus the
+ * current capture is already promotion-grade recurrence.
+ */
+export const MAX_RELATED_INSPIRATION_CITATIONS = 2;
+/** A related capture is context; it does not get the main event's budget. */
+const MAX_RELATED_INSPIRATION_CHARS = 1_000;
 /** A top of mind a reader cannot hold in one sitting is not a top of mind. */
 export const MAX_TOP_OF_MIND_ENTRIES = 7;
 
@@ -373,6 +382,15 @@ Existing statements are provided for phrasing only. If this capture is
 evidence of a pattern already listed, restate it the way it is already
 phrased rather than coining a near-duplicate.
 
+You may also be shown a few of the person's EARLIER captures that sit near
+this one. They are context, not material: every statement you return must be
+grounded in the current capture first, and a pattern that lives only in the
+earlier captures is not yours to name today. If — and only if — an earlier
+capture independently witnesses a statement you are already returning, cite
+it: its id, with a verbatim span from THAT capture showing the same pattern.
+At most ${MAX_RELATED_INSPIRATION_CITATIONS} citations per statement, and citing
+none is the normal answer. A theme merely adjacent is not a witness.
+
 Return 0 to ${MAX_SIGNAL_CANDIDATES} statements. Zero is the right answer for a
 capture that carries no durable pattern — a logistics note, a reminder, a
 bare link with nothing said about it. Never pad, never template, never write
@@ -391,9 +409,24 @@ const signalExtractionResponseSchema: ResponseSchema = {
           statement: { type: "STRING", description: "The durable pattern, one sentence." },
           reason: { type: "STRING", description: "Why this capture is evidence of it." },
           quote: { type: "STRING", description: "A verbatim span, or omitted." },
+          relatedEvidence: {
+            type: "ARRAY",
+            maxItems: MAX_RELATED_INSPIRATION_CITATIONS,
+            description:
+              "Earlier captures that independently witness this pattern, or omitted.",
+            items: {
+              type: "OBJECT",
+              properties: {
+                inspirationId: { type: "STRING", description: "An id from the earlier captures shown." },
+                quote: { type: "STRING", description: "A verbatim span of THAT capture." },
+              },
+              required: ["inspirationId", "quote"],
+              propertyOrdering: ["inspirationId", "quote"],
+            },
+          },
         },
         required: ["statement"],
-        propertyOrdering: ["statement", "reason", "quote"],
+        propertyOrdering: ["statement", "reason", "quote", "relatedEvidence"],
       },
     },
   },
@@ -407,6 +440,9 @@ const extractedStatementsSchema = z.object({
         statement: z.string(),
         reason: z.string().optional(),
         quote: z.string().optional(),
+        relatedEvidence: z
+          .array(z.object({ inspirationId: z.string(), quote: z.string() }))
+          .optional(),
       }),
     )
     .optional(),
@@ -456,6 +492,18 @@ function buildSignalExtractionPrompt(input: SignalCandidateExtractionInput): str
     );
   }
 
+  /* One fence per earlier capture, so a capture that spells a closer cannot
+     swallow its neighbours — and the id sits inside the fence with the text
+     it names, where a forged id in one capture cannot relabel another. */
+  for (const related of input.relatedInspirations) {
+    sections.push(
+      fence(
+        "earlier capture",
+        `id: ${related.id}\nCaptured: ${related.createdAt.toISOString()}\n${clip(related.text, MAX_RELATED_INSPIRATION_CHARS)}`,
+      ),
+    );
+  }
+
   return sections.join("\n\n");
 }
 
@@ -487,11 +535,28 @@ export function parseSignalCandidates(payload: unknown): SignalCandidateExtracti
   }
 
   const statements = (parsed.data.statements ?? [])
-    .map((candidate) => ({
-      statement: candidate.statement.trim(),
-      reason: candidate.reason?.trim() || undefined,
-      quote: candidate.quote?.trim() || undefined,
-    }))
+    .map((candidate) => {
+      /* Shape discipline only — whether a cited id was actually OFFERED, and
+         whether its quote is genuinely in that capture, is the caller's
+         check, because only the caller holds the retrieved set. Here: drop
+         blanks, collapse duplicate ids (first wins), enforce the cap the
+         schema merely advertises. */
+      const seenIds = new Set<string>();
+      const relatedEvidence = (candidate.relatedEvidence ?? [])
+        .map((cited) => ({ inspirationId: cited.inspirationId.trim(), quote: cited.quote.trim() }))
+        .filter((cited) => {
+          if (!cited.inspirationId || !cited.quote || seenIds.has(cited.inspirationId)) return false;
+          seenIds.add(cited.inspirationId);
+          return true;
+        })
+        .slice(0, MAX_RELATED_INSPIRATION_CITATIONS);
+      return {
+        statement: candidate.statement.trim(),
+        reason: candidate.reason?.trim() || undefined,
+        quote: candidate.quote?.trim() || undefined,
+        relatedEvidence: relatedEvidence.length > 0 ? relatedEvidence : undefined,
+      };
+    })
     .filter((candidate) => candidate.statement.length > 0)
     .slice(0, MAX_SIGNAL_CANDIDATES);
 
@@ -557,16 +622,21 @@ const signalMatchJudgementResponseSchema: ResponseSchema = {
 export function buildSignalMatchJudgementRequest(
   input: SignalMatchJudgementInput,
 ): GenerateContentRequest {
+  /*
+    Through `fence()`, like every other prompt in this file — this builder
+    used to assemble its delimiters by hand and interpolate the statements
+    raw, which is exactly the forgetting the module header warns about. A
+    statement containing its own closer could end the fence early; and since
+    a "same" verdict on an unlocked emerging signal REWRITES that signal's
+    stored statement (`restateSignal`), the fence here guards a write, not
+    just a reading. Logged as M9 in docs/known-issues.md.
+  */
   const prompt = [
     "statement A:",
-    "<<<statement>>>",
-    input.candidateStatement,
-    "<<<end>>>",
+    fence("statement a", input.candidateStatement),
     "",
     "statement B:",
-    "<<<statement>>>",
-    input.existingStatement,
-    "<<<end>>>",
+    fence("statement b", input.existingStatement),
   ].join("\n");
 
   return {

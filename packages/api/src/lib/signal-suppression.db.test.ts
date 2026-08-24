@@ -76,7 +76,7 @@ async function derive(
       profileId,
       evidenceOwnerProfileId: profileId,
       inspirationId,
-      candidates: [{ statement, reason: null, quote: null, quoteSource: null, embedding }],
+      candidates: [{ statement, reason: null, quote: null, quoteSource: null, relatedEvidence: [], embedding }],
       embeddingModel: EMBEDDING_MODEL,
       provider: neverCalledProvider,
       preferredLocale: "en-US" as never,

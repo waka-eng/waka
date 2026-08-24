@@ -59,7 +59,7 @@ async function derive(
       profileId,
       evidenceOwnerProfileId: profileId,
       inspirationId: insp.id as string,
-      candidates: [{ statement, reason: null, quote: null, quoteSource: null, embedding: NEAR_EMBEDDING }],
+      candidates: [{ statement, reason: null, quote: null, quoteSource: null, relatedEvidence: [], embedding: NEAR_EMBEDDING }],
       embeddingModel: EMBEDDING_MODEL,
       provider: neverCalledProvider,
       preferredLocale: "en-US" as never,

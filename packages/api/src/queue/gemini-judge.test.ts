@@ -38,12 +38,17 @@ describe("buildSignalMatchJudgementRequest", () => {
   it("delimits both statements — they are content, never instructions", () => {
     const prompt = buildSignalMatchJudgementRequest(INPUT).contents[0]!.parts[0]!.text!;
 
-    expect(prompt).toContain("<<<statement>>>");
     expect(prompt).toContain(INPUT.candidateStatement);
     expect(prompt).toContain(INPUT.existingStatement);
-    // Two statements, two fences each.
-    expect(prompt.match(/<<<statement>>>/g)).toHaveLength(2);
-    expect(prompt.match(/<<<end>>>/g)).toHaveLength(2);
+    /* Through fence(), with a distinct tag per statement — the shared
+       anonymous <<<statement>>>/<<<end>>> pair this test used to pin was the
+       hand-rolled fence docs/known-issues.md logs as M9: a statement
+       containing the closer ended its own fence. Each fence opens and closes
+       exactly once; prompt-fence.test.ts holds the adversarial cases. */
+    for (const tag of ["statement a", "statement b"]) {
+      expect(prompt.match(new RegExp(`<<<${tag}>>>`, "g"))).toHaveLength(1);
+      expect(prompt.match(new RegExp(`<<<end ${tag}>>>`, "g"))).toHaveLength(1);
+    }
   });
 
   it("tells the judge all three verdicts, that tension is not opposition, and that uncertainty means independent", () => {

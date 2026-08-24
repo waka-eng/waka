@@ -11,9 +11,14 @@ import {
   classifyMatch,
   computeSignalConfidence,
   CONFIDENCE_SOURCE_DIVERSITY_BONUS,
+  resolveRelatedEvidence,
   SIGNAL_MATCH_MIN_COSINE,
   SIGNAL_MERGE_JUDGE_MIN_COSINE,
 } from "./signal-derivation.js";
+import {
+  MAX_RELATED_INSPIRATION_CITATIONS,
+  parseSignalCandidates,
+} from "../queue/gemini.js";
 
 const NOW = new Date("2026-08-15T12:00:00.000Z");
 const DAY = 24 * 60 * 60 * 1000;
@@ -131,5 +136,119 @@ describe("decay is real: the same evidence scores lower as it ages", () => {
     // Support and spread do not decay, so it floors instead of vanishing:
     // dormant patterns stay reachable rather than deleted by arithmetic.
     expect(after180quiet).toBeGreaterThan(0);
+  });
+});
+
+describe("resolveRelatedEvidence — which citations code lets stand", () => {
+  const OFFERED = [
+    {
+      id: "old-1",
+      text: "Quit piano this spring; practice had started feeling like performance.",
+      createdAt: new Date("2026-06-01T00:00:00.000Z"),
+    },
+    {
+      id: "old-2",
+      text: "A note about something else entirely.",
+      createdAt: new Date("2026-07-01T00:00:00.000Z"),
+    },
+  ];
+
+  it("keeps a citation whose quote is genuinely in the cited capture", () => {
+    const kept = resolveRelatedEvidence(
+      {
+        relatedEvidence: [
+          { inspirationId: "old-1", quote: "practice had started feeling like performance" },
+        ],
+      },
+      OFFERED,
+      500,
+    );
+    expect(kept).toEqual([
+      { inspirationId: "old-1", quote: "practice had started feeling like performance" },
+    ]);
+  });
+
+  /* The model cannot conjure evidence from a capture it was never shown —
+     an id outside the offered set is dropped no matter how good the quote. */
+  it("drops a citation of a capture that was not offered", () => {
+    expect(
+      resolveRelatedEvidence(
+        { relatedEvidence: [{ inspirationId: "unoffered-9", quote: "anything at all here" }] },
+        OFFERED,
+        500,
+      ),
+    ).toEqual([]);
+  });
+
+  /* "These two share a theme" is not "this capture witnesses this pattern".
+     The verbatim quote is the proof, and a paraphrase fails it — same rule,
+     same verifier, as the primary quote. */
+  it("drops a citation whose quote is a paraphrase of the cited capture", () => {
+    expect(
+      resolveRelatedEvidence(
+        {
+          relatedEvidence: [
+            { inspirationId: "old-1", quote: "gave up piano because practicing felt performative" },
+          ],
+        },
+        OFFERED,
+        500,
+      ),
+    ).toEqual([]);
+  });
+
+  it("drops a citation whose quote lives in a DIFFERENT offered capture", () => {
+    expect(
+      resolveRelatedEvidence(
+        {
+          relatedEvidence: [
+            { inspirationId: "old-2", quote: "practice had started feeling like performance" },
+          ],
+        },
+        OFFERED,
+        500,
+      ),
+    ).toEqual([]);
+  });
+
+  it("is empty-safe in both directions", () => {
+    expect(resolveRelatedEvidence({ relatedEvidence: [] }, OFFERED, 500)).toEqual([]);
+    expect(
+      resolveRelatedEvidence(
+        { relatedEvidence: [{ inspirationId: "old-1", quote: "feeling like performance" }] },
+        [],
+        500,
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe("parseSignalCandidates — related-citation shape discipline", () => {
+  it("collapses duplicate ids, drops blanks, and enforces the cap", () => {
+    const parsed = parseSignalCandidates({
+      statements: [
+        {
+          statement: "You keep abandoning practices once they feel like performances.",
+          relatedEvidence: [
+            { inspirationId: "a", quote: "first quote" },
+            { inspirationId: "a", quote: "second quote for the same capture" },
+            { inspirationId: " ", quote: "blank id" },
+            { inspirationId: "b", quote: " " },
+            { inspirationId: "c", quote: "third distinct capture" },
+            { inspirationId: "d", quote: "fourth distinct capture" },
+          ],
+        },
+      ],
+    });
+    const cited = parsed.statements[0]!.relatedEvidence!;
+    expect(cited.map((row) => row.inspirationId)).toEqual(["a", "c"]);
+    expect(cited).toHaveLength(MAX_RELATED_INSPIRATION_CITATIONS);
+  });
+
+  it("leaves relatedEvidence absent when nothing was cited", () => {
+    const parsed = parseSignalCandidates({
+      statements: [{ statement: "A pattern with no earlier witnesses." }],
+    });
+    expect(parsed.statements[0]!.relatedEvidence).toBeUndefined();
   });
 });

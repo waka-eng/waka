@@ -133,3 +133,47 @@ export const CONFIDENCE_SOURCE_DIVERSITY_BONUS = 8;
  * likely to match are the ones that survive the cut.
  */
 export const MATCH_CANDIDATE_SCAN_LIMIT = 500;
+
+/*
+ * -----------------------------------------------------------------------
+ * Related captures — recurrence the extractor is allowed to SEE.
+ *
+ * Per-capture extraction can only name a pattern one capture witnesses on
+ * its own. The pattern a person actually produces returns months later,
+ * dressed in different words, across saves that individually look like
+ * nothing — so at derivation the current capture's nearest earlier
+ * captures (by inspiration-embedding cosine) are shown to the extractor
+ * as context, and it may cite the ones that independently witness a
+ * statement it is already grounding in the current capture. A citation
+ * becomes a real evidence row for the same signal — dated by ITS OWN
+ * capture date (see signal-lifecycle.ts) and kept only with a verbatim
+ * quote from its own text, verified in code.
+ * -----------------------------------------------------------------------
+ */
+
+/**
+ * Ceiling on how many of the profile's most recent capture vectors are
+ * scanned for relatedness. Same in-memory-cosine cost story as
+ * MATCH_CANDIDATE_SCAN_LIMIT, and deliberately the same value: the two
+ * scans run in the same pass over the same archive.
+ */
+export const RELATED_INSPIRATION_SCAN_LIMIT = 500;
+
+/**
+ * Floor below which an earlier capture is not offered as context at all.
+ * Well under the signal-matching bars on purpose — statements are distilled
+ * and compact while captures are raw and noisy, so thematic kinship between
+ * captures lives lower on the cosine scale than sameness between statements.
+ * A first, defensible guess like every number in this file; the failure
+ * modes are bounded on both sides (too high → the feature sees nothing and
+ * derivation behaves exactly as before; too low → the model is shown noise
+ * it is instructed to ignore and must out-quote to cite).
+ */
+export const RELATED_INSPIRATION_MIN_COSINE = 0.6;
+
+/**
+ * How many related captures the extractor is shown. Context, not corpus:
+ * enough to notice a theme returning, few enough that the current capture
+ * stays the loudest thing in the prompt.
+ */
+export const RELATED_INSPIRATION_CONTEXT_LIMIT = 5;

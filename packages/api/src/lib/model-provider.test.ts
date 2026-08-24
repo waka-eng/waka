@@ -40,6 +40,7 @@ const EXTRACTION_INPUT: SignalCandidateExtractionInput = {
     { kind: "page_body", label: "example.com", text: "An article about workspaces." },
   ],
   existingStatements: [{ id: signalId, statement: "Quiet rooms are where honest work happens." }],
+  relatedInspirations: [],
 };
 
 const SYNTHESIS_INPUT: TopOfMindSynthesisInput = {

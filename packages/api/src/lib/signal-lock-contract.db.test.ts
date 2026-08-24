@@ -64,7 +64,7 @@ async function derive(
       profileId,
       evidenceOwnerProfileId: profileId,
       inspirationId,
-      candidates: [{ statement, reason: null, quote: null, quoteSource: null, embedding }],
+      candidates: [{ statement, reason: null, quote: null, quoteSource: null, relatedEvidence: [], embedding }],
       embeddingModel: EMBEDDING_MODEL,
       provider: neverCalledProvider,
       preferredLocale: "en-US" as never,
@@ -216,7 +216,8 @@ describe("regeneration updates a locked signal's support, never its words", () =
       { statement: "Sick days change the food rules.", quote: "감기 걸린 날이라 오늘은 회 말고" },
       // Verbatim from the reflection answer — the person's words too.
       { statement: "Exceptions are worth remembering.", quote: "몸이 아픈 날의 예외를 기억하고 싶어서" },
-      // Verbatim from the page behind the link — the article speaking.
+      // Verbatim from the page behind the link — the ARTICLE speaking, which
+      // is no longer quotable as evidence (dev, PR #266: own words only).
       { statement: "Soup reads as recovery food.", quote: "따뜻한 국물 요리가 감기 회복에 좋다는" },
       // A paraphrase that appears nowhere — must be refused to null.
       { statement: "Dislikes raw fish.", quote: "회를 싫어한다고 분명히 말했다" },
@@ -269,10 +270,11 @@ describe("regeneration updates a locked signal's support, never its words", () =
       quote: "몸이 아픈 날의 예외를 기억하고 싶어서",
       quote_source: "own",
     });
-    expect(byStatement.get("Soup reads as recovery food.")).toMatchObject({
-      quote: "따뜻한 국물 요리가 감기 회복에 좋다는",
-      quote_source: "enrichment",
-    });
+    expect(
+      byStatement.get("Soup reads as recovery food."),
+      "a span of the PAGE is the article's words, not the person's — refused " +
+        "to honest-null since own-words-only (the statement itself survives)",
+    ).toMatchObject({ quote: null, quote_source: null });
     expect(
       byStatement.get("Dislikes raw fish."),
       "an invented quote must be refused to honest-null, never stored",

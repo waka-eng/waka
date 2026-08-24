@@ -1,23 +1,30 @@
 # How WAKA generates memory
 
 This is the mechanics companion to [data-model.md](data-model.md). That doc
-says what the layers *are*; this one says exactly how each layer is derived
-from the one below — every threshold, every decision, and which guarantees
-are enforced by code versus asked of the model.
+says what the layers *are*; this one says how each layer is generated from
+the one below — every rule, every number, and who decides what.
 
 **This doc cannot silently drift from the implementation.** Every constant in
-the [tuning tables](#tuning-constants) is machine-checked against the exported
-values in code by `packages/api/src/lib/generation-doc.test.ts`, which runs in
-the normal unit suite. Change a value in code without updating this doc — or
-here without updating code — and CI fails. The same test verifies every file
-path this doc cites still exists, and re-asserts the structural claims marked
-**[checked]** below. Prose can still lag in nuance; numbers and names cannot.
+the [tuning tables](#tuning-constants) is machine-checked against the code by
+`packages/api/src/lib/generation-doc.test.ts`, both directions, in the normal
+unit suite — change a value on either side alone and CI fails. The same test
+checks every inline `NAME (value)` mention, re-asserts every claim marked
+**[checked]**, and verifies every file path cited here still exists. Prose can
+lag in nuance; numbers and names cannot.
+
+**One sentence governs every layer,** and it is worth reading the rest of the
+doc through: *the model writes sentences, the numbers make decisions, and
+every checkable claim the model makes is checked.*
 
 The pipeline in one picture:
 
 ```
   capture ──► enrichment ──► extraction ──► embed ──► match-or-mint ──► evidence
  (layer 1)   (links/images)  (model, ≤3)   (768d)    (attach/judge/mint)    │
+                                  ▲                                         │
+              related earlier captures (≤5, retrieved by                    │
+              capture-vector cosine; citable as evidence                    │
+              only with a code-verified verbatim quote)                     │
                                                                             ▼
                                                               confidence + promotion
                                                               (emerging → active at 3)
@@ -26,48 +33,48 @@ The pipeline in one picture:
                             one versioned artifact    (model, ≤7)   (score, ≤12)
 ```
 
-Everything model-facing happens in exactly three calls per unit of work:
-extraction (per capture), the merge judge (per ambiguous candidate, usually
-zero), and synthesis (per refresh). Everything else — matching, confidence,
-promotion, selection, versioning, locks — is deterministic code, testable
-without a model.
-
 ---
 
 ## The life of one inspiration
 
-The same pipeline, told as one capture's story. Say you save: *"Turned down
-the platform-team offer. I keep choosing depth over breadth."*
+The pipeline, told as one capture's story. Say you save: *"Turned down the
+platform-team offer. I keep choosing depth over breadth."*
 
-1. **Capture.** The text lands as an inspiration — yours, editable, deletable,
-   never shared. If it carried a link or an image, enrichment fetches the page
-   body / describes the image in the background and re-derives when done.
-2. **Extraction.** One model call reads the capture (plus reflections and
-   enrichment) and proposes at most three candidate statements — here, likely
-   one: "You keep choosing depth over breadth." Zero would also be a valid
-   answer; a grocery list yields nothing.
-3. **Match or mint.** The candidate is embedded and compared against your
-   existing signals. If you have said this before in other words, the cosine
-   is high and the capture **attaches as evidence** to that signal. In the
-   ambiguous band the judge is asked once. Otherwise a new signal is born
-   `emerging`.
-4. **Recurrence decides.** At three pieces of evidence the signal promotes to
-   `active`. One mention is a thought; three are a pattern.
-5. **Confidence follows the evidence** — how much, how spread out, how
-   recent, whether an agent corroborated it — computed fresh at every read,
+1. **Capture.** The text lands as an inspiration — yours, editable,
+   deletable, never shared. A link or image is enriched in the background
+   (page fetched, image described) and the capture re-derives when that
+   lands.
+2. **Related captures.** Your save's vector is compared against your earlier
+   saves'. The nearest few are shown to the extractor as context — so if you
+   wrote about quitting piano "because practice felt like performance"
+   months ago, today's save about abandoning the blog for the same reason
+   can cite it, and both become evidence of one pattern neither save could
+   witness alone.
+3. **Extraction.** One model call reads the capture (plus reflections,
+   enrichment, and those related saves) and proposes at most three pattern
+   statements — here, likely one: "You keep choosing depth over breadth."
+   Zero is a valid answer; a grocery list yields nothing.
+4. **Match or mint.** Each statement is embedded and compared against your
+   existing signals by cosine distance. Said before in other words → the
+   capture **attaches as evidence** of that signal. Genuinely new → a signal
+   is born `emerging`. In the ambiguous band, one judge call breaks the tie.
+5. **Recurrence decides.** At three pieces of evidence the signal promotes
+   to `active`. One mention is a thought; three are a pattern.
+6. **Confidence follows the evidence** — how much, how spread out over time,
+   how recent, whether an agent corroborated it — recomputed at every read,
    so a pattern you stop feeding fades without anyone touching it.
-6. **Selection.** When the signal set changes, a refresh scores every
+7. **Selection.** When the signal set changes, a refresh scores every
    eligible signal and takes the strongest twelve. New profiles borrow their
    best still-forming signals so the board is never blank.
-7. **Synthesis.** One model call returns the whole artifact — at most seven
-   entries, each citing the signals it rests on. Code then validates every
+8. **Synthesis.** One model call returns the whole top of mind — at most
+   seven entries, each citing the signals it rests on. Code validates every
    citation, restores your locked entries byte-for-byte, and writes the next
-   **version** of your top of mind. The old one is superseded, never erased.
-8. **You push back.** Edit an entry (it locks), dismiss it, pin it, or mark
-   it *not true* — and the next synthesis is told, with your correction
-   outranking the model's phrasing. Delete the original inspiration and the
-   whole chain unwinds: evidence gone, signal retired or marked unsupported,
-   artifact re-synthesized.
+   **version**. The old one is superseded, never erased.
+9. **You push back.** Edit an entry (it locks), pin it, dismiss it, or mark
+   it *not true* — the next synthesis is told, and your correction outranks
+   the model's phrasing. Delete the original inspiration and the chain
+   unwinds: evidence gone, signal retired or marked unsupported, artifact
+   re-synthesized.
 
 Everything below specifies each step precisely.
 
@@ -75,7 +82,25 @@ Everything below specifies each step precisely.
 
 ## Layer 1 → Layer 2: how a signal is generated
 
-### 1. What starts a derivation
+**The whole layer in one table.** One capture flows through seven decisions,
+in this order. Three involve the model — and each of those is either confined
+to a band or verified after the fact; everything that admits, promotes, or
+ranks is arithmetic.
+
+| # | Decision | Decided by | The rule |
+|---|---|---|---|
+| 1 | Which earlier captures are worth showing alongside this one | Arithmetic | cosine over stored capture vectors — floor `RELATED_INSPIRATION_MIN_COSINE` (0.6), strongest `RELATED_INSPIRATION_CONTEXT_LIMIT` (5) of the `RELATED_INSPIRATION_SCAN_LIMIT` (500) most recent |
+| 2 | Is there a durable pattern here, and in what words | **Model** | 0 to `MAX_SIGNAL_CANDIDATES` (3) statements — zero is a sanctioned answer; its quote is kept only if it is a verbatim span of the capture |
+| 3 | Which earlier captures co-witness a statement | **Model proposes, code verifies** | at most `MAX_RELATED_INSPIRATION_CITATIONS` (2) per statement; only ids that were actually offered; each citation needs a verbatim quote from the cited capture's own text or it is dropped whole |
+| 4 | Same pattern as an existing signal, or a new one | Arithmetic — model tie-break inside one band | ≥ `SIGNAL_MATCH_MIN_COSINE` (0.86) attach as evidence · below `SIGNAL_MERGE_JUDGE_MIN_COSINE` (0.7) mint new · in between, one judge call where **uncertainty mints** |
+| 5 | Does the pattern count as real | Arithmetic | `SIGNAL_PROMOTION_MIN_EVIDENCE` (3) evidence rows: `emerging` becomes `active` |
+| 6 | How strong is it right now | Arithmetic | the confidence formula below, computed fresh at every read, over evidence dated by capture time |
+| 7 | What happens when its evidence is deleted | Arithmetic | at zero evidence an unlocked signal retires; a human-edited one keeps its words, marked unsupported and excluded from synthesis |
+
+Decisions 1–4 happen inside one derivation job; 5–7 are pure code a test can
+pin exactly. The subsections below take the steps in the same order.
+
+### 1. What starts a run
 
 | Event | Reason recorded | Where |
 |---|---|---|
@@ -84,83 +109,89 @@ Everything below specifies each step precisely.
 | A reflection is added or removed | `edited` | same |
 | An attachment finishes enriching | `edited` (re-derive with new context) | `packages/api/src/lib/queue.ts` |
 
-Deleting an inspiration does **not** start a derivation — it runs the reverse
-operation, [reconciliation](#5-lifecycle), inside the delete transaction.
+Deleting an inspiration does **not** start a derivation — it runs the
+reverse operation (step 7) inside the delete transaction.
 
-Derivation jobs are keyed per inspiration in the Postgres-backed queue
-(`background_jobs`), so a burst of edits coalesces. An enqueue that lands
-while a derivation is already **running** sets `rerun_requested` instead of
-being absorbed: the running pass read its inputs before the new edit existed,
-so on completion the job returns to `pending` and runs once more. The trailing
-edit is never lost. **[checked]**
+Jobs are keyed per inspiration in the Postgres queue, so a burst of edits
+coalesces into one run. An edit landing while a run is already executing sets
+`rerun_requested`: the running pass read its inputs before the edit existed,
+so on completion the job runs exactly once more. A trailing edit is never
+lost. **[checked]**
 
-### 2. Enrichment: what the model gets to read
+### 2. What the model gets to read
 
-The extraction model sees more than the typed text when the capture carried
-attachments, and everything it sees is bounded and provenance-labeled:
+Everything is bounded, provenance-labeled, and fenced:
 
-- **Links** — the page is fetched with per-hop SSRF checks (every redirect
-  re-validated, private ranges refused unless the host is explicitly
-  allowlisted via `WAKA_ENRICHMENT_ALLOWED_HOSTS`), under a hard timeout and a
-  byte cap, and reduced to a text extraction of the page body.
-- **Images** — described by a vision call (temperature 0) that transcribes any
-  legible text verbatim and describes what is depicted; the description is
-  capped and stored on the attachment.
+- **The capture itself.** Inputs are clipped on the way in, and whatever the
+  model returns is clipped again in code — statements to 500 characters.
+- **Your reflection answers** — the strongest context a capture carries.
+- **Link enrichment** — the page is fetched with per-hop SSRF checks (every
+  redirect re-validated, private ranges refused unless allowlisted via
+  `WAKA_ENRICHMENT_ALLOWED_HOSTS`), under a hard timeout and byte cap, then
+  reduced to body text. **Image enrichment** — a temperature-0 vision call
+  transcribes legible text verbatim and describes the image.
+- **Up to `MATCH_CANDIDATE_SCAN_LIMIT` (500) of your existing statements** —
+  *for phrasing consistency only*; matching is decided by distance, below.
+- **Related earlier captures** — see step 3.
 
-Enrichment output is **derived context, never content**: it lives on the
-attachment row, is clearly labeled machine-derived when shown, and is fenced
-as untrusted data in every downstream prompt — a web page that says "ignore
-your instructions" is a string, not an instruction.
+Enrichment is derived context, never content: it lives on the attachment
+row, is labeled machine-derived when shown, and arrives in every prompt
+fenced as untrusted data. A web page that says "ignore your instructions" is
+a string, not an instruction.
 
-### 3. Extraction: one model call per capture
+### 3. Related captures, and what the model may propose
 
-`extractSignalCandidates` (interface in
-`packages/api/src/lib/model-provider.ts`, Gemini implementation in
-`packages/api/src/queue/gemini.ts`) reads one capture — text, the human's own
-reflection answers, enrichment context — plus up to
-`MATCH_CANDIDATE_SCAN_LIMIT` of the profile's existing statements *for
-phrasing consistency only*. It returns **0 to `MAX_SIGNAL_CANDIDATES` (3)**
-candidate statements, each with a reason and, when honest, a verbatim quote.
+Per-capture reading is structurally blind to how people actually recur: the
+same theme returning months later, worded differently, across saves that
+individually look like nothing. So before extraction:
 
-The contract, enforced by prompt and checked where code can check:
+1. The capture's own vector (already maintained for layer-1 recall — the
+   reorder costs no extra model call) is compared against the profile's
+   stored capture vectors: the `RELATED_INSPIRATION_SCAN_LIMIT` (500) most
+   recent are scanned.
+2. Anything at or above `RELATED_INSPIRATION_MIN_COSINE` (0.6) qualifies;
+   the strongest `RELATED_INSPIRATION_CONTEXT_LIMIT` (5) enter the prompt,
+   each in its own fence with its id and date.
 
-- **Zero is a right answer.** A grocery list is not evidence of a durable
-  pattern. The prompt says so explicitly; a model that pads output mints
-  noise, and noise is the failure mode this whole layer exists to prevent.
-- **Statements are patterns, not summaries.** "You keep returning to X"
-  rather than "this note is about X".
-- **Quotes must be verbatim spans.** Absent is honest; invented is not — and
-  since 2026-08-22 this is enforced by code rather than asked of the model:
-  `verifyQuote` (`packages/api/src/lib/salience.ts`) keeps a claimed quote
-  only when it appears, whitespace-normalized, in the person's own words
-  (the capture text and their reflection answers) or in the attachment
-  enrichment, and records which in `signal_evidence.quote_source`
-  (`own` / `enrichment` — different claims about a person, never rendered
-  alike). Verification runs before the length clip, because the other order
-  truncates a long honest quote into a reject. A quote that verifies
-  nowhere is stored as null. Rows written before this date carry a quote
-  with a null `quote_source`, which is how a reader tells a verified span
-  from a legacy unverified one.
-- All user text is fenced between delimiters and the system instruction
-  pins the model against instruction injection from capture content.
-- Temperature 0, JSON schema-constrained output, statements clipped to 500
-  chars in code regardless of what the model returns.
+The extraction call (`extractSignalCandidates` — interface in
+`packages/api/src/lib/model-provider.ts`, implementation in
+`packages/api/src/queue/gemini.ts`) then returns **0 to
+`MAX_SIGNAL_CANDIDATES` (3)** candidate statements. The contract:
 
-The model does **not** decide matching. It proposes statements; distance does
-the rest.
+- **Zero is a right answer.** A model that pads output mints noise, and
+  noise is the failure mode this whole layer exists to prevent.
+- **Statements are patterns, not summaries** — "You keep returning to X",
+  never "this note is about X".
+- **Quotes must be verbatim spans.** Absent is honest; invented is not. The
+  primary quote is verified in code against the capture's own text
+  (`packages/api/src/lib/salience.ts`) and dropped if it is not there —
+  including a span from attachment enrichment: only the person's OWN words
+  survive as evidence quotes now. `signal_evidence.quote_source` remains on
+  the row (`own` / `enrichment` / null): new rows carry `own` or null, and
+  older rows keep whatever they were verified as, because the two are
+  different claims about a person and must never render alike.
+- **Related captures are context, not material.** Every statement must be
+  grounded in the current capture first; a pattern living only in the
+  earlier captures is not the model's to name. When an earlier capture
+  *does* independently witness a statement, the model may cite it — at most
+  `MAX_RELATED_INSPIRATION_CITATIONS` (2) per statement — and code then
+  drops any cited id that was not actually offered and verifies each
+  citation's quote against the cited capture's text
+  (`resolveRelatedEvidence`). A citation whose quote fails is dropped whole:
+  "these two share a theme" is not "this capture witnesses this pattern",
+  and the verbatim quote is the difference.
+- Temperature 0, JSON schema-constrained, caps re-enforced in code
+  regardless of what the model returns.
 
-### 4. Match-or-mint: where dedupe actually happens
+### 4. The matching math
 
-Each candidate is embedded (`gemini-embedding-001`, 768 dimensions — same
-model family as inspiration embeddings, see
-`packages/api/src/lib/inspiration-embeddings.ts`) and compared by cosine
-similarity against the profile's existing signal vectors — the
-`MATCH_CANDIDATE_SCAN_LIMIT` (500) most recently evidenced, scanned in
-application memory.
+Each surviving candidate is embedded (`gemini-embedding-001`, 768
+dimensions — the same family as capture embeddings, see
+`packages/api/src/lib/inspiration-embeddings.ts`). Then, in order:
 
-First, candidates within one batch are deduped against each other at
-`SIGNAL_BATCH_DEDUPE_MIN_COSINE` (0.94) — a model that says the same thing
-twice in one reply mints once.
+**Batch dedupe.** Candidates from one reply are compared to each other; at
+cosine ≥ `SIGNAL_BATCH_DEDUPE_MIN_COSINE` (0.94) they collapse — a model
+that says the same thing twice in one reply mints once.
 
 Next, the ground refuses: each candidate is compared against the vectors of
 the profile's **dismissed** signals (rows whose `dismissed_at` is set — the
@@ -173,132 +204,156 @@ dismissed signal (clearing `dismissed_at`) returns the pattern to the loop's
 sight. Checked before the match on purpose: a pattern the owner refused must
 not re-enter as evidence for something else **[checked]**.
 
-Then, per candidate, the decision — this is `classifyMatch` in
-`packages/api/src/lib/signal-derivation-thresholds.ts`, applied by
-`packages/api/src/lib/signal-match-or-mint.ts` **[checked]**:
+**Match-or-mint.** Each candidate is compared against the profile's existing
+signal vectors — the `MATCH_CANDIDATE_SCAN_LIMIT` (500) most recently
+evidenced — and the nearest neighbor's cosine decides. This is
+`classifyMatch` in `packages/api/src/lib/signal-derivation-thresholds.ts`,
+applied by `packages/api/src/lib/signal-match-or-mint.ts` **[checked]**:
 
 | Similarity to nearest existing signal | Decision |
 |---|---|
-| ≥ `SIGNAL_MATCH_MIN_COSINE` (0.86) | **Attach** — this capture becomes evidence of the existing signal |
-| ≥ `SIGNAL_MERGE_JUDGE_MIN_COSINE` (0.7), < 0.86 | **Ask the judge** — one bounded model call: "do these two statements name the same durable pattern?" Yes → attach; no or any failure → mint |
+| ≥ `SIGNAL_MATCH_MIN_COSINE` (0.86) | **Attach** — the capture becomes evidence of that signal |
+| ≥ `SIGNAL_MERGE_JUDGE_MIN_COSINE` (0.7), < 0.86 | **Ask the judge** — one bounded model call: "do these two statements name the same durable pattern?" Yes → attach; no, uncertain, or any failure → mint |
 | < 0.7, or no comparable vector | **Mint** — a new signal is born `emerging` |
 
-The judge (`judgeSignalMatch`) is instructed that *uncertainty means
-different*, and every malformed or failed response also lands on mint. The
-asymmetry is deliberate: a wrong merge fuses two patterns invisibly and
+The asymmetry is deliberate. A wrong merge fuses two patterns invisibly and
 corrupts both evidence trails; a wrong mint is a visible near-duplicate the
-owner can merge or delete. When this system errs, it errs recoverably.
+owner can merge or delete. When this system errs, it errs recoverably —
+which is why the judge is told that uncertainty means different, and why
+every malformed or failed judge response also lands on mint.
 
-Attaching writes a row in `signal_evidence` (M:N: one capture can evidence
-several signals, one signal accumulates many captures), unique per
-(signal, inspiration) pair so re-derivation never double-counts.
+**Writing evidence.** Attaching writes a `signal_evidence` row (M:N — one
+capture can evidence several signals; one signal accumulates many captures),
+unique per (signal, inspiration) pair so re-derivation never double-counts.
+Surviving related-capture citations attach the same way, to whichever signal
+the candidate landed on: ordinary evidence rows, quote carried, reason null
+(the quote is the grounding). A cited capture deleted between retrieval and
+the write is skipped, not an abort.
 
-### 5. Confidence, promotion, lifecycle
+While a signal is still `emerging` and unedited, a confirming capture may
+also **restate** it — the second observation usually names the pattern
+better than the first. Once `active` or human-edited, the wording is
+settled.
 
-**Confidence** (0–100) is a pure function of the evidence set and the clock,
-`computeSignalConfidence`:
+### 5. Promotion
 
 ```
-confidence = SUPPORT × (evidence count, saturating at CONFIDENCE_SATURATION_EVIDENCE = 6)
-           + SPREAD  × (time span of evidence, saturating at CONFIDENCE_SATURATION_SPREAD_DAYS = 30)
-           + RECENCY × (decay with half-life CONFIDENCE_RECENCY_HALF_LIFE_DAYS = 45)
-           + CONFIDENCE_SOURCE_DIVERSITY_BONUS (8) when evidence spans app AND agent capture
-           , capped at 100
+evidence_count ≥ SIGNAL_PROMOTION_MIN_EVIDENCE (3)   →   emerging → active
 ```
 
-with weights `CONFIDENCE_SUPPORT_WEIGHT` (55), `CONFIDENCE_SPREAD_WEIGHT`
-(30), `CONFIDENCE_RECENCY_WEIGHT` (15) — summing to 100 **[checked]**. The
-diversity term is a *bonus*, not a weight, deliberately: most profiles are
-app-only, and a weight would cap every solo human below 100 forever.
-Corroboration adds; its absence must not subtract.
+That is the whole rule, and it is enforced twice: in the lifecycle pass
+(`packages/api/src/lib/signal-lifecycle.ts`) and by a Postgres trigger
+(`drizzle/migrations/0005_signal_promotion_guard.sql`), so nothing can write
+an active signal below the bar.
 
-Because the formula contains a clock, *when* it runs is part of the contract:
+### 6. Confidence
 
-- **Computed live at every personal read** — `GET /api/signals` (list and
-  detail, so the web surface and MCP inherit it) and layer-3 selection both
-  recompute confidence from the evidence rows at request time **[checked]**.
-  This is what makes the recency term real: a signal that goes quiet fades on
-  its own, with no write needed.
-- **A snapshot is stored on the signal row**, written whenever evidence
-  changes. It is written at the exact moment the recency term peaks, so it
-  can only ever overstate a signal that has since gone quiet — which is why
-  no personal surface serves it. It exists for two readers: as a coarse SQL
-  pre-sort before live ranking, and as what the **group wall** shows. The
-  wall's query is deliberately unable to reach `signal_evidence` or
-  `inspirations` (a member must never touch another member's private layers),
-  so it shows "confidence as the owner's system last wrote it" — the one
-  documented staleness in the system.
+Confidence (0–100) is a pure function of the evidence set and the clock —
+`computeSignalConfidence`, no model anywhere:
 
-**Promotion.** A signal is born `emerging` and becomes `active` at
-`SIGNAL_PROMOTION_MIN_EVIDENCE` (3) pieces of evidence. Recurrence is the bar:
-one mention is a thought, three are a pattern.
+```
+support = min(1, n / 6)                 n = evidence count; 6 = CONFIDENCE_SATURATION_EVIDENCE
+spread  = min(1, span_days / 30)        span = newest − oldest evidence; 30 = CONFIDENCE_SATURATION_SPREAD_DAYS
+recency = 2^(−quiet_days / 45)          quiet = days since newest; 45 = CONFIDENCE_RECENCY_HALF_LIFE_DAYS
 
-**Lifecycle** — status is a fact about support, computed, never guessed:
+confidence = round( 55·support + 30·spread + 15·recency + diversity )
+             where diversity = CONFIDENCE_SOURCE_DIVERSITY_BONUS (8)
+             when evidence spans app AND agent capture, else 0
+             — clamped to 0..100
+```
+
+The weights are `CONFIDENCE_SUPPORT_WEIGHT` (55),
+`CONFIDENCE_SPREAD_WEIGHT` (30), `CONFIDENCE_RECENCY_WEIGHT` (15) — summing
+to 100 **[checked]**. Diversity is a *bonus*, not a fourth weight: most
+profiles are app-only, and a weight would cap every solo human below 100
+forever. Corroboration adds; its absence must not subtract.
+
+**Worked example.** Four pieces of evidence spanning 20 days, the newest 10
+days ago, all typed by the person:
+
+```
+support = 4/6  = 0.667   →  55 × 0.667 = 36.7
+spread  = 20/30 = 0.667  →  30 × 0.667 = 20.0
+recency = 2^(−10/45) = 0.857 → 15 × 0.857 = 12.9
+                                     total ≈ 70
+```
+
+The same signal 45 days later, untouched: support and spread are unchanged,
+recency has halved twice over (2^(−55/45) ≈ 0.43), and confidence drifts to
+≈ 63 — fading, but floored well above zero, because support and spread never
+decay. A well-evidenced dormant pattern stays reachable.
+
+Two rules about *when* and *what* the formula reads:
+
+- **Computed live at every read.** `GET /api/signals` (list and detail, so
+  web and MCP inherit it) and layer-3 selection recompute confidence from
+  the evidence rows at request time **[checked]**. That is what makes the
+  recency term real: a quiet signal fades with no write and no cron.
+- **Every date is the cited capture's own `created_at`** — when the
+  witnessing happened, never when the evidence link was written. Live since
+  related-capture citations exist: an old save cited today widens the
+  spread term with its months-old date and cannot pose as fresh recency.
+
+A snapshot *is* stored on the signal row, rewritten whenever evidence
+changes — at the exact moment the recency term peaks, so it can only ever
+overstate a signal that has since gone quiet. No personal surface serves
+it. It exists as a coarse SQL pre-sort, and as what the **group wall** shows
+— the wall's query is deliberately unable to reach `signal_evidence` or
+`inspirations` (a member must never touch another member's private layers),
+which makes it the one documented staleness in the system.
+
+### 7. When evidence is deleted
+
+Status is a fact about support — computed, never guessed:
 
 | State | Meaning | How it happens |
 |---|---|---|
 | `emerging` | Seen, not yet recurred | Minted; below 3 evidence |
 | `active` | A durable pattern | Crossed 3 evidence |
-| `retired` | Support fell away | Evidence deleted down to zero (unlocked signal) |
-| `active` + `unsupported_at` | The owner's words stand; nothing supports them | Evidence hit zero on a **locked** (human-edited) signal — the text is theirs to keep, but it is excluded from synthesis |
+| `retired` | Support fell away | Evidence deleted to zero (unlocked signal) |
+| `active` + `unsupported_at` | The owner's words stand; nothing supports them | Evidence hit zero on a **locked** (human-edited) signal — the text is theirs, but it is excluded from synthesis |
 
-Reconciliation (`reconcileSignalsAfterEvidenceLoss`) runs inside the
-inspiration-delete transaction, under the same per-profile advisory lock as
-derivation, so a delete racing a derivation cannot strand a signal on
-evidence that no longer exists.
+Reconciliation runs inside the inspiration-delete transaction, under the
+same per-profile lock as derivation, so a delete racing a derivation cannot
+strand a signal on evidence that no longer exists.
 
-**Human edits.** Editing a signal's statement **locks** it (WAKA stops
-rewording it), drops its stored vector immediately, queues a `reembed_signal`
-job to compute the new one, and schedules a synthesis refresh. Deleting a
-signal is allowed, cascades its evidence links, and also schedules a refresh.
-
-The drop and the re-embedding are split because they cost different things.
-Forgetting the old vector is a delete, and it cannot wait: a vector describing
-the previous wording goes on matching captures to a pattern its owner has just
-said they no longer hold. Computing the new one is a call on the shared model
-key, and every such call belongs on the queue where the per-account budget
-below can see it — the request path must not spend that key. In between, the
-signal is not a match target, so a similar capture mints a visible
-near-duplicate its owner can merge: the recoverable mistake, again.
+**Human edits.** Editing a signal's statement locks it (WAKA stops rewording
+it), drops its stored vector immediately, and queues a `reembed_signal` job
+for the new one. The drop cannot wait — a vector for the old wording would
+keep matching captures to a pattern its owner just said they no longer hold
+— but the re-embed is a model call, and every model call belongs on the
+queue where the per-account budget can see it. In between, the signal is
+simply not a match target; a similar capture mints a visible near-duplicate.
+The recoverable mistake, again.
 
 ### Is there a maximum number of signals?
 
-**No hard cap on the total — by design.** A memory that refused to learn a
-501st pattern would be lying about the person. What bounds growth instead:
-
-- At most `MAX_SIGNAL_CANDIDATES` (3) candidates per capture — worst-case
-  growth is linear in captures, and in practice far below it, because
-- match-or-mint absorbs recurrence: growth tracks *distinct patterns*, not
-  capture volume. The judge band and batch dedupe both push borderline cases
-  toward attaching or collapsing rather than minting.
-- Zero candidates is a sanctioned, prompted-for outcome.
-- Evidence loss retires signals; retired rows stop being match targets.
-
-Two knobs bound the *cost* of any signal count: matching scans only the
-`MATCH_CANDIDATE_SCAN_LIMIT` (500) most recently evidenced signals (a pattern
-dormant past the cut can spawn a duplicate — the recoverable mistake again),
-and synthesis reads at most `TOP_OF_MIND_SIGNAL_LIMIT` (12). If profiles ever
-hold many thousands of signals, move the cosine scan into pgvector; nothing
-in the model changes, only where the arithmetic runs.
+**No hard cap — by design.** A memory that refused to learn a 501st pattern
+would be lying about the person. Growth is bounded structurally instead: at
+most `MAX_SIGNAL_CANDIDATES` (3) candidates per capture, recurrence absorbed
+by attach rather than mint, batch dedupe, and zero as a sanctioned outcome —
+so growth tracks *distinct patterns*, not capture volume. Cost is bounded
+separately: matching scans only the `MATCH_CANDIDATE_SCAN_LIMIT` (500) most
+recently evidenced signals, and synthesis reads at most
+`TOP_OF_MIND_SIGNAL_LIMIT` (12). If profiles ever hold many thousands of
+signals, the cosine scan moves into pgvector; nothing in the model changes,
+only where the arithmetic runs.
 
 ---
 
 ## Layer 2 → Layer 3: how the top of mind is generated
 
-The pass is `packages/api/src/lib/top-of-mind-synthesis.ts`, and it is the
-order of the four stages below and nothing else. Each stage is its own file,
-named for the question it answers:
+The pass lives in `packages/api/src/lib/top-of-mind-synthesis.ts` and runs
+four stages in order: **select** which signals may be considered, read the
+**live artifact** as it stands, **synthesize** the whole next artifact in one
+model call, then **validate and version** what came back. (The ranking
+arithmetic is also pinned from `packages/api/src/lib/top-of-mind-selection.ts`
+— a stage-module mirror of the same constants and functions; folding the two
+copies into one is tracked work, and the drift lock holds both.)
 
-| Stage | File | Answers |
-|---|---|---|
-| 1. Selection | `packages/api/src/lib/top-of-mind-selection.ts` | which signals may be considered at all |
-| 2. The live artifact | `packages/api/src/lib/top-of-mind-artifact.ts` | what the version standing now holds |
-| 3. Validation | `packages/api/src/lib/top-of-mind-validation.ts` | what of the reply the database can vouch for |
-| 4. Versioning | `packages/api/src/lib/top-of-mind-versioning.ts` | what the next version holds, and writing it |
-
-Stages 1 and 3 are one guarantee in two halves: stage 1 filters candidates by
-`signals.profileId`, and stage 3 checks the model's citations against exactly
-that set. Neither is any use without the other.
+Selection and validation are one guarantee in two halves: selection filters
+candidates to this profile's signals, and validation checks the model's
+citations against exactly that set. Neither is any use without the other.
 
 ### 1. What starts a refresh
 
@@ -310,47 +365,57 @@ that set. Neither is any use without the other.
 | Feedback is given | Always (a verdict changes what synthesis should weigh) |
 | `POST /api/top-of-mind/refresh` | Manual, debounced |
 
-Refreshes are debounced by a partial unique index (one pending/running
-refresh per profile), with the same trailing-edge `rerun_requested` semantics
-as derivation: signals changing mid-synthesis schedule exactly one follow-up.
+Refreshes are debounced to one pending pass per profile, with the same
+trailing-edge `rerun_requested` semantics as derivation.
 
 ### 2. Selection: deterministic, scored, bounded
 
-`selectSignals` considers signals that are `active` (or `emerging` — see cold
-start) and not `unsupported`, and scores each **[checked — weights sum to 1]**:
+Eligible signals are `active` (or `emerging` — see the cold start) and not
+unsupported. Each is scored — `computeSelectionScore`, weights summing to 1
+**[checked]**:
 
 ```
-score = SELECTION_CONFIDENCE_WEIGHT (0.45) × confidence
-      + SELECTION_EVIDENCE_WEIGHT   (0.2)  × support   (saturates at SELECTION_EVIDENCE_SATURATION = 6)
-      + SELECTION_RECENCY_WEIGHT    (0.2)  × recency   (half-life SELECTION_RECENCY_HALF_LIFE_DAYS = 30)
-      + SELECTION_COMEBACK_WEIGHT   (0.15) × comeback
-      , then × SELECTION_DISPUTED_MULTIPLIER (0.4) if the owner's latest verdict is "not_true"
-      , clamped to 0..100
+support  = min(1, n / 6)              6 = SELECTION_EVIDENCE_SATURATION
+recency  = 2^(−quiet_days / 30)       30 = SELECTION_RECENCY_HALF_LIFE_DAYS
+comeback = 0 unless the gap before the newest evidence was ≥ 21 days
+           (COMEBACK_MIN_DORMANT_DAYS) AND that newest evidence is ≤ 14
+           days old (COMEBACK_MAX_RETURN_AGE_DAYS); then it scales linearly
+           with the gap, saturating at 90 days (COMEBACK_SATURATION_DAYS):
+           comeback = min(1, (gap − 21) / (90 − 21))
+
+score = 0.45·confidence + 0.2·support·100 + 0.2·recency·100 + 0.15·comeback·100
+        × 0.4 if the owner's latest verdict on this signal is "not_true"
+        — clamped to 0..100
 ```
 
-**Comeback**: a signal that went quiet and returned outranks one that never
-stopped — the return is the person's attention re-landing. It needs a real
-gap (`COMEBACK_MIN_DORMANT_DAYS` = 21, saturating at
-`COMEBACK_SATURATION_DAYS` = 90) and a recent return
-(`COMEBACK_MAX_RETURN_AGE_DAYS` = 14).
+with `SELECTION_CONFIDENCE_WEIGHT` (0.45), `SELECTION_EVIDENCE_WEIGHT`
+(0.2), `SELECTION_RECENCY_WEIGHT` (0.2), `SELECTION_COMEBACK_WEIGHT`
+(0.15), and `SELECTION_DISPUTED_MULTIPLIER` (0.4).
 
-**Disputed**: a multiplier, not an exclusion — the person may be wrong and the
-pattern may return; a memory that silently drops whatever was disputed cannot
-be argued with. The latest verdict wins, so a later "true" lifts an older
-"not_true".
+**Worked example.** Confidence 70, four evidence rows, newest 10 days ago,
+no comeback: 0.45×70 + 0.2×66.7 + 0.2×79.4 + 0 ≈ **61**. The same signal
+after its owner marked it *not true*: 61 × 0.4 ≈ **24** — dampened, still in
+the race. Disputed is a multiplier, not an exclusion: the person may be
+wrong, the pattern may return, and a memory that silently drops whatever was
+disputed cannot be argued with. The *latest* verdict wins, so a later "true"
+lifts an older "not_true".
+
+**Comeback** exists because a signal that went quiet and returned outranks
+one that never stopped — the return is the person's attention re-landing. A
+60-day gap with a return 5 days ago scores comeback = (60−21)/(90−21) ≈
+0.57, worth about 8.5 points.
 
 The top `TOP_OF_MIND_SIGNAL_LIMIT` (12) go to synthesis, ties broken by
-recency then id, so identical data always selects identically.
+recency then id — identical data always selects identically.
 
-**Cold start.** A new profile's signals are all `emerging` (nothing has
-recurred three times yet), which used to mean `topOfMind: null` for days.
-Below a floor of `TOP_OF_MIND_MIN_SIGNALS` (3) active signals, selection
-borrows the strongest emerging ones — active first, only enough to reach the
-floor — and marks the pass **provisional**, which tells synthesis to write
-tentatively: questions and hypotheses, not asserted patterns. At or above the
-floor the behavior is byte-identical to active-only, so an established
-profile is never diluted with single-observation noise. The rule is the pure
-function `chooseSelection` **[checked]**.
+**Cold start.** Below a floor of `TOP_OF_MIND_MIN_SIGNALS` (3) active
+signals, selection borrows the strongest emerging ones — active first, only
+enough to reach the floor — and marks the pass **provisional**, which tells
+synthesis to write tentatively: questions and hypotheses, not asserted
+patterns. At or above the floor the behavior is byte-identical to
+active-only, so an established profile is never diluted with
+single-observation noise. The rule is the pure function `chooseSelection`
+**[checked]**.
 
 ### 3. Synthesis: one call, the whole artifact
 
@@ -358,13 +423,13 @@ function `chooseSelection` **[checked]**.
 entries, every **locked** entry, recent feedback (newest first, with the
 person's own correction text), and the provisional flag. It returns the
 **entire artifact** — at most `MAX_TOP_OF_MIND_ENTRIES` (7) entries, each
-typed (`pattern`, `tension`, `question`, `hypothesis`, `action`), each citing
-signal ids — or an explicit `noChange`.
+typed (`pattern`, `tension`, `question`, `hypothesis`, `action`), each
+citing signal ids — or an explicit `noChange`.
 
-Whole-artifact on purpose: a model asked to patch entries reasons about diffs
-it cannot see, and every incremental variant of this call drifted into
-appending. Temperature 0, schema-constrained, all signal statements and
-feedback fenced as data.
+Whole-artifact on purpose: a model asked to patch entries reasons about
+diffs it cannot see, and every incremental variant of this call drifted into
+appending. Temperature 0, schema-constrained, everything user-originated
+fenced as data.
 
 ### 4. What code enforces after the model answers
 
@@ -372,11 +437,11 @@ feedback fenced as data.
 |---|---|
 | Every cited signal exists and belongs to this profile | Citations validated against the DB; invented ones dropped; an entry left citing nothing is dropped with it. An artifact that cites nothing is a horoscope. |
 | Locked entries survive **byte-identical** | Copied forward from storage, never from the model's reply — the model is asked to reproduce them and then not trusted to. Violations are counted and logged. |
-| Pins, dismissals, locks survive regeneration | They are columns on entries, carried by code; the model never sees or controls them. |
-| "Nothing changed" is a decision, not a silence | A no-move pass writes a version with reason `no_change` — a silent pass and a broken generator look identical from outside, and the old system hid failures in exactly that gap. |
-| No concurrent writes to one artifact family | Per-owner advisory lock held across read-synthesize-write; entry edits take the same lock, so an edit cannot vanish under a concurrent regeneration. |
+| Pins, dismissals, locks survive regeneration | Columns on entries, carried by code; the model never sees or controls them. |
+| "Nothing changed" is a decision, not a silence | A no-move pass writes a version with reason `no_change` — a silent pass and a broken generator look identical from outside. |
+| No concurrent writes to one artifact family | Per-owner advisory lock held across read-synthesize-write; entry edits take the same lock. |
 | Order-shuffled citations are not a change | The no-change comparison treats citations as a set. |
-| Rejected content does not return | Entries whose latest verdict is `not_true` may not come back in the same form; corrections outrank model phrasing (prompt rule, backed by the disputed multiplier upstream). |
+| Rejected content does not return | Entries whose latest verdict is `not_true` may not come back in the same form; corrections outrank model phrasing. |
 
 Versions form a chain: the previous live artifact is marked superseded and
 points at its replacement. Nothing is mutated in place; history is walkable.
@@ -414,16 +479,15 @@ A group's artifact runs the same pipeline with three deliberate differences
   asks for cross-member entries in the group's plural voice — an artifact of
   solo entries is named a failure in the instruction itself.
 - **Members edit by accepted proposal, and code applies them.** Before the
-  model writes a word, every proposal accepted since the previous version is
-  materialized deterministically: an accepted edit rewrites its entry and
-  locks it, an accepted removal dismisses it, an accepted addition arrives
-  locked (`applyGroupProposals`, pure and unit-tested). A pass that applied
-  any proposal writes reason `member_proposal`. Member decisions never pass
-  through the model.
+  model writes a word, every proposal accepted since the previous version
+  is materialized deterministically: an accepted edit rewrites its entry
+  and locks it, an accepted removal dismisses it, an accepted addition
+  arrives locked (`applyGroupProposals`, pure and unit-tested). Member
+  decisions never pass through the model.
 - **Citations carry attribution.** Each group citation row records which
-  member's signal fed the entry (`owner_profile_id`), which is what the room
-  view renders as contributors. Raw captures never appear anywhere in the
-  group path — the prompt sees distilled statements only.
+  member's signal fed the entry, which the room view renders as
+  contributors. Raw captures never appear anywhere in the group path — the
+  prompt sees distilled statements only.
 
 Triggers: a member requesting a reread, membership changes, and proposal
 acceptance — all enqueue the same `refresh_group_top_of_mind` job. The room
@@ -432,6 +496,13 @@ speaks in its creator's preferred locale until groups carry their own.
 ---
 
 ## How time is applied
+
+**Evidence is dated by the capture that witnesses it** — `inspirations
+.created_at`, never the evidence row's own insert time. The two diverge
+exactly when it matters: an old save cited retroactively arrives carrying
+its own date, so it widens the spread term instead of collapsing it and
+cannot masquerade as fresh recency. Confidence, selection, the principle
+span bar, and the read routes all apply this one rule.
 
 Four terms read the clock; nothing else does. What matters is *when* each is
 evaluated — a decay term only exists if something actually runs it.
@@ -444,51 +515,46 @@ evaluated — a decay term only exists if something actually runs it.
 | Comeback bonus (weight 0.15) | needs a gap ≥ `COMEBACK_MIN_DORMANT_DAYS` (21); the return must be ≤ `COMEBACK_MAX_RETURN_AGE_DAYS` (14) old | Live, at every refresh |
 
 So a signal decays twice, on different clocks: its **confidence** fades with
-a 45-day half-life on the recency slice, and its **selection score** fades
-again with a 30-day half-life. Both are computed from the evidence timestamps
-at the moment of the read — no cron rewrites scores, and a profile nobody
-touches costs nothing. The stored confidence snapshot does *not* decay (it is
-rewritten only when evidence changes), which is exactly why no personal
-surface serves it — see the confidence section above.
+a 45-day half-life, and its **selection score** fades again with a 30-day
+half-life. Both are computed from the evidence timestamps at the moment of
+the read — no cron rewrites scores, and a profile nobody touches costs
+nothing. The stored snapshot does *not* decay, which is exactly why no
+personal surface serves it.
 
 Deliberate consequences:
 
 - **Silence is information.** A quiet signal sinks in both confidence and
   selection, making room without anyone dismissing anything.
 - **Scores floor rather than vanish.** Support and spread do not decay, so a
-  well-evidenced dormant signal settles at a low-but-nonzero score instead of
-  zero. Dormant patterns stay *reachable* — surfaced again the moment fresh
-  evidence or a comeback lands — rather than deleted by arithmetic.
+  well-evidenced dormant signal settles low-but-nonzero — reachable the
+  moment fresh evidence or a comeback lands, never deleted by arithmetic.
 - **Returns beat persistence.** The comeback bonus pays for a gap plus a
-  recent return, so a pattern that resurfaces after months outranks one that
-  never went away. A comeback you did not act on within two weeks is history.
+  recent return; a comeback not acted on within two weeks is just history.
 
 ---
 
 ## Layer 4: principles — how the person chooses
 
-Implemented per `docs/goals/principles.md` (phases 1–5, 2026-08-18 →
-2026-08-21). The constants below live in
-`packages/api/src/lib/principle-generation.ts` and are drift-locked like
-every other table in this document.
+Implemented per `docs/goals/principles.md` (2026-08-18 → 2026-08-21). The
+constants live in `packages/api/src/lib/principle-generation.ts` and are
+drift-locked like every other table here.
 
-A **principle** is how a person chooses, stripped of context — the
-generator from which context-bound **rules** compile ("frugal mindset" →
-"≤$100 for LLM testing" under the context *LLM testing*). WAKA stores
-the generator; captured rules are evidence, never artifacts. Unlike top
-of mind (ONE bounded artifact, rewritten whole, decaying by design),
-principles are a **growing, uncapped set** selected by *longevity* —
-what survives is what qualifies.
+A **principle** is how a person chooses, stripped of context — the generator
+from which context-bound **rules** compile ("frugal mindset" → "≤$100 for
+LLM testing" under the context *LLM testing*). WAKA stores the generator;
+captured rules are evidence, never artifacts. Unlike top of mind (ONE
+bounded artifact, rewritten whole, decaying by design), principles are a
+**growing, uncapped set** selected by *longevity* — what survives is what
+qualifies.
 
 **Five qualification tests, all required for a minted principle:**
 
 1. **Context** — still instructs after every proper noun, number, and
    project name is deleted; otherwise it is a rule → evidence.
-2. **Directive** — prescribes the next choice; a fact about the person
-   is a signal, not a principle.
+2. **Directive** — prescribes the next choice; a fact about the person is a
+   signal, not a principle.
 3. **Evidence** — cites at least `PRINCIPLE_MIN_SIGNALS` (3) distinct
-   signals from this profile's own history; uncited virtue is a
-   horoscope.
+   signals from this profile's own history; uncited virtue is a horoscope.
 4. **Time** — evidence spanning at least `PRINCIPLE_MIN_SPAN_DAYS` (45)
    days and selected into at least `PRINCIPLE_MIN_TOM_APPEARANCES` (5)
    top-of-mind versions; a two-week obsession is top of mind, not
@@ -497,39 +563,41 @@ what survives is what qualifies.
 5. **Completion** — can never be finished; anything checkable-off is a
    goal, not a principle.
 
-Owner **declarations** skip evidence and time (aspirational until
-demonstrated — trust pending demonstration); context, directive, and
-completion are applied internally, and a declaration failing them is
-quietly kept as an inspiration — evidence, where it belongs — with no
-refusal surfaced.
+Tests 3 and 4 are hard numbers checked in SQL; tests 1, 2, and 5 are
+semantic properties no formula can check, applied by the model under
+instruction. Owner **declarations** skip evidence and time (aspirational
+until demonstrated); context, directive, and completion still apply
+internally, and a declaration failing them is quietly kept as an
+inspiration — evidence, where it belongs — with no refusal surfaced.
 
 **States:** `held` (demonstrated), `aspirational` (declared, visibly
-undemonstrated; redeemed to held when evidence arrives), `contested`
-(the owner's `not_true` verdict, or a judged conflict between two
-principles, marked as a pair for owner adjudication). An explicit,
-owner-reorderable **rank** keeps the set decidable even while a
-conflict stands — the higher rank wins operationally.
+undemonstrated; redeemed to held when evidence arrives), `contested` (the
+owner's `not_true` verdict, or a judged conflict between two principles,
+marked as a pair for owner adjudication). An explicit, owner-reorderable
+**rank** keeps the set decidable even while a conflict stands — the higher
+rank wins operationally.
 
-**Generation is mint-or-match, daily.** A dedicated cron — the *sole*
-enqueuer, midnight PST (fixed 08:00 UTC), drift-pinned so any second
-call site fails CI — evaluates each active profile: one cheap SQL check
-for clusters newly past the bar, and only then model calls (distill one
-candidate; judge it against the standing set as
-`same | independent | conflicting`, conservative toward independent).
-Same recoverable-mistake stance as match-or-mint, one level up. State
-maintenance (contested flips, reconciliation after evidence loss) is
-immediate SQL and does not wait for midnight; generation does.
+**Generation is mint-or-match, nightly.** A dedicated cron — the *sole*
+enqueuer, midnight PST (fixed 08:00 UTC), pinned so any second call site
+fails CI — evaluates each active profile: one cheap SQL check for clusters
+newly past the bar, and only then model calls (distill at most
+`PRINCIPLE_MAX_CANDIDATES_PER_RUN` (3) candidates; judge each against the
+standing set as `same | independent | conflicting`, conservative toward
+independent — the same recoverable-mistake stance as match-or-mint, one
+level up). Statements are capped at `PRINCIPLE_MAX_STATEMENT_LENGTH` (200)
+characters: a principle is a directive, not an essay. State maintenance
+(contested flips, reconciliation after evidence loss) is immediate SQL and
+does not wait for midnight; generation does.
 
-**The canonical rendering is machine-facing:** one deterministic
-markdown document (rank-ordered, stable `p-<uuid8>` ids, a preamble
-carrying the consumption contract, contested pairs cross-referenced),
-served byte-identically via `GET /api/principles.md` and the MCP tool —
-the web view is the human's decorated reading of the same document.
-Golden-tested byte-for-byte once implemented.
+**The canonical rendering is machine-facing:** one deterministic markdown
+document (rank-ordered, stable ids, a preamble carrying the consumption
+contract, contested pairs cross-referenced), served byte-identically via
+`GET /api/principles.md` and the MCP tool — the web view is the human's
+decorated reading of the same document. Golden-tested byte-for-byte.
 
-The audit chain stays unbroken: answer → principle → signals → the
-person's own captures — and decisions made by agents cite principle ids,
-extending it to the last mile.
+The audit chain stays unbroken: answer → principle → signals → the person's
+own captures — and decisions made by agents cite principle ids, extending it
+to the last mile.
 
 ---
 
@@ -556,6 +624,9 @@ The authoritative values. Machine-checked against code — see
 | `CONFIDENCE_RECENCY_HALF_LIFE_DAYS` | 45 | Recency half-life |
 | `CONFIDENCE_SOURCE_DIVERSITY_BONUS` | 8 | Added when app and agent evidence corroborate |
 | `MATCH_CANDIDATE_SCAN_LIMIT` | 500 | Most-recently-evidenced signals scanned per match |
+| `RELATED_INSPIRATION_SCAN_LIMIT` | 500 | Most recent capture vectors scanned for relatedness |
+| `RELATED_INSPIRATION_MIN_COSINE` | 0.6 | Floor below which an earlier capture is not offered as context |
+| `RELATED_INSPIRATION_CONTEXT_LIMIT` | 5 | Related captures the extractor is shown, strongest first |
 
 ### Layer 3 — synthesis (`packages/api/src/lib/top-of-mind-selection.ts`)
 
@@ -594,6 +665,7 @@ The authoritative values. Machine-checked against code — see
 | `GEMINI_EMBEDDING_DIMENSIONS` | 768 | Vector width |
 | `MAX_GEMINI_EMBEDDING_VALUES` | 4096 | Sanity ceiling on values accepted back per vector |
 | `MAX_SIGNAL_CANDIDATES` | 3 | Statements one extraction may propose |
+| `MAX_RELATED_INSPIRATION_CITATIONS` | 2 | Earlier captures one statement may cite as co-witnesses |
 | `MAX_TOP_OF_MIND_ENTRIES` | 7 | Entries one artifact may hold |
 
 All generation calls run at temperature 0 with schema-constrained JSON
