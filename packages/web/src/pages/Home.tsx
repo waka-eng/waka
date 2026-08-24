@@ -1097,6 +1097,19 @@ export interface FieldAudit {
     rMax: number;
     aliveMax: number;
     arriveMin: number;
+    /**
+     * HOW MANY ORBS ARE SUNK, AND HOW MANY ARE LIT.
+     *
+     * The audit could see everything about a memory except the one channel
+     * that carries meaning. Two things drive that channel — a search, and
+     * (since 2026-08-24) reading a pattern, which lights the memories it was
+     * read from where they live instead of setting them orbiting. Both say
+     * the same sentence to the field, "this one and everything else sinks",
+     * and neither was observable from outside: a light that never moved and
+     * a light that moved correctly looked identical to every test here.
+     */
+    dimmed: number;
+    glowing: number;
   };
   /**
    * WHETHER THE SKY IS LEANING DOWN, AND HOW FAR EACH STATEMENT CAME.
@@ -5931,7 +5944,11 @@ function HomeExperience(): JSX.Element {
              so it runs through dim and glow rather than through a results
              list. The memory keeps its place in the field, which is the one
              thing a list can never show you. */
-          const hits = foundRef.current;
+          /* A SEARCH OUTRANKS A READING. Both speak the same sentence to the
+             field — "this one, and everything else sinks" — but a query is
+             something you asked for in words and reading a pattern is not,
+             so while a search is open it owns the light. */
+          const hits = foundRef.current ?? readingLitRef.current;
           const missed = hits !== null && !hits.has(b.sigId ?? b.id);
           const wantDim = missed || (selActive && b.hold === 0) ? 1 : 0;
           const wantGlow = b.hold !== 0 || (hits !== null && !missed) ? 1 : 0;
@@ -7828,6 +7845,8 @@ function HomeExperience(): JSX.Element {
             let rMax = 0;
             let aliveMax = 0;
             let arriveMin = Infinity;
+            let dimmed = 0;
+            let glowing = 0;
             for (const b of list) {
               if (!onThisWall(b)) continue;
               if (b.active) active++;
@@ -7835,6 +7854,9 @@ function HomeExperience(): JSX.Element {
               rMax = Math.max(rMax, b.r);
               aliveMax = Math.max(aliveMax, b.alive);
               arriveMin = Math.min(arriveMin, b.arrive);
+              /* mid-ease values are neither yet; half is the crossing */
+              if (b.dim > 0.5) dimmed++;
+              if (b.glow > 0.5) glowing++;
             }
             return {
               active,
@@ -7842,6 +7864,8 @@ function HomeExperience(): JSX.Element {
               rMax: Math.round(rMax),
               aliveMax: Number(aliveMax.toFixed(3)),
               arriveMin: Number(arriveMin.toFixed(2)),
+              dimmed,
+              glowing,
             };
           })(),
           /* the same question asked upward: is the sky leaning into
@@ -9669,6 +9693,36 @@ function HomeExperience(): JSX.Element {
   }, [seek]);
   const foundRef = useRef<ReadonlySet<string> | null>(null);
   foundRef.current = found;
+  /**
+   * THE MEMORIES UNDER THE PATTERN YOU ARE READING — lit where they live.
+   *
+   * Reading one of your own patterns used to set its memories orbiting the
+   * sentence, which gave every one of them a second place to be while the
+   * field below held the first. The founder disliked it on sight and the
+   * reason is the world's own argument: a memory has a location and keeps
+   * it. So the grounds are published here instead, into the very channel a
+   * search uses — "this one, and everything else sinks" — and the field
+   * answers by lighting exactly those and dimming the rest.
+   *
+   * A search still outranks it: a query is a thing you asked for in words,
+   * and reading a pattern is not. Only your OWN wall lights, because only
+   * your own memories are in the ground to light (a room's evidence names
+   * people, and those keep their ring — see `solveSats`).
+   */
+  const readingLit = useMemo<ReadonlySet<string> | null>(() => {
+    if (!focusCandId || atWall.kind !== "self") return null;
+    const rows = evidenceBySignalRef.current.get(focusCandId) ?? [];
+    if (rows.length === 0) return null;
+    return new Set(rows.map((e) => e.inspirationId));
+    /* provTick is the ref's change signal — the chain arrives a request
+       later than the tap, and the light must follow it when it lands */
+  }, [focusCandId, atWall, provTick]);
+  const readingLitRef = useRef<ReadonlySet<string> | null>(null);
+  readingLitRef.current = readingLit;
+  /* the loop is parked when nothing moves; a new set is a change to draw */
+  useEffect(() => {
+    simApiRef.current?.wake();
+  }, [readingLit]);
   /** The invite link for a room, and whether it has just been copied. */
   const [copied, setCopied] = useState<string | null>(null);
   const copyInvite = useCallback((g: ApiGroupSummary) => {

@@ -410,12 +410,35 @@ function makeSat(nebId: string, e: EvidenceRef, deps: SkyDeps): Sat | null {
  * newest memory. Nothing is labelled — mass and time ARE the motion.
  */
 export function solveSats(n: Neb, c: Candidate, deps: SkyDeps) {
+  /**
+   * A SATELLITE IS A PERSON. A MEMORY IS IN THE GROUND.
+   *
+   * Every kind of evidence used to orbit, including your own memories — so
+   * reading one of your patterns set your own saves spinning around the
+   * sentence, in a ring, away from the field where those same memories are
+   * sitting still. The founder's review of it was "don't like this orbiting
+   * thing" (2026-08-24), and the reason it grated is that it was a SECOND
+   * PLACE for something that already has one: the world's whole argument is
+   * that a memory has a location and keeps it.
+   *
+   * So a pattern of your own now lights its memories WHERE THEY LIVE — the
+   * page publishes its grounds into the same channel search uses, and the
+   * field dims everything else. Nothing orbits.
+   *
+   * What still orbits is evidence that has NO home in the ground: the people
+   * standing behind a room's statement. A room may never show anyone's
+   * memories — that is the privacy line — so its evidence names members, and
+   * a member is not in the field to be lit. `authorName` is exactly that
+   * distinction, and it was already the test the whisper used to decide
+   * whether a satellite had anything to say.
+   */
+  const nameable = c.evidence.filter((e) => Boolean(e.authorName));
   /* Over SAT_MAX the highest resonances stay and the rest are simply not
      drawn. There is deliberately no "and N more": a count is a number. */
   const picked =
-    c.evidence.length <= SAT_MAX
-      ? c.evidence
-      : [...c.evidence].sort((a, b) => b.resonance - a.resonance).slice(0, SAT_MAX);
+    nameable.length <= SAT_MAX
+      ? nameable
+      : [...nameable].sort((a, b) => b.resonance - a.resonance).slice(0, SAT_MAX);
   const sats: Sat[] = [];
   let lo = Infinity;
   let hi = -Infinity;

@@ -1349,3 +1349,43 @@ describe("the star travels with the sentence", () => {
     ).not.toBeNull();
   });
 });
+
+describe("reading a pattern lights its memories where they live", () => {
+  /**
+   * Founder, 2026-08-24: "don't like this orbiting thing." Reading one of
+   * your own patterns used to set its memories spinning around the sentence
+   * — a SECOND place for something that already has one, while the field
+   * below held the first. The world's whole argument is that a memory has a
+   * location and keeps it.
+   *
+   * So a pattern of your own now speaks to the ground instead, in the very
+   * sentence a search speaks: this one, and everything else sinks. What
+   * still orbits is evidence with no home down there — the people standing
+   * behind a room's statement, whom a room may never trade for their
+   * memories. The four orbit cases above are all about those, which is why
+   * they are untouched by this.
+   *
+   * `NAMING` cites three of the six memories in these facts, so the split is
+   * the assertion: three lit, three sunk, and nobody had to count them.
+   */
+  it("lights exactly what it was read from, and sinks the rest", async () => {
+    await climbToSky();
+    const before = layout.audit().drawn;
+    expect(before.glowing, "nothing is picked out before a pattern is read").toBe(0);
+    expect(before.dimmed, "and nothing has sunk").toBe(0);
+
+    await tapSentence(NAMING);
+    /* the chain is one request deep — the light follows it when it lands */
+    await layout.step(30);
+
+    const lit = layout.audit().drawn;
+    expect(lit.glowing, "the memories this pattern was read from").toBe(3);
+    expect(lit.dimmed, "and the ones it was not").toBe(3);
+
+    await tapEmptySky();
+    await layout.step(30);
+    const after = layout.audit().drawn;
+    expect(after.glowing, "letting the pattern go gives the field back").toBe(0);
+    expect(after.dimmed).toBe(0);
+  });
+});
