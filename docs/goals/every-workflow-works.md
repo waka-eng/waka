@@ -55,7 +55,7 @@ unproven in a browser.**
 | A1 | Sign up → onboarding → first capture | API + **Browser** (`journeys:cold-start`) ✅ |
 | A2 | Sign in / sign out, email + password | API (`organic`) |
 | A3 | Sign in with Google | **nothing** — needs OAuth configured; blocked on a founder decision, not on effort |
-| A4 | Password recovery | **does not exist** |
+| A4 | Password recovery | **does not exist** — unproven because there is nothing to prove: no route, no token table, no mail transport. Deferred by founder decision 2026-08-24 pending a provider. The only row here that can lock a real person out |
 | B1 | Capture text | API + **Browser** (`journeys:keep`) ✅ |
 | B2 | Capture a link, enriched from its page | API (`organic` step 7) ✅ — was wrongly logged unproven; see the 2026-08-22 correction |
 | B3 | Capture an image, described so it is searchable | by URL: API (`organic` step 8) ✅. Real upload (presign→PUT→HEAD): **proven 2026-08-24 against the stub** (`erasure` step 1–2) — the object lands, enrichment reads it back. Nothing about S3's own IAM or durability |
@@ -73,7 +73,7 @@ unproven in a browser.**
 | G1 | Create a room, join by code | API (`groups`) |
 | G2 | Share a signal in; **the evidence must not cross** | API (`groups`) |
 | G3 | Room top of mind by proposal and approval | API (`groups`) |
-| G4 | Leave, close a room; join code rotates on removal | API (`groups`) partial |
+| G4 | Leave, close a room; join code rotates on removal | API (`rooms`) ✅ 2026-08-24 — 9 checks, no model calls: removal re-keys and leaving does not, the old key is dead, and a removal reaches no further than the room it named |
 | H1 | Agent profile: its own stack, its own capture | API (MCP live gate) |
 | H2 | Cross-profile permission matrix | API (MCP live gate) |
 | I1 | Terminal consent, credential binding | API (MCP live gate) |
@@ -497,3 +497,51 @@ because the sabotage sits on the parent. An opacity check would have passed.
 A3 (Google) needs OAuth configured — blocked on a decision, not on effort. A4
 (password recovery) does not exist and waits on a mail provider. J1's locale
 and public-page halves, and G4's rotation, remain partial.
+
+### 2026-08-24 — G4, and the exits nobody had walked
+
+`groups.ts` proves what crosses between people while everyone is still in the
+room. It never changes the membership, so every question about the EXITS was
+untested and G4 sat at "partial" with no reason attached.
+
+`tools/e2e/rooms.ts` — 9 checks, no model calls, so there is no reason it
+should not run on every change.
+
+**The one that needed an end-to-end proof.** A join code does not expire and
+`joinGroupByCode` asks only whether the code matches, so deleting a membership
+row ends a person's access to nothing at all: anyone removed who had ever seen
+the invite link walks straight back in, indistinguishable from a normal join.
+`rotateJoinCode` handles it and has a unit test — which proves a new code gets
+written, and says nothing about whether the OLD one stopped working. This
+suite holds the code from before the removal and tries it afterwards: 404.
+
+And the asymmetry is checked in both directions, because getting it backwards
+is also a bug. **Leaving does not re-key** — it is voluntary, the person may be
+asked back, and rotating there would kill the invite link in every other
+member's hands for no security gain. The suite leaves, confirms everyone else's
+code still works, and asks the leaver back in with the code they already had.
+
+**The removal that reached too far.** `group_top_of_mind_affirmations` has no
+`group_id` column, so a delete keyed on the profile alone once meant "their
+votes anywhere" — removing someone from a room you own withdrew their
+agreements from rooms you cannot read and that were never named in the
+request, leaving nothing to tell that apart from "they never voted". The suite
+puts the same person in two rooms, removes them from one, and checks they are
+still among the people who agreed in the other.
+
+**A check that was passing without asserting anything.** The first version of
+that step compared `affirmations` to a number. It is an ARRAY — of *who*
+agreed, because states render and numerals never — so `array < 2` coerced to
+`NaN < 2`, which is false, and the step passed vacuously. It names the person
+now, which is both correct and stronger than a count.
+
+#### Where the inventory stands
+
+Every row now reads *proven by <name>* or *unproven, because <reason>* — which
+is Phase 3's gate. The two that remain unproven are unproven for reasons no
+harness can fix:
+
+- **A3, Google** — needs a client configured. A decision, not effort.
+- **A4, password recovery** — there is nothing to prove. No route, no token
+  table, no mail transport. Deferred by founder decision pending a provider,
+  and the only row here that can lock a real person out of their own memory.
