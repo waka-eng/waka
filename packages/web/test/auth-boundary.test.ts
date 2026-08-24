@@ -250,7 +250,7 @@ describe("auth boundary", () => {
     const container = await renderAuthRoutes({ initialPath: "/login" });
 
     expect(container.textContent).toContain("Welcome");
-    expect(container.textContent).toContain("Sign in to return to your inspirations.");
+    expect(container.textContent).toContain("Sign in to return to what you kept.");
     expect(container.querySelector("#login-tab-login")?.textContent).toBe("Sign in");
     expect(container.textContent).not.toContain("PROTECTED HOME DATA");
   });
@@ -333,13 +333,18 @@ describe("auth boundary", () => {
     expect(container.querySelector("#login-tab-login")?.textContent).toBe("로그인");
     expect(container.querySelector("#login-tab-signup")?.textContent).toBe("계정 만들기");
     expect(container.textContent).toContain("Google로 계속");
-    expect(container.textContent).toContain("이미 계정이 있나요?");
+    /* The footer prompt this used to check ("이미 계정이 있나요?" / "Already
+       have an account?") is gone. It was a second copy of the tab six inches
+       above it, on the same card, doing the same thing — centred under a
+       left-aligned form. The tab is the control, and the two assertions on it
+       just above are what now carry "every piece of shell copy re-rendered".
+       Its `not.toContain` partner goes with it: a string that cannot appear
+       in either language proves nothing about a language switch. */
     expect(container.textContent).not.toContain("Begin your archive.");
     expect(container.textContent).not.toContain("Create an account to save and reflect on what moves you.");
     expect(container.textContent).not.toContain("Continue with Google");
     expect(container.textContent).not.toContain("SIGN IN");
     expect(container.textContent).not.toContain("CREATE ACCOUNT");
-    expect(container.textContent).not.toContain("Already have an account?");
   });
 
   it("updates the OAuth error banner when the pre-submit signup language changes", async () => {
@@ -394,7 +399,7 @@ describe("auth boundary", () => {
 
     const container = await renderAuthRoutes({ initialPath: "/" });
 
-    expect(container.textContent).toContain("Sign in to return to your inspirations.");
+    expect(container.textContent).toContain("Sign in to return to what you kept.");
     expect(container.textContent).not.toContain("PROTECTED HOME DATA");
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
@@ -405,7 +410,7 @@ describe("auth boundary", () => {
 
     const container = await renderAuthRoutes({ initialPath: "/" });
 
-    expect(container.textContent).toContain("Sign in to return to your inspirations.");
+    expect(container.textContent).toContain("Sign in to return to what you kept.");
     expect(container.textContent).not.toContain("PROTECTED HOME DATA");
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
   });

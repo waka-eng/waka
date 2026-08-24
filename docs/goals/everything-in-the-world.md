@@ -38,13 +38,13 @@ Measured, not remembered — every row re-checked against the tree at v1:
 | 3 | A declared principle silently filed as a note | **closed** — `503 retryable`, nothing written |
 | 6 | The `≡` menu | **closed** — the control is gone; nothing matches `jar-flatmenu` in `packages/web/src` |
 | 4 | Two palettes — world dark, flat screens near-white | **resolved 2026-08-24** — the crossing that caused it no longer exists (zero links from the world); the split is now declared in `architecture.md` rather than denied by it. Removing the menu had stranded all six flat screens with no exit; `journeys:parking-lot` gates the fix |
-| 5 | Sign-in's submit is the weakest control; no password recovery | open (lockout copy fixed) |
+| 5 | Sign-in's submit is the weakest control; no password recovery | **rank fixed 2026-08-24** — 648px² → 26,304px², and asked before the alternative; `journeys:doorway` gates it. Recovery still deferred by decision: no mail provider |
 | 7 | Keeping something confirms almost invisibly | **closed in the world** — the orb now arrives, which is the confirmation the design always intended. The flat screen's quiet "kept" is untouched and no longer the path that matters |
 | 14 | **Nobody knows the world can be moved through** — real user feedback, 2026-08-23 | **closed 2026-08-24** — three separate invisible failures; `journeys:ways-out` gates it. The neighbouring *wall* still does not peek past the side edges the way the field peeks past the bottom; recorded, not attempted |
 | 15 | The first memory a person ever keeps does not appear until reload | **closed** — a clock-skew bug; `journeys:first-keep` gates it |
 | 8 | 21–22 touch targets under 44px; destructive ones at 20px | open |
 | 9 | The world is one unlabelled canvas | **out of scope, by decision** |
-| 10 | Three product nouns on the sign-in screen | open |
+| 10 | Three product nouns on the sign-in screen | **closed 2026-08-24** — eyebrow is `WAKA`, no canon layer name at the door, in either language |
 | 11 | `/signals` prints a raw `43%` with no legend | open |
 | 12 | The demo fixture declares an impossible signal state | open — a data call |
 | 13 | The consent page has no decline control | out of scope — too small for a phase |
@@ -804,3 +804,75 @@ for now, and arriving is not enough either — the canvas has to be there on the
 other side, or you are still stranded, just at a different address.
 
 Regression: `e2e:journeys` 10/10.
+
+### 2026-08-24 — Phase 4, the doorway
+
+Findings 5 and 10, on the one screen nobody can skip.
+
+#### Rank
+
+Measured on `/login`, by area: a 548x48 white "CONTINUE WITH GOOGLE" pill,
+then the two tab labels, then the field labels — and last, at **40x16**,
+lowercase and underlined at the bottom-left, the submit for the form the
+person had just filled in. Every single thing that navigated AWAY outranked
+the thing that finished the job.
+
+It did not get fixed by shouting. The register law stands — one uppercase
+voice on this page and it belongs to eyebrows, never to something you press —
+so the weight comes from the two channels a lowercase word can still use:
+**ground and footprint**. The submit is a filled pill in the page's own ink,
+the same size and shape as the one that used to out-rank it, and Google moved
+below an OR divider, which is where an alternative goes. Google is otherwise
+untouched: a recoloured Google button is a phishing signal.
+
+| control | before | after |
+|---|---|---|
+| the form's submit | 648px², last | **26,304px², first** |
+| CONTINUE WITH GOOGLE | 24,112px², first | 24,112px², last |
+
+The duplicate footer prompt went with it — "New to WAKA? Create account." was
+a second copy of the CREATE ACCOUNT tab on the same card, centred under a
+left-aligned form. The tab is the control.
+
+**Two things this cost, both worth naming.** The submit was invisible on the
+first attempt: `button[type="submit"]` in the actions block sets
+`background: none`, `border: 0` and an underline at the same specificity the
+new class had, and another `.btn-primary` in a later sheet wins the tie
+regardless of source order in this file. 548x48 in exactly the right place,
+with no ground and no border. It is declared once now, in this file's own
+body-scoped override section, which exists for that. And the OR divider's
+rules ran straight into the pill's edge, reading as an underline on it, so it
+got symmetric room.
+
+**Password recovery is still missing and is still deferred.** No route, no
+token table, no mail transport. Building a reset flow with no way to send the
+mail would be worse than the gap. The lockout copy that pointed at the
+non-existent feature was fixed on 2026-08-22.
+
+#### Nouns
+
+The eyebrow said "WAKA · Signals" over a subtitle saying "…return to your
+inspirations": two canon LAYER names used as branding, on the first screen
+anyone sees, for one product. Now `WAKA`, and "Sign in to return to what you
+kept" — no layer name at the door, in either language.
+
+#### Gate
+
+`journeys:doorway`, asserting both claims in both tab modes:
+
+    positive   submit is the largest control and asked first;
+               canon nouns — login: none; signup: none
+    negative   login: submit (737px²) outranked by SIGN IN (1742px²),
+               CREATE ACCOUNT (3364px²), CONTINUE WITH GOOGLE (24112px²)
+
+The sabotage restores the footnote treatment rather than inventing one, so the
+negative run reproduces the shipped defect at its shipped size. The noun half
+was proven separately rather than assumed: replayed against the copy that
+shipped it returns `["inspiration", "signal"]`.
+
+Four assertions in `auth-boundary` moved with the copy. Three were the
+subtitle used as a "the login page rendered" marker; the fourth checked the
+removed footer prompt as one of the pieces a language switch re-renders, and
+the two assertions on the tab immediately above it already carry that.
+
+Regression: web 130/130.

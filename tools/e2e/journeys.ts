@@ -679,6 +679,120 @@ const JOURNEYS: Journey[] = [
       };
     },
   },
+
+  {
+    id: "doorway",
+    name: "the door you came to open is the biggest thing on the door",
+    /* TWO CLAIMS, BOTH ABOUT THE ONE SCREEN NOBODY CAN SKIP.
+
+       RANK (finding 5). Measured on the old build, by area: a 548x48 white
+       "CONTINUE WITH GOOGLE" pill, then the two tab labels, then the field
+       labels — and last, at **40x16**, lowercase and underlined at the
+       bottom-left, the submit for the form the person had just filled in.
+       Every single thing that navigated AWAY outranked the thing that
+       finished the job. It is now the largest control on the screen and it
+       comes before the alternative rather than after it, without shouting:
+       the page keeps one uppercase register and it belongs to eyebrows.
+
+       NOUNS (finding 10). The eyebrow said "WAKA · Signals" over a subtitle
+       saying "…return to your inspirations" — two canon LAYER names used as
+       branding, on the first screen anyone sees, for one product.
+
+       THE SABOTAGE BREAKS RANK, which is the Major one. The noun count rides
+       along and is reported either way, so a regression there is visible even
+       on a passing run. */
+    breaks: async (ctx) => {
+      await ctx.addInitScript(() => {
+        window.addEventListener("load", () => {
+          const style = document.createElement("style");
+          style.setAttribute("data-sabotage", "submit-as-footnote");
+          /* the exact treatment it used to have: a lowercase word, not a
+             control — 40x16, no ground, hard left */
+          style.textContent =
+            "body .login-card .btn-doorway { width: auto !important; min-height: 0 !important;" +
+            " padding: 0 !important; background: none !important; align-self: flex-start !important; }";
+          document.head.appendChild(style);
+        });
+      });
+    },
+    run: async (page, base) => {
+      /* THE CANON LAYER NAMES, WHICH ARE NOT BRANDING. `docs/data-model.md`
+         names the three layers; a person arriving at a door does not need to
+         be taught any of them, and being shown two at once for one product is
+         what finding 10 is. Matched whole-word so "signal" does not fire on
+         "signalling" and "principle" does not fire inside a longer word. */
+      const CANON = ["inspiration", "signal", "top of mind", "principle"];
+      const problems: string[] = [];
+      const seen: string[] = [];
+
+      for (const mode of ["login", "signup"] as const) {
+        await page.goto(`${base}/login`, { waitUntil: "domcontentloaded" });
+        await page.waitForTimeout(1_500);
+        if (mode === "signup") {
+          await page.click("#login-tab-signup");
+          await page.waitForTimeout(800);
+        }
+
+        const shot = await page.evaluate(() => {
+          const card = document.querySelector<HTMLElement>(".login-card");
+          const controls = Array.from(
+            document.querySelectorAll<HTMLElement>("button, a[href]"),
+          )
+            .filter((el) => {
+              const r = el.getBoundingClientRect();
+              return r.width > 0 && r.height > 0;
+            })
+            .map((el, order) => {
+              const r = el.getBoundingClientRect();
+              return {
+                text: (el.innerText || "").trim().slice(0, 30),
+                area: Math.round(r.width * r.height),
+                isSubmit: el.classList.contains("btn-doorway"),
+                isGoogle: el.classList.contains("btn-google"),
+                order,
+              };
+            });
+          return { text: (card?.innerText || "").toLowerCase(), controls };
+        });
+
+        const submit = shot.controls.find((c) => c.isSubmit);
+        const google = shot.controls.find((c) => c.isGoogle);
+        if (!submit) {
+          problems.push(`${mode}: no submit on the form`);
+        } else {
+          const bigger = shot.controls.filter((c) => c.area > submit.area);
+          if (bigger.length > 0) {
+            problems.push(
+              `${mode}: submit (${submit.area}px²) outranked by ${bigger
+                .map((c) => `${c.text || "?"} (${c.area}px²)`)
+                .join(", ")}`,
+            );
+          }
+          /* AND IT COMES FIRST. Equal weight in the wrong order is still the
+             alternative asking before the thing it is an alternative to. */
+          if (google && google.order < submit.order) {
+            problems.push(`${mode}: the alternative is asked before the form`);
+          }
+        }
+
+        const nouns = CANON.filter((n) =>
+          new RegExp(`\\b${n}s?\\b`).test(shot.text),
+        );
+        seen.push(`${mode}: ${nouns.length === 0 ? "none" : nouns.join("+")}`);
+        if (nouns.length > 1) {
+          problems.push(`${mode}: ${nouns.length} product nouns for one thing — ${nouns.join(", ")}`);
+        }
+      }
+
+      return {
+        ok: problems.length === 0,
+        detail:
+          problems.length === 0
+            ? `submit is the largest control and asked first; canon nouns — ${seen.join("; ")}`
+            : problems.join("; "),
+      };
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------

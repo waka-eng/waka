@@ -49,12 +49,12 @@ Each finding carries how it was established:
 | 2 | **Blocking** | `pnpm demo:seed` — the documented way in — fails against current migrations |
 | 3 | **Major** | A declared principle is silently filed as a note when the model call fails |
 | 4 | **Major** | The product is two themes: near-black world, near-white surfaces — **resolved 2026-08-24**; the crossing that caused it is gone, and removing it had stranded all six flat screens with no way back |
-| 5 | **Major** | Sign-in's primary action is the weakest thing on the screen; no password recovery exists |
+| 5 | **Major** | Sign-in's primary action is the weakest thing on the screen; no password recovery exists — **rank fixed 2026-08-24** (648px² → 26,304px², and asked first); recovery deferred by decision, no mail provider |
 | 6 | **Moderate** | The "other screens" menu opens on top of the sentence it obscures |
 | 7 | **Moderate** | Keeping something — the core act — confirms almost invisibly |
 | 8 | **Moderate** | 21–22 touch targets per surface under 44px, destructive ones at 20px |
 | 9 | **Moderate** | The world is one unlabelled canvas to assistive technology |
-| 10 | **Minor** | Three product nouns on the sign-in screen |
+| 10 | **Minor** | Three product nouns on the sign-in screen — **fixed 2026-08-24** |
 | 11 | **Minor** | `/signals` prints a raw confidence percentage with nothing to read it against |
 | 12 | **Minor** | The demo fixture describes a signal state the product forbids creating |
 | 13 | **Minor** | The consent page has no decline control |
@@ -259,6 +259,35 @@ friction; this one is a locked door.
 Minor, same screen: "New to WAKA? Create account." sits centred beneath a
 left-aligned form and duplicates the CREATE ACCOUNT tab six inches above it.
 
+### Fixed 2026-08-24 — except the recovery, which is deferred by decision
+
+**The rank is inverted.** The submit is now the largest control on the screen
+— 548×48, against Google's 548×44 — and it comes *before* the alternative
+rather than after it. It did not get there by shouting: the page keeps one
+uppercase register and it belongs to eyebrows, so the weight comes from the
+two channels a lowercase word can still use, **ground and footprint**. Google
+moved below an OR divider, which is where an alternative belongs, and is
+otherwise untouched — a recoloured Google button is a phishing signal.
+
+| control | before | after |
+|---|---|---|
+| the form's submit | 40×16 = **648px²** | 548×48 = **26,304px²** |
+| CONTINUE WITH GOOGLE | 548×44 = 24,112px², **first** | 24,112px², **last** |
+
+**The duplicate prompt is gone.** "New to WAKA? Create account." was a second
+copy of the CREATE ACCOUNT tab on the same card, centred under a left-aligned
+form. The tab is the control.
+
+**Password recovery is still missing, and is still the one locked door.**
+Deferred by decision pending a mail provider — no route, no token table, no
+transport, and inventing one without a way to send the mail would be worse
+than the gap. The lockout copy that pointed at the non-existent feature was
+fixed on 2026-08-22. When a provider is chosen this is the first thing built.
+
+Gated by `journeys:doorway`, whose sabotage restores the footnote treatment
+exactly: under it the submit measures 737px² and is outranked by both tabs and
+the Google pill, which is the shipped defect reproduced.
+
 ---
 
 ## 6. The "other screens" menu opens on top of the sentence it obscures
@@ -355,6 +384,15 @@ Inspirations", above the line "Sign in to return to your inspirations."
 layer name. The eyebrow uses a layer-2 word as branding on the one screen
 every user sees before they know what either word means.
 
+
+### Fixed 2026-08-24
+
+The eyebrow is `WAKA`. The subtitle is "Sign in to return to what you kept" —
+no canon layer name at the door, in either language. Checked by
+`journeys:doorway`, which counts how many of `inspiration` / `signal` /
+`top of mind` / `principle` appear in the login card and fails on more than
+one. Run against the copy that shipped, it returns `["inspiration", "signal"]`
+— the finding, reproduced.
 ---
 
 ## 11. `/signals` prints a raw confidence percentage

@@ -293,7 +293,11 @@ export function SignupForm({
         </select>
       </label>
 
-      <button className="btn-primary" type="submit" disabled={submitting}>
+      {/* `btn-doorway`: the login page's own submit, and NOT `.profile-card`'s
+          save or onboarding's. `.login-card` is shared by four screens, so
+          the weight this control needs had to be asked for by name rather
+          than inherited by ancestor. */}
+      <button className="btn-primary btn-doorway" type="submit" disabled={submitting}>
         {submitting ? t(locale, "loginCreatingAccount") : t(locale, "loginCreateAccount")}
       </button>
     </form>
@@ -446,7 +450,11 @@ export function LoginForm(): JSX.Element {
         ) : null}
       </label>
 
-      <button className="btn-primary" type="submit" disabled={submitting}>
+      {/* `btn-doorway`: the login page's own submit, and NOT `.profile-card`'s
+          save or onboarding's. `.login-card` is shared by four screens, so
+          the weight this control needs had to be asked for by name rather
+          than inherited by ancestor. */}
+      <button className="btn-primary btn-doorway" type="submit" disabled={submitting}>
         {submitting ? t(locale, "loginSigningIn") : t(locale, "loginTab")}
       </button>
     </form>
@@ -598,10 +606,6 @@ export default function LoginPage(): JSX.Element {
           </div>
         ) : null}
 
-        <GoogleSignInButton locale={locale} returnTo={resolveRedirect(location)} />
-
-        <OrDivider locale={locale} />
-
         <div
           className="login-tabs"
           role="tablist"
@@ -655,33 +659,20 @@ export default function LoginPage(): JSX.Element {
           )}
         </div>
 
-        <p className="login-footer">
-          {mode === "login" ? (
-            <>
-              {t(locale, "loginNewPrompt")} {" "}
-              <button
-                type="button"
-                className="login-link"
-                onClick={() => setMode("signup")}
-              >
-                {t(locale, "loginCreateAccount")}
-              </button>
-              .
-            </>
-          ) : (
-            <>
-              {t(locale, "loginExistingPrompt")} {" "}
-              <button
-                type="button"
-                className="login-link"
-                onClick={() => setMode("login")}
-              >
-                {t(locale, "loginTab")}
-              </button>
-              .
-            </>
-          )}
-        </p>
+        {/* THE ALTERNATIVE COMES AFTER THE THING IT IS AN ALTERNATIVE TO.
+            Google used to sit above the tabs, so the first and heaviest thing
+            on the screen was a full-width white pill handing the account to
+            somebody else, and the submit for the form a person had just
+            filled in was a 40x16 lowercase footnote at the bottom-left,
+            ranked below both tabs and the field labels.
+
+            Reading order now says what the product means: this is an
+            email-and-password product, and Google is one other way in. The
+            divider says so out loud in between. Nothing was removed — the
+            button is the same button, in the place an alternative goes. */}
+        <OrDivider locale={locale} />
+
+        <GoogleSignInButton locale={locale} returnTo={resolveRedirect(location)} />
       </section>
     </main>
   );
