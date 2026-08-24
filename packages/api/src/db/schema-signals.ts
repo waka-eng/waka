@@ -140,6 +140,19 @@ export const signalEvidence = pgTable(
       .notNull()
       .references(() => profiles.id, { onDelete: "cascade" }),
 
+    /**
+     * WHOSE MEMORY THIS ROW CITES — split from `profileId` on 2026-08-24,
+     * when rooms started distilling from their pooled ground. For a personal
+     * signal the two are the same profile; for a room's signal `profileId`
+     * is the room's mind and this is the member whose memory stands under
+     * the statement. The inspiration FK runs through THIS column, so an
+     * evidence row still cannot name a memory its stated owner does not
+     * hold — the room case is a lawful pairing, not a loosened net. It is
+     * also what the two-voices gate counts: a room signal appears only once
+     * `COUNT(DISTINCT owner_profile_id) >= 2`.
+     */
+    ownerProfileId: uuid("owner_profile_id").notNull(),
+
     signalId: uuid("signal_id").notNull(),
     inspirationId: uuid("inspiration_id").notNull(),
 
@@ -180,10 +193,15 @@ export const signalEvidence = pgTable(
       name: "signal_evidence_signal_fk",
     }).onDelete("cascade"),
     inspirationFk: foreignKey({
-      columns: [table.profileId, table.inspirationId],
+      columns: [table.ownerProfileId, table.inspirationId],
       foreignColumns: [inspirations.profileId, inspirations.id],
       name: "signal_evidence_inspiration_fk",
     }).onDelete("cascade"),
+    /** The two-voices gate's index: COUNT(DISTINCT owner) per signal. */
+    signalOwnerIdx: index("signal_evidence_signal_owner_idx").on(
+      table.signalId,
+      table.ownerProfileId,
+    ),
   }),
 );
 

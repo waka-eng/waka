@@ -71,8 +71,8 @@ describe("the weather is a view of the record", () => {
     await seedInspiration(profileId, daysAgo(2, 2));
     const sig = await seedSignal(profileId, daysAgo(2, 1), "You cook to think.");
     await t.sql`
-      INSERT INTO signal_evidence (profile_id, signal_id, inspiration_id, created_at)
-      VALUES (${profileId}, ${sig}, ${insp}, ${daysAgo(2, 1)})`;
+      INSERT INTO signal_evidence (profile_id, owner_profile_id, signal_id, inspiration_id, created_at)
+      VALUES (${profileId}, ${profileId}, ${sig}, ${insp}, ${daysAgo(2, 1)})`;
 
     // Yesterday: a refusal, and the poster read everything again and held.
     const anchor = await seedSignal(profileId, daysAgo(9), "You are a morning person.");

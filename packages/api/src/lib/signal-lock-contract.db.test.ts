@@ -62,6 +62,7 @@ async function derive(
     await acquireSignalDerivationLock(tx as never, profileId);
     const result = await applyCandidates(tx as never, {
       profileId,
+      evidenceOwnerProfileId: profileId,
       inspirationId,
       candidates: [{ statement, reason: null, quote: null, quoteSource: null, embedding }],
       embeddingModel: EMBEDDING_MODEL,

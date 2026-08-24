@@ -98,6 +98,15 @@ export interface ResolvedCandidate {
 interface ApplyCandidatesInput {
   profileId: string;
   inspirationId: string;
+  /**
+   * WHOSE MEMORY THE EVIDENCE CITES — the inspiration's owner. Equal to
+   * `profileId` for every personal derivation; different exactly when a
+   * ROOM distils (2026-08-24): `profileId` is then the room's mind and this
+   * is the member whose public memory is being read. The evidence rows carry
+   * it, and the inspiration foreign key runs through it, so a wrong value is
+   * refused by Postgres rather than stored.
+   */
+  evidenceOwnerProfileId: string;
   candidates: ResolvedCandidate[];
   embeddingModel: string;
   provider: ModelProvider;
@@ -169,6 +178,7 @@ export async function applyCandidates(
     if (match) {
       await attachEvidence(tx, {
         profileId: input.profileId,
+        ownerProfileId: input.evidenceOwnerProfileId,
         signalId: match.target.id,
         inspirationId: input.inspirationId,
         reason: candidate.reason,
@@ -256,6 +266,7 @@ export async function applyCandidates(
 
     await attachEvidence(tx, {
       profileId: input.profileId,
+      ownerProfileId: input.evidenceOwnerProfileId,
       signalId: minted.id,
       inspirationId: input.inspirationId,
       reason: candidate.reason,
@@ -395,6 +406,8 @@ async function attachEvidence(
   tx: WakaTx,
   input: {
     profileId: string;
+    /** whose memory this row cites; the inspiration FK runs through it */
+    ownerProfileId: string;
     signalId: string;
     inspirationId: string;
     reason: string | null;
@@ -410,6 +423,7 @@ async function attachEvidence(
     .insert(signalEvidence)
     .values({
       profileId: input.profileId,
+      ownerProfileId: input.ownerProfileId,
       signalId: input.signalId,
       inspirationId: input.inspirationId,
       reason: input.reason,

@@ -51,7 +51,7 @@ import {
   type AttachmentEnrichmentStatus,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
-import { type AuthEnv, profileAccessError, requireAuth } from "../lib/middleware.js";
+import { type AuthEnv, profileAccessError, requireAuth, asAccountProfile } from "../lib/middleware.js";
 import { enqueueEnrichAttachment } from "../lib/queue.js";
 
 // ---------------------------------------------------------------------------
@@ -499,10 +499,18 @@ attachmentsRoutes.post("/", async (c) => {
     return c.json({ error: "Inspiration not found" }, 404);
   }
 
+  /* A room's mind keeps no inspirations, so a mind-owned parent here is a
+     bug upstream — but the narrow costs nothing and keeps the access matrix
+     typed on account-held profiles only. */
+  const parentProfile = asAccountProfile({
+    accountId: parent.accountId,
+    type: parent.profileType,
+  });
+  if (!parentProfile) return c.json({ error: "Inspiration not found" }, 404);
   const denied = await profileAccessError(
     db,
     session,
-    { id: parent.profileId, accountId: parent.accountId, type: parent.profileType },
+    { id: parent.profileId, accountId: parentProfile.accountId, type: parentProfile.type },
     "capture",
   );
   if (denied) return c.json(denied, 403);

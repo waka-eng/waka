@@ -89,8 +89,8 @@ async function seedStack(profileId: string): Promise<Record<string, string[]>> {
   await one(
     "signalEvidence",
     await t.sql`
-      INSERT INTO signal_evidence (profile_id, signal_id, inspiration_id)
-      VALUES (${profileId}, ${sig.id}, ${insp.id}) RETURNING id`,
+      INSERT INTO signal_evidence (profile_id, owner_profile_id, signal_id, inspiration_id)
+      VALUES (${profileId}, ${profileId}, ${sig.id}, ${insp.id}) RETURNING id`,
   );
   await one(
     "signalStatements",

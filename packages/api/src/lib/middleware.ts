@@ -129,6 +129,23 @@ export interface ProfileAccessTarget {
   type: "human" | "agent";
 }
 
+/**
+ * Narrow a profiles row to an ACCOUNT-HELD target, or nothing.
+ *
+ * A room's mind (`type = 'group'`, null account — 2026-08-24) is a profile
+ * that no session can be and no personal route may act on: it belongs to a
+ * room, and rooms are reached through the group routes with their own
+ * membership gate. Every place that loads a profile as an access target
+ * passes through here, so a mind resolves to "no such profile" everywhere
+ * by one rule instead of by nine remembered checks.
+ */
+export function asAccountProfile<
+  T extends { accountId: string | null; type: "human" | "agent" | "group" },
+>(row: T): (T & { accountId: string; type: "human" | "agent" }) | null {
+  if (row.accountId === null || row.type === "group") return null;
+  return row as T & { accountId: string; type: "human" | "agent" };
+}
+
 export type ProfileAccessVerdict = "allowed" | "denied" | "sibling_grant_required";
 
 /**

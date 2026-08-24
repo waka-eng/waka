@@ -1,0 +1,16 @@
+-- A room can have a mind.
+--
+-- Founder ruling, 2026-08-24: "if inspiration is shared to go to rooms, then
+-- that room would have x inspirations from person x, y from person y, z from
+-- person z. that room should create signals based on x+y+z." A room that
+-- distils needs an owner for what it distils, and everything at layer 2 —
+-- match-or-mint, evidence, embeddings, lifecycle, confidence, suppression —
+-- is keyed to a profile through seven composite foreign keys. The room's
+-- mind therefore IS a profile, of a third kind.
+--
+-- This migration carries the enum value alone, the same way 0011 carried
+-- `reembed_signal`: ALTER TYPE ... ADD VALUE cannot be used by later
+-- statements inside the same transaction, so the value lands here and
+-- 0025 builds the structure that uses it. IF NOT EXISTS so a re-run does
+-- not fail on a value that is already there.
+ALTER TYPE "public"."profile_type" ADD VALUE IF NOT EXISTS 'group';

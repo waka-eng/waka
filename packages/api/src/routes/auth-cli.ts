@@ -60,6 +60,7 @@ import {
   humanSessionsOnly,
   resolveProfileAccess,
   requireAuth,
+  asAccountProfile,
 } from "../lib/middleware.js";
 import {
   type AuthenticatedSession,
@@ -365,8 +366,14 @@ export async function bindableProfiles(
     .where(eq(profiles.accountId, session.profile.accountId))
     .orderBy(profiles.type, profiles.createdAt);
 
-  /* write never rides a grant, so the sync matrix answers alone here */
-  return rows.filter((row) => resolveProfileAccess(session, row, "write") === "allowed");
+  /* The WHERE proved every row is this account's (NULL never equals an id),
+     so a room's mind cannot appear here; the narrow states that for the
+     types. Write never rides a grant, so the sync matrix answers alone. */
+  return rows.flatMap((row) => {
+    const held = asAccountProfile(row);
+    if (!held) return [];
+    return resolveProfileAccess(session, held, "write") === "allowed" ? [held] : [];
+  });
 }
 
 /**

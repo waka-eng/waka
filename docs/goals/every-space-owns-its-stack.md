@@ -79,6 +79,43 @@ the same ground can suggest to each member, on their own wall, in their own
 name, which keeps every statement attributed. That is a smaller, additive
 change and it is what a Phase 2 should be if the founder keeps A.
 
+## The fork, ruled — 2026-08-24
+
+The founder answered the fork the same day it was put to them, and the
+answer is neither branch as written: **a room DOES distil its own
+signals from its own pooled ground** (the plan's direction), on four
+rulings that reshape the phases below:
+
+1. **Sharing stays one switch.** "Going to your rooms" puts a memory on
+   every one of its owner's rooms' grounds. Per-room picking stays out
+   of scope; visibility stays global and two-valued.
+2. **"Say out loud" retires — room-grown only.** The room's sky becomes
+   what it distilled from x+y+z. The `signal_shares` RECORD survives as
+   history (the export carries it; the record outlives the verb), but
+   the share verb goes and the wall's future is the room's own signals.
+3. **A room signal needs two voices.** It appears only once memories
+   from at least two different members stand under it — a one-member
+   pattern is that member's own, already on their own wall.
+4. **Same synthesis pipeline.** Room-grown signals feed the room's top
+   of mind under the existing consent machinery: affirmations gate the
+   first draft, proposals and stances govern change.
+
+**The architecture, chosen by the schema itself: the room's mind is a
+profile** (`type = 'group'`, no account, owned by its room — migrations
+0024/0025). Seven composite `(profile_id, id)` foreign keys and the
+whole match-or-mint / lifecycle / embedding / confidence stack are
+profile-keyed and reuse unchanged. `signal_evidence.owner_profile_id`
+records WHOSE memory each citation reads, with the inspiration FK
+running through it, so a room signal citing a non-member's memory is
+unstorable rather than merely unlikely. Room-derivation jobs are owned
+by the KEEPER's profile (the person whose keep triggered the work), so
+the per-account model budget and queue fairness bill the right person
+and a room is not an unmetered path to the shared key.
+
+Phases 2–4 below are superseded where they conflict with these rulings
+(notably: `signal_shares` is not dropped by migration — the record
+survives; the mint bar is two VOICES, not any change to promote-at-3).
+
 ## The shape
 
 Four phases. Each ends green and is independently revertible. The restructuring

@@ -61,6 +61,7 @@ import {
   profileColumns,
   serializeAccount,
   serializeProfile,
+  sessionProfileRow,
   type AccountRow,
   type ProfileRow,
 } from "./auth-identity.js";
@@ -217,7 +218,9 @@ export async function signupHandler(c: Context<AuthEnv>): Promise<Response> {
         })
         .returning(profileColumns);
 
-      return { account: account!, profile: profile! };
+      /* inserted with this account's id one statement up; the narrow only
+         teaches the types what the insert already wrote */
+      return { account: account!, profile: sessionProfileRow(profile!) };
     });
   } catch (err) {
     // postgres.js exposes the SQLSTATE on `err.code`. `23505` = unique
@@ -383,7 +386,9 @@ export async function loginHandler(c: Context<AuthEnv>): Promise<Response> {
   const rows = await db
     .select({
       account: accountColumns,
-      profile: profileColumns,
+      /* accountId through the JOIN, so the row's type carries what the join
+         proves: this profile has an account (see loadIdentity) */
+      profile: { ...profileColumns, accountId: accounts.id },
       passwordHash: accounts.passwordHash,
     })
     .from(accounts)

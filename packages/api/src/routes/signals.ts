@@ -42,6 +42,7 @@ import {
   requireAuth,
   type AuthEnv,
   type ProfileOperation,
+  asAccountProfile,
 } from "../lib/middleware.js";
 import { enqueueSignalReembed, enqueueTopOfMindRefresh } from "../lib/queue.js";
 import { reconcilePrinciplesAfterSignalLoss } from "../lib/principle-generation.js";
@@ -627,7 +628,10 @@ export async function loadProfileTarget(
     .from(profiles)
     .where(eq(profiles.id, profileId))
     .limit(1);
-  return row ?? null;
+  /* a room's mind narrows to nothing here: its signals are the room's, read
+     through the group routes and their membership gate, never through the
+     personal scope machinery */
+  return row ? asAccountProfile(row) : null;
 }
 
 export type ProfileScopeResolution =

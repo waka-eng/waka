@@ -610,12 +610,18 @@ export function createPrincipleMarkdownRoute(
     );
     if (!scope.ok) return c.json(scope.body, scope.status);
 
-    const [profileRow] = await db
+    const [profileRaw] = await db
       .select({ name: profiles.name, type: profiles.type })
       .from(profiles)
       .where(eq(profiles.id, scope.profileId))
       .limit(1);
-    if (!profileRow) return c.json({ error: "Profile not found" }, 404);
+    /* principles are a person's or an agent's; a room's mind holds none
+       (rooms do not participate in layer 4 — data-model.md), so a mind here
+       reads as no profile at all */
+    if (!profileRaw || profileRaw.type === "group") {
+      return c.json({ error: "Profile not found" }, 404);
+    }
+    const profileRow = { name: profileRaw.name, type: profileRaw.type };
 
     const views = await loadPrincipleViews(db, scope.profileId);
     const renderedAt = new Date();

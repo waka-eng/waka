@@ -294,6 +294,9 @@ export async function deriveSignalsForInspiration(
     await acquireSignalDerivationLock(tx, profileId);
     return applyCandidates(tx, {
       profileId,
+      /* a personal derivation reads its own memory; the room path (which
+         derives into a mind while citing a member) sets these apart */
+      evidenceOwnerProfileId: inspiration.profileId,
       inspirationId: inspiration.id,
       candidates: embedded,
       embeddingModel: embeddingClient.model,

@@ -78,12 +78,42 @@ the auth-hardening track.
 | Cardinality | Unbounded list per profile — editable, deletable, **not** append-only | Evolving set per profile | **Exactly one** per profile; exactly one per group | Growing, **uncapped** set per profile — expensive to earn, merged on overlap |
 | Visibility | Private to the owning profile's account | Private by default; shareable per group — the unit walls consume | Profile: account (+ optional public surface); group: members | Account-private; **not shareable** (v1); served to the profile's own credentialed tools via the canonical machine rendering |
 
-The pipeline, per profile: inspirations accumulate → WAKA distills
-signals → signals synthesize into the top of mind → what keeps surviving
-distills, nightly, into principles. The group flow reuses the second
-layer: members share signals to a group wall, and the group's top of
-mind is generated from those shared signals; principles do not
-participate in groups (v1).
+The pipeline, per SPACE, and the rules are the same in every one of
+them: a space's ground is what is visible in it; a space's signals are
+distilled from its own ground; a space's top of mind is those signals
+after people have acted on them — alone in your own space, together in
+a room. For a person: inspirations accumulate → WAKA distills signals →
+signals synthesize into the top of mind → what keeps surviving
+distills, nightly, into principles.
+
+**A room runs the same pipeline over a pooled ground** (founder ruling,
+2026-08-24: "that room should create signals based on x+y+z"). A room's
+ground is its members' public memories — x from one person, y from
+another, z from a third — and the room distils ITS OWN signals from
+them, owned by the room's mind (a `group`-type profile, migrations
+0024/0025) rather than by any member. Three rules keep that honest:
+
+- **Visibility stays global and two-valued.** One switch — private, or
+  public to every room its owner is in. Per-room visibility is
+  deliberately out of scope.
+- **A room's signal appears only once memories from at least two
+  different members stand under it.** A pattern one person's memories
+  support is that person's own signal, already forming on their own
+  wall, and must not wear the room's name — everything a room says
+  about itself is genuinely collective.
+- **The evidence asymmetry is deliberate, and it is not a global
+  relaxation.** A ROOM's entries may name the memories that fed them,
+  because a room's ground is public-to-the-room by construction — every
+  memory on it was put there by its owner's own switch. **Your own top
+  of mind keeps "that, never which."**
+
+The room's top of mind is generated from the room's own signals through
+the same synthesis pipeline, still gated by the members' affirmations
+and proposals. Sharing an already-formed personal signal into a room
+("say out loud") retires as the way statements reach a room — the
+`signal_shares` record survives as history (the export still carries
+it; the record outlives the verb), but the wall's future is what the
+room grew. Principles do not participate in groups (v1).
 
 ## Inspiration (layer 1)
 
@@ -182,10 +212,12 @@ agent's distilled working memory.
   mutated in place.
 - **Profile-scoped**: generated from that profile's signals; the admin
   can edit entries (which locks them), pin, dismiss, reorder.
-- **Group**: generated from the signals members have shared to that
-  group; entries can attribute which members' signals fed them. Members
-  change it together — proposals and affirmations are the co-editing
-  mechanism — and accepted changes create new versions.
+- **Group**: generated from the room's OWN signals — distilled from the
+  pooled public memories of its members (ruling 2026-08-24; previously
+  from signals members shared in, whose record survives as history).
+  Entries can attribute contribution. Members change it together —
+  proposals and affirmations are the co-editing mechanism — and
+  accepted changes create new versions.
 
 ## Principle (layer 4)
 

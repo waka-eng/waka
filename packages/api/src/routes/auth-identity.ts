@@ -67,6 +67,24 @@ export interface ProfileRow {
   publicTopOfMindEnabled: boolean;
 }
 
+/**
+ * Narrow a profiles row into the session shape, holding the invariant that
+ * makes it safe: A ROOM'S MIND CANNOT BE A SESSION. Since 2026-08-24 a
+ * profile may belong to a room instead of an account (`type = 'group'`,
+ * null `accountId`), and every identity path here reaches profiles through
+ * an account — a join on accounts, or an insert that wrote the account in
+ * the same transaction — so a null can only mean a bug upstream, and it is
+ * an error rather than a shrug.
+ */
+export function sessionProfileRow(
+  row: Omit<ProfileRow, "accountId"> & { accountId: string | null },
+): ProfileRow {
+  if (row.accountId === null) {
+    throw new Error("a room's mind cannot act as a session profile");
+  }
+  return { ...row, accountId: row.accountId };
+}
+
 export function serializeAccount(account: AccountRow) {
   return {
     id: account.id,
@@ -101,7 +119,12 @@ export async function loadIdentity(
   profileId: string,
 ): Promise<{ account: AccountRow; profile: ProfileRow } | null> {
   const [row] = await db
-    .select({ account: accountColumns, profile: profileColumns })
+    .select({
+      account: accountColumns,
+      /* accountId through the JOIN: the join is on accounts.id, so the type
+         system learns what the join already proves — this row has one. */
+      profile: { ...profileColumns, accountId: accounts.id },
+    })
     .from(profiles)
     .innerJoin(accounts, eq(accounts.id, profiles.accountId))
     .where(eq(profiles.id, profileId))

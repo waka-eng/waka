@@ -221,6 +221,18 @@ export async function createGroupForProfile(
           profileId: input.profileId,
           kind: "joined",
         });
+        /* THE ROOM'S MIND, born with the room (2026-08-24). The profile that
+           owns what this room distils from its pooled ground: no account --
+           it is the room's, not anyone's -- and deleted by the room's own
+           cascade. Same transaction as the group row, so no code path ever
+           meets a room without one; migration 0025 settled the rooms that
+           predate this line. */
+        await tx.insert(profiles).values({
+          accountId: null,
+          type: "group",
+          name: input.name,
+          groupId: group.id,
+        });
         return group;
       });
 
@@ -523,8 +535,14 @@ export async function listGroupMembers(
     .where(eq(groupMembers.groupId, groupId))
     .orderBy(asc(groupMembers.createdAt), asc(groupMembers.profileId));
 
-  const labels = labelMembersByProfileId(rows);
-  return rows.map((row) => {
+  /* A room's mind is not a member of the room — it IS the room's layer 2.
+     `group_members` never holds one, so this filter is a type-level
+     restatement of that fact rather than a behavior change. */
+  const seated = rows.flatMap((row) =>
+    row.type === "group" ? [] : [{ ...row, type: row.type }],
+  );
+  const labels = labelMembersByProfileId(seated);
+  return seated.map((row) => {
     const label = labels.get(row.profileId);
     return {
       profileId: row.profileId,

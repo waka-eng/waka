@@ -28,7 +28,15 @@ import {
 
 import { accounts } from "./schema-accounts";
 
-export const profileTypeValues = ["human", "agent"] as const;
+/**
+ * `group` is A ROOM'S MIND (2026-08-24): the profile that owns what a room
+ * distils from its pooled ground. It belongs to a room rather than an
+ * account — `accountId` null, `groupId` set — and migration 0025's CHECK
+ * (`profiles_mind_shape_check`) pins that shape both ways. Every
+ * account-scoped query filters on `account_id = $x`, which NULL never
+ * satisfies, so a room's mind is invisible to all of them by construction.
+ */
+export const profileTypeValues = ["human", "agent", "group"] as const;
 export type ProfileType = (typeof profileTypeValues)[number];
 export const profileTypeEnum = pgEnum("profile_type", profileTypeValues);
 
@@ -37,11 +45,23 @@ export const profiles = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
 
-    accountId: uuid("account_id")
-      .notNull()
-      .references(() => accounts.id, { onDelete: "cascade" }),
+    /** Null for exactly one kind of profile: a room's mind (see the enum). */
+    accountId: uuid("account_id").references(() => accounts.id, {
+      onDelete: "cascade",
+    }),
 
     type: profileTypeEnum("type").notNull(),
+
+    /**
+     * The room this mind belongs to, for `type = 'group'` and only then.
+     *
+     * The FOREIGN KEY (→ groups, ON DELETE CASCADE: the room takes its mind
+     * with it), the one-mind-per-room UNIQUE index, and the shape CHECK all
+     * live in migration 0025 rather than here — `schema-groups` already
+     * imports this module for `groupMembers.profileId`, and declaring the
+     * reference from this side too would make the two modules a cycle.
+     */
+    groupId: uuid("group_id"),
 
     /** Display name. For agents, what the agent calls itself. */
     name: text("name").notNull().default(""),

@@ -55,8 +55,8 @@ async function seedSignal(status: string, evidenceCount: number): Promise<string
       INSERT INTO inspirations (profile_id, text, source)
       VALUES (${profileId}, ${`memory ${i}`}, 'app') RETURNING id`;
     await t.sql`
-      INSERT INTO signal_evidence (profile_id, signal_id, inspiration_id)
-      VALUES (${profileId}, ${signal.id}, ${inspiration.id})`;
+      INSERT INTO signal_evidence (profile_id, owner_profile_id, signal_id, inspiration_id)
+      VALUES (${profileId}, ${profileId}, ${signal.id}, ${inspiration.id})`;
   }
 
   if (status === "active") {

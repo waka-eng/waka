@@ -169,6 +169,20 @@
       "when": 1787544504282,
       "tag": "0023_the-sibling-door-gets-a-hand",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1787544564282,
+      "tag": "0024_a-room-can-have-a-mind",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1787544624282,
+      "tag": "0025_the-rooms-mind-and-the-borrowed-ground",
+      "breakpoints": true
     }
   ]
 }
