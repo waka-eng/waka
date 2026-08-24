@@ -52,7 +52,7 @@ Each finding carries how it was established:
 | 5 | **Major** | Sign-in's primary action is the weakest thing on the screen; no password recovery exists — **rank fixed 2026-08-24** (648px² → 26,304px², and asked first); recovery deferred by decision, no mail provider |
 | 6 | **Moderate** | The "other screens" menu opens on top of the sentence it obscures |
 | 7 | **Moderate** | Keeping something — the core act — confirms almost invisibly |
-| 8 | **Moderate** | 21–22 touch targets per surface under 44px, destructive ones at 20px |
+| 8 | **Moderate** | 21–22 touch targets per surface under 44px, destructive ones at 20px — **fixed 2026-08-24**; `/top-of-mind` went 11-of-20 under 44px to 0-of-20 |
 | 9 | **Moderate** | The world is one unlabelled canvas to assistive technology |
 | 10 | **Minor** | Three product nouns on the sign-in screen — **fixed 2026-08-24** |
 | 11 | **Minor** | `/signals` prints a raw confidence percentage with nothing to read it against |
@@ -60,11 +60,17 @@ Each finding carries how it was established:
 | 13 | **Minor** | The consent page has no decline control |
 | 14 | **Major** | Nobody knows the world can be moved through — user feedback; **fixed 2026-08-24**, three separate invisible failures |
 | 15 | **Major** | The first memory a person ever keeps does not appear until reload — **fixed 2026-08-23**; a clock-skew bug that silently dropped the newest orb on *every* keep |
+| 16 | **Blocking (mobile)** | `/signals` renders as a column of single letters on a phone — found and **fixed 2026-08-24** |
+| 17 | **Blocking** | Near-white on near-white at 1.15:1 — every signal sentence, and every surface's page title, by two different roads — found and **fixed 2026-08-24** |
 
 Working well, and worth not breaking: Korean coverage is genuinely complete;
 capture round-trips correctly; no surface overflows horizontally on a phone;
-measured text contrast passes on every surface tested; the permission matrix
-holds under the MCP live gate.
+the permission matrix holds under the MCP live gate.
+
+**One line of that summary was wrong and is corrected below.** It read
+"measured text contrast passes on every surface tested". Finding 17 is a
+1.15:1 failure on the sentences that are the whole content of `/signals` — the
+pass sampled labelled text and never measured the field carrying the claim.
 
 ---
 
@@ -346,6 +352,51 @@ Mitigated, and worth crediting: an undo exists (`sf-undo` / `putEntryBack`,
 close/leave (`Surface.tsx:333,501`). "Fading never deletes" is being honoured.
 The ergonomics are the gap, not the safety net.
 
+### Fixed 2026-08-24
+
+The audit missed the two smallest controls in the product: the principle
+arrows, at **11×20**, in the same row as REMOVE.
+
+| | before | after |
+|---|---|---|
+| `take it down` / `hold` on a post-it | 21×21 and 22×22, **21px apart** | 44×44, **44px apart** |
+| principle `↑` / `↓` | **11×20** | 44×44 |
+| `read this again` | 18×18 | 44×44 |
+| `← back` | 47×22 | 47×44 |
+| the reading's provenance row | 22px tall | 44px tall |
+| `your profile` / language in the you-menu | 33px and 18px tall | 44px |
+| the shortest footer verb | 42px wide | 46px |
+| `/top-of-mind` controls under 44px | **11 of 20** | **0 of 20** |
+
+**The marks did not get bigger; the hands did.** Enlarging the glyphs would
+turn a note's quiet footer into a toolbar, and these are meant to be found
+rather than offered — so the button is 44×44 and the disc the eye reads is
+still 22px, drawn inside it. Negative margins give the extra height back, so
+no sheet reflows: the whole change is invisible until you try to press it.
+
+**Spacing was half of it.** Two 44px targets whose centres are 21px apart are
+*worse* than two small ones — they overlap, and the overlap belongs to
+whichever paints last. At `gap: 0` the new boxes put their centres exactly
+44px apart, which is the smallest distance at which they do not overlap. The
+irreversible verb in the principles row gained real distance for the same
+reason, keeping its quiet register: there is no red in Waka at rest.
+
+**Two things were deliberately not changed.** `.sf-control` is 32px with the
+reason written beside it, and its nearest neighbour measures 94px away — the
+spacing clause covers it, and overriding a decision this repo made on purpose
+to satisfy a round number would be worse than the gap. The full-width text
+fields (29–37px tall) are likewise uncrowded. So the gate is **not** "44px
+everywhere": it is a 24px floor on size, and a 44px floor on distance that
+only 44px targets may cross. That is narrower than this goal originally
+promised, and it is what the evidence supports.
+
+Gated by `journeys:the-hand`, whose sabotage restores the 21px marks a pixel
+apart: under it the run reports `hold (22x22) & take it down (22x22) 22px
+apart`, which is this finding as it shipped. Its first version passed over six
+empty screens and the `--negative` run said so in one word — *survived
+sabotage; this journey is decoration* — so it now keeps a memory and declares
+a principle before it walks, and fails outright if it finds no marks at all.
+
 ---
 
 ## 9. The world is one unlabelled canvas to assistive technology
@@ -612,6 +663,102 @@ The dial cannot be standing before a memory it is being asked to show.
 
 Proven by the `first-keep` journey: field light `0.06 → 1.57` without reload,
 against `~1.95` after one.
+
+---
+
+## 16. `/signals` renders as a column of single letters on a phone
+
+**Blocking, on mobile.** [measured] — found 2026-08-24, **fixed the same day.**
+
+Not found by the original audit. Turned up while measuring touch targets.
+
+At 390×844 every signal's sentence collapsed to **9px wide and 1,742px tall** —
+the whole screen rendered as one letter per line, running down the page for
+the length of the sentence, one signal after another. `/signals` was not
+degraded on a phone; it was unreadable.
+
+A signal row is a flex **row**: the machine's sentence, then its meta beside it
+— "3 behind it · 42% · still forming", the date, the bin. The meta is
+`white-space: nowrap` and refuses to shrink. The sentence is a `textarea` with
+`field-sizing: content`, whose min-content width is about one character. On a
+350px column the row over-constrains, the meta wins every pixel, and the
+sentence takes what is left.
+
+Confirmed against the commit *before* the touch-target work, so it is not a
+side effect of it — it had been shipping. Every measured count passed the whole
+time: nothing overflowed the viewport, no test failed, and every character of
+the text was present on screen.
+
+At ≤520px the row wraps instead: the sentence takes the full line and the meta
+follows underneath as a row, which is what every other layer already does with
+the same content.
+
+---
+
+## 17. Near-white on near-white, by two different roads
+
+**Blocking.** [measured] — found 2026-08-24, **fixed the same day.**
+
+Also not found by the original audit, whose summary reads "measured text
+contrast passes on every surface tested". It does not, on the one that matters
+most, and this is the correction.
+
+`--ink` is a **post-it's** variable: `Surface.tsx` writes it per sheet from
+that sheet's paper, and `.sf-postit-text` paints itself with it. `/signals`
+reuses `.sf-postit-text` for its rows, and those rows are not post-its — so
+`--ink` fell all the way through to the value `chrome.css` defines for the
+world, `#e8edf4`.
+
+That is the **world's light ink on the surface's near-white paper**:
+
+| | ratio |
+|---|---|
+| signal sentence, as shipped | **1.15:1** |
+| after | **17.63:1** |
+
+Every claim the machine had made about the person — the entire content of
+`/signals`, on desktop and on phone — was invisible. The meta beside it used
+`--sf-ink-3` and read normally, which is why the page looked populated and
+merely blank in the middle.
+
+The surface root now declares a floor: `--ink: var(--sf-ink)`. A post-it still
+wins, because `Surface.tsx` sets it inline on the sheet — verified after the
+fix, three sheets still carrying three different warm inks. What changed is
+only the case where nothing set it, and there the answer can never be the other
+palette's ink.
+
+### And the same failure by a second road, on the largest words on the screen
+
+`.sf-roomname` — "Demo User's top of mind", the page's own title — measured
+**1.15:1** as well, and the floor above did not touch it, because it does not
+read `--ink` at all.
+
+`chrome.css` carries two bare `h1, h2 { color: var(--w-ink) }` blocks. **An
+element selector in another sheet beats a colour `.sf` sets and lets inherit**,
+because the element selector applies *to* the element while inheritance only
+reaches it. So the title computed `#e8edf4` while its own parent `.sf-head`
+sat correctly at `#171613` one level up.
+
+This contradicts the promise at the top of `surface.css` — *"Every rule here is
+scoped under `.sf`, so nothing in the seventeen thousand lines of global.css
+can reach it"*. True of class rules; false of element ones, and the gap shipped
+a blank page twice. That header now says so, and the surface states its own
+heading ink rather than relying on inheritance another sheet can outrank.
+
+Every surface now measures ≥4.5:1 on every heading, sentence and label. The
+gate checks titles as well as body text — checking only the body would have
+missed this one.
+
+Both 16 and 17 are gated by `journeys:the-hand`, which walks the six routes at
+390px and now checks legibility alongside geometry. Replayed against the old
+fall-through it reports `1.15:1` against a 4.5:1 threshold.
+
+**What these two say about the audit that missed them.** Both are invisible to
+every check the product had: no exception, no failed count, no overflow, no
+console error. The audit's own contrast pass sampled labelled text and never
+looked at the field that carries the sentence. A screen can be fully rendered,
+fully populated, and completely unusable, and nothing but a person or a
+measurement aimed at the right element will say so.
 
 ---
 

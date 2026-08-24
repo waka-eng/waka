@@ -42,7 +42,9 @@ Measured, not remembered — every row re-checked against the tree at v1:
 | 7 | Keeping something confirms almost invisibly | **closed in the world** — the orb now arrives, which is the confirmation the design always intended. The flat screen's quiet "kept" is untouched and no longer the path that matters |
 | 14 | **Nobody knows the world can be moved through** — real user feedback, 2026-08-23 | **closed 2026-08-24** — three separate invisible failures; `journeys:ways-out` gates it. The neighbouring *wall* still does not peek past the side edges the way the field peeks past the bottom; recorded, not attempted |
 | 15 | The first memory a person ever keeps does not appear until reload | **closed** — a clock-skew bug; `journeys:first-keep` gates it |
-| 8 | 21–22 touch targets under 44px; destructive ones at 20px | open |
+| 8 | 21–22 touch targets under 44px; destructive ones at 20px | **fixed 2026-08-24** — `/top-of-mind` 11-of-20 under 44px → 0-of-20; `journeys:the-hand` gates it. The gate shipped narrower than promised and says so |
+| 16 | **`/signals` rendered as a column of single letters on a phone** — found by this phase | **fixed 2026-08-24** |
+| 17 | **Every signal sentence was near-white on near-white, 1.15:1** — found by this phase | **fixed 2026-08-24** |
 | 9 | The world is one unlabelled canvas | **out of scope, by decision** |
 | 10 | Three product nouns on the sign-in screen | **closed 2026-08-24** — eyebrow is `WAKA`, no canon layer name at the door, in either language |
 | 11 | `/signals` prints a raw `43%` with no legend | open |
@@ -874,5 +876,105 @@ Four assertions in `auth-boundary` moved with the copy. Three were the
 subtitle used as a "the login page rendered" marker; the fourth checked the
 removed footer prompt as one of the pieces a language switch re-renders, and
 the two assertions on the tab immediately above it already carry that.
+
+Regression: web 130/130.
+
+### 2026-08-24 — Phase 5, the hand — and two blocking bugs it walked into
+
+Finding 8, plus two things the walk found that nobody had reported.
+
+#### The hand
+
+The audit missed the two smallest controls in the product: the principle
+arrows, at **11x20**, in the same row as REMOVE.
+
+| | before | after |
+|---|---|---|
+| `take it down` / `hold` on a post-it | 21x21 and 22x22, **21px apart** | 44x44, **44px apart** |
+| principle `↑` / `↓` | **11x20** | 44x44 |
+| `read this again` | 18x18 | 44x44 |
+| `← back` | 47x22 | 47x44 |
+| provenance row | 22px tall | 44px tall |
+| you-menu rows | 33px and 18px | 44px |
+| shortest footer verb | 42px wide | 46px |
+| `/top-of-mind` under 44px | **11 of 20** | **0 of 20** |
+
+The marks did not get bigger; the hands did. The button is 44x44 and the disc
+the eye reads is still 22px, drawn inside it by `::before`, with negative
+margins giving the height back so no sheet reflows. Spacing was half the fix:
+two 44px targets 21px apart are worse than two small ones, because they
+overlap and the overlap belongs to whichever paints last.
+
+**The gate shipped narrower than this goal promised, and says so.** Not "44px
+everywhere" — a 24px floor on size, and a 44px floor on distance that only
+44px targets may cross. `.sf-control` is 32px with its reason written beside
+it and its nearest neighbour 94px away; overriding a decision this repo made
+on purpose to satisfy a round number would be worse than the gap. Rule 5.
+
+On phones the principles row needed re-laying: four 44px verbs in a
+right-hand column made a 176px rail that pulled the row apart and took 44px of
+width off a statement that is a single-line field and simply cuts. They wrap
+under the body now.
+
+#### And then `/signals`
+
+Two things, neither reported, both invisible to every check the product had.
+
+**It rendered as a column of single letters on a phone.** Each sentence was
+9px wide and 1,742px tall. A signal row is a flex ROW — sentence, then meta;
+the meta is `nowrap` and will not shrink, the sentence is a textarea with
+`field-sizing: content` whose min-content width is one character. On a 350px
+column the meta takes every pixel. Confirmed against the commit before this
+work, so it had been shipping. It wraps now.
+
+**And every sentence on it was near-white on near-white.** `--ink` is a
+POST-IT's variable, written per sheet by `Surface.tsx`. `/signals` reuses
+`.sf-postit-text` for rows that are not post-its, so `--ink` fell through to
+`chrome.css`'s `#e8edf4` — the WORLD's light ink, on this surface's paper.
+
+    signal sentence, as shipped   1.15:1
+    after                        17.63:1
+
+Every claim the machine had made about the person, on the page whose whole job
+is to show them, invisible — on desktop as well as phone. The meta beside it
+used `--sf-ink-3` and read fine, which is why the page looked populated and
+merely empty in the middle. The surface root now declares `--ink: var(--sf-ink)`
+as a floor; a post-it still wins from its inline style, verified after the fix
+with three sheets carrying three different warm inks.
+
+**And the same failure by a second road.** `.sf-roomname` — the page's own
+title, the largest words on the screen — measured 1.15:1 too, and the floor
+above did not touch it because it does not read `--ink`. `chrome.css` carries
+two bare `h1, h2 { color: var(--w-ink) }` blocks, and an element selector in
+another sheet beats a colour `.sf` sets and lets inherit. The title computed
+`#e8edf4` while its own parent sat correctly at `#171613` one level up.
+
+That contradicts the promise at the top of `surface.css` — "nothing in the
+seventeen thousand lines of global.css can reach it". True of class rules,
+false of element ones, and the gap shipped a blank page twice. The header says
+so now, and the surface states its own heading ink.
+
+Every surface measures ≥4.5:1 on every heading, sentence and label. The audit
+summary's "measured text contrast passes on every surface tested" is corrected
+in place: it sampled labelled text and never measured the field carrying the
+claim, or the title above it.
+
+#### Gate
+
+`journeys:the-hand` walks the six routes at 390px:
+
+    positive   every control >= 24px, no sub-44px pair crowded, every
+               sentence readable — 38 marks over /capture:13 … /rooms:13
+    negative   /top-of-mind: crowded — hold (22x22) & take it down (22x22)
+               22px apart
+
+**Its first version was decoration and the harness said so.** A fresh account
+has no memories, no signals and no principles, so it walked six empty screens,
+found six controls on each — the footer nav — and passed; `--negative`
+reported *survived sabotage; this journey is decoration*. It keeps a memory
+and declares a principle before it walks now, and fails outright if it finds
+no marks at all. The contrast half was proven the same way rather than
+assumed: replayed against the old fall-through it reports 1.15:1 against a
+4.5:1 threshold.
 
 Regression: web 130/130.

@@ -148,6 +148,22 @@ async function goSurface(page: Page, base: string, path: string): Promise<void> 
 const bodyText = (page: Page): Promise<string> =>
   page.evaluate(() => document.body.innerText.trim());
 
+/** WCAG relative luminance of an `rgb(…)` / `rgba(…)` string. */
+function luminance(css: string): number {
+  const [r, g, b] = (css.match(/[\d.]+/g) ?? ["0", "0", "0"]).slice(0, 3).map((raw) => {
+    const u = Number(raw) / 255;
+    return u <= 0.03928 ? u / 12.92 : Math.pow((u + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** WCAG contrast ratio between two `rgb(…)` strings, 1:1 to 21:1. */
+function contrast(fg: string, bg: string): number {
+  const a = luminance(fg);
+  const b = luminance(bg);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
 // ---------------------------------------------------------------------------
 // The journeys
 
@@ -790,6 +806,240 @@ const JOURNEYS: Journey[] = [
           problems.length === 0
             ? `submit is the largest control and asked first; canon nouns — ${seen.join("; ")}`
             : problems.join("; "),
+      };
+    },
+  },
+
+  {
+    id: "the-hand",
+    name: "a thumb can hit what it aimed at, and read what it hit",
+    /* THREE RULES, ONE WALK, AT 390x844 WITH TOUCH ON.
+
+       SIZE and CROWDING are finding 8. Measured before: 21-22 controls per
+       surface under 44px, and — the shape that actually matters — "take it
+       down" at 21x21 sitting 21px from "hold" at 22x22. A destructive control
+       at half the minimum, touching a harmless one. Undo exists and fading
+       never deletes, but an undo you have to reach for is a mis-tap that
+       already happened. The two smallest in the product were worse: the
+       principle arrows were **11x20**.
+
+       The rules are not "44px everywhere", because that is not what the
+       evidence supports and pretending otherwise would mean overriding
+       decisions this repo made deliberately. `.sf-control` is 32px with the
+       reason written beside it, and its nearest neighbour is 94px away. So:
+       a floor on size, and a floor on distance that only 44px targets are
+       allowed to cross.
+
+       CONTRAST is a second finding this walk turned up on the way. See below.
+
+       THE SABOTAGE puts the post-it's marks back to 21px a pixel apart, which
+       is finding 8 exactly as it shipped. */
+    breaks: async (ctx) => {
+      await ctx.addInitScript(() => {
+        window.addEventListener("load", () => {
+          const style = document.createElement("style");
+          style.setAttribute("data-sabotage", "small-crowded-marks");
+          style.textContent =
+            ".sf-act { width: 21px !important; height: 21px !important; margin: 0 !important; }" +
+            ".sf-postit-acts { gap: 1px !important; margin: 0 -5px 0 0 !important; }";
+          document.head.appendChild(style);
+        });
+      });
+    },
+    run: async (page, base) => {
+      await signUp(page, base);
+
+      /* AND IT HAS TO HAVE SOMETHING TO MEASURE.
+         A fresh account has no memories, no signals and no principles, so the
+         first version of this walked six empty screens, found six controls on
+         each — the footer nav — and passed. The `--negative` run said so in
+         one word: it SURVIVED its own sabotage, because there was not a single
+         post-it on the page for the sabotage to shrink. That is the harness
+         doing exactly what it is for.
+
+         So the journey makes the things it is about: one memory, which is a
+         post-it with a "hold" and a "take it down" on it, and one principle,
+         which is the row carrying the two arrows that used to be 11x20. */
+      const phrase = `the funicular counts down in stops not minutes ${uniq()}`;
+      await goSurface(page, base, "/capture");
+      await page.fill('textarea[aria-label="What caught you?"]', phrase);
+      await page.click('button:has-text("keep")');
+      await page.waitForTimeout(4_000);
+
+      await goSurface(page, base, "/principles");
+      const declare = await page.$(".pr-declare-input");
+      if (declare) {
+        await declare.fill(`prefer the small tool over the platform ${uniq()}`);
+        await declare.press("Enter");
+        await page.waitForTimeout(4_000);
+      }
+
+      /* A PHONE, MEASURED AS GEOMETRY, AND ONLY NOW — the setting up above
+         types into the surface, and it does that at the size every other
+         journey uses so a failure there is a failure they would all see.
+
+         The harness gives every journey a 1440x900 context and `hasTouch`
+         cannot be changed after a context is made, so this resizes the page
+         rather than emulating a finger. Every rule below is about boxes and
+         distances, which the viewport alone decides. Said out loud so nobody
+         reads this as a touch run that it is not. */
+      await page.setViewportSize({ width: 390, height: 844 });
+
+      const ROUTES = [
+        "/capture",
+        "/inspirations",
+        "/signals",
+        "/principles",
+        "/top-of-mind",
+        "/rooms",
+      ];
+      /* 24px is WCAG 2.5.8's floor; 44px is the distance below which two
+         targets are close enough that one absorbs a miss meant for the
+         other, and only a pair that is itself 44px in both axes may be that
+         close. */
+      const MIN_SIZE = 24;
+      const MIN_APART = 44;
+      const problems: string[] = [];
+      const notes: string[] = [];
+      /* the controls this journey actually exists for — if none of them are
+         on any page, the walk proved nothing and has to say so */
+      let marks = 0;
+
+      for (const path of ROUTES) {
+        await goSurface(page, base, path);
+        const found = await page.evaluate(
+          ([minSize, minApart]) => {
+            const boxes = Array.from(
+              document.querySelectorAll<HTMLElement>(
+                "button, a[href], input, select, textarea",
+              ),
+            )
+              .filter((el) => {
+                const r = el.getBoundingClientRect();
+                const cs = getComputedStyle(el);
+                return (
+                  r.width > 0 &&
+                  r.height > 0 &&
+                  cs.visibility !== "hidden" &&
+                  cs.display !== "none"
+                );
+              })
+              .map((el) => {
+                const r = el.getBoundingClientRect();
+                return {
+                  name:
+                    (el.getAttribute("aria-label") || el.innerText || el.className || "?")
+                      .trim()
+                      .slice(0, 24) || "?",
+                  w: Math.round(r.width),
+                  h: Math.round(r.height),
+                  cx: r.x + r.width / 2,
+                  cy: r.y + r.height / 2,
+                };
+              });
+
+            const tooSmall = boxes.filter((b) => b.w < minSize || b.h < minSize);
+            const crowded: string[] = [];
+            for (let i = 0; i < boxes.length; i++) {
+              for (let j = i + 1; j < boxes.length; j++) {
+                const a = boxes[i];
+                const b = boxes[j];
+                /* a pair that is 44px in both axes may be as close as it
+                   likes — two big targets cannot steal each other's misses */
+                if (a.w >= minApart && a.h >= minApart && b.w >= minApart && b.h >= minApart) {
+                  continue;
+                }
+                const d = Math.hypot(a.cx - b.cx, a.cy - b.cy);
+                if (d < minApart) {
+                  crowded.push(
+                    `${a.name} (${a.w}x${a.h}) & ${b.name} (${b.w}x${b.h}) ${Math.round(d)}px apart`,
+                  );
+                }
+              }
+            }
+
+            /*
+              AND WHETHER THE PAGE CAN BE READ AT ALL. Colours are collected
+              here and the contrast is computed in the harness — partly
+              because the arithmetic is easier to check there, and partly
+              because a named helper declared inside `page.evaluate` picks up
+              esbuild's keep-names shim and dies on `__name is not defined`.
+            */
+            const ground = getComputedStyle(
+              document.querySelector(".sf") || document.body,
+            ).backgroundColor;
+            /* The sentence AND the title. `.sf-roomname` failed at the same
+               1.15:1 by a different road: `chrome.css` carries bare
+               `h1, h2 { color: var(--w-ink) }` blocks, and an element
+               selector in another sheet beats a colour `.sf` sets and lets
+               inherit — so the largest words on the page were the world's
+               near-white on this surface's paper. Checking only the body text
+               would have missed it. */
+            const sentences = Array.from(
+              document.querySelectorAll<HTMLElement>(
+                ".sf-postit-text, .pr-statement, .sf-roomname, .sf-headline",
+              ),
+            )
+              .filter((el) => {
+                const r = el.getBoundingClientRect();
+                return r.width >= 1 && r.height >= 1;
+              })
+              .map((el) => {
+                /* a post-it paints its own ground, so it is measured against
+                   that rather than against the wall behind it */
+                const sheet = el.closest<HTMLElement>(".sf-postit");
+                return {
+                  text: ((el as HTMLTextAreaElement).value || el.textContent || "")
+                    .trim()
+                    .slice(0, 20),
+                  fg: getComputedStyle(el).color,
+                  bg: sheet ? getComputedStyle(sheet).backgroundColor : ground,
+                };
+              });
+            return {
+              count: boxes.length,
+              marks: document.querySelectorAll(".sf-act, .pr-action, .sf-reread").length,
+              tooSmall,
+              crowded,
+              sentences,
+            };
+          },
+          [MIN_SIZE, MIN_APART] as const,
+        );
+
+        if (found.tooSmall.length > 0) {
+          problems.push(
+            `${path}: under ${MIN_SIZE}px — ${found.tooSmall
+              .map((b) => `${b.name} (${b.w}x${b.h})`)
+              .join(", ")}`,
+          );
+        }
+        if (found.crowded.length > 0) {
+          problems.push(`${path}: crowded — ${found.crowded.slice(0, 4).join("; ")}`);
+        }
+        const faint = found.sentences
+          .map((sen) => ({ ...sen, ratio: contrast(sen.fg, sen.bg) }))
+          .filter((sen) => sen.ratio < 4.5)
+          .map((sen) => `"${sen.text}" at ${sen.ratio.toFixed(2)}:1`);
+        if (faint.length > 0) {
+          problems.push(`${path}: unreadable — ${faint.slice(0, 3).join("; ")}`);
+        }
+        notes.push(`${path}:${found.count}`);
+        marks += found.marks;
+      }
+
+      /* A CLEAN WALK OVER NOTHING IS NOT A CLEAN WALK. */
+      if (marks === 0) {
+        problems.push(
+          "no post-it mark, principle verb or re-read on any screen — this walk measured only chrome",
+        );
+      }
+      return {
+        ok: problems.length === 0,
+        detail:
+          problems.length === 0
+            ? `every control >= ${MIN_SIZE}px, no sub-${MIN_APART}px pair crowded, every sentence readable — ${marks} marks over ${notes.join(" ")}`
+            : problems.slice(0, 4).join(" | "),
       };
     },
   },

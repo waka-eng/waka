@@ -7,6 +7,20 @@
  * deliberate: the previous attempts failed because they were overrides, and an
  * override can only ever adjust a composition it did not choose.
  *
+ * THAT SENTENCE IS TRUE OF CLASS RULES AND FALSE OF ELEMENT ONES, and the gap
+ * shipped a blank page. A bare `h1 { color: … }` in another sheet beats a
+ * colour this file sets on `.sf` and lets inherit, because the element
+ * selector applies TO the element and inheritance only reaches it. On
+ * 2026-08-24 that put `chrome.css`'s `var(--w-ink)` — the world's near-white
+ * — on this surface's page titles at 1.15:1. The same day, `--ink` (a
+ * post-it's variable, unset outside a post-it) fell through to the same value
+ * and made every sentence on `/signals` invisible.
+ *
+ * So the scoping is a default, not a wall. Anything this surface renders that
+ * a bare element selector elsewhere might colour has to say its own ink, and
+ * `--ink` has a floor on `.sf` for the case where nothing sets it. Both are
+ * below, both with the measurement attached.
+ *
  * The type scale is measured, not invented. Read off meech213.com:
  *
  *   0.6  0.75  0.85  1  1.1  1.15  1.25  1.5  1.55  2   ···   12  12.5  18 rem
@@ -32,6 +46,25 @@
   */
   --sf-paper: #fcfcfb;
   --sf-ink: #171613;
+  /*
+     A FLOOR UNDER `--ink`, BECAUSE IT HAD NONE AND THE PAGE WENT BLANK.
+
+     `--ink` is a POST-IT's variable: `Surface.tsx` writes it per sheet from
+     that sheet's paper, and `.sf-postit-text` paints itself with it. `/signals`
+     reuses `.sf-postit-text` for its rows, and those rows are NOT post-its —
+     so `--ink` fell all the way through to the value chrome.css defines for
+     the world, `#e8edf4`.
+
+     That is the WORLD's light ink, on this surface's near-white paper.
+     Measured 2026-08-24: **1.15:1**. Every signal sentence on the page
+     — the machine's actual claims about you, which is the entire content of
+     `/signals` — was near-white on near-white, on desktop and on phone.
+
+     A post-it still wins: `Surface.tsx` sets `--ink` inline on the sheet,
+     which outranks this. What this changes is only the case where nothing set
+     it, and there the answer can never be the other palette's ink.
+  */
+  --ink: var(--sf-ink);
   --sf-ink-2: rgba(23, 22, 19, 0.62);
   /*
      0.4 measured 2.55:1 on the paper — below AA, and it is not decoration.
@@ -156,6 +189,30 @@
   width: min(1180px, 100%);
   margin: 0 auto;
   flex: none;
+}
+
+/*
+   THE SURFACE'S OWN HEADINGS, SAID OUT LOUD BECAUSE THE SCOPING DOES NOT
+   COVER THEM.
+
+   The header at the top of this file says every rule here is scoped under
+   `.sf` so nothing in global.css or chrome.css can reach it. That is true of
+   CLASS rules and false of ELEMENT ones: `chrome.css` carries two bare
+   `h1, h2 { color: var(--w-ink) }` blocks, and a selector on the element
+   beats a colour inherited through an ancestor's class, however specific the
+   ancestor is. So the surface's own page title — "Demo User's top of mind",
+   the largest words on the screen — was painted in the WORLD's light ink on
+   this surface's near-white paper and measured **1.15:1**, while its parent
+   `.sf-head` sat correctly at `#171613` one level up.
+
+   Same root cause as `--ink` falling through above, arriving by a different
+   road. The surface states its own ink here rather than relying on
+   inheritance that another sheet can outrank.
+*/
+.sf h1,
+.sf h2,
+.sf h3 {
+  color: var(--sf-ink);
 }
 
 .sf-roomname {
@@ -355,27 +412,67 @@
    always present at low contrast and only come up when you approach, so the
    geometry never moves.
 */
+/*
+   THE HAND, NOT THE EYE.
+
+   Measured at 390x844 with touch on: "hold" was 22x22 and "take it down" was
+   21x21, sitting 21px apart centre to centre. A destructive control at half
+   the 44px minimum, immediately beside a harmless one, with a gap too small
+   to absorb anything. Undo exists and the founder law holds — fading never
+   deletes — but an undo you have to reach for is a mis-tap that already
+   happened.
+
+   THE MARKS DO NOT GET BIGGER; THE HANDS DO. What the eye reads is still a
+   22px disc: enlarging the glyphs would turn a note's quiet footer into a
+   toolbar, and these are meant to be found rather than offered. The BUTTON
+   is 44x44 and the disc is drawn inside it by `::before`, so the target a
+   thumb has and the mark an eye sees are two different sizes on purpose.
+
+   AND THE ROW DOES NOT MOVE. Negative margins pull the taller boxes back
+   into the 22px line they used to occupy, so no sheet reflows and no footer
+   grows — the whole change is invisible until you try to press it.
+
+   SPACING IS HALF THE FIX AND IS EASY TO FORGET. Two 44px targets whose
+   centres are 21px apart are worse than two small ones: they overlap, and
+   the overlap belongs to whichever paints last. At `gap: 0` these boxes put
+   their centres exactly 44px apart, which is the smallest distance at which
+   they do not overlap at all.
+*/
 .sf-postit-acts {
   display: flex;
-  gap: 1px;
-  margin-right: -5px;
+  gap: 0;
+  /* 22px of visual, 44px of box: pull back 11px a side vertically and the
+     22px of extra width the two boxes gained horizontally, less the 5px
+     overhang the row always had */
+  margin: -11px -16px -11px 0;
 }
 
 .sf-act {
+  position: relative;
   display: grid;
   place-items: center;
-  width: 21px;
-  height: 21px;
-  border-radius: 999px;
+  width: 44px;
+  height: 44px;
   color: var(--ink);
   opacity: 0.28;
-  transition: opacity 140ms var(--sf-ease), background 140ms var(--sf-ease);
+  transition: opacity 140ms var(--sf-ease);
+}
+
+/* the disc the eye reads — and the only thing that ever takes a background */
+.sf-act::before {
+  content: "";
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  transition: background 140ms var(--sf-ease);
 }
 
 .sf-postit:hover .sf-act,
 .sf-postit:focus-within .sf-act { opacity: 0.55; }
 
 .sf-act svg {
+  position: relative;
   width: 15px;
   height: 15px;
   fill: none;
@@ -385,7 +482,8 @@
   stroke-linejoin: round;
 }
 
-.sf-postit .sf-act:hover { opacity: 1; background: color-mix(in srgb, var(--ink) 9%, transparent); }
+.sf-postit .sf-act:hover { opacity: 1; }
+.sf-postit .sf-act:hover::before { background: color-mix(in srgb, var(--ink) 9%, transparent); }
 .sf-act.on { opacity: 1; }
 
 /* The date gives way so the row never wraps on a narrow sheet. */
@@ -466,8 +564,15 @@
   padding-bottom: 60px;
 }
 
+/* 47x22 before — the one control at the top of five screens, and short in
+   the axis a thumb misses in. Nothing is near it, so it just gets the height;
+   the negative margin keeps the header where it was. */
 .sf-back {
   align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin: -11px 0;
   font-size: var(--sf-ui);
   color: var(--sf-ink-3);
   transition: color 0.15s var(--sf-ease);
@@ -845,8 +950,12 @@
   position: relative;
   display: flex;
   align-items: center;
+  justify-content: center;
+  min-width: 44px;
   min-height: 52px;
-  padding: 0 2px;
+  /* 2px a side left the shortest verb ("rooms") at 42 wide — two pixels
+     short of the line, which is a silly way to fail it */
+  padding: 0 4px;
   line-height: 1.2;
   white-space: nowrap;
   transition: color 0.15s var(--sf-ease);
@@ -926,8 +1035,13 @@
   background: var(--sf-ink);
 }
 
+/* A dropdown is not short of room, so these do not need the mark-and-hand
+   trick — they just ARE 44px. Measured 160x33 and 38x18 before. */
 .sf-you-menu a {
-  padding: 6px 14px;
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
   color: color-mix(in srgb, var(--sf-paper) 78%, transparent);
   text-decoration: none;
   font-size: var(--sf-ui);
@@ -959,6 +1073,37 @@
   .sf-verbs { gap: clamp(12px, 4vw, 20px); flex-wrap: wrap; }
   .sf-foot-end { gap: 10px; }
 
+  /*
+     `/signals` WAS UNREADABLE ON A PHONE, AND HAD BEEN.
+
+     A signal row is a flex ROW: the machine's sentence, then the meta beside
+     it — "3 behind it · 42% · still forming", the date, the bin. The meta is
+     `white-space: nowrap` and refuses to shrink; the sentence is a textarea
+     with `field-sizing: content`, whose min-content width is about ONE
+     CHARACTER. On a 350px column the row over-constrains, the meta wins every
+     pixel, and the sentence collapses to 9px wide and 1,742px tall — the
+     whole screen rendered as a vertical column of single letters, one below
+     the next, for the length of the sentence.
+
+     Found 2026-08-24 while measuring touch targets, and confirmed against the
+     commit before that work, so it is not a side effect of it. Every measured
+     count still passed while this shipped: nothing overflowed the viewport,
+     no test failed, and the text was all present — one letter per line.
+
+     At this width the two stack. The sentence gets the column, the meta goes
+     under it, which is what every other layer already does with the same
+     content.
+  */
+  .sf-result {
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 2px;
+  }
+  /* the sentence takes the whole line; everything after it — the evidence
+     line, the date, the bin — wraps onto the next one and stays a ROW, which
+     is what it is everywhere else. `column` put each of the three on its own
+     line and left the bin stranded under the date. */
+  .sf-result > .sf-postit-text { flex: 1 0 100%; }
 }
 
 /*
@@ -1152,17 +1297,31 @@
   color: var(--sf-ink-4);
 }
 
+/* Same as the post-it's marks: an 18px glyph inside a 44px hand, with the
+   extra size given back by negative margins so the "read today · v2" line
+   does not grow around it. */
 .sf-reread {
+  position: relative;
   display: grid;
   place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: -13px;
+  color: var(--sf-ink-4);
+  transition: color 0.15s var(--sf-ease);
+}
+/* the disc the eye reads, and the only thing that takes a background */
+.sf-reread::before {
+  content: "";
+  position: absolute;
   width: 18px;
   height: 18px;
   border-radius: 999px;
-  color: var(--sf-ink-4);
-  transition: color 0.15s var(--sf-ease), background 0.15s var(--sf-ease);
+  transition: background 0.15s var(--sf-ease);
 }
 
 .sf-reread svg {
+  position: relative;
   width: 12px;
   height: 12px;
   fill: none;
@@ -1268,8 +1427,8 @@
   .sf-direction-history > .sf-label { margin-bottom: 7px; }
 }
 
-.sf-reread:hover:not(:disabled) {
-  color: var(--sf-ink);
+.sf-reread:hover:not(:disabled) { color: var(--sf-ink); }
+.sf-reread:hover:not(:disabled)::before {
   background: color-mix(in srgb, var(--sf-ink) 7%, transparent);
 }
 
@@ -1386,6 +1545,11 @@
 }
 
 .sf-you-langs button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
   font-size: var(--sf-meta);
   color: color-mix(in srgb, var(--sf-paper) 52%, transparent);
 }
@@ -1415,7 +1579,10 @@
 
 /* What the save has already done, beside the control that would stop it
    doing more. Meta tier: a fact, not a warning. */
+/* The way into a reading, and 22px tall. It is a wide row with nothing
+   within 190px of it, so height is the only thing it was missing. */
 .sf-provenance {
+  min-height: 44px;
   font-size: var(--sf-meta);
   color: var(--sf-ink-3);
   white-space: nowrap;
@@ -1552,12 +1719,33 @@
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding-top: 10px;
+  /* the verbs are 44px tall now and were 20; the row keeps the optical
+     position it had by giving back most of what they gained */
+  padding-top: 0;
 }
 
+/*
+   THE SMALLEST CONTROLS IN THE PRODUCT WERE HERE.
+
+   Measured at 390x844: "move up" and "move down" were **11x20** — one mono
+   glyph with 2px of padding — sitting 30px apart, in the same row as REMOVE,
+   which erases a principle. A quarter of the 44px minimum on the axis that
+   matters, for the two controls a thumb is most likely to graze on the way to
+   something else.
+
+   Same approach as the post-it's marks: the WORD does not change — these are
+   10px mono verbs and they are meant to be quiet — the BOX around it does.
+   44px in both axes, the label centred inside, and the row gives back the
+   height so nothing reflows.
+*/
 .sf .pr-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
   border: 0;
-  padding: 2px 2px;
+  padding: 2px 4px;
   background: transparent;
   font-family: var(--sf-mono, "JetBrains Mono", monospace);
   font-size: 10px;
@@ -1565,8 +1753,16 @@
   text-transform: uppercase;
   color: var(--sf-ink-3);
   cursor: pointer;
+  white-space: nowrap;
   transition: color 0.15s var(--sf-ease);
 }
+
+/* AND THE IRREVERSIBLE ONE IS NOT SHOULDER TO SHOULDER WITH THE REST.
+   Removing a principle is the only act in this row that cannot be undone by
+   pressing the same button again, and it sat at the same 10px gap as the two
+   arrows. It keeps its quiet register — there is no red in Waka at rest —
+   and gains distance instead, which is the thing a mis-tap actually needs. */
+.sf .pr-action.is-destructive { margin-left: 14px; }
 
 .sf .pr-action:hover:not(:disabled) { color: var(--sf-ink); }
 .sf .pr-action:disabled { opacity: 0.35; cursor: default; }
@@ -1597,10 +1793,22 @@
 .pr-declare-input:focus { outline: none; border-bottom-color: var(--sf-ink-4); }
 
 @media (max-width: 560px) {
-  .pr-row { gap: 12px; }
+  /* ON A PHONE THE VERBS GET THEIR OWN LINE.
+     They used to stack into a right-hand COLUMN, which was fine while each
+     was 20px tall and is not now that each is 44: four of them made a 176px
+     rail that pulled the row apart and took 44px of width off a statement
+     that is a single-line field and simply cuts. Wrapping them under the
+     body gives the sentence the whole width back and puts the verbs in a
+     row a thumb can actually use. */
+  .pr-row { gap: 12px; flex-wrap: wrap; }
   .pr-rank { flex-basis: 24px; }
   .pr-statement { font-size: 21px; }
-  .pr-actions { flex-direction: column; align-items: flex-end; }
+  .pr-actions {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    width: 100%;
+  }
 }
 
 /* ---------------------------------------------------------------------------
