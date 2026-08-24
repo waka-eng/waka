@@ -18,6 +18,10 @@ The pipeline in one picture:
 ```
   capture ──► enrichment ──► extraction ──► embed ──► match-or-mint ──► evidence
  (layer 1)   (links/images)  (model, ≤3)   (768d)    (attach/judge/mint)    │
+                                  ▲                                         │
+              related earlier captures (≤5, retrieved by                    │
+              capture-vector cosine; citable as evidence                    │
+              only with a code-verified verbatim quote)                     │
                                                                             ▼
                                                               confidence + promotion
                                                               (emerging → active at 3)
@@ -81,6 +85,27 @@ Everything below specifies each step precisely.
 ---
 
 ## Layer 1 → Layer 2: how a signal is generated
+
+**The whole layer in one table.** One capture flows through seven decisions,
+in this order. Three involve the model — and each of those is either confined
+to a band or verified after the fact; everything that admits, promotes, or
+ranks is arithmetic. The sentence to remember: *the model writes sentences,
+the numbers make decisions, and every checkable claim the model makes is
+checked.*
+
+| # | Decision | Decided by | The rule |
+|---|---|---|---|
+| 1 | Which earlier captures are worth showing alongside this one | Arithmetic | cosine over stored capture vectors — floor `RELATED_INSPIRATION_MIN_COSINE` (0.6), strongest `RELATED_INSPIRATION_CONTEXT_LIMIT` (5) of the `RELATED_INSPIRATION_SCAN_LIMIT` (500) most recent |
+| 2 | Is there a durable pattern here, and in what words | **Model** | 0 to `MAX_SIGNAL_CANDIDATES` (3) statements — zero is a sanctioned answer; its quote is kept only if it is a verbatim span of the capture |
+| 3 | Which earlier captures co-witness a statement | **Model proposes, code verifies** | at most `MAX_RELATED_INSPIRATION_CITATIONS` (2) per statement; only ids that were actually offered; each citation needs a verbatim quote from the cited capture's own text or it is dropped whole |
+| 4 | Same pattern as an existing signal, or a new one | Arithmetic — model tie-break inside one band | ≥ `SIGNAL_MATCH_MIN_COSINE` (0.86) attach as evidence · below `SIGNAL_MERGE_JUDGE_MIN_COSINE` (0.7) mint new · in between, one judge call where **uncertainty mints** |
+| 5 | Does the pattern count as real | Arithmetic | `SIGNAL_PROMOTION_MIN_EVIDENCE` (3) evidence rows: `emerging` becomes `active` |
+| 6 | How strong is it right now | Arithmetic | the confidence formula in §5, computed fresh at every read, over evidence dated by capture time |
+| 7 | What happens when its evidence is deleted | Arithmetic | at zero evidence an unlocked signal retires; a human-edited one keeps its words, marked unsupported and excluded from synthesis |
+
+Decisions 1–4 happen inside one derivation job; 5–7 are pure code a test can
+pin exactly. The subsections below specify each step, in the same order the
+job runs them.
 
 ### 1. What starts a derivation
 
@@ -225,7 +250,13 @@ confidence = SUPPORT × (evidence count, saturating at CONFIDENCE_SATURATION_EVI
            , capped at 100
 ```
 
-with weights `CONFIDENCE_SUPPORT_WEIGHT` (55), `CONFIDENCE_SPREAD_WEIGHT`
+Every date the formula reads is **the cited capture's own `created_at`** —
+when the witnessing happened, never when the evidence link was written. The
+distinction is live since related-capture citations exist: an old save cited
+today widens the spread term with its own months-old date, and cannot pose as
+fresh recency. (Stated once for all clocks in "How time is applied".)
+
+The weights are `CONFIDENCE_SUPPORT_WEIGHT` (55), `CONFIDENCE_SPREAD_WEIGHT`
 (30), `CONFIDENCE_RECENCY_WEIGHT` (15) — summing to 100 **[checked]**. The
 diversity term is a *bonus*, not a weight, deliberately: most profiles are
 app-only, and a weight would cap every solo human below 100 forever.
