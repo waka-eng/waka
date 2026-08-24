@@ -80,13 +80,30 @@ ALTER TABLE "profiles" ADD COLUMN "group_id" uuid;--> statement-breakpoint
 ALTER TABLE "profiles" ADD CONSTRAINT "profiles_group_id_groups_id_fk" FOREIGN KEY ("group_id") REFERENCES "public"."groups"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 -- One mind per room.
 CREATE UNIQUE INDEX "profiles_group_mind_unique_idx" ON "profiles" USING btree ("group_id") WHERE "group_id" IS NOT NULL;--> statement-breakpoint
-ALTER TABLE "profiles" ADD CONSTRAINT "profiles_mind_shape_check" CHECK (("type" = 'group' AND "account_id" IS NULL AND "group_id" IS NOT NULL) OR ("type" <> 'group' AND "account_id" IS NOT NULL AND "group_id" IS NULL));--> statement-breakpoint
--- Every room that already exists grows its mind now, so no code path ever
--- has to ask "does this room have one yet": creation writes it for new rooms
--- (same transaction as the group row), and this backfill settles the past.
-INSERT INTO "profiles" ("account_id", "type", "name", "group_id")
-SELECT NULL, 'group', g."name", g."id"
-FROM "groups" g
-WHERE NOT EXISTS (SELECT 1 FROM "profiles" p WHERE p."group_id" = g."id");
+-- COMPARED AS TEXT, and that is not a style choice. On a database that
+-- already exists, 0024 adds 'group' to a type that was committed long ago,
+-- and PostgreSQL refuses to USE a value added earlier in the same
+-- uncommitted transaction — which is what drizzle gives us, since it applies
+-- every pending migration in one. `"type" = 'group'` is such a use and
+-- aborted the whole migration. `"type"::text = 'group'` is a text
+-- comparison: it never resolves an enum value, so it is safe here and means
+-- exactly the same thing. Verified against a server, both ways round.
+ALTER TABLE "profiles" ADD CONSTRAINT "profiles_mind_shape_check" CHECK (("type"::text = 'group' AND "account_id" IS NULL AND "group_id" IS NOT NULL) OR ("type"::text <> 'group' AND "account_id" IS NOT NULL AND "group_id" IS NULL));--> statement-breakpoint
+-- THE BACKFILL IS NOT HERE, AND CANNOT BE.
+--
+-- Every room that already exists needs a mind, so that no code path has to
+-- ask "does this room have one yet". That INSERT used to live here, and it
+-- is the reason this migration could not be applied to any database that
+-- already existed: writing a row whose `type` is 'group' RESOLVES the enum
+-- value, and the value was added by 0024 in this same uncommitted
+-- transaction. Every form of it fails — a literal, a cast, a lookup through
+-- `pg_enum` — because they all end up in the enum's input function, which is
+-- where the refusal lives. Only the CHECK above could be rewritten to avoid
+-- resolving anything; a row cannot.
+--
+-- So the backfill moved to where a separate transaction is available:
+-- `ensureGroupMinds()` in `routes/groups-membership.ts`, run by the API at
+-- startup. It is the same idempotent statement, it is safe to run any number
+-- of times, and it needs no operator to remember it.
 --> statement-breakpoint
 RESET lock_timeout;

@@ -210,6 +210,44 @@ function generateJoinCode(): string {
  * between the two is refused there, which is what makes this bound to the
  * switch rather than to the moment somebody happened to arrive.
  */
+/**
+ * EVERY ROOM THAT ALREADY EXISTS GROWS ITS MIND.
+ *
+ * A room's mind is written in the same transaction as the room itself, so
+ * every room made from 2026-08-24 onward has one and no code path has to ask.
+ * Rooms that predate that line still need one, and this is where they get it.
+ *
+ * It lives here rather than in migration 0025, where it started, because it
+ * physically cannot run there: writing a row whose `type` is 'group' resolves
+ * an enum value that 0024 added in the same uncommitted transaction, and
+ * PostgreSQL refuses. Every spelling fails for the same reason — a literal, a
+ * cast, a lookup through `pg_enum` — because they all reach the enum's input
+ * function. A separate transaction is the only fix, and this is one.
+ *
+ * Called at API startup, which is what keeps it off an operator's checklist.
+ * Idempotent by construction: the `NOT EXISTS` means running it a thousand
+ * times is the same as running it once, and the unique index on `group_id`
+ * would refuse a second mind even if two boots raced.
+ */
+export async function ensureGroupMinds(db: WakaDb = getDb()): Promise<number> {
+  /* Written as one statement rather than a read followed by writes: two
+     boots racing would otherwise both see the same room as mindless, and the
+     unique index would turn the loser into a crash at startup instead of a
+     no-op. `NOT EXISTS` inside the INSERT makes the whole thing one atomic,
+     repeatable question. */
+  const created = await db.execute<{ id: string }>(sql`
+    INSERT INTO "profiles" ("account_id", "type", "name", "group_id")
+    SELECT NULL, 'group', g."name", g."id"
+    FROM "groups" g
+    WHERE NOT EXISTS (SELECT 1 FROM "profiles" p WHERE p."group_id" = g."id")
+    RETURNING "id"
+  `);
+
+  const count = created.length;
+  if (count > 0) console.log(`[groups] gave ${count} existing room(s) a mind`);
+  return count;
+}
+
 export interface GroundBackfillDependencies {
   /**
    * How a memory is asked for. Seams here because `enqueueDeriveSignals`
