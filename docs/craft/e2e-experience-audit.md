@@ -916,16 +916,52 @@ cross-profile write denial, which is the one that matters most.
 
 ## What was not covered
 
-Named so the gaps are not mistaken for clean results:
+Named so the gaps are not mistaken for clean results. Three of the five gaps
+this section opened with have since been closed, and are kept here with what
+closed them rather than deleted — a gap that quietly disappears reads as one
+that was never real.
 
-- **Everything downstream of a model call.** Derivation, synthesis, minting,
-  enrichment, image description. No `GEMINI_API_KEY`.
-- **Google OAuth.** Not configured; the button was never pressed.
-- **Rooms with more than one member.** The seed creates none, so the sharing
-  boundary — what crosses and what must not — was read, not driven. Given it
-  is the highest-stakes surface in the product for privacy, it deserves a run
-  of its own against a two-account stack.
-- **`tools/e2e/*.ts`.** The four documented suites spend model calls and were
-  not run. Their coverage as *workflow* proof is a separate question from this
-  one and was explicitly out of scope here.
-- **Attachments and images.** No S3 bucket configured.
+**Still open:**
+
+- **Google OAuth.** Not configured; the button was never pressed. No harness
+  can close this one without a real Google project, so it stays open by
+  nature rather than by neglect.
+- **The sky's arrival, on a real sky.** `ways-out` checks that the sky leans
+  — `lean` is the camera's own scalar and exists on an empty account, so
+  ripping the peek out fails the journey. What it cannot check on a fresh
+  account is that an elected statement *arrives* near the seam, which is the
+  exact bug that shipped: the peek elected correctly, eased correctly, and
+  parked every cloud in the part of its own sprite that has no light left in
+  it. The journey says `sky leaning (1) but EMPTY` when it walks that half
+  without measuring it. **This is structural, not an oversight.** A sky needs
+  signals, signals only ever come from derivation, and there is no route that
+  writes one — so a key-free suite cannot produce one, and `journeys` has to
+  stay key-free to run on every pull request. Closing it means a browser pass
+  gated on the key, the way `e2e:erasure` is gated.
+- **Password recovery.** Deferred by decision, no mail provider. The one item
+  in this document that can lock a real person out of their own memory.
+- **Findings 9 and 13.** Out of scope by founder decision: the world as one
+  unlabelled canvas to assistive technology, and the consent page's missing
+  decline control.
+
+**Closed since:**
+
+- **Rooms with more than one member.** Now driven, not read. `e2e:rooms` runs
+  nine checks across four accounts and proves the thing this entry called the
+  highest-stakes surface in the product: removal re-keys the door and leaving
+  does not, the old key is dead, only the owner can remove or close, and a
+  removal reaches no further than the room it named.
+- **`tools/e2e/*.ts`.** All of them run, and there are eleven suites now
+  rather than four, plus two support servers they lean on. `docs/goals/every-workflow-works.md` carries the inventory, and
+  every row in it reads either *proven by ‹suite›* or *unproven, because
+  ‹reason›*.
+- **Attachments and images.** A local S3 stub (`pnpm e2e:s3-stub`) closed the
+  upload path: presign → PUT → HEAD is driven end to end, and `e2e:erasure`
+  uses it to prove a deleted account's bytes are actually gone (`HEAD` 404)
+  rather than merely dereferenced.
+- **Everything downstream of a model call** is now *partly* covered rather
+  than not at all: `e2e:signals`, `e2e:top-of-mind`, `e2e:principles` and
+  `e2e:erasure` all spend real calls when a key is present, and CI skips them
+  with a loud "NOT RUN" step when it is absent. `e2e:principles` is recorded
+  as a diagnostic rather than a gate, because the distiller legitimately
+  returns no candidate from the same fixture about half the time.
