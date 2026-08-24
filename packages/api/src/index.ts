@@ -23,6 +23,7 @@ import { healthRoutes } from "./routes/health.js";
 import { inspirationsRoutes } from "./routes/inspirations.js";
 import { profilesRoutes } from "./routes/profiles.js";
 import { principlesMarkdownRoutes, principlesRoutes } from "./routes/principles.js";
+import { createExportRoute } from "./routes/export.js";
 import { createReadingRoute } from "./routes/reading.js";
 import { createWeatherMarkdownRoute, createWeatherRoute } from "./routes/weather.js";
 import { sessionsRoutes } from "./routes/sessions.js";
@@ -74,6 +75,9 @@ app.route("/api/reading.md", createReadingRoute());
 // back. JSON for the world (told + antechamber), markdown for the wire.
 app.route("/api/weather.md", createWeatherMarkdownRoute());
 app.route("/api/weather", createWeatherRoute());
+// Everything visible: the whole human profile as one deterministic bundle,
+// the person's own hand only. The anti-Dreaming — you can leave with it.
+app.route("/api/export", createExportRoute());
 
 // Deliberately unauthenticated: returns only the owner-approved surface.
 app.route("/api/public/profiles", publicProfileRoutes);

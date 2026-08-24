@@ -244,6 +244,33 @@ Postgres. No new infrastructure, no new dependencies.
 
 ## Log
 
+- **2026-08-24 — Phase 3: PASS.** Everything visible. `GET /api/export`
+  serves the whole human profile as one deterministic bundle
+  (`lib/profile-export.ts`): principles verbatim with citations and
+  statement chains, every signal with lock state, evidence, chain and
+  shares, the full top-of-mind version chain with reasons and entry
+  citations, raw inspirations with attachments and reflections, and the
+  four records — consultations, suppressions, feedback, decision
+  citations. Rows are served whole (no cherry-picked columns to go stale)
+  and every list is ordered (created_at, id), so the same stack serves
+  the same bytes twice. Human-session-only and own-profile-only by
+  construction — no `?profile=` exists on the route, and an agent-bound
+  credential gets a 403 before any query runs; egress is stricter than
+  any serve. The export itself is a consultation (new surface value
+  `export`, migration `0021`): the largest serve goes on the record like
+  the smallest. Deliberately excluded, stated in the assembler's header:
+  embedding vectors and background jobs (recomputable infrastructure),
+  session rows (credentials are not memory), and other members' room
+  content (the person's own shares are in; the room's wall is the
+  room's). Gate measured: `export.db.test.ts` 4/4 on real Postgres
+  through the real route — a fixture account seeded across every
+  exported table gets every row back per-table-exactly while a second
+  profile's rows appear zero times; the determinism case compares bytes
+  across two serves; the agent refusal is pinned live (and writes no
+  serve record); the export's own consultation is asserted. api 56
+  files / 626 tests, web 146, vocabulary and seams clean. Register item
+  6 (agent-memory-wedge) closed.
+
 - **2026-08-24 — Phase 2: PASS.** The machine's original survives.
   Migration `0020_the-machines-original-survives`: `signal_statements`
   and `principle_statements`, the L3 writer pattern extended down and

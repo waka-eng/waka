@@ -265,10 +265,16 @@ grants visible, so the multi-agent account ships consented instead of
 latent. Sequenced before any room-read surface so room content cannot
 silently reach eight profiles.
 
-**6. Everything-visible export** (S). `GET /api/export`: one
-deterministic bundle of the whole human profile — principles.md
-verbatim, every signal with lock state and evidence, the full
-top-of-mind version chain with reasons, raw inspirations.
+**6. Everything-visible export** (S). **Shipped 2026-08-24**
+(`goals/no-quiet-corners.md` Phase 3): `GET /api/export` — one
+deterministic bundle: principles verbatim with citations and statement
+chains, every signal with lock state, evidence, chain and shares, the
+full top-of-mind version chain with reasons, raw inspirations with
+attachments and reflections, the consultation, suppression, feedback
+and decision-citation records. Human-session-only, own profile only —
+the agent refusal and the zero-foreign-rows egress are pinned on real
+Postgres through the real route (`export.db.test.ts`), and the export
+writes its own consultation. Original brief:
 Human-session-only, pinned by the live suite (an agent credential must
 never exfiltrate the corpus). The anti-Dreaming: OpenAI warns its
 summary "will not include everything ChatGPT remembers"; our export *is*

@@ -46,6 +46,9 @@ export const consultationSurfaceValues = [
       the antechamber carries refused candidates — derived readings of the
       person, so the serve is on the record like any other */
   "weather",
+  /** the whole-stack egress (`GET /api/export`) — the largest serve there
+      is, and the owner's own read is still a read on the record */
+  "export",
 ] as const;
 export type ConsultationSurface = (typeof consultationSurfaceValues)[number];
 export const consultationSurfaceEnum = pgEnum(
