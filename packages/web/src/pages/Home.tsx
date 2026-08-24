@@ -425,6 +425,50 @@ const ANTICIPATE_SQ = 0.03;
 /** And how long the body takes to come back up out of it, once released. */
 const ANTICIPATE_EASE = 4.6e-4;
 /**
+ * MOOD — A DISPOSITION, WHERE `flare` IS AN EVENT.
+ *
+ * `flare` decays in 0.7s and carries nothing to the next thing that happens,
+ * so the creature that greets your next act has not been changed by your last
+ * one. Loyall lists CHANGE as a requirement for a believable agent in its own
+ * right, and Anki's emotion engine is the production version: a state
+ * underneath, moving continuously, so the same stimulus twice does not produce
+ * the same response twice. This is that requirement at the smallest scale it
+ * can be had.
+ *
+ * THE LAW THIS ARGUES WITH, SAID PLAINLY. Mood spending LIGHT is not on the
+ * table: it would break invariant 4 outright — two beings at the same aliveness
+ * would stop being the same colour, and temperature would mean two things at
+ * once. So it spends RHYTHM, and that brushes against "light is the only
+ * meaning channel".
+ *
+ * The case for it: that law's real work is preventing a LEGEND — a key you
+ * have to learn before the screen means anything, which is what hue-per-
+ * category always becomes. A creature that blinks slower and moves smaller
+ * after you let something go needs no legend; it is read the way a tired
+ * person is read, without decoding. And rhythm is not a virgin channel —
+ * `bobRate` and `blinkMs` are already identity — so the honest cost is that it
+ * now carries TWO things, not that it starts carrying one.
+ *
+ * The one thing rhythm cannot do is survive reduced motion, where it is silent
+ * by design. There mood simply does not exist rather than falling back to
+ * light, because falling back to light is the version that breaks invariant 4.
+ */
+const MOOD_HALF_LIFE_MS = 90000;
+/** What each moment does to the disposition. `touch` is deliberately absent:
+    being tapped is not an experience. */
+const MOOD_OF: Partial<Record<Moment, number>> = {
+  kept: 0.5,
+  answered: 0.4,
+  shared: 0.3,
+  arrived: 0.1,
+  "let-go": -0.35,
+};
+/** How far mood may bend each rhythm. Small on purpose: this is a disposition
+    read at a glance, not a readout, and a legible one would be a legend. */
+const MOOD_BOB = 0.28;
+const MOOD_BLINK = 0.18;
+const MOOD_GLANCE = 0.25;
+/**
  * HOW LONG THE COMPANION TAKES TO BECOME THE ONE WHOSE WALL THIS IS.
  *
  * Shorter than UNWIND_MS on purpose: the change starts on the arrival beat
@@ -2958,6 +3002,8 @@ function HomeExperience(): JSX.Element {
       antAt: 0,
       antFlare: 0,
       ant: 0,
+      /** the slow one: -1 … 1, half-life MOOD_HALF_LIFE_MS, rhythm only */
+      mood: 0,
     };
 
     /* motes rising off the aura when the companion is genuinely inspired */
@@ -4759,7 +4805,7 @@ function HomeExperience(): JSX.Element {
            bloom; this is the body, and a body may act.) */
         const sq = view.reduced
           ? 0
-          : Math.sin(companion.bobPh + 1.5) * 0.022 -
+          : Math.sin(companion.bobPh + 1.5) * 0.022 * (1 + companion.mood * MOOD_BOB) -
             companion.pitch * PITCH_STRETCH +
             companion.ant;
         const bw = companion.size * (1 + sq);
@@ -5438,6 +5484,15 @@ function HomeExperience(): JSX.Element {
         companion.flare = Math.max(0, companion.flare - dt / 0.7);
         easing = true;
       }
+      /* THE DISPOSITION FALLS BACK TOWARD LEVEL. A half-life, not a linear
+         decay: what a mood does is fade, and the last of it should take longer
+         than the first. It is never a reason to keep the world awake — a
+         creature settling is exactly what an idle world looks like — so this
+         does not set `easing`. */
+      if (companion.mood !== 0) {
+        companion.mood *= Math.pow(0.5, (dt * 1000) / MOOD_HALF_LIFE_MS);
+        if (Math.abs(companion.mood) < 0.002) companion.mood = 0;
+      }
       /* Something was captured today. That is a STATE, and states render —
          so it is a steady offset under the companion's light, not a twitch.
          (It used to flash every six seconds: the layout brightening itself
@@ -5457,7 +5512,11 @@ function HomeExperience(): JSX.Element {
            aliveness is its own, not a readout of yours. */
         if (companion.idleAt === 0) companion.idleAt = now + 22000 + Math.random() * 14000;
         if (now >= companion.idleAt) {
-          companion.idleAt = now + 30000 + Math.random() * 30000;
+          /* and it looks around more readily when it is up, less when it is
+             down — the willingness to be interested, which is the thing a
+             mood most visibly changes */
+          companion.idleAt =
+            now + (30000 + Math.random() * 30000) * (1 - companion.mood * MOOD_GLANCE);
           const subject = idleSubject();
           if (subject) {
             /* it looks at a MEMORY of yours, chosen for being alive and near.
@@ -5530,7 +5589,10 @@ function HomeExperience(): JSX.Element {
              and on a machine's wall the jitter is quantized out of it, so the
              blink arrives on a beat rather than whenever. A metronome is what
              a clock looks like from the outside. */
-          const base = wornBeing().blinkMs;
+          /* LOW MOOD BLINKS SLOWER. The being's own interval is still the
+             thing being bent — identity first, disposition on top of it — so
+             two creatures in the same mood still blink at their own rates. */
+          const base = wornBeing().blinkMs * (1 - companion.mood * MOOD_BLINK);
           const jitter = 0.8 + Math.random() * 0.4;
           companion.blinkAt = now + base * lerp(jitter, 1, clamp01(mech));
           companion.blink = 1;
@@ -6554,6 +6616,22 @@ function HomeExperience(): JSX.Element {
        * long it holds. Nothing new is drawn; what differs is the gesture.
        */
       acknowledge: (moment: Moment = "touch") => {
+        /*
+         * WHAT THIS DID TO THE CREATURE, BEFORE WHAT IT MADE IT DO.
+         *
+         * Set here rather than inside the arms below, so a moment added later
+         * cannot forget to say what it means — the same reason `attachEvidence`
+         * holds the lock check at the write. Clamped to ±1 so a run of keeps
+         * cannot wind the disposition somewhere it will not come back from,
+         * and skipped entirely under reduced motion, where every rhythm it
+         * bends is silent and the honest value is none.
+         */
+        if (!view.reduced) {
+          const felt = MOOD_OF[moment];
+          if (felt !== undefined) {
+            companion.mood = clamp(companion.mood + felt, -1, 1);
+          }
+        }
         switch (moment) {
           case "kept":
             /* SOMETHING NEW EXISTS. The biggest flare in the world, and the
