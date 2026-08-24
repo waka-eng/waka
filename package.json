@@ -27,6 +27,7 @@
     "e2e:erasure": "tsx tools/e2e/erasure.ts",
     "e2e:connections": "tsx tools/e2e/connections.ts",
     "e2e:rooms": "tsx tools/e2e/rooms.ts",
+    "e2e:sky": "tsx tools/e2e/sky.ts",
     "e2e:cold-start": "tsx tools/e2e/cold-start.ts",
     "e2e:signals": "tsx tools/e2e/signals.ts",
     "e2e:top-of-mind": "tsx tools/e2e/top-of-mind.ts",
