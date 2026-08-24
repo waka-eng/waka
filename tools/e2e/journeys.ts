@@ -126,13 +126,16 @@ async function breakRoute(
   );
 }
 
+/** One password for every journey's account, so a journey can sign back in. */
+const SIGNUP_PASSWORD = "journey-local-password-1";
+
 async function signUp(page: Page, base: string): Promise<{ email: string; name: string }> {
   const email = `journey-${uniq()}@example.test`;
   const name = "Journey Tester";
   await page.goto(`${base}/login`, { waitUntil: "domcontentloaded" });
   await page.click("#login-tab-signup");
   await page.fill("input[name=email]", email);
-  await page.fill("input[name=password]", "journey-local-password-1");
+  await page.fill("input[name=password]", SIGNUP_PASSWORD);
   await page.fill("input[name=name]", name);
   await page.click("button[type=submit]");
   await page.waitForTimeout(6_000);
@@ -1226,6 +1229,118 @@ const JOURNEYS: Journey[] = [
                 .map((a) => a.label.toLowerCase())
                 .join(", ")}; "read it again" previews its consequence`
             : problems.slice(0, 4).join("; "),
+      };
+    },
+  },
+
+  {
+    id: "public-page",
+    name: "what you publish is only what you said to publish",
+    /* J1's public-page half, which `journeys:account` never touched — it
+       proved the display name and stopped there.
+ 
+       THIS IS THE HIGHEST-STAKES PRIVACY SURFACE IN THE PRODUCT. The group
+       boundary decides what a handful of invited people can see; this one
+       decides what the open internet can. A raw capture reaching `/:handle`
+       is not a bug that gets reported, it is one that gets discovered.
+ 
+       So the leak check is the same shape `groups.ts` uses and for the same
+       reason: capture a phrase that exists nowhere else on the stack, then
+       search the whole published page for it. A field-by-field check only
+       ever finds the leak you thought of.
+ 
+       AND IT IS READ AS A STRANGER. Cookies are cleared before every look, so
+       what is measured is what an anonymous visitor gets — not what the owner
+       sees rendered through their own session. */
+    breaks: (ctx) =>
+      breakRoute(ctx, (p, m) => /\/api\/(profiles|auth\/me)/.test(p) && m === "PATCH"),
+    run: async (page, base) => {
+      const me = await signUp(page, base);
+      const secret = `the porcelain kestrel ${uniq()}`;
+      await goSurface(page, base, "/capture");
+      await page.fill('textarea[aria-label="What caught you?"]', `I keep thinking about ${secret}.`);
+      await page.click('button:has-text("keep")');
+      await page.waitForTimeout(2_500);
+
+      const handle = `e2e${Date.now().toString(36)}`;
+      await goSurface(page, base, "/profile");
+      const opener = await page.$('button:has-text("make a public page")');
+      if (!opener) return { ok: false, detail: "no way to make a public page on /profile" };
+      await opener.click();
+      await page.waitForTimeout(600);
+
+      const handleField = await page.$('input[name=publicHandle]');
+      if (!handleField) return { ok: false, detail: "the public-page form has no handle field" };
+      await handleField.fill(handle);
+      /* the first toggle is the page itself; the second is the top of mind,
+         and it is disabled until the first is on */
+      const toggles = await page.$$('.profile-toggle-row input[type=checkbox]');
+      if (toggles.length < 2) {
+        return { ok: false, detail: `expected two publish toggles, saw ${toggles.length}` };
+      }
+      await toggles[0]!.check();
+      await page.click('button:has-text("save profile")');
+      await page.waitForTimeout(3_000);
+
+      /** Look at the page the way anybody on the internet would. */
+      const asStranger = async (): Promise<{ status: number; text: string }> => {
+        await page.context().clearCookies();
+        const response = await page.goto(`${base}/${handle}`, {
+          waitUntil: "domcontentloaded",
+        });
+        await page.waitForTimeout(2_500);
+        return {
+          status: response?.status() ?? 0,
+          text: await page.evaluate(() => document.body.innerText),
+        };
+      };
+
+      const problems: string[] = [];
+      const published = await asStranger();
+      if (!/top of mind|탑오브마인드/i.test(published.text) && published.text.trim().length === 0) {
+        problems.push("the published page rendered nothing at all");
+      }
+      if (published.text.includes(secret)) {
+        problems.push("a raw capture is readable on the public page");
+      }
+
+      /* AND IT GOES AWAY AGAIN. A publish toggle that cannot be un-published
+         is the same failure as one that never published: the person is not in
+         control of it either way. */
+      await page.goto(`${base}/login`, { waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(800);
+      await page.fill("input[name=email]", me.email);
+      await page.fill("input[name=password]", SIGNUP_PASSWORD);
+      await page.click(".btn-doorway");
+      await page.waitForTimeout(4_000);
+
+      await goSurface(page, base, "/profile");
+      const reopen = await page.$('button:has-text("your page is public")');
+      if (!reopen) {
+        problems.push("after publishing, /profile does not say the page is public");
+      } else {
+        await reopen.click();
+        await page.waitForTimeout(600);
+        const again = await page.$$('.profile-toggle-row input[type=checkbox]');
+        await again[0]!.uncheck();
+        await page.click('button:has-text("save profile")');
+        await page.waitForTimeout(3_000);
+
+        const withdrawn = await asStranger();
+        if (withdrawn.text.includes(secret)) {
+          problems.push("a raw capture is still readable after un-publishing");
+        }
+        if (/top of mind|탑오브마인드/i.test(withdrawn.text)) {
+          problems.push("the page is still published after being turned off");
+        }
+      }
+
+      return {
+        ok: problems.length === 0,
+        detail:
+          problems.length === 0
+            ? `published at /${handle} with no capture text on it, and gone again when turned off`
+            : problems.join("; "),
       };
     },
   },

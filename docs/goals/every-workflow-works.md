@@ -78,7 +78,7 @@ unproven in a browser.**
 | H2 | Cross-profile permission matrix | API (MCP live gate) |
 | I1 | Terminal consent, credential binding | API (MCP live gate) |
 | I2 | Capture and recall from a terminal | API (MCP live gate) |
-| J1 | Rename, locale, make a public page | **Browser** (`journeys:account`) — rename only; locale and public page still unproven |
+| J1 | Rename, locale, make a public page | **Browser** — rename (`journeys:account`) ✅ and the public page (`journeys:public-page`) ✅ 2026-08-24, read as an anonymous stranger with the raw capture searched for by phrase. Locale still unproven |
 | J2 | List and revoke connections | API (`connections`) ✅ 2026-08-24 — 7 checks, no model calls |
 | J3 | Delete the account | API (`erasure`) ✅ 2026-08-24 — 11 checks, including the bytes, the room's own artifact, and that the bystander keeps everything |
 | K1 | The world renders on a hostile network | Browser (`first-paint`) ✅ |
