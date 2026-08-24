@@ -697,6 +697,16 @@ never read as a clean one. `FieldAudit` gained a `sky` block for the same
 reason `provenanceCount` is in it: this is a promise whose failure looks
 identical to a quiet screen.
 
+**And the sky half is now measured rather than only declared.** `ways-out`
+runs key-free, so on the fresh account it walks it has no statements to elect
+and prints `sky leaning (1) but EMPTY` — honest, and not a measurement.
+`pnpm e2e:sky` closes that: it grows a real sky and re-takes the table above
+automatically, against a second account with no sky as the dark reference.
+The reading it gates on is the same one that appears there — the top band,
+0.02 empty against 0.87 lit. See *What was not covered* for why this could not
+live inside `journeys`, and the suite's own header for the two controls that
+looked obvious and were wrong.
+
 Confirmed at 1440×900 and 390×844, and on the climb: the words resolve, and
 the clouds return to their own arrangement as you rise.
 
