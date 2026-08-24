@@ -96,6 +96,24 @@
   --jar-row: rgba(255, 255, 255, 0.045);
   --jar-row-hover: rgba(255, 255, 255, 0.1);
 
+  /* ---- the drawer: the one surface in this world you can see the EDGE of ----
+     Everything else on this screen is light on a ground. The notepad has to be
+     a THING — an object that slid up in FRONT of the world — because the
+     founder looked at the last one and said "it's like the text is written in
+     the space, but I kind of want like a physical drawer component coming up
+     so that it's clearly a space to type." It was `--jar-panel`: a 0.95 tint of
+     near-black laid over near-black, which occludes nothing you can see and so
+     reads as nothing at all.
+     Matter nearer the eye catches more light. The sheet is opaque and a dozen
+     points UP from `--jar-atmos`; its top edge is lit like the lip of a real
+     one; and the place you type is a WELL sunk into it, because a hollow takes
+     less light than the face around it. */
+  --jar-sheet: #12161f;
+  --jar-sheet-lip: rgba(255, 255, 255, 0.2);
+  --jar-sheet-edge: rgba(255, 255, 255, 0.07);
+  --jar-sheet-well: rgba(0, 0, 0, 0.34);
+  --jar-sheet-grip: rgba(232, 237, 244, 0.32);
+
   /* ---- the aliveness ramp: every orb, satellite and cloud is baked from
      these three, and from nothing else ---- */
   /* alive: the single warm note in a cold frame */
@@ -1068,69 +1086,95 @@
    The quick slot hangs off the seam and grows UPWARD (`translateY(-100%)`),
    which is right for one line and catastrophic for a page: a long paste
    climbed up the screen and printed straight over the companion, the sky and
-   everything else, with no ground of its own. The founder said "don't cover
-   like this" — four times, because the first fix only changed the FACE and
-   inherited that geometry.
+   everything else, with no ground of its own.
    So the note state stops being a taller version of the line and becomes a
    real sheet: released from the seam, anchored to the bottom of the frame,
-   full width, its own opaque ground, its own height. It rises from the
-   bottom the way a notes app does, and nothing above it is obscured. */
+   opaque, with its own edges and its own height. It rises from below the
+   frame the way a drawer does.
+
+   COVERING THE COMPANION IS FINE — the founder settled that: "I don't care
+   about the text covering the character." What was not fine was the sheet
+   being invisible. Every rule below is spent on one thing: that this reads as
+   an object in front of the world rather than words printed on it. */
+/* AND IT COVERS WHAT IT SLID IN FRONT OF. The mouth sits at z4, under the
+   ground's axis row at z5, so the room names and the `+` printed straight
+   THROUGH the sheet's footer — which is the one thing an opaque object cannot
+   do and still be an object. A drawer is only in front of the world if it is
+   in front of all of it; the axis comes back the moment the note shrinks. The
+   lift is on the container because `.jar-mouth` is itself a stacking context,
+   so no rule on the sheet inside it could ever have climbed out.
+   Seven, not six: measured in the browser, `.jar-axis` is ALSO six and comes
+   later in the document, and equal z-index is decided by document order — so
+   six changed nothing and the room names still printed through. */
+.jar-mouth--note {
+  z-index: 7;
+}
 .jar-mouth-slot--note {
   top: auto;
   bottom: 0;
+  /* an object with two visible sides, not a band across the frame: the edges
+     are most of what says "component" */
+  width: min(100%, 640px);
+  margin: 0 auto;
   transform: none;
-  padding: 0;
-  background: var(--jar-panel);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border-radius: 20px 20px 0 0;
+  padding: 0 0 calc(12px + env(safe-area-inset-bottom));
+  /* opaque, and lighter than the world it slid in front of */
+  background: var(--jar-sheet);
+  border: 1px solid var(--jar-sheet-edge);
+  border-bottom: 0;
+  /* the lit lip — the top edge of a solid thing catching the room */
+  border-top-color: var(--jar-sheet-lip);
+  border-radius: 18px 18px 0 0;
   box-shadow:
-    0 0 0 1px var(--jar-panel-edge),
-    0 -24px 60px -30px rgba(0, 0, 0, 0.9);
-  animation: jar-drawer-up 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
+    /* the sheet's own thickness, just under the lip */
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    /* and what it casts upward on the world behind it: this is the depth cue,
+       and it is why the field no longer looks printed on space */
+    0 -40px 90px -20px rgba(0, 0, 0, 0.95);
+  animation: jar-drawer-up 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+  /* A SOLID THING STOPS THE POINTER. `.jar-mouth` is pointer-events: none so
+     the world can be dragged through it; the sheet is the exception, because
+     a press that lands on a drawer and pans the sky behind it is a press that
+     went through the drawer, and then it is not a drawer. */
+  pointer-events: auto;
 }
+/* It comes from BELOW THE FRAME, its whole height, once. The old animation
+   nudged it twelve pixels and faded it in — which is an appearance, not an
+   arrival, and told you nothing about where the thing came from or where it
+   goes back to. Motion explains. */
 @keyframes jar-drawer-up {
   from {
-    transform: translateY(12px);
-    opacity: 0;
+    transform: translateY(100%);
   }
   to {
     transform: none;
-    opacity: 1;
   }
 }
-/* the handle: one short rule at the top edge, the way a sheet says which way
-   it came from. Not a control — the drawer is driven by the text alone. */
+/* THE GRAB RAIL. Not a control — the drawer is driven by the length of what
+   you wrote, and nothing else — but it is the mark every physical sheet in
+   the world wears at the edge you'd pull, and it is how this one says which
+   way it came from. */
 .jar-mouth-slot--note::before {
   content: "";
   display: block;
-  width: 36px;
-  height: 3px;
-  margin: 10px auto 4px;
+  width: 44px;
+  height: 4px;
+  margin: 9px auto 11px;
   border-radius: 999px;
-  background: var(--jar-scroll);
+  background: var(--jar-sheet-grip);
 }
-.jar-mouth-slot--note .jar-mouth-field {
-  max-width: 68ch;
-  /* it OWNS this height rather than growing into the world above it */
-  height: min(42vh, 380px);
-  max-height: min(42vh, 380px);
-  padding: 12px 24px 20px;
-  font-weight: 400;
-  font-size: 15px;
-  letter-spacing: normal;
-  text-transform: none;
-  line-height: 1.62;
-  text-align: left;
-}
-.jar-mouth-slot--note .jar-mouth-field::placeholder {
-  text-transform: none;
-  letter-spacing: normal;
-}
-/* the where-it-goes line sits inside the sheet, on its own ground */
+/* WHERE THIS ONE IS GOING, ON THE DRAWER'S OWN FOOTER. Inside the sheet, under
+   a hairline, so the choice belongs to the note you are writing instead of
+   floating over the field's orbs the way it did. */
 .jar-mouth-slot--note .jar-mouth-where {
-  padding-bottom: calc(14px + env(safe-area-inset-bottom));
+  margin: 12px 20px 0;
+  padding-top: 11px;
+  border-top: 1px solid var(--jar-sheet-edge);
 }
+.jar-mouth-slot--note .jar-mouth-note {
+  margin: 10px 20px 0;
+}
+
 .jar-mouth-field::-webkit-scrollbar {
   width: 6px;
 }
@@ -2444,8 +2488,29 @@
     color: var(--jar-faint);
     text-transform: uppercase;
   }
-  /* and the drawer's prose face, which must also outrank the flat screens */
+  /* THE WELL — the recessed place you write, and the drawer's whole claim to
+     being a drawer. A sheet with text lying on its face is still a surface; a
+     sheet with a panel sunk into it is unmistakably a place to type.
+
+     Its geometry has to be stated from inside this layer, not just its face:
+     `chrome.css` gives every bare textarea `width: 100%`, `padding: 9px 0` and
+     `border-radius: 0`, and the layer order means a rounded, inset, padded
+     well declared up in `product` would lose all three and come out as a flat
+     full-bleed strip — the same collision that ate the font size, in the same
+     place, for the same reason. */
   .jar-mouth-slot--note .jar-mouth-field {
+    box-sizing: border-box;
+    width: calc(100% - 40px);
+    max-width: none;
+    margin: 0 auto;
+    /* the well owns its height: a drawer whose depth changed with every line
+       you typed would be a growing block of text again, not a notepad */
+    height: min(34vh, 300px);
+    max-height: min(34vh, 300px);
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: var(--jar-sheet-well);
+    box-shadow: inset 0 0 0 1px var(--jar-sheet-edge);
     font-size: 15px;
     font-weight: 400;
     letter-spacing: normal;

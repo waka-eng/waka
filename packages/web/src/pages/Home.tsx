@@ -9148,13 +9148,26 @@ function HomeExperience(): JSX.Element {
 
   /* The field is exactly as tall as what is in it. It hangs off the seam and
      grows UPWARD, so the words stay the same distance above the ground the
-     orb will drop into however many lines they wrap to. */
+     orb will drop into however many lines they wrap to.
+
+     EXCEPT IN THE DRAWER, WHERE THE WELL OWNS ITS HEIGHT — and this is not a
+     preference, it is the reason the sheet kept coming out the size of the
+     text inside it. An inline `style.height` outranks every stylesheet in the
+     document, cascade layers included, so the drawer's stated depth was being
+     overwritten on each keystroke by whatever the words happened to measure.
+     Releasing the inline value hands the height back to the CSS: a notepad
+     that is a notepad-shaped thing the moment it opens, rather than a block of
+     text that grows until it hits a ceiling. */
   useLayoutEffect(() => {
     const el = mouthFieldRef.current;
     if (!el) return;
+    if (mouthLong) {
+      el.style.height = "";
+      return;
+    }
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
-  }, [draft, mouthOpen]);
+  }, [draft, mouthOpen, mouthLong]);
 
   useEffect(() => {
     if (!mouthOpen) return;
@@ -10720,7 +10733,11 @@ function HomeExperience(): JSX.Element {
           headquarters' own transform every frame, so it belongs to your wall
           and to the seam exactly as if it lived there. */}
       {phase === "ready" ? (
-        <div ref={measured.mouth} className="jar-mouth" data-jar-chrome="1">
+        <div
+          ref={measured.mouth}
+          className={`jar-mouth${mouthLong ? " jar-mouth--note" : ""}`}
+          data-jar-chrome="1"
+        >
           {/* QUICK BY DEFAULT, A NOTEPAD WHEN IT HAS TO BE.
               The mouth is for a few sentences, a link, an image — the thing
               you say on the way past. So it keeps the resting phrase's own
@@ -10737,6 +10754,21 @@ function HomeExperience(): JSX.Element {
             className={`jar-mouth-slot${atNow ? "" : " jar-mouth-slot--away"}${
               mouthLong ? " jar-mouth-slot--note" : ""
             }`}
+            /* THE SHEET KEEPS THE CARET. The drawer is solid — it stops the
+               pointer rather than letting a press fall through to the world —
+               which means a press on its face would otherwise blur the note
+               and drop you out of what you were writing. Refusing the default
+               on mousedown leaves focus exactly where it was, so the whole
+               object behaves like one surface you are typing on. The buttons
+               inside it are exempt: they need the press. */
+            onMouseDown={
+              mouthLong
+                ? (e) => {
+                    if (e.target instanceof Element && e.target.closest("textarea, button")) return;
+                    e.preventDefault();
+                  }
+                : undefined
+            }
           >
             {mouthOpen ? (
               <textarea
