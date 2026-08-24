@@ -78,7 +78,7 @@ unproven in a browser.**
 | H2 | Cross-profile permission matrix | API (MCP live gate) |
 | I1 | Terminal consent, credential binding | API (MCP live gate) |
 | I2 | Capture and recall from a terminal | API (MCP live gate) |
-| J1 | Rename, locale, make a public page | **Browser** — rename (`journeys:account`) ✅ and the public page (`journeys:public-page`) ✅ 2026-08-24, read as an anonymous stranger with the raw capture searched for by phrase. Locale still unproven |
+| J1 | Rename, locale, make a public page | **Browser** — all three ✅ 2026-08-24. Rename (`journeys:account`); the public page (`journeys:public-page`), read as an anonymous stranger with the raw capture searched for by phrase; locale (`journeys:locale`), which signs in from a **clean browser** because "remembered" means a second device and not a second page load, and also asserts no unformatted ICU and no bare message key reaches the screen. Its first version asserted a reload, survived its own sabotage, and found audit finding 19 by doing so |
 | J2 | List and revoke connections | API (`connections`) ✅ 2026-08-24 — 7 checks, no model calls |
 | J3 | Delete the account | API (`erasure`) ✅ 2026-08-24 — 11 checks, including the bytes, the room's own artifact, and that the bystander keeps everything |
 | K1 | The world renders on a hostile network | Browser (`first-paint`) ✅ |

@@ -151,6 +151,46 @@ async function goSurface(page: Page, base: string, path: string): Promise<void> 
 const bodyText = (page: Page): Promise<string> =>
   page.evaluate(() => document.body.innerText.trim());
 
+/**
+ * The page's words, MINUS anything inside a `<select>`.
+ *
+ * `/profile`'s language picker lists its options by native name — `English`
+ * and `한국어` — and that is correct: you should be able to find your own
+ * language whatever language the product is currently in. It also means the
+ * page contains Hangul at all times, so "is there Hangul on screen" is a
+ * question that cannot come back no on that route.
+ *
+ * That cost a false pass. The `locale` journey's fresh-browser check read
+ * `document.body.innerText`, found `한국어` in the picker, and reported a
+ * Korean product while every label around it said DISPLAY NAME and LANGUAGE.
+ * It was caught by tracing why only one of two assertions had fired, not by
+ * anything in the harness noticing.
+ */
+const translatableText = (page: Page): Promise<string> =>
+  /* NO CALLBACKS INSIDE `evaluate`, AND NOT FOR STYLE. The first version used
+     a TreeWalker with an `acceptNode` filter and died on `__name is not
+     defined` — esbuild's keep-names shim reaches into function expressions
+     passed to `page.evaluate` and the helper it references does not exist in
+     the page. Plain loops are the only reliable shape in here, and this is the
+     second place in this harness to learn it.
+
+     The selects are hidden in the LIVE document rather than stripped from a
+     clone, because `innerText` is what respects visibility and it returns
+     nothing useful on a detached node. They are put back immediately. */
+  page.evaluate(() => {
+    const selects = document.querySelectorAll<HTMLSelectElement>("select");
+    const previous: string[] = [];
+    for (let i = 0; i < selects.length; i += 1) {
+      previous.push(selects[i]!.style.display);
+      selects[i]!.style.display = "none";
+    }
+    const text = document.body.innerText.trim();
+    for (let i = 0; i < selects.length; i += 1) {
+      selects[i]!.style.display = previous[i]!;
+    }
+    return text;
+  });
+
 /** WCAG relative luminance of an `rgb(…)` / `rgba(…)` string. */
 function luminance(css: string): number {
   const [r, g, b] = (css.match(/[\d.]+/g) ?? ["0", "0", "0"]).slice(0, 3).map((raw) => {
@@ -1340,6 +1380,142 @@ const JOURNEYS: Journey[] = [
         detail:
           problems.length === 0
             ? `published at /${handle} with no capture text on it, and gone again when turned off`
+            : problems.join("; "),
+      };
+    },
+  },
+
+  {
+    id: "locale",
+    name: "the product speaks the language you chose, and still does tomorrow",
+    /* WHY THIS EXISTS, AND WHY THE STATIC CHECK WAS NOT ENOUGH.
+       `docs/goals/every-workflow-works.md` J1 read "locale still unproven"
+       while the audit recorded "Korean coverage is genuinely complete". Both
+       were true, because they were about different things: `ko-KR.json` has
+       all 367 keys `en-US.json` has and none missing, which is a fact about
+       two files. Whether a person who picks Korean gets a Korean product is a
+       fact about a browser, and nothing had ever opened one to find out.
+
+       THREE FAILURES THIS SHAPE IS AGAINST, all of which leave the files
+       perfectly complete:
+
+         - The choice does not survive. `Profile.tsx` writes the preference to
+           `localStorage` AND to `/api/auth/me/preferences`, and
+           `auth-context` restores it from the PROFILE on the next load. So a
+           preference that saves locally and never reaches the server looks
+           correct until the next visit, which is the worst possible time to
+           find out.
+         - Raw ICU reaches the screen. This happened during this session:
+           `{count, plural, other {{count} behind it}}` printed verbatim,
+           because ICU cannot nest a placeholder inside a branch. Every
+           existing message keeps the placeholder outside for that reason, and
+           nothing was checking.
+         - A key prints instead of its message. `t()` returns the key when a
+           lookup misses, so a typo renders as `signalHoldFaint` on the page —
+           legible enough to survive review, and not a word in any language.
+
+       None of the three throws. All three are visible only to something that
+       looks at the rendered text, which is what this does. */
+    /* THE PATH IS `/auth/me/profile`, AND GETTING IT WRONG COST A FALSE PASS.
+       The first version of this sabotage broke `/api/auth/me/preferences` — a
+       path that appears in `auth-agent-boundary.test.ts` and nowhere in the
+       web client. `updateAuthProfile` PATCHes `/api/auth/me/profile`. So the
+       save succeeded, the journey passed, and `--negative` reported it as
+       decoration for a reason that had nothing to do with the journey. A
+       sabotage aimed at a route that does not exist is indistinguishable from
+       no sabotage at all, and it fails silently in the direction of green. */
+    breaks: (ctx) => breakRoute(ctx, (p) => p === "/api/auth/me/profile"),
+    run: async (page, base) => {
+      const { email } = await signUp(page, base);
+
+      await goSurface(page, base, "/profile");
+      const picker = page.locator("select.field-input").first();
+      if ((await picker.count()) === 0) return { ok: false, detail: "no language picker on /profile" };
+      /* THE BUTTON IS ALREADY IN KOREAN BY THE TIME WE REACH FOR IT.
+         `Profile.tsx` derives `locale` straight from the picker's state, so
+         choosing Korean re-renders the whole form — including this button's
+         label — before anything is saved. That is the product being right and
+         a text selector being monolingual: the first version of this journey
+         looked for `save profile` and timed out for 30 seconds against a
+         button that now said 저장. Submit is addressed by its ROLE, which is
+         the one thing about it that does not translate. */
+      await picker.selectOption("ko-KR");
+      await page.click('button.btn-primary[type=submit]');
+      await page.waitForTimeout(3_500);
+
+      /* A RELOAD IS NOT THE TEST. THIS IS THE SECOND VERSION OF THIS JOURNEY.
+         The first reloaded the page and asserted Korean, and it SURVIVED ITS
+         OWN SABOTAGE — reported as decoration by `--negative`, which is the
+         only reason any of this was found. The reason it survived is the
+         finding: the picker persisted the choice to `localStorage` the moment
+         it changed, so a save that 500'd still left this browser in Korean
+         forever. Reloading reads back the very thing the sabotage did not
+         prevent.
+
+         "Still does tomorrow" means a DIFFERENT browser — a second device,
+         a cleared cache, a colleague's laptop. So the reading that counts is
+         taken in a fresh context with empty storage, signing in from nothing.
+         The only channel that can carry the preference there is the server,
+         which is exactly what the sabotage breaks. */
+      const browser = page.context().browser();
+      if (!browser) return { ok: false, detail: "no browser to open a second context from" };
+      const tomorrow = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      await stubExternals(tomorrow, base);
+      const fresh = await tomorrow.newPage();
+      const hangul = /[\uAC00-\uD7A3]/;
+      const problems: string[] = [];
+      try {
+        await fresh.goto(`${base}/login`, { waitUntil: "domcontentloaded" });
+        await fresh.fill("input[name=email]", email);
+        await fresh.fill("input[name=password]", SIGNUP_PASSWORD);
+        await fresh.click("button[type=submit]");
+        await fresh.waitForTimeout(6_000);
+        await goSurface(fresh, base, "/profile");
+        /* NOT `bodyText` — the picker's own options are always in their native
+           names, so `/profile` always contains Hangul. See `translatableText`. */
+        if (!hangul.test(await translatableText(fresh))) {
+          problems.push(
+            "signed in on a clean browser and the product is back in English — the choice " +
+              "never left this machine",
+          );
+        }
+      } finally {
+        await tomorrow.close();
+      }
+
+      /* Every flat surface, not just the one carrying the picker — the
+         preference is account-wide and a surface that missed the provider
+         would still render English while /profile looked fine. */
+      const surfaces = ["/capture", "/inspirations", "/signals", "/top-of-mind", "/rooms", "/principles"];
+      const silent: string[] = [];
+      const rawIcu: string[] = [];
+      const bareKeys: string[] = [];
+      for (const path of surfaces) {
+        await goSurface(page, base, path);
+        const text = await translatableText(page);
+        if (!hangul.test(text)) silent.push(path);
+        /* `{` immediately followed by a word and a comma is ICU that never
+           got formatted. Plain prose does not contain it. */
+        if (/\{\s*\w+\s*,/.test(text)) rawIcu.push(path);
+        /* A message key that printed itself: lowerCamelCase, no spaces, long
+           enough not to be a variable name a person would write in prose,
+           and standing alone on its line. */
+        for (const line of text.split("\n")) {
+          const bare = line.trim();
+          if (/^[a-z][a-zA-Z]{11,}$/.test(bare) && !hangul.test(bare)) bareKeys.push(`${path}:${bare}`);
+        }
+      }
+      if (silent.length > 0) problems.push(`still English: ${silent.join(", ")}`);
+      if (rawIcu.length > 0) problems.push(`unformatted ICU on screen: ${rawIcu.join(", ")}`);
+      if (bareKeys.length > 0) {
+        problems.push(`message key printed instead of its message: ${bareKeys.slice(0, 3).join(", ")}`);
+      }
+
+      return {
+        ok: problems.length === 0,
+        detail:
+          problems.length === 0
+            ? `Korean reached a clean browser and holds across ${surfaces.length} surfaces; no raw ICU, no bare keys`
             : problems.join("; "),
       };
     },
