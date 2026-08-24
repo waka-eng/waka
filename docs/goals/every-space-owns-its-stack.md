@@ -116,6 +116,29 @@ Phases 2–4 below are superseded where they conflict with these rulings
 (notably: `signal_shares` is not dropped by migration — the record
 survives; the mint bar is two VOICES, not any change to promote-at-3).
 
+## Log
+
+- **2026-08-24 — Built, and proven ALIVE the same day.** Four commits
+  (`1cc5746` schema + canon, `98f6857` fan-out, `7e9380a` the dev merge it
+  rides on, `cccf749` serve + web), and then the live walk on the real
+  stack with the founder's Gemini key at every model edge. Two fresh
+  accounts, one room. Four public keeps fanned out (every job owned by
+  its keeper — the budget billed the right person), the room's mind
+  minted four patterns citing the right members' memories, dev's
+  recurrence attached second captures — and the two-voices gate held
+  everything off the wall, correctly: nothing had crossed members yet.
+  Then two people kept nearly the same sentence, and SIX SECONDS later
+  both patterns crossed the bar — each member's keep matched the OTHER's
+  existing pattern — and the wall served them with contributors named
+  ("Ari, Bo"). A third pair, both members affirmed all three, and the
+  first board drafted in the room's plural voice: a pattern, a
+  hypothesis, and a question, every entry crediting both contributors
+  through the evidence-owner derivation. The world shows it: the room's
+  poster carries the plural sentence, the room's sky holds the grown
+  statements, the ground legend names both members. What remains of this
+  goal is Phase 5's page-language sweep and the deliberately-deferred
+  pieces (backfill on join; the daily sweep), logged as open.
+
 ## The shape
 
 Four phases. Each ends green and is independently revertible. The restructuring
