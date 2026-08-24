@@ -180,6 +180,29 @@ run). No new dependencies, no new infrastructure.
 
 ## Log
 
+- **2026-08-23 — Phase 1: PASS.** The reading exists and cannot lie.
+  `lib/the-reading.ts` holds the registry — eight constant-backed
+  sentences (each importing its LIVE value, worded: three, twelve, a
+  month and a half, three quiet weeks…) and six law-backed sentences
+  (each naming the contract test that enforces it) — and one rendering
+  function serves both the world and the wire.
+  `lib/the-reading.test.ts` is the both-directions drift lock: it holds
+  its own value→words table, so a tuned constant fails the suite until
+  the registry's words and the sentence are re-worded, a law sentence
+  fails when its test file disappears, and the rendering is asserted to
+  contain every sentence and not one digit. Served at
+  `GET /api/reading.md` (session-authenticated, both kinds of mind, no
+  consultation written — it serves the product, not anyone's memory).
+  The world's door: "how it reads you" in the poster's ≡ menu opens
+  `ReadingPanel`, which rewords nothing; its own suite pins verbatim
+  sentences, the quieter coda, the fetch-pending state, and zero
+  numerals. The waka skill now tells agents to QUOTE the reading rather
+  than improvise a description of the loop (pushed to waka-mcp, same
+  branch). Gate measured: the-reading suite 3/3, panel suite 2/2, api
+  51 files / 602 tests, web 19 files / 133 tests, vocabulary and seams
+  clean. Deliberately excluded: any sentence about contested pairs —
+  the judge is binary today, and the reading speaks only today's truth.
+
 - **2026-08-23 — Created on the founder's instruction** ("create /goal
   to build this all"), from the research in
   `docs/craft/the-legible-loop.md`. Owns what was `no-quiet-corners`

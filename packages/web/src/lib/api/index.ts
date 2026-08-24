@@ -51,3 +51,4 @@ export * from "./top-of-mind";
 export * from "./groups";
 export * from "./feedback";
 export * from "./public-profiles";
+export * from "./reading";

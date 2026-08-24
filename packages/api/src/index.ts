@@ -23,6 +23,7 @@ import { healthRoutes } from "./routes/health.js";
 import { inspirationsRoutes } from "./routes/inspirations.js";
 import { profilesRoutes } from "./routes/profiles.js";
 import { principlesMarkdownRoutes, principlesRoutes } from "./routes/principles.js";
+import { createReadingRoute } from "./routes/reading.js";
 import { sessionsRoutes } from "./routes/sessions.js";
 import { publicProfileRoutes } from "./routes/public-profiles.js";
 import { signalsRoutes } from "./routes/signals.js";
@@ -64,6 +65,9 @@ app.route("/api/profiles", profilesRoutes);
 app.route("/api/sessions", sessionsRoutes);
 app.route("/api/principles.md", principlesMarkdownRoutes);
 app.route("/api/principles", principlesRoutes);
+// How WAKA reads you — the loop's rules, one rendering for every kind of
+// mind, pinned by lib/the-reading.test.ts so it cannot drift from the code.
+app.route("/api/reading.md", createReadingRoute());
 
 // Deliberately unauthenticated: returns only the owner-approved surface.
 app.route("/api/public/profiles", publicProfileRoutes);

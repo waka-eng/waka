@@ -716,6 +716,23 @@
   backdrop-filter: blur(18px);
   pointer-events: auto;
 }
+/* THE READING. Sentences at reading weight, air between them — a page a
+   person actually reads, not a settings sheet. The coda sits quieter: it is
+   the page speaking about the person's own hand, not another rule. */
+.jar-reading {
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
+}
+.jar-reading-line {
+  margin: 0 0 12px;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--jar-ink);
+}
+.jar-reading-coda {
+  margin: 16px 0 0;
+  color: var(--jar-faint);
+}
 .jar-roomform-tabs { display: flex; gap: 18px; margin-bottom: 16px; }
 .jar-roomform-tabs button {
   appearance: none;

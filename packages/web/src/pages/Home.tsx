@@ -215,8 +215,11 @@ import {
   type ApiGroupFieldInspiration,
   type ApiGroupWallSignal,
   type ApiTopOfMindVersion,
+  type ApiReading,
+  fetchTheReading,
   ApiError,
 } from "../lib/api";
+import { ReadingPanel } from "../components/ReadingPanel";
 import {
   loadInspiration,
   loadInspirations,
@@ -8087,6 +8090,10 @@ function HomeExperience(): JSX.Element {
   /* TEMPORARY. See `.jar-flatmenu` in the JSX below — this is scaffolding for
      the screens the world has no home for yet, and it goes when they do. */
   const [flatMenuOpen, setFlatMenuOpen] = useState(false);
+  /* the reading: fetched once on first open, held for the session — the
+     rules do not change under a person mid-visit */
+  const [readingOpen, setReadingOpen] = useState(false);
+  const [theReading, setTheReading] = useState<ApiReading | null>(null);
   /** The rename box, while it is open: null when nobody is renaming. */
   const [renaming, setRenaming] = useState<{ id: string; text: string; busy: boolean } | null>(
     null,
@@ -9930,9 +9937,32 @@ function HomeExperience(): JSX.Element {
                   {label}
                 </Link>
               ))}
+              {/* THE READING — not a flat screen, so not a Link: it opens
+                  the loop's rules as a panel over the world, one tap from
+                  the poster (goals/the-legible-loop.md Phase 1). */}
+              <button
+                type="button"
+                role="menuitem"
+                className="jar-flatmenu-item jar-label"
+                onClick={() => {
+                  setFlatMenuOpen(false);
+                  setReadingOpen(true);
+                  if (!theReading) {
+                    fetchTheReading()
+                      .then(setTheReading)
+                      .catch(() => undefined);
+                  }
+                }}
+              >
+                how it reads you
+              </button>
             </div>
           ) : null}
         </div>
+
+        {readingOpen ? (
+          <ReadingPanel reading={theReading} onClose={() => setReadingOpen(false)} />
+        ) : null}
 
         <button
           type="button"
