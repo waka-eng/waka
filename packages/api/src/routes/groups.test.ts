@@ -62,6 +62,7 @@ const wallSignal: GroupWallSignal = {
   signalId,
   statement: "Rooms that instruct without speaking",
   confidenceAsWritten: 72,
+  locked: false,
   reactions: [],
   ownerProfileId: otherProfileId,
   ownerName: "Grace",

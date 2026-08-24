@@ -7490,7 +7490,9 @@ function HomeExperience(): JSX.Element {
           kind: "reading",
           col,
           text: s.statement,
-          locked: false,
+          /* the owner's star travels with the sentence — the lock renders
+             exactly where other people read it (no-quiet-corners Phase 8) */
+          locked: Boolean(s.locked),
           wallTarget: {
             signalId: s.signalId,
             mine: s.ownerProfileId === viewerIdRef.current,

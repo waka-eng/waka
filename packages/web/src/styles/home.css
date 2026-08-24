@@ -736,7 +736,9 @@
 /* A gesture's receipt: the same quiet register as the panel's meta lines —
    it states, it never celebrates. */
 .jar-receipt {
-  color: var(--jar-faint);
+  /* a receipt is READ — the law the act just enacted — so it sits at the
+     readable step of the ramp, quiet by size rather than by dimness */
+  color: var(--jar-muted);
   font-size: 12.5px;
 }
 .jar-roomform-tabs { display: flex; gap: 18px; margin-bottom: 16px; }
@@ -1893,8 +1895,9 @@
   display: block;
   font-size: 13.5px;
   line-height: 1.62;
-  /* the surround: present, readable, clearly not the point */
-  color: var(--jar-faint);
+  /* the surround: readable — measured to AA — while the lit span above it
+     still carries the salience step */
+  color: var(--jar-muted);
 }
 /* THE ANTECHAMBER — the dim place. The refused candidates render at the
    faint end of the ink scale on purpose: these are the sentences that did
@@ -1910,7 +1913,9 @@
   margin: 0 0 2px;
   font-size: 13.5px;
   line-height: 1.62;
-  color: var(--jar-faint);
+  /* the dim place stays dim by standing (muted, under the panel's hush),
+     not by being unreadable */
+  color: var(--jar-muted);
 }
 .jar-ante-anchor {
   margin: 0;
@@ -1955,7 +1960,9 @@
   line-height: 1.62;
   text-align: left;
   cursor: pointer;
-  color: var(--jar-faint);
+  /* the dim state is still READ — it is the recalibration queue — so it
+     dims to the readable step, and answered lifts to full ink above it */
+  color: var(--jar-muted);
   transition: border-color 0.2s ease;
 }
 .jar-ground:hover,
@@ -2003,6 +2010,34 @@
   color: var(--jar-ink);
   text-shadow: 0 0 10px rgba(240, 235, 214, 0.45), 0 0 3px rgba(240, 235, 214, 0.6);
   cursor: pointer;
+  /* THE TURN. The star appears the moment the words become held, and the
+     motion is the explanation: it settles INTO place — a small turn and a
+     scale falling to rest — the way a held thing stops moving. 0.6s, inside
+     the founder's 0.4–0.8 band; ease-out because arriving is a settling,
+     not a launch. Runs once, on appearance, and never again: motion
+     explains the state change, it does not decorate the state
+     (no-quiet-corners Phase 8 — founder-gated, reviewed live). */
+  display: inline-block;
+  animation: jar-star-turn 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@keyframes jar-star-turn {
+  from {
+    transform: rotate(-100deg) scale(0.4);
+    opacity: 0;
+  }
+  60% {
+    opacity: 1;
+  }
+  to {
+    transform: rotate(0deg) scale(1);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .jar-star {
+    /* the state still changes; only the motion stays home */
+    animation: none;
+  }
 }
 .jar-star:focus-visible {
   outline: 1px solid var(--jar-ink);

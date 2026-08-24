@@ -303,7 +303,7 @@ describe("what a group can publish", () => {
     return mount(
       {
         loadMembership: vi.fn(async () => membership),
-        loadWall: vi.fn(async () => [overSelectedWallRow as GroupWallSignal]),
+        loadWall: vi.fn(async () => [overSelectedWallRow as unknown as GroupWallSignal]),
         loadTopOfMind: vi.fn(
           async () => overSelectedTopOfMind as unknown as GroupTopOfMindView,
         ),

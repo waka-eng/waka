@@ -70,6 +70,8 @@ export interface ApiGroupWallSignal {
   statement: string;
   /** As the owner's system last wrote it — a snapshot, not a live value. */
   confidenceAsWritten: number;
+  /** The owner holds these words — the star renders where they are read. */
+  locked: boolean;
   ownerProfileId: string;
   ownerName: string;
   sharedAt: string;

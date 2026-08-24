@@ -57,6 +57,10 @@ export interface GroupWallSignal {
    * that has gone quiet since then reads stronger here than it is.
    */
   confidenceAsWritten: number;
+  /** The owner holds these words (locked). The lock is a fact ABOUT the
+      statement — no-quiet-corners Phase 8: the star must render exactly
+      where other people read the sentence. */
+  locked: boolean;
   ownerProfileId: string;
   ownerName: string;
   sharedAt: string;
@@ -86,6 +90,7 @@ export async function loadGroupWall(
       signalId: signals.id,
       statement: signals.statement,
       confidence: signals.confidence,
+      lockedAt: signals.lockedAt,
       ownerProfileId: signalShares.profileId,
       ownerName: profiles.name,
       sharedAt: signalShares.createdAt,
@@ -177,6 +182,7 @@ export async function loadGroupWall(
     signalId: row.signalId,
     statement: row.statement,
     confidenceAsWritten: row.confidence,
+    locked: row.lockedAt !== null,
     ownerProfileId: row.ownerProfileId,
     ownerName: labels.get(row.ownerProfileId)?.displayName ?? row.ownerName,
     sharedAt: row.sharedAt.toISOString(),

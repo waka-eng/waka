@@ -66,8 +66,8 @@
  *
  *   `lib/api` — for the group reads, which have no loader above them, plus
  *   `fetchGroupProposals` and `affirmGroupProposal`, this file's own subject
- *   for the proposal cases. `fetchGroupWall` is emptied on purpose; the reason
- *   is at the mock.
+ *   for the proposal cases. `fetchGroupWall` serves one LOCKED
+ *   statement; the reason is at the mock.
  *
  *   `lib/auth-context` — the session stated as a fact, because the page also
  *   renders for a signed-out visitor and that is a different sky.
@@ -220,7 +220,27 @@ vi.mock("../src/lib/api", async (importOriginal) => {
   return {
     ...actual,
     ...apiMockFrom(FACTS),
-    fetchGroupWall: async () => [],
+    /* One shared statement, LOCKED — the owner's own words on the room's
+       wall. The star must render exactly where other people read the
+       sentence (no-quiet-corners Phase 8), and the case below pins it. The
+       cloud stands at the GROUP's column, far from every viewport this
+       file's other cases work in, so the whole-sky loops absorb it the way
+       they absorb the four dev-fixture agents. */
+    fetchGroupWall: async (groupId: string) =>
+      groupId === GROUP_ID
+        ? [
+            {
+              signalId: "wall-sig-starred",
+              statement: "The room holds my own words, starred.",
+              confidenceAsWritten: 70,
+              locked: true,
+              ownerProfileId: VIEWER_ID,
+              ownerName: "You",
+              sharedAt: new Date(BASE - DAY).toISOString(),
+              reactions: [],
+            },
+          ]
+        : [],
     /**
      * The write behind "keep the change", and the only one of the three whose
      * result is not visible on screen: a kept memory closes its own panel, and
@@ -1269,5 +1289,22 @@ describe("a verdict leaves a receipt", () => {
       (b) => (b.textContent ?? "").trim() === "put it back",
     );
     expect(undo, "the receipt arrived without its undo").toBeTruthy();
+  });
+});
+
+describe("the star travels with the sentence", () => {
+  /**
+   * goal: no-quiet-corners, Phase 8. A locked statement is the owner's own
+   * words, and the lock used to be invisible exactly where other people
+   * read the sentence — the room's wall. The wall payload now carries
+   * `locked`, the wall candidate carries it into the sky, and the star
+   * renders on the cloud at the room's column.
+   */
+  it("renders the star on a locked statement over the room's wall", async () => {
+    const el = cloud("The room holds my own words");
+    expect(
+      el.querySelector(".jar-star"),
+      "the owner's star must render where the room reads the sentence",
+    ).not.toBeNull();
   });
 });

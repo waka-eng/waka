@@ -244,6 +244,36 @@ Postgres. No new infrastructure, no new dependencies.
 
 ## Log
 
+- **2026-08-24 — Phase 8: three of five debts paid; HOLDS at the
+  founder's motion gate.** Landed: **(1) contrast, measured** —
+  `contrast.test.ts` computes WCAG ratios from `home.css`'s own tokens on
+  every run: ink 17.03:1 on the deep ground / 16.45:1 on the panel, muted
+  5.48:1 / 5.47:1 — both clear AA; faint measures 2.35:1 / 2.42:1 and is
+  the argued exception, in writing in the test's header: faint is
+  de-emphasis, raising it to 4.5 would land it on muted and collapse the
+  three-step ramp the rule exists to protect — so the enforcement is that
+  nothing a person must READ is set in it, and the same suite walks the
+  reading classes to hold that line. Four classes were failing it and are
+  lifted to muted: the receipts, the provenance surround, the grounds
+  band's dim state, the antechamber's candidates. **(2) the star where
+  the sentence is read** — the wall payload now carries `locked`, the
+  wall candidate carries it into the sky, and the owner's star renders on
+  the cloud at the room's column (release stays a self-wall act);
+  pinned in `home-sky` (16/16). **(3) the star's turn** — 0.6s, a settle
+  into place (rotate and scale falling to rest, ease-out), runs once on
+  appearance and never loops, stays home entirely under
+  prefers-reduced-motion; the envelope is pinned in `motion.test.ts`
+  (once, in-band, reduced-motion honored) and the FEEL awaits the
+  founder's eyes. **The founder's review, exactly as ruled** (live, their
+  machine): `pnpm dev:local`, then `pnpm tsx tools/demo/seed.ts` for a
+  world with a star in it, sign in with the printed credentials, edit
+  any pattern ("say it better") and watch the star arrive — the turn is
+  the thing under review. **Still owed, named rather than rushed:** the
+  drawn sky→field root lines and dial-scrubbing the room's history are
+  each a real pass on the canvas engine, and motion done hastily is
+  decoration — they stay debts, listed here, next in this phase.
+  Measured: api 640, web 22 files / 151 tests, all gates clean.
+
 - **2026-08-24 — Track D: PASS.** The demo kit is committed. `tools/demo/`
   holds the three pieces: `seed.ts` — one command against a fresh local
   stack, through the public API only (sign-ups, captures, the live-model
