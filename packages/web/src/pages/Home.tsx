@@ -421,6 +421,94 @@ const SPIN_TURNS = 2;
 /** Let go and it eases back to front-facing, the short way round. */
 const UNWIND_MS = 650;
 /**
+ * THE GATHER BEFORE A REACTION.
+ *
+ * Every moment in this world was a reaction with no wind-up: the thing
+ * happened and the creature was already at full flare on the next frame. That
+ * is the one shape a living thing never makes. Anticipation is the first of
+ * the three terms carrying Luxo Jr. — a lamp with no eyes and no hue — and it
+ * is the cheapest of them here, because it spends time rather than light.
+ *
+ * It is the creature's own wind-up, not a prediction of yours. The memory is
+ * already born and falling; what these numbers stage is the beat between
+ * seeing it and answering, which is why nothing about the keep is delayed to
+ * pay for them.
+ */
+const ANTICIPATE_MS = 130;
+/** How far it compresses at the bottom of the gather. Squash, so positive. */
+const ANTICIPATE_SQ = 0.03;
+/** And how long the body takes to come back up out of it, once released. */
+const ANTICIPATE_EASE = 4.6e-4;
+/**
+ * MOOD — A DISPOSITION, WHERE `flare` IS AN EVENT.
+ *
+ * `flare` decays in 0.7s and carries nothing to the next thing that happens,
+ * so the creature that greets your next act has not been changed by your last
+ * one. Loyall lists CHANGE as a requirement for a believable agent in its own
+ * right, and Anki's emotion engine is the production version: a state
+ * underneath, moving continuously, so the same stimulus twice does not produce
+ * the same response twice. This is that requirement at the smallest scale it
+ * can be had.
+ *
+ * THE LAW THIS ARGUES WITH, SAID PLAINLY. Mood spending LIGHT is not on the
+ * table: it would break invariant 4 outright — two beings at the same aliveness
+ * would stop being the same colour, and temperature would mean two things at
+ * once. So it spends RHYTHM, and that brushes against "light is the only
+ * meaning channel".
+ *
+ * The case for it: that law's real work is preventing a LEGEND — a key you
+ * have to learn before the screen means anything, which is what hue-per-
+ * category always becomes. A creature that blinks slower and moves smaller
+ * after you let something go needs no legend; it is read the way a tired
+ * person is read, without decoding. And rhythm is not a virgin channel —
+ * `bobRate` and `blinkMs` are already identity — so the honest cost is that it
+ * now carries TWO things, not that it starts carrying one.
+ *
+ * The one thing rhythm cannot do is survive reduced motion, where it is silent
+ * by design. There mood simply does not exist rather than falling back to
+ * light, because falling back to light is the version that breaks invariant 4.
+ */
+const MOOD_HALF_LIFE_MS = 90000;
+/** What each moment does to the disposition. `touch` is deliberately absent:
+    being tapped is not an experience. */
+const MOOD_OF: Partial<Record<Moment, number>> = {
+  kept: 0.5,
+  answered: 0.4,
+  shared: 0.3,
+  arrived: 0.1,
+  "let-go": -0.35,
+};
+/** How far mood may bend each rhythm. Small on purpose: this is a disposition
+    read at a glance, not a readout, and a legible one would be a legend. */
+const MOOD_BOB = 1;
+/**
+ * AND THE BREATH NEVER STOPS.
+ *
+ * At full gain a mood of -1 multiplies the bob's amplitude by zero, and
+ * measuring it is the only reason that was caught: 0.0px of travel, a
+ * companion holding perfectly still. The settle already refuses this a few
+ * lines down — "never below a fifth — still breathing, never frozen" —
+ * because a creature that stops moving does not read as low, it reads as
+ * crashed. Low mood is quieter, never absent.
+ */
+const MOOD_BOB_FLOOR = 0.4;
+/**
+ * AND THE RATE, WHICH IS THE ONE READ AT A GLANCE.
+ *
+ * Amplitude alone was not enough and the arithmetic says why: the bob is a
+ * squash of 0.022, so on a 140px body it is ±3px, and a quarter of three
+ * pixels is nothing. Restraint that lands below perception is not restraint,
+ * it is an effect that does not exist.
+ *
+ * SPEED is the channel a person reads instantly — sluggish against lively is
+ * legible in a second, long before an amplitude difference is. It is also the
+ * honest one for a disposition: what changes when someone is flat is not how
+ * far they move, it is how readily.
+ */
+const MOOD_RATE = 0.45;
+const MOOD_BLINK = 0.4;
+const MOOD_GLANCE = 0.45;
+/**
  * HOW LONG THE COMPANION TAKES TO BECOME THE ONE WHOSE WALL THIS IS.
  *
  * Shorter than UNWIND_MS on purpose: the change starts on the arrival beat
@@ -430,6 +518,22 @@ const UNWIND_MS = 650;
  * is looking at you, which is the double-exposure this exists to avoid.
  */
 const FORM_FADE_MS = 320;
+/**
+ * ARRIVING IN A ROOM, WHOSE GROUNDS ARE HERE IS LIT THIS LONG.
+ *
+ * A room pours ONE member's memories — yours, until you move to somebody
+ * else's (see `onThisWall`, and the note above it for why a heap of five
+ * grounds is not evidence for anything). That decision is right and it has a
+ * cost nobody had paid for: standing in a room with four other people looks
+ * exactly like standing on your own wall. Every other ground was already on
+ * screen, in the corner, at the dim end of the one channel this world has —
+ * which is the correct RESTING state for a control and the wrong arrival.
+ *
+ * So travelling into a room lights all of them, and they settle back to the
+ * quiet register on their own. The world moved because you moved to it, and
+ * what the motion explains is that this ground is one of several.
+ */
+const GROUNDS_LIT_MS = 1600;
 /**
  * The turn is a PLANET, not a card: the silhouette never changes, and it is
  * the features that travel across it. An eye sits on the equator at this
@@ -1220,8 +1324,6 @@ function HomeExperience(): JSX.Element {
      standing in it (the dial has no meaning among candidates), and which
      nebulae have been drawn together. */
   const [inSky, setInSky] = useState(false);
-  /* whether the camera is down on the ground, where the memories are */
-  const [inField, setInField] = useState(false);
   /** Which pattern in the sky is being read. Its verdict row belongs to it. */
   const [focusCandId, setFocusCandId] = useState<string | null>(null);
   /** Patterns with a neighbour close enough to join. Pushed from the loop so
@@ -1409,6 +1511,47 @@ function HomeExperience(): JSX.Element {
    * wall by the data you asked for is not.
    */
   const headingRef = useRef<number | null>(null);
+  /**
+   * WHAT A REBUILD OF THE LOOP MUST NOT FORGET.
+   *
+   * `headingRef` above is this idea applied to one field, and the comment on
+   * it explains why it had to exist: the loop is rebuilt when a destination's
+   * data arrives mid-crossing, and it used to resume at column zero. That
+   * fixed WHERE the loop resumed. It did not fix the fact that everything
+   * else about the crossing — the camera, whether a crossing was even running,
+   * and the creature's whole pose — is declared inside the effect and so is
+   * replaced by a fresh object on every rebuild.
+   *
+   * The visible cost, measured off a screen recording: travelling into a room
+   * for the first time after a hard refresh, the companion rides out to its
+   * full 190px lead, holds there while the fetch lands, and then teleports
+   * 288px back to centre in a single frame as the rebuilt state takes over.
+   * The ease that is supposed to bring it home moves 7.4% per frame and
+   * cannot produce that jump; the creature was not eased, it was replaced.
+   *
+   * So the crossing and the creature are snapshotted on teardown and restored
+   * on setup. Three things are deliberately NOT carried:
+   *
+   *   `gesture` — a pointer that was down before a rebuild is not down after
+   *     one. Restoring it would strand the world mid-drag with no pointer.
+   *   `pour` and `view.primed` — these are exactly what the dependency list
+   *     exists to reset. A rebuild happens because there is new data, and new
+   *     memories have to be allowed to arrive. Carrying them would trade this
+   *     bug for a field that never shows what just loaded.
+   *   `view.w/h/layout` — re-measured on setup, and must be: a rebuild can
+   *     straddle a resize.
+   */
+  // @ts-expect-error TEMPORARY probe
+  window.__tick3 = () => setGroupFieldTick((n) => n + 1);
+  const carryRef = useRef<{
+    cam: unknown;
+    trip: unknown;
+    companion: unknown;
+    /** the world has been sized, so a rebuild must not re-stage it */
+    primed: boolean;
+    /** where every memory had drifted to, by id */
+    balls: Map<string, { x: number; y: number }>;
+  } | null>(null);
   /** The camera is over a wall that has no dial: the dial fades, as in the sky. */
   const [dialAway, setDialAway] = useState(false);
   /** Drafts assembled here, in this session. They live nowhere else. */
@@ -1528,8 +1671,19 @@ function HomeExperience(): JSX.Element {
 
   /* ---- rooms (v8): session caches that survive the sim effect's re-runs ---- */
   const auth = useOptionalAuth();
+  /**
+   * WHO IS ASKING — and offline, which invented person is.
+   *
+   * Signed out there is no profile, and every derivation that asks "is this
+   * one mine?" then answered no about all of them: `onThisWall` matches a
+   * room's ground against this id, so all four fixture rooms stood empty. The
+   * fixture names the member it calls "You" (`viewerProfileId`), and it is
+   * only ever written on the offline path — a real session always wins here,
+   * and outside dev there is no fixture to hand one over.
+   */
+  const offlineViewerRef = useRef<string | null>(null);
   const viewerIdRef = useRef<string | null>(null);
-  viewerIdRef.current = auth?.profile?.id ?? null;
+  viewerIdRef.current = auth?.profile?.id ?? offlineViewerRef.current;
   /* the hue map the legend reads — written where the orbs are tinted, so the
      two can never disagree about who is which colour */
   const hueByOwnerRef = useRef<Map<string, number>>(new Map());
@@ -1618,7 +1772,7 @@ function HomeExperience(): JSX.Element {
         const openMs = open ? Date.parse(open.createdAt) || 0 : null;
         groupChromeRef.current.set(
           groupId,
-          deriveGroupChrome(name, top, openMs, evidence, groupCompany(membersRef.current.get(groupId))),
+          deriveGroupChrome(name, top, openMs, evidence, groupCompany(membersRef.current.get(groupId), viewerIdRef.current)),
         );
         cache.set(groupId, { status: "ready", data: { evidence, top } });
         simApiRef.current?.wake();
@@ -1676,6 +1830,8 @@ function HomeExperience(): JSX.Element {
      */
     const goOffline = (layout: OfflineHome) => {
       offlineRef.current = true;
+      /* before anything reads it: the rooms below are built against this id */
+      offlineViewerRef.current = layout.viewerProfileId;
       setOffline(true);
       setNotes(layout.notes);
       setSignals(layout.signals);
@@ -2731,6 +2887,12 @@ function HomeExperience(): JSX.Element {
       /* the dust has been scattered once; it is ambient and never re-placed */
       motesPlaced: false,
     };
+    /* A REBUILD HAS ALREADY BEEN SIZED. `measure()` snaps every memory back to
+       its home while `primed` is false, which is the arrival animation
+       replaying for orbs that never moved. `motesPlaced` is deliberately NOT
+       carried: the mote arrays are rebuilt with the loop, so skipping the
+       scatter would leave the dust stacked at the origin. See `carryRef`. */
+    if (carryRef.current) view.primed = carryRef.current.primed;
     /* ---- the horizontal axis (v8): columns of jars, one room each ----
        Column zero is the personal jar; column c ≥ 1 is groupsRef[c-1]. The
        camera gains cam.x = column × view.w with the same snap discipline as
@@ -2797,10 +2959,36 @@ function HomeExperience(): JSX.Element {
       /** how long this crossing takes; a held drag can stretch it */
       ms: TRAVEL_MS,
     };
+    /* THE CROSSING SURVIVES A REBUILD. Restored here rather than after the
+       whole preamble because `measure()` reads both: it resets `cam.x` to
+       `trip.col * view.w` unless a crossing is running, so a `trip` that has
+       forgotten it was mid-flight is what walks the camera back to the column
+       it started from. See `carryRef`. */
+    if (carryRef.current) {
+      Object.assign(cam, carryRef.current.cam as Partial<typeof cam>);
+      Object.assign(trip, carryRef.current.trip as Partial<typeof trip>);
+      /* A REBUILD CAN COME FROM THE WALLS THEMSELVES CHANGING — `walls` is on
+         the dependency list. A crossing whose start or destination no longer
+         exists is not resumable, and resuming it would aim the camera at a
+         column that is not there, which is worse than the jump this is here to
+         remove. Fall back to where React says you are and stand still; the
+         camera is deliberately left to `measure()`, which sets it from
+         `trip.col` once the viewport has a real width. */
+      const cols = wallsRef.current;
+      const lo = cols[0]?.col ?? 0;
+      const hi = cols[cols.length - 1]?.col ?? 0;
+      const stranded = (c: number) => c < lo || c > hi;
+      if (cols.length === 0 || stranded(trip.col) || (trip.active && stranded(trip.dest))) {
+        trip.col = atWallRef.current.col;
+        trip.active = false;
+        trip.awaitingWake = false;
+        cam.xBack = false;
+        cam.aiming = false;
+      }
+    }
 
     /** Which one-time hints have already been said, so they are said once. */
     const hinted = {
-      inField: false,
       dialAway: false,
     };
     /**
@@ -3084,7 +3272,20 @@ function HomeExperience(): JSX.Element {
       glanceAt: 0,
       glanceUntil: 0,
       riseAt: 0,
+      /* the wind-up: when it began, what it is winding up TO, and how far
+         into the compression the body currently is */
+      antAt: 0,
+      antFlare: 0,
+      ant: 0,
+      /** the slow one: -1 … 1, half-life MOOD_HALF_LIFE_MS, rhythm only */
+      mood: 0,
     };
+    /* AND SO DOES THE CREATURE. Every field above is a number, a boolean or a
+       string — no canvas, no node, nothing bound to the palette this run baked
+       — so the pose carries across whole. See `carryRef`. */
+    if (carryRef.current) {
+      Object.assign(companion, carryRef.current.companion as Partial<typeof companion>);
+    }
 
     /* motes rising off the aura when the companion is genuinely inspired */
     const upX = new Float32Array(10);
@@ -4097,13 +4298,113 @@ function HomeExperience(): JSX.Element {
       return null;
     }
 
+    /**
+     * The frame that was on screen a moment ago, held so a resize can put it
+     * back. ONE scratch surface for the page's whole life: a window being
+     * dragged fires a resize per frame, and allocating a viewport-sized
+     * canvas on each of them is a garbage-collection stall in the middle of
+     * the one interaction that most needs to stay smooth.
+     */
+    let carryC: HTMLCanvasElement | null = null;
+    function carry(w: number, h: number): HTMLCanvasElement | null {
+      if (!carryC) carryC = document.createElement("canvas");
+      if (carryC.width !== w || carryC.height !== h) {
+        carryC.width = w;
+        carryC.height = h;
+      }
+      const c2 = carryC.getContext("2d");
+      if (!c2) return null;
+      /* it is a copy, not a layer: whatever it held from the last resize has
+         to be gone, or a shrink leaves the old edges showing round the new */
+      c2.clearRect(0, 0, w, h);
+      c2.drawImage(canvas!, 0, 0);
+      return carryC;
+    }
+
     function measure() {
       const rect = root!.getBoundingClientRect();
-      view.w = Math.max(rect.width, 1);
-      view.h = Math.max(rect.height, 1);
+      /*
+       * A DEGENERATE RECT IS A LIE, NOT A SIZE.
+       *
+       * `.jar` is `position: fixed; inset: 0`. It is the viewport by
+       * construction and there is no state of the page in which it is one
+       * pixel wide — so a rect that small is a measurement taken while the
+       * subtree is mid-rebuild, and the old `Math.max(rect.width, 1)` wrote it
+       * straight through as a real size. That is the wobble the mutation log
+       * caught: three canvas resizes in two milliseconds on every keep, one of
+       * them to a viewport of nothing.
+       *
+       * The window's own dimensions are the honest answer here and cost no
+       * layout to read, so a rect that cannot be true defers to them rather
+       * than being clamped into a shape the loop will act on.
+       */
+      const trueW = rect.width >= 2 ? rect.width : window.innerWidth;
+      const trueH = rect.height >= 2 ? rect.height : window.innerHeight;
+      view.w = Math.max(trueW, 1);
+      view.h = Math.max(trueH, 1);
       const nextDpr = Math.min(window.devicePixelRatio || 1, 2);
-      canvas!.width = Math.round(view.w * nextDpr);
-      canvas!.height = Math.round(view.h * nextDpr);
+      /*
+       * ONLY WHEN THE SIZE ACTUALLY CHANGED.
+       *
+       * Assigning `canvas.width` or `canvas.height` CLEARS the canvas to
+       * transparent. The spec says so even when the value assigned is the one
+       * already there, which is the part that bit: `measure()` runs on every
+       * setup of the frame loop, and the loop is rebuilt whenever
+       * `inspirations` changes — which is what saving a memory does. So every
+       * keep threw away a full backing store, allocated an identical one, and
+       * left a window in which the world is blank until the next frame draws.
+       *
+       * WHETHER THAT WINDOW IS THE BLINK REPORTED AFTER A SAVE IS NOT
+       * ESTABLISHED. Recording the composited output either side of a forced
+       * rebuild showed the same brightness dip with this guard and without it,
+       * so it is committed as what it provably is — work that should not
+       * happen, and a blank frame that should not be possible — and not as a
+       * fix for that symptom.
+       *
+       * `draw` sets its own transform every frame (`ctx.setTransform` at the
+       * top of the pass), so nothing here relies on the state reset that
+       * resizing also performs. A real resize still clears, which is correct
+       * and unavoidable: the backing store genuinely changed.
+       */
+      const cw = Math.round(view.w * nextDpr);
+      const ch = Math.round(view.h * nextDpr);
+      /*
+       * AND WHEN IT DID CHANGE, CARRY THE PICTURE ACROSS.
+       *
+       * A recorded mutation log of a real keep settled what the paragraph
+       * above could not. The canvas is resized THREE times inside two
+       * milliseconds, six hundred milliseconds after the field closes —
+       * exactly when the server's row arrives and rebuilds the loop. The
+       * guard is working: three writes mean three genuinely different sizes,
+       * a measurement wobbling while the subtree is mid-rebuild. So the
+       * window is real, it is entered on every keep, and it is what the blink
+       * is.
+       *
+       * Chasing the wobble is the wrong repair. A resize is allowed to change
+       * the backing store — that is what it is for — and the world should
+       * survive one either way, including the honest ones nobody has
+       * complained about: dragging the window edge blanks the field today for
+       * the same reason. So the old surface is blitted into the new one before
+       * anything else can composite, and the frame on screen stays on screen
+       * until a real frame replaces it. Whatever makes the size move, there is
+       * no longer a blank to see.
+       *
+       * Stretched rather than re-laid out, on purpose: for the one frame this
+       * lives, a picture at slightly the wrong scale is invisible and a black
+       * screen is not. `draw` writes its own transform at the top of every
+       * pass, so the identity transform this blit needs cannot leak into it.
+       */
+      if (canvas!.width !== cw || canvas!.height !== ch) {
+        const pw = canvas!.width;
+        const ph = canvas!.height;
+        const keep = pw > 0 && ph > 0 ? carry(pw, ph) : null;
+        canvas!.width = cw;
+        canvas!.height = ch;
+        if (keep) {
+          ctx!.setTransform(1, 0, 0, 1, 0, 0);
+          ctx!.drawImage(keep, 0, 0, pw, ph, 0, 0, cw, ch);
+        }
+      }
       canvas!.style.width = `${view.w}px`;
       canvas!.style.height = `${view.h}px`;
       /* DPR changed (zoom / monitor move): halo sprites are rastered in
@@ -4681,9 +4982,32 @@ function HomeExperience(): JSX.Element {
       b.active = true;
       b.gone = 0;
       b.arrive = view.reduced ? 1 : 0;
+      /*
+       * IT ENTERS FROM JUST ABOVE WHERE IT IS ACTUALLY GOING.
+       *
+       * `entryH` is spent by the draw as `rise` against the EFFECTIVE home —
+       * the peek-lifted one, `lerp(homeY, peekY, lift)` — while this measured
+       * it from the field home that the lift is carrying the orb away from.
+       * For an orb in the peek row those are far apart: the row sits up under
+       * the poster and the field home is near the bottom of the world. So the
+       * entrance began a couple of hundred pixels above HEADQUARTERS instead
+       * of above the row, and a memory arrived out of the sky rather than out
+       * of the ground.
+       *
+       * `born` has always measured against the lifted home — that is how a
+       * newborn comes out of the sentence instead of off the top of the
+       * screen — and this is the same sum, for the orbs that arrive by pour.
+       *
+       * It was invisible while a rebuild re-poured the WHOLE field: every orb
+       * did it at once and it read as the world re-staging, which was the
+       * louder bug. With only genuinely new memories pouring, one orb does it
+       * alone, and then it is the only thing moving on the screen.
+       */
+      const enterLift = peekLift();
+      const fromY = b.peek ? lerp(b.homeY, b.peekY, enterLift) : b.homeY;
       b.entryH = 90 + b.frac * 110;
-      b.x = b.homeX;
-      b.y = b.homeY - (view.reduced ? 0 : b.entryH);
+      b.x = b.peek ? lerp(b.homeX, b.peekX, enterLift) : b.homeX;
+      b.y = fromY - (view.reduced ? 0 : b.entryH);
     }
 
     function reconcileScrub() {
@@ -4901,7 +5225,13 @@ function HomeExperience(): JSX.Element {
            character's own response to being moved and not decoration on top
            of it. (Its LIGHT still obeys the rule that juice lives in the
            bloom; this is the body, and a body may act.) */
-        const sq = view.reduced ? 0 : Math.sin(companion.bobPh + 1.5) * 0.022 - companion.pitch * PITCH_STRETCH;
+        const sq = view.reduced
+          ? 0
+          : Math.sin(companion.bobPh + 1.5) *
+              0.022 *
+              Math.max(MOOD_BOB_FLOOR, 1 + companion.mood * MOOD_BOB) -
+            companion.pitch * PITCH_STRETCH +
+            companion.ant;
         const bw = companion.size * (1 + sq);
         const bh = companion.size * (1 - sq);
 
@@ -5025,10 +5355,20 @@ function HomeExperience(): JSX.Element {
                grid by up to half a cell at the extremes of the breath. */
             const cx = bw / MACHINE_CELLS;
             const cy = bh / MACHINE_CELLS;
-            const wCells = Math.max(1, Math.round((nr * 2) / cx));
-            const hCells = Math.max(1, Math.round((nr * 2) / cy));
+            /* FLOOR, NOT ROUND, AND PULLED IN BY A CELL. A square of side d
+               carries 27% more area than a circle of diameter d, so matching
+               the arc's diameter made the nubs HEAVIER than the ones they
+               replaced — two blocks sitting beside the creature rather than
+               two soft nubs belonging to it. Flooring gives back the cell that
+               rounding up was adding, and the inset moves each one a cell
+               toward the middle so the body overlaps it instead of meeting it
+               edge to edge. Both are size, not light: a nub still swells with
+               the glow exactly as it did. */
+            const wCells = Math.max(1, Math.floor((nr * 2) / cx));
+            const hCells = Math.max(1, Math.floor((nr * 2) / cy));
+            const inset = nx === 0 ? 0 : Math.sign(nx) * cx;
             ctx!.fillRect(
-              Math.round((nx - (wCells * cx) / 2) / cx) * cx,
+              Math.round((nx - inset - (wCells * cx) / 2) / cx) * cx,
               Math.round((ny - (hCells * cy) / 2) / cy) * cy,
               wCells * cx,
               hCells * cy,
@@ -5438,7 +5778,12 @@ function HomeExperience(): JSX.Element {
         dt *
         wornBeing().bobRate *
         (1 + 0.6 * clamp01(Math.abs(companion.off) / DRAG_LEAD_PX)) *
-        (1 + 0.45 * companion.pitch);
+        (1 + 0.45 * companion.pitch) *
+        /* the disposition, on the term it is most legible on. Multiplied with
+           the being's own rate rather than replacing it, so a slow creature in
+           a good mood is still slower than a quick one in a bad one — identity
+           underneath, disposition on top, the same order as the blink. */
+        (1 + companion.mood * MOOD_RATE);
       /* arrived before the data: the wall holds still until it can wake whole */
       if (trip.awaitingWake && !trip.active) tryWakeWall();
 
@@ -5577,9 +5922,38 @@ function HomeExperience(): JSX.Element {
       /* the companion. Its glow eases toward the real signal; its flare
          decays; it blinks; and when it is genuinely inspired, motes rise. */
       companion.inspNow = view.reduced ? companion.insp : lerp(companion.inspNow, companion.insp, 1 - Math.pow(0.02, dt));
+      /* THE GATHER, AND THE RELEASE AT THE END OF IT. The compression eases IN
+         (u·u) so the body sinks rather than snapping down, and the flare it is
+         holding fires at the bottom — the fast half of a slow-in, fast-out.
+         The body then comes back up on its own clock, under the light, which
+         is what makes the release read as a push rather than a cut. */
+      if (companion.antAt > 0) {
+        const u = clamp01((now - companion.antAt) / ANTICIPATE_MS);
+        companion.ant = u * u * ANTICIPATE_SQ;
+        if (u >= 1) {
+          companion.flare = Math.max(companion.flare, companion.antFlare);
+          companion.antAt = 0;
+          companion.antFlare = 0;
+        }
+        easing = true;
+      } else if (companion.ant > 0.0005) {
+        companion.ant = lerp(companion.ant, 0, kd(ANTICIPATE_EASE, dt));
+        easing = true;
+      } else if (companion.ant !== 0) {
+        companion.ant = 0;
+      }
       if (companion.flare > 0) {
         companion.flare = Math.max(0, companion.flare - dt / 0.7);
         easing = true;
+      }
+      /* THE DISPOSITION FALLS BACK TOWARD LEVEL. A half-life, not a linear
+         decay: what a mood does is fade, and the last of it should take longer
+         than the first. It is never a reason to keep the world awake — a
+         creature settling is exactly what an idle world looks like — so this
+         does not set `easing`. */
+      if (companion.mood !== 0) {
+        companion.mood *= Math.pow(0.5, (dt * 1000) / MOOD_HALF_LIFE_MS);
+        if (Math.abs(companion.mood) < 0.002) companion.mood = 0;
       }
       /* Something was captured today. That is a STATE, and states render —
          so it is a steady offset under the companion's light, not a twitch.
@@ -5600,7 +5974,11 @@ function HomeExperience(): JSX.Element {
            aliveness is its own, not a readout of yours. */
         if (companion.idleAt === 0) companion.idleAt = now + 22000 + Math.random() * 14000;
         if (now >= companion.idleAt) {
-          companion.idleAt = now + 30000 + Math.random() * 30000;
+          /* and it looks around more readily when it is up, less when it is
+             down — the willingness to be interested, which is the thing a
+             mood most visibly changes */
+          companion.idleAt =
+            now + (30000 + Math.random() * 30000) * (1 - companion.mood * MOOD_GLANCE);
           const subject = idleSubject();
           if (subject) {
             /* it looks at a MEMORY of yours, chosen for being alive and near.
@@ -5673,7 +6051,10 @@ function HomeExperience(): JSX.Element {
              and on a machine's wall the jitter is quantized out of it, so the
              blink arrives on a beat rather than whenever. A metronome is what
              a clock looks like from the outside. */
-          const base = wornBeing().blinkMs;
+          /* LOW MOOD BLINKS SLOWER. The being's own interval is still the
+             thing being bent — identity first, disposition on top of it — so
+             two creatures in the same mood still blink at their own rates. */
+          const base = wornBeing().blinkMs * (1 - companion.mood * MOOD_BLINK);
           const jitter = 0.8 + Math.random() * 0.4;
           companion.blinkAt = now + base * lerp(jitter, 1, clamp01(mech));
           companion.blink = 1;
@@ -5742,16 +6123,16 @@ function HomeExperience(): JSX.Element {
          sentence, neither of which has a history to scrub. So it comes up
          with the field and goes away with it. */
       const inField = cam.y > view.layout.fieldTop * 0.5;
-      /* THE LEGEND BELONGS TO THE GROUND IT EXPLAINS.
-         It is a key to the orbs, so it exists where the orbs are. Standing at
-         headquarters reading one sentence, or up in the sky among signals,
-         a list of whose-colour-is-whose answers a question nobody is asking —
-         it was just chrome in the corner. It comes up with the field and goes
-         away with it, exactly as the timeline does. */
-      if (inField !== hinted.inField) {
-        hinted.inField = inField;
-        setInField(inField);
-      }
+      /* THE LEGEND BELONGED TO THE GROUND IT EXPLAINED — AND IT IS NOT A
+         LEGEND ANY MORE.
+         It was pushed to React from here so the corner rows could come up with
+         the field and go away with it, on the reasoning that a key to the orbs
+         answers nobody at headquarters. That was true of a key. It is a CHOICE
+         now — the rows moved you between the grounds in a room the moment they
+         stopped decoding hues — and a choice about the wall you are standing
+         on is not a fact about the ground you are hovering over. It is mounted
+         at every height below the sky instead, so nothing needs pushing here.
+         (`inField` still decides whether the DIAL is away, just below.) */
       const nowAway =
         !inField || !hasDial(wallAt(Math.round(cam.x / Math.max(view.w, 1))).kind);
       if (nowAway !== hinted.dialAway) {
@@ -6636,14 +7017,84 @@ function HomeExperience(): JSX.Element {
     measure();
     /* `measure` is the first moment `vw` is real, so the horizontal camera can
        only be placed here — before it, `col * vw` is a column times one pixel. */
-    cam.x = trip.col * view.w;
-    cam.xTarget = cam.x;
+    /* NOT UNDER A CROSSING THAT IS STILL RUNNING. This is unconditional on a
+       first open, and has to be — before `measure()` there is no real viewport
+       and `col * vw` is a column times one pixel. But a rebuild that resumed a
+       crossing already has a camera partway across, and re-placing it here
+       restarts the slide from the column it set off from. `measure()` sets
+       `xTarget` from `trip.dest` on its own while a crossing is live. */
+    if (!trip.active) {
+      cam.x = trip.col * view.w;
+      cam.xTarget = cam.x;
+    }
     /* Resumed mid-journey: nobody ran the arrival, so run it now — the wall
        needs its ground solved, poured and woken exactly as a glide would. */
     if (resumedAt !== null) arriveColumn();
+    /*
+     * A ROOM THAT HAS NOT WOKEN YET HAS TO KEEP TRYING.
+     *
+     * `ready` gates the ENTIRE headquarters block — eyebrow, poster, forming
+     * line — on `wokenGroups.has(id)`, and the only thing that ever adds to
+     * that set is `tryWakeWall`. It is reached from exactly two places:
+     * `arriveColumn`, and the tick while `trip.awaitingWake` is true.
+     *
+     * Both are lost in the same instant. Arriving in a room whose field is
+     * still in flight sets `awaitingWake` and returns; the fetch then resolves
+     * and calls `setGroupFieldTick`, which rebuilds this effect — so `trip` is
+     * replaced by a fresh one with `awaitingWake` false, and `headingRef` was
+     * already cleared by the arrival, so the `resumedAt` branch above does not
+     * run either. Nothing asks again. The room stays unwoken and its
+     * headquarters renders NOTHING: no name, no sentence, not even the
+     * "Forming — nothing read together yet" that `deriveGroupChrome` prepared
+     * for exactly this case. It stays blank until you travel away and back.
+     *
+     * The rebuild that loses the flag is the same event that makes the answer
+     * available, so setting it on setup is not a retry loop — it is one
+     * question asked at the only moment it can now be answered. `tryWakeWall`
+     * clears the flag itself, and `groupVisitedRef` keeps the wake to once.
+     */
+    else if (curWall().kind === "group") trip.awaitingWake = true;
     measure();
     if (view.reduced) settleInstantly();
-    else primePour();
+    else if (carryRef.current) {
+      /*
+       * A REBUILD IS NOT AN ARRIVAL.
+       *
+       * `primePour()` with no argument stages the WHOLE archive, and on a
+       * rebuild that means every memory you were already looking at falls in
+       * from above again — the pour is how the field explains that something
+       * has arrived, and nothing has. But the rebuild happened BECAUSE there
+       * is new data, and those memories genuinely are arriving, so the answer
+       * is not to skip the pour: it is to pour only what this run did not
+       * already have.
+       *
+       * Identity is the ball's id. The objects are rebuilt from scratch every
+       * run, so the id is the only thing that survives, and it is what says
+       * whether a memory is new to the FIELD rather than new to this array.
+       */
+      const carried = carryRef.current.balls;
+      const fresh: Ball[] = [];
+      for (const b of list) {
+        const was = carried.get(b.id);
+        if (!was) {
+          fresh.push(b);
+          continue;
+        }
+        b.x = was.x;
+        b.y = was.y;
+        b.arrive = 1;
+        b.spawnAt = -1;
+        /* recomputed, never carried: `ground` is effect-local and resets, so a
+           carried `active` could disagree with whose ground is being stood in */
+        b.active = b.capturedMs <= TRef.current && onThisWall(b);
+      }
+      if (fresh.length > 0) primePour(fresh);
+      else {
+        pour.active = false;
+        pour.done = true;
+      }
+      computeInspiration();
+    } else primePour();
 
     simApiRef.current = {
       /**
@@ -6697,12 +7148,36 @@ function HomeExperience(): JSX.Element {
        * long it holds. Nothing new is drawn; what differs is the gesture.
        */
       acknowledge: (moment: Moment = "touch") => {
+        /*
+         * WHAT THIS DID TO THE CREATURE, BEFORE WHAT IT MADE IT DO.
+         *
+         * Set here rather than inside the arms below, so a moment added later
+         * cannot forget to say what it means — the same reason `attachEvidence`
+         * holds the lock check at the write. Clamped to ±1 so a run of keeps
+         * cannot wind the disposition somewhere it will not come back from,
+         * and skipped entirely under reduced motion, where every rhythm it
+         * bends is silent and the honest value is none.
+         */
+        if (!view.reduced) {
+          const felt = MOOD_OF[moment];
+          if (felt !== undefined) {
+            companion.mood = clamp(companion.mood + felt, -1, 1);
+          }
+        }
         switch (moment) {
           case "kept":
             /* SOMETHING NEW EXISTS. The biggest flare in the world, and the
                eyes go DOWN to the ground where it landed — the creature looks
-               at what was just made rather than at you making it. */
-            companion.flare = Math.max(companion.flare, 0.95);
+               at what was just made rather than at you making it.
+               IT GATHERS FIRST. The eyes travel during the wind-up, so the
+               look is already committed when the light arrives — the body
+               sinks toward the thing, then answers it. Under reduced motion
+               the gather is silent (it is rhythm) and the flare is immediate,
+               which is the same rule the bob and the lean already follow. */
+            if (!view.reduced) {
+              companion.antAt = performance.now();
+              companion.antFlare = 0.95;
+            } else companion.flare = Math.max(companion.flare, 0.95);
             companion.eyeTX = 0;
             companion.eyeTY = 1.5;
             companion.attendUntil = performance.now() + 1500;
@@ -6711,8 +7186,14 @@ function HomeExperience(): JSX.Element {
           case "answered":
             /* YOU TOLD IT SOMETHING TRUE ABOUT YOURSELF. It looks UP at the
                sky it read you from, and holds longer than anything else here:
-               this is the slow one, because being understood is not a ping. */
-            companion.flare = Math.max(companion.flare, 0.72);
+               this is the slow one, because being understood is not a ping.
+               It gathers too — the only other moment loud enough to deserve a
+               wind-up. The rest stay immediate on purpose: a creature that
+               winds up for a tap is a creature that is never simply present. */
+            if (!view.reduced) {
+              companion.antAt = performance.now();
+              companion.antFlare = 0.72;
+            } else companion.flare = Math.max(companion.flare, 0.72);
             companion.eyeTX = 0;
             companion.eyeTY = -1.6;
             companion.attendUntil = performance.now() + 2800;
@@ -6822,9 +7303,29 @@ function HomeExperience(): JSX.Element {
         if (left < M || left + w > view.w - M) {
           return { left: Math.round((view.w - w) / 2), top: null, bottom: Math.round(view.h - (view.h - M)) };
         }
-        /* vertically it meets the companion at the shoulder and reads
-           downward, clamped so a long memory never leaves the frame */
-        const top = clamp(cy - companion.size * 0.34, 56, Math.max(56, view.h * 0.52));
+        /*
+         * AND WHEN THE COMPANION IS NOT IN THE FRAME, IT MEETS THE MEMORY.
+         *
+         * "Beside the companion" is the right rule only while the companion
+         * can be seen. Down in the field it cannot: `cy` is far above the
+         * viewport, the clamp pins the card to 56px, and it opens hard against
+         * the top edge — nowhere near the orb, and nowhere near the creature
+         * either, which is the one thing this placement exists to avoid.
+         *
+         * So the anchor falls back to the orb itself. The gesture the block
+         * above describes — the orb, the companion turned toward it, then what
+         * it found — is still what happens whenever all three are on screen;
+         * this only decides where to read from when the middle term is gone.
+         *
+         * The ceiling is solved from the card's own declared height rather
+         * than a flat 52% of the viewport, or a memory beside a low orb gets
+         * pulled back up to the middle for no reason a reader can see.
+         */
+        const inFrame = cy > 80 && cy < view.h - 80;
+        const anchorY = inFrame ? cy : b ? b.y - cam.y : view.h * 0.5;
+        const h = Math.min(view.h * 0.62, 560);
+        const maxTop = Math.max(56, view.h - h - M);
+        const top = clamp(anchorY - companion.size * 0.34, 56, maxTop);
         return { left: Math.round(left), top: Math.round(top), bottom: null };
       },
       toTop: () => {
@@ -7263,6 +7764,40 @@ function HomeExperience(): JSX.Element {
       window.removeEventListener("keydown", onKey);
       document.removeEventListener("visibilitychange", onVis);
       mq.removeEventListener("change", onMq);
+      /* HAND THE WORLD TO WHOEVER REBUILDS THIS LOOP. Copies, not the live
+         objects: the next run mutates what it is given from its first frame,
+         and a teardown must not be able to reach into it. See `carryRef`. */
+      carryRef.current = {
+        cam: { ...cam },
+        trip: { ...trip },
+        companion: { ...companion },
+        primed: view.primed,
+        /*
+         * A MEMORY IS CARRIED UNDER BOTH OF ITS NAMES.
+         *
+         * A keep exists twice before it settles: the local seed born at the
+         * mouth, `kept-…`, and the row the server hands back with an id of its
+         * own. The pour builder drops the seed the moment `inspirations`
+         * contains either name (see `kept` above), so on the rebuild that
+         * arrival causes, the local ball LEAVES the list and the server ball
+         * ENTERS it — and keyed only by the local id, the carry has nothing to
+         * say about the newcomer. It reads as a memory that has never been
+         * seen, so it pours: falling in from above a second after you watched
+         * the same words fall out of the sentence.
+         *
+         * Filing each position under `sigId` as well is what lets the second
+         * name find the first one's place. It is the same memory; it should
+         * arrive once.
+         */
+        balls: new Map(
+          list.flatMap((b) => {
+            const at = { x: b.x, y: b.y };
+            const under: [string, { x: number; y: number }][] = [[b.id, at]];
+            if (b.sigId && b.sigId !== b.id) under.push([b.sigId, at]);
+            return under;
+          }),
+        ),
+      };
       simApiRef.current = null;
       ballsRef.current = null;
       /* room orbs belong to this run of the loop; the DATA cache stays */
@@ -7654,6 +8189,26 @@ function HomeExperience(): JSX.Element {
     setStanding(ownerProfileId);
     simApiRef.current?.standIn(ownerProfileId);
   }, []);
+  /**
+   * Whether the grounds have just been arrived at. True for GROUNDS_LIT_MS
+   * after travelling onto a shared wall, and the class it drives is removed
+   * rather than animated out: the rows carry an opacity transition already, so
+   * dropping the class IS the settle, on the same curve everything else here
+   * uses.
+   */
+  const [groundsLit, setGroundsLit] = useState(false);
+  useEffect(() => {
+    if (grounds.length === 0) {
+      setGroundsLit(false);
+      return;
+    }
+    setGroundsLit(true);
+    const id = window.setTimeout(() => setGroundsLit(false), GROUNDS_LIT_MS);
+    return () => window.clearTimeout(id);
+    /* `wallKey` and not `grounds`: the identity of that array changes whenever
+       a room's field is refetched, and re-lighting the corner because a
+       background request landed is the world moving on its own. */
+  }, [wallKey, grounds.length]);
   /**
    * WHAT THE POSTER RESTS ON — THE SAME QUESTION, ONE LAYER UP.
    *
@@ -10403,6 +10958,27 @@ function HomeExperience(): JSX.Element {
                 onChange={(e) => editing.retype(e.target.value)}
               />
               <p className="jar-neb-ask">
+                {/* THE PICTURE IS PART OF EDITING, not a sibling of it.
+                    It sat on the housekeeping row beside `edit`, which read as
+                    a fifth unrelated act; changing what a memory IS — its
+                    words and what it carries — is one job. The server reads
+                    the picture at capture time, so it feeds the patterns too,
+                    which is the other reason it belongs with the words. */}
+                <label className="jar-attach">
+                  {attaching ? "keeping the picture…" : "attach a picture"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={attaching}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      const id = panelBall?.sigId ?? panelId;
+                      if (f && id) void attachTo(id, f);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+                <span aria-hidden="true"> · </span>
                 <button type="button" onClick={editing.keep} disabled={editing.open.saving}>
                   {editing.open.saving ? "keeping…" : "keep the change"}
                 </button>
@@ -10455,27 +11031,8 @@ function HomeExperience(): JSX.Element {
                   )
                 }
               >
-                change the words
+                edit
               </button>
-              <span aria-hidden="true"> · </span>
-              {/* THE PICTURE GOES INSIDE THE GLASS. A memory that carries an
-                  image is drawn with it, which is the thing this layout was
-                  first sketched around — and the server reads the picture at
-                  capture time, so it feeds the signals too. */}
-              <label className="jar-attach">
-                {attaching ? "keeping the picture…" : "add a picture"}
-                <input
-                  type="file"
-                  accept="image/*"
-                  disabled={attaching}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    const id = panelBall?.sigId ?? panelId;
-                    if (f && id) void attachTo(id, f);
-                    e.target.value = "";
-                  }}
-                />
-              </label>
               <span aria-hidden="true"> · </span>
               {/* WHO ELSE MAY SEE THIS.
                   The one verb the data model gained and the layout could not
@@ -10489,13 +11046,26 @@ function HomeExperience(): JSX.Element {
                   is no copy anywhere else, so this is genuinely reversible,
                   which is why it needs no confirmation while forgetting
                   does. */}
-              <button type="button" onClick={togglePublic} disabled={publishing}>
-                {publishing
-                  ? "…"
-                  : panelIsPublic
-                    ? "in your rooms · take it back"
-                    : "kept to yourself · put it in your rooms"}
-              </button>
+              {/* WHERE IT IS, THEN WHAT YOU CAN DO ABOUT IT.
+                  This was one button whose label was the state AND the act
+                  glued together — "kept to yourself · put it in your rooms" —
+                  so the whole phrase looked pressable and nothing said which
+                  half would happen. The state is plain text now and only the
+                  verb is a button, which is the same shape every other line
+                  in this panel already has. */}
+              {publishing ? (
+                "…"
+              ) : (
+                <>
+                  <span className="jar-panel-state">
+                    {panelIsPublic ? "in your rooms" : "only you"}
+                  </span>
+                  <span aria-hidden="true"> · </span>
+                  <button type="button" onClick={togglePublic}>
+                    {panelIsPublic ? "keep it to yourself" : "put it in your rooms"}
+                  </button>
+                </>
+              )}
               <span aria-hidden="true"> · </span>
               {/* AND ONLY THEN MAY IT GO. Forgetting sits at the end of the
                   same line as the other two housekeeping acts rather than in
@@ -10505,10 +11075,19 @@ function HomeExperience(): JSX.Element {
                   destructive option is never sitting next to its own
                   confirmation. */}
               {forget.step === "going" ? (
-                "letting go…"
+                "deleting…"
               ) : forget.id === panelId ? (
                 <>
-                  <button type="button" onClick={forgetIt}>forget it</button>
+                  {/* WHAT A DELETE CANNOT TAKE BACK.
+                      A memory is evidence: signals were read out of it and
+                      they do not go with it. Saying so at the moment of asking
+                      is the difference between a warning and a surprise, and
+                      it is the honest shape of the layers — layer 1 is yours
+                      to remove, layer 2 is what was already learned. */}
+                  <span className="jar-panel-warn">
+                    Patterns already read from this stay.
+                  </span>{" "}
+                  <button type="button" onClick={forgetIt}>delete it</button>
                   <span aria-hidden="true"> · </span>
                   <button type="button" onClick={() => setForget({ id: null, step: "rest" })}>
                     keep it
@@ -10516,7 +11095,7 @@ function HomeExperience(): JSX.Element {
                 </>
               ) : (
                 <button type="button" onClick={() => setForget({ id: panelId, step: "asking" })}>
-                  forget this
+                  delete
                 </button>
               )}
             </p>
@@ -10745,9 +11324,16 @@ function HomeExperience(): JSX.Element {
         ) : null}
       </div>
 
-      {grounds.length > 0 && inField && phase === "ready" ? (
+      {/* AT EVERY HEIGHT, NOT JUST DOWN IN THE FIELD.
+          It was gated on `inField`, so it was not even mounted at the height
+          you ARRIVE at — the one moment a person needs telling that this
+          ground is one of several. It is a fact about the wall you are
+          standing on, so like the offline line it holds still while you
+          descend. Only the sky is exempt: up there you are reading patterns,
+          and whose ground is under you is not the question. */}
+      {grounds.length > 0 && !inSky && phase === "ready" ? (
         <div
-          className="jar-ground"
+          className={groundsLit ? "jar-ground jar-ground--lit" : "jar-ground"}
           data-jar-chrome="1"
           role="radiogroup"
           aria-label="Whose inspirations are on the ground"
