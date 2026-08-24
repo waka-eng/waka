@@ -970,6 +970,26 @@ export interface FieldAudit {
     aliveMax: number;
     arriveMin: number;
   };
+  /**
+   * WHETHER THE SKY IS LEANING DOWN, AND HOW FAR EACH STATEMENT CAME.
+   *
+   * Here for the same reason `provenanceCount` is: this is a promise nothing
+   * else can see fail. The elected statements ease toward the top edge from
+   * off-screen homes, so a peek that is elected but never applied, or applied
+   * to a part of the cloud sprite that has no light left in it, looks
+   * IDENTICAL to a peek that was never built — an empty top edge either way.
+   * That is exactly how the first attempt at it spent a day looking broken
+   * while working: `peekY` was correct and the clouds were reaching it, and
+   * the band it put them in was invisible.
+   *
+   * `lean` is the camera's own scalar, 1 at headquarters and 0 up in the sky.
+   * A statement with `peekY === homeY` was not elected and never moves.
+   */
+  sky: {
+    lean: number;
+    minCam: number;
+    nebs: Array<{ y: number; homeY: number; peekY: number; r: number }>;
+  };
 }
 
 export default function HomePage(): JSX.Element {
@@ -2450,6 +2470,7 @@ function HomeExperience(): JSX.Element {
        the layout without a pointer in the way. Bisecting "the button did not
        work" from "the command did not work" is otherwise guesswork. */
     w.wakaSim = () => simApiRef.current;
+
     return () => {
       delete w.wakaField;
       delete w.wakaSim;
@@ -3217,6 +3238,24 @@ function HomeExperience(): JSX.Element {
      */
     function peekLift(): number {
       return clamp01(1 - cam.y / Math.max(view.layout.maxCam, 1));
+    }
+
+    /**
+     * THE SAME RULE, ACROSS THE SEAM: how far the SKY has leaned down into
+     * headquarters. One where you stand, nothing once you are up in it.
+     *
+     * `peekLift` is 1 at headquarters and 0 down in the field; this is 1 at
+     * headquarters and 0 up in the sky. Together they are one sentence — the
+     * section you are NOT in leans toward you — so both edges of the screen
+     * say there is somewhere to go. It exists because a person told us they
+     * had no idea the world could be moved through: the ground had always
+     * said so and the sky never had.
+     *
+     * Camera, never a timer. Standing in the field it stays 1 and costs
+     * nothing, because the sky is a whole viewport away and culled.
+     */
+    function skyPeek(): number {
+      return clamp01(1 - cam.y / Math.min(view.layout.minCam, -1));
     }
 
     /**
@@ -4242,7 +4281,7 @@ function HomeExperience(): JSX.Element {
      */
     function step(dt: number, now: number) {
       const t = now / 1000;
-      stepSky(sky, view, stir, skyDeps, dt, now, t);
+      stepSky(sky, view, stir, skyDeps, dt, now, t, skyPeek());
 
       /* the arrival the founder likes, kept: oldest first, 60ms apart, each
          orb entering from above its home */
@@ -4909,15 +4948,37 @@ function HomeExperience(): JSX.Element {
          frame: the canvas carries the light, the words stay crisp. */
       const els = measured.nebEls.current;
       if (els.size > 0) {
+        /**
+         * A LEANING STATEMENT COMES DOWN AS LIGHT, NOT AS WORDS.
+         *
+         * The clouds elected to wait at the top edge are half off the screen
+         * by construction — that is the whole point of them. Their sentences
+         * are DOM, centred on the cloud, so at full lean the reader got the
+         * bottom half of a line of body text sliced by the viewport and
+         * sitting under the chrome. That is overflow, not an invitation.
+         *
+         * So the words fade out as the cloud leans down and resolve as you
+         * climb to meet it. Light is the only thing that crosses the seam,
+         * which is the law this world already runs on; the reading is what
+         * going up there is FOR.
+         */
+        const lean = skyPeek();
         for (const n of sky.nebs) {
           const el = els.get(n.id);
           if (!el) continue;
+          /* zero for every statement that was not elected — its `peekY` IS
+             its `homeY`, so it never left home and has nothing to fade */
+          const leaning = n.peekY === n.homeY ? 0 : lean;
           /* the subject grows on the same curve and by the same amount its
              body and its orbit do — the candidate is one thing */
           const grow = 1 + FOCUS_POP * n.focus;
           el.style.transform = `translate3d(${(n.x - cam.x).toFixed(1)}px, ${(n.y - cam.y).toFixed(1)}px, 0) translate(-50%, -50%) scale(${grow.toFixed(3)})`;
           const op =
-            (1 - n.gone) * (n.condense > 0.5 ? 1 : 0) * n.dimS * lerp(1, FOCUS_DIM, n.dimN);
+            (1 - n.gone) *
+            (n.condense > 0.5 ? 1 : 0) *
+            n.dimS *
+            lerp(1, FOCUS_DIM, n.dimN) *
+            (1 - leaning);
           el.style.opacity = `${op}`;
           /* AND AN INVISIBLE SENTENCE IS STILL A TARGET. `.jar-neb` carries
              `pointer-events: auto` and starts at opacity zero until the loop
@@ -6803,6 +6864,18 @@ function HomeExperience(): JSX.Element {
               arriveMin: Number(arriveMin.toFixed(2)),
             };
           })(),
+          /* the same question asked upward: is the sky leaning into
+             headquarters, and did each elected statement actually get there */
+          sky: {
+            lean: Number(skyPeek().toFixed(3)),
+            minCam: Math.round(view.layout.minCam),
+            nebs: sky.nebs.map((n) => ({
+              y: Math.round(n.y),
+              homeY: Math.round(n.homeY),
+              peekY: Math.round(n.peekY),
+              r: Math.round(n.r),
+            })),
+          },
         };
       },
     };
@@ -9054,11 +9127,15 @@ function HomeExperience(): JSX.Element {
               (`Ball.lens`) was never written from it, so it filtered nothing.
               The field field and the derive side survive for the rebuild. */}
 
-          {/* The edge affordances: a neighbour's name waiting at the side it
-              lives past. They live in headquarters' own chrome, so they scroll
-              away with it — which is also how the field section ends up with
-              none, exactly as it should, since there is nothing different to
-              travel to down there. */}
+          {/* THE WAYS OUT: a neighbour's name waiting at the side it lives
+              past. They live in headquarters' own chrome, so they scroll away
+              with it — which is also how the field section ends up with none,
+              exactly as it should, since there is nothing different to travel
+              to down there.
+
+              `.jar-way`, not `.jar-edge`. These and the create rails above
+              shared that one class through two whole conflicting stylesheets
+              and neither of them got the layout it was written for. */}
           {walls.map((w, i) => {
             const left = walls[i - 1] ?? null;
             const right = walls[i + 1] ?? null;
@@ -9067,7 +9144,7 @@ function HomeExperience(): JSX.Element {
                 {left ? (
                   <button
                     type="button"
-                    className="jar-edge jar-label"
+                    className="jar-way jar-label"
                     data-jar-chrome="1"
                     style={{ left: `calc(var(--jar-vw, 100vw) * ${w.col} + 16px)` }}
                     onPointerDown={() => loadWall(left)}
@@ -9079,7 +9156,7 @@ function HomeExperience(): JSX.Element {
                 {right ? (
                   <button
                     type="button"
-                    className="jar-edge jar-edge--r jar-label"
+                    className="jar-way jar-way--r jar-label"
                     data-jar-chrome="1"
                     style={{ left: `calc(var(--jar-vw, 100vw) * ${w.col + 1} - 16px)` }}
                     onPointerDown={() => loadWall(right)}

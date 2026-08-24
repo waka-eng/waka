@@ -58,7 +58,7 @@ Each finding carries how it was established:
 | 11 | **Minor** | `/signals` prints a raw confidence percentage with nothing to read it against |
 | 12 | **Minor** | The demo fixture describes a signal state the product forbids creating |
 | 13 | **Minor** | The consent page has no decline control |
-| 14 | **Major** | Nobody knows the world can be moved through — user feedback, 2026-08-23 |
+| 14 | **Major** | Nobody knows the world can be moved through — user feedback; **fixed 2026-08-24**, three separate invisible failures |
 | 15 | **Major** | The first memory a person ever keeps does not appear until reload — **fixed 2026-08-23**; a clock-skew bug that silently dropped the newest orb on *every* keep |
 
 Working well, and worth not breaking: Korean coverage is genuinely complete;
@@ -383,6 +383,169 @@ Otherwise this page is the most carefully written surface in the product. It
 names the asking device, states the 30-day lifetime, states that revocation
 does not touch the browser session, and states the access difference between
 an agent-bound and a human-bound credential — before the button, not after.
+
+---
+
+## 14. Nobody knows the world can be moved through
+
+**Major.** [measured] — **fixed 2026-08-24.**
+
+Not found by the audit. A real person, using the product, said they had no
+idea they could go left, right, up or down.
+
+They were right, and it was not one bug. It was three, and every one of them
+was **invisible rather than wrong** — nothing threw, no count moved, and the
+whole suite stayed green through all of it.
+
+### Left and right: the signposts existed and had never once been drawn
+
+The ways out are already designed and already built. Each margin carries the
+neighbouring wall's name with a chevron (`‹ Demo Agent`) and, below it, the
+offer to grow the axis that way (`Add an agent`, `Make a room`). All of them
+rested at `opacity: 0`, revealed by:
+
+```css
+.jar-hq:hover .jar-edge, .jar-edge:focus-visible { opacity: 1; }
+```
+
+`.jar-hq` carries `pointer-events: none` — the world underneath it has to stay
+reachable — and **an element that takes no pointer can never match `:hover`.**
+So that selector had never fired, on any pointer device, in the whole life of
+the file. The only thing keeping the signposts on screen anywhere was a
+`@media (hover: none)` rule setting `0.7`, which is why they were visible on a
+phone and invisible on every desktop there has ever been.
+
+The affordance that teaches you the world is wider was itself gated behind
+already knowing.
+
+Measured at headquarters, 1440×900, pointer resting inside the world:
+
+| signpost | opacity |
+|---|---|
+| `Make a room` | 0 |
+| `Add an agent` | 0 |
+| `‹ Demo Agent` | 0 |
+
+### …and underneath that, one class name doing two jobs
+
+Turning them on exposed the second bug immediately: `‹ DEMO AGENT` printed
+straight through `ADD AN AGENT` at the left margin.
+
+`home.css` held **two complete, conflicting `.jar-edge` definitions**, 280
+lines apart, each with its own comment header claiming the name. One is a
+*vertical rail hard against a margin* (`writing-mode: vertical-rl`,
+`--l`/`--r` as anchors). The other is a *horizontal name placed from its
+wall's own column* (`white-space: nowrap`, `max-width: 22ch`,
+`--r: translateX(-100%)`). Whichever came second won, silently, property by
+property. So:
+
+- a way out inherited `writing-mode: vertical-rl` and became a 10px stripe;
+- the right-hand one held its own inline `left` **and** the rail's
+  `right: 10px`, was anchored twice, and stretched into a 110×25 flat box
+  while its mirror image stayed a 10×83 vertical one.
+
+Both read as layout bugs. Neither was. They were one name doing two jobs.
+
+The horizontal signposts are now `.jar-way`, with `.jar-edge` left to the
+rails, and the two things each margin carries are separated vertically —
+travel at eye level beside the companion, the offer to extend the axis below
+it.
+
+### Up: the ground announced itself and the sky did not
+
+The field has always had a peek row: memories elected to rise toward
+headquarters so the bottom of the screen is never empty. The sky had no
+equivalent, so the top edge was plain black.
+
+Measured standing at headquarters on the demo account, canvas pixels:
+
+| band | avg | max |
+|---|---|---|
+| top edge (0–12%) | **0.05** | 65 |
+| bottom edge (88–100%) | **7.20** | 186 |
+
+The ground announced itself **144× more loudly** than the sky. The sky's
+centre is `minCam + 0.46·vh`, so its lowest statement rested about **340px
+above the viewport** — there was nothing to see because there was nothing
+there.
+
+`Neb` now carries a `peekY`, `layoutSky` elects the lowest two statements per
+wall, and `stepSky` eases them toward the seam against the same camera scalar
+the field's `peekLift` uses — 1 where you stand, 0 once you are up in it.
+
+**The first build of it looked completely broken and was working perfectly.**
+The clouds were elected correctly and reached their `peekY` exactly, and the
+top edge moved 0.05 → 0.07. `rasterNebula` bakes alpha as
+`peak · (1−u)^2.4` under a mask that is already zero at the rim, so past about
+half a radius there is no light left in the sprite. Hanging the clouds at
+`0.62r` above the seam put the **entire on-screen band inside that dead
+zone**. The depth is now `0.28r` and named, with that measurement in the
+comment beside it, because the number is the whole fix and looks arbitrary
+without it.
+
+One more thing surfaced by the fix: at full lean, a statement's DOM sentence
+was sliced mid-line by the viewport and printed under the chrome. The words
+now fade as the cloud leans down and resolve as you climb — light is the only
+thing that crosses the seam, and reading the sentence is what going up there
+is for.
+
+| band | before | after |
+|---|---|---|
+| top edge (0–12%) | 0.05 | **0.73** |
+| top strip (0–6%) | — | **1.42** |
+
+### Proven by
+
+`tools/e2e/journeys.ts` gained `ways-out`, whose sabotage **is the original
+bug** — `.jar-edge, .jar-way { opacity: 0 }` — rather than an invented one. It
+asserts every signpost on screen is visible, that none of them overlap, that
+any elected sky statement actually arrived near the seam, and that the lean
+scalar reads 1 at headquarters even on an account with no statements to lean.
+It says out loud when the sky half checked nothing, so a vacuous pass can
+never read as a clean one. `FieldAudit` gained a `sky` block for the same
+reason `provenanceCount` is in it: this is a promise whose failure looks
+identical to a quiet screen.
+
+Confirmed at 1440×900 and 390×844, and on the climb: the words resolve, and
+the clouds return to their own arrangement as you rise.
+
+**Still open on this finding:** the horizontal fix restores signposts that
+were designed and built. It does not make the *neighbouring wall itself* peek
+past the left and right edges the way the field peeks past the bottom, which
+would be the world's own idiom rather than chrome. That is a larger change —
+culling, physics, and the question of whose memories are whose — and is not
+attempted here.
+
+---
+
+## 15. The first memory a person keeps does not appear until reload
+
+**Major.** [driven] — **fixed 2026-08-23.**
+
+Keeping the very first memory on a new account left the field empty. Reload
+and it was there. It read as "the keep didn't work", which is the worst thing
+the core act of the product can read as.
+
+`assignHomes` filters `b.capturedMs <= TRef.current`. `TRef` starts at
+`Date.now()` when the world mounts and is advanced only by scrubbing the dial
+or by a client-stamped birth. The server's `createdAt` for the new capture
+measured **+6ms ahead** of that. `inspirations` is a dependency of the sim
+effect, so every keep tears the sim down and rebuilds it from the server's
+timestamp — in the future of the dial, and therefore dropped.
+
+It dropped the newest orb on **every** keep. It was only ever *visible* on the
+first one, because 0-of-1 is an empty world and 49-of-50 is not.
+
+The fix is one line, after the ball list is built:
+
+```ts
+for (const b of list) TRef.current = Math.max(TRef.current, b.capturedMs);
+```
+
+The dial cannot be standing before a memory it is being asked to show.
+
+Proven by the `first-keep` journey: field light `0.06 → 1.57` without reload,
+against `~1.95` after one.
 
 ---
 

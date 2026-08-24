@@ -467,6 +467,143 @@ const JOURNEYS: Journey[] = [
       };
     },
   },
+
+  {
+    id: "ways-out",
+    name: "standing in the world, you can see that it goes somewhere",
+    /* WHAT THIS EXISTS FOR. A person told us they had no idea they could go
+       left, right, up or down. Three separate things were true at once and
+       every one of them was invisible rather than wrong:
+
+         - `.jar-hq` carries `pointer-events: none`, and an element that takes
+           no pointer can never match `:hover`, so `.jar-hq:hover .jar-edge`
+           had never once fired. Every way out of a wall sat at opacity 0 on
+           every desktop there has ever been.
+         - Two conflicting `.jar-edge` blocks in one stylesheet meant the two
+           signposts sharing each margin printed straight through each other.
+         - The sky had no peek at all, so the top edge was plain black while
+           the ground below announced itself.
+
+       None of these threw, none broke a count, and the whole suite stayed
+       green through all of it. That is the shape of failure this journey is
+       shaped against: a promise that is kept by BEING SEEN, and whose absence
+       looks exactly like a quiet screen.
+
+       THE SABOTAGE IS THE ORIGINAL BUG. Not a stripper, not an injected
+       element — the literal rule that was there, put back. If this journey
+       can survive `.jar-edge { opacity: 0 }` it would have shipped the thing
+       it was written for. */
+    breaks: async (ctx) => {
+      await ctx.addInitScript(() => {
+        window.addEventListener("load", () => {
+          const style = document.createElement("style");
+          style.setAttribute("data-sabotage", "ways-out-hidden");
+          style.textContent = ".jar-edge, .jar-way { opacity: 0 !important; }";
+          document.head.appendChild(style);
+        });
+      });
+    },
+    run: async (page, base) => {
+      await signUp(page, base);
+      const seen = await page.evaluate(() => {
+        const marks = Array.from(document.querySelectorAll<HTMLElement>(".jar-edge, .jar-way"));
+        const inView = marks
+          .map((el) => {
+            const r = el.getBoundingClientRect();
+            const cs = getComputedStyle(el);
+            return {
+              text: (el.innerText || "").trim(),
+              opacity: Number(cs.opacity),
+              x: Math.round(r.left),
+              y: Math.round(r.top),
+              w: Math.round(r.width),
+              h: Math.round(r.height),
+              onScreen:
+                r.right > 0 && r.left < window.innerWidth && r.bottom > 0 && r.top < window.innerHeight,
+            };
+          })
+          /* the walls off to either side render their own signposts at their
+             own columns; only the ones on this screen are a promise to anyone */
+          .filter((m) => m.onScreen && m.w > 0 && m.h > 0);
+        /* two signposts share each margin — travel at eye level, the offer to
+           grow the axis below it — and they used to be printed on the same
+           line. Overlap here is that bug coming back. */
+        const overlaps: string[] = [];
+        for (let i = 0; i < inView.length; i++) {
+          for (let j = i + 1; j < inView.length; j++) {
+            const a = inView[i];
+            const b = inView[j];
+            if (
+              a.x < b.x + b.w &&
+              b.x < a.x + a.w &&
+              a.y < b.y + b.h &&
+              b.y < a.y + a.h
+            ) {
+              overlaps.push(`${a.text} × ${b.text}`);
+            }
+          }
+        }
+        const audit = (
+          window as unknown as {
+            wakaField?: () => {
+              sky?: { lean: number; nebs: Array<{ y: number; homeY: number; peekY: number; r: number }> };
+            };
+          }
+        ).wakaField?.();
+        const lean = audit?.sky?.lean ?? null;
+        const nebs = audit?.sky?.nebs ?? null;
+        const elected = nebs ? nebs.filter((n) => n.peekY !== n.homeY) : [];
+        /* an elected statement has to have actually ARRIVED near the seam.
+           The first build of the sky peek elected correctly and eased
+           correctly and still showed nothing, because it parked the clouds in
+           the part of their own sprite that has no light left in it. */
+        const stranded = elected.filter((n) => Math.abs(n.y - n.peekY) > n.r * 0.5);
+        return {
+          inView,
+          overlaps,
+          skyKnown: nebs !== null,
+          lean,
+          electedCount: elected.length,
+          strandedCount: stranded.length,
+        };
+      });
+
+      const hidden = seen.inView.filter((m) => m.opacity < 0.5).map((m) => m.text || "(unnamed)");
+      const problems: string[] = [];
+      if (seen.inView.length === 0) problems.push("no way out is on screen at all");
+      if (hidden.length > 0) problems.push(`invisible: ${hidden.join(", ")}`);
+      if (seen.overlaps.length > 0) problems.push(`overlapping: ${seen.overlaps.join(", ")}`);
+      if (seen.strandedCount > 0) {
+        problems.push(`${seen.strandedCount} sky statement(s) elected to peek but never arrived`);
+      }
+      /* THE SCALAR IS CHECKED EVEN WHEN THERE IS NOTHING TO LEAN.
+         A fresh account has no statements, so the count check above is
+         vacuous on the exact run this journey is most likely to be executed
+         on. `lean` is not: it is the camera's own reading, 1 standing at
+         headquarters and 0 up in the sky, and it exists whether or not the
+         sky has anything in it. Rip the peek out and this goes to `null`,
+         which is the difference between "nothing to show yet" and "the
+         mechanism is gone". */
+      if (seen.skyKnown && (seen.lean === null || seen.lean < 0.99)) {
+        problems.push(`the sky is not leaning at headquarters (lean=${seen.lean})`);
+      }
+      /* SAID OUT LOUD WHEN IT CHECKED NOTHING. A fresh account has no signals,
+         so it has no sky to lean — and a journey that reports a clean pass
+         over an empty check is the same lie as a silent truncation. */
+      const skyNote = !seen.skyKnown
+        ? "sky NOT CHECKED (no audit on this build)"
+        : seen.electedCount === 0
+          ? `sky leaning (${seen.lean}) but EMPTY — no statements on this account to elect`
+          : `${seen.electedCount} sky statement(s) leaning in`;
+      return {
+        ok: problems.length === 0,
+        detail:
+          problems.length === 0
+            ? `${seen.inView.length} ways out visible, none overlapping; ${skyNote}`
+            : problems.join("; "),
+      };
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------

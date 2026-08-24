@@ -40,7 +40,7 @@ Measured, not remembered — every row re-checked against the tree at v1:
 | 4 | Two palettes — world dark, flat screens near-white | open |
 | 5 | Sign-in's submit is the weakest control; no password recovery | open (lockout copy fixed) |
 | 7 | Keeping something confirms almost invisibly | **closed in the world** — the orb now arrives, which is the confirmation the design always intended. The flat screen's quiet "kept" is untouched and no longer the path that matters |
-| 14 | **Nobody knows the world can be moved through** — real user feedback, 2026-08-23 | open, unstarted |
+| 14 | **Nobody knows the world can be moved through** — real user feedback, 2026-08-23 | **closed 2026-08-24** — three separate invisible failures; `journeys:ways-out` gates it. The neighbouring *wall* still does not peek past the side edges the way the field peeks past the bottom; recorded, not attempted |
 | 15 | The first memory a person ever keeps does not appear until reload | **closed** — a clock-skew bug; `journeys:first-keep` gates it |
 | 8 | 21–22 touch targets under 44px; destructive ones at 20px | open |
 | 9 | The world is one unlabelled canvas | **out of scope, by decision** |
@@ -664,3 +664,94 @@ How much of *"no idea they can go left, right, up, bottom"* that closes is now
 an open question rather than a guess — and it needs to be asked of a person,
 not of a harness. Left/right along the wall axis and up to the sky are still
 unaddressed. Finding 14 stays open and unstarted.
+
+### 2026-08-24 — finding 14 closed, and it was three bugs
+
+The user's sentence was *"no idea they can go left, right, up, bottom"*. I had
+assumed one cause. There were three, and what they had in common is the part
+worth keeping: **not one of them threw, moved a count, or turned a suite red.**
+Every failure here was a thing that was supposed to be SEEN and wasn't, and
+the entire test suite was green through all of it.
+
+#### Left and right — a hover that could never happen
+
+The signposts were already designed and already built: `‹ Demo Agent` at the
+margin the wall lives past, `Add an agent` / `Make a room` below it. They sat
+at `opacity: 0`, revealed by `.jar-hq:hover .jar-edge`.
+
+`.jar-hq` carries `pointer-events: none`. An element that takes no pointer
+never matches `:hover`. **That selector had never fired once, on any pointer
+device, in the life of the file.** The only reason the signposts were visible
+anywhere was a `@media (hover: none)` fallback — so they worked on a phone and
+had never been drawn on a desktop.
+
+The affordance that teaches you the world is wider was gated behind already
+knowing.
+
+#### …and one class name doing two jobs
+
+Turning them on printed `‹ DEMO AGENT` straight through `ADD AN AGENT`.
+`home.css` held **two complete, conflicting `.jar-edge` blocks** 280 lines
+apart, each with its own header claiming the name — one a vertical rail
+anchored to a margin, one a horizontal name placed from its wall's column.
+Later won, property by property: a way out inherited `writing-mode:
+vertical-rl` and became a 10px stripe; the right-hand one held its own inline
+`left` **and** the rail's `right: 10px`, was anchored twice, and stretched
+flat. Both looked like layout bugs. Neither was.
+
+The horizontal signposts are `.jar-way` now. The two things each margin
+carries are separated: travel at eye level, growing the axis below it.
+
+#### Up — and the fix that looked broken while working perfectly
+
+Measured at headquarters, canvas pixels: top edge **0.05**, bottom edge
+**7.20**. The ground announced itself 144× more loudly than the sky, whose
+lowest statement rested ~340px above the viewport.
+
+So: `peekY` on `Neb`, the lowest two per wall elected in `layoutSky`, eased
+toward the seam by `stepSky` against the same camera scalar `peekLift` uses.
+Built it, measured it, and the top edge went **0.05 → 0.07**.
+
+It was working. `rasterNebula` bakes alpha as `peak · (1−u)^2.4` under a mask
+already at zero by the rim — past about half a radius there is no light left
+in the sprite. Hanging the clouds at `0.62r` put the whole on-screen band
+inside that dead zone. A temporary probe proved the clouds were reaching their
+`peekY` to the pixel, in a part of themselves that cannot be seen.
+
+`0.28r`, named and commented with the measurement, because the number is the
+entire fix and looks arbitrary without it. Top edge **0.05 → 0.73**; the top
+6% strip reads **1.42**.
+
+One more thing the fix surfaced: at full lean a statement's DOM sentence was
+sliced mid-line by the viewport and printed under the chrome. The words now
+fade as the cloud leans down and resolve as you climb. Light is the only thing
+that crosses the seam; reading the sentence is what going up there is for.
+
+#### Gate
+
+`journeys:ways-out`, whose sabotage **is the original bug** —
+`.jar-edge, .jar-way { opacity: 0 }` — rather than an invented one:
+
+    positive   2 ways out visible, none overlapping; sky leaning (1) but EMPTY
+    negative   invisible: MAKE A ROOM, ADD AN AGENT   journey fails, as required
+
+It also says out loud when the sky half checked nothing, so a vacuous pass can
+never read as a clean one — a fresh account has no statements to elect, and
+the `lean` scalar is asserted regardless so ripping the mechanism out is
+distinguishable from having nothing to show. `FieldAudit` gained a `sky` block
+for the same reason `provenanceCount` is in it: this is a promise whose
+failure looks exactly like a quiet screen. The temporary probe is gone; that
+block replaced it, behind the same `showsDebug()` gate as the rest.
+
+Confirmed at 1440×900 and 390×844, and on the climb.
+
+Regression: `e2e:journeys` **9/9**, vocabulary clean.
+
+#### What this leaves open
+
+The horizontal fix restores signposts that were designed and built. It does
+**not** make the neighbouring wall itself peek past the left and right edges
+the way the field peeks past the bottom — that would be the world's own idiom
+rather than chrome, and it is a larger change touching culling, physics, and
+the question of whose memories are whose. Recorded, not attempted, not
+pretended.
