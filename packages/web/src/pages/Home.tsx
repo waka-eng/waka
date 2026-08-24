@@ -98,6 +98,7 @@ import {
   type SkyDeps,
 } from "../space/signal/sky-engine";
 import { paintSky } from "../space/signal/sky-paint";
+import { paintRoots, type RootTarget } from "../space/signal/roots-paint";
 import { useEditing } from "../space/editing";
 import { deriveAgentChrome } from "../space-kinds/agent";
 import {
@@ -1111,6 +1112,22 @@ export interface FieldAudit {
      */
     dimmed: number;
     glowing: number;
+  };
+  /**
+   * THE ROOTS, WHICH ARE THE ONE THING ON THIS SURFACE A SCREENSHOT CANNOT
+   * SETTLE. A root is a sub-pixel line at a quarter alpha, drawn while the
+   * whole sky dims around the pattern it leaves — so "did it draw" and "did
+   * nothing draw" photograph almost identically, and a difference image is
+   * swamped by the focus animation that is happening at the same moment. The
+   * only honest answer is the loop counting what it handed the painter.
+   */
+  roots: {
+    /** the pattern being read, or null; the source a line needs */
+    subject: string | null;
+    /** how many of its memories the loop found on the ground to draw to */
+    targets: number;
+    /** how far up the light has come, 0 to 1 */
+    ease: number;
   };
   /**
    * WHETHER THE SKY IS LEANING DOWN, AND HOW FAR EACH STATEMENT CAME.
@@ -5508,6 +5525,37 @@ function HomeExperience(): JSX.Element {
          in its comments went with it unchanged. */
       paintSky({ ctx: ctx!, pal, sky, cam, view, t, grid });
 
+      /* pass 0c — THE ROOTS OF WHAT YOU ARE READING.
+         Between the sky and the ground on purpose: under every orb and under
+         the cloud's own body, so nothing it says is ever drawn ON a memory.
+         `space/signal/roots-paint.ts` carries the reasoning, including why
+         this is not the orb-to-orb connection the founder ruled out. */
+      const rootsOf = focusCandIdRef.current;
+      const rootLit = rootsOf === null ? null : readingLitRef.current;
+      if (rootsOf !== null && rootLit !== null && rootLit.size > 0) {
+        const cloud = sky.nebs.find((n) => n.id === rootsOf);
+        if (cloud) {
+          const targets: RootTarget[] = [];
+          for (const b of list) {
+            if (!b.active) continue;
+            if (!rootLit.has(b.sigId ?? b.id)) continue;
+            targets.push({ x: b.x, y: b.y, alivePow: b.alivePow });
+          }
+          paintRoots({
+            ctx: ctx!,
+            ramp: pal.ramp,
+            from: { x: cloud.x, y: cloud.y, r: cloud.r },
+            to: targets,
+            cam,
+            view,
+            /* the reading's own light, so the roots arrive with the field's
+               glow rather than a beat before it; instant when the person has
+               asked for less movement */
+            ease: view.reduced ? 1 : rootEaseRef.current,
+          });
+        }
+      }
+
       /* passes 1 and 2 — THE GROUND. Every memory's diffuse bloom laid down in
          additive light, then every memory's disc drawn over it. One appearance
          in two loops: the disc reads as lit from within precisely because its
@@ -6191,6 +6239,7 @@ function HomeExperience(): JSX.Element {
       /* arrived before the data: the wall holds still until it can wake whole */
       if (trip.awaitingWake && !trip.active) tryWakeWall();
 
+
       /* the hold: down over about a second when the world has been left
          alone, and never below a fifth — still breathing, never frozen */
       const settleWant = now - stir.at > SETTLE_IDLE ? SETTLE_MIN : 1;
@@ -6220,6 +6269,28 @@ function HomeExperience(): JSX.Element {
          orb's scale rides nothing: selection never touches geometry. */
       /* a vertical move in progress is motion, so the loop stays awake for it */
       let easing = Math.abs(companion.pitch) > 0.01 || Math.abs(companion.lift) > 0.4;
+      /* THE ROOTS COME UP WITH THE READING'S OWN LIGHT, on the same two
+         curves the orbs use — fast in, slow out — so the lines and the glow
+         underneath them are one gesture rather than two things that happen
+         to agree. Eased here because this is where `dt` is; drawn in the
+         paint pass, which has no clock of its own. */
+      {
+        const litNow = focusCandIdRef.current !== null ? readingLitRef.current : null;
+        const wantRoots = litNow !== null && litNow.size > 0 ? 1 : 0;
+        const have = rootEaseRef.current;
+        if (view.reduced) {
+          rootEaseRef.current = wantRoots;
+        } else if (Math.abs(have - wantRoots) < 0.004) {
+          rootEaseRef.current = wantRoots;
+        } else {
+          rootEaseRef.current = lerp(
+            have,
+            wantRoots,
+            kd(wantRoots > have ? EASE_GLOW_IN : EASE_GLOW_OUT, dt),
+          );
+          easing = true;
+        }
+      }
       allBalls((arr) => {
         for (const b of arr) {
           /* SEARCHING USES THE FOCUS LAW IT ALREADY HAS. A search is the same
@@ -8151,6 +8222,22 @@ function HomeExperience(): JSX.Element {
               glowing,
             };
           })(),
+          roots: (() => {
+            const subject = focusCandIdRef.current;
+            const lit = subject === null ? null : readingLitRef.current;
+            let targets = 0;
+            if (subject !== null && lit !== null) {
+              for (const b of list) {
+                if (!b.active) continue;
+                if (lit.has(b.sigId ?? b.id)) targets++;
+              }
+            }
+            return {
+              subject,
+              targets,
+              ease: Number(rootEaseRef.current.toFixed(3)),
+            };
+          })(),
           /* the same question asked upward: is the sky leaning into
              headquarters, and did each elected statement actually get there */
           sky: {
@@ -10026,6 +10113,17 @@ function HomeExperience(): JSX.Element {
   }, [focusCandId, atWall, provTick]);
   const readingLitRef = useRef<ReadonlySet<string> | null>(null);
   readingLitRef.current = readingLit;
+  /* Which pattern the roots belong to. The lit SET is not enough to draw
+     them: a line needs a source, and the source is the cloud this reading is
+     of. Held as a ref for the same reason the lit set is — the loop reads it
+     every frame and must not be rebuilt when it changes. */
+  const focusCandIdRef = useRef<string | null>(null);
+  focusCandIdRef.current = focusCandId;
+  /* How far the roots have come up, 0 to 1. Light arrives and leaves on a
+     curve like everything else here; a line that snapped on would read as a
+     diagram being switched over the world rather than as the world
+     answering. Eased in the step, read in the paint. */
+  const rootEaseRef = useRef(0);
   /* the loop is parked when nothing moves; a new set is a change to draw */
   useEffect(() => {
     simApiRef.current?.wake();

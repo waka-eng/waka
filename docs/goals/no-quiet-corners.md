@@ -244,6 +244,56 @@ Postgres. No new infrastructure, no new dependencies.
 
 ## Log
 
+- **2026-08-24 — Phase 8: the fifth debt paid — the roots are drawn, and
+  the founder ruled they are not the connections they struck out.** Asked
+  directly, they chose "build it — sky-to-field is different", and they
+  are right about why: the ruling that killed orb-to-orb lines ("I don't
+  want the connections with the other balls to appear. It's confusing")
+  is about the FIELD — lines across one plane, saying two captures are
+  somehow related, a relation the product cannot name in words either. A
+  root is a different sentence: this pattern is standing on THAT memory,
+  directed, crossing the two layers, never a mesh — one cloud, its own
+  roots, everything else on screen sunk. It is light rather than a
+  diagram: the cloud's own colour, additive, one device pixel, falling
+  along its length, no arrowhead and no label anywhere.
+  What it solves that lighting the field does not: read a pattern from
+  the sky and the field is a screen and a half below the bottom edge, so
+  the world's answer happens somewhere you are not. The line leaves the
+  cloud and goes down out of frame — the same vocabulary the ground uses
+  at the other edge — and travelling down it the far end resolves onto
+  the orbs that were lit the whole time.
+  **THREE BUGS, EACH INVISIBLE TO A DIFFERENT INSTRUMENT, and the reason
+  this took a browser.** (1) The gradient fell to a tenth of peak at the
+  memory, on sound reasoning about not double-ringing an already-lit orb
+  — which solved the wrong end, because when the cloud is above the top
+  edge the only part anyone can see is the last stretch. It arrives at
+  half strength now. (2) The pass inherited `globalAlpha` from the mote
+  pass, which sets it per mote and never puts it back; `save()` preserves
+  what it inherited rather than resetting it, so the lines were stroked
+  at whatever fraction the last mote wanted. (3) **The canvas is in WORLD
+  space** — the frame clears with `clearRect(cam.x, cam.y, …)` and the
+  motes ADD the camera — and this pass subtracted it, putting every line
+  one whole viewport below where it belonged. The unit test asserted the
+  same subtraction, so it agreed with the bug and stayed green. Diagnosed
+  by drawing a six-pixel magenta probe rectangle, photographing nothing,
+  and then printing the numbers the painter was actually handed.
+  Gate measured live at 1440x900 against a Gemini-derived world, with
+  four memories kept to mint a real pattern: the loop reports `targets:
+  2, ease: 1`, the field reports `glowing 2, dimmed 10`, and the
+  photograph shows two lines coming down from off the top of the frame
+  and landing on exactly the two lit memories. `roots.test.ts` 11/11
+  pins the geometry (world space to draw, screen space to cull, the
+  segment cull that keeps a line with BOTH ends off-frame, the start at
+  the cloud's edge), the compositing, the fall-off, the carry, the ease,
+  and the stated alpha. Web 28 files / 190 tests, all gates clean.
+  `FieldAudit` gained a `roots` block for the same reason it gained
+  `dimmed`/`glowing`: a sub-pixel line drawn while the whole sky dims
+  around it photographs identically whether it drew or not, so the loop
+  has to be able to say what it handed the painter. **The FEEL is the
+  founder's**, as Phase 8's gate says: `pnpm dev:local`, sign in, climb
+  to the sky, press a pattern, then walk down toward the ground.
+
+
 - **2026-08-24 — Phase 8: a fourth debt paid — the dial winds a room.** The
   brief's line was "dial-scrubbing the room's history (the timeline is
   served and told — the dial does not yet wind it)", and it was owed on
