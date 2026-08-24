@@ -6678,6 +6678,30 @@ function HomeExperience(): JSX.Element {
     /* Resumed mid-journey: nobody ran the arrival, so run it now — the wall
        needs its ground solved, poured and woken exactly as a glide would. */
     if (resumedAt !== null) arriveColumn();
+    /*
+     * A ROOM THAT HAS NOT WOKEN YET HAS TO KEEP TRYING.
+     *
+     * `ready` gates the ENTIRE headquarters block — eyebrow, poster, forming
+     * line — on `wokenGroups.has(id)`, and the only thing that ever adds to
+     * that set is `tryWakeWall`. It is reached from exactly two places:
+     * `arriveColumn`, and the tick while `trip.awaitingWake` is true.
+     *
+     * Both are lost in the same instant. Arriving in a room whose field is
+     * still in flight sets `awaitingWake` and returns; the fetch then resolves
+     * and calls `setGroupFieldTick`, which rebuilds this effect — so `trip` is
+     * replaced by a fresh one with `awaitingWake` false, and `headingRef` was
+     * already cleared by the arrival, so the `resumedAt` branch above does not
+     * run either. Nothing asks again. The room stays unwoken and its
+     * headquarters renders NOTHING: no name, no sentence, not even the
+     * "Forming — nothing read together yet" that `deriveGroupChrome` prepared
+     * for exactly this case. It stays blank until you travel away and back.
+     *
+     * The rebuild that loses the flag is the same event that makes the answer
+     * available, so setting it on setup is not a retry loop — it is one
+     * question asked at the only moment it can now be answered. `tryWakeWall`
+     * clears the flag itself, and `groupVisitedRef` keeps the wake to once.
+     */
+    else if (curWall().kind === "group") trip.awaitingWake = true;
     measure();
     if (view.reduced) settleInstantly();
     else if (carryRef.current) {
