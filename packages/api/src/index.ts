@@ -23,6 +23,7 @@ import { healthRoutes } from "./routes/health.js";
 import { inspirationsRoutes } from "./routes/inspirations.js";
 import { profilesRoutes } from "./routes/profiles.js";
 import { principlesMarkdownRoutes, principlesRoutes } from "./routes/principles.js";
+import { createAgentGrantRoutes } from "./routes/agent-grants.js";
 import { createExportRoute } from "./routes/export.js";
 import { createReadingRoute } from "./routes/reading.js";
 import { createWeatherMarkdownRoute, createWeatherRoute } from "./routes/weather.js";
@@ -78,6 +79,9 @@ app.route("/api/weather", createWeatherRoute());
 // Everything visible: the whole human profile as one deterministic bundle,
 // the person's own hand only. The anti-Dreaming — you can leave with it.
 app.route("/api/export", createExportRoute());
+// The hand on the sibling door: explicit, human-granted, revocable
+// agent-to-agent read grants. The open default retired with this route.
+app.route("/api/agent-grants", createAgentGrantRoutes());
 
 // Deliberately unauthenticated: returns only the owner-approved surface.
 app.route("/api/public/profiles", publicProfileRoutes);

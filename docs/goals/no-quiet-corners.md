@@ -244,6 +244,35 @@ Postgres. No new infrastructure, no new dependencies.
 
 ## Log
 
+- **2026-08-24 — Phase 6: PASS.** The sibling door has a hand on it, and
+  the open default is retired — the flip the founder ruled 2026-08-23
+  ships exactly as ruled: no flag, no dark machinery. The matrix
+  (`resolveProfileAccess`) now answers in three words — allowed, denied,
+  `sibling_grant_required` — and targets carry their type; the handler
+  form (`profileAccessError`, async now) answers a sibling reach from the
+  live `agent_read_grants` rows, read on every request so revocation
+  takes effect on the very next one. The grant is explicit, human-granted
+  (`POST /api/agent-grants`, human-session-only on every verb),
+  one-directional, and revocation is a timestamp, not a delete — who
+  could read whom, and when that ended, is a record; the human profile is
+  never a grant target and a foreign agent answers like one that does not
+  exist. All four matrix call sites moved (signals scope, inspirations
+  tenancy, attachments capture, CLI consent's write filter — write never
+  rides a grant). Migration `0023`. Gate measured:
+  `sibling-grants.db.test.ts` 5/5 live on real Postgres through the real
+  routes (ungranted sibling 403 with the door named; agent→its human,
+  agent→itself, human→everything all grant-free; grant → 200, reverse
+  direction still 403, revoke → 403 on the next request with the revoked
+  row listed as record; agent refused from the grant routes; human-target
+  and cross-account grants unstorable), `profile-access.test.ts` re-pinned
+  cell by cell with the flip's own describe, api 58 files / 637 tests,
+  web 146, vocabulary and seams clean — and the **waka-mcp live suite
+  re-run against the flipped stack: 9/9 green**, because nothing the MCP
+  client does crosses agent-to-agent. `data-model.md`'s matrix table
+  gained the sibling row. Register item 5 (agent-memory-wedge) closed;
+  the eight-agent household surface ("one column per mind, grants
+  visible") stays future work, now safe to build on a consented default.
+
 - **2026-08-24 — Phase 5: PASS.** Contested pairs are held, and only the
   owner settles them. The merge judge's contract is three-way —
   `relation: same | independent | opposed`, schema-constrained with the

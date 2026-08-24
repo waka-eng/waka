@@ -46,7 +46,7 @@ export async function resolveTargetProfile(
   }
 
   const [target] = await db
-    .select({ id: profiles.id, accountId: profiles.accountId })
+    .select({ id: profiles.id, accountId: profiles.accountId, type: profiles.type })
     .from(profiles)
     .where(eq(profiles.id, requested))
     .limit(1);
@@ -55,7 +55,7 @@ export async function resolveTargetProfile(
     return { ok: false, status: 404, body: { error: "Profile not found" } };
   }
 
-  const denied = profileAccessError(session, target, operation);
+  const denied = await profileAccessError(db, session, target, operation);
   if (denied) return { ok: false, status: 403, body: denied };
 
   return { ok: true, profileId: target.id };

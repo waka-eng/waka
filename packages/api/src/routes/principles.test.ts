@@ -62,10 +62,14 @@ function createApp() {
       getModelProvider: async () => mockState.provider,
       loadProfile: async (_db: unknown, profileId: string) => {
         if (profileId === HUMAN_PROFILE_ID || profileId === AGENT_PROFILE_ID) {
-          return { id: profileId, accountId: "account-1" };
+          return {
+            id: profileId,
+            accountId: "account-1",
+            type: profileId === HUMAN_PROFILE_ID ? ("human" as const) : ("agent" as const),
+          };
         }
         if (profileId === OTHER_PROFILE_ID) {
-          return { id: profileId, accountId: "account-2" };
+          return { id: profileId, accountId: "account-2", type: "human" as const };
         }
         return null;
       },

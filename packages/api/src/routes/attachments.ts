@@ -489,6 +489,7 @@ attachmentsRoutes.post("/", async (c) => {
       id: inspirations.id,
       profileId: inspirations.profileId,
       accountId: profiles.accountId,
+      profileType: profiles.type,
     })
     .from(inspirations)
     .innerJoin(profiles, eq(profiles.id, inspirations.profileId))
@@ -499,9 +500,10 @@ attachmentsRoutes.post("/", async (c) => {
     return c.json({ error: "Inspiration not found" }, 404);
   }
 
-  const denied = profileAccessError(
+  const denied = await profileAccessError(
+    db,
     session,
-    { id: parent.profileId, accountId: parent.accountId },
+    { id: parent.profileId, accountId: parent.accountId, type: parent.profileType },
     "capture",
   );
   if (denied) return c.json(denied, 403);

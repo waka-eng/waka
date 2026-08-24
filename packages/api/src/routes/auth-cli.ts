@@ -58,7 +58,7 @@ import { getDb } from "../lib/db.js";
 import {
   type AuthEnv,
   humanSessionsOnly,
-  profileAccessError,
+  resolveProfileAccess,
   requireAuth,
 } from "../lib/middleware.js";
 import {
@@ -365,7 +365,8 @@ export async function bindableProfiles(
     .where(eq(profiles.accountId, session.profile.accountId))
     .orderBy(profiles.type, profiles.createdAt);
 
-  return rows.filter((row) => !profileAccessError(session, row, "write"));
+  /* write never rides a grant, so the sync matrix answers alone here */
+  return rows.filter((row) => resolveProfileAccess(session, row, "write") === "allowed");
 }
 
 /**

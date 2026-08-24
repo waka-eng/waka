@@ -19,6 +19,7 @@ import { getCookie } from "hono/cookie";
 
 import { SESSION_COOKIE_NAME, verifySessionToken } from "./auth.js";
 import { type AuthenticatedSession, lookupSession } from "./session.js";
+import { hasLiveSiblingGrant } from "./sibling-grants.js";
 
 export interface AuthEnv {
   Variables: {
@@ -124,7 +125,11 @@ export type ProfileOperation = "read" | "capture" | "write";
 export interface ProfileAccessTarget {
   id: string;
   accountId: string;
+  /** Who the target is — the sibling rule turns on it. */
+  type: "human" | "agent";
 }
+
+export type ProfileAccessVerdict = "allowed" | "denied" | "sibling_grant_required";
 
 /**
  * May this session perform `operation` on `target`?
@@ -135,31 +140,52 @@ export interface ProfileAccessTarget {
  * - An **agent**-profile session may read and capture into the account's
  *   human profile — that is the conditioning-and-relaying case — but may
  *   never curate, edit, or delete the human's memory.
+ * - An **agent** session reaching for a SIBLING agent's memory needs an
+ *   explicit, human-granted, revocable grant — the matrix answers
+ *   `sibling_grant_required` and `profileAccessError` reads the live grant
+ *   rows. The open default retired with `goals/no-quiet-corners.md`
+ *   Phase 6 (the flip is founder-ruled, 2026-08-23, signed in
+ *   docs/data-model.md's decision log): no flag, no dark machinery.
  * - Nothing reaches across accounts, ever.
  */
 export function resolveProfileAccess(
   session: AuthenticatedSession,
   target: ProfileAccessTarget,
   operation: ProfileOperation,
-): boolean {
-  if (target.accountId !== session.profile.accountId) return false;
-  if (target.id === session.profile.id) return true;
-  if (session.profile.type === "human") return true;
+): ProfileAccessVerdict {
+  if (target.accountId !== session.profile.accountId) return "denied";
+  if (target.id === session.profile.id) return "allowed";
+  if (session.profile.type === "human") return "allowed";
   // Agent session, some other profile in the same account.
-  return operation === "read" || operation === "capture";
+  if (operation === "write") return "denied";
+  if (target.type === "human") return "allowed";
+  return "sibling_grant_required";
 }
 
 /**
- * Throwing form for handlers: returns nothing on success, or the 403 body to
- * return. Kept as a value rather than an exception so handlers stay explicit
- * about their failure responses.
+ * The handler form: null on success, or the 403 body to return. Async since
+ * the sibling flip — a `sibling_grant_required` verdict is answered from
+ * the live grant rows, read now rather than cached, so revocation takes
+ * effect on the very next request.
  */
-export function profileAccessError(
+export async function profileAccessError(
+  db: Parameters<typeof hasLiveSiblingGrant>[0],
   session: AuthenticatedSession,
   target: ProfileAccessTarget,
   operation: ProfileOperation,
-): { error: string } | null {
-  return resolveProfileAccess(session, target, operation)
-    ? null
-    : { error: "Not permitted for this profile" };
+): Promise<{ error: string } | null> {
+  const verdict = resolveProfileAccess(session, target, operation);
+  if (verdict === "allowed") return null;
+  if (verdict === "sibling_grant_required") {
+    const granted = await hasLiveSiblingGrant(db, {
+      granteeProfileId: session.profile.id,
+      targetProfileId: target.id,
+    });
+    if (granted) return null;
+    return {
+      error:
+        "No grant to read this agent's memory — the account holder can open that door",
+    };
+  }
+  return { error: "Not permitted for this profile" };
 }

@@ -162,7 +162,7 @@ describe("GET /api/signals", () => {
 
   it("lets an agent session read the account's human profile", async () => {
     const listSignals = vi.fn(async () => [summary]);
-    const loadProfile = vi.fn(async () => ({ id: humanProfileId, accountId }));
+    const loadProfile = vi.fn(async () => ({ id: humanProfileId, accountId, type: "human" as const }));
     const app = new Hono();
     app.route(
       "/api/signals",
@@ -191,6 +191,7 @@ describe("GET /api/signals", () => {
     const loadProfile = vi.fn(async () => ({
       id: humanProfileId,
       accountId: otherAccountId,
+      type: "human" as const,
     }));
     const app = new Hono();
     app.route(
@@ -361,7 +362,7 @@ describe("PATCH /api/signals/:signalId", () => {
 
   it("refuses an agent session editing the human profile's signals", async () => {
     const updateStatement = vi.fn();
-    const loadProfile = vi.fn(async () => ({ id: humanProfileId, accountId }));
+    const loadProfile = vi.fn(async () => ({ id: humanProfileId, accountId, type: "human" as const }));
     const app = new Hono();
     app.route(
       "/api/signals",

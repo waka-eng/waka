@@ -614,6 +614,8 @@ export async function unshareSignalFromGroup(
 export interface ProfileScopeTarget {
   id: string;
   accountId: string;
+  /** who the target is — the sibling-grant rule reads it */
+  type: "human" | "agent";
 }
 
 export async function loadProfileTarget(
@@ -621,7 +623,7 @@ export async function loadProfileTarget(
   profileId: string,
 ): Promise<ProfileScopeTarget | null> {
   const [row] = await db
-    .select({ id: profiles.id, accountId: profiles.accountId })
+    .select({ id: profiles.id, accountId: profiles.accountId, type: profiles.type })
     .from(profiles)
     .where(eq(profiles.id, profileId))
     .limit(1);
@@ -665,7 +667,7 @@ export async function resolveProfileScope(
     return { ok: false, status: 404, body: { error: "Profile not found" } };
   }
 
-  const denied = profileAccessError(session, target, operation);
+  const denied = await profileAccessError(db, session, target, operation);
   if (denied) return { ok: false, status: 403, body: denied };
 
   return { ok: true, profileId: target.id };

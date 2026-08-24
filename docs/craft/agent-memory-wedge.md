@@ -266,7 +266,16 @@ Mem0 18%, best ~60%) with the deterministic-beats-LLM evidence on our
 side and our own 2026-08-02 proof (awareness lives in arithmetic above
 generation) as house doctrine.
 
-**5. Sibling access becomes a grant** (S+). Flip
+**5. Sibling access becomes a grant** (S+). **Shipped 2026-08-24**
+(`goals/no-quiet-corners.md` Phase 6): the matrix answers
+`sibling_grant_required` for agent→sibling read/capture and
+`profileAccessError` reads the live `agent_read_grants` rows —
+human-granted, one-directional, revocable-on-the-next-request, the
+revoked grant kept as record (`POST/GET/DELETE /api/agent-grants`,
+human-session-only). Refused-sibling-read pinned live on real Postgres
+through the real routes (`sibling-grants.db.test.ts`), the pure matrix
+re-pinned cell by cell, and the waka-mcp live suite green through the
+flip. Original brief: flip
 `resolveProfileAccess`'s intra-account default to human-profile-only for
 agent sessions; sibling-agent access becomes an explicit, human-granted,
 revocable pairing listed beside credentials. Add the refused-sibling-read

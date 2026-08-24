@@ -58,6 +58,7 @@ A session bound to an agent profile gets:
 |---|---|
 | Its own agent profile | Full read/write: capture, curate signals, edit its top of mind, declare and curate its own principles |
 | The account's human profile | **Read + capture only**: read top of mind, signals, and principles (the conditioning use case), and capture inspirations into it — never edit or delete the human's signals, top of mind, or principles, and never declare into them. Principles are curation, so capture does not extend to them |
+| A sibling agent's profile | **Read + capture only, and only through an explicit grant** (`agent_read_grants`, `POST /api/agent-grants`): human-granted, one-directional, revocable — revocation takes effect on the next request, and the revoked grant stays as record. Ungranted, the door is closed. The open default retired 2026-08-24 with `goals/no-quiet-corners.md` Phase 6 (the flip is the founder's ruling of 2026-08-23, decision log below) |
 | Other accounts | Nothing |
 
 The human-profile session can do everything in every profile of the
