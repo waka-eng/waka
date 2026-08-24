@@ -48,7 +48,7 @@ Each finding carries how it was established:
 | 1 | **Blocking** | The world is a blank black screen whenever either font CDN is unreachable |
 | 2 | **Blocking** | `pnpm demo:seed` — the documented way in — fails against current migrations |
 | 3 | **Major** | A declared principle is silently filed as a note when the model call fails |
-| 4 | **Major** | The product is two themes: near-black world, near-white surfaces |
+| 4 | **Major** | The product is two themes: near-black world, near-white surfaces — **resolved 2026-08-24**; the crossing that caused it is gone, and removing it had stranded all six flat screens with no way back |
 | 5 | **Major** | Sign-in's primary action is the weakest thing on the screen; no password recovery exists |
 | 6 | **Moderate** | The "other screens" menu opens on top of the sentence it obscures |
 | 7 | **Moderate** | Keeping something — the core act — confirms almost invisibly |
@@ -207,6 +207,34 @@ are given "the world's palette without its geometry" by `chrome.css`.
 `/profile` and `/login` do exactly that. The six Surface routes do not — they
 are a different palette, not a flatter version of the same one. Whichever way
 this is meant to resolve, the doc and the build currently disagree.
+
+### Re-measured 2026-08-24, after the menu was removed — **resolved, and not the way this expected**
+
+Two of the three claims above no longer hold, and a worse one took their place.
+
+**The repeated crossing is gone.** Sampled from the running build: the world
+carries **zero** links into any of the six Surface routes. The `≡` menu was
+the only door and Phase 1 removed it. Nothing in the world flashes to white
+any more, because nothing in the world goes there.
+
+**But the exit went with the door.** The menu opened *from* the world, so it
+was also the way home — and the Surface footer never had one of its own. Every
+one of the six routes could be arrived at (a bookmark, an old link, the
+terminal flow) and **not left**, except by the browser's back button or the URL
+bar. That is a strictly worse defect than a palette flash, it was created by
+fixing finding 6, and nothing caught it. Fixed: `← the world` now sits first in
+the surface footer, set off from the view-switching verbs beside it, and
+`journeys:parking-lot` walks all six.
+
+**The palette split stands, and is now declared rather than denied.** Sampled
+averages are unchanged — world `(6,8,13)`, the six Surface routes `(247–252)`.
+The doc was the thing that was wrong: these routes are a parking lot in a paper
+register, holding what has not yet been designed into the world, and repainting
+1,800 lines of measured light-ground type and contrast to match a world nobody
+crosses into from them would be a large investment in surfaces the founder has
+said should be deprecated by migration. `docs/architecture.md` now says what is
+true, in its own diff. If the split is ever meant to close, it closes by those
+screens *leaving*, not by being repainted.
 
 ---
 

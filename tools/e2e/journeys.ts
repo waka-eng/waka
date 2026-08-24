@@ -604,6 +604,81 @@ const JOURNEYS: Journey[] = [
       };
     },
   },
+
+  {
+    id: "parking-lot",
+    name: "every flat screen can be left again",
+    /* WHY THIS EXISTS. The `≡` menu was the only door from the world into the
+       flat routes — and because it opened FROM the world, it was also the way
+       home. Emptying the holding pen removed the door and, with it, the exit.
+
+       Measured 2026-08-24 on the running build: the world has ZERO links into
+       any of these six routes, and the surface footer had no link back. Arrive
+       at one from a bookmark, an old link, or the terminal flow, and the only
+       ways out were the browser's own back button and the URL bar. Six screens
+       you could reach and not leave.
+
+       These routes are a parking lot — they hold the few things not yet
+       designed into the world, and they are on their way out. A parking lot
+       still has to have an exit. */
+    breaks: async (ctx) => {
+      await ctx.addInitScript(() => {
+        window.addEventListener("load", () => {
+          const style = document.createElement("style");
+          style.setAttribute("data-sabotage", "no-way-home");
+          style.textContent = ".sf-verb-world { display: none !important; }";
+          document.head.appendChild(style);
+        });
+      });
+    },
+    run: async (page, base) => {
+      await signUp(page, base);
+      const FLAT = [
+        "/capture",
+        "/inspirations",
+        "/signals",
+        "/principles",
+        "/top-of-mind",
+        "/rooms",
+      ];
+      const stranded: string[] = [];
+      const landed: string[] = [];
+      for (const path of FLAT) {
+        await goSurface(page, base, path);
+        /* VISIBLE, not merely present. `page.$` finds a `display: none`
+           element perfectly well, and clicking it then waits thirty seconds
+           for it to appear — so an exit that exists and cannot be seen was
+           reported as a timeout rather than as the missing exit it is. */
+        const home = await page.$(".sf-verb-world");
+        const reachable = home !== null && (await home.isVisible());
+        if (!reachable) {
+          stranded.push(`${path} (no way back${home ? " — present but not visible" : ""})`);
+          continue;
+        }
+        await home.click();
+        await page.waitForTimeout(3_500);
+        /* ARRIVING IS NOT THE SAME AS THE WORLD BEING THERE. A push to `/`
+           that renders nothing is still stranded, just at a different
+           address, so the canvas has to exist on the other side. */
+        const where = await page.evaluate(() => ({
+          path: location.pathname,
+          canvases: document.querySelectorAll("canvas").length,
+        }));
+        if (where.path !== "/" || where.canvases < 1) {
+          stranded.push(`${path} -> ${where.path} (${where.canvases} canvases)`);
+        } else {
+          landed.push(path);
+        }
+      }
+      return {
+        ok: stranded.length === 0,
+        detail:
+          stranded.length === 0
+            ? `${landed.length}/${FLAT.length} flat screens return to a live world`
+            : `stranded: ${stranded.join(", ")}`,
+      };
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------

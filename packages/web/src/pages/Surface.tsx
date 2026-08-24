@@ -2239,6 +2239,28 @@ export default function SurfacePage(): JSX.Element {
 
       <nav className="sf-foot">
         <div className="sf-verbs">
+          {/* THE WAY BACK, AND IT WAS MISSING.
+              These routes are a parking lot: the world is where the product
+              is, and these hold the few things not yet designed into it. The
+              `≡` menu used to be the door — and, because it opened from the
+              world, it was also the way home. Removing it took both.
+
+              Measured 2026-08-24 on the running build: the world has ZERO
+              links into any of these routes, and this footer had none back.
+              Land here from a bookmark, an old link, or the terminal flow and
+              the only exits were the browser's own back button and the URL
+              bar. Six surfaces you could arrive at and not leave.
+
+              First in the row and set apart, because it is the one word here
+              that LEAVES rather than switching a view — everything after it
+              is a door within this surface. */}
+          <button
+            type="button"
+            className="sf-primary-verb sf-verb-world"
+            onClick={() => navigate("/")}
+          >
+            ← the world
+          </button>
           {takenDown ? (
             <button type="button" className="sf-undo" onClick={putEntryBack}>
               took it down · put it back

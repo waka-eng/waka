@@ -37,7 +37,7 @@ Measured, not remembered — every row re-checked against the tree at v1:
 | 2 | `pnpm demo:seed` broken by migration `0007` | **closed** |
 | 3 | A declared principle silently filed as a note | **closed** — `503 retryable`, nothing written |
 | 6 | The `≡` menu | **closed** — the control is gone; nothing matches `jar-flatmenu` in `packages/web/src` |
-| 4 | Two palettes — world dark, flat screens near-white | open |
+| 4 | Two palettes — world dark, flat screens near-white | **resolved 2026-08-24** — the crossing that caused it no longer exists (zero links from the world); the split is now declared in `architecture.md` rather than denied by it. Removing the menu had stranded all six flat screens with no exit; `journeys:parking-lot` gates the fix |
 | 5 | Sign-in's submit is the weakest control; no password recovery | open (lockout copy fixed) |
 | 7 | Keeping something confirms almost invisibly | **closed in the world** — the orb now arrives, which is the confirmation the design always intended. The flat screen's quiet "kept" is untouched and no longer the path that matters |
 | 14 | **Nobody knows the world can be moved through** — real user feedback, 2026-08-23 | **closed 2026-08-24** — three separate invisible failures; `journeys:ways-out` gates it. The neighbouring *wall* still does not peek past the side edges the way the field peeks past the bottom; recorded, not attempted |
@@ -755,3 +755,52 @@ the way the field peeks past the bottom — that would be the world's own idiom
 rather than chrome, and it is a larger change touching culling, physics, and
 the question of whose memories are whose. Recorded, not attempted, not
 pretended.
+
+### 2026-08-24 — Phase 3, and the defect the phase was hiding
+
+Phase 3 was written to close finding 4 by bringing the flat routes onto the
+world's palette, on the reasoning that `chrome.css` already does it for
+`/login` and `/profile` and `architecture.md` already claims it. Measuring
+first changed the answer, and then found something worse.
+
+**The crossing is gone.** Sampled on the running build: the world carries
+**zero** links into any of the six Surface routes. The `≡` menu was the only
+door, and Phase 1 removed it. Finding 4's severity came from *"in a session, a
+person crosses this repeatedly"* — nobody crosses it at all now.
+
+**And the exit went with the door.** The menu opened FROM the world, so it was
+also the way home; the surface footer never had one of its own. All six routes
+could be arrived at — a bookmark, an old link, the terminal flow — and **not
+left**, except by the browser's back button or the URL bar. Six screens you
+could reach and not leave, created by fixing finding 6, caught by nothing.
+
+That is the real defect, it is strictly worse than a palette flash, and it is
+what this phase spent itself on: `← the world` first in the surface footer,
+set off by a rule from the view-switching verbs beside it, because it is the
+one word in that row that LEAVES rather than switching a view.
+
+**The palette split stands, declared rather than repainted.** Sampled averages
+unchanged: world `(6,8,13)`, the six routes `(247–252)`. The doc was the wrong
+one. These routes are a parking lot in a paper register — measured contrast
+ratios, a type system tuned to a light ground, 1,800 lines of it — and
+repainting them to match a world nobody crosses into from them is a large
+investment in screens the founder has said should be deprecated by migration
+into the world. `architecture.md` now says what is true, in its own diff per
+rule 4. **If the split is ever meant to close, it closes by those screens
+leaving, not by being repainted** — and that is a call the founder can
+overrule, with this measurement in front of them.
+
+#### Gate
+
+`journeys:parking-lot`, walking all six routes:
+
+    positive   6/6 flat screens return to a live world
+    negative   stranded: /capture (no way back — present but not visible), +5
+
+The negative run also corrected the check itself: `page.$` finds a
+`display: none` element perfectly well, so the first version reported a
+thirty-second click timeout instead of the missing exit. Visibility is asked
+for now, and arriving is not enough either — the canvas has to be there on the
+other side, or you are still stranded, just at a different address.
+
+Regression: `e2e:journeys` 10/10.

@@ -878,6 +878,15 @@
   transform: scaleX(1);
 }
 
+/* The one word in this row that leaves the surface rather than switching a
+   view inside it, so it is set off by a rule rather than by weight — the
+   verbs beside it are all the same rank as each other and it is not one of
+   them. */
+.sf-verb-world {
+  padding-right: clamp(20px, 2.5vw, 32px);
+  border-right: 1px solid var(--sf-rule);
+}
+
 .sf-undo {
   color: var(--sf-mark);
   white-space: nowrap;
