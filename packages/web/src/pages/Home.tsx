@@ -8473,8 +8473,22 @@ function HomeExperience(): JSX.Element {
   useEffect(() => {
     if (!focusCandId) return undefined;
     if (evidenceBySignalRef.current.has(focusCandId)) return undefined;
-    /* proposals and local drafts have no server pattern behind them */
-    if (focusCandId.startsWith("proposal:") || focusCandId.startsWith("draft:")) return undefined;
+    /* proposals and local drafts have no server pattern behind them — and
+       neither does a ROOM'S statement, whose id is `wall:<group>:<signal>`
+       and which the server would 404. That miss used to land in the catch
+       below, write an empty chain, and light the honest-empty line: the
+       world told you the roots of a room's statement "were never recorded"
+       when in truth they are recorded perfectly well on their owner's own
+       wall and are deliberately not shown here. What crosses into a room is
+       the statement and never the evidence — a privacy boundary, rendered
+       as a shorter chain, which must never be reported as a gap in the
+       record. Founder found it on a live wall, 2026-08-24. */
+    if (
+      focusCandId.startsWith("proposal:") ||
+      focusCandId.startsWith("draft:") ||
+      focusCandId.startsWith("wall:")
+    )
+      return undefined;
     let dead = false;
     loadSignal(focusCandId)
       .then((full) => {
@@ -10656,10 +10670,18 @@ function HomeExperience(): JSX.Element {
                 fact worth a line. */}
             {focusCandId === c.id &&
             c.kind === "reading" &&
+            !c.wallTarget &&
             evidenceFor(c).length === 0 &&
             evidenceBySignalRef.current.has(c.id) ? (
+              /* Plain words. "The roots of this signal were never recorded"
+                 was jargon twice over — `roots` and `signal` are the world's
+                 names for things this sentence is admitting it cannot show —
+                 and it read as an accusation about the archive rather than a
+                 fact about one row. And it may only ever be said about YOUR
+                 OWN pattern: a room's statement has no chain here by ruling,
+                 not by loss (see the fetch above). */
               <p className="jar-prov-lead jar-label">
-                the roots of this signal were never recorded
+                nothing was kept under this one
               </p>
             ) : null}
             {/* WHO HAS ANSWERED A ROOM'S STATEMENT — named, lit or dimmed,
