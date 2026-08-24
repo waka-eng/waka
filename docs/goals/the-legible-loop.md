@@ -1,7 +1,7 @@
 # Goal: the legible loop
 
-Status: in flight — Phases 1–4 passed; next is Phase 5 (the weather
-report, and the antechamber).
+Status: in flight — Phases 1–5 passed; Phase 6 (kept, not read) is
+founder-gated and awaits the evidence ruling.
 Created 2026-08-23 on the founder's instruction to build
 the whole loop-legibility experience as its own goal. Carved out of
 `no-quiet-corners.md` (its Phase 9, plus Phase 4 — the suppression
@@ -181,6 +181,42 @@ records). Demo-seed runs for gates as needed (~10 derivations per
 run). No new dependencies, no new infrastructure.
 
 ## Log
+
+- **2026-08-24 — Phase 5: PASS.** The weather report, and the antechamber.
+  `lib/the-weather.ts` assembles the telling as a pure VIEW over six record
+  families — inspirations kept, signals minted, roots grown, refusals
+  written, artifact versions (the explicit `no_change` kind now finally
+  legible as "everything was read again, and the poster held"), and
+  consultations — bucketed into worded days ("yesterday", "two days ago"),
+  every count in words, zero digits anywhere in a sentence, a label, or
+  the markdown. Nothing is written to tell the weather and nothing can be
+  said that a row does not back. Served twice off one assembly:
+  `GET /api/weather` (JSON — the told sentence for the caller's
+  `?since=` away-window, the fortnight, and the antechamber) and
+  `GET /api/weather.md` (the days, digit-free, for any other mind); both
+  write a consultation (new enum value `weather` — the antechamber carries
+  refused candidates, which are derived readings of the person). The
+  world: on return after time away the existing glide runs first and the
+  companion whispers the told sentence only after the camera comes home —
+  seeing first, telling second, never a notification, silence for a quiet
+  window; and the ≡ menu gains **the antechamber** — every refusal with
+  its candidate dim, its anchor named, and the anchor REACHABLE: "put it
+  back" (the restore verb, permanently housed at last — Phase 3's
+  seven-second undo window is no longer the only way back), "stands again"
+  after a restore, "since removed" as the departed mark. Also fixed in
+  passing: `fetchTheReading` was requesting `/api/api/reading.md` (apiPath
+  already prefixes) — a latent 404 from Phase 1 that no live click had yet
+  exercised. Gate measured: `the-weather.db.test.ts` 5/5 on real Postgres
+  (seeded fortnight worded with zero numerals; DELETING a suppression and
+  a no-change version deletes exactly their sentences — the narration
+  cannot outlive its rows; the away-window tells in one sentence and holds
+  its tongue when quiet; the antechamber row keeps a departed anchor's
+  words with a null id), `antechamber-panel` 4/4,
+  `home-poster` 11/11 (the telling asserted ABSENT before the glide's
+  return and present after), api 54 files / 617 tests, web 22 files / 146
+  tests, vocabulary and seams clean. Deliberately excluded: any stored
+  summary row, any "N new things" digest, any telling before the world
+  has drawn.
 
 - **2026-08-24 — Phase 4: PASS.** Ratified light on the poster. The served
   entry payload's `citedSignals` now carry `answered` — true when the owner

@@ -278,6 +278,15 @@ vi.mock("../src/lib/api", async (importOriginal) => {
        back off the map when the request died, unlighting the ground the
        round-trip case just lit. */
     createFeedback: async () => ({ id: "feedback-1" }),
+    /* The weather, as the server would tell it for the away-window. The
+       sentence's truth is the API's business (the-weather.db.test.ts —
+       every sentence a view of a stored record); what this file pins is
+       WHEN the world says it: after the glide has returned, never before. */
+    fetchTheWeather: async () => ({
+      told: "refused a candidate — too close to what you dismissed.",
+      days: [],
+      antechamber: [],
+    }),
   };
 });
 
@@ -691,5 +700,55 @@ describe("ratified light: the poster's grounds are lit by who holds them", () =>
       (r) => r.textContent ?? "",
     );
     expect(receipt, "the answer taught silently").toContain(RECEIPTS.verdictKept.text);
+  });
+});
+
+describe("the weather is told on arrival, after the world has drawn", () => {
+  /**
+   * goal: the-legible-loop, Phase 5. On return after time away, the world
+   * glides to the newest thing, comes home — and only then whispers the
+   * told sentence through the companion's own line. Seeing first, telling
+   * second: the assertion in the middle of this case is the phase's law,
+   * not decoration. Never a notification — the line rides `.jar-char-say`
+   * and goes on its own.
+   *
+   * `setTimeout` is faked for this case only: the glide's two beats are
+   * wall-clock timeouts, and a test that really waited four seconds would
+   * be a sleep, not a statement. The harness clock (rAF) is untouched.
+   */
+  it("whispers the away-window's sentence only after the glide returns", async () => {
+    layout.unmount();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    window.localStorage.setItem("waka.seen", String(Date.UTC(2026, 7, 10)));
+    try {
+      layout = await mountWorld(FACTS);
+      const said = () =>
+        layout.container.querySelector(".jar-char-say")?.textContent ?? "";
+
+      /* the world has drawn, the glide has not begun: silence */
+      expect(said()).not.toContain("refused a candidate");
+
+      /* first beat: the camera goes to the newest thing — still silence */
+      await act(async () => {
+        vi.advanceTimersByTime(1400);
+      });
+      await layout.step(5);
+      expect(said(), "the telling must not precede the return").not.toContain(
+        "refused a candidate",
+      );
+
+      /* second beat: the camera comes home — now the weather is told */
+      await act(async () => {
+        vi.advanceTimersByTime(2600);
+      });
+      await layout.step(5);
+      expect(said()).toContain(
+        "refused a candidate — too close to what you dismissed.",
+      );
+      expect(/\d/.test(said()), "a numeral rode in with the telling").toBe(false);
+    } finally {
+      vi.useRealTimers();
+      window.localStorage.removeItem("waka.seen");
+    }
   });
 });

@@ -37,6 +37,8 @@ before it gets a name anywhere else.
 | Decay / retirement | `dormant_at` | **setting** | a signal long unused sets like dusk | Decay / retirement policy | reserved |
 | Suppression (owner-refused pattern) | `dismissed_at`, `suppressions` — `anchor_signal_id`, `candidate_statement` | **refused ground** | the ground will refuse anything this close from now on | Suppression record (logged, reversible, deletes nothing) | **today** |
 | Ratified standing (per cited ground) | `citedSignals[].answered` (computed from feedback + locks, never stored) | **agreed light** | what you have answered holds full ink; what only WAKA thinks sits dim | Ratified provenance standing | **today** |
+| Activity narration (view of records) | `GET /api/weather` — told sentences derived from stored rows only | **the weather** | what the loop did, told as days — never a number, never a ping | Derived activity narration (no stored summaries) | **today** |
+| Suppression log surface | `weather.antechamber[]` — refused candidates + anchors | **the antechamber** | the dim place where what was read but not kept still stands | Suppression log view (delta surface) | **today** |
 | Decision attribution | `decision_trace` | **roots of a choice** | which memories this choice came from | Attribution / decision audit | reserved |
 
 ## Words banned from the UI

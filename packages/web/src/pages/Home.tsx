@@ -218,8 +218,11 @@ import {
   type ApiTopOfMindVersion,
   type ApiReading,
   fetchTheReading,
+  type ApiAntechamberRow,
+  fetchTheWeather,
   ApiError,
 } from "../lib/api";
+import { AntechamberPanel } from "../components/AntechamberPanel";
 import { ReadingPanel } from "../components/ReadingPanel";
 import { RECEIPTS } from "../lib/receipts";
 import {
@@ -1171,7 +1174,8 @@ function HomeExperience(): JSX.Element {
     empty: false,
     prevText: null,
   });
-  /** What the companion is glowing about; set only when it is tapped. */
+  /** What the companion is saying: its own line when tapped, and the told
+      weather when an arrival has something on the record to tell. */
   const [charSay, setCharSay] = useState("");
   /* The panel and the selection are ONE state: opening is selecting, and
      closing — by Esc, by a tap on the dimmed field, by tapping the same orb
@@ -2009,6 +2013,16 @@ function HomeExperience(): JSX.Element {
    * then the camera glides to the newest thing and lights it, and comes back
    * out. One beat, no summary, and nothing to dismiss. If nothing is new the
    * whole thing is silent, which is most days.
+   *
+   * AND THEN, ONLY THEN, THE WEATHER IS TOLD. One sentence for the
+   * away-window, assembled server-side purely from stored records
+   * (`the-weather.db.test.ts` — a deleted record loses its sentence),
+   * whispered through the companion's own line after the world has drawn
+   * and the camera has come home. Seeing first, telling second — the told
+   * line rides the return, it never precedes it, and it is never a
+   * notification: nothing to dismiss, gone on its own. A window in which
+   * the loop did nothing is told with silence
+   * (goals/the-legible-loop.md Phase 5).
    */
   useEffect(() => {
     if (!inspirations || phase !== "ready" || offlineRef.current) return undefined;
@@ -2026,25 +2040,47 @@ function HomeExperience(): JSX.Element {
       stamp();
       return undefined;
     }
+    /* fetched while the glide waits its beat; whichever timeout speaks reads
+       the settled value from the ref. A failed fetch is a silent arrival —
+       the weather is a courtesy, never a blocker. */
+    const toldRef = { current: null as string | null };
+    void fetchTheWeather({ since: new Date(since) })
+      .then((weather) => {
+        toldRef.current = weather.told;
+      })
+      .catch(() => undefined);
+    const timers: number[] = [];
+    const tell = () => {
+      if (toldRef.current) setCharSay(toldRef.current);
+    };
     const fresh = inspirations.filter((c) => c.capturedMs > since);
     if (fresh.length === 0) {
+      /* nothing to glide to — but the loop may still have worked (a refusal,
+         a held poster). The world is drawn; the whisper may come. */
+      timers.push(window.setTimeout(tell, 1400));
       stamp();
-      return undefined;
+      return () => timers.forEach((id) => window.clearTimeout(id));
     }
     const newest = fresh.reduce((a, b) => (b.capturedMs > a.capturedMs ? b : a));
-    const t = window.setTimeout(() => {
-      simApiRef.current?.select(newest.id);
-      /* AND BACK OUT, ALL THE WAY. Not just letting the selection go — the
-         camera returns to headquarters, because travelling between walls is
-         only possible from there, and a greeting that leaves you unable to
-         walk left or right would be an ambush rather than a welcome. */
+    timers.push(
       window.setTimeout(() => {
-        simApiRef.current?.release();
-        simApiRef.current?.toTop();
-      }, 2600);
-      stamp();
-    }, 1400);
-    return () => window.clearTimeout(t);
+        simApiRef.current?.select(newest.id);
+        /* AND BACK OUT, ALL THE WAY. Not just letting the selection go — the
+           camera returns to headquarters, because travelling between walls is
+           only possible from there, and a greeting that leaves you unable to
+           walk left or right would be an ambush rather than a welcome. */
+        timers.push(
+          window.setTimeout(() => {
+            simApiRef.current?.release();
+            simApiRef.current?.toTop();
+            /* home again: the telling rides the end of the return */
+            tell();
+          }, 2600),
+        );
+        stamp();
+      }, 1400),
+    );
+    return () => timers.forEach((id) => window.clearTimeout(id));
   }, [inspirations, phase]);
 
   /* ------------- the background sweep: newest first, four at a time -------------
@@ -8171,6 +8207,26 @@ function HomeExperience(): JSX.Element {
      rules do not change under a person mid-visit */
   const [readingOpen, setReadingOpen] = useState(false);
   const [theReading, setTheReading] = useState<ApiReading | null>(null);
+  /* the antechamber: fetched on every open — refusals accrue while the
+     world stands, and a stale dim place would claim the ground refused
+     less than it has */
+  const [antechamberOpen, setAntechamberOpen] = useState(false);
+  const [antechamber, setAntechamber] = useState<ApiAntechamberRow[] | null>(null);
+  /** Anchors put back from the antechamber this session, so its rows answer
+      in the same beat rather than waiting for a refetch. */
+  const [restoredAnchors, setRestoredAnchors] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const restoreFromAntechamber = useCallback((anchorSignalId: string) => {
+    if (offlineRef.current) return;
+    restoreSignal(anchorSignalId)
+      .then(() => {
+        setRestoredAnchors((prev) => new Set(prev).add(anchorSignalId));
+      })
+      .catch(() => {
+        /* it did not come back; the row keeps offering */
+      });
+  }, []);
   /** The rename box, while it is open: null when nobody is renaming. */
   const [renaming, setRenaming] = useState<{ id: string; text: string; busy: boolean } | null>(
     null,
@@ -10124,12 +10180,38 @@ function HomeExperience(): JSX.Element {
               >
                 how it reads you
               </button>
+              {/* THE ANTECHAMBER — the dim place where the ground's refusals
+                  stand, on request (goals/the-legible-loop.md Phase 5). */}
+              <button
+                type="button"
+                role="menuitem"
+                className="jar-flatmenu-item jar-label"
+                onClick={() => {
+                  setFlatMenuOpen(false);
+                  setAntechamberOpen(true);
+                  setAntechamber(null);
+                  fetchTheWeather()
+                    .then((weather) => setAntechamber(weather.antechamber))
+                    .catch(() => setAntechamber([]));
+                }}
+              >
+                the antechamber
+              </button>
             </div>
           ) : null}
         </div>
 
         {readingOpen ? (
           <ReadingPanel reading={theReading} onClose={() => setReadingOpen(false)} />
+        ) : null}
+
+        {antechamberOpen ? (
+          <AntechamberPanel
+            rows={antechamber}
+            onClose={() => setAntechamberOpen(false)}
+            onRestoreAnchor={restoreFromAntechamber}
+            restoredAnchorIds={restoredAnchors}
+          />
         ) : null}
 
         <button

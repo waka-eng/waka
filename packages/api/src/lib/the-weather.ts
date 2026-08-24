@@ -1,0 +1,424 @@
+/**
+ * The weather — what the loop did, told as days.
+ *
+ * goal: the-legible-loop, Phase 5. Each sentence here is a VIEW of a record
+ * that already exists — an inspiration kept, a signal minted, a root grown,
+ * a refusal written, an artifact version (including the explicit no-change
+ * kind), a consultation served. Nothing is written to tell the weather, no
+ * model is called, and nothing can be said that a row does not back: delete
+ * the row and the sentence vanishes, which is exactly what
+ * `the-weather.db.test.ts` proves.
+ *
+ * Zero numerals anywhere in a rendered sentence or day label — counts and
+ * distances arrive as words ("three roots", "two days ago"). The law binds
+ * the telling, not the archive: the JSON payload may carry ids and
+ * timestamps for the world to act on.
+ *
+ * The vague-explanation research (docs/craft/the-legible-loop.md, findings
+ * 2 and 8) is why the shape is "what changed", never "how it felt": a delta
+ * of records, told after the world has drawn — seeing first, telling
+ * second.
+ */
+
+import { and, desc, eq, gt, lte } from "drizzle-orm";
+
+import {
+  consultations,
+  inspirations,
+  signalEvidence,
+  signals,
+  suppressions,
+  topOfMinds,
+} from "../db/index.js";
+import type { getDb } from "./db.js";
+
+type WakaDb = ReturnType<typeof getDb>;
+
+/** How far back the weather is told. A fortnight, like the gate says. */
+export const WEATHER_WINDOW_DAYS = 14;
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+const COUNT_WORDS = [
+  "zero",
+  "one",
+  "two",
+  "three",
+  "four",
+  "five",
+  "six",
+  "seven",
+  "eight",
+  "nine",
+  "ten",
+  "eleven",
+  "twelve",
+  "thirteen",
+  "fourteen",
+  "fifteen",
+  "sixteen",
+  "seventeen",
+  "eighteen",
+  "nineteen",
+  "twenty",
+] as const;
+
+/** A count as words, never digits. Beyond the table it is honestly "many". */
+export function wordedCount(n: number): string {
+  return COUNT_WORDS[n] ?? "many";
+}
+
+function wordedTimes(n: number): string {
+  if (n === 1) return "once";
+  if (n === 2) return "twice";
+  return `${wordedCount(n)} times`;
+}
+
+/** "today", "yesterday", "two days ago" … — the day labels of the telling. */
+export function wordedDaysAgo(daysAgo: number): string {
+  if (daysAgo <= 0) return "today";
+  if (daysAgo === 1) return "yesterday";
+  return `${wordedCount(daysAgo)} days ago`;
+}
+
+export interface WeatherSentence {
+  text: string;
+  /** which record table backs this sentence — the view's own receipt */
+  backing:
+    | "inspirations"
+    | "signals"
+    | "signal_evidence"
+    | "suppressions"
+    | "top_of_minds"
+    | "consultations";
+}
+
+export interface WeatherDay {
+  /** whole days before `now`; zero is today */
+  daysAgo: number;
+  label: string;
+  sentences: WeatherSentence[];
+}
+
+export interface AntechamberRow {
+  id: string;
+  /** the refused candidate's words — what stands in the dim place */
+  candidateStatement: string;
+  /** the dismissed signal whose vector refused it; null once truly deleted */
+  anchorSignalId: string | null;
+  /** what the anchor said at the moment it refused — outlives the anchor */
+  anchorStatement: string;
+  /** whether the anchor still refuses (dismissed now) — false after restore
+      or deletion, so the world knows whether "put it back" means anything */
+  anchorStillRefusing: boolean;
+  suppressedAt: string;
+}
+
+export interface TheWeather {
+  /** one sentence for the time since the caller was last here; null when
+      nothing happened — most days, and silence is the honest telling */
+  told: string | null;
+  days: WeatherDay[];
+  antechamber: AntechamberRow[];
+}
+
+interface WindowCounts {
+  kept: number;
+  minted: number;
+  roots: number;
+  refusals: number;
+  posterRewrites: number;
+  posterHeld: number;
+  posterYourHand: number;
+  posterFirst: number;
+  consulted: number;
+}
+
+/**
+ * The clauses of one day (or one away-window), in a fixed voice. Every
+ * clause maps one-to-one onto a family of rows; a count of zero says
+ * nothing rather than "nothing happened" — absence of a row is absence of
+ * a sentence.
+ */
+function tellCounts(c: WindowCounts): WeatherSentence[] {
+  const out: WeatherSentence[] = [];
+  if (c.kept > 0) {
+    out.push({
+      text:
+        c.kept === 1
+          ? "you kept a memory"
+          : `you kept ${wordedCount(c.kept)} memories`,
+      backing: "inspirations",
+    });
+  }
+  if (c.minted > 0) {
+    out.push({
+      text:
+        c.minted === 1
+          ? "a new pattern was spoken"
+          : `${wordedCount(c.minted)} new patterns were spoken`,
+      backing: "signals",
+    });
+  }
+  if (c.roots > 0) {
+    out.push({
+      text:
+        c.roots === 1
+          ? "a pattern grew a root"
+          : `your patterns grew ${wordedCount(c.roots)} roots`,
+      backing: "signal_evidence",
+    });
+  }
+  if (c.refusals > 0) {
+    out.push({
+      text:
+        c.refusals === 1
+          ? "refused a candidate — too close to what you dismissed"
+          : `refused ${wordedCount(c.refusals)} candidates — too close to what you dismissed`,
+      backing: "suppressions",
+    });
+  }
+  // The sky held: memories were read and no pattern moved. Only worth
+  // saying when something was actually read — a quiet day is quiet.
+  if (c.kept > 0 && c.minted === 0 && c.roots === 0 && c.refusals === 0) {
+    out.push({ text: "the sky held", backing: "inspirations" });
+  }
+  if (c.posterFirst > 0) {
+    out.push({ text: "the poster was written for the first time", backing: "top_of_minds" });
+  }
+  if (c.posterRewrites > 0) {
+    out.push({
+      text:
+        c.posterRewrites === 1
+          ? "the poster was rewritten"
+          : `the poster was rewritten ${wordedTimes(c.posterRewrites)}`,
+      backing: "top_of_minds",
+    });
+  }
+  if (c.posterHeld > 0) {
+    out.push({
+      text: "everything was read again, and the poster held",
+      backing: "top_of_minds",
+    });
+  }
+  if (c.posterYourHand > 0) {
+    out.push({ text: "the poster took your own words", backing: "top_of_minds" });
+  }
+  if (c.consulted > 0) {
+    out.push({
+      text:
+        c.consulted === 1
+          ? "your memory was consulted"
+          : `your memory was consulted ${wordedTimes(c.consulted)}`,
+      backing: "consultations",
+    });
+  }
+  return out;
+}
+
+interface Stamped {
+  at: Date;
+  kind: keyof WindowCounts;
+}
+
+async function loadStamps(
+  db: WakaDb,
+  profileId: string,
+  since: Date,
+  until: Date,
+): Promise<Stamped[]> {
+  const bounded = <T extends { at: Date | null }>(rows: T[]) =>
+    rows.filter((r): r is T & { at: Date } => r.at !== null);
+
+  const [kept, minted, roots, refusals, posters, consulted] = await Promise.all([
+    db
+      .select({ at: inspirations.createdAt })
+      .from(inspirations)
+      .where(
+        and(
+          eq(inspirations.profileId, profileId),
+          gt(inspirations.createdAt, since),
+          lte(inspirations.createdAt, until),
+        ),
+      ),
+    db
+      .select({ at: signals.createdAt })
+      .from(signals)
+      .where(
+        and(
+          eq(signals.profileId, profileId),
+          gt(signals.createdAt, since),
+          lte(signals.createdAt, until),
+        ),
+      ),
+    db
+      .select({ at: signalEvidence.createdAt })
+      .from(signalEvidence)
+      .where(
+        and(
+          eq(signalEvidence.profileId, profileId),
+          gt(signalEvidence.createdAt, since),
+          lte(signalEvidence.createdAt, until),
+        ),
+      ),
+    db
+      .select({ at: suppressions.suppressedAt })
+      .from(suppressions)
+      .where(
+        and(
+          eq(suppressions.profileId, profileId),
+          gt(suppressions.suppressedAt, since),
+          lte(suppressions.suppressedAt, until),
+        ),
+      ),
+    db
+      .select({ at: topOfMinds.createdAt, reason: topOfMinds.reason })
+      .from(topOfMinds)
+      .where(
+        and(
+          eq(topOfMinds.profileId, profileId),
+          gt(topOfMinds.createdAt, since),
+          lte(topOfMinds.createdAt, until),
+        ),
+      ),
+    db
+      .select({ at: consultations.servedAt })
+      .from(consultations)
+      .where(
+        and(
+          eq(consultations.profileId, profileId),
+          gt(consultations.servedAt, since),
+          lte(consultations.servedAt, until),
+        ),
+      ),
+  ]);
+
+  const out: Stamped[] = [];
+  for (const r of bounded(kept)) out.push({ at: r.at, kind: "kept" });
+  for (const r of bounded(minted)) out.push({ at: r.at, kind: "minted" });
+  for (const r of bounded(roots)) out.push({ at: r.at, kind: "roots" });
+  for (const r of bounded(refusals)) out.push({ at: r.at, kind: "refusals" });
+  for (const r of posters) {
+    if (r.at === null) continue;
+    if (r.reason === "regenerated") out.push({ at: r.at, kind: "posterRewrites" });
+    else if (r.reason === "no_change") out.push({ at: r.at, kind: "posterHeld" });
+    else if (r.reason === "human_edit") out.push({ at: r.at, kind: "posterYourHand" });
+    else if (r.reason === "initial") out.push({ at: r.at, kind: "posterFirst" });
+    /* member_proposal is a room's weather, not this profile's */
+  }
+  for (const r of bounded(consulted)) out.push({ at: r.at, kind: "consulted" });
+  return out;
+}
+
+const emptyCounts = (): WindowCounts => ({
+  kept: 0,
+  minted: 0,
+  roots: 0,
+  refusals: 0,
+  posterRewrites: 0,
+  posterHeld: 0,
+  posterYourHand: 0,
+  posterFirst: 0,
+  consulted: 0,
+});
+
+/**
+ * The whole telling: the fortnight as days, one told sentence for the
+ * caller's own away-window, and the antechamber.
+ */
+export async function assembleTheWeather(
+  db: WakaDb,
+  input: { profileId: string; now?: Date; since?: Date | null },
+): Promise<TheWeather> {
+  const now = input.now ?? new Date();
+  const windowStart = new Date(now.getTime() - WEATHER_WINDOW_DAYS * MS_PER_DAY);
+  const stamps = await loadStamps(db, input.profileId, windowStart, now);
+
+  // Whole days measured back from now — the label the world tells by.
+  const dayOf = (at: Date) =>
+    Math.max(0, Math.floor((now.getTime() - at.getTime()) / MS_PER_DAY));
+
+  const byDay = new Map<number, WindowCounts>();
+  for (const s of stamps) {
+    const day = dayOf(s.at);
+    const counts = byDay.get(day) ?? emptyCounts();
+    counts[s.kind] += 1;
+    byDay.set(day, counts);
+  }
+
+  const days: WeatherDay[] = [...byDay.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([daysAgo, counts]) => ({
+      daysAgo,
+      label: wordedDaysAgo(daysAgo),
+      sentences: tellCounts(counts),
+    }))
+    .filter((day) => day.sentences.length > 0);
+
+  // The told sentence: the caller's own away-window, one line. Assembled
+  // from the same stamps — no second query, no second truth.
+  let told: string | null = null;
+  if (input.since) {
+    const sinceMs = input.since.getTime();
+    const away = emptyCounts();
+    for (const s of stamps) {
+      if (s.at.getTime() > sinceMs) away[s.kind] += 1;
+    }
+    const clauses = tellCounts(away).map((s) => s.text);
+    told = clauses.length > 0 ? `${clauses.join("; ")}.` : null;
+  }
+
+  const antechamberRows = await db
+    .select({
+      id: suppressions.id,
+      candidateStatement: suppressions.candidateStatement,
+      anchorSignalId: suppressions.anchorSignalId,
+      anchorStatement: suppressions.anchorStatement,
+      suppressedAt: suppressions.suppressedAt,
+      anchorDismissedAt: signals.dismissedAt,
+    })
+    .from(suppressions)
+    .leftJoin(signals, eq(signals.id, suppressions.anchorSignalId))
+    .where(eq(suppressions.profileId, input.profileId))
+    .orderBy(desc(suppressions.suppressedAt))
+    .limit(50);
+
+  return {
+    told,
+    days,
+    antechamber: antechamberRows.map((row) => ({
+      id: row.id,
+      candidateStatement: row.candidateStatement,
+      anchorSignalId: row.anchorSignalId,
+      anchorStatement: row.anchorStatement,
+      anchorStillRefusing: row.anchorDismissedAt !== null,
+      suppressedAt: row.suppressedAt.toISOString(),
+    })),
+  };
+}
+
+/**
+ * The wire rendering — the days only, as markdown, for any mind that asks
+ * "what did WAKA do lately". Digit-free by construction: labels and counts
+ * are words, and nothing else is printed.
+ */
+export function renderTheWeather(weather: TheWeather): string {
+  const lines: string[] = [];
+  lines.push("# The weather");
+  lines.push("");
+  lines.push("> What the loop did, told as days — every sentence a view of a");
+  lines.push("> stored record, never a summary someone wrote.");
+  lines.push("");
+  if (weather.days.length === 0) {
+    lines.push("A quiet fortnight — nothing moved.");
+  }
+  for (const day of weather.days) {
+    lines.push(`## ${day.label}`);
+    lines.push("");
+    for (const sentence of day.sentences) {
+      lines.push(`- ${sentence.text}.`);
+    }
+    lines.push("");
+  }
+  return lines.join("\n").replace(/\n+$/, "\n");
+}

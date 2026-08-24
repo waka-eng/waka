@@ -1896,6 +1896,48 @@
   /* the surround: present, readable, clearly not the point */
   color: var(--jar-faint);
 }
+/* THE ANTECHAMBER — the dim place. The refused candidates render at the
+   faint end of the ink scale on purpose: these are the sentences that did
+   not come to be, and light is the only channel that may say so. */
+.jar-antechamber {
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
+}
+.jar-ante-row {
+  margin: 0 0 14px;
+}
+.jar-ante-candidate {
+  margin: 0 0 2px;
+  font-size: 13.5px;
+  line-height: 1.62;
+  color: var(--jar-faint);
+}
+.jar-ante-anchor {
+  margin: 0;
+  color: var(--jar-faint);
+}
+.jar-ante-anchor-words {
+  color: var(--jar-muted, rgba(232, 237, 244, 0.55));
+}
+.jar-ante-standing {
+  color: var(--jar-faint);
+}
+.jar-ante-restore {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: var(--jar-muted, rgba(232, 237, 244, 0.55));
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.jar-ante-restore:hover,
+.jar-ante-restore:focus-visible {
+  color: var(--jar-ink);
+  outline: none;
+}
+
 /* A GROUND THE POSTER STANDS ON, LIT BY WHO HOLDS IT. Same face, same size,
    same rule down the left as any quotation you can walk into — light is the
    only difference between "what we have agreed about me" (answered: full

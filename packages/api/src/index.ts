@@ -24,6 +24,7 @@ import { inspirationsRoutes } from "./routes/inspirations.js";
 import { profilesRoutes } from "./routes/profiles.js";
 import { principlesMarkdownRoutes, principlesRoutes } from "./routes/principles.js";
 import { createReadingRoute } from "./routes/reading.js";
+import { createWeatherMarkdownRoute, createWeatherRoute } from "./routes/weather.js";
 import { sessionsRoutes } from "./routes/sessions.js";
 import { publicProfileRoutes } from "./routes/public-profiles.js";
 import { signalsRoutes } from "./routes/signals.js";
@@ -68,6 +69,11 @@ app.route("/api/principles", principlesRoutes);
 // How WAKA reads you — the loop's rules, one rendering for every kind of
 // mind, pinned by lib/the-reading.test.ts so it cannot drift from the code.
 app.route("/api/reading.md", createReadingRoute());
+// What the loop did — told as days, a view of stored records only, pinned
+// by lib/the-weather.db.test.ts so nothing can be said that a row does not
+// back. JSON for the world (told + antechamber), markdown for the wire.
+app.route("/api/weather.md", createWeatherMarkdownRoute());
+app.route("/api/weather", createWeatherRoute());
 
 // Deliberately unauthenticated: returns only the owner-approved surface.
 app.route("/api/public/profiles", publicProfileRoutes);

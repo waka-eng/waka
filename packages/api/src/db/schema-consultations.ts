@@ -42,6 +42,10 @@ export const consultationSurfaceValues = [
   "signals",
   "top_of_mind",
   "principles",
+  /** the weather + antechamber serve: told sentences carry no memory, but
+      the antechamber carries refused candidates — derived readings of the
+      person, so the serve is on the record like any other */
+  "weather",
 ] as const;
 export type ConsultationSurface = (typeof consultationSurfaceValues)[number];
 export const consultationSurfaceEnum = pgEnum(

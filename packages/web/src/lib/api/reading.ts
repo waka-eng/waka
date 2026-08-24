@@ -20,7 +20,9 @@ export interface ApiReading {
 export async function fetchTheReading(): Promise<ApiReading> {
   let res: Response;
   try {
-    res = await fetch(apiPath("/api/reading.md"), {
+    /* apiPath prepends the /api prefix itself — the served route is
+       /api/reading.md, so the argument is the bare path */
+    res = await fetch(apiPath("/reading.md"), {
       method: "GET",
       credentials: "include",
       headers: { Accept: "text/markdown" },
