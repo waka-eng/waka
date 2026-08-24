@@ -56,6 +56,7 @@ import {
 } from "./inspiration-embeddings.js";
 import { normalizeSupportedLocale } from "./locales.js";
 import { getDefaultModelProvider, type ModelProvider } from "./model-provider.js";
+import { quoteForEvidence } from "./salience.js";
 import {
   MATCH_CANDIDATE_SCAN_LIMIT,
   SIGNAL_BATCH_DEDUPE_MIN_COSINE,
@@ -225,11 +226,39 @@ export async function deriveSignalsForInspiration(
   // and it is worth keeping current even when this capture yielded nothing.
   await ensureInspirationEmbedding({ profileId, inspirationId: inspiration.id });
 
+  /*
+    THE QUOTE IS CHECKED BEFORE IT IS KEPT.
+
+    `quote` is the model naming the span it read. Downstream it is stored on
+    the evidence row and the world renders it as a lit span of the person's
+    own memory — and where it is NOT found in that memory the renderer falls
+    back to printing the quote by itself, still inside the memory's card.
+    So an invented quote does not degrade into a worse citation, it becomes
+    words the product attributes to someone who never wrote them.
+
+    `verifyQuote` is the judge for exactly this and has been written, correct
+    and documented since 2026-08-01 with no caller. This is the call site it
+    was missing. Models paraphrase; the refusal is the feature.
+
+    The rule itself — own words only, and clip after verifying rather than
+    before — lives in `quoteForEvidence` beside the judge, where a test can
+    run it. See `salience.ts`; both orderings are wrong in the direction of
+    attributing invented text to a person, which is why neither is inline.
+  */
+  const enrichmentText =
+    attachmentRows
+      .flatMap((row) => (row.text ? [row.text] : []))
+      .join("\n\n") || null;
+
   const statements = extraction.statements
     .map((candidate) => ({
       statement: clip(candidate.statement, MAX_STATEMENT_LENGTH),
       reason: candidate.reason ? clip(candidate.reason, MAX_REASON_LENGTH) : null,
-      quote: candidate.quote ? clip(candidate.quote, MAX_QUOTE_LENGTH) : null,
+      quote: quoteForEvidence(
+        candidate.quote,
+        { text: inspiration.text, enrichment: enrichmentText },
+        MAX_QUOTE_LENGTH,
+      ),
     }))
     .filter((candidate) => candidate.statement.length > 0);
 
