@@ -4686,9 +4686,32 @@ function HomeExperience(): JSX.Element {
       b.active = true;
       b.gone = 0;
       b.arrive = view.reduced ? 1 : 0;
+      /*
+       * IT ENTERS FROM JUST ABOVE WHERE IT IS ACTUALLY GOING.
+       *
+       * `entryH` is spent by the draw as `rise` against the EFFECTIVE home —
+       * the peek-lifted one, `lerp(homeY, peekY, lift)` — while this measured
+       * it from the field home that the lift is carrying the orb away from.
+       * For an orb in the peek row those are far apart: the row sits up under
+       * the poster and the field home is near the bottom of the world. So the
+       * entrance began a couple of hundred pixels above HEADQUARTERS instead
+       * of above the row, and a memory arrived out of the sky rather than out
+       * of the ground.
+       *
+       * `born` has always measured against the lifted home — that is how a
+       * newborn comes out of the sentence instead of off the top of the
+       * screen — and this is the same sum, for the orbs that arrive by pour.
+       *
+       * It was invisible while a rebuild re-poured the WHOLE field: every orb
+       * did it at once and it read as the world re-staging, which was the
+       * louder bug. With only genuinely new memories pouring, one orb does it
+       * alone, and then it is the only thing moving on the screen.
+       */
+      const enterLift = peekLift();
+      const fromY = b.peek ? lerp(b.homeY, b.peekY, enterLift) : b.homeY;
       b.entryH = 90 + b.frac * 110;
-      b.x = b.homeX;
-      b.y = b.homeY - (view.reduced ? 0 : b.entryH);
+      b.x = b.peek ? lerp(b.homeX, b.peekX, enterLift) : b.homeX;
+      b.y = fromY - (view.reduced ? 0 : b.entryH);
     }
 
     function reconcileScrub() {
