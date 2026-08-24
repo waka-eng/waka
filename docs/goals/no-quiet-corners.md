@@ -196,6 +196,16 @@ founder law and taste is not delegable.
 
 ## Phase 9 — the loop shows its hands
 
+**Build order, set 2026-08-23 after the research
+(`docs/craft/the-legible-loop.md`):** this phase splits in three and
+does not wait its turn in the document. **9a** (the reading, gesture
+receipts, ratified light) has no dependencies and is pulled forward to
+run immediately after Phase 2 — it is the highest trust-per-line work
+in the goal. **9b** (the weather report and the antechamber) needs
+Phase 4's suppression log and runs after it. **9c** ("kept, not read")
+is founder-gated: it changes what evidence means, and the ruling is
+asked for in the research document.
+
 Added mid-flight from the founder's own ask (2026-08-23): *"people are
 not going to look at every single signal … they would look at the
 principles and top of mind … what they should do instead is be able to
