@@ -84,6 +84,19 @@ export const SIGNAL_BATCH_DEDUPE_MIN_COSINE = 0.94;
 /** Evidence count at which an `emerging` signal becomes `active`. */
 export const SIGNAL_PROMOTION_MIN_EVIDENCE = 3;
 
+/**
+ * HOW MANY DIFFERENT MEMBERS' MEMORIES A ROOM SIGNAL NEEDS BEFORE IT
+ * APPEARS (founder, 2026-08-24). Counted as DISTINCT `owner_profile_id`
+ * over the signal's evidence — not evidence rows, voices. A pattern one
+ * person's memories support is that person's own signal, already forming
+ * on their own wall, and must not wear the room's name; two voices is the
+ * moment a statement about the room stops being a statement about one of
+ * its members. The signal is minted and accumulates below the bar — it
+ * has to be, or the second voice would have nothing to land on — it is
+ * SERVED (wall, sky, synthesis) only at or above it.
+ */
+export const GROUP_SIGNAL_MIN_VOICES = 2;
+
 /** Evidence count at which the support term of confidence saturates. */
 export const CONFIDENCE_SATURATION_EVIDENCE = 6;
 

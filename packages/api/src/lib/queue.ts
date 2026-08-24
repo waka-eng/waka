@@ -125,7 +125,7 @@
  * Splitting the guard from the claim is the one move that must not be made.
  */
 
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 
 import {
   type BackgroundJob,
@@ -136,6 +136,7 @@ import {
   type ReembedSignalPayload,
   type RefreshGroupTopOfMindPayload,
   type RefreshTopOfMindPayload,
+  profiles,
 } from "../db/index.js";
 import { getDb } from "./db.js";
 import {
@@ -412,12 +413,20 @@ export async function enqueueDeriveSignals(
   profileId: string,
   inspirationId: string,
   reason: DeriveSignalsPayload["reason"],
+  /** where the signals land when not on the inspiration's own profile — a
+      room's mind; part of the key, or the personal pass and every room's
+      pass over one capture would collapse into whichever enqueued first */
+  deriveIntoProfileId?: string,
 ): Promise<EnqueueResult> {
   return enqueueKeyedJob({
     profileId,
     type: "derive_signals",
-    payload: { inspirationId, reason },
-    idempotencyKey: `derive_signals:${inspirationId}:${reason}`,
+    payload: deriveIntoProfileId
+      ? { inspirationId, reason, deriveIntoProfileId }
+      : { inspirationId, reason },
+    idempotencyKey: deriveIntoProfileId
+      ? `derive_signals:${inspirationId}:${reason}:${deriveIntoProfileId}`
+      : `derive_signals:${inspirationId}:${reason}`,
   });
 }
 
@@ -783,7 +792,20 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<void> {
         result.mintedSignalIds.length > 0 ||
         result.promotedSignalIds.length > 0;
       if (changed) {
-        await enqueueTopOfMindRefresh(job.profileId, "signals_changed");
+        if (payload.deriveIntoProfileId) {
+          /* a room pass moved a ROOM's signals, so it is the room's board
+             that needs reconsidering — the keeper's own poster learned
+             nothing from it */
+          const mindGroupId = await groupIdOfMind(payload.deriveIntoProfileId);
+          /* owned by the same keeper as the derive pass, for the same budget
+             reason: the refresh spends the model key, and the keep that made
+             it necessary is whose spend it is */
+          if (mindGroupId) {
+            await enqueueGroupTopOfMindRefresh(job.profileId, mindGroupId, "signals_changed");
+          }
+        } else {
+          await enqueueTopOfMindRefresh(job.profileId, "signals_changed");
+        }
       }
       return;
     }
@@ -866,12 +888,29 @@ function parseEnrichAttachmentPayload(payload: unknown): EnrichAttachmentPayload
   return { attachmentId, inspirationId };
 }
 
+/**
+ * Which room a mind profile belongs to. Read at most once per room-derive
+ * job, to route the synthesis that follows it; null for a profile that is
+ * not a mind (a poisoned payload rather than a crash).
+ */
+async function groupIdOfMind(profileId: string): Promise<string | null> {
+  const [row] = await getDb()
+    .select({ groupId: profiles.groupId })
+    .from(profiles)
+    .where(and(eq(profiles.id, profileId), eq(profiles.type, "group")))
+    .limit(1);
+  return row?.groupId ?? null;
+}
+
 function parseDeriveSignalsPayload(payload: unknown): DeriveSignalsPayload | null {
   const inspirationId = readString(payload, "inspirationId");
   const reason = readString(payload, "reason");
   if (!inspirationId) return null;
   if (reason !== "created" && reason !== "edited") return null;
-  return { inspirationId, reason };
+  const deriveIntoProfileId = readString(payload, "deriveIntoProfileId");
+  return deriveIntoProfileId
+    ? { inspirationId, reason, deriveIntoProfileId }
+    : { inspirationId, reason };
 }
 
 function parseRefreshTopOfMindPayload(payload: unknown): RefreshTopOfMindPayload | null {
@@ -896,6 +935,7 @@ function parseRefreshGroupTopOfMindPayload(
     reason !== "shares_changed" &&
     reason !== "membership_changed" &&
     reason !== "proposal_accepted" &&
+    reason !== "signals_changed" &&
     reason !== "manual"
   ) {
     return null;

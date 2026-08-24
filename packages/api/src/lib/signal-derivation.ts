@@ -93,6 +93,15 @@ export interface DeriveSignalsInput {
   inspirationId: string;
   /** "created" on capture, "edited" when a change re-derives the capture. */
   reason: "created" | "edited";
+  /**
+   * WHERE THE SIGNALS LAND (2026-08-24). Absent, on the inspiration's own
+   * profile — every personal pass, unchanged. Set, on a ROOM'S MIND: the
+   * same extraction over the same capture, but matched against the ROOM's
+   * existing statements, minted under the room's profile, and cited with
+   * the keeper as the evidence owner. One capture, several passes, several
+   * spaces — which is the founder's x+y+z, made literal.
+   */
+  deriveIntoProfileId?: string;
 }
 
 export interface SignalDerivationDependencies {
@@ -150,7 +159,13 @@ export async function deriveSignalsForInspiration(
     };
   }
 
-  const profileId = inspiration.profileId;
+  /* THE DERIVING PROFILE IS WHERE SIGNALS LAND — the inspiration's own
+     owner for a personal pass, a room's mind for a room pass. Everything
+     downstream of extraction keys off it: the existing-statement scan, the
+     match targets, the advisory lock, the mint. The one deliberate
+     exception is the capture's own layer-1 embedding, which stays with the
+     memory's owner wherever the pass is landing. */
+  const profileId = input.deriveIntoProfileId ?? inspiration.profileId;
 
   const [profileRows, reflectionRows, attachmentRows, existingStatements] = await Promise.all([
     db
@@ -228,7 +243,10 @@ export async function deriveSignalsForInspiration(
   // defaults resolve to the same thing, and a test that stubbed them must
   // never find a second, unstubbed connection underneath.
   await ensureInspirationEmbedding({
-    profileId,
+    /* the memory's own vector belongs to the memory's owner, whichever
+       space this pass is deriving into — a room pass re-uses it, and must
+       not write a second copy under the mind */
+    profileId: inspiration.profileId,
     inspirationId: inspiration.id,
     db,
     client: embeddingClient,
