@@ -550,16 +550,21 @@ const signalMatchJudgementResponseSchema: ResponseSchema = {
 export function buildSignalMatchJudgementRequest(
   input: SignalMatchJudgementInput,
 ): GenerateContentRequest {
+  /*
+    Through `fence()`, like every other prompt in this file — this builder
+    used to assemble its delimiters by hand and interpolate the statements
+    raw, which is exactly the forgetting the module header warns about. A
+    statement containing its own closer could end the fence early; and since
+    a "same" verdict on an unlocked emerging signal REWRITES that signal's
+    stored statement (`restateSignal`), the fence here guards a write, not
+    just a reading. Logged as M9 in docs/known-issues.md.
+  */
   const prompt = [
     "statement A:",
-    "<<<statement>>>",
-    input.candidateStatement,
-    "<<<end>>>",
+    fence("statement a", input.candidateStatement),
     "",
     "statement B:",
-    "<<<statement>>>",
-    input.existingStatement,
-    "<<<end>>>",
+    fence("statement b", input.existingStatement),
   ].join("\n");
 
   return {
