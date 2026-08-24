@@ -1937,9 +1937,19 @@
   border-radius: 5px;
   color: var(--jar-faint);
   /* light is the only channel: the ground you are NOT in is dimmer, and that
-     is the whole difference — no underline, no chip, no marker */
-  opacity: 0.4;
+     is the whole difference — no underline, no chip, no marker.
+     0.4 was below the floor of its own job. At ten pixels, uppercase, on this
+     ground, it read as texture rather than as four other people — and this is
+     the ONLY thing on screen saying a room is shared, because the field pours
+     one member at a time by design. Still clearly the dim end of the channel
+     against the lit row at 1. */
+  opacity: 0.62;
   transition: opacity 0.28s ease, background-color 0.2s ease;
+}
+/* JUST ARRIVED: every ground lit, for as long as an arrival lasts. Dropping
+   the class is the whole settle — the transition above is already the curve. */
+.jar-ground--lit .jar-ground-row {
+  opacity: 1;
 }
 .jar-ground-row:hover,
 .jar-ground-row:focus-visible {

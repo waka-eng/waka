@@ -504,6 +504,22 @@ const MOOD_GLANCE = 0.45;
  */
 const FORM_FADE_MS = 320;
 /**
+ * ARRIVING IN A ROOM, WHOSE GROUNDS ARE HERE IS LIT THIS LONG.
+ *
+ * A room pours ONE member's memories — yours, until you move to somebody
+ * else's (see `onThisWall`, and the note above it for why a heap of five
+ * grounds is not evidence for anything). That decision is right and it has a
+ * cost nobody had paid for: standing in a room with four other people looks
+ * exactly like standing on your own wall. Every other ground was already on
+ * screen, in the corner, at the dim end of the one channel this world has —
+ * which is the correct RESTING state for a control and the wrong arrival.
+ *
+ * So travelling into a room lights all of them, and they settle back to the
+ * quiet register on their own. The world moved because you moved to it, and
+ * what the motion explains is that this ground is one of several.
+ */
+const GROUNDS_LIT_MS = 1600;
+/**
  * The turn is a PLANET, not a card: the silhouette never changes, and it is
  * the features that travel across it. An eye sits on the equator at this
  * longitude; the pair are ~1 radian apart, which is what puts them where they
@@ -1272,8 +1288,6 @@ function HomeExperience(): JSX.Element {
      standing in it (the dial has no meaning among candidates), and which
      nebulae have been drawn together. */
   const [inSky, setInSky] = useState(false);
-  /* whether the camera is down on the ground, where the memories are */
-  const [inField, setInField] = useState(false);
   /** Which pattern in the sky is being read. Its verdict row belongs to it. */
   const [focusCandId, setFocusCandId] = useState<string | null>(null);
   /** Patterns with a neighbour close enough to join. Pushed from the loop so
@@ -1593,8 +1607,19 @@ function HomeExperience(): JSX.Element {
 
   /* ---- rooms (v8): session caches that survive the sim effect's re-runs ---- */
   const auth = useOptionalAuth();
+  /**
+   * WHO IS ASKING — and offline, which invented person is.
+   *
+   * Signed out there is no profile, and every derivation that asks "is this
+   * one mine?" then answered no about all of them: `onThisWall` matches a
+   * room's ground against this id, so all four fixture rooms stood empty. The
+   * fixture names the member it calls "You" (`viewerProfileId`), and it is
+   * only ever written on the offline path — a real session always wins here,
+   * and outside dev there is no fixture to hand one over.
+   */
+  const offlineViewerRef = useRef<string | null>(null);
   const viewerIdRef = useRef<string | null>(null);
-  viewerIdRef.current = auth?.profile?.id ?? null;
+  viewerIdRef.current = auth?.profile?.id ?? offlineViewerRef.current;
   /* the hue map the legend reads — written where the orbs are tinted, so the
      two can never disagree about who is which colour */
   const hueByOwnerRef = useRef<Map<string, number>>(new Map());
@@ -1683,7 +1708,7 @@ function HomeExperience(): JSX.Element {
         const openMs = open ? Date.parse(open.createdAt) || 0 : null;
         groupChromeRef.current.set(
           groupId,
-          deriveGroupChrome(name, top, openMs, evidence, groupCompany(membersRef.current.get(groupId))),
+          deriveGroupChrome(name, top, openMs, evidence, groupCompany(membersRef.current.get(groupId), viewerIdRef.current)),
         );
         cache.set(groupId, { status: "ready", data: { evidence, top } });
         simApiRef.current?.wake();
@@ -1741,6 +1766,8 @@ function HomeExperience(): JSX.Element {
      */
     const goOffline = (layout: OfflineHome) => {
       offlineRef.current = true;
+      /* before anything reads it: the rooms below are built against this id */
+      offlineViewerRef.current = layout.viewerProfileId;
       setOffline(true);
       setNotes(layout.notes);
       setSignals(layout.signals);
@@ -2812,7 +2839,6 @@ function HomeExperience(): JSX.Element {
 
     /** Which one-time hints have already been said, so they are said once. */
     const hinted = {
-      inField: false,
       dialAway: false,
     };
     /**
@@ -5896,16 +5922,16 @@ function HomeExperience(): JSX.Element {
          sentence, neither of which has a history to scrub. So it comes up
          with the field and goes away with it. */
       const inField = cam.y > view.layout.fieldTop * 0.5;
-      /* THE LEGEND BELONGS TO THE GROUND IT EXPLAINS.
-         It is a key to the orbs, so it exists where the orbs are. Standing at
-         headquarters reading one sentence, or up in the sky among signals,
-         a list of whose-colour-is-whose answers a question nobody is asking —
-         it was just chrome in the corner. It comes up with the field and goes
-         away with it, exactly as the timeline does. */
-      if (inField !== hinted.inField) {
-        hinted.inField = inField;
-        setInField(inField);
-      }
+      /* THE LEGEND BELONGED TO THE GROUND IT EXPLAINED — AND IT IS NOT A
+         LEGEND ANY MORE.
+         It was pushed to React from here so the corner rows could come up with
+         the field and go away with it, on the reasoning that a key to the orbs
+         answers nobody at headquarters. That was true of a key. It is a CHOICE
+         now — the rows moved you between the grounds in a room the moment they
+         stopped decoding hues — and a choice about the wall you are standing
+         on is not a fact about the ground you are hovering over. It is mounted
+         at every height below the sky instead, so nothing needs pushing here.
+         (`inField` still decides whether the DIAL is away, just below.) */
       const nowAway =
         !inField || !hasDial(wallAt(Math.round(cam.x / Math.max(view.w, 1))).kind);
       if (nowAway !== hinted.dialAway) {
@@ -7943,6 +7969,26 @@ function HomeExperience(): JSX.Element {
     setStanding(ownerProfileId);
     simApiRef.current?.standIn(ownerProfileId);
   }, []);
+  /**
+   * Whether the grounds have just been arrived at. True for GROUNDS_LIT_MS
+   * after travelling onto a shared wall, and the class it drives is removed
+   * rather than animated out: the rows carry an opacity transition already, so
+   * dropping the class IS the settle, on the same curve everything else here
+   * uses.
+   */
+  const [groundsLit, setGroundsLit] = useState(false);
+  useEffect(() => {
+    if (grounds.length === 0) {
+      setGroundsLit(false);
+      return;
+    }
+    setGroundsLit(true);
+    const id = window.setTimeout(() => setGroundsLit(false), GROUNDS_LIT_MS);
+    return () => window.clearTimeout(id);
+    /* `wallKey` and not `grounds`: the identity of that array changes whenever
+       a room's field is refetched, and re-lighting the corner because a
+       background request landed is the world moving on its own. */
+  }, [wallKey, grounds.length]);
   /**
    * WHAT THE POSTER RESTS ON — THE SAME QUESTION, ONE LAYER UP.
    *
@@ -10558,9 +10604,16 @@ function HomeExperience(): JSX.Element {
         ) : null}
       </div>
 
-      {grounds.length > 0 && inField && phase === "ready" ? (
+      {/* AT EVERY HEIGHT, NOT JUST DOWN IN THE FIELD.
+          It was gated on `inField`, so it was not even mounted at the height
+          you ARRIVE at — the one moment a person needs telling that this
+          ground is one of several. It is a fact about the wall you are
+          standing on, so like the offline line it holds still while you
+          descend. Only the sky is exempt: up there you are reading patterns,
+          and whose ground is under you is not the question. */}
+      {grounds.length > 0 && !inSky && phase === "ready" ? (
         <div
-          className="jar-ground"
+          className={groundsLit ? "jar-ground jar-ground--lit" : "jar-ground"}
           data-jar-chrome="1"
           role="radiogroup"
           aria-label="Whose inspirations are on the ground"
