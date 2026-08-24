@@ -46,12 +46,10 @@ export function citedWords(titles: string[]): string {
 }
 
 /**
- * The absolute date, spelled all the way out — "May eighteenth", and with the
- * year when it is not this one. It used to format the day (and sometimes the
- * year) as digits, which put "June 25" in the panel directly beside a
- * relative line that obeyed the rule: states render, numerals never. The
- * spelled form is also the one a person would say aloud, which is the test
- * this whole surface is written to.
+ * The absolute date — "Aug 23", and with the year when it is not this one.
+ * It was spelled all the way out ("May eighteenth") to obey "states render,
+ * numerals never"; see the note inside `dateWords` for why a date is not one
+ * of the states that rule is about.
  */
 const ORD_ONES = [
   "zeroth", "first", "second", "third", "fourth", "fifth", "sixth", "seventh",
@@ -71,10 +69,23 @@ const ONES = [
 
 export function dateWords(ms: number, T: number): string {
   const d = new Date(ms);
-  const month = d.toLocaleDateString("en-US", { month: "long" });
-  const day = ordWords(d.getDate());
-  if (d.getFullYear() === new Date(T).getFullYear()) return `${month} ${day}`;
-  return `${month} ${day}, ${yearWords(d.getFullYear())}`;
+  /*
+   * A DATE IS READ, NOT COUNTED.
+   *
+   * "August twenty-third" spelled out obeyed the letter of "states render,
+   * numerals never" and missed its point. That law is about STATES — a count
+   * of members, a score, a tally — where a numeral turns a fact about people
+   * into a readout. A calendar date is none of those: it is a label, everyone
+   * already reads it as digits, and spelling it out makes the reader do
+   * arithmetic to find out when something was.
+   *
+   * `Aug 23`, which is what a person writes down. The month stays short so it
+   * cannot be mistaken for a count, and the year is only there when it is not
+   * this one.
+   */
+  const month = d.toLocaleDateString("en-US", { month: "short" });
+  if (d.getFullYear() === new Date(T).getFullYear()) return `${month} ${d.getDate()}`;
+  return `${month} ${d.getDate()}, ${d.getFullYear()}`;
 }
 /**
  * The name a whisper says: the given name alone. The first whitespace-

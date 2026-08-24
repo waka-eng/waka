@@ -1486,6 +1486,17 @@
 .jar-panel-when {
   display: block;
 }
+/* WHERE THE MEMORY CURRENTLY IS — a fact, not a control. Set apart from the
+   buttons beside it so the line reads "here is where this is, here is what you
+   can do", rather than as one long pressable phrase. */
+.jar-panel-state {
+  color: var(--jar-faint);
+}
+/* AND WHAT DELETING CANNOT UNDO. Quiet, because it is a fact rather than an
+   alarm — but present before the act, not after it. */
+.jar-panel-warn {
+  color: var(--jar-faint);
+}
 .jar-panel-text {
   margin: 14px 0 0;
   font-size: 15px;

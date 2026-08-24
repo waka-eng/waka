@@ -6974,9 +6974,29 @@ function HomeExperience(): JSX.Element {
         if (left < M || left + w > view.w - M) {
           return { left: Math.round((view.w - w) / 2), top: null, bottom: Math.round(view.h - (view.h - M)) };
         }
-        /* vertically it meets the companion at the shoulder and reads
-           downward, clamped so a long memory never leaves the frame */
-        const top = clamp(cy - companion.size * 0.34, 56, Math.max(56, view.h * 0.52));
+        /*
+         * AND WHEN THE COMPANION IS NOT IN THE FRAME, IT MEETS THE MEMORY.
+         *
+         * "Beside the companion" is the right rule only while the companion
+         * can be seen. Down in the field it cannot: `cy` is far above the
+         * viewport, the clamp pins the card to 56px, and it opens hard against
+         * the top edge — nowhere near the orb, and nowhere near the creature
+         * either, which is the one thing this placement exists to avoid.
+         *
+         * So the anchor falls back to the orb itself. The gesture the block
+         * above describes — the orb, the companion turned toward it, then what
+         * it found — is still what happens whenever all three are on screen;
+         * this only decides where to read from when the middle term is gone.
+         *
+         * The ceiling is solved from the card's own declared height rather
+         * than a flat 52% of the viewport, or a memory beside a low orb gets
+         * pulled back up to the middle for no reason a reader can see.
+         */
+        const inFrame = cy > 80 && cy < view.h - 80;
+        const anchorY = inFrame ? cy : b ? b.y - cam.y : view.h * 0.5;
+        const h = Math.min(view.h * 0.62, 560);
+        const maxTop = Math.max(56, view.h - h - M);
+        const top = clamp(anchorY - companion.size * 0.34, 56, maxTop);
         return { left: Math.round(left), top: Math.round(top), bottom: null };
       },
       toTop: () => {
@@ -10095,6 +10115,27 @@ function HomeExperience(): JSX.Element {
                 onChange={(e) => editing.retype(e.target.value)}
               />
               <p className="jar-neb-ask">
+                {/* THE PICTURE IS PART OF EDITING, not a sibling of it.
+                    It sat on the housekeeping row beside `edit`, which read as
+                    a fifth unrelated act; changing what a memory IS — its
+                    words and what it carries — is one job. The server reads
+                    the picture at capture time, so it feeds the patterns too,
+                    which is the other reason it belongs with the words. */}
+                <label className="jar-attach">
+                  {attaching ? "keeping the picture…" : "attach a picture"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={attaching}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      const id = panelBall?.sigId ?? panelId;
+                      if (f && id) void attachTo(id, f);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+                <span aria-hidden="true"> · </span>
                 <button type="button" onClick={editing.keep} disabled={editing.open.saving}>
                   {editing.open.saving ? "keeping…" : "keep the change"}
                 </button>
@@ -10147,27 +10188,8 @@ function HomeExperience(): JSX.Element {
                   )
                 }
               >
-                change the words
+                edit
               </button>
-              <span aria-hidden="true"> · </span>
-              {/* THE PICTURE GOES INSIDE THE GLASS. A memory that carries an
-                  image is drawn with it, which is the thing this layout was
-                  first sketched around — and the server reads the picture at
-                  capture time, so it feeds the signals too. */}
-              <label className="jar-attach">
-                {attaching ? "keeping the picture…" : "add a picture"}
-                <input
-                  type="file"
-                  accept="image/*"
-                  disabled={attaching}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    const id = panelBall?.sigId ?? panelId;
-                    if (f && id) void attachTo(id, f);
-                    e.target.value = "";
-                  }}
-                />
-              </label>
               <span aria-hidden="true"> · </span>
               {/* WHO ELSE MAY SEE THIS.
                   The one verb the data model gained and the layout could not
@@ -10181,13 +10203,26 @@ function HomeExperience(): JSX.Element {
                   is no copy anywhere else, so this is genuinely reversible,
                   which is why it needs no confirmation while forgetting
                   does. */}
-              <button type="button" onClick={togglePublic} disabled={publishing}>
-                {publishing
-                  ? "…"
-                  : panelIsPublic
-                    ? "in your rooms · take it back"
-                    : "kept to yourself · put it in your rooms"}
-              </button>
+              {/* WHERE IT IS, THEN WHAT YOU CAN DO ABOUT IT.
+                  This was one button whose label was the state AND the act
+                  glued together — "kept to yourself · put it in your rooms" —
+                  so the whole phrase looked pressable and nothing said which
+                  half would happen. The state is plain text now and only the
+                  verb is a button, which is the same shape every other line
+                  in this panel already has. */}
+              {publishing ? (
+                "…"
+              ) : (
+                <>
+                  <span className="jar-panel-state">
+                    {panelIsPublic ? "in your rooms" : "only you"}
+                  </span>
+                  <span aria-hidden="true"> · </span>
+                  <button type="button" onClick={togglePublic}>
+                    {panelIsPublic ? "keep it to yourself" : "put it in your rooms"}
+                  </button>
+                </>
+              )}
               <span aria-hidden="true"> · </span>
               {/* AND ONLY THEN MAY IT GO. Forgetting sits at the end of the
                   same line as the other two housekeeping acts rather than in
@@ -10197,10 +10232,19 @@ function HomeExperience(): JSX.Element {
                   destructive option is never sitting next to its own
                   confirmation. */}
               {forget.step === "going" ? (
-                "letting go…"
+                "deleting…"
               ) : forget.id === panelId ? (
                 <>
-                  <button type="button" onClick={forgetIt}>forget it</button>
+                  {/* WHAT A DELETE CANNOT TAKE BACK.
+                      A memory is evidence: signals were read out of it and
+                      they do not go with it. Saying so at the moment of asking
+                      is the difference between a warning and a surprise, and
+                      it is the honest shape of the layers — layer 1 is yours
+                      to remove, layer 2 is what was already learned. */}
+                  <span className="jar-panel-warn">
+                    Patterns already read from this stay.
+                  </span>{" "}
+                  <button type="button" onClick={forgetIt}>delete it</button>
                   <span aria-hidden="true"> · </span>
                   <button type="button" onClick={() => setForget({ id: null, step: "rest" })}>
                     keep it
@@ -10208,7 +10252,7 @@ function HomeExperience(): JSX.Element {
                 </>
               ) : (
                 <button type="button" onClick={() => setForget({ id: panelId, step: "asking" })}>
-                  forget this
+                  delete
                 </button>
               )}
             </p>

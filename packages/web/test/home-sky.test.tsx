@@ -1155,10 +1155,12 @@ describe("changing a memory's words", () => {
     if (!open) throw new Error("the panel offers no way to the housekeeping verbs");
     await act(async () => open.click());
 
-    const change = [...panel.querySelectorAll<HTMLElement>(".jar-neb-ask button")].find((b) =>
-      /change the words/i.test(b.textContent ?? ""),
+    /* `change the words` was renamed to `edit` when the picture moved inside
+       it; this test is about what editing DOES, so it follows the label. */
+    const change = [...panel.querySelectorAll<HTMLElement>(".jar-neb-ask button")].find(
+      (b) => (b.textContent ?? "").trim().toLowerCase() === "edit",
     );
-    if (!change) throw new Error("`more` did not offer changing the words");
+    if (!change) throw new Error("`more` did not offer editing the memory");
     await act(async () => change.click());
 
     const box = panel.querySelector<HTMLTextAreaElement>("textarea.jar-reflect-box");
