@@ -232,6 +232,14 @@ async function main(): Promise<void> {
   let stayer: Session | undefined;
   let leaverProfileId = "";
   let groupId = "";
+  /** How many of the room's own statements somebody agreed with — written by
+      the step that grows the room, read by the step that asks it to speak.
+      Declared HERE and not beside `citedBefore`: `let` is not hoisted, so a
+      declaration sitting between the two steps put the writer in the temporal
+      dead zone and the step failed with "cannot access before initialization"
+      — a step that had been passing, now broken by the variable that was
+      supposed to explain it. */
+  let affirmedShared = 0;
   let attachmentObject = "";
 
   await step("two people keep their own archives, and one of them keeps a picture", async () => {
@@ -350,8 +358,6 @@ async function main(): Promise<void> {
   });
 
   let citedBefore = 0;
-  /** How many of the room's own statements somebody agreed with, from step 3. */
-  let affirmedShared = 0;
   await step("the room reads itself, and what it writes cites the leaver", async () => {
     const read = await api(stayer!, `/api/groups/${groupId}/top-of-mind/refresh`, {
       method: "POST",
