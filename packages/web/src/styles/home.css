@@ -2900,6 +2900,27 @@
   border-left-color: var(--jar-muted, var(--jar-muted));
   outline: none;
 }
+/* THE PATTERN'S SENTENCE, OPEN. Measured the same way the memory's editor is:
+   every metric that decides where a glyph lands is the resting line's, so the
+   words do not shift by a pixel when the caret arrives. */
+.jar-ground-edit {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  resize: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  color: var(--jar-ink);
+  outline: none;
+  user-select: text;
+  -webkit-user-select: text;
+}
 .jar-ground--answered {
   color: var(--jar-ink);
   text-shadow: 0 0 12px var(--jar-scroll);

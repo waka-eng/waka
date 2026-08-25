@@ -10015,19 +10015,68 @@ function HomeExperience(): JSX.Element {
                         <p className="jar-prov-lead jar-label">standing on</p>
                         {posterGrounds.map((ground) => (
                           <div key={ground.id}>
-                            <button
-                              type="button"
-                              className={
-                                ground.answered
-                                  ? "jar-ground jar-ground--answered"
-                                  : "jar-ground"
-                              }
-                              onClick={() =>
-                                setGroundAsk((cur) => (cur === ground.id ? null : ground.id))
-                              }
-                            >
-                              {ground.statement}
-                            </button>
+                            {/* SAYING IT IN YOUR OWN WORDS, on the layer below
+                                the board. `editing.ts` has implemented the
+                                `signal` kind since it was written — the
+                                request, the optimistic update, the 404
+                                reload — and NOTHING CALLED IT. A whole branch
+                                of a hook, complete and unreachable, because
+                                the only way in was on the flat `/signals`
+                                screen (2026-08-25).
+
+                                It is the same act the board already offers on
+                                its own entries, so it is the same shape: the
+                                sentence becomes a field in place, and the row
+                                under it says keep or leave. A pattern is a
+                                claim about you; being able to correct its
+                                words without leaving the world is the whole
+                                point of it being here. */}
+                            {editing.open?.kind === "signal" &&
+                            editing.open.id === ground.id ? (
+                              <>
+                                <textarea
+                                  className="jar-ground-edit"
+                                  aria-label="this pattern in your own words"
+                                  value={editing.open.text}
+                                  rows={2}
+                                  autoFocus
+                                  onChange={(e) => editing.retype(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Escape") {
+                                      e.preventDefault();
+                                      editing.leave();
+                                    }
+                                  }}
+                                />
+                                <p className="jar-ask">
+                                  <button
+                                    type="button"
+                                    disabled={editing.open.saving}
+                                    onClick={editing.keep}
+                                  >
+                                    {editing.open.saving ? "saving…" : "save"}
+                                  </button>
+                                  <span aria-hidden="true"> · </span>
+                                  <button type="button" onClick={editing.leave}>
+                                    leave it
+                                  </button>
+                                </p>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                className={
+                                  ground.answered
+                                    ? "jar-ground jar-ground--answered"
+                                    : "jar-ground"
+                                }
+                                onClick={() =>
+                                  setGroundAsk((cur) => (cur === ground.id ? null : ground.id))
+                                }
+                              >
+                                {ground.statement}
+                              </button>
+                            )}
                             {groundAsk === ground.id ? (
                               <p className="jar-ask">
                                 <button
@@ -10058,6 +10107,16 @@ function HomeExperience(): JSX.Element {
                                   }}
                                 >
                                   not true
+                                </button>
+                                <span aria-hidden="true"> · </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setGroundAsk(null);
+                                    editing.begin("signal", ground.id, ground.statement);
+                                  }}
+                                >
+                                  say it in my words
                                 </button>
                               </p>
                             ) : null}
