@@ -1752,10 +1752,27 @@
      frame around everything else on the page — it is the one axis that applies
      to every wall at once — so it sits under them all rather than between the
      ground and the names. */
-  /* ABOVE THE COUNT, with the same air between them that everything here
-     keeps from an edge: the count's own box is 10px up and about 22px tall,
-     so 42px leaves 10px of gap. Time is still the outermost frame — it is
-     simply no longer the thing pressed against the glass. */
+  /* THE WORD MOVED; THE INSTRUMENT STAYED (founder, 2026-08-25: "let's find a
+     new home for timeline, doesn't need to stay at bottom").
+
+     What was wrong with this edge was never the rail — it was that a WORD
+     reading `timeline` sat here above the count, so time was a fifth signpost
+     on a page whose whole grammar is four, and the fifth one was the only one
+     that named an instrument instead of a place. That word is now `.jar-when`
+     in the top-left, saying `now` or the day you are parked at, beside the
+     name of the wall you are parked on.
+
+     The rail itself belongs here and nowhere else, and the top was measured
+     before this was written: the chips occupy 0–40px, the poster's block
+     starts at 56px and grows downward with the length of the sentence, so a
+     full-width hairline anywhere up there crosses the wall's own words at
+     some sentence length. Time is a horizontal instrument and the bottom edge
+     is the one clear full-width band on the page.
+
+     It rests ABOVE the count, and the count keeps the edge: the count's box is
+     10px up and about 22px tall, so 42px leaves the same 10px of air between
+     them that every signpost keeps from the glass. And at rest there is
+     nothing here at all — see the reveal rules below. */
   bottom: calc(42px + env(safe-area-inset-bottom));
   display: flex;
   align-items: stretch;
@@ -1786,56 +1803,30 @@
    a button called timeline and when user hovers on it, the line and the
    draggable circle only show then?"
 
-   Time is the one axis that applies to every wall at once, so it keeps its
-   place at the bottom edge — but a hairline drawn the full width of the
-   screen with a lit handle on it, at rest, on every wall, is an instrument
-   left switched on in a room where nobody is winding anything.
+   A hairline drawn the full width of the screen with a lit handle on it, at
+   rest, on every wall, is an instrument left switched on in a room where
+   nobody is winding anything.
 
-   So the WORD rests there and the instrument arrives. The label sits over the
-   middle of the rail rather than beside it, so opening moves nothing: it
-   fades out in the same slot the hairline fades into.
+   SO THE WORD RESTS AND THE INSTRUMENT ARRIVES — and the word is `.jar-when`,
+   up in the top-left beside the name of the wall, not a label lying over this
+   rail. That is what finally made the rest state REACHABLE. While the word
+   said `timeline` — a name for the instrument — the only way to show you had
+   wound back was to keep the whole instrument lit, so `--live` was set on
+   `!atNow` and one drag drew the hairline across the screen for the rest of
+   the session. Nothing put it away again except a scrub landing within half a
+   day of the present, on a rail you cannot see unless you are touching it.
+   That is the line the founder asked four times to remove, held up by the one
+   rule meant to make it meaningful. Now the word says `now`, or the day you
+   are parked at, the fact is carried in type, and `--live` means only "a
+   finger is on it".
 
    THREE WAYS IN, and the third is the one that keeps it honest on a phone.
-   Hover is what was asked for and is right on a pointer; `:focus-within`
-   carries a keyboard; `--open` is the press, because a hover-only control
-   does not exist on touch and this stylesheet has shipped three of those
-   already. `--live` is not a way in but a fact: while you are scrubbing, or
-   parked anywhere but now, the rail stays up because it is showing you
-   where you are. */
-.jar-dial-name {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 1;
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  margin: 0;
-  padding: 6px 12px;
-  background: none;
-  font-family: inherit;
-  color: var(--jar-faint);
-  cursor: pointer;
-  pointer-events: auto;
-  white-space: nowrap;
-  transition: opacity 0.28s ease, color 0.22s ease;
-}
-.jar-dial-name:hover,
-.jar-dial-name:focus-visible {
-  color: var(--jar-muted);
-}
-/* the word steps aside for the instrument it names */
-.jar-dial:hover .jar-dial-name,
-.jar-dial:focus-within .jar-dial-name,
-.jar-dial--open .jar-dial-name,
-.jar-dial--live .jar-dial-name {
-  opacity: 0;
-  pointer-events: none;
-}
-
-/* AT REST THERE IS NO RAIL. The hairline, the months and the handle all wait
-   together — a half-drawn instrument is worse than none. */
+   Reaching for the word is what was asked for and is right on a pointer;
+   focusing it carries a keyboard; pressing it is the touch answer, because a
+   hover-only control does not exist on a phone and this stylesheet has
+   shipped three of those already. All three arrive as `--open`, set by the
+   word rather than by a selector on this element — the rail and the word are
+   no longer in the same box, and that is the point. */
 .jar-dial-track::before,
 .jar-month,
 .jar-dial-handle {
@@ -2951,6 +2942,43 @@
    One control, two questions: the name opens the wall you are standing on,
    the caret opens the list of the others. They share a ground so they read
    as one thing, with a hairline between them so the halves are separable. */
+/* ---------- when you are, beside where you are ----------
+   NOT A PILL, and that is deliberate. `.jar-here` and the account link are
+   pills because they are doors — press them and you are somewhere else. This
+   is a READOUT you can also press, and a second pill beside the first would
+   have read as a toolbar, which is the one shape this layout was built
+   without. So it is set in the same voice as the four signposts at the edges
+   of the screen: the label register, at the faint tier, brightening on
+   approach exactly as the pill beside it does.
+
+   AND IT CARRIES ITS OWN NEWS IN LIGHT. Wound back, it is the day you are
+   standing in and it is printed at full ink; at now it is the word `now` and
+   it is as quiet as any other signpost. Light is the only meaning channel, so
+   nothing else has to stay switched on to tell you where in time you are —
+   which is precisely what the rail was doing before. */
+.jar-when {
+  pointer-events: auto;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 7px 10px;
+  background: none;
+  font-family: inherit;
+  color: var(--jar-faint);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.2s ease;
+}
+.jar-when:hover,
+.jar-when:focus-visible {
+  color: var(--jar-muted);
+}
+/* parked anywhere but now — the one fact this word exists to carry */
+.jar-when--away {
+  color: var(--jar-ink);
+}
+
 .jar-here-split {
   position: relative;
   display: inline-flex;

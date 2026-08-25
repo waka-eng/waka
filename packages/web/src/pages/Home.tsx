@@ -1378,6 +1378,24 @@ function HomeExperience(): JSX.Element {
   const [scrubbing, setScrubbing] = useState(false);
   /* parked at now? then the date label and the return button say nothing */
   const [atNow, setAtNow] = useState(true);
+  /**
+   * WHEN YOU ARE PARKED, AS A FACT THE PAGE CAN PRINT.
+   *
+   * `atNow` is a boolean and could only ever say THAT you had wound back, so
+   * the only way to say WHEN was to leave the whole rail lit — which is why
+   * the founder kept seeing a line across the screen they had asked four
+   * times to remove. One drag set `!atNow`, `--live` followed it, and the
+   * hairline stayed drawn for the rest of the session: the only way back to
+   * the rest state was to land a scrub within half a day of the present, on
+   * a rail that is invisible unless you are touching it.
+   *
+   * A word can carry that fact. `null` is now; anything else is the millisecond
+   * the wall is wound to, written on scrub-end rather than on every pointer
+   * move — the readout that rides the handle already answers mid-scrub, and a
+   * number in state per frame is a re-render per frame.
+   */
+  const [parkedAt, setParkedAt] = useState<number | null>(null);
+  const parkedRef = useRef<number | null>(null);
   const [chrome, setChrome] = useState<WallChrome>({
     text: null,
     eyebrow: "Top of mind",
@@ -1926,6 +1944,8 @@ function HomeExperience(): JSX.Element {
    * reason. Pressing the word opens the rail; hovering opens it too.
    */
   const [timeOpen, setTimeOpen] = useState(false);
+  /* the pointer is on the word; the rail is a hover away and this is the hover */
+  const [timeNear, setTimeNear] = useState(false);
 
   /**
    * Fetch one room's jar — its readings' evidence plus its direction —
@@ -7881,7 +7901,9 @@ function HomeExperience(): JSX.Element {
       const pct = `${(p * 100).toFixed(2)}%`;
       const handle = dialHandleRef.current;
       if (handle) handle.style.left = pct;
-      setAtNow(dial.end - T < DAY_MS / 2);
+      const isNow = dial.end - T < DAY_MS / 2;
+      setAtNow(isNow);
+      parkedRef.current = isNow ? null : T;
       /* The date rides ALONGSIDE the handle rather than inside it: the handle
          scales up while the dial is live, and a label inheriting that scale
          is how the date came to be printed at poster size. */
@@ -7921,6 +7943,8 @@ function HomeExperience(): JSX.Element {
   const onDialUp = useCallback(() => {
     scrubbingRef.current = false;
     setScrubbing(false);
+    /* the word in the corner takes the scrub's last reading and holds it */
+    setParkedAt(parkedRef.current);
     simApiRef.current?.wake();
   }, []);
 
@@ -11191,6 +11215,39 @@ function HomeExperience(): JSX.Element {
               ) : null}
             </span>
           }
+
+          {/* WHEN YOU ARE, BESIDE WHERE YOU ARE.
+              Founder, 2026-08-25: "let's find a new home for timeline. doesn't
+              need to stay at bottom."
+
+              It was a word at the bottom edge with the count under it, which
+              made time a FIFTH signpost on a screen whose whole grammar is
+              four: up is what you believe, down is what you kept, left and
+              right are whose mind. Time is not a direction you can walk — it
+              is a lens on whichever wall you are already standing on. So it
+              belongs with the sentence that says which wall that is, and the
+              bottom edge goes back to holding one thing.
+
+              AND IT IS THE READING, NOT A LABEL. It said `timeline`, a name
+              for an instrument, and the instrument then had to stay lit to
+              say you had wound back. This says `now`, or the day you are
+              parked at — so the fact lives in a word that is always there and
+              the rail can be genuinely absent until you reach for it. */}
+          {dial && phase === "ready" && !dialAway ? (
+            <button
+              type="button"
+              className={`jar-when jar-label${parkedAt === null ? "" : " jar-when--away"}`}
+              aria-expanded={timeOpen}
+              aria-label="wind this wall back through time"
+              onClick={() => setTimeOpen((v) => !v)}
+              onPointerEnter={() => setTimeNear(true)}
+              onPointerLeave={() => setTimeNear(false)}
+              onFocus={() => setTimeNear(true)}
+              onBlur={() => setTimeNear(false)}
+            >
+              {parkedAt === null ? "now" : dateWords(parkedAt, dial.end)}
+            </button>
+          ) : null}
         </div>
 
         {/* AND THE WAY OUT MOVES RIGHT. Two permanent things at the top of the
@@ -11286,22 +11343,16 @@ function HomeExperience(): JSX.Element {
       {dial && phase === "ready" ? (
         <div
           ref={dialRef}
-          className={`jar-dial${scrubbing || !atNow ? " jar-dial--live" : ""}${
+          className={`jar-dial${scrubbing ? " jar-dial--live" : ""}${
             dialAway ? " jar-dial--away" : ""
-          }${timeOpen ? " jar-dial--open" : ""}`}
+          }${timeOpen || timeNear || scrubbing ? " jar-dial--open" : ""}`}
           data-jar-chrome="1"
         >
-          {/* THE WORD THAT RESTS THERE. It sits over the middle of the rail
-              rather than beside it, so opening the instrument moves nothing:
-              the label fades as the hairline arrives, in the same slot. */}
-          <button
-            type="button"
-            className="jar-dial-name jar-label"
-            aria-expanded={timeOpen}
-            onClick={() => setTimeOpen((v) => !v)}
-          >
-            timeline
-          </button>
+          {/* NO LABEL IN HERE ANY MORE. The word that summons this instrument
+              is `.jar-when`, up in the top-left beside the name of the wall —
+              see the comment there for why time stopped being a fifth thing
+              at the bottom edge. What is left is the instrument itself, and
+              at rest it is nothing at all. */}
           <div
             ref={dialTrackRef}
             className="jar-dial-track"

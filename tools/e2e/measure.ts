@@ -130,7 +130,13 @@ const FIXTURE = `<!doctype html>
     <span class="jar-saved-count">30 inspirations</span>
     <span class="jar-caret" aria-hidden="true"></span>
   </button>
-  <div class="jar-dial jar-dial--open"><button class="jar-dial-name jar-label">timeline</button><div class="jar-dial-track"><div class="jar-dial-handle"></div></div></div>
+  <div class="jar-topbar" data-jar-chrome="1">
+    <div class="jar-exits">
+      <span class="jar-here-split"><button class="jar-here jar-back jar-label">ME</button></span>
+      <button class="jar-when jar-label">now</button>
+    </div>
+  </div>
+  <div class="jar-dial jar-dial--open"><div class="jar-dial-track"><span class="jar-month jar-label" style="left:50%">aug</span><div class="jar-dial-handle"></div></div></div>
 
   <div class="jar-mouth-slot">
     <p class="jar-ask jar-ask--row jar-mouth-where jar-mouth-where--armed">
@@ -336,17 +342,28 @@ const CASES: Case[] = [
     run: async (page) => {
       const b = (await page.evaluate(BOXES)) as Boxes;
       const box = (k: string) => b[k] as { top: number; bottom: number; left: number; right: number };
+      /* THE COUNT HAS THE EDGE, AND THE RAIL STANDS OFF IT BY THE SAME AIR.
+         The rail lives down here too — it is a horizontal instrument and this
+         is the only clear full-width band on the page — but it is the count
+         that touches the glass, and the gap between them is the same 10px
+         every signpost keeps. It used to be the other way round, which cost
+         the count its own inset: it kept 10px from the RAIL while the rail
+         kept 6px from the screen, so the sign a person reads most sat
+         furthest from an edge of the four. */
+      const railGap = box("saved").top - box("dial").bottom;
       const got = {
         top: box("values").top,
         left: box("wayL").left,
         right: b.vw - box("wayR").right,
-        /* THE COUNT IS AT THE BOTTOM EDGE and the rail stands off it, since
-           2026-08-25: it used to be the other way round, which cost the count
-           its own inset — it kept 10px from the RAIL and the rail kept 6px
-           from the screen, so the sign a person reads most sat furthest from
-           an edge of the four. */
+        /* THE COUNT HAS THE BOTTOM EDGE TO ITSELF, since 2026-08-25. First
+           the rail was under it, which cost the count its own inset — it kept
+           10px from the RAIL and the rail kept 6px from the screen, so the
+           sign a person reads most sat furthest from an edge of the four.
+           Then the rail moved above it, which is where it stays: the WORD
+           that used to sit here went to the top-left and became the reading
+           itself, so this edge is no longer naming two things. */
         bottom: b.vh - box("saved").bottom,
-        "the rail above it": box("saved").top - box("dial").bottom,
+        "the rail above it": railGap,
       };
       const wrong = Object.entries(got).filter(([, v]) => !near(v, INSET, 1));
       return {
@@ -393,7 +410,7 @@ const CASES: Case[] = [
   {
     id: "the-rail-rests-hidden",
     name: "the timeline waits to be asked, and arrives when it is",
-    needs: ["jar-dial-name", "jar-dial-track"],
+    needs: ["jar-when", "jar-dial", "jar-dial-track", "jar-month"],
     sabotage: ".jar-dial-track::before, .jar-dial-handle { opacity: 1 !important; }",
     run: async (page) => {
       /* THE CASE THAT WOULD HAVE CAUGHT IT. The founder asked for the line
@@ -404,7 +421,7 @@ const CASES: Case[] = [
          nothing. */
       const read = `(() => {
         const o = (s, pe) => { const e = document.querySelector(s); return e ? Number(getComputedStyle(e, pe || null).opacity) : -1; };
-        return { name: o(".jar-dial-name"), handle: o(".jar-dial-handle"), rail: o(".jar-dial-track", "::before") };
+        return { name: o(".jar-when"), handle: o(".jar-dial-handle"), rail: o(".jar-dial-track", "::before") };
       })()`;
       /* WAIT OUT THE FADE BEFORE READING. The first version of this case read
          on the next frame and caught the rail mid-transition at 0.5, then
@@ -416,16 +433,24 @@ const CASES: Case[] = [
       await page.evaluate(`document.querySelector(".jar-dial").classList.add("jar-dial--open")`);
       await page.waitForTimeout(400);
       const open = (await page.evaluate(read)) as Record<string, number>;
+      /* THE WORD DOES NOT FADE ANY MORE, and that is the change. It used to
+         lie over the middle of the rail and step aside as the hairline
+         arrived. It now sits in the top-left saying WHEN you are, which is a
+         fact rather than a label — so it is legible in both states, and a
+         reading where it went dark would mean the readout had been turned
+         back into a signpost. */
       const hidden = rest.rail! < 0.02 && rest.handle! < 0.02 && rest.name! > 0.5;
-      const shown = open.rail! > 0.2 && open.handle! > 0.5 && open.name! < 0.02;
+      const shown = open.rail! > 0.2 && open.handle! > 0.5 && open.name! > 0.5;
       return {
         ok: hidden && shown,
         detail:
           hidden && shown
-            ? `at rest name ${rest.name} rail ${rest.rail} handle ${rest.handle}; opened ${open.name} / ${open.rail} / ${open.handle}`
+            ? `at rest the word reads at ${rest.name} over rail ${rest.rail} and handle ${rest.handle}; asked, rail ${open.rail} and handle ${open.handle}, the word still at ${open.name}`
             : !hidden
               ? `the rail does not rest hidden — rail ${rest.rail}, handle ${rest.handle}, with the word at ${rest.name}`
-              : `asked for, it did not arrive — rail ${open.rail}, handle ${open.handle}`,
+              : open.name! <= 0.5
+                ? `the word went dark when the rail arrived — it is the readout, it stays`
+                : `asked for, it did not arrive — rail ${open.rail}, handle ${open.handle}`,
       };
     },
   },
