@@ -1770,6 +1770,9 @@ function HomeExperience(): JSX.Element {
    * person is actively typing is the smallest and worst possible version of
    * breaking that promise.
    */
+  /** The memory that asked to be reflected on as it was kept — see the reset
+      effect beside `reflect`. Null unless "keep it and reflect" was pressed. */
+  const reflectOnOpenRef = useRef<string | null>(null);
   const [draft, setDraft] = useState(() => {
     try {
       return window.localStorage.getItem("waka.draft") ?? "";
@@ -7383,7 +7386,16 @@ function HomeExperience(): JSX.Element {
     const onWheel = (e: WheelEvent) => {
       /* the panel scrolls its own content, and so does a long capture in the
          mouth; neither ever drives the camera */
-      if (e.target instanceof Element && e.target.closest(".jar-panel, .jar-mouth")) return;
+      /* `.jar-mouth-slot--note` by name, not by living inside `.jar-mouth`:
+         the drawer is portalled to the world's root so that nothing moving can
+         displace it, which took it out of the layer this selector used to find
+         it by — and the wheel started driving the camera while you were trying
+         to scroll a page of pasted text. */
+      if (
+        e.target instanceof Element &&
+        e.target.closest(".jar-panel, .jar-mouth, .jar-mouth-slot--note")
+      )
+        return;
       e.preventDefault();
       if (trip.active) return; /* mid-travel the wheel waits */
       const nowW = performance.now();
@@ -9291,7 +9303,8 @@ function HomeExperience(): JSX.Element {
    * happens before the mouth is emptied. React's state updates are queued;
    * the DOM read below is of the field the person just typed into.
    */
-  const keepIt = useCallback(() => {
+  const keepIt = useCallback(
+    (andReflect = false) => {
     const text = draft.trim();
     if (text === "") return;
     /* LINKS TYPED INTO THE MOUTH BECOME ATTACHMENTS.
@@ -9392,6 +9405,18 @@ function HomeExperience(): JSX.Element {
           finalizeAttachment({ type: "link", inspirationId: made.id, url }).catch(
             () => undefined,
           );
+
+        /* KEPT, AND THEN ASKED ABOUT (founder, 2026-08-25).
+           You cannot reflect on something that does not exist yet — a
+           reflection is a row against a memory's id — so "reflect on this"
+           cannot be an alternative to keeping. It is keeping, and then the
+           question, without making you find the orb you just made and open it
+           yourself. Selecting the new orb opens its panel through the same
+           path a click does, and the reflection is already open inside it. */
+        if (andReflect) {
+          reflectOnOpenRef.current = seed.id;
+          setSelectedId(seed.id);
+        }
       })
       .catch(() => {
         bornRef.current = bornRef.current.filter((s) => s.id !== seed.id);
@@ -9411,7 +9436,9 @@ function HomeExperience(): JSX.Element {
        It fails closed, so nothing was ever published by accident — but a
        person who asked for something to reach their rooms was told it had and
        it had not, which is the same lie in the safer direction. */
-  }, [draft, keepPublic]);
+    },
+    [draft, keepPublic],
+  );
 
   const onMouthKey = useCallback(
     (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
@@ -9497,8 +9524,24 @@ function HomeExperience(): JSX.Element {
      inside the card. */
   const [reflect, setReflect] = useState<ReflectState>({ step: "rest", question: "", answer: "" });
 
-  /* a new memory is a new reflection: nothing carries over */
+  /**
+   * A new memory is a new reflection: nothing carries over.
+   *
+   * ...unless the memory arrived BY WAY OF "keep it and reflect", which asks
+   * for the question in the same breath as the keep. That path sets the
+   * reflection before the panel exists — there is nothing to open it on until
+   * the orb is identified — so without this the reset ran a moment later and
+   * swallowed it, and the founder's one gesture landed them in front of a
+   * closed panel with a "reflect on this" button they had already pressed.
+   * The ref names WHICH memory asked, so a panel opened on any other one
+   * still rests.
+   */
   useEffect(() => {
+    if (panelId !== null && reflectOnOpenRef.current === panelId) {
+      reflectOnOpenRef.current = null;
+      setReflect({ step: "open", question: "What did this stir in you?", answer: "" });
+      return;
+    }
     setReflect({ step: "rest", question: "", answer: "" });
   }, [panelId]);
 
@@ -11113,6 +11156,34 @@ function HomeExperience(): JSX.Element {
                   onClick={() => setKeepPublic(true)}
                 >
                   going to your rooms
+                </button>
+              </p>
+            ) : null}
+            {/* THE DRAWER SAYS WHAT IT CAN DO. TWO VERBS, ONLY HERE.
+                The quick line keeps on Enter and needs nothing drawn: it is
+                one line, the gesture is the whole instrument. A drawer is a
+                different situation — Enter is a NEWLINE in a page of pasted
+                text, so the way to keep it was a shortcut nobody had been
+                told (founder: "there is no save button"). A surface that has
+                stopped being a gesture has to name its actions.
+
+                "and reflect" is the same keep with the question attached,
+                because a reflection is a row against a memory's id and there
+                is nothing to attach one to until the memory exists. It keeps,
+                then opens the new orb with the question already asked — the
+                workflow the founder was missing, rather than a second way to
+                save. */}
+            {mouthLong && mouthOpen && draft.trim() !== "" ? (
+              <p className="jar-mouth-do">
+                <button type="button" className="jar-mouth-keep" onClick={() => keepIt()}>
+                  keep it
+                </button>
+                <button
+                  type="button"
+                  className="jar-mouth-reflect"
+                  onClick={() => keepIt(true)}
+                >
+                  keep it and reflect
                 </button>
               </p>
             ) : null}

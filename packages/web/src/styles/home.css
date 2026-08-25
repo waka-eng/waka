@@ -1072,17 +1072,19 @@
   width: min(calc(100% - 32px), 1040px);
   margin: 0 auto;
   transform: none;
-  padding: 0 0 calc(12px + env(safe-area-inset-bottom));
+  /* Deeper at the foot than it was: the drawer names two verbs now, and at
+     12px the second row sat on the frame's edge. */
+  padding: 0 0 calc(22px + env(safe-area-inset-bottom));
   /* opaque, and lighter than the world it slid in front of */
   background: var(--jar-sheet);
   border: 1px solid var(--jar-sheet-edge);
   border-bottom: 0;
-  /* the lit lip — the top edge of a solid thing catching the room */
-  border-top-color: var(--jar-sheet-lip);
+  /* NO LIT LIP. It was a bright hairline across the full width of the sheet,
+     and at 1040px that is not an edge catching the light — it is a rule drawn
+     over the top of your writing. The sheet is already legible as an object
+     from its own value against the world and the shadow it casts upward. */
   border-radius: 18px 18px 0 0;
   box-shadow:
-    /* the sheet's own thickness, just under the lip */
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
     /* and what it casts upward on the world behind it: this is the depth cue,
        and it is why the field no longer looks printed on space */
     0 -40px 90px -20px rgba(0, 0, 0, 0.95);
@@ -1109,22 +1111,56 @@
    you wrote, and nothing else — but it is the mark every physical sheet in
    the world wears at the edge you'd pull, and it is how this one says which
    way it came from. */
-.jar-mouth-slot--note::before {
-  content: "";
-  display: block;
-  width: 44px;
-  height: 4px;
-  margin: 9px auto 11px;
-  border-radius: 999px;
-  background: var(--jar-sheet-grip);
+/* THE GRAB RAIL IS GONE. It was drawn as the handle of a thing you could
+   pull, and nothing was ever bound to it — the founder found that out by
+   clicking it. A control that looks draggable and is inert teaches that the
+   surface is broken, so the choice is to implement the drag or to stop
+   claiming it. The drawer opens and closes itself from what you type, which
+   is the behaviour it actually has. Its top padding stands in for the rail's
+   old spacing so nothing else shifts. */
+.jar-mouth-slot--note {
+  padding-top: 18px;
 }
 /* WHERE THIS ONE IS GOING, ON THE DRAWER'S OWN FOOTER. Inside the sheet, under
    a hairline, so the choice belongs to the note you are writing instead of
    floating over the field's orbs the way it did. */
+/* No rule above it either: the well below has its own edge, and a second line
+   a few pixels under the first was fencing off a footer that is already
+   plainly outside the writing. */
 .jar-mouth-slot--note .jar-mouth-where {
+  margin: 14px 20px 0;
+}
+/* THE DRAWER'S TWO VERBS, in the label register the rest of the world uses —
+   the world has no buttons with fills in it, and one here would be the only
+   box on the screen. They read as words you can press because they are lit
+   against everything around them, which is the only channel this world has. */
+.jar-mouth-do {
+  display: flex;
+  justify-content: center;
+  gap: 26px;
   margin: 12px 20px 0;
-  padding-top: 11px;
-  border-top: 1px solid var(--jar-sheet-edge);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.jar-mouth-do button {
+  all: unset;
+  cursor: pointer;
+  transition: color 0.18s ease;
+}
+/* Keeping is the ordinary act, so it carries the light. Reflecting is the
+   longer road and sits back a step — offered, not urged. */
+.jar-mouth-keep {
+  color: var(--jar-ink);
+}
+.jar-mouth-reflect {
+  color: var(--jar-faint);
+}
+.jar-mouth-reflect:hover,
+.jar-mouth-keep:hover {
+  color: var(--jar-live);
 }
 .jar-mouth-slot--note .jar-mouth-note {
   margin: 10px 20px 0;
