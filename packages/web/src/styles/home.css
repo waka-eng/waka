@@ -638,6 +638,33 @@
   bottom: calc(10px + env(safe-area-inset-bottom));
 }
 
+/* ---------- reflecting on what you just kept ----------
+   The seek card's shape, because it is the same kind of moment: one sheet
+   that owns the screen for as long as it takes to answer, then goes. It is
+   NOT the reading panel — you have just typed these words, and having them
+   read back to you with their verbs and their date around them is a card
+   pretending to be a question. */
+.jar-reflect-room {
+  top: auto;
+  bottom: 16vh;
+  width: min(460px, calc(100vw - 40px));
+  text-align: left;
+}
+/* which memory this is about, in one line and never the whole thing */
+.jar-reflect-on {
+  margin: 0 0 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--jar-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.jar-reflect-room .jar-reflect-box {
+  width: 100%;
+}
+
 /* ---------- which kind of place to make ----------
    A room and an agent are both a new column on the axis and they are nothing
    like each other. Two words in a strip could not carry that difference — and

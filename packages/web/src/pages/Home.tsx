@@ -8411,6 +8411,30 @@ function HomeExperience(): JSX.Element {
    * happens before the mouth is emptied. React's state updates are queued;
    * the DOM read below is of the field the person just typed into.
    */
+  /**
+   * WHY A CALL FAILED, IN WORDS A PERSON CAN SEND YOU.
+   *
+   * Every one of these catches used to discard the error and print a fixed
+   * sentence — "That didn't keep. The words are still here." The words being
+   * still there is the reassuring half and the only half; nothing said
+   * whether the server refused it, the session had expired, or the network
+   * never left the building. The founder hit it, screenshotted it, and the
+   * screenshot could not be debugged, which is the whole cost: a failure
+   * that reports nothing takes an hour to reproduce and a second to explain.
+   *
+   * `ApiError` already carries a status and the server's own message. This
+   * puts them where the person already looking will see them.
+   */
+  const whyFailed = useCallback((err: unknown, fallback: string): string => {
+    if (err instanceof ApiError) {
+      if (err.status === 0) return `${fallback} — the server could not be reached.`;
+      if (err.status === 401) return `${fallback} — you are signed out. Sign in and it is still here.`;
+      return `${fallback} — the server said no (${err.status}): ${err.message}`;
+    }
+    if (err instanceof Error && err.message) return `${fallback} — ${err.message}`;
+    return fallback;
+  }, []);
+
   const keepIt = useCallback(
     (andReflect = false) => {
     const text = draft.trim();
@@ -8540,16 +8564,21 @@ function HomeExperience(): JSX.Element {
              opens with the question already in it. */
           simApiRef.current?.acknowledge("kept");
           setCharSay("saved");
-          reflectOnOpenRef.current = seed.id;
-          setSelectedId(seed.id);
+          /* THE SHEET, NOT THE CARD. `made.id` and not `seed.id`: a
+             reflection is a row against the SERVER's id, and the seed's is a
+             local one minted before the keep left. */
+          setReflectOn({ id: made.id, text });
+          setReflect({ step: "open", question: "What did this stir in you?", answer: "" });
         }
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         bornRef.current = bornRef.current.filter((s) => s.id !== seed.id);
         simApiRef.current?.unborn(seed.id);
         setDraft(text);
         setMouthOpen(true);
-        setMouthNote("That didn’t keep. The words are still here.");
+        setMouthNote(whyFailed(err, "That didn’t keep. The words are still here"));
+        /* and in a build with the internals on, the whole error, once */
+        if (showsDebug()) console.error("[waka] keep failed:", err);
       });
     /* `keepPublic` IS A DEPENDENCY, and leaving it out silently discarded the
        one privacy decision a person makes by hand. This callback reads
@@ -8763,6 +8792,17 @@ function HomeExperience(): JSX.Element {
      an answer against the saved signal's own id, so the whole loop fits
      inside the card. */
   const [reflect, setReflect] = useState<ReflectState>({ step: "rest", question: "", answer: "" });
+  /**
+   * THE MEMORY A STANDALONE REFLECTION IS ABOUT.
+   *
+   * `reflect` alone is bound to whatever card is open, which is right for the
+   * card's own verb. Reflecting from the MOUTH has no card: you kept
+   * something and were asked about it, and dragging the whole reading panel
+   * open to hold one question puts a memory's words, its verbs, its date and
+   * its visibility on screen around a textarea (founder, 2026-08-25: "have
+   * reflect workflow in modal"). Null unless the mouth asked.
+   */
+  const [reflectOn, setReflectOn] = useState<{ id: string; text: string } | null>(null);
 
   /**
    * A new memory is a new reflection: nothing carries over.
@@ -9588,9 +9628,12 @@ function HomeExperience(): JSX.Element {
         /* it went out to people, or it came home */
         simApiRef.current?.acknowledge(isPublic ? "shared" : "touch");
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         /* left as it was: the word is the state, so an unchanged word is an
-           honest report that nothing moved */
+           honest report that nothing moved — but silence about WHY is not,
+           and this one is a privacy control */
+        setMouthNote(whyFailed(err, "That didn’t change who can see it"));
+        if (showsDebug()) console.error("[waka] visibility change failed:", err);
       })
       .finally(() => setPublishing(false));
   }, [panelBall, panelId, panelIsPublic, publishing]);
@@ -9639,23 +9682,32 @@ function HomeExperience(): JSX.Element {
   }, [panelId, panelBall]);
 
   const keepReflection = useCallback(() => {
-    if (!panelId || reflect.step !== "open" || reflect.answer.trim() === "") return;
+    /* the sheet's own memory when the mouth asked, the open card's otherwise */
+    const onId = reflectOn?.id ?? (panelBall?.sigId ?? panelId);
+    if (!onId || reflect.step !== "open" || reflect.answer.trim() === "") return;
     const answer = reflect.answer.trim();
     setReflect((r) => ({ ...r, step: "keeping" }));
     /* a room orb reflects against its real signal id; the relight below
        still addresses the namespaced ball on screen */
-    createReflection(panelBall?.sigId ?? panelId, { question: reflect.question, answer })
+    createReflection(onId, { question: reflect.question, answer })
       .then((made) => {
         setReflect((r) => ({ ...r, step: "kept", lastId: made.id }));
         /* THE PAYOFF: the memory comes back to life in front of you. A saved
            reflection is a real state change — one more answered reflection,
            touched just now — so the orb's aliveness genuinely rises and the
            light shows it. Fading → touch → reflect → re-lit, made visible. */
-        simApiRef.current?.relight(panelId);
+        if (panelId) simApiRef.current?.relight(panelId);
         simApiRef.current?.acknowledge("answered");
       })
-      .catch(() => setReflect((r) => ({ ...r, step: "open" })));
-  }, [panelId, reflect, panelBall]);
+      .catch((err: unknown) => {
+        /* THE ANSWER IS NEVER THROWN AWAY. It goes back to `open` with the
+           words still in the box — and now it says why, instead of looking
+           like the button simply did nothing. */
+        setReflect((r) => ({ ...r, step: "open" }));
+        setMouthNote(whyFailed(err, "That reflection didn’t save. Your words are still here"));
+        if (showsDebug()) console.error("[waka] reflection failed:", err);
+      });
+  }, [panelId, reflect, panelBall, reflectOn, whyFailed]);
 
   /* The passages worth marking inside the text: the words a PATTERN carried
      out of this memory, and only those. The second tier used to be the
@@ -11493,6 +11545,100 @@ function HomeExperience(): JSX.Element {
               not now
             </button>
           </p>
+        </div>
+      ) : null}
+
+      {/* ---------------- THE REFLECTION, ON ITS OWN ----------------
+          Founder, 2026-08-25: "have reflect workflow in modal."
+
+          Reflecting from the CARD stays inside the card, because the memory
+          is already open and the question belongs under its words. Reflecting
+          from the MOUTH had no card, so it borrowed one — it selected the orb
+          it had just made, which dragged the whole reading panel open to hold
+          one question, with the memory's words, its verbs, its date and its
+          visibility arranged around a textarea. You had just typed those
+          words. You do not need them read back to you to answer a question
+          about them.
+
+          So it is its own sheet, in the shape this world already uses for a
+          moment that owns the screen — the same one the seek line and the
+          delete ask wear. It says what was kept, asks, takes the answer, and
+          goes. */}
+      {reflectOn && reflect.step !== "rest" ? (
+        <div
+          className="jar-seek jar-reflect-room"
+          data-jar-chrome="1"
+          role="dialog"
+          aria-label="reflect on what you just kept"
+        >
+          <p className="jar-prov-lead jar-label">saved</p>
+          {/* what it was, in one line: enough to know which memory this is
+              about, never the whole thing back */}
+          <p className="jar-reflect-on">{reflectOn.text}</p>
+          {reflect.step === "kept" ? (
+            <>
+              <p className="jar-reflect-q">Kept.</p>
+              <p className="jar-ask jar-ask--row">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const rid = reflect.lastId;
+                    const owner = reflectOn.id;
+                    setReflect({ step: "rest", question: "", answer: "" });
+                    setReflectOn(null);
+                    if (rid && !offlineRef.current)
+                      deleteReflection(owner, rid).catch(() => undefined);
+                  }}
+                >
+                  take it back
+                </button>
+                <span aria-hidden="true"> · </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReflect({ step: "rest", question: "", answer: "" });
+                    setReflectOn(null);
+                  }}
+                >
+                  done
+                </button>
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="jar-reflect-q">{reflect.question}</p>
+              <textarea
+                className="jar-reflect-box"
+                value={reflect.answer}
+                rows={4}
+                autoFocus
+                placeholder="In your own words"
+                onChange={(e) => setReflect((r) => ({ ...r, answer: e.target.value }))}
+              />
+              <p className="jar-ask jar-ask--row">
+                <button
+                  type="button"
+                  disabled={reflect.step === "keeping" || reflect.answer.trim() === ""}
+                  onClick={keepReflection}
+                >
+                  {reflect.step === "keeping" ? "keeping…" : "keep"}
+                </button>
+                <span aria-hidden="true"> · </span>
+                {/* NOT NOW IS NOT A LOSS. The memory is already kept — that
+                    is the whole point of the beat before this one — so
+                    leaving the question costs nothing and says so. */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReflect({ step: "rest", question: "", answer: "" });
+                    setReflectOn(null);
+                  }}
+                >
+                  not now
+                </button>
+              </p>
+            </>
+          )}
         </div>
       ) : null}
 
