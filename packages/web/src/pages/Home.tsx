@@ -8518,6 +8518,24 @@ function HomeExperience(): JSX.Element {
            yourself. Selecting the new orb opens its panel through the same
            path a click does, and the reflection is already open inside it. */
         if (andReflect) {
+          /* SAY IT WAS SAVED BEFORE ASKING THE QUESTION (founder, 2026-08-25:
+             "when clicking on save and reflect, make clear it was saved —
+             character brightens with the word saved shown in the place of
+             capture inspiration, and then have reflect workflow in modal").
+
+             It went straight to the question. Two things happened at once and
+             only one of them was visible, so the gesture read as "reflect"
+             with the keep taken on trust — and a keep taken on trust is the
+             one thing this world has never asked anybody to do. The plain
+             `save` beside it flares the companion and drops an orb; this did
+             the same underneath and said nothing.
+
+             So the acknowledgement comes first, in the two channels the world
+             already has: the creature brightens, and the word lands in the
+             mouth's own resting slot where the phrase lives. Then the card
+             opens with the question already in it. */
+          simApiRef.current?.acknowledge("kept");
+          setCharSay("saved");
           reflectOnOpenRef.current = seed.id;
           setSelectedId(seed.id);
         }
@@ -10459,6 +10477,20 @@ function HomeExperience(): JSX.Element {
                 start and the row fades in, which is an appearance, not a
                 layout change. Invisible it is also inert, so the empty
                 mouth still offers no control — the "no forms" rule holds. */}
+            {/* ONE ROW, IN THE ORDER THE FOUNDER DREW IT (2026-08-25:
+                `private/public • save • reflect`).
+
+                It was two rows — who may see it above, what to do with it
+                below — which put four controls and two separators under a
+                single line of typing, and made the drawer taller than the
+                words in it. They are one row now, in the label register, so
+                the mouth's foot matches the card's and the signposts'.
+
+                "save and reflect" becomes "reflect" for the same reason: the
+                row already says `save` beside it, so the longer name was
+                spending three words to say "and also". It still KEEPS first —
+                you cannot reflect on something that does not exist yet — and
+                the beat that follows is what says so. */}
             {mouthOpen ? (
               <p
                 className={`jar-ask jar-ask--row jar-mouth-where${
@@ -10473,7 +10505,7 @@ function HomeExperience(): JSX.Element {
                 >
                   private
                 </button>
-                <span aria-hidden="true"> · </span>
+                <span aria-hidden="true">/</span>
                 <button
                   type="button"
                   className={keepPublic ? "jar-where-on" : "jar-where-off"}
@@ -10482,40 +10514,13 @@ function HomeExperience(): JSX.Element {
                 >
                   public
                 </button>
-              </p>
-            ) : null}
-            {/* THE DRAWER SAYS WHAT IT CAN DO. TWO VERBS, ONLY HERE.
-                The quick line keeps on Enter and needs nothing drawn: it is
-                one line, the gesture is the whole instrument. A drawer is a
-                different situation — Enter is a NEWLINE in a page of pasted
-                text, so the way to keep it was a shortcut nobody had been
-                told (founder: "there is no save button"). A surface that has
-                stopped being a gesture has to name its actions.
-
-                "and reflect" is the same keep with the question attached,
-                because a reflection is a row against a memory's id and there
-                is nothing to attach one to until the memory exists. It keeps,
-                then opens the new orb with the question already asked — the
-                workflow the founder was missing, rather than a second way to
-                save. */}
-            {mouthOpen ? (
-              /* ON BOTH FACES NOW (founder: "save button is missing" — said
-                 of the one line, after it was said of the sheet). Enter
-                 still keeps on the quick line, but a named way to save and a
-                 way to reflect belong wherever there are words, not only
-                 once the words have grown into a page. Reserved-then-armed
-                 like the row above it, so the typing line never moves. */
-              <p
-                className={`jar-ask jar-ask--row jar-mouth-do jar-mouth-where${
-                  draft.trim() !== "" ? " jar-mouth-where--armed" : ""
-                }`}
-              >
+                <span aria-hidden="true" className="jar-mouth-dot"> · </span>
                 <button type="button" className="jar-where-on" onClick={() => keepIt()}>
                   save
                 </button>
-                <span aria-hidden="true"> · </span>
+                <span aria-hidden="true" className="jar-mouth-dot"> · </span>
                 <button type="button" className="jar-where-off" onClick={() => keepIt(true)}>
-                  save and reflect
+                  reflect
                 </button>
               </p>
             ) : null}

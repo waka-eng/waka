@@ -719,11 +719,15 @@
   z-index: 6;
   left: 50%;
   transform: translateX(-50%);
-  /* 16px ABOVE THE DIAL, which is what is actually at the bottom edge: the
-     rail sits 6px up and stands 30px tall, so 46px puts the same inset
-     between this and the dial as the ways sideways keep from their edges.
-     Measuring from the viewport bottom instead would put it under the rail. */
-  bottom: calc(46px + env(safe-area-inset-bottom));
+  /* THE COUNT IS AT THE BOTTOM EDGE, and the rail is above it (founder,
+     2026-08-25: "make timeline slider come above 30 inspirations so 30
+     inspirations can always be closer to the edge with same margin as the
+     other edges"). It was the other way round, which cost this sign its own
+     inset: it kept 10px from the RAIL, and the rail kept 6px from the
+     screen, so the one sign a person reads most sat furthest from the edge
+     of the four. Now it keeps the same 10px from the frame that the ways
+     sideways and the way up keep, and the rail stands off it. */
+  bottom: calc(10px + env(safe-area-inset-bottom));
   display: flex;
   align-items: center;
   gap: 7px;
@@ -1699,7 +1703,11 @@
      frame around everything else on the page — it is the one axis that applies
      to every wall at once — so it sits under them all rather than between the
      ground and the names. */
-  bottom: calc(6px + env(safe-area-inset-bottom));
+  /* ABOVE THE COUNT, with the same air between them that everything here
+     keeps from an edge: the count's own box is 10px up and about 22px tall,
+     so 42px leaves 10px of gap. Time is still the outermost frame — it is
+     simply no longer the thing pressed against the glass. */
+  bottom: calc(42px + env(safe-area-inset-bottom));
   display: flex;
   align-items: stretch;
   padding: 0 24px;

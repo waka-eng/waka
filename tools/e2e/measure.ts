@@ -130,7 +130,7 @@ const FIXTURE = `<!doctype html>
     <span class="jar-saved-count">30 inspirations</span>
     <span class="jar-caret" aria-hidden="true"></span>
   </button>
-  <div class="jar-dial"><div class="jar-dial-track"><div class="jar-dial-handle"></div></div></div>
+  <div class="jar-dial jar-dial--open"><button class="jar-dial-name jar-label">timeline</button><div class="jar-dial-track"><div class="jar-dial-handle"></div></div></div>
 
   <div class="jar-panel" data-jar-chrome="1" role="dialog">
     <div class="jar-panel-head">
@@ -304,9 +304,13 @@ const CASES: Case[] = [
         top: box("values").top,
         left: box("wayL").left,
         right: b.vw - box("wayR").right,
-        /* the count measures from the DIAL, which is what is at the bottom
-           edge — from the viewport it would sit under the rail */
-        "above the dial": box("dial").top - box("saved").bottom,
+        /* THE COUNT IS AT THE BOTTOM EDGE and the rail stands off it, since
+           2026-08-25: it used to be the other way round, which cost the count
+           its own inset — it kept 10px from the RAIL and the rail kept 6px
+           from the screen, so the sign a person reads most sat furthest from
+           an edge of the four. */
+        bottom: b.vh - box("saved").bottom,
+        "the rail above it": box("saved").top - box("dial").bottom,
       };
       const wrong = Object.entries(got).filter(([, v]) => !near(v, INSET, 1));
       return {
