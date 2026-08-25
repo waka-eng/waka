@@ -56,3 +56,38 @@
  * that precedence level together.
  */
 @layer base, product, chrome;
+
+/**
+ * AND ONE RULE THAT BEATS ALL THREE LAYERS, ON PURPOSE.
+ *
+ * `e2e:usability` walked the product on 2026-08-25 and found THIRTEEN controls
+ * whose focused state is pixel-identical to their resting state — the capture
+ * control, both private/public verbs, the wall pills, the account link, the
+ * way up, and every text field at the door. A keyboard user tabbing through
+ * this product has no cursor at all. WCAG 2.2 AA, 2.4.7 Focus Visible.
+ *
+ * It got that way honestly: `outline: none` appears twelve times across the
+ * three stylesheets, each time to stop a browser's default ring from ruining a
+ * shape somebody had just designed, and each time the replacement was left for
+ * later. Two places did write one.
+ *
+ * THIS IS UNLAYERED, which is the whole point. Unlayered rules beat every
+ * layer regardless of specificity — the hazard `layers.css` exists to explain
+ * — so the floor cannot be removed by a later `outline: none` in `product` or
+ * `chrome`. That is not a trick played on the other stylesheets; it is a
+ * statement that being able to see where you are is not a design preference
+ * one of them gets to override. A surface that needs a different-looking ring
+ * may draw one; it may not draw nothing.
+ *
+ * `:focus-visible`, not `:focus`, so a pointer press does not leave a ring
+ * behind on a page whose whole manner is quiet. The ring is the world's own
+ * ink with a dark rim under it, so it reads on the deep ground and on a
+ * panel — the only two grounds this product has.
+ */
+:focus-visible {
+  outline: 2px solid var(--jar-ink, #e8edf4);
+  outline-offset: 2px;
+  /* the rim: keeps the ring legible where it crosses light chrome */
+  box-shadow: 0 0 0 4px rgba(6, 8, 13, 0.55);
+  border-radius: inherit;
+}

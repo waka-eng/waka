@@ -39,7 +39,8 @@
     "e2e:s3-stub": "tsx tools/e2e/s3-stub.ts",
     "visual-diff": "tsx tools/visual-diff/capture.ts",
     "visual-diff:install": "playwright install chromium",
-    "e2e:phone": "tsx tools/e2e/phone.ts"
+    "e2e:phone": "tsx tools/e2e/phone.ts",
+    "e2e:usability": "tsx tools/e2e/usability.ts"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
