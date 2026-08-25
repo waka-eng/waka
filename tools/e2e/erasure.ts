@@ -321,7 +321,31 @@ async function main(): Promise<void> {
       { timeoutMs: 240_000, label: "the room's first statement of its own" },
     );
 
-    return `room ${groupId.slice(0, 8)}, two members, ${wall.length} statements it grew`;
+    /* AND SOMEBODY AGREES WITH THEM, BECAUSE A ROOM DOES NOT SPEAK FIRST ON
+       ITS OWN. `GROUP_DRAFT_MIN_AFFIRMED` (top-of-mind-synthesis.ts) holds a
+       room's first generative draft until three of its shared statements have
+       been affirmed by a member other than their owner — the same shape as
+       `emerging → active` at three, one level up, so a room never drafts from
+       thin evidence in a slow week.
+
+       This suite never affirmed anything, so the room waited forever and the
+       step after this one spent five minutes discovering that. The wait was
+       not the bug; the silence was. Agreeing here is also what a person does,
+       and it is the only way the next step has anything to read. */
+    for (const row of wall) {
+      const said = await api(stayer!, `/api/feedback`, {
+        method: "POST",
+        body: JSON.stringify({ targetType: "signal", targetId: row.signalId, value: "true" }),
+      });
+      if (said.status !== 200 && said.status !== 201) {
+        throw new Error(`agreeing with a room statement → ${said.status}: ${said.raw.slice(0, 160)}`);
+      }
+    }
+
+    return (
+      `room ${groupId.slice(0, 8)}, two members, ${wall.length} statements it grew, ` +
+      `all ${wall.length} agreed with`
+    );
   });
 
   let citedBefore = 0;

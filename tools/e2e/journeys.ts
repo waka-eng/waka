@@ -302,7 +302,12 @@ const JOURNEYS: Journey[] = [
       await page.locator('button:has-text("Keep something")').first().click();
       await page.waitForTimeout(900);
       await page.fill(
-        'textarea[aria-label="something worth keeping"]',
+        /* The mouth's own label, which matches its visible placeholder — an
+           accessible name that does not is its own bug. It read "something
+           worth keeping" once; a selector that names a label the product no
+           longer has does not fail loudly, it times out for thirty seconds
+           and reports the journey broken. */
+        'textarea[aria-label="keep something"]',
         `a lift button that dims once it has heard you ${uniq()}`,
       );
       await page.keyboard.press("Enter");
@@ -557,7 +562,8 @@ const JOURNEYS: Journey[] = [
         window.addEventListener("load", () => {
           const style = document.createElement("style");
           style.setAttribute("data-sabotage", "ways-out-hidden");
-          style.textContent = ".jar-edge, .jar-way { opacity: 0 !important; }";
+          style.textContent =
+            ".jar-edge, .jar-way, .jar-axis-mark, .jar-overhead { opacity: 0 !important; }";
           document.head.appendChild(style);
         });
       });
@@ -565,13 +571,30 @@ const JOURNEYS: Journey[] = [
     run: async (page, base) => {
       await signUp(page, base);
       const seen = await page.evaluate(() => {
-        const marks = Array.from(document.querySelectorAll<HTMLElement>(".jar-edge, .jar-way"));
+        /* EVERY WAY THIS LAYOUT ACTUALLY HAS, not only the two in the margins.
+           A person's FIRST account has exactly one wall, so there is no
+           neighbour to point at and `.jar-way` renders nothing at all — this
+           journey was asserting a promise that cannot hold on the very run it
+           is most often executed on, and reporting "no way out is on screen"
+           about a world that has three.
+
+           Sideways is one of four: the axis along the bottom carries every
+           wall AND the offer to make another, and the way up sits on the top
+           edge whenever something is forming overhead. The claim is unchanged
+           — standing here, you can SEE that this goes somewhere — and the
+           sabotage hides all of them, so hiding any one still fails it. */
+        const marks = Array.from(
+          document.querySelectorAll<HTMLElement>(
+            ".jar-edge, .jar-way, .jar-axis-mark, .jar-overhead",
+          ),
+        );
         const inView = marks
           .map((el) => {
             const r = el.getBoundingClientRect();
             const cs = getComputedStyle(el);
             return {
               text: (el.innerText || "").trim(),
+              margin: el.classList.contains("jar-way") || el.classList.contains("jar-edge"),
               opacity: Number(cs.opacity),
               x: Math.round(r.left),
               y: Math.round(r.top),
@@ -588,10 +611,14 @@ const JOURNEYS: Journey[] = [
            grow the axis below it — and they used to be printed on the same
            line. Overlap here is that bug coming back. */
         const overlaps: string[] = [];
-        for (let i = 0; i < inView.length; i++) {
-          for (let j = i + 1; j < inView.length; j++) {
-            const a = inView[i];
-            const b = inView[j];
+        /* Only the MARGINS are checked for collision: the axis is a row of
+           deliberately adjacent marks, and the bug this guards against was two
+           signposts printed on one line at the same edge. */
+        const margins = inView.filter((m) => m.margin);
+        for (let i = 0; i < margins.length; i++) {
+          for (let j = i + 1; j < margins.length; j++) {
+            const a = margins[i];
+            const b = margins[j];
             if (
               a.x < b.x + b.w &&
               b.x < a.x + a.w &&
@@ -1181,6 +1208,22 @@ const JOURNEYS: Journey[] = [
          that only exist beside one. */
       let appeared = false;
       for (let i = 0; i < 60; i += 1) {
+        /* ASK THE POSTER FIRST. The four verbs sat permanently under the
+           ambition until 2026-08-25, when the founder had them folded into
+           the poster's own press: a resting page is a sentence, not a
+           sentence with a toolbar bolted to it. They open where the grounds
+           and the history already open, so this journey now does what a
+           person does — press the words, then answer them. */
+        /* Only when it is shut: the poster TOGGLES, so pressing it on every
+           poll would open the band and close it again on the next pass. */
+        await page
+          .evaluate(() => {
+            const poster = document.querySelector<HTMLElement>(
+              'h1.jar-poster[data-jar-chrome="1"]',
+            );
+            if (poster && poster.getAttribute("aria-expanded") !== "true") poster.click();
+          })
+          .catch(() => {});
         appeared = await page.evaluate(
           () => document.querySelectorAll(".jar-board-act").length >= 3,
         );
