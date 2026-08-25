@@ -108,12 +108,12 @@ const FIXTURE = `<!doctype html>
   /* the world writes these two as inline \`left\` from the wall's column */
   .jar-way { left: ${INSET}px; }
   .jar-way--r { left: auto; right: ${INSET}px; transform: none; }
-  /* the card is placed by the frame loop and animated in; pinned for measure */
-  .jar-panel {
-    position: static !important; transform: none !important;
-    animation: none !important; inset: auto !important;
-    margin: 40px auto !important; width: 460px !important;
-  }
+  /* THE CARD IS NO LONGER PINNED. It was forced to 'position: static' with a
+     margin, because its place used to be solved by the frame loop — and that
+     pin would now hide the very thing the founder asked for, since the
+     stylesheet itself centres it. Only the entrance is stilled, so nothing is
+     read mid-animation. */
+  .jar-panel, .jar-seek, .jar-settings, .jar-prov-room { animation: none !important; }
 </style>
 <div class="jar" style="--jar-vh:100vh;--jar-vw:100vw">
   <button class="jar-values" data-jar-chrome="1">
@@ -148,6 +148,13 @@ const FIXTURE = `<!doctype html>
       <span aria-hidden="true" class="jar-mouth-dot"> &middot; </span>
       <button type="button" class="jar-where-off">reflect</button>
     </p>
+  </div>
+
+  <div class="jar-settings" data-jar-chrome="1" role="dialog">
+    <div class="jar-settings-head"><span class="jar-label">this wall</span></div>
+  </div>
+  <div class="jar-prov-room" data-jar-chrome="1" role="dialog">
+    <p class="jar-prov-room-lead">Where this came from.</p>
   </div>
 
   <div class="jar-panel" data-jar-chrome="1" role="dialog">
@@ -457,11 +464,19 @@ const CASES: Case[] = [
 
   {
     id: "a-sheet-is-its-contents-tall",
-    name: "a sheet that sits at the bottom is only as tall as what is in it",
+    name: "a modal is only as tall as what is in it",
     needs: ["jar-seek", "jar-reflect-room", "jar-reflect-on", "jar-reflect-q", "jar-reflect-box"],
-    /* the exact shape of the bug: the base's `top` winning over the variant's
-       `top: auto`, which pins both edges and stretches the box */
-    sabotage: ".jar-seek.jar-reflect-room { top: 58px !important; }",
+    /* THE SABOTAGE HAD TO BE REWRITTEN, and the reason is worth keeping. It
+       was `top: 58px` alone, which was enough while the variant answered
+       `bottom: 16vh` — the two together are what pinned both edges and
+       stretched the box. Once every modal became one centred surface nothing
+       set `bottom` any more, so forcing `top` merely MOVED the sheet and this
+       case survived its own sabotage: decoration, reported as such by
+       `--negative`. Both edges are pinned here explicitly, so the case still
+       measures the thing it was written for. */
+    sabotage:
+      ".jar-seek.jar-reflect-room { top: 58px !important; bottom: 16vh !important;" +
+      " transform: translateX(-50%) !important; }",
     run: async (page) => {
       /* THE THIRD TIME THIS CASCADE BUG SHIPPED. `.jar-reflect-room` was
          written a hundred and eighty lines ABOVE `.jar-seek`, so its
@@ -486,6 +501,70 @@ const CASES: Case[] = [
         detail: ok
           ? `${r1(m.height)}px tall, with its ${r1(m.pad)}px of padding under the last thing in it and nothing else`
           : `${r1(m.slack - m.pad)}px of dead space under the sheet's last row — it is ${r1(m.height)}px tall and its contents do not fill it`,
+      };
+    },
+  },
+
+  {
+    id: "every-modal-is-one-modal",
+    name: "every modal is centred, and they are all the same object",
+    needs: ["jar-panel", "jar-seek", "jar-settings", "jar-prov-room"],
+    /* one of the four given its old surface back — the exact drift this
+       case exists to notice */
+    sabotage:
+      ".jar-settings { top: 58px !important; left: 20px !important; transform: none !important;" +
+      " border-radius: 14px !important; background: #0a0d14 !important; box-shadow: none !important; }",
+    run: async (page) => {
+      /* THE FOUNDER'S RULING, 2026-08-25, pointing at a memory's card: "all
+         modals must be centered and have same style as this one." There were
+         four surfaces — 18px/4px/14px/6px radii, three grounds, two of them
+         not centred at all — and which one you got depended on which verb you
+         had pressed. The card is the reference, so it is read first and
+         everything else is compared against IT rather than against a literal
+         written here: if the card changes, the others are required to follow. */
+      const read = `(() => {
+        const one = (s) => {
+          const e = document.querySelector(s);
+          if (!e) return null;
+          const c = getComputedStyle(e), b = e.getBoundingClientRect();
+          return {
+            skin: [c.borderRadius, c.padding, c.backgroundColor, c.boxShadow, c.backdropFilter].join(" | "),
+            offX: (b.left + b.width / 2) - window.innerWidth / 2,
+            offY: (b.top + b.height / 2) - window.innerHeight / 2,
+          };
+        };
+        return { card: one(".jar-panel"), seek: one(".jar-seek"),
+                 settings: one(".jar-settings"), prov: one(".jar-prov-room") };
+      })()`;
+      type M = { skin: string; offX: number; offY: number };
+      const m = (await page.evaluate(read)) as Record<string, M | null>;
+      const missing = Object.entries(m).filter(([, v]) => !v).map(([k]) => k);
+      if (missing.length) return { ok: false, detail: `not in the fixture at all: ${missing.join(", ")}` };
+      const card = m.card as M;
+      const others = ["seek", "settings", "prov"] as const;
+
+      const offCentre = Object.entries(m).filter(
+        ([, v]) => !near((v as M).offX, 0, 1) || !near((v as M).offY, 0, 1),
+      );
+      if (offCentre.length) {
+        return {
+          ok: false,
+          detail:
+            "not centred: " +
+            offCentre
+              .map(([k, v]) => `${k} sits ${r1((v as M).offX)}px across and ${r1((v as M).offY)}px down from the middle`)
+              .join("; "),
+        };
+      }
+      const different = others.filter((k) => (m[k] as M).skin !== card.skin);
+      return {
+        ok: different.length === 0,
+        detail:
+          different.length === 0
+            ? `all four centred and wearing one surface — ${card.skin}`
+            : different
+                .map((k) => `${k} is a different object from the card:\n      card ${card.skin}\n      ${k.padEnd(4)} ${(m[k] as M).skin}`)
+                .join("\n    "),
       };
     },
   },

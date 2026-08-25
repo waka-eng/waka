@@ -652,8 +652,6 @@
    it. Naming the base in the selector makes the variant win wherever either
    one is written. */
 .jar-seek.jar-reflect-room {
-  top: auto;
-  bottom: 16vh;
   width: min(460px, calc(100vw - 40px));
   text-align: left;
 }
@@ -679,10 +677,7 @@
    Here each has a name and a sentence, which is what a person actually needs
    to choose between them. */
 .jar-seek.jar-newplace {
-  top: auto;
-  bottom: 16vh;
   width: min(440px, calc(100vw - 48px));
-  padding: 18px 20px 12px;
 }
 .jar-newplace-row {
   display: block;
@@ -833,15 +828,7 @@
 .jar-seek {
   position: absolute;
   z-index: 6;
-  top: calc(58px + env(safe-area-inset-top));
-  left: 50%;
-  transform: translateX(-50%);
   width: min(420px, calc(100vw - 48px));
-  padding: 14px 18px;
-  background: var(--jar-panel);
-  border: 1px solid var(--jar-panel-edge);
-  border-radius: 4px;
-  backdrop-filter: blur(18px);
   pointer-events: auto;
 }
 .jar-seek .jar-ask { margin-top: 8px; }
@@ -1610,18 +1597,10 @@
 .jar-settings {
   pointer-events: auto;
   position: absolute;
-  top: calc(58px + env(safe-area-inset-top));
-  left: 20px;
   z-index: 7;
-  width: min(340px, calc(100vw - 40px));
+  width: min(420px, calc(100vw - 48px));
   max-height: min(70vh, 560px);
   overflow-y: auto;
-  padding: 18px 20px 20px;
-  border: 1px solid var(--jar-panel-edge);
-  border-radius: 14px;
-  background: var(--jar-deep);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
 }
 
 .jar-settings-head {
@@ -2025,8 +2004,6 @@
 /* compound for the same reason as the two above — this one happens to be
    written below `.jar-seek` and works, and that is luck, not a rule */
 .jar-seek.jar-forget-ask {
-  top: auto;
-  bottom: 12vh;
   width: min(460px, calc(100vw - 48px));
 }
 .jar-forget-ask .jar-panel-warn {
@@ -2052,10 +2029,6 @@
      it. A memory you opened is the only thing you are reading, and the
      middle is where a person already is. The chain from the orb to the
      panel is carried by the orb staying lit, not by adjacency. */
-  left: 50%;
-  top: 50%;
-  --jar-panel-rise: 0px;
-  transform: translate(-50%, calc(-50% + var(--jar-panel-rise)));
   /* A READING MEASURE THAT GROWS WITH WHAT IT HOLDS.
      A memory can be a line or a whole pasted page. The measure caps where
      prose stops being trackable (~70 characters) and the height takes most of
@@ -2065,21 +2038,13 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   touch-action: pan-y;
-  /* rounded all round — it is a panel, not a sheet clipped by the screen */
-  border-radius: 18px;
-  padding: 24px;
+  /* THE SURFACE ITSELF IS NOT WRITTEN HERE ANY MORE. Radius, padding, ground,
+     blur and shadow moved to `.jar-modal-surface` below, which this panel and
+     every other modal share — see the ruling there. What stays is what is
+     particular to reading one memory. */
   /* Everything in here can contain captured Korean, so the whole panel stays
      in Pretendard. The voice face never enters it. */
   font-family: inherit;
-  background: var(--jar-panel);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  /* barely there: a hairline too faint to read as a border, and a soft bloom
-     that separates it from the field. No hard edge anywhere. */
-  box-shadow:
-    0 0 0 1px var(--jar-panel-edge),
-    0 20px 60px -28px rgba(0, 0, 0, 0.8),
-    0 0 40px -12px rgba(0, 0, 0, 0.45);
   user-select: text;
   -webkit-user-select: text;
   will-change: opacity, transform;
@@ -2102,6 +2067,57 @@
 .jar-panel--in {
   animation: jar-panel-in 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+
+/* ═══════════════ ONE SURFACE, AND EVERY MODAL WEARS IT ═══════════════
+   Founder, 2026-08-25, pointing at a memory's card: "all modals must be
+   centered and have same style as this one."
+
+   There were FOUR. The card was centred with an 18px radius, a hairline drawn
+   as a shadow and a soft bloom under it. The seek sheet was pinned 58px from
+   the top with a 4px radius and a hard 1px border. The wall's settings hung
+   off the left margin under the chip that opened it, with a 14px radius, a
+   different ground (`--jar-deep`) and no shadow. The room's provenance sheet
+   was centred with a 6px radius and a hard border. Same kind of object, four
+   answers, and which one you got depended on which verb you had pressed.
+
+   So the surface is written ONCE, here, and the four selectors below are the
+   list of things that are modals. Everything particular — a reading measure,
+   a scroll, a flex column, an entrance — stays with each of them.
+
+   WRITTEN BELOW ALL FOUR ON PURPOSE. Three separate bugs in this file this
+   week came from a rule losing to a same-specificity rule written later, so a
+   shared rule that must win is placed after every rule it shares with, and
+   none of those four declares any of these properties any more.
+
+   THE HAIRLINE IS A SHADOW, NOT A BORDER, and that is the one detail worth
+   keeping deliberate: a real border takes part in layout and the box gets two
+   pixels wider than the measure it was given, which is how the account pill
+   came to be four pixels taller than the wall pill beside it. A shadow ring
+   draws the same line and occupies nothing. */
+.jar-panel,
+.jar-seek,
+.jar-settings,
+.jar-prov-room {
+  /* dead centre, and the rise is a variable because the transform slot is
+     spoken for by the centring — see `jar-panel-in` */
+  left: 50%;
+  top: 50%;
+  --jar-panel-rise: 0px;
+  transform: translate(-50%, calc(-50% + var(--jar-panel-rise)));
+  /* rounded all round — these are panels, not sheets clipped by the screen */
+  border-radius: 18px;
+  padding: 24px;
+  background: var(--jar-panel);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  /* barely there: a hairline too faint to read as a border, and a soft bloom
+     that separates it from the field. No hard edge anywhere. */
+  box-shadow:
+    0 0 0 1px var(--jar-panel-edge),
+    0 20px 60px -28px rgba(0, 0, 0, 0.8),
+    0 0 40px -12px rgba(0, 0, 0, 0.45);
+}
+
 .jar-panel--out {
   animation: jar-panel-out 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
   pointer-events: none;
@@ -2520,18 +2536,10 @@
 .jar-prov-room {
   position: fixed;
   z-index: 8;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
   width: min(1020px, calc(100vw - 56px));
   max-height: min(78vh, 760px);
   display: flex;
   flex-direction: column;
-  padding: 22px 24px 16px;
-  background: var(--jar-panel);
-  border: 1px solid var(--jar-panel-edge);
-  border-radius: 6px;
-  backdrop-filter: blur(18px);
   pointer-events: auto;
   animation: jar-panel-in 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
