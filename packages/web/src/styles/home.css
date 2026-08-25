@@ -185,6 +185,39 @@
   margin: 0 auto;
   padding: calc(56px + env(safe-area-inset-top)) 20px 0;
 }
+/* ═══ THE LAYER TAKES NO POINTER; ITS CONTROLS TAKE IT BACK, ALL OF THEM ═══
+   `.jar-hq` is `pointer-events: none` so the world underneath stays draggable
+   through it. `pointer-events` INHERITS, so every control inside headquarters
+   is unclickable until it says otherwise — and this file has now been bitten
+   by that three times: `.jar-edge` (finding 14), `.jar-board-acts` (found a
+   day later, on the same selector), and the POSTER itself, found on
+   2026-08-25 by an end-to-end walk that reported the entry actions
+   unreachable and named what the press landed on instead — the canvas.
+
+   The poster is the worst of the three, because the poster IS a control: the
+   sentence is what you press to ask where it came from, and there is no
+   button beside it by design. A press fell straight through to the world and
+   selected whatever memory happened to be under the words, so asking the
+   poster a question opened somebody's capture instead. It went unnoticed for
+   as long as it did because the four board verbs sat in the open; folding
+   them behind that press (founder, 2026-08-25) is what made an old, quiet bug
+   load-bearing.
+
+   So it is stated ONCE, for the whole layer, rather than remembered per
+   control. The next interactive thing added inside headquarters will not be
+   named `.jar-edge` either, and it should not have to know about this. */
+.jar-hq button,
+.jar-hq label,
+.jar-hq input,
+.jar-hq textarea,
+.jar-hq [role="button"] {
+  pointer-events: auto;
+}
+/* and the sentence says it can be pressed before you press it */
+.jar-poster[role="button"] {
+  cursor: pointer;
+}
+
 .jar-eyebrow {
   margin: 0 0 16px;
 }

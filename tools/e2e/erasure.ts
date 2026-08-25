@@ -341,6 +341,7 @@ async function main(): Promise<void> {
         throw new Error(`agreeing with a room statement → ${said.status}: ${said.raw.slice(0, 160)}`);
       }
     }
+    affirmedShared = wall.length;
 
     return (
       `room ${groupId.slice(0, 8)}, two members, ${wall.length} statements it grew, ` +
@@ -349,6 +350,8 @@ async function main(): Promise<void> {
   });
 
   let citedBefore = 0;
+  /** How many of the room's own statements somebody agreed with, from step 3. */
+  let affirmedShared = 0;
   await step("the room reads itself, and what it writes cites the leaver", async () => {
     const read = await api(stayer!, `/api/groups/${groupId}/top-of-mind/refresh`, {
       method: "POST",
@@ -361,6 +364,28 @@ async function main(): Promise<void> {
        `contributors`, not citations — the route serializes field by field
        (routes/groups.ts) rather than handing back a loader's shape. Guessing
        it cost a five-minute timeout waiting on a path that could never match. */
+    /* A ROOM DOES NOT SPEAK FIRST UNTIL ENOUGH OF IT HAS BEEN AGREED WITH.
+       `GROUP_DRAFT_MIN_AFFIRMED` is three, and the count is over SHARED
+       STATEMENTS, not over agreements: a room that grew two of its own can
+       never reach it however many times each is affirmed. This suite grows
+       its room from two members and four captures, so how many it grows is
+       the model's call and often fewer than three.
+
+       Waiting five minutes to discover a gate we can read directly is not a
+       test, it is a delay. If the room is holding, say so in the words of the
+       rule and stop — the same shape as the attachment steps above, which
+       report what the stack has not got rather than failing it. */
+    const MIN_AFFIRMED = 3;
+    if (affirmedShared < MIN_AFFIRMED) {
+      throw new Error(
+        `the room is holding its first draft: ${affirmedShared} of its own statements ` +
+          `were agreed with and a room needs ${MIN_AFFIRMED} before it drafts ` +
+          `(GROUP_DRAFT_MIN_AFFIRMED, top-of-mind-synthesis.ts). Nothing is broken — ` +
+          `there was not enough agreed material in a two-person room for it to speak, ` +
+          `so the erasure claims below could not be exercised against a room's own words.`,
+      );
+    }
+
     const board = await waitFor(
       async ({ note }) => {
         const response = await api<GroupBoard>(

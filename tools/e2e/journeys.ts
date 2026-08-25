@@ -315,11 +315,25 @@ const JOURNEYS: Journey[] = [
 
       const after = await fieldLight();
       /* Measured 2026-08-23 on a brand-new account: the field reads ~0.07
-         empty, ~0.05 after the first keep, and ~1.95 once the page is
-         RELOADED. So the orb exists and simply is not drawn until something
-         re-solves the ground. A tenfold floor is far below the reload value
-         and far above the noise between two empty frames. */
-      const ok = after !== null && after > before * 10 && after > 0.5;
+         empty, ~0.05 after the first keep WHEN THE BUG IS PRESENT — the orb
+         exists and is simply not drawn until something re-solves the ground —
+         and ~1.95 once the page is RELOADED. So the three states are well
+         separated and the absolute floor is what tells them apart: 0.5 sits
+         six times over the empty frame and three times under the reload.
+
+         THE RATIO IS THE BRITTLE HALF, and it was ×10. It multiplies a
+         near-zero baseline, so an empty frame that reads 0.09 instead of 0.07
+         moves the bar from 0.7 to 0.9 and a genuine, visible, seven-fold rise
+         to 0.63 is reported as "the first memory does not appear in the
+         field". It is ×5 now: still a real relative claim, no longer a
+         measurement of how dark this particular empty frame happened to be.
+
+         A fresh orb is DIMMER than the same orb after a reload, and that is
+         the product being honest rather than a shortfall: nothing has been
+         read from a memory one second old, so it carries nothing and is drawn
+         carrying nothing. The re-light when the distillation pass lands is
+         what gives it whatever it turns out to hold up. */
+      const ok = after !== null && after > before * 5 && after > 0.5;
       return { ok, detail: `fieldLight ${before} -> ${after} (reload shows ~1.95)` };
     },
   },
@@ -1227,7 +1241,16 @@ const JOURNEYS: Journey[] = [
         appeared = await page.evaluate(
           () => document.querySelectorAll(".jar-board-act").length >= 3,
         );
-        if (appeared) break;
+        if (appeared) {
+          /* LET IT COME TO REST BEFORE MEASURING. The band the poster opens
+             arrives on a curve, and `elementFromPoint` during that arrival
+             answers about a layout that is still moving — which reported
+             three of the four verbs as unhittable at full opacity. What this
+             journey asks is whether a person can hit them, and a person aims
+             at a page that has stopped. */
+          await page.waitForTimeout(1_200);
+          break;
+        }
         await page.waitForTimeout(2_000);
       }
       if (!appeared) {
@@ -1253,6 +1276,14 @@ const JOURNEYS: Journey[] = [
             opacity: Number(getComputedStyle(el).opacity),
             /* the real question: if a person aimed here, would they hit it */
             hit: hit === el || (hit !== null && el.contains(hit)),
+            /* AND WHAT THEY HIT INSTEAD. "cannot be hit at its own centre" is
+               a symptom with no suspect: the fix is always something lying
+               over it, and naming that thing is the difference between a
+               report and a search. */
+            hitBy:
+              hit === null
+                ? "(nothing)"
+                : `${hit.tagName.toLowerCase()}.${(hit.className || "").toString().trim().split(/\s+/).join(".")}`,
           };
         });
       });
@@ -1263,7 +1294,8 @@ const JOURNEYS: Journey[] = [
         if (!act.onScreen) problems.push(`"${act.label}" has no box`);
         else if (!act.hit) {
           problems.push(
-            `"${act.label}" cannot be hit at its own centre (opacity ${act.opacity})`,
+            `"${act.label}" cannot be hit at its own centre (opacity ${act.opacity}) — ` +
+              `the press lands on ${act.hitBy}`,
           );
         }
       }
