@@ -727,7 +727,7 @@ describe("ratified light: the poster's grounds are lit by who holds them", () =>
     /* the dim ground opens its own ask row — correction one gesture from
        the explanation, the same verbs the sky uses */
     await press(".jar-ground", /the code is read as the truth/);
-    await press(".jar-neb-ask button", /^yes$/);
+    await press(".jar-ask button", /^yes$/);
 
     const lit = [...layout.container.querySelectorAll<HTMLElement>(".jar-ground")].find((g) =>
       (g.textContent ?? "").includes("the code is read as the truth"),

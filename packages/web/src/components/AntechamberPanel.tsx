@@ -79,7 +79,7 @@ export function AntechamberPanel({
           );
         })
       )}
-      <p className="jar-neb-ask" style={{ marginTop: 14 }}>
+      <p className="jar-ask" style={{ marginTop: 14 }}>
         <button type="button" onClick={onClose}>
           close
         </button>

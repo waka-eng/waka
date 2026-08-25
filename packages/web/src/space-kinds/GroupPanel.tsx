@@ -80,7 +80,7 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
       </span>
     ))}
   </div>
-  <p className="jar-neb-ask" style={{ marginTop: 14 }}>
+  <p className="jar-ask" style={{ marginTop: 14 }}>
     <button
       type="button"
       onClick={() => {
@@ -150,7 +150,7 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
           is open, either answer shows itself and offers the other — changing
           your mind is answering again, and the record keeps only the latest. */}
       {p.viewerStance === "affirmed" ? (
-        <p className="jar-neb-ask">
+        <p className="jar-ask">
           <span>you agreed</span>
           <span aria-hidden="true"> · </span>
           <button type="button" onClick={() => answerProposal(groupPanel, p.id, false)}>
@@ -158,7 +158,7 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
           </button>
         </p>
       ) : p.viewerStance === "declined" ? (
-        <p className="jar-neb-ask">
+        <p className="jar-ask">
           <span>you said not us</span>
           <span aria-hidden="true"> · </span>
           <button type="button" onClick={() => answerProposal(groupPanel, p.id, true)}>
@@ -166,7 +166,7 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
           </button>
         </p>
       ) : (
-        <p className="jar-neb-ask">
+        <p className="jar-ask">
           <button type="button" onClick={() => answerProposal(groupPanel, p.id, true)}>
             yes, that is us
           </button>
@@ -250,7 +250,7 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
         value={propose.text}
         onChange={(e) => setPropose({ ...propose, text: e.target.value })}
       />
-      <p className="jar-neb-ask">
+      <p className="jar-ask">
         <button type="button" disabled={propose.busy} onClick={() => sendProposal(groupPanel)}>
           {propose.busy ? "…" : "put it to them"}
         </button>
@@ -261,14 +261,14 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
       </p>
     </div>
   ) : (
-    <p className="jar-neb-ask">
+    <p className="jar-ask">
       <button type="button" onClick={() => setPropose({ text: "", busy: false })}>
         put something to this group
       </button>
     </p>
   )}
 
-  <p className="jar-neb-ask jar-neb-ask--after">
+  <p className="jar-ask jar-ask--after">
     {leaving === groupPanel ? (
       <>
         <button type="button" onClick={() => leaveThisGroup(groupPanel)}>
@@ -285,7 +285,7 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
       </button>
     )}
   </p>
-  <p className="jar-neb-ask" style={{ marginTop: 10 }}>
+  <p className="jar-ask" style={{ marginTop: 10 }}>
     <button type="button" onClick={() => setGroupPanel(null)}>
       close
     </button>

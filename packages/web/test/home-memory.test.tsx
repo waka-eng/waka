@@ -415,11 +415,11 @@ async function openMemory(text: string): Promise<HTMLElement> {
 
 /** The verbs under an open memory, pressed by name. */
 async function pressPanelVerb(panel: HTMLElement, name: string): Promise<void> {
-  const verb = [...panel.querySelectorAll<HTMLElement>(".jar-neb-ask--after button")].find(
+  const verb = [...panel.querySelectorAll<HTMLElement>(".jar-ask--after button")].find(
     (b) => (b.textContent ?? "").trim() === name,
   );
   if (!verb) {
-    const seen = [...panel.querySelectorAll(".jar-neb-ask--after button")].map((b) =>
+    const seen = [...panel.querySelectorAll(".jar-ask--after button")].map((b) =>
       (b.textContent ?? "").trim(),
     );
     throw new Error(`no "${name}" under the memory — saw ${JSON.stringify(seen)}`);
@@ -492,12 +492,12 @@ describe("changing a memory's words", () => {
     /* THE ROW DOES NOT MOVE OR GROW WHEN THE WORDS OPEN — it changes what it
        offers, in the same place and the same face, because what you are doing
        has changed. */
-    const keep = [...panel.querySelectorAll<HTMLElement>(".jar-neb-ask--after button")].find((b) =>
+    const keep = [...panel.querySelectorAll<HTMLElement>(".jar-ask--after button")].find((b) =>
       /keep the change/i.test(b.textContent ?? ""),
     );
     if (!keep) throw new Error("the open words offer no way to keep what was typed");
     expect(
-      [...panel.querySelectorAll(".jar-neb-ask--after button")].map((b) =>
+      [...panel.querySelectorAll(".jar-ask--after button")].map((b) =>
         (b.textContent ?? "").trim(),
       ),
       "and while the words are open the row is about the words, not about the memory",

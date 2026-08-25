@@ -313,13 +313,24 @@
    own. Section A is now the eyebrow, the ambition, the forming line, the
    companion and the peek — nothing else. */
 
-.jar-neb-ask {
+/* ---------- the quiet verb row ----------
+   A line of small, low-contrast verbs under something you are reading: the
+   card's foot, the settings sheets, the antechamber, the room panel. Twenty-odd
+   places wear it, and it is the reason the whole layout's second register
+   reads as one thing rather than as a dozen local decisions.
+
+   IT WAS `.jar-neb-ask` UNTIL 2026-08-25 — the row of actions under a NEBULA,
+   which is where it started life and the only place it stayed for about a
+   week. The sky it was named for was deleted that day, so the name pointed at
+   nothing: a reader grepping `neb` found the most-used chrome class in the
+   product and no explanation anywhere. Renamed for what it is. */
+.jar-ask {
   margin: 10px 0 0;
   font-size: 13px;
   color: var(--jar-faint);
   pointer-events: auto;
 }
-.jar-neb-ask button {
+.jar-ask button {
   appearance: none;
   -webkit-appearance: none;
   border: 0;
@@ -331,13 +342,13 @@
   cursor: pointer;
   transition: color 0.2s ease;
 }
-.jar-neb-ask button:hover,
-.jar-neb-ask button:focus-visible {
+.jar-ask button:hover,
+.jar-ask button:focus-visible {
   color: var(--jar-ink);
 }
 /* Offered only after "not true" — a sequence, never a menu, so the
    destructive answer is never sitting beside the harmless ones. */
-.jar-neb-ask--after { margin-top: 6px; opacity: 0.55; }
+.jar-ask--after { margin-top: 6px; opacity: 0.55; }
 
 /* WHAT YOU SAID, WORN BY THE STATEMENT.
    Agreed: unchanged, full weight. Half-agreed: lighter, the claim loosened.
@@ -750,7 +761,7 @@
   backdrop-filter: blur(18px);
   pointer-events: auto;
 }
-.jar-seek .jar-neb-ask { margin-top: 8px; }
+.jar-seek .jar-ask { margin-top: 8px; }
 
 /* A file picker in the world's voice: a word you press, and the input
    itself never shows. */
@@ -2247,7 +2258,7 @@
    row of choices (lowercase, separated by a middot, the same face as the
    prose above them) and these now use it, with the separators drawn by the
    markup so they never collide when the row wraps. */
-.jar-neb-ask--row {
+.jar-ask--row {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;

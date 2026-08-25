@@ -40,7 +40,7 @@ export function ReadingPanel({ reading, onClose }: ReadingPanelProps): JSX.Eleme
       ) : (
         <p className="jar-reading-line">still fetching the reading…</p>
       )}
-      <p className="jar-neb-ask" style={{ marginTop: 14 }}>
+      <p className="jar-ask" style={{ marginTop: 14 }}>
         <button type="button" onClick={onClose}>
           close
         </button>

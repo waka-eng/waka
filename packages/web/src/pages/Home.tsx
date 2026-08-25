@@ -9763,7 +9763,7 @@ function HomeExperience(): JSX.Element {
                               {ground.statement}
                             </button>
                             {groundAsk === ground.id ? (
-                              <p className="jar-neb-ask">
+                              <p className="jar-ask">
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -9796,7 +9796,7 @@ function HomeExperience(): JSX.Element {
                               </p>
                             ) : null}
                             {verdictReceipt?.id === ground.id ? (
-                              <p className="jar-neb-ask">
+                              <p className="jar-ask">
                                 <span className="jar-receipt">{verdictReceipt.text}</span>
                               </p>
                             ) : null}
@@ -9925,7 +9925,7 @@ function HomeExperience(): JSX.Element {
                           value={editing.open.text}
                           onChange={(e) => editing.retype(e.target.value)}
                         />
-                        <p className="jar-neb-ask">
+                        <p className="jar-ask">
                           <button type="button" disabled={editing.open.saving} onClick={editing.keep}>
                             {editing.open.saving ? "…" : "keep these words"}
                           </button>
@@ -9937,7 +9937,7 @@ function HomeExperience(): JSX.Element {
                       </div>
                     ) : null}
                     {w.kind === "self" && undrop ? (
-                      <p className="jar-neb-ask jar-neb-ask--after" data-jar-chrome="1">
+                      <p className="jar-ask jar-ask--after" data-jar-chrome="1">
                         {/* the dismissal's receipt rides beside its undo —
                             reversible is part of the law being stated */}
                         <span className="jar-receipt">{RECEIPTS.dismissed.text}</span>
@@ -10396,7 +10396,7 @@ function HomeExperience(): JSX.Element {
                 mouth still offers no control — the "no forms" rule holds. */}
             {mouthOpen ? (
               <p
-                className={`jar-neb-ask jar-neb-ask--row jar-mouth-where${
+                className={`jar-ask jar-ask--row jar-mouth-where${
                   draft.trim() !== "" ? " jar-mouth-where--armed" : ""
                 }${mouthLong ? " jar-mouth-where--sheet" : ""}`}
               >
@@ -10441,7 +10441,7 @@ function HomeExperience(): JSX.Element {
                  once the words have grown into a page. Reserved-then-armed
                  like the row above it, so the typing line never moves. */
               <p
-                className={`jar-neb-ask jar-neb-ask--row jar-mouth-do jar-mouth-where${
+                className={`jar-ask jar-ask--row jar-mouth-do jar-mouth-where${
                   draft.trim() !== "" ? " jar-mouth-where--armed" : ""
                 }`}
               >
@@ -10525,7 +10525,7 @@ function HomeExperience(): JSX.Element {
                moves it. Private remains the state you get by touching
                nothing. */
             <p
-              className={`jar-neb-ask jar-neb-ask--row jar-panel-vis${
+              className={`jar-ask jar-ask--row jar-panel-vis${
                 publishing ? " jar-panel-vis--busy" : ""
               }`}
             >
@@ -10628,7 +10628,7 @@ function HomeExperience(): JSX.Element {
                read back empty every time */
             verdicts.has(panelBall.sigId) ? null : (
               /* the same one quiet line the sky uses — not a row of controls */
-              <p className="jar-neb-ask">
+              <p className="jar-ask">
                 <button type="button" onClick={() => sayVerdict(panelBall.sigId as string, "true")}>
                   yes
                 </button>
@@ -10685,7 +10685,7 @@ function HomeExperience(): JSX.Element {
               just typed. A reflection is layer-1 detail and feeds extraction,
               so removing one re-derives what stood on it. */}
           {reflect.step === "kept" ? (
-            <p className="jar-neb-ask jar-neb-ask--after">
+            <p className="jar-ask jar-ask--after">
               <span>kept</span>
               {reflect.lastId ? (
                 <>
@@ -10737,7 +10737,7 @@ function HomeExperience(): JSX.Element {
               server reads a picture at capture time, so it feeds the signals
               exactly as the text does. */}
           {editing.open?.kind === "memory" && editing.open.id === panelId ? (
-            <p className="jar-neb-ask jar-neb-ask--after jar-panel-foot">
+            <p className="jar-ask jar-ask--after jar-panel-foot">
               <span className="jar-panel-foot-l">
               <label className="jar-attach">
                 {attaching ? "keeping the picture…" : "attach a picture"}
@@ -10783,7 +10783,7 @@ function HomeExperience(): JSX.Element {
               movement, and movement belongs at the foot, centred, where it
               reads as "and then" rather than as another verb. */}
           {panelCanReflect && reflect.step === "rest" && !editing.open ? (
-            <p className="jar-neb-ask jar-neb-ask--after jar-panel-foot">
+            <p className="jar-ask jar-ask--after jar-panel-foot">
               <span className="jar-panel-foot-l">
               <button type="button" onClick={askToReflect}>
                 reflect
@@ -10894,7 +10894,7 @@ function HomeExperience(): JSX.Element {
               )}
             </div>
           </div>
-          <p className="jar-neb-ask jar-neb-ask--row jar-prov-room-close">
+          <p className="jar-ask jar-ask--row jar-prov-room-close">
             <button type="button" onClick={() => setProv(null)}>
               enough
             </button>
@@ -10915,7 +10915,7 @@ function HomeExperience(): JSX.Element {
             loses this ground, and can no longer point back to where it came
             from.
           </p>
-          <p className="jar-neb-ask jar-neb-ask--row">
+          <p className="jar-ask jar-ask--row">
             <button
               type="button"
               className="jar-where-on"
@@ -11228,7 +11228,7 @@ function HomeExperience(): JSX.Element {
               if (e.key === "Escape") setAgentName(null);
             }}
           />
-          <p className="jar-neb-ask">
+          <p className="jar-ask">
             <button type="button" onClick={makeAgent}>
               give it a wall
             </button>
@@ -11414,7 +11414,7 @@ function HomeExperience(): JSX.Element {
               signs in as itself; until then the wall is empty, and says so.
             </span>
           </button>
-          <p className="jar-neb-ask jar-neb-ask--row jar-newplace-close">
+          <p className="jar-ask jar-ask--row jar-newplace-close">
             <button type="button" onClick={() => setNewPlace(false)}>
               not now
             </button>
@@ -11436,7 +11436,7 @@ function HomeExperience(): JSX.Element {
               if (e.key === "Escape") setSeek(null);
             }}
           />
-          <p className="jar-neb-ask">
+          <p className="jar-ask">
             {found && found.size === 0 && seek.trim().length > 1 ? (
               <span>nothing here says that</span>
             ) : (
@@ -11483,7 +11483,7 @@ function HomeExperience(): JSX.Element {
             }}
           />
           {groupForm.error ? <p className="jar-roomform-err">{groupForm.error}</p> : null}
-          <p className="jar-neb-ask">
+          <p className="jar-ask">
             <button type="button" onClick={submitGroup} disabled={groupForm.busy}>
               {groupForm.busy ? "…" : groupForm.mode === "make" ? "make it" : "go in"}
             </button>
@@ -11576,7 +11576,7 @@ function HomeExperience(): JSX.Element {
             <p className="jar-settings-note">{auth.account.email}</p>
           ) : null}
 
-          <p className="jar-neb-ask">
+          <p className="jar-ask">
             <Link className="jar-settings-verb" to="/profile" onClick={() => setAccountOpen(false)}>
               open your account
             </Link>
@@ -11587,7 +11587,7 @@ function HomeExperience(): JSX.Element {
               place where its refusals stand. They lived in the ≡ drawer until
               the founder removed it (2026-08-24); this sheet was already
               here, so they moved in rather than growing a new toggle. */}
-          <p className="jar-neb-ask">
+          <p className="jar-ask">
             <button
               type="button"
               onClick={() => {
@@ -11621,7 +11621,7 @@ function HomeExperience(): JSX.Element {
           {/* THE FLAT SCREENS — the same memories in another register, still
               scaffolding (they go when the world can do everything they do),
               still reachable. In the flat bar's own order and words. */}
-          <p className="jar-neb-ask jar-settings-flats">
+          <p className="jar-ask jar-settings-flats">
             {[
               ["/capture", "capture"],
               ["/inspirations", "inspirations"],
@@ -11642,7 +11642,7 @@ function HomeExperience(): JSX.Element {
           {/* SIGNING OUT IS NOT DESTRUCTIVE, so it does not ask twice — nothing
               is lost and signing back in restores everything. It is last
               because it is the one thing here that ends the session. */}
-          <p className="jar-neb-ask jar-neb-ask--after">
+          <p className="jar-ask jar-ask--after">
             <button
               type="button"
               onClick={() => {
@@ -11666,7 +11666,7 @@ function HomeExperience(): JSX.Element {
               "have marked public become part of its ground. You can leave " +
               "whenever you like."}
           </p>
-          <p className="jar-neb-ask">
+          <p className="jar-ask">
             <button type="button" className="jar-settings-verb" onClick={acceptJoin}>
               {"join this room"}
             </button>

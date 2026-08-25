@@ -119,7 +119,7 @@ export function SpaceSettings({
                 value={renaming.text}
                 onChange={(e) => setRenaming({ ...renaming, text: e.target.value })}
               />
-              <p className="jar-neb-ask">
+              <p className="jar-ask">
                 <button type="submit" disabled={renaming.busy}>
                   {renaming.busy ? "…" : "rename it"}
                 </button>
@@ -161,7 +161,7 @@ export function SpaceSettings({
                 ) : null}
                 {iOwnIt && m.profileId !== auth?.profile?.id ? (
                   removing === m.profileId ? (
-                    <span className="jar-neb-ask">
+                    <span className="jar-ask">
                       <button type="button" onClick={() => removeMember(gid, m.profileId)}>
                         take them out
                       </button>
@@ -184,7 +184,7 @@ export function SpaceSettings({
             ))}
           </ul>
 
-          <p className="jar-neb-ask">
+          <p className="jar-ask">
             <button
               type="button"
               onClick={() => {
@@ -201,7 +201,7 @@ export function SpaceSettings({
               Closing it ends the room for everyone, and takes the top
               of mind the room built together — which nobody else can
               get back, so it says so. */}
-          <p className="jar-neb-ask jar-neb-ask--after">
+          <p className="jar-ask jar-ask--after">
             {leaving === gid ? (
               <>
                 <button type="button" onClick={() => leaveThisGroup(gid)}>
@@ -220,7 +220,7 @@ export function SpaceSettings({
           </p>
 
           {iOwnIt ? (
-            <p className="jar-neb-ask">
+            <p className="jar-ask">
               {closing === gid ? (
                 <>
                   <button
@@ -263,7 +263,7 @@ export function SpaceSettings({
           ? "Its memory is its own — what it keeps here is not mixed into yours."
           : "Everything you keep, and what WAKA has read out of it."}
       </p>
-      <p className="jar-neb-ask">
+      <p className="jar-ask">
         <Link className="jar-settings-verb" to="/profile">
           open your account
         </Link>
