@@ -743,6 +743,58 @@
   color: var(--jar-ink);
 }
 
+/* ---------- which kind of place to make ----------
+   A room and an agent are both a new column on the axis and they are nothing
+   like each other. Two words in a strip could not carry that difference — and
+   they also grew a second question INTO the one row that answers "where am I".
+   Here each has a name and a sentence, which is what a person actually needs
+   to choose between them. */
+.jar-newplace {
+  top: auto;
+  bottom: 16vh;
+  width: min(440px, calc(100vw - 48px));
+  padding: 18px 20px 12px;
+}
+.jar-newplace-row {
+  display: block;
+  width: 100%;
+  margin: 12px 0 0;
+  padding: 0 0 0 12px;
+  border: 0;
+  border-left: 1px solid var(--jar-edge, rgba(255, 255, 255, 0.08));
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+.jar-newplace-row:hover,
+.jar-newplace-row:focus-visible {
+  border-left-color: var(--jar-ink);
+  outline: none;
+}
+.jar-newplace-name {
+  display: block;
+  font-size: 15px;
+  color: var(--jar-ink);
+}
+.jar-newplace-what {
+  display: block;
+  margin-top: 3px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--jar-muted);
+}
+.jar-newplace-close {
+  margin: 16px 0 0;
+  justify-content: flex-end;
+}
+/* the way to make one, at the foot of the list of the ones you have */
+.jar-here-row--make {
+  color: var(--jar-faint);
+}
+
 /* ---------- how much is down there, and the way to it ----------
    The ground is a whole section below headquarters and nothing on the resting
    page said so. A count and a caret: the number is what you have, the caret is
@@ -751,26 +803,41 @@
 
    Quiet at rest and brighter on approach, like every other word here. The
    caret leans DOWN, which is the one thing it has to say. */
+/* THREE QUESTIONS, ONE BLOCK — NOT THREE HEADLINES (founder, 2026-08-25: "so
+   much going on"). How much is down there, whose mind you are in, and when:
+   three different axes, and they were three centred rows of tracked uppercase
+   at the same weight, which reads as three competing announcements rather than
+   one corner of the page.
+
+   The founder's first instinct was to delete the wall names, and the walk says
+   why that is the wrong cut: on a brand-new account the ONLY ways out visible
+   anywhere are the two marks on this strip (`ME` and the `+`), because a first
+   account has no neighbour to point at. Removing them puts back the bug a real
+   person reported — no idea you could go left or right — and the journey that
+   guards it would fail.
+
+   So nothing is deleted and a hierarchy is made instead: this line leaves the
+   label register entirely for lowercase prose, which stops it competing with
+   the names below it, and the three sit close enough to read as one block. */
 .jar-saved {
   position: absolute;
   z-index: 6;
   left: 50%;
   transform: translateX(-50%);
-  bottom: calc(88px + env(safe-area-inset-bottom));
+  bottom: calc(80px + env(safe-area-inset-bottom));
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   appearance: none;
   -webkit-appearance: none;
   border: 0;
   margin: 0;
-  padding: 6px 12px;
+  padding: 5px 12px;
   background: none;
   font-family: inherit;
-  font-weight: 500;
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-weight: 400;
+  font-size: 12.5px;
+  letter-spacing: 0.01em;
   white-space: nowrap;
   color: var(--jar-faint);
   cursor: pointer;
@@ -806,7 +873,7 @@
   /* ABOVE THE TIMELINE, not under it. Whose mind you are standing in is a
      fact about the world; when is a fact about the whole page, so time is the
      outer frame and the names sit inside it. */
-  bottom: calc(48px + env(safe-area-inset-bottom));
+  bottom: calc(44px + env(safe-area-inset-bottom));
   display: flex;
   justify-content: center;
   align-items: baseline;
@@ -836,7 +903,11 @@
   color: var(--jar-faint);
   cursor: pointer;
   pointer-events: auto;
-  opacity: 0.5;
+  /* A wall you are not standing on is a place you COULD go, and that is a
+     quieter fact than where you are. It stays legible — this strip is the only
+     thing on a new account that says the world goes anywhere — so it is a step
+     down the ink scale, never a fade toward invisible. */
+  opacity: 0.38;
   transition: opacity 0.25s ease, color 0.25s ease;
 }
 .jar-axis-mark:hover { opacity: 1; color: var(--jar-muted); }
@@ -861,10 +932,6 @@
 }
 .jar-axis-add:hover,
 .jar-axis-add:focus-visible { opacity: 1; color: var(--jar-ink); }
-/* the two words the `+` opens: the same register, one step in from it */
-.jar-axis-make { opacity: 0.85; color: var(--jar-muted); }
-.jar-axis-make:hover,
-.jar-axis-make:focus-visible { opacity: 1; color: var(--jar-ink); }
 .jar-axis-mark.is-here .jar-axis-name { box-shadow: inset 0 -1px 0 0 currentColor; }
 /* an agent is a different KIND of wall, said the way the companion says it:
    letterform, not colour */

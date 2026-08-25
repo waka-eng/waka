@@ -1445,7 +1445,21 @@ function HomeExperience(): JSX.Element {
      standing in it (the dial has no meaning among candidates), and which
      nebulae have been drawn together. */
   /** Whether the axis is offering the two ways to make another place. */
-  const [addOpen, setAddOpen] = useState(false);
+  /**
+   * MAKING A NEW PLACE — asked in one sheet, from either door.
+   *
+   * The offer used to live only on the `+` at the end of the axis, and it
+   * opened two more marks INTO the strip — so the one row that answers "where
+   * am I and where else is there" grew two answers to a different question
+   * while you were reading it. And the list under the wall name, which is the
+   * other place a person goes looking for their walls, offered no way to make
+   * one at all (founder, 2026-08-25: "give option to add new, and inside the
+   * modal, decide if they want to add new room or add new agent").
+   *
+   * One sheet, two doors into it, and the choice is made inside it where
+   * there is room to say what each thing IS.
+   */
+  const [newPlace, setNewPlace] = useState(false);
   /** Whether the top-left split button is listing the other walls. */
   const [wallPick, setWallPick] = useState(false);
   /** Which pattern in the sky is being read. Its verdict row belongs to it. */
@@ -11560,6 +11574,22 @@ function HomeExperience(): JSX.Element {
                       </button>
                     );
                   })}
+                  {/* THE LIST OF YOUR WALLS IS ALSO WHERE YOU MAKE ONE. It
+                      listed every place you could go and offered no way to
+                      make another, so a person looking for their rooms in the
+                      obvious place had to know about a `+` at the far end of
+                      the screen. */}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="jar-here-row jar-here-row--make jar-label"
+                    onClick={() => {
+                      setWallPick(false);
+                      setNewPlace(true);
+                    }}
+                  >
+                    add new
+                  </button>
                 </span>
               ) : null}
             </span>
@@ -11814,38 +11844,59 @@ function HomeExperience(): JSX.Element {
             register — it opens two words and closes again. */}
         <button
           type="button"
-          className={`jar-axis-mark jar-axis-add${addOpen ? " is-here" : ""}`}
-          aria-expanded={addOpen}
+          className={`jar-axis-mark jar-axis-add${newPlace ? " is-here" : ""}`}
+          aria-expanded={newPlace}
           aria-label="make another place"
-          onClick={() => setAddOpen((v) => !v)}
+          onClick={() => setNewPlace(true)}
         >
           <span aria-hidden="true">+</span>
         </button>
-        {addOpen ? (
-          <>
-            <button
-              type="button"
-              className="jar-axis-mark jar-axis-make"
-              onClick={() => {
-                setAddOpen(false);
-                setAgentName("");
-              }}
-            >
-              <span className="jar-axis-name">an agent</span>
-            </button>
-            <button
-              type="button"
-              className="jar-axis-mark jar-axis-make"
-              onClick={() => {
-                setAddOpen(false);
-                setGroupForm({ mode: "make", text: "", busy: false, error: null });
-              }}
-            >
-              <span className="jar-axis-name">a room</span>
-            </button>
-          </>
-        ) : null}
       </nav>
+
+      {/* WHICH KIND OF PLACE — asked once, with room to say what each is.
+          A room and an agent are both a new column on the axis and they are
+          nothing like each other: one is people, one is a machine that writes
+          on its own wall. Two words in a strip could not carry that, so the
+          choice is made here, where a sentence fits. */}
+      {newPlace ? (
+        <div className="jar-seek jar-newplace" data-jar-chrome="1" role="dialog" aria-label="make another place">
+          <p className="jar-prov-lead jar-label">make another place</p>
+          <button
+            type="button"
+            className="jar-newplace-row"
+            onClick={() => {
+              setNewPlace(false);
+              setGroupForm({ mode: "make", text: "", busy: false, error: null });
+            }}
+          >
+            <span className="jar-newplace-name">a room</span>
+            <span className="jar-newplace-what">
+              A wall a few of you keep. Members put up chosen signals — never
+              the captures behind them — and the room reads them into one
+              shared top of mind.
+            </span>
+          </button>
+          <button
+            type="button"
+            className="jar-newplace-row"
+            onClick={() => {
+              setNewPlace(false);
+              setAgentName("");
+            }}
+          >
+            <span className="jar-newplace-name">an agent</span>
+            <span className="jar-newplace-what">
+              A mind of its own, with its own wall. It writes there once it
+              signs in as itself; until then the wall is empty, and says so.
+            </span>
+          </button>
+          <p className="jar-neb-ask jar-neb-ask--row jar-newplace-close">
+            <button type="button" onClick={() => setNewPlace(false)}>
+              not now
+            </button>
+          </p>
+        </div>
+      ) : null}
 
       {/* SEARCHING, AND IT IS ONE LINE. No results panel, no counts, no list —
           the answer is in the field, lit. Escape puts the field back. */}
