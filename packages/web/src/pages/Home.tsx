@@ -8784,6 +8784,32 @@ function HomeExperience(): JSX.Element {
   /** Set while a step is in flight, so the panel effect can tell paging
       through the card from opening a different memory out of the field. */
   const steppingRef = useRef(false);
+
+  /**
+   * AN OPEN EDIT IS ABANDONED BY EVERY ROUTE OUT OF ITS CARD, NOT JUST ONE.
+   *
+   * `stepToMemory` has always left the words behind, and while the carets were
+   * the only way to swap the card mid-edit that was the whole rule. The carets
+   * became `save` on 2026-08-25 (founder), which leaves the FIELD as the
+   * remaining way — and tapping another orb runs none of `stepToMemory`.
+   *
+   * WHAT THAT COSTS IS NOT THE CARET. Both the edit field and the editing
+   * footer are gated on `editing.open.id === panelId`, so the words never
+   * appear over the wrong memory; that much was already safe. It is the
+   * READING footer that breaks, because it is gated on `!editing.open` — so a
+   * card opened while an edit is still held for some other memory renders
+   * NEITHER footer: no reflect, no ways on, no delete. An edit left behind on
+   * a card you can no longer see silently strips the next card of everything
+   * it offers.
+   *
+   * A change of selection always abandons an edit, because an edit is always
+   * about the memory on screen. One rule for every route, rather than a line
+   * remembered per way in.
+   */
+  useEffect(() => {
+    leaveWordsRef.current();
+  }, [selectedId]);
+
   const stepToMemory = useCallback((id: string | null) => {
     if (!id) return;
     leaveWordsRef.current();
@@ -10904,21 +10930,35 @@ function HomeExperience(): JSX.Element {
                 />
               </label>
               </span>
-              {/* THE WAY ON STAYS PUT WHILE YOU TYPE. Dropping the carets
-                  during an edit would have been simpler — the footer is about
-                  the words then — and it would have taken the way out of a
-                  screen away from somebody in the middle of using it, which is
-                  a mistake this codebase has now fixed three times in other
-                  corners. It is also what makes the abandon rule real:
-                  stepping away leaves an open edit behind rather than carrying
-                  it to the wrong memory, and a control nobody can reach cannot
-                  demonstrate that. */}
-              <span className="jar-panel-foot-c">{panelStepCarets}</span>
-              <span className="jar-panel-foot-r">
-                <button type="button" onClick={editing.keep} disabled={editing.open.saving}>
-                  {editing.open.saving ? "keeping…" : "keep the change"}
+              {/* THE MIDDLE BECOMES `save` WHILE YOU TYPE (founder,
+                  2026-08-25: "when user edits sth, replace the center left
+                  right arrow icon with save button").
+
+                  This argued the other way until today: that the carets should
+                  stay, because taking the way out of a screen away from
+                  somebody mid-use is a mistake this codebase has fixed three
+                  times in other corners. The founder's ruling is better and
+                  the old argument does not survive it. Stepping to another
+                  memory with an edit open was never a way OUT — it was the way
+                  to leave unsaved words behind on a card you are no longer
+                  looking at. Leaving is `leave it`, one cell to the right, and
+                  closing the card is the other. Neither has moved.
+
+                  So the centre says what this footer is for while it is open.
+                  It is the same word the mouth uses for the same act, in the
+                  same slot the carets had, so nothing shifts under the
+                  pointer when the edit begins. */}
+              <span className="jar-panel-foot-c">
+                <button
+                  type="button"
+                  className="jar-panel-save"
+                  onClick={editing.keep}
+                  disabled={editing.open.saving || editing.open.text.trim() === ""}
+                >
+                  {editing.open.saving ? "saving…" : "save"}
                 </button>
-                <span aria-hidden="true"> · </span>
+              </span>
+              <span className="jar-panel-foot-r">
                 <button type="button" onClick={editing.leave}>
                   leave it
                 </button>

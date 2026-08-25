@@ -491,9 +491,18 @@ describe("changing a memory's words", () => {
 
     /* THE ROW DOES NOT MOVE OR GROW WHEN THE WORDS OPEN — it changes what it
        offers, in the same place and the same face, because what you are doing
-       has changed. */
-    const keep = [...panel.querySelectorAll<HTMLElement>(".jar-ask--after button")].find((b) =>
-      /keep the change/i.test(b.textContent ?? ""),
+       has changed. Founder, 2026-08-25: "when user edits sth, replace the
+       center left right arrow icon with save button." So the middle cell,
+       which holds the two ways on while you are reading, holds the one act
+       while you are typing — the same pixels, a different offer. */
+    const middle = panel.querySelector<HTMLElement>(".jar-panel-foot-c");
+    if (!middle) throw new Error("the open words have no middle cell at all");
+    expect(
+      middle.querySelectorAll(".jar-caret").length,
+      "the ways on are not offered while the words are open — that slot is the act now",
+    ).toBe(0);
+    const keep = [...middle.querySelectorAll<HTMLElement>("button")].find((b) =>
+      /^save$/i.test((b.textContent ?? "").trim()),
     );
     if (!keep) throw new Error("the open words offer no way to keep what was typed");
     expect(
@@ -652,7 +661,7 @@ describe("stepping between memories", () => {
     ).toBe(false);
   });
 
-  it("closes an open edit rather than carrying it to the next memory", { timeout: 30_000 }, async () => {
+  it("closes an open edit rather than carrying it to another memory", { timeout: 30_000 }, async () => {
     await layout.toField();
     const panel = await openMemory("something I kept, 2");
 
@@ -664,25 +673,46 @@ describe("stepping between memories", () => {
       "the words are open",
     ).not.toBeNull();
 
-    const on = [
-      ...layout.container.querySelectorAll<HTMLElement>(".jar-panel-foot-c button"),
-    ].find((b) => /after this one/.test(b.getAttribute("aria-label") ?? ""));
-    if (!on) throw new Error("no way on from a memory in the middle of the archive");
-    await act(async () => on.click());
+    /* OPENED OUT OF THE FIELD, WHICH IS NOW THE ONLY WAY. This pressed the
+       `after this one` caret until 2026-08-25, when the founder ruled that the
+       middle of the footer becomes `save` while you type — so the carets are
+       not there to press during an edit, and the field is what remains.
+       `stepToMemory` was the one route that abandoned the words, so removing
+       the carets from the edit left the remaining route carrying a caret onto
+       a card it did not belong to: one memory's words over another's date and
+       verbs, still writing to the one you had left. */
+    await openMemory("something I kept, 1");
     await layout.step(30);
 
     /* THE RULE THIS PROTECTS IS CORRECTNESS, NOT TIDINESS. A caret left open
-       over the memory you have just stepped away from is a caret typing into
-       the wrong one. */
+       over the memory you have just left is a caret typing into the wrong
+       one. */
     expect(
       layout.container.querySelector("textarea.jar-panel-edit"),
-      "the caret did not travel with the step",
+      "the caret did not travel to the memory opened next",
     ).toBeNull();
+    /* AND THE COST IS THE FOOTER, WHICH IS WHY THE CARET ALONE IS NOT THE
+       TEST. Both the field and the editing footer are gated on the open
+       edit's id matching the card, so the words could never appear over the
+       wrong memory. The READING footer is gated on there being no open edit at
+       all — so an edit merely LEFT BEHIND on a card you can no longer see
+       renders the next card with neither footer: no reflect, no ways on, no
+       delete. Asserting the caret is gone passes with that bug live. */
+    const foot = layout.container.querySelector(".jar-panel--in .jar-panel-foot");
+    expect(
+      foot,
+      "the memory opened next has its footer — an edit left behind on the last " +
+        "card must not strip this one of everything it offers",
+    ).not.toBeNull();
+    expect(
+      [...(foot?.querySelectorAll("button") ?? [])].map((b) => (b.textContent ?? "").trim()),
+      "and it is the reading footer, not the one that belongs to an open edit",
+    ).toContain("reflect");
     expect(
       (
         layout.container.querySelector(".jar-panel--in .jar-panel-text")?.textContent ?? ""
       ).trim(),
-      "and the next memory is the one on screen",
+      "and the memory opened is the one on screen",
     ).toBe("something I kept, 1");
   });
 });

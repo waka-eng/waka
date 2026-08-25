@@ -1951,7 +1951,15 @@
    them a couple of pixels low. Centre is what the sketch draws. */
 .jar-panel-foot {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  /* `minmax(0, 1fr)` RATHER THAN `1fr`, and not because anything is broken
+     today — measured, the two ends come out equal either way. A bare `1fr`
+     carries an automatic minimum of min-content, so a side cell whose longest
+     unbreakable word outgrows its share shoulders past it and shoves the
+     middle column sideways. Nothing written in this footer is that long, and
+     the middle is the one slot that must not move: it holds the ways on while
+     you read and `save` while you type, and those are the same pixels. Zero as
+     the floor makes that structural instead of lucky. */
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: 12px;
 }
@@ -1971,6 +1979,26 @@
   display: inline-flex;
   align-items: center;
   padding: 4px 6px;
+}
+/* THE ONE ACT THE FOOTER IS FOR WHILE AN EDIT IS OPEN (founder, 2026-08-25:
+   "when user edits sth, replace the center left right arrow icon with save
+   button"). It takes the carets' slot, so nothing shifts under the pointer
+   when the edit begins — and it is brighter than the two ways out beside it,
+   because light is the only meaning channel this page has and this is what
+   you came here to do. Empty words are not a save: with nothing to keep it
+   goes to the faint tier and stops offering a hand. */
+/* WRITTEN AS `.jar-ask button.jar-panel-save`, and it has to be. `.jar-ask
+   button` sets `color: inherit` at one class plus one element, which OUTRANKS
+   a bare `.jar-panel-save` however far down the file it is written — so the
+   first version of this rule was inert and the gate below read the save button
+   at the faint tier, in exactly the same ink as `leave it` beside it. Naming
+   the row and the element makes it win on specificity rather than on luck. */
+.jar-ask button.jar-panel-save {
+  color: var(--jar-ink);
+}
+.jar-ask button.jar-panel-save:disabled {
+  color: var(--jar-faint);
+  cursor: default;
 }
 .jar-panel-vis {
   /* in the row now, not floated over it */

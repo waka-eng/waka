@@ -175,6 +175,17 @@ const FIXTURE = `<!doctype html>
       </span>
       <span class="jar-panel-foot-r"><button type="button">delete</button></span>
     </p>
+    <!-- THE SAME CARD WHILE ITS WORDS ARE BEING EDITED, and it is written
+         BELOW the reading foot rather than above it. The world renders exactly
+         one of these two at a time; stacking this one between the words and
+         the reading foot put a second margin in that gap and pushed
+         'card-words-have-air' from 22px to 26px — a fixture distorting the
+         very measurement beside it. Last in the panel, it touches nothing. -->
+    <p class="jar-ask jar-ask--after jar-panel-foot" id="foot-editing">
+      <span class="jar-panel-foot-l"><label class="jar-attach">attach a picture</label></span>
+      <span class="jar-panel-foot-c"><button type="button" class="jar-panel-save">save</button></span>
+      <span class="jar-panel-foot-r"><button type="button">leave it</button></span>
+    </p>
   </div>
 
   <!-- the sheet the world puts up after a keep, so a variant that is meant to
@@ -623,6 +634,73 @@ const CASES: Case[] = [
             : !level
               ? `the caret sits ${r1(caret - verb)}px off \`reflect\`'s centre — it carries no baseline of its own`
               : `cell centres ${cells.map(r1).join(" / ")}`,
+      };
+    },
+  },
+
+  {
+    id: "the-edit-offers-one-act",
+    name: "editing puts `save` where the ways on were, and lights it",
+    needs: ["jar-panel-foot-c", "jar-panel-save", "jar-caret"],
+    /* THE DEFECT THAT ACTUALLY HAPPENED, reproduced exactly. The save rule was
+       first written as a bare `.jar-panel-save`, which loses to `.jar-ask
+       button` — one class plus one element — so it was inert and the button
+       came out in the same faint ink as `leave it` beside it. Giving the
+       colour back to `inherit` is that bug, and it must go red here. */
+    sabotage: ".jar-ask button.jar-panel-save { color: inherit !important; }",
+    run: async (page) => {
+      /* Founder, 2026-08-25: "when user edits sth, replace the center left
+         right arrow icon with save button." Two things have to hold, and the
+         second is the one a screenshot would not settle: `save` must land in
+         the SAME SLOT the carets had, so nothing shifts under the pointer when
+         the edit begins, and it must be brighter than the ways out beside it,
+         because light is the only meaning channel this page has. */
+      const read = `(() => {
+        const ink = (s) => { const e = document.querySelector(s); return e ? getComputedStyle(e).color : null; };
+        /* CELL AGAINST CELL. The first try read one CARET's box against the
+           editing cell's box and reported 16.5px — but there are two carets
+           with a gap between them, so a single one sits half a gap off its own
+           cell's centre by construction. It was measuring the gap and calling
+           it a shift. The claim is about the SLOT, so the slot is what is
+           read. */
+        const feet = [...document.querySelectorAll(".jar-panel-foot")];
+        const cellOf = (f) => { const c = f && f.querySelector(".jar-panel-foot-c");
+          if (!c) return null; const b = c.getBoundingClientRect(); return b.left + b.width / 2; };
+        return {
+          saveX: cellOf(document.querySelector("#foot-editing")),
+          caretX: cellOf(feet.find((f) => f.id !== "foot-editing")),
+          save: ink(".jar-panel-save"),
+          leave: ink("#foot-editing .jar-panel-foot-r button"),
+        };
+      })()`;
+      const m = (await page.evaluate(read)) as {
+        saveX: number | null; caretX: number | null; save: string | null; leave: string | null;
+      };
+      if (m.saveX === null || m.caretX === null) {
+        return { ok: false, detail: "one of the two feet is not in the fixture" };
+      }
+      /* NOT "different from `leave it`" — that was too weak a claim, and the
+         sabotage slipped through it: `color: inherit` lands a hair off rather
+         than exactly on the neighbour's value, so a broken rule still read as
+         "different" and the case passed while decorating. What is actually
+         claimed is that the act is at FULL ink and the ways out are not, so
+         that is what is measured. */
+      const alpha = (c: string | null): number => {
+        if (!c) return -1;
+        const m4 = /rgba?\(([^)]+)\)/.exec(c);
+        if (!m4) return -1;
+        const parts = m4[1]!.split(",").map((n) => Number(n.trim()));
+        return parts.length < 4 ? 1 : (parts[3] as number);
+      };
+      const sameSlot = near(m.saveX - m.caretX, 0, 1);
+      const brighter = alpha(m.save) >= 0.9 && alpha(m.leave) < 0.9;
+      return {
+        ok: sameSlot && brighter,
+        detail: sameSlot && brighter
+          ? `\`save\` takes the carets' own centre (${r1(m.saveX - m.caretX)}px off) and reads ${m.save} against ${m.leave}`
+          : !sameSlot
+            ? `\`save\` sits ${r1(m.saveX - m.caretX)}px off the slot the carets had — the footer moves under the pointer when an edit begins`
+            : `\`save\` is not the lit one — it reads ${m.save} beside \`leave it\` at ${m.leave}; the act and the way out are the same offer`,
       };
     },
   },
