@@ -2903,6 +2903,22 @@
 /* THE PATTERN'S SENTENCE, OPEN. Measured the same way the memory's editor is:
    every metric that decides where a glyph lands is the resting line's, so the
    words do not shift by a pixel when the caret arrives. */
+/* WHAT A PRINCIPLE GREW FROM. Indented, dimmer, and each on its own line —
+   the same three things `.jar-prov` already does to say "this is underneath
+   that". A reader who has followed a pattern down to its memories has already
+   learned to read this shape. */
+.jar-was-roots {
+  display: block;
+  margin: var(--sp-6) 0 0 var(--sp-14);
+}
+.jar-was-root {
+  display: block;
+  margin-bottom: var(--sp-4);
+  font-size: var(--t-fine);
+  line-height: 1.5;
+  color: var(--jar-faint);
+}
+
 /* THE VERBS ARE THEIR OWN LINE UNDER THE SENTENCE. `.jar-ask` is inline by
    default, so the row set itself down immediately after `aspirational` and the
    band read "…aspirationalsay it in my words". Caught by walking it. */

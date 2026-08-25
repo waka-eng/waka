@@ -1298,6 +1298,25 @@ function HomeExperience(): JSX.Element {
   const [pick, setPick] = useState<string | null>(null);
   const [pDraft, setPDraft] = useState<{ id: string | null; text: string } | null>(null);
   const [pGoing, setPGoing] = useState<string | null>(null);
+  /**
+   * WHAT A PRINCIPLE GREW FROM — the one edge the world could not draw.
+   *
+   * `/graph` drew three columns: principles over the signals they grew from,
+   * signals over the experiences that evidence them. The world already draws
+   * the lower half — pressing a pattern opens its roots down to the memories
+   * behind it — and it has never been able to draw the upper one. So the
+   * whole reason a flat graph existed was ONE MISSING LINK, not a missing
+   * picture.
+   *
+   * It is drawn the way this world draws everything else: one hop, asked for,
+   * under the thing it is about. Not a second diagram — the world IS the
+   * diagram, and a node-and-edge canvas inside it would be a picture of a
+   * place you are standing in.
+   *
+   * `citedSignals` already arrives on every principle, so this needs no
+   * request at all; the edge was in the payload the whole time.
+   */
+  const [pRoots, setPRoots] = useState<string | null>(null);
   const [pBusy, setPBusy] = useState(false);
 
   const sky = useMemo(
@@ -10481,6 +10500,21 @@ function HomeExperience(): JSX.Element {
                                   harmless, moving is reversible, disputing is
                                   a stance the machine will read, and removing
                                   is last and asks. */}
+                              {/* THE ROOTS, one layer down. From here the
+                                  world's existing path continues: each of
+                                  these is a pattern, and pressing a pattern
+                                  in the grounds band opens the memories under
+                                  IT. Four layers, reachable in hops, with no
+                                  second picture of the place. */}
+                              {pRoots === pr.id && !pDraft ? (
+                                <span className="jar-was-roots">
+                                  {pr.citedSignals.map((c) => (
+                                    <span key={c.id} className="jar-was-root">
+                                      {c.statement}
+                                    </span>
+                                  ))}
+                                </span>
+                              ) : null}
                               {pick === pr.id && !pDraft ? (
                                 <span className="jar-ask">
                                   <button
@@ -10489,6 +10523,20 @@ function HomeExperience(): JSX.Element {
                                   >
                                     say it in my words
                                   </button>
+                                  {pr.citedSignals.length > 0 ? (
+                                    <>
+                                      <span aria-hidden="true"> · </span>
+                                      <button
+                                        type="button"
+                                        aria-expanded={pRoots === pr.id}
+                                        onClick={() =>
+                                          setPRoots((cur) => (cur === pr.id ? null : pr.id))
+                                        }
+                                      >
+                                        what it grew from
+                                      </button>
+                                    </>
+                                  ) : null}
                                   {i > 0 ? (
                                     <>
                                       <span aria-hidden="true"> · </span>
