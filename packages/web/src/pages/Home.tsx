@@ -8355,6 +8355,35 @@ function HomeExperience(): JSX.Element {
 
   const panelId = panel ? panel.id : null;
 
+  /**
+   * HOW MANY MEMORIES ARE IN THE GROUND YOU ARE STANDING OVER.
+   *
+   * It read `inspirations.length` — the VIEWER's own archive — on every wall,
+   * so standing in a room or on an agent's wall the count said how many
+   * things you had kept, printed under somebody else's ground, next to a
+   * caret that takes you down into that ground (founder, 2026-08-25: "30
+   * inspirations shouldn't be hardcoded and reflect the number of balls in
+   * the ground per wall"). Not hardcoded, but wrong in the way that matters:
+   * a number beside a door has to describe what is behind the door.
+   *
+   * Each wall's ground has its own source, and they are the three the loop
+   * itself pours from — your archive, the agent's own captures, and the
+   * room's field of its members' public memories. `groupFieldTick` is in the
+   * deps because that last one lives in a ref the fetch fills.
+   */
+  const wallCount = useMemo<number>(() => {
+    if (atWall.kind === "agent") {
+      const a = (agents ?? []).find((x) => x.agent.id === atWall.id);
+      return a?.inspirations.length ?? 0;
+    }
+    if (atWall.kind === "group") {
+      return (groupFieldRef.current.get(atWall.id) ?? []).length;
+    }
+    return inspirations?.length ?? 0;
+    /* eslint-disable-next-line react-hooks/exhaustive-deps -- groupFieldTick
+       is the ref's change signal; the ref itself is stable */
+  }, [atWall, agents, inspirations, groupFieldTick]);
+
   /* ---------------- the mouth ----------------
      The one verb this layout was missing. It says one phrase at rest, becomes
      a plain field when you touch it, and commits on Enter — guarded, because
@@ -10214,7 +10243,8 @@ function HomeExperience(): JSX.Element {
                     onPointerDown={() => loadWall(left)}
                     onClick={() => simApiRef.current?.travel(-1)}
                   >
-                    ‹ {left.name}
+                    <span className="jar-caret jar-caret--left" aria-hidden="true" />
+                    <span>{left.name}</span>
                   </button>
                 ) : null}
                 {right ? (
@@ -10226,7 +10256,8 @@ function HomeExperience(): JSX.Element {
                     onPointerDown={() => loadWall(right)}
                     onClick={() => simApiRef.current?.travel(1)}
                   >
-                    {right.name} ›
+                    <span>{right.name}</span>
+                    <span className="jar-caret jar-caret--right" aria-hidden="true" />
                   </button>
                 ) : null}
               </Fragment>
@@ -11292,8 +11323,8 @@ function HomeExperience(): JSX.Element {
           data-jar-chrome="1"
           onClick={() => simApiRef.current?.toSky()}
         >
-          <span className="jar-up-caret" aria-hidden="true" />
           <span className="jar-values-words jar-label">philosophies &amp; values</span>
+          <span className="jar-caret jar-caret--up" aria-hidden="true" />
         </button>
       ) : null}
 
@@ -11312,7 +11343,7 @@ function HomeExperience(): JSX.Element {
           aria-label="back down to your wall"
           onClick={() => simApiRef.current?.toTop()}
         >
-          <span className="jar-saved-caret" aria-hidden="true" />
+          <span className="jar-caret" aria-hidden="true" />
         </button>
       ) : null}
       {phase === "ready" && inSky ? (
@@ -11343,11 +11374,16 @@ function HomeExperience(): JSX.Element {
           aria-label="back up to the wall"
           onClick={() => simApiRef.current?.toTop()}
         >
-          <span className="jar-up-caret" aria-hidden="true" />
+          <span className="jar-caret jar-caret--up" aria-hidden="true" />
         </button>
       ) : null}
 
-      {phase === "ready" && !inField && (inspirations?.length ?? 0) > 0 ? (
+      {/* NOT IN THE SKY (founder, 2026-08-25: "30 inspirations should be gone
+          from here"). It is the door into the ground, printed with how much
+          is behind it — and from up here the ground is two sections away, so
+          it was a door to somewhere you cannot get to in one step, sitting
+          under a sentence about the timeless half of a mind. */}
+      {phase === "ready" && !inField && !inSky && wallCount > 0 ? (
         <button
           type="button"
           className="jar-saved"
@@ -11355,10 +11391,10 @@ function HomeExperience(): JSX.Element {
           onClick={() => simApiRef.current?.toGround()}
         >
           <span className="jar-saved-count">
-            {inspirations?.length ?? 0}
-            {(inspirations?.length ?? 0) === 1 ? " inspiration" : " inspirations"}
+            {wallCount}
+            {wallCount === 1 ? " inspiration" : " inspirations"}
           </span>
-          <span className="jar-saved-caret" aria-hidden="true" />
+          <span className="jar-caret" aria-hidden="true" />
         </button>
       ) : null}
 

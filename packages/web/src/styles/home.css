@@ -519,16 +519,22 @@
   z-index: 6;
   left: 50%;
   transform: translateX(-50%);
-  top: calc(14px + env(safe-area-inset-top));
+  /* THE SAME MARGIN THE WAYS SIDEWAYS KEEP (founder, 2026-08-25: "place both
+     closer towards edge with equal margin as left and right things"). Those
+     stand 16px in from their column's edge, so this stands 16px down from the
+     top and the count stands 16px up from the dial. Four signposts, one
+     inset, measured from whatever edge each of them is nearest. */
+  top: calc(16px + env(safe-area-inset-top));
+  /* A ROW, not a column — the same construction as the count at the bottom:
+     words, then the caret that says which way they lead. */
   display: flex;
-  flex-direction: column;
   align-items: center;
   gap: 7px;
   appearance: none;
   -webkit-appearance: none;
   border: 0;
   margin: 0;
-  padding: 8px 16px 10px;
+  padding: 5px 12px;
   background: none;
   font-family: inherit;
   color: var(--jar-faint);
@@ -605,18 +611,14 @@
 }
 /* the same mark, aimed the other way: from the sky there is one other place
    and you came from it, so it carries no name */
+/* AND THE WAY BACK DOWN keeps the same inset from the edge it is nearest as
+   every other signpost (founder, 2026-08-25: "padding between the edge and
+   the carrot, same padding as other ones in the main screen"). It sat hard
+   against the bottom of the frame, which read as something that had slipped
+   off rather than a door. */
 .jar-up--down {
   top: auto;
   bottom: calc(16px + env(safe-area-inset-bottom));
-}
-.jar-up-caret {
-  display: block;
-  width: 9px;
-  height: 9px;
-  border-top: 1px solid currentColor;
-  border-left: 1px solid currentColor;
-  transform: rotate(45deg);
-  opacity: 0.85;
 }
 
 /* ---------- which kind of place to make ----------
@@ -700,7 +702,11 @@
   z-index: 6;
   left: 50%;
   transform: translateX(-50%);
-  bottom: calc(80px + env(safe-area-inset-bottom));
+  /* 16px ABOVE THE DIAL, which is what is actually at the bottom edge: the
+     rail sits 6px up and stands 30px tall, so 52px puts the same inset
+     between this and the dial as the ways sideways keep from their edges.
+     Measuring from the viewport bottom instead would put it under the rail. */
+  bottom: calc(52px + env(safe-area-inset-bottom));
   display: flex;
   align-items: center;
   gap: 7px;
@@ -736,16 +742,34 @@
   color: var(--jar-ink);
 }
 /* two lit edges of a rotated square, so no glyph and no font can go missing */
-.jar-saved-caret {
+/* ---------- ONE CARET, FOUR DIRECTIONS ----------
+   Every signpost in this world points somewhere, and until now each pointed
+   in its own handwriting: the count wore a 6px rotated square, the way up
+   wore a 9px one built from the other two borders, and the two ways sideways
+   wore the GLYPHS `<` and `>` — which arrive in whatever face the fallback
+   stack happens to have and sit on the text baseline rather than on the
+   line's centre (founder, 2026-08-25: "make the carrot on ROOM1 and the left
+   side have the same carrot as 30 INSPIRATIONS is using, but obviously facing
+   left or right").
+
+   Two lit edges of a rotated square, and the rotation is the direction. No
+   glyph, so nothing can go missing; one size, so four signposts read as four
+   of the same thing. */
+.jar-caret {
   display: block;
+  flex: none;
   width: 6px;
   height: 6px;
-  margin-top: -3px;
   border-right: 1px solid currentColor;
   border-bottom: 1px solid currentColor;
+  /* the corner these two borders make points down at 45deg; every other
+     direction is that same corner turned a quarter further round */
   transform: rotate(45deg);
   opacity: 0.8;
 }
+.jar-caret--up { transform: rotate(225deg); }
+.jar-caret--left { transform: rotate(135deg); }
+.jar-caret--right { transform: rotate(-45deg); }
 
 .jar-seek {
   position: absolute;
@@ -920,6 +944,11 @@
    read as layout bugs and neither was: they were one name doing two jobs. */
 .jar-way {
   position: absolute;
+  /* a row, because the caret is an element beside the name rather than a
+     character inside it — see `.jar-caret` */
+  display: flex;
+  align-items: center;
+  gap: 7px;
   appearance: none;
   -webkit-appearance: none;
   border: 0;
@@ -1728,14 +1757,27 @@
    notch in it. Arrivals and departures wear the same mark on purpose — the
    fact is "the room changed who it is", and light is not spent sorting people
    into good news and bad. Which of the two it was is what the name says. */
+/* A DOOR MARK: the rail's note that this room's membership changed here.
+   Founder, 2026-08-25, seeing two of them land a few days apart: "what is
+   this weird thing on the timeline slider" — which is the whole finding. At
+   full ink and eleven pixels tall they were the brightest thing on the rail,
+   taller than the track and unexplained, and two adjacent ones fused into a
+   `||` that reads as a pause button rather than as two events.
+
+   They are rail TEXTURE, not a control: something happened here, wind to it
+   and the wall will show you what. So they sit at the muted tier, inside the
+   track's own height rather than overhanging it, and they are narrow enough
+   that two close together stay two marks. What they MEAN still arrives on
+   the hover title and, properly, by winding the dial onto them. */
 .jar-hinge {
   position: absolute;
   top: 50%;
   width: 1px;
-  height: 11px;
-  margin-top: -5.5px;
+  height: 7px;
+  margin-top: -3.5px;
   transform: translateX(-50%);
-  background: var(--jar-ink);
+  background: var(--jar-muted);
+  opacity: 0.75;
   pointer-events: none;
 }
 /* THE HANDLE IS WHITE AND WHOLLY THERE (founder, 2026-08-25: "make this
