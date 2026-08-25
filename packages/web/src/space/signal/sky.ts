@@ -249,10 +249,6 @@ export interface Neb {
   keepR: number;
   /** Seconds for one turn — slower the longer it has gathered. */
   period: number;
-  /** Where its LIGHT is. It trails the body, which is the only thing with
-      weight here — the cloud itself is exactly where the finger put it. */
-  haloX: number;
-  haloY: number;
   /** Clustered: nested rather than intersecting. 1 apart, NEST_K drawn in. */
   nest: number;
   /** The most nesting may draw it in: the span's widening, and nothing under. */

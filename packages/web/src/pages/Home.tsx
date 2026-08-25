@@ -8084,8 +8084,6 @@ function HomeExperience(): JSX.Element {
         const want = (n.r + best.r) * 0.42;
         n.homeX = n.x = best.x + (dx / d) * want;
         n.homeY = n.y = best.y + (dy / d) * want;
-        n.haloX = n.x;
-        n.haloY = n.y;
         n.pinned = true;
         companion.flare = Math.max(companion.flare, view.reduced ? 0 : 0.4);
         wake();

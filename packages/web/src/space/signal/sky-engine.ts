@@ -501,8 +501,6 @@ export function makeNeb(c: Candidate, i: number, deps: SkyDeps): Neb {
     txtH: 0,
     keepR: 0,
     period: ORBIT_MS_NEW / 1000,
-    haloX: 0,
-    haloY: 0,
     nest: 1,
     nestFloor: 1,
     focused: false,
@@ -698,12 +696,6 @@ export function layoutSky(sky: SkyState, view: ViewState, deps: SkyDeps) {
     if (n.x === 0 && n.y === 0) {
       n.x = n.homeX;
       n.y = n.homeY;
-    }
-    /* a cloud's light starts where the cloud is; it only ever trails it
-       afterwards, and never flies in from the origin */
-    if (n.haloX === 0 && n.haloY === 0) {
-      n.haloX = n.x;
-      n.haloY = n.y;
     }
   }
   /* THE SKY LEANS DOWN INTO HEADQUARTERS, THE WAY THE GROUND LEANS UP.
@@ -1075,17 +1067,6 @@ export function stepSky(
          hand instead of in a caption. */
       n.x = n.dragX;
       n.y = n.dragY;
-      /* AND THE CLOUD COMES WITH IT, 1:1.
-         The words used to lead and the body used to trail on a very long
-         time constant. Written as "the light has inertia, the object does
-         not", which is a good sentence about a halo and a wrong one here:
-         this sprite is the BODY, the thing in your hand. A held object
-         that arrives late does not read as weight, it reads as broken —
-         the founder's word was "weird" — and it also means you aim with
-         one thing and drop another somewhere else. Under the hand, the
-         candidate is ONE object. */
-      n.haloX = n.x;
-      n.haloY = n.y;
       continue;
     }
     const dx = view.reduced ? 0 : n.ampX * stir.amp * Math.sin(t * n.rateX + n.phX);
@@ -1095,20 +1076,19 @@ export function stepSky(
     /* the elected statements ease toward the seam instead of their own
        home; for every other one `peekY === homeY` and this is `homeY` */
     n.y = lerp(n.y, lerp(n.homeY, n.peekY, peek) + dy, k);
-    /* At rest the halo simply is where the cloud is — and it catches up
-       fast after a release, rather than sliding in from where the drag
-       started. The softness that was wanted lives in the drift above.
+    /* THE HALO IS GONE, AND THE LIGHT IS SIMPLY WHERE THE CLOUD IS.
+       `haloX/haloY` eased toward `n.x/n.y` at τ≈145ms, and the sprite was
+       painted there while the sentence over it was placed by React at
+       `n.x/n.y` exactly. That reads as a transient — light catching up after
+       a release — and it is not one: `dx/dy` above never stop, so a
+       first-order lag against a continuous drift is a CONSTANT phase offset.
+       The glow and the words it belongs to sat permanently apart, for as long
+       as the cloud existed. The founder saw it and said so: "the text and the
+       background white color doesnt move together."
 
-       READ THE UNITS BEFORE TOUCHING THIS. `kd`'s first argument is the
-       fraction of the distance STILL REMAINING after one second, so a
-       LARGER number is SLOWER. This line was 0.35 for a while — a time
-       constant of 952ms and 2.2 seconds to close — sitting directly under
-       a comment promising the opposite, and it smeared the light behind
-       every released cloud for a second and a half. 1e-3 is τ≈145ms,
-       slightly ahead of the body's own re-home at τ≈256ms, so the light
-       arrives first and the cloud settles into it. */
-    n.haloX = view.reduced ? n.x : lerp(n.haloX, n.x, kd(1e-3, dt));
-    n.haloY = view.reduced ? n.y : lerp(n.haloY, n.y, kd(1e-3, dt));
+       There was nothing to weigh: the softness this was reaching for already
+       lives in the drift, and light that trails its own body explains
+       nothing. Motion explains, never decorates. */
   }
   /* They mingle, they never collide — and "collide" now includes the
      WORDS. A candidate's keep-out is whichever of its light and its

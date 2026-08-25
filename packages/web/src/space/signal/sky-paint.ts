@@ -180,7 +180,11 @@ export function paintSky(p: SkyPaint) {
     if (n.sats.length > 0) satPass(n, false, satGround);
     ctx!.globalCompositeOperation = "lighter";
     ctx!.globalAlpha = clamp01(a);
-    ctx!.drawImage(pal.nebulae[n.variant], grid(n.haloX) - rr, grid(n.haloY) - rr, rr * 2, rr * 2);
+    /* THE LIGHT IS WHERE THE CLOUD IS — see `haloX`'s deletion in
+       sky-engine.ts. It used to be drawn at an eased `haloX/haloY` while the
+       sentence over it was placed by React at `n.x/n.y`, so the glow and the
+       words it belongs to sat permanently apart. */
+    ctx!.drawImage(pal.nebulae[n.variant], grid(n.x) - rr, grid(n.y) - rr, rr * 2, rr * 2);
     if (n.sats.length > 0) satPass(n, true, satGround);
   }
   ctx!.globalCompositeOperation = "lighter";

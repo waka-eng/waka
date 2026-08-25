@@ -5,12 +5,17 @@ import { signUp, capture } from "./organic.js";
 
 const BASE = process.env.WAKA_BASE ?? "http://localhost:3010";
 const PASSWORD = "repro-prov-2026";
+/* PAIRS, NOT A PILE. Three captures under one reading promote it to `active`
+   and it leaves the sky for the poster; two keep it `emerging`, which is what
+   hangs overhead and what "where from" is asked of. So: two lines each on
+   three unrelated subjects. */
 const LINES = [
   "The pull between short-term financial gains and keeping users engaged.",
   "Every quarter the same argument: revenue now, or the thing people come back for.",
-  "I keep choosing the long game and then apologising for it in the numbers meeting.",
-  "Retention is the only number I actually believe, and it is the slowest one.",
-  "We shipped the engagement hack and I have felt bad about it for a month.",
+  "I write best before anyone else is awake, and I keep scheduling meetings into it.",
+  "My mornings are the only hours I actually think in, and I sell them cheap.",
+  "Hiring for taste is slower than hiring for skill and I keep forgetting that.",
+  "The people who changed this team were the ones with judgement, not credentials.",
 ];
 
 async function main(): Promise<number> {
@@ -24,6 +29,7 @@ async function main(): Promise<number> {
     const rows = body.signals ?? [];
     console.log("[prov] signals so far:", rows.length, JSON.stringify(rows.map((x) => x.status)));
     if (rows.some((x) => x.status === "emerging")) break;
+    if (i > 12) break;
   }
 
   const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
