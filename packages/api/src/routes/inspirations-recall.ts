@@ -13,7 +13,7 @@
 import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 
-import { attachments, inspirations, reflections } from "../db/index.js";
+import { attachments, experiences, inspirations, reflections } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import type { AuthEnv } from "../lib/middleware.js";
 import { attachmentSelection, serializeAttachment } from "./attachments.js";
@@ -118,6 +118,29 @@ export function registerRecallRoutes(
         sql`${inspirations.text} ilike ${buildLikePattern(search)} escape '!'`,
       );
       if (matches) filters.push(matches);
+    }
+
+    /* THE NAMED GROUND AS A LENS (meeting, 2026-08-17). By name, because a
+       name is how the caller — usually an agent mid-task — refers to the
+       stretch of work; resolved under the target profile so one profile's
+       "NixOS PR" can never read another's. An unknown name matches nothing,
+       which is the honest answer rather than an error: the ground exists
+       the moment a memory is kept on it, and not before. */
+    if (query.data.experience !== undefined) {
+      filters.push(
+        inArray(
+          inspirations.experienceId,
+          db
+            .select({ id: experiences.id })
+            .from(experiences)
+            .where(
+              and(
+                eq(experiences.profileId, target.profileId),
+                eq(experiences.name, query.data.experience),
+              ),
+            ),
+        ),
+      );
     }
 
     if (query.data.cursor) {

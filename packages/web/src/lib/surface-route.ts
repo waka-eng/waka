@@ -12,7 +12,11 @@ export type SurfaceView =
   | "signals"
   | "principles"
   | "rooms"
-  | "room";
+  | "room"
+  /** The agents in this account: their keys, and the door to each one's mind. */
+  | "agents"
+  /** One profile's mind as a picture: principles over signals over experiences. */
+  | "graph";
 
 export interface SurfaceRoute {
   view: SurfaceView;
@@ -46,6 +50,18 @@ export function parseSurfacePath(pathname: string): SurfaceRoute {
   }
   if (segments.length === 1 && segments[0] === "rooms") {
     return { view: "rooms", entityId: null };
+  }
+  if (segments.length === 1 && segments[0] === "agents") {
+    return { view: "agents", entityId: null };
+  }
+  /* /graph is the session's own mind; /graph/<profileId> is another profile
+     the matrix lets this session read — an agent's, usually. */
+  if (segments.length === 1 && segments[0] === "graph") {
+    return { view: "graph", entityId: null };
+  }
+  if (segments.length === 2 && segments[0] === "graph") {
+    const entityId = decodeSegment(segments[1]);
+    return { view: "graph", entityId };
   }
   /*
     THE WALL NEEDS AN ADDRESS OF ITS OWN NOW.
@@ -96,6 +112,10 @@ export function buildSurfacePath(input: SurfaceRoute): string {
       return "/inspirations";
     case "rooms":
       return "/rooms";
+    case "agents":
+      return "/agents";
+    case "graph":
+      return input.entityId ? `/graph/${encodeURIComponent(input.entityId)}` : "/graph";
     case "room":
       return input.entityId ? `/rooms/${encodeURIComponent(input.entityId)}` : "/rooms";
     case "inspiration":

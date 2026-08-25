@@ -80,6 +80,16 @@ export const inspirations = pgTable(
     kind: inspirationKindEnum("kind"),
     source: inspirationSourceEnum("source").notNull().default("app"),
     visibility: inspirationVisibilityEnum("visibility").notNull().default("private"),
+    /**
+     * The experience this memory was kept during — nullable, because most
+     * personal captures are not "during" anything nameable. The composite FK
+     * `(profile_id, experience_id) → experiences (profile_id, id)` lives in
+     * migration 0026 rather than here (same reason `profiles.group_id`'s
+     * does: it needs `ON DELETE SET NULL (experience_id)`, the column-list
+     * form, which the builder cannot express — a bare SET NULL on a
+     * composite key would null `profile_id` too).
+     */
+    experienceId: uuid("experience_id"),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

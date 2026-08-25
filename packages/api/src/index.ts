@@ -24,6 +24,9 @@ import { inspirationsRoutes } from "./routes/inspirations.js";
 import { profilesRoutes } from "./routes/profiles.js";
 import { principlesMarkdownRoutes, principlesRoutes } from "./routes/principles.js";
 import { createAgentGrantRoutes } from "./routes/agent-grants.js";
+import { agentKeyRoutes } from "./routes/agent-keys.js";
+import { experienceRoutes } from "./routes/experiences.js";
+import { graphRoutes } from "./routes/graph.js";
 import { createExportRoute } from "./routes/export.js";
 import { createReadingRoute } from "./routes/reading.js";
 import { createWeatherMarkdownRoute, createWeatherRoute } from "./routes/weather.js";
@@ -62,6 +65,9 @@ app.route("/api/health", healthRoutes);
 
 // Signup, login, session, profile preferences, and the CLI loopback flow.
 app.route("/api/auth", authRoutes);
+app.route("/api/agent-keys", agentKeyRoutes);
+app.route("/api/experiences", experienceRoutes);
+app.route("/api/graph", graphRoutes);
 
 // The memories an account owns — its human profile and any agent profiles.
 app.route("/api/profiles", profilesRoutes);

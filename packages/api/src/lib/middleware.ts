@@ -17,6 +17,7 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { getCookie } from "hono/cookie";
 
+import { looksLikeAgentKey, lookupAgentKeySession } from "./agent-key-auth.js";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "./auth.js";
 import { type AuthenticatedSession, lookupSession } from "./session.js";
 import { hasLiveSiblingGrant } from "./sibling-grants.js";
@@ -48,6 +49,13 @@ function readToken(c: Context): string | null {
 
 /** Shared by both middlewares so they cannot drift. */
 async function resolveSessionFromToken(token: string): Promise<AuthenticatedSession | null> {
+  /* An agent's standing key, told apart by its prefix rather than by trying
+     the JWT verify and falling through — the shapes are disjoint, so the
+     cheap check routes the credential without spending a signature check.
+     The session it yields is agent-bound: the whole access matrix below and
+     `humanSessionsOnly` apply to it unchanged (2026-08-17 meeting: per-agent
+     keys are a way IN, never a wider set of powers once in). */
+  if (looksLikeAgentKey(token)) return lookupAgentKeySession(token);
   const decoded = await verifySessionToken(token);
   if (!decoded?.sub) return null;
   return lookupSession(token);

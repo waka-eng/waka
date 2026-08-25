@@ -2012,3 +2012,82 @@ select.gr-input { appearance: none; cursor: pointer; }
   transition: color 0.15s var(--sf-ease);
 }
 .sf .gr-leave:hover { color: #8a2a1d; }
+
+/* ------------------------------------------------------------------ agents
+   The other hands (meeting, 2026-08-17): an agent card is its name, its
+   keys, and the door to its mind. The secret's one showing is the only
+   loud thing here, because it is the only thing that will not come back. */
+.sf .ag-card {
+  padding: 14px 16px;
+  border: 1px solid var(--sf-ink-4);
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+.sf .ag-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.sf .ag-keys {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+.sf .ag-key-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 13px;
+}
+.sf .ag-key-prefix {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--sf-ink-2);
+}
+.sf .ag-key-label { color: var(--sf-ink-3); }
+.sf .ag-key-dead { color: var(--sf-ink-4); }
+.sf .ag-secret {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--sf-ink-2);
+  border-radius: 8px;
+}
+.sf .ag-secret code {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  word-break: break-all;
+  user-select: all;
+}
+
+/* The graph needs the room its three columns are: 640px was the prose
+   measure, and a third of a mind was scrolled off it by default. */
+.sf .sf-layer--graph .sf-column { max-width: 920px; }
+
+/* ------------------------------------------------------------------- graph
+   Three columns because the data is a layered derivation. Principles carry
+   the one accent this sheet allows itself — the meeting asked for them to
+   read apart at a glance. */
+.sf .gph-scroll { overflow-x: auto; }
+.sf .gph-svg { min-width: 860px; }
+.sf .gph-col {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  fill: var(--sf-ink-3);
+  text-anchor: middle;
+}
+.sf .gph-edge {
+  fill: none;
+  stroke: var(--sf-ink-4);
+  stroke-width: 1;
+}
+.sf .gph-node circle { fill: var(--sf-ink-2); }
+.sf .gph-node text { font-size: 12px; fill: var(--sf-ink); }
+.sf .gph-node--principle circle { fill: #8a2a1d; }
+.sf .gph-node--principle text { fill: #8a2a1d; }
+.sf .gph-node--experience circle { fill: var(--sf-ink-4); }
+.sf .gph-node--experience text { fill: var(--sf-ink-3); }

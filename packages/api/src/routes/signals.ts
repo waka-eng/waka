@@ -28,6 +28,7 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
 import {
+  experiences,
   inspirations,
   profiles,
   signalEvidence,
@@ -94,6 +95,8 @@ const listSignalsQuerySchema = z
      * fragments, because a statement is one sentence and either alone misses.
      */
     q: z.string().trim().min(1).max(200).optional(),
+    /** Only the signals evidenced by memories kept during this experience. */
+    experience: z.string().trim().min(1).max(80).optional(),
     limit: limitSchema.optional(),
     /** Read another profile in the same account, per the permission matrix. */
     profile: z.string().uuid("profile must be a uuid").optional(),
@@ -170,6 +173,8 @@ export interface ListSignalsInput {
   status?: SignalStatus;
   /** Full-text over the statements; see `listSignalsQuerySchema.q`. */
   query?: string;
+  /** Only signals evidenced from this named experience's memories. */
+  experience?: string;
   limit: number;
 }
 
@@ -345,6 +350,32 @@ export async function listProfileSignals(
                 sql`to_tsvector('simple', ${signals.statement}) @@ plainto_tsquery('simple', ${input.query})`,
                 sql`${signals.statement} ilike ${buildLikePattern(input.query)} escape '!'`,
               )!,
+            ]
+          : []),
+        /* A signal's relation to an experience is a fact of its EVIDENCE —
+           which memories stand under it and where they were kept — so the
+           filter walks evidence → inspiration → experience rather than
+           reading a stored link that could drift (meeting, 2026-08-17). */
+        ...(input.experience
+          ? [
+              inArray(
+                signals.id,
+                db
+                  .select({ id: signalEvidence.signalId })
+                  .from(signalEvidence)
+                  .innerJoin(
+                    inspirations,
+                    eq(inspirations.id, signalEvidence.inspirationId),
+                  )
+                  .innerJoin(
+                    experiences,
+                    and(
+                      eq(experiences.id, inspirations.experienceId),
+                      eq(experiences.profileId, input.profileId),
+                      eq(experiences.name, input.experience),
+                    ),
+                  ),
+              ),
             ]
           : []),
       ),
@@ -743,6 +774,7 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
 
     const signalRows = await listSignals(db, {
       query: parsedQuery.data.q,
+      experience: parsedQuery.data.experience,
       profileId: scope.profileId,
       status: parsedQuery.data.status,
       limit: parsedQuery.data.limit ?? DEFAULT_SIGNAL_LIMIT,

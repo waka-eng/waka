@@ -29,6 +29,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Check, Paperclip } from "lucide-react";
 
 import { contributorColor, contributorInitials } from "../components/faces";
+import { AgentsScreen } from "../components/AgentsScreen";
+import { GraphScreen } from "../components/GraphScreen";
 import { useAuth } from "../lib/auth-context";
 import { confidenceBandKey } from "../lib/confidence";
 import {
@@ -1592,6 +1594,26 @@ export default function SurfacePage(): JSX.Element {
           The walls a few profiles keep together. Doors, then two quiet ways
           in: name a new room, or arrive with a code someone gave you.
         */}
+        {/* THE OTHER HANDS, AND THE SHAPE OF A MIND (meeting, 2026-08-17).
+            Agents are managed here — their names, their standing keys — and
+            each one's door opens onto the graph of what it has come to hold.
+            The graph also serves the person's own mind at /graph. */}
+        <section className={`sf-layer sf-layer--agents${view === "agents" ? " on" : ""}`}>
+          <AgentsScreen
+            locale={locale}
+            active={view === "agents"}
+            onBack={() => navigateSurface("wall")}
+            onSeeMind={(profileId) => navigateSurface("graph", { entityId: profileId })}
+          />
+        </section>
+        <section className={`sf-layer sf-layer--graph${view === "graph" ? " on" : ""}`}>
+          <GraphScreen
+            locale={locale}
+            active={view === "graph"}
+            profileId={route.view === "graph" ? route.entityId : null}
+            onBack={() => navigateSurface("agents")}
+          />
+        </section>
         <section className={`sf-layer sf-layer--rooms${view === "rooms" ? " on" : ""}`}>
           <div className="sf-column">
             <button type="button" className="sf-back" onClick={() => navigateSurface("wall")}>
@@ -2273,6 +2295,18 @@ export default function SurfacePage(): JSX.Element {
               what a principle is, and a door that appears out of nowhere
               reads as a bug, not a reward. (Owner decision, 2026-08-21;
               replaces the earlier progressive-disclosure behavior.) */}
+          <button
+            type="button"
+            className={`sf-primary-verb${view === "agents" || view === "graph" ? " on" : ""}`}
+            aria-pressed={view === "agents" || view === "graph"}
+            onClick={() =>
+              navigateSurface(view === "agents" ? "wall" : "agents", {
+                replace: view === "agents",
+              })
+            }
+          >
+            {t(locale, "agentsVerb")}
+          </button>
           <button
             type="button"
             className={`sf-primary-verb${view === "principles" ? " on" : ""}`}

@@ -165,6 +165,38 @@ agent's relayed excerpt, an agent's own observation.
   input to extraction. The guided question *generator* is a parked
   feature; the stored reflections are not.
 
+## Experience (layer-1 grouping)
+
+The named ground a run of memories was gathered on (meeting decision,
+2026-08-17 — deliberately **experience**, not "project": a project is a rule
+scope, an experience is a stretch of lived work). One row per
+`(profile, name)`, born at capture: naming an experience on a keep
+finds-or-creates it in the capture's own transaction, so there is no second
+birthplace to drift from.
+
+- **An inspiration names at most one experience**, through a composite
+  `(profile_id, experience_id)` FK — the same tenancy net every child of
+  layer 1 uses, so a memory can never stand on another profile's ground.
+- **Signals are deliberately NOT keyed to experiences.** A signal's relation
+  to an experience is a fact of its *evidence* — which memories stand under
+  it and where they were kept — so it is derived by joining
+  `signal_evidence → inspirations → experiences`, never stored twice.
+- **The lens**: `?experience=` on the inspirations and signals lists narrows
+  recall to one ground; `GET /api/graph` draws
+  principle → signal → experience from the same joins, statements and names
+  only — capture text never crosses.
+
+## Agent keys
+
+The standing credential an agent profile holds (meeting decision,
+2026-08-17: per-agent names and API keys). Issued and revoked by a
+**human session only**; binds to an **agent profile only**; resolves through
+`requireAuth` to an ordinary agent-bound session, so the access matrix and
+`humanSessionsOnly` apply unchanged — a key is a way in, never a wider set
+of powers once in. Only the secret's SHA-256 lands in `agent_keys`
+(sessions-table posture); the secret is shown once at issue time. Revocation
+is a timestamp and takes effect on the key's next request.
+
 ## Signal (layer 2)
 
 **An evidence-backed pattern**: a durable distilled statement — a taste,

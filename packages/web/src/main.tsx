@@ -220,6 +220,9 @@ ReactDOM.createRoot(root).render(
             <Route path="/top-of-mind" />
             <Route path="/rooms" />
             <Route path="/rooms/:groupId" />
+            <Route path="/agents" />
+            <Route path="/graph" />
+            <Route path="/graph/:profileId" />
           </Route>
           {/*
             Catch-all: route the visitor through "/" so the guard makes the

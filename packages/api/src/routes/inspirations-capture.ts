@@ -20,6 +20,7 @@ import { Hono } from "hono";
 
 import {
   decisionPrincipleCitations,
+  experiences,
   inspirations,
   reflections,
   type InspirationSource,
@@ -151,6 +152,26 @@ export function registerCaptureRoutes(
 
     const persistInspiration = () =>
       db.transaction(async (tx) => {
+      /* THE NAMED GROUND, found or made in the same transaction as the
+         memory that stands on it. Find-or-create by name because a name is
+         how the keeper (usually an agent mid-task) refers to the stretch of
+         work; the upsert races safely on the (profile, name) unique. Scoped
+         to the TARGET profile: a capture written for an agent files under
+         the agent's own experiences, never the writer's. */
+      let experienceId: string | null = null;
+      if (parsed.data.experience !== undefined) {
+        const [experienceRow] = await tx
+          .insert(experiences)
+          .values({ profileId: target.profileId, name: parsed.data.experience })
+          .onConflictDoUpdate({
+            target: [experiences.profileId, experiences.name],
+            /* a no-op write, so RETURNING answers on the existing row too */
+            set: { name: parsed.data.experience },
+          })
+          .returning({ id: experiences.id });
+        experienceId = experienceRow?.id ?? null;
+      }
+
       const [inserted] = await tx
         .insert(inspirations)
         .values({
@@ -161,6 +182,7 @@ export function registerCaptureRoutes(
           /* absent means private, and that is the column's own default rather
              than a value written here — one place decides what unset means */
           ...(visibility ? { visibility } : {}),
+          ...(experienceId ? { experienceId } : {}),
           createdAt: now,
           updatedAt: now,
         })
