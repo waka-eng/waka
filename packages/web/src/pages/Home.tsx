@@ -2503,8 +2503,19 @@ function HomeExperience(): JSX.Element {
           consultations: 4,
           inspirations: 5,
         };
+        /* AND NOT A WORD ABOUT SIGNALS (founder, 2026-08-25: "we removed
+           signal concept"). Signals are the machine's working material — they
+           are derived, stored and used to write your top of mind, and there is
+           nowhere in this world a person meets one. A creature reporting that
+           "a signal found another memory behind it" is describing plumbing to
+           somebody who has never seen the pipes. The record keeps every
+           clause; the spoken line is only what a person has a word for. */
         const spoken = (day?.sentences ?? [])
           .filter((sentence) => sentence.text !== "the sky held")
+          .filter(
+            (sentence) =>
+              sentence.backing !== "signals" && sentence.backing !== "signal_evidence",
+          )
           .map((sentence, i) => ({ sentence, i }))
           .sort(
             (a, b) =>
@@ -2518,8 +2529,14 @@ function HomeExperience(): JSX.Element {
            the most newsworthy thing leads, the rest arrive on curiosity. The
            cursor resets whenever the list itself changes, so a fresh fetch
            starts from the top again. */
+        /* THE DAY LANDS AT THE END (founder: "this should just say x and end
+           with today. today - is weird"). "Today — you kept nine memories" is
+           a headline with a dateline; "you kept nine memories today" is a
+           sentence somebody says. The label was already a phrase that reads
+           as an ending — "today", "two days ago" — so it only ever wanted to
+           be there. */
         const lines = spoken.map(
-          (x) => `${day?.label ?? "today"} — ${x.sentence.text}.`,
+          (x) => `${x.sentence.text} ${day?.label ?? "today"}.`,
         );
         if (lines.length > 0) {
           const key = lines.join("|");
@@ -4912,8 +4929,11 @@ function HomeExperience(): JSX.Element {
          it has mounted, which is one frame of a field a few pixels too tall
          and never a wrong layout that persists. */
       {
-        const axis = measured.axis.current;
-        const box = axis ? axis.getBoundingClientRect() : null;
+        /* THE DIAL IS THE WHOLE BOTTOM CHROME NOW. It was measured off the
+           axis of walls, which sat above it — and the axis is gone, so the
+           reserve is the timeline's own band and the air under it. */
+        const rail = dialRef.current;
+        const box = rail ? rail.getBoundingClientRect() : null;
         const claimed = box ? Math.round(view.h - box.top) : 0;
         /* A CEILING, AND IT IS A CATASTROPHE GUARD RATHER THAN A TIDY-UP.
            Two rows of small labels cannot honestly want two fifths of the
@@ -11916,6 +11936,21 @@ function HomeExperience(): JSX.Element {
       {/* AND WHAT THE SKY SAYS, STANDING IN IT. One sentence, in prose. The
           numeral law needs nothing here: what is forming is not countable
           yet, which is the whole point of the sentence. */}
+      {/* AND THE WAY BACK DOWN IS A CARET AND NOTHING ELSE (founder,
+          2026-08-25: "from the sky, just have a carrot icon to go back
+          down"). Up here there is one other place and you came from it — a
+          name beside the mark would be telling somebody where they live. */}
+      {phase === "ready" && inSky ? (
+        <button
+          type="button"
+          className="jar-up jar-up--down"
+          data-jar-chrome="1"
+          aria-label="back down to your wall"
+          onClick={() => simApiRef.current?.toTop()}
+        >
+          <span className="jar-saved-caret" aria-hidden="true" />
+        </button>
+      ) : null}
       {phase === "ready" && inSky ? (
         <div className="jar-values-room" data-jar-chrome="1">
           <p className="jar-values-lead">
@@ -11957,43 +11992,26 @@ function HomeExperience(): JSX.Element {
         >
           <span className="jar-saved-count">
             {inspirations?.length ?? 0}
-            {(inspirations?.length ?? 0) === 1 ? " inspiration saved" : " inspirations saved"}
+            {(inspirations?.length ?? 0) === 1 ? " inspiration" : " inspirations"}
           </span>
           <span className="jar-saved-caret" aria-hidden="true" />
         </button>
       ) : null}
 
-      <nav ref={measured.axis} className="jar-axis" data-jar-chrome="1" aria-label="walls">
-        {walls.map((w) => {
-          const here = atWall.kind === w.kind && atWall.id === w.id;
-          return (
-            <button
-              key={spaceKey(w)}
-              type="button"
-              className={`jar-axis-mark${here ? " is-here" : ""} jar-axis-mark--${w.kind}`}
-              aria-current={here ? "true" : undefined}
-              onClick={() => simApiRef.current?.goToWall(w.col)}
-            >
-              <span className="jar-axis-name">{w.name}</span>
-            </button>
-          );
-        })}
-        {/* AND THE WAY TO MAKE ANOTHER ONE, at the end of the row of them.
-            A room and an agent are both A NEW PLACE ON THIS AXIS, so the
-            offer belongs where the axis already is rather than printed
-            sideways down the margins of the world, which is where it used
-            to live and where nobody found it. One mark, in the strip's own
-            register — it opens two words and closes again. */}
-        <button
-          type="button"
-          className={`jar-axis-mark jar-axis-add${newPlace ? " is-here" : ""}`}
-          aria-expanded={newPlace}
-          aria-label="make another place"
-          onClick={() => setNewPlace(true)}
-        >
-          <span aria-hidden="true">+</span>
-        </button>
-      </nav>
+      {/* THE STRIP OF WALL NAMES IS GONE (founder, 2026-08-25: "remove").
+          It listed every wall along the bottom edge and lit the one you were
+          on. I argued to keep it — on a first account its two marks were the
+          only visible ways out — and the founder ruled twice, so it goes.
+
+          WHAT KEEPS ITS PROMISE NOW, because a promise is not kept by a menu:
+          up and down are on screen at all times, as `philosophies & values`
+          at the top edge and the count of what you have kept at the bottom.
+          Sideways is `.jar-way`, the neighbour's own name printed in the
+          margin it lives past — which only exists when there IS a neighbour,
+          and a first account has none to point at. So the case the strip was
+          protecting is the case where sideways means nothing yet. The wall
+          list under the name at the top left carries the rest, including the
+          way to make another place. */}
 
       {/* WHICH KIND OF PLACE — asked once, with room to say what each is.
           A room and an agent are both a new column on the axis and they are

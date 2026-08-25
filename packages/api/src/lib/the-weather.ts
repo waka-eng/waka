@@ -195,25 +195,25 @@ function tellCounts(c: WindowCounts): WeatherSentence[] {
     out.push({ text: "the sky held", backing: "inspirations" });
   }
   if (c.posterFirst > 0) {
-    out.push({ text: "the poster was written for the first time", backing: "top_of_minds" });
+    out.push({ text: "your top of mind was written for the first time", backing: "top_of_minds" });
   }
   if (c.posterRewrites > 0) {
     out.push({
       text:
         c.posterRewrites === 1
-          ? "the poster was rewritten"
-          : `the poster was rewritten ${exactTimes(c.posterRewrites)}`,
+          ? "your top of mind was rewritten"
+          : `your top of mind was rewritten ${exactTimes(c.posterRewrites)}`,
       backing: "top_of_minds",
     });
   }
   if (c.posterHeld > 0) {
     out.push({
-      text: "everything was read again, and the poster held",
+      text: "everything was read again, and your top of mind held",
       backing: "top_of_minds",
     });
   }
   if (c.posterYourHand > 0) {
-    out.push({ text: "the poster took your own words", backing: "top_of_minds" });
+    out.push({ text: "your top of mind took your own words", backing: "top_of_minds" });
   }
   if (c.consulted > 0) {
     out.push({

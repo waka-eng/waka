@@ -714,13 +714,11 @@
 .jar-way {
   opacity: 1;
   color: var(--jar-muted);
-  /* A SIZE OF ITS OWN, ABOVE THE LABEL REGISTER'S 10px. These are the two
-     names of the places you can walk to from here — the most consequential
-     words in either margin — and at the shared label size they read as a
-     watermark on a 1440px screen. The register's weight, tracking and case
-     still apply; only the measure grows. */
-  font-size: 13px;
-  letter-spacing: 0.13em;
+  /* The label register, unmodified — the same voice as the way up and the
+     count of what you have kept. Three signposts at three sizes read as
+     three unrelated things; one size makes them one kind of thing. */
+  font-size: 10px;
+  letter-spacing: 0.16em;
 }
 .jar-way:hover,
 .jar-way:focus-visible {
@@ -825,6 +823,12 @@
 .jar-up:hover,
 .jar-up:focus-visible {
   color: var(--jar-ink);
+}
+/* the same mark, aimed the other way: from the sky there is one other place
+   and you came from it, so it carries no name */
+.jar-up--down {
+  top: auto;
+  bottom: calc(16px + env(safe-area-inset-bottom));
 }
 .jar-up-caret {
   display: block;
@@ -933,9 +937,14 @@
      pointing at somewhere you can go — and it was set in lowercase prose,
      which made it the only signpost in the world speaking a different
      language from the others. */
+  /* ONE REGISTER FOR EVERY SIGNPOST (founder, 2026-08-25: "make font of x
+     inspirations, and the left and right text the same as PHILOSOPHIES &
+     VALUES"). Three things point out of this screen — up to what is forming,
+     sideways to a neighbour, down to the ground — and they were at three
+     sizes. They are one voice now: the label register, unmodified. */
   font-weight: 500;
-  font-size: 13px;
-  letter-spacing: 0.13em;
+  font-size: 10px;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   white-space: nowrap;
   color: var(--jar-muted);
@@ -1668,7 +1677,11 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: calc(14px + env(safe-area-inset-top)) 16px 0;
+  /* NEARER THE EDGES (founder, 2026-08-25: "reduce left and right margins").
+     Sixteen pixels of inset plus each pill's own side padding read as a
+     floating bar; the two permanent things at the top of the screen belong to
+     the corners they name. */
+  padding: calc(14px + env(safe-area-inset-top)) 8px 0;
   pointer-events: none;
 }
 /* The two exits sit together at the top-left, so the rest of the bar is still

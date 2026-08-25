@@ -403,10 +403,39 @@ export async function mountWorld(facts: WorldFacts): Promise<MountedWorld> {
     audit,
     step,
     async travelTo(name) {
+      /*
+       * THE ROUTE A PERSON ACTUALLY HAS.
+       *
+       * This used to click the wall-names strip along the bottom of the
+       * screen. That strip is gone (founder, 2026-08-24: "remove") — every
+       * wall now hangs off the caret beside the name in the top-left corner,
+       * and a helper that still reaches for the old strip finds an empty list
+       * and fails twelve tests with a message about the group mock, which is
+       * not what is wrong.
+       *
+       * So travel the way the person travels: open the list, press the row.
+       * The list closes on the press, hence re-opening it each attempt.
+       */
+      const openWallList = async () => {
+        const caret = container.querySelector<HTMLElement>(".jar-here-more");
+        if (!caret) {
+          throw new Error(
+            "no .jar-here-more — the top-left name has no caret, so there is " +
+              "no way to another wall at all. The top bar did not mount.",
+          );
+        }
+        if (caret.getAttribute("aria-expanded") !== "true") {
+          await act(async () => {
+            caret.click();
+          });
+        }
+      };
+
       for (let attempt = 0; attempt < 8; attempt += 1) {
         const here = container.querySelector(".jar-here")?.textContent ?? "";
         if (name.test(here.trim())) break;
-        await clickByText(".jar-axis a, .jar-axis button", name);
+        await openWallList();
+        await clickByText(".jar-here-row", name);
         await step(90); /* travel eases over ~670ms */
       }
       await step(30);
@@ -414,19 +443,20 @@ export async function mountWorld(facts: WorldFacts): Promise<MountedWorld> {
        * ARRIVAL IS ASSERTED, NEVER ASSUMED.
        *
        * `goToWall` clamps its target to the walls that actually exist, so if
-       * the group never reached the axis the click is a silent no-op and the
+       * the group never reached the list the click is a silent no-op and the
        * camera stays where it was. A test that then checked the ground would
        * be checking the wall it started on and passing — which is exactly the
        * kind of green that let the original bug through. Better to be loud.
        */
       const here = (container.querySelector(".jar-here")?.textContent ?? "").trim();
       if (!name.test(here)) {
-        const axis = [...container.querySelectorAll(".jar-axis a, .jar-axis button")].map((n) =>
+        await openWallList();
+        const offered = [...container.querySelectorAll(".jar-here-row")].map((n) =>
           (n.textContent ?? "").trim(),
         );
         throw new Error(
           `travelTo(${name}) did not arrive — still standing on "${here}". ` +
-            `The axis offers: ${JSON.stringify(axis)}. ` +
+            `The wall list offers: ${JSON.stringify(offered)}. ` +
             `If the wall is missing from that list, the group fetch mock is wrong.`,
         );
       }

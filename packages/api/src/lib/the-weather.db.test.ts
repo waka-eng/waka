@@ -74,7 +74,7 @@ describe("the weather is a view of the record", () => {
       INSERT INTO signal_evidence (profile_id, owner_profile_id, signal_id, inspiration_id, created_at)
       VALUES (${profileId}, ${profileId}, ${sig}, ${insp}, ${daysAgo(2, 1)})`;
 
-    // Yesterday: a refusal, and the poster read everything again and held.
+    // Yesterday: a refusal, and the top of mind read everything again and held.
     const anchor = await seedSignal(profileId, daysAgo(9), "You are a morning person.");
     await t.sql`
       INSERT INTO suppressions
@@ -99,7 +99,7 @@ describe("the weather is a view of the record", () => {
     expect(lines).toContain(
       "yesterday: refused a candidate — too close to what you dismissed",
     );
-    expect(lines).toContain("yesterday: everything was read again, and the poster held");
+    expect(lines).toContain("yesterday: everything was read again, and your top of mind held");
     expect(lines).toContain("today: your memory was consulted");
 
     /* A COUNT IS COUNTED; A DAY IS SAID. Founder ruling, 2026-08-24: the
@@ -132,7 +132,7 @@ describe("the weather is a view of the record", () => {
 
     const before = sentencesOf(await assembleTheWeather(t.db as never, { profileId, now: NOW }));
     expect(before.some((l) => l.includes("refused a candidate"))).toBe(true);
-    expect(before.some((l) => l.includes("the poster held"))).toBe(true);
+    expect(before.some((l) => l.includes("your top of mind held"))).toBe(true);
 
     await t.sql`DELETE FROM suppressions WHERE profile_id = ${profileId}`;
     await t.sql`DELETE FROM top_of_minds WHERE profile_id = ${profileId}`;
@@ -143,7 +143,7 @@ describe("the weather is a view of the record", () => {
       "the refusal's sentence outlived the refusal's record",
     ).toBe(false);
     expect(
-      after.some((l) => l.includes("the poster held")),
+      after.some((l) => l.includes("your top of mind held")),
       "the held sentence outlived the no-change version",
     ).toBe(false);
   });
