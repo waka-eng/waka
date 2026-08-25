@@ -48,7 +48,7 @@ body {
    * ONE DEFINITION PER COLOUR.
    *
    * These values used to be written out twice under two vocabularies:
-   * #06080d was --bg, --paper AND --w-ground; #e8edf4 was --ink, --accent
+   * var(--jar-deep) was --bg, --paper AND --w-ground; var(--jar-ink) was --ink, --accent
    * AND --w-ink. Worse, --w-muted was defined here and then REDEFINED
    * hundreds of lines below, so the value at this position was dead and
    * anybody reading top-down learned the wrong number.

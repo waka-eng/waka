@@ -160,6 +160,74 @@ describe("the spacing grid is one grid", () => {
   });
 });
 
+/**
+ * THE PALETTE, held the same way — and the finding that opened it.
+ *
+ * 97 distinct colour literals across the three governed stylesheets when this
+ * was measured. Thirteen of them were the VALUE OF A TOKEN THAT ALREADY
+ * EXISTED: `--jar-deep: #06080d` is declared, and `#06080d` was then written
+ * raw four times; `--jar-panel-edge` and `--jar-muted` the same. A token
+ * declared and then bypassed is worse than no token — the next person changes
+ * the declaration, watches most of the product follow, and has no way to see
+ * the places that did not.
+ *
+ * Those thirteen are converted. The rest is a long tail of one-off shadows and
+ * gradients where a name would add nothing, so it is counted rather than
+ * forced. Colour is the most design-sensitive of the three scales, and a blind
+ * mapping of 97 values is a redesign nobody asked for.
+ */
+const COLOUR_CEILING = 125;
+
+/** Colour literals, per governed file. */
+function coloursIn(file: string): string[] {
+  const out: string[] = [];
+  for (const m of read(file).matchAll(/#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)/g)) {
+    out.push(`${file}: ${m[0]}`);
+  }
+  return out;
+}
+
+describe("the palette does not bypass itself", () => {
+  it("never writes a colour a declared token already holds", () => {
+    /* THE FINDING THIS EXISTS FOR, and it is exact rather than a count: a raw
+       value identical to a token's own value means the cascade was stepped
+       around, and nothing about the rule looks wrong when you read it. */
+    const declared = new Map<string, string>();
+    for (const file of [...GOVERNED, "system.css"]) {
+      for (const m of read(file).matchAll(
+        /^\s*(--[a-z0-9-]+):\s*(#[0-9a-fA-F]{3,8}|rgba?\([^)]*\))\s*;/gm,
+      )) {
+        if (!declared.has(m[2]!.toLowerCase())) declared.set(m[2]!.toLowerCase(), m[1]!);
+      }
+    }
+    const bypassed: string[] = [];
+    for (const file of GOVERNED) {
+      for (const line of read(file).split("\n")) {
+        if (/^\s*--[a-z0-9-]+:/.test(line)) continue;
+        for (const [value, name] of declared) {
+          if (line.toLowerCase().includes(value)) bypassed.push(`${file}: ${value} is var(${name})`);
+        }
+      }
+    }
+    expect(
+      bypassed,
+      "a colour was written raw when a token already holds that exact value. " +
+        "Change the token and this rule will not follow — use var().",
+    ).toEqual([]);
+  });
+
+  it("keeps the count of colour literals at or under the ceiling", () => {
+    const loose = GOVERNED.flatMap((f) => coloursIn(f));
+    expect(
+      loose.length,
+      `${loose.length} colour literals, ceiling ${COLOUR_CEILING}. A new one means ` +
+        "a colour was chosen at a call site. If it is a tier the palette should " +
+        "own, name it; if it is a one-off shadow, it is part of the tail this " +
+        "ratchet is draining.",
+    ).toBeLessThanOrEqual(COLOUR_CEILING);
+  });
+});
+
 describe("the type scale is one scale", () => {
   it("declares every step it claims, in one place", () => {
     /* If a step is renamed or dropped, the call sites below are pointing at

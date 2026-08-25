@@ -685,7 +685,7 @@
   margin: var(--sp-12) 0 0;
   padding: 0 0 0 var(--sp-12);
   border: 0;
-  border-left: 1px solid var(--jar-edge, rgba(255, 255, 255, 0.08));
+  border-left: 1px solid var(--jar-edge, var(--jar-panel-edge));
   background: none;
   color: inherit;
   font: inherit;
@@ -2512,7 +2512,7 @@
   /* the one structural mark: a rule down the left, the typographic sign for
      quoted material, at an opacity that never competes with the words */
   border: 0;
-  border-left: 1px solid var(--jar-edge, rgba(255, 255, 255, 0.08));
+  border-left: 1px solid var(--jar-edge, var(--jar-panel-edge));
   background: none;
   color: inherit;
   font: inherit;
@@ -2522,7 +2522,7 @@
 }
 .jar-prov-row:hover,
 .jar-prov-row:focus-visible {
-  border-left-color: var(--jar-muted, rgba(232, 237, 244, 0.55));
+  border-left-color: var(--jar-muted, var(--jar-muted));
   outline: none;
 }
 .jar-prov-text {
@@ -2795,7 +2795,7 @@
   color: var(--jar-faint);
 }
 .jar-ante-anchor-words {
-  color: var(--jar-muted, rgba(232, 237, 244, 0.55));
+  color: var(--jar-muted, var(--jar-muted));
 }
 .jar-ante-standing {
   color: var(--jar-faint);
@@ -2805,7 +2805,7 @@
   padding: 0;
   background: none;
   font: inherit;
-  color: var(--jar-muted, rgba(232, 237, 244, 0.55));
+  color: var(--jar-muted, var(--jar-muted));
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -2826,7 +2826,7 @@
   margin: 0;
   padding: 0 0 0 var(--sp-12);
   border: 0;
-  border-left: 1px solid var(--jar-edge, rgba(255, 255, 255, 0.08));
+  border-left: 1px solid var(--jar-edge, var(--jar-panel-edge));
   background: none;
   font: inherit;
   font-size: var(--t-ui);
@@ -2840,12 +2840,12 @@
 }
 .jar-ground:hover,
 .jar-ground:focus-visible {
-  border-left-color: var(--jar-muted, rgba(232, 237, 244, 0.55));
+  border-left-color: var(--jar-muted, var(--jar-muted));
   outline: none;
 }
 .jar-ground--answered {
   color: var(--jar-ink);
-  text-shadow: 0 0 12px rgba(232, 237, 244, 0.16);
+  text-shadow: 0 0 12px var(--jar-scroll);
 }
 
 /* THE WORDS THAT DID THE READING. <mark> is the correct element — this is
@@ -2856,7 +2856,7 @@
   color: var(--jar-ink);
   /* the faintest lift, so it still reads on a screen where the ink values are
      close: not a glow, a half-step */
-  text-shadow: 0 0 12px rgba(232, 237, 244, 0.16);
+  text-shadow: 0 0 12px var(--jar-scroll);
 }
 /* THE PAGE'S WORDS, NOT THE PERSON'S. A quote verified against the fetched
    page behind a saved link still lights — it genuinely did the reading — but
