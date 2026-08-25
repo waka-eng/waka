@@ -43,6 +43,8 @@ const WORDED_FOR: Record<string, { value: number; words: string }> = {
   TOP_OF_MIND_SIGNAL_LIMIT: { value: 12, words: "twelve" },
   SELECTION_DISPUTED_MULTIPLIER: { value: 0.4, words: "far back" },
   GROUP_DRAFT_MIN_AFFIRMED: { value: 3, words: "three" },
+  GROUP_DRAFT_SMALL_MAX_MEMBERS: { value: 3, words: "three people or fewer" },
+  GROUP_DRAFT_MIN_AFFIRMED_SMALL: { value: 2, words: "two" },
 };
 
 describe("the reading", () => {

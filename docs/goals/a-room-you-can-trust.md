@@ -368,10 +368,14 @@ house norm.
   reactions** (latest verdict per current member, reactor never the
   owner — whose self-verdicts are private curation; a reaction row
   carries name + verdict and nothing beneath the statement, pinned).
-  1b: the room's **first draft waits for affirmed material** —
-  `GROUP_DRAFT_MIN_AFFIRMED` (3) shared statements affirmed by someone
-  other than their owner, latest verdict wins, owner self-agreement
-  excluded; below the bar the pass returns the legible
+  1b: the room's **first draft waits for affirmed material** — shared
+  statements affirmed by someone other than their owner, latest verdict
+  wins, owner self-agreement excluded. The bar reads the room (founder
+  ruling, 2026-08-25): `GROUP_DRAFT_MIN_AFFIRMED_SMALL` (2) at or below
+  `GROUP_DRAFT_SMALL_MAX_MEMBERS` (3) members,
+  `GROUP_DRAFT_MIN_AFFIRMED` (3) above it — a flat three counted SHARED
+  STATEMENTS, so a pair with two statements up could never reach it at
+  all. Below the bar the pass returns the legible
   `waiting_for_affirmations`, member proposals still materialize, and an
   established room is never re-gated. The trigger side shipped earlier
   on the base: agreement enqueues the room's re-synthesis. Gate measured

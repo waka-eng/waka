@@ -1327,7 +1327,7 @@ async function writeGroupVersion(
  * when at least one current member other than its owner has said "true" of
  * it (their latest verdict is the one that stands — a later "not true"
  * withdraws the affirmation), and the room's FIRST generative draft waits
- * until GROUP_DRAFT_MIN_AFFIRMED shared statements are affirmed.
+ * until that many shared statements are affirmed.
  *
  * Only the first model draft is gated. An established room re-reads its
  * standing artifact as shares and verdicts move — that is maintenance of
@@ -1335,8 +1335,46 @@ async function writeGroupVersion(
  * decisions are NEVER gated: an accepted proposal materializes a version
  * whatever the count, because the members speaking directly is the strongest
  * evidence there is.
+ *
+ * A SMALL ROOM IS HELD TO A SMALLER NUMBER, WHICH IS THE SAME RULE.
+ *
+ * Founder ruling, 2026-08-25. Three affirmations is a proportion argument
+ * wearing an absolute number's clothes: in a room of eight it is a modest
+ * corroboration, and in a room of two it is most of everything the room has
+ * ever said. The count is over SHARED STATEMENTS, not over agreements — a
+ * pair who have put two statements up can never reach three however many
+ * times each of them is affirmed — so the gate did not slow a small room
+ * down, it closed it. Measured on this stack: across fourteen successful
+ * synthesis jobs, not one of thirteen rooms had ever produced a top of mind.
+ *
+ * So the threshold reads the room. At or below
+ * GROUP_DRAFT_SMALL_MAX_MEMBERS the bar is two; above it, three. Two is
+ * the floor and never one, because one affirmation is a single person
+ * agreeing with a single statement, and a room that speaks off that has not
+ * been corroborated by anybody — it has been asserted twice.
  */
 export const GROUP_DRAFT_MIN_AFFIRMED = 3;
+
+/** A room this size or smaller is held to the smaller bar. */
+export const GROUP_DRAFT_SMALL_MAX_MEMBERS = 3;
+
+/** The bar for a small room. Two, never one — see the note above. */
+export const GROUP_DRAFT_MIN_AFFIRMED_SMALL = 2;
+
+/**
+ * How many affirmed shared statements THIS room needs before it drafts.
+ *
+ * Takes the CURRENT member count, which is the count at the moment the job
+ * runs: a room that grows past the small-room size before it has ever spoken
+ * is held to the larger bar from then on, and one that shrinks back is held
+ * to the smaller. Neither retroactively unsays anything, because only the
+ * FIRST draft is gated at all.
+ */
+export function groupDraftMinAffirmed(memberCount: number): number {
+  return memberCount <= GROUP_DRAFT_SMALL_MAX_MEMBERS
+    ? GROUP_DRAFT_MIN_AFFIRMED_SMALL
+    : GROUP_DRAFT_MIN_AFFIRMED;
+}
 
 async function countAffirmedSharedSignals(
   db: WakaDb,
@@ -1438,7 +1476,7 @@ export async function refreshTopOfMindForGroup(
   let waitingForAffirmations = false;
   if (liveBefore === null && shared.length > 0) {
     const affirmed = await countAffirmedSharedSignals(db, input.groupId, shared);
-    if (affirmed < GROUP_DRAFT_MIN_AFFIRMED) {
+    if (affirmed < groupDraftMinAffirmed(memberRows.length)) {
       if (pending.length === 0) {
         return { ...nothing, status: "waiting_for_affirmations" };
       }

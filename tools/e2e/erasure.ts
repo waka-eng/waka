@@ -330,11 +330,12 @@ async function main(): Promise<void> {
     );
 
     /* AND SOMEBODY AGREES WITH THEM, BECAUSE A ROOM DOES NOT SPEAK FIRST ON
-       ITS OWN. `GROUP_DRAFT_MIN_AFFIRMED` (top-of-mind-synthesis.ts) holds a
-       room's first generative draft until three of its shared statements have
-       been affirmed by a member other than their owner — the same shape as
-       `emerging → active` at three, one level up, so a room never drafts from
-       thin evidence in a slow week.
+       ITS OWN. `groupDraftMinAffirmed` (top-of-mind-synthesis.ts) holds a
+       room's first generative draft until enough of its shared statements
+       have been affirmed by a member other than their owner — the same shape
+       as `emerging → active`, one level up, so a room never drafts from thin
+       evidence in a slow week. This room has two members, so the bar it is
+       held to is the small-room one (founder ruling, 2026-08-25).
 
        This suite never affirmed anything, so the room waited forever and the
        step after this one spent five minutes discovering that. The wait was
@@ -371,22 +372,27 @@ async function main(): Promise<void> {
        (routes/groups.ts) rather than handing back a loader's shape. Guessing
        it cost a five-minute timeout waiting on a path that could never match. */
     /* A ROOM DOES NOT SPEAK FIRST UNTIL ENOUGH OF IT HAS BEEN AGREED WITH.
-       `GROUP_DRAFT_MIN_AFFIRMED` is three, and the count is over SHARED
-       STATEMENTS, not over agreements: a room that grew two of its own can
-       never reach it however many times each is affirmed. This suite grows
-       its room from two members and four captures, so how many it grows is
-       the model's call and often fewer than three.
+       The count is over SHARED STATEMENTS, not over agreements: a room that
+       grew one of its own can never reach two however many times it is
+       affirmed. This suite grows its room from two members and four
+       captures, so how many it grows is the model's call.
+
+       The bar is the SMALL-ROOM one — two — because this room has two
+       members (`groupDraftMinAffirmed`, founder ruling 2026-08-25). It was a
+       flat three until then, which a two-person room could not reach at all;
+       two is reachable here, and this step now fails only when the model
+       genuinely grew fewer than two statements for the pair to agree with.
 
        Waiting five minutes to discover a gate we can read directly is not a
        test, it is a delay. If the room is holding, say so in the words of the
        rule and stop — the same shape as the attachment steps above, which
        report what the stack has not got rather than failing it. */
-    const MIN_AFFIRMED = 3;
+    const MIN_AFFIRMED = 2;
     if (affirmedShared < MIN_AFFIRMED) {
       throw new Error(
         `the room is holding its first draft: ${affirmedShared} of its own statements ` +
           `were agreed with and a room needs ${MIN_AFFIRMED} before it drafts ` +
-          `(GROUP_DRAFT_MIN_AFFIRMED, top-of-mind-synthesis.ts). Nothing is broken — ` +
+          `(groupDraftMinAffirmed, top-of-mind-synthesis.ts). Nothing is broken — ` +
           `there was not enough agreed material in a two-person room for it to speak, ` +
           `so the erasure claims below could not be exercised against a room's own words.`,
       );

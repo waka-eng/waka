@@ -28,6 +28,8 @@ import { CONFIDENCE_RECENCY_HALF_LIFE_DAYS } from "./signal-derivation-threshold
 import {
   COMEBACK_MIN_DORMANT_DAYS,
   GROUP_DRAFT_MIN_AFFIRMED,
+  GROUP_DRAFT_MIN_AFFIRMED_SMALL,
+  GROUP_DRAFT_SMALL_MAX_MEMBERS,
   SELECTION_DISPUTED_MULTIPLIER,
   TOP_OF_MIND_MIN_SIGNALS,
   TOP_OF_MIND_SIGNAL_LIMIT,
@@ -135,6 +137,26 @@ export const READING_LINES: ReadingLine[] = [
       constant: "GROUP_DRAFT_MIN_AFFIRMED",
       value: GROUP_DRAFT_MIN_AFFIRMED,
       words: "three",
+    },
+  },
+  {
+    sentence:
+      "A room of three people or fewer is held to a smaller bar, because three statements is most of everything a pair has ever said.",
+    backing: {
+      kind: "constant",
+      constant: "GROUP_DRAFT_SMALL_MAX_MEMBERS",
+      value: GROUP_DRAFT_SMALL_MAX_MEMBERS,
+      words: "three people or fewer",
+    },
+  },
+  {
+    sentence:
+      "That smaller bar is two, and it never falls to one: one person agreeing once is not a room agreeing.",
+    backing: {
+      kind: "constant",
+      constant: "GROUP_DRAFT_MIN_AFFIRMED_SMALL",
+      value: GROUP_DRAFT_MIN_AFFIRMED_SMALL,
+      words: "two",
     },
   },
   {

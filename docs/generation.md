@@ -464,9 +464,22 @@ A group's artifact runs the same pipeline with three deliberate differences
   artifact does not draft from thin evidence: a shared statement is
   *affirmed* when at least one current member other than its owner has
   said "true" of it (their latest verdict stands — a later "not true"
-  withdraws it), and the first generative draft waits until
-  `GROUP_DRAFT_MIN_AFFIRMED` (3) shared statements are affirmed — the
-  `emerging → active` shape, one level up. Below the bar the pass returns
+  withdraws it), and the first generative draft waits until enough shared
+  statements are affirmed — the `emerging → active` shape, one level up.
+
+  **The bar reads the room** (founder ruling, 2026-08-25). At or below
+  `GROUP_DRAFT_SMALL_MAX_MEMBERS` (3) members it is
+  `GROUP_DRAFT_MIN_AFFIRMED_SMALL` (2); above that,
+  `GROUP_DRAFT_MIN_AFFIRMED` (3). A flat three was a proportion argument
+  wearing an absolute number's clothes: the count is over SHARED
+  STATEMENTS, so a pair who have put two statements up could never reach
+  three however many times each was affirmed — the gate did not slow a
+  small room down, it closed it. Two is the floor and never one, because
+  one person agreeing with one statement is not a room agreeing. The
+  member count is read at the moment the job runs, and only the first
+  draft is gated at all, so crossing the size line never unsays anything.
+
+  Below the bar the pass returns
   the explicit status `waiting_for_affirmations` rather than a silent
   nothing. Only the first model draft is gated: an established room
   re-reads its standing artifact as shares and verdicts move, and member
@@ -636,6 +649,8 @@ The authoritative values. Machine-checked against code — see
 | `TOP_OF_MIND_SIGNAL_LIMIT` | 12 | Signals synthesis may consider |
 | `TOP_OF_MIND_MIN_SIGNALS` | 3 | Cold-start floor; below it, emerging signals backfill |
 | `GROUP_DRAFT_MIN_AFFIRMED` | 3 | A room's first draft waits for this many shared statements affirmed by someone other than their owner |
+| `GROUP_DRAFT_SMALL_MAX_MEMBERS` | 3 | A room this size or smaller is held to the small-room bar instead |
+| `GROUP_DRAFT_MIN_AFFIRMED_SMALL` | 2 | The small room's bar. Two, never one — one person agreeing once is not a room agreeing |
 | `SELECTION_CONFIDENCE_WEIGHT` | 0.45 | Selection: confidence term |
 | `SELECTION_EVIDENCE_WEIGHT` | 0.2 | Selection: support term |
 | `SELECTION_RECENCY_WEIGHT` | 0.2 | Selection: recency term |
