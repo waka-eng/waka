@@ -1783,10 +1783,15 @@
    date wants, beside the pair that says who may see this — which put three
    unrelated things in one corner. Stepping is movement, and movement reads as
    "and then" at the foot rather than as a third verb at the head. */
+/* THE FOOT, CENTRED THE SAME WAY. `baseline` looked right for three lots of
+   text and is wrong the moment one of them is not text: the carets are 7px
+   boxes rotated 45deg with no baseline of their own, so the browser lined
+   their bottom edge up with the x-height of `reflect` and `delete` and sat
+   them a couple of pixels low. Centre is what the sketch draws. */
 .jar-panel-foot {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
-  align-items: baseline;
+  align-items: center;
   gap: 12px;
 }
 .jar-panel-foot-l {
@@ -1821,9 +1826,7 @@
 }
 
 .jar-panel-vis {
-  position: absolute;
-  top: 14px;
-  right: 18px;
+  /* in the row now, not floated over it */
   margin: 0;
   justify-content: flex-end;
 }
@@ -1917,20 +1920,36 @@
   animation: jar-panel-out 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
   pointer-events: none;
 }
+/* THE HEAD: date left, who-may-see right, centred against each other.
+   It was not a row at all — the date was a block padded 56px/120px to dodge
+   controls that had already moved to the foot, and the pair was absolutely
+   positioned at `top: 14px`. Nothing shared a vertical origin, so the two
+   never lined up and the gap between them changed with the length of the
+   date (founder's sketch, 2026-08-25: "must be aligned centered"). */
+.jar-panel-head {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
 .jar-panel-when {
   display: block;
-  /* both corners are occupied — the carets at the left, the visibility pair
-     at the right — so the date sits between them rather than under either */
-  padding-right: 120px;
-  padding-left: 56px;
+  /* nothing to dodge: the grid holds the other half off */
+  padding: 0;
 }
 /* AND WHAT DELETING CANNOT UNDO. Quiet, because it is a fact rather than an
    alarm — but present before the act, not after it. */
 .jar-panel-warn {
   color: var(--jar-faint);
 }
+/* AND THE WORDS GET AIR ON BOTH SIDES (founder's sketch: "enough spacing",
+   drawn as a band above the text and another below it). 14px above and
+   nothing below left the paragraph sitting against whatever verb row came
+   next, so the card read as three things stacked rather than one thing with
+   a middle. */
 .jar-panel-text {
-  margin: 14px 0 0;
+  margin: 22px 0;
   font-size: 15px;
   line-height: 1.6;
   color: var(--jar-ink);

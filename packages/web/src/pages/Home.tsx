@@ -10491,6 +10491,16 @@ function HomeExperience(): JSX.Element {
           role="dialog"
           aria-label="a saved inspiration"
         >
+          {/* THE HEAD IS ONE ROW (founder's sketch, 2026-08-25: "must be
+              aligned centered"). The date and the visibility pair were two
+              independently placed things that only LOOKED like a row — the
+              date a block padded 56px left and 120px right to dodge controls
+              that have since moved, the pair absolutely positioned at
+              `top: 14px`. Two different boxes, two different vertical
+              origins, so nothing lined up with anything and the gap changed
+              with the length of the date. They are one grid now, centred
+              against each other, and neither knows where the other ends. */}
+          <div className="jar-panel-head">
           {panelIsGroup ? (
             /* whisper attribution: whose save this is, and when — where the
                evidence named no date of its own, who alone. Leaving a fact
@@ -10545,6 +10555,7 @@ function HomeExperience(): JSX.Element {
               </button>
             </p>
           ) : null}
+          </div>
           {editing.open?.kind === "memory" && editing.open.id === panelId ? (
             /* THE SAME SLOT, THE SAME MEASURE, THE SAME FACE. It is the words
                you were just reading, with a caret in them — see
