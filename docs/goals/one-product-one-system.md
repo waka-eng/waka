@@ -189,8 +189,28 @@ a browser rather than reasoned about — the bar inherited from
 |---|---|
 | Gate | routes absent from `main.tsx`; retired prefixes absent from the tree; a browser walkthrough per capability; all suites still green |
 | At open | 4,784 lines across four files; 16 routes; 12 verbs the world cannot do |
-| **Now** | unchanged — **12 of 12 verbs still missing from the world** |
-| State | **NOT MET.** Audit complete, migration not started |
+| **Now** | **8 left.** Agent credentials landed 2026-08-25; two of the twelve were miscounted — see below |
+| State | **NOT MET.** In progress |
+
+**TWO CORRECTIONS TO THIS AUDIT'S OWN NUMBERS,** found while building against
+them and recorded rather than quietly adjusted.
+
+The verb diff was taken over `Home.tsx`'s OWN imports. The world reaches a
+good deal of the API through `space/editing.ts` instead, and that file was not
+in the diff — so a verb the world can already run looked missing.
+
+- `updateTopOfMindEntry` **was never missing.** It is wired at
+  `Home.tsx:10295`, as `say it in my words` on the board, through
+  `editing.begin("entry", …)`. It should not have been on the list.
+- `updateSignal` **has its machinery and no caller.** `editing.ts` implements
+  the `signal` kind fully — the request, the optimistic update, the 404
+  reload — and nothing in the world calls `begin("signal", …)`. That is a dead
+  branch rather than a missing capability, and it is the cheapest of the
+  remaining items because only the way in is absent.
+
+The lesson for any future audit here: an import diff over one file measures
+what that file imports, not what the surface can do. Confirming each survivor
+against the whole tree is what would have caught both.
 
 The twelve, in four groups: principles (`declarePrinciple`,
 `updatePrinciple`, `deletePrinciple`, `disputePrinciple`,
