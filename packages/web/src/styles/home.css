@@ -727,6 +727,78 @@
   color: var(--jar-ink);
 }
 
+/* ---------- what is forming overhead: philosophies and values ----------
+   Top of mind is CURRENT — what this wall is holding today. Above it is the
+   timeless half: what a person keeps coming back to whatever the day is. It
+   takes a long time to form, so for now the door is the honest part: a caret
+   and two words at the top of headquarters, in the same register as every
+   other signpost in this world, and a room above that says what will live
+   there and why it is slow.
+
+   A PLACE, NOT A TOOLTIP. A promise you can walk into and find empty is
+   honest; a promise that only exists as hover text is a roadmap. */
+.jar-values {
+  position: absolute;
+  z-index: 6;
+  left: 50%;
+  transform: translateX(-50%);
+  top: calc(14px + env(safe-area-inset-top));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 8px 16px 10px;
+  background: none;
+  font-family: inherit;
+  color: var(--jar-faint);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: color 0.22s ease;
+}
+.jar-values:hover,
+.jar-values:focus-visible {
+  color: var(--jar-ink);
+}
+.jar-values-words {
+  display: block;
+  white-space: nowrap;
+}
+
+/* THE ROOM ITSELF, standing in it. Prose, centred, at a reading measure — no
+   label register, because this is the one thing up here to read rather than a
+   sign pointing somewhere. */
+.jar-values-room {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  width: min(520px, calc(100vw - 56px));
+  text-align: center;
+  pointer-events: none;
+}
+.jar-values-lead {
+  margin: 0;
+  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-weight: 300;
+  font-size: clamp(19px, 2vw, 25px);
+  line-height: 1.34;
+  letter-spacing: 0.012em;
+  text-wrap: balance;
+  color: var(--jar-ink);
+}
+.jar-values-sub {
+  margin: 14px 0 0;
+  font-size: 14px;
+  line-height: 1.66;
+  text-wrap: pretty;
+  color: var(--jar-muted);
+}
+
 /* ---------- the way back up, from the ground ----------
    The count and its caret point down from headquarters and then get out of the
    way; this is the same promise aimed the other way, and while you are down in
@@ -3081,19 +3153,23 @@
        because the field's height is written from its own scrollHeight, but it
        pushed the words that far off the seam they are supposed to hang from. */
     padding: 0;
-    /* the resting phrase's own face, so opening the mouth is not a change of
-       instrument */
-    font-size: 10px;
-    font-weight: 500;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    line-height: 1.9;
+    /* YOUR WORDS, NOT THE PAGE'S (founder, 2026-08-25: "when typing into keep
+       something, it should no longer force capitalization").
+
+       This block exists to out-rank `chrome.css`, which styles every bare
+       textarea for the login page — and while it was here it also restated
+       the mouth's whole face, including the tracked uppercase of the LABEL
+       register. So the product rule up in `@layer product` could say
+       `text-transform: none` all it liked and lose to this copy, which is
+       exactly the layer-order trap the note above this block was written
+       about, sprung by the block itself.
+
+       The face now lives in ONE place — the product rule — and this block
+       keeps only what it is for: refusing the form furniture `chrome.css`
+       imposes. The invitation stays chrome, in the placeholder; the sentence
+       is set the way the panel sets a memory. */
     text-align: center;
     color: var(--jar-ink);
-  }
-  .jar-mouth-field::placeholder {
-    color: var(--jar-faint);
-    text-transform: uppercase;
   }
   /* THE WELL — the recessed place you write, and the drawer's whole claim to
      being a drawer. A sheet with text lying on its face is still a surface; a
