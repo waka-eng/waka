@@ -585,7 +585,7 @@ const JOURNEYS: Journey[] = [
           const style = document.createElement("style");
           style.setAttribute("data-sabotage", "ways-out-hidden");
           style.textContent =
-            ".jar-edge, .jar-way, .jar-here-more, .jar-up { opacity: 0 !important; }";
+            ".jar-edge, .jar-way, .jar-here-more, .jar-values, .jar-up { opacity: 0 !important; }";
           document.head.appendChild(style);
         });
       });
@@ -600,17 +600,27 @@ const JOURNEYS: Journey[] = [
            is most often executed on, and reporting "no way out is on screen"
            about a world that has three.
 
-           Sideways is one of four: the caret beside the name in the top-left
-           corner opens every wall AND the offer to make another, and the way
-           up sits on the top edge whenever something is forming overhead.
-           (That caret replaced a strip of wall names along the bottom edge on
-           2026-08-24; the claim it stands for did not change.) The claim is
-           unchanged — standing here, you can SEE that this goes somewhere —
-           and the sabotage hides all of them, so hiding any one still fails
-           it. */
+           Sideways is one of five: the caret beside the name in the top-left
+           corner opens every wall AND the offer to make another (it replaced
+           a strip of wall names along the bottom edge on 2026-08-24), and the
+           way up is `.jar-values` standing at headquarters or `.jar-up`
+           standing down in the ground — never both at once, because one of
+           the two is always the wrong direction.
+
+           BOTH OF THOSE HAVE TO BE NAMED, and for a while neither was. The
+           selector said `.jar-overhead`, which was the way up until it was
+           rebuilt and renamed; then it said `.jar-up`, which is real but only
+           renders in the field, and this journey stands at headquarters. A
+           way-out check that names no element on the screen it runs on does
+           not fail — it counts the margins, finds them empty on a first
+           account, and reports that a world with two exits has none.
+
+           The claim is unchanged — standing here, you can SEE that this goes
+           somewhere — and the sabotage hides all of them, so hiding any one
+           still fails it. */
         const marks = Array.from(
           document.querySelectorAll<HTMLElement>(
-            ".jar-edge, .jar-way, .jar-here-more, .jar-up",
+            ".jar-edge, .jar-way, .jar-here-more, .jar-values, .jar-up",
           ),
         );
         const inView = marks
