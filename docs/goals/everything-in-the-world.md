@@ -1069,3 +1069,31 @@ like full coverage.
 The `--negative` run is a step of its own: each journey is put through its own
 sabotage and must fail. It has caught two journeys as decoration already, and
 a gate that cannot fail is the thing this whole goal exists to prevent.
+
+### 2026-08-25 — the axis of walls is gone; two passages above are history now
+
+Recorded here because two paragraphs in this log describe a surface the
+product no longer has, and a reader arriving at them cold would go looking
+for it.
+
+The strip of wall names along the bottom edge — `.jar-axis`, the "axis of
+walls" that Phase 1 above moved rooms onto and that finding 14's remainder
+above names as one of the two things that "already map" where you can go —
+was removed at the founder's instruction on 2026-08-24 ("remove", against a
+screenshot of `AGENT1  ME  ROOM1  +`). Two lists of the same four places
+were on screen at once: the strip, and the caret beside the name in the
+top-left corner, which opens every wall AND the offer to make another. The
+corner won because it is where "where am I" is already answered, and
+because the bottom edge was wanted for time.
+
+Leave both passages as written. They were true, they explain decisions that
+still stand — a room IS a wall you travel to; finding 14's question is still
+open — and a goal log that is edited to stay current stops being a record.
+What changed is only the route: the caret, not the strip.
+
+Three things still pointed at the strip a day later, and none of them said
+so out loud — the demo walk's fourth scene, journey 9's count of the ways
+out, and the canvas stub's box for the bottom reserve. They are fixed, and
+the shape of that failure is worth keeping: removing a surface breaks the
+harnesses that navigate BY it, and a harness that cannot find its route
+usually reports something else's name.
