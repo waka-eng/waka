@@ -1084,6 +1084,11 @@
      over the top of your writing. The sheet is already legible as an object
      from its own value against the world and the shadow it casts upward. */
   border-radius: 18px 18px 0 0;
+  /* the ceiling the drawer breathes under, and the value the step-aside
+     transition animates from — a transform here would fight the arrival
+     animation's fill, so the sinking is a height, not a move */
+  max-height: min(86vh, 760px);
+  transition: max-height 0.32s cubic-bezier(0.22, 1, 0.36, 1);
   box-shadow:
     /* and what it casts upward on the world behind it: this is the depth cue,
        and it is why the field no longer looks printed on space */
@@ -1099,6 +1104,38 @@
    nudged it twelve pixels and faded it in — which is an appearance, not an
    arrival, and told you nothing about where the thing came from or where it
    goes back to. Motion explains. */
+/* STEPPED ASIDE: the sheet sinks to a lip at the bottom edge. The strip that
+   stays is the sheet's own top — the first line of the draft showing through —
+   so the state renders as "your note is here" without a label saying so. */
+.jar-mouth-slot--note.jar-mouth-slot--min {
+  max-height: 52px;
+  overflow: hidden;
+}
+/* the step-aside word, on the sheet's shoulder */
+.jar-mouth-step {
+  all: unset;
+  position: absolute;
+  top: 13px;
+  right: 20px;
+  cursor: pointer;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--jar-faint);
+  transition: color 0.18s ease;
+}
+.jar-mouth-step:hover {
+  color: var(--jar-ink);
+}
+/* the way back: one press anywhere on the lip */
+.jar-mouth-lift {
+  all: unset;
+  position: absolute;
+  inset: 0;
+  cursor: pointer;
+  z-index: 1;
+}
+
 @keyframes jar-drawer-up {
   from {
     transform: translateY(100%);
@@ -1130,37 +1167,11 @@
 .jar-mouth-slot--note .jar-mouth-where {
   margin: 14px 20px 0;
 }
-/* THE DRAWER'S TWO VERBS, in the label register the rest of the world uses —
-   the world has no buttons with fills in it, and one here would be the only
-   box on the screen. They read as words you can press because they are lit
-   against everything around them, which is the only channel this world has. */
+/* The verbs row: the privacy pair's face, one breath below it. The first cut
+   wore tracked uppercase and read as chrome stamped onto the sheet. */
 .jar-mouth-do {
-  display: flex;
+  margin: 8px 20px 0;
   justify-content: center;
-  gap: 26px;
-  margin: 12px 20px 0;
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-.jar-mouth-do button {
-  all: unset;
-  cursor: pointer;
-  transition: color 0.18s ease;
-}
-/* Keeping is the ordinary act, so it carries the light. Reflecting is the
-   longer road and sits back a step — offered, not urged. */
-.jar-mouth-keep {
-  color: var(--jar-ink);
-}
-.jar-mouth-reflect {
-  color: var(--jar-faint);
-}
-.jar-mouth-reflect:hover,
-.jar-mouth-keep:hover {
-  color: var(--jar-live);
 }
 .jar-mouth-slot--note .jar-mouth-note {
   margin: 10px 20px 0;

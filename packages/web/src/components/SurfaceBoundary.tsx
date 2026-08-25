@@ -56,13 +56,18 @@ export interface SurfaceBoundaryProps {
 
 interface SurfaceBoundaryState {
   failed: boolean;
+  /** The caught error's own words, shown small under the copy. */
+  message: string;
 }
 
 export class SurfaceBoundary extends Component<SurfaceBoundaryProps, SurfaceBoundaryState> {
-  state: SurfaceBoundaryState = { failed: false };
+  state: SurfaceBoundaryState = { failed: false, message: "" };
 
-  static getDerivedStateFromError(): SurfaceBoundaryState {
-    return { failed: true };
+  static getDerivedStateFromError(error: unknown): SurfaceBoundaryState {
+    return {
+      failed: true,
+      message: error instanceof Error ? error.message : String(error),
+    };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
@@ -102,6 +107,25 @@ export class SurfaceBoundary extends Component<SurfaceBoundaryProps, SurfaceBoun
           <button className="btn-primary" type="button" onClick={this.retry}>
             {t(locale, "surfaceUnavailableRetry")}
           </button>
+          {/* THE ERROR'S OWN WORDS, small and untranslated. This screen's
+              copy guesses at a cause ("usually a dropped connection...") and
+              the guess was all a person could report — a founder hit a
+              failure here and the only thing they could say about it was a
+              screenshot of the guess. The message names the actual error, so
+              a report carries the cause instead of the apology. */}
+          {this.state.message !== "" ? (
+            <p
+              style={{
+                marginTop: 14,
+                fontSize: 11,
+                opacity: 0.55,
+                fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                wordBreak: "break-word",
+              }}
+            >
+              {this.state.message}
+            </p>
+          ) : null}
         </section>
       </main>
     );

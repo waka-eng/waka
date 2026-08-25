@@ -1773,6 +1773,17 @@ function HomeExperience(): JSX.Element {
   /** The memory that asked to be reflected on as it was kept — see the reset
       effect beside `reflect`. Null unless "keep it and reflect" was pressed. */
   const reflectOnOpenRef = useRef<string | null>(null);
+  /**
+   * THE DRAWER CAN STEP ASIDE WITHOUT CLOSING (founder, 2026-08-25). Writing
+   * something long is exactly when you need to glance at the world — the
+   * pattern you are answering, the memory you half-remember — and the only
+   * options were to keep the drawer in your face or lose the draft's place.
+   * Minimized, the sheet sinks to a lip at the bottom edge with the first
+   * line of the draft showing, the world is yours again, and one press
+   * brings it back with the caret where it was. Closing the drawer (keeping,
+   * cancelling, shrinking the text) always resets this.
+   */
+  const [mouthMin, setMouthMin] = useState(false);
   const [draft, setDraft] = useState(() => {
     try {
       return window.localStorage.getItem("waka.draft") ?? "";
@@ -1818,6 +1829,10 @@ function HomeExperience(): JSX.Element {
    * serious.
    */
   const mouthLong = draft.length > 140 || draft.includes("\n");
+  /* a drawer that stops being a drawer forgets that it was stepped aside */
+  useEffect(() => {
+    if (!mouthLong) setMouthMin(false);
+  }, [mouthLong]);
 
   /**
    * THE DIAL'S RIGHT-HAND END IS NOW, AND KEEPING SOMETHING HAPPENS NOW.
@@ -11070,7 +11085,7 @@ function HomeExperience(): JSX.Element {
             <div
             className={`jar-mouth-slot${atNow ? "" : " jar-mouth-slot--away"}${
               mouthLong ? " jar-mouth-slot--note" : ""
-            }`}
+            }${mouthLong && mouthMin ? " jar-mouth-slot--min" : ""}`}
             /* THE SHEET KEEPS THE CARET. The drawer is solid — it stops the
                pointer rather than letting a press fall through to the world —
                which means a press on its face would otherwise blur the note
@@ -11087,6 +11102,39 @@ function HomeExperience(): JSX.Element {
                 : undefined
             }
           >
+            {mouthLong && !mouthMin ? (
+              <button
+                type="button"
+                className="jar-mouth-step jar-label"
+                /* mousedown would blur the note before the click lands; the
+                   sheet's own guard already refuses that for presses on its
+                   face, and this button wants the click, so it blurs
+                   deliberately in the handler instead */
+                onClick={() => {
+                  mouthFieldRef.current?.blur();
+                  setMouthMin(true);
+                }}
+              >
+                step aside
+              </button>
+            ) : null}
+            {mouthLong && mouthMin ? (
+              /* THE WHOLE LIP IS THE WAY BACK. While minimized the sheet's
+                 visible strip shows the first line of the draft — the state
+                 renders — and any press on it brings the drawer back up with
+                 the caret restored. An overlay rather than handlers on the
+                 children, so a press cannot land IN the text and start
+                 typing into a mostly-hidden page. */
+              <button
+                type="button"
+                className="jar-mouth-lift"
+                aria-label="open the note"
+                onClick={() => {
+                  setMouthMin(false);
+                  window.setTimeout(() => mouthFieldRef.current?.focus(), 330);
+                }}
+              />
+            ) : null}
             {mouthOpen ? (
               <textarea
                 ref={(el) => {
@@ -11174,15 +11222,18 @@ function HomeExperience(): JSX.Element {
                 workflow the founder was missing, rather than a second way to
                 save. */}
             {mouthLong && mouthOpen && draft.trim() !== "" ? (
-              <p className="jar-mouth-do">
-                <button type="button" className="jar-mouth-keep" onClick={() => keepIt()}>
+              /* Same face as the privacy pair one line up — lowercase prose,
+                 the middot, the lit/faint pair — because the first cut wore
+                 the tracked-uppercase label register and read as chrome
+                 stamped onto the sheet (founder: "so ugly"). The footer is
+                 one small language now: a line that says where it goes, and a
+                 line that says what you can do. */
+              <p className="jar-neb-ask jar-neb-ask--row jar-mouth-do">
+                <button type="button" className="jar-where-on" onClick={() => keepIt()}>
                   keep it
                 </button>
-                <button
-                  type="button"
-                  className="jar-mouth-reflect"
-                  onClick={() => keepIt(true)}
-                >
+                <span aria-hidden="true"> · </span>
+                <button type="button" className="jar-where-off" onClick={() => keepIt(true)}>
                   keep it and reflect
                 </button>
               </p>
