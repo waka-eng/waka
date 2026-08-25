@@ -292,26 +292,42 @@ async function main(): Promise<void> {
     if (!(await canSeeWall(removed, elsewhere!.id))) {
       throw new Error("removing them from one room removed them from another");
     }
-    /* `affirmations` is WHO agreed, not how many — the law is that states
-       render and numerals never, and the payload obeys it. The first version
-       of this check compared that array to a number: `array < 2` coerces to
-       `NaN < 2`, which is false, so it passed without asserting anything.
-       Naming the person is both correct and stronger. */
+    /* THE PAYLOAD IS `stances` NOW, and reading the old key is how this case
+       started failing against a working product. Refusal became a counted
+       stance (ruling 0c, 2026-08-23): every recorded answer arrives in one
+       array, yes and no alike, one row per member, latest wins. An agreement
+       is a stance whose value is `affirmed`.
+
+       It is WHO agreed, never how many — states render and numerals never,
+       and the payload obeys it. The first version of this check compared the
+       array to a number: `array < 2` coerces to `NaN < 2`, which is false, so
+       it passed without asserting anything. Naming the person is both correct
+       and stronger — and it is also what caught the rename, because a missing
+       key reads as "nobody agreed" rather than as a shape that moved. */
     const proposals = await api<{
       proposals?: Array<{
         id: string;
-        affirmations?: Array<{ profileId: string; name: string }>;
+        stances?: Array<{ profileId: string | null; name: string | null; value: string }>;
       }>;
     }>(bystander, `/api/groups/${elsewhere!.id}/proposals`);
     if (proposals.status !== 200) throw new Error(`proposals elsewhere → ${proposals.status}`);
     const theirs = (proposals.body.proposals ?? []).find((p) => p.id === elsewhereProposal);
     if (!theirs) throw new Error("the other room's proposal vanished");
-    const who = theirs.affirmations ?? [];
+    const recorded = theirs.stances ?? [];
+    if (recorded.length === 0) {
+      throw new Error(
+        "the other room's proposal carries no stances at all — either every answer was " +
+          "wiped, or this case is reading a key the payload no longer has",
+      );
+    }
+    const who = recorded.filter((a) => a.value === "affirmed");
     if (!who.some((a) => a.profileId === removed.profileId)) {
       throw new Error(
         "their agreement in the other room is gone — a removal reached into a room it " +
-          `was never asked about (${who.length} affirmation(s) left: ${who
-            .map((a) => a.name)
+          `was never asked about (${who.length} agreement(s) left: ${who
+            .map((a) => a.name ?? "someone")
+            .join(", ")}; all stances: ${recorded
+            .map((a) => `${a.name ?? "someone"}=${a.value}`)
             .join(", ")})`,
       );
     }
