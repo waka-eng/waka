@@ -220,6 +220,11 @@ vi.mock("../src/lib/api", async (importOriginal) => {
   return {
     ...actual,
     ...apiMockFrom(FACTS),
+    /* THE DELETE HAS TO SUCCEED FOR THE SILENT PATH TO BE OBSERVABLE. The real
+       one reaches a server jsdom has not got, so it rejects — and a rejected
+       delete is a DIFFERENT state wearing a different sentence, which is
+       precisely the confusion the cases below exist to refuse. */
+    deleteInspiration: async () => undefined,
     /* One shared statement, LOCKED — the owner's own words on the room's
        wall. The star must render exactly where other people read the
        sentence (no-quiet-corners Phase 8), and the case below pins it. The
@@ -500,6 +505,56 @@ async function tapAnOrb(): Promise<HTMLElement> {
     `no tap anywhere across the field opened a memory: ${a.drawn.active} drawn, ` +
       `band ${a.highest}–${a.lowest}, radii ${a.drawn.rMin}–${a.drawn.rMax}`,
   );
+}
+
+/**
+ * Open a NAMED memory's panel by tapping the field until that one answers.
+ *
+ * `tapAnOrb` gives whichever orb the scan reaches first, which is enough when
+ * any memory will do. A case about what deleting COSTS needs a specific one:
+ * `own-0` through `own-4` are cited by the two signals overhead and `own-5` is
+ * cited by nothing, and that difference is the whole subject.
+ */
+async function openMemory(text: string): Promise<HTMLElement> {
+  const a = layout.audit();
+  /* A COARSE SCAN, NOT A FINE ONE. Every probe costs frames, and the fit
+     spreads six orbs across the whole band — stepping by the smallest radius
+     was thousands of presses and a timeout. Tapping a second orb replaces the
+     panel, so misses cost nothing and need no close. */
+  const step = Math.max(12, Math.floor(a.drawn.rMin));
+  for (let y = Math.floor(a.highest); y <= Math.ceil(a.lowest); y += step) {
+    for (let x = 20; x <= 1400; x += step) {
+      await pressOn(canvas(), x, y);
+      await liftAt(x, y);
+      await layout.step(3);
+      const open = layout.container.querySelector<HTMLElement>(".jar-panel--in");
+      if (!open) continue;
+      const said = (open.querySelector(".jar-panel-text")?.textContent ?? "").trim();
+      if (said.startsWith(text)) {
+        await layout.step(12);
+        return open;
+      }
+    }
+  }
+  throw new Error(
+    `no orb in the field opened "${text}": ${a.drawn.active} drawn, ` +
+      `band ${a.highest}–${a.lowest}, radii ${a.drawn.rMin}–${a.drawn.rMax}`,
+  );
+}
+
+/** The verbs under an open memory, pressed by name. */
+async function pressPanelVerb(panel: HTMLElement, name: string): Promise<void> {
+  const verb = [...panel.querySelectorAll<HTMLElement>(".jar-neb-ask--after button")].find(
+    (b) => (b.textContent ?? "").trim() === name,
+  );
+  if (!verb) {
+    const seen = [...panel.querySelectorAll(".jar-neb-ask--after button")].map((b) =>
+      (b.textContent ?? "").trim(),
+    );
+    throw new Error(`no "${name}" under the memory — saw ${JSON.stringify(seen)}`);
+  }
+  await act(async () => verb.click());
+  await layout.step(8);
 }
 
 /** Shut the room of grounds — the one way out, by design. */
@@ -1437,5 +1492,77 @@ describe("reading a pattern lights its memories where they live", () => {
     const after = layout.audit().drawn;
     expect(after.glowing, "letting the pattern go gives the field back").toBe(0);
     expect(after.dimmed).toBe(0);
+  });
+});
+
+/**
+ * WHAT DELETING A MEMORY COSTS, ASKED ONLY WHEN IT COSTS SOMETHING.
+ *
+ * Every delete used to open the same warning, including for a memory nothing
+ * had ever been read from — a sentence about consequences where there were
+ * none, which is friction wearing a safety costume and teaches a person to
+ * dismiss the warning that matters (founder, 2026-08-25: "delete it without
+ * warning if inspiration is not powering a signal. if it does, then show a new
+ * modal to explain the situation").
+ *
+ * The fixture makes the distinction real rather than mocked: the two signals
+ * overhead cite `own-0` through `own-4`, and `own-5` is cited by nothing. So
+ * the same verb, pressed on two memories that differ in exactly one fact,
+ * must do two different things.
+ */
+describe("deleting a memory", () => {
+  it("goes without a word when no signal was ever read from it", { timeout: 30_000 }, async () => {
+    await layout.toField();
+    const panel = await openMemory("something I kept, 5");
+    await pressPanelVerb(panel, "delete");
+    await layout.step(20);
+
+    expect(
+      layout.container.querySelector(".jar-forget-ask"),
+      "nothing stands on this memory, so there is nothing to warn about",
+    ).toBeNull();
+    /* long enough for the request to settle and the panel to finish leaving —
+       it fades rather than vanishing, like everything else here */
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await layout.step(40);
+    expect(
+      layout.container.querySelector(".jar-panel--in"),
+      "and the memory is simply gone",
+    ).toBeNull();
+    expect(
+      (layout.container.textContent ?? "").includes("didn’t go through"),
+      "and nothing claimed it failed",
+    ).toBe(false);
+  });
+
+  it("says what is lost when a signal stands on it, and only then", { timeout: 30_000 }, async () => {
+    await layout.toField();
+    const panel = await openMemory("something I kept, 0");
+    await pressPanelVerb(panel, "delete");
+    await layout.step(20);
+
+    const ask = layout.container.querySelector(".jar-forget-ask");
+    expect(ask, "a signal was read from this one — that is worth a sentence").not.toBeNull();
+    /* the sentence has to say what actually happens: the signal SURVIVES and
+       loses its ground. A warning that implied the signal went with it would
+       be false, and false in the direction that stops people deleting. */
+    const said = (ask?.textContent ?? "").toLowerCase();
+    expect(said).toContain("does not unlearn");
+    expect(said).toContain("loses this ground");
+
+    /* the lit answer is keeping it: this is a door that would rather not be
+       walked through */
+    const keep = [...(ask?.querySelectorAll<HTMLElement>("button") ?? [])].find(
+      (b) => (b.textContent ?? "").trim() === "keep it",
+    );
+    expect(keep?.className, "keeping is the lit half of the pair").toContain("jar-where-on");
+    await act(async () => keep!.click());
+    await layout.step(10);
+    expect(
+      layout.container.querySelector(".jar-forget-ask"),
+      "and saying keep it puts the question away",
+    ).toBeNull();
   });
 });

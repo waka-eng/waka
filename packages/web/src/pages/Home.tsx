@@ -9620,7 +9620,21 @@ function HomeExperience(): JSX.Element {
   }, []);
 
   /** Which memory has been asked about, and how far the asking has got. */
-  const [forget, setForget] = useState<{ id: string | null; step: "rest" | "asking" | "going" }>({
+  /**
+   * DELETING, AND THE FOUR THINGS THAT CAN BE TRUE OF IT.
+   *
+   * `failed` is separate from `asking` and the separation is the whole point.
+   * They were one state for a while: the request's catch put the flow back to
+   * `asking`, which was harmless while asking meant "are you sure" — and
+   * became a lie the moment asking meant "a signal stands on this memory".
+   * A dropped request would then explain, in confident detail, a consequence
+   * that had nothing to do with what went wrong. A surface may not borrow a
+   * sentence about one thing to report another.
+   */
+  const [forget, setForget] = useState<{
+    id: string | null;
+    step: "rest" | "asking" | "going" | "failed";
+  }>({
     id: null,
     step: "rest",
   });
@@ -10299,8 +10313,10 @@ function HomeExperience(): JSX.Element {
         setForget({ id: null, step: "rest" });
       })
       .catch(() => {
-        /* it is still there, and the world still shows it: back to the ask */
-        setForget({ id, step: "asking" });
+        /* IT IS STILL THERE, AND THE WORLD STILL SHOWS IT. Not back to the
+           ask: the ask is a sentence about what a signal loses, and nothing
+           about this failure is that. Its own state, its own line. */
+        setForget({ id, step: "failed" });
       });
   }, [panelId, panelBall, forget.step]);
 
@@ -11780,6 +11796,14 @@ function HomeExperience(): JSX.Element {
                       ask below instead. */}
                   {forget.step === "going" ? (
                     "deleting…"
+                  ) : forget.step === "failed" ? (
+                    /* PROSE, AND IT SAYS WHAT IS TRUE: the memory is still
+                       here. Beside the verb rather than in a sheet, because
+                       nothing happened and nothing needs deciding — pressing
+                       delete again is the whole recovery. */
+                    <span className="jar-panel-warn">
+                      That didn’t go through — it is still here.
+                    </span>
                   ) : (
                     <button
                       type="button"
