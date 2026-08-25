@@ -28,7 +28,7 @@ import {
   FIELD_TIER_GAMMA,
 } from "../../lib/aliveness";
 import { clamp, clamp01, DAY_MS } from "../../lib/num";
-import { SIZE_R, TIERS } from "../../canvas/sprites";
+import { SIZE_R, TIERS, sizeIdxFor } from "../../canvas/sprites";
 import type { Ball } from "./orb";
 
 /** However crowded the field gets, an orb never shrinks past this. */
@@ -221,17 +221,11 @@ export function fitField(arr: Ball[], bandW: number, bandH: number): number {
     const r = clamp(Math.min(b.rBase, fitR), ORB_R_MIN, b.rBase);
     b.r = r;
     /* nearest baked size, so nothing is ever scaled by more than a few
-       percent — the sphere's rim and specular only survive at 1:1 */
-    let bi = 0;
-    let bd = Infinity;
-    for (let i = 0; i < SIZE_R.length; i++) {
-      const d = Math.abs(SIZE_R[i] - r);
-      if (d < bd) {
-        bd = d;
-        bi = i;
-      }
-    }
-    if (SIZE_R[bi] > r && bi > 0) bi -= 1;
+       percent — the sphere's rim and specular only survive at 1:1. The rule
+       lives in `sizeIdxFor` because it was written here and NOT written in the
+       two places that build a ball, and that divergence is what made every
+       orb outside a fit a blurry one. */
+    const bi = sizeIdxFor(r);
     b.sizeIdx = bi;
     /* and it is DRAWN at the size it was baked at. The radius jitter was
        always meaningless variation — size encodes nothing here, by law — so

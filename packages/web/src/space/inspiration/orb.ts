@@ -27,6 +27,7 @@ import { Inspiration, type Evidence, type Signal } from "../../lib/data";
 import { hashStr, mix32, TAU } from "../../lib/num";
 import { type ApiAgentSignal } from "../../lib/agent-contract";
 import { FIELD_CARRY_PROMOTION_EVIDENCE } from "../../lib/aliveness";
+import { sizeIdxFor } from "../../canvas/sprites";
 
 
 export interface Ball {
@@ -411,7 +412,7 @@ export function makeBall(s: SignalSeed, agentId = ""): Ball {
     terms: s.terms,
     r,
     rBase: r,
-    sizeIdx: r < 26.5 ? 0 : r < 29.8 ? 1 : 2,
+    sizeIdx: sizeIdxFor(r),
     frac: (hashStr(s.id) % 1000) / 1000,
     scat: scatterSeed(s.id),
     x: 0,
@@ -521,7 +522,7 @@ export function makeAgentBall(s: ApiAgentSignal): Ball {
     terms: [],
     r,
     rBase: r,
-    sizeIdx: r < 26.5 ? 0 : r < 29.8 ? 1 : 2,
+    sizeIdx: sizeIdxFor(r),
     frac: (hashStr(s.id) % 1000) / 1000,
     scat: scatterSeed(s.id),
     x: 0,
