@@ -84,16 +84,12 @@ const MODULES: Record<string, Record<string, unknown>> = {
  * outcome, since the doc names its path.
  */
 /*
- * More than one file, because the lock covered `aliveness.ts` alone while the
- * roots painter beside it exported five tuning constants of exactly the same
- * kind — numbers a founder would tune by eye and a document would then quietly
- * stop describing. A list that a new painter must be added to is a weaker
- * guarantee than a glob, but it is an honest one: the test names the files it
- * reads, and the doc names the same paths.
+ * A list rather than a glob: a new painter that exports tuning constants has to
+ * be added here by hand. Weaker than a glob, but honest — the test names the
+ * files it reads, and the doc names the same paths.
  */
 const WEB_TUNING = [
   new URL("../../../web/src/lib/aliveness.ts", import.meta.url),
-  new URL("../../../web/src/space/signal/roots-paint.ts", import.meta.url),
 ];
 
 function webTuningExports(): Map<string, string> {

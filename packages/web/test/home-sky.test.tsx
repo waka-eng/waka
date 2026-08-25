@@ -449,7 +449,7 @@ function canvas(): HTMLElement {
  * the camera, and from headquarters the whole sky sits at a negative y.
  */
 async function climbToSky() {
-  const up = layout.container.querySelector<HTMLElement>(".jar-forming-line");
+  const up = layout.container.querySelector<HTMLElement>(".jar-overhead");
   if (!up) throw new Error("no forming line — nothing is overhead to climb to");
   await act(async () => up.click());
   await layout.step(80);

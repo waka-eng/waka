@@ -99,7 +99,6 @@ import {
   type SkyDeps,
 } from "../space/signal/sky-engine";
 import { paintSky } from "../space/signal/sky-paint";
-import { paintRoots, type RootTarget } from "../space/signal/roots-paint";
 import { useEditing } from "../space/editing";
 import { deriveAgentChrome } from "../space-kinds/agent";
 import {
@@ -1111,22 +1110,6 @@ export interface FieldAudit {
      */
     dimmed: number;
     glowing: number;
-  };
-  /**
-   * THE ROOTS, WHICH ARE THE ONE THING ON THIS SURFACE A SCREENSHOT CANNOT
-   * SETTLE. A root is a sub-pixel line at a quarter alpha, drawn while the
-   * whole sky dims around the pattern it leaves — so "did it draw" and "did
-   * nothing draw" photograph almost identically, and a difference image is
-   * swamped by the focus animation that is happening at the same moment. The
-   * only honest answer is the loop counting what it handed the painter.
-   */
-  roots: {
-    /** the pattern being read, or null; the source a line needs */
-    subject: string | null;
-    /** how many of its memories the loop found on the ground to draw to */
-    targets: number;
-    /** how far up the light has come, 0 to 1 */
-    ease: number;
   };
   /**
    * WHETHER THE SKY IS LEANING DOWN, AND HOW FAR EACH STATEMENT CAME.
@@ -5587,37 +5570,6 @@ function HomeExperience(): JSX.Element {
          in its comments went with it unchanged. */
       paintSky({ ctx: ctx!, pal, sky, cam, view, t, grid });
 
-      /* pass 0c — THE ROOTS OF WHAT YOU ARE READING.
-         Between the sky and the ground on purpose: under every orb and under
-         the cloud's own body, so nothing it says is ever drawn ON a memory.
-         `space/signal/roots-paint.ts` carries the reasoning, including why
-         this is not the orb-to-orb connection the founder ruled out. */
-      const rootsOf = focusCandIdRef.current;
-      const rootLit = rootsOf === null ? null : readingLitRef.current;
-      if (rootsOf !== null && rootLit !== null && rootLit.size > 0) {
-        const cloud = sky.nebs.find((n) => n.id === rootsOf);
-        if (cloud) {
-          const targets: RootTarget[] = [];
-          for (const b of list) {
-            if (!b.active) continue;
-            if (!rootLit.has(b.sigId ?? b.id)) continue;
-            targets.push({ x: b.x, y: b.y, alivePow: b.alivePow });
-          }
-          paintRoots({
-            ctx: ctx!,
-            ramp: pal.ramp,
-            from: { x: cloud.x, y: cloud.y, r: cloud.r },
-            to: targets,
-            cam,
-            view,
-            /* the reading's own light, so the roots arrive with the field's
-               glow rather than a beat before it; instant when the person has
-               asked for less movement */
-            ease: view.reduced ? 1 : rootEaseRef.current,
-          });
-        }
-      }
-
       /* passes 1 and 2 — THE GROUND. Every memory's diffuse bloom laid down in
          additive light, then every memory's disc drawn over it. One appearance
          in two loops: the disc reads as lit from within precisely because its
@@ -6331,28 +6283,6 @@ function HomeExperience(): JSX.Element {
          orb's scale rides nothing: selection never touches geometry. */
       /* a vertical move in progress is motion, so the loop stays awake for it */
       let easing = Math.abs(companion.pitch) > 0.01 || Math.abs(companion.lift) > 0.4;
-      /* THE ROOTS COME UP WITH THE READING'S OWN LIGHT, on the same two
-         curves the orbs use — fast in, slow out — so the lines and the glow
-         underneath them are one gesture rather than two things that happen
-         to agree. Eased here because this is where `dt` is; drawn in the
-         paint pass, which has no clock of its own. */
-      {
-        const litNow = focusCandIdRef.current !== null ? readingLitRef.current : null;
-        const wantRoots = litNow !== null && litNow.size > 0 ? 1 : 0;
-        const have = rootEaseRef.current;
-        if (view.reduced) {
-          rootEaseRef.current = wantRoots;
-        } else if (Math.abs(have - wantRoots) < 0.004) {
-          rootEaseRef.current = wantRoots;
-        } else {
-          rootEaseRef.current = lerp(
-            have,
-            wantRoots,
-            kd(wantRoots > have ? EASE_GLOW_IN : EASE_GLOW_OUT, dt),
-          );
-          easing = true;
-        }
-      }
       allBalls((arr) => {
         for (const b of arr) {
           /* SEARCHING USES THE FOCUS LAW IT ALREADY HAS. A search is the same
@@ -6655,15 +6585,6 @@ function HomeExperience(): JSX.Element {
       /* and a third: the camera stands over a wall that has no dial, so the
          dial fades away — exactly as it does in the sky. Read off the camera
          rather than off arrival, so it goes as the wall slides in. */
-      /* AND TIME ONLY MEANS SOMETHING TO THE FIELD.
-         The dial lay across the bottom edge at all times — but in this layout
-         HORIZONTAL means "whose wall", and the dial means "when". Two
-         different horizontal meanings on the same edge, and the bottom edge
-         belongs to the axis. There is also nothing up here to wind: the sky
-         holds signals that are still forming and headquarters holds one
-         sentence, neither of which has a history to scrub. So it comes up
-         with the field and goes away with it. */
-      const inField = cam.y > view.layout.fieldTop * 0.5;
       /* THE LEGEND BELONGED TO THE GROUND IT EXPLAINED — AND IT IS NOT A
          LEGEND ANY MORE.
          It was pushed to React from here so the corner rows could come up with
@@ -6672,10 +6593,13 @@ function HomeExperience(): JSX.Element {
          now — the rows moved you between the grounds in a room the moment they
          stopped decoding hues — and a choice about the wall you are standing
          on is not a fact about the ground you are hovering over. It is mounted
-         at every height below the sky instead, so nothing needs pushing here.
-         (`inField` still decides whether the DIAL is away, just below.) */
-      const nowAway =
-        !inField || !hasDial(wallAt(Math.round(cam.x / Math.max(view.w, 1))).kind);
+         at every height below the sky instead, so nothing needs pushing here. */
+      /* AT EVERY HEIGHT. This was `!inField || …`, so a wall's history existed
+         only once you had descended into its ground — the timeline was a
+         thing you had to go and find rather than a permanent fact about where
+         you are. The only reason left to hide it is that this wall HAS no
+         history to wind, which is data, not altitude. */
+      const nowAway = !hasDial(wallAt(Math.round(cam.x / Math.max(view.w, 1))).kind);
       if (nowAway !== hinted.dialAway) {
         hinted.dialAway = nowAway;
         setDialAway(nowAway);
@@ -8293,22 +8217,6 @@ function HomeExperience(): JSX.Element {
               glowing,
             };
           })(),
-          roots: (() => {
-            const subject = focusCandIdRef.current;
-            const lit = subject === null ? null : readingLitRef.current;
-            let targets = 0;
-            if (subject !== null && lit !== null) {
-              for (const b of list) {
-                if (!b.active) continue;
-                if (lit.has(b.sigId ?? b.id)) targets++;
-              }
-            }
-            return {
-              subject,
-              targets,
-              ease: Number(rootEaseRef.current.toFixed(3)),
-            };
-          })(),
           /* the same question asked upward: is the sky leaning into
              headquarters, and did each elected statement actually get there */
           sky: {
@@ -8503,32 +8411,39 @@ function HomeExperience(): JSX.Element {
 
   const scrubClient = useCallback(
     /**
-     * TIME IS THE VERTICAL AXIS NOW.
+     * TIME COMES BACK TO THE BOTTOM EDGE, AND IT IS ALWAYS THERE.
      *
-     * The bottom edge belongs to the axis of walls — whose mind you are
-     * standing in — and the timeline was laid across the same edge, so the
-     * one horizontal band in the world carried two unrelated meanings and a
-     * sideways drag could plausibly have meant either. Two meanings, two
-     * axes: side to side is WHOSE, up and down is WHEN. Nothing else about
-     * the dial changes; it reads clientY against the track's height exactly
-     * as it read clientX against its width.
+     * It was moved to a vertical rail on the right to keep two meanings off
+     * one axis: sideways is WHOSE mind, up and down is WHEN. The rail was
+     * legible and nobody used it — a hairline in the margin, mounted only
+     * while you were down in the field, so the history of a wall was a thing
+     * you had to descend to and then find.
+     *
+     * A timeline is a horizontal instrument. It is one again, laid just above
+     * the axis of walls rather than across it: two bands, stacked, each
+     * labelled by what it holds — names below, months above. The ambiguity
+     * the rail was built to avoid was between two things sharing ONE band,
+     * and they no longer do.
+     *
+     * It reads clientX against the track's width, exactly as it read clientY
+     * against its height.
      */
-    (clientY: number) => {
+    (clientX: number) => {
       const track = dialTrackRef.current;
       if (!track || !dial) return;
       const rect = track.getBoundingClientRect();
-      const p = clamp((clientY - rect.top) / Math.max(rect.height, 1), 0, 1);
+      const p = clamp((clientX - rect.left) / Math.max(rect.width, 1), 0, 1);
       const T = dial.start + p * dial.span;
       const pct = `${(p * 100).toFixed(2)}%`;
       const handle = dialHandleRef.current;
-      if (handle) handle.style.top = pct;
+      if (handle) handle.style.left = pct;
       setAtNow(dial.end - T < DAY_MS / 2);
       /* The date rides ALONGSIDE the handle rather than inside it: the handle
          scales up while the dial is live, and a label inheriting that scale
          is how the date came to be printed at poster size. */
       const date = dialDateRef.current;
       if (date) {
-        date.style.top = pct;
+        date.style.left = pct;
         /* SPOKEN, like every other date on this surface. This printed "Jun 25"
            — digits, in reading text — and it only appears mid-scrub, which is
            why a walk of the resting page never caught it. It shares the
@@ -8549,13 +8464,13 @@ function HomeExperience(): JSX.Element {
       e.currentTarget.setPointerCapture(e.pointerId);
       scrubbingRef.current = true;
       setScrubbing(true);
-      scrubClient(e.clientY);
+      scrubClient(e.clientX);
     },
     [scrubClient],
   );
   const onDialMove = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
-      if (scrubbingRef.current) scrubClient(e.clientY);
+      if (scrubbingRef.current) scrubClient(e.clientX);
     },
     [scrubClient],
   );
@@ -10173,17 +10088,11 @@ function HomeExperience(): JSX.Element {
   }, [focusCandId, atWall, provTick]);
   const readingLitRef = useRef<ReadonlySet<string> | null>(null);
   readingLitRef.current = readingLit;
-  /* Which pattern the roots belong to. The lit SET is not enough to draw
-     them: a line needs a source, and the source is the cloud this reading is
-     of. Held as a ref for the same reason the lit set is — the loop reads it
-     every frame and must not be rebuilt when it changes. */
+  /* Which signal is being read. Held as a ref for the same reason the lit set
+     is — the loop reads it every frame and must not be rebuilt when it
+     changes. */
   const focusCandIdRef = useRef<string | null>(null);
   focusCandIdRef.current = focusCandId;
-  /* How far the roots have come up, 0 to 1. Light arrives and leaves on a
-     curve like everything else here; a line that snapped on would read as a
-     diagram being switched over the world rather than as the world
-     answering. Eased in the step, read in the paint. */
-  const rootEaseRef = useRef(0);
   /* the loop is parked when nothing moves; a new set is a change to draw */
   useEffect(() => {
     simApiRef.current?.wake();
@@ -10654,26 +10563,12 @@ function HomeExperience(): JSX.Element {
                         ))}
                       </div>
                     ) : null}
-                    {/* The one quiet line, and the page's single interactive
-                        signal. The candidates that could replace this ambition
-                        are separate entities living a section above, and this
-                        is the way up — on any wall that has a sky. */}
-                    {c.forming ? (
-                      <button
-                        type="button"
-                        className={`jar-forming-line jar-label${
-                          w.kind === "self" && skyFresh ? " jar-forming-line--new" : ""
-                        }`}
-                        data-jar-chrome="1"
-                        onClick={() => {
-                          simApiRef.current?.acknowledge();
-                          if (hasSky(w.kind)) simApiRef.current?.toSky();
-                        }}
-                      >
-                        {c.forming}
-                        {w.kind === "self" && skyFresh ? " — new overhead" : ""}
-                      </button>
-                    ) : null}
+                    {/* THE WAY UP IS NOT UNDER THE THING YOU ARE READING.
+                        This line used to sit here, beneath the ambition —
+                        which put the page's only "there is more above you"
+                        BELOW the sentence you had already got to, pointing
+                        down to say up. It is fixed chrome at the top edge
+                        now; see `.jar-overhead`. */}
                     {/* HOW YOU CHOOSE — layer 4, in the place layer 3 already
                         occupies.
 
@@ -10772,7 +10667,22 @@ function HomeExperience(): JSX.Element {
                         </button>
                       </p>
                     ) : null}
-                    {w.kind === "self" && !offline && lead && !editing.open ? (
+                    {/* WHAT YOU MAY DO ABOUT IT, ONLY ONCE YOU HAVE ASKED.
+                        Four verbs sat permanently under the ambition, so the
+                        resting page was a sentence with a toolbar under it —
+                        furniture, which this layout does not have. They fold
+                        into the poster's own press, beside the grounds and
+                        the history, because "where did this come from" and
+                        "change it" are the same conversation. A read in
+                        progress keeps them mounted regardless: a control that
+                        vanished mid-work would take its own progress report
+                        with it. */}
+                    {here &&
+                    w.kind === "self" &&
+                    !offline &&
+                    lead &&
+                    !editing.open &&
+                    (posterAsk || board.step !== "rest") ? (
                       <div className="jar-board-acts" data-jar-chrome="1">
                         {board.step === "asking" ? (
                           <>
@@ -12030,6 +11940,38 @@ function HomeExperience(): JSX.Element {
         ) : null}
       </div>
 
+      {/* THE WAY UP, DRAWN WHERE UP IS.
+          The one line that says something is forming overhead used to live
+          under the ambition — the page's only vertical invitation, printed
+          below the thing you were already reading. It is chrome now: top
+          centre, at the top edge of the screen, at every height except the
+          sky itself, where the invitation has been taken and saying it again
+          would be a signpost pointing at the place you are standing.
+
+          The caret is the whole of the motion budget: it lifts a hair and
+          settles, once every few seconds, which is the shape of the gesture
+          it is asking for. It does not pulse and it does not glow — this is
+          not a notification, and nothing overhead is urgent. */}
+      {chrome.forming && hasSky(atWall.kind) && !inSky && phase === "ready" ? (
+        <button
+          type="button"
+          className={`jar-overhead${
+            atWall.kind === "self" && skyFresh ? " jar-overhead--new" : ""
+          }`}
+          data-jar-chrome="1"
+          onClick={() => {
+            simApiRef.current?.acknowledge();
+            simApiRef.current?.toSky();
+          }}
+        >
+          <span className="jar-overhead-caret" aria-hidden="true" />
+          <span className="jar-overhead-words jar-label">
+            {chrome.forming}
+            {atWall.kind === "self" && skyFresh ? " — new overhead" : ""}
+          </span>
+        </button>
+      ) : null}
+
       {/* AT EVERY HEIGHT, NOT JUST DOWN IN THE FIELD.
           It was gated on `inField`, so it was not even mounted at the height
           you ARRIVE at — the one moment a person needs telling that this
@@ -12071,7 +12013,7 @@ function HomeExperience(): JSX.Element {
         <div
           ref={dialRef}
           className={`jar-dial${scrubbing || !atNow ? " jar-dial--live" : ""}${
-            inSky || dialAway ? " jar-dial--away" : ""
+            dialAway ? " jar-dial--away" : ""
           }`}
           data-jar-chrome="1"
         >
@@ -12087,7 +12029,7 @@ function HomeExperience(): JSX.Element {
               <span
                 key={m.pct}
                 className="jar-month jar-label"
-                style={{ top: `${(m.pct * 100).toFixed(2)}%` }}
+                style={{ left: `${(m.pct * 100).toFixed(2)}%` }}
               >
                 {m.label}
               </span>
@@ -12103,7 +12045,7 @@ function HomeExperience(): JSX.Element {
               <span
                 key={`${h.kind}-${h.pct}`}
                 className="jar-hinge"
-                style={{ top: `${(h.pct * 100).toFixed(2)}%` }}
+                style={{ left: `${(h.pct * 100).toFixed(2)}%` }}
                 title={h.kind === "joined" ? `${h.who} arrived` : `${h.who} left`}
                 aria-hidden="true"
               />

@@ -166,8 +166,8 @@ function tellCounts(c: WindowCounts): WeatherSentence[] {
     out.push({
       text:
         c.minted === 1
-          ? "a new pattern was spoken"
-          : `${exactCount(c.minted)} new patterns were spoken`,
+          ? "a new signal was spoken"
+          : `${exactCount(c.minted)} new signals were spoken`,
       backing: "signals",
     });
   }
@@ -175,8 +175,8 @@ function tellCounts(c: WindowCounts): WeatherSentence[] {
     out.push({
       text:
         c.roots === 1
-          ? "a pattern grew a root"
-          : `your patterns grew ${exactCount(c.roots)} roots`,
+          ? "a signal found another memory behind it"
+          : `your signals found ${exactCount(c.roots)} more memories behind them`,
       backing: "signal_evidence",
     });
   }

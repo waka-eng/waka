@@ -266,10 +266,10 @@ function posterText(): string {
  */
 async function windTo(pos: number): Promise<void> {
   const rail = one(".jar-dial-track");
-  const from = railAt * VIEW_H;
-  const to = pos * VIEW_H;
-  const at = (kind: string, y: number) =>
-    new PointerEvent(kind, { bubbles: true, cancelable: true, clientY: y, pointerId: 1 });
+  const from = railAt * VIEW_W;
+  const to = pos * VIEW_W;
+  const at = (kind: string, x: number) =>
+    new PointerEvent(kind, { bubbles: true, cancelable: true, clientX: x, pointerId: 1 });
   await act(async () => {
     rail.dispatchEvent(at("pointerdown", from));
   });
@@ -289,12 +289,12 @@ async function windTo(pos: number): Promise<void> {
   await layout.step(10);
 
   const asked = pos * 100;
-  const landed = Number.parseFloat(one(".jar-dial-handle").style.top);
+  const landed = Number.parseFloat(one(".jar-dial-handle").style.left);
   if (!Number.isFinite(landed) || Math.abs(landed - asked) > 0.5) {
     throw new Error(
       `the room's dial did not move to where the pointer asked: wanted ` +
-        `${asked.toFixed(2)}% down the rail, handle sits at ` +
-        `"${one(".jar-dial-handle").style.top || "(nowhere)"}".`,
+        `${asked.toFixed(2)}% along the rail, handle sits at ` +
+        `"${one(".jar-dial-handle").style.left || "(nowhere)"}".`,
     );
   }
 }
@@ -314,7 +314,7 @@ describe("the dial in a room", () => {
        room's first mark would sit halfway down it instead of near the top. */
     const hinges = [...layout.container.querySelectorAll<HTMLElement>(".jar-hinge")];
     expect(hinges.length, "the door's marks are not on the rail").toBe(DOOR_DAYS.length);
-    const first = Math.min(...hinges.map((h) => Number.parseFloat(h.style.top)));
+    const first = Math.min(...hinges.map((h) => Number.parseFloat(h.style.left)));
     const wanted = railPos(ago(DOOR_DAYS[0])) * 100;
     expect(
       first,

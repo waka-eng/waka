@@ -94,8 +94,8 @@ describe("the weather is a view of the record", () => {
     const lines = sentencesOf(weather);
 
     expect(lines).toContain("two days ago: you kept 2 memories");
-    expect(lines).toContain("two days ago: a new pattern was spoken");
-    expect(lines).toContain("two days ago: a pattern grew a root");
+    expect(lines).toContain("two days ago: a new signal was spoken");
+    expect(lines).toContain("two days ago: a signal found another memory behind it");
     expect(lines).toContain(
       "yesterday: refused a candidate — too close to what you dismissed",
     );

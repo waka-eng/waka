@@ -355,7 +355,31 @@ function posterWordsHere(): Array<[string, "held" | "new"]> {
 /** just the sentence, with the trailing space each word carries trimmed off */
 const posterText = () => (posterHere().textContent ?? "").trim();
 
+/**
+ * THE VERBS LIVE BEHIND THE POSTER'S OWN PRESS.
+ *
+ * They used to sit permanently under the ambition, which made the resting
+ * page a sentence with a toolbar bolted to it. They fold into the same band
+ * the grounds and the history open into — asking the poster where it came
+ * from and changing what it says are one conversation — so a test that wants
+ * a verb has to have asked the question first, exactly as a person does.
+ */
+async function askThePoster(): Promise<void> {
+  /* THE SELF COLUMN'S POSTER, NAMED. Every wall in the row renders one, and
+     only the wall you are standing on is interrogable — so a bare
+     `.jar-poster` picks the leftmost agent's, which has no ask row at all. */
+  const poster = layout.container.querySelector<HTMLElement>(
+    '.jar-wallcol[data-kind="self"] .jar-poster',
+  );
+  if (!poster) throw new Error("no poster on your own wall to ask");
+  if (poster.getAttribute("aria-expanded") === "true") return;
+  await act(async () => {
+    poster.click();
+  });
+}
+
 async function press(selector: string, name: RegExp): Promise<void> {
+  if (selector === ".jar-board-act") await askThePoster();
   const el = [...layout.container.querySelectorAll(selector)].find((n) =>
     name.test((n.textContent ?? "").trim()),
   );

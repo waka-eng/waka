@@ -266,7 +266,83 @@
   margin-top: 8px;
 }
 
-/* ---------- the companion's whisper line ---------- */
+/* ---------- the way up, at the top edge ----------
+   It was `.jar-forming-line`, set under the ambition inside `.jar-hq` — so
+   the page's only "there is more above you" rode the camera downward and
+   printed itself below the sentence a person had already read. Pointing down
+   to say up.
+
+   It is fixed chrome now, centred on the top edge, and it is deliberately
+   small: this is a doorway, not an announcement. The caret above the words
+   is the whole of the motion — a slow lift and settle, the shape of the
+   gesture being asked for. It never pulses and never glows: nothing overhead
+   is urgent, and a badge would make the sky a queue. */
+.jar-overhead {
+  position: fixed;
+  top: calc(14px + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 6px 14px 8px;
+  background: none;
+  font-family: inherit;
+  color: var(--jar-muted);
+  cursor: pointer;
+  pointer-events: auto;
+  animation: jar-arrive 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: color 0.22s ease;
+}
+.jar-overhead:hover,
+.jar-overhead:focus-visible {
+  color: var(--jar-ink);
+}
+/* A caret drawn from one rotated square's two lit edges — no glyph, because a
+   glyph would arrive in whatever face the fallback stack happened to have. */
+.jar-overhead-caret {
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-top: 1px solid currentColor;
+  border-left: 1px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.75;
+  animation: jar-overhead-lift 4.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+.jar-overhead-words {
+  display: block;
+  white-space: nowrap;
+}
+/* Something arrived overhead while you were down here. One step of luminance,
+   which is the only meaning channel this world has. */
+.jar-overhead--new {
+  color: var(--jar-ink);
+}
+@keyframes jar-overhead-lift {
+  0%,
+  62%,
+  100% {
+    transform: translateY(0) rotate(45deg);
+  }
+  76% {
+    transform: translateY(-3px) rotate(45deg);
+  }
+}
+
+/* ---------- the companion's whisper line ----------
+   A MEASURE, BECAUSE THE WEATHER IS A SENTENCE AND SENTENCES HAVE A WIDTH.
+   It was set `left: 0; right: 0`, so a busy day printed the whole report as
+   one unbroken rule of small caps from bezel to bezel — 190 characters at
+   2560px, which is not a line anybody reads, it is a ticker. Typography's
+   own answer is the measure: cap the column, let it wrap, and keep it
+   centred under the companion. */
 .jar-char-say {
   position: absolute;
   left: 0;
@@ -275,7 +351,11 @@
   pointer-events: none;
 }
 .jar-char-say p {
-  margin: 0;
+  max-width: 46ch;
+  margin: 0 auto;
+  /* the report is a list of clauses; break it where the clauses are */
+  text-wrap: pretty;
+  line-height: 1.7;
 }
 
 /* The readings band that used to sit here is GONE from section A. Looking at
@@ -617,6 +697,13 @@
 .jar-way {
   opacity: 1;
   color: var(--jar-muted);
+  /* A SIZE OF ITS OWN, ABOVE THE LABEL REGISTER'S 10px. These are the two
+     names of the places you can walk to from here — the most consequential
+     words in either margin — and at the shared label size they read as a
+     watermark on a 1440px screen. The register's weight, tracking and case
+     still apply; only the measure grows. */
+  font-size: 13px;
+  letter-spacing: 0.13em;
 }
 .jar-way:hover,
 .jar-way:focus-visible {
@@ -650,10 +737,13 @@
   -webkit-appearance: none;
   border: 0;
   background: none;
-  padding: 8px 10px;
+  padding: 10px 13px;
   font-family: inherit;
   font-weight: 500;
-  font-size: 9px;
+  /* 9px was smaller than every other label on the page, for the strip that
+     answers "where am I and where else is there" — the one question a moving
+     camera creates. It is a primary surface and it is now sized like one. */
+  font-size: 12px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -672,9 +762,16 @@
    wall you are standing on: where you ARE outranks what you could make. */
 .jar-axis-add {
   opacity: 0.75;
-  font-size: 12px;
+  /* THE ONE GLYPH ON THE STRIP, AND IT WAS THE SMALLEST THING ON IT. Every
+     other mark is a word several characters wide; this is a single `+`, so
+     at the same type size it has a fraction of the target and a fraction of
+     the presence. Making a place is the strip's only creative act — it is
+     drawn at a size that says so, and given a square hit area rather than a
+     glyph's worth of one. */
+  font-size: 21px;
+  line-height: 1;
   letter-spacing: 0;
-  padding: 6px 10px;
+  padding: 4px 14px 7px;
 }
 .jar-axis-add:hover,
 .jar-axis-add:focus-visible { opacity: 1; color: var(--jar-ink); }
@@ -1491,35 +1588,41 @@
   right: 20px;
 }
 
-/* ---------- time dial: a soft neutral rail, no coloured glow ---------- */
+/* ---------- time dial: a horizontal band above the axis of walls ----------
+   IT WENT TO THE RIGHT MARGIN TO KEEP TWO MEANINGS OFF ONE AXIS, AND NOBODY
+   USED IT. The reasoning was sound — the bottom edge is the map of WHOSE mind
+   you are in, and laying WHEN across the same band makes a sideways drag
+   ambiguous — but the cure cost more than the disease: a hairline rail in the
+   margin, mounted only while you were down in the field, so a wall's history
+   was something you had to descend to and then hunt for.
+
+   A timeline is a horizontal instrument. It is one again, and the ambiguity
+   is answered by STACKING rather than by rotating: two bands, one above the
+   other, each holding exactly one meaning. Months and a scrub handle here;
+   names of walls below. They never overlap and neither is ever mistaken for
+   the other, because the thing that told them apart was never the axis — it
+   was what is written on them.
+
+   And it is present at every height now. Winding time rewrites the poster,
+   so it means something at headquarters; the only reason to hide it is a wall
+   with no history to wind, which is data, not altitude. */
 .jar-dial {
   position: absolute;
-  /* TIME LEAVES THE BOTTOM EDGE.
-     The axis of walls owns the bottom — it is the map of whose mind you are
-     standing in, and it is the one thing that must never move. The timeline
-     used to sit just above it, which put two unrelated meanings on the same
-     horizontal band: a sideways gesture could have meant "another person" or
-     "another month" and the screen gave you no way to tell which.
-
-     So time becomes the other axis. Side to side is WHOSE, up and down is
-     WHEN — which is also the direction the world already travels between the
-     sky and the field, so scrubbing time now runs parallel to moving through
-     it rather than across it. It hugs the right edge, out of the reading
-     column, and it is a hairline until you go near it. */
-  top: 96px;
-  bottom: calc(56px + env(safe-area-inset-bottom));
-  right: 0;
   z-index: 5;
+  left: 0;
+  right: 0;
+  /* it rides directly above the axis strip and moves when the strip does */
+  bottom: calc(50px + env(safe-area-inset-bottom));
   display: flex;
   align-items: stretch;
-  padding: 0 20px 0 34px;
+  padding: 0 24px;
   /* A scrim, not a band: the field drifts behind the rail, so it needs its
      own ground without ever showing an edge. */
   background: linear-gradient(
-    to left,
+    to top,
     var(--jar-deep) 0%,
-    var(--jar-deep) 34%,
-    color-mix(in srgb, var(--jar-deep) 60%, transparent) 68%,
+    var(--jar-deep) 38%,
+    color-mix(in srgb, var(--jar-deep) 60%, transparent) 72%,
     transparent 100%
   );
   /* At rest the timeline is present but quiet — a hairline, a small dot, and
@@ -1533,8 +1636,7 @@
 .jar-dial--live {
   opacity: 1;
 }
-/* Time has no meaning among candidates: the dial fades out as the camera
-   enters the sky, and returns on the way down. */
+/* nothing to wind on this wall */
 .jar-dial--away {
   opacity: 0;
   pointer-events: none;
@@ -1542,18 +1644,18 @@
 .jar-dial-track {
   position: relative;
   flex: 1;
-  width: 30px;
+  height: 30px;
   touch-action: none;
-  cursor: ns-resize;
+  cursor: ew-resize;
 }
 .jar-dial-track::before {
   content: "";
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 1px;
-  margin-left: -0.5px;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  margin-top: -0.5px;
   border-radius: 999px;
   background: var(--jar-faint);
   opacity: 0.5;
@@ -1563,37 +1665,37 @@
 .jar-dial--live .jar-dial-track::before {
   opacity: 0.9;
 }
-/* the months read down the rail, set to its right so the hairline stays the
+/* the months read along the rail, set below it so the hairline stays the
    thing your eye tracks */
 .jar-month {
   position: absolute;
-  left: 50%;
-  margin-left: 11px;
+  top: 50%;
+  margin-top: 7px;
   white-space: nowrap;
-  transform: translateY(-50%);
+  transform: translateX(-50%);
   pointer-events: none;
 }
 /* THE DOOR'S MARK ON THE RAIL — the one thing a room's history turns on.
-   A short rule across the track, at full ink, so it reads as a HINGE rather
+   A short notch ACROSS the track, at full ink, so it reads as a HINGE rather
    than as another month label: months are words beside the rail, this is a
    notch in it. Arrivals and departures wear the same mark on purpose — the
    fact is "the room changed who it is", and light is not spent sorting people
    into good news and bad. Which of the two it was is what the name says. */
 .jar-hinge {
   position: absolute;
-  left: 50%;
-  width: 11px;
-  height: 1px;
-  margin-left: -5.5px;
-  transform: translateY(-50%);
+  top: 50%;
+  width: 1px;
+  height: 11px;
+  margin-top: -5.5px;
+  transform: translateX(-50%);
   background: var(--jar-ink);
   pointer-events: none;
 }
 /* the handle is a small neutral bubble — no accent, no purple glow */
 .jar-dial-handle {
   position: absolute;
-  left: 50%;
-  top: 100%;
+  top: 50%;
+  left: 100%;
   width: 7px;
   height: 7px;
   margin: -3.5px 0 0 -3.5px;
@@ -1614,15 +1716,13 @@
 }
 /* The scrubbed date. A SIBLING of the handle, not a child: the handle scales
    up while the dial is live, and a label inheriting that scale is how this
-   came to be printed at poster size. It is a label, it sits just above the
-   handle, and it exists only while a finger is actually scrubbing. */
-/* the scrubbed date sits to the LEFT of the rail, reading back into the
-   world rather than off the edge of the screen */
+   came to be printed at poster size. It sits just above the handle, and it
+   exists only while a finger is actually scrubbing. */
 .jar-dial-date {
   position: absolute;
-  right: calc(50% + 12px);
-  transform: translateY(-50%);
-  text-align: right;
+  bottom: calc(50% + 10px);
+  transform: translateX(-50%);
+  text-align: center;
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;

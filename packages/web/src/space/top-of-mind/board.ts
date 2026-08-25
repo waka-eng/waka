@@ -15,7 +15,7 @@
  * it is kept because adopting a group's ambition as your own is a real act
  * that should say where the words came from.
  *
- * `formingWords` obeys the numerals law: "Four patterns are forming", never
+ * `formingWords` obeys the numerals law: "Four signals are forming", never
  * "4". The count is legible because the words are.
  */
 
@@ -102,7 +102,7 @@ export function formingWords(
   for (const f of forming ?? []) if (f.createdMs <= T) n++;
   if (n === 0) return null;
   const w = numWords(n);
-  return `${w[0].toUpperCase()}${w.slice(1)} ${n === 1 ? "pattern is" : "patterns are"} forming`;
+  return `${w[0].toUpperCase()}${w.slice(1)} ${n === 1 ? "signal is" : "signals are"} forming`;
 }
 /**
  * WHAT A WALL'S HEADQUARTERS SAYS. One shape for every kind of wall — yours,
