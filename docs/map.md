@@ -351,13 +351,13 @@ verified by opening the file.
   There is no `Jar.tsx`; `pages/Home.tsx` imports it.
 - **`docs/codebase.md` puts `space-kinds/` underneath `space/` in the dependency
   order — "pure predicates and constants", read by the layers and reading
-  nothing back. The imports go both ways.** `space-kinds/group.ts` takes
-  `colorBall`, `scatterSeed`, `Ball` and `formingWords` out of
-  `space/inspiration/` and `space/top-of-mind/`. (The other half of the cycle
-  went with `space/signal/` on 2026-08-25: `sky-engine.ts` took
-  `makeGroupBall` from `space-kinds/group.ts` so a room's evidence could be
-  built as a real field orb before the sky hung it.) Trace dependencies from
-  the imports, not from that list. The same
+  nothing back. One import still goes the other way.** `space-kinds/group.ts`
+  takes `formingWords` and `WallChrome` out of `space/top-of-mind/`. It used to
+  take four more — `colorBall`, `scatterSeed` and `Ball` — for `makeGroupBall`,
+  which built a room's evidence into a real field orb so the sky could hang it;
+  that function had no caller once `space/signal/` was deleted on 2026-08-25
+  and went with it, and the true CYCLE went with it too. Trace dependencies
+  from the imports, not from that list. The same
   document also names a `space-kinds/self.ts` that was never written — nothing
   about your own space differs yet, which is the right outcome and a stale
   sentence. Both are written up at length in `packages/web/src/space/README.md`.

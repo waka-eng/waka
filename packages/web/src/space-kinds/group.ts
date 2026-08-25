@@ -3,8 +3,8 @@
  *
  * `index.ts` beside this file says what KINDS of space exist and which of them
  * have a sky or a dial. This says what a group's own wall is made of: the
- * shared signals that become its orbs (`groupWallOrbs`), how one of those is
- * built into a ball (`makeGroupBall`), and what its headquarters says
+ * shared signals that become its orbs (`groupWallOrbs`) and what its
+ * headquarters says
  * (`deriveGroupChrome`).
  *
  * The canon draws the boundary this module exists to hold: sharing is a
@@ -15,9 +15,6 @@
  * is able to reach rather than by remembering not to.
  */
 import type { ApiGroupTopOfMind, ApiGroupWallSignal } from "../lib/api";
-import { hashStr, TAU } from "../lib/num";
-import { colorBall } from "../space/inspiration/field";
-import { scatterSeed, type Ball } from "../space/inspiration/orb";
 import { formingWords, type WallChrome } from "../space/top-of-mind/board";
 
 
@@ -87,93 +84,6 @@ export function groupWallOrbs(wall: ApiGroupWallSignal[], top: ApiGroupTopOfMind
     });
   }
   return [...seen.values()];
-}
-
-/**
- * A room orb: the same ball, built from an evidence preview. Aliveness decays
- * from `createdAt` on the personal jar's own half-life; the reflection and
- * note boosts are omitted because the payload cannot know them. Tint hashes
- * the signal id — evidence previews carry no theme terms.
- */
-export function makeGroupBall(
-  ev: GroupEvidence,
-  groupId: string,
-  colIdx: number,
-  viewerId: string | null,
-): Ball {
-  const r = 24 + ((hashStr(ev.signalId + "r") % 1000) / 1000) * 8;
-  const b: Ball = {
-    id: `${groupId}:${ev.signalId}`,
-    capturedMs: ev.createdMs,
-    updatedMs: ev.createdMs,
-    reflections: 0,
-    hasNotes: false,
-    /* A room's evidence is a STATEMENT, not one of the viewer's memories, so
-       there is no citation chain under it to carry anything — and a room may
-       never reach into another member's layers to find one. Nothing above it
-       here is the honest reading, not a placeholder. */
-    roots: 0,
-    promotion: 0,
-    onPoster: false,
-    underPrinciple: false,
-    frontier: false,
-    hasGroup: false,
-    textPreview: ev.textPreview,
-    kind: ev.kind,
-    quote: ev.quote,
-    terms: [],
-    r,
-    rBase: r,
-    sizeIdx: r < 26.5 ? 0 : r < 29.8 ? 1 : 2,
-    frac: (hashStr(ev.signalId) % 1000) / 1000,
-    scat: scatterSeed(ev.signalId),
-    x: 0,
-    y: 0,
-    homeX: 0,
-    homeY: 0,
-    peekX: 0,
-    peekY: 0,
-    ampX: 10 + Math.random() * 8,
-    ampY: 10 + Math.random() * 8,
-    ampBaseX: 0,
-    ampBaseY: 0,
-    rateX: TAU / (7 + Math.random() * 6),
-    rateY: TAU / (7 + Math.random() * 6),
-    phX: Math.random() * TAU,
-    phY: Math.random() * TAU,
-    arrive: 1,
-    entryH: 0,
-    active: false,
-    leaving: false,
-    gone: 0,
-    spawnAt: -1,
-    peek: false,
-    relightAt: 0,
-    relight: 0,
-    aliveFrom: 0,
-    aliveTo: 0,
-    alive: 0,
-    alivePow: 0,
-    breathRate: 0.9 + Math.random() * 0.5,
-    breathPhase: Math.random() * TAU,
-    hold: 0,
-    dim: 0,
-    glow: 0,
-    press: 0,
-    img: null,
-    imgUrl: null,
-    col: colIdx,
-    sigId: ev.signalId,
-    authorName: ev.authorName ?? undefined,
-    own: viewerId !== null && ev.authorUserId === viewerId,
-    citedBy: ev.citedBy,
-    origin: "human",
-    lens: 0,
-  };
-  b.ampBaseX = b.ampX;
-  b.ampBaseY = b.ampY;
-  colorBall(b, Date.now());
-  return b;
 }
 
 /**

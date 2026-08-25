@@ -55,7 +55,6 @@ export const ORB_R_MIN = 6;
  * they belong to a camera and a character, and nothing outside the loop reads
  * them.
  */
-export const EASE_LIGHT = 1.2e-4;
 /** Light in fast, out slow: τ ≈ 28ms arriving, ≈ 180ms leaving. */
 export const EASE_GLOW_IN = 1e-16;
 export const EASE_GLOW_OUT = 3.8e-3;

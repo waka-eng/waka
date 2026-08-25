@@ -254,24 +254,6 @@ export function orbsForHue(pal: HuedPalette, hue: number, pixel: boolean): HTMLC
   return made;
 }
 
-/**
- * WHAT AN UNDATED MEMORY LOOKS LIKE.
- *
- * Aliveness is a claim about WHEN something was saved and how it has been
- * returned to since. A room's proposal names no per-save date, so there is no
- * such claim to make about the memories it cites — and lighting them from the
- * newest edge of the declared span would print a number nobody measured, in
- * the one channel this page reserves for meaning.
- *
- * So an undated memory declares itself undated instead: one fixed tier, one
- * fixed power, the same for every satellite in that ring including any the
- * viewer saved themselves. A ring then says one kind of thing throughout,
- * which is the only honest thing it can say. The panel already prints who and
- * no when for these.
- */
-export const UNDATED_TIER = Math.round((TIERS - 1) / 2);
-export const UNDATED_POW = 0.5;
-
 export function makeSprite(px: number): [HTMLCanvasElement, CanvasRenderingContext2D | null] {
   const c = document.createElement("canvas");
   c.width = px;

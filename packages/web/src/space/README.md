@@ -70,17 +70,18 @@ rule bends, and it bends because settings are about a space as a whole rather
 than about any one of its layers, so neither directory is clean. It is recorded
 rather than hidden.
 
-**`space-kinds/` imports back up into `space/`.** `space-kinds/group.ts`
-reaches into `space/inspiration/` and `space/top-of-mind/` for `colorBall`,
-`scatterSeed`, `Ball` and `formingWords`. `docs/codebase.md` plans a one-way
-layering — `space-kinds/` as pure predicates underneath `space/` — and the code
-does not obey it. Do not trust the documented layering when tracing a
-dependency; trust the imports.
+**`space-kinds/` imports back up into `space/`, once.** `space-kinds/group.ts`
+reaches into `space/top-of-mind/` for `formingWords` and `WallChrome`.
+`docs/codebase.md` plans a one-way layering — `space-kinds/` as pure predicates
+underneath `space/` — and that one import does not obey it. Trust the imports
+when tracing a dependency, not the documented layering.
 
-This used to be a true CYCLE, with `space/signal/sky-engine.ts` reaching down
-into `space-kinds/group.ts` for `makeGroupBall`. `space/signal/` was deleted on
-2026-08-25 — layer 2 has no drawing of its own any more — so the loop is a
-one-way violation now rather than a knot.
+It was a true CYCLE until 2026-08-25, and much wider: `space/signal/sky-engine.ts`
+reached down for `makeGroupBall`, which reached back up for `colorBall`,
+`scatterSeed` and `Ball` to build a room's evidence as a real field orb before
+the sky hung it. Deleting `space/signal/` left `makeGroupBall` with no caller;
+deleting that closed the loop and took three of the four upward imports with
+it.
 
 Also: `docs/codebase.md` names a `space-kinds/self.ts`. It was never written.
 "Your own space" is a `SpaceKind` with no file, because so far nothing about it
