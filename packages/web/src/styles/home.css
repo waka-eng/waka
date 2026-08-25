@@ -206,6 +206,7 @@
    So it is stated ONCE, for the whole layer, rather than remembered per
    control. The next interactive thing added inside headquarters will not be
    named `.jar-edge` either, and it should not have to know about this. */
+.jar-hq a,
 .jar-hq button,
 .jar-hq label,
 .jar-hq input,

@@ -73,6 +73,11 @@ describe("headquarters takes no pointer, and its controls take it back", () => {
     /* The selector list as written, so a control kind that is dropped from it
        fails here rather than in somebody's hands. */
     const wanted = [
+      /* `a` carries no control of its own today — every way out of
+         headquarters is a <button>. It is in the list because the rule's
+         whole claim is that the NEXT thing added does not have to know about
+         any of this, and a link is the likeliest next thing. */
+      ".jar-hq a",
       ".jar-hq button",
       ".jar-hq label",
       ".jar-hq input",
