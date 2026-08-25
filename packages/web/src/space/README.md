@@ -49,7 +49,6 @@ following names, you would have looked here first and not found it.
 | The change | Where |
 | --- | --- |
 | How a save looks or lies on the ground | `space/inspiration/` |
-| What a statement is, or how the sky moves | `space/signal/` |
 | The one synthesized artifact, its entries, its poster | `space/top-of-mind/` |
 | What you can do *to* a space | `space/settings/` |
 | Opening, retyping or keeping a thing's words | `space/editing.ts` |
@@ -71,13 +70,17 @@ rule bends, and it bends because settings are about a space as a whole rather
 than about any one of its layers, so neither directory is clean. It is recorded
 rather than hidden.
 
-**The two directories import each other.** `space/signal/sky-engine.ts` reaches
-into `space-kinds/group.ts` for `makeGroupBall`; `space-kinds/group.ts` reaches
-back into `space/inspiration/` and `space/top-of-mind/`. `docs/codebase.md`
-plans a one-way layering — `space-kinds/` as pure predicates underneath `space/`
-— and the code does not obey it, because a group's evidence has to be built as a
-real field orb before the sky can hang it. Do not trust the documented layering
-when tracing a dependency; trust the imports.
+**`space-kinds/` imports back up into `space/`.** `space-kinds/group.ts`
+reaches into `space/inspiration/` and `space/top-of-mind/` for `colorBall`,
+`scatterSeed`, `Ball` and `formingWords`. `docs/codebase.md` plans a one-way
+layering — `space-kinds/` as pure predicates underneath `space/` — and the code
+does not obey it. Do not trust the documented layering when tracing a
+dependency; trust the imports.
+
+This used to be a true CYCLE, with `space/signal/sky-engine.ts` reaching down
+into `space-kinds/group.ts` for `makeGroupBall`. `space/signal/` was deleted on
+2026-08-25 — layer 2 has no drawing of its own any more — so the loop is a
+one-way violation now rather than a knot.
 
 Also: `docs/codebase.md` names a `space-kinds/self.ts`. It was never written.
 "Your own space" is a `SpaceKind` with no file, because so far nothing about it

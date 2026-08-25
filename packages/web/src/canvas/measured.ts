@@ -42,6 +42,12 @@
  *     effects. `mouthSpot` IS here, because a newborn memory leaves from the
  *     middle of the sentence that made it and the loop measures that.
  *
+ * Three members LEFT by this rule on 2026-08-25 — `nebEls`, `clusterEls` and
+ * `satSay`, the sky's words. Nothing on the canvas side dereferenced them any
+ * more, because nothing rendered the elements: the whole candidate layer went
+ * with the sky engine. They are the rule working in the other direction, and
+ * worth naming here because the membership test is what this file is for.
+ *
  * Adding a ref here that the canvas never reads would make this object a
  * grab-bag of "refs in Home.tsx", which answers no question. The membership
  * rule is the whole value of the file.
@@ -102,15 +108,6 @@ export interface Measured {
       leaves from the middle of the sentence that made it however many lines
       that had wrapped to. Assigned by a callback ref, hence mutable. */
   readonly mouthSpot: MutableRefObject<HTMLElement | null>;
-
-  /* ---- the sky (216 lines): layer two's words ---- */
-  /** One sentence per candidate, keyed by candidate id, positioned on its cloud
-      every frame. The map is mutated by callback refs as candidates mount and
-      unmount; `.current` itself is never replaced. */
-  readonly nebEls: MutableRefObject<Map<string, HTMLDivElement>>;
-  /** The one whisper the orbits carry: whose memory the pointer is on. The loop
-      writes both its words and its place. */
-  readonly satSay: RefObject<HTMLDivElement>;
 }
 
 /**
@@ -133,8 +130,6 @@ export function useMeasured(): Measured {
       hqInner: { current: null },
       mouth: { current: null },
       mouthSpot: { current: null },
-      nebEls: { current: new Map() },
-      satSay: { current: null },
     };
   }
   return held.current;

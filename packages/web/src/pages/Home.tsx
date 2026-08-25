@@ -75,28 +75,6 @@ import {
   mix,
   rgbCss,
 } from "../canvas/sprites";
-import {
-  readSkyLayout,
-  type Candidate,
-  type Neb,
-  type Sat,
-} from "../space/signal/sky";
-import {
-  focusOn,
-  layoutSky,
-  makeNeb,
-  persistSky,
-  releaseHolds,
-  sayWho,
-  solveSats,
-  springs,
-  stepSky,
-  FOCUS_DIM,
-  FOCUS_POP,
-  NEB_CORE,
-  type SkyDeps,
-} from "../space/signal/sky-engine";
-import { paintSky } from "../space/signal/sky-paint";
 import { useEditing } from "../space/editing";
 import { deriveAgentChrome } from "../space-kinds/agent";
 import {
@@ -536,8 +514,6 @@ const GROUNDS_LIT_MS = 1600;
 const EYE_LON = 0.5;
 /** The equator's radius as seen head-on, as a fraction of the body's width. */
 const FACE_R = 0.34;
-/** At most this many candidates get a body in the sky. */
-const SKY_MAX = 9;
 /**
  * The traveler (v8). Pressing toward a neighbouring column, the companion
  * turns and glides ahead of the world over this long, easing in…
@@ -608,24 +584,6 @@ const PITCH_FULL = 1400;
  * apart. What remains below is the page's own: read by what the page still
  * lays out itself and by nothing else.
  */
-/**
- * Air between a satellite and the name of whoever saved it — and the least the
- * name is ever left from the edge of the sky, which clips.
- */
-const SAT_SAY_GAP = 12;
-/**
- * THE MOST OF THE VIEWPORT ONE CANDIDATE'S SYSTEM MAY CLAIM.
- *
- * clampHome parks a candidate by a pad the size of its whole system, so the
- * range it may be parked in is what is left over — and at half the viewport
- * that range is empty. These are the pads' ceiling, and therefore also the
- * ceiling measureNeb cuts an orbit down to: an orbit wider than a pad may be
- * has nowhere at all to sit, and runs off both edges every revolution.
- */
-const SKY_PAD_X = 0.45;
-const SKY_PAD_Y = 0.42;
-/** The least of the viewport an orbit is ever left clear of an edge. */
-const SKY_EDGE = 12;
 
 
 // ---------------------------------------------------------------------------
@@ -999,13 +957,6 @@ interface SimApi {
   toGround: () => void;
   /** The traveler: one column left or right, the companion leading. */
   travel: (dir: 1 | -1) => void;
-  /** Hand the loop the current candidate list. */
-  syncSky: (list: Candidate[]) => void;
-  /** An adopted candidate contracts to a point. */
-  condense: (id: string) => void;
-  /** Join this pattern to its nearest neighbour without a drag — the
-      keyboard-and-pointer path for the one gesture that had none. */
-  joinTo: (id: string) => void;
   /** Walk to a wall by column, from the axis map along the bottom. */
   goToWall: (col: number) => void;
   /* `revealMemory` LIVED HERE and is gone. It flew the camera from a statement
@@ -1130,7 +1081,6 @@ export interface FieldAudit {
   sky: {
     lean: number;
     minCam: number;
-    nebs: Array<{ y: number; homeY: number; peekY: number; r: number }>;
   };
 }
 
@@ -1469,7 +1419,6 @@ function HomeExperience(): JSX.Element {
   /** Whether the top-left split button is listing the other walls. */
   const [wallPick, setWallPick] = useState(false);
   /** Which pattern in the sky is being read. Its verdict row belongs to it. */
-  const [focusCandId, setFocusCandId] = useState<string | null>(null);
   /**
    * WHOSE GROUNDS ARE OPEN — and why the grounds are not simply always shown.
    *
@@ -3627,12 +3576,6 @@ function HomeExperience(): JSX.Element {
          only written when it actually changes */
       hoverTick: 0,
       cursor: "",
-      nebDrag: null as Neb | null,
-      /** Did the press that grabbed a cloud ever become a drag? If not, it is a
-          tap, and a tap on a candidate is what makes it the subject. */
-      nebMoved: false,
-      nebOffX: 0,
-      nebOffY: 0,
       downX: 0,
       downY: 0,
       lastX: 0,
@@ -4066,7 +4009,7 @@ function HomeExperience(): JSX.Element {
       const b = list[i];
       if (selectedIdRef.current === b.id) release();
       if (gesture.pressId === b.id) gesture.pressId = null;
-      if (sky.heldBall === b) sky.heldBall = null;
+      if (held.ball === b) held.ball = null;
       list.splice(i, 1);
       byId.delete(b.id);
       /* the depth order is an index permutation over `list`: it has to be
@@ -4588,251 +4531,38 @@ function HomeExperience(): JSX.Element {
      * pointer — and the engine no longer has to be trusted to stay inside it,
      * because it can no longer see anything else.
      */
-    const sky = {
-      nebs: [] as Neb[],
-      /* the cluster signature last handed to React, so the loop can push a
-         discrete fact without pushing it sixty times a second */
-      clusterSig: "",
-      shown: false,
-      /* who belongs to a cluster right now, and which cloud the pointer is on:
-         clustered sentences whisper, the touched one comes back to full */
-      clusterMembers: new Set<string>(),
-      hoverNeb: null as Neb | null,
-      /**
-       * THE SUBJECT: the one candidate carrying its evidence right now, or none.
-       * At rest the sky is sentences and bodies only — a skyful of orbiting
-       * evidence was unreadable, and it was the satellites that made it so.
-       * Exactly one at a time, because the point of the tap is to be able to
-       * read one claim's provenance without the others in the way.
-       */
-      focusNeb: null as Neb | null,
-      /* which satellite the pointer (or a finger) is on: its owner's given name
-         is whispered beside it, and it is what a tap would open */
-      hoverSat: null as Sat | null,
-      satSaid: "",
-      /* how wide that name came out, measured once when it CHANGES — the loop
-         needs it every frame to decide which side of the satellite it fits on,
-         and reading offsetWidth per frame would force a layout per frame */
-      satSayW: 0,
-      /* the satellite a selection came FROM, so the reading panel sits beside
-         the satellite that was tapped rather than beside the memory's own place
-         in a field a whole section below */
-      selSat: null as Sat | null,
-      /* a satellite's memory can live in a room column that has never been
-         built, so it is held directly and released directly */
-      heldBall: null as Ball | null,
-    };
-    /* tier-one persistence: where the clouds were left, last session */
-    const savedSky = readSkyLayout();
+    /**
+     * THE ONE ORB BEING HELD, which is all that is left of the sky.
+     *
+     * There was a `SkyState` here — clouds, their satellites, a focused
+     * subject, a hovered one, a cluster signature — and thirteen engine
+     * functions that moved it. Every one of them went dormant on 2026-08-24
+     * when the candidate layer came out of headquarters, and none of it was
+     * deleted until the founder said so on 2026-08-25.
+     *
+     * This survived because it was never about the sky: it is the GROUND's
+     * bookkeeping. A memory being read is held, and a held memory has to be
+     * findable to let go of — it can live in a room column that has never
+     * been built, so it is kept by reference rather than looked up.
+     */
+    const held = { ball: null as Ball | null };
 
     /**
-     * WHAT THE SKY ENGINE STILL NEEDS FROM THIS PAGE — the whole list, once.
-     *
-     * The thirteen functions that move the sky live in
-     * `space/signal/sky-engine.ts` now; this is the seam they reach back
-     * through. It is built once per effect run and every entry is either a
-     * function declaration hoisted above (so the order of this block and the
-     * order those are written in are independent) or an ACCESSOR onto a ref —
-     * never a ref's current value, because `viewerId` is rewritten on every
-     * render and `selectedId` on every selection, and a value read here would
-     * pin the engine to whatever was true when the loop started.
+     * Let go of every orb. Two steps, and the second is not redundant: the
+     * sweep clears whatever is in the ground right now, and the held one may
+     * live in a room column that has never been built — so it is cleared by
+     * the reference we kept rather than by being found.
      */
-    const skyDeps: SkyDeps = {
-      byId,
-      findBall,
-      allBalls,
-      clampHome,
-      orbFitX,
-      orbFitY,
-      colOfGroup,
-      release,
-      wake,
-      groupBalls: () => groupBallsRef.current,
-      viewerId: () => viewerIdRef.current,
-      nebEl: (id) => measured.nebEls.current.get(id) ?? null,
-      satSayEl: () => measured.satSay.current,
-      selectedId: () => selectedIdRef.current,
-      setFocusCandId,
-    };
-
-    /** Which column a room's memories belong to; zero when it is not on the
-        map yet, which only ever reads as "this is a room's memory". */
-    function colOfGroup(groupId: string): number {
-      const i = groupsRef.current.findIndex((g) => g.id === groupId);
-      return i < 0 ? 0 : i + 1;
-    }
-
-    /**
-     * The widest orbit this viewport can actually hold: the most a pad may be
-     * (SKY_PAD_X of the viewport), less the edge it is kept clear of, less the
-     * drift it swings by, and less the growth it takes on when it becomes the
-     * subject — because the pad covers the solved radius, and those three are
-     * what the solved radius does not include. clampHome's pad is written from
-     * the same three, so the cap and the pad can never disagree.
-     */
-    function orbFitX(n: Neb) {
-      return Math.max(24, (view.w * SKY_PAD_X - SKY_EDGE - n.ampX) / (1 + FOCUS_POP));
-    }
-    function orbFitY(n: Neb) {
-      return Math.max(24, (view.h * SKY_PAD_Y - SKY_EDGE - n.ampY) / (1 + FOCUS_POP));
-    }
-
-    /**
-     * Homes in section S. The proposal is the largest and sits nearest the
-     * centre — it is a whole ambition, not a fragment; the readings orbit it
-     * on a wide ellipse. A nebula the person has MOVED keeps where it was put
-     * (for this session — there is no endpoint to persist a sky layout to).
-     */
-    /**
-     * A candidate is parked where its whole SYSTEM fits, not merely where its
-     * cloud does: tapping it must never send half an orbit past an edge, and
-     * the answer to that is where it rests — never a camera move at the moment
-     * of the tap. It binds a dragged-and-kept position too: a spot restored
-     * from a previous session was chosen against a different viewport.
-     */
-    function clampHome(n: Neb) {
-      /* the system at its WIDEST, not at its average: the subject sits
-         FOCUS_POP bigger, and every candidate drifts by its own amplitude, so
-         a pad measured from the solved radius alone would still let the far
-         side of the ring cross an edge on the swing. measureNeb has already
-         cut the orbit to something a pad this size can cover, so the caps
-         below are a floor under a pathological viewport, not the normal path. */
-      const padX = Math.min(
-        Math.max(n.r * 0.5, n.orbRx * (1 + FOCUS_POP) + n.ampX) + SKY_EDGE,
-        view.w * SKY_PAD_X,
-      );
-      const padY = Math.min(
-        Math.max(n.r * 0.5, n.orbRy * (1 + FOCUS_POP) + n.ampY) + SKY_EDGE,
-        view.h * SKY_PAD_Y,
-      );
-      /* every sky is its own column wide, and no candidate ever wanders out
-         of the wall it belongs to */
-      const off = n.col * view.w;
-      n.homeX = clamp(n.homeX, off + padX, Math.max(off + padX, off + view.w - padX));
-      /* the pads are capped at a fraction of the viewport, so this range is
-         never empty however tall the words wrapped */
-      n.homeY = clamp(n.homeY, view.layout.minCam + padY + 28, -padY);
-    }
-
-    /**
-     * Rebuild the sky from the candidate list, keeping what is already up.
-     *
-     * NOTHING CALLS THIS, AND THAT IS THE WHOLE STATE OF THE SKY.
-     *
-     * `sky.nebs` starts `[]` and this is its only writer, so on 2026-08-24
-     * — when the founder had the candidate layer taken out of headquarters —
-     * every piece of machinery downstream of it went dormant in one step
-     * rather than being deleted: `layoutSky`, `stepSky`, `paintSky`,
-     * `focusOn`, `springs`, `sayWho` and the two DOM passes in `place()` all
-     * still run every frame, over an empty array, doing nothing. The hit
-     * tests answer null, `FieldAudit.sky.nebs` reports zero, and
-     * `Measured.nebEls` / `clusterEls` / `satSay` are never written because
-     * the elements they held are no longer rendered.
-     *
-     * IT IS KEPT ON PURPOSE. The founder's plan for the space above
-     * headquarters is philosophies and values — "top of mind = current,
-     * philosophies and values = timeless" (2026-08-24) — and clouds with
-     * their evidence in orbit is the machinery that space will want. What
-     * stands up there today is `.jar-values`, plain DOM saying it is
-     * forming.
-     *
-     * SO THIS IS THE ONE LINE THAT WOULD WAKE IT: call `syncSky(list)` with
-     * candidates from wherever they come from next, and every pass above
-     * starts drawing again. Until then, treat everything it feeds as dead
-     * weight that is deliberately still here, and do not spend an afternoon
-     * discovering that the way this comment's author did.
-     */
-    function syncSky(list: Candidate[]) {
-      const prev = new Map(sky.nebs.map((n) => [n.id, n] as const));
-      const next: Neb[] = [];
-      /* the cap is PER SKY: a skyful is a skyful on each wall, and a room full
-         of agents must not crowd your own sky out of its own ceiling */
-      const perCol = new Map<number, number>();
-      for (let i = 0; i < list.length; i++) {
-        const c = list[i];
-        const taken = perCol.get(c.col) ?? 0;
-        if (taken >= SKY_MAX) continue;
-        perCol.set(c.col, taken + 1);
-        const had = prev.get(c.id);
-        if (had) {
-          /* the sky cannot exist before the inspirations do, so this is never a
-             late arrival — it is a candidate whose evidence genuinely
-             changed (a draft re-drafted), re-solved once. Phases are hashed
-             per candidate-and-memory, so every surviving satellite keeps the
-             exact place on the ellipse it already had. */
-          if (had.evSig !== c.evidence.map((e) => e.signalId).join(","))
-            solveSats(had, c, skyDeps);
-          next.push(had);
-          continue;
-        }
-        const n = makeNeb(c, i, skyDeps);
-        /* a draft is born between the nebulae it was drawn from */
-        if (c.originIds.length > 0) {
-          let sx = 0;
-          let sy = 0;
-          let hits = 0;
-          for (const oid of c.originIds) {
-            const o = prev.get(oid);
-            if (o) {
-              sx += o.x;
-              sy += o.y;
-              hits++;
-            }
-          }
-          if (hits > 0) {
-            n.x = sx / hits;
-            n.y = sy / hits;
-            n.homeX = n.x;
-            n.homeY = n.y;
-            n.pinned = true;
-          }
-        }
-        /* a place this candidate was left at in an earlier session comes
-           back BEFORE the sky is ever seen — no jump — clamped into the
-           sky this viewport actually has */
-        const saved = savedSky[c.id];
-        if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
-          const off = c.col * view.w;
-          n.x = n.homeX = off + clamp(saved.x, 12, view.w - 12);
-          n.y = n.homeY = clamp(saved.y, view.layout.minCam + 30, -20);
-          n.pinned = true;
-        }
-        next.push(n);
+    function releaseHolds() {
+      allBalls((arr) => {
+        for (const b of arr) b.hold = 0;
+      });
+      if (held.ball) {
+        held.ball.hold = 0;
+        held.ball = null;
       }
-      sky.nebs = next;
-      /* a candidate that has left the sky cannot be the subject of it */
-      if (sky.focusNeb && !next.includes(sky.focusNeb)) sky.focusNeb = null;
-      /* a selected satellite whose candidate has left the sky has nothing
-         left to sit beside */
-      const held = sky.selSat;
-      if (held && !next.some((n) => n.sats.includes(held))) release();
-      layoutSky(sky, view, skyDeps);
-      wake();
     }
 
-    /** What is under the pointer up in the sky, nearest-first. */
-    function nebAt(cx: number, cy: number): Neb | null {
-      const wx = cx + cam.x;
-      const wy = cy + cam.y;
-      for (let i = sky.nebs.length - 1; i >= 0; i--) {
-        const n = sky.nebs[i];
-        if (n.gone > 0.4 || n.condense < 0.99) continue;
-        const dx = n.x - wx;
-        const dy = n.y - wy;
-        /* the cloud is soft; its handle is its bright middle */
-        const rr = n.r * NEB_CORE;
-        if (dx * dx + dy * dy <= rr * rr) return n;
-      }
-      return null;
-    }
-
-    /**
-     * The frame that was on screen a moment ago, held so a resize can put it
-     * back. ONE scratch surface for the page's whole life: a window being
-     * dragged fires a resize per frame, and allocating a viewport-sized
-     * canvas on each of them is a garbage-collection stall in the middle of
-     * the one interaction that most needs to stay smooth.
-     */
     let carryC: HTMLCanvasElement | null = null;
     function carry(w: number, h: number): HTMLCanvasElement | null {
       if (!carryC) carryC = document.createElement("canvas");
@@ -5132,8 +4862,6 @@ function HomeExperience(): JSX.Element {
         }
       }
       view.primed = true;
-      /* homes for the sky's inhabitants, in the viewport they now have */
-      layoutSky(sky, view, skyDeps);
       /* The volume is a real, world-tall gradient: the sky at the top is a
          different place from the deep. It starts one viewport above HQ, so it
          covers all three sections. */
@@ -5284,7 +5012,6 @@ function HomeExperience(): JSX.Element {
      */
     function step(dt: number, now: number) {
       const t = now / 1000;
-      stepSky(sky, view, stir, skyDeps, dt, now, t, skyPeek());
 
       /* the arrival the founder likes, kept: oldest first, 60ms apart, each
          orb entering from above its home */
@@ -5506,7 +5233,7 @@ function HomeExperience(): JSX.Element {
          "the light already answered" reads as the product having nothing to
          say on the day somebody starts. Under a handful of memories, it says
          what is actually true instead. */
-      if (sky.nebs.length === 0 && trip.inspCol > 0 && trip.inspCol < 4)
+      if (trip.inspCol > 0 && trip.inspCol < 4)
         return pick([
           "A few so far. Say more and I will start to see it",
           "Not enough yet to see a shape",
@@ -5669,13 +5396,6 @@ function HomeExperience(): JSX.Element {
           moteA[i] * (i % 3 === 0 ? 1 - thin * 0.85 : 1) * lerp(0.6, 1.15, companion.inspNow);
         ctx!.drawImage(pal.mote, mx + cam.x - mr * 3, moteY[i] + cam.y - mr * 3, mr * 6, mr * 6);
       }
-
-      /* pass 0b — THE SKY. Each candidate a cloud of light with its own
-         evidence in orbit around it. `space/signal/sky-paint.ts`, which reads
-         three of the loop's state groups and so was allowed to leave; the
-         satellite pass's occlusion rules and the two aliveness fixes recorded
-         in its comments went with it unchanged. */
-      paintSky({ ctx: ctx!, pal, sky, cam, view, t, grid });
 
       /* passes 1 and 2 — THE GROUND. Every memory's diffuse bloom laid down in
          additive light, then every memory's disc drawn over it. One appearance
@@ -6126,86 +5846,6 @@ function HomeExperience(): JSX.Element {
          orbs drawn over the words. */
       const mouth = measured.mouth.current;
       if (mouth) mouth.style.transform = `translate3d(0, ${(-cam.y).toFixed(1)}px, 0)`;
-      /* Each candidate's sentence is DOM, positioned on its cloud every
-         frame: the canvas carries the light, the words stay crisp. */
-      const els = measured.nebEls.current;
-      if (els.size > 0) {
-        /**
-         * A LEANING STATEMENT COMES DOWN AS LIGHT, NOT AS WORDS.
-         *
-         * The clouds elected to wait at the top edge are half off the screen
-         * by construction — that is the whole point of them. Their sentences
-         * are DOM, centred on the cloud, so at full lean the reader got the
-         * bottom half of a line of body text sliced by the viewport and
-         * sitting under the chrome. That is overflow, not an invitation.
-         *
-         * So the words fade out as the cloud leans down and resolve as you
-         * climb to meet it. Light is the only thing that crosses the seam,
-         * which is the law this world already runs on; the reading is what
-         * going up there is FOR.
-         */
-        const lean = skyPeek();
-        for (const n of sky.nebs) {
-          const el = els.get(n.id);
-          if (!el) continue;
-          /* zero for every statement that was not elected — its `peekY` IS
-             its `homeY`, so it never left home and has nothing to fade */
-          const leaning = n.peekY === n.homeY ? 0 : lean;
-          /* the subject grows on the same curve and by the same amount its
-             body and its orbit do — the candidate is one thing */
-          const grow = 1 + FOCUS_POP * n.focus;
-          el.style.transform = `translate3d(${(n.x - cam.x).toFixed(1)}px, ${(n.y - cam.y).toFixed(1)}px, 0) translate(-50%, -50%) scale(${grow.toFixed(3)})`;
-          const op =
-            (1 - n.gone) *
-            (n.condense > 0.5 ? 1 : 0) *
-            n.dimS *
-            lerp(1, FOCUS_DIM, n.dimN) *
-            (1 - leaning);
-          el.style.opacity = `${op}`;
-          /* AND AN INVISIBLE SENTENCE IS STILL A TARGET. `.jar-neb` carries
-             `pointer-events: auto` and starts at opacity zero until the loop
-             has given it a place; it also passes through zero while a
-             candidate condenses or disperses. Its one child is the least
-             reversible control in the layout, and on touch that child rests
-             visible by design — so the container has to stop taking the
-             pointer whenever it cannot actually be seen. The same rule the
-             action itself now obeys, applied one level up where the
-             stylesheet cannot reach it.
-
-             The threshold is well under the faintest state a candidate can
-             legitimately be READ in — a clustered member whispering at 0.25
-             while another candidate is the subject sits at 0.055, and it must
-             stay tappable, because tapping it is how it becomes the subject.
-             What this catches is the three states where the sentence is
-             genuinely not on screen: not yet placed, condensed by an
-             adoption, and dispersed. Those all reach exactly zero. */
-          el.style.pointerEvents = op > 0.02 ? "auto" : "none";
-          /* the layout width is NOT touched by focus: it is what the orbit was
-             measured from, and scale is a transform, so the box stays put */
-          el.style.width = `${Math.round(Math.min(n.r * 1.7, 320))}px`;
-        }
-      }
-      /* whose memory the pointer is on, beside it — it rides the satellite, so
-         the name stays where the memory is even while the orbit turns under
-         it. Absolutely positioned: it can never shift anything else. */
-      const who = measured.satSay.current;
-      if (who && sky.hoverSat) {
-        const sx = sky.hoverSat.x - cam.x;
-        const sy = sky.hoverSat.y - cam.y;
-        /* IT HAS TO STAY IN THE SKY. The name sits to the satellite's right by
-           default, but the sky clips and the name never wraps, so a satellite
-           on the right of its orbit would have its owner cut in half or lost
-           off the edge entirely — on a phone that is most of the ring, and a
-           room's ring is exactly where whose it is has to be readable. So it
-           flips to the other side when it would not fit, the way the reading
-           panel's own right-then-left placement does, and is clamped inside
-           the viewport as a floor. Transform only: still nothing can shift. */
-        let lx = sx + sky.hoverSat.dr + SAT_SAY_GAP;
-        if (lx + sky.satSayW > view.w - SAT_SAY_GAP)
-          lx = sx - sky.hoverSat.dr - SAT_SAY_GAP - sky.satSayW;
-        lx = clamp(lx, SAT_SAY_GAP, Math.max(SAT_SAY_GAP, view.w - sky.satSayW - SAT_SAY_GAP));
-        who.style.transform = `translate3d(${lx.toFixed(1)}px, ${sy.toFixed(1)}px, 0) translate(0, -50%)`;
-      }
     }
 
     function tick(now: number) {
@@ -6362,7 +6002,6 @@ function HomeExperience(): JSX.Element {
       const selActive = selectedIdRef.current !== null;
       /* The field never stops drifting, even while an orb is focused — only
          the focused orb itself holds still (step() skips anything held). */
-      if (selActive) springs(sky, skyDeps);
       step(dt, now);
 
       /* presentation lerps: the unrelated sink into the haze, the kin light
@@ -6557,7 +6196,7 @@ function HomeExperience(): JSX.Element {
             companion.eyeTX = (Math.random() - 0.5) * 1.6;
           }
         }
-        const forming = sky.nebs.length > 0;
+        const forming = false; /* nothing forms overhead since the sky went */
         if (forming) {
           if (companion.glanceAt === 0) companion.glanceAt = now + 4000;
           if (now >= companion.glanceAt) {
@@ -6731,8 +6370,7 @@ function HomeExperience(): JSX.Element {
     /* Nothing moved while an orb was focused, so nothing needs to re-settle:
        releasing lifts the haze and leaves the pile exactly as it was. */
     function release() {
-      releaseHolds(sky, skyDeps);
-      sky.selSat = null;
+      releaseHolds();
       selectedIdRef.current = null;
       setSelectedId(null);
       /* Nothing to give back: opening the panel moved nothing, so closing it
@@ -6756,8 +6394,7 @@ function HomeExperience(): JSX.Element {
         release();
         return;
       }
-      releaseHolds(sky, skyDeps);
-      sky.selSat = null;
+      releaseHolds();
       selectedIdRef.current = id;
       setSelectedId(id);
       /* IT LOOKS AT WHAT YOU TAPPED.
@@ -6768,37 +6405,11 @@ function HomeExperience(): JSX.Element {
          not rearrangement, and the layout stays where you left it. */
       attendTo(b.x, b.y);
       b.hold = 1;
-      sky.heldBall = b;
+      held.ball = b;
       /* the companion brightens in sympathy with an alive bubble */
       if (b.alive > 0.55) companion.flare = Math.max(companion.flare, 0.6);
       /* Its kin are NOT lit and NOT moved. Exactly one thing on screen is
          lit; the connections belong in the panel as text, never in the jar. */
-      wake();
-    }
-
-    /**
-     * Tapping a SATELLITE is tapping the memory it stands for. The same
-     * reading panel opens — and where that memory also has a place in a field
-     * below, it lights there too, because it is the same memory and not a
-     * copy of one. Another member's save is never fetched: its preview and its
-     * owner are all of it that is ours to show.
-     */
-    function selectSat(s: Sat) {
-      if (selectedIdRef.current === s.id) {
-        release();
-        return;
-      }
-      releaseHolds(sky, skyDeps);
-      sky.selSat = s;
-      s.held = true;
-      selectedIdRef.current = s.id;
-      setSelectedId(s.id);
-      const b = findBall(s.id);
-      if (b) {
-        b.hold = 1;
-        sky.heldBall = b;
-        if (b.alive > 0.55) companion.flare = Math.max(companion.flare, 0.6);
-      }
       wake();
     }
 
@@ -6841,51 +6452,6 @@ function HomeExperience(): JSX.Element {
       return found;
     }
 
-    /**
-     * What is under the pointer up in the orbits — in the exact reverse of the
-     * paint order, so the satellite whose pixels are on top answers: the NEAR
-     * half before the far one, and within a half the nearest first. Both loops
-     * are reversed, and the inner one walks satPass's own `satOrd`: one
-     * ordering, read forward to draw and backward to pick, so the two can
-     * never disagree about which orb is on top.
-     */
-    function satAt(cx: number, cy: number): Sat | null {
-      /* only the subject has satellites, so there is only one system to test
-         — and a retracting one is on its way out and answers nothing */
-      const n = sky.focusNeb;
-      if (!n || n.gone > 0.4 || n.condense < 0.99) return null;
-      const wx = cx + cam.x;
-      const wy = cy + cam.y;
-      for (let half = 0; half < 2; half++) {
-        const near = half === 0;
-        for (let k = n.satOrd.length - 1; k >= 0; k--) {
-          const s = n.sats[n.satOrd[k]];
-          if ((s.front > 0) !== near) continue;
-          /* half-emerged is half under the words: it answers once it is out */
-          if (s.em < 0.5) continue;
-          const dx = s.x - wx;
-          const dy = s.y - wy;
-          const rr = s.dr + 4;
-          if (dx * dx + dy * dy <= rr * rr) return s;
-        }
-      }
-      return null;
-    }
-
-    /**
-     * Nearest-first across BOTH populations, by the same depth rule the paint
-     * order obeys: whichever sits lower in the world is the nearer, and the
-     * nearer answers. (The sky and the fields are a section apart, so this
-     * only ever has one candidate — but it is decided by depth rather than by
-     * which array happened to be walked first.)
-     */
-    function pickAt(cx: number, cy: number): { ball: Ball | null; sat: Sat | null } {
-      const sat = satAt(cx, cy);
-      const ball = hitAt(cx, cy);
-      if (sat && ball) return ball.y >= sat.y ? { ball, sat: null } : { ball: null, sat };
-      return { ball, sat };
-    }
-
     function tap(cx: number, cy: number) {
       /* mid-travel the page is the traveler's: taps wait for arrival */
       if (trip.active) return;
@@ -6898,18 +6464,13 @@ function HomeExperience(): JSX.Element {
         wake();
         return;
       }
-      const hit = pickAt(cx, cy);
-      if (hit.sat) {
-        selectSat(hit.sat);
+      const ball = hitAt(cx, cy);
+      if (ball) {
+        select(ball.id);
         return;
       }
-      if (hit.ball) {
-        select(hit.ball.id);
-        return;
-      }
-      /* bare sky: the subject gives its evidence back and everything returns
-         to rest — the same tap that releases a focused orb down in the field */
-      if (sky.focusNeb) focusOn(sky, skyDeps, null);
+      /* bare ground: a focused orb gives the light back and everything
+         returns to rest */
       if (selectedIdRef.current) release();
     }
 
@@ -6963,51 +6524,6 @@ function HomeExperience(): JSX.Element {
         /* a synthetic or already-released pointer: the window listeners still
            carry the gesture, they just do not get the off-window guarantee */
       }
-      /* A press on a nebula SENTENCE grabs its cloud — the words visually
-         ARE the cloud — and a press on the bare cloud does the same:
-         proximity is how candidates are gathered into one ambition. */
-      let nb: Neb | null = null;
-      const nebEl = e.target instanceof Element ? e.target.closest(".jar-neb") : null;
-      if (nebEl) {
-        for (const [id, el] of measured.nebEls.current) {
-          if (el === nebEl) {
-            const cand = sky.nebs.find((q) => q.id === id) ?? null;
-            if (cand && !(cand.gone > 0.4 || cand.condense < 0.99)) nb = cand;
-            break;
-          }
-        }
-      }
-      /* A satellite is NEARER than the cloud it orbits, and part of its
-         ellipse passes over the cloud's own handle — so it answers first, or
-         a press there would start a drag and the tap that opens the memory
-         would never happen. The sentence above keeps its precedence: the
-         words visually ARE the cloud. */
-      const onSat = nb ? null : satAt(e.clientX, e.clientY);
-      if (!nb && !onSat) nb = cam.y < view.layout.minCam * 0.3 ? nebAt(e.clientX, e.clientY) : null;
-      if (nb) {
-        /* a cloud on the move carries no whisper: the name belongs to the
-           memory under the pointer, and the pointer now owns the cloud */
-        sky.hoverSat = null;
-        sayWho(sky, skyDeps, null);
-        gesture.nebDrag = nb;
-        gesture.nebMoved = false;
-        nb.dragging = true;
-        gesture.nebOffX = nb.x - (e.clientX + cam.x);
-        gesture.nebOffY = nb.y - (e.clientY + cam.y);
-        nb.dragX = nb.x;
-        nb.dragY = nb.y;
-        /* a press is not yet a drag: it becomes one at the same six pixels
-           the rest of the page uses, and until then it is still a TAP */
-        gesture.downX = e.clientX;
-        gesture.downY = e.clientY;
-        wake();
-        return;
-      }
-      if (onSat) {
-        /* touching one raises its owner's name too, not only hovering */
-        sky.hoverSat = onSat;
-        sayWho(sky, skyDeps, onSat);
-      }
       gesture.down = true;
       gesture.dragging = false;
       gesture.axis = 0;
@@ -7030,7 +6546,7 @@ function HomeExperience(): JSX.Element {
          press-to-release interval, and it is free when the background sweep
          has already been here. Another member's room orb is never fetched —
          its preview is all that is ours to show. */
-      const warm = onSat ? findBall(onSat.id) ?? null : hitAt(e.clientX, e.clientY);
+      const warm = hitAt(e.clientX, e.clientY);
       if (warm && (warm.col === undefined || warm.own))
         void loadDetailRef.current(warm.sigId ?? warm.id);
       /* AND THE LIGHT ANSWERS AT TOUCHDOWN. The whole contact term was built
@@ -7141,14 +6657,6 @@ function HomeExperience(): JSX.Element {
       if (performance.now() < companion.attendUntil) return; /* it is looking at something */
       companion.eyeTX = clamp((dx / d) * 2, -2, 2);
       companion.eyeTY = clamp((dy / d) * 2, -2, 2);
-      /* which cloud the pointer rests on: a clustered member's whispered
-         sentence rises back to full while it is touched */
-      sky.hoverNeb = cam.y < view.layout.minCam * 0.3 ? nebAt(e.clientX, e.clientY) : null;
-      /* and which satellite: whose memory it is rises beside it, one fade */
-      if (!gesture.nebDrag) {
-        sky.hoverSat = satAt(e.clientX, e.clientY);
-        sayWho(sky, skyDeps, sky.hoverSat);
-      }
       /* The cursor says what a tap would do. Every other move is plenty for a
          couple of dozen orbs, and it is the same hit test the tap uses, so
          the pointer never lies about which orb it would take. The cursor
@@ -7156,8 +6664,6 @@ function HomeExperience(): JSX.Element {
          the element the cursor resolves from. */
       if ((gesture.hoverTick++ & 1) === 0 && !gesture.dragging) {
         const over =
-          sky.hoverNeb !== null ||
-          sky.hoverSat !== null ||
           overChar(e.clientX, e.clientY + cam.y) ||
           hitAt(e.clientX, e.clientY) !== null;
         const want = over ? "pointer" : "";
@@ -7170,14 +6676,6 @@ function HomeExperience(): JSX.Element {
     const onMove = (e: PointerEvent) => {
       onHover(e);
       if (gesture.ownerId !== null && e.pointerId !== gesture.ownerId) return;
-      if (gesture.nebDrag) {
-        if (!gesture.nebMoved && Math.abs(e.clientX - gesture.downX) + Math.abs(e.clientY - gesture.downY) > TAP_SLOP)
-          gesture.nebMoved = true;
-        gesture.nebDrag.dragX = e.clientX + cam.x + gesture.nebOffX;
-        gesture.nebDrag.dragY = e.clientY + cam.y + gesture.nebOffY;
-        wake();
-        return;
-      }
       if (!gesture.down) return;
       if (!gesture.dragging && Math.abs(e.clientX - gesture.downX) + Math.abs(e.clientY - gesture.downY) > TAP_SLOP) {
         gesture.dragging = true;
@@ -7252,42 +6750,6 @@ function HomeExperience(): JSX.Element {
          is a finished gesture, and the capture and the identity go together —
          the cloud-drag paths used to return without either. */
       releaseOwner(e.pointerId);
-      if (gesture.nebDrag) {
-        const n = gesture.nebDrag;
-        n.dragging = false;
-        gesture.nebDrag = null;
-        if (!gesture.nebMoved) {
-          /* A PRESS THAT NEVER MOVED IS A TAP. The candidate becomes the
-             subject and its evidence emerges; tapping the subject again gives
-             the sky back. Nothing is pinned and nothing is persisted — the
-             cloud did not go anywhere. */
-          focusOn(sky, skyDeps, sky.focusNeb === n ? null : n);
-          return;
-        }
-        /* dragged off the top of the sky: it thins and disperses. Locally
-           only — there is no endpoint to tell that it was let go of. */
-        if (n.y < view.layout.minCam + n.r * 0.35) {
-          n.gone = 0.01;
-          /* A DISPERSING CANDIDATE IS NO LONGER THE SUBJECT OF ANYTHING. The
-             same teardown adoption's condense and syncSky already obey: a
-             memory being read from a system that is leaving has nothing left
-             to sit beside, and a subject that is not there still holds every
-             other candidate sunk at FOCUS_DIM for as long as it is the
-             subject. focusOn rather than a bare assignment, so focus0/em0 are
-             re-based and the retraction eases out with the dispersal instead
-             of snapping. */
-          if (sky.selSat && n.sats.includes(sky.selSat)) release();
-          if (sky.focusNeb === n) focusOn(sky, skyDeps, null);
-        } else {
-          /* it keeps where it was put — through reloads, too */
-          n.pinned = true;
-          n.homeX = n.x;
-          n.homeY = n.y;
-        }
-        persistSky(sky, view);
-        wake();
-        return;
-      }
       if (!gesture.down) return;
       gesture.down = false;
       if (gesture.axis === 2) {
@@ -7349,29 +6811,11 @@ function HomeExperience(): JSX.Element {
       gesture.interruptedSnap = false;
       gesture.dragging = false;
       gesture.axis = 0;
-      /* a finger has no hover to leave with: the name it raised goes on lift */
-      if (e.pointerType !== "mouse") {
-        sky.hoverSat = null;
-        sayWho(sky, skyDeps, null);
-      }
       wake();
     };
     const onCancel = (e: PointerEvent) => {
       if (gesture.ownerId !== null && e.pointerId !== gesture.ownerId) return;
       gesture.pressId = null;
-      sky.hoverSat = null;
-      sayWho(sky, skyDeps, null);
-      if (gesture.nebDrag) {
-        gesture.nebDrag.dragging = false;
-        /* a cancelled press that never moved never claimed a new place */
-        if (gesture.nebMoved) {
-          gesture.nebDrag.pinned = true;
-          gesture.nebDrag.homeX = gesture.nebDrag.x;
-          gesture.nebDrag.homeY = gesture.nebDrag.y;
-          persistSky(sky, view);
-        }
-        gesture.nebDrag = null;
-      }
       if (gesture.axis === 2) {
         cam.xTarget = trip.col * view.w;
         cam.xBack = true;
@@ -7469,7 +6913,6 @@ function HomeExperience(): JSX.Element {
       if (e.key === "Escape") {
         /* one layer at a time: the reading first, then the subject's evidence */
         if (selectedIdRef.current) release();
-        else if (sky.focusNeb) focusOn(sky, skyDeps, null);
         return;
       }
       /* Left and right are the traveler's keys — they pass through even
@@ -7830,7 +7273,7 @@ function HomeExperience(): JSX.Element {
        */
       place: () => {
         const b = selectedIdRef.current ? findBall(selectedIdRef.current) : undefined;
-        if (!b && !sky.selSat) return null;
+        if (!b) return null;
         const M = 20; /* never closer than this to an edge */
         const w = Math.min(Math.max(360, Math.min(view.w * 0.3, 500)), view.w - 48);
         const cx = view.w / 2; /* the companion holds the middle of the frame */
@@ -7895,7 +7338,6 @@ function HomeExperience(): JSX.Element {
         aimTo(view.layout.maxCam, 0);
       },
       travel,
-      syncSky,
       /**
        * A reflection was kept. This is not a celebration animation: one more
        * answered reflection and a touch just now are exactly what the real
@@ -8129,45 +7571,6 @@ function HomeExperience(): JSX.Element {
         }
         go();
       },
-      joinTo: (id: string) => {
-        const n = sky.nebs.find((q) => q.id === id);
-        if (!n) return;
-        let best: Neb | null = null;
-        let bestD = Infinity;
-        for (const m of sky.nebs) {
-          if (m === n || m.gone > 0) continue;
-          const d = (m.x - n.x) ** 2 + (m.y - n.y) ** 2;
-          if (d < bestD) {
-            bestD = d;
-            best = m;
-          }
-        }
-        if (!best) return;
-        /* placed just inside the distance the release actually clusters at,
-           so the existing pass does the joining — one rule, not two */
-        const dx = n.x - best.x;
-        const dy = n.y - best.y;
-        const d = Math.hypot(dx, dy) || 1;
-        const want = (n.r + best.r) * 0.42;
-        n.homeX = n.x = best.x + (dx / d) * want;
-        n.homeY = n.y = best.y + (dy / d) * want;
-        n.pinned = true;
-        companion.flare = Math.max(companion.flare, view.reduced ? 0 : 0.4);
-        wake();
-      },
-      condense: (id: string) => {
-        const n = sky.nebs.find((q) => q.id === id);
-        if (!n) return;
-        n.condenseAt = performance.now();
-        /* THE HIERARCHY HAD ITS SIGN FLIPPED. Poking the companion flared it
-           to nearly full and changed nothing; adopting an ambition — the
-           rarest and least reversible act here — changed everything and
-           produced no light at all. */
-        companion.flare = 1;
-        /* its satellites spiral in with it, so nothing is left to read beside */
-        if (sky.selSat && n.sats.includes(sky.selSat)) release();
-        wake();
-      },
       /**
        * The invariant, counted rather than glanced at.
        *
@@ -8280,17 +7683,13 @@ function HomeExperience(): JSX.Element {
               glowing,
             };
           })(),
-          /* the same question asked upward: is the sky leaning into
-             headquarters, and did each elected statement actually get there */
+          /* the same question asked upward: how far the sky has leaned into
+             headquarters. There is nothing IN it to elect any more, so the
+             scalar is the whole answer — and it still tells a rip-out from a
+             quiet day, which is what this was always for. */
           sky: {
             lean: Number(skyPeek().toFixed(3)),
             minCam: Math.round(view.layout.minCam),
-            nebs: sky.nebs.map((n) => ({
-              y: Math.round(n.y),
-              homeY: Math.round(n.homeY),
-              peekY: Math.round(n.peekY),
-              r: Math.round(n.r),
-            })),
           },
         };
       },
@@ -8640,7 +8039,14 @@ function HomeExperience(): JSX.Element {
   }, [charSay]);
 
 
-  const [provTick, setProvTick] = useState(0);
+  /* THE EVIDENCE INDEX'S CHANGE SIGNAL, AND IT NO LONGER MOVES. The index
+     lives in a ref because the render loop reads it every frame; this was
+     how React was told it had changed, and the only writer was the lazy
+     top-up that the sky's `focusOn` triggered. The eager build at load is
+     what fills it now, before any of these memos first run. Kept as a
+     constant rather than deleted so the two dependency lists below still
+     say out loud that they depend on the index. */
+  const provTick = 0;
   /* whether the poster is showing what it was built from */
   const [posterAsk, setPosterAsk] = useState(false);
   /** Which ground in the poster's standing-on band is being asked about —
@@ -8920,56 +8326,6 @@ function HomeExperience(): JSX.Element {
     );
   }, []);
 
-  /**
-   * FETCH THE CHAIN WHEN SOMEONE ASKS FOR IT.
-   *
-   * The evidence index is built eagerly for your own sky at load, but a
-   * pattern on an AGENT's wall or in a room is never in it — those walls load
-   * statements only, and pulling every agent's full evidence at startup would
-   * be a large fetch for something most visits never open.
-   *
-   * So the chain is fetched at the moment a statement is read, once, and kept.
-   * `bump` exists because the index lives in a ref (the render loop reads it
-   * every frame and must not re-subscribe): this is the one place that has to
-   * tell React the ref changed.
-   */
-  useEffect(() => {
-    if (!focusCandId) return undefined;
-    if (evidenceBySignalRef.current.has(focusCandId)) return undefined;
-    /* proposals and local drafts have no server pattern behind them — and
-       neither does a ROOM'S statement, whose id is `wall:<group>:<signal>`
-       and which the server would 404. That miss used to land in the catch
-       below, write an empty chain, and light the honest-empty line: the
-       world told you the roots of a room's statement "were never recorded"
-       when in truth they are recorded perfectly well on their owner's own
-       wall and are deliberately not shown here. What crosses into a room is
-       the statement and never the evidence — a privacy boundary, rendered
-       as a shorter chain, which must never be reported as a gap in the
-       record. Founder found it on a live wall, 2026-08-24. */
-    if (
-      focusCandId.startsWith("proposal:") ||
-      focusCandId.startsWith("draft:") ||
-      focusCandId.startsWith("wall:")
-    )
-      return undefined;
-    let dead = false;
-    loadSignal(focusCandId)
-      .then((full) => {
-        if (dead) return;
-        evidenceBySignalRef.current.set(full.id, full.evidence);
-        setProvTick((n) => n + 1);
-      })
-      .catch(() => {
-        /* no chain available: the statement still stands, unsourced, and the
-           section simply does not appear — better than an error where a
-           quotation should be */
-        if (!dead) evidenceBySignalRef.current.set(focusCandId, []);
-      });
-    return () => {
-      dead = true;
-    };
-  }, [focusCandId]);
-
   /* THE CHOSEN GROUND, WHOLE. The evidence row carries a preview — enough to
      show which words did the reading, never enough to be the memory. The
      right pane asks for the memory itself, once per selection, and says so
@@ -8998,17 +8354,6 @@ function HomeExperience(): JSX.Element {
   }, [provPick]);
 
   const panelId = panel ? panel.id : null;
-
-  /* ---------------- the sky's inhabitants ----------------
-     The candidates are NOT peers of the adopted ambition and are not shown
-     beside it: they live a section above it. The proposal leads (it is a
-     whole ambition), then the provisional readings — machine claims, honestly
-     labelled as not yet adoptable — then anything drafted here. */
-  /* NOTHING IS HANDED TO THE SKY ANY MORE. `syncSky` was the one caller that
-     put clouds in it; with no caller, `sky.nebs` is empty for the life of the
-     page and every path in the loop that walks it is a no-op. The engine is
-     deleted separately — unreachable first, then gone, in that order, because
-     the two are different risks. */
 
   /* ---------------- the mouth ----------------
      The one verb this layout was missing. It says one phrase at rest, becomes
@@ -9945,21 +9290,19 @@ function HomeExperience(): JSX.Element {
    * your own memories are in the ground to light (a room's evidence names
    * people, and those keep their ring — see `solveSats`).
    */
+  /* AND WHAT IT FOLLOWS IS THE ROOM THAT IS OPEN. It used to follow
+     `focusCandId`, which only the sky's `focusOn` ever set — so when the
+     candidate layer went dormant this light went out with it, silently, and
+     stayed out. The provenance room is the same act by the same person
+     ("what is this built from"), it carries the very rows this needs, and it
+     is the one a person can actually reach. */
   const readingLit = useMemo<ReadonlySet<string> | null>(() => {
-    if (!focusCandId || atWall.kind !== "self") return null;
-    const rows = evidenceBySignalRef.current.get(focusCandId) ?? [];
-    if (rows.length === 0) return null;
-    return new Set(rows.map((e) => e.inspirationId));
-    /* provTick is the ref's change signal — the chain arrives a request
-       later than the tap, and the light must follow it when it lands */
-  }, [focusCandId, atWall, provTick]);
+    if (!prov || atWall.kind !== "self") return null;
+    if (prov.rows.length === 0) return null;
+    return new Set(prov.rows.map((e) => e.inspirationId));
+  }, [prov, atWall]);
   const readingLitRef = useRef<ReadonlySet<string> | null>(null);
   readingLitRef.current = readingLit;
-  /* Which signal is being read. Held as a ref for the same reason the lit set
-     is — the loop reads it every frame and must not be rebuilt when it
-     changes. */
-  const focusCandIdRef = useRef<string | null>(null);
-  focusCandIdRef.current = focusCandId;
   /* the loop is parked when nothing moves; a new set is a change to draw */
   useEffect(() => {
     simApiRef.current?.wake();

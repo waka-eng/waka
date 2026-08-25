@@ -313,94 +313,6 @@
    own. Section A is now the eyebrow, the ambition, the forming line, the
    companion and the peek — nothing else. */
 
-/* ---------- section S: the sky, where ambitions are still forming ----------
-   The canvas draws the nebulae; this layer carries their words, positioned on
-   their clouds by the loop every frame so the text stays crisp and
-   selectable. Only the sentences take the pointer — the sky itself does not. */
-.jar-sky {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  pointer-events: none;
-  overflow: hidden;
-}
-.jar-neb {
-  position: absolute;
-  top: 0;
-  left: 0;
-  pointer-events: auto;
-  text-align: center;
-  will-change: transform;
-  /* it has no place until the loop has given it one */
-  opacity: 0;
-}
-.jar-neb-text {
-  margin: 0;
-  /* the voice face: a candidate ambition is machine-written and reliably
-     Latin, with Pretendard behind it for anything captured in Hangul */
-  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
-  font-weight: 300;
-  font-size: 16px;
-  line-height: 1.5;
-  letter-spacing: 0.01em;
-  max-width: 26ch;
-  margin-inline: auto;
-  color: var(--jar-ink);
-  opacity: 0.92;
-  text-wrap: balance;
-}
-.jar-neb--reading .jar-neb-text {
-  font-size: 15px;
-}
-.jar-neb-note {
-  margin: 8px 0 0;
-  font-style: normal;
-}
-/* the one action a candidate carries */
-.jar-neb-act {
-  display: inline-block;
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  margin: 10px 0 0;
-  padding: 0;
-  background: none;
-  font-family: inherit;
-  cursor: pointer;
-  transition:
-    color 0.2s ease,
-    opacity 0.2s ease;
-  opacity: 0;
-  /* AN INVISIBLE BUTTON IS STILL A BUTTON. Opacity zero does not remove hit
-     testing, so "adopt as your ambition" — the least reversible act in the
-     world — was a fully tappable target sitting under the sentence, on a
-     surface whose primary gesture is drag. It takes the pointer only when it
-     can actually be seen. */
-  pointer-events: none;
-}
-.jar-neb:hover .jar-neb-act,
-.jar-neb:focus-within .jar-neb-act {
-  opacity: 1;
-  pointer-events: auto;
-}
-/* And where there is no hover to reveal it, it simply rests visible: on touch
-   it was unreachable by design and reachable by accident, which is exactly
-   the wrong way round for this one action. */
-@media (hover: none) {
-  .jar-neb-act {
-    opacity: 1;
-    pointer-events: auto;
-  }
-}
-/* ---------- answering a pattern ----------
-   NOT A CONTROL BAR. This was four uppercase chips under the statement and it
-   read as a survey form bolted to a sentence. Every deduction surface studied
-   for this carries confidence in the TYPE — handwriting versus print, guess
-   versus solid, blue versus red — and none of them grows a toolbar.
-
-   So: one line, lowercase, in the same face the statement is set in, at a
-   size below it. It exists only on the pattern being read and disappears the
-   moment it is answered. */
 .jar-neb-ask {
   margin: 10px 0 0;
   font-size: 13px;
@@ -431,46 +343,6 @@
    Agreed: unchanged, full weight. Half-agreed: lighter, the claim loosened.
    Untrue: the world's dimmest ink with a line through it — still present,
    because nothing here is deleted for being disagreed with. */
-.jar-neb-text[data-said="partly"] { opacity: 0.68; }
-.jar-neb-text[data-said="not_true"] {
-  opacity: 0.42;
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
-  text-decoration-color: var(--jar-faint);
-}
-.jar-neb-act:hover {
-  color: var(--jar-ink);
-}
-.jar-neb-act[disabled] {
-  cursor: default;
-  opacity: 0.4;
-}
-/* A candidate that cannot be adopted carries NO action and says nothing about
-   it. The affordance's absence is the whole message; a greyed control with
-   "not yet adoptable" beside it was two ways of saying the same thing, and
-   both of them took up room a sentence needed. */
-/* ---------- a satellite's owner ----------
-   A candidate's evidence orbits it as real orbs on the canvas. In a room's
-   candidate those memories belong to different people, so the one under the
-   pointer says whose — a given name, once, beside it. Pretendard, because a
-   name can be Korean; the label register, because that is where whispers
-   live. Absolutely positioned and written entirely by the loop, so raising it
-   can never shift anything else on the page. */
-.jar-satsay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  white-space: nowrap;
-  pointer-events: none;
-  will-change: transform;
-  color: var(--jar-faint);
-  opacity: 0;
-  transition: opacity 0.22s ease;
-}
-.jar-satsay--on {
-  opacity: 1;
-}
-
 /* ---------- the board's verbs ----------
    They sit under the poster in the label register and never compete with it:
    the ambition is the thing being read, these are what you may do about it.
@@ -547,16 +419,6 @@
   font-size: 14px;
 }
 
-.jar-sky-empty {
-  position: absolute;
-  left: 0;
-  right: 0;
-  /* one whisper, in the middle of the section above headquarters */
-  top: -50vh;
-  margin: 0;
-  text-align: center;
-  color: var(--jar-faint);
-}
 
 /* ---------- rooms ----------
    Saying a statement out loud, and the rooms it is out loud in. Rows, not
@@ -2315,10 +2177,6 @@
     animation: jar-panel-swap-out 0.01ms linear both;
   }
   /* the sky arrives parked: no drift, no breathing, nothing sliding in */
-  .jar-neb-act,
-  .jar-satsay {
-    transition: none;
-  }
   .jar-reflect {
     animation: jar-panel-swap-in 0.01ms linear both;
   }

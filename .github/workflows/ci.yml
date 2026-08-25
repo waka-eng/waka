@@ -324,39 +324,19 @@ jobs:
           echo "its failures are invisible from every surface. Add the secret"
           echo "to turn this into a gate."
 
-      # THE SKY IS THE ONE PROMISE `journeys` CANNOT MEASURE, and it says so
-      # every run: `sky leaning (1) but EMPTY — no statements on this account
-      # to elect`. A sky is made of signals, signals only come from
-      # derivation, and no route writes one — so the key-free suite that runs
-      # on every pull request structurally cannot grow one.
+      # THE SKY SUITE IS GONE, with the engine it measured. It grew a real
+      # sky and photometered the top band of the canvas against an account
+      # that had none — the only gate that could see `SKY_PEEK_DEPTH = 0.62`,
+      # which elected the right statements, eased them to `peekY` to the
+      # pixel, and drew nothing anyone could see.
       #
-      # This suite grows a real one and photometers the top band of the canvas
-      # against a second account that has no sky at all, because the bug that
-      # shipped (`SKY_PEEK_DEPTH = 0.62`) elected the right statements and
-      # eased them to `peekY` to the pixel and drew nothing anyone could see.
-      # Every model-level assertion was green on it. Only light was not, and
-      # only against an empty account is lit distinguishable from dark.
-      - name: Sky (needs a model key)
-        if: ${{ secrets.GEMINI_API_KEY != '' }}
-        run: pnpm e2e:sky --base-url http://127.0.0.1:3010
-
-      # The negative run matters more here than almost anywhere: this suite
-      # declines to report when it cannot see, so a broken build and a blind
-      # harness both come back quiet. Emptying the sky collapses the lit band
-      # onto the control's and proves the difference is actually detected.
-      - name: Sky, emptied (must fail)
-        if: ${{ secrets.GEMINI_API_KEY != '' }}
-        run: pnpm e2e:sky --base-url http://127.0.0.1:3010 --negative
-
-      - name: Sky — NOT RUN
-        if: ${{ secrets.GEMINI_API_KEY == '' }}
-        run: |
-          echo "::warning::e2e:sky was NOT RUN — no GEMINI_API_KEY."
-          echo "The sky leaning over the top edge is the only one of the"
-          echo "world's four ways out that no key-free suite can measure."
-          echo "Until this runs, that quarter of the promise is unmeasured"
-          echo "on every commit, and journeys reports it as EMPTY by design."
-
+      # There is nothing left for it to look at. The candidate layer came out
+      # of headquarters on 2026-08-24 and the engine behind it was deleted on
+      # 2026-08-25; what stands above the wall now is `.jar-values`, plain DOM
+      # saying that philosophies and values are still forming. `journeys:
+      # ways-out` counts that as one of the ways out and needs no model key,
+      # so the promise it stood for is measured on every pull request instead
+      # of only on the runs that had one.
       - name: Stack log
         if: always()
         run: tail -n 200 /tmp/waka-stack.log || true
