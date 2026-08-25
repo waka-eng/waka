@@ -59,7 +59,7 @@ export interface ReadingLine {
 export const READING_LINES: ReadingLine[] = [
   {
     sentence:
-      "When three of your memories say the same thing, WAKA speaks it back to you as a pattern.",
+      "When three of your memories say the same thing, WAKA says it back to you in a sentence of its own.",
     backing: {
       kind: "constant",
       constant: "SIGNAL_PROMOTION_MIN_EVIDENCE",
@@ -69,7 +69,7 @@ export const READING_LINES: ReadingLine[] = [
   },
   {
     sentence:
-      "A new thought joins an old pattern only when they are all but the same thought; otherwise it stands on its own.",
+      "A new thought joins one of those sentences only when they are all but the same thought; otherwise it stands on its own.",
     backing: {
       kind: "constant",
       constant: "SIGNAL_MATCH_MIN_COSINE",
@@ -79,7 +79,7 @@ export const READING_LINES: ReadingLine[] = [
   },
   {
     sentence:
-      "A pattern nobody feeds cools — half of its warmth is gone in about a month and a half.",
+      "A sentence nobody feeds cools — half of its warmth is gone in about a month and a half.",
     backing: {
       kind: "constant",
       constant: "CONFIDENCE_RECENCY_HALF_LIFE_DAYS",
@@ -89,7 +89,7 @@ export const READING_LINES: ReadingLine[] = [
   },
   {
     sentence:
-      "A pattern that stirs again after three quiet weeks is noticed for coming back.",
+      "A sentence that stirs again after three quiet weeks is noticed for coming back.",
     backing: {
       kind: "constant",
       constant: "COMEBACK_MIN_DORMANT_DAYS",
@@ -99,7 +99,7 @@ export const READING_LINES: ReadingLine[] = [
   },
   {
     sentence:
-      "Your poster is first written once three patterns are alive to write it from.",
+      "Your top of mind is first written once three of those sentences are alive to write it from.",
     backing: {
       kind: "constant",
       constant: "TOP_OF_MIND_MIN_SIGNALS",
@@ -109,7 +109,7 @@ export const READING_LINES: ReadingLine[] = [
   },
   {
     sentence:
-      "Each rewrite of the poster reads from at most twelve patterns — the ones with the most life in them.",
+      "Each rewrite of your top of mind reads from at most twelve of them — the ones with the most life in them.",
     backing: {
       kind: "constant",
       constant: "TOP_OF_MIND_SIGNAL_LIMIT",
@@ -119,7 +119,7 @@ export const READING_LINES: ReadingLine[] = [
   },
   {
     sentence:
-      "A pattern you called untrue steps far back in the choosing — and is never erased.",
+      "A sentence you called untrue steps far back in the choosing — and is never erased.",
     backing: {
       kind: "constant",
       constant: "SELECTION_DISPUTED_MULTIPLIER",
@@ -154,14 +154,14 @@ export const READING_LINES: ReadingLine[] = [
   },
   {
     sentence:
-      "A pattern's receipts are verified quotes — your words, or your saved page's, and never invented.",
+      "A sentence's receipts are verified quotes — your words, or your saved page's, and never invented.",
     backing: {
       kind: "contract",
       testPath: "packages/api/src/lib/signal-lock-contract.db.test.ts",
     },
   },
   {
-    sentence: "A sentence you set aside does not return to the poster.",
+    sentence: "A sentence you set aside does not return to your top of mind.",
     backing: {
       kind: "contract",
       testPath: "packages/api/src/lib/top-of-mind-synthesis.test.ts",
@@ -169,7 +169,7 @@ export const READING_LINES: ReadingLine[] = [
   },
   {
     sentence:
-      "A pattern you let go is refused ground: nothing is deleted, nothing that close grows there again, and every refusal is written down — until you put it back.",
+      "A sentence you let go is refused ground: nothing is deleted, nothing that close grows there again, and every refusal is written down — until you put it back.",
     backing: {
       kind: "contract",
       testPath: "packages/api/src/lib/signal-suppression.db.test.ts",
@@ -177,7 +177,7 @@ export const READING_LINES: ReadingLine[] = [
   },
   {
     sentence:
-      "A room's poster changes only when more than half the room carries the change — a no is counted, never a veto.",
+      "A room's top of mind changes only when more than half the room carries the change — a no is counted, never a veto.",
     backing: {
       kind: "contract",
       testPath: "packages/api/src/routes/room-decline.db.test.ts",

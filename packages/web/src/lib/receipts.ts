@@ -42,7 +42,7 @@ export const RECEIPTS = {
   },
   /** Not this — rides beside the undo, because reversible is part of the law */
   dismissed: {
-    text: "set aside — it will not return to the poster",
+    text: "set aside — it will not return to your top of mind",
     enforcedBy: "packages/api/src/lib/top-of-mind-synthesis.test.ts",
   },
   /** "then let it go" on a pattern of your own — the ground-level law:
