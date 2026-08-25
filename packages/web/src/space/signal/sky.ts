@@ -111,17 +111,6 @@ export interface Candidate {
 }
 
 
-/** One memory, once, however many candidates cited it — strongest first. */
-export function dedupeEvidence(all: EvidenceRef[]): EvidenceRef[] {
-  const seen = new Map<string, EvidenceRef>();
-  for (const e of all) {
-    const key = e.groupId ? `${e.groupId}:${e.signalId}` : e.signalId;
-    const got = seen.get(key);
-    if (!got || e.resonance > got.resonance) seen.set(key, e);
-  }
-  return [...seen.values()].sort((a, b) => b.resonance - a.resonance).slice(0, SAT_MAX);
-}
-
 /**
  * A SATELLITE: one evidence memory, in orbit around the candidate it is
  * evidence FOR. It is a reference, never a second memory — the very sprite the

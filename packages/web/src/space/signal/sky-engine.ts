@@ -222,8 +222,6 @@ const NEST_MS = 300;
 export const NEB_CORE = 0.62;
 /** Air between one candidate's words and the next candidate's anything. */
 const SKY_GAP = 14;
-/** Two nebulae belong together once they overlap by this much. */
-const CLUSTER_OVERLAP = 0.35;
 /** An adopted candidate contracts to a point over this long. */
 export const CONDENSE_MS = 700;
 
@@ -1151,36 +1149,6 @@ export function stepSky(
       }
     }
   }
-}
-
-/**
- * Which nebulae have been drawn together. Proximity IS belonging: once two
- * clouds overlap by more than a third of their radii they are one group,
- * and the group can be drafted from. Connected components, computed on the
- * loop but only handed to React when the answer changes.
- */
-export function computeClusters(sky: SkyState): string {
-  const parent = sky.nebs.map((_, i) => i);
-  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
-  for (let i = 0; i < sky.nebs.length; i++)
-    for (let j = i + 1; j < sky.nebs.length; j++) {
-      const a = sky.nebs[i];
-      const b = sky.nebs[j];
-      if (a.gone > 0 || b.gone > 0 || a.condenseAt > 0 || b.condenseAt > 0) continue;
-      const d = Math.hypot(b.x - a.x, b.y - a.y);
-      if (d < (a.r + b.r) * (1 - CLUSTER_OVERLAP)) parent[find(i)] = find(j);
-    }
-  const groups = new Map<number, string[]>();
-  for (let i = 0; i < sky.nebs.length; i++) {
-    const root = find(i);
-    const g = groups.get(root);
-    if (g) g.push(sky.nebs[i].id);
-    else groups.set(root, [sky.nebs[i].id]);
-  }
-  const sig: string[] = [];
-  for (const ids of groups.values()) if (ids.length > 1) sig.push(ids.join("+"));
-  sig.sort();
-  return sig.join("|");
 }
 
 /**

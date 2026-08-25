@@ -108,9 +108,6 @@ export interface Measured {
       every frame. The map is mutated by callback refs as candidates mount and
       unmount; `.current` itself is never replaced. */
   readonly nebEls: MutableRefObject<Map<string, HTMLDivElement>>;
-  /** One line per cluster, keyed by the joined ids, placed under the lowest
-      cloud in the cluster. Same lifecycle as `nebEls`. */
-  readonly clusterEls: MutableRefObject<Map<string, HTMLDivElement>>;
   /** The one whisper the orbits carry: whose memory the pointer is on. The loop
       writes both its words and its place. */
   readonly satSay: RefObject<HTMLDivElement>;
@@ -137,7 +134,6 @@ export function useMeasured(): Measured {
       mouth: { current: null },
       mouthSpot: { current: null },
       nebEls: { current: new Map() },
-      clusterEls: { current: new Map() },
       satSay: { current: null },
     };
   }

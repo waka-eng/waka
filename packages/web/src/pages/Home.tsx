@@ -4714,7 +4714,34 @@ function HomeExperience(): JSX.Element {
       n.homeY = clamp(n.homeY, view.layout.minCam + padY + 28, -padY);
     }
 
-    /** Rebuild the sky from the candidate list, keeping what is already up. */
+    /**
+     * Rebuild the sky from the candidate list, keeping what is already up.
+     *
+     * NOTHING CALLS THIS, AND THAT IS THE WHOLE STATE OF THE SKY.
+     *
+     * `sky.nebs` starts `[]` and this is its only writer, so on 2026-08-24
+     * — when the founder had the candidate layer taken out of headquarters —
+     * every piece of machinery downstream of it went dormant in one step
+     * rather than being deleted: `layoutSky`, `stepSky`, `paintSky`,
+     * `focusOn`, `springs`, `sayWho` and the two DOM passes in `place()` all
+     * still run every frame, over an empty array, doing nothing. The hit
+     * tests answer null, `FieldAudit.sky.nebs` reports zero, and
+     * `Measured.nebEls` / `clusterEls` / `satSay` are never written because
+     * the elements they held are no longer rendered.
+     *
+     * IT IS KEPT ON PURPOSE. The founder's plan for the space above
+     * headquarters is philosophies and values — "top of mind = current,
+     * philosophies and values = timeless" (2026-08-24) — and clouds with
+     * their evidence in orbit is the machinery that space will want. What
+     * stands up there today is `.jar-values`, plain DOM saying it is
+     * forming.
+     *
+     * SO THIS IS THE ONE LINE THAT WOULD WAKE IT: call `syncSky(list)` with
+     * candidates from wherever they come from next, and every pass above
+     * starts drawing again. Until then, treat everything it feeds as dead
+     * weight that is deliberately still here, and do not spend an afternoon
+     * discovering that the way this comment's author did.
+     */
     function syncSky(list: Candidate[]) {
       const prev = new Map(sky.nebs.map((n) => [n.id, n] as const));
       const next: Neb[] = [];
@@ -6156,23 +6183,6 @@ function HomeExperience(): JSX.Element {
           /* the layout width is NOT touched by focus: it is what the orbit was
              measured from, and scale is a transform, so the box stays put */
           el.style.width = `${Math.round(Math.min(n.r * 1.7, 320))}px`;
-        }
-        for (const [id, el] of measured.clusterEls.current) {
-          if (!el) continue;
-          let sx = 0;
-          let sy = 0;
-          let hits = 0;
-          let low = -Infinity;
-          for (const mid of id.split("+")) {
-            const n = sky.nebs.find((q) => q.id === mid);
-            if (!n) continue;
-            sx += n.x;
-            sy += n.y;
-            low = Math.max(low, n.y + n.r * 0.52);
-            hits++;
-          }
-          if (hits === 0) continue;
-          el.style.transform = `translate3d(${(sx / hits - cam.x).toFixed(1)}px, ${(low - cam.y).toFixed(1)}px, 0) translate(-50%, 0)`;
         }
       }
       /* whose memory the pointer is on, beside it — it rides the satellite, so

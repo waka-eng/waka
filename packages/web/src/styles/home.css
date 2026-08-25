@@ -470,32 +470,6 @@
   opacity: 1;
 }
 
-/* proximity is belonging: drawn together, they can be drafted from */
-.jar-cluster {
-  position: absolute;
-  top: 0;
-  left: 0;
-  pointer-events: auto;
-  text-align: center;
-  will-change: transform;
-}
-.jar-cluster-act {
-  display: inline-block;
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  margin: 14px 0 0;
-  padding: 0;
-  background: none;
-  font-family: inherit;
-  cursor: pointer;
-  white-space: nowrap;
-  animation: jar-arrive 0.26s cubic-bezier(0.22, 1, 0.36, 1);
-  transition: color 0.2s ease;
-}
-.jar-cluster-act:hover {
-  color: var(--jar-ink);
-}
 /* ---------- the board's verbs ----------
    They sit under the poster in the label register and never compete with it:
    the ambition is the thing being read, these are what you may do about it.
@@ -2340,9 +2314,6 @@
     animation: jar-panel-swap-out 0.01ms linear both;
   }
   /* the sky arrives parked: no drift, no breathing, nothing sliding in */
-  .jar-cluster-act {
-    animation: none;
-  }
   .jar-neb-act,
   .jar-satsay {
     transition: none;
@@ -2739,11 +2710,6 @@
 .jar-star::before {
   content: "\2736";
 }
-/* the plain line beside the handing-back choice — explanation, not warning */
-.jar-star-plain {
-  color: var(--jar-faint);
-  margin-right: 8px;
-}
 .jar-star-act {
   text-shadow: 0 0 10px rgba(240, 235, 214, 0.35);
 }
@@ -2897,14 +2863,6 @@
   flex-wrap: wrap;
   row-gap: 4px;
   opacity: 0.75;
-}
-
-/* THE WAY UP, WHILE THE SKY HOLDS SOMETHING UNSEEN. Full ink instead of the
-   label's muted grey — light is the meaning channel, and this is the one
-   standing line whose meaning can change under you. It settles back to the
-   quiet register the moment you climb: seeing is what clears it. */
-.jar-forming-line--new {
-  color: var(--jar-ink);
 }
 
 /* WHERE THIS ONE IS GOING — both words, the chosen one in full ink and the

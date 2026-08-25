@@ -60,16 +60,18 @@
  * green. Ten silent holes in the one place a silent failure was predicted is
  * not a net.
  *
- * WHAT IT CHECKS, AND WHAT IT STILL CANNOT. Four more of the twelve —
- * `atmos`, `hq`, `charSay` and `mouth` — are written by the loop into styles a
- * DOM test can read back, so they are checked here, and freezing any one of
- * them turns this file red. The remaining six are still uncovered and it is
- * worth saying which and why rather than implying a coverage that is not
- * there: `grain` is written by the palette pass from a canvas the stub does
- * not really rasterise; `hqInner` is only ever READ, and what it feeds is the
- * companion's size, which lives on the canvas; `nebEls`, `clusterEls` and
- * `satSay` need a formed candidate and a pointer resting on one of its
- * satellites; `mouthSpot` is measured once, at the moment a memory is kept.
+ * WHAT IT CHECKS, AND WHAT IT STILL CANNOT. Four more — `atmos`, `hq`,
+ * `charSay` and `mouth` — are written by the loop into styles a DOM test can
+ * read back, so they are checked here, and freezing any one of them turns
+ * this file red. The rest are still uncovered and it is worth saying which
+ * and why rather than implying a coverage that is not there: `grain` is
+ * written by the palette pass from a canvas the stub does not really
+ * rasterise; `hqInner` is only ever READ, and what it feeds is the
+ * companion's size, which lives on the canvas; `nebEls` and `satSay` need a
+ * formed candidate and a pointer resting on one of its satellites, and no
+ * candidate has formed since the sky went dormant (see `syncSky`), so they
+ * are not merely uncovered — nothing writes them at all; `mouthSpot` is
+ * measured once, at the moment a memory is kept.
  *
  * It also does not check that anything LOOKS right. The canvas draws nothing
  * here (see canvas-stub.ts), so a transform being present is the claim, and
