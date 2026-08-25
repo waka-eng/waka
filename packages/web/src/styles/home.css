@@ -2647,6 +2647,56 @@
 /* one column on a narrow screen: the chosen memory reads UNDER its own row
    rather than beside it, which is the same object in the only order that
    fits */
+/* SIXTEEN PIXELS ON A TOUCH DEVICE, FOR EVERY FIELD IN THE WORLD.
+   Mobile Safari zooms the whole page when a text field under 16px takes focus
+   and does not zoom back out. Measured 2026-08-25: the capture field, the
+   card's editor and the reflection box were all 15px, so on a phone the ONE
+   ACT THIS PRODUCT EXISTS FOR threw the world into a zoomed state the moment
+   you touched it. `.jar-roomform-box` was already 16px and is left alone.
+
+   It is written as one rule for all three rather than a line remembered per
+   field, so the next field added to the world does not have to know about
+   this. The pixel only lands where a coarse pointer says it is needed, so the
+   reading measure the card was designed at is untouched everywhere else. */
+@media (pointer: coarse) {
+  .jar-mouth-field,
+  .jar-panel-edit,
+  .jar-reflect-box {
+    font-size: 16px;
+  }
+}
+
+/* ═══════════════════ THE TOP ROW, ON A PHONE ═══════════════════
+   MEASURED, NOT GUESSED (2026-08-25, first walk of the world at phone size).
+   At 390px the four things along the top edge overlap each other:
+
+     .jar-here-split   x   8..96     the wall you are on
+     .jar-when         x 104..153    when you are
+     .jar-values       x  97..293    the way up
+     .jar-account      x 242..382    the way out
+
+   `.jar-values` is centred and 196px wide, so it lies ACROSS both the
+   top-left pair and the account link. This is not a cosmetic overlap:
+   Playwright could not tap `.jar-when` at all — `.jar-values` intercepted the
+   pointer — which means on a phone the timeline could not be opened, and the
+   thing you hit instead took you to another region of the world. At 360px it
+   is worse.
+
+   Four controls needing 473px plus gaps cannot share a 390px line, so on a
+   phone the SIGNPOST steps down to its own line and the chrome keeps the top.
+   The 10px inset the founder set for the four signposts is a desktop rule
+   about four edges; here the top edge already belongs to the chrome, and a
+   signpost that cannot be pressed is not keeping any margin worth having.
+
+   The count at the bottom is untouched — it has that edge to itself at every
+   width. */
+@media (max-width: 560px) {
+  .jar-values {
+    /* clear of the chrome row, which ends at 40px */
+    top: calc(48px + env(safe-area-inset-top));
+  }
+}
+
 @media (max-width: 760px) {
   .jar-prov-room-panes {
     grid-template-columns: minmax(0, 1fr);

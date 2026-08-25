@@ -1142,6 +1142,20 @@ body textarea {
   color: var(--w-ink);
   font-size: 15px;
 }
+/* SIXTEEN PIXELS ON A TOUCH DEVICE, AND IT IS NOT A TYPOGRAPHY CHOICE.
+   Mobile Safari ZOOMS THE WHOLE PAGE when a text field under 16px takes
+   focus, and does not zoom back out. Measured 2026-08-25: every input in this
+   product was 15px, so the first tap on the sign-in form threw the page into
+   a zoomed state the person then had to pinch their way out of — on the very
+   first screen anyone sees. One pixel, on the devices that care. */
+@media (pointer: coarse) {
+  body .field-input,
+  body input,
+  body select,
+  body textarea {
+    font-size: 16px;
+  }
+}
 
 /* ---------- one foot, ordered by consequence ----------
    Leaving is harmless, so it reads normally. Destroying is last and quietest:

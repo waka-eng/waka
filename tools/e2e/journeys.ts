@@ -1238,6 +1238,26 @@ const JOURNEYS: Journey[] = [
       }
 
       await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+
+      /* CLOSE ANYTHING STANDING OVER THE BOARD BEFORE MEASURING.
+         Seen once in a full sweep on 2026-08-25 and not reproducible alone:
+         this case reported all three verbs unreachable with "the press lands
+         on div.jar-panel.jar-panel--in" — a reading card, centred, lying over
+         them. Run on its own it passed twice.
+
+         The account this walks is reused across journeys, so a card left open
+         by an earlier one is still open when this one arrives, and the claim
+         being made here — the four verbs are hit-testable — is not a claim
+         about what happens while a memory is open on top of them. A case that
+         passes or fails on what ran before it is not measuring its own
+         subject.
+
+         Escape closes the card, and pressing it on a page with nothing open
+         costs nothing. The claim is unchanged; only its starting state is now
+         its own rather than inherited. */
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(300);
+
       /* The board arrives out of band. Poll rather than sleep, and say so if
          it never comes — a walk with no board proves nothing about buttons
          that only exist beside one. */
