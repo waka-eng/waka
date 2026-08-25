@@ -132,6 +132,18 @@ const FIXTURE = `<!doctype html>
   </button>
   <div class="jar-dial jar-dial--open"><button class="jar-dial-name jar-label">timeline</button><div class="jar-dial-track"><div class="jar-dial-handle"></div></div></div>
 
+  <div class="jar-mouth-slot">
+    <p class="jar-ask jar-ask--row jar-mouth-where jar-mouth-where--armed">
+      <button type="button" class="jar-where-on">private</button>
+      <span aria-hidden="true">/</span>
+      <button type="button" class="jar-where-off">public</button>
+      <span aria-hidden="true" class="jar-mouth-dot"> &middot; </span>
+      <button type="button" class="jar-where-on">save</button>
+      <span aria-hidden="true" class="jar-mouth-dot"> &middot; </span>
+      <button type="button" class="jar-where-off">reflect</button>
+    </p>
+  </div>
+
   <div class="jar-panel" data-jar-chrome="1" role="dialog">
     <div class="jar-panel-head">
       <span class="jar-panel-when jar-label">today &middot; aug 23</span>
@@ -145,8 +157,8 @@ const FIXTURE = `<!doctype html>
     <p class="jar-ask jar-ask--after jar-panel-foot">
       <span class="jar-panel-foot-l"><button type="button">reflect</button></span>
       <span class="jar-panel-foot-c">
-        <button type="button" aria-label="previous"><span class="jar-step-caret jar-step-caret--back"></span></button>
-        <button type="button" aria-label="next"><span class="jar-step-caret"></span></button>
+        <button type="button" aria-label="previous"><span class="jar-caret jar-caret--left"></span></button>
+        <button type="button" aria-label="next"><span class="jar-caret jar-caret--right"></span></button>
       </span>
       <span class="jar-panel-foot-r"><button type="button">delete</button></span>
     </p>
@@ -179,11 +191,14 @@ const BOXES = `(() => {
     when: box(".jar-panel-when"), vis: box(".jar-panel-vis"),
     text: box(".jar-panel-text"),
     footL: box(".jar-panel-foot-l"), footC: box(".jar-panel-foot-c"), footR: box(".jar-panel-foot-r"),
-    footVerb: box(".jar-panel-foot-l button"), footCaret: box(".jar-panel-foot-c .jar-step-caret"),
+    footVerb: box(".jar-panel-foot-l button"), footCaret: box(".jar-panel-foot-c .jar-caret"),
     inkValues: ink(".jar-values-words"), inkWayL: ink(".jar-way"),
     inkWayR: ink(".jar-way--r"), inkSaved: ink(".jar-saved-count"),
     inkCaretUp: ink(".jar-caret--up"), inkCaretLeft: ink(".jar-caret--left"),
     inkCaretRight: ink(".jar-caret--right"),
+    /* the two rows of quiet verbs: the card's head and the mouth's foot */
+    typeVis: ink(".jar-panel-vis button"), typeMouth: ink(".jar-mouth-where button"),
+    typeWhen: ink(".jar-panel-when"),
   };
 })()`;
 
@@ -208,7 +223,7 @@ const CASES: Case[] = [
         "jar-values", "jar-values-words", "jar-way", "jar-way--r",
         "jar-saved", "jar-saved-count", "jar-caret",
         "jar-panel-head", "jar-panel-when", "jar-panel-vis",
-        "jar-panel-text", "jar-panel-foot",
+        "jar-panel-text", "jar-panel-foot", "jar-mouth-where",
       ];
       /* WHOLE CLASS NAMES, NOT SUBSTRINGS. `includes` said yes to
          `jar-panel-head` while the product had renamed it to
@@ -324,6 +339,37 @@ const CASES: Case[] = [
   },
 
   {
+    id: "verb-rows-one-register",
+    name: "every row of quiet verbs is set in the label register",
+    needs: ["jar-panel-vis", "jar-mouth-where"],
+    sabotage: ".jar-mouth-where button { font-size: 13px; text-transform: none; }",
+    run: async (page) => {
+      /* THE MISS THIS CASE EXISTS FOR. `private/public` was brought to the
+         label register on the CARD and left at `.jar-ask`'s 13px prose in the
+         MOUTH — the same four words, two registers, depending which surface
+         you were on, and nothing in the repo could tell. What is compared is
+         type only, not colour: these rows sit on different grounds and are
+         allowed different ink. */
+      const b = (await page.evaluate(BOXES)) as Boxes;
+      const typeOf = (s: string) => (s ?? "").split(" | ").slice(0, 4).join(" | ");
+      const rows = {
+        "the card's date": typeOf(b.typeWhen as string),
+        "the card's private/public": typeOf(b.typeVis as string),
+        "the mouth's row": typeOf(b.typeMouth as string),
+      };
+      const distinct = [...new Set(Object.values(rows))];
+      return {
+        ok: distinct.length === 1,
+        detail:
+          distinct.length === 1
+            ? `all three: ${distinct[0]}`
+            : `${distinct.length} registers — ` +
+              Object.entries(rows).map(([k, v]) => `${k}: ${v}`).join(" / "),
+      };
+    },
+  },
+
+  {
     id: "card-head-is-a-row",
     name: "the card's head is one row, centred against itself",
     needs: ["jar-panel-head", "jar-panel-when", "jar-panel-vis"],
@@ -361,7 +407,7 @@ const CASES: Case[] = [
        the caret sits inside a button whose own box already centres it. What
        negative mode has to prove is that this case CAN fail, so it is given
        the plainest regression of the same kind: somebody nudges the caret. */
-    sabotage: ".jar-step-caret { margin-top: 4px; }",
+    sabotage: ".jar-panel-foot-c .jar-caret { margin-top: 4px; }",
     run: async (page) => {
       const b = (await page.evaluate(BOXES)) as Boxes;
       const verb = (b.footVerb as { midY: number }).midY;

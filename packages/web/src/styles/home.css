@@ -1336,9 +1336,24 @@
    jumping when the choice appears; inert while invisible, so the empty mouth
    still offers no control. */
 .jar-mouth-where {
+  /* THE LABEL REGISTER, LIKE EVERY OTHER ROW OF VERBS (founder, 2026-08-25:
+     "in here, make private/public the same font as well"). It wore
+     `.jar-ask`'s 13px prose, so the drawer's foot spoke at sentence size
+     while the card's foot and the four signposts spoke at label size — the
+     same four words, two registers, depending on which surface you were on. */
+  gap: 5px;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.18s ease;
+}
+.jar-mouth-where button {
+  font-size: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  font-weight: 500;
 }
 .jar-mouth-where--armed {
   opacity: 1;
@@ -1944,20 +1959,6 @@
   align-items: center;
   padding: 4px 6px;
 }
-/* two lit edges of a rotated square: no glyph, so no font can go missing */
-.jar-step-caret {
-  display: block;
-  width: 7px;
-  height: 7px;
-  border-top: 1px solid currentColor;
-  border-right: 1px solid currentColor;
-  transform: rotate(45deg);
-  opacity: 0.85;
-}
-.jar-step-caret--back {
-  transform: rotate(-135deg);
-}
-
 .jar-panel-vis {
   /* in the row now, not floated over it */
   margin: 0;

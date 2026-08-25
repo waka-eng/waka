@@ -122,7 +122,14 @@ await scene("standing-on", async () => {
 
 /* Scene 3 — how it reads you: the loop's rules, drift-pinned. */
 await scene("the-reading", async () => {
-  await page.$eval(".jar-flatmenu-toggle", (el) => el.click());
+  /* THE `≡` MENU IS GONE and has been since Phase 1 of
+     everything-in-the-world — "the control is gone; nothing matches
+     jar-flatmenu in packages/web/src". This clicked it anyway, and
+     `page.$eval` THROWS on a selector that matches nothing, so this scene
+     failed outright rather than reporting a missing door. The reading lives
+     behind the account panel now, which is where the world's own
+     housekeeping went. */
+  await page.$eval(".jar-account", (el) => el.click());
   await page.waitForTimeout(400);
   await page.getByText("how it reads you", { exact: false }).first().click();
   const ok = await visible("never rewritten", 10_000);

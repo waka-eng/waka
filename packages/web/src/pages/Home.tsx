@@ -8032,14 +8032,13 @@ function HomeExperience(): JSX.Element {
   }, [charSay]);
 
 
-  /* THE EVIDENCE INDEX'S CHANGE SIGNAL, AND IT NO LONGER MOVES. The index
-     lives in a ref because the render loop reads it every frame; this was
-     how React was told it had changed, and the only writer was the lazy
-     top-up that the sky's `focusOn` triggered. The eager build at load is
-     what fills it now, before any of these memos first run. Kept as a
-     constant rather than deleted so the two dependency lists below still
-     say out loud that they depend on the index. */
-  const provTick = 0;
+  /* THE EVIDENCE INDEX HAS NO CHANGE SIGNAL ANY MORE, because it no longer
+     changes after load. `provTick` was how React was told the ref had been
+     topped up, and the only writer was the lazy fetch the sky's `focusOn`
+     triggered; the eager build at load is what fills it now, before any memo
+     below first runs. It was briefly kept as a constant so the dependency
+     lists still named it — but a constant in a dependency array is a
+     dependency that can never fire, which reads as a signal and is not one. */
   /* whether the poster is showing what it was built from */
   const [posterAsk, setPosterAsk] = useState(false);
   /** Which ground in the poster's standing-on band is being asked about —
@@ -8241,7 +8240,7 @@ function HomeExperience(): JSX.Element {
         out.push(e);
       }
     return out;
-  }, [atWall, agents, notes, provTick, wokenGroups]);
+  }, [atWall, agents, notes, wokenGroups]);
 
   /**
    * THE GROUNDS THEMSELVES, AND WHOSE LIGHT EACH HOLDS.
@@ -8373,8 +8372,13 @@ function HomeExperience(): JSX.Element {
       return (groupFieldRef.current.get(atWall.id) ?? []).length;
     }
     return inspirations?.length ?? 0;
-    /* eslint-disable-next-line react-hooks/exhaustive-deps -- groupFieldTick
-       is the ref's change signal; the ref itself is stable */
+    /* `groupFieldTick` is the ref's change signal — a room's memories arrive
+       into `groupFieldRef` from a fetch, and this is how React is told. The
+       ref itself is stable and is deliberately not a dependency.
+       (This carried an `eslint-disable-next-line` until 2026-08-25. There is
+       no eslint in this repo, so it silenced nothing and told a reader a rule
+       was being held off when no rule exists — a line that looks like a guard
+       and guards nothing, which `measure-groups.mjs` argues against by name.) */
   }, [atWall, agents, inspirations, groupFieldTick]);
 
   /* ---------------- the mouth ----------------
@@ -8678,7 +8682,7 @@ function HomeExperience(): JSX.Element {
       prev: at > 0 ? (order[at - 1] as { id: string }).id : null,
       next: at < order.length - 1 ? (order[at + 1] as { id: string }).id : null,
     };
-    /* `provTick` is not a dependency and `panelId` is: the neighbours change
+    /* `panelId` and the archive are the whole of it: the neighbours change
        when the archive does or when you step, and nothing else. */
   }, [panelId, panelIsGroup, inspirations]);
 
@@ -8697,7 +8701,7 @@ function HomeExperience(): JSX.Element {
           title="the memory before this one"
           onClick={() => stepToMemory(panelNeighbours.prev)}
         >
-          <span className="jar-step-caret jar-step-caret--back" aria-hidden="true" />
+          <span className="jar-caret jar-caret--left" aria-hidden="true" />
         </button>
       ) : null}
       {panelNeighbours.next ? (
@@ -8707,7 +8711,7 @@ function HomeExperience(): JSX.Element {
           title="the memory after this one"
           onClick={() => stepToMemory(panelNeighbours.next)}
         >
-          <span className="jar-step-caret" aria-hidden="true" />
+          <span className="jar-caret jar-caret--right" aria-hidden="true" />
         </button>
       ) : null}
     </>
