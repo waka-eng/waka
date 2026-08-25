@@ -324,6 +324,29 @@ jobs:
           echo "its failures are invisible from every surface. Add the secret"
           echo "to turn this into a gate."
 
+      # THE GATE FOR WHAT NEITHER READING NOR LOOKING FINDS.
+      #
+      # Two defects in one week were found by the founder's eye and by no
+      # gate here: a card head whose two halves were separately positioned
+      # and so could never line up, and a rule that declared `color` twice
+      # with the second winning a line below `white-space`. The unit suites
+      # run in jsdom, which has no layout engine and applies no stylesheet —
+      # so a rendered assertion about either would have passed green over an
+      # unasked question.
+      #
+      # This one opens a browser and asks the engine what the cascade decided
+      # and where the boxes landed. It needs no database, no API and no
+      # account: it serves the product's own stylesheet with fixture markup,
+      # so it is seconds rather than minutes.
+      - name: Measured style (alignment and tone)
+        run: pnpm e2e:measure
+
+      # Same reason the journeys have one: a check about a number is easy to
+      # write so that it can never fail. Each case carries a sabotage that
+      # breaks precisely what it asserts and must go red under it.
+      - name: Measured style, broken (must fail)
+        run: pnpm e2e:measure --negative
+
       # THE SKY SUITE IS GONE, with the engine it measured. It grew a real
       # sky and photometered the top band of the canvas against an account
       # that had none — the only gate that could see `SKY_PEEK_DEPTH = 0.62`,
