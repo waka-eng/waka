@@ -20,7 +20,7 @@
  */
 import { Link } from "react-router-dom";
 
-import type { ApiGroupMember, ApiGroupSummary } from "../../lib/api";
+import type { ApiAgentKey, ApiGroupMember, ApiGroupSummary, ApiMintedKey } from "../../lib/api";
 import type { Space } from "../../space-kinds";
 
 export interface SpaceSettingsProps {
@@ -48,6 +48,29 @@ export interface SpaceSettingsProps {
   setRemoving: (memberId: string | null) => void;
   renaming: { id: string; text: string; busy: boolean } | null;
   setRenaming: (next: { id: string; text: string; busy: boolean } | null) => void;
+  /**
+   * AN AGENT'S CREDENTIALS, WHICH USED TO HAVE NO ADDRESS IN THE WORLD.
+   *
+   * `createAgentKey` / `fetchAgentKeys` / `revokeAgentKey` existed only on the
+   * flat `/agents` screen — three of the twelve verbs `one-product-one-system.md`
+   * counted as missing here. They belong on the agent's own wall: a key is a
+   * fact about THIS agent, and the sheet opened by its name is where its facts
+   * already live.
+   *
+   * They are not deferred to `/profile` like renaming and deleting are. That
+   * deferral is about flat work needing focus traps and plain confirmations;
+   * issuing a key is one press with one consequence, and revoking is the same
+   * two-step this panel already runs four times.
+   */
+  agentKeys: ApiAgentKey[];
+  /** shown ONCE, never retrievable again — see `ApiMintedKey.secret` */
+  minted: ApiMintedKey | null;
+  setMinted: (key: ApiMintedKey | null) => void;
+  issueKey: (profileId: string) => void;
+  revoking: string | null;
+  setRevoking: (keyId: string | null) => void;
+  revokeKey: (keyId: string) => void;
+  keysBusy: boolean;
   /** who is reading, so the panel knows whether they own this group */
   viewerProfileId: string | null;
   /** the invite link's copied-just-now flash, which the page owns because the
@@ -81,6 +104,14 @@ export function SpaceSettings({
   renameThisGroup,
   closeThisGroup,
   removeMember,
+  agentKeys,
+  minted,
+  setMinted,
+  issueKey,
+  revoking,
+  setRevoking,
+  revokeKey,
+  keysBusy,
 }: SpaceSettingsProps): JSX.Element {
   const auth = { profile: { id: viewerProfileId } };
   const setSettingsFor = (_: string | null) => onClose();
@@ -263,6 +294,90 @@ export function SpaceSettings({
           ? "Its memory is its own — what it keeps here is not mixed into yours."
           : "Everything you keep, and what WAKA has read out of it."}
       </p>
+      {/* ═══ WHAT CAN SPEAK AS THIS AGENT ═══
+          Only on an agent's wall: your own wall has no keys, and a room's
+          credentials would be a different thing entirely. Live keys only —
+          a revoked key is not a fact about the agent any more, it is a fact
+          about its past, and this sheet says what IS. */}
+      {atWall.kind === "agent" ? (
+        <>
+          <p className="jar-settings-sub jar-label">what can speak as it</p>
+          {(() => {
+            const live = agentKeys.filter(
+              (k) => k.profileId === atWall.id && k.revokedAt === null,
+            );
+            if (live.length === 0) {
+              return (
+                <p className="jar-settings-note">
+                  Nothing yet. A key lets this agent keep things here on its own.
+                </p>
+              );
+            }
+            return live.map((k) => (
+              <p key={k.id} className="jar-settings-key">
+                <span className="jar-settings-key-name">
+                  {k.label ?? "a key"} · {k.prefix}…
+                </span>
+                {/* THE TWO-STEP, the same shape as the four above it: a
+                    destructive word is never beside its own yes. */}
+                {revoking === k.id ? (
+                  <span className="jar-ask">
+                    <button type="button" disabled={keysBusy} onClick={() => revokeKey(k.id)}>
+                      {keysBusy ? "revoking…" : "yes, revoke it"}
+                    </button>
+                    <span aria-hidden="true"> · </span>
+                    <button type="button" onClick={() => setRevoking(null)}>
+                      keep it
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="jar-settings-verb"
+                    onClick={() => setRevoking(k.id)}
+                  >
+                    revoke
+                  </button>
+                )}
+              </p>
+            ));
+          })()}
+
+          {/* SHOWN ONCE AND NEVER AGAIN, and it says so. The server returns the
+              secret in the minting response alone; there is no route that can
+              hand it back. A person who closes this without copying it has to
+              issue another, so the sentence has to be unmistakable BEFORE they
+              close it rather than an apology afterwards. */}
+          {minted && minted.profileId === atWall.id ? (
+            <p className="jar-settings-minted">
+              <span className="jar-settings-sub jar-label">copy it now</span>
+              <code className="jar-settings-secret">{minted.secret}</code>
+              <span className="jar-settings-note">
+                This is the only time it is shown. Close this and it is gone for good.
+              </span>
+              <button
+                type="button"
+                className="jar-settings-verb"
+                onClick={() => setMinted(null)}
+              >
+                I have it
+              </button>
+            </p>
+          ) : (
+            <p className="jar-ask">
+              <button
+                type="button"
+                className="jar-settings-verb"
+                disabled={keysBusy}
+                onClick={() => issueKey(atWall.id)}
+              >
+                {keysBusy ? "issuing…" : "issue a key"}
+              </button>
+            </p>
+          )}
+        </>
+      ) : null}
+
       <p className="jar-ask">
         <Link className="jar-settings-verb" to="/profile">
           open your account

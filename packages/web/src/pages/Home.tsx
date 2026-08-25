@@ -187,6 +187,11 @@ import {
   type ApiGroupProposal,
   type ApiGroupMember,
   type ApiGroupSummary,
+  createAgentKey,
+  fetchAgentKeys,
+  revokeAgentKey,
+  type ApiAgentKey,
+  type ApiMintedKey,
   type ApiPrinciple,
   type ApiGroupFieldInspiration,
   type ApiGroupWallSignal,
@@ -1943,6 +1948,24 @@ function HomeExperience(): JSX.Element {
    * has shipped three controls that were dead on touch for exactly that
    * reason. Pressing the word opens the rail; hovering opens it too.
    */
+  /**
+   * AN AGENT'S CREDENTIALS, NOW THAT THEY HAVE AN ADDRESS HERE.
+   *
+   * `createAgentKey` / `fetchAgentKeys` / `revokeAgentKey` lived only on the
+   * flat `/agents` screen. They are three of the twelve verbs
+   * `one-product-one-system.md` counted as missing from the world, and the
+   * first three to come home.
+   *
+   * Keys are fetched WHEN THE SHEET OPENS rather than on boot: this is the
+   * only surface that reads them, most sessions never open it, and a list of
+   * credentials is not something to hold in memory on the chance somebody
+   * asks. `minted` holds the one response that carries a secret, and nothing
+   * writes it to storage — see the sheet for why that sentence matters.
+   */
+  const [agentKeys, setAgentKeys] = useState<ApiAgentKey[]>([]);
+  const [minted, setMinted] = useState<ApiMintedKey | null>(null);
+  const [revoking, setRevoking] = useState<string | null>(null);
+  const [keysBusy, setKeysBusy] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
   /* the pointer is on the word; the rail is a hover away and this is the hover */
   const [timeNear, setTimeNear] = useState(false);
@@ -9082,6 +9105,62 @@ function HomeExperience(): JSX.Element {
    * what it is, a group's is the real one.
    */
   const [settingsFor, setSettingsFor] = useState<string | null>(null);
+
+  /* Fetched when the sheet opens, on the wall it is about. A failure is
+     quiet: no keys is a real state, and a banner over a settings sheet for a
+     list nobody asked to see is noise. */
+  useEffect(() => {
+    if (!settingsFor || atWall.kind !== "agent" || offlineRef.current) return;
+    let dead = false;
+    fetchAgentKeys()
+      .then((rows) => {
+        if (!dead) setAgentKeys(rows);
+      })
+      .catch(() => undefined);
+    return () => {
+      dead = true;
+    };
+  }, [settingsFor, atWall]);
+
+  /* CLOSING THE SHEET FORGETS THE SECRET. It is shown once by the server's
+     design; holding it in state after the surface that shows it has gone is
+     keeping a credential around for no one to read. */
+  useEffect(() => {
+    if (settingsFor) return;
+    setMinted(null);
+    setRevoking(null);
+  }, [settingsFor]);
+
+  const issueKey = useCallback(
+    (profileId: string) => {
+      if (keysBusy) return;
+      setKeysBusy(true);
+      createAgentKey(profileId)
+        .then((key) => {
+          setMinted(key);
+          return fetchAgentKeys().then((rows) => setAgentKeys(rows));
+        })
+        .catch((err) => setCharSay(whyFailed(err, "That key was not issued.")))
+        .finally(() => setKeysBusy(false));
+    },
+    [keysBusy, whyFailed],
+  );
+
+  const revokeKey = useCallback(
+    (keyId: string) => {
+      if (keysBusy) return;
+      setKeysBusy(true);
+      revokeAgentKey(keyId)
+        .then(() => {
+          setRevoking(null);
+          return fetchAgentKeys().then((rows) => setAgentKeys(rows));
+        })
+        .catch((err) => setCharSay(whyFailed(err, "That key is still live.")))
+        .finally(() => setKeysBusy(false));
+    },
+    [keysBusy, whyFailed],
+  );
+
   /**
    * The account drop, top right — the mirror of the space settings top left.
    * They are mutually exclusive: opening one closes the other, because two
@@ -12010,6 +12089,14 @@ function HomeExperience(): JSX.Element {
           renameThisGroup={renameThisGroup}
           closeThisGroup={closeThisGroup}
           removeMember={removeMember}
+          agentKeys={agentKeys}
+          minted={minted}
+          setMinted={setMinted}
+          issueKey={issueKey}
+          revoking={revoking}
+          setRevoking={setRevoking}
+          revokeKey={revokeKey}
+          keysBusy={keysBusy}
         />
       ) : null}
 

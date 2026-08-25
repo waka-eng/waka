@@ -1653,6 +1653,63 @@
   text-decoration: none;
   white-space: nowrap;
 }
+/* ═══ AN AGENT'S CREDENTIALS, IN ITS OWN SHEET ═══
+   The three key verbs came home from the flat `/agents` screen on 2026-08-25.
+   Nothing here invents a register: the sub-heading is the label register every
+   other eyebrow in the product wears, the rows are the sheet's own note tier,
+   and the verbs are `.jar-settings-verb` exactly as `open your account` is.
+   A new surface that brings its own type is how a product ends up with
+   thirty-four prefixes. */
+.jar-settings-sub {
+  display: block;
+  margin: var(--sp-18) 0 var(--sp-8);
+  color: var(--jar-faint);
+}
+.jar-settings-key {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-12);
+  margin: 0 0 var(--sp-8);
+  font-size: var(--t-ui);
+  color: var(--jar-muted);
+}
+.jar-settings-key-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* THE ONE TIME THE SECRET IS ON SCREEN. It is set apart because it is the
+   only thing in this sheet a person must ACT on before closing it — every
+   other line here can be read again tomorrow. */
+.jar-settings-minted {
+  display: block;
+  margin: var(--sp-12) 0 0;
+  padding: var(--sp-12);
+  border-radius: var(--sp-12);
+  background: var(--jar-row);
+}
+/* EVERY CHILD OF THE MINTED BOX IS ITS OWN LINE. `.jar-settings-note` is a
+   <span>, so `I have it` set itself down immediately after the full stop of
+   "gone for good." and read as part of the sentence rather than as the thing
+   you press when you have copied the key. */
+.jar-settings-minted > * {
+  display: block;
+}
+.jar-settings-minted .jar-settings-verb {
+  margin-top: var(--sp-10);
+}
+.jar-settings-secret {
+  display: block;
+  margin: var(--sp-8) 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--t-fine);
+  line-height: 1.5;
+  color: var(--jar-ink);
+  word-break: break-all;
+  user-select: all;
+  -webkit-user-select: all;
+}
 .jar-settings-verb:hover {
   color: var(--jar-ink);
 }
