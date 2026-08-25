@@ -588,3 +588,101 @@ describe("deleting a memory", () => {
     ).toBeNull();
   });
 });
+
+/**
+ * READING ON, WITHOUT PUTTING THE CARD DOWN.
+ *
+ * Reading a second memory used to mean closing the first, finding another orb
+ * in a field that had just re-lit, and tapping it — three gestures and a
+ * search to do the most ordinary thing there is (founder, 2026-08-25: "add
+ * option to move between inspirations from the card itself").
+ *
+ * The fixture's six memories are `own-0` through `own-5` at `daysAgo: i + 1`,
+ * so `own-5` is the OLDEST and `own-0` the newest — the index counts backwards
+ * from today, which is worth saying out loud because reading it the other way
+ * is how the first version of this case "failed" against a working product.
+ * The order is therefore known and so are the ends: the oldest has nothing
+ * before it, the newest nothing after, and each end loses that half of the row
+ * rather than wrapping. Wrapping would make "the oldest" impossible to feel.
+ */
+describe("stepping between memories", () => {
+  it("walks the ground's own order, and stops at both ends", { timeout: 30_000 }, async () => {
+    await layout.toField();
+    const panel = await openMemory("something I kept, 5");
+
+    const said = () =>
+      (
+        layout.container.querySelector(".jar-panel--in .jar-panel-text")?.textContent ?? ""
+      ).trim();
+    const step = async (label: RegExp) => {
+      const el = [
+        ...layout.container.querySelectorAll<HTMLElement>(".jar-panel-step button"),
+      ].find((b) => label.test(b.getAttribute("aria-label") ?? ""));
+      if (!el) return false;
+      await act(async () => el.click());
+      await layout.step(30);
+      return true;
+    };
+
+    expect(said(), "opened on the oldest").toBe("something I kept, 5");
+    expect(
+      await step(/before this one/),
+      "the oldest memory offers no way further back — the end of an archive is real",
+    ).toBe(false);
+
+    expect(await step(/after this one/), "and it does offer the one after").toBe(true);
+    expect(said(), "which is the next one the ground was given").toBe("something I kept, 4");
+
+    expect(
+      layout.container.querySelectorAll(".jar-panel--in").length,
+      "the card never closed — that is the whole point of stepping from it",
+    ).toBe(1);
+
+    await step(/before this one/);
+    expect(said(), "and back again lands where it started").toBe("something I kept, 5");
+
+    /* walk to the far end and check the other stop */
+    for (let i = 0; i < 5; i += 1) await step(/after this one/);
+    expect(said(), "five steps forward from the oldest reaches the newest").toBe(
+      "something I kept, 0",
+    );
+    expect(
+      await step(/after this one/),
+      "and the newest offers no way further on",
+    ).toBe(false);
+  });
+
+  it("closes an open edit rather than carrying it to the next memory", { timeout: 30_000 }, async () => {
+    await layout.toField();
+    const panel = await openMemory("something I kept, 2");
+
+    const words = panel.querySelector<HTMLElement>(".jar-panel-text");
+    if (!words) throw new Error("the memory is not on screen");
+    await act(async () => words.click());
+    expect(
+      layout.container.querySelector("textarea.jar-panel-edit"),
+      "the words are open",
+    ).not.toBeNull();
+
+    const on = [
+      ...layout.container.querySelectorAll<HTMLElement>(".jar-panel-step button"),
+    ].find((b) => /after this one/.test(b.getAttribute("aria-label") ?? ""));
+    if (!on) throw new Error("no way on from a memory in the middle of the archive");
+    await act(async () => on.click());
+    await layout.step(30);
+
+    /* THE RULE THIS PROTECTS IS CORRECTNESS, NOT TIDINESS. A caret left open
+       over the memory you have just stepped away from is a caret typing into
+       the wrong one. */
+    expect(
+      layout.container.querySelector("textarea.jar-panel-edit"),
+      "the caret did not travel with the step",
+    ).toBeNull();
+    expect(
+      (
+        layout.container.querySelector(".jar-panel--in .jar-panel-text")?.textContent ?? ""
+      ).trim(),
+      "and the next memory is the one on screen",
+    ).toBe("something I kept, 1");
+  });
+});

@@ -117,6 +117,16 @@ export interface Measured {
   /** The one whisper the orbits carry: whose memory the pointer is on. The loop
       writes both its words and its place. */
   readonly satSay: RefObject<HTMLDivElement>;
+  /**
+   * The axis of walls, along the bottom — measured, not guessed.
+   *
+   * The chrome at the bottom edge is two stacked bands now (the timeline
+   * underneath, the names of the walls above it), and the field has to stop
+   * clear of BOTH. A constant would be wrong on the first phone with a home
+   * indicator; the distance from the viewport's bottom to this element's top
+   * is the whole reserve, stated by the chrome itself.
+   */
+  readonly axis: RefObject<HTMLElement>;
 }
 
 /**
@@ -143,6 +153,7 @@ export function useMeasured(): Measured {
       nebEls: { current: new Map() },
       clusterEls: { current: new Map() },
       satSay: { current: null },
+      axis: { current: null },
     };
   }
   return held.current;

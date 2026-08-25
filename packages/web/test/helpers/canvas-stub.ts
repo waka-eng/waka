@@ -203,9 +203,30 @@ export function setViewport(width: number, height: number): void {
   }
 
   Element.prototype.getBoundingClientRect = function rect(this: Element) {
-    /* The root is the viewport. Everything else reports the same box, which is
-       enough for the chrome measurements the engine takes (it only ever reads
-       widths and heights, never positions, from these). */
+    /* The root is the viewport, and everything else reported the same box —
+       which was enough while the engine only ever read widths and heights off
+       these. It reads a POSITION now: the field's bottom reserve is the
+       distance from the viewport's bottom to the top of the axis of walls,
+       measured rather than guessed, so that two stacked bands of chrome and a
+       phone's home indicator are all accounted for by the chrome itself.
+       Answering "the whole viewport" for that element reserves the whole
+       screen and leaves no field at all.
+       So the axis gets a real box, at the height it actually occupies. */
+    if ((this as HTMLElement).classList?.contains("jar-axis")) {
+      const h = 36;
+      const top = height - h - 48;
+      return {
+        x: 0,
+        y: top,
+        top,
+        left: 0,
+        right: width,
+        bottom: top + h,
+        width,
+        height: h,
+        toJSON: () => ({}),
+      } as DOMRect;
+    }
     return {
       x: 0,
       y: 0,

@@ -743,6 +743,56 @@
   color: var(--jar-ink);
 }
 
+/* ---------- how much is down there, and the way to it ----------
+   The ground is a whole section below headquarters and nothing on the resting
+   page said so. A count and a caret: the number is what you have, the caret is
+   which way. It sits directly above the names of the walls — the two together
+   are the whole bottom edge, and time frames them both from underneath.
+
+   Quiet at rest and brighter on approach, like every other word here. The
+   caret leans DOWN, which is the one thing it has to say. */
+.jar-saved {
+  position: absolute;
+  z-index: 6;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(88px + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 6px 12px;
+  background: none;
+  font-family: inherit;
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--jar-faint);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: color 0.22s ease;
+}
+.jar-saved:hover,
+.jar-saved:focus-visible {
+  color: var(--jar-ink);
+}
+/* two lit edges of a rotated square, so no glyph and no font can go missing */
+.jar-saved-caret {
+  display: block;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.8;
+}
+
 /* ================= the axis map =================
    The bottom edge maps the horizontal axis and nothing else. One mark per
    wall, in axis order, laid out from the centre so YOUR wall is the middle of
@@ -753,7 +803,10 @@
   z-index: 6;
   left: 0;
   right: 0;
-  bottom: calc(6px + env(safe-area-inset-bottom));
+  /* ABOVE THE TIMELINE, not under it. Whose mind you are standing in is a
+     fact about the world; when is a fact about the whole page, so time is the
+     outer frame and the names sit inside it. */
+  bottom: calc(48px + env(safe-area-inset-bottom));
   display: flex;
   justify-content: center;
   align-items: baseline;
@@ -1038,11 +1091,13 @@
   position: absolute;
   left: 0;
   right: 0;
-  /* the loop's measured seam — and, until the first measure lands, the same
-     number written out: the viewport less the dial's strip and the peek */
-  top: var(--jar-seam, calc(100% - 188px));
-  /* it hangs off the seam and grows upward */
-  transform: translateY(-100%);
+  /* UNDER THE COMPANION, WHERE THE HAND IS. It used to hang off `--jar-seam`
+     — the field's own top edge — and grow upward, which put the one thing
+     this page exists for at the far end of the screen from the creature
+     asking for it. The loop writes `--jar-mouth-top` from the companion's own
+     chin, so the two move together at every viewport height, and the fallback
+     is the old seam for the one paint before the first measure lands. */
+  top: var(--jar-mouth-top, var(--jar-seam, calc(100% - 188px)));
   /* the air between the last word and the field's top edge */
   padding: 0 20px 14px;
   text-align: center;
@@ -1664,8 +1719,12 @@
   z-index: 5;
   left: 0;
   right: 0;
-  /* it rides directly above the axis strip and moves when the strip does */
-  bottom: calc(50px + env(safe-area-inset-bottom));
+  /* THE VERY BOTTOM EDGE (founder, 2026-08-25: "put the timeline at the very
+     bottom, and then the room navigation above it"). Time is the outermost
+     frame around everything else on the page — it is the one axis that applies
+     to every wall at once — so it sits under them all rather than between the
+     ground and the names. */
+  bottom: calc(6px + env(safe-area-inset-bottom));
   display: flex;
   align-items: stretch;
   padding: 0 24px;
@@ -1790,6 +1849,37 @@
    the other dim, so the pair says at once where it is AND that it can move;
    one word that swapped when pressed gave no sign it could be pressed at all.
    Private is still the state you get by touching nothing. */
+/* READING ON — the two carets at the card's top left, opposite the visibility
+   pair. Reading on is a movement, and it belongs in the corner the eye is
+   already in when it has finished a line. An end of the archive simply has no
+   caret: a control that looks live and does nothing teaches that the surface
+   is broken, and the ends of what you have kept are real. */
+.jar-panel-step {
+  position: absolute;
+  top: 12px;
+  left: 18px;
+  margin: 0;
+  gap: 10px;
+}
+.jar-panel-step button {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 6px;
+}
+/* two lit edges of a rotated square: no glyph, so no font can go missing */
+.jar-step-caret {
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-top: 1px solid currentColor;
+  border-right: 1px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.85;
+}
+.jar-step-caret--back {
+  transform: rotate(-135deg);
+}
+
 .jar-panel-vis {
   position: absolute;
   top: 14px;
@@ -1889,9 +1979,10 @@
 }
 .jar-panel-when {
   display: block;
-  /* the visibility pair is absolute at the same height on the right; the date
-     stops short of it rather than running underneath */
+  /* both corners are occupied — the carets at the left, the visibility pair
+     at the right — so the date sits between them rather than under either */
   padding-right: 120px;
+  padding-left: 56px;
 }
 /* AND WHAT DELETING CANNOT UNDO. Quiet, because it is a fact rather than an
    alarm — but present before the act, not after it. */

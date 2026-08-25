@@ -403,14 +403,16 @@ export async function assembleTheWeather(
        earns its place in the record — the days, the markdown — but the
        creature's one line is what HAPPENED, counted. The label is the
        world's to add or omit; none is baked in here. */
-    /* AND AT MOST TWO OF THEM (founder, 2026-08-25: "only show the most
-       critical thing at the moment. never show more than 2 things here").
-       A busy fortnight read out in full is a ticker, not a whisper. The
-       record — the days, the markdown — stays complete; the spoken line
-       carries the two most newsworthy clauses. Newsworthy means what
-       changed ABOUT you before what you did: the poster moving outranks a
-       signal moving outranks being read outranks your own keeping, and
-       within that the rare thing outranks the routine one. */
+    /* AND EXACTLY ONE OF THEM (founder, 2026-08-25: "always show the most
+       relevant statement of the time when clicking on it to show text. never
+       show more than 1 thing"). This was five clauses, then two, and neither
+       was a whisper — a creature that reports a fortnight in one breath is a
+       ticker. The record stays complete in the days and the markdown; the
+       spoken line is the single most newsworthy thing that happened.
+
+       Newsworthy means what changed ABOUT you before what you did: the poster
+       moving outranks a signal moving outranks being read outranks your own
+       keeping. Your own keeping is last on purpose — you were there for it. */
     const clauses = tellCounts(away).filter((s) => s.text !== "the sky held");
     const NEWS: Record<WeatherSentence["backing"], number> = {
       top_of_minds: 0,
@@ -423,9 +425,9 @@ export async function assembleTheWeather(
     const spoken = clauses
       .map((s, i) => ({ s, i }))
       .sort((a, b) => NEWS[a.s.backing] - NEWS[b.s.backing] || a.i - b.i)
-      .slice(0, 2)
+      .slice(0, 1)
       .map((x) => x.s.text);
-    told = spoken.length > 0 ? `${spoken.join("; ")}.` : null;
+    told = spoken.length > 0 ? `${spoken[0]}.` : null;
   }
 
   const antechamberRows =

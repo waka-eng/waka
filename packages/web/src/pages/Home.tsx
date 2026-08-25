@@ -990,7 +990,7 @@ interface SimApi {
   /** Glide back to headquarters. */
   toTop: () => void;
   /** Glide up into the sky, where the ambitions are still forming. */
-  toSky: () => void;
+  toGround: () => void;
   /** The traveler: one column left or right, the companion leading. */
   travel: (dir: 1 | -1) => void;
   /** Hand the loop the current candidate list. */
@@ -1696,6 +1696,15 @@ function HomeExperience(): JSX.Element {
   } | null>(null);
   /** The camera is over a wall that has no dial: the dial fades, as in the sky. */
   const [dialAway, setDialAway] = useState(false);
+  /**
+   * WHETHER THE CAMERA IS STANDING IN THE GROUND.
+   *
+   * One discrete fact, pushed from the loop when it changes and never per
+   * frame. It exists so the count of what you have kept can point DOWN from
+   * headquarters and then get out of the way: a signpost to the room you are
+   * already standing in is furniture, and this world has none.
+   */
+  const [inField, setInField] = useState(false);
   /** Drafts assembled here, in this session. They live nowhere else. */
   /* ---- the mouth: the one verb this world was missing ----
      At rest it is a phrase. Open, it is a plain field at the seam between
@@ -2445,13 +2454,42 @@ function HomeExperience(): JSX.Element {
         /* counts only, and no day label — the founder liked the sentence
            and struck the preamble ("just drop today and the sky held").
            The full record keeps both; this is the spoken register. */
+        /* ONE CLAUSE. THE MOST NEWSWORTHY ONE (founder, 2026-08-25: "always
+           show the most relevant statement of the time when clicking on it to
+           show text. never show more than 1 thing"). This joined every clause
+           the day had, so a busy day came out as five statements in one
+           breath — a ticker, not a whisper, and the founder read it back to
+           us at that length twice.
+
+           Newsworthy is what changed ABOUT you before what you did: the poster
+           moving outranks a signal moving outranks being read outranks your
+           own keeping, which is last because you were there for it. Ties go to
+           the order the day already tells them in.
+
+           The same order is written down in `the-weather.ts`, which ranks its
+           own spoken line the same way. It is stated twice because these are
+           two packages with no shared module between them, and a single line
+           of ranking is a smaller thing to keep in step than a new seam. If a
+           third caller ever wants it, that is the moment it becomes one. */
+        const NEWS: Record<string, number> = {
+          top_of_minds: 0,
+          signals: 1,
+          signal_evidence: 2,
+          suppressions: 3,
+          consultations: 4,
+          inspirations: 5,
+        };
         const spoken = (day?.sentences ?? [])
           .filter((sentence) => sentence.text !== "the sky held")
-          .map((sentence) => sentence.text);
+          .map((sentence, i) => ({ sentence, i }))
+          .sort(
+            (a, b) =>
+              (NEWS[a.sentence.backing] ?? 9) - (NEWS[b.sentence.backing] ?? 9) || a.i - b.i,
+          );
         /* the day label leads and "the sky held" stays out — the founder
            struck both, then asked for the label back */
         if (spoken.length > 0) {
-          setCharSay(`${day?.label ?? "today"} — ${spoken.join("; ")}.`);
+          setCharSay(`${day?.label ?? "today"} — ${spoken[0]!.sentence.text}.`);
         } else {
           setCharSay(fallback());
         }
@@ -3385,6 +3423,7 @@ function HomeExperience(): JSX.Element {
     /** Which one-time hints have already been said, so they are said once. */
     const hinted = {
       dialAway: false,
+      inField: false,
     };
     /**
      * STAGING ORBS INTO THE FIELD — the pour, and everything that schedules it.
@@ -4823,10 +4862,28 @@ function HomeExperience(): JSX.Element {
          the guess was 92 plus forty of air, which is a fifth of a short
          viewport of field given away for nothing, and on a phone with a home
          indicator the guess was simply wrong. */
-      /* The dial is a vertical rail against the right edge now, so it takes
-         no height from the field at all — the bottom inset it used to claim
-         belongs to the axis of walls. */
-      view.dialH = 0;
+      /* WHAT THE BOTTOM CHROME ACTUALLY TAKES, measured rather than guessed.
+         It was a rail in the right margin for a while and took nothing; it is
+         two stacked bands along the bottom edge again — the timeline
+         underneath and the names of the walls above it — and the field has to
+         stop clear of both. The axis is the upper of the two, so the distance
+         from the viewport's bottom to its top edge IS the reserve, at every
+         viewport height and on every phone with a home indicator. Zero until
+         it has mounted, which is one frame of a field a few pixels too tall
+         and never a wrong layout that persists. */
+      {
+        const axis = measured.axis.current;
+        const box = axis ? axis.getBoundingClientRect() : null;
+        const claimed = box ? Math.round(view.h - box.top) : 0;
+        /* A CEILING, AND IT IS A CATASTROPHE GUARD RATHER THAN A TIDY-UP.
+           Two rows of small labels cannot honestly want two fifths of the
+           screen; a number that large means the measurement is wrong, and the
+           cost of believing it is a world with no field in it at all. It is
+           set high on purpose — low enough to survive a nonsense reading,
+           high enough that ordinary drift in the chrome's real height still
+           reaches the layout and is still visible as itself. */
+        view.dialH = clamp(claimed, 0, Math.round(view.h * 0.4));
+      }
       /* WHICH SECTION THE CAMERA IS RESTING ON, read in the world that is
          about to be replaced. The rest points ARE ±vh, so a height change
          MOVES them — and the camera has to arrive on the same section it was
@@ -4959,8 +5016,17 @@ function HomeExperience(): JSX.Element {
        * preference wins and the body is where the eye expects it.
        */
       companion.y = hi >= lo ? clamp(view.h / 2, lo, hi) : (lo + hi) / 2;
+      /* WHAT SITS UNDER THE COMPANION, AND IN WHAT ORDER (founder, 2026-08-25:
+         "keep something should be shown right below the character").
+         The mouth first, directly beneath the body, because keeping something
+         is what this page is FOR and it should be under the hand before
+         anything else is. The companion's own line goes below the mouth: it
+         reports what the loop did, which is a thing to read after the thing to
+         do. Both are world coordinates, like the companion itself. */
+      const chin = Math.round(companion.y + companion.size * 0.62);
+      root!.style.setProperty("--jar-mouth-top", `${chin + 18}px`);
       const say = measured.charSay.current;
-      if (say) say.style.top = `${Math.round(companion.y + companion.size * 0.62)}px`;
+      if (say) say.style.top = `${chin + 96}px`;
       /* the columns' DOM measures itself off these — one write per resize */
       root!.style.setProperty("--jar-vw", `${Math.round(view.w)}px`);
       root!.style.setProperty("--jar-vh", `${Math.round(view.h)}px`);
@@ -6530,6 +6596,14 @@ function HomeExperience(): JSX.Element {
          you are. The only reason left to hide it is that this wall HAS no
          history to wind, which is data, not altitude. */
       const nowAway = !hasDial(wallAt(Math.round(cam.x / Math.max(view.w, 1))).kind);
+      /* and whether the ground is what the camera is standing in — read off
+         the camera, so it changes as the descent happens rather than on
+         arrival */
+      const nowInField = cam.y > view.layout.maxCam * 0.5;
+      if (nowInField !== hinted.inField) {
+        hinted.inField = nowInField;
+        setInField(nowInField);
+      }
       if (nowAway !== hinted.dialAway) {
         hinted.dialAway = nowAway;
         setDialAway(nowAway);
@@ -7722,13 +7796,16 @@ function HomeExperience(): JSX.Element {
       toTop: () => {
         aimTo(0, 0);
       },
-      /* the signal line's glide: programmatic, and exempt from the snap.
-         Only the personal column has a sky to glide into. */
-      toSky: () => {
-        if (trip.col !== 0 || trip.active) return;
+      /* DOWN TO THE GROUND, programmatically and exempt from the snap — the
+         same glide `toSky` was, aimed the other way now that there is only
+         one other way to aim. It is what the count of what you have kept
+         opens: a line that says how much is down there is a promise that you
+         can go and look. */
+      toGround: () => {
+        if (trip.active) return;
         gesture.snapAt = 0;
         cam.vel = 0;
-        aimTo(view.layout.minCam, 0);
+        aimTo(view.layout.maxCam, 0);
       },
       travel,
       syncSky,
@@ -9095,6 +9172,62 @@ function HomeExperience(): JSX.Element {
      delete is silent; anything else opens the ask. */
   const panelPowersSignal = (panelBall?.roots ?? 0) > 0;
 
+  /**
+   * THE MEMORY BEFORE THIS ONE, AND THE ONE AFTER — from the card itself.
+   *
+   * Reading a second memory meant closing the first, finding another orb in a
+   * field that had just re-lit, and tapping it: three gestures and a search to
+   * do the most ordinary thing there is, which is read on (founder,
+   * 2026-08-25: "add option to move between inspirations from the card
+   * itself").
+   *
+   * IN THE GROUND'S OWN ORDER, which is when you kept them — oldest to newest,
+   * the same order the field lays them out in and the same order the dial
+   * winds through. Any other order would be a second, invisible arrangement of
+   * the same things.
+   *
+   * ONLY WITHIN THE WALL YOU ARE STANDING ON, and only over memories that
+   * exist at the moment the dial is wound to: stepping out of the ground you
+   * are looking at, or into a memory that has not happened yet, is not a step,
+   * it is a teleport. Null at either end — the ends of an archive are real and
+   * the row simply loses that half rather than wrapping, which would make
+   * "the oldest" and "the newest" impossible to feel.
+   */
+  const panelNeighbours = useMemo<{ prev: string | null; next: string | null }>(() => {
+    if (!panelId || panelIsGroup) return { prev: null, next: null };
+    const here = (inspirations ?? []).filter((c) => c.capturedMs <= TRef.current);
+    if (here.length < 2) return { prev: null, next: null };
+    const order = [...here].sort(
+      (a, b) => a.capturedMs - b.capturedMs || a.id.localeCompare(b.id),
+    );
+    const at = order.findIndex((c) => c.id === panelId);
+    if (at < 0) return { prev: null, next: null };
+    return {
+      prev: at > 0 ? (order[at - 1] as { id: string }).id : null,
+      next: at < order.length - 1 ? (order[at + 1] as { id: string }).id : null,
+    };
+    /* `provTick` is not a dependency and `panelId` is: the neighbours change
+       when the archive does or when you step, and nothing else. */
+  }, [panelId, panelIsGroup, inspirations]);
+
+  /**
+   * Step to a neighbour without closing what is open — one gesture, in place.
+   *
+   * `editing` is declared further down and cannot be closed over here, so the
+   * words are left through a ref. That is not a workaround: leaving an open
+   * caret behind is a CORRECTNESS rule — an edit still open over the memory
+   * you have just stepped away from would be typed into the wrong one — and a
+   * rule that has to hold cannot depend on where in this file a hook happens
+   * to sit.
+   */
+  const leaveWordsRef = useRef<() => void>(() => {});
+  const stepToMemory = useCallback((id: string | null) => {
+    if (!id) return;
+    leaveWordsRef.current();
+    setForget({ id: null, step: "rest" });
+    setSelectedId(id);
+  }, []);
+
   /* ---------------- reflect ----------------
      The panel is the memory and ONE action. Reflecting happens here rather
      than somewhere else because leaving the jar to answer a question about a
@@ -9796,6 +9929,10 @@ function HomeExperience(): JSX.Element {
     setAdopted,
     setSelectedId,
   });
+  /* the one thing `stepToMemory` needs and cannot close over: see its note */
+  leaveWordsRef.current = () => {
+    if (editing.open) editing.leave();
+  };
 
   /**
    * THROW IT AWAY, FOR REAL.
@@ -10898,6 +11035,34 @@ function HomeExperience(): JSX.Element {
             </span>
           )}
 
+          {/* THE MEMORY BEFORE AND AFTER, ON THE CARD. Two carets at the top
+              left, opposite the visibility pair — reading on is a movement,
+              and it belongs in the corner your eye is already in when it has
+              finished a line. An end of the archive simply has no caret: an
+              inert control that looks live teaches that the surface is broken,
+              and the ends of what you have kept are real. */}
+          {!panelIsGroup && (panelNeighbours.prev || panelNeighbours.next) ? (
+            <p className="jar-neb-ask jar-neb-ask--row jar-panel-step">
+              {panelNeighbours.prev ? (
+                <button
+                  type="button"
+                  aria-label="the memory before this one"
+                  onClick={() => stepToMemory(panelNeighbours.prev)}
+                >
+                  <span className="jar-step-caret jar-step-caret--back" aria-hidden="true" />
+                </button>
+              ) : null}
+              {panelNeighbours.next ? (
+                <button
+                  type="button"
+                  aria-label="the memory after this one"
+                  onClick={() => stepToMemory(panelNeighbours.next)}
+                >
+                  <span className="jar-step-caret" aria-hidden="true" />
+                </button>
+              ) : null}
+            </p>
+          ) : null}
           {!panelIsGroup ? (
             /* WHO MAY SEE THIS, AT THE TOP RIGHT (founder, 2026-08-25:
                "top right should have option to switch between Private •
@@ -11596,7 +11761,37 @@ function HomeExperience(): JSX.Element {
 
           It is also the keyboard-and-pointer route to travel, which dragging
           alone never offered. */}
-      <nav className="jar-axis" data-jar-chrome="1" aria-label="walls">
+      {/* HOW MUCH IS DOWN THERE, AND THE WAY TO IT (founder, 2026-08-25:
+          "x inspirations saved should be at the bottom with a carrot").
+          The ground is a whole section below and nothing on the resting page
+          said it existed, let alone how much was in it. A count and a caret:
+          the number is what you have, the caret is which way.
+
+          THE NUMERAL IS DELIBERATE AND IT IS AN EXCEPTION. "States render,
+          numerals never" holds everywhere it means something — an aliveness,
+          a confidence, how many people agreed — because a number there invites
+          a person to optimise a score. This is not that: it is the SIZE OF
+          YOUR OWN ARCHIVE, the one quantity that is simply a fact about you
+          and cannot be gamed by anybody but yourself. Asked for by name.
+
+          It is not shown while you are already standing in the ground: a
+          signpost pointing at the room you are in is furniture. */}
+      {phase === "ready" && !inField && (inspirations?.length ?? 0) > 0 ? (
+        <button
+          type="button"
+          className="jar-saved"
+          data-jar-chrome="1"
+          onClick={() => simApiRef.current?.toGround()}
+        >
+          <span className="jar-saved-count">
+            {inspirations?.length ?? 0}
+            {(inspirations?.length ?? 0) === 1 ? " inspiration saved" : " inspirations saved"}
+          </span>
+          <span className="jar-saved-caret" aria-hidden="true" />
+        </button>
+      ) : null}
+
+      <nav ref={measured.axis} className="jar-axis" data-jar-chrome="1" aria-label="walls">
         {walls.map((w) => {
           const here = atWall.kind === w.kind && atWall.id === w.id;
           return (
