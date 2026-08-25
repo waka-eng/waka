@@ -2903,6 +2903,36 @@
 /* THE PATTERN'S SENTENCE, OPEN. Measured the same way the memory's editor is:
    every metric that decides where a glyph lands is the resting line's, so the
    words do not shift by a pixel when the caret arrives. */
+/* THE VERBS ARE THEIR OWN LINE UNDER THE SENTENCE. `.jar-ask` is inline by
+   default, so the row set itself down immediately after `aspirational` and the
+   band read "…aspirationalsay it in my words". Caught by walking it. */
+.jar-was .jar-ask {
+  display: block;
+  margin-top: var(--sp-6);
+}
+
+/* A PRINCIPLE IS NOW SOMETHING YOU PRESS. It was a `<p>`; it is a button
+   inside one, and it has to read as the same sentence it always was — no
+   pill, no underline, no colour of its own. The only thing that changes is
+   that the pointer says it can be asked. */
+.jar-was-open {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+.jar-was-open:hover,
+.jar-was-open:focus-visible {
+  color: var(--jar-ink);
+}
+
 .jar-ground-edit {
   display: block;
   width: 100%;

@@ -192,6 +192,11 @@ import {
   revokeAgentKey,
   type ApiAgentKey,
   type ApiMintedKey,
+  declarePrinciple,
+  deletePrinciple,
+  disputePrinciple,
+  reorderPrinciples,
+  updatePrinciple,
   type ApiPrinciple,
   type ApiGroupFieldInspiration,
   type ApiGroupWallSignal,
@@ -1270,6 +1275,29 @@ function HomeExperience(): JSX.Element {
    */
   const [principles, setPrinciples] = useState<ApiPrinciple[]>([]);
   const [principlesOpen, setPrinciplesOpen] = useState(false);
+  /**
+   * LAYER FOUR BECOMES SOMETHING YOU CAN ANSWER, not only read.
+   *
+   * The world has shown principles since they existed — sorted by rank, with
+   * `aspirational` marked — and offered NO verb on them. Declaring, correcting,
+   * disputing, ordering and removing were all on the flat `/principles` screen,
+   * which is five of the twelve verbs `one-product-one-system.md` counted as
+   * missing here.
+   *
+   * They follow the grammar the layer below already uses: press the sentence
+   * and its verbs open under it, exactly as pressing a pattern opens
+   * `yes · partly · not true`. A person who has learned that a claim answers
+   * back when you press it has already learned this.
+   *
+   * `pick` is which principle is open, `pDraft` is the words being typed
+   * (declaring when `pDraft.id` is null, correcting when it is not), and
+   * `pGoing` is the two-step on removal — a destructive word is never beside
+   * its own yes, the same rule the settings sheet keeps four times over.
+   */
+  const [pick, setPick] = useState<string | null>(null);
+  const [pDraft, setPDraft] = useState<{ id: string | null; text: string } | null>(null);
+  const [pGoing, setPGoing] = useState<string | null>(null);
+  const [pBusy, setPBusy] = useState(false);
 
   const sky = useMemo(
     () => ({
@@ -9106,6 +9134,114 @@ function HomeExperience(): JSX.Element {
    */
   const [settingsFor, setSettingsFor] = useState<string | null>(null);
 
+  /* ── THE FIVE ACTS ON A PRINCIPLE ──────────────────────────────────────
+     Each reloads from the server rather than patching state by hand: rank is
+     decided there (declaring re-ranks, disputing can change a state), and a
+     list this short is not worth a reconciliation that can disagree with it. */
+  const reloadPrinciples = useCallback(async () => {
+    const rows = await fetchPrinciples();
+    setPrinciples(rows);
+  }, []);
+
+  const savePrinciple = useCallback(() => {
+    const draft = pDraft;
+    if (!draft || pBusy) return;
+    const text = draft.text.trim();
+    if (text === "") return;
+    setPBusy(true);
+    /**
+     * DECLARING IS ROUTED, NOT REFUSED — and the world has to say which way it
+     * went. `POST /principles` never rejects: what qualifies comes back as a
+     * principle, and what is really a rule or a goal is KEPT AS AN INSPIRATION
+     * instead (`ApiDeclarationResult`).
+     *
+     * The first version of this ignored the answer, reloaded, and closed. So
+     * typing "I finish what I start." — a goal — returned 201, added nothing
+     * to the band, and said nothing: the person is told their words were
+     * saved by the absence of an error, and shown a list that does not
+     * contain them. Caught by walking it in a browser, which is the only
+     * reason it is not shipping.
+     */
+    const done = () => {
+      setPDraft(null);
+      setPick(null);
+    };
+    if (draft.id) {
+      void updatePrinciple(draft.id, text)
+        .then(() => reloadPrinciples())
+        .then(done)
+        .catch((err) => setCharSay(whyFailed(err, "That was not saved.")))
+        .finally(() => setPBusy(false));
+      return;
+    }
+    void declarePrinciple(text)
+      .then((result) => {
+        if (result.created === "inspiration") {
+          /* Not a failure and not a correction — a different filing, said in
+             the world's own voice rather than left for the person to infer
+             from an unchanged list. */
+          setCharSay(
+            "That reads as something to do rather than something you hold to, so it is kept as a memory.",
+          );
+          done();
+          return undefined;
+        }
+        return reloadPrinciples().then(done);
+      })
+      .catch((err) => setCharSay(whyFailed(err, "That was not saved.")))
+      .finally(() => setPBusy(false));
+  }, [pDraft, pBusy, reloadPrinciples, whyFailed]);
+
+  const disputeThisPrinciple = useCallback(
+    (id: string) => {
+      if (pBusy) return;
+      setPBusy(true);
+      disputePrinciple(id)
+        .then(() => reloadPrinciples())
+        .then(() => setPick(null))
+        .catch((err) => setCharSay(whyFailed(err, "That dispute was not recorded.")))
+        .finally(() => setPBusy(false));
+    },
+    [pBusy, reloadPrinciples, whyFailed],
+  );
+
+  const removePrinciple = useCallback(
+    (id: string) => {
+      if (pBusy) return;
+      setPBusy(true);
+      deletePrinciple(id)
+        .then(() => reloadPrinciples())
+        .then(() => {
+          setPGoing(null);
+          setPick(null);
+        })
+        .catch((err) => setCharSay(whyFailed(err, "That principle is still here.")))
+        .finally(() => setPBusy(false));
+    },
+    [pBusy, reloadPrinciples, whyFailed],
+  );
+
+  /* MOVED BY ONE PLACE, NOT DRAGGED. Rank IS the ordering — "states render,
+     numerals never" — so the act is `above the one before it`, and the whole
+     order is sent because that is what the route takes and what makes it
+     stick against the next generation. */
+  const movePrinciple = useCallback(
+    (id: string, by: -1 | 1) => {
+      if (pBusy) return;
+      const order = [...principles].sort((a, b) => a.rank - b.rank).map((x) => x.id);
+      const at = order.indexOf(id);
+      const to = at + by;
+      if (at < 0 || to < 0 || to >= order.length) return;
+      order.splice(to, 0, ...order.splice(at, 1));
+      setPBusy(true);
+      reorderPrinciples(order)
+        .then((rows) => setPrinciples(rows))
+        .catch((err) => setCharSay(whyFailed(err, "That order was not saved.")))
+        .finally(() => setPBusy(false));
+    },
+    [pBusy, principles, whyFailed],
+  );
+
   /* Fetched when the sheet opens, on the wall it is about. A failure is
      quiet: no keys is a real state, and a banner over a settings sheet for a
      list nobody asked to see is noise. */
@@ -10211,9 +10347,53 @@ function HomeExperience(): JSX.Element {
                             beside a statement. */}
                         {[...principles]
                           .sort((a, b) => a.rank - b.rank)
-                          .map((pr) => (
+                          .map((pr, i, ranked) => (
                             <p key={pr.id} className="jar-was">
-                              {pr.statement}
+                              {/* CORRECTING IT IN PLACE, the same shape the
+                                  card and the pattern already use: the
+                                  sentence becomes a field where it stands, so
+                                  the words do not move when the caret
+                                  arrives. */}
+                              {pDraft && pDraft.id === pr.id ? (
+                                <>
+                                  <textarea
+                                    className="jar-ground-edit"
+                                    aria-label="this principle in your own words"
+                                    value={pDraft.text}
+                                    rows={2}
+                                    autoFocus
+                                    onChange={(e) =>
+                                      setPDraft({ id: pr.id, text: e.target.value })
+                                    }
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Escape") {
+                                        e.preventDefault();
+                                        setPDraft(null);
+                                      }
+                                    }}
+                                  />
+                                  <span className="jar-ask">
+                                    <button type="button" disabled={pBusy} onClick={savePrinciple}>
+                                      {pBusy ? "saving…" : "save"}
+                                    </button>
+                                    <span aria-hidden="true"> · </span>
+                                    <button type="button" onClick={() => setPDraft(null)}>
+                                      leave it
+                                    </button>
+                                  </span>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="jar-was-open"
+                                  aria-expanded={pick === pr.id}
+                                  onClick={() =>
+                                    setPick((cur) => (cur === pr.id ? null : pr.id))
+                                  }
+                                >
+                                  {pr.statement}
+                                </button>
+                              )}
                               {pr.state === "aspirational" ? (
                                 /* The one distinction worth carrying up here:
                                    declared-but-not-yet-demonstrated is a
@@ -10221,8 +10401,120 @@ function HomeExperience(): JSX.Element {
                                    already has the word for it. */
                                 <span className="jar-poster-away"> aspirational</span>
                               ) : null}
+                              {/* THE VERBS, under the sentence they are about.
+                                  Order is by consequence: correcting is
+                                  harmless, moving is reversible, disputing is
+                                  a stance the machine will read, and removing
+                                  is last and asks. */}
+                              {pick === pr.id && !pDraft ? (
+                                <span className="jar-ask">
+                                  <button
+                                    type="button"
+                                    onClick={() => setPDraft({ id: pr.id, text: pr.statement })}
+                                  >
+                                    say it in my words
+                                  </button>
+                                  {i > 0 ? (
+                                    <>
+                                      <span aria-hidden="true"> · </span>
+                                      <button
+                                        type="button"
+                                        disabled={pBusy}
+                                        onClick={() => movePrinciple(pr.id, -1)}
+                                      >
+                                        matters more
+                                      </button>
+                                    </>
+                                  ) : null}
+                                  {i < ranked.length - 1 ? (
+                                    <>
+                                      <span aria-hidden="true"> · </span>
+                                      <button
+                                        type="button"
+                                        disabled={pBusy}
+                                        onClick={() => movePrinciple(pr.id, 1)}
+                                      >
+                                        matters less
+                                      </button>
+                                    </>
+                                  ) : null}
+                                  <span aria-hidden="true"> · </span>
+                                  <button
+                                    type="button"
+                                    disabled={pBusy}
+                                    onClick={() => disputeThisPrinciple(pr.id)}
+                                  >
+                                    not mine
+                                  </button>
+                                  <span aria-hidden="true"> · </span>
+                                  {pGoing === pr.id ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        disabled={pBusy}
+                                        onClick={() => removePrinciple(pr.id)}
+                                      >
+                                        {pBusy ? "removing…" : "yes, remove it"}
+                                      </button>
+                                      <span aria-hidden="true"> · </span>
+                                      <button type="button" onClick={() => setPGoing(null)}>
+                                        keep it
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <button type="button" onClick={() => setPGoing(pr.id)}>
+                                      remove
+                                    </button>
+                                  )}
+                                </span>
+                              ) : null}
                             </p>
                           ))}
+                        {/* DECLARING ONE, which is the only act here that is
+                            not about a sentence already on screen — so it is
+                            the only one that does not hang off one. Layer four
+                            is what you choose to be; up to now the world could
+                            only show you what it had inferred. */}
+                        {pDraft && pDraft.id === null ? (
+                          <p className="jar-was">
+                            <textarea
+                              className="jar-ground-edit"
+                              aria-label="a principle of your own"
+                              value={pDraft.text}
+                              rows={2}
+                              autoFocus
+                              placeholder="What you hold to"
+                              onChange={(e) => setPDraft({ id: null, text: e.target.value })}
+                              onKeyDown={(e) => {
+                                if (e.key === "Escape") {
+                                  e.preventDefault();
+                                  setPDraft(null);
+                                }
+                              }}
+                            />
+                            <span className="jar-ask">
+                              <button type="button" disabled={pBusy} onClick={savePrinciple}>
+                                {pBusy ? "declaring…" : "declare it"}
+                              </button>
+                              <span aria-hidden="true"> · </span>
+                              <button type="button" onClick={() => setPDraft(null)}>
+                                not now
+                              </button>
+                            </span>
+                          </p>
+                        ) : (
+                          <p className="jar-ask">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPick(null);
+                                setPDraft({ id: null, text: "" });
+                              }}
+                            >
+                              declare one
+                            </button>
+                          </p>
+                        )}
                       </div>
                     ) : null}
                     {/* THE BOARD'S OWN VERBS — and this is what makes the
