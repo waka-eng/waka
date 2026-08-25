@@ -91,11 +91,30 @@ async function isolate(ctx: BrowserContext, baseUrl: string): Promise<void> {
   );
 }
 
+/**
+ * GET THROUGH THE DOOR, AND MAKE AN ACCOUNT IF THERE ISN'T ONE.
+ *
+ * This signed in as `demo@example.test` and gave up if that failed, so on any
+ * machine where `pnpm demo:seed` had not been run it stayed on `/login` — and
+ * then reported `the world renders with every third-party host unreachable —
+ * FAIL`, naming the world for a missing row in a database. A gate that says
+ * the product is broken when the truth is "no account" is worse than no gate:
+ * it is a red suite nobody can act on, and it is exactly the "breaks in the
+ * middle" failure the founder asked to be rid of (2026-08-25).
+ *
+ * Every other browser suite in this repo signs UP, with a unique address, and
+ * so is runnable on a cold stack. This one now does the same — it prefers an
+ * existing account so a seeded demo is still what gets walked, and falls back
+ * to making one. If neither works it says which, rather than blaming the page
+ * it never reached.
+ */
 async function signIn(
   ctx: BrowserContext,
   { baseUrl, email, password }: Args,
 ): Promise<import("playwright").Page> {
   const page = await ctx.newPage();
+  const landed = (): boolean => !new URL(page.url()).pathname.startsWith("/login");
+
   await page.goto(`${baseUrl}/login`, { waitUntil: "domcontentloaded" });
   await page.fill("input[name=email]", email);
   await page.fill("input[name=password]", password);
@@ -103,6 +122,23 @@ async function signIn(
   await page
     .waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 20_000 })
     .catch(() => {});
+  if (landed()) return page;
+
+  console.log(`[first-paint] no account for ${email}; making one`);
+  await page.goto(`${baseUrl}/login`, { waitUntil: "domcontentloaded" });
+  await page.click("#login-tab-signup");
+  await page.fill("input[name=email]", `first-paint-${Date.now()}@example.test`);
+  await page.fill("input[name=password]", "first-paint-password-1");
+  await page.fill("input[name=name]", "First Paint");
+  await page.click("button[type=submit]");
+  await page
+    .waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 20_000 })
+    .catch(() => {});
+  if (!landed()) {
+    /* Neither route worked. Say so here, so the case below reports a door that
+       would not open rather than a world that would not draw. */
+    console.log("[first-paint] could not sign in OR sign up — the door itself is shut");
+  }
   return page;
 }
 

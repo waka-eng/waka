@@ -938,6 +938,32 @@ function parseArgs(argv: string[]): CliArgs | null {
   return args;
 }
 
+/**
+ * THIS STACK CANNOT EXERCISE THE CLAIM — WHICH IS NOT THE PRODUCT FAILING.
+ *
+ * Founder, 2026-08-25: every workflow should reach its end "without breaking
+ * in the middle". Auditing the eleven suites against that found the same shape
+ * four times over: a step discovers, at run time, that the stack it is pointed
+ * at cannot host the thing being claimed — no attachments bucket, a fixture on
+ * loopback that the API's SSRF guard refuses by design — and reports FAIL. The
+ * product is fine. The guard blocking loopback IS the product working.
+ *
+ * A red run whose red is environmental is worse than a missing gate, because a
+ * genuine regression then arrives into a suite that is already red and nobody
+ * looks twice. Every suite here already had a skip concept; none of them used
+ * it for the conditions they can only discover while running.
+ *
+ * The rule for using this, and it is narrow: throw `NotExercised` ONLY when
+ * the stack lacks a capability the claim needs. Never when the product
+ * answered and answered wrongly — that is a failure and stays one.
+ */
+class NotExercised extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "NotExercised";
+  }
+}
+
 interface StepResult {
   number: number;
   title: string;
@@ -1152,11 +1178,11 @@ const STEPS: Step[] = [
       });
 
       if (settled.enrichment.errorReason === "private_address") {
-        throw new Error(
-          "enrichment refused the fixture as a private address. The API's SSRF guard blocks " +
-            "loopback by design, so this step needs either a dev-only allowance for the fixture " +
-            "host in packages/api/src/lib/signal-enrichment.ts, or --fixture-url pointing at a " +
-            "routable address that reaches this machine.",
+        throw new NotExercised(
+          "the fixture is on loopback and the API's SSRF guard refuses private addresses — " +
+            "by design, so this is the product working rather than failing. To exercise the " +
+            "claim, pass --fixture-url pointing at an address that routes back to this machine, " +
+            "or add a dev-only allowance in packages/api/src/lib/signal-enrichment.ts.",
         );
       }
       assert(
@@ -1206,6 +1232,17 @@ const STEPS: Step[] = [
         label: "the fixture image's enrichment",
       });
 
+      /* THE SAME GUARD AS THE LINK STEP ABOVE. This one reached a plain
+         `assert` instead and so reported the identical environmental cause as
+         a product failure — the two steps share a cause and must share an
+         answer. */
+      if (settled.enrichment.errorReason === "private_address") {
+        throw new NotExercised(
+          "the fixture image is on loopback and the API's SSRF guard refuses private " +
+            "addresses — by design. Pass --fixture-url pointing at an address that routes " +
+            "back to this machine to exercise the claim.",
+        );
+      }
       assert(
         settled.enrichment.status === "ready",
         `enrichment settled as ${settled.enrichment.status} (${settled.enrichment.errorReason ?? "no reason"}), expected ready`,
@@ -1282,14 +1319,17 @@ async function runScenario(args: CliArgs): Promise<number> {
         });
       } catch (err) {
         const message = redact(err instanceof Error ? err.message : String(err));
+        /* A capability this stack has not got is a SKIP, not a FAIL, and it
+           never aborts the run — see `NotExercised`. */
+        const notExercised = err instanceof NotExercised;
         results.push({
           number,
           title: step.title,
-          outcome: "fail",
-          detail: message,
+          outcome: notExercised ? "skip" : "fail",
+          detail: notExercised ? `NOT EXERCISED — ${message}` : message,
           ms: Date.now() - startedAt,
         });
-        if (step.critical) aborted = true;
+        if (step.critical && !notExercised) aborted = true;
       }
       console.log(formatResult(results[results.length - 1]!));
     }
@@ -1317,7 +1357,13 @@ async function runScenario(args: CliArgs): Promise<number> {
   const skipped = results.filter((row) => row.outcome === "skip").length;
   const passed = results.filter((row) => row.outcome === "pass").length;
   console.log(`\n[organic] ${passed} passed, ${failed} failed, ${skipped} skipped`);
-  return failed + skipped > 0 ? 1 : 0;
+  /* A SKIP NO LONGER MAKES THE RUN RED, and the distinction is the point. Two
+     things wear the skip badge: a step this stack cannot host (`NotExercised`)
+     and a step abandoned because an earlier one failed. The second only ever
+     happens alongside a real failure, so `failed` is already non-zero and the
+     run is red anyway; keeping `skipped` in this sum only had the effect of
+     painting a healthy stack red for lacking an object store. */
+  return failed > 0 ? 1 : 0;
 }
 
 async function main(): Promise<void> {

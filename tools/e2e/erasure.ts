@@ -128,6 +128,32 @@ interface GroupBoard {
   }>;
 }
 
+/**
+ * THIS STACK CANNOT EXERCISE THE CLAIM — WHICH IS NOT THE PRODUCT FAILING.
+ *
+ * `options.skip` below is decided BEFORE a step runs, from what the
+ * environment declares. That covers the attachment byte checks, which can read
+ * `ATTACHMENTS_BUCKET` up front — and covers nothing that is only discoverable
+ * once a request has been made. So step 1 posted to `/api/attachments/presign`,
+ * got `500 Attachments bucket is not configured`, and reported FAIL directly
+ * above a SKIP whose stated reason was the identical missing bucket.
+ *
+ * The comment on the room-draft step said out loud that it meant to behave
+ * "the same shape as the attachment steps above, which report what the stack
+ * has not got rather than failing it" — and then threw a plain `Error`, which
+ * is a FAIL. The intent was written down and never implemented.
+ *
+ * Narrow rule, the same as organic's: throw this ONLY when the stack lacks a
+ * capability the claim needs. A product that answered wrongly is a failure and
+ * stays one.
+ */
+class NotExercised extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "NotExercised";
+  }
+}
+
 const results: Array<{ ok: boolean; skipped?: boolean }> = [];
 
 async function step(
@@ -149,9 +175,16 @@ async function step(
     console.log(`PASS ${index}. ${title} (${((Date.now() - started) / 1000).toFixed(1)}s)`);
     console.log(`     ${detail}`);
   } catch (err) {
-    results.push({ ok: false });
     const message = err instanceof Error ? err.message : String(err);
-    console.log(`FAIL ${index}. ${title} (${((Date.now() - started) / 1000).toFixed(1)}s)`);
+    const seconds = ((Date.now() - started) / 1000).toFixed(1);
+    if (err instanceof NotExercised) {
+      results.push({ ok: true, skipped: true });
+      console.log(`SKIP ${index}. ${title} (${seconds}s)`);
+      console.log(`     NOT EXERCISED — ${message}`);
+      return;
+    }
+    results.push({ ok: false });
+    console.log(`FAIL ${index}. ${title} (${seconds}s)`);
     console.log(`     ${message}`);
   }
 }
@@ -264,17 +297,35 @@ async function main(): Promise<void> {
       await capture(stayer, { text, kind: "note", visibility: "public" });
     }
 
-    const attachment = await attachImage(leaver, {
-      inspirationId: first.id,
-      bytes: new Uint8Array(ONE_PIXEL_PNG),
-      filename: "sextant.png",
-      contentType: "image/png",
-    });
-    attachmentObject = storeReachable ? objectUrl(endpoint, bucket, attachment.url) : "";
+    /* TWO CLAIMS IN ONE STEP, AND ONLY ONE OF THEM NEEDS A BUCKET. The
+       archives are the load-bearing half and they had already been written by
+       the time this ran; the picture needs an object store. On a stack with
+       none, `attachImage` answers `500 Attachments bucket is not configured`
+       and the whole step went red — reporting that two people could not keep
+       their own archives, which they demonstrably had.
+
+       So the picture is attempted and its absence is reported in words. The
+       archives stay a hard claim: anything else thrown here is still a
+       failure. */
+    let pictureNote = "one image attached";
+    try {
+      const attachment = await attachImage(leaver, {
+        inspirationId: first.id,
+        bytes: new Uint8Array(ONE_PIXEL_PNG),
+        filename: "sextant.png",
+        contentType: "image/png",
+      });
+      attachmentObject = storeReachable ? objectUrl(endpoint, bucket, attachment.url) : "";
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (!/bucket is not configured/i.test(message)) throw err;
+      attachmentObject = "";
+      pictureNote = "no image — this stack has no attachments bucket, so the picture half of this step was not exercised";
+    }
 
     leaverProfileId = leaver.profileId;
 
-    return `${LEAVER_ARCHIVE.length} + ${STAYER_ARCHIVE.length} captures, one image attached`;
+    return `${LEAVER_ARCHIVE.length} + ${STAYER_ARCHIVE.length} captures, ${pictureNote}`;
   });
 
   await step(
@@ -389,7 +440,7 @@ async function main(): Promise<void> {
        report what the stack has not got rather than failing it. */
     const MIN_AFFIRMED = 2;
     if (affirmedShared < MIN_AFFIRMED) {
-      throw new Error(
+      throw new NotExercised(
         `the room is holding its first draft: ${affirmedShared} of its own statements ` +
           `were agreed with and a room needs ${MIN_AFFIRMED} before it drafts ` +
           `(groupDraftMinAffirmed, top-of-mind-synthesis.ts). Nothing is broken — ` +
