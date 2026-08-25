@@ -524,7 +524,7 @@
      stand 16px in from their column's edge, so this stands 16px down from the
      top and the count stands 16px up from the dial. Four signposts, one
      inset, measured from whatever edge each of them is nearest. */
-  top: calc(16px + env(safe-area-inset-top));
+  top: calc(10px + env(safe-area-inset-top));
   /* A ROW, not a column — the same construction as the count at the bottom:
      words, then the caret that says which way they lead. */
   display: flex;
@@ -537,6 +537,17 @@
   padding: 5px 12px;
   background: none;
   font-family: inherit;
+  /* THE SAME INK AS A WAY OUT (founder, 2026-08-25: "same font and opacity
+     as ROOM1 and the other one"). The type already matched on all four —
+     10px, 0.16em, uppercase. The COLOUR did not, and not in the direction it
+     looked: a way sideways is the QUIETEST of the four at `--jar-faint`,
+     because a later rule in this file re-states it after the block that sets
+     it muted. This sign's own words were a tier brighter (`.jar-label` paints
+     them muted) and the count was brighter still (it painted nothing and
+     inherited the world's ink). Three tiers, four signposts.
+
+     All four sit at faint now, and the parts inside inherit it rather than
+     re-declaring — which is what let them drift apart in the first place. */
   color: var(--jar-faint);
   cursor: pointer;
   pointer-events: auto;
@@ -546,8 +557,14 @@
 .jar-values:focus-visible {
   color: var(--jar-ink);
 }
-.jar-values-words {
+/* INHERIT, never re-declare. `.jar-label` paints its own colour, so a span
+   wearing it inside a signpost silently overrode the sign's ink — which is
+   exactly how the four drifted to three different tiers. The label register's
+   TYPE is what these want from it; the colour comes from the sign. */
+.jar-values-words,
+.jar-saved-count {
   display: block;
+  color: inherit;
   white-space: nowrap;
 }
 
@@ -593,7 +610,7 @@
   z-index: 6;
   left: 50%;
   transform: translateX(-50%);
-  top: calc(14px + env(safe-area-inset-top));
+  top: calc(10px + env(safe-area-inset-top));
   appearance: none;
   -webkit-appearance: none;
   border: 0;
@@ -618,7 +635,7 @@
    off rather than a door. */
 .jar-up--down {
   top: auto;
-  bottom: calc(16px + env(safe-area-inset-bottom));
+  bottom: calc(10px + env(safe-area-inset-bottom));
 }
 
 /* ---------- which kind of place to make ----------
@@ -703,10 +720,10 @@
   left: 50%;
   transform: translateX(-50%);
   /* 16px ABOVE THE DIAL, which is what is actually at the bottom edge: the
-     rail sits 6px up and stands 30px tall, so 52px puts the same inset
+     rail sits 6px up and stands 30px tall, so 46px puts the same inset
      between this and the dial as the ways sideways keep from their edges.
      Measuring from the viewport bottom instead would put it under the rail. */
-  bottom: calc(52px + env(safe-area-inset-bottom));
+  bottom: calc(46px + env(safe-area-inset-bottom));
   display: flex;
   align-items: center;
   gap: 7px;
@@ -731,8 +748,12 @@
   font-size: 10px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
+  /* and the same ink as the rest of the family. This rule declared `color`
+     TWICE — the second winning silently, one line below `white-space`, which
+     is why the count read a whole tier brighter than the ways sideways and
+     why reading the file did not show it. One declaration. */
+  color: var(--jar-faint);
   white-space: nowrap;
-  color: var(--jar-muted);
   cursor: pointer;
   pointer-events: auto;
   transition: color 0.22s ease;

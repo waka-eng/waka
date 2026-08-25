@@ -10239,7 +10239,7 @@ function HomeExperience(): JSX.Element {
                     type="button"
                     className="jar-way jar-label"
                     data-jar-chrome="1"
-                    style={{ left: `calc(var(--jar-vw, 100vw) * ${w.col} + 16px)` }}
+                    style={{ left: `calc(var(--jar-vw, 100vw) * ${w.col} + 10px)` }}
                     onPointerDown={() => loadWall(left)}
                     onClick={() => simApiRef.current?.travel(-1)}
                   >
@@ -10252,7 +10252,7 @@ function HomeExperience(): JSX.Element {
                     type="button"
                     className="jar-way jar-way--r jar-label"
                     data-jar-chrome="1"
-                    style={{ left: `calc(var(--jar-vw, 100vw) * ${w.col + 1} - 16px)` }}
+                    style={{ left: `calc(var(--jar-vw, 100vw) * ${w.col + 1} - 10px)` }}
                     onPointerDown={() => loadWall(right)}
                     onClick={() => simApiRef.current?.travel(1)}
                   >
