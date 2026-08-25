@@ -623,8 +623,26 @@ describe("what the poster is standing on", () => {
     );
     expect(leads, "the poster was asked and answered with nothing").toContain("built from");
 
-    const rows = [...layout.container.querySelectorAll(".jar-prov--poster .jar-prov-row")].map(
-      (n) => (n.textContent ?? "").trim(),
+    /* AND "BUILT FROM" IS A DOOR NOW, NOT A LABEL OVER A LIST. The rows used
+       to sit here and to TRAVEL — pressing one left headquarters for the
+       field — so they moved to a room that opens over the world and takes
+       nothing away from you (founder, 2026-08-25). The memories under the
+       ambition are the same memories; this follows them through the door. */
+    const door = [...layout.container.querySelectorAll<HTMLElement>(".jar-prov-open")].find(
+      (n) => (n.textContent ?? "").trim() === "built from",
+    );
+    if (!door) throw new Error("`built from` is not pressable — the grounds have no way in");
+    await act(async () => door.click());
+
+    const room = layout.container.querySelector(".jar-prov-room");
+    if (!room) throw new Error("`built from` opened nothing");
+    expect(
+      (room.querySelector(".jar-prov-room-lead")?.textContent ?? "").trim(),
+      "the room leads with the ambition it is accounting for",
+    ).not.toBe("");
+
+    const rows = [...room.querySelectorAll(".jar-prov-row")].map((n) =>
+      (n.textContent ?? "").trim(),
     );
     expect(rows).toHaveLength(CHAIN_SIZE);
     /* each row names a memory AND why it was read that way — the row is an

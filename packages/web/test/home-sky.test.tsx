@@ -476,6 +476,44 @@ async function whereFrom(startsWith: string): Promise<void> {
   await act(async () => verb.click());
 }
 
+/**
+ * Press across the field until a memory's panel opens, and hand it back.
+ *
+ * The band comes from the audit rather than from a guess, so this follows the
+ * field wherever the fit put it; the step is smaller than the smallest orb the
+ * audit reports, so a hit is not luck.
+ */
+async function tapAnOrb(): Promise<HTMLElement> {
+  const a = layout.audit();
+  if (a.drawn.active === 0) throw new Error("the field is empty — nothing to tap");
+  const step = Math.max(6, Math.floor(a.drawn.rMin));
+  for (let y = Math.floor(a.highest); y <= Math.ceil(a.lowest); y += step) {
+    for (let x = 20; x <= 1400; x += step) {
+      await pressOn(canvas(), x, y);
+      await liftAt(x, y);
+      await layout.step(24);
+      const open = layout.container.querySelector<HTMLElement>(".jar-panel--in");
+      if (open) return open;
+    }
+  }
+  throw new Error(
+    `no tap anywhere across the field opened a memory: ${a.drawn.active} drawn, ` +
+      `band ${a.highest}–${a.lowest}, radii ${a.drawn.rMin}–${a.drawn.rMax}`,
+  );
+}
+
+/** Shut the room of grounds — the one way out, by design. */
+async function closeGrounds(): Promise<void> {
+  const room = layout.container.querySelector<HTMLElement>(".jar-prov-room");
+  if (!room) throw new Error("no room of grounds is open");
+  const close = [...room.querySelectorAll<HTMLElement>("button")].find(
+    (b) => (b.textContent ?? "").trim() === "enough",
+  );
+  if (!close) throw new Error("the room of grounds has no way out");
+  await act(async () => close.click());
+  await layout.step(5);
+}
+
 async function tapEmptySky() {
   await pressOn(canvas(), 30, 30);
   await liftAt(30, 30);
@@ -698,33 +736,45 @@ describe("the focus rule: one subject at a time", () => {
    * sentence sit the memories it was read from; that section belongs to the
    * one being read and to nothing else, for the same reason its satellites do.
    */
-  it("shows the read-from rows under the subject and under no one else", async () => {
+  it("opens one room of grounds, holding the subject's and nobody else's", async () => {
     await climbToSky();
-    expect(layout.container.querySelectorAll(".jar-sky .jar-prov").length).toBe(0);
+    expect(layout.container.querySelectorAll(".jar-prov-room").length).toBe(0);
 
     /* ONE LINE AT A TIME (founder ruling, 2026-08-24). Reading a pattern no
        longer prints its grounds, its verbs and its receipt all at once; the
        grounds are one tap away on the line that is already there, which is
-       what `where from` is. The rest of this case is unchanged, and its
-       claim is the one that matters: whatever the sky is showing, it is
-       showing it for exactly ONE pattern. */
+       what `where from` is.
+
+       AND THE GROUNDS ARE A ROOM NOW, NOT A LIST UNDER THE SENTENCE (founder,
+       2026-08-25). The rows used to fly the camera down into the field, which
+       cost you the place you were reading from; they open over the world
+       instead, and nothing behind them moves. The claim this case makes is
+       unchanged and is the one that matters: whatever is on screen, it is on
+       screen for exactly ONE pattern. */
     await tapSentence(NAMING);
     await whereFrom(NAMING);
-    const one = [...layout.container.querySelectorAll(".jar-sky .jar-prov")];
-    expect(one.length, "exactly one candidate is showing what it rests on").toBe(1);
-    expect(cloud(NAMING).contains(one[0]), "and it is the subject's own").toBe(true);
+    const one = [...layout.container.querySelectorAll(".jar-prov-room")];
+    expect(one.length, "exactly one room of grounds is open").toBe(1);
+    expect(
+      (one[0].querySelector(".jar-prov-room-lead")?.textContent ?? "").startsWith(NAMING),
+      "and it leads with the subject's own sentence",
+    ).toBe(true);
     expect(one[0].querySelectorAll(".jar-prov-row").length, "the memories it was read from").toBe(3);
 
+    /* it stays until it is dismissed — that is what "nothing moves behind it"
+       buys, and the close is the only way out */
+    await closeGrounds();
+    expect(layout.container.querySelectorAll(".jar-prov-room").length).toBe(0);
+
     await tapSentence(PROOF);
-    expect(
-      layout.container.querySelectorAll(".jar-sky .jar-prov").length,
-      "reading another pattern closes the last one's grounds",
-    ).toBe(0);
     await whereFrom(PROOF);
-    const two = [...layout.container.querySelectorAll(".jar-sky .jar-prov")];
+    const two = [...layout.container.querySelectorAll(".jar-prov-room")];
     expect(two.length, "still exactly one — the sky does not accumulate evidence").toBe(1);
-    expect(cloud(PROOF).contains(two[0])).toBe(true);
+    expect(
+      (two[0].querySelector(".jar-prov-room-lead")?.textContent ?? "").startsWith(PROOF),
+    ).toBe(true);
     expect(two[0].querySelectorAll(".jar-prov-row").length).toBe(2);
+    await closeGrounds();
   });
 
   /**
@@ -1200,45 +1250,40 @@ describe("changing a signal's words", () => {
  * CHANGING THE MEMORY UNDERNEATH IT — the third of the act, and the last one
  * no test reached.
  *
- * The route is the product's own and it is worth naming, because it is also
- * the shortest one to a reading panel over the viewer's own save: a candidate
- * being read lists what it was read FROM, and each of those rows travels to
- * that memory in the field and opens it. So the chain runs downward from the
- * sky into layer 1, which is exactly the claim `jar-prov` exists to make, and
- * this case walks it.
+ * THE ROUTE CHANGED, AND THE ROUTE IS THE POINT. This used to walk down from
+ * the sky: a signal's grounds listed the memories it was read from, and
+ * pressing one flew the camera into the field and opened that memory. The
+ * founder ruled that travel out ("never move from sky to ground") — reading
+ * where a claim came from must not cost you the place you were reading it —
+ * so there is no longer a way from a statement to its memory's panel, and
+ * this case walks the only route a person has: down into the field, and a tap
+ * on the orb itself.
  *
- * `more` is on the way: the panel keeps its housekeeping verbs behind one
- * quiet word, and "change the words" is one of them.
+ * The panel's verbs are one flat row now — reflect, edit, delete — so this
+ * walks straight to `edit`. They used to sit behind a quiet `more`, and this
+ * case is the reason that indirection was worth removing: the shortest route
+ * to changing the words under a signal ran through a word nobody expected to
+ * have to press.
  */
 describe("changing a memory's words", () => {
   const MINE = "What I actually meant was the naming.";
 
   it("keeps the person's own text on the memory the sky was read from", async () => {
-    await climbToSky();
-    const el = await tapSentence(NAMING);
-    /* the grounds are a tap away now — see the one-line rule */
-    await whereFrom(NAMING);
-
-    const row = el.querySelector<HTMLElement>(".jar-prov-row");
-    if (!row) throw new Error("the subject lists nothing it was read from");
-    await act(async () => row.click());
-    await layout.step(60);
-
-    const panel = layout.container.querySelector<HTMLElement>(".jar-panel--in");
-    if (!panel) throw new Error("travelling to the cited memory never opened its panel");
-
-    const open = [...panel.querySelectorAll<HTMLElement>(".jar-neb-ask button")].find((b) =>
-      /^more$/i.test((b.textContent ?? "").trim()),
-    );
-    if (!open) throw new Error("the panel offers no way to the housekeeping verbs");
-    await act(async () => open.click());
+    await layout.toField();
+    /* A REAL TAP ON A REAL ORB. There is no coordinate in the audit and there
+       should not be one — the field is drawn, and where a memory sits is the
+       loop's business. So this does what a person does: presses points across
+       the band the audit says the field was solved into, and stops at the
+       first one that opens something. A scan that found nothing is a failure
+       with a sentence, never a silent skip. */
+    const panel = await tapAnOrb();
 
     /* `change the words` was renamed to `edit` when the picture moved inside
        it; this test is about what editing DOES, so it follows the label. */
     const change = [...panel.querySelectorAll<HTMLElement>(".jar-neb-ask button")].find(
       (b) => (b.textContent ?? "").trim().toLowerCase() === "edit",
     );
-    if (!change) throw new Error("`more` did not offer editing the memory");
+    if (!change) throw new Error("the panel offers no way to edit the memory");
     await act(async () => change.click());
 
     const box = panel.querySelector<HTMLTextAreaElement>("textarea.jar-reflect-box");

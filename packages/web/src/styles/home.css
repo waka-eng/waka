@@ -1209,11 +1209,14 @@
   overflow: hidden;
 }
 /* the step-aside word, on the sheet's shoulder */
+/* THE LEFT SHOULDER. It shared the right corner with the visibility pair the
+   moment that moved up here, and two unrelated controls stacked in one corner
+   is how a corner stops being readable. */
 .jar-mouth-step {
   all: unset;
   position: absolute;
   top: 13px;
-  right: 20px;
+  left: 20px;
   cursor: pointer;
   font-size: 10px;
   letter-spacing: 0.14em;
@@ -1261,8 +1264,17 @@
 /* No rule above it either: the well below has its own edge, and a second line
    a few pixels under the first was fencing off a footer that is already
    plainly outside the writing. */
-.jar-mouth-slot--note .jar-mouth-where {
-  margin: 14px 20px 0;
+/* ON THE SHEET, IT RIDES THE TOP RIGHT. The footer had grown to two stacked
+   rows under the writing — where it goes, then what you can do — which is a
+   form growing out of the bottom of a page. Where a note is going is a
+   PROPERTY of the note, so it sits on the sheet's shoulder beside the
+   minimize word, and the footer keeps one row: what you can do. */
+.jar-mouth-slot--note .jar-mouth-where--sheet {
+  position: absolute;
+  top: 11px;
+  right: 20px;
+  margin: 0;
+  justify-content: flex-end;
 }
 
 /* The reserved row: present from the moment the mouth opens, visible once
@@ -1278,11 +1290,19 @@
   opacity: 1;
   pointer-events: auto;
 }
-/* The verbs row: the privacy pair's face, one breath below it. The first cut
-   wore tracked uppercase and read as chrome stamped onto the sheet. */
+/* The verbs row: lowercase prose in the panel's own grammar, never the
+   tracked-uppercase label register — the first cut wore that and read as
+   chrome stamped onto the sheet. On the sheet it sits under a hairline,
+   which is the only rule in the whole object: it separates the page you are
+   writing from the two things you can do with it. */
 .jar-mouth-do {
-  margin: 8px 20px 0;
+  margin-top: 10px;
   justify-content: center;
+}
+.jar-mouth-slot--note .jar-mouth-do {
+  margin: 0 20px;
+  padding: 13px 0 3px;
+  border-top: 1px solid var(--jar-panel-edge);
 }
 .jar-mouth-slot--note .jar-mouth-note {
   margin: 10px 20px 0;
@@ -1732,6 +1752,36 @@
   opacity: 1;
 }
 
+/* WHERE THIS MEMORY MAY BE SEEN — a state at the top right, not a verb in
+   the row at the bottom. Both words always present, the standing one lit and
+   the other dim, so the pair says at once where it is AND that it can move;
+   one word that swapped when pressed gave no sign it could be pressed at all.
+   Private is still the state you get by touching nothing. */
+.jar-panel-vis {
+  position: absolute;
+  top: 14px;
+  right: 18px;
+  margin: 0;
+  justify-content: flex-end;
+}
+.jar-panel-vis--busy {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* THE ONE ASK BEFORE A DELETE. It borrows the seek card's shape because it is
+   the same object — a small centred sheet that owns the moment — and it never
+   appears unless a signal genuinely stands on this memory. */
+.jar-forget-ask {
+  top: auto;
+  bottom: 12vh;
+  width: min(460px, calc(100vw - 48px));
+}
+.jar-forget-ask .jar-panel-warn {
+  display: block;
+  margin: 0 0 4px;
+}
+
 /* ---------- the reading panel: a focused bubble's information ----------
    NOT a sheet. Nothing slides, nothing is dragged, there is no grab handle,
    there are no snap points and there is no promote-to-full: reading one saved
@@ -1806,12 +1856,9 @@
 }
 .jar-panel-when {
   display: block;
-}
-/* WHERE THE MEMORY CURRENTLY IS — a fact, not a control. Set apart from the
-   buttons beside it so the line reads "here is where this is, here is what you
-   can do", rather than as one long pressable phrase. */
-.jar-panel-state {
-  color: var(--jar-faint);
+  /* the visibility pair is absolute at the same height on the right; the date
+     stops short of it rather than running underneath */
+  padding-right: 120px;
 }
 /* AND WHAT DELETING CANNOT UNDO. Quiet, because it is a fact rather than an
    alarm — but present before the act, not after it. */
@@ -2146,6 +2193,141 @@
      still carries the salience step */
   color: var(--jar-muted);
 }
+/* THE LEAD OF A CHAIN THAT IS NOW A DOOR. The poster's "built from" was a
+   label over a list; it opens the provenance room instead, so it wears the
+   register's own interactivity mark and nothing else. */
+.jar-prov-open {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  padding: 0;
+  background: none;
+  font-family: inherit;
+  color: var(--jar-faint);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 0.2s ease;
+}
+.jar-prov-open:hover,
+.jar-prov-open:focus-visible {
+  color: var(--jar-ink);
+}
+
+/* ================= WHERE A STATEMENT CAME FROM =================
+   The claim at the top, its grounds below it in two panes: every memory it
+   stands on down the left, the one you pressed whole on the right. It is a
+   room rather than a list under a sentence because the rows used to TRAVEL —
+   pressing one flew the camera out of the sky and down into the field, which
+   cost you the place you were reading from to find out where it came from.
+   Nothing behind this moves. */
+.jar-prov-room {
+  position: fixed;
+  z-index: 8;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(1020px, calc(100vw - 56px));
+  max-height: min(78vh, 760px);
+  display: flex;
+  flex-direction: column;
+  padding: 22px 24px 16px;
+  background: var(--jar-panel);
+  border: 1px solid var(--jar-panel-edge);
+  border-radius: 6px;
+  backdrop-filter: blur(18px);
+  pointer-events: auto;
+  animation: jar-panel-in 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* the claim, in the poster's face at reading size — this is the sentence the
+   whole room is accounting for, so it leads and nothing shares its line */
+.jar-prov-room-lead {
+  margin: 0 0 18px;
+  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-weight: 300;
+  font-size: clamp(17px, 1.5vw, 21px);
+  line-height: 1.38;
+  letter-spacing: 0.012em;
+  text-wrap: balance;
+  color: var(--jar-ink);
+}
+.jar-prov-room-panes {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: 24px;
+}
+.jar-prov-room-list,
+.jar-prov-room-full {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.jar-prov-room-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 4px;
+}
+/* A HONEST EDGE INSTEAD OF A SILENT TRUNCATION. A ground is a whole memory
+   and a row is a few lines; clamping says so — the text stops mid-thought
+   with the rest plainly there to be asked for, which is what the right pane
+   is. Founder: "have max length". */
+.jar-prov-room-list .jar-prov-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* which one you are reading: the quotation rule at full ink, and nothing
+   else — no fill, no chip, no arrow */
+.jar-prov-row--picked {
+  border-left-color: var(--jar-ink);
+}
+.jar-prov-row--picked .jar-prov-text {
+  color: var(--jar-ink);
+}
+.jar-prov-room-full {
+  padding-left: 24px;
+  border-left: 1px solid var(--jar-panel-edge);
+}
+.jar-prov-room-text {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.62;
+  white-space: pre-wrap;
+  color: var(--jar-ink);
+}
+/* the pane before you have chosen, and while it is fetching: prose, never the
+   label register, and never a spinner */
+.jar-prov-room-idle {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--jar-faint);
+}
+.jar-prov-room-close {
+  margin: 16px 0 0;
+  justify-content: flex-end;
+}
+/* one column on a narrow screen: the chosen memory reads UNDER its own row
+   rather than beside it, which is the same object in the only order that
+   fits */
+@media (max-width: 760px) {
+  .jar-prov-room-panes {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  .jar-prov-room-full {
+    padding-left: 0;
+    border-left: 0;
+    border-top: 1px solid var(--jar-panel-edge);
+    padding-top: 16px;
+  }
+}
+
 /* THE ANTECHAMBER — the dim place. The refused candidates render at the
    faint end of the ink scale on purpose: these are the sentences that did
    not come to be, and light is the only channel that may say so. */

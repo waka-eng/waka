@@ -1004,15 +1004,12 @@ interface SimApi {
   joinTo: (id: string) => void;
   /** Walk to a wall by column, from the axis map along the bottom. */
   goToWall: (col: number) => void;
-  /**
-   * FOLLOW THE CHAIN DOWNWARD. A pattern in the sky names the memories it was
-   * read from; pressing one of them travels to that memory in the field and
-   * opens it. This is the only navigation in the world that is caused by
-   * reading rather than by moving, and it is the whole point of provenance:
-   * a claim about you that you cannot walk back to its source is just an
-   * assertion.
-   */
-  revealMemory: (inspirationId: string) => void;
+  /* `revealMemory` LIVED HERE and is gone. It flew the camera from a statement
+     down to the memory it was read from — the only navigation in the world
+     caused by reading rather than by moving, and the founder ruled it out
+     outright (2026-08-25: "never move from sky to ground"). Provenance is
+     answered without moving now: `.jar-prov-room` puts the grounds and the
+     whole memory on screen over the world you are standing in. */
   /** A reflection was kept: this memory's light genuinely comes back up. */
   relight: (id: string) => void;
   /**
@@ -1513,9 +1510,26 @@ function HomeExperience(): JSX.Element {
    * where it came from.
    */
   const [chainOpen, setChainOpen] = useState<string | null>(null);
-  const openChain = useCallback((id: string) => {
-    setChainOpen((cur) => (cur === id ? null : id));
-  }, []);
+  /**
+   * THE PROVENANCE OF ONE STATEMENT, IN A ROOM OF ITS OWN.
+   *
+   * Both entrances — "where from" under a signal in the sky, and "built from"
+   * under the ambition at headquarters — used to render a list of pressable
+   * rows in place, and pressing one flew the camera down into the field to
+   * the memory. Two faults in one gesture. The travel was ruled out outright
+   * (founder, 2026-08-25: "never move from sky to ground"): finding out where
+   * a claim came from must not cost you the place you were reading it. And a
+   * memory is longer than a row, so every ground arrived clipped with no way
+   * to see the rest of it except by leaving.
+   *
+   * So: one object, two panes. Left is every ground this statement stands on,
+   * each clamped to a few lines with the read span still lit. Right is the
+   * one you pressed, whole. Nothing moves behind it.
+   */
+  const [prov, setProv] = useState<{ lead: string; rows: Evidence[] } | null>(null);
+  const [provPick, setProvPick] = useState<string | null>(null);
+  /** the chosen ground, fetched whole — `null` while it is on its way */
+  const [provFull, setProvFull] = useState<{ id: string; text: string } | null>(null);
   /* reading a different pattern closes the last one's grounds: the sky shows
      one set at a time, the way it focuses one statement at a time */
   useEffect(() => {
@@ -1723,8 +1737,6 @@ function HomeExperience(): JSX.Element {
    *   `view.w/h/layout` — re-measured on setup, and must be: a rebuild can
    *     straddle a resize.
    */
-  // @ts-expect-error TEMPORARY probe
-  window.__tick3 = () => setGroupFieldTick((n) => n + 1);
   const carryRef = useRef<{
     cam: unknown;
     trip: unknown;
@@ -7807,20 +7819,6 @@ function HomeExperience(): JSX.Element {
       toTop: () => {
         aimTo(0, 0);
       },
-      revealMemory: (inspirationId: string) => {
-        const b = findBall(inspirationId);
-        if (!b) return;
-        /* bring it to a comfortable reading height rather than to the exact
-           centre: the companion sits mid-frame and the memory should land
-           beside it, not behind it */
-        const want = clamp(b.y - view.h * 0.5, view.layout.minCam, view.layout.maxCam);
-        if (Math.abs(want - cam.y) > 8) {
-          gesture.snapAt = 0;
-          cam.vel = 0;
-          aimTo(want, 0);
-        }
-        select(inspirationId);
-      },
       /* the signal line's glide: programmatic, and exempt from the snap.
          Only the personal column has a sky to glide into. */
       toSky: () => {
@@ -8824,6 +8822,28 @@ function HomeExperience(): JSX.Element {
   );
 
   /**
+   * "WHERE FROM" — the one verb, two destinations, and neither of them moves.
+   *
+   * A statement with grounds opens the provenance room over the world. One
+   * whose grounds were never recorded has nothing to put in that room, so it
+   * toggles the honest line in place instead: the absence of receipts is a
+   * fact worth a sentence, and a modal that opened onto an apology would be
+   * worse than the sentence.
+   */
+  const whereFrom = useCallback(
+    (c: Candidate) => {
+      const rows = c.kind === "reading" ? evidenceBySignalRef.current.get(c.id) ?? [] : [];
+      if (rows.length === 0) {
+        setChainOpen((cur) => (cur === c.id ? null : c.id));
+        return;
+      }
+      setProvPick(null);
+      setProv({ lead: c.text, rows });
+    },
+    [],
+  );
+
+  /**
    * SALIENCE, SET IN LIGHT.
    *
    * The server names the span it read (`quote`) inside the memory's text
@@ -8919,6 +8939,33 @@ function HomeExperience(): JSX.Element {
       dead = true;
     };
   }, [focusCandId]);
+
+  /* THE CHOSEN GROUND, WHOLE. The evidence row carries a preview — enough to
+     show which words did the reading, never enough to be the memory. The
+     right pane asks for the memory itself, once per selection, and says so
+     while it is on its way rather than rendering a shorter version of the
+     truth. */
+  useEffect(() => {
+    if (provPick === null) {
+      setProvFull(null);
+      return undefined;
+    }
+    let dead = false;
+    setProvFull(null);
+    loadInspiration(provPick)
+      .then((full) => {
+        if (!dead) setProvFull({ id: provPick, text: full.text });
+      })
+      .catch(() => {
+        /* the left pane still holds the span that was read, which is the
+           claim this room exists to back; the right pane says it could not
+           fetch the rest rather than pretending the preview is the whole */
+        if (!dead) setProvFull({ id: provPick, text: "" });
+      });
+    return () => {
+      dead = true;
+    };
+  }, [provPick]);
 
   const panelId = panel ? panel.id : null;
 
@@ -9445,6 +9492,12 @@ function HomeExperience(): JSX.Element {
       member's save — no reflect action at all. */
   const panelIsGroup = panelBall !== null && panelBall.col !== undefined;
   const panelCanReflect = !panelIsGroup || panelBall?.own === true;
+  /* WHETHER ANYTHING WAS READ OUT OF THIS MEMORY. `roots` is the count of
+     signals standing on it — the same number the field grades its light by —
+     so the question "does deleting this cost anything a person cannot see"
+     is already answered on the orb, with no extra request. Zero means the
+     delete is silent; anything else opens the ask. */
+  const panelPowersSignal = (panelBall?.roots ?? 0) > 0;
 
   /* ---------------- reflect ----------------
      The panel is the memory and ONE action. Reflecting happens here rather
@@ -9569,15 +9622,12 @@ function HomeExperience(): JSX.Element {
   }, []);
 
   /** Which memory has been asked about, and how far the asking has got. */
-  /** the housekeeping actions, opened on request rather than always present */
-  const [more, setMore] = useState(false);
   const [forget, setForget] = useState<{ id: string | null; step: "rest" | "asking" | "going" }>({
     id: null,
     step: "rest",
   });
   useEffect(() => {
     setForget({ id: null, step: "rest" });
-    setMore(false);
   }, [panelId]);
 
   /* ============================ ROOMS ============================
@@ -10523,24 +10573,21 @@ function HomeExperience(): JSX.Element {
                     ) : null}
                     {here && posterAsk ? (
                       posterChain.length > 0 ? (
+                        /* THE SAME ROOM THE SKY OPENS. These rows travelled
+                           too — press one and the camera left headquarters
+                           for the field — and they were clipped the same way.
+                           One object, two entrances. */
                         <div className="jar-prov jar-prov--poster" data-jar-chrome="1">
-                          <p className="jar-prov-lead jar-label">built from</p>
-                          {posterChain.map((e) => (
-                            <button
-                              key={e.inspirationId}
-                              type="button"
-                              className="jar-prov-row"
-                              onClick={() => {
-                                setPosterAsk(false);
-                                simApiRef.current?.revealMemory(e.inspirationId);
-                              }}
-                            >
-                              <span className="jar-prov-text">{salience(e)}</span>
-                              {e.reason ? (
-                                <span className="jar-prov-why">{e.reason}</span>
-                              ) : null}
-                            </button>
-                          ))}
+                          <button
+                            type="button"
+                            className="jar-prov-lead jar-prov-open jar-label"
+                            onClick={() => {
+                              setProvPick(null);
+                              setProv({ lead: c.text ?? "", rows: posterChain });
+                            }}
+                          >
+                            built from
+                          </button>
                         </div>
                       ) : (
                         /* the honest empty: a sentence with no chain is a
@@ -11025,7 +11072,7 @@ function HomeExperience(): JSX.Element {
                   setMouthMin(true);
                 }}
               >
-                step aside
+                minimize
               </button>
             ) : null}
             {mouthLong && mouthMin ? (
@@ -11109,7 +11156,7 @@ function HomeExperience(): JSX.Element {
               <p
                 className={`jar-neb-ask jar-neb-ask--row jar-mouth-where${
                   draft.trim() !== "" ? " jar-mouth-where--armed" : ""
-                }`}
+                }${mouthLong ? " jar-mouth-where--sheet" : ""}`}
               >
                 <button
                   type="button"
@@ -11117,7 +11164,7 @@ function HomeExperience(): JSX.Element {
                   aria-pressed={!keepPublic}
                   onClick={() => setKeepPublic(false)}
                 >
-                  kept to yourself
+                  private
                 </button>
                 <span aria-hidden="true"> · </span>
                 <button
@@ -11126,7 +11173,7 @@ function HomeExperience(): JSX.Element {
                   aria-pressed={keepPublic}
                   onClick={() => setKeepPublic(true)}
                 >
-                  going to your rooms
+                  public
                 </button>
               </p>
             ) : null}
@@ -11144,20 +11191,24 @@ function HomeExperience(): JSX.Element {
                 then opens the new orb with the question already asked — the
                 workflow the founder was missing, rather than a second way to
                 save. */}
-            {mouthLong && mouthOpen && draft.trim() !== "" ? (
-              /* Same face as the privacy pair one line up — lowercase prose,
-                 the middot, the lit/faint pair — because the first cut wore
-                 the tracked-uppercase label register and read as chrome
-                 stamped onto the sheet (founder: "so ugly"). The footer is
-                 one small language now: a line that says where it goes, and a
-                 line that says what you can do. */
-              <p className="jar-neb-ask jar-neb-ask--row jar-mouth-do">
+            {mouthOpen ? (
+              /* ON BOTH FACES NOW (founder: "save button is missing" — said
+                 of the one line, after it was said of the sheet). Enter
+                 still keeps on the quick line, but a named way to save and a
+                 way to reflect belong wherever there are words, not only
+                 once the words have grown into a page. Reserved-then-armed
+                 like the row above it, so the typing line never moves. */
+              <p
+                className={`jar-neb-ask jar-neb-ask--row jar-mouth-do jar-mouth-where${
+                  draft.trim() !== "" ? " jar-mouth-where--armed" : ""
+                }`}
+              >
                 <button type="button" className="jar-where-on" onClick={() => keepIt()}>
-                  keep it
+                  save
                 </button>
                 <span aria-hidden="true"> · </span>
                 <button type="button" className="jar-where-off" onClick={() => keepIt(true)}>
-                  keep it and reflect
+                  save and reflect
                 </button>
               </p>
             ) : null}
@@ -11235,22 +11286,16 @@ function HomeExperience(): JSX.Element {
 
                 And each is pressable: it travels to that memory in the field
                 and opens it, so the chain runs downward as well as upward. */}
-            {chainOpen === c.id && evidenceFor(c).length > 0 ? (
-              <div className="jar-prov">
-                <p className="jar-prov-lead jar-label">read from</p>
-                {evidenceFor(c).map((e) => (
-                  <button
-                    key={`${e.signalId}:${e.inspirationId}`}
-                    type="button"
-                    className="jar-prov-row"
-                    onClick={() => simApiRef.current?.revealMemory(e.inspirationId)}
-                  >
-                    <span className="jar-prov-text">{salience(e)}</span>
-                    {e.reason ? <span className="jar-prov-why">{e.reason}</span> : null}
-                  </button>
-                ))}
-              </div>
-            ) : null}
+            {/* THE CHAIN IS A ROOM OF ITS OWN NOW, NOT A LIST UNDER A
+                SENTENCE. See `<the provenance of a signal>` below the sky:
+                pressing "where from" opens it. Two things drove that. The
+                rows travelled — pressing one flew the camera from the sky
+                down into the field, which the founder ruled out outright
+                ("never move from sky to ground"): reading where a claim came
+                from must not cost you the place you were reading it. And a
+                memory is longer than a row, so every ground was delivered as
+                a clipped fragment with no way to see the rest of it without
+                leaving. */}
             {/* THE HONEST EMPTY. A pattern whose grounds were never recorded
                 (rows from before the chain was kept) says so, rather than
                 rendering no section — the absence of receipts is itself a
@@ -11368,7 +11413,7 @@ function HomeExperience(): JSX.Element {
                   </>
                 ) : null}
                 <span aria-hidden="true"> · </span>
-                <button type="button" onClick={() => openChain(c.id)}>
+                <button type="button" onClick={() => whereFrom(c)}>
                   {chainOpen === c.id ? "enough" : "where from"}
                 </button>
               </p>
@@ -11384,7 +11429,7 @@ function HomeExperience(): JSX.Element {
                     <span aria-hidden="true"> · </span>
                   </>
                 ) : null}
-                <button type="button" onClick={() => openChain(c.id)}>
+                <button type="button" onClick={() => whereFrom(c)}>
                   {chainOpen === c.id ? "enough" : "where from"}
                 </button>
               </p>
@@ -11498,6 +11543,38 @@ function HomeExperience(): JSX.Element {
             </span>
           )}
 
+          {!panelIsGroup ? (
+            /* WHO MAY SEE THIS, AT THE TOP RIGHT (founder, 2026-08-25:
+               "top right should have option to switch between Private •
+               Public. also call it private and public everywhere"). The
+               same lit/dim pair the mouth wears while writing: both words
+               always present, the standing one lit, pressing the other one
+               moves it. Private remains the state you get by touching
+               nothing. */
+            <p
+              className={`jar-neb-ask jar-neb-ask--row jar-panel-vis${
+                publishing ? " jar-panel-vis--busy" : ""
+              }`}
+            >
+              <button
+                type="button"
+                className={panelIsPublic ? "jar-where-off" : "jar-where-on"}
+                aria-pressed={!panelIsPublic}
+                onClick={() => (panelIsPublic ? togglePublic() : undefined)}
+              >
+                private
+              </button>
+              <span aria-hidden="true"> · </span>
+              <button
+                type="button"
+                className={panelIsPublic ? "jar-where-on" : "jar-where-off"}
+                aria-pressed={panelIsPublic}
+                onClick={() => (panelIsPublic ? undefined : togglePublic())}
+              >
+                public
+              </button>
+            </p>
+          ) : null}
           <p ref={panelTextRef} className="jar-panel-text" style={markStyle}>
             {markPassages(
               panel.detail ? panel.detail.text : panelBall.textPreview,
@@ -11660,117 +11737,167 @@ function HomeExperience(): JSX.Element {
               </p>
             </div>
           ) : null}
-          {/* ONE ACTION IN THE OPEN, THE REST BEHIND A WORD.
-              This became four lines under every memory — reflect, change the
-              words, add a picture, forget this — which is a menu attached to
-              a sentence. Reflecting is the act this panel exists for and the
-              only one anybody does often; the other three are housekeeping
-              you go looking for. They live behind one quiet word now. */}
-          {/* ONE ROW, ONE VOICE.
-              This was three separate things: an uppercase `REFLECT ON THIS`
-              set as a label-button, then `more`, then `forget this`, each its
-              own block — a memory ending in a small ransom note of three
-              registers. The act this panel exists for and the way to the rest
-              of the acts are now one lowercase line in the same face as the
-              memory above them, which is the grammar the sky has used all
-              along. `forget this` is not on it: throwing a memory away is
-              housekeeping, and it lives behind `more` with the other two. */}
-          {panelCanReflect && reflect.step === "rest" && !editing.open && !more ? (
+          {/* ONE ROW, THREE VERBS, IN THE MEMORY'S OWN VOICE (founder,
+              2026-08-25: "the bottom should be Reflect • Edit • Delete").
+              The nest — one act in the open, the rest behind "more" — put
+              the housekeeping a press further away than anybody expected it
+              to be. Three lowercase words in the panel's own grammar now,
+              reflecting first because it is the act this panel exists for.
+              Visibility is not on this row any more: where the memory may be
+              seen is a state, and it reads at the top right beside the date,
+              not among the verbs.
+
+              A room orb keeps its own law: another member's save offers no
+              verb here at all (the verdict row above is the answer), and
+              your own save in a room reflects but is never edited or
+              deleted from the room's wall. */}
+          {panelCanReflect && reflect.step === "rest" && !editing.open ? (
             <p className="jar-neb-ask jar-neb-ask--after jar-neb-ask--row">
               <button type="button" onClick={askToReflect}>
-                reflect on this
+                reflect
               </button>
               {!panelIsGroup ? (
                 <>
                   <span aria-hidden="true"> · </span>
-                  <button type="button" onClick={() => setMore(true)}>
-                    more
+                  <button
+                    type="button"
+                    onClick={() =>
+                      editing.begin(
+                        "memory",
+                        panelId as string,
+                        panel.detail ? panel.detail.text : panelBall.textPreview,
+                      )
+                    }
+                  >
+                    edit
                   </button>
+                  <span aria-hidden="true"> · </span>
+                  {/* DELETING ASKS ONLY WHEN THERE IS SOMETHING TO SAY
+                      (founder, 2026-08-25: "delete it without warning if
+                      inspiration is not powering a signal. if it does, then
+                      show a new modal to explain the situation"). A memory
+                      nothing was read from goes the moment you say so —
+                      a warning with nothing to warn about is friction wearing
+                      a safety costume. A memory a signal stands on opens the
+                      ask below instead. */}
+                  {forget.step === "going" ? (
+                    "deleting…"
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        panelPowersSignal
+                          ? setForget({ id: panelId, step: "asking" })
+                          : forgetIt()
+                      }
+                    >
+                      delete
+                    </button>
+                  )}
                 </>
               ) : null}
             </p>
           ) : null}
-          {panelCanReflect && !panelIsGroup && reflect.step === "rest" && !editing.open && more ? (
-            <p className="jar-neb-ask jar-neb-ask--after">
-              <button
-                type="button"
-                onClick={() =>
-                  editing.begin(
-                    "memory",
-                    panelId as string,
-                    panel.detail ? panel.detail.text : panelBall.textPreview,
-                  )
-                }
-              >
-                edit
-              </button>
-              <span aria-hidden="true"> · </span>
-              {/* WHO ELSE MAY SEE THIS.
-                  The one verb the data model gained and the layout could not
-                  perform: rooms were rendering a ground nobody could put
-                  anything on. It reads as a state rather than as a switch —
-                  the word says where the memory currently is, and pressing it
-                  moves it — because "public/private" as a pair of options
-                  invites a choice, and this is a fact about one memory.
+        </div>
+      ) : null}
 
-                  Closing it again takes it out of every room at once. There
-                  is no copy anywhere else, so this is genuinely reversible,
-                  which is why it needs no confirmation while forgetting
-                  does. */}
-              {/* WHERE IT IS, THEN WHAT YOU CAN DO ABOUT IT.
-                  This was one button whose label was the state AND the act
-                  glued together — "kept to yourself · put it in your rooms" —
-                  so the whole phrase looked pressable and nothing said which
-                  half would happen. The state is plain text now and only the
-                  verb is a button, which is the same shape every other line
-                  in this panel already has. */}
-              {publishing ? (
-                "…"
-              ) : (
-                <>
-                  <span className="jar-panel-state">
-                    {panelIsPublic ? "in your rooms" : "only you"}
-                  </span>
-                  <span aria-hidden="true"> · </span>
-                  <button type="button" onClick={togglePublic}>
-                    {panelIsPublic ? "keep it to yourself" : "put it in your rooms"}
-                  </button>
-                </>
-              )}
-              <span aria-hidden="true"> · </span>
-              {/* AND ONLY THEN MAY IT GO. Forgetting sits at the end of the
-                  same line as the other two housekeeping acts rather than in
-                  a block of its own: it is the last thing you would reach
-                  for, not a different category of thing. Asking still happens
-                  in sequence — the confirmation replaces this word, so the
-                  destructive option is never sitting next to its own
-                  confirmation. */}
-              {forget.step === "going" ? (
-                "deleting…"
-              ) : forget.id === panelId ? (
-                <>
-                  {/* WHAT A DELETE CANNOT TAKE BACK.
-                      A memory is evidence: signals were read out of it and
-                      they do not go with it. Saying so at the moment of asking
-                      is the difference between a warning and a surprise, and
-                      it is the honest shape of the layers — layer 1 is yours
-                      to remove, layer 2 is what was already learned. */}
-                  <span className="jar-panel-warn">
-                    Patterns already read from this stay.
-                  </span>{" "}
-                  <button type="button" onClick={forgetIt}>delete it</button>
-                  <span aria-hidden="true"> · </span>
-                  <button type="button" onClick={() => setForget({ id: null, step: "rest" })}>
-                    keep it
-                  </button>
-                </>
-              ) : (
-                <button type="button" onClick={() => setForget({ id: panelId, step: "asking" })}>
-                  delete
+      {/* ================= WHERE A STATEMENT CAME FROM =================
+          It leads with the statement itself, because the question the room
+          answers is "how did THIS get said" and the claim has to be present
+          for the grounds under it to mean anything.
+
+          Then two panes. LEFT: every memory this statement stands on, in the
+          order it was read, each clamped to a few lines with the span that
+          did the reading still at full ink and its surround dim — the same
+          salience the rows always carried, now with an honest edge instead of
+          a silent truncation. RIGHT: the one you pressed, whole, fetched as
+          the memory itself rather than as the preview the evidence carries.
+
+          NOTHING MOVES BEHIND IT. The old rows flew the camera down into the
+          field, which cost you the place you were reading from to find out
+          where it came from — ruled out by the founder outright. */}
+      {prov !== null ? (
+        <div
+          className="jar-prov-room"
+          data-jar-chrome="1"
+          role="dialog"
+          aria-label="where this came from"
+        >
+          <p className="jar-prov-room-lead">{prov.lead}</p>
+          <div className="jar-prov-room-panes">
+            <div className="jar-prov-room-list">
+              <p className="jar-prov-lead jar-label">read from</p>
+              {prov.rows.map((e) => (
+                <button
+                  key={`${e.signalId}:${e.inspirationId}`}
+                  type="button"
+                  className={`jar-prov-row${
+                    provPick === e.inspirationId ? " jar-prov-row--picked" : ""
+                  }`}
+                  aria-pressed={provPick === e.inspirationId}
+                  onClick={() => setProvPick(e.inspirationId)}
+                >
+                  <span className="jar-prov-text">{salience(e)}</span>
+                  {e.reason ? <span className="jar-prov-why">{e.reason}</span> : null}
                 </button>
+              ))}
+            </div>
+            <div className="jar-prov-room-full">
+              {provPick === null ? (
+                /* THE PANE SAYS WHAT IT IS FOR RATHER THAN SITTING BLANK, and
+                   it never guesses by pre-selecting the first ground: which
+                   memory you are reading is a thing you chose, and a pane
+                   that chose for you would put words on screen you did not
+                   ask for and could not tell apart from your own choice. */
+                <p className="jar-prov-room-idle">
+                  Press one to read the whole memory it came from.
+                </p>
+              ) : provFull === null || provFull.id !== provPick ? (
+                <p className="jar-prov-room-idle">Fetching it…</p>
+              ) : provFull.text === "" ? (
+                <p className="jar-prov-room-idle">
+                  Couldn’t fetch the rest of this one. The words on the left are
+                  the span that was read.
+                </p>
+              ) : (
+                <p className="jar-prov-room-text">{provFull.text}</p>
               )}
-            </p>
-          ) : null}
+            </div>
+          </div>
+          <p className="jar-neb-ask jar-neb-ask--row jar-prov-room-close">
+            <button type="button" onClick={() => setProv(null)}>
+              enough
+            </button>
+          </p>
+        </div>
+      ) : null}
+
+      {/* THE ONE ASK BEFORE A DELETE, AND ONLY WHEN IT IS TRUE. A modal, not
+          a clause crammed into the verb row: the situation deserves its own
+          sentence, and the destructive word must never sit pressed against
+          the row you were just reading. Keeping is the lit answer — this is
+          a door that would rather not be walked through. */}
+      {forget.step === "asking" && forget.id !== null ? (
+        <div className="jar-seek jar-forget-ask" data-jar-chrome="1" role="alertdialog">
+          <p className="jar-panel-warn">
+            A signal was read from this memory and still stands on it.
+            Deleting the memory does not unlearn the signal — but the signal
+            loses this ground, and can no longer point back to where it came
+            from.
+          </p>
+          <p className="jar-neb-ask jar-neb-ask--row">
+            <button
+              type="button"
+              className="jar-where-on"
+              onClick={() => setForget({ id: null, step: "rest" })}
+            >
+              keep it
+            </button>
+            <span aria-hidden="true"> · </span>
+            <button type="button" className="jar-where-off" onClick={forgetIt}>
+              delete it anyway
+            </button>
+          </p>
         </div>
       ) : null}
 
