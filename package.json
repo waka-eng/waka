@@ -38,7 +38,8 @@
     "e2e:fixtures": "tsx tools/e2e/fixture-server.ts",
     "e2e:s3-stub": "tsx tools/e2e/s3-stub.ts",
     "visual-diff": "tsx tools/visual-diff/capture.ts",
-    "visual-diff:install": "playwright install chromium"
+    "visual-diff:install": "playwright install chromium",
+    "e2e:phone": "tsx tools/e2e/phone.ts"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",

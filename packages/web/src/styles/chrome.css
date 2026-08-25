@@ -1142,6 +1142,18 @@ body textarea {
   color: var(--w-ink);
   font-size: 15px;
 }
+/* THE DOOR'S OWN TABS, ON A THUMB. Measured 2026-08-25 at 390px:
+   `.login-tab` renders 58x30 and 112x30 — past WCAG 2.2 AA's 24x24 and short
+   of the 44 a phone wants for the control that chooses between signing in and
+   signing up, which is the first decision anyone makes here. Six pixels of
+   air, on coarse pointers only. */
+@media (pointer: coarse) {
+  .login-tab {
+    padding-top: 7px;
+    padding-bottom: 7px;
+  }
+}
+
 /* SIXTEEN PIXELS ON A TOUCH DEVICE, AND IT IS NOT A TYPOGRAPHY CHOICE.
    Mobile Safari ZOOMS THE WHOLE PAGE when a text field under 16px takes
    focus, and does not zoom back out. Measured 2026-08-25: every input in this

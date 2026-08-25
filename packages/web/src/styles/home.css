@@ -2666,6 +2666,68 @@
   }
 }
 
+/* ═══════════════ WHAT A THUMB CAN ACTUALLY HIT ═══════════════
+   MEASURED AT 390x844 AND 360x640, 2026-08-25. Every interactive thing in the
+   world, with its rendered size:
+
+     .jar-mouth-rest   350x19   the capture control — the one act this
+                                product exists for, nineteen pixels tall
+     .jar-where-on     55x11    private / public / save / reflect
+     .jar-where-off    48x11
+     .jar-values       196x21   the way up
+     .jar-saved        138x21   the way down
+     .jar-when         49x25    when you are
+     .jar-here         46x26    the wall you are on
+     .jar-here-more    42x26    the other walls
+     .jar-account      140x25   the way out
+     .jar-up           42x26
+
+   THE LINE THIS DRAWS, AND WHY IT IS NOT 44 EVERYWHERE. WCAG 2.2 AA (2.5.8,
+   Target Size Minimum) asks for 24x24 CSS pixels. Apple's HIG asks 44x44 and
+   Material 48x48, and those are recommendations rather than the conformance
+   bar. Forcing 44 onto all ten would add twenty-plus pixels of height to the
+   top row, the bottom row and the mouth at once — remaking the composition on
+   the strength of a guideline this product is not held to.
+
+   So: the ACTS get 44 — the mouth, and the four verbs under it, because those
+   are what a person reaches for while holding the phone one-handed and a
+   mis-hit on `save` or `reflect` costs them the thing they were keeping.
+   Everything else clears 24 and is brought to it where it falls short.
+
+   Coarse pointers only. Nothing here moves a pixel on a desktop, which is
+   also why `e2e:measure` still reads the same geometry it was written
+   against. */
+@media (pointer: coarse) {
+  /* the one act: 19px -> 45px, taken as air around the words rather than as
+     bigger type, so the mouth reads exactly as it was designed to */
+  .jar-mouth-rest {
+    padding-top: 13px;
+    padding-bottom: 13px;
+  }
+  /* the verbs under it: 11px -> 44px. The row grows, and on a phone that is
+     the right trade — these decide who may read a memory and whether it is
+     kept at all. */
+  .jar-mouth-where button,
+  .jar-panel-vis button {
+    /* 17, not 16: the words are 11px tall, so 16 each side lands on 43 and the
+       gate reports it one pixel short — which is the gate doing its job */
+    padding-top: 17px;
+    padding-bottom: 17px;
+  }
+  /* the two signposts on the vertical axis: 21px -> 27px, past WCAG's 24 */
+  .jar-values,
+  .jar-saved {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  /* the chrome pills sit at 25-26px and already clear 24; `.jar-here-more` is
+     the one under it on the short axis, at 42px wide */
+  .jar-here-more {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+}
+
 /* ═══════════════════ THE TOP ROW, ON A PHONE ═══════════════════
    MEASURED, NOT GUESSED (2026-08-25, first walk of the world at phone size).
    At 390px the four things along the top edge overlap each other:
