@@ -309,19 +309,34 @@ describe("the dial in a room", () => {
   });
 
   it("spans the room's life rather than the viewer's archive", async () => {
-    /* The viewer's oldest memory is two hundred days old and the room's first
-       mark is a hundred. If the rail were still spanning the archive, the
-       room's first mark would sit halfway down it instead of near the top. */
-    const hinges = [...layout.container.querySelectorAll<HTMLElement>(".jar-hinge")];
-    expect(hinges.length, "the door's marks are not on the rail").toBe(DOOR_DAYS.length);
-    const first = Math.min(...hinges.map((h) => Number.parseFloat(h.style.left)));
-    const wanted = railPos(ago(DOOR_DAYS[0])) * 100;
+    /* The viewer's oldest memory is two hundred days old and the room's
+       history begins a hundred days ago. Wind to the very start of the rail
+       and ask what day it landed on: a rail spanning the ROOM answers with
+       the room's opening, and one still spanning the archive answers with
+       something twice as old.
+
+       THIS USED TO COUNT THE DOOR'S MARKS. The marks were 1px ticks on the
+       rail for who joined and who left, and they were removed on 2026-08-25
+       — the founder asked four times, having read them as a stray `||`
+       rather than as events. Counting them was never the claim anyway; it
+       was a way of reading the rail's span off the DOM, and it took the
+       whole test down with the feature. The date the dial reports is the
+       same reading, taken from the thing the test is actually about. */
+    await windTo(0);
+    /* The dial prints a day and a month and no year — it is a label, not a
+       timestamp — so the year has to be supplied to read it back. This rail
+       spans about a hundred days, well inside one year, so today's is right;
+       a rail that ever spans a new year would need the label to carry one. */
+    const shown = one(".jar-dial-date").textContent ?? "";
+    const days = Math.round(
+      (Date.now() - Date.parse(`${shown.trim()} ${new Date().getFullYear()}`)) / DAY,
+    );
     expect(
-      first,
-      `the room's first mark should sit at ${wanted.toFixed(1)}% of a rail that ` +
-        `starts three days before it. Sitting lower means the rail is still ` +
-        `spanning the viewer's archive, which begins long before this room did.`,
-    ).toBeCloseTo(wanted, 0);
+      Number.isFinite(days) ? days : NaN,
+      `wound to the far left, the dial says "${shown}". A rail spanning this ` +
+        `room starts about ${Math.round((Date.now() - railStart) / DAY)} days ` +
+        `back; one still spanning the viewer's archive would start about 200.`,
+    ).toBeLessThan(150);
   });
 
   it("shows the sentence the room actually had up, not today's", async () => {

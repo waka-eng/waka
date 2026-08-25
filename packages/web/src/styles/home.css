@@ -1724,14 +1724,88 @@
      you are in time, when the room changed — and facts do not wait for the
      pointer. */
 }
+/* ---------- the rail arrives when you reach for it ----------
+   Founder, 2026-08-25: "I don't want the line to always be there. Can we have
+   a button called timeline and when user hovers on it, the line and the
+   draggable circle only show then?"
+
+   Time is the one axis that applies to every wall at once, so it keeps its
+   place at the bottom edge — but a hairline drawn the full width of the
+   screen with a lit handle on it, at rest, on every wall, is an instrument
+   left switched on in a room where nobody is winding anything.
+
+   So the WORD rests there and the instrument arrives. The label sits over the
+   middle of the rail rather than beside it, so opening moves nothing: it
+   fades out in the same slot the hairline fades into.
+
+   THREE WAYS IN, and the third is the one that keeps it honest on a phone.
+   Hover is what was asked for and is right on a pointer; `:focus-within`
+   carries a keyboard; `--open` is the press, because a hover-only control
+   does not exist on touch and this stylesheet has shipped three of those
+   already. `--live` is not a way in but a fact: while you are scrubbing, or
+   parked anywhere but now, the rail stays up because it is showing you
+   where you are. */
+.jar-dial-name {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 6px 12px;
+  background: none;
+  font-family: inherit;
+  color: var(--jar-faint);
+  cursor: pointer;
+  pointer-events: auto;
+  white-space: nowrap;
+  transition: opacity 0.28s ease, color 0.22s ease;
+}
+.jar-dial-name:hover,
+.jar-dial-name:focus-visible {
+  color: var(--jar-muted);
+}
+/* the word steps aside for the instrument it names */
+.jar-dial:hover .jar-dial-name,
+.jar-dial:focus-within .jar-dial-name,
+.jar-dial--open .jar-dial-name,
+.jar-dial--live .jar-dial-name {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* AT REST THERE IS NO RAIL. The hairline, the months and the handle all wait
+   together — a half-drawn instrument is worse than none. */
+.jar-dial-track::before,
+.jar-month,
+.jar-dial-handle {
+  opacity: 0;
+}
+.jar-dial:hover .jar-dial-track::before,
+.jar-dial:focus-within .jar-dial-track::before,
+.jar-dial--open .jar-dial-track::before,
+.jar-dial--live .jar-dial-track::before {
+  opacity: 0.5;
+}
+.jar-dial:hover .jar-dial-handle,
+.jar-dial:focus-within .jar-dial-handle,
+.jar-dial--open .jar-dial-handle,
+.jar-dial--live .jar-dial-handle {
+  opacity: 1;
+}
 .jar-month {
-  opacity: 0.45;
   transition: opacity 0.28s ease;
 }
 .jar-dial:hover .jar-month,
 .jar-dial:focus-within .jar-month,
+.jar-dial--open .jar-month,
 .jar-dial--live .jar-month {
-  opacity: 1;
+  /* the months were the quietest part of a rail that was always up; now the
+     rail itself waits, they come back at the strength they were designed at */
+  opacity: 0.45;
 }
 /* nothing to wind on this wall */
 .jar-dial--away {
@@ -1778,29 +1852,6 @@
    notch in it. Arrivals and departures wear the same mark on purpose — the
    fact is "the room changed who it is", and light is not spent sorting people
    into good news and bad. Which of the two it was is what the name says. */
-/* A DOOR MARK: the rail's note that this room's membership changed here.
-   Founder, 2026-08-25, seeing two of them land a few days apart: "what is
-   this weird thing on the timeline slider" — which is the whole finding. At
-   full ink and eleven pixels tall they were the brightest thing on the rail,
-   taller than the track and unexplained, and two adjacent ones fused into a
-   `||` that reads as a pause button rather than as two events.
-
-   They are rail TEXTURE, not a control: something happened here, wind to it
-   and the wall will show you what. So they sit at the muted tier, inside the
-   track's own height rather than overhanging it, and they are narrow enough
-   that two close together stay two marks. What they MEAN still arrives on
-   the hover title and, properly, by winding the dial onto them. */
-.jar-hinge {
-  position: absolute;
-  top: 50%;
-  width: 1px;
-  height: 7px;
-  margin-top: -3.5px;
-  transform: translateX(-50%);
-  background: var(--jar-muted);
-  opacity: 0.75;
-  pointer-events: none;
-}
 /* THE HANDLE IS WHITE AND WHOLLY THERE (founder, 2026-08-25: "make this
    circle just white and full opacity"). It was faint at rest and only came up
    under the pointer — but it is WHERE YOU ARE IN TIME, a fact and not an
@@ -1903,6 +1954,22 @@
   /* in the row now, not floated over it */
   margin: 0;
   justify-content: flex-end;
+  /* THE SAME REGISTER AS THE DATE ACROSS FROM IT (founder, 2026-08-25: "make
+     it private/public and make same font and size as" — pointing at
+     `YESTERDAY · AUG 24`). It wore `.jar-ask`, the quiet verb row's 13px
+     prose, so the head's two ends were a meta label on the left and two
+     sentence-sized words on the right, which is why the row read as
+     lopsided even once it was centred. */
+  gap: 5px;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.jar-panel-vis button {
+  font-size: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  font-weight: 500;
 }
 .jar-panel-vis--busy {
   opacity: 0.5;

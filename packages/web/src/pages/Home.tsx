@@ -1909,6 +1909,23 @@ function HomeExperience(): JSX.Element {
   const groupBoardPendingRef = useRef<Set<string>>(new Set());
   /** Both refs' change signal — they are filled from promises. */
   const [groupPastTick, setGroupPastTick] = useState(0);
+  /**
+   * IS THE RAIL SHOWING? (founder, 2026-08-25: "i don't want the line to
+   * always be there. can we have a button called timeline and when user
+   * hovers on it, the line and the draggable circle only show then?")
+   *
+   * Time is the one axis that applies to every wall at once, so it earns a
+   * permanent place at the bottom edge — but a rail and a handle drawn across
+   * the full width, at rest, on every screen, is a control shouting while
+   * nothing is being wound. The word is what rests there now; the instrument
+   * arrives when you reach for it.
+   *
+   * A BUTTON AND NOT ONLY A HOVER. Hover is what was asked for and it is
+   * right on a pointer, but it does not exist on a phone — and this codebase
+   * has shipped three controls that were dead on touch for exactly that
+   * reason. Pressing the word opens the rail; hovering opens it too.
+   */
+  const [timeOpen, setTimeOpen] = useState(false);
 
   /**
    * Fetch one room's jar — its readings' evidence plus its direction —
@@ -2712,41 +2729,6 @@ function HomeExperience(): JSX.Element {
     /* `groupPastTick` is the timeline ref's change signal: the room's history
        lands a request after arrival, and the rail must re-span when it does. */
   }, [inspirations, clockMs, atWall, groupPastTick]);
-
-  /**
-   * THE DOOR'S MARKS, ON THE RAIL.
-   *
-   * `goals/room-timeline.md` names this as the phase's unmet thesis: "join
-   * marks are not hinges — every stop renders the same class, so a join is
-   * visually identical to a refresh." A room's story turns on who walked in
-   * and who walked out, and a rail that draws those the same as a nightly
-   * re-reading is a rail that says nothing about the room.
-   *
-   * So the marks are the door's alone. A version boundary is not one: the
-   * board changing is what you SEE when you wind past it — the sentence over
-   * the room becomes a different sentence — and drawing a tick for it too
-   * would be the same fact in two channels, which is how a legend gets born.
-   */
-  const doorHinges = useMemo(() => {
-    if (!dial || dial.onGroup === null) return [];
-    const timeline = groupTimelineRef.current.get(dial.onGroup);
-    if (!timeline) return [];
-    return timeline.doorMarks.flatMap((mark) => {
-      const ms = Date.parse(mark.occurredAt);
-      if (!Number.isFinite(ms) || ms < dial.start || ms > dial.end) return [];
-      return [
-        {
-          pct: (ms - dial.start) / dial.span,
-          /* An arrival and a departure are the same KIND of event — the room
-             changed who it is — so they wear one mark. Which of the two it
-             was is what the name beside it says, and light is not spent on
-             sorting people into good news and bad. */
-          who: mark.name ?? "someone",
-          kind: mark.kind,
-        },
-      ];
-    });
-  }, [dial, groupPastTick]);
 
   /* ------------- palette: resolve vars once, re-raster sprites ------------- */
   useEffect(() => {
@@ -8001,17 +7983,28 @@ function HomeExperience(): JSX.Element {
        no wait at all, and still one single appearance. */
     const cached = detailsRef.current.get(fetchId);
     if (cached) {
+      steppingRef.current = false;
       setPanel({ id: selectedId, detail: cached, partial: false });
       setPanelOpen(true);
       return undefined;
     }
     /* otherwise: whatever was open leaves at once, and nothing takes its
-       place until the new content is complete */
-    setPanelOpen(false);
+       place until the new content is complete.
+
+       EXCEPT WHILE STEPPING, WHICH IS THE SAME CARD (founder's recording,
+       2026-08-25: "don't make card blink when switching"). Closing and
+       reopening is right when a DIFFERENT memory is opened out of the field —
+       that is a new appearance, and the animation says so. Paging with the
+       carets is not: the card is a frame you are turning pages inside, the
+       carets live in its own foot, and taking the whole object away and
+       bringing it back between pages reads as a blink. The old words stay up
+       until the new ones land, and only the contents change. */
+    if (!steppingRef.current) setPanelOpen(false);
     let done = false;
     const show = (detail: InspirationDetail | null) => {
       if (done) return;
       done = true;
+      steppingRef.current = false;
       window.clearTimeout(timer);
       setPanel({ id: selectedId, detail, partial: detail === null });
       setPanelOpen(true);
@@ -8713,11 +8706,32 @@ function HomeExperience(): JSX.Element {
    * to sit.
    */
   const leaveWordsRef = useRef<() => void>(() => {});
+  /** Set while a step is in flight, so the panel effect can tell paging
+      through the card from opening a different memory out of the field. */
+  const steppingRef = useRef(false);
   const stepToMemory = useCallback((id: string | null) => {
     if (!id) return;
     leaveWordsRef.current();
     setForget({ id: null, step: "rest" });
-    setSelectedId(id);
+    steppingRef.current = true;
+    /* AND THE GROUND FOLLOWS THE CARD (founder's recording, 2026-08-25: "the
+       balls in the back should reflect which ball we're moving to").
+
+       This set React's `selectedId` and nothing else. The loop mirrors that
+       ref, so the FIELD dimmed correctly — every other orb sank — but the one
+       you had stepped to was never held: `select()` is what lights an orb,
+       leans the companion toward it and takes the hold, and it was never
+       called. So paging through the card moved the words and left the light
+       on whichever orb you had originally tapped.
+
+       `select` sets `selectedId` itself, so this replaces the setter rather
+       than joining it. It cannot toggle the selection off by accident: React
+       state has not committed yet, so the ref it compares against is still
+       the memory being stepped AWAY from. The bare setter stays as the
+       fallback for the fixture, which has no simulation behind it. */
+    const sim = simApiRef.current;
+    if (sim) sim.select(id);
+    else setSelectedId(id);
   }, []);
 
   /* ---------------- reflect ----------------
@@ -9526,11 +9540,31 @@ function HomeExperience(): JSX.Element {
     setPublishing(true);
     updateInspiration(id, { visibility: next })
       .then(() => {
+        const isPublic = next === "public";
         setInspirations((cur) =>
-          (cur ?? []).map((c) => (c.id === id ? { ...c, isPublic: next === "public" } : c)),
+          (cur ?? []).map((c) => (c.id === id ? { ...c, isPublic } : c)),
+        );
+        /* AND THE DETAIL, WHICH IS WHAT THE WORD ACTUALLY READS.
+           `panelIsPublic` takes `panel.detail.isPublic` FIRST and falls back
+           to the archive — "the detail is authoritative once it lands", which
+           it is, and nothing here updated it. So the request went out, the
+           server changed the row, the archive was corrected, and the word did
+           not move, because the stale detail kept winning (founder,
+           2026-08-25: "private doesn't switch to public"). The detail lands
+           the instant the card opens, so this was every press after the first
+           frame — which is every press.
+
+           Both copies, because both are read: the ref is what a re-open
+           serves from, and the state is what this render is showing. */
+        const cached = detailsRef.current.get(id);
+        if (cached) detailsRef.current.set(id, { ...cached, isPublic });
+        setPanel((cur) =>
+          cur && cur.id === panelId && cur.detail
+            ? { ...cur, detail: { ...cur.detail, isPublic } }
+            : cur,
         );
         /* it went out to people, or it came home */
-        simApiRef.current?.acknowledge(next === "public" ? "shared" : "touch");
+        simApiRef.current?.acknowledge(isPublic ? "shared" : "touch");
       })
       .catch(() => {
         /* left as it was: the word is the state, so an unchanged word is an
@@ -10574,7 +10608,7 @@ function HomeExperience(): JSX.Element {
               >
                 private
               </button>
-              <span aria-hidden="true"> · </span>
+              <span aria-hidden="true">/</span>
               <button
                 type="button"
                 className={panelIsPublic ? "jar-where-on" : "jar-where-off"}
@@ -11193,9 +11227,20 @@ function HomeExperience(): JSX.Element {
           ref={dialRef}
           className={`jar-dial${scrubbing || !atNow ? " jar-dial--live" : ""}${
             dialAway ? " jar-dial--away" : ""
-          }`}
+          }${timeOpen ? " jar-dial--open" : ""}`}
           data-jar-chrome="1"
         >
+          {/* THE WORD THAT RESTS THERE. It sits over the middle of the rail
+              rather than beside it, so opening the instrument moves nothing:
+              the label fades as the hairline arrives, in the same slot. */}
+          <button
+            type="button"
+            className="jar-dial-name jar-label"
+            aria-expanded={timeOpen}
+            onClick={() => setTimeOpen((v) => !v)}
+          >
+            timeline
+          </button>
           <div
             ref={dialTrackRef}
             className="jar-dial-track"
@@ -11212,22 +11257,6 @@ function HomeExperience(): JSX.Element {
               >
                 {m.label}
               </span>
-            ))}
-            {/* THE DOOR'S MARKS. A room's story turns on who walked in and who
-                walked out, and until now every stop on a rail looked like
-                every other, so a join read exactly like a nightly re-reading
-                (`goals/room-timeline.md`, the phase's own unmet thesis). These
-                are the door's alone: a version boundary gets no tick, because
-                winding past one already SHOWS you the sentence changing, and
-                the same fact in two channels is how a legend gets born. */}
-            {doorHinges.map((h) => (
-              <span
-                key={`${h.kind}-${h.pct}`}
-                className="jar-hinge"
-                style={{ left: `${(h.pct * 100).toFixed(2)}%` }}
-                title={h.kind === "joined" ? `${h.who} arrived` : `${h.who} left`}
-                aria-hidden="true"
-              />
             ))}
             {/* the date exists only while a finger is on the dial: it answers
                 the scrub and then goes, and there is no second affordance for
