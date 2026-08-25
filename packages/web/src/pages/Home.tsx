@@ -62,6 +62,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
 
 import { hueCss } from "../lib/appearance";
@@ -1149,6 +1150,50 @@ export interface FieldAudit {
   };
 }
 
+/**
+ * THE DRAWER LEAVES THE WORLD'S COORDINATE SYSTEM.
+ *
+ * The quick line belongs to the seam: its layer takes the camera's offset
+ * every frame, so the line hangs off the field's top edge and scrolls away as
+ * you descend. A DRAWER wants none of that. It is stuck to the bottom of the
+ * SCREEN, and every ancestor between it and the screen is something that
+ * moves — the camera translates the mouth layer, and opening the drawer moves
+ * the world besides.
+ *
+ * Two narrower fixes were tried and both were wrong. `position: fixed` does
+ * nothing while an ancestor carries a transform, because a transform makes
+ * itself the containing block for fixed descendants. And cancelling the
+ * camera on the mouth layer fixed the case I could reproduce and not the
+ * founder's — it assumed the transform was the only thing moving, which is a
+ * guess about which ancestor is at fault when the honest answer is that it
+ * should not matter which.
+ *
+ * So the drawer renders into `.jar` — the world's own root — which is above
+ * every moving layer inside it and is itself `position: fixed; inset: 0` with
+ * no transform of its own. Nothing between the drawer and the viewport can
+ * move it, whatever the world does next.
+ *
+ * `.jar` rather than `document.body`, which was the first attempt and looked
+ * right until you saw it: every `--jar-*` token is defined ON `.jar`, so a
+ * drawer parented to the body lost the whole palette and rendered as
+ * transparent text over the world — the sheet, its lit lip and its sunken
+ * well all resolved to nothing. The host has to be inside the scope that
+ * defines the design, and outside everything that moves.
+ *
+ * The resting line stays exactly where it was, in the layer built for it:
+ * this branch is only ever taken while the drawer is out. A null host is the
+ * first render, before the ref is attached, and renders inline — which is
+ * where the quick line lives anyway, so nothing flashes.
+ */
+function withMouthLayer(
+  isDrawer: boolean,
+  host: HTMLElement | null,
+  slot: JSX.Element,
+): JSX.Element {
+  if (!isDrawer || !host) return slot;
+  return createPortal(slot, host) as JSX.Element;
+}
+
 export default function HomePage(): JSX.Element {
   /* No gate. This is home now — it is what a signed-in person lands on, in
      every build. The dev gate that used to stand here existed while this was
@@ -1770,25 +1815,7 @@ function HomeExperience(): JSX.Element {
    * serious.
    */
   const mouthLong = draft.length > 140 || draft.includes("\n");
-  /**
-   * A DRAWER BELONGS TO THE SCREEN, NOT TO THE WORLD.
-   *
-   * The mouth layer takes the camera's offset every frame so the quick line
-   * hangs off the field's seam and scrolls away as you descend — right for a
-   * line of chrome that means "here", wrong for a sheet. Opened anywhere but
-   * the top of the world, the drawer inherited that offset and floated with
-   * dead space beneath it, which reads as a panel that failed to land rather
-   * than as a drawer that came out.
-   *
-   * The loop reads this to leave the layer alone while the drawer is open.
-   * A ref because the loop is a rAF closure and cannot see render state; the
-   * effect that mirrors it costs one frame, which the drawer's own 300ms
-   * arrival hides completely.
-   */
-  const mouthLongRef = useRef(mouthLong);
-  useEffect(() => {
-    mouthLongRef.current = mouthLong;
-  }, [mouthLong]);
+
   /**
    * THE DIAL'S RIGHT-HAND END IS NOW, AND KEEPING SOMETHING HAPPENS NOW.
    *
@@ -6021,13 +6048,7 @@ function HomeExperience(): JSX.Element {
          has to sit ABOVE the canvas: a field you are typing into cannot have
          orbs drawn over the words. */
       const mouth = measured.mouth.current;
-      if (mouth) {
-        /* ...except when it is a drawer, which is stuck to the bottom of the
-           SCREEN and must not ride the camera. See `mouthLongRef`. */
-        mouth.style.transform = mouthLongRef.current
-          ? "translate3d(0, 0, 0)"
-          : `translate3d(0, ${(-cam.y).toFixed(1)}px, 0)`;
-      }
+      if (mouth) mouth.style.transform = `translate3d(0, ${(-cam.y).toFixed(1)}px, 0)`;
       /* the companion's whisper is screen-anchored, like the companion */
       const say = measured.charSay.current;
       if (say) say.style.transform = `translate3d(${cam.x.toFixed(1)}px, 0, 0)`;
@@ -11000,7 +11021,10 @@ function HomeExperience(): JSX.Element {
               opens itself rather than offering a handle: quick save must
               stay quick, and a control you have to find first is not quick.
               (Founder's choice of the three.) */}
-          <div
+          {withMouthLayer(
+            mouthLong,
+            measured.root.current,
+            <div
             className={`jar-mouth-slot${atNow ? "" : " jar-mouth-slot--away"}${
               mouthLong ? " jar-mouth-slot--note" : ""
             }`}
@@ -11094,7 +11118,8 @@ function HomeExperience(): JSX.Element {
             ) : null}
             {/* the one honest line, in prose and never in the label register */}
             {mouthNote !== "" ? <p className="jar-mouth-note">{mouthNote}</p> : null}
-          </div>
+            </div>,
+          )}
         </div>
       ) : null}
 

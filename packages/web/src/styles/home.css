@@ -1052,8 +1052,18 @@
   z-index: 7;
 }
 .jar-mouth-slot--note {
+  /* FIXED, AND IT ONLY WORKS BECAUSE OF WHERE THIS IS RENDERED. A transformed
+     ancestor makes itself the containing block for a fixed descendant, so
+     `fixed` inside the mouth layer would have been quietly equivalent to
+     `absolute` and pinned to a moving box. The drawer is portalled to
+     `document.body` for exactly this reason — see `withMouthLayer`. */
+  position: fixed;
+  left: 0;
+  right: 0;
   top: auto;
   bottom: 0;
+  /* above the world and its chrome: it is the thing you are typing into */
+  z-index: 40;
   /* an object with two visible sides, not a band across the frame: the edges
      are most of what says "component" — so it still stops short of the frame
      at any width. 1040 rather than 640 because a paste is what summons this
