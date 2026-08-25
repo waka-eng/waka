@@ -299,15 +299,23 @@ const JOURNEYS: Journey[] = [
       const before = await fieldLight();
       if (before === null) return { ok: false, detail: "no canvas to read the field from" };
 
-      await page.locator('button:has-text("Keep something")').first().click();
+      /* THE MOUTH BY ITS CLASS, NOT BY ITS WORDS. The resting phrase has been
+         renamed twice — "Keep something" then "Capture inspiration" (founder,
+         2026-08-25) — and it is not even a constant: the slot carries the
+         companion's line whenever the creature has just spoken, so a
+         text-matched selector misses on a run where the greeting happens to
+         be showing. `.jar-mouth-rest` is what the control IS. */
+      await page.locator(".jar-mouth-rest").first().click();
       await page.waitForTimeout(900);
       await page.fill(
         /* The mouth's own label, which matches its visible placeholder — an
-           accessible name that does not is its own bug. It read "something
-           worth keeping" once; a selector that names a label the product no
-           longer has does not fail loudly, it times out for thirty seconds
-           and reports the journey broken. */
-        'textarea[aria-label="keep something"]',
+           accessible name that does not is its own bug. It has read "something
+           worth keeping" and "keep something" before now; a selector naming a
+           label the product no longer has does not fail loudly, it times out
+           for thirty seconds and reports the journey broken. Kept as the label
+           rather than the class BECAUSE the accessible name is the claim: a
+           person using a screen reader has to be told what this field is. */
+        'textarea[aria-label="capture inspiration"]',
         `a lift button that dims once it has heard you ${uniq()}`,
       );
       await page.keyboard.press("Enter");
