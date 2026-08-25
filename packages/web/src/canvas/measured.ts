@@ -92,9 +92,6 @@ export interface Measured {
       what the companion's slot is solved against, and observing the outer
       element instead would be a resize feedback loop. */
   readonly hqInner: RefObject<HTMLDivElement>;
-  /** The companion's whisper. Screen-anchored, so the loop writes both its top
-      and a transform that cancels the horizontal camera. */
-  readonly charSay: RefObject<HTMLDivElement>;
 
   /* ---- the mouth (59 lines): where a memory is said ---- */
   /** The mouth's camera-riding layer. It stands on the seam and is a sibling of
@@ -147,7 +144,6 @@ export function useMeasured(): Measured {
       grain: { current: null },
       hq: { current: null },
       hqInner: { current: null },
-      charSay: { current: null },
       mouth: { current: null },
       mouthSpot: { current: null },
       nebEls: { current: new Map() },

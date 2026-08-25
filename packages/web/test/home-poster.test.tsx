@@ -751,8 +751,10 @@ describe("the weather is told on arrival, after the world has drawn", () => {
    * glides to the newest thing, comes home — and only then whispers the
    * told sentence through the companion's own line. Seeing first, telling
    * second: the assertion in the middle of this case is the phase's law,
-   * not decoration. Never a notification — the line rides `.jar-char-say`
-   * and goes on its own.
+   * not decoration. Never a notification — it is SAID IN THE MOUTH'S OWN
+   * SLOT, in the resting phrase's place, and goes on its own. It had a row of
+   * its own until 2026-08-25; putting it here costs the page a layer rather
+   * than adding one, and is why this case reads `.jar-mouth-rest`.
    *
    * `setTimeout` is faked for this case only: the glide's two beats are
    * wall-clock timeouts, and a test that really waited four seconds would
@@ -765,7 +767,7 @@ describe("the weather is told on arrival, after the world has drawn", () => {
     try {
       layout = await mountWorld(FACTS);
       const said = () =>
-        layout.container.querySelector(".jar-char-say")?.textContent ?? "";
+        layout.container.querySelector(".jar-mouth-rest")?.textContent ?? "";
 
       /* the world has drawn, the glide has not begun: silence */
       expect(said()).not.toContain("refused a candidate");

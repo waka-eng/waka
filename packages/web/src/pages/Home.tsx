@@ -5035,12 +5035,10 @@ function HomeExperience(): JSX.Element {
          The mouth first, directly beneath the body, because keeping something
          is what this page is FOR and it should be under the hand before
          anything else is. The companion's own line goes below the mouth: it
-         reports what the loop did, which is a thing to read after the thing to
-         do. Both are world coordinates, like the companion itself. */
+         reports what the loop did, and it says so in the mouth's own slot
+         rather than in a row of its own — one place, one line. */
       const chin = Math.round(companion.y + companion.size * 0.62);
       root!.style.setProperty("--jar-mouth-top", `${chin + 18}px`);
-      const say = measured.charSay.current;
-      if (say) say.style.top = `${chin + 96}px`;
       /* the columns' DOM measures itself off these — one write per resize */
       root!.style.setProperty("--jar-vw", `${Math.round(view.w)}px`);
       root!.style.setProperty("--jar-vh", `${Math.round(view.h)}px`);
@@ -6045,9 +6043,6 @@ function HomeExperience(): JSX.Element {
          orbs drawn over the words. */
       const mouth = measured.mouth.current;
       if (mouth) mouth.style.transform = `translate3d(0, ${(-cam.y).toFixed(1)}px, 0)`;
-      /* the companion's whisper is screen-anchored, like the companion */
-      const say = measured.charSay.current;
-      if (say) say.style.transform = `translate3d(${cam.x.toFixed(1)}px, 0, 0)`;
       /* Each candidate's sentence is DOM, positioned on its cloud every
          frame: the canvas carries the light, the words stay crisp. */
       const els = measured.nebEls.current;
@@ -9225,6 +9220,37 @@ function HomeExperience(): JSX.Element {
   }, [panelId, panelIsGroup, inspirations]);
 
   /**
+   * The two carets, built once and shown at the foot of BOTH faces of the card
+   * — reading and editing. An end of the archive simply has no caret rather
+   * than an inert one: a control that looks live and does nothing teaches that
+   * the surface is broken, and the ends of what you have kept are real.
+   */
+  const panelStepCarets = panelIsGroup ? null : (
+    <>
+      {panelNeighbours.prev ? (
+        <button
+          type="button"
+          aria-label="the memory before this one"
+          title="the memory before this one"
+          onClick={() => stepToMemory(panelNeighbours.prev)}
+        >
+          <span className="jar-step-caret jar-step-caret--back" aria-hidden="true" />
+        </button>
+      ) : null}
+      {panelNeighbours.next ? (
+        <button
+          type="button"
+          aria-label="the memory after this one"
+          title="the memory after this one"
+          onClick={() => stepToMemory(panelNeighbours.next)}
+        >
+          <span className="jar-step-caret" aria-hidden="true" />
+        </button>
+      ) : null}
+    </>
+  );
+
+  /**
    * Step to a neighbour without closing what is open — one gesture, in place.
    *
    * `editing` is declared further down and cannot be closed over here, so the
@@ -10684,11 +10710,19 @@ function HomeExperience(): JSX.Element {
                     walls and rooms keep their own sentence below: those say
                     what the machine or the room is waiting FOR, which is
                     information, not scaffolding. */}
-                {ready && c?.empty && !c?.formingAlt && w.kind !== "self" ? (
+                {/* AND THE ROOM'S SENTENCE GOES TOO (founder, 2026-08-25:
+                    "dont show this"). The reasoning above held while the room
+                    could not say anything for itself; it says what it is
+                    waiting for through its own poster now, and a second voice
+                    saying the same thing in a different register on the same
+                    empty wall is the duplicate this note was already written
+                    against. An agent keeps its line: an agent that has been
+                    given nothing genuinely is waiting on YOU, and that is a
+                    fact about what to do next rather than a description of
+                    the emptiness. */}
+                {ready && c?.empty && !c?.formingAlt && w.kind === "agent" ? (
                   <p className="jar-wall-empty">
-                    {w.kind === "agent"
-                      ? "Give me something to work on and I’ll start"
-                      : "This room hasn’t noticed anything yet — share more, read together."}
+                    Give me something to work on and I’ll start
                   </p>
                 ) : null}
                 {w.kind === "group" && failedGroups.has(w.id) && !ready ? (
@@ -10722,20 +10756,11 @@ function HomeExperience(): JSX.Element {
               </div>
             );
           })}
-          {/* what the companion is glowing about — its one line, in words */}
-          <div ref={measured.charSay} className="jar-char-say">
-            {charSay ? (
-              <p key={charSay} className="jar-label">
-                {charSay.split(/\s+/).map((word, i) => (
-                  <Fragment key={`${i}-${word}`}>
-                    <span className="jar-word" style={{ animationDelay: `${i * 28}ms` }}>
-                      {word}
-                    </span>{" "}
-                  </Fragment>
-                ))}
-              </p>
-            ) : null}
-          </div>
+          {/* THE COMPANION'S OWN ROW IS GONE. It was a second line of words
+              under the mouth, which made tapping the creature a way to ADD a
+              layer to a page that already had too many. What it said now
+              arrives in the mouth's own slot, in the resting phrase's place —
+              same words, same face, one row fewer. */}
 
           {/* ---- THE LENS lived here ----
               Excised while half-built: the control existed but nothing read
@@ -10886,10 +10911,10 @@ function HomeExperience(): JSX.Element {
                 value={draft}
                 rows={1}
                 spellCheck={false}
-                aria-label="keep something"
+                aria-label="capture inspiration"
                 /* the resting phrase, kept — opening the mouth changes
                    nothing about it (founder, 2026-08-24) */
-                placeholder="Keep something"
+                placeholder="Capture inspiration"
                 onChange={(e) => {
                   setDraft(e.target.value);
                   if (mouthNote !== "") setMouthNote("");
@@ -10903,10 +10928,23 @@ function HomeExperience(): JSX.Element {
                 ref={(el) => {
                   measured.mouthSpot.current = el;
                 }}
-                className="jar-mouth-rest jar-label"
-                onClick={openMouth}
+                className={`jar-mouth-rest jar-label${charSay ? " jar-mouth-rest--said" : ""}`}
+                onClick={() => {
+                  /* whatever the companion was saying is answered by starting
+                     to write, which is the reply the sentence was asking for */
+                  if (charSay) setCharSay("");
+                  openMouth();
+                }}
               >
-                Keep something
+                {/* THE COMPANION SPEAKS HERE, IN THE PHRASE'S OWN PLACE
+                    (founder, 2026-08-25: "replace the today - text with keep
+                    something when user clicks on character"). Its line used to
+                    be a second row of its own under the mouth, so tapping the
+                    creature added a layer to a page the founder had just said
+                    had too many. It is the same slot now: the words change,
+                    nothing moves, and the phrase comes back when the line has
+                    been said. */}
+                {charSay || "Capture inspiration"}
               </button>
             )}
             {/* WHERE THIS ONE GOES, DECIDED WHILE WRITING IT.
@@ -11048,35 +11086,6 @@ function HomeExperience(): JSX.Element {
               {dateWords(panelBall.capturedMs, TRef.current)}
             </span>
           )}
-
-          {/* THE MEMORY BEFORE AND AFTER, ON THE CARD. Two carets at the top
-              left, opposite the visibility pair — reading on is a movement,
-              and it belongs in the corner your eye is already in when it has
-              finished a line. An end of the archive simply has no caret: an
-              inert control that looks live teaches that the surface is broken,
-              and the ends of what you have kept are real. */}
-          {!panelIsGroup && (panelNeighbours.prev || panelNeighbours.next) ? (
-            <p className="jar-neb-ask jar-neb-ask--row jar-panel-step">
-              {panelNeighbours.prev ? (
-                <button
-                  type="button"
-                  aria-label="the memory before this one"
-                  onClick={() => stepToMemory(panelNeighbours.prev)}
-                >
-                  <span className="jar-step-caret jar-step-caret--back" aria-hidden="true" />
-                </button>
-              ) : null}
-              {panelNeighbours.next ? (
-                <button
-                  type="button"
-                  aria-label="the memory after this one"
-                  onClick={() => stepToMemory(panelNeighbours.next)}
-                >
-                  <span className="jar-step-caret" aria-hidden="true" />
-                </button>
-              ) : null}
-            </p>
-          ) : null}
           {!panelIsGroup ? (
             /* WHO MAY SEE THIS, AT THE TOP RIGHT (founder, 2026-08-25:
                "top right should have option to switch between Private •
@@ -11094,6 +11103,12 @@ function HomeExperience(): JSX.Element {
                 type="button"
                 className={panelIsPublic ? "jar-where-off" : "jar-where-on"}
                 aria-pressed={!panelIsPublic}
+                /* WHAT THE WORD MEANS, ON HOVER (founder's sketch, 2026-08-25:
+                   "when hovering, show tooltip of what that means"). Two words
+                   that decide who can read something have to be able to say
+                   what they decide; the state is legible at a glance and the
+                   consequence is not. */
+                title="Only you can read this. Nothing leaves your own ground."
                 onClick={() => (panelIsPublic ? togglePublic() : undefined)}
               >
                 private
@@ -11103,6 +11118,7 @@ function HomeExperience(): JSX.Element {
                 type="button"
                 className={panelIsPublic ? "jar-where-on" : "jar-where-off"}
                 aria-pressed={panelIsPublic}
+                title="Rooms you are in can read this, and it can feed what a room says."
                 onClick={() => (panelIsPublic ? undefined : togglePublic())}
               >
                 public
@@ -11290,7 +11306,8 @@ function HomeExperience(): JSX.Element {
               server reads a picture at capture time, so it feeds the signals
               exactly as the text does. */}
           {editing.open?.kind === "memory" && editing.open.id === panelId ? (
-            <p className="jar-neb-ask jar-neb-ask--after jar-neb-ask--row">
+            <p className="jar-neb-ask jar-neb-ask--after jar-panel-foot">
+              <span className="jar-panel-foot-l">
               <label className="jar-attach">
                 {attaching ? "keeping the picture…" : "attach a picture"}
                 <input
@@ -11305,24 +11322,46 @@ function HomeExperience(): JSX.Element {
                   }}
                 />
               </label>
-              <span aria-hidden="true"> · </span>
-              <button type="button" onClick={editing.keep} disabled={editing.open.saving}>
-                {editing.open.saving ? "keeping…" : "keep the change"}
-              </button>
-              <span aria-hidden="true"> · </span>
-              <button type="button" onClick={editing.leave}>
-                leave it
-              </button>
+              </span>
+              {/* THE WAY ON STAYS PUT WHILE YOU TYPE. Dropping the carets
+                  during an edit would have been simpler — the footer is about
+                  the words then — and it would have taken the way out of a
+                  screen away from somebody in the middle of using it, which is
+                  a mistake this codebase has now fixed three times in other
+                  corners. It is also what makes the abandon rule real:
+                  stepping away leaves an open edit behind rather than carrying
+                  it to the wrong memory, and a control nobody can reach cannot
+                  demonstrate that. */}
+              <span className="jar-panel-foot-c">{panelStepCarets}</span>
+              <span className="jar-panel-foot-r">
+                <button type="button" onClick={editing.keep} disabled={editing.open.saving}>
+                  {editing.open.saving ? "keeping…" : "keep the change"}
+                </button>
+                <span aria-hidden="true"> · </span>
+                <button type="button" onClick={editing.leave}>
+                  leave it
+                </button>
+              </span>
             </p>
           ) : null}
+          {/* THE FOOT OF THE CARD, IN THREE PARTS (founder's sketch,
+              2026-08-25): what you can DO at the ends, and the way to read on
+              in the middle. The two carets were at the top left, in the
+              corner the date wants and beside the pair that says who may see
+              this — three unrelated things in one corner. Stepping is
+              movement, and movement belongs at the foot, centred, where it
+              reads as "and then" rather than as another verb. */}
           {panelCanReflect && reflect.step === "rest" && !editing.open ? (
-            <p className="jar-neb-ask jar-neb-ask--after jar-neb-ask--row">
+            <p className="jar-neb-ask jar-neb-ask--after jar-panel-foot">
+              <span className="jar-panel-foot-l">
               <button type="button" onClick={askToReflect}>
                 reflect
               </button>
+              </span>
+              <span className="jar-panel-foot-c">{panelStepCarets}</span>
+              <span className="jar-panel-foot-r">
               {!panelIsGroup ? (
                 <>
-                  <span aria-hidden="true"> · </span>
                   {/* DELETING ASKS ONLY WHEN THERE IS SOMETHING TO SAY
                       (founder, 2026-08-25: "delete it without warning if
                       inspiration is not powering a signal. if it does, then
@@ -11355,6 +11394,7 @@ function HomeExperience(): JSX.Element {
                   )}
                 </>
               ) : null}
+              </span>
             </p>
           ) : null}
         </div>
@@ -11806,6 +11846,25 @@ function HomeExperience(): JSX.Element {
 
           It is not shown while you are already standing in the ground: a
           signpost pointing at the room you are in is furniture. */}
+      {/* AND THE WAY BACK UP, at the top edge, while you are in the ground
+          (founder, 2026-08-25: "add carrot to go up at top of the screen when
+          at ground"). The count and its caret point DOWN from headquarters and
+          then get out of the way; this is the same promise aimed the other
+          way, and it is the only thing on screen down here that says the world
+          continues above you. Its opposite number never shows at the same
+          time — one of the two is always the wrong direction. */}
+      {phase === "ready" && inField ? (
+        <button
+          type="button"
+          className="jar-up"
+          data-jar-chrome="1"
+          aria-label="back up to the wall"
+          onClick={() => simApiRef.current?.toTop()}
+        >
+          <span className="jar-up-caret" aria-hidden="true" />
+        </button>
+      ) : null}
+
       {phase === "ready" && !inField && (inspirations?.length ?? 0) > 0 ? (
         <button
           type="button"

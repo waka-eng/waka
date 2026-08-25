@@ -616,7 +616,7 @@ describe("stepping between memories", () => {
       ).trim();
     const step = async (label: RegExp) => {
       const el = [
-        ...layout.container.querySelectorAll<HTMLElement>(".jar-panel-step button"),
+        ...layout.container.querySelectorAll<HTMLElement>(".jar-panel-foot-c button"),
       ].find((b) => label.test(b.getAttribute("aria-label") ?? ""));
       if (!el) return false;
       await act(async () => el.click());
@@ -665,7 +665,7 @@ describe("stepping between memories", () => {
     ).not.toBeNull();
 
     const on = [
-      ...layout.container.querySelectorAll<HTMLElement>(".jar-panel-step button"),
+      ...layout.container.querySelectorAll<HTMLElement>(".jar-panel-foot-c button"),
     ].find((b) => /after this one/.test(b.getAttribute("aria-label") ?? ""));
     if (!on) throw new Error("no way on from a memory in the middle of the archive");
     await act(async () => on.click());

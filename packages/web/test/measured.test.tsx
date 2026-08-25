@@ -186,18 +186,24 @@ describe("what the frame loop writes into the page", () => {
   });
 
   /**
-   * The companion's whisper is the one element written from BOTH passes: its
-   * `top` comes from the resize, where the companion's slot is solved, and its
-   * transform comes from the frame, cancelling the horizontal camera so it
-   * stays screen-anchored. Checking both is what makes this specific — a
-   * freeze that only broke one of the two would otherwise pass.
+   * THE MOUTH IS SOLVED AGAINST THE COMPANION, and that number leaves the loop
+   * as a custom property rather than as a style on one element — the slot is
+   * portalled out of the world when it grows into a sheet, so a `top` written
+   * onto it would be written onto whichever copy happened to be mounted.
+   *
+   * This replaces a case about `.jar-char-say`, the companion's own line,
+   * which was a row of its own until 2026-08-25 and is now the mouth's slot
+   * saying something else for a moment. There is no second element to place,
+   * which is the point of the change; what still has to be true is that the
+   * loop solves the mouth's place from the creature's, so this asserts that.
    */
-  it("puts the companion's whisper where the companion is", async () => {
+  it("solves the mouth's place from the companion's", async () => {
     await layout.step(2);
-    const say = need(".jar-char-say");
-    expect(Number.parseInt(say.style.top, 10), "solved against the companion's slot")
-      .toBeGreaterThan(0);
-    expect(say.style.transform, "screen-anchored against the horizontal camera").toMatch(
+    const root = need(".jar");
+    const top = root.style.getPropertyValue("--jar-mouth-top");
+    expect(top, "the loop wrote the mouth's line off the companion's chin").not.toBe("");
+    expect(Number.parseInt(top, 10), "and it is a real place on the page").toBeGreaterThan(0);
+    expect(need(".jar-mouth").style.transform, "the mouth still rides the camera").toMatch(
       /translate3d/,
     );
   });
