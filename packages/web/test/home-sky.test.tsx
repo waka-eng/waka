@@ -1314,11 +1314,11 @@ describe("changing a signal's words", () => {
  * this case walks the only route a person has: down into the field, and a tap
  * on the orb itself.
  *
- * The panel's verbs are one flat row now — reflect, edit, delete — so this
- * walks straight to `edit`. They used to sit behind a quiet `more`, and this
- * case is the reason that indirection was worth removing: the shortest route
- * to changing the words under a signal ran through a word nobody expected to
- * have to press.
+ * AND THERE IS NO EDIT VERB ANY MORE. The words themselves are the field: an
+ * `edit` button used to open a SECOND box under the memory holding a copy of
+ * the same text, so the panel showed the words twice and asked the reader to
+ * find their place again (founder, 2026-08-25). Pressing the paragraph opens
+ * a caret in it, which is what this case now does.
  */
 describe("changing a memory's words", () => {
   const MINE = "What I actually meant was the naming.";
@@ -1333,16 +1333,22 @@ describe("changing a memory's words", () => {
        with a sentence, never a silent skip. */
     const panel = await tapAnOrb();
 
-    /* `change the words` was renamed to `edit` when the picture moved inside
-       it; this test is about what editing DOES, so it follows the label. */
-    const change = [...panel.querySelectorAll<HTMLElement>(".jar-neb-ask button")].find(
-      (b) => (b.textContent ?? "").trim().toLowerCase() === "edit",
-    );
-    if (!change) throw new Error("the panel offers no way to edit the memory");
-    await act(async () => change.click());
+    /* THE WORDS ARE THE CONTROL. Pressing the paragraph is the whole gesture —
+       if this ever needs a button again, that is the regression. */
+    const words = panel.querySelector<HTMLElement>(".jar-panel-text");
+    if (!words) throw new Error("the panel is not showing the memory at all");
+    expect(
+      words.className,
+      "your own memory says it can be typed into, before you press it",
+    ).toContain("jar-panel-text--yours");
+    await act(async () => words.click());
 
-    const box = panel.querySelector<HTMLTextAreaElement>("textarea.jar-reflect-box");
-    if (!box) throw new Error("the edit box never opened — 'change the words' did nothing");
+    const box = panel.querySelector<HTMLTextAreaElement>("textarea.jar-panel-edit");
+    if (!box) throw new Error("pressing the memory's own words opened no caret");
+    expect(
+      panel.querySelectorAll(".jar-panel-text").length,
+      "the words are shown ONCE — the field replaces the paragraph, never joins it",
+    ).toBe(1);
     const nativeValue = Object.getOwnPropertyDescriptor(
       HTMLTextAreaElement.prototype,
       "value",
@@ -1353,10 +1359,19 @@ describe("changing a memory's words", () => {
       box.dispatchEvent(new Event("input", { bubbles: true }));
     });
 
-    const keep = [...panel.querySelectorAll<HTMLElement>(".jar-reflect button")].find((b) =>
+    /* THE ROW DOES NOT MOVE OR GROW WHEN THE WORDS OPEN — it changes what it
+       offers, in the same place and the same face, because what you are doing
+       has changed. */
+    const keep = [...panel.querySelectorAll<HTMLElement>(".jar-neb-ask--after button")].find((b) =>
       /keep the change/i.test(b.textContent ?? ""),
     );
-    if (!keep) throw new Error("the edit box has no way to keep what was typed");
+    if (!keep) throw new Error("the open words offer no way to keep what was typed");
+    expect(
+      [...panel.querySelectorAll(".jar-neb-ask--after button")].map((b) =>
+        (b.textContent ?? "").trim(),
+      ),
+      "and while the words are open the row is about the words, not about the memory",
+    ).not.toContain("delete");
     await act(async () => keep.click());
     await layout.step(10);
 

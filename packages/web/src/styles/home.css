@@ -1872,6 +1872,43 @@
   color: var(--jar-ink);
   white-space: pre-wrap;
 }
+/* YOUR OWN WORDS ARE THE FIELD. Pressing them opens a caret where you pressed
+   — there is no `edit` verb, because the paragraph is the control. It carries
+   a text cursor so the pointer says so before the press, and nothing else: an
+   outline or a fill would make a resting memory look like a form, and reading
+   is what this panel is mostly for. */
+.jar-panel-text--yours {
+  cursor: text;
+}
+/* THE FIELD IS THE PARAGRAPH, MEASURED THE SAME WAY. Every metric that decides
+   where a glyph lands is inherited from the rule above — size, leading, colour,
+   wrapping — so the words do not shift by a pixel when the caret arrives. It
+   was a second box UNDER the memory holding a copy of the same text, which
+   showed the words twice and asked the reader to find their place again
+   (founder, 2026-08-25: "its weird that you read on top and edit at the
+   bottom"). Height is written by the loop from the content, so a long memory
+   is never letterboxed and a short one never sits in a pit. */
+.jar-panel-edit {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  padding: 0;
+  background: none;
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--jar-ink);
+  resize: none;
+  overflow: hidden;
+  /* the caret is the only new mark on the surface */
+  caret-color: var(--jar-ink);
+}
+.jar-panel-edit:focus {
+  outline: none;
+}
 /* the one honest degradation: the rest never arrived, said once and quietly */
 .jar-panel-note {
   margin: 10px 0 0;

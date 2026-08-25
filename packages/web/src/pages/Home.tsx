@@ -61,6 +61,7 @@ import {
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
@@ -10269,6 +10270,74 @@ function HomeExperience(): JSX.Element {
     panel?.detail?.isPublic ??
     (inspirations ?? []).find((c) => c.id === (panelBall?.sigId ?? panelId))?.isPublic ??
     false;
+  /**
+   * THE MEMORY'S OWN WORDS ARE THE EDITOR.
+   *
+   * There used to be an `edit` verb in the row at the bottom, and pressing it
+   * opened a second box UNDER the memory holding a copy of the same text. So
+   * the panel showed the words twice — read them up here, change them down
+   * there — and the founder said what that is: "its weird that you read on
+   * top and edit at the bottom. just make it editable no matter what. dont
+   * have separate edit button."
+   *
+   * Now the paragraph IS the control. Press it anywhere and it becomes a
+   * field in the same place, at the same measure, in the same face, with the
+   * caret where you pressed — nothing moves, nothing is duplicated, and there
+   * is no verb to find first.
+   *
+   * WHY NOT SIMPLY ALWAYS A FIELD. The resting paragraph lights the spans a
+   * signal actually read out of this memory (`markPassages`), which is the
+   * receipt behind every claim the sky makes about you. A textarea cannot
+   * carry marks. So the words are lit while you are reading them and plain
+   * while you are changing them, which is also the honest thing to show: what
+   * you are typing into is the text, not the reading of it.
+   */
+  const panelEditRef = useRef<HTMLTextAreaElement | null>(null);
+  /** Where the press landed, so the caret opens there rather than at the end. */
+  const panelCaretRef = useRef<number | null>(null);
+  /* The field is exactly as tall as its words. A fixed `rows` would either
+     letterbox a long memory or leave a short one sitting in a pit, and both
+     are a change of shape at the moment the press asks for none. */
+  const growPanelEdit = useCallback((el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
+
+  const beginPanelEdit = useCallback(
+    (ev: ReactMouseEvent<HTMLParagraphElement>) => {
+      if (!panelId || panelIsGroup || !panelCanReflect || editing.open) return;
+      /* THE CARET GOES WHERE THE FINGER WENT. Without this the press lands
+         you at the end of a page of text and you scroll back to the sentence
+         you meant — which is the same "find your place again" cost the
+         separate box had, moved rather than removed. Both spellings, because
+         the standard changed names and neither browser family has both. */
+      let at: number | null = null;
+      const doc = document as Document & {
+        caretPositionFromPoint?: (x: number, y: number) => { offset: number } | null;
+        caretRangeFromPoint?: (x: number, y: number) => Range | null;
+      };
+      try {
+        const pos = doc.caretPositionFromPoint?.(ev.clientX, ev.clientY);
+        if (pos) at = pos.offset;
+        else {
+          const range = doc.caretRangeFromPoint?.(ev.clientX, ev.clientY);
+          if (range) at = range.startOffset;
+        }
+      } catch {
+        /* no caret API here: the field opens at the end, which is the old
+           behaviour and never wrong, only less kind */
+      }
+      panelCaretRef.current = at;
+      editing.begin(
+        "memory",
+        panelId,
+        panel?.detail ? panel.detail.text : panelBall?.textPreview ?? "",
+      );
+    },
+    [panelId, panelIsGroup, panelCanReflect, editing, panel, panelBall],
+  );
+
   const [publishing, setPublishing] = useState(false);
   const togglePublic = useCallback(() => {
     const id = panelBall?.sigId ?? panelId;
@@ -11589,12 +11658,54 @@ function HomeExperience(): JSX.Element {
               </button>
             </p>
           ) : null}
-          <p ref={panelTextRef} className="jar-panel-text" style={markStyle}>
-            {markPassages(
-              panel.detail ? panel.detail.text : panelBall.textPreview,
-              panelMarks,
-            )}
-          </p>
+          {editing.open?.kind === "memory" && editing.open.id === panelId ? (
+            /* THE SAME SLOT, THE SAME MEASURE, THE SAME FACE. It is the words
+               you were just reading, with a caret in them — see
+               `beginPanelEdit`. Nothing has moved and nothing is duplicated. */
+            <textarea
+              ref={(el) => {
+                panelEditRef.current = el;
+                if (!el) return;
+                growPanelEdit(el);
+                if (document.activeElement !== el) {
+                  el.focus();
+                  const at = panelCaretRef.current;
+                  const to = at === null ? el.value.length : Math.min(at, el.value.length);
+                  el.setSelectionRange(to, to);
+                  panelCaretRef.current = null;
+                }
+              }}
+              className="jar-panel-text jar-panel-edit"
+              aria-label="the words of this memory"
+              value={editing.open.text}
+              onChange={(e) => {
+                editing.retype(e.target.value);
+                growPanelEdit(e.currentTarget);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  editing.leave();
+                }
+              }}
+            />
+          ) : (
+            <p
+              ref={panelTextRef}
+              className={
+                panelCanReflect && !panelIsGroup
+                  ? "jar-panel-text jar-panel-text--yours"
+                  : "jar-panel-text"
+              }
+              style={markStyle}
+              onClick={panelCanReflect && !panelIsGroup ? beginPanelEdit : undefined}
+            >
+              {markPassages(
+                panel.detail ? panel.detail.text : panelBall.textPreview,
+                panelMarks,
+              )}
+            </p>
+          )}
           {panel.partial ? (
             <p className="jar-panel-note">Couldn’t load the rest.</p>
           ) : null}
@@ -11706,51 +11817,6 @@ function HomeExperience(): JSX.Element {
               own: another member's is theirs, and a room orb is a statement
               that was shared rather than a memory that can be reached.
               It asks once, in place, because there is no undo behind it. */}
-          {/* EDITING THE MEMORY ITSELF — the last thing the archive could do
-              that this layout could not. Editing a capture re-derives the
-              signals resting on it, which is why it belongs here beside the
-              words rather than on a settings screen somewhere. */}
-          {panelCanReflect && !panelIsGroup && editing.open?.id === panelId ? (
-            <div className="jar-reflect">
-              <textarea
-                className="jar-reflect-box"
-                value={editing.open.text}
-                rows={5}
-                autoFocus
-                onChange={(e) => editing.retype(e.target.value)}
-              />
-              <p className="jar-neb-ask">
-                {/* THE PICTURE IS PART OF EDITING, not a sibling of it.
-                    It sat on the housekeeping row beside `edit`, which read as
-                    a fifth unrelated act; changing what a memory IS — its
-                    words and what it carries — is one job. The server reads
-                    the picture at capture time, so it feeds the patterns too,
-                    which is the other reason it belongs with the words. */}
-                <label className="jar-attach">
-                  {attaching ? "keeping the picture…" : "attach a picture"}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    disabled={attaching}
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      const id = panelBall?.sigId ?? panelId;
-                      if (f && id) void attachTo(id, f);
-                      e.target.value = "";
-                    }}
-                  />
-                </label>
-                <span aria-hidden="true"> · </span>
-                <button type="button" onClick={editing.keep} disabled={editing.open.saving}>
-                  {editing.open.saving ? "keeping…" : "keep the change"}
-                </button>
-                <span aria-hidden="true"> · </span>
-                <button type="button" onClick={editing.leave}>
-                  leave it
-                </button>
-              </p>
-            </div>
-          ) : null}
           {/* ONE ROW, THREE VERBS, IN THE MEMORY'S OWN VOICE (founder,
               2026-08-25: "the bottom should be Reflect • Edit • Delete").
               The nest — one act in the open, the rest behind "more" — put
@@ -11765,6 +11831,39 @@ function HomeExperience(): JSX.Element {
               verb here at all (the verdict row above is the answer), and
               your own save in a room reflects but is never edited or
               deleted from the room's wall. */}
+          {/* WHILE THE WORDS ARE OPEN, THE ROW IS ABOUT THE WORDS. Same place,
+              same face as the resting verbs — the row does not move and does
+              not grow; what it offers changes, because what you are doing has.
+              The picture lives here rather than beside `delete`: changing what
+              a memory IS — its words and what it carries — is one job, and the
+              server reads a picture at capture time, so it feeds the signals
+              exactly as the text does. */}
+          {editing.open?.kind === "memory" && editing.open.id === panelId ? (
+            <p className="jar-neb-ask jar-neb-ask--after jar-neb-ask--row">
+              <label className="jar-attach">
+                {attaching ? "keeping the picture…" : "attach a picture"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={attaching}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    const id = panelBall?.sigId ?? panelId;
+                    if (f && id) void attachTo(id, f);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              <span aria-hidden="true"> · </span>
+              <button type="button" onClick={editing.keep} disabled={editing.open.saving}>
+                {editing.open.saving ? "keeping…" : "keep the change"}
+              </button>
+              <span aria-hidden="true"> · </span>
+              <button type="button" onClick={editing.leave}>
+                leave it
+              </button>
+            </p>
+          ) : null}
           {panelCanReflect && reflect.step === "rest" && !editing.open ? (
             <p className="jar-neb-ask jar-neb-ask--after jar-neb-ask--row">
               <button type="button" onClick={askToReflect}>
@@ -11772,19 +11871,6 @@ function HomeExperience(): JSX.Element {
               </button>
               {!panelIsGroup ? (
                 <>
-                  <span aria-hidden="true"> · </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      editing.begin(
-                        "memory",
-                        panelId as string,
-                        panel.detail ? panel.detail.text : panelBall.textPreview,
-                      )
-                    }
-                  >
-                    edit
-                  </button>
                   <span aria-hidden="true"> · </span>
                   {/* DELETING ASKS ONLY WHEN THERE IS SOMETHING TO SAY
                       (founder, 2026-08-25: "delete it without warning if
