@@ -83,7 +83,9 @@ export function GraphScreen({ locale, active, profileId, onBack }: GraphScreenPr
         </div>
       </div>
 
-      {failed ? <p className="pr-empty">{t(locale, "graphEmpty")}</p> : null}
+      {/* A failure is not an empty mind: "nothing to draw yet" on a 403
+          would be the screen lying about whose fault the blank is. */}
+      {failed ? <p className="pr-empty">{t(locale, "graphError")}</p> : null}
       {layout && graph && graph.nodes.length === 0 ? (
         <p className="pr-empty">{t(locale, "graphEmpty")}</p>
       ) : null}

@@ -39,6 +39,7 @@ import {
   reflections,
   signalContradictions,
   signalEvidence,
+  experiences,
   signalShares,
   signalStatements,
   signals,
@@ -163,9 +164,21 @@ export async function assembleProfileExport(db: WakaDb, profileId: string) {
     .from(decisionPrincipleCitations)
     .where(eq(decisionPrincipleCitations.profileId, profileId))
     .orderBy(asc(decisionPrincipleCitations.createdAt), asc(decisionPrincipleCitations.id));
+  /* The named grounds (2026-08-17): the person's own words for their
+     stretches of work, so they belong in "everything visible". The
+     inspirations rows already carry experience_id; without this table the
+     ids would point at names the export never said. `agent_keys` stays out
+     deliberately — the rows are credential hashes plus bookkeeping, not
+     memory, and a hash has no business travelling. */
+  const experienceRows = await db
+    .select()
+    .from(experiences)
+    .where(eq(experiences.profileId, profileId))
+    .orderBy(asc(experiences.createdAt), asc(experiences.id));
 
   return {
     profile: profile ?? null,
+    experiences: experienceRows,
     inspirations: inspirationRows,
     attachments: attachmentRows,
     reflections: reflectionRows,

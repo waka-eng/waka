@@ -27,6 +27,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
 import { lookupAgentKeySession } from "../lib/agent-key-auth.js";
+import { requireAuth } from "../lib/middleware.js";
 import type { AuthEnv } from "../lib/middleware.js";
 import type { AuthenticatedSession } from "../lib/session.js";
 import { createAgentKeyRoutes } from "./agent-keys.js";
@@ -208,6 +209,25 @@ describe("the agent's standing key", () => {
     expect(marks).toHaveLength(1);
     expect(marks[0]!.session_id, "no session row to name — null, never a 500").toBeNull();
     expect(marks[0]!.reader_profile_id, "but the reader is named").toBe(agentId);
+  });
+
+  it("rides the Authorization header only — a key in a cookie is not a credential", async () => {
+    /* A cookie is attached by the browser to whatever asks. Accepting a key
+       there would let a page that can set cookies fix a victim's browser to
+       an attacker's agent, and every keep the victim made would land in the
+       attacker's stack. The REAL middleware makes the ruling, so the rule
+       cannot drift from the code that enforces it. The lookup underneath
+       reads the process-global database, which is not this suite's schema —
+       so the header case asserts the ruling reaches the lookup (500-or-401,
+       never a session), and the cookie case asserts it never does. */
+    const app = new Hono<AuthEnv>();
+    app.use("*", requireAuth);
+    app.get("/probe", (c) => c.json({ as: c.get("session").profile.id }));
+
+    const viaCookie = await app.request("/probe", {
+      headers: { Cookie: `waka_session=waka_agent_${"a".repeat(48)}` },
+    });
+    expect(viaCookie.status, "the cookie channel refuses the shape outright").toBe(401);
   });
 
   it("never lands the secret, and the list shows only the prefix", async () => {

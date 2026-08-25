@@ -34,15 +34,15 @@ export interface AuthEnv {
  * browser). Null when neither is present, so the caller decides whether
  * absence is a 401 or a fall-through.
  */
-function readToken(c: Context): string | null {
+function readToken(c: Context): { token: string; source: "header" | "cookie" } | null {
   const authHeader = c.req.header("Authorization");
   if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
     const token = authHeader.slice(7).trim();
-    if (token.length > 0) return token;
+    if (token.length > 0) return { token, source: "header" };
   }
 
   const cookieToken = getCookie(c, SESSION_COOKIE_NAME);
-  if (cookieToken && cookieToken.length > 0) return cookieToken;
+  if (cookieToken && cookieToken.length > 0) return { token: cookieToken, source: "cookie" };
 
   return null;
 }
@@ -55,23 +55,34 @@ async function resolveSessionFromToken(token: string): Promise<AuthenticatedSess
      The session it yields is agent-bound: the whole access matrix below and
      `humanSessionsOnly` apply to it unchanged (2026-08-17 meeting: per-agent
      keys are a way IN, never a wider set of powers once in). */
-  if (looksLikeAgentKey(token)) return lookupAgentKeySession(token);
   const decoded = await verifySessionToken(token);
   if (!decoded?.sub) return null;
   return lookupSession(token);
 }
 
 export const requireAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
-  const token = readToken(c);
-  if (!token) {
+  const read = readToken(c);
+  if (!read) {
     return c.json({ error: "Authentication required" }, 401);
   }
-  const session = await resolveSessionFromToken(token);
+  /* AN AGENT'S STANDING KEY RIDES THE HEADER, NEVER THE COOKIE. The prefix
+     routes it to the key lookup without spending a signature check; the
+     source check is the security half. A cookie is attached by the browser
+     to whatever asks — accepting a key there would let a page that can set
+     cookies fix a victim's browser to an attacker's agent, and every keep
+     the victim made would land in the attacker's stack. A server-to-server
+     credential has no business in a browser channel, so the shape is simply
+     not a credential there. */
+  const session = looksLikeAgentKey(read.token)
+    ? read.source === "header"
+      ? await lookupAgentKeySession(read.token)
+      : null
+    : await resolveSessionFromToken(read.token);
   if (!session) {
     return c.json({ error: "Authentication required" }, 401);
   }
   c.set("session", session);
-  c.set("sessionToken", token);
+  c.set("sessionToken", read.token);
   await next();
 };
 
@@ -106,12 +117,17 @@ export const humanSessionsOnly: MiddlewareHandler<AuthEnv> = async (c, next) => 
 };
 
 export const optionalAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
-  const token = readToken(c);
-  if (token) {
-    const session = await resolveSessionFromToken(token);
+  const read = readToken(c);
+  if (read) {
+    /* same header-only rule for keys as requireAuth, same reason */
+    const session = looksLikeAgentKey(read.token)
+      ? read.source === "header"
+        ? await lookupAgentKeySession(read.token)
+        : null
+      : await resolveSessionFromToken(read.token);
     if (session) {
       c.set("session", session);
-      c.set("sessionToken", token);
+      c.set("sessionToken", read.token);
     }
   }
   await next();

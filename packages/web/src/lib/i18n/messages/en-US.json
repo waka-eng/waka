@@ -383,5 +383,6 @@
   "graphEmpty": "Nothing to draw yet. Principles, signals, and experiences appear here as they form.",
   "graphPrinciples": "principles",
   "graphSignals": "signals",
-  "graphExperiences": "experiences"
+  "graphExperiences": "experiences",
+  "graphError": "The graph could not be loaded. Try again."
 }
