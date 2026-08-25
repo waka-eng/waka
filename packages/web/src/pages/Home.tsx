@@ -861,12 +861,17 @@ function computeLayout(vw: number, vh: number, dialH: number): Layout {
     wallR,
     layoutH,
     maxCam: vh,
-    /* THE WORLD IS TWO SECTIONS NOW, NOT THREE. `minCam` was `-vh`: a whole
-       viewport above headquarters where signals still forming hung as clouds
-       of light. That place is gone (founder, 2026-08-25) and zero is what
-       says so — headquarters is the top of the world, and nothing above it
-       can be reached by a flick, a wheel, an arrow key or a link. */
-    minCam: 0,
+    /* THE PLACE ABOVE HEADQUARTERS COMES BACK, FOR SOMETHING ELSE.
+       It held the signals still forming, as clouds of light, and that was
+       removed — signals are the machine's working material, not a place a
+       person stands in. What goes there now is the OTHER half of a mind
+       (founder, 2026-08-25): "top of mind = current. philosophies and values
+       = timeless." The wall says what you are holding today; above it is what
+       you keep coming back to whatever the day is. It takes a long time to
+       form, so for now the room exists and says so — which is the honest
+       shape, and the reason it is a PLACE rather than a promise in a tooltip:
+       a person can go up and see that it is empty, and why. */
+    minCam: -vh,
     /* The peek line sits clear of the time dial, which is fixed to the
        bottom of the viewport in both sections — otherwise the topmost orbs
        and the dial occupy the same strip. */
@@ -990,6 +995,7 @@ interface SimApi {
   /** Glide back to headquarters. */
   toTop: () => void;
   /** Glide up into the sky, where the ambitions are still forming. */
+  toSky: () => void;
   toGround: () => void;
   /** The traveler: one column left or right, the companion leading. */
   travel: (dir: 1 | -1) => void;
@@ -1719,6 +1725,8 @@ function HomeExperience(): JSX.Element {
    * already standing in is furniture, and this world has none.
    */
   const [inField, setInField] = useState(false);
+  /** And whether it stands in the sky — where philosophies and values form. */
+  const [inSky, setInSky] = useState(false);
   /** Drafts assembled here, in this session. They live nowhere else. */
   /* ---- the mouth: the one verb this world was missing ----
      At rest it is a phrase. Open, it is a plain field at the seam between
@@ -2457,6 +2465,8 @@ function HomeExperience(): JSX.Element {
    * own field-state lines: the creature always answers something, and never
    * with a made-up weather.
    */
+  /** Which of the day's clauses the next tap speaks, keyed to the list. */
+  const weatherTurnRef = useRef<{ key: string; at: number }>({ key: "", at: 0 });
   const sayTheWeather = useCallback((fallback: () => string) => {
     if (offlineRef.current) {
       setCharSay(fallback());
@@ -2500,10 +2510,25 @@ function HomeExperience(): JSX.Element {
             (a, b) =>
               (NEWS[a.sentence.backing] ?? 9) - (NEWS[b.sentence.backing] ?? 9) || a.i - b.i,
           );
-        /* the day label leads and "the sky held" stays out — the founder
-           struck both, then asked for the label back */
-        if (spoken.length > 0) {
-          setCharSay(`${day?.label ?? "today"} — ${spoken[0]!.sentence.text}.`);
+        /* AND EACH TAP TURNS THE PAGE (founder, 2026-08-25: "when clicking on
+           the character, change the text that is being shown … it can
+           rotate"). Still one clause at a time — the whisper rule holds — but
+           a creature that answered every tap with the same sentence read as a
+           recording. The ranked list is kept, a cursor walks it, and it wraps:
+           the most newsworthy thing leads, the rest arrive on curiosity. The
+           cursor resets whenever the list itself changes, so a fresh fetch
+           starts from the top again. */
+        const lines = spoken.map(
+          (x) => `${day?.label ?? "today"} — ${x.sentence.text}.`,
+        );
+        if (lines.length > 0) {
+          const key = lines.join("|");
+          if (weatherTurnRef.current.key !== key) {
+            weatherTurnRef.current = { key, at: 0 };
+          }
+          setCharSay(lines[weatherTurnRef.current.at % lines.length]!);
+          weatherTurnRef.current.at =
+            (weatherTurnRef.current.at + 1) % lines.length;
         } else {
           setCharSay(fallback());
         }
@@ -3438,6 +3463,7 @@ function HomeExperience(): JSX.Element {
     const hinted = {
       dialAway: false,
       inField: false,
+      inSky: false,
     };
     /**
      * STAGING ORBS INTO THE FIELD — the pour, and everything that schedules it.
@@ -5489,7 +5515,17 @@ function HomeExperience(): JSX.Element {
        */
       const enterLift = peekLift();
       const fromY = b.peek ? lerp(b.homeY, b.peekY, enterLift) : b.homeY;
-      b.entryH = 90 + b.frac * 110;
+      /* AND A PEEK ORB ENTERS FROM BELOW (founder's recording, 2026-08-25:
+         "the balls fly wierdly"). "From just above where it is going" is
+         right for an orb landing in the field — the fall is short and happens
+         down in the ground. A PEEK orb lands under the poster, so from-above
+         started it mid-headquarters and the pour's stagger turned arrival
+         into a two-second rain of spheres past the companion and the mouth.
+         The lift's own sentence is that these memories RISE out of the ground
+         to sit under the claim that stands on them — so the entrance rises
+         too: negative height, spent by the same `rise` term in the draw.
+         Motion explains, and this motion now explains the right thing. */
+      b.entryH = b.peek ? -(60 + b.frac * 70) : 90 + b.frac * 110;
       b.x = b.peek ? lerp(b.homeX, b.peekX, enterLift) : b.homeX;
       b.y = fromY - (view.reduced ? 0 : b.entryH);
     }
@@ -6612,6 +6648,11 @@ function HomeExperience(): JSX.Element {
       if (nowInField !== hinted.inField) {
         hinted.inField = nowInField;
         setInField(nowInField);
+      }
+      const nowInSky = cam.y < view.layout.minCam * 0.5;
+      if (nowInSky !== hinted.inSky) {
+        hinted.inSky = nowInSky;
+        setInSky(nowInSky);
       }
       if (nowAway !== hinted.dialAway) {
         hinted.dialAway = nowAway;
@@ -7805,11 +7846,18 @@ function HomeExperience(): JSX.Element {
       toTop: () => {
         aimTo(0, 0);
       },
-      /* DOWN TO THE GROUND, programmatically and exempt from the snap — the
-         same glide `toSky` was, aimed the other way now that there is only
-         one other way to aim. It is what the count of what you have kept
-         opens: a line that says how much is down there is a promise that you
-         can go and look. */
+      /* UP TO WHAT IS TIMELESS — programmatic, exempt from the snap, and only
+         from your own column: a room's values are not a thing this world
+         claims to hold. */
+      toSky: () => {
+        if (trip.col !== 0 || trip.active) return;
+        gesture.snapAt = 0;
+        cam.vel = 0;
+        aimTo(view.layout.minCam, 0);
+      },
+      /* DOWN TO THE GROUND, the same glide aimed the other way. It is what the
+         count of what you have kept opens: a line that says how much is down
+         there is a promise that you can go and look. */
       toGround: () => {
         if (trip.active) return;
         gesture.snapAt = 0;
@@ -10243,20 +10291,19 @@ function HomeExperience(): JSX.Element {
                     className="jar-hq-inner"
                     ref={w.kind === "self" ? measured.hqInner : undefined}
                   >
-                    {/* the wall's name, and nothing else in this slot, ever —
-                        no kind label, no model, no chip. On a group's own
-                        wall the name is also the door to the room's panel:
-                        the panel's header says "opened by tapping a group's
-                        wall", and until this button existed nothing anywhere
-                        called it — a finished, tested surface with no way in. */}
-                    {/* NOT A DOOR ANY MORE (founder, 2026-08-24). The name
-                        above the poster was also the way into the room's
-                        panel, so the same panel had two entrances and the
-                        one over the poster looked like a label until you
-                        happened to press it. The button at the top left is
-                        the single way in — for every wall, not only a room —
-                        and this is a fact about where you are standing. */}
-                    <div className="jar-eyebrow jar-label">{c.eyebrow}</div>
+                    {/* THE LAYER, NOT THE NAME (founder, 2026-08-25: "this
+                        should always say TOP OF MIND at the top no matter
+                        what room"). This slot held the wall's name, under a
+                        rule that nothing else may ever stand here — and the
+                        name is already on screen twice, in the pill at the
+                        top left and on the axis below, so here it was the
+                        repetition. What the slot answers now is WHAT KIND OF
+                        SENTENCE IS UNDER ME, which is the one fact nothing
+                        else on the page states: this is the wall's top of
+                        mind — current, held today — as against the timeless
+                        half forming in the sky. Same words, same place, on
+                        every wall; whose it is stays where it already was. */}
+                    <div className="jar-eyebrow jar-label">top of mind</div>
                     {c.text ? (
                       /* A STABLE KEY, AND A CARRIED/NEW SPLIT INSIDE IT.
                          The whole h1 used to be keyed by its words, so every
@@ -11846,6 +11893,42 @@ function HomeExperience(): JSX.Element {
 
           It is not shown while you are already standing in the ground: a
           signpost pointing at the room you are in is furniture. */}
+      {/* WHAT IS FORMING OVERHEAD — the way up, at the top edge, while you
+          stand at headquarters (founder, 2026-08-25: "have a carrot and text
+          to say philosophies and value to indicate sth will start forming up
+          there"). Top of mind is current; philosophies and values are
+          timeless, and the timeless half takes long enough to form that for
+          now the place mostly says so. The door exists anyway, because a
+          person can go and see that it is empty and why — a place is honest
+          where a promise in a tooltip is not. Only on your own column. */}
+      {phase === "ready" && !inField && !inSky && atWall.kind === "self" ? (
+        <button
+          type="button"
+          className="jar-values"
+          data-jar-chrome="1"
+          onClick={() => simApiRef.current?.toSky()}
+        >
+          <span className="jar-up-caret" aria-hidden="true" />
+          <span className="jar-values-words jar-label">philosophies &amp; values</span>
+        </button>
+      ) : null}
+
+      {/* AND WHAT THE SKY SAYS, STANDING IN IT. One sentence, in prose. The
+          numeral law needs nothing here: what is forming is not countable
+          yet, which is the whole point of the sentence. */}
+      {phase === "ready" && inSky ? (
+        <div className="jar-values-room" data-jar-chrome="1">
+          <p className="jar-values-lead">
+            Your philosophies and values will form here.
+          </p>
+          <p className="jar-values-sub">
+            They are the timeless half of a mind — what you keep coming back
+            to, whatever the day is. They take time, and they are worth it:
+            keep capturing, and this sky will start to fill.
+          </p>
+        </div>
+      ) : null}
+
       {/* AND THE WAY BACK UP, at the top edge, while you are in the ground
           (founder, 2026-08-25: "add carrot to go up at top of the screen when
           at ground"). The count and its caret point DOWN from headquarters and

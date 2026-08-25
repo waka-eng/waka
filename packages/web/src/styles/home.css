@@ -1191,7 +1191,14 @@
      asking for it. The loop writes `--jar-mouth-top` from the companion's own
      chin, so the two move together at every viewport height, and the fallback
      is the old seam for the one paint before the first measure lands. */
-  top: var(--jar-mouth-top, var(--jar-seam, calc(100% - 188px)));
+  /* THE FALLBACK IS WHERE THE COMPANION RESTS, NOT WHERE THE SEAM IS. The
+     loop writes the real number from the creature's chin a frame or two after
+     mount — and the old fallback was the field's top edge at the BOTTOM of
+     the screen, so the whole block drew down there and then leapt up when the
+     measure landed (founder's recording: "shown at bottom then moves up").
+     The companion rests near the middle at every viewport, so mid-viewport is
+     a fallback the real number only nudges. */
+  top: var(--jar-mouth-top, 58%);
   /* the air between the last word and the field's top edge */
   padding: 0 20px 14px;
   text-align: center;
@@ -1269,11 +1276,20 @@
      appearing where a phrase had been (founder, 2026-08-24). A long paste
      gets the prose face it needs, in the drawer below. */
   font-family: inherit;
-  font-weight: 500;
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  line-height: 1.9;
+  /* YOUR WORDS ARE NOT CHROME (founder, 2026-08-25: "when typing into keep
+     something, it should no longer force capitalization"). The one-instrument
+     rule — the mouth you pressed is the mouth you type in — over-reached: it
+     put the person's own sentence through the tracked-uppercase LABEL
+     register, so everything anyone wrote came out shouting. The hierarchy is
+     the other way round: the invitation is chrome and stays in the label
+     register (the placeholder below), the words are the most important thing
+     on the screen while they are being written, and they are set the way the
+     panel sets a memory — reading size, sentence case, prose. */
+  font-weight: 400;
+  font-size: 15px;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  line-height: 1.6;
   /* Never underlined, in any state. The platform draws its own decorations
      inside a text field — a spelling rule, an autocorrect mark, a focus
      line — and this world's single interactivity signal is not for the
@@ -1293,6 +1309,17 @@
   touch-action: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--jar-scroll) transparent;
+}
+/* the invitation stays chrome: the placeholder wears the label register the
+   resting phrase wears, so the SLOT looks identical until the first letter —
+   and the first letter arrives in your own voice, not the page's */
+.jar-mouth-field::placeholder {
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  line-height: 1.9;
+  color: var(--jar-muted);
 }
 .jar-mouth-field::placeholder {
   color: var(--jar-faint);
@@ -1853,12 +1880,21 @@
   /* At rest the timeline is present but quiet — a hairline, a small dot, and
      dim months. It comes to full strength on approach or while scrubbing, so
      it is never lost and never competing with the field. */
-  opacity: 0.42;
+  /* NO FADE ON THE BAND ITSELF. It rested at 0.42 and came up on approach —
+     but element opacity multiplies into every child, so the handle could
+     never be whiter than the band around it however it was styled. The parts
+     that should rest quiet (the months) carry their own fade below; the
+     hairline already does; the handle and the door-marks are FACTS — where
+     you are in time, when the room changed — and facts do not wait for the
+     pointer. */
+}
+.jar-month {
+  opacity: 0.45;
   transition: opacity 0.28s ease;
 }
-.jar-dial:hover,
-.jar-dial:focus-within,
-.jar-dial--live {
+.jar-dial:hover .jar-month,
+.jar-dial:focus-within .jar-month,
+.jar-dial--live .jar-month {
   opacity: 1;
 }
 /* nothing to wind on this wall */
@@ -1916,27 +1952,26 @@
   background: var(--jar-ink);
   pointer-events: none;
 }
-/* the handle is a small neutral bubble — no accent, no purple glow */
+/* THE HANDLE IS WHITE AND WHOLLY THERE (founder, 2026-08-25: "make this
+   circle just white and full opacity"). It was faint at rest and only came up
+   under the pointer — but it is WHERE YOU ARE IN TIME, a fact and not an
+   affordance being teased, and the dial around it already does the
+   quiet-at-rest work. No accent, no glow; it still grows under the hand. */
 .jar-dial-handle {
   position: absolute;
   top: 50%;
   left: 100%;
-  width: 7px;
-  height: 7px;
-  margin: -3.5px 0 0 -3.5px;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
   border-radius: 50%;
-  background: var(--jar-faint);
+  background: #fff;
   box-shadow: none;
   pointer-events: none;
-  transition:
-    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
-    background 0.28s ease,
-    box-shadow 0.28s ease;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .jar-dial:hover .jar-dial-handle,
 .jar-dial--live .jar-dial-handle {
-  background: var(--jar-card-hover);
-  box-shadow: inset -1px -1px 2px rgba(255, 255, 255, 0.35);
   transform: scale(1.9);
 }
 /* The scrubbed date. A SIBLING of the handle, not a child: the handle scales

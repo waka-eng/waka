@@ -62,8 +62,10 @@ export const spaceKey = (s: Space): string => `${s.kind}:${s.id}`;
  * always your own memories by ruling and headquarters holds only what has
  * been settled. The shape is the same everywhere, which is the point.
  */
-export const hasSky = (k: SpaceKind): boolean =>
-  k === "self" || k === "agent" || k === "group";
+/* Only your own column: the sky is where YOUR philosophies and values form
+   (founder, 2026-08-25 — "top of mind = current, philosophies and values =
+   timeless"), and this world does not claim to hold a room's or an agent's. */
+export const hasSky = (k: SpaceKind): boolean => k === "self";
 
 /**
  * THE DIAL WINDS EVERY SPACE, INCLUDING A ROOM — AND IN A ROOM IT WINDS THE
