@@ -206,13 +206,15 @@ export function setViewport(width: number, height: number): void {
     /* The root is the viewport, and everything else reported the same box —
        which was enough while the engine only ever read widths and heights off
        these. It reads a POSITION now: the field's bottom reserve is the
-       distance from the viewport's bottom to the top of the axis of walls,
-       measured rather than guessed, so that two stacked bands of chrome and a
-       phone's home indicator are all accounted for by the chrome itself.
-       Answering "the whole viewport" for that element reserves the whole
-       screen and leaves no field at all.
-       So the axis gets a real box, at the height it actually occupies. */
-    if ((this as HTMLElement).classList?.contains("jar-axis")) {
+       distance from the viewport's bottom to the top of the DIAL, measured
+       rather than guessed, so that the band of chrome along the bottom edge
+       and a phone's home indicator are both accounted for by the chrome
+       itself. Answering "the whole viewport" for that element reserves the
+       whole screen and leaves no field at all.
+       So the dial gets a real box, at the height it actually occupies. (It
+       was the strip of wall names until 2026-08-24; that strip was removed
+       and the dial became the lowest thing on the page.) */
+    if ((this as HTMLElement).classList?.contains("jar-dial")) {
       const h = 36;
       const top = height - h - 48;
       return {

@@ -577,7 +577,7 @@ const JOURNEYS: Journey[] = [
           const style = document.createElement("style");
           style.setAttribute("data-sabotage", "ways-out-hidden");
           style.textContent =
-            ".jar-edge, .jar-way, .jar-axis-mark, .jar-overhead { opacity: 0 !important; }";
+            ".jar-edge, .jar-way, .jar-here-more, .jar-up { opacity: 0 !important; }";
           document.head.appendChild(style);
         });
       });
@@ -592,14 +592,17 @@ const JOURNEYS: Journey[] = [
            is most often executed on, and reporting "no way out is on screen"
            about a world that has three.
 
-           Sideways is one of four: the axis along the bottom carries every
-           wall AND the offer to make another, and the way up sits on the top
-           edge whenever something is forming overhead. The claim is unchanged
-           — standing here, you can SEE that this goes somewhere — and the
-           sabotage hides all of them, so hiding any one still fails it. */
+           Sideways is one of four: the caret beside the name in the top-left
+           corner opens every wall AND the offer to make another, and the way
+           up sits on the top edge whenever something is forming overhead.
+           (That caret replaced a strip of wall names along the bottom edge on
+           2026-08-24; the claim it stands for did not change.) The claim is
+           unchanged — standing here, you can SEE that this goes somewhere —
+           and the sabotage hides all of them, so hiding any one still fails
+           it. */
         const marks = Array.from(
           document.querySelectorAll<HTMLElement>(
-            ".jar-edge, .jar-way, .jar-axis-mark, .jar-overhead",
+            ".jar-edge, .jar-way, .jar-here-more, .jar-up",
           ),
         );
         const inView = marks

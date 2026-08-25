@@ -142,12 +142,23 @@ await scene("the-room", async () => {
   /* the poster ask from scene two folds away before travel */
   await page.$eval('h1.jar-poster[data-jar-chrome="1"]', (el) => el.click()).catch(() => {});
   await page.waitForTimeout(400);
-  /* the axis along the bottom edge is the product's own pointer route */
+  /* the caret beside the name in the top-left corner is the product's own
+     pointer route to another wall — the strip along the bottom edge that
+     used to be one was removed on 2026-08-24 */
+  const opened = await page.evaluate(() => {
+    const caret = document.querySelector(".jar-here-more");
+    if (!caret) return false;
+    if (caret.getAttribute("aria-expanded") !== "true") caret.click();
+    return true;
+  });
+  if (!opened) return false;
+  /* the list is React state, so it exists a render after the press */
+  await page.waitForSelector(".jar-here-row", { timeout: 5_000 });
   const clicked = await page.evaluate(() => {
-    const marks = [...document.querySelectorAll(".jar-axis-mark")];
-    const mark = marks.find((el) => (el.textContent ?? "").toLowerCase().includes("the reading circle"));
-    if (!mark) return false;
-    mark.click();
+    const rows = [...document.querySelectorAll(".jar-here-row")];
+    const row = rows.find((el) => (el.textContent ?? "").toLowerCase().includes("the reading circle"));
+    if (!row) return false;
+    row.click();
     return true;
   });
   if (!clicked) return false;
