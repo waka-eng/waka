@@ -644,7 +644,14 @@
    NOT the reading panel — you have just typed these words, and having them
    read back to you with their verbs and their date around them is a card
    pretending to be a question. */
-.jar-reflect-room {
+/* WRITTEN AS A COMPOUND SELECTOR ON PURPOSE, and it is not style. Every one
+   of these is `.jar-seek` PLUS a variant, and two of the three were declared
+   ABOVE `.jar-seek` in this file — same specificity, base written later, so
+   the base's `top` won and the sheet was stretched from the top edge down to
+   its own `bottom`, six hundred pixels tall with four hundred of nothing in
+   it. Naming the base in the selector makes the variant win wherever either
+   one is written. */
+.jar-seek.jar-reflect-room {
   top: auto;
   bottom: 16vh;
   width: min(460px, calc(100vw - 40px));
@@ -671,7 +678,7 @@
    they also grew a second question INTO the one row that answers "where am I".
    Here each has a name and a sentence, which is what a person actually needs
    to choose between them. */
-.jar-newplace {
+.jar-seek.jar-newplace {
   top: auto;
   bottom: 16vh;
   width: min(440px, calc(100vw - 48px));
@@ -2024,7 +2031,9 @@
 /* THE ONE ASK BEFORE A DELETE. It borrows the seek card's shape because it is
    the same object — a small centred sheet that owns the moment — and it never
    appears unless a signal genuinely stands on this memory. */
-.jar-forget-ask {
+/* compound for the same reason as the two above — this one happens to be
+   written below `.jar-seek` and works, and that is luck, not a rule */
+.jar-seek.jar-forget-ask {
   top: auto;
   bottom: 12vh;
   width: min(460px, calc(100vw - 48px));

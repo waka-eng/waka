@@ -163,6 +163,20 @@ const FIXTURE = `<!doctype html>
       <span class="jar-panel-foot-r"><button type="button">delete</button></span>
     </p>
   </div>
+
+  <!-- the sheet the world puts up after a keep, so a variant that is meant to
+       sit at the bottom can be caught being stretched from the top -->
+  <div class="jar-seek jar-reflect-room" data-jar-chrome="1" role="dialog">
+    <p class="jar-prov-lead jar-label">saved</p>
+    <p class="jar-reflect-on">the mouth's foot is one row now</p>
+    <p class="jar-reflect-q">What did this stir in you?</p>
+    <textarea class="jar-reflect-box" rows="3" placeholder="In your own words"></textarea>
+    <p class="jar-ask jar-ask--row" id="reflect-foot">
+      <button type="button">keep</button>
+      <span aria-hidden="true"> &middot; </span>
+      <button type="button">not now</button>
+    </p>
+  </div>
 </div>`;
 
 /* ── reading the page ──────────────────────────────────────────────────────
@@ -219,12 +233,19 @@ const CASES: Case[] = [
     sabotage: "",
     run: async () => {
       const home = readFileSync(HOME, "utf8");
+      /* DERIVED, NEVER RESTATED. This was a hand-kept list beside the cases'
+         own `needs`, so a case added later declared five classes and this
+         one went on checking the same fourteen — a drift check that had
+         itself drifted. There is one place a case says what it stands on,
+         and this reads it. */
       const wanted = [
-        "jar-values", "jar-values-words", "jar-way", "jar-way--r",
-        "jar-saved", "jar-saved-count", "jar-caret",
-        "jar-panel-head", "jar-panel-when", "jar-panel-vis",
-        "jar-panel-text", "jar-panel-foot", "jar-mouth-where", "jar-dial-name",
-      ];
+        ...new Set([
+          ...CASES.flatMap((c) => c.needs),
+          /* the fixture's own scaffolding, measured by no single case but
+             stood on by all of them */
+          "jar-values-words", "jar-saved-count", "jar-caret", "jar-way--r",
+        ]),
+      ].sort();
       /* WHOLE CLASS NAMES, NOT SUBSTRINGS. `includes` said yes to
          `jar-panel-head` while the product had renamed it to
          `jar-panel-headline` — the exact drift this case exists to catch,
@@ -405,6 +426,41 @@ const CASES: Case[] = [
             : !hidden
               ? `the rail does not rest hidden — rail ${rest.rail}, handle ${rest.handle}, with the word at ${rest.name}`
               : `asked for, it did not arrive — rail ${open.rail}, handle ${open.handle}`,
+      };
+    },
+  },
+
+  {
+    id: "a-sheet-is-its-contents-tall",
+    name: "a sheet that sits at the bottom is only as tall as what is in it",
+    needs: ["jar-seek", "jar-reflect-room", "jar-reflect-on", "jar-reflect-q", "jar-reflect-box"],
+    /* the exact shape of the bug: the base's `top` winning over the variant's
+       `top: auto`, which pins both edges and stretches the box */
+    sabotage: ".jar-seek.jar-reflect-room { top: 58px !important; }",
+    run: async (page) => {
+      /* THE THIRD TIME THIS CASCADE BUG SHIPPED. `.jar-reflect-room` was
+         written a hundred and eighty lines ABOVE `.jar-seek`, so its
+         `top: auto` lost to the base's `top: 58px` — same specificity, later
+         wins — and the sheet stretched from the top edge down to its own
+         `bottom: 16vh`: six hundred pixels tall with four hundred of nothing
+         under the verbs. Nobody reading either rule would see it. A box is
+         honest when its floor is one padding below its last child. */
+      const read = `(() => {
+        const s = document.querySelector(".jar-reflect-room");
+        const last = s && s.lastElementChild;
+        if (!s || !last) return null;
+        const a = s.getBoundingClientRect(), b = last.getBoundingClientRect();
+        return { height: a.height, slack: a.bottom - b.bottom,
+                 pad: parseFloat(getComputedStyle(s).paddingBottom) };
+      })()`;
+      const m = (await page.evaluate(read)) as { height: number; slack: number; pad: number } | null;
+      if (!m) return { ok: false, detail: "the sheet is not in the fixture at all" };
+      const ok = Math.abs(m.slack - m.pad) <= 1;
+      return {
+        ok,
+        detail: ok
+          ? `${r1(m.height)}px tall, with its ${r1(m.pad)}px of padding under the last thing in it and nothing else`
+          : `${r1(m.slack - m.pad)}px of dead space under the sheet's last row — it is ${r1(m.height)}px tall and its contents do not fill it`,
       };
     },
   },
