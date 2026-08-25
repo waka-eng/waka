@@ -1097,3 +1097,99 @@ out, and the canvas stub's box for the bottom reserve. They are fixed, and
 the shape of that failure is worth keeping: removing a surface breaks the
 harnesses that navigate BY it, and a harness that cannot find its route
 usually reports something else's name.
+
+---
+
+## 2026-08-25 — the retirement audit: what still only exists on a flat screen
+
+Founder asked for this directly: "audit which are missing and how we can add
+it to the world so we can retire the flat screens." So this is the list, taken
+against the tree rather than remembered, with the bar this goal already set —
+**reachable and usable from `/` without visiting a flat route.**
+
+`Surface.tsx` is 2,348 lines over ten views, with 2,093 lines of stylesheet.
+Eleven routes still resolve to it. Below, every capability each view offers,
+and whether the world has it.
+
+### Already in the world — these screens are pure duplication
+
+| Flat capability | Where it lives in the world |
+|---|---|
+| capture text | the mouth, and its drawer |
+| private / public on a capture | both words on the mouth and on the card |
+| search the whole archive | `/` opens `.jar-seek`; the answer is the field, lit |
+| open one memory | tap its orb; the card opens centred |
+| edit a memory's words | in place, in the card — no edit verb |
+| delete a memory | the card's foot, warning only when a signal stands on it |
+| step between memories | the carets in the card's foot |
+| attach a picture | the card, while editing |
+| the ranked principles, read | "how you choose", under the poster |
+| make a room · join by code · add an agent | the "add new" sheet |
+| a room's wall, board and timeline | the room's own column, and the dial |
+| propose a change · affirm · decline | on the room's wall |
+| room settings, members, close, leave | the top-left name |
+| what the machine decided, answered back | the board's four verbs |
+| where a statement came from | the provenance room |
+
+### Missing from the world — seven gaps, in the order they should close
+
+1. **Reflections you have already written are invisible.** The world lets you
+   write one and take back the one you just wrote. It never shows the ones
+   already stored — and `InspirationDetail.reflections` is already fetched and
+   sitting in the card's own data. A person writes something, comes back, and
+   their words are gone from view. This is the worst of the seven and the
+   smallest to close. **Render them on the card, each with its own take-back.**
+
+2. **No way to see your signals, or take one down.** `/signals` lists every
+   signal with what it rests on, lets you rewrite one into your own words, and
+   take one down. The world shows the top of mind and the evidence under it,
+   never the layer between. Note the tension: the founder removed the word
+   "signal" from copy on 2026-08-25, so the answer is probably NOT a list —
+   it is that a person reaches these through the poster's provenance, which
+   already exists, plus a take-down verb there.
+
+3. **Principles are read-only.** The world shows the ranked list. It cannot
+   declare, dispute ("not true"), reorder, or remove. Four verbs, and the band
+   they belong on is already built.
+
+4. **Agent keys cannot be minted or revoked.** The world creates an agent; the
+   secret's one showing, the key list, and revocation are only on `/agents`.
+   This is the one gap with a security shape: revocation must never be harder
+   to reach than issuance.
+
+5. **The stack graph has no home.** `/graph` draws principles → signals →
+   experiences as columns with edges. Nothing in the world draws it.
+
+6. **Experience has no presence at all.** The grouping unit from the meeting
+   exists in the API and in the graph screen. `Home.tsx` mentions it zero
+   times.
+
+7. **You cannot attach a picture while capturing.** Only afterwards, by
+   opening the memory and editing it.
+
+### The sequencing constraint nobody had written down
+
+**Eight of the fifteen CI journeys drive the flat screens, not the world** —
+`keep`, `seek`, `reflect`, `let-go`, `account`, `the-hand`, `entry-actions`,
+`public-page` all reach for `/capture`, `/inspirations`, `/principles` or
+`/profile`. They do it because a canvas is hard to drive and a form is not.
+
+So deleting a screen is never the first move, and "the world can do it now" is
+not enough on its own. The order per capability is:
+
+1. build it in the world;
+2. move the journey that proves it onto the world;
+3. then, and only then, delete the flat view.
+
+Skipping step 2 deletes the evidence along with the screen, which is how a
+retirement turns into a regression nobody notices for a week. `/profile` is
+not a flat screen in this sense and is not in scope — it is the account, and
+four journeys use it as one.
+
+### What this makes possible, and when
+
+`/capture`, `/inspirations` and `/top-of-mind` are duplication TODAY except
+for gap 1 and gap 7 — close those two, move four journeys, and three views go.
+`/signals` needs gap 2. `/principles` needs gap 3. `/agents` needs gap 4.
+`/rooms` is already duplication; its journey cost is zero. `/graph` needs gaps
+5 and 6, which are the only two that are new design rather than relocation.
