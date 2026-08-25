@@ -100,6 +100,15 @@ describe("GET /api/signals", () => {
       status: "active",
       limit: 12,
     });
+    /* SCOPED RECALL (meeting, 2026-08-17): the q parameter reaches the
+       loader, so an agent can ask for the signals about one concern instead
+       of paging the whole wall through its context window. */
+    const scoped = await app.request("/api/signals?q=walking");
+    expect(scoped.status).toBe(200);
+    expect(listSignals).toHaveBeenLastCalledWith(
+      db,
+      expect.objectContaining({ profileId: humanProfileId, query: "walking" }),
+    );
     await expect(response.json()).resolves.toEqual({
       signals: [
         {

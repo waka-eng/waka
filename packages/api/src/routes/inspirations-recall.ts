@@ -70,7 +70,7 @@ function decodeCursor(raw: string): ListCursor | null {
  * handed everything. `!` as the escape character keeps the SQL literal free of
  * backslashes.
  */
-function buildLikePattern(query: string): string {
+export function buildLikePattern(query: string): string {
   return `%${query.replace(/[!%_]/g, (char) => `!${char}`)}%`;
 }
 

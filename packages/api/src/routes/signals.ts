@@ -22,6 +22,8 @@
 
 import { recordConsultation } from "../lib/consultations.js";
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
+
+import { buildLikePattern } from "./inspirations-recall.js";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
@@ -83,6 +85,15 @@ const limitSchema = z
 const listSignalsQuerySchema = z
   .object({
     status: z.enum(signalStatusValues).optional(),
+    /**
+     * SCOPED RECALL (meeting, 2026-08-17). An agent working one concern must
+     * be able to ask for the signals ABOUT that concern instead of paging the
+     * whole wall through its context window — "이런 프로젝트 관련한 시그널만
+     * 보고 싶어", asked for as a query parameter on exactly this route. Same
+     * two-pronged match the layer-1 recall uses: tsquery for words, ilike for
+     * fragments, because a statement is one sentence and either alone misses.
+     */
+    q: z.string().trim().min(1).max(200).optional(),
     limit: limitSchema.optional(),
     /** Read another profile in the same account, per the permission matrix. */
     profile: z.string().uuid("profile must be a uuid").optional(),
@@ -157,6 +168,8 @@ export interface SignalDetail extends SignalSummary {
 export interface ListSignalsInput {
   profileId: string;
   status?: SignalStatus;
+  /** Full-text over the statements; see `listSignalsQuerySchema.q`. */
+  query?: string;
   limit: number;
 }
 
@@ -323,9 +336,18 @@ export async function listProfileSignals(
     })
     .from(signals)
     .where(
-      input.status
-        ? and(eq(signals.profileId, input.profileId), eq(signals.status, input.status))
-        : eq(signals.profileId, input.profileId),
+      and(
+        eq(signals.profileId, input.profileId),
+        ...(input.status ? [eq(signals.status, input.status)] : []),
+        ...(input.query
+          ? [
+              or(
+                sql`to_tsvector('simple', ${signals.statement}) @@ plainto_tsquery('simple', ${input.query})`,
+                sql`${signals.statement} ilike ${buildLikePattern(input.query)} escape '!'`,
+              )!,
+            ]
+          : []),
+      ),
     )
     .orderBy(desc(signals.confidence), desc(signals.lastEvidenceAt), desc(signals.createdAt))
     .limit(input.limit);
@@ -720,6 +742,7 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
     if (!scope.ok) return c.json(scope.body, scope.status);
 
     const signalRows = await listSignals(db, {
+      query: parsedQuery.data.q,
       profileId: scope.profileId,
       status: parsedQuery.data.status,
       limit: parsedQuery.data.limit ?? DEFAULT_SIGNAL_LIMIT,

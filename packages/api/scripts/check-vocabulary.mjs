@@ -394,7 +394,9 @@ const ALLOWED = [
   },
   {
     name: "buildLikePattern",
-    files: ["src/routes/inspirations-recall.ts"],
+    /* signals.ts imports it for the scoped-recall q filter — the same SQL,
+       spoken at a second call site, is not a second word */
+    files: ["src/routes/inspirations-recall.ts", "src/routes/signals.ts"],
     disposition: "permanent",
     why:
       "builds the second operand of a SQL `ILIKE`, which SQL itself calls a " +
