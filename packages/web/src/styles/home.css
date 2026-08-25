@@ -1167,6 +1167,20 @@
 .jar-mouth-slot--note .jar-mouth-where {
   margin: 14px 20px 0;
 }
+
+/* The reserved row: present from the moment the mouth opens, visible once
+   there are words. Reserving the height is what keeps the typing line from
+   jumping when the choice appears; inert while invisible, so the empty mouth
+   still offers no control. */
+.jar-mouth-where {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+.jar-mouth-where--armed {
+  opacity: 1;
+  pointer-events: auto;
+}
 /* The verbs row: the privacy pair's face, one breath below it. The first cut
    wore tracked uppercase and read as chrome stamped onto the sheet. */
 .jar-mouth-do {

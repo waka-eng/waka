@@ -11186,8 +11186,21 @@ function HomeExperience(): JSX.Element {
                 and which way it currently sits, in the one channel this
                 world has. Private is still the resting state and still the
                 one you get by not touching it. */}
-            {mouthOpen && draft.trim() !== "" ? (
-              <p className="jar-neb-ask jar-neb-ask--row jar-mouth-where">
+            {/* RENDERED WHENEVER THE MOUTH IS OPEN, VISIBLE ONCE THERE ARE
+                WORDS (founder, 2026-08-25: "keep something is always same
+                position"). The slot hangs upward from the seam, so a row
+                that MOUNTS on the first keystroke grew the slot and shoved
+                the line you were typing into a new place — the one moment a
+                surface must hold still. The space is reserved from the
+                start and the row fades in, which is an appearance, not a
+                layout change. Invisible it is also inert, so the empty
+                mouth still offers no control — the "no forms" rule holds. */}
+            {mouthOpen ? (
+              <p
+                className={`jar-neb-ask jar-neb-ask--row jar-mouth-where${
+                  draft.trim() !== "" ? " jar-mouth-where--armed" : ""
+                }`}
+              >
                 <button
                   type="button"
                   className={keepPublic ? "jar-where-off" : "jar-where-on"}

@@ -31,7 +31,7 @@
  * second.
  */
 
-import { and, desc, eq, gt, lte } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lte, ne, or } from "drizzle-orm";
 
 import {
   consultations,
@@ -300,6 +300,19 @@ async function loadStamps(
           eq(consultations.profileId, profileId),
           gt(consultations.servedAt, since),
           lte(consultations.servedAt, until),
+          /* ANOTHER HAND'S READS ONLY (founder, 2026-08-25: "are these
+             numbers accurate?"). The record marks every serve, your own
+             browser's included — the world loads your top of mind and your
+             signals on every visit, so a day of using the product wrote a
+             hundred rows and the line announced them as if someone else had
+             been reading. Every row was real; the SENTENCE was wrong, because
+             "your memory was consulted" means a reader who is not you. A
+             null reader stays counted: that is an erased account's mark —
+             someone read it, and their leaving does not unread it. */
+          or(
+            ne(consultations.readerProfileId, profileId),
+            isNull(consultations.readerProfileId),
+          )!,
         ),
       ),
   ]);

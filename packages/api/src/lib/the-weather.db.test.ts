@@ -209,4 +209,41 @@ describe("the weather is a view of the record", () => {
     expect(wordedDaysAgo(2)).toBe("two days ago");
     expect(wordedDaysAgo(13)).toBe("thirteen days ago");
   });
+
+  it("does not call your own reading a consultation — another hand's, it does", async () => {
+    /* Founder, 2026-08-25: "are these numbers accurate?" — they were, as a
+       record, and wrong as a sentence: the world loads your top of mind and
+       your signals on every visit, each serve writing a row, so a day of
+       using the product read as a hundred consultations by nobody. "Your
+       memory was consulted" means a reader who is not you. A null reader
+       stays counted: an erased account's mark is still someone having read. */
+    const profileId = await seedProfile();
+    const [agentRow] = await t.sql`
+      SELECT account_id AS acct FROM profiles WHERE id = ${profileId}`;
+    const [agent] = await t.sql`
+      INSERT INTO profiles (account_id, type, name)
+      VALUES (${agentRow.acct}, 'agent', 'the agent') RETURNING id`;
+
+    /* your own read, this morning */
+    await t.sql`
+      INSERT INTO consultations (profile_id, reader_profile_id, surface, served_at)
+      VALUES (${profileId}, ${profileId}, 'signals', ${daysAgo(0, 3)})`;
+
+    const own = await assembleTheWeather(t.db as never, { profileId, now: NOW });
+    expect(
+      sentencesOf(own).some((line) => line.includes("consulted")),
+      "your own reading is you looking at your own wall, not a consultation",
+    ).toBe(false);
+
+    /* the agent's read, an hour later */
+    await t.sql`
+      INSERT INTO consultations (profile_id, reader_profile_id, surface, served_at)
+      VALUES (${profileId}, ${agent.id}, 'signals', ${daysAgo(0, 2)})`;
+
+    const read = await assembleTheWeather(t.db as never, { profileId, now: NOW });
+    expect(
+      sentencesOf(read),
+      "another hand's read is exactly what the sentence means",
+    ).toContain("today: your memory was consulted");
+  });
 });
