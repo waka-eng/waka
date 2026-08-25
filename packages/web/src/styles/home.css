@@ -220,7 +220,7 @@
 }
 
 .jar-eyebrow {
-  margin: 0 0 16px;
+  margin: 0 0 var(--sp-16);
 }
 .jar-poster {
   margin: 0;
@@ -257,7 +257,7 @@
   color: var(--jar-muted);
 }
 .jar-asof {
-  margin: 12px 0 0;
+  margin: var(--sp-12) 0 0;
   animation: jar-arrive 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -271,7 +271,7 @@
   appearance: none;
   -webkit-appearance: none;
   border: 0;
-  margin: 20px 0 0;
+  margin: var(--sp-20) 0 0;
   padding: 0;
   background: none;
   /* font-family only: the .jar-label register supplies the rest, and this
@@ -297,7 +297,7 @@
    margin keeps them a pair. */
 .jar-forming-line--choose {
   display: block;
-  margin-top: 8px;
+  margin-top: var(--sp-8);
 }
 
 
@@ -325,7 +325,7 @@
    nothing: a reader grepping `neb` found the most-used chrome class in the
    product and no explanation anywhere. Renamed for what it is. */
 .jar-ask {
-  margin: 10px 0 0;
+  margin: var(--sp-10) 0 0;
   font-size: var(--t-ui);
   color: var(--jar-faint);
   pointer-events: auto;
@@ -348,7 +348,7 @@
 }
 /* Offered only after "not true" — a sequence, never a menu, so the
    destructive answer is never sitting beside the harmless ones. */
-.jar-ask--after { margin-top: 6px; opacity: 0.55; }
+.jar-ask--after { margin-top: var(--sp-6); opacity: 0.55; }
 
 /* WHAT YOU SAID, WORN BY THE STATEMENT.
    Agreed: unchanged, full weight. Half-agreed: lighter, the claim loosened.
@@ -381,8 +381,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 18px;
-  margin-top: 26px;
+  gap: var(--sp-18);
+  margin-top: var(--sp-26);
   opacity: 0.72;
   /* EXPLICIT, because `pointer-events` INHERITS and `.jar-hq` is `none`.
      Dropping the old `pointer-events: none` here was not enough: with nothing
@@ -438,17 +438,17 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
-  margin-top: 10px;
+  gap: var(--sp-2);
+  margin-top: var(--sp-10);
 }
 .jar-share-row {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: var(--sp-10);
   appearance: none;
   -webkit-appearance: none;
   border: 0;
-  padding: 4px 0;
+  padding: var(--sp-4) 0;
   background: none;
   font: inherit;
   font-size: var(--t-ui);
@@ -462,7 +462,7 @@
    light rather than a tick or a colour */
 .jar-share-hint { font-size: var(--t-meta); opacity: 0.55; }
 .jar-share-note {
-  margin: 8px 0 0;
+  margin: var(--sp-8) 0 0;
   font-size: var(--t-fine);
   font-style: italic;
   color: var(--jar-faint);
@@ -534,7 +534,7 @@
   -webkit-appearance: none;
   border: 0;
   margin: 0;
-  padding: 5px 12px;
+  padding: 5px var(--sp-12);
   background: none;
   font-family: inherit;
   /* THE SAME INK AS A WAY OUT (founder, 2026-08-25: "same font and opacity
@@ -592,7 +592,7 @@
   color: var(--jar-ink);
 }
 .jar-values-sub {
-  margin: 14px 0 0;
+  margin: var(--sp-14) 0 0;
   font-size: var(--t-note);
   line-height: 1.66;
   text-wrap: pretty;
@@ -615,7 +615,7 @@
   -webkit-appearance: none;
   border: 0;
   margin: 0;
-  padding: 10px 18px;
+  padding: var(--sp-10) var(--sp-18);
   background: none;
   color: var(--jar-faint);
   cursor: pointer;
@@ -657,7 +657,7 @@
 }
 /* which memory this is about, in one line and never the whole thing */
 .jar-reflect-on {
-  margin: 0 0 14px;
+  margin: 0 0 var(--sp-14);
   font-size: var(--t-note);
   line-height: 1.5;
   color: var(--jar-muted);
@@ -682,8 +682,8 @@
 .jar-newplace-row {
   display: block;
   width: 100%;
-  margin: 12px 0 0;
-  padding: 0 0 0 12px;
+  margin: var(--sp-12) 0 0;
+  padding: 0 0 0 var(--sp-12);
   border: 0;
   border-left: 1px solid var(--jar-edge, rgba(255, 255, 255, 0.08));
   background: none;
@@ -711,7 +711,7 @@
   color: var(--jar-muted);
 }
 .jar-newplace-close {
-  margin: 16px 0 0;
+  margin: var(--sp-16) 0 0;
   justify-content: flex-end;
 }
 /* the way to make one, at the foot of the list of the ones you have */
@@ -764,7 +764,7 @@
   -webkit-appearance: none;
   border: 0;
   margin: 0;
-  padding: 5px 12px;
+  padding: 5px var(--sp-12);
   background: none;
   font-family: inherit;
   /* THE SAME REGISTER AS A WAY OUT (founder, 2026-08-25: "make 30 inspirations
@@ -831,7 +831,7 @@
   width: min(420px, calc(100vw - 48px));
   pointer-events: auto;
 }
-.jar-seek .jar-ask { margin-top: 8px; }
+.jar-seek .jar-ask { margin-top: var(--sp-8); }
 
 /* A file picker in the world's voice: a word you press, and the input
    itself never shows. */
@@ -842,8 +842,8 @@
 /* A proposal waiting on the room: somebody's sentence, who is behind it so
    far, and your answer. Prose, because it is a claim about all of you. */
 .jar-proposal {
-  margin-top: 16px;
-  padding-top: 14px;
+  margin-top: var(--sp-16);
+  padding-top: var(--sp-14);
   border-top: 1px solid var(--jar-panel-edge);
 }
 .jar-proposal-body {
@@ -855,7 +855,7 @@
   color: var(--jar-ink);
   text-wrap: balance;
 }
-.jar-proposal-who { margin: 8px 0 0; }
+.jar-proposal-who { margin: var(--sp-8) 0 0; }
 
 .jar-roomform {
   position: absolute;
@@ -864,7 +864,7 @@
   left: 50%;
   transform: translate(-50%, -50%);
   width: min(420px, calc(100vw - 48px));
-  padding: 22px 24px 20px;
+  padding: var(--sp-22) var(--sp-24) var(--sp-20);
   background: var(--jar-panel);
   border: 1px solid var(--jar-panel-edge);
   border-radius: 4px;
@@ -879,13 +879,13 @@
   overflow-y: auto;
 }
 .jar-reading-line {
-  margin: 0 0 12px;
+  margin: 0 0 var(--sp-12);
   font-size: var(--t-body);
   line-height: 1.55;
   color: var(--jar-ink);
 }
 .jar-reading-coda {
-  margin: 16px 0 0;
+  margin: var(--sp-16) 0 0;
   color: var(--jar-faint);
 }
 /* A gesture's receipt: the same quiet register as the panel's meta lines —
@@ -896,7 +896,7 @@
   color: var(--jar-muted);
   font-size: var(--t-ui);
 }
-.jar-roomform-tabs { display: flex; gap: 18px; margin-bottom: 16px; }
+.jar-roomform-tabs { display: flex; gap: var(--sp-18); margin-bottom: var(--sp-16); }
 .jar-roomform-tabs button {
   appearance: none;
   -webkit-appearance: none;
@@ -923,7 +923,7 @@
 .jar-roomform-box::placeholder { color: var(--jar-faint); }
 .jar-roomform-box:focus { border-bottom-color: var(--jar-muted); }
 .jar-roomform-err {
-  margin: 10px 0 0;
+  margin: var(--sp-10) 0 0;
   font-size: var(--t-ui);
   font-style: italic;
   color: var(--jar-muted);
@@ -941,7 +941,7 @@
 .jar-wall-empty,
 .jar-wall-hold {
   max-width: 22ch;
-  margin: 18px auto 0;
+  margin: var(--sp-18) auto 0;
   text-align: center;
   text-wrap: balance;
   color: var(--jar-faint);
@@ -1058,7 +1058,7 @@
      a fallback the real number only nudges. */
   top: var(--jar-mouth-top, 58%);
   /* the air between the last word and the field's top edge */
-  padding: 0 20px 14px;
+  padding: 0 var(--sp-20) var(--sp-14);
   text-align: center;
   transition: opacity 0.28s ease;
 }
@@ -1331,7 +1331,7 @@
    is the behaviour it actually has. Its top padding stands in for the rail's
    old spacing so nothing else shifts. */
 .jar-mouth-slot--note {
-  padding-top: 18px;
+  padding-top: var(--sp-18);
 }
 /* WHERE THIS ONE IS GOING, ON THE DRAWER'S OWN FOOTER. Inside the sheet, under
    a hairline, so the choice belongs to the note you are writing instead of
@@ -1386,16 +1386,16 @@
    which is the only rule in the whole object: it separates the page you are
    writing from the two things you can do with it. */
 .jar-mouth-do {
-  margin-top: 10px;
+  margin-top: var(--sp-10);
   justify-content: center;
 }
 .jar-mouth-slot--note .jar-mouth-do {
-  margin: 0 20px;
+  margin: 0 var(--sp-20);
   padding: 13px 0 3px;
   border-top: 1px solid var(--jar-panel-edge);
 }
 .jar-mouth-slot--note .jar-mouth-note {
-  margin: 10px 20px 0;
+  margin: var(--sp-10) var(--sp-20) 0;
 }
 
 .jar-mouth-field::-webkit-scrollbar {
@@ -1410,7 +1410,7 @@
    — the same rule the skeleton lines obey. Said once, quietly, and it goes
    the moment the person types again. */
 .jar-mouth-note {
-  margin: 10px 0 0;
+  margin: var(--sp-10) 0 0;
   font-size: var(--t-ui);
   line-height: 1.45;
   color: var(--jar-faint);
@@ -1479,7 +1479,7 @@
    free for the one line that says whose wall you are standing on. */
 .jar-exits {
   display: flex;
-  gap: 8px;
+  gap: var(--sp-8);
   align-items: center;
 }
 .jar-back {
@@ -1498,7 +1498,7 @@
      padding to both buttons"). A name set in tracked uppercase already carries
      air between its letters, and at 14px of side padding the pill fit it like
      a label rather than holding it like a control. */
-  padding: 7px 20px;
+  padding: 7px var(--sp-20);
   border-radius: 999px;
   background: var(--jar-card);
   transition:
@@ -1607,8 +1607,8 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: var(--sp-12);
+  margin-bottom: var(--sp-14);
 }
 
 .jar-settings-x {
@@ -1625,18 +1625,18 @@
 }
 
 .jar-settings-name {
-  margin: 0 0 14px;
+  margin: 0 0 var(--sp-14);
   font-size: 17px;
   line-height: 1.35;
   color: var(--jar-ink);
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--sp-12);
 }
 
 .jar-settings-note {
-  margin: 0 0 16px;
+  margin: 0 0 var(--sp-16);
   font-size: var(--t-ui);
   line-height: 1.5;
   color: var(--jar-muted);
@@ -1672,7 +1672,7 @@
 
 .jar-settings-roll {
   list-style: none;
-  margin: 0 0 16px;
+  margin: 0 0 var(--sp-16);
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -1682,7 +1682,7 @@
 .jar-settings-member {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: var(--sp-10);
   font-size: var(--t-note);
   color: var(--jar-ink);
 }
@@ -1691,7 +1691,7 @@
 }
 
 .jar-settings-rename {
-  margin-bottom: 14px;
+  margin-bottom: var(--sp-14);
 }
 
 /* THE SAME PANEL, HUNG FROM THE OTHER PILL. Left is where you are, right is
@@ -1755,7 +1755,7 @@
   bottom: calc(42px + env(safe-area-inset-bottom));
   display: flex;
   align-items: stretch;
-  padding: 0 24px;
+  padding: 0 var(--sp-24);
   /* NO SCRIM AT ALL, AND THAT IS THE FIX. It was a gradient to `--jar-deep`,
      written as "a scrim, not a band … without ever showing an edge" — and at
      the very bottom of the screen it showed one, a hard horizontal seam across
@@ -1895,7 +1895,7 @@
   left: 100%;
   width: 8px;
   height: 8px;
-  margin: -4px 0 0 -4px;
+  margin: -var(--sp-4) 0 0 -var(--sp-4);
   border-radius: 50%;
   background: #fff;
   box-shadow: none;
@@ -1961,7 +1961,7 @@
      the floor makes that structural instead of lucky. */
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  gap: 12px;
+  gap: var(--sp-12);
 }
 .jar-panel-foot-l {
   justify-self: start;
@@ -1969,7 +1969,7 @@
 .jar-panel-foot-c {
   display: inline-flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--sp-14);
   justify-self: center;
 }
 .jar-panel-foot-r {
@@ -1978,7 +1978,7 @@
 .jar-panel-foot-c button {
   display: inline-flex;
   align-items: center;
-  padding: 4px 6px;
+  padding: var(--sp-4) var(--sp-6);
 }
 /* THE ONE ACT THE FOOTER IS FOR WHILE AN EDIT IS OPEN (founder, 2026-08-25:
    "when user edits sth, replace the center left right arrow icon with save
@@ -2036,7 +2036,7 @@
 }
 .jar-forget-ask .jar-panel-warn {
   display: block;
-  margin: 0 0 4px;
+  margin: 0 0 var(--sp-4);
 }
 
 /* ---------- the reading panel: a focused bubble's information ----------
@@ -2134,7 +2134,7 @@
   transform: translate(-50%, calc(-50% + var(--jar-panel-rise)));
   /* rounded all round — these are panels, not sheets clipped by the screen */
   border-radius: 18px;
-  padding: 24px;
+  padding: var(--sp-24);
   background: var(--jar-panel);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -2161,7 +2161,7 @@
   grid-template-columns: auto auto;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--sp-16);
 }
 .jar-panel-when {
   display: block;
@@ -2179,7 +2179,7 @@
    next, so the card read as three things stacked rather than one thing with
    a middle. */
 .jar-panel-text {
-  margin: 22px 0;
+  margin: var(--sp-22) 0;
   font-size: var(--t-body);
   line-height: 1.6;
   color: var(--jar-ink);
@@ -2224,13 +2224,13 @@
 }
 /* the one honest degradation: the rest never arrived, said once and quietly */
 .jar-panel-note {
-  margin: 10px 0 0;
+  margin: var(--sp-10) 0 0;
   font-size: var(--t-ui);
   color: var(--jar-faint);
 }
 /* a room orb's collapsed links sentence: which readings cited this save */
 .jar-panel-cited {
-  margin: 14px 0 0;
+  margin: var(--sp-14) 0 0;
 }
 /* ---------- marks inside the memory ----------
    Not a highlighter and not a pull-quote: the way a person underlines their
@@ -2247,8 +2247,8 @@
   box-shadow: inset 0 -1px 0 0 color-mix(in srgb, var(--jar-mark, #f0eade) 45%, transparent);
 }
 .jar-mark--source {
-  padding: 0 2px;
-  margin: 0 -2px;
+  padding: 0 var(--sp-2);
+  margin: 0 -var(--sp-2);
   background: color-mix(in srgb, var(--jar-mark, #f0eade) 16%, transparent);
   box-shadow: inset 0 -1px 0 0 color-mix(in srgb, var(--jar-mark, #f0eade) 60%, transparent);
 }
@@ -2259,7 +2259,7 @@
   appearance: none;
   -webkit-appearance: none;
   border: 0;
-  margin: 22px 0 0;
+  margin: var(--sp-22) 0 0;
   padding: 0;
   background: none;
   font-family: inherit;
@@ -2279,11 +2279,11 @@
 }
 /* the question and the box arrive together, once, whole */
 .jar-reflect {
-  margin-top: 20px;
+  margin-top: var(--sp-20);
   animation: jar-panel-in 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .jar-reflect-q {
-  margin: 0 0 10px;
+  margin: 0 0 var(--sp-10);
   font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
   font-weight: 300;
   font-size: 16px;
@@ -2295,7 +2295,7 @@
   width: 100%;
   box-sizing: border-box;
   resize: none;
-  padding: 12px 14px;
+  padding: var(--sp-12) var(--sp-14);
   border: 0;
   border-radius: 14px;
   background: var(--jar-row);
@@ -2483,7 +2483,7 @@
   align-items: baseline;
   /* the middots are their own flex items and flex eats the spaces around
      inline text, so the breathing room is the gap's job, not the markup's */
-  gap: 6px 10px;
+  gap: var(--sp-6) var(--sp-10);
 }
 
 /* ---------- provenance: what a pattern was read from ----------
@@ -2494,13 +2494,13 @@
    highlighter, a score or a bar — the reader's eye lands on the fragment
    before they have decided to look for it. */
 .jar-prov {
-  margin: 16px 0 0;
+  margin: var(--sp-16) 0 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-8);
 }
 .jar-prov-lead {
-  margin: 0 0 2px;
+  margin: 0 0 var(--sp-2);
   color: var(--jar-faint);
 }
 /* pressable, but not a button: it is a quotation you can walk into */
@@ -2508,7 +2508,7 @@
   display: block;
   width: 100%;
   margin: 0;
-  padding: 0 0 0 12px;
+  padding: 0 0 0 var(--sp-12);
   /* the one structural mark: a rule down the left, the typographic sign for
      quoted material, at an opacity that never competes with the words */
   border: 0;
@@ -2574,7 +2574,7 @@
 /* the claim, in the poster's face at reading size — this is the sentence the
    whole room is accounting for, so it leads and nothing shares its line */
 .jar-prov-room-lead {
-  margin: 0 0 18px;
+  margin: 0 0 var(--sp-18);
   font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
   font-weight: 300;
   font-size: clamp(17px, 1.5vw, 21px);
@@ -2588,7 +2588,7 @@
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
-  gap: 24px;
+  gap: var(--sp-24);
 }
 .jar-prov-room-list,
 .jar-prov-room-full {
@@ -2599,8 +2599,8 @@
 .jar-prov-room-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding-right: 4px;
+  gap: var(--sp-10);
+  padding-right: var(--sp-4);
 }
 /* A HONEST EDGE INSTEAD OF A SILENT TRUNCATION. A ground is a whole memory
    and a row is a few lines; clamping says so — the text stops mid-thought
@@ -2622,7 +2622,7 @@
   color: var(--jar-ink);
 }
 .jar-prov-room-full {
-  padding-left: 24px;
+  padding-left: var(--sp-24);
   border-left: 1px solid var(--jar-panel-edge);
 }
 .jar-prov-room-text {
@@ -2641,7 +2641,7 @@
   color: var(--jar-faint);
 }
 .jar-prov-room-close {
-  margin: 16px 0 0;
+  margin: var(--sp-16) 0 0;
   justify-content: flex-end;
 }
 /* one column on a narrow screen: the chosen memory reads UNDER its own row
@@ -2717,14 +2717,14 @@
   /* the two signposts on the vertical axis: 21px -> 27px, past WCAG's 24 */
   .jar-values,
   .jar-saved {
-    padding-top: 8px;
-    padding-bottom: 8px;
+    padding-top: var(--sp-8);
+    padding-bottom: var(--sp-8);
   }
   /* the chrome pills sit at 25-26px and already clear 24; `.jar-here-more` is
      the one under it on the short axis, at 42px wide */
   .jar-here-more {
-    padding-left: 20px;
-    padding-right: 20px;
+    padding-left: var(--sp-20);
+    padding-right: var(--sp-20);
   }
 }
 
@@ -2762,13 +2762,13 @@
 @media (max-width: 760px) {
   .jar-prov-room-panes {
     grid-template-columns: minmax(0, 1fr);
-    gap: 16px;
+    gap: var(--sp-16);
   }
   .jar-prov-room-full {
     padding-left: 0;
     border-left: 0;
     border-top: 1px solid var(--jar-panel-edge);
-    padding-top: 16px;
+    padding-top: var(--sp-16);
   }
 }
 
@@ -2780,10 +2780,10 @@
   overflow-y: auto;
 }
 .jar-ante-row {
-  margin: 0 0 14px;
+  margin: 0 0 var(--sp-14);
 }
 .jar-ante-candidate {
-  margin: 0 0 2px;
+  margin: 0 0 var(--sp-2);
   font-size: var(--t-ui);
   line-height: 1.62;
   /* the dim place stays dim by standing (muted, under the panel's hush),
@@ -2824,7 +2824,7 @@
   display: block;
   width: 100%;
   margin: 0;
-  padding: 0 0 0 12px;
+  padding: 0 0 0 var(--sp-12);
   border: 0;
   border-left: 1px solid var(--jar-edge, rgba(255, 255, 255, 0.08));
   background: none;
@@ -2876,7 +2876,7 @@
 .jar-star {
   background: none;
   border: none;
-  padding: 0 6px 0 0;
+  padding: 0 var(--sp-6) 0 0;
   margin: 0;
   font: inherit;
   line-height: inherit;
@@ -2941,7 +2941,7 @@
    for the person who can act on it, not the person who just wanted to read */
 .jar-skel-why {
   display: block;
-  margin-top: 10px;
+  margin-top: var(--sp-10);
   font-size: var(--t-fine);
   color: var(--jar-faint);
   opacity: 0.75;
@@ -2967,7 +2967,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: var(--sp-2);
   font-size: var(--t-label);
   font-weight: 500;
   letter-spacing: 0.14em;
@@ -2976,13 +2976,13 @@
 .jar-ground-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-8);
   white-space: nowrap;
   /* a button, wearing nothing a button brings with it */
   border: 0;
   background: none;
-  padding: 4px 6px;
-  margin: 0 0 0 -6px;
+  padding: var(--sp-4) var(--sp-6);
+  margin: 0 0 0 -var(--sp-6);
   font: inherit;
   letter-spacing: inherit;
   text-transform: inherit;
@@ -3035,7 +3035,7 @@
    as every other row of choices, and present only once there is something to
    send anywhere */
 .jar-mouth-where {
-  margin-top: 8px;
+  margin-top: var(--sp-8);
   justify-content: center;
 }
 
@@ -3061,7 +3061,7 @@
    meta — the poster's own history, which existed in the database from the
    start and had never been readable anywhere. */
 .jar-was {
-  margin: 0 0 4px;
+  margin: 0 0 var(--sp-4);
   font-size: var(--t-ui);
   color: var(--jar-faint);
 }
@@ -3073,7 +3073,7 @@
    weight: the same face every other verb in this sheet wears. */
 .jar-settings-flats {
   flex-wrap: wrap;
-  row-gap: 4px;
+  row-gap: var(--sp-4);
   opacity: 0.75;
 }
 
@@ -3110,7 +3110,7 @@
   -webkit-appearance: none;
   border: 0;
   margin: 0;
-  padding: 7px 10px;
+  padding: 7px var(--sp-10);
   background: none;
   font-family: inherit;
   color: var(--jar-faint);
@@ -3135,14 +3135,14 @@
 }
 .jar-here-split .jar-here {
   border-radius: 999px 0 0 999px;
-  padding-right: 8px;
+  padding-right: var(--sp-8);
 }
 .jar-here-more {
   border-radius: 0 999px 999px 0;
   /* WIDER AND BIGGER (founder, 2026-08-25). A 9px glyph in a narrow well read
      as a smudge beside a name set at label size — it is the control that opens
      every other wall, and it was the smallest mark on the bar. */
-  padding: 6px 18px 6px 16px;
+  padding: var(--sp-6) var(--sp-18) var(--sp-6) var(--sp-16);
   font-size: var(--t-fine);
   box-shadow: inset 1px 0 0 0 var(--jar-panel-edge);
 }
@@ -3155,7 +3155,7 @@
   flex-direction: column;
   align-items: stretch;
   min-width: 100%;
-  padding: 6px;
+  padding: var(--sp-6);
   border-radius: 14px;
   background: var(--jar-panel);
   backdrop-filter: blur(20px);
@@ -3169,7 +3169,7 @@
   -webkit-appearance: none;
   border: 0;
   background: none;
-  padding: 7px 12px;
+  padding: 7px var(--sp-12);
   border-radius: 9px;
   text-align: left;
   white-space: nowrap;
@@ -3265,7 +3265,7 @@
        this is a long paste, and 300px showed about a third of one. */
     height: min(52vh, 520px);
     max-height: min(52vh, 520px);
-    padding: 14px 16px;
+    padding: var(--sp-14) var(--sp-16);
     border-radius: 12px;
     background: var(--jar-sheet-well);
     box-shadow: inset 0 0 0 1px var(--jar-sheet-edge);

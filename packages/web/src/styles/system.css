@@ -75,6 +75,52 @@
      normal leading looks like a document; tight leading looks like a poster.
   */
 
+  /* -----------------------------------------------------------------------
+   * SPACE
+   *
+   * A TWO-PIXEL GRID, WHICH IS WHAT THIS PRODUCT ALREADY WAS (2026-08-25).
+   * Measured before anything moved: 47 distinct spacing literals across the
+   * stylesheets, and all but six of the frequent ones were already even. The
+   * "random spacing here and there" the founder named was not a wild scatter —
+   * it was a grid nobody had written down, with a handful of odd values (1, 3,
+   * 5, 7, 9, 13) sitting off it.
+   *
+   * SO THE TOKENS ARE NAMED BY THEIR PIXEL VALUE, and that is deliberate. A
+   * ladder of `--sp-1 … --sp-12` where `--sp-7` means 14px is a second thing
+   * to learn and a second thing to get wrong. Naming a step after what it IS
+   * makes the grid legible at every call site and lets the gate below say
+   * exactly one thing: a spacing value that is not one of these is off the
+   * grid.
+   *
+   * What this buys is not shorter CSS — `var(--sp-14)` is longer than `14px`.
+   * It is that "off the grid" becomes a thing a machine can see.
+   * -------------------------------------------------------------------- */
+  --sp-2: 2px;
+  --sp-4: 4px;
+  --sp-6: 6px;
+  --sp-8: 8px;
+  --sp-10: 10px;
+  --sp-12: 12px;
+  --sp-14: 14px;
+  --sp-16: 16px;
+  --sp-18: 18px;
+  --sp-20: 20px;
+  --sp-22: 22px;
+  --sp-24: 24px;
+  --sp-26: 26px;
+  --sp-28: 28px;
+  --sp-30: 30px;
+  --sp-32: 32px;
+  --sp-36: 36px;
+  --sp-40: 40px;
+  --sp-44: 44px;
+  --sp-48: 48px;
+  --sp-56: 56px;
+  --sp-64: 64px;
+  --sp-72: 72px;
+  --sp-88: 88px;
+  --sp-96: 96px;
+
   /* --- the display cluster. Only the room's name lives here. --- */
   --t-display: clamp(64px, 13vw, 200px);
   --t-display-lh: 0.86;

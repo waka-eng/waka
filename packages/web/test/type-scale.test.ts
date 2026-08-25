@@ -98,6 +98,68 @@ function onTheScale(value: string): boolean {
   return value.startsWith("var(") || value.startsWith("clamp(") || value === "inherit";
 }
 
+/**
+ * THE SPACING GRID, held the same way.
+ *
+ * 47 distinct spacing literals when this was measured, and the founder called
+ * it "random spacing here and there". It was not a wild scatter: nearly every
+ * frequent value was already even. What existed was a two-pixel grid nobody
+ * had written down, with a handful of odd values sitting off it.
+ *
+ * So `system.css` declares the grid by pixel value (`--sp-14` is 14px, and
+ * naming a step after what it IS beats a `--sp-7` a reader has to translate),
+ * 194 declarations moved onto it with no geometry change, and what is left is
+ * counted here. The point is not shorter CSS — `var(--sp-14)` is longer than
+ * `14px`. It is that "off the grid" becomes something a machine can see.
+ */
+const SPACE_CEILING = 38;
+
+/** Spacing values, per governed file, as written. */
+function spacingIn(file: string): string[] {
+  const out: string[] = [];
+  const decl = /\b(padding|margin|gap|row-gap|column-gap)(-top|-right|-bottom|-left)?:\s*([^;{}]+);/g;
+  for (const m of read(file).matchAll(decl)) {
+    const value = m[3]!;
+    if (/var\(|calc\(|env\(/.test(value)) continue;
+    for (const px of value.matchAll(/\b\d+px\b/g)) out.push(`${file}: ${m[1]}${m[2] ?? ""}: ${px[0]}`);
+  }
+  return out;
+}
+
+describe("the spacing grid is one grid", () => {
+  it("declares the grid in one place", () => {
+    const system = read("system.css");
+    for (const step of ["--sp-2", "--sp-8", "--sp-14", "--sp-24", "--sp-96"]) {
+      expect(
+        new RegExp(`(?<![\\w-])${step}:`).test(system),
+        `\`${step}\` is gone from system.css. Call sites naming it now resolve ` +
+          "to nothing, and a spacing value that resolves to nothing is not a " +
+          "layout that looks broken — it is one that quietly collapsed.",
+      ).toBe(true);
+    }
+  });
+
+  it("keeps the count of off-grid spacing at or under the ceiling", () => {
+    const loose = GOVERNED.flatMap((f) => spacingIn(f));
+    expect(
+      loose.length,
+      `${loose.length} raw spacing values, and the ceiling is ${SPACE_CEILING}.\n` +
+        `  ${loose.join("\n  ")}\n` +
+        "Either the value is on the two-pixel grid — use its token — or it is " +
+        "off it, in which case it is one of the odd values this ratchet exists " +
+        "to drain, and the fix is to move to the step above or below.",
+    ).toBeLessThanOrEqual(SPACE_CEILING);
+  });
+
+  it("has a spacing ceiling that is still worth having", () => {
+    const loose = GOVERNED.flatMap((f) => spacingIn(f));
+    expect(
+      SPACE_CEILING - loose.length,
+      `the ceiling is ${SPACE_CEILING} and there are ${loose.length} left. Lower it.`,
+    ).toBeLessThanOrEqual(3);
+  });
+});
+
 describe("the type scale is one scale", () => {
   it("declares every step it claims, in one place", () => {
     /* If a step is renamed or dropped, the call sites below are pointing at

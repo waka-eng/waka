@@ -226,11 +226,11 @@ a:hover {
   border: 0;
   border-top: 1px solid var(--w-edge);
   border-radius: 0;
-  margin-top: 30px;
-  padding-top: 24px;
+  margin-top: var(--sp-30);
+  padding-top: var(--sp-24);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--sp-16);
 }
 .login-form {
   background: none;
@@ -242,7 +242,7 @@ a:hover {
 .profile-danger-heading {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-6);
 }
 .profile-public-heading .login-subtitle,
 .profile-danger-heading .login-subtitle {
@@ -255,8 +255,8 @@ a:hover {
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-bottom: 22px;
+  gap: var(--sp-6);
+  margin-bottom: var(--sp-22);
 }
 
 /* Messages speak in the world's voice: prose, quiet, and no colour carrying
@@ -312,7 +312,7 @@ a:hover {
   border: 0;
   border-bottom: 1px solid transparent;
   color: var(--w-muted);
-  padding: 10px 4px;
+  padding: var(--sp-10) var(--sp-4);
   letter-spacing: 0.1em;
 }
 .auth-tabs button[aria-selected="true"],
@@ -357,7 +357,7 @@ a:hover {
 .auth-form:not([hidden]) {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: var(--sp-18);
 }
 .login-form[hidden],
 .auth-form[hidden] {
@@ -369,7 +369,7 @@ a:hover {
 .auth-divider {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--sp-14);
   color: var(--w-faint);
   font-size: var(--t-label);
   letter-spacing: 0.16em;
@@ -391,7 +391,7 @@ a:hover {
    world marks the wall you are standing on */
 .login-tabs {
   display: flex;
-  gap: 22px;
+  gap: var(--sp-22);
   background: none;
   border: 0;
   border-radius: 0;
@@ -403,7 +403,7 @@ a:hover {
   border: 0;
   border-bottom: 1px solid transparent;
   border-radius: 0;
-  padding: 8px 2px;
+  padding: var(--sp-8) var(--sp-2);
   color: var(--w-muted);
   text-decoration: none;
 }
@@ -429,12 +429,12 @@ a:hover {
    rule beneath. A filled tab would be the only solid shape on the page. */
 .profile-tabs {
   display: flex;
-  gap: 22px;
+  gap: var(--sp-22);
   background: none;
   border: 0;
   border-bottom: 1px solid var(--w-edge);
   padding: 0;
-  margin-bottom: 22px;
+  margin-bottom: var(--sp-22);
 }
 .profile-tabs button {
   appearance: none;
@@ -443,7 +443,7 @@ a:hover {
   border-bottom: 1px solid transparent;
   border-radius: 0;
   margin-bottom: -1px;
-  padding: 10px 2px;
+  padding: var(--sp-10) var(--sp-2);
   color: var(--w-muted);
   font: inherit;
   font-size: var(--t-fine);
@@ -496,8 +496,8 @@ a:hover {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 16px;
-  padding: 14px 0;
+  gap: var(--sp-16);
+  padding: var(--sp-14) 0;
   background: none;
   border: 0;
   border-bottom: 1px solid var(--w-edge);
@@ -539,7 +539,7 @@ a:hover {
   border: 0;
   border-radius: 0;
   padding: 0;
-  margin-left: 10px;
+  margin-left: var(--sp-10);
   color: var(--w-faint);
   font-size: var(--t-label);
   font-weight: 500;
@@ -556,7 +556,7 @@ a:hover {
 .profile-row-actions {
   display: flex;
   align-items: baseline;
-  gap: 14px;
+  gap: var(--sp-14);
   flex: 0 0 auto;
 }
 .profile-memory-action,
@@ -596,8 +596,8 @@ a:hover {
 .profile-memory-create {
   display: flex;
   align-items: baseline;
-  gap: 14px;
-  padding: 14px 0 0;
+  gap: var(--sp-14);
+  padding: var(--sp-14) 0 0;
   background: none;
   border: 0;
 }
@@ -618,8 +618,8 @@ a:hover {
 .profile-toggle-row {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  margin: 0 0 14px;
+  gap: var(--sp-12);
+  margin: 0 0 var(--sp-14);
   color: var(--w-ink);
   font-size: var(--t-note);
   line-height: 1.5;
@@ -631,7 +631,7 @@ a:hover {
 .profile-toggle-row input[type="checkbox"] {
   width: 16px;
   height: 16px;
-  margin: 2px 0 0;
+  margin: var(--sp-2) 0 0;
   flex: 0 0 auto;
   accent-color: var(--w-ink);
   cursor: pointer;
@@ -646,7 +646,7 @@ a:hover {
 .login-form .btn-primary:not(.btn-doorway),
 .profile-card .btn-primary:not(.btn-doorway) {
   align-self: flex-start;
-  margin-top: 8px;
+  margin-top: var(--sp-8);
 }
 /* the tab strip's own rule is the only line it needs — the pill outline
    underneath it belonged to the filled-tab design that is gone */
@@ -672,7 +672,7 @@ a:hover {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: clamp(32px, 7vh, 88px) 24px 96px;
+  padding: clamp(var(--sp-32), 7vh, var(--sp-88)) var(--sp-24) var(--sp-96);
   /* the volume: one soft pool of light, high and centred, exactly where the
      world puts the light behind its companion. It never reads as a gradient
      because it has no edge — it is the room, not a panel in it. */
@@ -698,7 +698,7 @@ a:hover {
   box-shadow: none;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-4);
 }
 
 /* ---------- type comes back to reading size ----------
@@ -736,8 +736,8 @@ a:hover {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 26px;
+  gap: var(--sp-24);
+  margin-bottom: var(--sp-26);
 }
 
 /* ================= THE SAME VALUES, NOT SIMILAR ONES =================
@@ -808,14 +808,14 @@ h2 {
 .profile-public-panel,
 .profile-danger-panel {
   margin-top: 46px;
-  padding-top: 28px;
-  gap: 18px;
+  padding-top: var(--sp-28);
+  gap: var(--sp-18);
 }
 .field {
-  margin-bottom: 26px;
+  margin-bottom: var(--sp-26);
 }
 .profile-tabs {
-  margin-bottom: 30px;
+  margin-bottom: var(--sp-30);
 }
 
 /* ================= ORDER IS NOT A GUARANTEE, SPECIFICITY IS =================
@@ -846,7 +846,7 @@ body .login-shell {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: clamp(32px, 7vh, 88px) 24px 96px;
+  padding: clamp(var(--sp-32), 7vh, var(--sp-88)) var(--sp-24) var(--sp-96);
 }
 body .profile-card,
 body .login-card {
@@ -868,14 +868,14 @@ body .login-title {
 }
 body .profile-tabs {
   display: flex;
-  gap: 22px;
+  gap: var(--sp-22);
   padding: 0;
   background: none;
   border: 0;
   border-bottom: 1px solid var(--w-edge);
   border-radius: 0;
   box-shadow: none;
-  margin-bottom: 30px;
+  margin-bottom: var(--sp-30);
 }
 body .profile-tabs-indicator {
   display: none;
@@ -886,7 +886,7 @@ body .profile-tabs button {
   border-bottom: 1px solid transparent;
   border-radius: 0;
   margin-bottom: -1px;
-  padding: 10px 2px;
+  padding: var(--sp-10) var(--sp-2);
   color: var(--w-muted);
   font-weight: 500;
   font-size: var(--t-label);
@@ -912,7 +912,7 @@ body .profile-connection-row {
   border: 0;
   border-bottom: 1px solid var(--w-edge);
   border-radius: 0;
-  padding: 14px 0;
+  padding: var(--sp-14) 0;
   min-height: 0;
 }
 body .profile-memory-badge,
@@ -938,10 +938,10 @@ body .profile-row-tag {
 body .profile-public-panel,
 body .profile-danger-panel {
   margin-top: 34px;
-  padding-top: 20px;
+  padding-top: var(--sp-20);
 }
 body .field:last-of-type {
-  margin-bottom: 8px;
+  margin-bottom: var(--sp-8);
 }
 
 /* ---------- the words that open things ----------
@@ -949,11 +949,11 @@ body .field:last-of-type {
    where the section it reveals will appear, so opening it is the section
    arriving rather than the page rearranging around you. */
 body .profile-disclose {
-  margin: 26px 0 0;
+  margin: var(--sp-26) 0 0;
   font-size: var(--t-note);
 }
 body .profile-disclose--last {
-  margin-top: 40px;
+  margin-top: var(--sp-40);
 }
 body .profile-disclose button {
   appearance: none;
@@ -1020,7 +1020,7 @@ body .profile-list[hidden] {
    things you press */
 body .login-form .btn-primary,
 body .profile-card .btn-primary {
-  margin-top: 26px;
+  margin-top: var(--sp-26);
   color: var(--w-ink);
   font-size: var(--t-note);
   letter-spacing: 0;
@@ -1062,8 +1062,8 @@ body .login-card .btn-doorway {
   justify-content: center;
   width: 100%;
   min-height: 48px;
-  margin-top: 26px;
-  padding: 0 20px;
+  margin-top: var(--sp-26);
+  padding: 0 var(--sp-20);
   border: 0;
   border-radius: 999px;
   /* the page's ink as GROUND, and the page's ground as ink — the rule above
@@ -1091,7 +1091,7 @@ body .login-card .btn-doorway:disabled {
    because it separates two peers. Scoped to the doorway: `/profile` has an
    `.auth-divider` in a different composition and this is not about that. */
 body .login-card .login-divider {
-  margin: 22px 0;
+  margin: var(--sp-22) 0;
 }
 
 /* ================= READABILITY AND ONE PLACE FOR ACTIONS =================
@@ -1180,9 +1180,9 @@ body .login-footer {
 body .profile-foot {
   display: flex;
   align-items: baseline;
-  gap: 22px;
+  gap: var(--sp-22);
   margin-top: 52px;
-  padding-top: 20px;
+  padding-top: var(--sp-20);
   border-top: 1px solid var(--w-edge);
 }
 body .profile-foot .login-footer {
