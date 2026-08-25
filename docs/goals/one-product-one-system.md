@@ -152,6 +152,122 @@ phone that was not reasoned about, so Phase 5 measures before it fixes.
 
 ---
 
+## The audit register
+
+Founder, 2026-08-25: "give me the list of audits and end state of each audit …
+ensure you do all the audits and fix everything to achieve the desired end
+state per audits goal."
+
+Six audits. Each one's END STATE is written as something countable, so that
+"done" is a measurement rather than an opinion, and each carries the gate that
+holds it there. Every "now" figure below was taken from the tree, not
+remembered.
+
+### A1 — Every workflow reaches its end
+
+**End state.** Every named suite exits 0 on a cold stack. No suite reports the
+product as broken when the truth is a missing capability in the environment;
+that case says NOT EXERCISED and says why. No workflow stops halfway.
+
+| | |
+|---|---|
+| Gate | `pnpm e2e:<name>` for all 14, each exiting 0 |
+| At open | 9 of 11 green; 5 red cases, all environmental, reported as product failures |
+| **Now** | **14 named suites, all exit 0.** `NotExercised` separates a stack that cannot host a claim from a product that answered wrongly |
+| State | **MET** |
+
+### A2 — The flat screens move into the world and are deleted
+
+**End state.** `Surface.tsx`, `surface.css`, `GraphScreen.tsx`,
+`AgentsScreen.tsx` and the eleven flat routes are gone from
+`packages/web/src`. Nothing in the tree matches the `sf-`/`gr-`/`pr-`
+prefixes. Every capability they held is reachable and usable from `/`, seen in
+a browser rather than reasoned about — the bar inherited from
+`everything-in-the-world.md`, unchanged.
+
+| | |
+|---|---|
+| Gate | routes absent from `main.tsx`; retired prefixes absent from the tree; a browser walkthrough per capability; all suites still green |
+| At open | 4,784 lines across four files; 16 routes; 12 verbs the world cannot do |
+| **Now** | unchanged — **12 of 12 verbs still missing from the world** |
+| State | **NOT MET.** Audit complete, migration not started |
+
+The twelve, in four groups: principles (`declarePrinciple`,
+`updatePrinciple`, `deletePrinciple`, `disputePrinciple`,
+`reorderPrinciples`), signals (`updateSignal`, `deleteSignal`), the board
+(`updateTopOfMindEntry`, `refreshGroupTopOfMind`), agent credentials
+(`createAgentKey`, `fetchAgentKeys`, `revokeAgentKey`). Plus the stack graph,
+which has no world answer at all and is the one real design question.
+
+### A3 — One type scale, one spacing scale, one palette
+
+**End state.** No raw literal for size, spacing or colour at a call site in
+the stylesheets the product is keeping. Every value comes from a declared
+token. One token set, not three.
+
+| | |
+|---|---|
+| Gate | `type-scale.test.ts` (ratchet + half-pixel ban), and the same shape for spacing and colour |
+| At open | 53 font sizes (45 literal, 7 half-pixel); 47 spacing literals; 114 colour literals; 3 token sets |
+| **Now** | type: **21 literals, 0 half-pixel, ratcheted**. spacing: **47, ungoverned**. colour: **114, ungoverned** |
+| State | **PARTLY MET** — type done, spacing and colour untouched |
+
+### A4 — One component per purpose; the unused deleted
+
+**End state.** No two prefixes implement the same concept. A button, a field,
+a label, a panel, a list row, a verb row, an empty state and an error whisper
+each exist once and are worn by every surface that needs them. Nothing in the
+tree is unreferenced.
+
+| | |
+|---|---|
+| Gate | a source check that no two prefixes declare the same property for the same concept, plus `e2e:measure` cases comparing rendered primitives across surfaces |
+| At open | 917 top-level class rules; **34** distinct prefixes; `btn-` and `profile-` each declared in two files |
+| **Now** | unchanged, except the modal surface, which is done and is the pattern for the rest |
+| State | **NOT MET** |
+
+The modal work of 2026-08-25 is the shape every primitive follows: the card
+was named the reference, the surface was written once, and the four wearers
+became a selector list with a gate comparing them against the card rather than
+against a literal.
+
+### A5 — The product on a phone
+
+**End state.** At 390x844 and 360x640: nothing overflows sideways, no control
+is hidden under another, no text field under 16px, every control clears WCAG
+2.2 AA's 24x24 and the acts clear 44.
+
+| | |
+|---|---|
+| Gate | `pnpm e2e:phone`, with a negative mode that puts the shipped defects back |
+| At open | unmeasured. The top row overlapped itself so the timeline could not be opened at all; every field was 15px; the capture control was 19px tall |
+| **Now** | **clean at both widths**, gate green, negative mode finds all ten |
+| State | **MET for the door, the world and the open mouth.** The reading card and the modals are NOT yet walked at phone size — stated, not claimed |
+
+### A6 — Usability
+
+**End state.** A Nielsen heuristic pass over every surface and a WCAG 2.2 AA
+pass, both written down as ranked findings with severity, and everything in
+scope fixed.
+
+| | |
+|---|---|
+| Gate | the findings list, each row either fixed or carrying a recorded reason |
+| At open | not run |
+| **Now** | the WCAG target-size and iOS-zoom criteria were covered inside A5. The heuristic pass has not been run |
+| State | **NOT MET** |
+
+**And one thing about the method.** The founder linked a skill at
+`mcpmarket.com/tools/skills/user-experience-audit`. That host is blocked by
+this environment's egress proxy (`EGRESS_BLOCKED`), so its methodology was not
+read and is not what is being used. This audit runs on Nielsen's ten
+heuristics and WCAG 2.2 AA. Claiming a method that was not used would make
+every finding unverifiable, so it is recorded here rather than glossed. If
+that specific skill is wanted, it needs an egress allowance for the host or
+the file pasted in.
+
+---
+
 ## Phases
 
 Sequenced so that nothing is deleted before its replacement is seen working,
