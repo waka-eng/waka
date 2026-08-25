@@ -229,6 +229,22 @@ The twelve, in four groups: principles (`declarePrinciple`,
 (`createAgentKey`, `fetchAgentKeys`, `revokeAgentKey`). Plus the stack graph,
 which has no world answer at all and is the one real design question.
 
+**THE GRAPH IS ONE MISSING EDGE, AND IT IS BUILT.** `/graph` drew three
+columns — principles over signals over experiences. The world already drew the
+lower half; what it could not draw was a principle down to the signals it grew
+from. `what it grew from` is that edge, in the world's own idiom: one hop,
+asked for, under the thing it is about.
+
+Walked 2026-08-25, both ways. On a freshly declared principle the verb
+correctly does not appear, because there is nothing under it. With a citation
+in `principle_signals` — seeded directly, since the promotion step needs the
+nightly enqueuer this stack has no trigger for, on an account that really kept
+three memories and really grew a signal — the verb appears and shows the
+signal beneath it. In one frame: the board's sentence, the principle under it,
+the signal indented beneath that, and the memories along the bottom edge. The
+three columns, as a vertical stack, with no second picture of the place you
+are standing in.
+
 ### A3 — One type scale, one spacing scale, one palette
 
 **End state.** No raw literal for size, spacing or colour at a call site in
