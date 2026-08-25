@@ -212,6 +212,16 @@ The lesson for any future audit here: an import diff over one file measures
 what that file imports, not what the surface can do. Confirming each survivor
 against the whole tree is what would have caught both.
 
+**`deleteSignal` IS DELIBERATELY NOT MIGRATED, and that is the finish for it
+rather than an omission.** The world already answers a wrong pattern, and
+answers it better: `not true` is a counted stance the server turns into a
+suppression, with `restoreSignal` to undo. A hard delete is the flat screen's
+administrative affordance and it contradicts a founder law outright — *fading
+never deletes*. Porting it would have added a second, worse way to do a thing
+the world already does, which is the opposite of what this goal is for. The
+route stays on the server; the web client stops offering it when the flat
+screens go.
+
 The twelve, in four groups: principles (`declarePrinciple`,
 `updatePrinciple`, `deletePrinciple`, `disputePrinciple`,
 `reorderPrinciples`), signals (`updateSignal`, `deleteSignal`), the board

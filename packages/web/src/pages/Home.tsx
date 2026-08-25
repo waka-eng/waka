@@ -165,6 +165,7 @@ import {
   renameGroup,
   deleteGroup,
   fetchGroupTopOfMind,
+  refreshGroupTopOfMind,
   fetchGroups,
   fetchGroupField,
   fetchGroupWall,
@@ -9134,6 +9135,42 @@ function HomeExperience(): JSX.Element {
    */
   const [settingsFor, setSettingsFor] = useState<string | null>(null);
 
+  /**
+   * A ROOM'S BOARD, ASKED TO READ ITSELF AGAIN.
+   *
+   * `refreshGroupTopOfMind` was the last verb on the flat surface with no way
+   * in from the world. Your own wall has had `Read it again` since the board
+   * existed; a room's board could only go stale and stay stale.
+   *
+   * It is a SEPARATE block rather than the self wall's toolbar opened up to
+   * rooms. Those other verbs — hold this one up, say it in my words, not this
+   * — act on a self entry's id and its `pinned`/`locked` facts; a room's
+   * entries are a different row with a different shape, and letting the whole
+   * strip render for a group would have offered three verbs that would fail
+   * on press. One verb that works beats four that look right.
+   */
+  const [groupReading, setGroupReading] = useState<"rest" | "asking" | "working">("rest");
+  const rereadGroupBoard = useCallback(
+    (groupId: string) => {
+      setGroupReading("working");
+      refreshGroupTopOfMind(groupId)
+        .then(() => {
+          /* The reading is started, not finished — the server writes a new
+             version in the background and the wall picks it up on its own
+             sweep. Saying "reading" rather than "read" is the difference
+             between a receipt and a lie. */
+          setCharSay("The room is reading itself again.");
+          setGroupReading("rest");
+        })
+        .catch((err) => {
+          setCharSay(whyFailed(err, "That reading did not start."));
+          setGroupReading("rest");
+        });
+    },
+    [whyFailed],
+  );
+
+
   /* ── THE FIVE ACTS ON A PRINCIPLE ──────────────────────────────────────
      Each reloads from the server rather than patching state by hand: rank is
      decided there (declaring re-ranks, disputing can change a state), and a
@@ -10291,6 +10328,44 @@ function HomeExperience(): JSX.Element {
                           <p className="jar-prov-lead jar-label">written by hand</p>
                         </div>
                       )
+                    ) : null}
+                    {/* A ROOM'S BOARD ASKS TO BE READ AGAIN, in its own words
+                        and its own block — see `rereadGroupBoard` for why this is
+                        not the self wall's strip opened up to groups. */}
+                    {here && w.kind === "group" && lead && !editing.open && posterAsk ? (
+                      <div className="jar-board-acts" data-jar-chrome="1">
+                        {groupReading === "asking" ? (
+                          <>
+                            <span className="jar-board-warn">
+                              Reading everything the room has put up. What it says may change.
+                            </span>
+                            <button
+                              type="button"
+                              className="jar-board-act jar-label"
+                              onClick={() => rereadGroupBoard(w.id)}
+                            >
+                              Read again
+                            </button>
+                            <button
+                              type="button"
+                              className="jar-board-act jar-label"
+                              onClick={() => setGroupReading("rest")}
+                            >
+                              Leave it
+                            </button>
+                          </>
+                        ) : groupReading === "working" ? (
+                          <span className="jar-board-act jar-label">Reading…</span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="jar-board-act jar-label"
+                            onClick={() => setGroupReading("asking")}
+                          >
+                            Read it again
+                          </button>
+                        )}
+                      </div>
                     ) : null}
                     {/* WHAT IT USED TO SAY. Only where there is a past — one
                         version is not a history, it is the first sentence. */}
