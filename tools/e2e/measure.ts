@@ -223,7 +223,7 @@ const CASES: Case[] = [
         "jar-values", "jar-values-words", "jar-way", "jar-way--r",
         "jar-saved", "jar-saved-count", "jar-caret",
         "jar-panel-head", "jar-panel-when", "jar-panel-vis",
-        "jar-panel-text", "jar-panel-foot", "jar-mouth-where",
+        "jar-panel-text", "jar-panel-foot", "jar-mouth-where", "jar-dial-name",
       ];
       /* WHOLE CLASS NAMES, NOT SUBSTRINGS. `includes` said yes to
          `jar-panel-head` while the product had renamed it to
@@ -365,6 +365,46 @@ const CASES: Case[] = [
             ? `all three: ${distinct[0]}`
             : `${distinct.length} registers — ` +
               Object.entries(rows).map(([k, v]) => `${k}: ${v}`).join(" / "),
+      };
+    },
+  },
+
+  {
+    id: "the-rail-rests-hidden",
+    name: "the timeline waits to be asked, and arrives when it is",
+    needs: ["jar-dial-name", "jar-dial-track"],
+    sabotage: ".jar-dial-track::before, .jar-dial-handle { opacity: 1 !important; }",
+    run: async (page) => {
+      /* THE CASE THAT WOULD HAVE CAUGHT IT. The founder asked for the line
+         not to always be there; it was hidden by one rule and shown again by
+         another with the same selector, so it never went away and the first
+         screenshot of the finished work had it in frame. Read at rest and
+         read again opened — a reveal that cannot be seen to CHANGE proves
+         nothing. */
+      const read = `(() => {
+        const o = (s, pe) => { const e = document.querySelector(s); return e ? Number(getComputedStyle(e, pe || null).opacity) : -1; };
+        return { name: o(".jar-dial-name"), handle: o(".jar-dial-handle"), rail: o(".jar-dial-track", "::before") };
+      })()`;
+      /* WAIT OUT THE FADE BEFORE READING. The first version of this case read
+         on the next frame and caught the rail mid-transition at 0.5, then
+         blamed the stylesheet for a bug that was in the gate. These parts
+         cross over 0.28s; 400ms is past the end of that with room to spare. */
+      await page.evaluate(`document.querySelector(".jar-dial").classList.remove("jar-dial--open")`);
+      await page.waitForTimeout(400);
+      const rest = (await page.evaluate(read)) as Record<string, number>;
+      await page.evaluate(`document.querySelector(".jar-dial").classList.add("jar-dial--open")`);
+      await page.waitForTimeout(400);
+      const open = (await page.evaluate(read)) as Record<string, number>;
+      const hidden = rest.rail! < 0.02 && rest.handle! < 0.02 && rest.name! > 0.5;
+      const shown = open.rail! > 0.2 && open.handle! > 0.5 && open.name! < 0.02;
+      return {
+        ok: hidden && shown,
+        detail:
+          hidden && shown
+            ? `at rest name ${rest.name} rail ${rest.rail} handle ${rest.handle}; opened ${open.name} / ${open.rail} / ${open.handle}`
+            : !hidden
+              ? `the rail does not rest hidden — rail ${rest.rail}, handle ${rest.handle}, with the word at ${rest.name}`
+              : `asked for, it did not arrive — rail ${open.rail}, handle ${open.handle}`,
       };
     },
   },

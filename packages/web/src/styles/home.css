@@ -1838,7 +1838,11 @@
 .jar-dial:focus-within .jar-dial-track::before,
 .jar-dial--open .jar-dial-track::before,
 .jar-dial--live .jar-dial-track::before {
-  opacity: 0.5;
+  /* ONE STRENGTH FOR ALL FOUR WAYS IN. This said 0.5 while a second copy of
+     the hover half said 0.9 a hundred lines down — same selector, same
+     property, later winning — so reaching with the pointer lit the rail
+     brighter than pressing the word did, for no reason anyone chose. */
+  opacity: 0.9;
 }
 .jar-dial:hover .jar-dial-handle,
 .jar-dial:focus-within .jar-dial-handle,
@@ -1879,12 +1883,13 @@
   margin-top: -0.5px;
   border-radius: 999px;
   background: var(--jar-faint);
-  opacity: 0.5;
+  /* NO OPACITY HERE. This rule gives the hairline its shape and colour;
+     whether it is SHOWN is decided above, by the rest state and the three
+     ways in. It carried `opacity: 0.5` until 2026-08-25 — the same selector
+     deciding the same property twice in one file, later winning — so the rail
+     the founder asked to hide was visible at rest anyway, and the first
+     screenshot of the finished work showed it. One property, one place. */
   transition: opacity 0.28s ease;
-}
-.jar-dial:hover .jar-dial-track::before,
-.jar-dial--live .jar-dial-track::before {
-  opacity: 0.9;
 }
 /* the months read along the rail, set below it so the hairline stays the
    thing your eye tracks */
@@ -1918,7 +1923,11 @@
   background: #fff;
   box-shadow: none;
   pointer-events: none;
-  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+  /* the handle fades on the same clock as the hairline it rides — it
+     snapped in and out while the rail took 0.28s, which read as two
+     instruments rather than one arriving */
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.28s ease;
 }
 .jar-dial:hover .jar-dial-handle,
 .jar-dial--live .jar-dial-handle {
