@@ -86,8 +86,27 @@
   --t-reading: clamp(21px, 2.2vw, 30px);
   --t-lead: clamp(16px, 1.2vw, 19px);
   --t-body: 15px;
+  /* TWO STEPS NAMED BECAUSE THE PRODUCT REALLY USES THEM (2026-08-25).
+     `14px` appears at twenty sites and `12px` at thirteen, across three
+     stylesheets, and neither had a name. Folding them into `--t-ui` or
+     `--t-body` would move thirty-three pieces of type on screen — a visual
+     redesign, and one for the founder's eye rather than a refactor's. So the
+     scale describes what this product IS, and collapsing six reading steps to
+     four stays an open decision rather than a silent one. */
+  --t-note: 14px;
   --t-ui: 13px;
+  --t-fine: 12px;
   --t-meta: 11px;
+  /* THE LABEL REGISTER, WHICH HAD NO NAME UNTIL NOW (2026-08-25). Ten pixels,
+     tracked and uppercased, is what every signpost, eyebrow and quiet verb row
+     in this product is set in — the four edges of the world, the card's date,
+     the mouth's verbs. It was written as a bare `10px` in twenty-one places
+     across three stylesheets and referenced by nothing, so the one register a
+     person sees most often was the one the system could not name. */
+  --t-label: 10px;
+  /* the floor. Nothing legible is set smaller, and a size below this is a
+     mistake rather than a choice. */
+  --t-micro: 8px;
 
   /* -----------------------------------------------------------------------
    * VOICE

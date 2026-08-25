@@ -70,6 +70,22 @@ import { chromium, type Browser, type Page } from "playwright";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, "../..");
 const CSS = resolve(REPO, "packages/web/src/styles/home.css");
+/**
+ * AND THE TOKENS THE WORLD IS WRITTEN AGAINST.
+ *
+ * `main.tsx` imports `system.css` before anything else, so every `--t-*` the
+ * product uses is declared by the time `home.css` is read. This fixture served
+ * `home.css` ALONE, which meant a token declared in `system.css` resolved to
+ * nothing here and the property fell back to its initial value.
+ *
+ * That went unnoticed while `home.css` referenced no `--t-*` at all. The
+ * moment the label register became `var(--t-label)` (2026-08-25), the four
+ * signposts measured 16px and 13.33px instead of 10px and this suite went red
+ * — correctly, and about itself: it had been measuring a page that did not
+ * have the product's tokens on it. Serving both is what makes the page under
+ * measurement the page that ships.
+ */
+const TOKENS = resolve(REPO, "packages/web/src/styles/system.css");
 const HOME = resolve(REPO, "packages/web/src/pages/Home.tsx");
 
 /**
@@ -101,6 +117,7 @@ interface Case {
    a single-column fixture is the viewport's own edges. */
 const FIXTURE = `<!doctype html>
 <meta charset="utf-8">
+<link rel="stylesheet" href="/system.css">
 <link rel="stylesheet" href="/home.css">
 <style>
   html, body { margin: 0; height: 100%; background: #0a0d14; }
@@ -762,6 +779,11 @@ async function main(): Promise<number> {
       if (req.url === "/home.css") {
         res.setHeader("content-type", "text/css");
         res.end(readFileSync(CSS));
+        return;
+      }
+      if (req.url === "/system.css") {
+        res.setHeader("content-type", "text/css");
+        res.end(readFileSync(TOKENS));
         return;
       }
       res.setHeader("content-type", "text/html");

@@ -286,7 +286,7 @@
   transform: translateX(-50%);
   color: #999;
   font-family: "Inter Tight", sans-serif;
-  font-size: 14px;
+  font-size: var(--t-note);
 }
 
 .nc-note {
@@ -375,19 +375,19 @@
 
 .nc-note--text-tiny .nc-note-body--preview,
 .nc-note--text-tiny .nc-note-body-edit--inline {
-  font-size: 14px;
+  font-size: var(--t-note);
   line-height: 1.22;
 }
 
 .nc-note--text-micro .nc-note-body--preview,
 .nc-note--text-micro .nc-note-body-edit--inline {
-  font-size: 12px;
+  font-size: var(--t-fine);
   line-height: 1.24;
 }
 
 .nc-note--text-nano .nc-note-body--preview,
 .nc-note--text-nano .nc-note-body-edit--inline {
-  font-size: 10.5px;
+  font-size: var(--t-meta);
   line-height: 1.24;
 }
 
@@ -663,7 +663,7 @@ body.dragging .drop-overlay {
   padding: 22px 26px;
   background: #fffdf7;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-meta);
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
@@ -710,7 +710,7 @@ body.dragging .drop-overlay {
 
 .meta {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-meta);
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -1054,7 +1054,7 @@ body.dragging .drop-overlay {
 
 .login-eyebrow {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-meta);
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -1078,7 +1078,7 @@ body.dragging .drop-overlay {
 .login-subtitle {
   margin: 0 0 28px 0;
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--t-note);
   line-height: 1.5;
 }
 
@@ -1096,7 +1096,7 @@ body.dragging .drop-overlay {
 
 .field-label {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-label);
   text-transform: uppercase;
   letter-spacing: 0.14em;
   color: var(--muted);
@@ -1104,7 +1104,7 @@ body.dragging .drop-overlay {
 
 .field-input {
   font-family: inherit;
-  font-size: 15px;
+  font-size: var(--t-body);
   color: var(--ink);
   background: transparent;
   border: var(--border-hairline);
@@ -1125,13 +1125,13 @@ body.dragging .drop-overlay {
 
 .field-error {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-meta);
   color: var(--error);
   letter-spacing: 0.04em;
 }
 
 .form-error {
-  font-size: 13px;
+  font-size: var(--t-ui);
   color: var(--error);
   background: rgba(179, 38, 30, 0.06);
   border: 1px solid rgba(179, 38, 30, 0.25);
@@ -1139,7 +1139,7 @@ body.dragging .drop-overlay {
 }
 
 .form-success {
-  font-size: 13px;
+  font-size: var(--t-ui);
   color: var(--ink);
   background: rgba(15, 15, 14, 0.04);
   border: var(--border-hairline);
@@ -1171,7 +1171,7 @@ body.dragging .drop-overlay {
   color: var(--ink);
   cursor: pointer;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-meta);
   letter-spacing: 0.12em;
   line-height: 1;
   padding: 10px 13px;
@@ -1237,7 +1237,7 @@ body.dragging .drop-overlay {
   gap: 10px;
   color: var(--ink);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--t-note);
   line-height: 1.35;
 }
 
@@ -1280,7 +1280,7 @@ body.dragging .drop-overlay {
 
 .profile-public-link {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--t-fine);
   overflow-wrap: anywhere;
 }
 
@@ -1308,7 +1308,7 @@ body.dragging .drop-overlay {
 
 .btn-primary {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--t-fine);
   text-transform: uppercase;
   letter-spacing: 0.14em;
   background: var(--ink);
@@ -1335,7 +1335,7 @@ body.dragging .drop-overlay {
 
 .login-footer {
   margin-top: var(--space-6);
-  font-size: 12px;
+  font-size: var(--t-fine);
   color: var(--muted);
   text-align: center;
 }
@@ -1359,7 +1359,7 @@ body.dragging .drop-overlay {
 .login-tab {
   flex: 1;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-meta);
   text-transform: uppercase;
   letter-spacing: 0.14em;
   background: transparent;
@@ -1410,7 +1410,7 @@ body.dragging .drop-overlay {
 
 .btn-google {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--t-fine);
   text-transform: uppercase;
   letter-spacing: 0.14em;
   color: var(--ink);
@@ -1464,7 +1464,7 @@ body.dragging .drop-overlay {
 
 .login-divider__label {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-label);
   text-transform: uppercase;
   letter-spacing: 0.18em;
   color: var(--muted);
@@ -1690,7 +1690,7 @@ body.dragging .drop-overlay {
   background: rgba(255, 253, 247, 0.62);
   color: rgba(26, 23, 20, 0.68);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-label);
   font-weight: 650;
   letter-spacing: 0.12em;
   padding: 0 13px;
@@ -1887,7 +1887,7 @@ textarea {
     justify-content: space-between;
     padding: 10px 0 0;
     border-top: 1px solid rgba(15, 15, 14, 0.08);
-    font-size: 10px;
+    font-size: var(--t-label);
     line-height: 1.2;
   }
 
@@ -2121,7 +2121,7 @@ textarea {
   background: transparent;
   font: inherit;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-meta);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-3);
@@ -2187,7 +2187,7 @@ textarea {
 
 @media (max-width: 520px) {
   .profile-tab {
-    font-size: 10px;
+    font-size: var(--t-label);
     letter-spacing: 0.04em;
     padding: 8px 2px;
   }
@@ -2226,7 +2226,7 @@ textarea {
 .profile-memory-badge {
   flex: 0 0 52px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-label);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-3);
@@ -2289,7 +2289,7 @@ textarea {
 }
 
 .profile-row-meta {
-  font-size: 12px;
+  font-size: var(--t-fine);
   color: var(--ink-3);
 }
 
@@ -2307,7 +2307,7 @@ textarea {
   padding: 6px 2px;
   background: transparent;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-label);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-3);
@@ -2336,7 +2336,7 @@ textarea {
 /* The add row lives inside the tray as its last line; the + in the kind
    column keeps the grid, and the verb appears once there is a name. */
 .profile-memory-new .profile-memory-badge {
-  font-size: 13px;
+  font-size: var(--t-ui);
   color: var(--ink-4);
 }
 
