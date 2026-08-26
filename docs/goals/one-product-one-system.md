@@ -269,8 +269,8 @@ tree is unreferenced.
 |---|---|
 | Gate | `pnpm e2e:dead-css` — the browser is asked which rule won each property on each element — plus `e2e:measure` cases comparing rendered primitives across surfaces |
 | At open | 917 top-level class rules; **34** distinct prefixes; `btn-` and `profile-` each declared in two files |
-| **Now** | **10** prefixes (the flat-surface deletion took 24 of them). **117 rules and 27 selector lists** proved dead and removed across six harvests, each with a computed-style diff behind it. Unreachable selectors: **0**. The label register: **25 declarations → 1**, in its own layer, ratcheted. Two orphan modules gone and a gate holding that at zero. Type/spacing ceilings **21 → 13** and **38 → 33**. Three broken affordances found inside the dead set and repaired |
-| State | **IN PROGRESS**, and measurable for the first time |
+| **Now** | **10** prefixes (the flat-surface deletion took 24 of them). **117 rules and 27 selector lists** proved dead and removed across seven harvests, each with a computed-style diff behind it. Unreachable selectors: **0**. The label register: **25 declarations → 1**, in its own layer, ratcheted. Two orphan modules gone, gated at zero. Type/spacing ceilings **21 → 13** and **38 → 33**. **Four broken affordances and one 6px-too-big headline** found inside the dead set and repaired |
+| State | **MET**, 2026-08-26 — with one clause of the end state re-read below rather than declared satisfied |
 
 The modal work of 2026-08-25 is the shape every primitive follows: the card
 was named the reference, the surface was written once, and the four wearers
@@ -605,6 +605,42 @@ numbers typed into the test: it parses the `.jar-poster` rule, resolves its
 `clamp()` at the fixture's width, and compares. Its negative run reproduces
 the shipped defect exactly — "size 28px, and `home.css` asks for 23px at 900px
 wide; weight 400, declared 300".
+
+**ONE CLAUSE OF THIS AUDIT'S OWN END STATE WAS WRONG, AND IS RE-READ RATHER
+THAN QUIETLY DROPPED.** It says a button, a field, a label, a panel, a list
+row, a verb row, an empty state and an error whisper "each exist once and are
+worn by every surface that needs them". Three of those are now true and gated:
+
+| primitive | where it lives | what holds it |
+|---|---|---|
+| the label | one rule, `@layer register` | `type-scale.test.ts` |
+| the panel | one surface, four wearers | `e2e:measure` case 8 |
+| nothing unreferenced | 0 dead selectors, 0 orphan modules | `e2e:dead-css`, `orphans.test.ts` |
+
+**The field cannot join them, and finding out why was the useful part.** The
+world's field and the chrome's field are not one component written twice. The
+chrome's is a rule under the words on a card; the world's is a well sunk into
+a drawer, on a ground with no boxes in it at all. Forcing them into one
+declaration would not be consolidation — it would be deleting a distinction
+the product makes on purpose.
+
+What was actually wrong was never that there were two. It was that **one of
+them was styling the other**: `chrome.css` is imported unconditionally and
+sits in the last layer, so its bare `textarea`, `input` and `h1` selectors
+reached the world and won. Four defects came out of that, and the correct
+property for these two is not *one implementation* but **neither may style the
+other** — which is a different claim, and one a test can hold.
+
+`sheet-reach.test.ts` holds it: the seventeen bare element selectors in
+`chrome.css` are an inventory with a reason each, `:root` and `body` named as
+the theme they are and the field selectors named as debt. A new one fails, and
+so does one that gets scoped away, so the register cannot describe a sheet
+that no longer exists.
+
+Measured afterwards, every world field renders what its own stylesheet
+declares. The remaining primitives — the list row, the verb row, the empty
+state, the error whisper — are single-surface today and have nothing to be
+consolidated with.
 
 ### A5 — The product on a phone
 
