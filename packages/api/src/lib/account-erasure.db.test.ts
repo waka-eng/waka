@@ -275,3 +275,122 @@ describe("the gate: a member's erasure and the room's record, side by side", () 
     expect(await t.sql`SELECT id FROM accounts WHERE id = ${person.accountId}`).toHaveLength(0);
   });
 });
+
+/**
+ * ── AND NOTHING ANYWHERE STILL POINTS AT THEM ──────────────────────────────
+ *
+ * The suite above pins the DOCTRINE — what survives an erasure, what goes
+ * null, what is gone — table by named table, thirteen of them. That is the
+ * right way to hold a ruling, and it has one blind spot it cannot see past:
+ * it only checks the tables somebody remembered to write down.
+ *
+ * The schema has thirty-four. The other twenty-one rely on `ON DELETE
+ * CASCADE` from `accounts` or `profiles`, which is the correct mechanism and
+ * is completely invisible here — a table added next month with a plain
+ * `references()` and no cascade would keep a person's rows after they asked
+ * to be forgotten, every test above would still pass, and the first anyone
+ * would know is a subject-access request.
+ *
+ * So this asks the database itself. It reads every foreign key that points at
+ * `accounts.id` or `profiles.id` out of `information_schema`, and afterwards
+ * requires that no such column anywhere still holds an erased id.
+ *
+ * THE DOCTRINE FALLS OUT OF THAT RATHER THAN FIGHTING IT. "The row stays and
+ * the name goes null" satisfies this exactly — a survived row holds NULL
+ * there, and NULL is not the erased id. The two checks agree by construction:
+ * the named ones say what must remain, this one says nothing may still be
+ * attributable.
+ *
+ * A table that does not exist yet is covered the day it is created.
+ */
+describe("erasure, swept from the schema rather than from memory", () => {
+  /** Every FK column in this schema that points at a person. */
+  async function columnsPointingAtPeople(): Promise<Array<{ table: string; column: string }>> {
+    const rows = await t.sql`
+      SELECT tc.table_name AS table, kcu.column_name AS column
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.key_column_usage kcu
+        ON kcu.constraint_name = tc.constraint_name
+       AND kcu.table_schema = tc.table_schema
+      JOIN information_schema.constraint_column_usage ccu
+        ON ccu.constraint_name = tc.constraint_name
+       AND ccu.table_schema = tc.table_schema
+      WHERE tc.constraint_type = 'FOREIGN KEY'
+        AND tc.table_schema = ${t.schemaName}
+        AND ccu.table_name IN ('accounts', 'profiles')
+      ORDER BY 1, 2`;
+    return rows.map((r) => ({ table: String(r.table), column: String(r.column) }));
+  }
+
+  it("finds the references it claims to sweep", async () => {
+    /* THE SWEEP'S OWN FLOOR. A discovery query that silently returned nothing
+       would sweep an empty list and report a spotless erasure — the most
+       convincing possible way to be wrong, and the failure mode every gate
+       this session found had in common. If this number ever collapses, the
+       query broke, not the schema. */
+    const refs = await columnsPointingAtPeople();
+    expect(refs.length).toBeGreaterThanOrEqual(15);
+    expect(refs.map((r) => `${r.table}.${r.column}`)).toContain("reflections.profile_id");
+  });
+
+  it("leaves no column anywhere still holding an erased person's id", async () => {
+    /* Seeded through the real membership and proposal functions, so the rows
+       are the ones the product actually writes — plus three the doctrine
+       suite never reaches and a person would most mind being left behind:
+       their reflections, their agents' credentials, and their sessions. */
+    const founder = await seedGroup();
+    const ids = [founder.ari.accountId, founder.ari.profileId];
+
+    const [insp] = await t.sql`
+      INSERT INTO inspirations (profile_id, text) VALUES (${founder.ari.profileId}, 'a thing said')
+      RETURNING id`;
+    await t.sql`
+      INSERT INTO reflections (profile_id, inspiration_id, question, answer)
+      VALUES (${founder.ari.profileId}, ${insp!.id}, 'what did this stir?', 'something private')`;
+    await t.sql`
+      INSERT INTO agent_keys (profile_id, token_hash, prefix)
+      VALUES (${founder.ari.profileId}, ${"a".repeat(64)}, 'wk_test')`;
+    await t.sql`
+      INSERT INTO sessions (profile_id, token_hash, expires_at)
+      VALUES (${founder.ari.profileId}, ${"b".repeat(64)}, now() + interval '1 day')`;
+
+    const refs = await columnsPointingAtPeople();
+
+    /* WHICH OF THOSE THE SEED ACTUALLY EXERCISED. A column with no rows for
+       this person passes the sweep for free, so the count is reported rather
+       than assumed: the sweep is only evidence about the tables it had
+       something to find. */
+    const populated: string[] = [];
+    for (const ref of refs) {
+      const [before] = await t.sql`
+        SELECT count(*)::int AS n FROM ${t.sql(ref.table)}
+        WHERE ${t.sql(ref.column)} = ANY(${ids}::uuid[])`;
+      if ((before!.n as number) > 0) populated.push(`${ref.table}.${ref.column}`);
+    }
+    expect(
+      populated.length,
+      "the seed reached no person-linked column at all, so the sweep below would " +
+        "pass over an empty database and prove nothing",
+    ).toBeGreaterThanOrEqual(6);
+
+    await eraseAccount(founder.ari.accountId, { db: t.db as never });
+
+    const stillPointing: string[] = [];
+    for (const ref of refs) {
+      const [after] = await t.sql`
+        SELECT count(*)::int AS n FROM ${t.sql(ref.table)}
+        WHERE ${t.sql(ref.column)} = ANY(${ids}::uuid[])`;
+      if ((after!.n as number) > 0) {
+        stillPointing.push(`${ref.table}.${ref.column} (${after!.n} row(s))`);
+      }
+    }
+
+    expect(
+      stillPointing,
+      "these columns still hold an erased person's id. Either the table needs " +
+        "`onDelete: \"cascade\"` from accounts/profiles, or — if the row is meant " +
+        "to survive the way a room's approved text does — the id must be set null " +
+        "so what remains is no longer attributable to them.",
+    ).toEqual([]);
+  });
+});
