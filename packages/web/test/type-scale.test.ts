@@ -183,7 +183,10 @@ describe("the spacing grid is one grid", () => {
  * forced. Colour is the most design-sensitive of the three scales, and a blind
  * mapping of 97 values is a redesign nobody asked for.
  */
-const COLOUR_CEILING = 125;
+const COLOUR_CEILING = 104;
+/* 125 -> 104 on 2026-08-26. Nobody drained twenty-one colours: the dead rules
+   that held them were deleted by `e2e:dead-css`, and this ceiling had no way
+   to notice, which is the whole point of the test added below. */
 
 /** Colour literals, per governed file. */
 function coloursIn(file: string): string[] {
@@ -232,6 +235,22 @@ describe("the palette does not bypass itself", () => {
         "own, name it; if it is a one-off shadow, it is part of the tail this " +
         "ratchet is draining.",
     ).toBeLessThanOrEqual(COLOUR_CEILING);
+  });
+
+  it("has a ceiling that is still worth having", () => {
+    /* THE THIRD SCALE DID NOT HAVE THIS, AND THAT IS WHY IT DRIFTED. Type and
+       spacing each carry a test whose only job is to fail when the ceiling has
+       floated above the real count; colour did not, so when ninety-six dead
+       rules were deleted and took twenty-one colour literals with them, the
+       ratchet went on happily allowing twenty-one new ones. A ratchet that
+       cannot notice its own slack is a ratchet that only ever ran once. */
+    const loose = GOVERNED.flatMap((f) => coloursIn(f));
+    expect(
+      COLOUR_CEILING - loose.length,
+      `the ceiling is ${COLOUR_CEILING} and there are only ${loose.length} literals ` +
+        "left. Lower it — slack in a ratchet is room for the thing it was built " +
+        "to stop.",
+    ).toBeLessThanOrEqual(3);
   });
 });
 

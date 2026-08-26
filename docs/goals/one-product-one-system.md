@@ -255,8 +255,25 @@ token. One token set, not three.
 |---|---|
 | Gate | `type-scale.test.ts` (ratchet + half-pixel ban), and the same shape for spacing and colour |
 | At open | 53 font sizes (45 literal, 7 half-pixel); 47 spacing literals; 114 colour literals; 3 token sets |
-| **Now** | type: **21 literals, 0 half-pixel, ratcheted**. spacing: **47, ungoverned**. colour: **114, ungoverned** |
-| State | **PARTLY MET** — type done, spacing and colour untouched |
+| **Now** | all three ratcheted, and all three tightened themselves as dead rules were deleted: type **21 → 13**, spacing **47 → 33**, colour **125 → 104**. Zero half-pixel sizes; zero raw colours that duplicate a token's own value |
+| State | **MET**, 2026-08-26 |
+
+**THIS ROW WAS STALE FOR A DAY AND SAID THE OPPOSITE.** It read "PARTLY MET —
+type done, spacing and colour untouched" while `type-scale.test.ts` had
+carried a spacing grid check, a spacing ceiling, a palette-bypass check and a
+colour ceiling the whole time. The work had been done and the register never
+followed it. That is the second row in this document to be found describing a
+product that no longer existed, and both were found by being asked for a
+status rather than by any gate — a register is only as true as the last time
+somebody read it against the tree.
+
+**AND THE COLOUR RATCHET HAD BEEN ASLEEP.** Type and spacing each carry a test
+whose only job is to fail when its own ceiling has floated above the real
+count. Colour did not. So when `e2e:dead-css` deleted ninety-six unreachable
+rules and twenty-one colour literals went with them, the type and spacing
+ceilings failed and came down while colour's sat at 125 against 104, quietly
+allowing twenty-one new ones. It has the test now, and the ceiling is at the
+count.
 
 ### A4 — One component per purpose; the unused deleted
 

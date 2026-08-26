@@ -612,6 +612,48 @@ async function surfaces(
     }
   }
 
+  /* THE WALLS, AND MAKING ANOTHER ONE.
+     Three more states behind the `▾` beside the wall's name. They were the
+     largest block of `home.css` selectors this walk had never put on screen,
+     and an unentered state is indistinguishable from a dead rule from here. */
+  for (const [what, open] of [
+    ["the walls list", async () => {
+      await page.locator(".jar-here-more").first().click({ timeout: 6_000 });
+    }],
+    ["make another place", async () => {
+      await page.locator(".jar-here-row--make").first().click({ timeout: 6_000 });
+    }],
+    ["making a room", async () => {
+      await page.locator(".jar-newplace-row").first().click({ timeout: 6_000 });
+    }],
+  ] as Array<[string, () => Promise<void>]>) {
+    try {
+      await open();
+      await page.waitForTimeout(1_200);
+      await walkSurface(cdp, page, what, seen, ask);
+    } catch {
+      console.log(`  ${what.padEnd(22)} NOT WALKED — it did not open`);
+    }
+  }
+
+  /* AND A ROOM THAT EXISTS, which is the only way to reach the room's own
+     wall and the panel that dresses it. Made rather than assumed: a fresh
+     account has none, and every selector belonging to a room read as dead for
+     exactly that reason. */
+  try {
+    const field = page.locator(".jar-newplace input, .jar-seek input, .jar-roomform-box").first();
+    await field.fill(`a room for the walk ${Date.now().toString(36)}`, { timeout: 6_000 });
+    await page.locator(".jar-newplace button, .jar-seek button", { hasText: /make|create/i })
+      .first()
+      .click({ timeout: 6_000 });
+    await page.waitForTimeout(6_000);
+    await walkSurface(cdp, page, "a room, just made", seen, ask);
+  } catch {
+    console.log("  a room, just made     NOT WALKED — the room was not made");
+  }
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(700);
+
   /* HEADQUARTERS, REACHED FOR. Its four acts are revealed by hover and by
      focus-within, and nothing else in this walk hovers anything — which is
      exactly why they read as dead until now.
