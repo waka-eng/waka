@@ -3184,15 +3184,6 @@
 
 }
 
-/* THE FLAT SCREENS' ROW IN THE ACCOUNT DROP. Six quiet doors in one line,
-   allowed to wrap — a list of places, not a toolbar, so no boxes and no
-   weight: the same face every other verb in this sheet wears. */
-.jar-settings-flats {
-  flex-wrap: wrap;
-  row-gap: var(--sp-4);
-  opacity: 0.75;
-}
-
 /* WHERE THIS ONE IS GOING — both words, the chosen one in full ink and the
    other at the faint tier. Light says which is selected; nothing else does. */
 .jar-where-on {

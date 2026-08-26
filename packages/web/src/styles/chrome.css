@@ -234,6 +234,19 @@ a:hover {
   color: var(--w-muted);
   font-style: italic;
 }
+/* THE WAY BACK IN, under the refusal and quieter than it. It is a second
+   sentence in the same breath rather than a second alert: the refusal is what
+   happened, this is what to do about it, and a person reading in that order
+   should not have to cross a gap between them. Upright, because the italic
+   above is the product's voice reporting a failure and this is an
+   instruction. */
+.login-recover {
+  display: block;
+  margin-top: var(--sp-6);
+  color: var(--w-faint);
+  font-style: normal;
+  line-height: 1.5;
+}
 
 /* ---------- the ground, said explicitly ----------
    This file set the dark ink on `body` and assumed the ground came with it.

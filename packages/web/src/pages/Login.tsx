@@ -197,6 +197,30 @@ export function SignupForm({
       {formError ? (
         <div className="form-error" role="alert">
           {formError}
+          {/* THE WAY BACK IN, SAID WHERE THE PERSON IS STUCK.
+              Found in the heuristic pass, 2026-08-26: there is no password
+              reset anywhere in this product — `auth-password.ts` has exactly
+              `signup` and `login` — so someone who forgets one is locked out
+              of everything they kept, on a door that says "return to what you
+              kept". The message said "Incorrect email or password." and
+              stopped there, and a person would go looking for the reset link
+              that is not there.
+
+              What IS true is that `auth-google.ts` links an existing account
+              by VERIFIED email, so Continue with Google below really does open
+              the same archive — and it refuses to link an unverified claim,
+              which is why saying this is safe rather than an invitation. The
+              missing reset is stated plainly rather than left to be
+              discovered: this product's whole posture is that it does not have
+              quiet corners, and "there is no way to do this" is exactly the
+              kind of thing a quiet corner hides.
+
+              Only under the credentials failure. A network error or an
+              unavailable endpoint is not a person who has forgotten
+              something, and offering them a way back in would be noise. */}
+          {formError === t(locale, "loginInvalidCredentials") ? (
+            <span className="login-recover">{t(locale, "loginNoResetYet")}</span>
+          ) : null}
         </div>
       ) : null}
 
@@ -382,6 +406,30 @@ export function LoginForm(): JSX.Element {
       {formError ? (
         <div className="form-error" role="alert">
           {formError}
+          {/* THE WAY BACK IN, SAID WHERE THE PERSON IS STUCK.
+              Found in the heuristic pass, 2026-08-26: there is no password
+              reset anywhere in this product — `auth-password.ts` has exactly
+              `signup` and `login` — so someone who forgets one is locked out
+              of everything they kept, on a door that says "return to what you
+              kept". The message said "Incorrect email or password." and
+              stopped there, and a person would go looking for the reset link
+              that is not there.
+
+              What IS true is that `auth-google.ts` links an existing account
+              by VERIFIED email, so Continue with Google below really does open
+              the same archive — and it refuses to link an unverified claim,
+              which is why saying this is safe rather than an invitation. The
+              missing reset is stated plainly rather than left to be
+              discovered: this product's whole posture is that it does not have
+              quiet corners, and "there is no way to do this" is exactly the
+              kind of thing a quiet corner hides.
+
+              Only under the credentials failure. A network error or an
+              unavailable endpoint is not a person who has forgotten
+              something, and offering them a way back in would be noise. */}
+          {formError === t(locale, "loginInvalidCredentials") ? (
+            <span className="login-recover">{t(locale, "loginNoResetYet")}</span>
+          ) : null}
         </div>
       ) : null}
 

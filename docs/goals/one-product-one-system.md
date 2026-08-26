@@ -707,8 +707,29 @@ scope fixed.
 |---|---|
 | Gate | the findings list, each row either fixed or carrying a recorded reason |
 | At open | not run |
-| **Now** | the WCAG target-size and iOS-zoom criteria were covered inside A5. The heuristic pass has not been run |
-| State | **NOT MET** |
+| **Now** | **run, 2026-08-26** — 13 surfaces walked with the DOM captured for each, **5 findings ranked on Nielsen's severity scale**: two catastrophic, two major, one cosmetic. Three fixed, two open with a recorded reason. Written up in `docs/audits/usability-2026-08-26.md` |
+| State | **MET** |
+
+**IT WAS REPORTED MET ONCE BEFORE IT WAS.** The WCAG half had been covered
+inside A5 and by `e2e:usability`, the task was marked done on the strength of
+that, and a status message claimed six audits of six. The register said
+plainly "the heuristic pass has not been run", and it was right. What the
+walk then found is the argument for having run it:
+
+| | finding | severity | state |
+|---|---|---|---|
+| F1 | the settings sheet offered six doors to deleted screens | 4 | fixed |
+| F2 | there is no password recovery anywhere in the product | 4 | partly — the route that works is now named; email reset needs a decision |
+| F3 | a principle's verbs ignored whose sentence it was | 3 | fixed |
+| F4 | the product defines none of its own vocabulary | 3 | open, with a recommendation |
+| F5 | every unknown address silently becomes the world | 1 | open |
+
+F1 is the one that should sting: the flat-screen deletion swept routes and
+stylesheets and never swept **the things pointing at them**, so the account
+sheet went on offering `capture · inspirations · signals · top of mind ·
+rooms · principles` — six controls that look like doors and are not. No gate
+in this repo would have caught it, because every gate here asks whether what
+is on screen is correct, and none asks whether it still leads anywhere.
 
 **And one thing about the method.** The founder linked a skill at
 `mcpmarket.com/tools/skills/user-experience-audit`. That host is blocked by

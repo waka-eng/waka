@@ -204,6 +204,7 @@
   "loginPasswordMin": "Password must be at least {count} characters",
   "loginNetworkError": "We couldn’t reach the server. Check your connection and try again.",
   "loginInvalidCredentials": "Incorrect email or password.",
+  "loginNoResetYet": "WAKA cannot reset a password yet. If this address is also your Google address, Continue with Google opens the same archive.",
   "loginUnavailable": "Sign-in is not available yet. Create an account instead.",
   "loginSigningIn": "Signing in…",
   "loginCreateAccount": "Create account",

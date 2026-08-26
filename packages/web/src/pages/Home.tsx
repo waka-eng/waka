@@ -10561,33 +10561,71 @@ function HomeExperience(): JSX.Element {
                                       </button>
                                     </>
                                   ) : null}
-                                  <span aria-hidden="true"> · </span>
-                                  <button
-                                    type="button"
-                                    disabled={pBusy}
-                                    onClick={() => disputeThisPrinciple(pr.id)}
-                                  >
-                                    not mine
-                                  </button>
-                                  <span aria-hidden="true"> · </span>
-                                  {pGoing === pr.id ? (
+                                  {/* WHOSE SENTENCE IT IS DECIDES WHICH WAY OUT
+                                      IT HAS, and until 2026-08-26 both were
+                                      offered on every principle regardless.
+
+                                      `schema-principles.ts` already draws the
+                                      line: `origin` is `minted` — written by
+                                      the nightly generation — or `declared`,
+                                      the owner's own words. Offering both
+                                      verbs on both kinds got each one exactly
+                                      backwards. A sentence you wrote yourself
+                                      was offered `not mine`, which is not a
+                                      thing a person can coherently say about
+                                      their own words. And a sentence the
+                                      MACHINE concluded was offered a hard
+                                      `remove` — which is the flat screens'
+                                      administrative affordance, and precisely
+                                      the one this project refused to migrate
+                                      for signals, on the grounds that the
+                                      world answers a wrong claim with a
+                                      counted stance and that fading never
+                                      deletes.
+
+                                      The same ruling, applied to the other
+                                      noun: you ANSWER what the machine claims,
+                                      and you WITHDRAW what you said yourself.
+                                      Found because the founder asked whether
+                                      some of the flat wall was better deleted
+                                      than migrated — the answer being that the
+                                      question is not migrate-or-delete per
+                                      screen, it is whether a verb belongs on
+                                      that noun in that state. */}
+                                  {pr.origin === "minted" ? (
                                     <>
+                                      <span aria-hidden="true"> · </span>
                                       <button
                                         type="button"
                                         disabled={pBusy}
-                                        onClick={() => removePrinciple(pr.id)}
+                                        onClick={() => disputeThisPrinciple(pr.id)}
                                       >
-                                        {pBusy ? "removing…" : "yes, remove it"}
-                                      </button>
-                                      <span aria-hidden="true"> · </span>
-                                      <button type="button" onClick={() => setPGoing(null)}>
-                                        keep it
+                                        not mine
                                       </button>
                                     </>
                                   ) : (
-                                    <button type="button" onClick={() => setPGoing(pr.id)}>
-                                      remove
-                                    </button>
+                                    <>
+                                      <span aria-hidden="true"> · </span>
+                                      {pGoing === pr.id ? (
+                                        <>
+                                          <button
+                                            type="button"
+                                            disabled={pBusy}
+                                            onClick={() => removePrinciple(pr.id)}
+                                          >
+                                            {pBusy ? "withdrawing…" : "yes, withdraw it"}
+                                          </button>
+                                          <span aria-hidden="true"> · </span>
+                                          <button type="button" onClick={() => setPGoing(null)}>
+                                            keep it
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <button type="button" onClick={() => setPGoing(pr.id)}>
+                                          withdraw
+                                        </button>
+                                      )}
+                                    </>
                                   )}
                                 </span>
                               ) : null}
@@ -12482,26 +12520,20 @@ function HomeExperience(): JSX.Element {
             </button>
           </p>
 
-          {/* THE FLAT SCREENS — the same memories in another register, still
-              scaffolding (they go when the world can do everything they do),
-              still reachable. In the flat bar's own order and words. */}
-          <p className="jar-ask jar-settings-flats">
-            {[
-              ["/capture", "capture"],
-              ["/inspirations", "inspirations"],
-              ["/signals", "signals"],
-              ["/top-of-mind", "top of mind"],
-              ["/rooms", "rooms"],
-              ["/principles", "principles"],
-            ].map(([to, label], i) => (
-              <span key={to}>
-                {i > 0 ? <span aria-hidden="true"> · </span> : null}
-                <Link to={to} onClick={() => setAccountOpen(false)}>
-                  {label}
-                </Link>
-              </span>
-            ))}
-          </p>
+          {/* THE SIX LINKS TO THE FLAT SCREENS USED TO BE HERE, and the comment
+              that held them set their own condition: "they go when the world
+              can do everything they do". The world can, as of 2026-08-26 — the
+              screens and their eleven routes were deleted — and these were
+              left behind pointing at nothing.
+
+              Pressing one closed this sheet and dropped you back in the world
+              with no message, which is the same thing the product does for an
+              address that never existed. Six controls that look like doors and
+              are not is the worst kind of navigation a settings sheet can
+              offer, and it survived the deletion because the deletion swept
+              routes and stylesheets and never swept the things POINTING at
+              them. Found by walking the surfaces for the heuristic pass rather
+              than by any gate. */}
 
           {/* SIGNING OUT IS NOT DESTRUCTIVE, so it does not ask twice — nothing
               is lost and signing back in restores everything. It is last
