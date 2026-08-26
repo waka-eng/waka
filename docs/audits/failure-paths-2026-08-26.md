@@ -201,6 +201,95 @@ confidently misleading one. This finding came from reading the printed output,
 not from the verdict column — which is why the walk prints every sentence it
 found rather than only a tally.
 
+## The door, and an offline start
+
+Both were on the "still unmeasured" list below. Both are measured now, and one
+of them was the worst finding of the whole failure-path audit — not because
+the product said nothing, but because it said something **false**.
+
+### A 409 that needs no sabotage
+
+Signing up with an address already registered is a real 409
+(`auth-password.ts`), reachable by signing up twice. The door shows the
+server's own sentence, verbatim:
+
+> An account with this email already exists
+
+No defect. Recorded because it is the most common failure on the first
+surface and it behaves.
+
+### An offline start says you are signed out
+
+Kill every `/api/` request and reload as a signed-in person:
+
+```
+url:      /login
+says:     "Welcome back."
+          "Sign in to return to what you kept."
+```
+
+Restore the network, reload, and they are straight back in. **Nothing was ever
+wrong with the account.** The product asserted a fact about their session that
+it had no way of knowing, in the one situation where a person is already
+inclined to fear their archive is gone.
+
+The cause is in `auth-context`'s hydration: any failure of `/auth/me` drops
+the cached viewer. That is **right and stays right** — a cache is a display
+hint, never proof of a session, and rendering protected routes off stale
+localStorage is the one mistake this must never make. `isAuthenticated` is
+untouched by the fix and `RequireAuth` still sends the visitor to the door.
+
+What changed is only what the door then says. `http.ts` already distinguishes
+the two cases — a 401 is an answer, `ApiError { status: 0 }` means the
+question was never asked — and the context now carries that as
+`serverUnreachable`, which the door reads to choose its words and nothing
+reads to decide access.
+
+```
+"Welcome back."
+"Sign in to return to what you kept."
+"We couldn't reach the server. Check your connection and try again."   ← new
+```
+
+Verified three ways: the banner appears with the network dead; the session
+survives and the world returns when it comes back; and a visitor who was never
+signed in, on a healthy network, sees no banner.
+
+### A regression this audit caused, and caught
+
+Pressing the door's submit with the network dead said:
+
+> Login failed: network unreachable
+
+The API client's voice, on the product's first surface — and the catalogue has
+had `loginNetworkError` ("We couldn't reach the server. Check your connection
+and try again.") for exactly this all along.
+
+**That was this audit's own doing.** Before `writeJson` was wrapped earlier
+today, a dead network on login threw a raw `TypeError`, which fell to the
+`else` branch and rendered the product's own sentence. Wrapping it — the fix
+that stopped the world showing people Chrome's `Failed to fetch` — turned that
+into an `ApiError { status: 0 }`, which no longer matched `else` and fell
+through to `err.message`.
+
+One fix, two surfaces, opposite effects: the world gained a voice and the door
+lost one. Both forms now branch on `status === 0` explicitly.
+
+The lesson is narrower than "test everything": **a change to a shared error
+path is a change to every screen that reads it**, and the screens that already
+handled the case are the ones that quietly get worse.
+
+### The first measurement was wrong
+
+The first pass reported the door as SILENT — pressing sign in with a dead
+network produced nothing at all. It was `page.locator("button", { hasText:
+/^sign in$/i }).first()`, and the first match is the **tab**, not the submit.
+The tab does nothing when you are already on it.
+
+Caught by noticing that the pressable list held two "Sign in" entries. Had it
+gone unnoticed, this audit would have reported a silent door and gone looking
+for a bug in a handler that was working correctly the whole time.
+
 ## What is still unmeasured
 
 Named so the next pass starts from a list rather than from a fresh reading:
@@ -213,10 +302,10 @@ Named so the next pass starts from a list rather than from a fresh reading:
 - **`sendProposal`, `answerProposal`, `acceptJoin`, `copyInvite`,
   `makeAgent`, `sayVerdict`, `restoreFromAntechamber`** — all acts, all
   currently silent on failure by the source reading.
-- **An offline start** — the world loaded with no network at all, rather than
-  losing it mid-act. `offlineRef` guards several handlers with an early
-  `return` before any request is made, and what those say (if anything) is a
-  separate question from the three kinds above.
-- **A 409 in particular.** The three kinds run today are transport-shaped; a
-  conflict is the one failure where the server has something specific to say
-  and the fallback sentence is most likely to talk over it.
+- **`offlineRef`'s early returns.** An offline START is measured above, but
+  the world also has a `goOffline` fixture path, and several handlers return
+  early on `offlineRef.current` before any request is made. What those say, if
+  anything, is still unasked.
+- **The other real 409s.** `agent-keys.ts` refuses a key past a per-agent
+  limit and `auth-me.ts` refuses a taken handle. Both are reachable without
+  sabotage, like the signup 409, and neither has been walked.

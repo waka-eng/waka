@@ -172,11 +172,31 @@ export function SignupForm({
       navigate(resolveRedirect(location), { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
-        if (err.fieldErrors) {
-          setFieldErrors(err.fieldErrors as SignupFieldErrors);
-        }
-        if (!err.fieldErrors || err.status === 409) {
-          setFormError(err.message);
+        /* STATUS 0 IS A DEAD CONNECTION, NOT AN ANSWER — and this branch is
+           new because the door lost its own words to a fix made elsewhere.
+
+           `writeJson` did not wrap its fetch, so a dead network threw a raw
+           `TypeError` and landed in the `else` below, which says
+           `loginNetworkError`: "We couldn't reach the server. Check your
+           connection and try again." Wrapping it (2026-08-26, so the world
+           would stop showing people the browser's `Failed to fetch`) turned
+           that TypeError into an `ApiError { status: 0 }` — which no longer
+           matches `else`, and fell through to `err.message`:
+
+               "Login failed: network unreachable"
+
+           The API client's voice, on the product's first surface. The fix for
+           the world quietly regressed the door, and only pressing the door's
+           submit with the network dead showed it. */
+        if (err.status === 0) {
+          setFormError(t(locale, "loginNetworkError"));
+        } else {
+          if (err.fieldErrors) {
+            setFieldErrors(err.fieldErrors as SignupFieldErrors);
+          }
+          if (!err.fieldErrors || err.status === 409) {
+            setFormError(err.message);
+          }
         }
       } else {
         setFormError(
@@ -357,10 +377,13 @@ export function LoginForm(): JSX.Element {
       navigate(resolveRedirect(location), { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
-        // Treat 401 (bad credentials) as a form-level message rather than a
-        // field-level one — pinning the error to "password" would imply the
-        // email is correct, which is an information leak we'd rather avoid.
-        if (err.status === 401) {
+        // A dead connection is not an answer from the server — see the same
+        // branch in SignupForm above for why this exists and what it is
+        // repairing. Measured: "Login failed: network unreachable" where the
+        // catalogue already had the product's own sentence for it.
+        if (err.status === 0) {
+          setFormError(t(locale, "loginNetworkError"));
+        } else if (err.status === 401) {
           setFormError(t(locale, "loginInvalidCredentials"));
           setWrongCredentials(true);
         } else if (err.status === 404) {
@@ -519,6 +542,9 @@ export default function LoginPage(): JSX.Element {
   const [locale] = useState<SupportedLocale>(() => readStoredLocale());
   const location = useLocation();
   const navigate = useNavigate();
+  /* Why the door is standing here, when the reason is "we could not ask" —
+     see `AuthContextValue.serverUnreachable`. It never decides access. */
+  const { serverUnreachable } = useAuth();
 
   /**
    * Surface the OAuth error code (if any) the API redirected us back with
@@ -603,6 +629,24 @@ export default function LoginPage(): JSX.Element {
           {headline}
         </h1>
         <p className="login-subtitle">{subtitle}</p>
+
+        {/* THE DOOR SAYS WHY IT IS THE DOOR.
+            A person whose network is down is bounced here by `RequireAuth`
+            with a valid session and greeted "Welcome back. Sign in to return
+            to what you kept." — which asserts they are signed out, in the one
+            situation where somebody is already afraid their archive is gone.
+            Measured by killing every /api/ request and reloading: the door
+            appears; restore the network and they are straight back in.
+
+            The greeting stays (it is right when the door is right). This says
+            what is actually known, above it, in the banner slot the OAuth
+            error already uses. Suppressed when an OAuth error is showing —
+            that one is about a specific attempt and outranks a condition. */}
+        {serverUnreachable && !oauthError ? (
+          <div className="form-error" role="alert">
+            {t(locale, "loginNetworkError")}
+          </div>
+        ) : null}
 
         {oauthError ? (
           <div
