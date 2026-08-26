@@ -711,10 +711,6 @@
   justify-content: flex-end;
 }
 /* the way to make one, at the foot of the list of the ones you have */
-.jar-here-row--make {
-  color: var(--jar-faint);
-}
-
 /* ---------- how much is down there, and the way to it ----------
    The ground is a whole section below headquarters and nothing on the resting
    page said so. A count and a caret: the number is what you have, the caret is
@@ -902,8 +898,6 @@
   font-size: 16px;
   outline: none;
 }
-.jar-roomform-box::placeholder { color: var(--jar-faint); }
-.jar-roomform-box:focus { border-bottom-color: var(--jar-muted); }
 .jar-roomform-err {
   margin: var(--sp-10) 0 0;
   font-size: var(--t-ui);
@@ -3294,6 +3288,15 @@
 .jar-here-row.is-here {
   color: var(--jar-ink);
 }
+/* AND `add new` IS QUIETER THAN A WALL THAT EXISTS — which it was not, for as
+   long as this rule sat 2,560 lines ABOVE the base class it modifies. Same
+   specificity, and `.jar-here-row` wrote `color` later, so the modifier lost
+   every time and the way to make a place read exactly as loud as the places
+   you already have. A modifier belongs beside what it modifies; written far
+   from it, nothing about either rule looks wrong. */
+.jar-here-row--make {
+  color: var(--jar-faint);
+}
 
 /* ================= the mouth is chrome, not a form =================
    THE LAYER COLLISION THAT SURVIVED THREE ATTEMPTED FIXES.
@@ -3361,6 +3364,24 @@
      well declared up in `product` would lose all three and come out as a flat
      full-bleed strip — the same collision that ate the font size, in the same
      place, for the same reason. */
+  /* THE FOURTH AND FIFTH FACE OF THE SAME COLLISION, and the honest note is
+     that the commit which fixed the third said "sweeping the siblings this
+     time rather than fixing the one that was reported". It swept the siblings
+     THE WALK COULD SEE. The room form sits three clicks deep behind the wall
+     picker, `e2e:dead-css` had never reached it, and so its field was invisible
+     to the sweep that was meant to be exhaustive.
+
+     `chrome.css` gives every bare `input` its placeholder colour and its focus
+     border from the later layer, so the room form's own faint and its own
+     muted underline never applied — it wore the CHROME's tiers on the world's
+     ground. Reached now that the walk enters every state, which is what made
+     the difference between a sweep and a claim of one. */
+  .jar-roomform-box::placeholder {
+    color: var(--jar-faint);
+  }
+  .jar-roomform-box:focus {
+    border-bottom-color: var(--jar-muted);
+  }
   /* AND THE ANSWER BOX'S OWN SHAPE, for the same reason and in the same
      breath. `chrome.css` gives every bare `textarea` `padding: 9px 0` and
      `border-radius: 0` from the `chrome` layer, so the box declared up in

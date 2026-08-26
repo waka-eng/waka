@@ -12446,7 +12446,17 @@ function HomeExperience(): JSX.Element {
               className={groupForm.mode === "make" ? "is-on" : undefined}
               onClick={() => setGroupForm({ ...groupForm, mode: "make", error: null })}
             >
-              Make a group
+              {/* "ROOM", NOT "GROUP". This repo's rule is that identifiers
+                  speak canon and copy speaks human — `group` in the code,
+                  `room` on the screen — and this button was the one place the
+                  canon word reached a person. The comment eight lines above it
+                  says "MAKING OR JOINING A ROOM", the dialog that opens it
+                  offers "a room", and then the tab said Make a group.
+
+                  Found while fixing an e2e walk that could not reach this
+                  form, which is the second copy defect in two days turned up
+                  by reading a surface closely for an unrelated reason. */}
+              Make a room
             </button>
             <button
               type="button"

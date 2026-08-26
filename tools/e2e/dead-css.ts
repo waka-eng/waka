@@ -612,6 +612,17 @@ async function surfaces(
     }
   }
 
+  /* FROM A FRESH LOAD, because the chain below is three clicks deep and the
+     surfaces before it leave things standing. Reported as
+     `locator.click: Timeout 6000ms exceeded` on a button that was plainly on
+     screen — the element was found and never actionable, which is what an
+     invisible leftover lying over it looks like. Pressing Escape after each
+     modal was not enough; loading the world again is. Same lesson as the
+     camera that carried across a resize: state a walk did not put there is
+     state a walk cannot reason about. */
+  await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(6_000);
+
   /* THE WALLS, AND MAKING ANOTHER ONE.
      Three more states behind the `▾` beside the wall's name. They were the
      largest block of `home.css` selectors this walk had never put on screen,
@@ -631,25 +642,35 @@ async function surfaces(
       await open();
       await page.waitForTimeout(1_200);
       await walkSurface(cdp, page, what, seen, ask);
-    } catch {
-      console.log(`  ${what.padEnd(22)} NOT WALKED — it did not open`);
+    } catch (err) {
+      console.log(
+        `  ${what.padEnd(22)} NOT WALKED — ${err instanceof Error ? err.message.split("\n")[0] : err}`,
+      );
     }
   }
 
   /* AND A ROOM THAT EXISTS, which is the only way to reach the room's own
      wall and the panel that dresses it. Made rather than assumed: a fresh
      account has none, and every selector belonging to a room read as dead for
-     exactly that reason. */
+     exactly that reason.
+
+     THE FORM IS `.jar-roomform` AND ITS SUBMIT IS THE WORDS `make it`. The
+     first version of this looked for a button inside `.jar-newplace` — but
+     choosing "a room" REPLACES that dialog with the form, so the dialog is
+     gone by the time the submit is needed, and the submit carries no class of
+     its own. Both were guesses; the shapes above are measured. */
   try {
-    const field = page.locator(".jar-newplace input, .jar-seek input, .jar-roomform-box").first();
-    await field.fill(`a room for the walk ${Date.now().toString(36)}`, { timeout: 6_000 });
-    await page.locator(".jar-newplace button, .jar-seek button", { hasText: /make|create/i })
-      .first()
-      .click({ timeout: 6_000 });
-    await page.waitForTimeout(6_000);
+    await page.locator(".jar-roomform-box").first().fill(`a room for the walk ${Date.now().toString(36)}`, {
+      timeout: 8_000,
+    });
+    await page.locator(".jar-roomform button", { hasText: /^make it$/i }).first().click({ timeout: 8_000 });
+    await page.waitForTimeout(7_000);
     await walkSurface(cdp, page, "a room, just made", seen, ask);
-  } catch {
-    console.log("  a room, just made     NOT WALKED — the room was not made");
+  } catch (err) {
+    /* SAY WHY, NOT JUST THAT. Two states went unwalked for a whole run
+       reported only as "it did not open", and finding out why cost a separate
+       probe of the same flow. The reason is printed now. */
+    console.log(`  a room, just made     NOT WALKED — ${err instanceof Error ? err.message.split("\n")[0] : err}`);
   }
   await page.keyboard.press("Escape");
   await page.waitForTimeout(700);

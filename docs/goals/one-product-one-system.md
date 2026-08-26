@@ -286,7 +286,7 @@ tree is unreferenced.
 |---|---|
 | Gate | `pnpm e2e:dead-css` — the browser is asked which rule won each property on each element — plus `e2e:measure` cases comparing rendered primitives across surfaces |
 | At open | 917 top-level class rules; **34** distinct prefixes; `btn-` and `profile-` each declared in two files |
-| **Now** | **10** prefixes (the flat-surface deletion took 24 of them). **117 rules and 27 selector lists** proved dead and removed across seven harvests, each with a computed-style diff behind it. Unreachable selectors: **0**. The label register: **25 declarations → 1**, in its own layer, ratcheted. Two orphan modules gone, gated at zero. Type/spacing ceilings **21 → 13** and **38 → 33**. **Four broken affordances and one 6px-too-big headline** found inside the dead set and repaired |
+| **Now** | **10** prefixes (the flat-surface deletion took 24 of them). **117 rules and 27 selector lists** proved dead and removed across seven harvests, each with a computed-style diff behind it. Unreachable selectors: **0**, over a walk that now enters all **20** states. The label register: **25 declarations → 1**, in its own layer, ratcheted. Two orphan modules gone, gated at zero. Type/spacing ceilings **21 → 13** and **38 → 33**. **Four broken affordances and one 6px-too-big headline** found inside the dead set and repaired |
 | State | **MET**, 2026-08-26 — with one clause of the end state re-read below rather than declared satisfied |
 
 The modal work of 2026-08-25 is the shape every primitive follows: the card
@@ -658,6 +658,38 @@ Measured afterwards, every world field renders what its own stylesheet
 declares. The remaining primitives — the list row, the verb row, the empty
 state, the error whisper — are single-surface today and have nothing to be
 consolidated with.
+
+**EIGHTH — THE WALK FINALLY ENTERS EVERY STATE, AND `unreachable` REACHES 0.**
+The last three states behind the wall picker — the walls list, `make another
+place`, and the room form with a room actually made in it — went unwalked for
+two runs, reported only as "it did not open". Finding out why cost a separate
+probe of the same flow, which is a cost the walk should have paid itself: it
+prints the real error now (`locator.click: Timeout 6000ms exceeded` — the
+element found and never actionable, which is what an invisible leftover lying
+over it looks like). The chain starts from a fresh load, the same lesson as
+the camera that carried across a resize.
+
+Two of my own guesses were wrong and are recorded as measured shapes instead:
+choosing "a room" REPLACES the dialog with the form, so a submit inside
+`.jar-newplace` does not exist by the time it is needed, and that submit is the
+unclassed words `make it`.
+
+**AND IT IMMEDIATELY FOUND THE FOURTH AND FIFTH FACE OF THE COLLISION**, which
+matters because the commit that fixed the third said *"sweeping the siblings
+this time rather than fixing the one that was reported"*. It swept the
+siblings **the walk could see**. The room form sits three clicks deep behind
+the wall picker and `e2e:dead-css` had never reached it, so its field was
+invisible to the sweep that was meant to be exhaustive:
+`.jar-roomform-box::placeholder` and `:focus` both lost to `chrome.css`'s bare
+`input` rules, and the room form wore the chrome's tiers on the world's
+ground. A sweep is only ever as wide as the walk under it.
+
+**And one ordering defect nothing else could see.** `.jar-here-row--make` sets
+`color: var(--jar-faint)` at line 714; `.jar-here-row`, the base class it
+modifies, is at line 3274 and writes `color` later at the same specificity. So
+`add new` had rendered exactly as loud as the walls that already exist, for as
+long as both rules existed. A modifier written 2,560 lines from its base is
+one nothing about looks wrong.
 
 ### A5 — The product on a phone
 
