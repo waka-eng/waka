@@ -269,7 +269,7 @@ tree is unreferenced.
 |---|---|
 | Gate | `pnpm e2e:dead-css` — the browser is asked which rule won each property on each element — plus `e2e:measure` cases comparing rendered primitives across surfaces |
 | At open | 917 top-level class rules; **34** distinct prefixes; `btn-` and `profile-` each declared in two files |
-| **Now** | **10** prefixes (the flat-surface deletion took 24 of them). **40 rules and 16 selector lists** proved dead and removed across two harvests, each with a zero-difference computed-style diff behind it. 24 overruled rules still standing, each one named |
+| **Now** | **10** prefixes (the flat-surface deletion took 24 of them). **40 rules and 16 selector lists** proved dead and removed across two harvests, each with a zero-difference computed-style diff behind it. The label register: **25 declarations → 1**, in its own layer, ratcheted. 24 overruled rules still standing, each one named |
 | State | **IN PROGRESS**, and measurable for the first time |
 
 The modal work of 2026-08-25 is the shape every primitive follows: the card
@@ -400,6 +400,61 @@ about nothing, which is the most expensive kind of green there is.
 **WHAT IS LEFT: 24 overruled rules** — 10 in `global.css`, 6 in `chrome.css`,
 the rest ambiguous between sheets — and whatever the next walk finds once it
 enters the states this one did not: headquarters open, hover, the error paths.
+
+**THIRD HARVEST — THE LABEL REGISTER, DECLARED ONCE.** This audit named it
+at 28 implementations when it was written. Measured again on 2026-08-26, after
+the flat-surface deletion took some with it: **25**, across `home.css`,
+`chrome.css` and `global.css`, in **four sizes** (10px, 11px, 12px and a raw
+`9px`), **five trackings** (0.08, 0.12, 0.14, 0.16, 0.18em) and **three
+weights**. None of that was a decision. It was twenty-five separate attempts to
+write down the same gesture from memory.
+
+**THE NUMBERS CAME FROM WHAT RENDERED, NOT FROM WHAT WAS WRITTEN.**
+`e2e:snapshot` was taken first and the computed values counted: **48 elements
+already rendered at 10px / 1.6px / 500**, and every other value in the product
+was worn by ten elements or fewer. So the register is what the product already
+mostly looked like, said once in tokens — `--t-label`, `0.16em`, `500`,
+`uppercase` — and the change is that the stragglers stopped disagreeing.
+
+Counting the render rather than the source also decided what stays OUT, twice:
+
+- **`.meta`** had an uppercase declaration in `global.css` that a
+  `text-transform: none` rule in `system.css` had already beaten. It renders
+  lowercase. Folding it in would have been a silent redesign carried in on a
+  consolidation.
+- **`.profile-signout-button`** likewise — and it was caught late, as the one
+  `text-transform` change in the whole computed diff. `chrome.css` already
+  rules that the register "belongs to eyebrows, never to things you press".
+
+**THE HARD PART WAS NOT THE COUNT, IT WAS BEING ABLE TO WIN.** The first
+attempt put the one rule in `system.css` and two things immediately beat it,
+both invisible to a source read and both found by the computed diff:
+
+1. **A `font:` shorthand in a later layer.** `chrome.css` carries
+   `font: inherit` on `.profile-tabs button`. It names neither `font-size` nor
+   `font-weight` and re-sets both. Stripping the longhands beside it left the
+   shorthand as the winner and the account tabs jumped 10px → 16px.
+2. **Import order inside one layer.** `home.css` is imported by `Home.tsx`, so
+   it lands after `system.css` in the same `product` layer — and `.jar-ask`'s
+   13px beat the register at equal specificity. The mouth's verbs went to 13px.
+
+So the register got **its own layer, last**: `@layer base, product, chrome,
+register`. A single declaration cannot be "the one place" while anything is
+allowed to out-rank it, and nothing else may live there —
+`type-scale.test.ts` fails if a second rule moves in, because a layer that
+holds "things that win" is not a register any more.
+
+**Result: one `text-transform: uppercase` in the entire tree.** The computed
+diff across six surfaces shows changes to `font-size`, `font-weight` and
+`letter-spacing` only, and **not one element changed case**.
+
+**AND THE MEASURE FIXTURE WAS QUIETLY LYING.** `e2e:measure` served
+`system.css` and `home.css` but not `layers.css`, so its layer order came from
+first appearance — `product`, `register`, then `chrome` from `home.css` — the
+opposite way round from the product for any conflict between the last two. It
+passed 12/12 either way, which is the point: a fixture that disagrees with
+production announces itself later, on a case nobody has written yet. It serves
+`layers.css` now.
 
 ### A5 — The product on a phone
 

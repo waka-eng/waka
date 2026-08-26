@@ -526,4 +526,97 @@ body:has(.reference-capture-modal) .nc-stage--top-of-mind-wall {
   .nc-stage--top-of-mind-wall { transition: none; }
 }
 
+
+
+}
+
+@layer register {
+/* ══════════════════ THE LABEL REGISTER, DECLARED ONCE ══════════════════
+ *
+ * Founder, 2026-08-25: "ensure font and text style used is also consistent
+ * and feel like we built it from an official design system instead of using
+ * random font and sizes and spacing here and there."
+ *
+ * WHAT IT WAS. This one gesture — small, uppercase, tracked — is the most
+ * repeated in the product, and it was declared TWENTY-FIVE TIMES across
+ * `home.css`, `chrome.css` and `global.css`, in four sizes (10px, 11px, 12px
+ * and a raw 9px), five trackings (0.08, 0.12, 0.14, 0.16, 0.18em) and three
+ * weights. Not one of those was a decision; they were twenty-five separate
+ * attempts to write down the same thing from memory, and `chrome.css` had
+ * already begun correcting `global.css` by overriding it rather than by
+ * editing it, which is how a sheet ends up arguing with itself.
+ *
+ * WHAT DECIDED THE NUMBERS. Not taste and not the majority of the
+ * DECLARATIONS — what was actually on screen. `e2e:snapshot` was taken first
+ * and the computed values counted: 48 elements already rendered at
+ * 10px / 1.6px / 500, and every other value in the product was worn by ten
+ * elements or fewer. So the register is what the product already mostly
+ * looked like, and the change is that the stragglers stopped disagreeing.
+ * `--t-label` is 10px and 0.16em of it is 1.6px, so this is that value said
+ * in tokens rather than in pixels.
+ *
+ * WHAT IS NOT IN IT, and why the list is not simply "everything that had an
+ * uppercase declaration":
+ *
+ *   `.btn-primary` and the other things you PRESS. `chrome.css` already rules
+ *   that "the world has one uppercase register and it belongs to eyebrows,
+ *   never to things you press", and sets them lowercase. Their uppercase
+ *   declarations in `global.css` had been dead for as long as that rule
+ *   existed.
+ *
+ *   `.meta`. Its uppercase declaration in `global.css` was already beaten by
+ *   a `text-transform: none` rule in this file, so it renders lowercase
+ *   today. Adding it here would have been a silent redesign carried in on a
+ *   consolidation — caught by counting what rendered rather than what was
+ *   written.
+ *
+ * WHY HERE. `home.css` is only loaded by the world, so a register that lives
+ * there cannot dress the door. This sheet is loaded by every page, and it is
+ * written LAST in it on purpose: the two voice rules above also name
+ * `.login-eyebrow` and `.field-label`, and a register that lost to them
+ * would be a twenty-sixth attempt rather than the end of them.
+ *
+ * DECLARED ONCE MEANS LAYERS STOP MATTERING. There is no longer any rule in
+ * any layer to out-rank; `type-scale.test.ts` holds it at one. */
+.jar-label,
+.jar-saved,
+.jar-mouth-field::placeholder,
+.jar-mouth-step,
+.jar-mouth-where,
+.jar-panel-vis,
+.jar-ground,
+.login-eyebrow,
+.field-label,
+.profile-public-heading > .login-eyebrow,
+.profile-danger-heading > .login-eyebrow,
+.profile-memories-heading > .login-eyebrow,
+.login-divider,
+.login-divider__label,
+.login-tab,
+.profile-tab,
+.profile-tabs button,
+.profile-row-tag,
+.profile-memory-badge,
+.profile-memory-action,
+/* `.profile-signout-button` IS DELIBERATELY NOT HERE. It had an uppercase
+   declaration in `global.css` and rendered LOWERCASE, because `chrome.css`
+   already rules that the register "belongs to eyebrows, never to things you
+   press" and sets the sign-out verb accordingly. Consolidating a dead
+   declaration into a live one would have turned it uppercase — a redesign
+   smuggled in on a tidy-up. Caught by diffing computed styles, where it was
+   the single `text-transform` change in the whole walk.
+
+   `.btn-destructive` and `.profile-memory-action` below ARE here, and they
+   are things you press too. They were already rendering uppercase, so listing
+   them changes their numbers and not their voice. Whether those two should
+   join the sign-out verb in lower case is a design question, and it is not
+   this rule's to answer. */
+.btn-destructive,
+.btn-google,
+.nc-profile-link {
+  font-size: var(--t-label);
+  letter-spacing: 0.16em;
+  font-weight: 500;
+  text-transform: uppercase;
+}
 }

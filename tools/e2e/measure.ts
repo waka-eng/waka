@@ -86,6 +86,23 @@ const CSS = resolve(REPO, "packages/web/src/styles/home.css");
  * measurement the page that ships.
  */
 const TOKENS = resolve(REPO, "packages/web/src/styles/system.css");
+/**
+ * AND THE LAYER ORDER, which is not decoration either.
+ *
+ * `layers.css` is one statement — `@layer base, product, chrome, register;` —
+ * and it is what decides that the label register out-ranks everything. Without
+ * it a browser orders layers BY FIRST APPEARANCE, and in this fixture that
+ * order comes out different from the product's: `system.css` introduces
+ * `product` then `register`, and `home.css` then introduces `chrome` — AFTER
+ * `register` rather than before it. So the fixture would resolve a conflict
+ * the opposite way round from the real page, and this suite would be
+ * measuring a cascade that ships nowhere.
+ *
+ * Nothing failed when the register moved into its own layer, which is exactly
+ * why this is worth stating: a fixture that disagrees with production only
+ * announces itself later, on a case nobody has written yet.
+ */
+const LAYERS = resolve(REPO, "packages/web/src/styles/layers.css");
 const HOME = resolve(REPO, "packages/web/src/pages/Home.tsx");
 
 /**
@@ -117,6 +134,7 @@ interface Case {
    a single-column fixture is the viewport's own edges. */
 const FIXTURE = `<!doctype html>
 <meta charset="utf-8">
+<link rel="stylesheet" href="/layers.css">
 <link rel="stylesheet" href="/system.css">
 <link rel="stylesheet" href="/home.css">
 <style>
@@ -779,6 +797,11 @@ async function main(): Promise<number> {
       if (req.url === "/home.css") {
         res.setHeader("content-type", "text/css");
         res.end(readFileSync(CSS));
+        return;
+      }
+      if (req.url === "/layers.css") {
+        res.writeHead(200, { "content-type": "text/css" });
+        res.end(readFileSync(LAYERS));
         return;
       }
       if (req.url === "/system.css") {

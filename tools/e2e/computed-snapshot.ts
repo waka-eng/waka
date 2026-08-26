@@ -25,8 +25,8 @@
  * the element's own box, because a layout property going missing shows up as
  * geometry long before it shows up as a colour.
  *
- * It walks the chrome — the door on both tabs, the account page and the
- * welcome — because the world has its own gates and the chrome had none.
+ * It walks the door on both tabs, the account page, the welcome, the world
+ * and the world with its mouth open.
  */
 import { writeFileSync } from "node:fs";
 import { chromium } from "playwright";
@@ -72,6 +72,30 @@ async function main() {
   await p.goto(base + "/onboarding", { waitUntil: "domcontentloaded" });
   await p.waitForTimeout(3000);
   snap["onboarding"] = JSON.parse((await p.evaluate(PROBE)) as string);
+
+  /* AND THE WORLD, because a change to the type register is not a chrome
+     change: the same register is worn by the signposts, the quiet verbs and
+     the card. The first version of this walked only the door and the account
+     page, which was right for proving a chrome-only deletion inert and would
+     be quietly blind to half of a design-system edit. */
+  await p.goto(base + "/", { waitUntil: "domcontentloaded" });
+  await p.waitForTimeout(6000);
+  for (const text of [
+    "a register worn in two places is two registers",
+    "the same words, the same voice, on every surface",
+  ]) {
+    await p.locator(".jar-mouth-rest").first().click();
+    await p.waitForTimeout(700);
+    await p.fill('textarea[aria-label="capture inspiration"]', text);
+    await p.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click();
+    await p.waitForTimeout(4500);
+  }
+  await p.goto(base + "/", { waitUntil: "domcontentloaded" });
+  await p.waitForTimeout(6000);
+  snap["world"] = JSON.parse((await p.evaluate(PROBE)) as string);
+  await p.locator(".jar-mouth-rest").first().click();
+  await p.waitForTimeout(1200);
+  snap["world-mouth"] = JSON.parse((await p.evaluate(PROBE)) as string);
   writeFileSync(out, JSON.stringify(snap));
   console.log("wrote", out, Object.entries(snap).map(([k, v]) => `${k}:${v.length}`).join(" "));
   await b.close();

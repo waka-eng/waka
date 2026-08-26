@@ -300,3 +300,73 @@ describe("the type scale is one scale", () => {
     ).toBeLessThanOrEqual(3);
   });
 });
+
+/**
+ * THE LABEL REGISTER IS ONE RULE, AND STAYS ONE RULE.
+ *
+ * Founder, 2026-08-25: "ensure font and text style used is also consistent
+ * and feel like we built it from an official design system instead of using
+ * random font and sizes and spacing here and there."
+ *
+ * Small, uppercase, tracked — the most repeated gesture in the product, and
+ * on 2026-08-26 it was declared TWENTY-FIVE times across `home.css`,
+ * `chrome.css` and `global.css`, in four sizes, five trackings and three
+ * weights. `chrome.css` had already begun correcting `global.css` by
+ * overriding it rather than editing it, which is how three sheets end up
+ * disagreeing about one gesture and nobody notices, because every one of them
+ * looks reasonable on its own.
+ *
+ * The count is the whole gate. One declaration cannot drift from itself; two
+ * can, and the one that stops being read is the one that keeps being edited.
+ */
+describe("the label register is declared once", () => {
+  const SHEETS = ["home.css", "chrome.css", "global.css", "system.css", "layers.css"] as const;
+
+  const bodies = (name: string): string =>
+    /* the same comment-blanking the rest of this file does: these sheets quote
+       CSS in their prose, and a gate that reads its own documentation as
+       evidence reports work that was never done */
+    readFileSync(resolve(STYLES, name), "utf8").replace(/\/\*[\s\S]*?\*\//g, " ");
+
+  it("nothing in the tree says `uppercase` except the register", () => {
+    const where = SHEETS.map((name) => ({
+      name,
+      count: (bodies(name).match(/text-transform:\s*uppercase/g) ?? []).length,
+    })).filter((sheet) => sheet.count > 0);
+
+    expect(
+      where.map((sheet) => `${sheet.name}:${sheet.count}`).join(" "),
+      "the register must be declared in exactly one place, in system.css",
+    ).toBe("system.css:1");
+  });
+
+  it("it is set in tokens, not in numbers somebody remembered", () => {
+    const css = bodies("system.css");
+    const rule = css.match(/@layer register\s*\{([\s\S]*)\}\s*$/);
+    expect(rule, "there is no `register` layer in system.css").not.toBeNull();
+    const body = rule![1]!;
+    expect(body).toContain("font-size: var(--t-label)");
+    expect(body).toContain("letter-spacing: 0.16em");
+    expect(body).toContain("font-weight: 500");
+  });
+
+  it("the register layer holds that one rule and nothing else", () => {
+    /* THE LAYER IS NOT A CONVENIENCE FOR WINNING ARGUMENTS WITH THE CASCADE.
+       It is last so that one declaration cannot be out-ranked — by a `font:`
+       shorthand in `chrome.css`, or by `home.css` landing after `system.css`
+       in the same layer, both of which really happened. The moment a second
+       rule moves in to borrow that power, the layer stops meaning "the
+       register" and starts meaning "things that win", and the next person
+       cannot tell which. */
+    const body = bodies("system.css").match(/@layer register\s*\{([\s\S]*)\}\s*$/)![1]!;
+    const rules = (body.match(/\{/g) ?? []).length;
+    expect(rules, "the register layer must hold exactly one rule").toBe(1);
+  });
+
+  it("the layer order names it last", () => {
+    const order = bodies("layers.css").match(/@layer\s+([a-z,\s]+);/);
+    expect(order, "layers.css no longer declares an order").not.toBeNull();
+    const names = order![1]!.split(",").map((one) => one.trim());
+    expect(names[names.length - 1], "`register` must be the last layer").toBe("register");
+  });
+});

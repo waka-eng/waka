@@ -142,10 +142,6 @@
 
 /* The one uppercase register on the page: small labels, never prose. */
 .jar-label {
-  font-weight: 500;
-  font-size: var(--t-label);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
   color: var(--jar-muted);
 }
 
@@ -767,20 +763,6 @@
   padding: 5px var(--sp-12);
   background: none;
   font-family: inherit;
-  /* THE SAME REGISTER AS A WAY OUT (founder, 2026-08-25: "make 30 inspirations
-     saved same font and style as ROOM1 ›"). It IS one — a name and a caret
-     pointing at somewhere you can go — and it was set in lowercase prose,
-     which made it the only signpost in the world speaking a different
-     language from the others. */
-  /* ONE REGISTER FOR EVERY SIGNPOST (founder, 2026-08-25: "make font of x
-     inspirations, and the left and right text the same as PHILOSOPHIES &
-     VALUES"). Three things point out of this screen — up to what is forming,
-     sideways to a neighbour, down to the ground — and they were at three
-     sizes. They are one voice now: the label register, unmodified. */
-  font-weight: 500;
-  font-size: var(--t-label);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
   /* and the same ink as the rest of the family. This rule declared `color`
      TWICE — the second winning silently, one line below `white-space`, which
      is why the count read a whole tier brighter than the ways sideways and
@@ -1172,10 +1154,6 @@
    resting phrase wears, so the SLOT looks identical until the first letter —
    and the first letter arrives in your own voice, not the page's */
 .jar-mouth-field::placeholder {
-  font-weight: 500;
-  font-size: var(--t-label);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
   line-height: 1.9;
   color: var(--jar-muted);
 }
@@ -1293,9 +1271,6 @@
   top: 13px;
   left: 20px;
   cursor: pointer;
-  font-size: var(--t-label);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
   color: var(--jar-faint);
   transition: color 0.18s ease;
 }
@@ -1363,9 +1338,6 @@
      while the card's foot and the four signposts spoke at label size — the
      same four words, two registers, depending on which surface you were on. */
   gap: 5px;
-  font-size: var(--t-label);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.18s ease;
@@ -2068,9 +2040,6 @@
      sentence-sized words on the right, which is why the row read as
      lopsided even once it was centred. */
   gap: 5px;
-  font-size: var(--t-label);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
 }
 .jar-panel-vis button {
   font-size: inherit;
@@ -3142,10 +3111,6 @@
   flex-direction: column;
   align-items: flex-start;
   gap: var(--sp-2);
-  font-size: var(--t-label);
-  font-weight: 500;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
 }
 .jar-ground-row {
   display: flex;

@@ -666,11 +666,7 @@ body.dropped .bg-blob.b3 {
 }
 
 .meta {
-  font-family: var(--font-mono);
-  font-size: var(--t-meta);
   color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
   cursor: pointer;
   transition: color var(--duration-fast) var(--ease-standard);
 }
@@ -933,11 +929,7 @@ body.dropped .bg-blob.b3 {
 }
 
 .login-eyebrow {
-  font-family: var(--font-mono);
-  font-size: var(--t-meta);
   color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
   margin: 0 0 var(--sp-14) 0;
 }
 
@@ -1043,12 +1035,8 @@ body.dropped .bg-blob.b3 {
   background: transparent;
   color: var(--ink);
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: var(--t-meta);
-  letter-spacing: 0.12em;
   line-height: 1;
   padding: var(--sp-10) 13px;
-  text-transform: uppercase;
   transition:
     background var(--duration-fast) var(--ease-standard),
     color var(--duration-fast) var(--ease-standard),
@@ -1168,10 +1156,6 @@ body.dropped .bg-blob.b3 {
 
 
 .btn-primary {
-  font-family: var(--font-mono);
-  font-size: var(--t-fine);
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
   background: var(--ink);
   color: var(--bg);
   border: 1px solid var(--ink);
@@ -1219,10 +1203,6 @@ body.dropped .bg-blob.b3 {
 
 .login-tab {
   flex: 1;
-  font-family: var(--font-mono);
-  font-size: var(--t-meta);
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
   background: transparent;
   color: var(--muted);
   border: none;
@@ -1266,10 +1246,6 @@ body.dropped .bg-blob.b3 {
  * ---------------------------------------------------------------------*/
 
 .btn-google {
-  font-family: var(--font-mono);
-  font-size: var(--t-fine);
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
   color: var(--ink);
   background: var(--cell);
   border: 1px solid var(--ink);
@@ -1320,10 +1296,6 @@ body.dropped .bg-blob.b3 {
 }
 
 .login-divider__label {
-  font-family: var(--font-mono);
-  font-size: var(--t-label);
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
   color: var(--muted);
 }
 
@@ -1534,13 +1506,8 @@ body.dropped .bg-blob.b3 {
   border-radius: 999px;
   background: rgba(255, 253, 247, 0.62);
   color: rgba(26, 23, 20, 0.68);
-  font-family: var(--font-mono);
-  font-size: var(--t-label);
-  font-weight: 650;
-  letter-spacing: 0.12em;
   padding: 0 13px;
   text-decoration: none;
-  text-transform: uppercase;
   transition:
     background var(--duration-fast) var(--ease-standard),
     border-color var(--duration-fast) var(--ease-standard),
@@ -1934,10 +1901,6 @@ textarea {
   border: 0;
   background: transparent;
   font: inherit;
-  font-family: var(--font-mono);
-  font-size: var(--t-meta);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--ink-3);
   cursor: pointer;
   border-radius: var(--r-pill);
@@ -2029,10 +1992,6 @@ textarea {
 /* The fixed left column: what kind of thing this row is, said in a word. */
 .profile-memory-badge {
   flex: 0 0 52px;
-  font-family: var(--font-mono);
-  font-size: var(--t-label);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--ink-3);
 }
 
@@ -2078,10 +2037,6 @@ textarea {
 }
 
 .profile-row-tag {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--ink-3);
   border: 1px solid var(--rule);
   border-radius: var(--r-pill);
@@ -2107,10 +2062,6 @@ textarea {
   border: 0;
   padding: var(--sp-6) var(--sp-2);
   background: transparent;
-  font-family: var(--font-mono);
-  font-size: var(--t-label);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--ink-3);
   cursor: pointer;
   transition: color var(--dur-fast) var(--ease);

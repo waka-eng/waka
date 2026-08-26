@@ -55,7 +55,33 @@
  * sheet belongs to carries the same hazard, and has to move every sheet at
  * that precedence level together.
  */
-@layer base, product, chrome;
+/* AND `register` LAST, holding exactly one rule.
+ *
+ * The label register — small, uppercase, tracked — was declared twenty-five
+ * times across three sheets, and collapsing it to one declaration ran
+ * straight into the two hazards this file exists to describe:
+ *
+ *   `chrome.css` carries `font: inherit` on `.profile-tabs button`, and a
+ *   SHORTHAND in a later layer re-sets `font-size` and `font-weight` even
+ *   though it names neither. Stripping the longhands beside it left that
+ *   shorthand as the winner, and the account page's tabs jumped from 10px to
+ *   the inherited 16px.
+ *
+ *   `home.css` is loaded by `Home.tsx` and therefore lands AFTER `system.css`
+ *   in the same `product` layer, so `.jar-ask`'s 13px beat a register written
+ *   in `system.css` at equal specificity, and the mouth's verbs went to 13px.
+ *
+ * Both were caught by `e2e:snapshot` diffing computed styles across the
+ * change rather than by anything failing. Both have the same shape: a single
+ * declaration cannot be "the one place" while anything at all is allowed to
+ * out-rank it. A layer after `chrome` makes that structural instead of a
+ * matter of which file happens to be imported where.
+ *
+ * NOTHING ELSE MAY BE PUT IN THIS LAYER. It is not a convenience for winning
+ * an argument with the cascade; it holds the register and `type-scale.test.ts`
+ * fails if a second rule appears in it. Anything else that needs to win
+ * should be corrected where it loses. */
+@layer base, product, chrome, register;
 
 /**
  * AND ONE RULE THAT BEATS ALL THREE LAYERS, ON PURPOSE.
