@@ -1,7 +1,8 @@
 # The failure-path audit — what the product says when a press does not go through
 
 **Date:** 2026-08-26
-**Instrument:** `pnpm e2e:when-it-fails` (`tools/e2e/when-it-fails.ts`)
+**Instrument:** `pnpm e2e:when-it-fails [--kind 500|drop|401]`
+(`tools/e2e/when-it-fails.ts`)
 
 ## Why this audit existed to be done
 
@@ -144,6 +145,62 @@ as the probe that produced each row.
    that is where six of the eight were. The check was sabotaged before it was
    trusted.
 
+## Three kinds of failure, not one
+
+The first pass broke every route with a clean **500**, deliberately: it is the
+case the client has the most excuse for handling well, since the promise
+rejects with an `ApiError` carrying a status that `whyFailed` already knows
+how to say. An act silent against a 500 will certainly be silent against
+anything worse.
+
+Having fixed those, the two worse shapes were worth running — and each found
+something a 500 could not.
+
+### `--kind drop` — the connection dies
+
+All six spoke. But they spoke in **two different voices**:
+
+```
+close-room   "That room is still open — the server could not be reached."
+rename-room  "That name did not stick — Failed to fetch"
+```
+
+`Failed to fetch` is Chrome's words, on a person's screen, under exactly the
+condition a person is least able to interpret them.
+
+The cause is one line. `http.ts` has three `fetch` calls: `getJson` and
+`requestVoid` each wrap theirs in a try/catch that rethrows as
+`ApiError { status: 0 }` — the thing `whyFailed` reads to say *"the server
+could not be reached"*. **`writeJson` did not.** So a `TypeError` walked
+through it into `whyFailed`'s plain-`Error` branch.
+
+`writeJson` is every POST and PATCH in the product: keeping a memory, renaming
+a room, leaving one, proposing a change, issuing a key. All of them leaked the
+browser's internals whenever the network dropped. It is wrapped now, and the
+six read with one voice.
+
+The odd one out was the *correct* one, which is why this needed six acts side
+by side to see at all.
+
+### `--kind 401` — the session expired between opening the surface and pressing
+
+All six spoke, and none showed a false success. But two of them **said the
+wrong thing**:
+
+> That room could not be made. **Try another name.**
+
+A person whose session has expired is being sent to think up a different name
+— advice that cannot work, about a problem they do not have. `submitGroup`
+wrote one sentence for every failure alike. It goes through `whyFailed` now,
+so the server gets to disagree with the guess; the fallback still says
+`Try another name`, because a name collision *is* the likely cause of a 409.
+
+**This is a limit of the instrument, and worth naming.** `SPEAKS` means a new
+line appeared that names a failure. It cannot tell a *correct* sentence from a
+confidently misleading one. This finding came from reading the printed output,
+not from the verdict column — which is why the walk prints every sentence it
+found rather than only a tally.
+
 ## What is still unmeasured
 
 Named so the next pass starts from a list rather than from a fresh reading:
@@ -156,8 +213,10 @@ Named so the next pass starts from a list rather than from a fresh reading:
 - **`sendProposal`, `answerProposal`, `acceptJoin`, `copyInvite`,
   `makeAgent`, `sayVerdict`, `restoreFromAntechamber`** — all acts, all
   currently silent on failure by the source reading.
-- **Failure kinds other than a clean 500.** The walk uses a 500 deliberately:
-  it is the case the client has the most excuse for handling well, since the
-  promise rejects with a status `whyFailed` already knows how to say. A
-  dropped connection, a 401 mid-session and an offline start are each a
-  different shape and none is covered.
+- **An offline start** — the world loaded with no network at all, rather than
+  losing it mid-act. `offlineRef` guards several handlers with an early
+  `return` before any request is made, and what those say (if anything) is a
+  separate question from the three kinds above.
+- **A 409 in particular.** The three kinds run today are transport-shaped; a
+  conflict is the one failure where the server has something specific to say
+  and the fallback sentence is most likely to talk over it.

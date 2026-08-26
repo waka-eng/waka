@@ -54,22 +54,49 @@
  */
 import { chromium, type Browser, type BrowserContext, type Page, type Route } from "playwright";
 
+/**
+ * HOW THE ROUTE IS BROKEN. Three shapes, because `whyFailed` has three
+ * branches and only one of them had ever run on screen.
+ *
+ *   500   the server answers, badly. The KIND reading: the promise rejects
+ *         with an `ApiError` carrying a status, which is the case the client
+ *         has the most excuse for handling well.
+ *   drop  the connection dies. `ApiError` with status 0 — "the server could
+ *         not be reached". An act that speaks under a 500 can still be silent
+ *         here, because a thrown TypeError is not an ApiError.
+ *   401   the session expired between opening the surface and pressing. The
+ *         one failure kind that is also a security question: a person whose
+ *         session died must not be left looking at what reads as success.
+ */
+type Kind = "500" | "drop" | "401";
+
 interface Args {
   baseUrl: string;
   only: string | null;
   headed: boolean;
+  kind: Kind;
 }
 
 function parseArgs(argv: string[]): Args {
-  const args: Args = { baseUrl: "http://127.0.0.1:3010", only: null, headed: false };
+  const args: Args = { baseUrl: "http://127.0.0.1:3010", only: null, headed: false, kind: "500" };
   for (let i = 0; i < argv.length; i += 1) {
     const [flag, inline] = argv[i]!.split(/=(.*)/s);
     const take = (): string => inline ?? argv[++i] ?? "";
     if (flag === "--base-url") args.baseUrl = take().replace(/\/+$/, "");
     else if (flag === "--only") args.only = take();
     else if (flag === "--headed") args.headed = true;
+    else if (flag === "--kind") {
+      const k = take();
+      if (k !== "500" && k !== "drop" && k !== "401") {
+        console.error(`[when-it-fails] --kind must be 500, drop or 401 (got ${k})`);
+        process.exit(2);
+      }
+      args.kind = k;
+    }
     else if (flag === "--help" || flag === "-h") {
-      console.log("Usage: pnpm e2e:when-it-fails [--base-url <url>] [--only <id>] [--headed]");
+      console.log(
+        "Usage: pnpm e2e:when-it-fails [--base-url <url>] [--only <id>] [--kind 500|drop|401] [--headed]",
+      );
       process.exit(0);
     } else {
       console.error(`[when-it-fails] unknown option ${flag}`);
@@ -165,22 +192,32 @@ async function stubExternals(ctx: BrowserContext, base: string): Promise<void> {
 }
 
 /**
- * BREAK ONE ROUTE, LEAVE THE REST ALONE — and do it with a 500 rather than by
- * aborting the request. A 500 is the case the client has the most excuse for
- * handling well: the fetch resolves, the promise rejects with an `ApiError`
- * carrying a status, and `whyFailed` already knows how to turn that into a
- * sentence. If an act stays silent against a clean 500 it will certainly stay
- * silent against a dropped connection, so this is the KIND reading.
+ * BREAK ONE ROUTE, LEAVE THE REST ALONE — in one of three ways.
+ *
+ * A 500 was the only shape the first pass used, deliberately: it is the case
+ * the client has the most excuse for handling well, so an act that stays
+ * silent against it will certainly stay silent against anything worse. Having
+ * fixed those, the two worse shapes are worth running, because they reach
+ * branches of `whyFailed` that nothing had ever put on a screen.
  */
 async function breakRoute(
   ctx: BrowserContext,
   match: (pathname: string, method: string) => boolean,
+  kind: Kind,
 ): Promise<void> {
   await ctx.route(
     (url) => url.pathname.startsWith("/api/"),
     async (route: Route) => {
       const url = new URL(route.request().url());
       if (match(url.pathname, route.request().method())) {
+        if (kind === "drop") return route.abort("connectionreset");
+        if (kind === "401") {
+          return route.fulfill({
+            status: 401,
+            contentType: "application/json",
+            body: JSON.stringify({ error: "session expired" }),
+          });
+        }
         return route.fulfill({
           status: 500,
           contentType: "application/json",
@@ -458,7 +495,7 @@ const ACTS: Act[] = [
 
 // ---------------------------------------------------------------------------
 
-async function walk(browser: Browser, base: string, act: Act): Promise<Reading> {
+async function walk(browser: Browser, base: string, act: Act, kind: Kind): Promise<Reading> {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   try {
     await stubExternals(ctx, base);
@@ -470,7 +507,7 @@ async function walk(browser: Browser, base: string, act: Act): Promise<Reading> 
        failure and not by having arrived at the surface. */
     const before = await saidOverTime(page);
 
-    await breakRoute(ctx, act.breaks);
+    await breakRoute(ctx, act.breaks, kind);
     await act.press(page);
 
     /* LONG ENOUGH FOR THE WORLD TO HAVE SAID IT AND NOT YET CLEARED IT. The
@@ -502,8 +539,13 @@ async function main(): Promise<void> {
     process.exit(2);
   }
 
+  const HOW: Record<Kind, string> = {
+    "500": "a 500 on",
+    drop: "a dropped connection on",
+    "401": "an expired session on",
+  };
   console.log(
-    "[when-it-fails] Every act below is pressed against a 500 on the one route it rests on.\n" +
+    `[when-it-fails] Every act below is pressed against ${HOW[args.kind]} the one route it rests on.\n` +
       "                The question is not whether it failed — it is whether anything said so.\n",
   );
 
@@ -517,7 +559,7 @@ async function main(): Promise<void> {
       let reading: Reading | null = null;
       let error: string | null = null;
       try {
-        reading = await walk(browser, args.baseUrl, act);
+        reading = await walk(browser, args.baseUrl, act, args.kind);
       } catch (err) {
         error = err instanceof Error ? err.message.split("\n")[0]! : String(err);
       }

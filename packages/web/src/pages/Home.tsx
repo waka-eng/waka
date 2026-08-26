@@ -9145,16 +9145,25 @@ function HomeExperience(): JSX.Element {
     if (groupForm.mode === "make") {
       createGroup(text)
         .then(landed)
-        .catch(() => failed("That room could not be made. Try another name."));
+        /* THROUGH `whyFailed`, AND THE 401 IS WHY.
+           This said "That room could not be made. Try another name." to every
+           failure alike, so `e2e:when-it-fails --kind 401` showed a signed-out
+           person being sent to think up a different name — advice that cannot
+           work, about a problem they do not have. The name IS the likely
+           cause of a 409, and the fallback still says so; what was missing is
+           that the server gets to disagree. */
+        .catch((err: unknown) =>
+          failed(whyFailed(err, "That room could not be made. Try another name.")),
+        );
     } else {
       /* a pasted invite link works as well as a bare code — the link is the
          thing people will actually send each other */
       const code = text.includes("/") ? text.split("/").filter(Boolean).pop() ?? text : text;
       joinGroup(code)
         .then((r) => landed(r.group))
-        .catch(() => failed("No room answered to that. Check the link."));
+        .catch((err: unknown) => failed(whyFailed(err, "No room answered to that. Check the link.")));
     }
-  }, [groupForm]);
+  }, [groupForm, whyFailed]);
 
   /**
    * WHO IS IN HERE — and it is the same act as inviting.
