@@ -73,8 +73,3 @@ export interface ApiGraph {
   edges: ApiGraphEdge[];
 }
 
-/** GET /graph — one profile's mind as nodes and edges. */
-export async function fetchGraph(profileId?: string): Promise<ApiGraph> {
-  const query = profileId ? `?profile=${encodeURIComponent(profileId)}` : "";
-  return getJson<ApiGraph>(apiPath(`/graph${query}`), "Failed to load the graph");
-}

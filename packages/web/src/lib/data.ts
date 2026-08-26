@@ -189,7 +189,7 @@ export interface Entry {
       headquarters peek draws, and it points at layer 2 — not at inspirations.
       `answered` is the ground's ratified standing: the owner has spoken to it
       (a verdict, a star) — false while only the machine believes it. */
-  citedSignals: Array<{ id: string; statement: string; answered: boolean }>;
+  citedSignals: Array<{ id: string; statement: string; answered: boolean; locked: boolean }>;
   createdMs: number;
 }
 
@@ -269,7 +269,14 @@ function toEntry(row: ApiTopOfMindEntry): Entry {
     /* an older payload without the standing must read as unanswered — dim is
        the honest default, never falsely lit */
     citedSignals: Array.isArray(row.citedSignals)
-      ? row.citedSignals.map((c) => ({ ...c, answered: Boolean(c.answered) }))
+      ? row.citedSignals.map((c) => ({
+          ...c,
+          answered: Boolean(c.answered),
+          /* a payload from before the server sent this reads as unlocked,
+             which is the safe way round: it offers no way back rather than
+             offering one that would fail */
+          locked: Boolean(c.locked),
+        }))
       : [],
     createdMs: ms(row.createdAt),
   };

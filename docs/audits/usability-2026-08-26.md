@@ -116,6 +116,42 @@ swallows every wrong address in silence.
 is the right destination for an old bookmark. The cost is only that a typo and
 a real address are indistinguishable.
 
+### F6 — severity 3 — A signal could be locked and never unlocked
+
+Rewriting a signal in your own words **locks** it: `PATCH /signals/:id` freezes
+the person's wording against regeneration, and `ApiSignal.locked` records it.
+`releaseSignal` is the only way back, and the world never offered it — so
+`say it in my words` on a ground was a one-way door.
+
+The board entry one surface away has had **both** halves all along
+(`Say it in my words` … `Hand it back`, asked twice, with the receipt that
+says what releasing costs). That is what makes this worth recording rather
+than just fixing: the correct pattern was already next door, and the verb was
+wired this session without it. Half a pair is the wrong shape.
+
+It also needed the lock to become **visible**. `citedSignals` carried only
+`answered`, which is true both for a signal you gave a verdict on and for one
+you reworded — right for deciding what the poster still asks about, useless
+for deciding what can be handed back. The server already had `lockedAt` in
+hand; it is sent now.
+
+*H3 user control and freedom.* **Fixed**, mirroring the board's shape exactly.
+
+### Found while censusing, not a usability finding — six dead exports
+
+The census that found F6 also found six exports on call-surfaces that nothing
+calls: `fetchGraph` (the graph screen it served was deleted three commits
+earlier), `fetchReflections` (redundant — `GET /inspirations/:id` already
+returns a capture with its reflections), `deleteSignal` and `dismissSignal`
+(the flat screens' way of doing what the world does with a counted stance),
+and `isMachine`. Deleting `deleteSignal` stranded its own `requestVoid`
+import: dead code holds more dead code up.
+
+`orphans.test.ts` now asks this one level down — an export on a call-surface
+that nothing calls fails the gate. A name used only by its own test counts as
+unused, because a function kept alive by its test is one the product does not
+call.
+
 ## Checked and clean
 
 - **H1 status** — the empty world says *Forming — nothing adopted yet*; keeping

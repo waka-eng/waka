@@ -177,6 +177,7 @@ import {
   joinGroup,
   deleteInspiration,
   createFeedback,
+  releaseSignal,
   restoreSignal,
   dismissTopOfMindEntry,
   restoreTopOfMindEntry,
@@ -8354,7 +8355,9 @@ function HomeExperience(): JSX.Element {
    * stands on shared statements (its chain says who said each), and an
    * agent's board grounds itself in its own memories.
    */
-  const posterGrounds = useMemo<Array<{ id: string; statement: string; answered: boolean }>>(() => {
+  const posterGrounds = useMemo<
+    Array<{ id: string; statement: string; answered: boolean; locked: boolean }>
+  >(() => {
     if (atWall.kind !== "self") return [];
     const board = notes ?? [];
     const lead = board.find((e) => e.pinned) ?? board[0];
@@ -8363,6 +8366,11 @@ function HomeExperience(): JSX.Element {
       id: cited.id,
       statement: cited.statement,
       answered: cited.answered || verdicts.has(cited.id),
+      /* CARRIED SO THE DOOR SWINGS BOTH WAYS. `answered` is true for a
+         reworded signal AND for one that was given a verdict, which is right
+         for deciding what the poster still asks about and useless for deciding
+         what can be handed back. Only a locked one has words to return. */
+      locked: cited.locked,
     }));
   }, [atWall, notes, verdicts]);
 
@@ -9066,6 +9074,42 @@ function HomeExperience(): JSX.Element {
         setEntrusting(null);
       })
       .catch(() => setEntrusting(null));
+  }, []);
+
+  /**
+   * THE SAME ACT, ON THE OTHER NOUN.
+   *
+   * Rewriting a signal LOCKS its words against regeneration — that is what
+   * `PATCH /signals/:id` does and what its own doc comment says. The world
+   * gained `say it in my words` on a ground this session and did not gain the
+   * way back, so a person could freeze a sentence and never unfreeze it. The
+   * board entry one surface away has had both halves all along (`Hand it
+   * back`), which is exactly why this was worth finding: the pattern was
+   * already right next door and the new verb was written without it.
+   *
+   * Found by censusing every verb in the world against the noun it sits on,
+   * after the founder asked whether some of the flat wall was better deleted
+   * than migrated. The answer that census keeps giving is that the question is
+   * never migrate-or-delete — it is whether the verb has the shape the noun
+   * needs, and half a pair is the wrong shape.
+   */
+  const [releasingGround, setReleasingGround] = useState<string | null>(null);
+  const releaseGround = useCallback((signalId: string) => {
+    releaseSignal(signalId)
+      .then(() => {
+        setNotes((prev) =>
+          prev
+            ? prev.map((n) => ({
+                ...n,
+                citedSignals: n.citedSignals.map((c) =>
+                  c.id === signalId ? { ...c, locked: false } : c,
+                ),
+              }))
+            : prev,
+        );
+        setReleasingGround(null);
+      })
+      .catch(() => setReleasingGround(null));
   }, []);
 
   /** Making a room, joining one, and the state of asking about either. */
@@ -10310,6 +10354,45 @@ function HomeExperience(): JSX.Element {
                                 >
                                   say it in my words
                                 </button>
+                                {/* and the way back out of that, in the same
+                                    row and only once there is something to
+                                    hand back. Asked twice, like the board's,
+                                    because releasing words lets the generator
+                                    reword or retire them from the next pass. */}
+                                {ground.locked ? (
+                                  releasingGround === ground.id ? (
+                                    <>
+                                      <span aria-hidden="true"> · </span>
+                                      <span className="jar-board-warn">
+                                        {RECEIPTS.releaseOffer.text}
+                                      </span>
+                                      <span aria-hidden="true"> · </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => releaseGround(ground.id)}
+                                      >
+                                        hand it back
+                                      </button>
+                                      <span aria-hidden="true"> · </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => setReleasingGround(null)}
+                                      >
+                                        leave it as it is
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span aria-hidden="true"> · </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => setReleasingGround(ground.id)}
+                                      >
+                                        hand it back
+                                      </button>
+                                    </>
+                                  )
+                                ) : null}
                               </p>
                             ) : null}
                             {verdictReceipt?.id === ground.id ? (

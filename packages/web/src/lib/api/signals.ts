@@ -13,7 +13,6 @@ import {
   getJson,
   patchJson,
   postJson,
-  requestVoid,
   type ProfileScoped,
 } from "./http";
 
@@ -142,21 +141,6 @@ export async function releaseSignal(id: string): Promise<ApiSignal> {
   return body.signal;
 }
 
-/**
- * POST /signals/:id/dismiss
- *
- * Throwing a pattern out, without deletion: the row, its evidence and its
- * vector all stay, the signal reads as retired — and from this act on the
- * server refuses any new candidate near it, writing every refusal down.
- */
-export async function dismissSignal(id: string): Promise<ApiSignal> {
-  const body = await postJson<{ signal: ApiSignal }>(
-    apiPath(`/signals/${encodeURIComponent(id)}/dismiss`),
-    {},
-    "Failed to let this signal go",
-  );
-  return body.signal;
-}
 
 /**
  * POST /signals/:id/restore
@@ -173,14 +157,5 @@ export async function restoreSignal(id: string): Promise<ApiSignal> {
   return body.signal;
 }
 
-/** DELETE /signals/:id */
-export async function deleteSignal(id: string): Promise<void> {
-  await requestVoid(
-    apiPath(`/signals/${encodeURIComponent(id)}`),
-    "DELETE",
-    undefined,
-    "Failed to delete this signal",
-  );
-}
 
 

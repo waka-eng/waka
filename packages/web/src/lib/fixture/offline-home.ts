@@ -415,7 +415,7 @@ export function offlineHome(): OfflineHome | null {
     sortOrder: i,
     /* unanswered, honestly: the offline visitor has said nothing yet, and
        dim grounds are the state that invites the answering */
-    citedSignals: [{ id: r.signal.id, statement: r.signal.statement, answered: false }],
+    citedSignals: [{ id: r.signal.id, statement: r.signal.statement, answered: false, locked: false }],
     createdMs: boardMs,
   }));
 

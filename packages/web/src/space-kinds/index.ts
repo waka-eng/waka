@@ -87,9 +87,3 @@ export const hasSky = (k: SpaceKind): boolean => k === "self";
  */
 export const hasDial = (_k: SpaceKind): boolean => true;
 
-/**
- * Whether this space is a machine's. The predicate lives here so the body,
- * the typography, the orbs and the motion cannot disagree about it — which
- * they have.
- */
-export const isMachine = (k: SpaceKind): boolean => k === "agent";

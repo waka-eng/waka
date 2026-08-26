@@ -111,7 +111,7 @@ export interface TopOfMindEntryView {
       Computed from the feedback and lock records at serve time, never
       stored: the light must move the moment the person answers
       (goals/the-legible-loop.md Phase 4). */
-  citedSignals: Array<{ id: string; statement: string; answered: boolean }>;
+  citedSignals: Array<{ id: string; statement: string; answered: boolean; locked: boolean }>;
   createdAt: string;
 }
 
@@ -206,7 +206,7 @@ async function loadEntries(
 
   const citationsByEntry = new Map<
     string,
-    Array<{ id: string; statement: string; answered: boolean }>
+    Array<{ id: string; statement: string; answered: boolean; locked: boolean }>
   >();
   for (const row of citationRows) {
     // The inner join already excludes citations whose signal was deleted;
@@ -216,6 +216,15 @@ async function loadEntries(
       id: row.signalId,
       statement: row.statement,
       answered: row.lockedAt !== null || answeredIds.has(row.signalId),
+      /* `answered` CONFLATES TWO DIFFERENT THINGS, deliberately — a verdict and
+         a rewrite both mean the person has dealt with this sentence, and the
+         poster only asks about the ones they have not. But the WORLD needs to
+         tell them apart: rewriting a signal locks its words against
+         regeneration, and only a locked one has anything to hand back. Sent
+         separately so the client can offer the way out of a door it was
+         letting people walk through in one direction. The value is already in
+         hand a line above; nothing extra is read for it. */
+      locked: row.lockedAt !== null,
     };
     const bucket = citationsByEntry.get(row.entryId);
     if (bucket) bucket.push(cited);

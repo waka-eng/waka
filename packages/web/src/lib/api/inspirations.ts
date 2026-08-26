@@ -252,16 +252,6 @@ export async function createReflection(
   return body.reflection;
 }
 
-/** GET /inspirations/:id/reflections — oldest first. */
-export async function fetchReflections(
-  inspirationId: string,
-): Promise<ApiReflection[]> {
-  const body = await getJson<{ reflections: ApiReflection[] }>(
-    apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/reflections`),
-    "Failed to load reflections",
-  );
-  return Array.isArray(body.reflections) ? body.reflections : [];
-}
 
 /** DELETE /inspirations/:id/reflections/:reflectionId */
 export async function deleteReflection(

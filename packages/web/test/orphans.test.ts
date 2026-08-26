@@ -133,3 +133,74 @@ describe("every module in the tree is reachable from the entry point", () => {
     expect(reachable.has(resolve(SRC, "pages/Home.tsx"))).toBe(true);
   });
 });
+
+/**
+ * AND THE SAME QUESTION ONE LEVEL DOWN: an export nothing calls.
+ *
+ * The module check above passes happily on a file that is imported for one of
+ * its five functions. Four dead ones were found this way on 2026-08-26, all in
+ * live, imported modules:
+ *
+ *   `fetchGraph`        — the graph screen it served was deleted three
+ *                         commits earlier; the call to fetch its data was not.
+ *   `fetchReflections`  — redundant: `GET /inspirations/:id` already returns
+ *                         a capture WITH its reflections.
+ *   `deleteSignal`      — deliberately not offered. `everything-in-the-world`
+ *                         ruled that a hard delete contradicts *fading never
+ *                         deletes*, and the world answers a wrong pattern with
+ *                         a counted stance instead. The route stays on the
+ *                         server; this client wrapper was the flat screens'
+ *                         and went with them.
+ *   `isMachine`         — a one-line helper nothing asks.
+ *
+ * Deleting `deleteSignal` then stranded its `requestVoid` import, which the
+ * compiler caught — dead code holds more dead code up.
+ *
+ * SCOPE, AND WHY IT IS NARROW. Only `lib/api`, `space/` and `space-kinds/` are
+ * swept: those are call-surfaces, where an export exists to be used and an
+ * unused one is a leftover. A component module exporting a type or a constant
+ * that only its own file reads is a different thing and not swept here.
+ *
+ * A name used ONLY by a test still counts as unused for this purpose — a
+ * function kept alive by its own test is a function the product does not call,
+ * and the test is testing the leftover rather than the product. Say so by
+ * deleting both.
+ */
+describe("every export on a call-surface is called", () => {
+  const SURFACES = ["lib/api", "space", "space-kinds"];
+
+  function everySourceFile(): string[] {
+    return walk(SRC);
+  }
+
+  it("has no export that only its own declaration mentions", () => {
+    const declared = new Map<string, string>();
+    for (const file of everySourceFile()) {
+      const rel = file.slice(SRC.length + 1);
+      if (!SURFACES.some((dir) => rel.startsWith(`${dir}/`))) continue;
+      const text = readFileSync(file, "utf8");
+      for (const match of text.matchAll(/export (?:async )?function (\w+)|export const (\w+)/g)) {
+        declared.set((match[1] ?? match[2]) as string, rel);
+      }
+    }
+
+    /* the whole tree as one string: an import, a call and a re-export all
+       mention the name, and any one of them is a use */
+    let blob = "";
+    for (const file of everySourceFile()) blob += readFileSync(file, "utf8");
+
+    const unused: string[] = [];
+    for (const [name, where] of declared) {
+      const uses = blob.match(new RegExp(`(?<![\\w.])${name}\\b`, "g"))?.length ?? 0;
+      if (uses <= 1) unused.push(`${name} (${where})`);
+    }
+
+    expect(
+      unused.sort(),
+      "these are exported from a call-surface and nothing in the product calls " +
+        "them. An export exists to be used; one that is not is a leftover of " +
+        "whatever was deleted around it, and it holds its own imports up with " +
+        "it. Delete it, or call it from wherever it was meant to be used.",
+    ).toEqual([]);
+  });
+});
