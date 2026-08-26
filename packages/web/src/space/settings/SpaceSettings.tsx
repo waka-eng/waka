@@ -245,7 +245,7 @@ export function SpaceSettings({
               </>
             ) : (
               <button type="button" onClick={() => setLeaving(gid)}>
-                leave this group
+                leave this room
               </button>
             )}
           </p>
@@ -259,7 +259,7 @@ export function SpaceSettings({
                     className="jar-settings-danger"
                     onClick={() => closeThisGroup(gid)}
                   >
-                    close it for everyone — what the group decided goes too
+                    close it for everyone — what the room decided goes too
                   </button>
                   <span aria-hidden="true"> · </span>
                   <button type="button" onClick={() => setClosing(null)}>
@@ -272,7 +272,7 @@ export function SpaceSettings({
                   className="jar-settings-verb"
                   onClick={() => setClosing(gid)}
                 >
-                  close this group
+                  close this room
                 </button>
               )}
             </p>

@@ -263,7 +263,7 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
   ) : (
     <p className="jar-ask">
       <button type="button" onClick={() => setPropose({ text: "", busy: false })}>
-        put something to this group
+        put something to this room
       </button>
     </p>
   )}
@@ -281,7 +281,7 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
       </>
     ) : (
       <button type="button" onClick={() => setLeaving(groupPanel)}>
-        leave this group
+        leave this room
       </button>
     )}
   </p>

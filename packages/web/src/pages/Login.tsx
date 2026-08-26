@@ -197,30 +197,6 @@ export function SignupForm({
       {formError ? (
         <div className="form-error" role="alert">
           {formError}
-          {/* THE WAY BACK IN, SAID WHERE THE PERSON IS STUCK.
-              Found in the heuristic pass, 2026-08-26: there is no password
-              reset anywhere in this product — `auth-password.ts` has exactly
-              `signup` and `login` — so someone who forgets one is locked out
-              of everything they kept, on a door that says "return to what you
-              kept". The message said "Incorrect email or password." and
-              stopped there, and a person would go looking for the reset link
-              that is not there.
-
-              What IS true is that `auth-google.ts` links an existing account
-              by VERIFIED email, so Continue with Google below really does open
-              the same archive — and it refuses to link an unverified claim,
-              which is why saying this is safe rather than an invitation. The
-              missing reset is stated plainly rather than left to be
-              discovered: this product's whole posture is that it does not have
-              quiet corners, and "there is no way to do this" is exactly the
-              kind of thing a quiet corner hides.
-
-              Only under the credentials failure. A network error or an
-              unavailable endpoint is not a person who has forgotten
-              something, and offering them a way back in would be noise. */}
-          {formError === t(locale, "loginInvalidCredentials") ? (
-            <span className="login-recover">{t(locale, "loginNoResetYet")}</span>
-          ) : null}
         </div>
       ) : null}
 
@@ -326,6 +302,18 @@ export function LoginForm(): JSX.Element {
   const [values, setValues] = useState<LoginValues>(EMPTY_LOGIN);
   const [fieldErrors, setFieldErrors] = useState<LoginFieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
+  /**
+   * WHY THE KIND IS TRACKED AND NOT INFERRED FROM THE MESSAGE.
+   *
+   * The recovery line under a failed sign-in used to be rendered on
+   * `formError === t(locale, "loginInvalidCredentials")` — comparing a
+   * RENDERED SENTENCE to decide what to show. Reword that string and the line
+   * silently stops appearing, with nothing failing anywhere: the exact hazard
+   * this codebase has spent a week removing from its stylesheets, written
+   * fresh into a page the same week. A state flag set where the 401 is
+   * actually handled cannot drift from the copy, because it does not read it.
+   */
+  const [wrongCredentials, setWrongCredentials] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   function handleChange<K extends keyof LoginValues>(
@@ -362,6 +350,7 @@ export function LoginForm(): JSX.Element {
 
     setSubmitting(true);
     setFormError(null);
+    setWrongCredentials(false);
     setFieldErrors({});
     try {
       await login({ email, password: values.password });
@@ -373,6 +362,7 @@ export function LoginForm(): JSX.Element {
         // email is correct, which is an information leak we'd rather avoid.
         if (err.status === 401) {
           setFormError(t(locale, "loginInvalidCredentials"));
+          setWrongCredentials(true);
         } else if (err.status === 404) {
           // Endpoint not yet wired on the backend (earlier sub-ACs). Surface
           // a useful, non-scary message rather than letting the raw "HTTP
@@ -427,7 +417,7 @@ export function LoginForm(): JSX.Element {
               Only under the credentials failure. A network error or an
               unavailable endpoint is not a person who has forgotten
               something, and offering them a way back in would be noise. */}
-          {formError === t(locale, "loginInvalidCredentials") ? (
+          {wrongCredentials ? (
             <span className="login-recover">{t(locale, "loginNoResetYet")}</span>
           ) : null}
         </div>
