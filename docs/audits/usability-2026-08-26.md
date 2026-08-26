@@ -152,6 +152,31 @@ that nothing calls fails the gate. A name used only by its own test counts as
 unused, because a function kept alive by its test is one the product does not
 call.
 
+### F7 — severity 3 — "memory" meant two different things, and one of them deletes an archive
+
+On the **account page** a memory is a whole archive: *"Each memory keeps its
+own captures, signals, and top of mind. Yours is the human one; an agent
+memory lets Claude remember its own work alongside you."* Its confirmation
+reads *"Remove this memory and everything in it? Its captures, signals, and
+top of mind all go with it, and this cannot be undone."*
+
+On the **card in the world**, a memory was one kept thought: *"the memory
+before this one"*, *"the words of this memory"*.
+
+So a person who learned the word in the world would read that confirmation as
+removing a single thought. It removes an entire archive, irreversibly. This is
+the vocabulary problem of F4 with a safety edge on it.
+
+**Fixed, in the direction canon already points.** The count directly above
+those carets reads `3 INSPIRATIONS` and the verb is `createInspiration`, so
+the card gives way and the account page keeps the word. Five accessible names
+on one surface; no other copy moved.
+
+Found while checking whether `deleteProfile(memory.id)` was a naming smell. It
+was not — `profile` is the canon identifier and `memory` the human word, which
+is this repo's stated convention — but reading the two surfaces side by side to
+confirm that is what showed the collision.
+
 ## The verb census
 
 F3 and F6 were both found the same way, so the method is written down. For

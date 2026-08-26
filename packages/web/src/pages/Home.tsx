@@ -8829,8 +8829,8 @@ function HomeExperience(): JSX.Element {
       {panelNeighbours.prev ? (
         <button
           type="button"
-          aria-label="the memory before this one"
-          title="the memory before this one"
+          aria-label="the inspiration before this one"
+          title="the inspiration before this one"
           onClick={() => stepToMemory(panelNeighbours.prev)}
         >
           <span className="jar-caret jar-caret--left" aria-hidden="true" />
@@ -8839,8 +8839,8 @@ function HomeExperience(): JSX.Element {
       {panelNeighbours.next ? (
         <button
           type="button"
-          aria-label="the memory after this one"
-          title="the memory after this one"
+          aria-label="the inspiration after this one"
+          title="the inspiration after this one"
           onClick={() => stepToMemory(panelNeighbours.next)}
         >
           <span className="jar-caret jar-caret--right" aria-hidden="true" />
@@ -11424,7 +11424,7 @@ function HomeExperience(): JSX.Element {
                 }
               }}
               className="jar-panel-text jar-panel-edit"
-              aria-label="the words of this memory"
+              aria-label="the words of this inspiration"
               value={editing.open.text}
               onChange={(e) => {
                 editing.retype(e.target.value);
