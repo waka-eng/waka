@@ -93,6 +93,7 @@ import { useMeasured } from "../canvas/measured";
 import { BODY_TIERS, bodyPath } from "../character/raster";
 import { GroupPanel } from "../space-kinds/GroupPanel";
 import { SpaceSettings, type GroupTrouble } from "../space/settings/SpaceSettings";
+import { whyFailed as sayWhyFailed, whyOf } from "../lib/why-failed";
 import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
 import { agentBeing, OWNER_BEING, unit, type Being } from "../character/body";
 import { posterWords } from "../space/top-of-mind/poster";
@@ -2258,13 +2259,11 @@ function HomeExperience(): JSX.Element {
              The reason goes to the console for whoever is debugging, and the
              human-readable half goes on screen. */
           console.error("[waka] the field could not be poured:", err);
-          setFailReason(
-            err instanceof ApiError
-              ? `${err.status} — ${err.message}`
-              : err instanceof Error
-                ? err.message
-                : String(err),
-          );
+          /* THE SAME WORDS THE WORLD USES. This built its own sentence from
+             `${err.status} — ${err.message}`, which printed "0 — …" at a
+             person when the connection was dead — a status code as prose, on
+             the one screen somebody meets when nothing works at all. */
+          setFailReason(whyOf(err) || String(err));
           setPhase("failed");
           return;
         }
@@ -8601,37 +8600,14 @@ function HomeExperience(): JSX.Element {
    * the DOM read below is of the field the person just typed into.
    */
   /**
-   * WHY A CALL FAILED, IN WORDS A PERSON CAN SEND YOU.
-   *
-   * Every one of these catches used to discard the error and print a fixed
-   * sentence — "That didn't keep. The words are still here." The words being
-   * still there is the reassuring half and the only half; nothing said
-   * whether the server refused it, the session had expired, or the network
-   * never left the building. The founder hit it, screenshotted it, and the
-   * screenshot could not be debugged, which is the whole cost: a failure
-   * that reports nothing takes an hour to reproduce and a second to explain.
-   *
-   * `ApiError` already carries a status and the server's own message. This
-   * puts them where the person already looking will see them.
+   * The product's one translation of an error into words, kept in `lib` so the
+   * boot's failure screen uses the SAME one — see `why-failed.ts` for the
+   * divergence that put it there.
    */
-  const whyFailed = useCallback((err: unknown, fallback: string): string => {
-    /* THE FULL STOP COMES OFF BEFORE THE DASH.
-       Every caller writes its fallback as a finished sentence — "That was not
-       saved." — because that is what it says on its own when the error is not
-       an `ApiError`. Appending to it produced
-       "That was not saved. — the server said no (500): …" in every failure
-       line in the product. Read on screen for the first time by the
-       failure-path walk, which is the only thing that has ever put six of
-       these sentences side by side. */
-    const stem = fallback.replace(/\.\s*$/, "");
-    if (err instanceof ApiError) {
-      if (err.status === 0) return `${stem} — the server could not be reached.`;
-      if (err.status === 401) return `${stem} — you are signed out. Sign in and it is still here.`;
-      return `${stem} — the server said no (${err.status}): ${err.message}`;
-    }
-    if (err instanceof Error && err.message) return `${stem} — ${err.message}`;
-    return fallback;
-  }, []);
+  const whyFailed = useCallback(
+    (err: unknown, fallback: string): string => sayWhyFailed(err, fallback),
+    [],
+  );
 
   const keepIt = useCallback(
     (andReflect = false) => {
