@@ -652,10 +652,32 @@ a:hover {
    stroke and the air around it, and weight is what kills it. The page title
    was landing near 58px and bold-ish, which is louder than anything the world
    ever prints; the poster tops out at 34. */
+/* AND IT IS NAMED RATHER THAN CAUGHT. This selector list ended `h1, h2` — two
+   bare element selectors, in the `chrome` layer, in a sheet loaded on every
+   route including the world's. So it did not dress the chrome's headings: it
+   dressed EVERY heading in the product, and `.jar-poster` is an `h1`.
+
+   Measured 2026-08-26: the poster won ONE of its own eight declarations.
+   Seven came from here. Six of them happened to agree — same face, same 300,
+   same tracking — which is why nobody saw it, and which is the whole hazard:
+   `home.css` carries a comment beside `font-weight: 300` reading "never
+   heavier … weight is what killed the last attempt", on a declaration that was
+   not in force. Editing it would have done nothing at all.
+
+   The seventh did not agree. `clamp(28px, 3vw, 40px)` against the world's
+   `clamp(23px, 2.5vw, 34px)`, so at 1440px the product's headline rendered at
+   40px instead of 34 — eighteen per cent louder than the world asks for,
+   while the comment two lines above this one says "the poster tops out at 34".
+
+   The chrome's headings are named now. Nothing here reaches past them. */
 .login-title,
 .profile-header h1,
-h1,
-h2 {
+.login-shell h1,
+.login-shell h2,
+.profile-shell h1,
+.profile-shell h2,
+.nc-canvas h1,
+.nc-canvas h2 {
   font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
   font-weight: 300;
   font-size: clamp(28px, 3vw, 40px);

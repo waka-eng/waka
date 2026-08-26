@@ -103,6 +103,22 @@ const TOKENS = resolve(REPO, "packages/web/src/styles/system.css");
  * announces itself later, on a case nobody has written yet.
  */
 const LAYERS = resolve(REPO, "packages/web/src/styles/layers.css");
+/**
+ * AND `chrome.css`, WHICH IS LOADED ON THE WORLD'S ROUTE TOO.
+ *
+ * `main.tsx` imports it unconditionally, so every rule in it applies to the
+ * world — and it is in the LAST layer, so it wins every conflict. A fixture
+ * that leaves it out is not a smaller version of the product; it is a
+ * different cascade, and it agrees with the real one only by luck.
+ *
+ * What it cost to find out: `chrome.css` ended a selector list with the bare
+ * `h1, h2`, and `.jar-poster` is an `h1`. The world's headline therefore took
+ * `clamp(28px, 3vw, 40px)` from the chrome sheet instead of the
+ * `clamp(23px, 2.5vw, 34px)` `home.css` asks for — 40px against 34 at this
+ * fixture's own width — and every case in this suite would have gone on
+ * passing, because the sheet doing it was not in the room.
+ */
+const CHROME = resolve(REPO, "packages/web/src/styles/chrome.css");
 const HOME = resolve(REPO, "packages/web/src/pages/Home.tsx");
 
 /**
@@ -137,6 +153,7 @@ const FIXTURE = `<!doctype html>
 <link rel="stylesheet" href="/layers.css">
 <link rel="stylesheet" href="/system.css">
 <link rel="stylesheet" href="/home.css">
+<link rel="stylesheet" href="/chrome.css">
 <style>
   html, body { margin: 0; height: 100%; background: #0a0d14; }
   .jar { position: fixed; inset: 0; }
@@ -151,6 +168,11 @@ const FIXTURE = `<!doctype html>
   .jar-panel, .jar-seek, .jar-settings, .jar-prov-room { animation: none !important; }
 </style>
 <div class="jar" style="--jar-vh:100vh;--jar-vw:100vw">
+  <!-- THE HEADLINE, and it is an <h1> because the world's is. That is the
+       whole point of it being here: a bare \`h1\` selector in another sheet
+       reaches this element, and a fixture that rendered the poster as a
+       \`div\` would be immune to the one defect the case below exists for. -->
+  <h1 class="jar-poster">a sentence the world is holding up</h1>
   <button class="jar-values" data-jar-chrome="1">
     <span class="jar-values-words jar-label">philosophies &amp; values</span>
     <span class="jar-caret jar-caret--up" aria-hidden="true"></span>
@@ -759,6 +781,88 @@ const CASES: Case[] = [
       };
     },
   },
+  {
+    id: "the-headline-is-the-worlds-own",
+    name: "the world's headline is set by the world, not by a sheet passing through",
+    needs: ["jar-poster"],
+    /* the defect exactly as it shipped: a bare element selector reaching the
+       poster from outside `home.css`. Injected styles are unlayered, which is
+       what `chrome.css`'s later layer amounted to. */
+    sabotage: "h1 { font-size: 28px; font-weight: 400; letter-spacing: 0.02em; }",
+    run: async (page) => {
+      /*
+       * WHAT THIS CAUGHT, AND WHY IT COULD NOT HAVE BEFORE.
+       *
+       * `chrome.css` ended a selector list with the bare `h1, h2`, is loaded
+       * on every route, and sits in the LAST layer. `.jar-poster` is an `h1`.
+       * So the product's headline took `clamp(28px, 3vw, 40px)` from the
+       * chrome sheet rather than the `clamp(23px, 2.5vw, 34px)` `home.css`
+       * asks for, and the poster won ONE of its own eight declarations.
+       *
+       * Six of the seven it lost happened to agree — same face, same 300,
+       * same tracking — which is exactly why it went unseen, and exactly why
+       * this case compares against `home.css`'s OWN text rather than against
+       * numbers typed here. Two declarations that agree today are two that
+       * can disagree tomorrow, and the one that stops being read is the one
+       * that keeps being edited: `home.css` carries "300, never heavier …
+       * weight is what killed the last attempt" beside a declaration that was
+       * not in force.
+       */
+      const declared = readFileSync(CSS, "utf8").match(/\.jar-poster\s*\{([^}]*)\}/);
+      if (!declared) return { ok: false, detail: "`home.css` no longer has a `.jar-poster` rule to be held to" };
+      const rule = declared[1]!.replace(/\/\*[\s\S]*?\*\//g, " ");
+      const want = (prop: string): string | null => {
+        const hit = rule.match(new RegExp(`(?<![\\w-])${prop}:\\s*([^;]+);`));
+        return hit ? hit[1]!.trim() : null;
+      };
+
+      /* `clamp(a, b vw, c)` resolved at the fixture's own width, because that
+         is the only way to compare a fluid declaration with a rendered pixel */
+      const size = want("font-size");
+      const clamp = size?.match(/clamp\(\s*([\d.]+)px\s*,\s*([\d.]+)vw\s*,\s*([\d.]+)px\s*\)/);
+      const width = page.viewportSize()?.width ?? 900;
+      const expected = clamp
+        ? Math.min(Math.max(Number(clamp[1]), (Number(clamp[2]) / 100) * width), Number(clamp[3]))
+        : null;
+
+      const got = (await page.evaluate(() => {
+        const el = document.querySelector(".jar-poster");
+        if (!el) return null;
+        const cs = getComputedStyle(el);
+        return {
+          size: parseFloat(cs.fontSize),
+          weight: cs.fontWeight,
+          family: cs.fontFamily.split(",")[0]!.replace(/['"]/g, "").trim(),
+          tracking: cs.letterSpacing,
+        };
+      })) as { size: number; weight: string; family: string; tracking: string } | null;
+      if (!got) return { ok: false, detail: "the poster is not in the fixture" };
+
+      const wrong: string[] = [];
+      if (expected !== null && Math.abs(got.size - expected) > 0.5) {
+        wrong.push(`size ${got.size}px, and \`home.css\` asks for ${expected}px at ${width}px wide`);
+      }
+      const weight = want("font-weight");
+      if (weight && got.weight !== weight) wrong.push(`weight ${got.weight}, declared ${weight}`);
+      const family = want("font-family")?.split(",")[0]?.replace(/['"]/g, "").trim();
+      if (family && got.family !== family) wrong.push(`face ${got.family}, declared ${family}`);
+      /* tracking is declared in em and rendered in px, so it is compared as em */
+      const tracking = want("letter-spacing");
+      const em = tracking?.match(/^([\d.]+)em$/);
+      if (em && Math.abs(parseFloat(got.tracking) - Number(em[1]) * got.size) > 0.2) {
+        wrong.push(`tracking ${got.tracking}, declared ${tracking} of ${got.size}px`);
+      }
+
+      return {
+        ok: wrong.length === 0,
+        detail:
+          wrong.length === 0
+            ? `${got.size}px ${got.weight} ${got.family} at ${got.tracking} — every one of them `
+              + "`home.css`'s own"
+            : wrong.join("; "),
+      };
+    },
+  },
 ];
 
 interface Args { negative: boolean; only: string | null }
@@ -802,6 +906,11 @@ async function main(): Promise<number> {
       if (req.url === "/layers.css") {
         res.writeHead(200, { "content-type": "text/css" });
         res.end(readFileSync(LAYERS));
+        return;
+      }
+      if (req.url === "/chrome.css") {
+        res.writeHead(200, { "content-type": "text/css" });
+        res.end(readFileSync(CHROME));
         return;
       }
       if (req.url === "/system.css") {

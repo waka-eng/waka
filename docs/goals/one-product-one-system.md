@@ -564,6 +564,48 @@ SELECTED one and already at full ink, and the reflection sheet opens with its
 box already focused — so the first run compared a focused box against itself
 and reported no change.
 
+**SEVENTH — THE ROOT CAUSE UNDER ALL OF THEM, AND THE WORLD'S HEADLINE.**
+Four separate collisions in this goal had one shape: `chrome.css` styles bare
+ELEMENT selectors — `textarea`, `input`, `h1`, `h2`, `a` — it is imported by
+`main.tsx` unconditionally, and it sits in the LAST layer. So the chrome sheet
+reaches every route including the world's, and wins.
+
+Asked properly — which `chrome.css` rules decide anything on a world surface —
+the answer is nine, and two of them matter. The field rules, whose three
+casualties are above. And this:
+
+> **`.jar-poster` won ONE of its own eight declarations.** Seven came from
+> `chrome.css`'s `.login-title, .profile-header h1, h1, h2`, because the
+> world's headline is an `<h1>`.
+
+Six of the seven happened to agree — same face, same 300, same tracking — and
+that is precisely why it survived. The seventh did not: `clamp(28px, 3vw,
+40px)` against the world's `clamp(23px, 2.5vw, 34px)`, so **the product's
+headline rendered at 40px instead of 34** at desktop width, eighteen per cent
+louder than the world asks for — while the chrome rule's own comment two lines
+above says "the poster tops out at 34".
+
+And `home.css` carries, beside a `font-weight: 300` that was not in force:
+"300, never heavier: in a geometric the elegance is in the thin even stroke …
+weight is what killed the last attempt." Editing that line would have done
+nothing at all. **That is the real cost of a duplicate: not the disagreement,
+which is visible, but the agreement, which teaches you that the rule you are
+reading is the rule that runs.**
+
+The chrome's headings are named now (`.login-shell h1`, `.profile-shell h1`,
+`.nc-canvas h1`, …) and nothing reaches past them. Chrome surfaces: **0
+computed differences**. The world: the poster and its words 40px → 34px.
+
+**AND THE MEASURE FIXTURE WAS BLIND TO IT BY CONSTRUCTION**, for the second
+time in this goal. It served `system.css`, `layers.css` and `home.css` — not
+`chrome.css` — so the sheet doing this was not in the room, and all twelve
+cases would have gone on passing forever. It serves `chrome.css` now, and case
+13 holds the headline against `home.css`'s OWN TEXT rather than against
+numbers typed into the test: it parses the `.jar-poster` rule, resolves its
+`clamp()` at the fixture's width, and compares. Its negative run reproduces
+the shipped defect exactly — "size 28px, and `home.css` asks for 23px at 900px
+wide; weight 400, declared 300".
+
 ### A5 — The product on a phone
 
 **End state.** At 390x844 and 360x640: nothing overflows sideways, no control
