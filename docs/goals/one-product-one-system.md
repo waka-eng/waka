@@ -456,6 +456,38 @@ passed 12/12 either way, which is the point: a fixture that disagrees with
 production announces itself later, on a case nobody has written yet. It serves
 `layers.css` now.
 
+**FOURTH HARVEST — THE MODULE HALF OF "NOTHING IS UNREFERENCED".** The
+stylesheet half is `e2e:dead-css`; the module half needs no browser, because
+an import graph is a fact about the source. Two orphans, both left by the flat
+screens deleted the same week, both of which had been sitting in the tree
+looking entirely like live code:
+
+- **`components/faces.ts`** — "Lifted out of Home so the rail can use it
+  without importing a page." The rail went out with `surface.css`.
+- **`lib/confidence.ts`** — 93 lines turning a confidence number into three
+  named bands, written because "the flat surfaces have no light channel, so
+  they printed the number instead". In the world confidence IS the light;
+  nothing needs the words.
+
+Neither was findable by grep: both had the shape of live code and names that
+read like live code. What made them visible is that nothing imports them, and
+that is only visible from the whole graph at once — so it is a gate now
+(`orphans.test.ts`), not a script somebody remembered to run. It had to be
+taught two things by watching it get them wrong: a `lazy(() => import(…))` is
+an import (the first run reported `pages/Home.tsx`, the largest file in the
+product, as unreferenced), and an ambient `.d.ts` is imported by nobody.
+
+**AND ONE COMMENT THAT HAD BECOME A LIE.** `main.tsx` said: "The list surfaces
+stay exactly where they were … `/inspirations` and `/signals` remain
+addressable." Both redirect to `/` now. A comment naming an address that
+answers with a redirect is a map of a building that has been pulled down, and
+the next person reads it as the current shape of the product. Corrected, along
+with `SurfaceBoundary`'s "and the flat surfaces still worked" — that file's
+`surface` has never meant those screens, and it now says so.
+
+Checked at the same time and clean: every in-app navigation target
+(`to=`, `navigate(`, `href=`) names a route that still exists.
+
 ### A5 — The product on a phone
 
 **End state.** At 390x844 and 360x640: nothing overflows sideways, no control

@@ -61,9 +61,12 @@ import "./styles/chrome.css";
   rest of the app is built on — captures in the field, patterns in the sky,
   the one artifact in between — read through `lib/data`.
 
-  The list surfaces stay exactly where they were. They are the fastest way to
-  read and edit the same archive, and the layout is not a replacement for
-  typing; `/inspirations` and `/signals` remain addressable.
+  THERE ARE NO LIST SURFACES ANY MORE. This comment used to end "`/inspirations`
+  and `/signals` remain addressable", and on 2026-08-26 that stopped being
+  true: the flat screens were deleted and all eleven of their routes now
+  redirect here. A comment that names an address which answers with a redirect
+  is worse than no comment — it is a map of a building that has been pulled
+  down, and the next person reads it as the current shape of the product.
 */
 const HomePage = lazy(() => import("./pages/Home"));
 

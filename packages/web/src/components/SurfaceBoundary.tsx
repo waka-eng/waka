@@ -4,9 +4,12 @@
  * WHAT IT EXISTS TO PREVENT, precisely: on 2026-08-22 a signed-in visitor
  * whose network could not reach `fonts.googleapis.com` OR `cdn.jsdelivr.net`
  * — either one alone was enough — got `/` as a black rectangle. No spinner,
- * no message, no retry. `#root` had zero children. The account was fine, the
- * session was fine, and the flat surfaces still worked; only the world, which
- * is the product, was gone.
+ * no message, no retry. `#root` had zero children. The account was fine and
+ * the session was fine; only the world, which is the product, was gone.
+ *
+ * ("and the flat surfaces still worked" stood here until 2026-08-26, when
+ * they were deleted. `surface` in this file's name has never meant those
+ * screens — it means a lazily-loaded one, and the world is the only one left.)
  *
  * The mechanism is worth stating because the fix looks disproportionate
  * otherwise. `HomePage` is `lazy()`, so React suspends on it. `ProtectedHome`
