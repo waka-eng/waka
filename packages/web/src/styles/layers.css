@@ -115,5 +115,22 @@
   outline-offset: 2px;
   /* the rim: keeps the ring legible where it crosses light chrome */
   box-shadow: 0 0 0 4px rgba(6, 8, 13, 0.55);
-  border-radius: inherit;
 }
+/*
+ * `border-radius: inherit` USED TO BE IN THAT RULE, and it was a bug with a
+ * long reach. This block is UNLAYERED, which means it beats every layer at
+ * any specificity — the property that makes it a floor. So the line did not
+ * merely round the ring: it replaced the ELEMENT'S OWN CORNERS with its
+ * parent's, on every focused thing in the product.
+ *
+ * Found on the answer box, which asks for `border-radius: 14px` and rendered
+ * 18px — the reflection sheet's radius, inherited the moment the box took
+ * focus, which for a textarea is immediately since Chromium treats every
+ * keyboard-accepting element as focus-visible. Chased first as a cascade
+ * collision with `chrome.css` (which is a real and separate bug, fixed in
+ * `home.css`), and it was this instead.
+ *
+ * It was never needed. An `outline` follows the element's own
+ * `border-radius` on its own; the ring was already the right shape, and the
+ * line was only ever changing what it was tracing.
+ */

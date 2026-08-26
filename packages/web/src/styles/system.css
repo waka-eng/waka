@@ -324,10 +324,6 @@
    13-15px -- the same as the buttons around it.
    ======================================================================= */
 
-.memory-contents-expanded-text,
-.memory-contents-expanded-reading,
-.memory-contents-expanded-editor,
-
 /* Anything the machine claims about a person takes the room's face. */
 .nc-loading {
   font-family: var(--voice-you);

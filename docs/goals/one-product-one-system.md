@@ -269,7 +269,7 @@ tree is unreferenced.
 |---|---|
 | Gate | `pnpm e2e:dead-css` — the browser is asked which rule won each property on each element — plus `e2e:measure` cases comparing rendered primitives across surfaces |
 | At open | 917 top-level class rules; **34** distinct prefixes; `btn-` and `profile-` each declared in two files |
-| **Now** | **10** prefixes (the flat-surface deletion took 24 of them). **93 rules and 27 selector lists** proved dead and removed across four harvests, each with a computed-style diff behind it. The label register: **25 declarations → 1**, in its own layer, ratcheted. Two orphan modules gone and a gate holding that at zero. Type/spacing ceilings **21 → 13** and **38 → 33** |
+| **Now** | **10** prefixes (the flat-surface deletion took 24 of them). **117 rules and 27 selector lists** proved dead and removed across six harvests, each with a computed-style diff behind it. Unreachable selectors: **0**. The label register: **25 declarations → 1**, in its own layer, ratcheted. Two orphan modules gone and a gate holding that at zero. Type/spacing ceilings **21 → 13** and **38 → 33**. Three broken affordances found inside the dead set and repaired |
 | State | **IN PROGRESS**, and measurable for the first time |
 
 The modal work of 2026-08-25 is the shape every primitive follows: the card
@@ -516,6 +516,53 @@ literal type sizes and five literal spacings left inside the dead rules that
 carried them, so both ceilings failed and came down: **21 → 13** and
 **38 → 33**. Nobody edited a call site; the count moved because the dead code
 that held the literals is gone.
+
+**SIXTH HARVEST — THE OVERRULED SET, AND THREE THINGS THAT WERE NOT DEAD
+CODE AT ALL.** With every state now reachable the unreachable set fell to
+**3**, and the overruled set — rules that match but decide nothing — could
+finally be worked. 21 removed: `global.css`'s `.field-input` (nine
+declarations), `.btn-primary`, `.profile-memory-action`, `.login-shell`,
+`.login-title`, `.login-divider`; `chrome.css` beating itself again with
+`.profile-tabs`, `.login-tabs button` and `.login-title, .profile-header h1,
+h1, h2`, each shadowed by a `body `-prefixed copy of itself further down.
+
+Three were held back, because a rule that matches and decides nothing is
+sometimes **a feature that has quietly stopped working**:
+
+- **Hovering a tab on the account page did nothing.** `global.css` says
+  `.profile-tab:hover { color: var(--ink-2) }` in `product`; `chrome.css` sets
+  `color` on the same buttons unconditionally from `chrome`, and won every
+  time. The hover now lives beside the rule that was silencing it.
+- **Focusing the answer box did not light it,** for the same reason — and the
+  box had **no side padding at all**, rendering `9px 0px` against the
+  `12px 14px` it asks for, because `chrome.css` gives every bare `textarea`
+  its own geometry from the later layer. The person's words touched both
+  edges of the sheet.
+- That is the **third** face of one collision. `home.css` already carries a
+  comment about it — "the same collision that ate the font size, in the same
+  place, for the same reason" — written when the drawer's well was fixed. It
+  was fixed twice by moving one rule into `home.css`'s own `@layer chrome`
+  block and never once by sweeping for siblings, which is why there was a
+  third. Swept this time.
+
+**AND ONE BUG THIS GOAL PUT IN ITSELF.** Chasing the answer box's wrong corner
+radius — 18px against the 14px it declares — through the cascade led not to
+`chrome.css` but to the `:focus-visible` accessibility floor added earlier in
+this same goal. It carried `border-radius: inherit`, and the floor is
+UNLAYERED, which is the property that lets it beat everything. So it was not
+rounding the focus ring: it was **replacing every focused element's own
+corners with its parent's**, product-wide. It was never needed — an `outline`
+follows the element's own radius on its own — and it is gone.
+
+Verified: chrome surfaces **0 computed differences**; the two restored
+affordances measured directly in a browser (an unselected tab goes
+`rgba(232,237,244,0.72)` → full ink on hover; the answer box goes transparent
+→ `rgba(255,255,255,0.1)` on focus, at `12px 14px` padding and a 14px radius).
+
+Both measurements were wrong the first time and said so: the first tab is the
+SELECTED one and already at full ink, and the reflection sheet opens with its
+box already focused — so the first run compared a focused box against itself
+and reported no change.
 
 ### A5 — The product on a phone
 

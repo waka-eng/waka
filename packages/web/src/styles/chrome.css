@@ -98,20 +98,6 @@ body {
     "Segoe UI", Roboto, sans-serif;
 }
 
-/* ---------- type ----------
-   Two faces and one uppercase register, exactly as the world has them: Jost
-   for the voice (Latin only, so headings alone), Pretendard for everything
-   that could hold Korean. Nothing else is allowed to shout. */
-.login-title,
-.profile-header h1,
-h1,
-h2 {
-  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
-  font-weight: 300;
-  letter-spacing: 0.012em;
-  color: var(--w-ink);
-  text-wrap: balance;
-}
 .login-subtitle,
 .field-hint,
 .login-footer {
@@ -216,11 +202,6 @@ a:hover {
   flex-direction: column;
   gap: var(--sp-16);
 }
-.login-form {
-  background: none;
-  border: 0;
-  border-radius: 0;
-}
 /* the prose inside a section, at reading size and reading weight */
 .profile-public-heading,
 .profile-danger-heading {
@@ -276,22 +257,6 @@ a:hover {
   border: 1px solid var(--w-edge);
   color: var(--w-ink);
 }
-/* the two-up SIGN IN / CREATE ACCOUNT switch: a filled black tab reads as a
-   hole punched in a dark page, so the selected one is carried by ink and a
-   rule instead — the same way the world marks the wall you are standing on */
-.login-tabs button {
-  background: none;
-  border: 0;
-  border-bottom: 1px solid transparent;
-  color: var(--w-muted);
-  padding: var(--sp-10) var(--sp-4);
-  letter-spacing: 0.1em;
-}
-.login-tabs button[aria-selected="true"],
-.login-tabs button.is-active {
-  color: var(--w-ink);
-  border-bottom-color: var(--w-ink);
-}
 /* the Google button is the one place a foreign brand's own surface belongs —
    it stays white, because a recoloured Google button is a phishing signal */
 .btn-google {
@@ -325,9 +290,6 @@ a:hover {
   display: flex;
   flex-direction: column;
   gap: var(--sp-18);
-}
-.login-form[hidden] {
-  display: none;
 }
 /* the divider keeps its word: two rules with OR between them is the standard
    read, and dropping the word leaves two orphan lines that mean nothing */
@@ -386,18 +348,6 @@ a:hover {
    weight rather than by a coloured chip. No red anywhere — colour temperature
    means aliveness here and is not spent on warnings. */
 
-/* ---------- tabs ----------
-   The same mark the world uses for the wall you are standing on: ink and a
-   rule beneath. A filled tab would be the only solid shape on the page. */
-.profile-tabs {
-  display: flex;
-  gap: var(--sp-22);
-  background: none;
-  border: 0;
-  border-bottom: 1px solid var(--w-edge);
-  padding: 0;
-  margin-bottom: var(--sp-22);
-}
 .profile-tabs button {
   appearance: none;
   background: none;
@@ -410,12 +360,6 @@ a:hover {
   font: inherit;
   cursor: pointer;
   transition: color 0.2s ease, border-color 0.2s ease;
-}
-/* the sliding indicator belongs to a design with a filled tab; the rule above
-   already says which one is selected, and two answers to one question is one
-   too many */
-.profile-tabs-indicator {
-  display: none;
 }
 
 /* ---------- lists ----------
@@ -755,9 +699,6 @@ h2 {
 .field {
   margin-bottom: var(--sp-26);
 }
-.profile-tabs {
-  margin-bottom: var(--sp-30);
-}
 
 /* ================= ORDER IS NOT A GUARANTEE, SPECIFICITY IS =================
    Everything above assumed this file's rules win because it is imported last.
@@ -820,6 +761,15 @@ body .profile-tabs {
 }
 body .profile-tabs-indicator {
   display: none;
+}
+/* A TAB LIGHTS UNDER THE POINTER, and it had stopped. `global.css` says
+   `.profile-tab:hover { color: var(--ink-2) }` in `product`; the rule below is
+   in `chrome`, sets `color` unconditionally, and therefore won every time.
+   Hovering a tab on the account page did nothing. Said here, beside the rule
+   that was silencing it, because a hover written in the losing sheet is how it
+   went quiet in the first place. */
+body .profile-tabs button:hover {
+  color: var(--w-ink);
 }
 body .profile-tabs button {
   background: none;

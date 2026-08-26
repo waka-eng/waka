@@ -461,21 +461,25 @@ async function walkSurface(
 
 const PASSWORD = "dead-css-password-1";
 
-/** Reopen a keepsake after a state that replaced the card with itself. */
-async function openCardAgain(page: Page): Promise<void> {
+/** Open a keepsake from a freshly loaded world. Says whether it managed to. */
+async function openCardAgain(page: Page): Promise<boolean> {
   try {
     await page.locator(".jar-saved").first().click({ timeout: 8_000 });
-    await page.waitForTimeout(3_000);
-    for (const y of [390, 350, 430]) {
+    await page.waitForTimeout(3_500);
+    for (const y of [390, 350, 430, 310, 470]) {
       for (let x = 160; x <= 940; x += 28) {
         await page.mouse.click(x, y);
         await page.waitForTimeout(350);
-        if ((await page.evaluate(() => document.querySelectorAll(".jar-panel").length)) > 0) return;
+        if ((await page.evaluate(() => document.querySelectorAll(".jar-panel").length)) > 0) {
+          await page.waitForTimeout(900);
+          if ((await page.evaluate(() => document.querySelectorAll(".jar-panel").length)) > 0) return true;
+        }
       }
     }
   } catch {
-    /* the next state will report itself as not walked */
+    return false;
   }
+  return false;
 }
 
 async function surfaces(
@@ -564,18 +568,25 @@ async function surfaces(
         await page.locator(".jar-panel-foot button", { hasText: /delete/i }).first().click({ timeout: 6_000 });
       }],
     ] as Array<[string, () => Promise<void>]>) {
+      /* EACH ONE STARTS FROM A CARD THIS LOOP OPENED ITSELF. The first version
+         pressed Escape and carried on, which worked for the first state and
+         then quietly stopped: the edit state leaves the card gone, and both
+         `answering a memory` and `letting a memory go` reported "it did not
+         open" for a card that was simply not there any more. A walk that says
+         NOT WALKED is honest; a walk that says it for the wrong reason wastes
+         the state it was written to enter. */
+      await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(6_000);
+      if (!(await openCardAgain(page))) {
+        console.log(`  ${what.padEnd(22)} NOT WALKED — no card to open it from`);
+        continue;
+      }
       try {
         await open();
         await page.waitForTimeout(1_500);
         await walkSurface(cdp, page, what, seen, ask);
       } catch {
         console.log(`  ${what.padEnd(22)} NOT WALKED — it did not open`);
-      }
-      /* back to the card for the next one, since each of these replaces it */
-      await page.keyboard.press("Escape");
-      await page.waitForTimeout(800);
-      if ((await page.evaluate(() => document.querySelectorAll(".jar-panel").length)) === 0) {
-        await openCardAgain(page);
       }
     }
   } else {
@@ -603,11 +614,23 @@ async function surfaces(
 
   /* HEADQUARTERS, REACHED FOR. Its four acts are revealed by hover and by
      focus-within, and nothing else in this walk hovers anything — which is
-     exactly why they read as dead until now. */
+     exactly why they read as dead until now.
+
+     THE POINTER IS MOVED RATHER THAN THE ELEMENT HOVERED. `.jar-hq` carries
+     `pointer-events: none` so the world underneath stays draggable, and
+     Playwright's `hover()` refuses an element that cannot take a pointer —
+     which is the same fact that made `:hover` unable to reveal those acts in
+     the product until it was fixed. Moving the mouse to the coordinates
+     hovers whatever is really there. */
   try {
-    await page.locator(".jar-hq-inner, .jar-hq").first().hover({ timeout: 6_000 });
-    await page.waitForTimeout(1_200);
-    await walkSurface(cdp, page, "headquarters reached for", seen, ask);
+    const box = await page.locator(".jar-poster, .jar-hq-inner").first().boundingBox();
+    if (box) {
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.waitForTimeout(1_400);
+      await walkSurface(cdp, page, "headquarters reached for", seen, ask);
+    } else {
+      console.log("  headquarters reached for  NOT WALKED — nothing to reach for");
+    }
   } catch {
     console.log("  headquarters reached for  NOT WALKED");
   }

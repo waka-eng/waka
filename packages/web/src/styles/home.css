@@ -2231,9 +2231,6 @@
   /* the caret is the only new mark on the surface */
   caret-color: var(--jar-ink);
 }
-.jar-panel-edit:focus {
-  outline: none;
-}
 /* the one honest degradation: the rest never arrived, said once and quietly */
 .jar-panel-note {
   margin: var(--sp-10) 0 0;
@@ -2281,10 +2278,6 @@
 .jar-panel-act:hover {
   color: var(--jar-ink);
 }
-.jar-panel-act[disabled] {
-  cursor: default;
-  opacity: 0.45;
-}
 .jar-panel-act--waiting {
   text-decoration: none;
   cursor: default;
@@ -2321,9 +2314,7 @@
   user-select: text;
   -webkit-user-select: text;
 }
-.jar-reflect-box:focus {
-  background: var(--jar-row-hover);
-}
+
 
 /* ---------- skeleton / failure whispers ---------- */
 .jar-skel {
@@ -3379,6 +3370,37 @@
      well declared up in `product` would lose all three and come out as a flat
      full-bleed strip — the same collision that ate the font size, in the same
      place, for the same reason. */
+  /* AND THE ANSWER BOX'S OWN SHAPE, for the same reason and in the same
+     breath. `chrome.css` gives every bare `textarea` `padding: 9px 0` and
+     `border-radius: 0` from the `chrome` layer, so the box declared up in
+     `product` came out with NO SIDE PADDING AT ALL — the person's words
+     touching both edges of the sheet. Measured 2026-08-26: `padding: 9px 0px`
+     against the `12px 14px` it asks for.
+
+     Sweeping the siblings this time rather than fixing the one that was
+     reported: the tint below, this shape, and the drawer's well underneath
+     are three faces of one collision, and the first two were found only
+     because the third had already been fixed and written up. */
+  .jar-reflect-box {
+    padding: var(--sp-12) var(--sp-14);
+    border-radius: 14px;
+    background: var(--jar-row);
+  }
+  /* THE ANSWER BOX LIGHTS WHEN YOU ARE IN IT — and it had stopped.
+     `.jar-reflect-box:focus { background: var(--jar-row-hover) }` was written
+     in `product`, and `chrome.css` gives every bare `textarea` a
+     `background: none` from the `chrome` layer, which beats it regardless of
+     specificity. So focusing the box to answer a memory did nothing at all,
+     and had done nothing for as long as both rules existed.
+
+     This is the SAME COLLISION the comment below describes for the drawer's
+     well and the font size — the third time it has been found in this file.
+     It was fixed twice by moving one rule into this layer and never once by
+     sweeping for its siblings, which is why there was a third. `e2e:dead-css`
+     found it by asking which rule actually won the property. */
+  .jar-reflect-box:focus {
+    background: var(--jar-row-hover);
+  }
   .jar-mouth-slot--note .jar-mouth-field {
     box-sizing: border-box;
     width: calc(100% - 40px);

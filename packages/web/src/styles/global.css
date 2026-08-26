@@ -407,9 +407,6 @@
  * on the transition fading rather than snapping.
  * ---------------------------------------------------------------------*/
 
-* {
-  box-sizing: border-box;
-}
 
 html,
 body {
@@ -788,13 +785,6 @@ body.dropped .bg-blob.b3 {
  * future face swaps cascade automatically.
  * ---------------------------------------------------------------------*/
 
-.login-shell {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-6);
-}
 
 .login-card {
   width: 100%;
@@ -809,13 +799,6 @@ body.dropped .bg-blob.b3 {
   margin: 0 0 var(--sp-14) 0;
 }
 
-.login-title {
-  margin: 0 0 var(--sp-6) 0;
-  font-family: var(--font-serif);
-  font-weight: 400;
-  font-size: 36px;
-  letter-spacing: -0.01em;
-}
 
 .login-title em {
   font-style: italic;
@@ -843,17 +826,6 @@ body.dropped .bg-blob.b3 {
 }
 
 
-.field-input {
-  font-family: inherit;
-  font-size: var(--t-body);
-  color: var(--ink);
-  background: transparent;
-  border: var(--border-hairline);
-  border-radius: var(--radius-none);
-  padding: var(--space-3) 14px;
-  outline: none;
-  transition: border-color var(--duration-fast) var(--ease-standard);
-}
 
 .field-input:focus {
   border-color: var(--ink);
@@ -887,9 +859,6 @@ body.dropped .bg-blob.b3 {
   padding: 10px var(--space-3);
 }
 
-.profile-card {
-  max-width: 520px;
-}
 
 .profile-header {
   display: flex;
@@ -1031,18 +1000,6 @@ body.dropped .bg-blob.b3 {
 }
 
 
-.btn-primary {
-  background: var(--ink);
-  color: var(--bg);
-  border: 1px solid var(--ink);
-  padding: 14px var(--space-4);
-  cursor: pointer;
-  transition:
-    background var(--duration-fast) var(--ease-standard),
-    color var(--duration-fast) var(--ease-standard),
-    border-color var(--duration-fast) var(--ease-standard),
-    opacity var(--duration-fast) var(--ease-standard);
-}
 
 .btn-primary:hover:not(:disabled) {
   background: transparent;
@@ -1158,12 +1115,6 @@ body.dropped .bg-blob.b3 {
  * "or" divider between OAuth and the email/password form.
  * ---------------------------------------------------------------------*/
 
-.login-divider {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  margin: 0 0 var(--sp-18) 0;
-}
 
 .login-divider__line {
   flex: 1;
@@ -1687,9 +1638,7 @@ textarea {
   transition: color var(--dur) var(--ease);
 }
 
-.profile-tab:hover {
-  color: var(--ink-2);
-}
+
 
 
 .profile-tab:focus-visible {
@@ -1702,15 +1651,6 @@ textarea {
   animation: profile-room-in var(--dur-slow) var(--ease) both;
 }
 
-/*
-  `hidden` is a UA-stylesheet `display: none`, and any explicit `display` in
-  our own CSS outranks it — a panel declaring `display: grid` stays visible
-  while claiming to be hidden. Reassert it at a specificity that wins.
-*/
-.profile-panel[hidden],
-.profile-room[hidden] {
-  display: none;
-}
 
 @keyframes profile-room-in {
   from {
@@ -1723,12 +1663,6 @@ textarea {
   }
 }
 
-/* Deleting an account should not sit level with a language picker. */
-.profile-danger-panel {
-  margin-top: var(--space-6);
-  padding-top: var(--space-5);
-  border-top: 1px solid var(--rule);
-}
 
 @media (prefers-reduced-motion: reduce) {
   .profile-tabs-indicator {
@@ -1769,11 +1703,6 @@ textarea {
   border-top: 1px solid var(--rule);
 }
 
-/* The fixed left column: what kind of thing this row is, said in a word. */
-.profile-memory-badge {
-  flex: 0 0 52px;
-  color: var(--ink-3);
-}
 
 /* Inline, borderless name. The underline appears only when editing, so a
    resting row reads as text and a touched one declares itself. */
@@ -1838,14 +1767,6 @@ textarea {
   justify-content: flex-end;
 }
 
-.profile-memory-action {
-  border: 0;
-  padding: var(--sp-6) var(--sp-2);
-  background: transparent;
-  color: var(--ink-3);
-  cursor: pointer;
-  transition: color var(--dur-fast) var(--ease);
-}
 
 .profile-memory-action:hover:not(:disabled) {
   color: var(--ink-1);
