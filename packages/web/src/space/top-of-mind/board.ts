@@ -112,7 +112,29 @@ export function formingWords(
  * is forming.
  */
 export interface WallChrome {
-  /** the wall's name, and nothing else in that slot, ever */
+  /**
+   * NOTHING READS THIS ANY MORE, and the render is right rather than broken.
+   *
+   * It used to be the wall's name under a rule that nothing else may ever
+   * stand in that slot. The founder overruled that on 2026-08-25 — "this
+   * should always say TOP OF MIND at the top no matter what room" — because
+   * the name is already on screen twice, in the pill at the top left and on
+   * the axis below, so the slot was spending itself on repetition. The JSX
+   * now writes those words literally and never consults this field.
+   *
+   * The comment that used to sit here still said "the wall's name, and
+   * nothing else in that slot, ever", which is the opposite of what the
+   * product does. An audit chasing dead fields read that contract, measured a
+   * room's wall saying `top of mind` where its own name should be, and came
+   * within one edit of reverting the ruling as a bug. A stale contract is
+   * worse than none: it makes correct code look broken and invites exactly
+   * that repair.
+   *
+   * Left in place rather than deleted because the ruling is a choice and
+   * choices get revisited; the plumbing that would serve the other one costs
+   * five object literals. `wall-chrome.test.ts` parks it explicitly so the
+   * gate that watches for newly-dark fields stays green and still watches.
+   */
   eyebrow: string;
   text: string | null;
   /**

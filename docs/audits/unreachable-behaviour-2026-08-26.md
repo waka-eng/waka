@@ -2,7 +2,8 @@
 
 **Date:** 2026-08-26
 **Found by:** following the clock bug in `docs/audits/first-run-2026-08-26.md`
-**Status:** reported, not changed. Each is a founder call, for reasons below.
+**Status:** reported, not changed — each is a founder call, for reasons below.
+The class is now gated: `packages/web/test/wall-chrome.test.ts`.
 
 ## Why these escaped every dead-code gate
 
@@ -82,7 +83,46 @@ The `else` branch runs every frame:
 Deleting the `if`/`else` pair as one dead block would remove a live
 per-frame assignment. The dead half is the `if` body only.
 
-## 3. What this says about the gates
+## 3. A third field, and a near-miss worth more than the finding
+
+`WallChrome.eyebrow` is written in five places — including `eyebrow: name` for
+rooms and agents — compared in the memo, and **never read**. The JSX writes
+the words literally:
+
+```jsx
+<div className="jar-eyebrow jar-label">top of mind</div>
+```
+
+Measured: standing in a room called *"the reading room 39066"*, the
+headquarters eyebrow reads `top of mind`. The field's own doc comment said:
+
+> *"the wall's name, and nothing else in that slot, ever"*
+
+So: a documented contract, a render that ignores it, and a browser
+confirming the room's name is missing from a slot that promises to hold it.
+Three independent signals pointing at a bug, and a one-line fix ready to
+write.
+
+The comment immediately above the JSX says:
+
+> *(founder, 2026-08-25: "this should always say TOP OF MIND at the top no
+> matter what room")*
+
+The render is **right**. The name is already on screen twice — in the pill at
+the top left and on the axis below — so the slot was spending itself on
+repetition. What was wrong was the field's contract, which still described the
+world before the ruling.
+
+**A stale contract is worse than no contract**: it makes correct code look
+broken and invites exactly the repair that undoes a decision. The comment on
+`WallChrome.eyebrow` now records the ruling instead of contradicting it. The
+render is untouched.
+
+This is the second time in two audits that a finding dissolved on reading the
+line above it — the mouth's placeholder was the first. Both times the code was
+right and the surrounding prose was what needed fixing.
+
+## 4. What this says about the gates
 
 Both of these would pass every check in the repo today, and both are the same
 shape as findings the last two audits produced by other means:
@@ -93,8 +133,23 @@ shape as findings the last two audits produced by other means:
 | first run | a fetch that lands and shows nothing |
 | this one | a value that is computed and displays nothing |
 
-A gate for it is narrower than it sounds: **every field of `WallChrome` must
-be read somewhere in JSX.** That one assertion would have caught finding 1 the
-day it appeared. It is not built here because building a third instrument in
-one sitting is how instruments stop being trusted — but it is the smallest
-thing that would close this class, and it is cheap.
+**It is built now** — `packages/web/test/wall-chrome.test.ts`, three
+assertions, no browser, in `pnpm -r test`:
+
+- every field of `WallChrome` is read through a render binding (`c.field`,
+  `c?.field`), or is listed in `DARK_BY_DECISION` with the ruling that made it
+  dark and where that ruling is written down;
+- nothing listed as deliberately dark is being drawn after all — an excuse
+  that has quietly become wrong is a gate lying in the reassuring direction;
+- the parser can still find the interface, so a silent zero-field sweep can
+  never report a clean bill.
+
+Deliberately *not* "the field appears anywhere": `prev.forming === next.forming`
+in the memo's equality check is a read, and counting it would have let the
+exact bug this gate exists for walk straight through.
+
+Sabotaged four ways before being trusted: removing the only `c?.empty` read
+(caught), rendering a parked field (caught), renaming the interface outright
+(caught), and renaming it to `WallChromeX` — which **passed**, because
+`indexOf` has no word boundary and the prefix still matched. The floor was
+testing something narrower than it claimed. Fixed, re-sabotaged, caught.
