@@ -2460,7 +2460,75 @@ function HomeExperience(): JSX.Element {
    * (`rebuildBoard`, `restoreLead`, and the edit path), and a room rehydrates
    * when you travel toward it. Only the three genuinely frozen layers are here.
    */
+  /**
+   * TAKE IN A BOARD THAT ARRIVED AFTER MOUNT — all three pieces, not two.
+   *
+   * The boot path sets THREE things from one `loadTopOfMind`: the artifact,
+   * its entries, and `adopted` — which is the one the poster actually reads.
+   * The first version of the refetch below set the first two and the poster
+   * went on saying `Forming — nothing adopted yet` with a built board sitting
+   * in state behind it. The request fired at +6.1s, the fix looked done, and
+   * the screen was unchanged; only watching the screen rather than the network
+   * caught it.
+   *
+   * ONLY WHEN THE POSTER IS EMPTY. `adopted` is read in exactly one place —
+   * your own wall's chrome — and the comment on the room-ambition bug a few
+   * hundred lines down says why this matters: a poster that repaints seconds
+   * later "while you were reading it" breaks the law that the world never
+   * moves unless you moved it. Filling a blank poster with the answer to what
+   * you just typed is not that; replacing a sentence someone is mid-way
+   * through would be. So entries and artifact always refresh, and the poster
+   * only ever fills, never swaps.
+   */
+  const absorbBoard = useCallback((tom: TopOfMind | null) => {
+    setTopOfMind(tom);
+    setNotes(tom?.entries ?? []);
+    /* AND THE CLOCK HAS TO KNOW THE ENTRY EXISTS.
+       This is the whole reason the first two versions of this did nothing
+       visible. `deriveAmbition` gates on `adopted.createdMs <= T`, and `T`
+       starts at `Date.now()` when the page loads and afterwards only ever
+       advances to a MEMORY's `capturedMs`. A board entry is derived about
+       three seconds after the memory it comes from, so it is permanently in
+       the future of a clock that has never heard of it — the poster was
+       right to hide it, and `setAdopted` fired into a world that then
+       correctly ignored it.
+
+       The operation is line-for-line the one the pour loop already does for
+       layer 1, and that comment states the rule this obeys: "this only ever
+       moves `TRef` forward, and only to something that exists." An entry the
+       server has built exists. Winding BACK is untouched, because `Math.max`
+       cannot move a clock backwards — deliberately no dial guard here, for
+       the same reason the pour loop has none: the interaction between a wound
+       dial and something newly arrived is one behaviour, and it should not
+       have two answers depending on which layer arrived.
+
+       Three versions of this fix looked correct and changed nothing on
+       screen. The first set two of the three states the boot path sets; the
+       second added the third; only watching the POSTER rather than the
+       network or the state found the clock. */
+    for (const e of tom?.entries ?? []) TRef.current = Math.max(TRef.current, e.createdMs);
+    setAdopted((cur) => {
+      if (cur) return cur;
+      const lead = tom?.entries.find((e: Entry) => e.pinned) ?? tom?.entries[0];
+      return lead
+        ? { ambition: lead.body, groupName: null, createdMs: lead.createdMs }
+        : cur;
+    });
+  }, []);
+
   const AWAY_LONG_ENOUGH_MS = 30_000;
+  /**
+   * HOW LONG A KEEP TAKES TO BECOME A READING, with margin.
+   *
+   * Measured, not guessed: `GET /api/top-of-mind` carried a rebuilt artifact
+   * three seconds after a first save on the local stack. Six is that, doubled,
+   * because being early means fetching the board the person already has and
+   * showing them nothing — the exact failure this is here to end.
+   *
+   * Being LATE is cheap by comparison: the poster simply waits for the next
+   * thing the person does. So the error is deliberately biased late.
+   */
+  const DERIVATION_SETTLE_MS = 6_000;
   useEffect(() => {
     let hiddenAt: number | null = null;
     const onVisibility = () => {
@@ -2478,6 +2546,24 @@ function HomeExperience(): JSX.Element {
         loadInspirations().then((rows) => setInspirations(rows)),
         loadAgentWalls().then((rows) => setAgents(rows)),
         readSkyRef.current(),
+        /* LAYER 3 WAS THE ONE LEFT OUT, and it is the layer that changes most.
+           This handler exists to catch the world up after an absence and it
+           refreshed layer 1, layer 2 and the agent walls — every layer except
+           the board, which is fetched exactly once on mount and never again.
+
+           So a person who kept something, went away, and came back found their
+           memories updated, their patterns updated, and the poster still
+           showing what it showed before they typed. Measured: the server has a
+           built top of mind THREE SECONDS after a first save, and the world
+           does not show it within two minutes without a full page load.
+
+           `setNotes` alongside `setTopOfMind` because the mount path sets both
+           from one fetch — the canon's "exactly one artifact per profile"
+           showing up as exactly one request — and setting only one of them
+           here would leave the poster and the board's own entries disagreeing.
+
+           Found by `e2e:first-sixty --stage kept`. */
+        loadTopOfMind().then((tom) => absorbBoard(tom)),
       ]);
     };
     document.addEventListener("visibilitychange", onVisibility);
@@ -8649,6 +8735,35 @@ function HomeExperience(): JSX.Element {
           finalizeAttachment({ type: "link", inspirationId: made.id, url }).catch(
             () => undefined,
           );
+
+        /* AND THEN ASK WHAT IT MADE OF IT.
+           A keep enqueues derivation, and the server had a rebuilt top of mind
+           THREE SECONDS later when this was measured. The client never asked.
+           So the product did its one trick, in three seconds, and hid it until
+           the person happened to reload — which a person in their first minute
+           has no reason to do. They save the first thing they have ever told
+           it, watch nothing happen, and conclude nothing did.
+
+           THE LAW SAYS THE WORLD NEVER MOVES UNLESS THE USER MOVED IT, and
+           this obeys it: the user pressed save, and this is that press
+           landing. It is the same shape `restoreLead` already uses one screen
+           away — `restoreTopOfMindEntry(id).then(() => loadTopOfMind())` — a
+           person's act, and then the board asked what it says now.
+
+           ONE fetch, not a poll. A poll would be the world moving on its own,
+           which is the thing the law forbids. If the derivation is slower than
+           the settle below, the poster waits for the person's next move, which
+           is the right way round.
+
+           The catch is silent on purpose and it is a READ, not an act: when
+           this fails the poster keeps showing what was last known, which is
+           true rather than quiet. The failure-path audit's own rule. */
+        window.setTimeout(() => {
+          if (offlineRef.current) return;
+          loadTopOfMind()
+            .then((tom) => absorbBoard(tom))
+            .catch(() => undefined);
+        }, DERIVATION_SETTLE_MS);
 
         /* KEPT, AND THEN ASKED ABOUT (founder, 2026-08-25).
            You cannot reflect on something that does not exist yet — a

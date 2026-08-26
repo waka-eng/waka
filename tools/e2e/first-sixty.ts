@@ -54,20 +54,47 @@
  */
 import { chromium, type BrowserContext, type Page, type Route } from "playwright";
 
+/**
+ * TWO EMPTIES, NOT ONE.
+ *
+ *   empty  signed up, nothing created. The screen every person sees first.
+ *   kept   ONE memory saved and nothing else. The person did the single thing
+ *          the product asked, and now decides whether to come back.
+ *
+ * The second is not a smaller version of the first. `docs/generation.md` puts
+ * promotion at three pieces of evidence, so after one save nothing has formed
+ * and nothing CAN have — the question is whether the product says so, or
+ * whether it looks identical to a product that is broken.
+ *
+ * One memory, deliberately, and not the five `journeys.ts` keeps to make its
+ * orb sweep land. Keeping five to make the walk easier would measure a state
+ * no real person passes through.
+ */
+type Stage = "empty" | "kept";
+
 interface Args {
   baseUrl: string;
   headed: boolean;
+  stage: Stage;
 }
 
 function parseArgs(argv: string[]): Args {
-  const args: Args = { baseUrl: "http://127.0.0.1:3010", headed: false };
+  const args: Args = { baseUrl: "http://127.0.0.1:3010", headed: false, stage: "empty" };
   for (let i = 0; i < argv.length; i += 1) {
     const [flag, inline] = argv[i]!.split(/=(.*)/s);
     const take = (): string => inline ?? argv[++i] ?? "";
     if (flag === "--base-url") args.baseUrl = take().replace(/\/+$/, "");
     else if (flag === "--headed") args.headed = true;
+    else if (flag === "--stage") {
+      const v = take();
+      if (v !== "empty" && v !== "kept") {
+        console.error(`[first-sixty] --stage must be empty or kept (got ${v})`);
+        process.exit(2);
+      }
+      args.stage = v;
+    }
     else if (flag === "--help" || flag === "-h") {
-      console.log("Usage: pnpm e2e:first-sixty [--base-url <url>] [--headed]");
+      console.log("Usage: pnpm e2e:first-sixty [--base-url <url>] [--stage empty|kept] [--headed]");
       process.exit(0);
     } else {
       console.error(`[first-sixty] unknown option ${flag}`);
@@ -188,8 +215,53 @@ async function controls(page: Page): Promise<string[]> {
 
 interface Surface {
   name: string;
-  /** Reach it from a freshly loaded, EMPTY world. Throws if it is not there. */
+  /** Reach it from a freshly loaded world. Throws if it is not there. */
   open: (page: Page, base: string) => Promise<void>;
+  /** Which stages this surface is walked in. Both, unless it says otherwise. */
+  stages?: Stage[];
+}
+
+/** Say one thing into the mouth. The whole of what the `kept` stage does. */
+async function keepOne(page: Page, base: string, text: string): Promise<void> {
+  if (new URL(page.url()).pathname !== "/") {
+    await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(6_000);
+  }
+  await page.locator(".jar-mouth-rest").first().click({ timeout: 8_000 });
+  await page.waitForTimeout(800);
+  await page.fill('textarea[aria-label="capture inspiration"]', text);
+  await page.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click({
+    timeout: 8_000,
+  });
+}
+
+/**
+ * OPEN THE ONE MEMORY THERE IS, BY FINDING ITS ORB.
+ *
+ * `journeys.ts` keeps FIVE before it sweeps, and says why: one orb on a whole
+ * field is a needle. This stage has exactly one on purpose, so the sweep may
+ * legitimately fail to land — and if it does, that is the WALK missing, not
+ * the product hiding anything. Reported as `NOT AIMED` rather than
+ * `NOT THERE`, because the two mean opposite things and conflating them would
+ * turn a limitation of this file into a finding about the product.
+ */
+async function openTheMemory(page: Page): Promise<boolean> {
+  try {
+    await page.locator(".jar-saved").first().click({ timeout: 10_000 });
+  } catch {
+    return false;
+  }
+  await page.waitForTimeout(4_000);
+  for (const y of [390, 350, 430, 310, 470, 270, 510, 230, 550, 590]) {
+    for (let i = 0; i < 34; i += 1) {
+      await page.mouse.click(140 + i * 26, y);
+      await page.waitForTimeout(220);
+      if ((await page.locator(".jar-panel").count()) === 0) continue;
+      await page.waitForTimeout(1_000);
+      if ((await page.locator(".jar-panel").count()) > 0) return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -266,11 +338,23 @@ const SURFACES: Surface[] = [
       await page.waitForTimeout(2_500);
     },
   },
+  {
+    name: "the one memory, opened",
+    stages: ["kept"],
+    open: async (page) => {
+      if (!(await openTheMemory(page))) throw new Error("NOT AIMED");
+    },
+  },
 ];
 
 interface Reading {
   name: string;
-  verdict: "SAYS" | "BARE" | "BLANK" | "NOT THERE";
+  /**
+   * `NOT THERE` means the surface does not exist for this account.
+   * `NOT AIMED` means THIS FILE could not reach it — a different claim
+   * entirely, and one that is about the walk rather than about the product.
+   */
+  verdict: "SAYS" | "BARE" | "BLANK" | "NOT THERE" | "NOT AIMED";
   prose: string[];
   controlCount: number;
   detail: string;
@@ -279,8 +363,12 @@ interface Reading {
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   console.log(
-    "[first-sixty] An account with nothing in it. Nothing is created at any point.\n" +
-      "              Of each surface: does it say anything to someone who has never been here?\n",
+    args.stage === "empty"
+      ? "[first-sixty] An account with nothing in it. Nothing is created at any point.\n" +
+          "              Of each surface: does it say anything to someone who has never been here?\n"
+      : "[first-sixty] ONE memory kept, and nothing else. Promotion needs three pieces of\n" +
+          "              evidence, so nothing has formed and nothing can have yet. Does the\n" +
+          "              product say so, or does it look like a product that is broken?\n",
   );
 
   const browser = await chromium.launch({
@@ -294,13 +382,58 @@ async function main(): Promise<void> {
     const page = await ctx.newPage();
     await signUp(page, args.baseUrl);
 
-    /* WHAT THE WORLD SAYS BEFORE ANYTHING IS TOUCHED, held aside so every
+    if (args.stage === "kept") {
+      /* THE ONE READING A RELOAD CANNOT TAKE.
+         The world's acknowledgement of a save is spoken by the character and
+         clears itself after four seconds. It is also the single most important
+         sentence in the product's first minute — it is the only evidence a
+         person has that the thing they typed went anywhere. Every other
+         surface below is walked from a fresh load; this one has to be caught
+         where it happens, diffed against the empty world it replaced. */
+      const beforeSave = new Set(await visibleLines(page, 3, 500));
+      await keepOne(page, args.baseUrl, "I cancelled dinner again tonight and felt relieved rather than sorry.");
+      /* LONG ENOUGH TO OUTLAST THE DERIVATION, which is the whole point of
+         this stage. The client waits `DERIVATION_SETTLE_MS` (6s) after a keep
+         before asking the board what it says now, and the answer lands around
+         eight seconds in. A four-second window read the world before its one
+         real answer arrived and called it BARE — measuring the walk's
+         patience rather than the product's.
+
+         A REALISTIC SENTENCE, TOO. This said "the first thing I ever said to
+         this" — a remark about the app, which no person types — and the model
+         built a confident claim about the person's RELATIONSHIPS out of it.
+         That looked like a serious finding for about a minute. Run against
+         three sentences a person might actually write, every derivation was
+         grounded in what was said. An input nobody would give produces an
+         output nobody should be shown, and reporting the second without
+         noticing the first would have been the worst mistake available. */
+      const afterSave = await visibleLines(page, 12, 1_200);
+      const said = afterSave.filter((l) => !beforeSave.has(l));
+      const prose = said.filter(isProse);
+      readings.push({
+        name: "the moment after the first save",
+        verdict: said.length === 0 ? "BLANK" : prose.length > 0 ? "SAYS" : "BARE",
+        prose,
+        controlCount: (await controls(page)).length,
+        detail: prose.length === 0 ? said.slice(0, 6).join(" · ") : "",
+      });
+      await page.waitForTimeout(3_000);
+    }
+
+    /* WHAT THE WORLD SAYS BEFORE ANY SURFACE IS OPENED, held aside so every
        later surface can be reported on what IT added rather than on the
        backdrop it is drawn over. Without this the topbar's words would make
-       every panel look like it said something. */
+       every panel look like it said something.
+
+       Taken AFTER the stage's setup, so in `kept` the backdrop is the world
+       with one memory in it — otherwise the archive door's own count would be
+       reported as something the archive door said. */
+    await page.goto(`${args.baseUrl}/`, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(6_000);
     const backdrop = new Set(await visibleLines(page));
 
     for (const surface of SURFACES) {
+      if (surface.stages && !surface.stages.includes(args.stage)) continue;
       /* FROM A FRESH LOAD EVERY TIME. The same lesson dead-css paid for: a
          surface left standing by the previous one is state this walk cannot
          reason about, and Escape was measurably not enough. */
@@ -311,18 +444,23 @@ async function main(): Promise<void> {
       try {
         await surface.open(page, args.baseUrl);
       } catch (err) {
+        const why = err instanceof Error ? err.message.split("\n")[0]! : String(err);
         readings.push({
           name: surface.name,
-          verdict: "NOT THERE",
+          /* THE WALK MISSING IS NOT THE PRODUCT HIDING. `NOT AIMED` is thrown
+             by a reach that knows it failed to aim — the orb sweep — and must
+             never be read as a statement about what exists. */
+          verdict: why === "NOT AIMED" ? "NOT AIMED" : "NOT THERE",
           prose: [],
           controlCount: 0,
-          detail: err instanceof Error ? err.message.split("\n")[0]! : String(err),
+          detail: why,
         });
         continue;
       }
 
       const lines = await visibleLines(page);
-      const own = surface.name === "the world, just arrived" ? lines : lines.filter((l) => !backdrop.has(l));
+      const own =
+        surface.name === "the world, just arrived" ? lines : lines.filter((l) => !backdrop.has(l));
       const prose = own.filter(isProse);
       const controlCount = (await controls(page)).length;
       const verdict =
@@ -346,11 +484,21 @@ async function main(): Promise<void> {
   const bare = readings.filter((r) => r.verdict === "BARE");
   const blank = readings.filter((r) => r.verdict === "BLANK");
   const absent = readings.filter((r) => r.verdict === "NOT THERE");
+  const unaimed = readings.filter((r) => r.verdict === "NOT AIMED");
   console.log(
-    `\n[first-sixty] ${readings.length} surfaces an empty account can reach — ` +
+    `\n[first-sixty] stage=${args.stage}: ${readings.length} surfaces walked — ` +
       `${says.length} say something, ${bare.length} show only furniture, ` +
-      `${blank.length} are blank, ${absent.length} are not reachable at all.`,
+      `${blank.length} are blank, ${absent.length} do not exist for this account.`,
   );
+  if (unaimed.length > 0) {
+    console.log(
+      `              ${unaimed.length} the walk could not aim at — a limit of this file, ` +
+        `not a reading: ${unaimed.map((r) => r.name).join(", ")}`,
+    );
+  }
+  /* NOT AIMED is deliberately NOT a failure: it says this walk could not
+     reach something, which is a reason to improve the walk rather than a
+     verdict about the product. */
   process.exit(bare.length + blank.length > 0 ? 1 : 0);
 }
 
