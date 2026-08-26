@@ -32,6 +32,15 @@
  *   4. Every control clears WCAG 2.2 AA's 24x24, and the ACTS — the mouth and
  *      the verbs under it — clear 44. See the comment in `home.css` for why
  *      the line is drawn in two places rather than at 44 for everything.
+ *   5. No two controls sit closer than 44px centre to centre unless BOTH are
+ *      44px in both axes. Size alone does not catch the shape that actually
+ *      costs someone something: two controls that each clear the floor, one
+ *      of which takes a memory down, close enough that one absorbs a miss
+ *      meant for the other. This rule used to live in `e2e:journeys` as
+ *      `the-hand`, which could not emulate touch — it resized a fine-pointer
+ *      page, so every control whose size comes from `@media (pointer: coarse)`
+ *      measured at its DESKTOP size and the walk reported crowding that no
+ *      phone has. It is asked here, where the pointer is real.
  *
  * ── WHY IT SIGNS UP AND KEEPS ──────────────────────────────────────────────
  *
@@ -39,6 +48,15 @@
  * the card and every modal only exist once something has been kept. The first
  * version of this walk measured a fresh account, found almost nothing on
  * screen, and reported it clean. It keeps three memories before it measures.
+ *
+ * AND IT OPENS ONE OF THEM. For its whole first life this walk measured the
+ * door, the world at rest and the mouth open — never a card. The card is
+ * where the smallest controls in the product live, and they were all under
+ * the floor: `reflect` and `delete` at 37x15, the two stepping carets at
+ * 18x14 sitting 32px apart. A gate that advertises "the product on a phone"
+ * and never opens the thing you tap a memory to see is not measuring the
+ * product. Opening it costs a coordinate sweep, because a keepsake is drawn
+ * on a canvas and has no selector to click.
  *
  *     pnpm e2e:phone              # every check must pass
  *     pnpm e2e:phone --negative   # each must fail when the defect is put back
@@ -63,6 +81,12 @@ const WCAG_MIN = 24;
 const ACT_MIN = 44;
 /** Below this, mobile Safari zooms the page on focus. */
 const NO_ZOOM = 16;
+/**
+ * The distance below which one target absorbs a miss meant for its neighbour.
+ * Only a pair that is itself 44px in both axes may be closer — two big
+ * targets cannot steal each other's misses.
+ */
+const MIN_APART = 44;
 
 /**
  * The controls a person reaches for one-handed while holding the phone.
@@ -78,7 +102,7 @@ const ACTS = ["jar-mouth-rest", "jar-where-on", "jar-where-off"];
 interface Finding {
   view: string;
   surface: string;
-  kind: "overflow" | "covered" | "zoom" | "target";
+  kind: "overflow" | "covered" | "zoom" | "target" | "crowded" | "unmeasured";
   detail: string;
 }
 
@@ -88,8 +112,17 @@ const PROBE = `(() => {
     const cls = typeof e.className === "string" ? e.className.trim().split(/\\s+/).slice(0, 2).join(".") : "";
     return e.tagName.toLowerCase() + (cls ? "." + cls : "");
   };
-  const out = { overflow: [], covered: [], zoom: [], targets: [], scrollW: document.documentElement.scrollWidth, vw };
+  const out = { overflow: [], covered: [], zoom: [], targets: [], crowded: [], scrollW: document.documentElement.scrollWidth, vw };
   const seen = new Set();
+  /* EVERY control, undeduped and with its centre. The crowding rule is about
+     PAIRS, and the seen-set above collapses by name: both stepping carets are
+     a bare button element with no class, so they share one name and deduping
+     would hide the one pair this rule was written for.
+     NO BACKTICKS IN HERE. This whole probe is a template literal, and the
+     first version of this comment quoted an identifier the way the rest of
+     the file does, which closed the literal and turned the JavaScript below
+     it into TypeScript the compiler tried to parse. */
+  const all = [];
   for (const e of document.querySelectorAll("*")) {
     const r = e.getBoundingClientRect();
     if (r.width === 0 || r.height === 0) continue;
@@ -104,6 +137,15 @@ const PROBE = `(() => {
 
     const tappable = e.matches("button, a, input, textarea, select, [role=button]");
     if (tappable) {
+      all.push({
+        name:
+          (e.getAttribute("aria-label") || e.innerText || name).trim().replace(/\\s+/g, " ").slice(0, 26) ||
+          name,
+        w: Math.round(r.width),
+        h: Math.round(r.height),
+        cx: r.left + r.width / 2,
+        cy: r.top + r.height / 2,
+      });
       if (!seen.has("t" + name)) {
         seen.add("t" + name);
         out.targets.push({ name, w: Math.round(r.width), h: Math.round(r.height) });
@@ -125,6 +167,21 @@ const PROBE = `(() => {
       out.zoom.push(name + " at " + cs.fontSize);
     }
   }
+
+  for (let i = 0; i < all.length; i++) {
+    for (let j = i + 1; j < all.length; j++) {
+      const a = all[i], b = all[j];
+      if (a.w >= ${MIN_APART} && a.h >= ${MIN_APART} && b.w >= ${MIN_APART} && b.h >= ${MIN_APART}) continue;
+      const d = Math.hypot(a.cx - b.cx, a.cy - b.cy);
+      if (d >= ${MIN_APART}) continue;
+      const key = "p" + a.name + "|" + b.name;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.crowded.push(
+        a.name + " (" + a.w + "x" + a.h + ") & " + b.name + " (" + b.w + "x" + b.h + ") " + Math.round(d) + "px apart",
+      );
+    }
+  }
   return JSON.stringify(out);
 })()`;
 
@@ -133,6 +190,7 @@ interface Probe {
   covered: string[];
   zoom: string[];
   targets: Array<{ name: string; w: number; h: number }>;
+  crowded: string[];
   scrollW: number;
   vw: number;
 }
@@ -143,6 +201,7 @@ async function read(page: Page, view: string, surface: string): Promise<Finding[
   for (const d of p.overflow) found.push({ view, surface, kind: "overflow", detail: d });
   for (const d of p.covered) found.push({ view, surface, kind: "covered", detail: d });
   for (const d of p.zoom) found.push({ view, surface, kind: "zoom", detail: d });
+  for (const d of p.crowded) found.push({ view, surface, kind: "crowded", detail: d });
   if (p.scrollW > p.vw + 1) {
     found.push({
       view,
@@ -166,6 +225,36 @@ async function read(page: Page, view: string, surface: string): Promise<Finding[
   return found;
 }
 
+/**
+ * A KEEPSAKE IS DRAWN ON A CANVAS AND HAS NO SELECTOR, so the only way in is
+ * to tap where one might be. `.jar-saved` opens the field of them; the sweep
+ * then walks the middle band of the screen until a `.jar-panel` appears. The
+ * y offsets are fractions of the viewport rather than pixels so the same
+ * sweep works at 844 and at 640.
+ */
+async function openCard(page: Page, view: View): Promise<boolean> {
+  const panels = async (): Promise<number> =>
+    (await page.evaluate(() => document.querySelectorAll(".jar-panel").length)) as number;
+  try {
+    await page.locator(".jar-saved").first().tap({ timeout: 20_000 });
+  } catch {
+    return false;
+  }
+  await page.waitForTimeout(4_000);
+  for (const fraction of [0.5, 0.45, 0.55, 0.4, 0.6, 0.35, 0.65, 0.3, 0.7]) {
+    const y = Math.round(view.height * fraction);
+    for (let x = 40; x <= view.width - 40; x += 26) {
+      await page.mouse.click(x, y);
+      await page.waitForTimeout(450);
+      if ((await panels()) === 0) continue;
+      /* it may still be on its way in or on its way back out */
+      await page.waitForTimeout(1_000);
+      if ((await panels()) > 0) return true;
+    }
+  }
+  return false;
+}
+
 async function walk(browser: Browser, view: View, negative: boolean): Promise<Finding[]> {
   const ctx = await browser.newContext({
     viewport: { width: view.width, height: view.height },
@@ -183,7 +272,12 @@ async function walk(browser: Browser, view: View, negative: boolean): Promise<Fi
         s.textContent =
           ".jar-values { top: 10px !important; }" +
           "input, textarea { font-size: 15px !important; }" +
-          ".jar-mouth-rest { padding-top: 0 !important; padding-bottom: 0 !important; }";
+          ".jar-mouth-rest { padding-top: 0 !important; padding-bottom: 0 !important; }" +
+          /* and the card's foot as it shipped: 18x14 carets a thumb's width
+             from `delete`, which is what the crowding rule is here for */
+          ".jar-panel button { min-width: 0 !important; min-height: 0 !important; }" +
+          ".jar-panel-foot button { min-width: 0 !important; min-height: 0 !important; }" +
+          ".jar-panel-foot-c { gap: 2px !important; }";
         document.head.appendChild(s);
       });
     });
@@ -219,6 +313,24 @@ async function walk(browser: Browser, view: View, negative: boolean): Promise<Fi
   await page.locator(".jar-mouth-rest").first().tap();
   await page.waitForTimeout(900);
   found.push(...(await read(page, view.name, "the mouth open")));
+
+  /* AND A MEMORY OPEN. Loaded fresh rather than reached from here: the mouth
+     is open, and the sweep below would spend its first passes closing it. */
+  await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(6_000);
+  if (await openCard(page, view)) {
+    found.push(...(await read(page, view.name, "a memory open")));
+  } else {
+    /* SAID OUT LOUD RATHER THAN PASSED OVER. A sweep that finds nothing looks
+       exactly like a surface with nothing wrong on it, and the difference is
+       the whole value of this walk. */
+    found.push({
+      view: view.name,
+      surface: "a memory open",
+      kind: "unmeasured",
+      detail: "no memory could be opened — the smallest controls in the product went unmeasured",
+    });
+  }
 
   await ctx.close();
   return found;

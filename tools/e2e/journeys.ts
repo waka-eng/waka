@@ -143,9 +143,125 @@ async function signUp(page: Page, base: string): Promise<{ email: string; name: 
 }
 
 /** The flat surfaces navigate by a footer of text buttons. */
+/**
+ * `/profile` IS NOT A FLAT SCREEN IN THE SENSE THAT WAS RETIRED, so this stays.
+ * There is no memory to stand in before you are authenticated, and account
+ * work wants focus traps and plain confirmations that in-layout UI cannot
+ * give. The eleven routes this used to reach — `/capture`, `/inspirations`,
+ * `/signals`, `/principles`, `/top-of-mind`, `/rooms`, `/agents`, `/graph` —
+ * were deleted on 2026-08-25 and their journeys now walk the world instead.
+ */
 async function goSurface(page: Page, base: string, path: string): Promise<void> {
   await page.goto(`${base}${path}`, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(2_500);
+}
+
+/**
+ * KEEPING SOMETHING, THE WAY A PERSON DOES IT NOW.
+ *
+ * This was `goto /capture`, fill `What caught you?`, press `keep`. That screen
+ * is gone; the act lives in the world's mouth, which is where it always
+ * happened for anyone who did not know the flat routes existed.
+ */
+/**
+ * WHAT THE BOTTOM EDGE SAYS IS BEHIND THE DOOR — the world's own count, as
+ * words. `-1` when the door is not on screen, which is the case with nothing
+ * kept yet.
+ */
+async function countInWorld(page: Page): Promise<number> {
+  return (await page.evaluate(() => {
+    const el = document.querySelector(".jar-saved-count");
+    if (!el) return -1;
+    const m = /(\d+)/.exec(el.textContent ?? "");
+    return m ? Number(m[1]) : -1;
+  })) as number;
+}
+
+async function keepInWorld(page: Page, base: string, text: string): Promise<number> {
+  if (!new URL(page.url()).pathname.match(/^\/$/)) {
+    await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(6_000);
+  }
+  await page.locator(".jar-mouth-rest").first().click();
+  await page.waitForTimeout(700);
+  await page.fill('textarea[aria-label="capture inspiration"]', text);
+  await page.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click();
+  /* WHAT THE WORLD SAID, READ WHILE IT IS SAYING IT. The character's voice
+     clears itself after four seconds, so a caller that waits for the keep to
+     settle and THEN reads the page finds the resting label and concludes
+     nothing was acknowledged. Caught exactly that way. */
+  await page.waitForTimeout(4_500);
+  return countInWorld(page);
+}
+
+/**
+ * WHAT THE ARCHIVE HOLDS, ASKED OF THE ARCHIVE.
+ *
+ * `/inspirations` printed the archive as a list and these journeys read the
+ * page's text to ask "is it still there". The world draws the archive as a
+ * FIELD OF ORBS — there is no text to read, by design, and a canvas cannot
+ * answer a question about a phrase.
+ *
+ * So persistence is asked of the same endpoint the world itself reads, in the
+ * page, with the session's own cookie. That is not a weaker claim than the
+ * old one: the flat list was a rendering of exactly this. What the WORLD does
+ * with a keep is a separate claim and has its own journey — `first-keep`
+ * asserts the orb arrives.
+ */
+/**
+ * OPENING A MEMORY, WHICH IN THE WORLD MEANS FINDING ITS ORB.
+ *
+ * The flat list had rows to click. The field has orbs on a canvas, placed by
+ * the frame loop, and nothing outside the page knows where they are — so this
+ * descends through the count and sweeps until a card opens AND STAYS open.
+ *
+ * The "stays" is load-bearing: a closing card lingers in the DOM for 200ms, so
+ * a sweep that stops at the first `.jar-panel` it sees keeps catching the tail
+ * of one an earlier click already dismissed, and then measures an empty field.
+ * Learned by doing exactly that.
+ */
+/**
+ * THE SWEEP IS IN VIEWPORT PIXELS, SO THE VIEWPORT HAS TO BE SAID. The
+ * defaults are the harness's own 1440x900 and every caller but one takes
+ * them. `the-hand` walks at 390x844, where every x past 390 is off the glass
+ * and `mouse.click` there reaches nothing at all — a sweep that silently
+ * clicked into space for two thirds of its passes and then reported "no
+ * memory opened" as if the product had failed.
+ */
+async function openAMemory(
+  page: Page,
+  bounds: { xs: number[]; ys: number[] } = {
+    xs: Array.from({ length: 28 }, (_, i) => 160 + i * 28),
+    ys: [390, 350, 430, 310, 470, 270, 510, 230, 550],
+  },
+): Promise<boolean> {
+  const panels = async (): Promise<number> =>
+    (await page.evaluate(() => document.querySelectorAll(".jar-panel").length)) as number;
+  try {
+    await page.locator(".jar-saved").first().click({ timeout: 20_000 });
+  } catch {
+    return false;
+  }
+  await page.waitForTimeout(4_000);
+  for (const y of bounds.ys) {
+    for (const x of bounds.xs) {
+      await page.mouse.click(x, y);
+      await page.waitForTimeout(500);
+      if ((await panels()) === 0) continue;
+      await page.waitForTimeout(1_200);
+      if ((await panels()) > 0) return true;
+    }
+  }
+  return false;
+}
+
+async function archiveHolds(page: Page, phrase: string): Promise<boolean> {
+  return (await page.evaluate(async (needle: string) => {
+    const r = await fetch("/api/inspirations?limit=200", { credentials: "include" });
+    if (!r.ok) return false;
+    const body = (await r.json()) as { inspirations?: Array<{ textPreview: string }> };
+    return (body.inspirations ?? []).some((row) => row.textPreview.includes(needle));
+  }, phrase)) as boolean;
 }
 
 const bodyText = (page: Page): Promise<string> =>
@@ -246,20 +362,29 @@ const JOURNEYS: Journey[] = [
     run: async (page, base) => {
       await signUp(page, base);
       const phrase = `the funicular counts down in stops not minutes ${uniq()}`;
-      await goSurface(page, base, "/capture");
-      await page.fill('textarea[aria-label="What caught you?"]', phrase);
-      await page.click('button:has-text("keep")');
-      await page.waitForTimeout(4_000);
+      const before = await countInWorld(page);
+      const after = await keepInWorld(page, base, phrase);
 
-      /* Two claims, and the second is the one that matters. "kept" appearing
-         is the product saying so; the archive holding it is the product
-         meaning it. A confirmation without persistence is the worse bug. */
-      const acknowledged = /kept/i.test(await bodyText(page));
-      await goSurface(page, base, "/inspirations");
-      const persisted = (await bodyText(page)).includes(phrase);
+      /* TWO CLAIMS, AND THE SECOND IS THE ONE THAT MATTERS. The world saying
+         so is the product saying so; the archive holding it is the product
+         meaning it. A confirmation without persistence is the worse bug.
+         
+         WHAT "SAYING SO" IS IN THE WORLD, and it took a failed run to get
+         right. The flat screen printed a quiet "kept". A plain `save` here
+         answers in the two channels the world has — the companion flares and
+         an orb drops — and BOTH ARE CANVAS EVENTS with no text to read. Only
+         `reflect` prints the word, because it is about to open a sheet over
+         the keep and has to say the keep happened first.
+         
+         So the acknowledgement asked for here is the one the world writes in
+         words: the count on the bottom edge, which is the door into what you
+         have kept and prints how much is behind it. It rising IS the product
+         saying so, in the only text the act produces. */
+      const acknowledged = after === before + 1 || (before === -1 && after === 1);
+      const persisted = await archiveHolds(page, phrase);
       return {
         ok: acknowledged && persisted,
-        detail: `acknowledged=${acknowledged} persisted=${persisted}`,
+        detail: `the count read ${before} then ${after}; the archive holds it: ${persisted}`,
       };
     },
   },
@@ -354,22 +479,29 @@ const JOURNEYS: Journey[] = [
     run: async (page, base) => {
       await signUp(page, base);
       const needle = `pumpernickel-${uniq()}`;
-      await goSurface(page, base, "/capture");
-      await page.fill('textarea[aria-label="What caught you?"]', `a word nobody repeats: ${needle}`);
-      await page.click('button:has-text("keep")');
-      await page.waitForTimeout(3_000);
+      await keepInWorld(page, base, `a word nobody repeats: ${needle}`);
 
       /* Bury it, so the assertion is about search rather than about recency. */
-      for (let i = 0; i < 3; i += 1) {
-        await page.fill('textarea[aria-label="What caught you?"]', `filler capture ${i} ${uniq()}`);
-        await page.click('button:has-text("keep")');
-        await page.waitForTimeout(1_200);
-      }
+      for (let i = 0; i < 3; i += 1) await keepInWorld(page, base, `filler capture ${i} ${uniq()}`);
 
-      await goSurface(page, base, "/inspirations");
-      await page.fill('input[aria-label="What were you circling?"]', needle);
+      /* THE WORLD'S OWN FIND, which is `/` — the gesture people already have
+         for searching a page, put on the layout rather than in a menu. It asks
+         the server for the whole archive rather than filtering the window in
+         hand, which is the same search the flat list ran.
+         
+         AND THE ASSERTION IS THE PRODUCT'S OWN VERDICT. The flat screen
+         printed matching rows and this read them back. The world lights the
+         orbs it found and says "nothing here says that" when it found none —
+         so the question "was it found" is answered by whether the world says
+         that sentence. There is no list of words to read, by design. */
+      await page.keyboard.press("/");
+      await page.waitForTimeout(600);
+      await page.fill('input[placeholder="Which words do you remember?"]', needle);
       await page.waitForTimeout(3_500);
-      const found = (await bodyText(page)).includes(needle);
+      const verdict = (await page.evaluate(
+        () => document.querySelector(".jar-seek")?.textContent ?? "",
+      )) as string;
+      const found = !/nothing here says that/i.test(verdict);
       return { ok: found, detail: `found=${found} needle=${needle}` };
     },
   },
@@ -380,51 +512,47 @@ const JOURNEYS: Journey[] = [
     breaks: (ctx) => breakRoute(ctx, (p, m) => /reflection/.test(p) && m === "POST"),
     run: async (page, base) => {
       await signUp(page, base);
-      await goSurface(page, base, "/capture");
-      await page.fill(
-        'textarea[aria-label="What caught you?"]',
-        `a bus map that admits which routes are slow ${uniq()}`,
-      );
-      await page.click('button:has-text("keep")');
-      await page.waitForTimeout(3_500);
+      const phrase = `a bus map that admits which routes are slow ${uniq()}`;
 
-      await goSurface(page, base, "/inspirations");
-      await page.evaluate(() => {
-        const row = Array.from(document.querySelectorAll("*")).find(
-          (e) => e.children.length === 0 && /bus map that admits/.test((e as HTMLElement).innerText || ""),
-        );
-        (row as HTMLElement | undefined)?.click();
-      });
-      await page.waitForTimeout(2_500);
+      /* ONE VERB, NOT A JOURNEY ACROSS TWO SCREENS. The flat walk kept on
+         `/capture`, went to `/inspirations`, found the row, and filled two
+         fields — a question the person wrote for themselves and then their
+         answer to it. In the world `reflect` in the mouth keeps the memory AND
+         opens the question over it in one press, with the question already
+         written. So the harness no longer has to know the shape of a
+         two-field form; it answers the question the world asked. */
+      await page.locator(".jar-mouth-rest").first().click();
+      await page.waitForTimeout(700);
+      await page.fill('textarea[aria-label="capture inspiration"]', phrase);
+      await page.locator(".jar-mouth-where button", { hasText: /^reflect$/ }).first().click();
+      await page.waitForTimeout(5_000);
 
-      /* TWO fields, and the button is gated on the FIRST — a reflection here is
-         a question the person writes for themselves, then their answer to it
-         (`Surface.tsx:2147`, `disabled={!reflectionQuestion.trim()}`). An
-         earlier version of this journey filled only "your answer", watched
-         "keep this too" stay disabled, and very nearly filed it as a product
-         defect. It is not one; it was this harness not knowing the shape of
-         the thing it was driving. */
-      const question = `why did this catch me ${uniq()}`;
+      const box = await page.$(".jar-reflect-room .jar-reflect-box");
+      if (!box) return { ok: false, detail: "the reflection never opened over the keep" };
       const answer = `because the admission is the useful part ${uniq()}`;
-      const questionField = await page.$('input[aria-label="a question"]');
-      const answerField = await page.$('textarea[aria-label="your answer"]');
-      if (!questionField || !answerField) {
-        return {
-          ok: false,
-          detail: `missing reflection fields (question=${!!questionField} answer=${!!answerField})`,
-        };
-      }
-      await questionField.fill(question);
-      await answerField.fill(answer);
-      await page.click('button:has-text("keep this too")');
-      await page.waitForTimeout(3_500);
+      await box.fill(answer);
+      await page.locator(".jar-reflect-room button", { hasText: /^keep$/ }).first().click();
+      await page.waitForTimeout(4_000);
 
-      /* Reload rather than trust the optimistic render. */
-      const url = page.url();
-      await page.goto(url, { waitUntil: "domcontentloaded" });
-      await page.waitForTimeout(2_500);
-      const text = await bodyText(page);
-      const survived = text.includes(answer) && text.includes(question);
+      /* Reload rather than trust the optimistic render, and ask the archive
+         rather than the canvas — the world draws a reflection as light on an
+         orb, and light is not a string. */
+      await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(6_000);
+      const survived = (await page.evaluate(async (needle: string) => {
+        const list = await fetch("/api/inspirations?limit=50", { credentials: "include" });
+        const body = (await list.json()) as { inspirations?: Array<{ id: string }> };
+        for (const row of body.inspirations ?? []) {
+          const one = await fetch(`/api/inspirations/${row.id}`, { credentials: "include" });
+          const got = (await one.json()) as {
+            inspiration?: { reflections?: Array<{ answer: string | null }> };
+          };
+          if ((got.inspiration?.reflections ?? []).some((r) => (r.answer ?? "").includes(needle))) {
+            return true;
+          }
+        }
+        return false;
+      }, answer)) as boolean;
       return { ok: survived, detail: `survivedReload=${survived}` };
     },
   },
@@ -436,27 +564,48 @@ const JOURNEYS: Journey[] = [
     run: async (page, base) => {
       await signUp(page, base);
       const phrase = `a lift button that dims once it has heard you ${uniq()}`;
-      await goSurface(page, base, "/capture");
-      await page.fill('textarea[aria-label="What caught you?"]', phrase);
-      await page.click('button:has-text("keep")');
-      await page.waitForTimeout(3_500);
+      /* Several, because a memory is opened here by finding its ORB and one
+         orb on a whole field is a needle. The phrase above is the one that
+         matters; the rest are targets. */
+      await keepInWorld(page, base, phrase);
+      for (let i = 0; i < 4; i += 1) await keepInWorld(page, base, `alongside it ${i} ${uniq()}`);
+      await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(7_000);
 
-      await goSurface(page, base, "/inspirations");
-      await page.evaluate((needle) => {
-        const row = Array.from(document.querySelectorAll("*")).find(
-          (e) => e.children.length === 0 && (e as HTMLElement).innerText?.includes(needle),
-        );
-        (row as HTMLElement | undefined)?.click();
-      }, phrase);
-      await page.waitForTimeout(2_500);
+      if (!(await openAMemory(page))) {
+        return { ok: false, detail: "no memory would open in the field" };
+      }
+      /* WHICH memory opened is whichever orb the sweep hit, so the claim is
+         about the ONE ON SCREEN rather than about `phrase`. That is not a
+         weaker claim — "a memory taken down is actually gone" is true of any
+         of them, and insisting on a particular one would only be insisting the
+         harness can aim. */
+      const doomed = (await page.evaluate(
+        () => document.querySelector(".jar-panel-text")?.textContent?.trim() ?? "",
+      )) as string;
+      if (!doomed) return { ok: false, detail: "the card opened with no words in it" };
 
-      page.once("dialog", (d) => void d.accept());
-      await page.click('button:has-text("delete this capture")');
-      await page.waitForTimeout(3_500);
+      const del = page.locator(".jar-panel button", { hasText: /^delete$/ });
+      await del.first().click();
+      await page.waitForTimeout(2_000);
+      /* THE ASK, AND ITS WORDS ARE NOT A GUESS. Deleting asks only when a
+         signal stands on the memory — a warning with nothing to warn about is
+         friction wearing a safety costume — and by the time these five keeps
+         have been distilled, one usually does. The confirm reads
+         `delete it anyway`, beside `keep it`, which is lit: this is a door
+         that would rather not be walked through.
+         
+         An earlier version of this looked for "yes, take it down", found
+         nothing, pressed nothing, and reported the product as failing to
+         delete. The network log said it plainly — no DELETE was ever sent. */
+      const anyway = page.locator(".jar-forget-ask button", { hasText: /delete it anyway/i });
+      if (await anyway.count()) {
+        await anyway.first().click();
+      }
+      await page.waitForTimeout(4_500);
 
-      await goSurface(page, base, "/inspirations");
-      const gone = !(await bodyText(page)).includes(phrase);
-      return { ok: gone, detail: `goneFromArchive=${gone}` };
+      const gone = !(await archiveHolds(page, doomed.slice(0, 40)));
+      return { ok: gone, detail: `goneFromArchive=${gone} (${doomed.slice(0, 44)}…)` };
     },
   },
 
@@ -727,81 +876,6 @@ const JOURNEYS: Journey[] = [
   },
 
   {
-    id: "parking-lot",
-    name: "every flat screen can be left again",
-    /* WHY THIS EXISTS. The `≡` menu was the only door from the world into the
-       flat routes — and because it opened FROM the world, it was also the way
-       home. Emptying the holding pen removed the door and, with it, the exit.
-
-       Measured 2026-08-24 on the running build: the world has ZERO links into
-       any of these six routes, and the surface footer had no link back. Arrive
-       at one from a bookmark, an old link, or the terminal flow, and the only
-       ways out were the browser's own back button and the URL bar. Six screens
-       you could reach and not leave.
-
-       These routes are a parking lot — they hold the few things not yet
-       designed into the world, and they are on their way out. A parking lot
-       still has to have an exit. */
-    breaks: async (ctx) => {
-      await ctx.addInitScript(() => {
-        window.addEventListener("load", () => {
-          const style = document.createElement("style");
-          style.setAttribute("data-sabotage", "no-way-home");
-          style.textContent = ".sf-verb-world { display: none !important; }";
-          document.head.appendChild(style);
-        });
-      });
-    },
-    run: async (page, base) => {
-      await signUp(page, base);
-      const FLAT = [
-        "/capture",
-        "/inspirations",
-        "/signals",
-        "/principles",
-        "/top-of-mind",
-        "/rooms",
-      ];
-      const stranded: string[] = [];
-      const landed: string[] = [];
-      for (const path of FLAT) {
-        await goSurface(page, base, path);
-        /* VISIBLE, not merely present. `page.$` finds a `display: none`
-           element perfectly well, and clicking it then waits thirty seconds
-           for it to appear — so an exit that exists and cannot be seen was
-           reported as a timeout rather than as the missing exit it is. */
-        const home = await page.$(".sf-verb-world");
-        const reachable = home !== null && (await home.isVisible());
-        if (!reachable) {
-          stranded.push(`${path} (no way back${home ? " — present but not visible" : ""})`);
-          continue;
-        }
-        await home.click();
-        await page.waitForTimeout(3_500);
-        /* ARRIVING IS NOT THE SAME AS THE WORLD BEING THERE. A push to `/`
-           that renders nothing is still stranded, just at a different
-           address, so the canvas has to exist on the other side. */
-        const where = await page.evaluate(() => ({
-          path: location.pathname,
-          canvases: document.querySelectorAll("canvas").length,
-        }));
-        if (where.path !== "/" || where.canvases < 1) {
-          stranded.push(`${path} -> ${where.path} (${where.canvases} canvases)`);
-        } else {
-          landed.push(path);
-        }
-      }
-      return {
-        ok: stranded.length === 0,
-        detail:
-          stranded.length === 0
-            ? `${landed.length}/${FLAT.length} flat screens return to a live world`
-            : `stranded: ${stranded.join(", ")}`,
-      };
-    },
-  },
-
-  {
     id: "doorway",
     name: "the door you came to open is the biggest thing on the door",
     /* TWO CLAIMS, BOTH ABOUT THE ONE SCREEN NOBODY CAN SKIP.
@@ -917,36 +991,71 @@ const JOURNEYS: Journey[] = [
 
   {
     id: "the-hand",
-    name: "a thumb can hit what it aimed at, and read what it hit",
-    /* THREE RULES, ONE WALK, AT 390x844 WITH TOUCH ON.
-
-       SIZE and CROWDING are finding 8. Measured before: 21-22 controls per
-       surface under 44px, and — the shape that actually matters — "take it
-       down" at 21x21 sitting 21px from "hold" at 22x22. A destructive control
-       at half the minimum, touching a harmless one. Undo exists and fading
-       never deletes, but an undo you have to reach for is a mis-tap that
-       already happened. The two smallest in the product were worse: the
-       principle arrows were **11x20**.
-
-       The rules are not "44px everywhere", because that is not what the
-       evidence supports and pretending otherwise would mean overriding
-       decisions this repo made deliberately. `.sf-control` is 32px with the
-       reason written beside it, and its nearest neighbour is 94px away. So:
-       a floor on size, and a floor on distance that only 44px targets are
-       allowed to cross.
-
-       CONTRAST is a second finding this walk turned up on the way. See below.
-
-       THE SABOTAGE puts the post-it's marks back to 21px a pixel apart, which
-       is finding 8 exactly as it shipped. */
+    name: "every sentence the world paints can actually be read",
+    /* WHAT THIS WALKED BEFORE, AND WHERE THE REST OF IT WENT.
+     *
+     * Until the flat surface was deleted this journey swept `/capture`,
+     * `/inspirations`, `/signals`, `/principles`, `/top-of-mind` and `/rooms`
+     * at 390px and asserted three rules over `.sf-*` and `.pr-*`: a size
+     * floor, a crowding floor, and contrast. Every one of those routes now
+     * redirects to `/` and every one of those classes went out with
+     * `surface.css`, so the walk measured the world six times over, counted
+     * zero marks, and reported the world's own chrome as a phone failure.
+     *
+     * SIZE moved to `e2e:phone`, which asks it properly: a real mobile
+     * context with `hasTouch`, two viewports, WCAG 2.2's 24px floor and 44 for
+     * the acts. Keeping a second copy here would leave two gates with one
+     * opinion between them, and the next person to edit one would not know
+     * they had just made the other one lie.
+     *
+     * CROWDING moved there too, and the reason is worth writing down because
+     * it was NOT obvious. This journey cannot emulate touch — `hasTouch` is
+     * fixed when a context is made and the harness makes one 1440x900 context
+     * for every journey — so it resized the page instead and called that a
+     * phone. But half the sizes in this product come from
+     * `@media (pointer: coarse)`, which a resized fine-pointer page never
+     * matches. Rehomed onto the world, the walk duly reported the mouth's
+     * verbs at 48x11 and 34x11, crowded against the field, and it was WRONG:
+     * measured in a real touch context those same verbs are 45px tall and
+     * nothing is crowded. A gate that reports defects a phone does not have
+     * costs more than it saves. It is asked in `e2e:phone` now, where the
+     * pointer is real — and asking it there immediately found the defect this
+     * one could not: the card was never opened by any phone gate at all, and
+     * `reflect`, `delete` and the two stepping carets were all under the
+     * floor, the carets 32px apart.
+     *
+     * CONTRAST STAYS, and it is what this journey is now for. It is the one
+     * claim here that does not depend on the pointer at all — a colour is the
+     * same colour under a thumb — and nothing else in the repo can make it.
+     * `contrast.test.ts` reads `home.css` as text and owns the RULING: ink
+     * and muted clear AA, faint is de-emphasis, and nothing a person must
+     * read may be set in it. What it cannot see is what is actually PAINTED.
+     * Two things decide that, and both are invisible to a source gate:
+     *
+     *   THE CASCADE ACROSS SHEETS. The original finding here was `chrome.css`
+     *   carrying a bare `h1, h2 { color: var(--w-ink) }` — an element
+     *   selector in another file beating a class colour in this one, so the
+     *   largest words on the page came out in the wrong sheet's near-white.
+     *
+     *   OPACITY ON AN ANCESTOR, which multiplies down a chain no grep can
+     *   follow and which no stylesheet states anywhere as a colour.
+     *
+     * So this composites both: every ancestor's opacity into the text's
+     * alpha, every ancestor's background into one opaque colour, and then
+     * asks WCAG about the two numbers that actually reached the eye.
+     *
+     * It still walks at 390x844, because the narrow viewport is where the
+     * world reflows and re-layers — a panel over a lit ground composites
+     * differently from a panel over an empty one. */
     breaks: async (ctx) => {
       await ctx.addInitScript(() => {
         window.addEventListener("load", () => {
           const style = document.createElement("style");
-          style.setAttribute("data-sabotage", "small-crowded-marks");
+          style.setAttribute("data-sabotage", "sunk-ink");
+          /* the shape of the original finding: a sentence set in a colour
+             the ground it is painted on swallows */
           style.textContent =
-            ".sf-act { width: 21px !important; height: 21px !important; margin: 0 !important; }" +
-            ".sf-postit-acts { gap: 1px !important; margin: 0 -5px 0 0 !important; }";
+            ".jar-saved-count, .jar-panel-text { color: #23272e !important; opacity: 1 !important; }";
           document.head.appendChild(style);
         });
       });
@@ -954,227 +1063,217 @@ const JOURNEYS: Journey[] = [
     run: async (page, base) => {
       await signUp(page, base);
 
-      /* AND IT HAS TO HAVE SOMETHING TO MEASURE.
-         A fresh account has no memories, no signals and no principles, so the
-         first version of this walked six empty screens, found six controls on
-         each — the footer nav — and passed. The `--negative` run said so in
-         one word: it SURVIVED its own sabotage, because there was not a single
-         post-it on the page for the sabotage to shrink. That is the harness
-         doing exactly what it is for.
-
-         So the journey makes the things it is about: one memory, which is a
-         post-it with a "hold" and a "take it down" on it, and one principle,
-         which is the row carrying the two arrows that used to be 11x20. */
-      const phrase = `the funicular counts down in stops not minutes ${uniq()}`;
-      await goSurface(page, base, "/capture");
-      await page.fill('textarea[aria-label="What caught you?"]', phrase);
-      await page.click('button:has-text("keep")');
-      await page.waitForTimeout(4_000);
-
-      /* A REAL DIRECTIVE, WITH NO UNIQUE SUFFIX. The first version appended
-         `uniq()` out of habit, and `routeDeclaration` correctly refused to
-         call a sentence ending in a random number a principle — it filed it
-         as an inspiration instead, `201 {"created":"inspiration"}`, so the
-         principle verbs this journey exists to measure were never on the
-         page. Nothing needs to be unique here: the account is new every run.
-
-         The failure was silent by construction and the per-family count is
-         the only reason it surfaced — one combined total stayed comfortably
-         above zero on the post-it marks alone. */
-      await goSurface(page, base, "/principles");
-      const declare = await page.$(".pr-declare-input");
-      if (declare) {
-        await declare.fill("prefer the small tool over the platform, always");
-        await declare.press("Enter");
-        await page.waitForTimeout(6_000);
+      /* IT HAS TO HAVE SOMETHING TO READ. An empty account is the world's
+         chrome and nothing else: no count, no keepsake, no card. The first
+         version of this journey walked six empty screens and reported them
+         clean, and its `--negative` run SURVIVED its own sabotage because
+         there was not one sentence on the page for the sabotage to sink.
+         That is why the coverage counter below exists and why it is fatal. */
+      for (const text of [
+        `the funicular counts down in stops not minutes ${uniq()}`,
+        `every good hallway smells faintly of someone else's dinner ${uniq()}`,
+        `I trust a menu more when it is printed badly ${uniq()}`,
+      ]) {
+        await keepInWorld(page, base, text);
       }
 
-      /* A PHONE, MEASURED AS GEOMETRY, AND ONLY NOW — the setting up above
-         types into the surface, and it does that at the size every other
-         journey uses so a failure there is a failure they would all see.
-
-         The harness gives every journey a 1440x900 context and `hasTouch`
-         cannot be changed after a context is made, so this resizes the page
-         rather than emulating a finger. Every rule below is about boxes and
-         distances, which the viewport alone decides. Said out loud so nobody
-         reads this as a touch run that it is not. */
       await page.setViewportSize({ width: 390, height: 844 });
 
-      const ROUTES = [
-        "/capture",
-        "/inspirations",
-        "/signals",
-        "/principles",
-        "/top-of-mind",
-        "/rooms",
-      ];
-      /* 24px is WCAG 2.5.8's floor; 44px is the distance below which two
-         targets are close enough that one absorbs a miss meant for the
-         other, and only a pair that is itself 44px in both axes may be that
-         close. */
-      const MIN_SIZE = 24;
-      const MIN_APART = 44;
-      const problems: string[] = [];
-      const notes: string[] = [];
-      /* the controls this journey actually exists for — if none of them are
-         on any page, the walk proved nothing and has to say so */
-      const FAMILIES = ["postit", "principle", "reread"] as const;
-      const marks: Record<(typeof FAMILIES)[number], number> = {
-        postit: 0,
-        principle: 0,
-        reread: 0,
+      /* AND THE WORLD IS LOADED AGAIN AT THAT SIZE RATHER THAN CARRIED OVER.
+         The LAYOUT reflows correctly — measured either way, the mouth lands
+         at y=513 of 844 — but the CAMERA does not reset, and a camera parked
+         one column across at 1440px is a whole viewport away at 390px. The
+         first run of this walk failed with "element is outside of the
+         viewport" on the mouth and read for a moment like a reflow bug in
+         the product. It was the harness's own leftovers. */
+      const goHome = async (): Promise<void> => {
+        await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+        await page.waitForTimeout(6_000);
+      };
+      /* the same sweep `openAMemory` does, in pixels that exist at 390px */
+      const PHONE_SWEEP = {
+        xs: Array.from({ length: 12 }, (_, i) => 40 + i * 26),
+        ys: [420, 380, 460, 340, 500, 300, 540, 260, 580],
       };
 
-      for (const path of ROUTES) {
-        await goSurface(page, base, path);
-        const found = await page.evaluate(
-          ([minSize, minApart]) => {
-            const boxes = Array.from(
-              document.querySelectorAll<HTMLElement>(
-                "button, a[href], input, select, textarea",
-              ),
-            )
-              .filter((el) => {
-                const r = el.getBoundingClientRect();
-                const cs = getComputedStyle(el);
-                return (
-                  r.width > 0 &&
-                  r.height > 0 &&
-                  cs.visibility !== "hidden" &&
-                  cs.display !== "none"
-                );
-              })
-              .map((el) => {
-                const r = el.getBoundingClientRect();
-                return {
-                  name:
-                    (el.getAttribute("aria-label") || el.innerText || el.className || "?")
-                      .trim()
-                      .slice(0, 24) || "?",
-                  w: Math.round(r.width),
-                  h: Math.round(r.height),
-                  cx: r.x + r.width / 2,
-                  cy: r.y + r.height / 2,
-                };
-              });
+      /* WCAG 1.4.3: 4.5:1 for body text, 3:1 once the type is large. */
+      const AA_TEXT = 4.5;
+      const AA_LARGE = 3;
+      const problems: string[] = [];
+      const notes: string[] = [];
+      let dimmed = 0;
+      let faint = 0;
 
-            const tooSmall = boxes.filter((b) => b.w < minSize || b.h < minSize);
-            const crowded: string[] = [];
-            for (let i = 0; i < boxes.length; i++) {
-              for (let j = i + 1; j < boxes.length; j++) {
-                const a = boxes[i];
-                const b = boxes[j];
-                /* a pair that is 44px in both axes may be as close as it
-                   likes — two big targets cannot steal each other's misses */
-                if (a.w >= minApart && a.h >= minApart && b.w >= minApart && b.h >= minApart) {
-                  continue;
-                }
-                const d = Math.hypot(a.cx - b.cx, a.cy - b.cy);
-                if (d < minApart) {
-                  crowded.push(
-                    `${a.name} (${a.w}x${a.h}) & ${b.name} (${b.w}x${b.h}) ${Math.round(d)}px apart`,
-                  );
-                }
+      /* The places words appear. If none of them had any, the walk proved
+         nothing and has to say so — per family, not as one total, because a
+         single number stays comfortably above zero on the chrome alone while
+         the card it was supposed to read never opened. */
+      const FAMILIES = ["world", "mouth", "card"] as const;
+      const words: Record<(typeof FAMILIES)[number], number> = { world: 0, mouth: 0, card: 0 };
+
+      const SURFACES: Array<{ name: string; family: (typeof FAMILIES)[number]; open: () => Promise<void> }> = [
+        { name: "the world", family: "world", open: goHome },
+        {
+          name: "the mouth open",
+          family: "mouth",
+          open: async () => {
+            await goHome();
+            await page.locator(".jar-mouth-rest").first().click();
+            await page.waitForTimeout(900);
+          },
+        },
+        {
+          name: "a memory open",
+          family: "card",
+          open: async () => {
+            await goHome();
+            await openAMemory(page, PHONE_SWEEP);
+            await page.waitForTimeout(900);
+          },
+        },
+      ];
+
+      for (const surface of SURFACES) {
+        await surface.open();
+        const found = await page.evaluate(() => {
+          /* NO NAMED FUNCTION MAY BE DECLARED IN HERE. esbuild's keep-names
+             shim wraps every named declaration in a `__name(...)` call that
+             does not exist in the page, and the whole probe dies with
+             `__name is not defined`. Loops and inline anonymous arrows only. */
+          const faintRaw = getComputedStyle(document.documentElement)
+            .getPropertyValue("--jar-faint")
+            .trim();
+          /* the token resolved the way the browser resolves it, so a retune
+             re-measures instead of drifting away from a copied string */
+          const probe = document.createElement("span");
+          probe.style.color = faintRaw || "transparent";
+          document.body.appendChild(probe);
+          const faintPainted = getComputedStyle(probe).color;
+          probe.remove();
+
+          const sentences: Array<{
+            text: string;
+            fg: string;
+            bg: string;
+            size: number;
+            large: boolean;
+            isFaint: boolean;
+            alpha: number;
+          }> = [];
+          const cardOpen = document.querySelectorAll(".jar-panel").length > 0;
+          for (const el of Array.from(document.querySelectorAll<HTMLElement>("body *"))) {
+            /* only elements carrying their OWN words — a wrapper inherits its
+               child's problem and would report the same sentence twice */
+            let own = "";
+            for (const node of Array.from(el.childNodes)) {
+              if (node.nodeType === 3) own += node.textContent ?? "";
+            }
+            own = own.trim();
+            if (own.length < 2) continue;
+            if (el.closest("[aria-hidden=true]")) continue;
+            const r = el.getBoundingClientRect();
+            if (r.width < 1 || r.height < 1) continue;
+            if (r.bottom < 0 || r.top > window.innerHeight) continue;
+            if (r.right < 0 || r.left > window.innerWidth) continue;
+            const cs = getComputedStyle(el);
+            if (cs.visibility === "hidden" || cs.display === "none") continue;
+
+            /* EVERY ANCESTOR'S OPACITY, MULTIPLIED DOWN, and every ancestor's
+               background collected on the way up. This is the whole reason a
+               source gate cannot answer this question. */
+            let through = 1;
+            let walk: HTMLElement | null = el;
+            const layers: number[][] = [];
+            while (walk) {
+              const wcs = getComputedStyle(walk);
+              through *= Number(wcs.opacity === "" ? 1 : wcs.opacity);
+              const parts = (wcs.backgroundColor.match(/[\d.]+/g) ?? []).map(Number);
+              if (parts.length >= 3) {
+                const a = parts.length > 3 ? parts[3]! : 1;
+                if (a > 0) layers.push([parts[0]!, parts[1]!, parts[2]!, a * through]);
               }
+              walk = walk.parentElement;
+            }
+            /* the world is painted on black, so anything still translucent
+               after every layer is composited resolves against it */
+            let br = 0;
+            let bg2 = 0;
+            let bb = 0;
+            for (let i = layers.length - 1; i >= 0; i -= 1) {
+              const [lr, lg, lb, la] = layers[i]!;
+              br = lr! * la! + br * (1 - la!);
+              bg2 = lg! * la! + bg2 * (1 - la!);
+              bb = lb! * la! + bb * (1 - la!);
             }
 
-            /*
-              AND WHETHER THE PAGE CAN BE READ AT ALL. Colours are collected
-              here and the contrast is computed in the harness — partly
-              because the arithmetic is easier to check there, and partly
-              because a named helper declared inside `page.evaluate` picks up
-              esbuild's keep-names shim and dies on `__name is not defined`.
-            */
-            const ground = getComputedStyle(
-              document.querySelector(".sf") || document.body,
-            ).backgroundColor;
-            /* The sentence AND the title. `.sf-roomname` failed at the same
-               1.15:1 by a different road: `chrome.css` carries bare
-               `h1, h2 { color: var(--w-ink) }` blocks, and an element
-               selector in another sheet beats a colour `.sf` sets and lets
-               inherit — so the largest words on the page were the world's
-               near-white on this surface's paper. Checking only the body text
-               would have missed it. */
-            const sentences = Array.from(
-              document.querySelectorAll<HTMLElement>(
-                ".sf-postit-text, .pr-statement, .sf-roomname, .sf-headline",
-              ),
-            )
-              .filter((el) => {
-                const r = el.getBoundingClientRect();
-                return r.width >= 1 && r.height >= 1;
-              })
-              .map((el) => {
-                /* a post-it paints its own ground, so it is measured against
-                   that rather than against the wall behind it */
-                const sheet = el.closest<HTMLElement>(".sf-postit");
-                return {
-                  text: ((el as HTMLTextAreaElement).value || el.textContent || "")
-                    .trim()
-                    .slice(0, 20),
-                  fg: getComputedStyle(el).color,
-                  bg: sheet ? getComputedStyle(sheet).backgroundColor : ground,
-                };
-              });
-            return {
-              count: boxes.length,
-              /* PER FAMILY, NOT ONE TOTAL. Declaring a principle needs a
-                 model call, so on a stack with no key the principle verbs —
-                 the 11x20 arrows, the worst case this journey exists for —
-                 simply are not on the page, while the post-it marks are. One
-                 combined count would stay comfortably above zero and the
-                 narrower coverage would never be said out loud. */
-              marks: {
-                postit: document.querySelectorAll(".sf-act").length,
-                principle: document.querySelectorAll(".pr-action").length,
-                reread: document.querySelectorAll(".sf-reread").length,
-              },
-              tooSmall,
-              crowded,
-              sentences,
-            };
-          },
-          [MIN_SIZE, MIN_APART] as const,
-        );
+            const fgParts = (cs.color.match(/[\d.]+/g) ?? []).map(Number);
+            const fa = (fgParts.length > 3 ? fgParts[3]! : 1) * through;
+            const fr = fgParts[0]! * fa + br * (1 - fa);
+            const fg = fgParts[1]! * fa + bg2 * (1 - fa);
+            const fb = fgParts[2]! * fa + bb * (1 - fa);
 
-        if (found.tooSmall.length > 0) {
-          problems.push(
-            `${path}: under ${MIN_SIZE}px — ${found.tooSmall
-              .map((b) => `${b.name} (${b.w}x${b.h})`)
-              .join(", ")}`,
-          );
+            const size = parseFloat(cs.fontSize);
+            const weight = Number(cs.fontWeight) || 400;
+            sentences.push({
+              text: own.replace(/\s+/g, " ").slice(0, 20),
+              fg: `rgb(${Math.round(fr)}, ${Math.round(fg)}, ${Math.round(fb)})`,
+              bg: `rgb(${Math.round(br)}, ${Math.round(bg2)}, ${Math.round(bb)})`,
+              size,
+              /* WCAG's own definition of large text, in CSS pixels */
+              large: size >= 24 || (size >= 18.66 && weight >= 700),
+              isFaint: cs.color === faintPainted,
+              alpha: fa,
+            });
+          }
+          return { sentences, cardOpen };
+        });
+
+        const unreadable: string[] = [];
+        for (const sen of found.sentences) {
+          /* DE-EMPHASIS IS NOT A DEFECT, AND IS NOT SILENT EITHER. Faint is
+             ruled on by `contrast.test.ts`, which holds the line that nothing
+             a person MUST read is set in it; and a sentence still fading in,
+             or deliberately dimmed behind what is open over it, is not being
+             asked to be read yet. Both are counted and printed rather than
+             dropped, so the exemption is auditable from the pass line. */
+          if (sen.isFaint) {
+            faint += 1;
+            continue;
+          }
+          if (sen.alpha < 0.5) {
+            dimmed += 1;
+            continue;
+          }
+          const ratio = contrast(sen.fg, sen.bg);
+          const floor = sen.large ? AA_LARGE : AA_TEXT;
+          if (ratio < floor) {
+            unreadable.push(
+              `"${sen.text}" ${ratio.toFixed(2)}:1 at ${Math.round(sen.size)}px (needs ${floor})`,
+            );
+          }
         }
-        if (found.crowded.length > 0) {
-          problems.push(`${path}: crowded — ${found.crowded.slice(0, 4).join("; ")}`);
+        if (unreadable.length > 0) {
+          problems.push(`${surface.name}: unreadable — ${unreadable.slice(0, 3).join("; ")}`);
         }
-        const faint = found.sentences
-          .map((sen) => ({ ...sen, ratio: contrast(sen.fg, sen.bg) }))
-          .filter((sen) => sen.ratio < 4.5)
-          .map((sen) => `"${sen.text}" at ${sen.ratio.toFixed(2)}:1`);
-        if (faint.length > 0) {
-          problems.push(`${path}: unreadable — ${faint.slice(0, 3).join("; ")}`);
+
+        /* the card only counts as read if it actually opened */
+        if (surface.family !== "card" || found.cardOpen) {
+          words[surface.family] += found.sentences.length;
         }
-        notes.push(`${path}:${found.count}`);
-        for (const family of FAMILIES) marks[family] += found.marks[family];
+        notes.push(`${surface.name}:${found.sentences.length}`);
       }
 
       /* A CLEAN WALK OVER NOTHING IS NOT A CLEAN WALK. */
-      const total = FAMILIES.reduce((n, family) => n + marks[family], 0);
-      if (total === 0) {
-        problems.push(
-          "no post-it mark, principle verb or re-read on any screen — this walk measured only chrome",
-        );
+      const missing = FAMILIES.filter((family) => words[family] === 0);
+      if (missing.length === FAMILIES.length) {
+        problems.push("not one sentence anywhere — this walk read nothing and proved nothing");
       }
-      /* …and a walk that covered SOME of them says which it missed, rather
-         than reporting a round number that reads like full coverage. */
-      const missing = FAMILIES.filter((family) => marks[family] === 0);
-      const seen = FAMILIES.map((family) => `${family}:${marks[family]}`).join(" ");
-      const gap = missing.length > 0 ? ` — NOT CHECKED: ${missing.join(", ")}` : "";
+      const gap = missing.length > 0 ? ` — NOT READ: ${missing.join(", ")}` : "";
       return {
         ok: problems.length === 0,
         detail:
           problems.length === 0
-            ? `every control >= ${MIN_SIZE}px, no sub-${MIN_APART}px pair crowded, every sentence readable — ${seen}${gap} over ${notes.join(" ")}`
+            ? `every painted sentence clears AA (${faint} faint and ${dimmed} dimmed exempt, ruled on by contrast.test.ts) over ${notes.join(" ")}${gap}`
             : problems.slice(0, 4).join(" | "),
       };
     },
@@ -1230,12 +1329,7 @@ const JOURNEYS: Journey[] = [
         "I keep buying notebooks I never write in.",
         "I would rather be early and wrong than late and certain.",
       ];
-      await goSurface(page, base, "/capture");
-      for (const text of SITTING) {
-        await page.fill('textarea[aria-label="What caught you?"]', text);
-        await page.click('button:has-text("keep")');
-        await page.waitForTimeout(1_200);
-      }
+      for (const text of SITTING) await keepInWorld(page, base, text);
 
       await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
 
@@ -1413,10 +1507,7 @@ const JOURNEYS: Journey[] = [
     run: async (page, base) => {
       const me = await signUp(page, base);
       const secret = `the porcelain kestrel ${uniq()}`;
-      await goSurface(page, base, "/capture");
-      await page.fill('textarea[aria-label="What caught you?"]', `I keep thinking about ${secret}.`);
-      await page.click('button:has-text("keep")');
-      await page.waitForTimeout(2_500);
+      await keepInWorld(page, base, `I keep thinking about ${secret}.`);
 
       const handle = `e2e${Date.now().toString(36)}`;
       await goSurface(page, base, "/profile");

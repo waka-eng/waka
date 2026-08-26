@@ -2785,6 +2785,56 @@
   }
 }
 
+/* ═══════════ WHAT A THUMB CAN HIT ONCE SOMETHING IS OPEN ═══════════
+   THE INVENTORY ABOVE SAYS "every interactive thing in the world" AND IT WAS
+   NOT. It listed ten controls, all of them chrome or the mouth, because the
+   walk that produced it measured the world at rest and the mouth open and
+   never opened a card. Every modal in this product — the memory card, the
+   timeline, the settings sheet, the provenance room — was outside it, and the
+   card is where the SMALLEST controls in the whole product live.
+
+   MEASURED 2026-08-26, at 390x844 with a real touch context, with a memory
+   open:
+
+     reflect                      37x15
+     the memory before this one   18x14   ← the two carets, 32px apart
+     the memory after this one    18x14
+     delete                       37x15   ← DESTRUCTIVE, at half the floor
+
+   That is finding 8 exactly, reborn in the world after the flat surface it
+   was first found on was deleted: a control that takes something down, under
+   the minimum size, a thumb's width from a harmless one. Undo exists and
+   fading never deletes, but an undo you have to reach for is a mis-tap that
+   already happened.
+
+   TWO FLOORS, AND THE FIRST ONE IS NOT A TOUCH RULE. WCAG 2.5.8 asks for
+   24x24 from every pointer, so the 24 is unconditional — those carets were
+   18x14 on a desktop too, and the block above, being coarse-only, would have
+   left them there. The 44 is the acts rule from that block applied to the
+   acts this footer holds: `reflect` and `delete` decide what happens to the
+   memory you are looking at, and stepping between memories is the one thing
+   you do repeatedly while holding the phone.
+
+   WRITTEN AT THE MODAL ROOTS, NOT AT THE FOOTER. The four sheets already
+   share one card style; sharing the floor as well is what makes the next
+   control added to any of them correct without anybody remembering this
+   comment. `min-width` is safe on the text verbs — they are wider than 44
+   already — and only ever grows the two carets. */
+.jar-panel button,
+.jar-seek button,
+.jar-settings button,
+.jar-prov-room button {
+  min-height: 24px;
+  min-width: 24px;
+}
+@media (pointer: coarse) {
+  /* the acts at the foot of the card, and the stepping between memories */
+  .jar-panel-foot button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
 /* ═══════════════════ THE TOP ROW, ON A PHONE ═══════════════════
    MEASURED, NOT GUESSED (2026-08-25, first walk of the world at phone size).
    At 390px the four things along the top edge overlap each other:

@@ -189,8 +189,8 @@ a browser rather than reasoned about — the bar inherited from
 |---|---|
 | Gate | routes absent from `main.tsx`; retired prefixes absent from the tree; a browser walkthrough per capability; all suites still green |
 | At open | 4,784 lines across four files; 16 routes; 12 verbs the world cannot do |
-| **Now** | **8 left.** Agent credentials landed 2026-08-25; two of the twelve were miscounted — see below |
-| State | **NOT MET.** In progress |
+| **Now** | **0 left.** 5,034 lines deleted across seven files; `grep -E '"(sf\|gr\|pr)-'` over `packages/web/src` returns **0**; `main.tsx` holds six routes and not one of them is flat. Of the twelve verbs: ten built into the world, one was never missing, one deliberately declined — each accounted for below |
+| State | **MET**, 2026-08-26 |
 
 **TWO CORRECTIONS TO THIS AUDIT'S OWN NUMBERS,** found while building against
 them and recorded rather than quietly adjusted.
@@ -281,14 +281,56 @@ against a literal.
 
 **End state.** At 390x844 and 360x640: nothing overflows sideways, no control
 is hidden under another, no text field under 16px, every control clears WCAG
-2.2 AA's 24x24 and the acts clear 44.
+2.2 AA's 24x24 and the acts clear 44, and no two controls sit closer than 44px
+centre to centre unless both of them are 44px in both axes.
 
 | | |
 |---|---|
 | Gate | `pnpm e2e:phone`, with a negative mode that puts the shipped defects back |
 | At open | unmeasured. The top row overlapped itself so the timeline could not be opened at all; every field was 15px; the capture control was 19px tall |
-| **Now** | **clean at both widths**, gate green, negative mode finds all ten |
-| State | **MET for the door, the world and the open mouth.** The reading card and the modals are NOT yet walked at phone size — stated, not claimed |
+| **Now** | **clean at both widths across four surfaces** — the door, the world, the open mouth and **an open memory** — gate green, negative mode finds all 16 |
+| State | **MET**, 2026-08-26 |
+
+**WHAT CLOSING THIS PROPERLY COST, because the first version of it was wrong
+in a way worth keeping on the record.** The audit above shipped saying "MET
+for the door, the world and the open mouth — the card and the modals are NOT
+yet walked". That honesty is the only reason the rest of this was found.
+
+Walking the card turned up finding 8 reborn in the world, on the surface the
+flat screens had been deleted from:
+
+| control | measured | floor |
+|---|---|---|
+| `reflect` | 37x15 | 24 |
+| the memory before this one | 18x14 | 24, and 44 as an act |
+| the memory after this one | 18x14 | 24, and 44 as an act |
+| `delete` | 37x15 | 24 |
+
+The two carets sat **32px apart**, and `delete` — which takes a memory down —
+was at half the minimum size beside them. Fixed at the four modal roots rather
+than in that one footer (`.jar-panel`, `.jar-seek`, `.jar-settings`,
+`.jar-prov-room`), so the next control added to any sheet inherits the floor.
+The 24 is unconditional because WCAG 2.5.8 is not a touch rule and those
+carets were 18x14 on a desktop too; the 44 is coarse-pointer only, the same
+ruling the mouth's verbs already carry.
+
+**AND ONE GATE WAS MOVED RATHER THAN KEPT.** `e2e:journeys`' `the-hand` used
+to make the size and crowding claims. It was written for the flat surface, and
+after the deletion every route and class in it was gone. Rehomed onto the
+world it reported the mouth's verbs at 48x11 and 34x11, crowded — **and that
+was wrong**: `the-hand` cannot emulate touch (`hasTouch` is fixed when a
+Playwright context is made, and the harness makes one 1440x900 context for
+every journey), so it resized a fine-pointer page, and every size that comes
+from `@media (pointer: coarse)` measured at its desktop value. In a real touch
+context those verbs are 45px tall and nothing is crowded.
+
+So size and crowding both went to `e2e:phone`, which has the real pointer —
+and asking crowding there is what surfaced the card table above.
+`the-hand` keeps the one claim that does not depend on the pointer and that
+nothing else in the repo can make: it composites every ancestor's opacity and
+background and asks WCAG about the colour that actually reached the eye.
+`contrast.test.ts` reads the stylesheet as text and cannot see either the
+cascade across sheets or an inherited `opacity`.
 
 ### A6 — Usability
 
