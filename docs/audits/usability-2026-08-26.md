@@ -152,6 +152,37 @@ that nothing calls fails the gate. A name used only by its own test counts as
 unused, because a function kept alive by its test is one the product does not
 call.
 
+## The verb census
+
+F3 and F6 were both found the same way, so the method is written down. For
+every verb the world offers: **which noun does it sit on, who authored that
+noun, and does the verb have an inverse?**
+
+| pair | state |
+|---|---|
+| keep a memory ↔ let it go | both, and the second asks first |
+| private ↔ public | both |
+| declare a principle ↔ withdraw it | both — and only on `declared` ones (F3) |
+| answer a minted principle (`not mine`) | the right verb for a claim, no delete (F3) |
+| say a board entry in my words ↔ hand it back | both, with a receipt |
+| say a **signal** in my words ↔ hand it back | **was missing** (F6) |
+| a verdict suppresses ↔ restore | both |
+| join a room ↔ leave it; make one ↔ delete it | both |
+| issue an agent key ↔ revoke it | both |
+| **keep this one up ↔ (nothing)** | **deliberate — see below** |
+
+**The last row is the one that proves the census is worth running rather than
+just applying.** `Keep this one up` has no inverse and that is a ruling, not
+an oversight, stated where it is implemented: *"there is no un-holding, by the
+canon's design. You either keep a statement or you say it is not you; a toggle
+back through 'held' would be a third state that means nothing."* The way out
+is `not this`. A census that mechanically demanded an inverse for every verb
+would have "fixed" that into a third state the canon refuses.
+
+So the rule the census actually applies: **a verb with no inverse needs either
+a stated ruling or another exit.** Two of the three asymmetries it found had
+neither, and are now fixed; the third has both.
+
 ## Checked and clean
 
 - **H1 status** — the empty world says *Forming — nothing adopted yet*; keeping

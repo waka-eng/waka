@@ -184,10 +184,17 @@ describe("every export on a call-surface is called", () => {
       }
     }
 
-    /* the whole tree as one string: an import, a call and a re-export all
-       mention the name, and any one of them is a use */
+    /* THE WHOLE TREE AS ONE STRING, WITH ITS IMPORT STATEMENTS REMOVED.
+       An import is not a use. The first version of this counted one, so a
+       function imported into a page and never called read as alive — which is
+       the exact shape it was written to catch, one level up. Stripping the
+       import statements means a name has to be MENTIONED somewhere it could
+       actually run. Re-exports survive the strip, because `export { x } from`
+       is not an import statement and passing a name onward is a use of it. */
     let blob = "";
-    for (const file of everySourceFile()) blob += readFileSync(file, "utf8");
+    for (const file of everySourceFile()) {
+      blob += readFileSync(file, "utf8").replace(/import\s+[\s\S]*?from\s+["'][^"']+["'];/g, " ");
+    }
 
     const unused: string[] = [];
     for (const [name, where] of declared) {
