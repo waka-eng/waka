@@ -427,6 +427,39 @@ const ACTS: Act[] = [
 
   // ---- the room's maintenance verbs -------------------------------------
   {
+    id: "make-agent",
+    name: "giving an agent a wall, and the server refuses",
+    breaks: (p, m) => p === "/api/profiles" && m === "POST",
+    reach: async (page, base) => {
+      await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(6_000);
+      await page.locator(".jar-here-more").first().click({ timeout: 8_000 });
+      await page.waitForTimeout(900);
+      await page.locator(".jar-here-row--make").first().click({ timeout: 8_000 });
+      await page.waitForTimeout(1_000);
+      /* THE SECOND ROW, AND IT IS FOUND BY ITS WORDS RATHER THAN ITS INDEX.
+         The dialog offers `a room` and `an agent`; an index would silently
+         start measuring the wrong one the day a third kind is added. */
+      const rows = page.locator(".jar-newplace-row");
+      const count = await rows.count();
+      let agentRow = -1;
+      for (let i = 0; i < count; i += 1) {
+        if (/an agent/i.test((await rows.nth(i).textContent()) ?? "")) agentRow = i;
+      }
+      if (agentRow < 0) throw new Error("no `an agent` row in the make dialog");
+      await rows.nth(agentRow).click();
+      await page.waitForTimeout(1_000);
+      await page.locator(".jar-roomform-box").first().fill("an agent the server refuses", {
+        timeout: 8_000,
+      });
+    },
+    press: async (page) => {
+      await page.locator("button", { hasText: /^give it a wall$/i }).first().click({
+        timeout: 8_000,
+      });
+    },
+  },
+  {
     id: "rename-room",
     name: "renaming a room, and the rename refuses",
     breaks: (p, m) => /^\/api\/groups\/[^/]+$/.test(p) && m === "PATCH",

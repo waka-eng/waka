@@ -290,6 +290,58 @@ Caught by noticing that the pressable list held two "Sign in" entries. Had it
 gone unnoticed, this audit would have reported a silent door and gone looking
 for a bug in a handler that was working correctly the whole time.
 
+## The other two real 409s, and the act behind them
+
+Both were on the unmeasured list. Both **behave**, and reaching the second one
+turned up an act that does not.
+
+### A handle already taken
+
+`PATCH /api/auth/me` refuses a duplicate public handle with a 409 carrying
+field-level `details`. Two accounts, the second claiming the first's handle:
+
+> That public handle is already taken
+
+Shown verbatim. No defect. (The field is behind a `make a public page` button
+on `/profile` — invisible until pressed, which is why the first attempt to
+reach it timed out on an element that exists.)
+
+### An agent past its key limit
+
+`POST /api/profiles/:id/keys` refuses past `MAX_KEYS_PER_AGENT`. Its handler
+already routes through `whyFailed` — `"That key was not issued."` — so the
+server's sentence reaches the person the same way the signup 409's does.
+
+### But giving an agent a wall said nothing at all
+
+Reaching the agent surface meant walking `make-agent`, which the source
+pre-pass had flagged and no walk had ever pressed. Measured: **SILENT.**
+
+```ts
+.catch(() => setAgentName(null))
+```
+
+`agentName` is not a busy flag — it is the form's open/closed state. Clearing
+it **closes the dialog**. So a refusal and pressing `not now` were the same
+gesture: the form folded, no wall appeared, and nothing said which had
+happened. The room verbs' collapsing confirm, in the other half of the same
+dialog.
+
+Its sibling one row up — `submitGroup`, reached by choosing `a room` instead
+of `an agent` — has carried an `error` on its form state all along. The two
+halves of one dialog, written to different standards.
+
+```
+make-agent   SILENT  →  SPEAKS
+  "That agent has no wall yet — the server said no (500): …"
+```
+
+The form now stays open and keeps the typed name, because the one recovery
+available is pressing it again and that used to require re-opening a dialog
+that had closed for no stated reason.
+
+**Seven acts, three failure kinds, twenty-one readings: all speak.**
+
 ## What is still unmeasured
 
 Named so the next pass starts from a list rather than from a fresh reading:
@@ -306,6 +358,7 @@ Named so the next pass starts from a list rather than from a fresh reading:
   the world also has a `goOffline` fixture path, and several handlers return
   early on `offlineRef.current` before any request is made. What those say, if
   anything, is still unasked.
-- **The other real 409s.** `agent-keys.ts` refuses a key past a per-agent
-  limit and `auth-me.ts` refuses a taken handle. Both are reachable without
-  sabotage, like the signup 409, and neither has been walked.
+- **`createProfile`'s own cap.** The server "caps how many an account may
+  hold", so there is a third 409 behind `make-agent` that this walk provoked
+  with a 500 rather than by hitting the cap. The handler is the same either
+  way; the server's sentence is not.

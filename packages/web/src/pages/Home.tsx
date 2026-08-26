@@ -9834,6 +9834,22 @@ function HomeExperience(): JSX.Element {
    * from the moment you name it, and stands honestly empty until then.
    */
   const [agentName, setAgentName] = useState<string | null>(null);
+  /**
+   * WHY GIVING AN AGENT A WALL DID NOT HAPPEN.
+   *
+   * `e2e:when-it-fails --only make-agent` read SILENT: the catch cleared
+   * `agentName`, which is what CLOSES the form, so a refusal and pressing
+   * `not now` were the same gesture — the dialog folded, no wall appeared,
+   * and nothing anywhere said which of those two things had happened. The
+   * same shape as the room's confirms, in the other half of the same dialog.
+   *
+   * Its sibling one row up — `submitGroup`, reached by choosing `a room`
+   * instead of `an agent` — has carried an `error` on its form state all
+   * along. This is that, kept as its own value rather than folded into
+   * `agentName`, because `agentName` is also the form's OPEN/CLOSED flag and
+   * an error must outlive neither more nor less than the form does.
+   */
+  const [agentTrouble, setAgentTrouble] = useState<string | null>(null);
   const makeAgent = useCallback(() => {
     const name = (agentName ?? "").trim();
     if (name === "") return;
@@ -9841,6 +9857,7 @@ function HomeExperience(): JSX.Element {
        human-bound session may call it and there is nothing else to create —
        so the kind is no longer passed, and the server caps how many an
        account may hold */
+    setAgentTrouble(null);
     createProfile(name)
       .then((p) => {
         setAgents((prev) => [
@@ -9854,8 +9871,14 @@ function HomeExperience(): JSX.Element {
         ]);
         setAgentName(null);
       })
-      .catch(() => setAgentName(null));
-  }, [agentName]);
+      .catch((err: unknown) => {
+        /* THE FORM STAYS OPEN AND KEEPS THE NAME. Clearing `agentName` was
+           the whole of the old handler, and clearing it is what shuts the
+           dialog — so the one recovery available (press it again) required
+           first re-opening a form that had closed for no stated reason. */
+        setAgentTrouble(whyFailed(err, "That agent has no wall yet."));
+      });
+  }, [agentName, whyFailed]);
 
   /**
    * KEEPING A PICTURE, OR A LINK.
@@ -12324,6 +12347,11 @@ function HomeExperience(): JSX.Element {
               not now
             </button>
           </p>
+          {agentTrouble ? (
+            <p className="jar-settings-warn" role="status">
+              {agentTrouble}
+            </p>
+          ) : null}
           <p className="jar-share-note">
             It writes here once it signs in as itself. Until then the wall is empty,
             and says so.
