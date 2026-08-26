@@ -296,7 +296,19 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
            `ApiError { status: 0 }`. A 401 is an answer and means signed out; a
            0 means the question was never asked. Only the second sets this. */
         if (!cancelled && aliveRef.current) {
-          setServerUnreachable(err instanceof ApiError ? err.status === 0 : true);
+          /* AN UNKNOWN ERROR IS NOT EVIDENCE THE SERVER WAS UNREACHABLE.
+             This defaulted to `true` for anything that was not an `ApiError`,
+             which would have put "We couldn't reach the server" in front of a
+             person whose network was fine and whose session was fine — a
+             crash inside `applyViewer` reads the same from here. Claiming a
+             cause on no evidence is the exact mistake this flag was added to
+             stop; only a status of 0, which the client sets when it never got
+             an answer, is evidence of it.
+
+             Note a 401 never reaches this catch at all: `fetchCurrentViewer`
+             RETURNS null for it rather than throwing, so signed-out is
+             handled above and the door greets it normally. */
+          setServerUnreachable(err instanceof ApiError && err.status === 0);
         }
         // The cache is only an optimistic display hint, not proof of an
         // authenticated session. If the initial server validation fails
@@ -318,6 +330,14 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   const login = useCallback(
     async (input: LoginRequest): Promise<ApiViewer> => {
       const { account, profile } = await apiLogin(input);
+      /* THE SERVER ANSWERED, so whatever the door was told earlier is stale.
+         Without this the flag survived the whole page session: a person who
+         hit a dead network, signed in once it came back, then signed out
+         again, met "We couldn't reach the server" on a door that had just
+         worked twice. Cleared wherever a round trip actually resolves —
+         `logout` is deliberately not one of those, because it wipes state
+         first and swallows its own network errors by design. */
+      setServerUnreachable(false);
       const next: ApiViewer = { account, profile };
       applyViewer(next);
       return next;
@@ -328,6 +348,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   const signup = useCallback(
     async (input: SignupRequest): Promise<ApiViewer> => {
       const { account, profile } = await apiSignup(input);
+      setServerUnreachable(false);
       const next: ApiViewer = { account, profile };
       applyViewer(next);
       return next;
@@ -345,6 +366,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
 
   const refresh = useCallback(async (): Promise<ApiViewer | null> => {
     const fresh = await fetchCurrentViewer();
+    setServerUnreachable(false);
     applyViewer(fresh);
     return fresh;
   }, [applyViewer]);

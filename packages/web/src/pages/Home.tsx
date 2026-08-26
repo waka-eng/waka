@@ -2528,6 +2528,25 @@ function HomeExperience(): JSX.Element {
    * thing the person does. So the error is deliberately biased late.
    */
   const DERIVATION_SETTLE_MS = 6_000;
+  /**
+   * The pending "ask what it made of it" timer, so it can be called off.
+   *
+   * Two reasons, both found reviewing this session's own diff rather than by
+   * a gate. A person who keeps something and then signs out inside six
+   * seconds left a timer that fired `loadTopOfMind()` against a cleared
+   * cookie — a stray 401 from a component that no longer exists. And two
+   * keeps inside six seconds stacked two timers, so the board was fetched
+   * twice for one answer.
+   *
+   * One timer, replaced on each keep and cleared on unmount.
+   */
+  const settleTimerRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
+    },
+    [],
+  );
   useEffect(() => {
     let hiddenAt: number | null = null;
     const onVisibility = () => {
@@ -8734,7 +8753,9 @@ function HomeExperience(): JSX.Element {
            The catch is silent on purpose and it is a READ, not an act: when
            this fails the poster keeps showing what was last known, which is
            true rather than quiet. The failure-path audit's own rule. */
-        window.setTimeout(() => {
+        if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
+        settleTimerRef.current = window.setTimeout(() => {
+          settleTimerRef.current = null;
           if (offlineRef.current) return;
           loadTopOfMind()
             .then((tom) => absorbBoard(tom))
