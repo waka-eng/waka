@@ -57,7 +57,9 @@ import { chromium, type BrowserContext, type Page, type Route } from "playwright
 /**
  * TWO EMPTIES, NOT ONE.
  *
- *   empty  signed up, nothing created. The screen every person sees first.
+ *   door   NOT signed up at all. The surface that comes before the account,
+ *          and the only one a person can meet without having decided anything.
+ *   empty  signed up, nothing created. The first screen inside.
  *   kept   ONE memory saved and nothing else. The person did the single thing
  *          the product asked, and now decides whether to come back.
  *
@@ -70,7 +72,7 @@ import { chromium, type BrowserContext, type Page, type Route } from "playwright
  * orb sweep land. Keeping five to make the walk easier would measure a state
  * no real person passes through.
  */
-type Stage = "empty" | "kept";
+type Stage = "door" | "empty" | "kept";
 
 interface Args {
   baseUrl: string;
@@ -87,14 +89,14 @@ function parseArgs(argv: string[]): Args {
     else if (flag === "--headed") args.headed = true;
     else if (flag === "--stage") {
       const v = take();
-      if (v !== "empty" && v !== "kept") {
-        console.error(`[first-sixty] --stage must be empty or kept (got ${v})`);
+      if (v !== "door" && v !== "empty" && v !== "kept") {
+        console.error(`[first-sixty] --stage must be door, empty or kept (got ${v})`);
         process.exit(2);
       }
       args.stage = v;
     }
     else if (flag === "--help" || flag === "-h") {
-      console.log("Usage: pnpm e2e:first-sixty [--base-url <url>] [--stage empty|kept] [--headed]");
+      console.log("Usage: pnpm e2e:first-sixty [--base-url <url>] [--stage door|empty|kept] [--headed]");
       process.exit(0);
     } else {
       console.error(`[first-sixty] unknown option ${flag}`);
@@ -339,6 +341,21 @@ const SURFACES: Surface[] = [
     },
   },
   {
+    name: "the door (sign in)",
+    stages: ["door"],
+    open: async () => {
+      /* nothing: `/login` opens on this tab */
+    },
+  },
+  {
+    name: "the door (sign up)",
+    stages: ["door"],
+    open: async (page) => {
+      await page.click("#login-tab-signup");
+      await page.waitForTimeout(1_200);
+    },
+  },
+  {
     name: "the one memory, opened",
     stages: ["kept"],
     open: async (page) => {
@@ -363,7 +380,10 @@ interface Reading {
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   console.log(
-    args.stage === "empty"
+    args.stage === "door"
+      ? "[first-sixty] NOT signed up. The surface before the account — what a person who has\n" +
+          "              never heard of WAKA can read before deciding to make one.\n"
+      : args.stage === "empty"
       ? "[first-sixty] An account with nothing in it. Nothing is created at any point.\n" +
           "              Of each surface: does it say anything to someone who has never been here?\n"
       : "[first-sixty] ONE memory kept, and nothing else. Promotion needs three pieces of\n" +
@@ -380,7 +400,10 @@ async function main(): Promise<void> {
   try {
     await stubExternals(ctx, args.baseUrl);
     const page = await ctx.newPage();
-    await signUp(page, args.baseUrl);
+    /* THE DOOR IS WALKED WITHOUT AN ACCOUNT, which is the whole point of it:
+       every other surface in this file is reached by signing up first, and a
+       person deciding whether to sign up has not done that yet. */
+    if (args.stage !== "door") await signUp(page, args.baseUrl);
 
     if (args.stage === "kept") {
       /* THE ONE READING A RELOAD CANNOT TAKE.
@@ -428,17 +451,18 @@ async function main(): Promise<void> {
        Taken AFTER the stage's setup, so in `kept` the backdrop is the world
        with one memory in it — otherwise the archive door's own count would be
        reported as something the archive door said. */
-    await page.goto(`${args.baseUrl}/`, { waitUntil: "domcontentloaded" });
-    await page.waitForTimeout(6_000);
+    const home = args.stage === "door" ? `${args.baseUrl}/login` : `${args.baseUrl}/`;
+    await page.goto(home, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(args.stage === "door" ? 2_500 : 6_000);
     const backdrop = new Set(await visibleLines(page));
 
     for (const surface of SURFACES) {
-      if (surface.stages && !surface.stages.includes(args.stage)) continue;
+      if (!(surface.stages ?? ["empty", "kept"]).includes(args.stage)) continue;
       /* FROM A FRESH LOAD EVERY TIME. The same lesson dead-css paid for: a
          surface left standing by the previous one is state this walk cannot
          reason about, and Escape was measurably not enough. */
-      await page.goto(`${args.baseUrl}/`, { waitUntil: "domcontentloaded" });
-      await page.waitForTimeout(6_000);
+      await page.goto(home, { waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(args.stage === "door" ? 2_500 : 6_000);
 
       let detail = "";
       try {
@@ -460,7 +484,9 @@ async function main(): Promise<void> {
 
       const lines = await visibleLines(page);
       const own =
-        surface.name === "the world, just arrived" ? lines : lines.filter((l) => !backdrop.has(l));
+        surface.name === "the world, just arrived" || surface.name === "the door (sign in)"
+          ? lines
+          : lines.filter((l) => !backdrop.has(l));
       const prose = own.filter(isProse);
       const controlCount = (await controls(page)).length;
       const verdict =
