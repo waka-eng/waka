@@ -265,8 +265,41 @@ async function main(): Promise<void> {
     console.log(
       "\n[by-keyboard] A canvas that cannot be tabbed into is not a defect in the canvas.\n" +
         "              It is a question about whether the product has a keyboard path to\n" +
-        "              its own content — reported here, not ruled on.",
+        "              its own content — reported, not ruled on.",
     );
+
+    /* ── WHAT THIS GATE HOLDS, AND WHAT IT ONLY REPORTS ────────────────────
+       The chrome is perfect today: every stop named, every stop visibly
+       focused, and the mouth usable with keys alone. Those are ratchets — a
+       regression in any of them fails, because they were true once and losing
+       them would be somebody's edit rather than an open question.
+
+       Reaching a MEMORY is not a ratchet, because it has never worked. Making
+       it fail here would paint the branch red on a finding that needs a
+       design decision (see docs/audits/by-keyboard-2026-08-26.md), and a
+       check that is always red is a check everyone learns to skip. It is
+       printed loudly on every run instead, so it cannot be forgotten — and
+       the day the archive grows a text route, `memoryOpened` becomes a
+       ratchet too and this comment goes with it. */
+    const broke: string[] = [];
+    if (stops.length < 8) broke.push(`Tab reaches ${stops.length} stops, was 8`);
+    if (unnamed.length > 0) {
+      broke.push(`${unnamed.length} stop(s) announce nothing: ${unnamed.map((s2) => s2.cls).join(", ")}`);
+    }
+    if (dark.length > 0) {
+      broke.push(`${dark.length} stop(s) show no visible focus: ${dark.map((s2) => s2.cls).join(", ")}`);
+    }
+    if (!keptByKeyboard) broke.push("a memory can no longer be kept with the keyboard alone");
+    if (!memoryOpened) {
+      console.log(
+        "\n[by-keyboard] STILL OPEN: no keyboard route into a memory. Not failed here —\n" +
+          "              see the audit. Printed every run so it cannot go quiet.",
+      );
+    }
+    if (broke.length > 0) {
+      console.log(`\n[by-keyboard] the keyboard path got WORSE:\n${broke.map((b) => `                ${b}`).join("\n")}`);
+      process.exit(1);
+    }
   } finally {
     await browser.close();
   }

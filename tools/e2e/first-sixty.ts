@@ -364,6 +364,48 @@ const SURFACES: Surface[] = [
   },
 ];
 
+/**
+ * SURFACES THAT SHOW ONLY FURNITURE ON PURPOSE, each with the ruling that made
+ * them that way. Same contract as `wall-chrome.test.ts`'s `DARK_BY_DECISION`:
+ * an entry may only exist because a decision put it here, never because a
+ * surface went quiet and nobody noticed.
+ *
+ * This is what lets the walk be a GATE rather than a report. It ran red on
+ * every commit otherwise — three surfaces are bare today and two of those are
+ * bare by a founder's ruling — and a check that is always red is a check
+ * everyone learns to skip.
+ *
+ * The ratchet only ever tightens: a NEW bare surface fails, and a listed one
+ * that starts speaking fails too, because an excuse that has quietly become
+ * wrong is a gate lying in the reassuring direction.
+ */
+const BARE_BY_DECISION: Record<string, string> = {
+  "the mouth, opened":
+    "RULED (founder, 2026-08-24): 'the resting phrase, kept — opening the mouth " +
+    "changes nothing about it'. The placeholder repeats the button by decision; " +
+    "docs/audits/first-run-2026-08-26.md records what that buys and costs.",
+  "your settings":
+    "A settings sheet: a name, an address and a row of places to go. Furniture " +
+    "is what it is for, and prose there would be prose about prose.",
+  "the walls list":
+    "A list of walls plus `add new`. The walls name themselves; a sentence " +
+    "explaining a list of names is the same repetition the eyebrow ruling " +
+    "removed one surface over.",
+  "the timeline":
+    "A dial. Its whole content is a control for choosing a moment, and its " +
+    "own affordance is named for a listener — `wind this wall back through " +
+    "time` — which is where the sentence went.",
+  "the archive door":
+    "OPEN, NOT SETTLED. Behind the door is the field, and the field is a " +
+    "CANVAS — its content is painted pixels, so there is no prose for this " +
+    "walk to find and nothing for a screen reader to read either. That is the " +
+    "same fact docs/audits/by-keyboard-2026-08-26.md found from the other " +
+    "side, where it is a live finding rather than a ruling: a keyboard user " +
+    "cannot reach a single memory. Listed here so this gate stays green on a " +
+    "known state rather than red on every commit — NOT because the question " +
+    "is closed. When the archive grows a text route, this entry goes.",
+};
+
 interface Reading {
   name: string;
   /**
@@ -525,7 +567,27 @@ async function main(): Promise<void> {
   /* NOT AIMED is deliberately NOT a failure: it says this walk could not
      reach something, which is a reason to improve the walk rather than a
      verdict about the product. */
-  process.exit(bare.length + blank.length > 0 ? 1 : 0);
+  /* THE RATCHET, BOTH WAYS. */
+  const unexplained = [...bare, ...blank].filter((r) => !(r.name in BARE_BY_DECISION));
+  const spokeAfterAll = Object.keys(BARE_BY_DECISION).filter((name) =>
+    readings.some((r) => r.name === name && r.verdict === "SAYS"),
+  );
+  if (unexplained.length > 0) {
+    console.log(
+      `\n[first-sixty] ${unexplained.length} surface(s) show only furniture and nothing says why:\n` +
+        unexplained.map((r) => `                ${r.name}`).join("\n") +
+        "\n              Either give it a sentence, or add it to BARE_BY_DECISION with\n" +
+        "              the ruling that made it bare and where that ruling is written down.",
+    );
+  }
+  if (spokeAfterAll.length > 0) {
+    console.log(
+      `\n[first-sixty] ${spokeAfterAll.length} surface(s) are listed as deliberately bare and\n` +
+        `              speak now: ${spokeAfterAll.join(", ")}. The decision was\n` +
+        "              reversed and the note was not — delete the entry.",
+    );
+  }
+  process.exit(unexplained.length + spokeAfterAll.length > 0 ? 1 : 0);
 }
 
 main().catch((err) => {

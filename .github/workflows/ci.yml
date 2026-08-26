@@ -148,9 +148,9 @@ jobs:
   # reports in seconds, and this job's own failure names itself rather than
   # hiding inside a long unit-test log.
   browser:
-    name: Browser gates (first paint, journeys)
+    name: Browser gates (first paint, journeys, failure paths, first run, keyboard)
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
 
     services:
       postgres:
@@ -360,6 +360,63 @@ jobs:
       # ways-out` counts that as one of the ways out and needs no model key,
       # so the promise it stood for is measured on every pull request instead
       # of only on the runs that had one.
+      # ── THE GATES THIS BRANCH ADDED ─────────────────────────────────────
+      #
+      # All five were built and run by hand over one session and then left
+      # unwired, which is the state every one of them exists to find: a check
+      # that only runs when somebody remembers is not a check. They need a
+      # live stack and a browser, so they belong here rather than in
+      # `pnpm -r test`.
+
+      # Every act pressed against a 500 on the route it rests on. The question
+      # is not whether it failed — `journeys --negative` already asks that —
+      # but whether ANYTHING SAID SO. Seven acts; three used to say nothing.
+      - name: Failure paths (every act must say what went wrong)
+        run: pnpm e2e:when-it-fails
+
+      # The same seven against a dead connection. An act that speaks under a
+      # 500 can still be silent here, because a thrown TypeError is not an
+      # ApiError — which is exactly how the world came to show people the
+      # browser's own "Failed to fetch".
+      - name: Failure paths, connection dropped
+        run: pnpm e2e:when-it-fails --kind drop
+
+      # And against a session that expired between opening the surface and
+      # pressing. The one failure kind that is also a security question: a
+      # person whose session died must not be left looking at what reads as
+      # success.
+      - name: Failure paths, session expired
+        run: pnpm e2e:when-it-fails --kind 401
+
+      # The three empties, in the order a person meets them: the door before
+      # there is an account, the account with nothing in it, and the account
+      # one save old. Surfaces that show only furniture must be named in
+      # BARE_BY_DECISION with the ruling that made them bare — and a listed one
+      # that starts speaking fails too, so an excuse cannot quietly go stale.
+      - name: First run — the door
+        run: pnpm e2e:first-sixty --stage door
+      - name: First run — an empty account
+        run: pnpm e2e:first-sixty --stage empty
+      - name: First run — one memory kept
+        run: pnpm e2e:first-sixty --stage kept
+
+      # The world with the mouse unplugged. A ratchet on the chrome — eight
+      # stops, all named, all visibly focused, the mouth usable with keys
+      # alone — all of which are true today and would be somebody's edit if
+      # they stopped being. Reaching a MEMORY is printed rather than failed:
+      # it has never worked, needs a design, and a check that is always red is
+      # a check everyone learns to skip.
+      - name: Keyboard reach (chrome must not regress)
+        run: pnpm e2e:by-keyboard
+
+      # The field at 12, 200 and 800 memories, seeded straight into Postgres
+      # because 800 keeps would be 800 model calls. Report-only by design:
+      # there is no agreed frame-budget yet, and inventing one in CI would be
+      # a workflow file deciding a product question. It prints the numbers so
+      # a regression is visible in the log the day it appears.
+      - name: At scale (report only)
+        run: pnpm e2e:at-scale --counts 12,200,800
+
       - name: Stack log
         if: always()
         run: tail -n 200 /tmp/waka-stack.log || true
