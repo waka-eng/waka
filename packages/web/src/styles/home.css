@@ -1147,11 +1147,13 @@
 /* the invitation stays chrome: the placeholder wears the label register the
    resting phrase wears, so the SLOT looks identical until the first letter —
    and the first letter arrives in your own voice, not the page's */
+/* ONE RULE, NOT TWO. These were two adjacent blocks on the same selector and
+   the first's `color: var(--jar-muted)` never applied — the second overrode it
+   on the next line. Found while probing why the mouth reads as bare to a
+   newcomer; the surviving colour is `--jar-faint`, so merging changes nothing
+   a person sees and removes a declaration that read as a live choice. */
 .jar-mouth-field::placeholder {
   line-height: 1.9;
-  color: var(--jar-muted);
-}
-.jar-mouth-field::placeholder {
   color: var(--jar-faint);
   opacity: 1;
 }
