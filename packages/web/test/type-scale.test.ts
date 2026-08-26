@@ -68,7 +68,12 @@ const GOVERNED = ["home.css", "chrome.css", "global.css"] as const;
  * `16px`, `17px`, `9px`, and the display-cluster one-offs (`20`–`44px`) that
  * belong to headings nobody has decided the scale for yet.
  */
-const CEILING = 21;
+const CEILING = 13;
+/* 21 -> 13 on 2026-08-26. Not a pass over the call sites: `e2e:dead-css`
+   deleted ninety-six unreachable selectors and eight of the remaining
+   literals went out inside them. A ratchet only ratchets if it follows the
+   count down, and these two tightened themselves by failing the moment the
+   slack opened. */
 
 /**
  * READ THE RULES, NOT THE PROSE.
@@ -112,7 +117,9 @@ function onTheScale(value: string): boolean {
  * counted here. The point is not shorter CSS — `var(--sp-14)` is longer than
  * `14px`. It is that "off the grid" becomes something a machine can see.
  */
-const SPACE_CEILING = 38;
+const SPACE_CEILING = 33;
+/* 38 -> 33 on 2026-08-26, for the same reason as `CEILING` above: the
+   literals left with the dead rules that carried them. */
 
 /** Spacing values, per governed file, as written. */
 function spacingIn(file: string): string[] {

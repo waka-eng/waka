@@ -1352,20 +1352,6 @@
   opacity: 1;
   pointer-events: auto;
 }
-/* The verbs row: lowercase prose in the panel's own grammar, never the
-   tracked-uppercase label register — the first cut wore that and read as
-   chrome stamped onto the sheet. On the sheet it sits under a hairline,
-   which is the only rule in the whole object: it separates the page you are
-   writing from the two things you can do with it. */
-.jar-mouth-do {
-  margin-top: var(--sp-10);
-  justify-content: center;
-}
-.jar-mouth-slot--note .jar-mouth-do {
-  margin: 0 var(--sp-20);
-  padding: 13px 0 3px;
-  border-top: 1px solid var(--jar-panel-edge);
-}
 .jar-mouth-slot--note .jar-mouth-note {
   margin: var(--sp-10) var(--sp-20) 0;
 }

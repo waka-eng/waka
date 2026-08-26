@@ -108,40 +108,9 @@
 
 
 
-.reference-tabs button.active,
-.reference-language button.active {
-  background: #111;
-  color: #fff;
-}
 
-.reference-capture-modal .cell.capture {
-  position: relative;
-  width: 100%;
-  min-height: min(520px, calc(100dvh - 180px));
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
 
-.reference-capture-modal .reflect-bar.visible {
-  display: flex;
-  margin-top: var(--sp-16);
-}
 
-.reference-capture-page-form .cell.capture {
-  grid-column: auto;
-  grid-row: auto;
-  width: 100%;
-  max-width: none;
-  min-width: 0;
-  min-height: 340px;
-  aspect-ratio: auto;
-  box-sizing: border-box;
-}
-.nc-canvas--drawer-open .nc-stage,
-.nc-canvas--drawer-open .nc-titlecard {
-  opacity: 0.52;
-}
 
 @keyframes contentsFlowIn {
   from {
@@ -323,51 +292,12 @@
   z-index: 5;
 }
 
-.nc-note-modal .nc-note-body {
-  font-family: var(--font-sans);
-  font-size: 27px;
-  font-weight: 450;
-  line-height: 1.2;
-  letter-spacing: 0;
-}
 
-.nc-note-modal.nc-note--text-long .nc-note-body,
-.nc-note--text-long .nc-note-body--preview,
-.nc-note--text-long .nc-note-body-edit--inline {
-  font-size: 20px;
-  line-height: 1.18;
-}
 
-.nc-note-modal.nc-note--text-compact .nc-note-body,
-.nc-note--text-compact .nc-note-body--preview,
-.nc-note--text-compact .nc-note-body-edit--inline {
-  font-size: 17px;
-  line-height: 1.2;
-}
 
-.nc-note--text-tiny .nc-note-body--preview,
-.nc-note--text-tiny .nc-note-body-edit--inline {
-  font-size: var(--t-note);
-  line-height: 1.22;
-}
 
-.nc-note--text-micro .nc-note-body--preview,
-.nc-note--text-micro .nc-note-body-edit--inline {
-  font-size: var(--t-fine);
-  line-height: 1.24;
-}
 
-.nc-note--text-nano .nc-note-body--preview,
-.nc-note--text-nano .nc-note-body-edit--inline {
-  font-size: var(--t-meta);
-  line-height: 1.24;
-}
 
-.nc-note--text-ultra .nc-note-body--preview,
-.nc-note--text-ultra .nc-note-body-edit--inline {
-  font-size: 9px;
-  line-height: 1.22;
-}
 
 @keyframes nc-note-modal-open {
   from {
@@ -391,13 +321,6 @@
   }
 }
 
-.nc-note--expanded.nc-note--featured .nc-note-body,
-.nc-note--expanded .nc-note-body {
-  font-size: 40px;
-  font-weight: 420;
-  line-height: 1.04;
-  letter-spacing: -0.018em;
-}
 
 .nc-note-body {
   margin: 0;
@@ -429,9 +352,6 @@
   overflow-wrap: normal;
 }
 
-.nc-note--featured .nc-note-inspirations {
-  max-height: 90px;
-}
 
 @keyframes nc-note-spinner {
   to {
@@ -471,21 +391,12 @@
     font-size: 22px;
   }
 
-  .nc-note-modal .nc-note-body {
-    font-size: 30px;
-    line-height: 1.1;
   }
-}
 
 @media (max-width: 900px) {
 
   }
 
-.react-flow__node.dragging .meaning-flow-node {
-  box-shadow:
-    0 0 0 3px rgba(15, 15, 14, 0.08),
-    0 12px 26px rgba(15, 15, 14, 0.12);
-}
 
 /* -----------------------------------------------------------------------
  * Reset + global baseline
@@ -696,9 +607,6 @@ body.dropped .bg-blob.b3 {
 @media (max-width: 760px) {
   }
 
-.history-overlay.visible {
-  display: flex;
-}
 
 @keyframes histSlide {
   from {
@@ -798,12 +706,6 @@ body.dropped .bg-blob.b3 {
   background: var(--cell);
   border: none;
 }
-.capture.focus-enter {
-  animation: capExpand 500ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-.capture.focus-exit {
-  animation: capCollapse 400ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
 @keyframes capExpand {
   0% {
     opacity: 0;
@@ -852,13 +754,7 @@ body.dropped .bg-blob.b3 {
     background: var(--cell);
   }
 }
-.capture.reflect-glow {
-  animation: warmGlow 2.2s ease;
-}
 
-.reflect-area.visible {
-  display: flex;
-}
 
 @keyframes reflectQuestionSpin {
   to {
@@ -876,31 +772,11 @@ body.dropped .bg-blob.b3 {
   }
 }
 
-.reflect-bar.visible {
-  display: flex;
-}
 
-.reflect-complete.visible {
-  opacity: 1;
-}
 
-.close-confirm.visible {
-  display: flex;
-}
 
-.thread-toggle.open .thread-toggle-caret {
-  transform: rotate(90deg);
-}
 
-.thread-body.open {
-  display: block;
-}
 
-.thread-a.skipped {
-  color: var(--muted);
-  font-style: italic;
-  opacity: 0.6;
-}
 
 
 /* -----------------------------------------------------------------------
@@ -1319,26 +1195,14 @@ body.dropped .bg-blob.b3 {
   overflow: hidden;
 }
 
-.detail-view.visible {
-  display: flex;
-}
 
 
 @media (max-width: 760px) {
 
-  .detail-body {
-    width: 100%;
-    padding: var(--sp-24) var(--sp-18) 34px;
-    gap: var(--sp-22);
   }
-}
 
 
 
-.inspiration-first-capture > .cell.capture {
-  min-height: 280px;
-  aspect-ratio: unset;
-}
 
 @keyframes ncSaveSavedFlash {
   0% {
@@ -1361,24 +1225,6 @@ body.dropped .bg-blob.b3 {
   }
 }
 
-.reference-capture-modal .cell.capture {
-  min-height: inherit;
-  padding: 0;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr);
-  gap: 0;
-  position: relative;
-}
-.reference-capture-modal .reflect-area.visible {
-  border: 0;
-  border-radius: 34px;
-  background: rgba(255, 255, 255, 0.97);
-  box-shadow:
-    0 22px 70px -44px rgba(26, 23, 20, 0.13);
-  padding: clamp(var(--sp-28), 5vw, 58px);
-  padding-bottom: clamp(74px, 6vw, 92px);
-  overflow: visible;
-}
 
 @keyframes captureBackdropIn {
   from {
@@ -1470,11 +1316,6 @@ body.dropped .bg-blob.b3 {
   to {
     transform: translateY(0) scaleY(1);
   }
-}
-.nc-canvas--drawer-open .nc-stage,
-.nc-canvas--drawer-open .nc-titlecard {
-  opacity: 0.78;
-  transition: opacity 260ms ease;
 }
 
 @keyframes drawerLabelFade {
@@ -1580,10 +1421,6 @@ body.dropped .bg-blob.b3 {
 }
 
 @media (max-width: 760px) {
-.reference-capture-modal .reflect-area.visible {
-    border-radius: 22px;
-    padding: var(--sp-22) var(--sp-18) 126px;
-  }
 }
 
 /* -----------------------------------------------------------------------
@@ -1628,14 +1465,7 @@ textarea {
 }
 
 @media (hover: none) and (pointer: coarse) {
-.capture-trigger,
-.locale-setting select,
-.meta,
-.history-close,
-.history-item,
-.memory-contents-back,
-.memory-detail-close,
-.memory-map-node .memory-group-hitarea {
+.meta {
     min-height: 44px;
   }
 
@@ -1702,23 +1532,9 @@ textarea {
     padding-block: 8px;
   }
 
-  .inspiration-first-capture > .cell.capture {
-    min-height: min(430px, calc(100dvh - 210px));
-  }
-
-  .history-overlay.visible {
-    align-items: stretch;
-    background: rgba(244, 242, 238, 0.82);
-  }
-
-  .reference-capture-modal .cell.capture {
-    min-height: 0;
-  }
-.reference-capture-modal .reflect-area.visible {
-    min-height: 0;
-    padding: var(--sp-22) var(--sp-18);
-  }
-
+  
+  
+  
   .nc-lang--top {
     top: max(20px, env(safe-area-inset-top));
     right: 18px;
@@ -1730,9 +1546,6 @@ textarea {
   }
 }
 
-.nc-note--passive .nc-note-preview {
-  pointer-events: none;
-}
 
 @keyframes histSheetUp {
   from {
@@ -1770,27 +1583,12 @@ textarea {
  * asked for.
  * ============================================================ */
 
-.nc-note .nc-note-actions {
-  opacity: 0;
-  transition: opacity 180ms ease;
-}
 
-.nc-note:hover .nc-note-actions,
-.nc-note:focus-within .nc-note-actions {
-  opacity: 1;
-}
 
-/* Keyboard users must never lose a control to a hover rule. */
-.nc-note .nc-note-actions:focus-within {
-  opacity: 1;
-}
 
 /* Coarse pointers have no hover, so nothing may hide behind one. */
 @media (hover: none) {
-  .nc-note .nc-note-actions {
-    opacity: 1;
   }
-}
 
 /* ============================================================
  * The thought is set as a thought.
@@ -1799,27 +1597,14 @@ textarea {
  * in the same voice as its chrome. Fraunces separates the two: everything the
  * product says about itself stays in sans, and the thoughts are in serif.
  * ============================================================ */
-
-.nc-note-body--preview,
-.nc-note-body-edit--inline {
+.nc-note-body--preview {
   font-family: "Fraunces", "Times New Roman", serif;
   font-weight: 400;
   letter-spacing: -0.005em;
   line-height: 1.32;
 }
 
-/* Travel. The wall does not cross-fade to the next room — this room's notes
-   leave upward and the next room's arrive from below, staggered by their
-   position so the set moves like a stack rather than a slide. */
-.nc-stage--travelling-out .nc-note {
-  animation: nc-wall-leave 260ms cubic-bezier(0.4, 0, 1, 1) forwards;
-  animation-delay: calc(var(--travel-i, 0) * 26ms);
-}
 
-.nc-stage--travelling-in .nc-note {
-  animation: nc-wall-arrive 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
-  animation-delay: calc(var(--travel-i, 0) * 34ms);
-}
 
 @keyframes nc-wall-leave {
   to {
@@ -1839,11 +1624,6 @@ textarea {
 
 /* Motion is the whole idea here, but it is not worth making anyone ill. */
 @media (prefers-reduced-motion: reduce) {
-.nc-stage--travelling-out .nc-note,
-.nc-stage--travelling-in .nc-note {
-    transition-duration: 1ms;
-    animation: none;
-  }
 }
 
 /* The wall is centred; on a narrow screen the rail would sit on top of it. */

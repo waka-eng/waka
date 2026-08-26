@@ -27,6 +27,18 @@
  *
  * It walks the door on both tabs, the account page, the welcome, the world
  * and the world with its mouth open.
+ *
+ * READ THE WORLD'S GEOMETRY WITH ONE EYE CLOSED. Each run signs up a NEW
+ * account, and the world generates its poster from what that account has
+ * kept — so `.jar-word` widths and the poster's height differ between any two
+ * runs whether or not anything changed. That is content, not style, and a
+ * fourth CSS deletion showed up as 49 world differences of which every single
+ * one was `width`, `height` or the box, with no `font-size`, `letter-spacing`
+ * or `color` among them.
+ *
+ * So: on the four chrome surfaces, expect zero differences of any kind. On
+ * the two world surfaces, judge the TYPE and COLOUR properties, and treat a
+ * geometry difference as evidence only when a type property moved with it.
  */
 import { writeFileSync } from "node:fs";
 import { chromium } from "playwright";

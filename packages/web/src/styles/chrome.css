@@ -266,8 +266,7 @@ a:hover {
    that paints its own ground is listed here, so nothing is left inheriting a
    colour from the theme it is no longer in. */
 .login-shell,
-.profile-shell,
-.surface-shell {
+.profile-shell {
   background: var(--w-ground);
   color: var(--w-ink);
 }
@@ -295,7 +294,6 @@ a:hover {
 }
 /* the Google button is the one place a foreign brand's own surface belongs —
    it stays white, because a recoloured Google button is a phishing signal */
-.google-button,
 .btn-google {
   background: #fff;
   color: #1f1f1f;
@@ -887,9 +885,6 @@ body .profile-disclose {
   margin: var(--sp-26) 0 0;
   font-size: var(--t-note);
 }
-body .profile-disclose--last {
-  margin-top: var(--sp-40);
-}
 body .profile-disclose button {
   appearance: none;
   background: none;
@@ -905,15 +900,6 @@ body .profile-disclose button {
 }
 body .profile-disclose button:hover {
   color: var(--w-ink);
-}
-/* the one that throws the account away is the quietest thing on the page:
-   what cannot be undone should be hardest to reach by accident, and the
-   confirmation carries the weight, not the colour */
-body .profile-disclose--last button {
-  color: var(--w-faint);
-}
-body .profile-disclose--last button:hover {
-  color: var(--w-muted);
 }
 /* a revealed section arrives, it does not appear */
 body .profile-public-panel:not([hidden]),
@@ -1107,7 +1093,6 @@ body textarea {
    Leaving is harmless, so it reads normally. Destroying is last and quietest:
    what cannot be undone should be the hardest thing to hit by accident, and
    the confirmation carries the warning. */
-body .profile-disclose--last,
 body .login-footer {
   margin: 0;
 }

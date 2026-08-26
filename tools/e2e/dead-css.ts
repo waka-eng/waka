@@ -461,6 +461,23 @@ async function walkSurface(
 
 const PASSWORD = "dead-css-password-1";
 
+/** Reopen a keepsake after a state that replaced the card with itself. */
+async function openCardAgain(page: Page): Promise<void> {
+  try {
+    await page.locator(".jar-saved").first().click({ timeout: 8_000 });
+    await page.waitForTimeout(3_000);
+    for (const y of [390, 350, 430]) {
+      for (let x = 160; x <= 940; x += 28) {
+        await page.mouse.click(x, y);
+        await page.waitForTimeout(350);
+        if ((await page.evaluate(() => document.querySelectorAll(".jar-panel").length)) > 0) return;
+      }
+    }
+  } catch {
+    /* the next state will report itself as not walked */
+  }
+}
+
 async function surfaces(
   ctx: BrowserContext,
   page: Page,
@@ -528,8 +545,71 @@ async function surfaces(
   if (opened) {
     await page.waitForTimeout(1_200);
     await walkSurface(cdp, page, "a memory open", seen, ask);
+
+    /* THE STATES A WALK HAS TO ENTER BEFORE IT MAY CALL ANYTHING DEAD.
+       The first version of this stopped at the open card and reported 218
+       `home.css` selectors as unused — among them `.jar-board-acts`, which
+       `e2e:journeys` proves is alive and which is only reachable by reaching
+       for headquarters. An unentered state and a dead rule look identical
+       from here, so the answer is to enter more states rather than to trust
+       the number. Each of these is one modal or one reveal. */
+    for (const [what, open] of [
+      ["saying it in your own words", async () => {
+        await page.locator(".jar-panel-text").first().click({ timeout: 6_000 });
+      }],
+      ["answering a memory", async () => {
+        await page.locator(".jar-panel-foot button", { hasText: /reflect/i }).first().click({ timeout: 6_000 });
+      }],
+      ["letting a memory go", async () => {
+        await page.locator(".jar-panel-foot button", { hasText: /delete/i }).first().click({ timeout: 6_000 });
+      }],
+    ] as Array<[string, () => Promise<void>]>) {
+      try {
+        await open();
+        await page.waitForTimeout(1_500);
+        await walkSurface(cdp, page, what, seen, ask);
+      } catch {
+        console.log(`  ${what.padEnd(22)} NOT WALKED — it did not open`);
+      }
+      /* back to the card for the next one, since each of these replaces it */
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(800);
+      if ((await page.evaluate(() => document.querySelectorAll(".jar-panel").length)) === 0) {
+        await openCardAgain(page);
+      }
+    }
   } else {
     console.log("  a memory open         NOT WALKED — no card opened");
+  }
+
+  /* AND THE THINGS THE WORLD ITSELF OPENS. */
+  await page.keyboard.press("Escape");
+  await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(6_000);
+  for (const [what, selector] of [
+    ["the timeline", ".jar-when"],
+    ["your settings", ".jar-account"],
+  ] as Array<[string, string]>) {
+    try {
+      await page.locator(selector).first().click({ timeout: 6_000 });
+      await page.waitForTimeout(1_500);
+      await walkSurface(cdp, page, what, seen, ask);
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(800);
+    } catch {
+      console.log(`  ${what.padEnd(22)} NOT WALKED — it did not open`);
+    }
+  }
+
+  /* HEADQUARTERS, REACHED FOR. Its four acts are revealed by hover and by
+     focus-within, and nothing else in this walk hovers anything — which is
+     exactly why they read as dead until now. */
+  try {
+    await page.locator(".jar-hq-inner, .jar-hq").first().hover({ timeout: 6_000 });
+    await page.waitForTimeout(1_200);
+    await walkSurface(cdp, page, "headquarters reached for", seen, ask);
+  } catch {
+    console.log("  headquarters reached for  NOT WALKED");
   }
 
   await page.goto(`${base}/onboarding`, { waitUntil: "domcontentloaded" });

@@ -239,15 +239,8 @@
    8-9px with 0.18-0.22em tracking -- the single most repeated gesture in the
    product, and the one that made every screen read as an instrument panel.
    ======================================================================= */
-.reference-capture-kicker,
-.reference-capture-close,
-.nc-note-evidence-label,
-.nc-note-evidence-source,
-.memory-reading-plain-where,
 .login-eyebrow,
-.field-label,
-.history-title,
-.capture-trigger-label {
+.field-label {
   font-family: var(--voice-you);
   font-size: var(--t-meta);
   font-weight: 500;
@@ -257,13 +250,6 @@
 }
 
 /* Counts, timestamps, provenance: quieter still, and never tracked. */
-.nc-note-when,
-.nc-note-provenance-text,
-.memory-contents-item-meta,
-.memory-led-summary,
-.memory-contents-readings-summary,
-.history-item-meta,
-.history-attachment-meta,
 .meta {
   font-family: var(--voice-you);
   font-size: var(--t-meta);
@@ -320,8 +306,6 @@
 /* Length tempers the size; the floor stays legible. The old ladder bottomed
    out at 9px, which is below the size at which anyone reads anything. */
 
-.nc-note:hover .nc-note-footer-row,
-.nc-note:focus-within .nc-note-footer-row { opacity: 1; }
 
 /* ==========================================================================
    5. CAPTURE
@@ -345,13 +329,6 @@
 .memory-contents-expanded-editor,
 
 /* Anything the machine claims about a person takes the room's face. */
-.memory-reading-plain-title,
-.memory-contents-reflection-question,
-
-.memory-reading-plain-title,
-
-.history-empty,
-.memory-contents-reflection-empty,
 .nc-loading {
   font-family: var(--voice-you);
   font-size: var(--t-ui);
@@ -363,7 +340,6 @@
 
    One shape for a real action, one for a quiet one, on every surface.
    ======================================================================= */
-.memory-contents-secondary-action,
 .btn-primary,
 .btn-destructive,
 .btn-google {
@@ -417,14 +393,6 @@
    affect layout, so it is safe to apply broadly.
    ======================================================================= */
 .nc-note,
-.nc-note-footer-row,
-.nc-note-inspiration-slide,
-.memory-contents-item,
-.memory-contents-secondary-action,
-.reference-capture-modal,
-.history-panel,
-.history-item,
-.capture-trigger,
 .btn-primary,
 .btn-destructive,
 .btn-google,
@@ -433,11 +401,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .nc-note,
-  .nc-note-footer-row,
-  .memory-contents-item,
-  .history-item,
-  .reference-capture-modal {
+.nc-note {
     transition-duration: 1ms;
     animation-duration: 1ms;
   }
@@ -516,11 +480,6 @@ body {
   transform-origin: center top;
 }
 
-body:has(.memory-contents-item--expanded) .nc-stage--top-of-mind-wall,
-body:has(.reference-capture-modal) .nc-stage--top-of-mind-wall {
-  transform: scale(0.97) translateY(-10px);
-  opacity: 0.5;
-}
 
 @media (prefers-reduced-motion: reduce) {
   .nc-stage--top-of-mind-wall { transition: none; }

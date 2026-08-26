@@ -269,7 +269,7 @@ tree is unreferenced.
 |---|---|
 | Gate | `pnpm e2e:dead-css` — the browser is asked which rule won each property on each element — plus `e2e:measure` cases comparing rendered primitives across surfaces |
 | At open | 917 top-level class rules; **34** distinct prefixes; `btn-` and `profile-` each declared in two files |
-| **Now** | **10** prefixes (the flat-surface deletion took 24 of them). **40 rules and 16 selector lists** proved dead and removed across two harvests, each with a zero-difference computed-style diff behind it. The label register: **25 declarations → 1**, in its own layer, ratcheted. 24 overruled rules still standing, each one named |
+| **Now** | **10** prefixes (the flat-surface deletion took 24 of them). **93 rules and 27 selector lists** proved dead and removed across four harvests, each with a computed-style diff behind it. The label register: **25 declarations → 1**, in its own layer, ratcheted. Two orphan modules gone and a gate holding that at zero. Type/spacing ceilings **21 → 13** and **38 → 33** |
 | State | **IN PROGRESS**, and measurable for the first time |
 
 The modal work of 2026-08-25 is the shape every primitive follows: the card
@@ -487,6 +487,35 @@ with `SurfaceBoundary`'s "and the flat surfaces still worked" — that file's
 
 Checked at the same time and clean: every in-app navigation target
 (`to=`, `navigate(`, `href=`) names a route that still exists.
+
+**FIFTH HARVEST — WIDEN THE WALK, THEN BELIEVE IT.** The unreachable set is
+only as good as the states entered, so the walk gained five: a memory being
+edited in your own words, the timeline, your settings, and the account page's
+tabs and public page from the round before. It also gained the tighter prefix
+guard, which stopped the word `surface` vouching for `.surface-shell`.
+
+**96 more unreachable selectors**, and the shape is the same every time: whole
+retired designs still being shipped. The note-canvas's eight text-size
+variants (`.nc-note--text-long` through `--ultra`, each with a preview and an
+inline editor), the reference-capture modal, the reflect bar, the thread
+toggles, the detail view, the history panel, the memory-contents drawer — and
+`.react-flow__node.dragging .meaning-flow-node`, left behind by the graph
+screen deleted three commits earlier.
+
+53 rules removed, 11 selector lists pruned. Chrome surfaces: **0 computed
+differences**. The world showed 49, every one of them `width`, `height` or a
+box and not one a type or colour property — because each snapshot run signs up
+a new account and the world generates a different poster. That limitation is
+written into the tool now rather than left as a trap for whoever reads its
+output next.
+
+**AND THE RATCHETS TIGHTENED THEMSELVES.** `type-scale.test.ts` carries a test
+whose only job is to fail when its own ceiling has drifted above the real
+count — slack in a ratchet is room for the thing it was built to stop. Eight
+literal type sizes and five literal spacings left inside the dead rules that
+carried them, so both ceilings failed and came down: **21 → 13** and
+**38 → 33**. Nobody edited a call site; the count moved because the dead code
+that held the literals is gone.
 
 ### A5 — The product on a phone
 
