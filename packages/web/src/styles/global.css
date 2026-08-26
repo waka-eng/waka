@@ -106,27 +106,7 @@
   --duration-page: 1400ms;
 }
 
-.top-home-capture .cell.capture {
-  position: relative;
-  inset: auto;
-  width: 100%;
-  min-height: 0;
-  flex: 1;
-  margin-top: var(--sp-12);
-  transform: none;
-  box-shadow: none;
-}
 
-.top-home-capture .cell.capture.focused {
-  position: fixed;
-  inset: 0;
-  z-index: 260;
-  width: auto;
-  min-height: 100dvh;
-  margin: 0;
-  padding: clamp(var(--sp-18), 4vw, 42px);
-  background: #fffdf7;
-}
 
 .reference-tabs button.active,
 .reference-language button.active {
@@ -158,10 +138,8 @@
   aspect-ratio: auto;
   box-sizing: border-box;
 }
-
 .nc-canvas--drawer-open .nc-stage,
-.nc-canvas--drawer-open .nc-titlecard,
-.nc-canvas--drawer-open .nc-footnote {
+.nc-canvas--drawer-open .nc-titlecard {
   opacity: 0.52;
 }
 
@@ -271,12 +249,6 @@
   justify-self: center;
 }
 
-.nc-first-run-guide .nc-loading {
-  max-width: 560px;
-  justify-self: center;
-  color: rgba(70, 64, 54, 0.74);
-  line-height: 1.5;
-}
 
 .nc-loading {
   position: absolute;
@@ -507,10 +479,7 @@
 
 @media (max-width: 900px) {
 
-  .top-home-capture .cell.capture {
-    min-height: 360px;
   }
-}
 
 .react-flow__node.dragging .meaning-flow-node {
   box-shadow:
@@ -655,18 +624,6 @@ body.dropped .bg-blob.b3 {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
 }
 
-body.dragging .drop-overlay {
-  opacity: 1;
-}
-.drop-overlay .card {
-  border: 1px dashed var(--ink);
-  padding: var(--sp-22) var(--sp-26);
-  background: #fffdf7;
-  font-family: var(--font-mono);
-  font-size: var(--t-meta);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
 
 /* -----------------------------------------------------------------------
  * Content well + page header
@@ -739,18 +696,9 @@ body.dragging .drop-overlay {
   position: relative;
 }
 
-.grid.home-grid {
-  grid-template-columns: repeat(3, 1fr);
-  max-width: 720px;
-  margin-inline: auto;
-}
 
 @media (max-width: 760px) {
-  .grid.home-grid {
-    grid-template-columns: repeat(2, 1fr);
-    max-width: 480px;
   }
-}
 
 .history-overlay.visible {
   display: flex;
@@ -809,53 +757,8 @@ body.dragging .drop-overlay {
   }
 }
 
-/* Home grid hides the inline capture cell; focused mode is the overlay. */
-.grid.home-grid > .cell.capture {
-  display: none;
-}
-.grid.home-grid > .cell.capture.focused {
-  display: flex;
-  position: absolute;
-  inset: 0;
-  grid-column: unset;
-  grid-row: unset;
-  border: var(--border-hairline);
-  border-radius: var(--radius-sm);
-  box-shadow:
-    0 30px 80px rgba(15, 15, 14, 0.1),
-    0 6px 16px rgba(15, 15, 14, 0.04);
-}
 
-/*
- * Empty-state home grid — the user has no classified saves yet, so the
- * 3×3 cluster rhythm has nothing to fill. Promote the capture cell to a
- * single centred square so the first-run target is obvious without
- * forcing the user to discover the header "+ CAPTURE" pill.
- */
-.grid.home-grid--empty {
-  grid-template-columns: 1fr;
-  grid-template-rows: 1fr;
-  max-width: 480px;
-  aspect-ratio: 1 / 1;
-}
-.grid.home-grid--empty > .cell.capture {
-  display: flex;
-  grid-column: unset;
-  grid-row: unset;
-  aspect-ratio: unset;
-  min-height: 100%;
-}
 
-/*
- * Loading-state placeholders — six dimmed tiles trace the eventual
- * 3×3 cluster rhythm while the parent's first fetch is in flight, so
- * the page never momentarily reads as empty before the server answers.
- * The capture cell stays hidden in this state (it's only relevant once
- * we know the user has zero saves).
- */
-.grid.home-grid--loading > .cell.capture {
-  display: none;
-}
 
 @keyframes skeletonPulse {
   0%,
@@ -876,21 +779,8 @@ body.dragging .drop-overlay {
     border-color 200ms ease,
     background 400ms ease;
 }
-.capture.dragover {
-  border-color: var(--ink);
-  background: #f6f2e8;
-}
 
-.cap-save.visible,
-.reference-capture-modal .cap-save.visible {
-  opacity: 1;
-  pointer-events: auto;
-  transform: scale(1);
-}
 
-.cap-save--quick.visible {
-  transform: scale(1.03);
-}
 
 /* Focus-mode expansion: capture grows to cover the entire grid. The
    prototype uses absolute positioning on top of `.grid` so the cluster
@@ -939,10 +829,6 @@ body.dragging .drop-overlay {
   }
 }
 
-.cap-confirm.visible {
-  opacity: 1;
-  pointer-events: auto;
-}
 
 /* Save-flash + reflect-glow ambient feedback animations on the capture
    cell. The prototype declares both as one-shot keyframes that the JS
@@ -958,9 +844,6 @@ body.dragging .drop-overlay {
   100% {
     box-shadow: inset 0 0 0 0 rgba(15, 15, 14, 0);
   }
-}
-.capture.save-flash {
-  animation: capPulse 600ms var(--ease-organic);
 }
 @keyframes warmGlow {
   0% {
@@ -1023,9 +906,6 @@ body.dragging .drop-overlay {
   opacity: 0.6;
 }
 
-.hitl-menu.open {
-  display: block;
-}
 
 /* -----------------------------------------------------------------------
  * /login page
@@ -1481,15 +1361,7 @@ body.dragging .drop-overlay {
   }
 }
 
-.home-view-switcher button:hover,
-.home-view-switcher button.active {
-  background: rgba(15, 15, 14, 0.08);
-  color: var(--ink);
-}
 
-.home-view-switcher button.active {
-  box-shadow: inset 0 0 0 1px rgba(15, 15, 14, 0.08);
-}
 
 .inspiration-first-capture > .cell.capture {
   min-height: 280px;
@@ -1525,8 +1397,6 @@ body.dragging .drop-overlay {
   gap: 0;
   position: relative;
 }
-
-.reference-capture-modal .cap-body,
 .reference-capture-modal .reflect-area.visible {
   border: 0;
   border-radius: 34px;
@@ -1629,10 +1499,8 @@ body.dragging .drop-overlay {
     transform: translateY(0) scaleY(1);
   }
 }
-
 .nc-canvas--drawer-open .nc-stage,
-.nc-canvas--drawer-open .nc-titlecard,
-.nc-canvas--drawer-open .nc-footnote {
+.nc-canvas--drawer-open .nc-titlecard {
   opacity: 0.78;
   transition: opacity 260ms ease;
 }
@@ -1745,9 +1613,7 @@ body.dragging .drop-overlay {
 }
 
 @media (max-width: 760px) {
-
-  .reference-capture-modal .cap-body,
-  .reference-capture-modal .reflect-area.visible {
+.reference-capture-modal .reflect-area.visible {
     border-radius: 22px;
     padding: var(--sp-22) var(--sp-18) 126px;
   }
@@ -1795,20 +1661,14 @@ textarea {
 }
 
 @media (hover: none) and (pointer: coarse) {
-  .capture-trigger,
-  .locale-setting select,
-  .meta,
-  .history-close,
-  .history-item,
-  .home-view-switcher button,
-  .cap-file-btn,
-  .cap-expand,
-  .cap-save,
-  .memory-contents-back,
-  .memory-detail-close,
-  .nc-drawer-object,
-  .nc-save-cta,
-  .memory-map-node .memory-group-hitarea {
+.capture-trigger,
+.locale-setting select,
+.meta,
+.history-close,
+.history-item,
+.memory-contents-back,
+.memory-detail-close,
+.memory-map-node .memory-group-hitarea {
     min-height: 44px;
   }
 
@@ -1887,9 +1747,7 @@ textarea {
   .reference-capture-modal .cell.capture {
     min-height: 0;
   }
-
-  .reference-capture-modal .cap-body,
-  .reference-capture-modal .reflect-area.visible {
+.reference-capture-modal .reflect-area.visible {
     min-height: 0;
     padding: var(--sp-22) var(--sp-18);
   }
@@ -2014,11 +1872,8 @@ textarea {
 
 /* Motion is the whole idea here, but it is not worth making anyone ill. */
 @media (prefers-reduced-motion: reduce) {
-  .nc-rail,
-  .nc-rail-room,
-  .nc-rail-room-edge,
-  .nc-stage--travelling-out .nc-note,
-  .nc-stage--travelling-in .nc-note {
+.nc-stage--travelling-out .nc-note,
+.nc-stage--travelling-in .nc-note {
     transition-duration: 1ms;
     animation: none;
   }
@@ -2026,27 +1881,9 @@ textarea {
 
 /* The wall is centred; on a narrow screen the rail would sit on top of it. */
 @media (max-width: 720px) {
-  .nc-rail {
-    top: auto;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    transform: none;
-    grid-auto-flow: column;
-    justify-content: center;
-    gap: var(--sp-4);
-    padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
-    background: linear-gradient(rgba(250, 249, 246, 0), rgba(250, 249, 246, 0.92) 40%);
+  
+  
   }
-
-  .nc-rail-room {
-    padding: var(--sp-6) var(--sp-10);
-  }
-
-  .nc-rail-room-edge {
-    display: none;
-  }
-}
 
 
 /* ---------------------------------------------------------------------------

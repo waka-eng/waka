@@ -3043,30 +3043,6 @@
   text-decoration: underline dotted;
   text-underline-offset: 3px;
 }
-/* THE STAR. A sentence the person wrote wears one small point of light before
-   its first word — the state IS the glyph, no badge, no label. It is also the
-   press target for handing the sentence back, so it is a button that refuses
-   to look like machinery. */
-.jar-star {
-  background: none;
-  border: none;
-  padding: 0 var(--sp-6) 0 0;
-  margin: 0;
-  font: inherit;
-  line-height: inherit;
-  color: var(--jar-ink);
-  text-shadow: 0 0 10px rgba(240, 235, 214, 0.45), 0 0 3px rgba(240, 235, 214, 0.6);
-  cursor: pointer;
-  /* THE TURN. The star appears the moment the words become held, and the
-     motion is the explanation: it settles INTO place — a small turn and a
-     scale falling to rest — the way a held thing stops moving. 0.6s, inside
-     the founder's 0.4–0.8 band; ease-out because arriving is a settling,
-     not a launch. Runs once, on appearance, and never again: motion
-     explains the state change, it does not decorate the state
-     (no-quiet-corners Phase 8 — founder-gated, reviewed live). */
-  display: inline-block;
-  animation: jar-star-turn 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
-}
 @keyframes jar-star-turn {
   from {
     transform: rotate(-100deg) scale(0.4);
@@ -3080,24 +3056,48 @@
     opacity: 1;
   }
 }
+/* THE STAR, IN THE HOME IT MOVED TO.
+ *
+ * It used to be `.jar-star`: a bare glyph button before the first word of a
+ * sentence the person wrote, the state being the glyph itself. It became a
+ * labelled verb — `Hand it back to WAKA` — and when it did, only half of it
+ * made the journey. `e2e:dead-css` found `.jar-star` matching nothing on any
+ * surface while `motion.test.ts` still guarded it, which is a gate protecting
+ * a rule for an element that no longer exists: green, and about nothing.
+ *
+ * TWO RULINGS WERE LEFT BEHIND, and both are restored here rather than
+ * dropped with the class.
+ *
+ * THE TURN, which is founder-gated (no-quiet-corners Phase 8, reviewed live).
+ * The glow followed the glyph to this button — the same colour, one step
+ * softer — and the settle did not. The numbers are the approved ones,
+ * unchanged: 0.6s inside the 0.4–0.8 band, ease-out because arriving is a
+ * settling and not a launch, `both` so it runs once on appearance and never
+ * again. Moving it is not a new motion decision; leaving it behind was.
+ *
+ * THE GLYPH LIVES IN THE STYLESHEET, NOT THE SENTENCE. The original rule said
+ * so in as many words, and the reason is that anything asking the DOM what a
+ * line says — a screen reader naming the button, a test reading its text —
+ * should get the words and not a dingbat. The labelled version had `✶ ` typed
+ * into the JSX, so the accessible name began with a six-pointed star. It is a
+ * `::before` again, and the button's name is the sentence it is. */
+.jar-star-act {
+  text-shadow: 0 0 10px rgba(240, 235, 214, 0.35);
+}
+.jar-star-act::before {
+  content: "\2736\00a0";
+  display: inline-block;
+  animation: jar-star-turn 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+/* THE RULE COMES BEFORE THE EXCEPTION TO IT, and not only for reading order:
+   `motion.test.ts` reads this file as text and takes the FIRST rule matching
+   the class, so a reduced-motion block written above the rule it exempts hands
+   the gate `animation: none` and it reports the turn as having no duration. */
 @media (prefers-reduced-motion: reduce) {
-  .jar-star {
+  .jar-star-act::before {
     /* the state still changes; only the motion stays home */
     animation: none;
   }
-}
-.jar-star:focus-visible {
-  outline: 1px solid var(--jar-ink);
-  outline-offset: 2px;
-}
-/* the glyph lives in the stylesheet, not the sentence: a starred line's text
-   content stays exactly the person's words, for every reader that asks the
-   DOM what the sentence says (tests included). */
-.jar-star::before {
-  content: "\2736";
-}
-.jar-star-act {
-  text-shadow: 0 0 10px rgba(240, 235, 214, 0.35);
 }
 /* "얘가 이걸 만든 이유가 이거다" — the server's own reason, when it gave one.
    A third register down, so it never competes with the quotation above it. */

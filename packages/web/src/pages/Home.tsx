@@ -10798,7 +10798,7 @@ function HomeExperience(): JSX.Element {
                                   title="Your own words — WAKA will not rewrite them"
                                   onClick={() => setEntrusting(lead.id)}
                                 >
-                                  ✶ Hand it back to WAKA
+                                  Hand it back to WAKA
                                 </button>
                               )
                             ) : null}

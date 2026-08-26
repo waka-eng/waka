@@ -24,8 +24,12 @@ const CSS = readFileSync(
 
 describe("the star's turn", () => {
   it("runs once, inside the founder's band, and never loops", () => {
-    const rule = CSS.match(/\.jar-star\s*\{([^}]*)\}/);
-    expect(rule, ".jar-star has no rule").not.toBeNull();
+    /* `.jar-star-act::before`, not `.jar-star`. The star became a labelled
+       verb and the bare-glyph class was left behind styled, gated and worn
+       by nothing — so this suite was passing about an element that no
+       longer rendered. Found by `e2e:dead-css`. */
+    const rule = CSS.match(/\.jar-star-act::before\s*\{([^}]*)\}/);
+    expect(rule, ".jar-star-act::before has no rule").not.toBeNull();
     const animation = rule![1]!.match(/animation:\s*([^;]+);/);
     expect(animation, "the star does not turn").not.toBeNull();
 
@@ -43,7 +47,7 @@ describe("the star's turn", () => {
 
   it("stays home under prefers-reduced-motion", () => {
     const reduced = CSS.match(
-      /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[^{]*\.jar-star\s*\{([^}]*)\}/,
+      /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[^{]*\.jar-star-act::before\s*\{([^}]*)\}/,
     );
     expect(reduced, "no reduced-motion rule for the star").not.toBeNull();
     expect(reduced![1]!).toContain("animation: none");

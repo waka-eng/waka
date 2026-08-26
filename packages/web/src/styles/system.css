@@ -239,8 +239,6 @@
    8-9px with 0.18-0.22em tracking -- the single most repeated gesture in the
    product, and the one that made every screen read as an instrument panel.
    ======================================================================= */
-
-.nc-rail-room-count,
 .reference-capture-kicker,
 .reference-capture-close,
 .nc-note-evidence-label,
@@ -249,8 +247,7 @@
 .login-eyebrow,
 .field-label,
 .history-title,
-.capture-trigger-label,
-.cell .lbl {
+.capture-trigger-label {
   font-family: var(--voice-you);
   font-size: var(--t-meta);
   font-weight: 500;
@@ -265,12 +262,8 @@
 .memory-contents-item-meta,
 .memory-led-summary,
 .memory-contents-readings-summary,
-.nc-room-item-count,
-.nc-drawer-count,
-.nc-bottom-hint,
 .history-item-meta,
 .history-attachment-meta,
-.nc-timerail-moment-when,
 .meta {
   font-family: var(--voice-you);
   font-size: var(--t-meta);
@@ -282,9 +275,6 @@
 /* ==========================================================================
    2. THE ROOM'S NAME -- the display cluster, and the only thing in it
    ======================================================================= */
-
-.nc-room-title-text,
-.nc-room-name,
 .login-title,
 .nc-title {
   font-family: var(--voice-room);
@@ -373,14 +363,7 @@
 
    One shape for a real action, one for a quiet one, on every surface.
    ======================================================================= */
-
 .memory-contents-secondary-action,
-.nc-edit-cancel,
-.nc-room-item-confirm-no,
-.nc-room-item-confirm-yes,
-.nc-drawer-reflect-actions button,
-.nc-join-confirm-accept,
-.nc-join-confirm-cancel,
 .btn-primary,
 .btn-destructive,
 .btn-google {
@@ -433,15 +416,9 @@
    Everything that moves resolves to `--ease`. Timing only -- this cannot
    affect layout, so it is safe to apply broadly.
    ======================================================================= */
-
 .nc-note,
 .nc-note-footer-row,
 .nc-note-inspiration-slide,
-.nc-save,
-.nc-save-cta,
-.nc-rail,
-.nc-timerail,
-.nc-room-panel,
 .memory-contents-item,
 .memory-contents-secondary-action,
 .reference-capture-modal,
@@ -475,8 +452,7 @@
    ======================================================================= */
 
 @media (prefers-reduced-motion: reduce) {
-  .nc-save-cta::after { transition: none; }
-}
+  }
 
 /* ==========================================================================
    14. THE GROUND

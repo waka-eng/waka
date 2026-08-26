@@ -267,14 +267,12 @@ a:hover {
    colour from the theme it is no longer in. */
 .login-shell,
 .profile-shell,
-.auth-shell,
 .surface-shell {
   background: var(--w-ground);
   color: var(--w-ink);
 }
 .login-card,
-.profile-card,
-.auth-card {
+.profile-card {
   background: var(--w-raised);
   border: 1px solid var(--w-edge);
   color: var(--w-ink);
@@ -282,7 +280,6 @@ a:hover {
 /* the two-up SIGN IN / CREATE ACCOUNT switch: a filled black tab reads as a
    hole punched in a dark page, so the selected one is carried by ink and a
    rule instead — the same way the world marks the wall you are standing on */
-.auth-tabs button,
 .login-tabs button {
   background: none;
   border: 0;
@@ -291,9 +288,7 @@ a:hover {
   padding: var(--sp-10) var(--sp-4);
   letter-spacing: 0.1em;
 }
-.auth-tabs button[aria-selected="true"],
 .login-tabs button[aria-selected="true"],
-.auth-tabs button.is-active,
 .login-tabs button.is-active {
   color: var(--w-ink);
   border-bottom-color: var(--w-ink);
@@ -319,7 +314,6 @@ a:hover {
    occluded. A sign-in form occludes nothing, so it gets no boxes: a rule
    under each field, a rule under the selected tab, and words for actions. */
 .login-form,
-.auth-form,
 .field {
   background: none;
   border: 0;
@@ -329,20 +323,17 @@ a:hover {
 /* `:not([hidden])` for the same reason as the panels below — the profile
    page's "you" tab IS a .login-form, so an unconditional display here keeps
    it on screen when the other tab is selected. */
-.login-form:not([hidden]),
-.auth-form:not([hidden]) {
+.login-form:not([hidden]) {
   display: flex;
   flex-direction: column;
   gap: var(--sp-18);
 }
-.login-form[hidden],
-.auth-form[hidden] {
+.login-form[hidden] {
   display: none;
 }
 /* the divider keeps its word: two rules with OR between them is the standard
    read, and dropping the word leaves two orphan lines that mean nothing */
-.login-divider,
-.auth-divider {
+.login-divider {
   display: flex;
   align-items: center;
   gap: var(--sp-14);
@@ -974,7 +965,6 @@ body .profile-danger-panel:not([hidden]) {
 body .profile-panel[hidden],
 body .profile-room[hidden],
 body .login-form[hidden],
-body .auth-form[hidden],
 body .profile-public-panel[hidden],
 body .profile-danger-panel[hidden],
 body .profile-list[hidden] {

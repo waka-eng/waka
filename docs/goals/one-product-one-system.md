@@ -269,7 +269,7 @@ tree is unreferenced.
 |---|---|
 | Gate | `pnpm e2e:dead-css` — the browser is asked which rule won each property on each element — plus `e2e:measure` cases comparing rendered primitives across surfaces |
 | At open | 917 top-level class rules; **34** distinct prefixes; `btn-` and `profile-` each declared in two files |
-| **Now** | **10** prefixes (the flat-surface deletion took 24 of them). 15 rules proved dead and removed, with a zero-difference computed-style diff behind it. 23 overruled rules still standing, each one named |
+| **Now** | **10** prefixes (the flat-surface deletion took 24 of them). **40 rules and 16 selector lists** proved dead and removed across two harvests, each with a zero-difference computed-style diff behind it. 24 overruled rules still standing, each one named |
 | State | **IN PROGRESS**, and measurable for the first time |
 
 The modal work of 2026-08-25 is the shape every primitive follows: the card
@@ -329,12 +329,77 @@ stylesheets stashed, and diffed: **0 differences** across 163 elements, 26
 properties and every element's box. That is what makes a deletion safe to
 make rather than merely plausible.
 
-**WHAT IS LEFT: 23 overruled rules** — 10 in `global.css`, 6 in `chrome.css`,
-7 whose selector appears in more than one sheet. Plus the half this walk
-cannot see: a rule matching no element on any surface it visited never reaches
-the report at all, because the protocol only hands back rules that matched.
-That half needs the sheets parsed and every selector queried, and it is the
-next round.
+**SECOND HARVEST — THE HALF THE PROTOCOL CANNOT REPORT.**
+`getMatchedStylesForNode` only ever hands back rules that MATCHED, so a rule
+matching nothing is invisible to everything above however dead it is. A second
+pass reads all 615 selectors out of the five sheets and puts each one to
+`querySelectorAll` on every surface, with state pseudo-classes trimmed off so
+the question is whether the ELEMENT is ever on screen.
+
+That alone is not a deletion signal, and saying why is the point of the pass:
+`.jar-board-acts` matched nothing here because the walk never opened
+headquarters, and `e2e:journeys` proves it very much alive. So each unmatched
+selector is put to a second question — **does any source file contain the
+words in it at all?** A class no `.ts`/`.tsx` in the tree mentions cannot be
+put on an element by anything, whatever states a walk happens to enter. That
+separates the unvisited from the unreachable, which is the separation "nothing
+in the tree is unreferenced" actually needs.
+
+**64 unreachable selectors**, every one of them a retired design still being
+shipped to every visitor:
+
+| sheet | what was still there |
+|---|---|
+| `global.css` | the capture-grid era — `.grid.home-grid`, `.cell.capture`, `.cap-save`, `.cap-confirm`, `.hitl-menu`, `.home-view-switcher`, `.drop-overlay`, `.top-home-capture`, `.reference-capture-modal` |
+| `system.css` | the note-canvas rail and drawer — `.nc-rail*`, `.nc-drawer*`, `.nc-room-*`, `.nc-timerail*`, `.nc-save-cta` |
+| `chrome.css` | the `.auth-*` shell, superseded by `.login-*` and never removed |
+
+24 rules removed from `global.css`, 1 from `system.css`, and 16 selector lists
+pruned of names nothing wears. Verified the same way: **0 computed-style
+differences** across the four chrome surfaces.
+
+**THREE TIMES THE INSTRUMENT WAS WRONG AND SAID SO.** Each was caught by
+disbelieving its output rather than by it failing:
+
+1. Keying rules on `styleSheetId` split one rule into seven, because every
+   navigation re-attaches the bundle under a new id — so a rule that wins on
+   the door and loses on the account page would have been reported as a
+   deletion candidate.
+2. The account page is tabbed and the public page is a separate route. The
+   `nc-` family — about 150 selectors — is worn only by `PublicProfile.tsx`,
+   and without that surface every one of them read as unused. Only the
+   source-word cross-check stood between that reading and a very bad deletion.
+   The surface is walked now.
+3. The prefix guard that lets a constructed class like `` `card--${size}` ``
+   count as spoken accepted any five-letter source word as a prefix — and the
+   word `surface`, which appears in prose and identifiers all over this repo,
+   therefore vouched for `.surface-shell`, a class belonging to a deleted
+   screen. A prefix now has to end in a hyphen, which is what a real
+   interpolation looks like.
+
+**AND ONE FINDING THAT WAS THE OPPOSITE OF DEAD CODE.** `.jar-star` — the
+point of light a sentence the person wrote wears — came back unreachable while
+`motion.test.ts` still guarded it. The class was not obsolete debris: the star
+had become a labelled verb, `Hand it back to WAKA`, and only half of it made
+the journey. The glow followed the glyph to the new button; two rulings did
+not.
+
+- **The turn**, which is founder-gated (Phase 8, reviewed live), was left on a
+  class nothing wore — so the approved motion had silently stopped happening.
+  It is on `.jar-star-act::before` now with the approved numbers untouched:
+  0.6s in the 0.4–0.8 band, ease-out, `both`, once on appearance.
+- **"The glyph lives in the stylesheet, not the sentence"** — a written
+  ruling, whose reason is that anything asking the DOM what a line says should
+  get the words and not a dingbat. The labelled version had `✶ ` typed into
+  the JSX, so the button's accessible name began with a six-pointed star. It
+  is a `::before` again.
+
+A gate guarding a rule for an element that no longer renders is green and
+about nothing, which is the most expensive kind of green there is.
+
+**WHAT IS LEFT: 24 overruled rules** — 10 in `global.css`, 6 in `chrome.css`,
+the rest ambiguous between sheets — and whatever the next walk finds once it
+enters the states this one did not: headquarters open, hover, the error paths.
 
 ### A5 — The product on a phone
 
