@@ -112,22 +112,6 @@ h2 {
   color: var(--w-ink);
   text-wrap: balance;
 }
-/* THE LABEL REGISTER APPLIES TO LABELS, NOT TO THEIR CONTAINERS.
-   `.profile-public-heading` and `.profile-danger-heading` are WRAPPERS that
-   hold an eyebrow AND a paragraph of explanation. Putting them in this group
-   uppercased the prose too, so "this permanently deletes your account" was
-   set as a 16px all-caps headline — the loudest text on a page whose job is
-   to be calm. The eyebrow inside them is the label; the paragraph is prose. */
-.login-eyebrow,
-.field-label,
-.profile-public-heading > .login-eyebrow,
-.profile-danger-heading > .login-eyebrow {
-  font-weight: 500;
-  font-size: var(--t-label);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--w-muted);
-}
 .login-subtitle,
 .field-hint,
 .login-footer {
@@ -295,14 +279,6 @@ a:hover {
   border: 1px solid var(--w-edge);
   color: var(--w-ink);
 }
-/* the oversized display word behind the form: it is a watermark, and on this
-   ground it has to be lifted out of the background rather than dropped into
-   it — light on dark, at the same weight it had as dark on light */
-.login-shell h1,
-.login-shell .login-display,
-.login-hero {
-  color: var(--w-ink);
-}
 /* the two-up SIGN IN / CREATE ACCOUNT switch: a filled black tab reads as a
    hole punched in a dark page, so the selected one is carried by ink and a
    rule instead — the same way the world marks the wall you are standing on */
@@ -452,10 +428,6 @@ a:hover {
   cursor: pointer;
   transition: color 0.2s ease, border-color 0.2s ease;
 }
-.profile-tabs button[aria-selected="true"] {
-  color: var(--w-ink);
-  border-bottom-color: var(--w-ink);
-}
 /* the sliding indicator belongs to a design with a filled tab; the rule above
    already says which one is selected, and two answers to one question is one
    too many */
@@ -483,11 +455,6 @@ a:hover {
   border-radius: 0;
   padding: 0;
   gap: 0;
-}
-.profile-list[hidden],
-.profile-panel[hidden],
-.profile-room[hidden] {
-  display: none;
 }
 .profile-list-row,
 .profile-room,
@@ -666,25 +633,6 @@ a:hover {
    the column reading as a lonely strip, and a type scale that comes down to
    reading size so the prose stops shouting. */
 
-.login-shell,
-.profile-shell {
-  min-height: 100dvh;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding: clamp(var(--sp-32), 7vh, var(--sp-88)) var(--sp-24) var(--sp-96);
-  /* the volume: one soft pool of light, high and centred, exactly where the
-     world puts the light behind its companion. It never reads as a gradient
-     because it has no edge — it is the room, not a panel in it. */
-  background:
-    radial-gradient(
-      120% 80% at 50% 12%,
-      rgba(232, 237, 244, 0.055) 0%,
-      rgba(232, 237, 244, 0.022) 34%,
-      transparent 68%
-    ),
-    var(--w-ground);
-}
 
 /* The card stops being a card: on this ground a bordered box is a hole cut
    into the room. It is a column of content standing in the light. */
@@ -746,7 +694,25 @@ a:hover {
    what makes two screens feel like two products. These are the world's own
    numbers, lifted from home.css rather than approximated. */
 
-/* the label register, byte for byte from .jar-label */
+/* THE ONE PLACE THE LABEL REGISTER IS DECLARED FOR THE CHROME, byte for byte
+   from `.jar-label`.
+
+   It was declared TWICE in this file — this rule, and an earlier four-selector
+   copy of it about six hundred lines up with identical values. Same layer,
+   same properties, same numbers, so the later one silently won and the
+   earlier one had decided nothing for as long as both existed. Nobody could
+   have seen that by reading: it took `e2e:dead-css` asking the browser which
+   rule actually won each property, and the answer naming this file on both
+   sides. Two declarations that agree today are two that can disagree
+   tomorrow, and the one that stops being read is the one that keeps being
+   edited.
+
+   THE LABEL REGISTER APPLIES TO LABELS, NOT TO THEIR CONTAINERS.
+   `.profile-public-heading` and `.profile-danger-heading` are WRAPPERS that
+   hold an eyebrow AND a paragraph of explanation. Putting them in this group
+   uppercased the prose too, so "this permanently deletes your account" was
+   set as a 16px all-caps headline — the loudest text on a page whose job is
+   to be calm. The eyebrow inside them is the label; the paragraph is prose. */
 .login-eyebrow,
 .field-label,
 .profile-public-heading > .login-eyebrow,

@@ -1094,13 +1094,6 @@ body.dragging .drop-overlay {
   gap: var(--sp-6);
 }
 
-.field-label {
-  font-family: var(--font-mono);
-  font-size: var(--t-label);
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: var(--muted);
-}
 
 .field-input {
   font-family: inherit;
@@ -1226,9 +1219,6 @@ body.dragging .drop-overlay {
   line-height: 1;
 }
 
-.profile-handle-input {
-  width: 100%;
-}
 
 .profile-toggle-row {
   display: grid;
@@ -1273,10 +1263,6 @@ body.dragging .drop-overlay {
   opacity: 1;
 }
 
-.profile-toggle-row input:disabled {
-  cursor: not-allowed;
-  opacity: 0.42;
-}
 
 .profile-public-link {
   color: var(--muted);
@@ -1300,11 +1286,6 @@ body.dragging .drop-overlay {
   outline: 0;
 }
 
-.btn-destructive:disabled,
-.profile-signout-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
 
 .btn-primary {
   font-family: var(--font-mono);
@@ -1380,10 +1361,6 @@ body.dragging .drop-overlay {
   color: var(--ink);
 }
 
-.login-tab--active {
-  background: var(--ink);
-  color: var(--bg);
-}
 
 .login-link {
   background: none;
@@ -2134,9 +2111,6 @@ textarea {
   color: var(--ink-2);
 }
 
-.profile-tab.is-active {
-  color: var(--ink-1);
-}
 
 .profile-tab:focus-visible {
   outline: 2px solid var(--rule-strong);
@@ -2210,13 +2184,6 @@ textarea {
   background: color-mix(in srgb, var(--ink) 2%, transparent);
 }
 
-.profile-list-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: 52px;
-  padding: 6px var(--space-3);
-}
 
 .profile-list-row + .profile-list-row {
   border-top: 1px solid var(--rule);
@@ -2257,9 +2224,6 @@ textarea {
   border-bottom-color: var(--rule-strong);
 }
 
-.profile-row-name::placeholder {
-  color: var(--ink-4);
-}
 
 .profile-row-main {
   flex: 1 1 auto;
@@ -2333,12 +2297,6 @@ textarea {
   outline-offset: 2px;
 }
 
-/* The add row lives inside the tray as its last line; the + in the kind
-   column keeps the grid, and the verb appears once there is a name. */
-.profile-memory-new .profile-memory-badge {
-  font-size: var(--t-ui);
-  color: var(--ink-4);
-}
 
 /* Section hints stay readable: one measure, not full-bleed. */
 .profile-memories-heading .login-subtitle {

@@ -267,15 +267,74 @@ tree is unreferenced.
 
 | | |
 |---|---|
-| Gate | a source check that no two prefixes declare the same property for the same concept, plus `e2e:measure` cases comparing rendered primitives across surfaces |
+| Gate | `pnpm e2e:dead-css` — the browser is asked which rule won each property on each element — plus `e2e:measure` cases comparing rendered primitives across surfaces |
 | At open | 917 top-level class rules; **34** distinct prefixes; `btn-` and `profile-` each declared in two files |
-| **Now** | unchanged, except the modal surface, which is done and is the pattern for the rest |
-| State | **NOT MET** |
+| **Now** | **10** prefixes (the flat-surface deletion took 24 of them). 15 rules proved dead and removed, with a zero-difference computed-style diff behind it. 23 overruled rules still standing, each one named |
+| State | **IN PROGRESS**, and measurable for the first time |
 
 The modal work of 2026-08-25 is the shape every primitive follows: the card
 was named the reference, the surface was written once, and the four wearers
 became a selector list with a gate comparing them against the card rather than
 against a literal.
+
+**WHY THIS AUDIT HAD NO NUMBER FOR SO LONG.** Twice it was attempted by
+parsing the stylesheets, and twice the parser reported zero dead rules — which
+was believed for about as long as it took to check one by hand. The reason a
+parser cannot answer it is three lines in `layers.css`:
+
+    @layer base, product, chrome;
+
+`global.css` and `system.css` are in `product`. `chrome.css` is in `chrome`, a
+LATER layer, so **every declaration in it beats every declaration in the other
+two regardless of specificity**. `chrome.css`'s stated job is to dress the
+flat screens in the world's light, and the way it does that is by re-declaring
+`global.css`'s rules in the world's voice. So `global.css` is full of rules
+that still match elements, still parse, still read as alive, and decide
+nothing. Specificity, order, layers, shorthand expansion and `!important` all
+settle this together, and the only thing that implements all five correctly is
+a browser.
+
+**`tools/e2e/dead-css.ts`** asks one, through the DevTools protocol the Styles
+pane itself uses: `CSS.getMatchedStylesForNode` returns every rule that
+matched a node in cascade order, and crediting each property to the last rule
+that set it says which rules won nothing. It walks seven surfaces and prints,
+for every dead rule, the rule that beat it — so a deletion can be checked
+rather than trusted.
+
+**FIRST HARVEST, 2026-08-26.** 38 rules overruled on every element they
+matched. Fifteen removed:
+
+- **nine in `global.css`** — `.field-label`, `.profile-list-row`,
+  `.login-tab--active`, `.btn-destructive:disabled`,
+  `.profile-memory-new .profile-memory-badge`,
+  `.profile-toggle-row input:disabled`, `.profile-row-name::placeholder`,
+  `.profile-handle-input`, `.profile-tab.is-active` — every one beaten by a
+  `chrome.css` rule naming the same elements.
+- **five in `chrome.css`, beaten by `chrome.css`.** The file overrides itself:
+  a rule, then a `body `-prefixed copy of it further down. The `body ` prefix
+  is a fossil from before layers — the chrome layer already wins — so it only
+  ever beats the other copy of itself.
+- **one in `system.css`** — `:where(…):focus-visible`, superseded by the
+  unlayered focus floor in `layers.css`, which beats every layer.
+
+And the label register, which this audit named at 28 implementations, was
+**declared twice inside `chrome.css`** with identical values: a four-selector
+copy and an eight-selector superset six hundred lines apart. Collapsed to the
+superset.
+
+**THE DELETION WAS PROVED, NOT ARGUED.** `tools/e2e/computed-snapshot.ts`
+writes down every computed style on every element of the door (both tabs), the
+account page and the welcome. Taken with the change, taken again with the
+stylesheets stashed, and diffed: **0 differences** across 163 elements, 26
+properties and every element's box. That is what makes a deletion safe to
+make rather than merely plausible.
+
+**WHAT IS LEFT: 23 overruled rules** — 10 in `global.css`, 6 in `chrome.css`,
+7 whose selector appears in more than one sheet. Plus the half this walk
+cannot see: a rule matching no element on any surface it visited never reaches
+the report at all, because the protocol only hands back rules that matched.
+That half needs the sheets parsed and every selector queried, and it is the
+next round.
 
 ### A5 — The product on a phone
 

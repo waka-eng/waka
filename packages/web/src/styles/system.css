@@ -392,22 +392,6 @@
     border-color var(--dur-fast) var(--ease);
 }
 
-/* WHAT HAS FOCUS, and only what has focus.
-   `.field-input` used to lead this selector list, so a text input took the
-   outline unconditionally rather than on focus. That was invisible for as long
-   as the declaration was dead, and would have become a permanent 2px ring on
-   every input the moment the token existed -- overriding `outline: none` at
-   global.css:1113, which is a deliberate decision: an input already says it has
-   focus by taking its border to full ink (global.css:1117). It is dropped
-   rather than moved; no rule ever wanted it.
-
-   The offset matters. At 3px the ring sits OUTSIDE the control, on the ground,
-   so it is measured against `#06080d` everywhere -- including around the white
-   Google button, where a light ring drawn inside would have been invisible. */
-:where(button, a, input, textarea, [tabindex]):focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 3px;
-}
 
 /* ==========================================================================
    10. AUTH, ONBOARDING, PROFILE
