@@ -92,7 +92,7 @@ import {
 import { useMeasured } from "../canvas/measured";
 import { BODY_TIERS, bodyPath } from "../character/raster";
 import { GroupPanel } from "../space-kinds/GroupPanel";
-import { SpaceSettings } from "../space/settings/SpaceSettings";
+import { SpaceSettings, type GroupTrouble } from "../space/settings/SpaceSettings";
 import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
 import { agentBeing, OWNER_BEING, unit, type Being } from "../character/body";
 import { posterWords } from "../space/top-of-mind/poster";
@@ -8529,12 +8529,21 @@ function HomeExperience(): JSX.Element {
    * puts them where the person already looking will see them.
    */
   const whyFailed = useCallback((err: unknown, fallback: string): string => {
+    /* THE FULL STOP COMES OFF BEFORE THE DASH.
+       Every caller writes its fallback as a finished sentence — "That was not
+       saved." — because that is what it says on its own when the error is not
+       an `ApiError`. Appending to it produced
+       "That was not saved. — the server said no (500): …" in every failure
+       line in the product. Read on screen for the first time by the
+       failure-path walk, which is the only thing that has ever put six of
+       these sentences side by side. */
+    const stem = fallback.replace(/\.\s*$/, "");
     if (err instanceof ApiError) {
-      if (err.status === 0) return `${fallback} — the server could not be reached.`;
-      if (err.status === 401) return `${fallback} — you are signed out. Sign in and it is still here.`;
-      return `${fallback} — the server said no (${err.status}): ${err.message}`;
+      if (err.status === 0) return `${stem} — the server could not be reached.`;
+      if (err.status === 401) return `${stem} — you are signed out. Sign in and it is still here.`;
+      return `${stem} — the server said no (${err.status}): ${err.message}`;
     }
-    if (err instanceof Error && err.message) return `${fallback} — ${err.message}`;
+    if (err instanceof Error && err.message) return `${stem} — ${err.message}`;
     return fallback;
   }, []);
 
@@ -9136,14 +9145,14 @@ function HomeExperience(): JSX.Element {
     if (groupForm.mode === "make") {
       createGroup(text)
         .then(landed)
-        .catch(() => failed("That group could not be made. Try another name."));
+        .catch(() => failed("That room could not be made. Try another name."));
     } else {
       /* a pasted invite link works as well as a bare code — the link is the
          thing people will actually send each other */
       const code = text.includes("/") ? text.split("/").filter(Boolean).pop() ?? text : text;
       joinGroup(code)
         .then((r) => landed(r.group))
-        .catch(() => failed("No group answered to that. Check the link."));
+        .catch(() => failed("No room answered to that. Check the link."));
     }
   }, [groupForm]);
 
@@ -9553,16 +9562,51 @@ function HomeExperience(): JSX.Element {
   const [leaving, setLeaving] = useState<string | null>(null);
   const [closing, setClosing] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
-  const leaveThisGroup = useCallback((groupId: string) => {
-    leaveGroup(groupId)
-      .then(() => {
-        setGroups((prev) => prev.filter((g) => g.id !== groupId));
-        setGroupPanel(null);
-        setLeaving(null);
-        simApiRef.current?.travel(-1);
-      })
-      .catch(() => setLeaving(null));
-  }, []);
+  /**
+   * WHAT THE ROOM'S PANEL SAYS WHEN THE SERVER REFUSES.
+   *
+   * Found by `e2e:when-it-fails`, which presses each act against a 500 on the
+   * one route it rests on and asks whether anything on screen said so. Three
+   * of this panel's four verbs said nothing at all:
+   *
+   *   rename   SILENT   — the screen was byte-identical before and after.
+   *   leave    MURMURS  — the confirm collapsed back to `leave this room`,
+   *                       which is exactly what pressing `stay` does.
+   *   close    MURMURS  — the same, back to `close this room`.
+   *
+   * A collapsing confirm is worse than silence: it is the shape of a
+   * successful cancel. The person pressed the yes, watched the panel agree,
+   * and the room is still there — with nothing anywhere to say which of those
+   * two things happened.
+   *
+   * The cure is the one the memory panel already proved: prose beside the
+   * verb, saying what is still true. Keyed by verb so it lands where the
+   * press did — an error at the top of a panel with four destructive words in
+   * it does not tell you which one refused.
+   */
+  const [groupTrouble, setGroupTrouble] = useState<GroupTrouble | null>(null);
+  const leaveThisGroup = useCallback(
+    (groupId: string) => {
+      setGroupTrouble(null);
+      leaveGroup(groupId)
+        .then(() => {
+          setGroups((prev) => prev.filter((g) => g.id !== groupId));
+          setGroupPanel(null);
+          setLeaving(null);
+          simApiRef.current?.travel(-1);
+        })
+        .catch((err: unknown) => {
+          /* DISARM AND SAY WHY, IN THAT ORDER. Leaving the confirm armed would
+             be the friendlier-looking choice and the wrong one: the armed word
+             is `leave — your statements come down`, and a person who reads the
+             failure and presses it again should be re-arming deliberately
+             rather than finding their finger already on the yes. */
+          setLeaving(null);
+          setGroupTrouble({ verb: "leave", text: whyFailed(err, "You are still in this room.") });
+        });
+    },
+    [whyFailed],
+  );
 
   /**
    * MAINTAINING A ROOM — three verbs the server has always answered.
@@ -9579,42 +9623,75 @@ function HomeExperience(): JSX.Element {
    * not go out until the database has agreed, which is the same rule the
    * memory panel's delete already follows.
    */
-  const renameThisGroup = useCallback((groupId: string, name: string) => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    setRenaming((cur) => (cur ? { ...cur, busy: true } : cur));
-    renameGroup(groupId, trimmed)
-      .then((updated) => {
-        setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, ...updated } : g)));
-        setRenaming(null);
-      })
-      .catch(() => setRenaming((cur) => (cur ? { ...cur, busy: false } : cur)));
-  }, []);
+  const renameThisGroup = useCallback(
+    (groupId: string, name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      setGroupTrouble(null);
+      setRenaming((cur) => (cur ? { ...cur, busy: true } : cur));
+      renameGroup(groupId, trimmed)
+        .then((updated) => {
+          setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, ...updated } : g)));
+          setRenaming(null);
+        })
+        .catch((err: unknown) => {
+          /* THE FORM STAYS OPEN AND KEEPS THE TYPED WORDS. This one measured
+             as SILENT — not "quiet", byte-identical — because clearing `busy`
+             is the whole of what used to happen and `busy` is invisible on a
+             request that fails in under a second. The words are still in the
+             box, so the recovery is one press; what was missing was any way to
+             know a press was needed. */
+          setRenaming((cur) => (cur ? { ...cur, busy: false } : cur));
+          setGroupTrouble({ verb: "rename", text: whyFailed(err, "That name did not stick.") });
+        });
+    },
+    [whyFailed],
+  );
 
-  const closeThisGroup = useCallback((groupId: string) => {
-    deleteGroup(groupId)
-      .then(() => {
-        setGroups((prev) => prev.filter((g) => g.id !== groupId));
-        setClosing(null);
-        setSettingsFor(null);
-        /* the column is gone, so stop standing in it */
-        simApiRef.current?.travel(-1);
-      })
-      .catch(() => setClosing(null));
-  }, []);
+  const closeThisGroup = useCallback(
+    (groupId: string) => {
+      setGroupTrouble(null);
+      deleteGroup(groupId)
+        .then(() => {
+          setGroups((prev) => prev.filter((g) => g.id !== groupId));
+          setClosing(null);
+          setSettingsFor(null);
+          /* the column is gone, so stop standing in it */
+          simApiRef.current?.travel(-1);
+        })
+        .catch((err: unknown) => {
+          setClosing(null);
+          setGroupTrouble({ verb: "close", text: whyFailed(err, "That room is still open.") });
+        });
+    },
+    [whyFailed],
+  );
 
-  const removeMember = useCallback((groupId: string, profileId: string) => {
-    removeGroupMember(groupId, profileId)
-      .then(async () => {
-        const fresh = await fetchGroupMembers(groupId).catch(() => null);
-        if (fresh) {
-          membersRef.current.set(groupId, fresh);
-          setMembers(new Map(membersRef.current));
-        }
-        setRemoving(null);
-      })
-      .catch(() => setRemoving(null));
-  }, []);
+  const removeMember = useCallback(
+    (groupId: string, profileId: string) => {
+      setGroupTrouble(null);
+      removeGroupMember(groupId, profileId)
+        .then(async () => {
+          const fresh = await fetchGroupMembers(groupId).catch(() => null);
+          if (fresh) {
+            membersRef.current.set(groupId, fresh);
+            setMembers(new Map(membersRef.current));
+          }
+          setRemoving(null);
+        })
+        .catch((err: unknown) => {
+          /* NOT WALKED by `e2e:when-it-fails` — a second member is a second
+             account and an invite round trip, which the walk does not do. It
+             is fixed here anyway because it is the same handler shape as the
+             three that WERE measured, written by the same hand on the same
+             day, and leaving it silent on the strength of not having been
+             looked at is how the other three got this way. */
+          setRemoving(null);
+          setGroupTrouble({ verb: "remove", text: whyFailed(err, "They are still in this room.") });
+        });
+    },
+    [whyFailed],
+  );
 
   /** read by the loop, which is created once and must not close over stale state */
 
@@ -12646,7 +12723,7 @@ function HomeExperience(): JSX.Element {
       ) : null}
 
       {pendingJoin && phase === "ready" ? (
-        <div className="jar-settings" data-jar-chrome="1" role="dialog" aria-label="Join this group">
+        <div className="jar-settings" data-jar-chrome="1" role="dialog" aria-label="Join this room">
           <div className="jar-settings-head">
             <span className="jar-label">Someone invited you</span>
           </div>
@@ -12680,6 +12757,8 @@ function HomeExperience(): JSX.Element {
           setRemoving={setRemoving}
           renaming={renaming}
           setRenaming={setRenaming}
+          trouble={groupTrouble}
+          clearTrouble={() => setGroupTrouble(null)}
           viewerProfileId={auth?.profile?.id ?? null}
           copied={copied}
           copyInvite={copyInvite}

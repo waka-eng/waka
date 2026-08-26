@@ -171,7 +171,7 @@ export interface ApiGroupTopOfMind {
 export async function fetchGroups(): Promise<ApiGroupSummary[]> {
   const body = await getJson<{ groups: ApiGroupSummary[] }>(
     apiPath("/groups"),
-    "Failed to load groups",
+    "Failed to load rooms",
   );
   return Array.isArray(body.groups) ? body.groups : [];
 }
@@ -181,7 +181,7 @@ export async function createGroup(name: string): Promise<ApiGroupSummary> {
   const body = await postJson<{ group: ApiGroupSummary }>(
     apiPath("/groups"),
     { name },
-    "Failed to create group",
+    "Failed to create room",
   );
   return body.group;
 }
@@ -193,7 +193,7 @@ export async function joinGroup(
   const body = await postJson<{ group: ApiGroupSummary; alreadyMember?: boolean }>(
     apiPath("/groups/join"),
     { joinCode },
-    "Failed to join group",
+    "Failed to join room",
   );
   return { group: body.group, alreadyMember: Boolean(body.alreadyMember) };
 }
@@ -294,7 +294,7 @@ export async function fetchGroupMembers(groupId: string): Promise<ApiGroupMember
 export async function fetchGroupWall(groupId: string): Promise<ApiGroupWallSignal[]> {
   const body = await getJson<{ wall: ApiGroupWallSignal[] }>(
     apiPath(`/groups/${encodeURIComponent(groupId)}/wall`),
-    "Failed to load this group's wall",
+    "Failed to load this room's wall",
   );
   return Array.isArray(body.wall) ? body.wall : [];
 }
@@ -326,7 +326,7 @@ export async function fetchGroupTopOfMind(
   const at = version === undefined ? "" : `?version=${encodeURIComponent(String(version))}`;
   const body = await getJson<ApiGroupTopOfMind>(
     apiPath(`/groups/${encodeURIComponent(groupId)}/top-of-mind${at}`),
-    "Failed to load this group's top of mind",
+    "Failed to load this room's top of mind",
   );
   return { topOfMind: body.topOfMind ?? null, entries: body.entries ?? [] };
 }
@@ -337,7 +337,7 @@ export async function refreshGroupTopOfMind(groupId: string): Promise<void> {
     apiPath(`/groups/${encodeURIComponent(groupId)}/top-of-mind/refresh`),
     "POST",
     {},
-    "Failed to start a new group reading",
+    "Failed to start a new room reading",
   );
 }
 
@@ -368,7 +368,7 @@ export interface ApiGroupTimeline {
 export async function fetchGroupTimeline(groupId: string): Promise<ApiGroupTimeline> {
   const body = await getJson<ApiGroupTimeline>(
     apiPath(`/groups/${encodeURIComponent(groupId)}/top-of-mind/versions`),
-    "Failed to load the group's timeline",
+    "Failed to load the room's timeline",
   );
   return {
     versions: Array.isArray(body.versions) ? body.versions : [],

@@ -1594,6 +1594,29 @@
   color: var(--jar-muted);
 }
 
+/* WHAT REFUSED, BESIDE THE WORD THAT REFUSED.
+   Its own line rather than trailing the verb: three of the four sentences it
+   carries are a whole clause plus a status ("You are still in this room — the
+   server said no (500): …"), and inline they wrapped around the verb and made
+   the verb itself hard to find again — which is the one thing a person needs
+   after reading it, because pressing again is the whole recovery.
+
+   `--jar-muted` and not `--jar-faint`: `jar-panel-warn` is faint because it
+   sits alone in a small card where nothing competes with it, and this sits in
+   a panel with a roll of members and four verbs, where faint is what the
+   furniture already is. One step up the SAME channel — the founder law is that
+   light is the only meaning channel, so a warning earns brightness, not a hue
+   of its own. (The first draft of this rule reached for a `--jar-warm` that
+   does not exist in the palette at all.) */
+.jar-settings-warn {
+  display: block;
+  width: 100%;
+  margin: 0 0 var(--sp-4);
+  font-size: var(--t-fine);
+  line-height: 1.5;
+  color: var(--jar-muted);
+}
+
 .jar-settings-verb {
   border: 0;
   background: none;

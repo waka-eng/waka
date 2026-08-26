@@ -23,6 +23,22 @@ import { Link } from "react-router-dom";
 import type { ApiAgentKey, ApiGroupMember, ApiGroupSummary, ApiMintedKey } from "../../lib/api";
 import type { Space } from "../../space-kinds";
 
+/**
+ * WHICH OF THIS PANEL'S FOUR DESTRUCTIVE WORDS REFUSED.
+ *
+ * Keyed rather than a single string because the panel offers four of them at
+ * once. One error line at the top would say "something went wrong" to a person
+ * looking at `rename`, `leave`, `close this room` and a roll of members with a
+ * `remove` beside each — which is a sentence that makes them check all four.
+ */
+export type GroupVerb = "rename" | "leave" | "close" | "remove";
+
+export interface GroupTrouble {
+  verb: GroupVerb;
+  /** already run through the page's `whyFailed`, so it names the status */
+  text: string;
+}
+
 export interface SpaceSettingsProps {
   /** the space whose settings these are — the one you are standing on */
   space: Space;
@@ -48,6 +64,15 @@ export interface SpaceSettingsProps {
   setRemoving: (memberId: string | null) => void;
   renaming: { id: string; text: string; busy: boolean } | null;
   setRenaming: (next: { id: string; text: string; busy: boolean } | null) => void;
+  /**
+   * WHAT THE SERVER REFUSED, IF IT REFUSED. Owned by the page for the same
+   * reason the four confirmations are: the handler that learns about the
+   * failure lives there. Cleared by the page when a verb is pressed again, and
+   * here when one is armed — arming is a fresh intention and the last
+   * refusal's sentence is no longer about it.
+   */
+  trouble: GroupTrouble | null;
+  clearTrouble: () => void;
   /**
    * AN AGENT'S CREDENTIALS, WHICH USED TO HAVE NO ADDRESS IN THE WORLD.
    *
@@ -96,6 +121,8 @@ export function SpaceSettings({
   setRemoving,
   renaming,
   setRenaming,
+  trouble,
+  clearTrouble,
   viewerProfileId,
   copied,
   copyInvite,
@@ -115,6 +142,18 @@ export function SpaceSettings({
 }: SpaceSettingsProps): JSX.Element {
   const auth = { profile: { id: viewerProfileId } };
   const setSettingsFor = (_: string | null) => onClose();
+  /**
+   * PROSE BESIDE THE VERB THAT REFUSED — the shape the memory panel's delete
+   * already proved reads. `role="status"` because it appears after a press
+   * rather than with the panel, so a screen reader that has already read this
+   * surface is told without being dragged back to the top of it.
+   */
+  const troubleAt = (verb: GroupVerb): JSX.Element | null =>
+    trouble?.verb === verb ? (
+      <span className="jar-settings-warn" role="status">
+        {trouble.text}
+      </span>
+    ) : null;
 
   return (
 <div className="jar-settings" data-jar-chrome="1" role="dialog" aria-label="Space settings">
@@ -159,6 +198,7 @@ export function SpaceSettings({
                   keep the old name
                 </button>
               </p>
+              {troubleAt("rename")}
             </form>
           ) : (
             <p className="jar-settings-name">
@@ -201,6 +241,21 @@ export function SpaceSettings({
                         keep them
                       </button>
                     </span>
+                  ) : trouble?.verb === "remove" ? (
+                    /* beside the person it refused about, not beside the roll */
+                    <>
+                      {troubleAt("remove")}
+                      <button
+                        type="button"
+                        className="jar-settings-verb"
+                        onClick={() => {
+                          clearTrouble();
+                          setRemoving(m.profileId);
+                        }}
+                      >
+                        remove
+                      </button>
+                    </>
                   ) : (
                     <button
                       type="button"
@@ -244,9 +299,18 @@ export function SpaceSettings({
                 </button>
               </>
             ) : (
-              <button type="button" onClick={() => setLeaving(gid)}>
-                leave this room
-              </button>
+              <>
+                {troubleAt("leave")}
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearTrouble();
+                    setLeaving(gid);
+                  }}
+                >
+                  leave this room
+                </button>
+              </>
             )}
           </p>
 
@@ -267,13 +331,19 @@ export function SpaceSettings({
                   </button>
                 </>
               ) : (
+                <>
+                {troubleAt("close")}
                 <button
                   type="button"
                   className="jar-settings-verb"
-                  onClick={() => setClosing(gid)}
+                  onClick={() => {
+                    clearTrouble();
+                    setClosing(gid);
+                  }}
                 >
                   close this room
                 </button>
+                </>
               )}
             </p>
           ) : null}

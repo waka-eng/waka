@@ -131,6 +131,40 @@ describe("the words a person reads", () => {
         }
       }
     }
+
+    /* ── THE THIRD CHANNEL: A SENTENCE PASSED AS AN ARGUMENT ──────────────
+       The two checks above read JSX text and the catalogue, and eight pieces
+       of live copy walked between them. Two were sentences handed to a
+       function — `failed("That group could not be made. Try another name.")`
+       — which is neither a text node nor a message key. Six more were the
+       `ApiError` messages in `lib/api/groups.ts`, and those reach a person by
+       the least obvious road in the product: `whyFailed` composes
+       `the server said no (500): ${err.message}` and puts it on screen, so
+       every string thrown by the API client is copy. The failure-path walk
+       printed one verbatim, which is how they were found at all.
+
+       So: any string LITERAL that reads as a sentence — a capital, three or
+       more words, no interpolation — is copy, wherever it sits. `.ts` as well
+       as `.tsx`, because that is where six of the eight were.
+
+       Deliberately not the whole file's strings: a class name, an event name
+       and a selector are not sentences, and requiring a leading capital plus
+       two spaces excludes them without needing a list of exceptions to
+       maintain. */
+    for (const file of everyFile(SRC)) {
+      const text = readFileSync(file, "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, " ")
+        .replace(/\/\/[^\n]*/g, " ");
+      for (const match of text.matchAll(/(['"])([A-Z][A-Za-z0-9 ,.'’·:&!?—–-]{10,}?)\1/g)) {
+        const said = match[2] as string;
+        if (said.split(" ").length < 3) continue;
+        for (const { canon, human } of CANON_IN_COPY) {
+          if (new RegExp(`(?<![\\w-])${canon}s?(?![\\w-])`, "i").test(said)) {
+            offenders.push(`${file.slice(SRC.length + 1)}: "${said.slice(0, 60)}" — say ${human}`);
+          }
+        }
+      }
+    }
     expect(
       offenders,
       "canon reached a person. `check-vocabulary.mjs` guards the other half of " +
