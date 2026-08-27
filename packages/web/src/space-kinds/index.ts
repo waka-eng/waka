@@ -53,19 +53,24 @@ export interface Space {
 export const spaceKey = (s: Space): string => `${s.kind}:${s.id}`;
 
 /**
- * EVERY SPACE HAS A SKY, INCLUDING A GROUP'S.
+ * EVERY SPACE HAS A SKY. This rule has now been decided three times, and the
+ * history is kept because it is the argument:
  *
- * Groups were carved out of this when a group had nothing to put up there.
- * Under the canon they do: members share SIGNALS in, and what hangs there is
- * exactly that — statements, other people's, not yet agreed. Without a sky
- * those shared statements have nowhere to live at all, because the field is
- * always your own memories by ruling and headquarters holds only what has
- * been settled. The shape is the same everywhere, which is the point.
+ * First: every space, including a group's — members share SIGNALS in, and
+ * what hangs there is exactly that: statements, other people's, not yet
+ * agreed. Then narrowed to your own column (founder, 2026-08-25): the sky is
+ * where YOUR philosophies and values form, and this world did not claim to
+ * hold a room's. Then opened again (founder, 2026-08-27: "i should be able
+ * to move to the sky and ground per every room ... every room will
+ * eventually have its own philosophies and values").
+ *
+ * So the shape is the same everywhere, which was the first ruling's point —
+ * and what each sky HOLDS stays honest per space: a room's says in the
+ * room's own name that its timeless half has not formed yet. An empty place
+ * you can stand in beats a door that refuses, which is the same reasoning
+ * the way up has carried since the strip of wall names went.
  */
-/* Only your own column: the sky is where YOUR philosophies and values form
-   (founder, 2026-08-25 — "top of mind = current, philosophies and values =
-   timeless"), and this world does not claim to hold a room's or an agent's. */
-export const hasSky = (k: SpaceKind): boolean => k === "self";
+export const hasSky = (_k: SpaceKind): boolean => true;
 
 /**
  * THE DIAL WINDS EVERY SPACE, INCLUDING A ROOM — AND IN A ROOM IT WINDS THE

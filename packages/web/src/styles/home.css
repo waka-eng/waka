@@ -89,7 +89,11 @@
      aura and the orb's own bloom read THROUGH the card, which looks like light
      sitting ON it. Light lives behind the panel, never on it — so the surface
      occludes, and only the blur keeps it from being a slab. */
-  --jar-panel: rgba(11, 14, 20, 0.95);
+  /* FULLY OPAQUE (founder, 2026-08-27: "make modal full opacity so whats
+     behind doesnt show"). It was rgba .95 over a backdrop blur — enough for
+     the poster's huge letters to ghost through a card someone is trying to
+     read. A surface for reading is paper, not glass. */
+  --jar-panel: rgb(11, 14, 20);
   --jar-panel-edge: rgba(255, 255, 255, 0.08);
   --jar-scroll: rgba(232, 237, 244, 0.16);
   --jar-row: rgba(255, 255, 255, 0.045);
@@ -883,7 +887,8 @@
   background: var(--jar-panel);
   border: 1px solid var(--jar-panel-edge);
   border-radius: 4px;
-  backdrop-filter: blur(18px);
+  /* no backdrop blur: the surface is opaque now, and a blur behind opaque
+     paint is GPU work per frame that no eye can see */
   pointer-events: auto;
 }
 /* THE READING. Sentences at reading weight, air between them — a page a
@@ -2200,8 +2205,6 @@
   border-radius: 18px;
   padding: var(--sp-24);
   background: var(--jar-panel);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   /* barely there: a hairline too faint to read as a border, and a soft bloom
      that separates it from the field. No hard edge anywhere. */
   box-shadow:
@@ -3317,8 +3320,6 @@
   padding: var(--sp-6);
   border-radius: 14px;
   background: var(--jar-panel);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   box-shadow:
     0 0 0 1px var(--jar-panel-edge),
     0 18px 44px -26px rgba(0, 0, 0, 0.8);
@@ -3380,6 +3381,17 @@
    belongs: it is not a form control on a page of forms, it is the one place
    the world listens. Nothing else in here reaches beyond the mouth. */
 @layer chrome {
+  /* THE SIXTH FACE OF THE SAME COLLISION, found by the founder mid-edit
+     (2026-08-27: "dont show this line when editing inspiration"). The card's
+     editor is a bare textarea, so `chrome.css` dressed it in the form's
+     underline from the winning layer, and the `border: 0` declared up in
+     `product` lost exactly the way this block's own notes predict. Your words
+     on the card are not a form field; the caret is the only new mark. */
+  .jar-panel-edit {
+    border: 0;
+    border-bottom: 0;
+    padding: 0;
+  }
   .jar-mouth-field {
     /* no form furniture: the world's single interactivity signal is not for
        the control you are already inside */

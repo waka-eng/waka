@@ -518,10 +518,20 @@ describe("changing a memory's words", () => {
       KEPT.calls,
       "the changed words never reached the archive — the memory branch of `keep` did not run",
     ).toEqual([{ id: "own-0", text: MINE }]);
+    /* THE CARD STAYS OPEN — the reverse of what this asserted until
+       2026-08-27. It used to demand the panel close on a kept edit, and the
+       founder overruled that twice in one day: once as a request ("just keep
+       it opened") and once as a bug report when a leftover deselect on the
+       success path closed it anyway. You kept the words; you are still
+       reading them. The card leaves when you send it away. */
     expect(
       layout.container.querySelector(".jar-panel--in"),
-      "a kept memory closes its panel: the words on screen are no longer the words behind them",
-    ).toBeNull();
+      "a kept memory keeps its card open — closing it was overruled",
+    ).not.toBeNull();
+    expect(
+      layout.container.querySelector(".jar-panel-save")?.textContent,
+      "and the foot says what just happened",
+    ).toBe("saved");
   });
 });
 

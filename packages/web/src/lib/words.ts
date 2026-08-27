@@ -67,6 +67,21 @@ const ONES = [
   "seventeen", "eighteen", "nineteen",
 ];
 
+/**
+ * The full date stamp a person writes at the top of a page: `Aug 24, 2026`.
+ * The card's head wears this instead of the spoken pair — "Two days ago ·
+ * Aug 24" said the same fact twice and went stale as the card stayed open
+ * (founder, 2026-08-27: "just keep date. also add year"). The year is always
+ * present: a memory product's dates are read across years, and a stamp that
+ * drops its year is a stamp that will one day be misread by exactly the
+ * person this is built for.
+ */
+export function dateStamp(ms: number): string {
+  const d = new Date(ms);
+  const month = d.toLocaleDateString("en-US", { month: "short" });
+  return `${month} ${d.getDate()}, ${d.getFullYear()}`;
+}
+
 export function dateWords(ms: number, T: number): string {
   const d = new Date(ms);
   /*

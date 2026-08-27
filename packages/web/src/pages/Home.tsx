@@ -140,7 +140,7 @@ import type { AgentBundle } from "../lib/agent-contract";
 import { MOCK_AGENTS, MOCK_AGENT_BUNDLES } from "../lib/fixture/agent-walls";
 import { offlineHome, type OfflineHome } from "../lib/fixture/offline-home";
 import {
-  agoWords,
+  dateStamp,
   citedWords,
   dateWords,
   groupCompany,
@@ -5846,9 +5846,11 @@ function HomeExperience(): JSX.Element {
             membersRef.current.get(curWall().id),
             viewerIdRef.current,
           );
-          /* a step dimmer than your own body, before the alpha: presence,
-             not a second protagonist */
-          const companyTier = Math.max(0, Math.round(bodyLit * (BODY_TIERS - 1)) - 1);
+          /* the same light tier your own body wears: the first version baked
+             them a tier dimmer AND cool AND at half alpha, and three
+             subtlety channels stacked read as flat grey stone. Cool and
+             alpha carry the "behind"; the bake keeps its gradient. */
+          const companyTier = Math.round(bodyLit * (BODY_TIERS - 1));
           /**
            * ONE BAKE PER FRAME. A bake is four 240px rasters, and a room of
            * seven arriving all at once put a 133ms frame in the middle of the
@@ -5877,11 +5879,32 @@ function HomeExperience(): JSX.Element {
               ? 0
               : Math.sin(t * 0.9 * be.bobRate + seat.phase * 6.283) * 2.4 * stir.amp;
             ctx!.save();
+            /* ANCHORED TO THE ROOM, NOT TO YOU. `charSX` is the companion's
+               screen-anchored x — the world slides under it, which is what
+               makes it the traveller — and the first version hung the whole
+               company off it, so leaving a room dragged the members along
+               like luggage. They stand at the ROOM's own column: travelling
+               away, the world slides them away with the wall they belong to
+               while your companion alone moves. Their y is the resting
+               anchor, not `cyC` — your bob and your lift are yours, and a
+               chorus that breathes in sync with you reads as puppetry. */
             ctx!.translate(
-              charSX + seat.dx * companion.size,
-              cyC + seat.dy * companion.size + mbob,
+              trip.col * view.w + view.w / 2 + seat.dx * companion.size,
+              companion.y + seat.dy * companion.size + mbob,
             );
-            ctx!.globalAlpha = company * 0.55;
+            ctx!.globalAlpha = company * 0.6;
+            /* the two soft nubs, peeking past the silhouette at the being's
+               own latitude — anatomy, so the small ones have it too; without
+               it they read as grey stones, which is what the founder saw
+               (2026-08-27: "more high quality and better looking") */
+            const nubY = ms * be.nubLat;
+            const nubRad = ms * 0.075;
+            ctx!.fillStyle = rgbCss(mix([166, 163, 156], [214, 209, 197], bodyLit), 1);
+            for (const side of [-1, 1]) {
+              ctx!.beginPath();
+              ctx!.arc(side * ms * 0.46, nubY, nubRad, 0, TAU);
+              ctx!.fill();
+            }
             ctx!.drawImage(sprites.body[companyTier], -ms / 2, -ms / 2, ms, ms);
             /* the face, at rest: the being's own two eyes, front-facing, no
                blink and no yaw — a creature present rather than performing.
@@ -5889,7 +5912,7 @@ function HomeExperience(): JSX.Element {
             bodyPath(ctx!, ms, ms, be);
             ctx!.clip();
             ctx!.fillStyle = "#2b2822";
-            const er = ms * be.eyeR;
+            const er = ms * be.eyeR * 1.35;
             const eyY = ms * be.eyeLat;
             for (const lon of [-be.eyeLon, be.eyeLon]) {
               const ca = Math.cos(lon);
@@ -6337,7 +6360,12 @@ function HomeExperience(): JSX.Element {
       mech = view.reduced ? mechAt(cam.x) : lerp(mech, mechAt(cam.x), kd(2e-3, dt));
       /* the company arrives the way machine-ness does: eased, or instantly
          under reduced motion */
-      const companyAt = curWall().kind === "group" ? 1 : 0;
+      /* ...and not while a travel is in flight: leaving a room, the members
+         are already fading IN PLACE as you go (founder, 2026-08-27: "only
+         character should move, the characters in the back should stay") —
+         and arriving at one, they greet you after you have arrived rather
+         than materialising mid-glide. */
+      const companyAt = curWall().kind === "group" && !trip.active ? 1 : 0;
       company = view.reduced ? companyAt : lerp(company, companyAt, kd(2e-3, dt));
       /* ATTENTION EASES IN AND LETS GO. The target is the lean while the
          attention is live and zero once it lapses; both directions run
@@ -7718,11 +7746,16 @@ function HomeExperience(): JSX.Element {
       toTop: () => {
         aimTo(0, 0);
       },
-      /* UP TO WHAT IS TIMELESS — programmatic, exempt from the snap, and only
-         from your own column: a room's values are not a thing this world
-         claims to hold. */
+      /* UP TO WHAT IS TIMELESS — programmatic, exempt from the snap, from
+         EVERY column. This refused any column but your own, with the comment
+         "a room's values are not a thing this world claims to hold" — and the
+         founder reversed that claim (2026-08-27: "philosophies & value should
+         be available on every page since every room will eventually have its
+         own"). The sky over a room is empty today and says so honestly, in
+         the room's own name — a place is honest where a locked door is not,
+         which is the same reasoning the way up has always carried. */
       toSky: () => {
-        if (trip.col !== 0 || trip.active) return;
+        if (trip.active) return;
         gesture.snapAt = 0;
         cam.vel = 0;
         aimTo(view.layout.minCam, 0);
@@ -8431,7 +8464,15 @@ function HomeExperience(): JSX.Element {
        carets live in its own foot, and taking the whole object away and
        bringing it back between pages reads as a blink. The old words stay up
        until the new ones land, and only the contents change. */
-    if (!steppingRef.current) setPanelOpen(false);
+    /* AND NEITHER IS MOVING TO ANOTHER MEMORY BY ANY OTHER ROUTE. The
+       carets stopped blinking on 2026-08-25; tapping another orb and walking
+       with the reach's arrows still closed and reopened the card on every
+       move — the same page-turn, still blinking (founder, 2026-08-27: "dont
+       make card blink every time i move to another inspiration"). The rule
+       is the state, not the gesture: a card already up stays up, whatever
+       moved the selection. The appearance animation belongs to appearing —
+       from nothing, and back to nothing. */
+    if (!steppingRef.current && !panelOpenRef.current) setPanelOpen(false);
     let done = false;
     const show = (detail: InspirationDetail | null) => {
       if (done) return;
@@ -12083,8 +12124,10 @@ function HomeExperience(): JSX.Element {
             </span>
           ) : (
             <span className="jar-panel-when jar-label">
-              {agoWords(panelBall.capturedMs, TRef.current)} ·{" "}
-              {dateWords(panelBall.capturedMs, TRef.current)}
+              {/* the date alone, with its year — "Two days ago · Aug 24" said
+                  one fact twice, and the relative half goes stale while the
+                  card stays open (founder, 2026-08-27) */}
+              {dateStamp(panelBall.capturedMs)}
             </span>
           )}
           {!panelIsGroup ? (
@@ -12311,7 +12354,7 @@ function HomeExperience(): JSX.Element {
             <p className="jar-ask jar-ask--after jar-panel-foot">
               <span className="jar-panel-foot-l">
               <label className="jar-attach">
-                {attaching ? "keeping the picture…" : "attach a picture"}
+                {attaching ? "adding attachment…" : "add attachment"}
                 <input
                   type="file"
                   accept="image/*"
@@ -12366,7 +12409,7 @@ function HomeExperience(): JSX.Element {
               </span>
               <span className="jar-panel-foot-r">
                 <button type="button" onClick={editing.leave}>
-                  leave it
+                  cancel edit
                 </button>
               </span>
             </p>
@@ -12995,12 +13038,22 @@ function HomeExperience(): JSX.Element {
       {phase === "ready" && inSky ? (
         <div className="jar-values-room" data-jar-chrome="1">
           <p className="jar-values-lead">
-            Your philosophies and values will form here.
+            {/* whose timeless half this sky holds — yours on your wall, the
+                room's in a room, the agent's on its own (founder, 2026-08-27:
+                every room will eventually have its own) */}
+            {atWall.kind === "self"
+              ? "Your philosophies and values will form here."
+              : `${atWall.name}’s philosophies and values will form here.`}
           </p>
           <p className="jar-values-sub">
-            They are the timeless half of a mind — what you keep coming back
-            to, whatever the day is. They take time, and they are worth it:
-            keep capturing, and this sky will start to fill.
+            {atWall.kind === "self"
+              ? "They are the timeless half of a mind — what you keep coming " +
+                "back to, whatever the day is. They take time, and they are " +
+                "worth it: keep capturing, and this sky will start to fill."
+              : "They are the timeless half of a mind — what it keeps coming " +
+                "back to, whatever the day is. They take time, and they are " +
+                "worth it: as patterns are kept here, this sky will start to " +
+                "fill."}
           </p>
         </div>
       ) : null}

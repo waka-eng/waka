@@ -282,7 +282,13 @@ export function useEditing(deps: EditingDeps): Editing {
             prev ? prev.map((c) => (c.id === held.id ? { ...c, preview: text } : c)) : prev,
           );
           d.details.current.delete(held.id);
-          d.setSelectedId(null);
+          /* THE CARD STAYS OPEN. This deselected the memory on success, which
+             closed the whole card in the same breath the `saved` beat was
+             trying to hold it — so the founder's ruling ("just keep it
+             opened") was being obeyed by the edit face and overruled by this
+             line one commit older than the ruling. You kept the words; you
+             are still reading them. The card leaves when you send it away.
+             (founder, 2026-08-27, after it closed on them again.) */
           done();
         })
         .catch(fail);
