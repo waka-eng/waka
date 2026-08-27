@@ -160,7 +160,10 @@ interface Reading {
   worstFrameMs: number;
   heapMb: number | null;
   reachable: boolean;
+  /** The largest number the door prints — what the world claims to HOLD. */
   saidHolding: number;
+  /** The door's sentence, whole. Kept because the verdict is about words. */
+  doorText: string;
 }
 
 async function measure(browser: Browser, base: string, sql: postgres.Sql, count: number): Promise<Reading> {
@@ -190,13 +193,26 @@ async function measure(browser: Browser, base: string, sql: postgres.Sql, count:
        the first frame, and timing only the last of those flatters it. */
     const started = Date.now();
     await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+    /* THE WHOLE SENTENCE, NOT THE FIRST NUMBER IN IT.
+       This read one number and compared it to the seeded count, which was the
+       right question asked in a way that could only survive one answer. The
+       door now prints two when they differ — how many orbs are in the ground,
+       and how many the archive holds — and a probe that took the first would
+       report the honest sentence `2000 of 2500` as the same defect as the
+       silent `2000` it replaced. What is being measured is whether the world
+       tells the truth about its size, so the size is the LARGEST number the
+       door names, and the sentence is carried out whole for the report. */
     let saidHolding = -1;
+    let doorText = "";
     for (let i = 0; i < 120; i += 1) {
-      saidHolding = (await page.evaluate(() => {
+      doorText = (await page.evaluate(() => {
         const el = document.querySelector(".jar-saved-count");
-        const m = /(\d[\d,]*)/.exec(el?.textContent ?? "");
-        return m ? Number(m[1]!.replace(/,/g, "")) : -1;
-      })) as number;
+        return (el?.textContent ?? "").replace(/\s+/g, " ").trim();
+      })) as string;
+      const numbers = [...doorText.matchAll(/(\d[\d,]*)/g)].map((m) =>
+        Number(m[1]!.replace(/,/g, "")),
+      );
+      saidHolding = numbers.length > 0 ? Math.max(...numbers) : -1;
       if (saidHolding > 0) break;
       await page.waitForTimeout(500);
     }
@@ -267,6 +283,7 @@ async function measure(browser: Browser, base: string, sql: postgres.Sql, count:
       heapMb: heap,
       reachable,
       saidHolding,
+      doorText,
     };
   } finally {
     await ctx.close();
@@ -297,7 +314,15 @@ async function main(): Promise<void> {
           `${r.reachable ? "a memory opens" : "NOTHING OPENS"}`,
       );
       if (r.saidHolding !== r.count) {
-        console.log(`        └─ the world says it holds ${r.saidHolding}, not ${r.count}`);
+        console.log(
+          `        └─ SHORT AND SILENT: seeded ${r.count}, the door says "${r.doorText}"`,
+        );
+      } else if (/\bof\b/.test(r.doorText)) {
+        /* The ceiling was reached and the door said so — the state this walk
+           exists to distinguish from the one above, and the reason it prints
+           on a pass. A number that matches is not the same as a sentence that
+           is honest, and only one of the two is visible to a person. */
+        console.log(`        └─ short, and says so: "${r.doorText}"`);
       }
     }
   } finally {

@@ -299,12 +299,23 @@ export async function fetchGroupWall(groupId: string): Promise<ApiGroupWallSigna
   return Array.isArray(body.wall) ? body.wall : [];
 }
 
-export async function fetchGroupField(groupId: string): Promise<ApiGroupFieldInspiration[]> {
-  const body = await getJson<{ field: ApiGroupFieldInspiration[] }>(
+export interface ApiGroupField {
+  field: ApiGroupFieldInspiration[];
+  /** What the room's ground holds. Equals `field.length` until the room passes
+      the server's ceiling, and is the length for a server too old to say. */
+  total: number;
+}
+
+export async function fetchGroupField(groupId: string): Promise<ApiGroupField> {
+  const body = await getJson<{ field: ApiGroupFieldInspiration[]; total?: number }>(
     apiPath(`/groups/${encodeURIComponent(groupId)}/field`),
     "Failed to load this room's field",
   );
-  return Array.isArray(body.field) ? body.field : [];
+  const field = Array.isArray(body.field) ? body.field : [];
+  return {
+    field,
+    total: typeof body.total === "number" ? Math.max(body.total, field.length) : field.length,
+  };
 }
 
 // ---------------------------------------------------------------------------

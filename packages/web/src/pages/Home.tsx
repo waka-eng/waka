@@ -216,6 +216,8 @@ import { RECEIPTS } from "../lib/receipts";
 import {
   loadInspiration,
   loadInspirations,
+  beyondOf,
+  EMPTY_FIELD,
   loadTopOfMind,
   loadSignal,
   loadSignals,
@@ -726,11 +728,12 @@ async function loadAgentWalls(): Promise<AgentBundle[]> {
        borrowing anything to fill itself. */
     return Promise.all(
       real.map(async (p) => {
-        const [inspirations, signals, tom] = await Promise.all([
-          loadInspirations(p.id).catch(() => [] as Inspiration[]),
+        const [field, signals, tom] = await Promise.all([
+          loadInspirations(p.id).catch(() => EMPTY_FIELD),
           loadSignals(p.id).catch(() => [] as Signal[]),
           loadTopOfMind(p.id).catch(() => null),
         ]);
+        const inspirations = field.inspirations;
         const entries = (tom?.entries ?? []).slice().sort((a, b) => a.createdMs - b.createdMs);
         const lead = tom?.entries.find((e) => e.pinned) ?? tom?.entries[0] ?? null;
         const iso = (ms: number) => new Date(ms).toISOString();
@@ -785,6 +788,10 @@ async function loadAgentWalls(): Promise<AgentBundle[]> {
             updatedAt: iso(c.updatedMs),
             producedBy: null,
           })),
+          /* the same ceiling as every other ground: an agent that has kept
+             more than the walk follows says so rather than reporting the
+             length of what arrived */
+          inspirationTotal: field.total,
         };
       }),
     );
@@ -1196,6 +1203,18 @@ function HomeExperience(): JSX.Element {
   }
   const offlineRef = useRef(false);
   const [inspirations, setInspirations] = useState<Inspiration[] | null>(null);
+  /**
+   * HOW MANY MEMORIES THE WALK NEVER REACHED — the remainder, not the total.
+   *
+   * A total held here would go stale the moment anything is kept or let go,
+   * because the field is edited in place by three handlers below and none of
+   * them refetch. The remainder does not: it is a fact about the far end of
+   * the archive, and keeping one more memory changes the near end. So the
+   * count under the door is `inspirations.length + fieldBeyond`, and it stays
+   * true through a capture, an edit and a removal without any of them
+   * knowing this exists.
+   */
+  const [fieldBeyond, setFieldBeyond] = useState<number>(0);
   /**
    * THE POUR READS THIS; THE POUR DOES NOT DEPEND ON IT.
    *
@@ -1956,6 +1975,9 @@ function HomeExperience(): JSX.Element {
   const groupChromeRef = useRef<Map<string, WallChrome>>(new Map());
   /* a room's ground, by group id, filled when the room wakes */
   const groupFieldRef = useRef<Map<string, ApiGroupFieldInspiration[]>>(new Map());
+  /* and how much of that ground the ceiling did not let through, by group id —
+     zero for every room under it, which is nearly every room */
+  const groupBeyondRef = useRef<Map<string, number>>(new Map());
   /** Namespaced room-orb id → ball, for the panel and relight lookups. */
   const groupBallsRef = useRef<Map<string, Ball>>(new Map());
   /** Rooms whose orbs have already poured this session: no re-pour on return. */
@@ -2047,11 +2069,17 @@ function HomeExperience(): JSX.Element {
          never generates a signal: every statement here was formed on some
          member's own wall out of their own inspirations and then shared in,
          so the ground was always real and simply never fetched. */
-      fetchGroupField(groupId).catch(() => [] as ApiGroupFieldInspiration[]),
+      fetchGroupField(groupId).catch(() => ({
+        field: [] as ApiGroupFieldInspiration[],
+        total: 0,
+      })),
     ])
-      .then(([top, wall, proposals, field]) => {
+      .then(([top, wall, proposals, ground]) => {
         wallSignalsRef.current.set(groupId, wall);
-        groupFieldRef.current.set(groupId, field);
+        groupFieldRef.current.set(groupId, ground.field);
+        /* the same remainder the personal field keeps, per room: what its
+           ground holds beyond what the ceiling let through */
+        groupBeyondRef.current.set(groupId, Math.max(0, ground.total - ground.field.length));
         setGroupFieldTick((n) => n + 1);
         const evidence = groupWallOrbs(wall, top);
         const name = groupsRef.current.find((g) => g.id === groupId)?.name ?? "";
@@ -2210,9 +2238,10 @@ function HomeExperience(): JSX.Element {
     /* LAYER 1 — the field. The archive is the spine, so its answer alone
        decides whether this is the real layout or the fixture. */
     loadInspirations()
-      .then((rows) => {
+      .then((field) => {
         if (dead || offlineRef.current) return;
-        setInspirations(rows);
+        setInspirations(field.inspirations);
+        setFieldBeyond(beyondOf(field));
         setPhase("ready");
       })
       .catch((err: unknown) => {
@@ -2561,7 +2590,10 @@ function HomeExperience(): JSX.Element {
          business making three requests that will all 401 */
       if (offlineRef.current) return;
       void Promise.allSettled([
-        loadInspirations().then((rows) => setInspirations(rows)),
+        loadInspirations().then((field) => {
+          setInspirations(field.inspirations);
+          setFieldBeyond(beyondOf(field));
+        }),
         loadAgentWalls().then((rows) => setAgents(rows)),
         readSkyRef.current(),
         /* LAYER 3 WAS THE ONE LEFT OUT, and it is the layer that changes most.
@@ -8588,6 +8620,38 @@ function HomeExperience(): JSX.Element {
        and guards nothing, which `measure-groups.mjs` argues against by name.) */
   }, [atWall, agents, inspirations, groupFieldTick]);
 
+  /**
+   * HOW MANY ARE BEHIND THE DOOR, WHICH CAN BE MORE THAN ARE DRAWN.
+   *
+   * Every ground in this product is loaded up to a ceiling — ten pages of two
+   * hundred for a personal or agent archive, four hundred for a room's field.
+   * The ceilings are deliberate: following a cursor forever lets one very old
+   * account stall the world's first paint. What was not deliberate is that
+   * nothing said so. At two and a half thousand memories the door read
+   * `2000 inspirations`, the ground drew two thousand orbs, and five hundred
+   * memories were absent from both with nothing said — in a product whose
+   * whole promise is that it keeps what you give it, and whose posture is no
+   * quiet corners.
+   *
+   * The failure ran in the worst direction: it UNDERSTATED. Somebody who
+   * reached it had every reason to read it as memories lost.
+   *
+   * So the door prints both numbers when they differ. The first is still the
+   * balls in the ground the caret takes you into (founder, 2026-08-25) — the
+   * second is what the archive holds.
+   */
+  const wallTotal = useMemo<number>(() => {
+    if (atWall.kind === "agent") {
+      const a = (agents ?? []).find((x) => x.agent.id === atWall.id);
+      return a?.inspirationTotal ?? a?.inspirations.length ?? 0;
+    }
+    if (atWall.kind === "group") {
+      const loaded = (groupFieldRef.current.get(atWall.id) ?? []).length;
+      return loaded + (groupBeyondRef.current.get(atWall.id) ?? 0);
+    }
+    return (inspirations?.length ?? 0) + fieldBeyond;
+  }, [atWall, agents, inspirations, groupFieldTick, fieldBeyond]);
+
   /* ---------------- the mouth ----------------
      The one verb this layout was missing. It says one phrase at rest, becomes
      a plain field when you touch it, and commits on Enter — guarded, because
@@ -12472,8 +12536,13 @@ function HomeExperience(): JSX.Element {
           onClick={() => simApiRef.current?.toGround()}
         >
           <span className="jar-saved-count">
-            {wallCount}
-            {wallCount === 1 ? " inspiration" : " inspirations"}
+            {/* TWO NUMBERS ONLY WHEN THEY DISAGREE. Under the ceiling — which
+                is where every account lives for a long time — this is exactly
+                what it always was: one number and the word. Past it, the door
+                stops printing the size of what arrived as though it were the
+                size of the archive. */}
+            {wallTotal > wallCount ? `${wallCount} of ${wallTotal}` : wallCount}
+            {wallTotal === 1 ? " inspiration" : " inspirations"}
           </span>
           <span className="jar-caret" aria-hidden="true" />
         </button>

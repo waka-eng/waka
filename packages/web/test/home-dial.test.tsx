@@ -150,7 +150,7 @@ beforeEach(async () => {
   /* The same rows the page was handed, asked of the same mock. Reading the
      moments back out of this rather than recomputing them from a base date
      means the test cannot drift out of agreement with the fixture helper. */
-  keptMs = (await dataMockFrom(FACTS).loadInspirations())
+  keptMs = (await dataMockFrom(FACTS).loadInspirations()).inspirations
     .map((row) => row.capturedMs)
     .sort((a, b) => a - b);
   /* The rail runs from three days before your earliest memory to now. Both

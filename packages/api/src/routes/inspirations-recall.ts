@@ -143,6 +143,14 @@ export function registerRecallRoutes(
       );
     }
 
+    /* WHAT THE WHOLE ARCHIVE HOLDS, BEFORE THE CURSOR NARROWS IT.
+       Snapshotted here on purpose: everything above describes *which* memories
+       the caller is asking for, and the cursor below describes *where in them
+       this page starts*. Counting after the cursor was pushed would answer
+       "how many are left", which is a fact about a scroll position and not
+       about the archive. */
+    const contentFilters = [...filters];
+
     if (query.data.cursor) {
       const cursor = decodeCursor(query.data.cursor);
       if (!cursor) return c.json({ error: "Invalid cursor" }, 400);
@@ -168,6 +176,30 @@ export function registerRecallRoutes(
       // share a timestamp.
       .orderBy(desc(inspirations.createdAt), desc(inspirations.id))
       .limit(limit);
+
+    /**
+     * HOW MANY THERE ARE, WHICH IS NOT HOW MANY WERE SENT.
+     *
+     * A client that follows the cursor still stops somewhere — the web field
+     * stops at ten pages, deliberately, so that one very old account cannot
+     * stall the world's first paint. Until this existed there was no way for
+     * it to know it had stopped short, so the count under the door read the
+     * length of what had arrived: at two and a half thousand memories the
+     * product said it held two thousand and said nothing about the rest.
+     *
+     * An archive that quietly understates itself is the worst direction for
+     * this failure to run in — the person has every reason to read it as
+     * memories lost. So the size of the archive is served as a fact about the
+     * archive, and the surface decides how to say it.
+     *
+     * Cheap: `inspirations_profile_created_idx` leads with `profile_id`, so
+     * the unsearched case is an index-only scan.
+     */
+    const [totals] = await db
+      .select({ total: sql<number>`cast(count(*) as int)` })
+      .from(inspirations)
+      .where(and(...contentFilters));
+    const total = Number(totals?.total ?? rows.length);
 
     const ids = rows.map((row) => row.id);
 
@@ -234,6 +266,7 @@ export function registerRecallRoutes(
             reflectionCount: reflectionCounts.get(row.id) ?? 0,
           }),
         ),
+        total,
         ...(last ? { nextCursor: encodeCursor(last) } : {}),
       },
       200,

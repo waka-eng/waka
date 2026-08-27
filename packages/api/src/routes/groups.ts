@@ -469,7 +469,8 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
     });
     if (!membership) return c.json({ error: "Group not found" }, 404);
 
-    const rows = await loadField(db, groupId);
+    const field = await loadField(db, groupId);
+    const rows = field.inspirations;
 
     // Serialized field by field, for the same reason the wall is: this is the
     // boundary between two people's memory, and a loader that one day selects
@@ -486,6 +487,11 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
         ownerName: row.ownerName,
         ownerType: row.ownerType,
       })),
+      /* What the room's ground HOLDS, beside what this response carries. Past
+         the loader's ceiling those differ, and until this was served the room's
+         door could only print the length of what arrived — a ceiling that reads
+         as loss. */
+      total: field.total,
     });
   });
 

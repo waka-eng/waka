@@ -108,4 +108,11 @@ export interface AgentBundle {
   direction: ApiAgentDirection;
   topOfMind: ApiAgentTopOfMind;
   inspirations: ApiAgentSignal[];
+  /**
+   * How many memories this agent's archive holds, when that is more than
+   * arrived. Optional because a fixture bundle is the whole of itself: there
+   * is nothing behind it to be short of, and a reader with no total falls
+   * back to the length, which for a fixture is the truth.
+   */
+  inspirationTotal?: number;
 }

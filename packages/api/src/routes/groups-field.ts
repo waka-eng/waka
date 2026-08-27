@@ -12,7 +12,7 @@
  * survives someone adding a second query without reading the canon first.
  */
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 
 import { groupMembers, inspirations, profiles } from "../db/index.js";
 import { getDb } from "../lib/db.js";
@@ -26,22 +26,53 @@ type WakaDb = ReturnType<typeof getDb>;
 const GROUP_FIELD_LIMIT = 400;
 
 /**
+ * WHOSE MEMORIES A ROOM'S GROUND IS MADE OF — in one place, because two
+ * queries now ask it: the page, and the count of what the page is a page of.
+ *
+ * Both halves of the predicate are explicit: the author is in this room AND
+ * marked the capture public. Neither is inferred, and `visibility` defaults to
+ * private at the column, so any bug upstream shows an empty field rather than
+ * somebody's private memory.
+ *
+ * THREE HALVES, NOT TWO. docs/data-model.md rule 5: "Group membership is
+ * between human profiles for now; agent profiles do not join walls."
+ * `routes/groups.ts:132` enforces that when somebody joins, and this read did
+ * not enforce it when somebody looks — so a member row for an agent, however
+ * it arrived, put that agent's public captures into a room belonging to other
+ * accounts. Six such rows exist in the dev database today, which is why this
+ * is a predicate and not a comment.
+ *
+ * Enforced here as well as at the join because the two answer different
+ * questions: the join asks "may this profile become a member", and this asks
+ * "whose memories is this room's ground made of". A rule checked only on the
+ * way in is a rule that a bad row silently repeals.
+ *
+ * Named rather than written twice on purpose: a security predicate that
+ * exists in two copies is a security predicate that will one day exist in two
+ * versions, and the count would be the copy nobody re-reads.
+ */
+function memberPublicInspirations(groupId: string) {
+  return and(
+    eq(groupMembers.groupId, groupId),
+    eq(inspirations.visibility, "public"),
+    eq(profiles.type, "human"),
+  );
+}
+
+/**
  * A room's ground: every PUBLIC capture belonging to every CURRENT member.
  *
  * A named loader rather than an inline query, so it can be injected in tests
  * the same way `loadGroupWall` is — the convention every other read in this
  * module follows, and the reason those reads have tests and this one did not.
  *
- * Both halves of the predicate are explicit: the author is in this room AND
- * marked the capture public. Neither is inferred, and `visibility` defaults to
- * private at the column, so any bug upstream shows an empty field rather than
- * somebody's private memory.
+ * Who it may draw from is `memberPublicInspirations` above; this decides how much.
  */
 export async function loadGroupField(
   db: WakaDb,
   groupId: string,
-): Promise<
-  Array<{
+): Promise<{
+  inspirations: Array<{
     id: string;
     text: string;
     kind: string | null;
@@ -51,8 +82,12 @@ export async function loadGroupField(
     ownerProfileId: string;
     ownerName: string;
     ownerType: string;
-  }>
-> {
+  }>;
+  /** How many the room's ground holds, which past `GROUP_FIELD_LIMIT` is more
+      than were sent. The room's door prints both so a ceiling reads as a
+      ceiling and not as memories that went missing. */
+  total: number;
+}> {
   const rows = await db
     .select({
       id: inspirations.id,
@@ -68,26 +103,23 @@ export async function loadGroupField(
     .from(inspirations)
     .innerJoin(profiles, eq(profiles.id, inspirations.profileId))
     .innerJoin(groupMembers, eq(groupMembers.profileId, profiles.id))
-    .where(
-      and(
-        eq(groupMembers.groupId, groupId),
-        eq(inspirations.visibility, "public"),
-        /* THREE HALVES, NOT TWO. docs/data-model.md rule 5: "Group membership
-           is between human profiles for now; agent profiles do not join walls."
-           `routes/groups.ts:132` enforces that when somebody joins, and this
-           read did not enforce it when somebody looks — so a member row for an
-           agent, however it arrived, put that agent's public captures into a
-           room belonging to other accounts. Six such rows exist in the dev
-           database today, which is why this is a predicate and not a comment.
-
-           Enforced here as well as at the join because the two answer different
-           questions: the join asks "may this profile become a member", and this
-           asks "whose memories is this room's ground made of". A rule checked
-           only on the way in is a rule that a bad row silently repeals. */
-        eq(profiles.type, "human"),
-      ),
-    )
+    .where(memberPublicInspirations(groupId))
     .orderBy(desc(inspirations.createdAt))
     .limit(GROUP_FIELD_LIMIT);
-  return rows;
+
+  /* THE SAME THREE HALVES, COUNTED.
+     Short-circuited when the page came back under the ceiling, because then
+     the rows ARE the field and a second pass over a room's whole archive
+     would be work done to learn something already known. */
+  if (rows.length < GROUP_FIELD_LIMIT) {
+    return { inspirations: rows, total: rows.length };
+  }
+
+  const [counted] = await db
+    .select({ total: sql<number>`cast(count(*) as int)` })
+    .from(inspirations)
+    .innerJoin(profiles, eq(profiles.id, inspirations.profileId))
+    .innerJoin(groupMembers, eq(groupMembers.profileId, profiles.id))
+    .where(memberPublicInspirations(groupId));
+  return { inspirations: rows, total: Math.max(Number(counted?.total ?? 0), rows.length) };
 }

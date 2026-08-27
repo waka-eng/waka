@@ -451,6 +451,26 @@ describe("the group module itself", () => {
     return { files, code };
   };
 
+  /**
+   * COUNTING A GATE THAT LIVES IN ONE PLACE.
+   *
+   * A gate written at the read site is counted where it stands. A gate written
+   * once inside a named predicate is counted per USE of that name — and never
+   * at its definition, which guards nothing on its own.
+   *
+   * Found the hard way on 2026-08-27. The first version of this counted the
+   * definition as well, which left exactly one slot of slack, and a
+   * deliberately ungated third read of layer 1 walked straight through a test
+   * written to stop it. A gate that counts itself is not a gate.
+   */
+  const gatedReads = (code: string, gate: RegExp): number => {
+    const shared = code.match(/function memberPublicInspirations\([\s\S]*?\n\}/)?.[0] ?? "";
+    const everywhere = code.match(new RegExp(gate.source, "g")) ?? [];
+    const inShared = shared.match(new RegExp(gate.source, "g")) ?? [];
+    const byName = code.match(/\.where\(\s*memberPublicInspirations\(/g) ?? [];
+    return everywhere.length - inShared.length + byName.length;
+  };
+
   it("scans every file the group module is made of", () => {
     const { files } = groupModuleSource();
     // A rename that empties this list must fail here rather than turn the
@@ -519,9 +539,24 @@ describe("the group module itself", () => {
     expect(code).toMatch(/eq\(\s*inspirations\.visibility\s*,\s*"public"\s*\)/);
     // ...and the gate must not be the only mention while some other query
     // quietly selects from the table without it.
-    const gates = code.match(/eq\(\s*inspirations\.visibility\s*,\s*"public"\s*\)/g) ?? [];
     const froms = code.match(/\.from\(\s*inspirations\s*\)/g) ?? [];
-    expect(gates.length).toBeGreaterThanOrEqual(froms.length);
+
+    /* A READ IS ALSO GATED WHEN IT NAMES THE PREDICATE THAT CARRIES THE GATE.
+       The room's ground became two queries on 2026-08-27 — the page, and the
+       count of what the page is a page of — and writing the predicate twice is
+       how a security predicate ends up existing in two versions. So it was
+       given a name, and this count learned the name. The assertion below it
+       proves the name still means what it says: without that, extracting the
+       predicate into an empty function would satisfy every count here. */
+    const visibility = /eq\(\s*inspirations\.visibility\s*,\s*"public"\s*\)/;
+    if (code.includes("memberPublicInspirations(")) {
+      expect(
+        code.match(/function memberPublicInspirations\([\s\S]*?\n\}/)?.[0] ?? "",
+        "the shared room-ground predicate must carry the visibility gate itself",
+      ).toMatch(visibility);
+    }
+
+    expect(gatedReads(code, visibility)).toBeGreaterThanOrEqual(froms.length);
   });
 
   /**
@@ -553,10 +588,21 @@ describe("the group module itself", () => {
        contains agents — an agent belongs in a room's list of who is here, it
        is only their MEMORIES that must not land on the ground. Same shape as
        the visibility count directly above, for the same reason. */
-    const humanGates = code.match(/eq\(\s*profiles\.type\s*,\s*"human"\s*\)/g) ?? [];
     const layerOneReads = code.match(/\.from\(\s*inspirations\s*\)/g) ?? [];
+
+    /* Same allowance, and the same proof, as the visibility count above: a
+       read may carry the gate by naming the one predicate that holds it, and
+       that predicate is checked for holding it. */
+    const humanOnly = /eq\(\s*profiles\.type\s*,\s*"human"\s*\)/;
+    if (code.includes("memberPublicInspirations(")) {
+      expect(
+        code.match(/function memberPublicInspirations\([\s\S]*?\n\}/)?.[0] ?? "",
+        "the shared room-ground predicate must carry the human-only gate itself",
+      ).toMatch(humanOnly);
+    }
+
     expect(
-      humanGates.length,
+      gatedReads(code, humanOnly),
       "every read of layer 1 through group membership needs the gate, not " +
         "just the first one",
     ).toBeGreaterThanOrEqual(layerOneReads.length);

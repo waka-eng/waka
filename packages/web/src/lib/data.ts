@@ -323,16 +323,55 @@ const FIELD_MAX_PAGES = 10;
  * is defined by the one before it, and the first page is what the world needs
  * to paint — the rest arrive behind it.
  */
-export async function loadInspirations(profile?: string): Promise<Inspiration[]> {
+export interface FieldLoad {
+  /** What arrived, oldest first — the order the ground lays them down in. */
+  inspirations: Inspiration[];
+  /**
+   * How many the archive holds. Equal to `inspirations.length` on every
+   * archive smaller than the ceiling, which is every archive for a long time.
+   */
+  total: number;
+  /**
+   * The walk stopped before the archive did. The one fact the world had no
+   * way of knowing until the server started serving a total — and without it
+   * the count under the door was the length of what had arrived, printed as
+   * though it were the size of the archive.
+   */
+  short: boolean;
+}
+
+/**
+ * The remainder: how many the archive holds that the walk never reached.
+ * Zero for every archive under the ceiling, which is nearly every archive.
+ */
+export function beyondOf(field: FieldLoad): number {
+  return Math.max(0, field.total - field.inspirations.length);
+}
+
+/** Nothing arrived, and nothing is behind it either — the shape a failed
+    walk falls back to, so a caller never has to invent a total. */
+export const EMPTY_FIELD: FieldLoad = { inspirations: [], total: 0, short: false };
+
+export async function loadInspirations(profile?: string): Promise<FieldLoad> {
   const out: Inspiration[] = [];
   let cursor: string | undefined;
+  let reported: number | undefined;
   for (let page = 0; page < FIELD_MAX_PAGES; page++) {
     const got = await fetchInspirationPage({ limit: FIELD_PAGE, profile, cursor });
     out.push(...got.inspirations.map(toInspiration));
+    if (typeof got.total === "number") reported = got.total;
     if (!got.nextCursor || got.inspirations.length === 0) break;
     cursor = got.nextCursor;
   }
-  return out.sort((a, b) => a.capturedMs - b.capturedMs);
+  /* `max` holds the invariant the door depends on — "N of M" with M below N
+     is worse than no sentence at all — across a server too old to report a
+     total, and across a capture or an erasure landing mid-walk. */
+  const total = Math.max(reported ?? 0, out.length);
+  return {
+    inspirations: out.sort((a, b) => a.capturedMs - b.capturedMs),
+    total,
+    short: total > out.length,
+  };
 }
 
 /** THE SKY. Patterns, brightest-first is decided by the sky's own layout;

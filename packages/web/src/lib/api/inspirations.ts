@@ -118,6 +118,10 @@ export interface FetchInspirationsOptions extends ProfileScoped {
 export interface ApiInspirationPage {
   inspirations: ApiInspirationSummary[];
   nextCursor?: string;
+  /** How many the archive holds under this query — not how many were sent.
+      Absent from an older server, which is why every reader treats a missing
+      total as "no better information than the length of what arrived". */
+  total?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -186,6 +190,7 @@ export async function fetchInspirationPage(
   return {
     inspirations: Array.isArray(body.inspirations) ? body.inspirations : [],
     nextCursor: body.nextCursor,
+    total: typeof body.total === "number" ? body.total : undefined,
   };
 }
 

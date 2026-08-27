@@ -73,8 +73,12 @@ const iso = (daysAgo: number) => new Date(at(daysAgo)).toISOString();
  */
 export function dataMockFrom(facts: WorldFacts) {
   return {
-    loadInspirations: async () =>
-      facts.inspirations.map((c) => ({
+    /* A FIELD, NOT A LIST. `loadInspirations` answers with what arrived AND
+       how much the archive holds, because past the walk's ceiling those are
+       different numbers and the door has to be able to say so. A fixture is
+       the whole of itself, so here they are equal and `short` is false. */
+    loadInspirations: async () => {
+      const inspirations = facts.inspirations.map((c) => ({
         id: c.id,
         preview: c.text,
         isPublic: false,
@@ -84,7 +88,9 @@ export function dataMockFrom(facts: WorldFacts) {
         updatedMs: at(c.daysAgo),
         attachments: [],
         reflectionCount: 0,
-      })),
+      }));
+      return { inspirations, total: inspirations.length, short: false };
+    },
     loadSignals: async () => [],
     loadTopOfMind: async () => null,
   };
@@ -104,7 +110,7 @@ export function apiMockFrom(facts: WorldFacts) {
       })),
     fetchGroupField: async (groupId: string) => {
       const g = facts.groups.find((x) => x.id === groupId);
-      return (g?.field ?? []).map((f) => ({
+      const field = (g?.field ?? []).map((f) => ({
         id: f.id,
         text: `memory ${f.id}`,
         kind: "note",
@@ -115,6 +121,9 @@ export function apiMockFrom(facts: WorldFacts) {
         ownerName: f.ownerName,
         ownerType: "human",
       }));
+      /* like the personal field above: what came, and what there is. A room in
+         a fixture holds exactly what it hands over. */
+      return { field, total: field.length };
     },
     fetchGroupMembers: async (groupId: string) => {
       const g = facts.groups.find((x) => x.id === groupId);
