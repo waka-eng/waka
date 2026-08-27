@@ -362,6 +362,23 @@ jobs:
       - name: Measured style, broken (must fail)
         run: pnpm e2e:measure --negative
 
+      # WHICH RULES STILL DECIDE ANYTHING, and WHETHER EVERY CONTROL ANSWERS
+      # THE HAND. Both ask the engine rather than the sheets, because `@layer`
+      # makes the cascade unanswerable by reading files: a hover written in
+      # the product layer and beaten by a flat colour in the chrome layer
+      # looks correct in every diff and paints nothing on screen. Three of
+      # them were doing exactly that until 2026-08-27.
+      #
+      # They are here for the reason this whole job exists. Ten gates below
+      # this line had never executed once, because a launch error in the step
+      # above skipped every one of them, and nobody could tell from the
+      # workflow: a gate that CI does not run is not a gate, it is a file.
+      - name: Dead CSS (which rules still decide anything)
+        run: pnpm e2e:dead-css --base-url http://127.0.0.1:3010
+
+      - name: Every control answers the hand
+        run: pnpm e2e:answers-the-hand --base-url http://127.0.0.1:3010
+
       # THE SKY SUITE IS GONE, with the engine it measured. It grew a real
       # sky and photometered the top band of the canvas against an account
       # that had none — the only gate that could see `SKY_PEEK_DEPTH = 0.62`,
