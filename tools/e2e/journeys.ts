@@ -45,6 +45,7 @@
  * stub keeps a font CDN outage from being reported as a broken journey.
  */
 import { type Browser, type BrowserContext, type Page, type Route } from "playwright";
+import { settleAfterArrival } from "./arrival";
 import { launchChromium } from "./browser";
 interface Args {
   baseUrl: string;
@@ -1421,25 +1422,13 @@ const JOURNEYS: Journey[] = [
          So the Escape at the start was aimed at the wrong suspect. What this
          case claims is that the four verbs can be pressed on a board with
          nothing over it, and the greeting is a thing over it — a real one,
-         by design, that a person waits out. The walk waits it out too:
-         `.jar-hq` is the ready gate itself — the world renders it and the
-         loading ground in the same ternary — the greeting's whole window is
-         4s from there, and one Escape after it closes anything that
-         survived. A timing this journey does not control is now a
-         timing it waits for rather than races. */
-      const GREETING_WINDOW_MS = 1_400 + 2_600 + 600;
-      await page
-        .waitForSelector(".jar-hq", { state: "attached", timeout: 30_000 })
-        .catch(() => null);
-      await page.waitForTimeout(GREETING_WINDOW_MS);
-      await page.keyboard.press("Escape");
-      await page.waitForTimeout(300);
-      /* and if something is STILL up, say which — a verb reported unreachable
-         with a card over it is a different fact from a verb that is unreachable */
-      const standing = await page.evaluate(() => {
-        const over = document.querySelector(".jar-panel");
-        return over ? over.className : null;
-      });
+         by design, that a person waits out. The walk waits it out too, and
+         the waiting lives in `arrival.ts` rather than here: `phone` raced the
+         same four seconds and read it as "no memory could be opened", so it
+         is a fact about arriving at this world and not a fact about this
+         journey. A timing none of them control is now one they wait for
+         rather than race. */
+      const standing = await settleAfterArrival(page);
       if (standing) {
         return {
           ok: false,

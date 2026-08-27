@@ -2842,6 +2842,26 @@
     padding-left: var(--sp-20);
     padding-right: var(--sp-20);
   }
+  /* AND THE TWO HALVES OF THE SPLIT HAVE TO BE APART FROM EACH OTHER.
+     Sizing a target is only half of 2.5.8; the other half is that two targets
+     under 44px must not sit inside 44px of each other, because then one of
+     them absorbs the misses meant for the other. These two are different
+     acts — the left opens THIS wall's settings, the right opens the list of
+     other walls — so a thumb that misses the caret lands in settings, which
+     is not a near miss, it is a different place.
+
+     They were far enough apart until the founder ruled the pills should
+     breathe in ("reduce left and right margins of all the buttons by just a
+     tiny bit", 2026-08-27). That took `.jar-back` from 20px of side padding
+     to 16, which is right, and took 8px off the width of each of these two,
+     which nobody was watching: their centres closed from 50px to 42. The
+     ruling stands exactly as made — on a desktop nothing here moves — and
+     the thumb gets the six pixels back. `e2e:phone` found it, four commits
+     and one whole day after the change that caused it, because it was not in
+     CI. It is now. */
+  .jar-here-split {
+    gap: 6px;
+  }
 }
 
 /* ═══════════ WHAT A THUMB CAN HIT ONCE SOMETHING IS OPEN ═══════════

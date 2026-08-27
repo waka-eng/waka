@@ -279,7 +279,20 @@ jobs:
       # No sign-in, no database rows: this one asks whether the world draws at
       # all when every third-party host is unreachable. It is first because if
       # it fails, nothing after it means anything.
+      # ONE FAILING GATE MUST NEVER AGAIN HIDE THE ONES BELOW IT.
+      #
+      # A step's default is `if: success()`, so the first red step skips the
+      # rest of the job. On 2026-08-27 that turned a one-second launch error
+      # in `measure` into TEN gates that had never executed — reported as
+      # "skipped", which reads like a decision rather than an accident. The
+      # job still fails if any gate fails; what changes is that every gate
+      # gets to say what it found, in one run, instead of the run stopping at
+      # the first bad news.
+      #
+      # `!cancelled()` rather than `always()`: a run the person cancelled
+      # should stop, and a job whose stack never came up has nothing to say.
       - name: First paint
+        if: ${{ !cancelled() }}
         run: pnpm e2e:first-paint
 
       # WHY THIS IS BLOCKING RATHER THAN NON-BLOCKING. Every journey drives
@@ -291,6 +304,7 @@ jobs:
       # prints `NOT CHECKED: principle` when that happens, so a thinner run
       # says so in its own result line instead of passing quietly.
       - name: Journeys
+        if: ${{ !cancelled() }}
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: pnpm e2e:journeys
@@ -299,6 +313,7 @@ jobs:
       # through its own sabotage and MUST fail. A journey that survives is
       # reported as decoration, and it has caught two of these already.
       - name: Journeys, sabotaged (each must fail)
+        if: ${{ !cancelled() }}
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: pnpm e2e:journeys --negative
@@ -308,6 +323,7 @@ jobs:
       # a revoke that returns 200 and leaves the token working would pass every
       # other check here. There is no reason it should not run on every change.
       - name: Connections (list and revoke)
+        if: ${{ !cancelled() }}
         run: pnpm e2e:connections --base-url http://127.0.0.1:3010
 
       # ERASURE NEEDS TWO THINGS THIS WORKFLOW MAY NOT HAVE, so it asks first.
@@ -325,14 +341,14 @@ jobs:
       # went. Without them it reports the byte checks as NOT RUN rather than
       # passing over them.
       - name: Erasure (needs a model key)
-        if: ${{ env.HAS_MODEL_KEY == 'true' }}
+        if: ${{ !cancelled() && env.HAS_MODEL_KEY == 'true' }}
         env:
           ATTACHMENTS_BUCKET: waka-ci
           ATTACHMENTS_ENDPOINT: http://127.0.0.1:8792
         run: pnpm e2e:erasure --base-url http://127.0.0.1:3010
 
       - name: Erasure — NOT RUN
-        if: ${{ env.HAS_MODEL_KEY != 'true' }}
+        if: ${{ !cancelled() && env.HAS_MODEL_KEY != 'true' }}
         run: |
           echo "::warning::e2e:erasure was NOT RUN — no GEMINI_API_KEY."
           echo "Account deletion is the highest-stakes path in the product and"
@@ -354,12 +370,14 @@ jobs:
       # account: it serves the product's own stylesheet with fixture markup,
       # so it is seconds rather than minutes.
       - name: Measured style (alignment and tone)
+        if: ${{ !cancelled() }}
         run: pnpm e2e:measure
 
       # Same reason the journeys have one: a check about a number is easy to
       # write so that it can never fail. Each case carries a sabotage that
       # breaks precisely what it asserts and must go red under it.
       - name: Measured style, broken (must fail)
+        if: ${{ !cancelled() }}
         run: pnpm e2e:measure --negative
 
       # WHICH RULES STILL DECIDE ANYTHING, and WHETHER EVERY CONTROL ANSWERS
@@ -374,9 +392,11 @@ jobs:
       # above skipped every one of them, and nobody could tell from the
       # workflow: a gate that CI does not run is not a gate, it is a file.
       - name: Dead CSS (which rules still decide anything)
+        if: ${{ !cancelled() }}
         run: pnpm e2e:dead-css --base-url http://127.0.0.1:3010
 
       - name: Every control answers the hand
+        if: ${{ !cancelled() }}
         run: pnpm e2e:answers-the-hand --base-url http://127.0.0.1:3010
 
       # THE SKY SUITE IS GONE, with the engine it measured. It grew a real
@@ -404,6 +424,7 @@ jobs:
       # is not whether it failed — `journeys --negative` already asks that —
       # but whether ANYTHING SAID SO. Seven acts; three used to say nothing.
       - name: Failure paths (every act must say what went wrong)
+        if: ${{ !cancelled() }}
         run: pnpm e2e:when-it-fails
 
       # The same seven against a dead connection. An act that speaks under a
@@ -411,6 +432,7 @@ jobs:
       # ApiError — which is exactly how the world came to show people the
       # browser's own "Failed to fetch".
       - name: Failure paths, connection dropped
+        if: ${{ !cancelled() }}
         run: pnpm e2e:when-it-fails --kind drop
 
       # And against a session that expired between opening the surface and
@@ -418,6 +440,7 @@ jobs:
       # person whose session died must not be left looking at what reads as
       # success.
       - name: Failure paths, session expired
+        if: ${{ !cancelled() }}
         run: pnpm e2e:when-it-fails --kind 401
 
       # The three empties, in the order a person meets them: the door before
@@ -426,10 +449,13 @@ jobs:
       # BARE_BY_DECISION with the ruling that made them bare — and a listed one
       # that starts speaking fails too, so an excuse cannot quietly go stale.
       - name: First run — the door
+        if: ${{ !cancelled() }}
         run: pnpm e2e:first-sixty --stage door
       - name: First run — an empty account
+        if: ${{ !cancelled() }}
         run: pnpm e2e:first-sixty --stage empty
       - name: First run — one memory kept
+        if: ${{ !cancelled() }}
         run: pnpm e2e:first-sixty --stage kept
 
       # The world with the mouse unplugged, and now the whole path rather than
@@ -449,6 +475,7 @@ jobs:
       # focus to the document — which it did, on every journey, until the
       # place you arrive in started taking the focus its own way in dropped.
       - name: Keyboard reach (the whole path, not just the chrome)
+        if: ${{ !cancelled() }}
         run: pnpm e2e:by-keyboard
 
       # The field at 12, 200 and 800 memories, seeded straight into Postgres
@@ -457,6 +484,7 @@ jobs:
       # a workflow file deciding a product question. It prints the numbers so
       # a regression is visible in the log the day it appears.
       - name: At scale (report only)
+        if: ${{ !cancelled() }}
         run: pnpm e2e:at-scale --counts 12,200,800
 
       - name: Stack log

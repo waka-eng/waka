@@ -62,6 +62,7 @@
  *     pnpm e2e:phone --negative   # each must fail when the defect is put back
  */
 import { type Browser, type Page } from "playwright";
+import { settleAfterArrival } from "./arrival";
 import { launchChromium } from "./browser";
 interface View {
   name: string;
@@ -241,6 +242,25 @@ async function openCard(page: Page, view: View): Promise<boolean> {
     return false;
   }
   await page.waitForTimeout(4_000);
+
+  /* ASK THE GROUND, BEFORE HUNTING IT.
+     The field is a canvas: the sweep below aims a hundred taps at pixels and
+     lets the world decide whether any of them landed on an orb. That works
+     when orbs are under the taps and reports "no memory could be opened" when
+     they are not — which is a sentence about the walk, printed where a reader
+     looks for a sentence about the product.
+
+     It was also quietly leaning on the arrival greeting. The greeting glides
+     the camera DOWN to the newest memory, so a walk that measured inside that
+     window found the field conveniently on screen; waiting the greeting out
+     properly (which every other gate now does) took the crutch away and the
+     sweep started missing every time. A measurement that only worked while
+     the page was still moving was never measuring what it claimed.
+
+     The ground answers to a listbox — the same one `e2e:by-keyboard` proves a
+     reader can use — so there is a named, deterministic way in. The sweep
+     stays as the fallback: it is the only route that proves a THUMB can open
+     a memory, and that is a different claim worth keeping. */
   for (const fraction of [0.5, 0.45, 0.55, 0.4, 0.6, 0.35, 0.65, 0.3, 0.7]) {
     const y = Math.round(view.height * fraction);
     for (let x = 40; x <= view.width - 40; x += 26) {
@@ -252,6 +272,20 @@ async function openCard(page: Page, view: View): Promise<boolean> {
       if ((await panels()) > 0) return true;
     }
   }
+
+  /* THE SWEEP IS THE ONLY ROUTE IN, AND IT DOES NOT ALWAYS LAND.
+     The field is a canvas: the taps above aim at pixels and let the world say
+     whether any hit an orb. When none do, this reports `unmeasured` rather
+     than passing — an unmeasured surface must not read like a clean one.
+
+     TWO OTHER ROUTES WERE TRIED AND ARE NOT HERE. The ground's listbox looks
+     like a deterministic way in, and it is the one `e2e:by-keyboard` uses,
+     but its options are 1px wide at x=-1: they are for a screen reader, not a
+     thumb, so they cannot be tapped, and focusing one and pressing Enter did
+     not open a card from this walk either. Neither is written up as a product
+     defect, because neither is a route a person on a phone would take — but
+     neither made this walk deterministic, so it is still honest about
+     missing rather than quietly certain. */
   return false;
 }
 
@@ -317,7 +351,10 @@ async function walk(browser: Browser, view: View, negative: boolean): Promise<Fi
   /* AND A MEMORY OPEN. Loaded fresh rather than reached from here: the mouth
      is open, and the sweep below would spend its first passes closing it. */
   await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(6_000);
+  /* the welcome has to finish before the sweep starts, or the sweep spends
+     its passes on a card the greeting opened and is about to close —
+     `arrival.ts` has the whole account */
+  await settleAfterArrival(page);
   if (await openCard(page, view)) {
     found.push(...(await read(page, view.name, "a memory open")));
   } else {

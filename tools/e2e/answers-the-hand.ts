@@ -37,6 +37,7 @@
  *     pnpm e2e:answers-the-hand [--base-url <url>]
  */
 import { type Browser, type Page } from "playwright";
+import { settleAfterArrival } from "./arrival";
 import { launchChromium } from "./browser";
 
 const DEFAULT_BASE = "http://127.0.0.1:3010";
@@ -58,6 +59,8 @@ interface Dead {
   surface: string;
   where: string;
   label: string;
+  /** what the pointer actually landed on, when it was not this control */
+  over?: string;
 }
 
 /**
@@ -220,7 +223,23 @@ async function askSurface(page: Page, surface: string, dead: Dead[]): Promise<nu
     await page.waitForTimeout(60);
     asked += 1;
     if (after !== "gone" && after === before) {
-      dead.push({ surface, where: hand.where, label: hand.label });
+      /* AND WHAT WAS AT ITS CENTRE WHEN NOTHING HAPPENED.
+         "This control said nothing" is a symptom with two very different
+         causes: the control has no answer written for it, or something else
+         is lying over it and the pointer never reached it at all. CI reported
+         `button.jar-saved` dead on a surface where it answers here, and the
+         report gave nothing to go on. A hover that lands on another element
+         is that element's hover, so naming it is the difference between a
+         finding and a search. */
+      const over = await page.evaluate((n: number) => {
+        const el = (window as unknown as { __hands: HTMLElement[] }).__hands[n];
+        const r = el.getBoundingClientRect();
+        const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        if (!at) return "(nothing)";
+        if (at === el || el.contains(at)) return "itself";
+        return `${at.tagName.toLowerCase()}.${(at.className || "").toString().trim().split(/\s+/).join(".")}`;
+      }, i);
+      dead.push({ surface, where: hand.where, label: hand.label, over });
     }
   }
   console.log(`  ${surface.padEnd(24)} ${String(asked).padStart(3)} controls asked`);
@@ -267,12 +286,8 @@ async function run(base: string): Promise<number> {
     }
 
     await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
-    /* the arrival greeting opens the newest memory 1.4s in and lets it go 2.6s
-       later; measuring through that is measuring a moving page */
-    await page.waitForSelector(".jar-hq", { state: "attached", timeout: 30_000 });
-    await page.waitForTimeout(4_600);
-    await page.keyboard.press("Escape");
-    await page.waitForTimeout(600);
+    /* measuring through the welcome is measuring a moving page — `arrival.ts` */
+    await settleAfterArrival(page);
     asked += await askSurface(page, "the world", dead);
     tabbed += await askByKeyboard(page, "the world", unlit);
 
@@ -321,7 +336,10 @@ async function run(base: string): Promise<number> {
   for (const d of dead) bySurface.set(d.surface, [...(bySurface.get(d.surface) ?? []), d]);
   for (const [surface, list] of bySurface) {
     console.log(`  ${surface}`);
-    for (const d of list) console.log(`      ${d.where}${d.label ? `  — ${d.label}` : ""}`);
+    for (const d of list) {
+      const under = d.over && d.over !== "itself" ? `   (the pointer landed on ${d.over})` : "";
+      console.log(`      ${d.where}${d.label ? `  — ${d.label}` : ""}${under}`);
+    }
   }
   console.log(
     `\n[hand] ${Object.keys(QUIET_BY_DECISION).length} kinds are exempt by decision:`,
