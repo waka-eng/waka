@@ -598,7 +598,9 @@ const JOURNEYS: Journey[] = [
          An earlier version of this looked for "yes, take it down", found
          nothing, pressed nothing, and reported the product as failing to
          delete. The network log said it plainly — no DELETE was ever sent. */
-      const anyway = page.locator(".jar-forget-ask button", { hasText: /delete it anyway/i });
+      /* the ask lives on the card's own foot now, not a floating sheet
+         (founder, 2026-08-27: no card over a card) */
+      const anyway = page.locator(".jar-panel-askrow button", { hasText: /delete it anyway/i });
       if (await anyway.count()) {
         await anyway.first().click();
       }

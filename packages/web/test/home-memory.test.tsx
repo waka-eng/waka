@@ -91,6 +91,9 @@ const FACTS = {
     id: `own-${i}`,
     text: `something I kept, ${i}`,
     daysAgo: i + 1,
+    /* `own-0` is public AND cited: the one memory where taking it private
+       costs a room its ground, which is what the un-publishing ask is for */
+    isPublic: i === 0,
   })),
   groups: [
     {
@@ -559,7 +562,7 @@ describe("deleting a memory", () => {
     await layout.step(20);
 
     expect(
-      layout.container.querySelector(".jar-forget-ask"),
+      layout.container.querySelector(".jar-panel-askrow"),
       "nothing stands on this memory, so there is nothing to warn about",
     ).toBeNull();
     /* long enough for the request to settle and the panel to finish leaving —
@@ -584,8 +587,15 @@ describe("deleting a memory", () => {
     await pressPanelVerb(panel, "delete");
     await layout.step(20);
 
-    const ask = layout.container.querySelector(".jar-forget-ask");
+    const ask = layout.container.querySelector(".jar-panel-askrow");
     expect(ask, "a signal was read from this one — that is worth a sentence").not.toBeNull();
+    /* ON the card, never OVER it (founder, 2026-08-27: "dont do hover card
+       on a hover card") — the question stands in the card's own foot, so
+       nothing covers the words being decided about */
+    expect(
+      layout.container.querySelector(".jar-panel")?.contains(ask!),
+      "the ask is the card's own state, not a second surface",
+    ).toBe(true);
     /* the sentence has to say what actually happens: the signal SURVIVES and
        loses its ground. A warning that implied the signal went with it would
        be false, and false in the direction that stops people deleting. */
@@ -602,8 +612,45 @@ describe("deleting a memory", () => {
     await act(async () => keep!.click());
     await layout.step(10);
     expect(
-      layout.container.querySelector(".jar-forget-ask"),
+      layout.container.querySelector(".jar-panel-askrow"),
       "and saying keep it puts the question away",
+    ).toBeNull();
+  });
+
+  /* THE SAME ASK, THE OTHER WAY OUT OF A ROOM (founder, 2026-08-27: "similar
+     warning should occur when changing what was public to private as well").
+     Un-publishing does not delete anything, but for a signal that was read
+     from this memory while it stood in a room, the ground goes just the same
+     — so the fact deserves the same sentence in the same place. */
+  it("says the same thing when a public memory is taken private", { timeout: 30_000 }, async () => {
+    await layout.toField();
+    const panel = await openMemory("something I kept, 0");
+    const goPrivate = [...panel.querySelectorAll<HTMLElement>(".jar-panel-vis button")].find(
+      (b) => (b.textContent ?? "").trim() === "private",
+    );
+    expect(goPrivate, "a public memory offers the way back to private").toBeTruthy();
+    await act(async () => goPrivate!.click());
+    await layout.step(10);
+
+    const ask = layout.container.querySelector(".jar-panel-askrow");
+    expect(ask, "a signal stands on this one — taking it private costs that ground").not.toBeNull();
+    const said = (ask?.textContent ?? "").toLowerCase();
+    expect(said).toContain("private");
+    expect(said).toContain("no longer point back");
+    expect(
+      layout.container.querySelector(".jar-panel")?.contains(ask!),
+      "and it is the card's own state, not a sheet over it",
+    ).toBe(true);
+
+    const keep = [...(ask?.querySelectorAll<HTMLElement>("button") ?? [])].find(
+      (b) => (b.textContent ?? "").trim() === "keep it public",
+    );
+    expect(keep?.className, "keeping it public is the lit half").toContain("jar-where-on");
+    await act(async () => keep!.click());
+    await layout.step(10);
+    expect(
+      layout.container.querySelector(".jar-panel-askrow"),
+      "and the question goes away when the answer is no",
     ).toBeNull();
   });
 });

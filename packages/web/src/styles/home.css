@@ -2084,15 +2084,15 @@
   pointer-events: none;
 }
 
-/* THE ONE ASK BEFORE A DELETE. It borrows the seek card's shape because it is
-   the same object — a small centred sheet that owns the moment — and it never
-   appears unless a signal genuinely stands on this memory. */
-/* compound for the same reason as the two above — this one happens to be
-   written below `.jar-seek` and works, and that is luck, not a rule */
-.jar-seek.jar-forget-ask {
-  width: min(460px, calc(100vw - 48px));
+/* THE ASK ON THE CARD'S OWN FOOT (founder, 2026-08-27: "dont do hover card
+   on a hover card"). The ask before a delete — and before un-publishing —
+   used to borrow the seek card's shape and float over the reading. It is a
+   state of the card now: the sentence takes the verbs' row, and nothing
+   covers the words being decided about. */
+.jar-panel-askrow {
+  margin: var(--sp-14) 0 0;
 }
-.jar-forget-ask .jar-panel-warn {
+.jar-panel-askrow .jar-panel-warn {
   display: block;
   margin: 0 0 var(--sp-4);
 }
@@ -2119,7 +2119,9 @@
      A memory can be a line or a whole pasted page. The measure caps where
      prose stops being trackable (~70 characters) and the height takes most of
      the frame, so a long capture is never delivered through a letterbox. */
-  width: min(clamp(400px, 32vw, 540px), calc(100vw - 48px));
+  /* one step wider (founder, 2026-08-27: "make slightly more wider") — a
+     pasted page was reading narrow against a whole frame of dark */
+  width: min(clamp(440px, 36vw, 600px), calc(100vw - 48px));
   max-height: min(80vh, 880px);
   overflow-y: auto;
   overscroll-behavior: contain;

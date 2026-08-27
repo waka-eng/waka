@@ -7379,6 +7379,19 @@ function HomeExperience(): JSX.Element {
       }
       const mine = step !== 0 || horiz || e.key === "Escape";
       if (!mine) return;
+      /* A FIELD'S KEYS ARE THE FIELD'S. The mouth stops its own keys from
+         reaching here, and the card's editor did not — so an arrow pressed
+         while editing a memory moved the caret AND travelled to the next
+         wall. Escape stays ours: leaving is what it means everywhere. */
+      const on = e.target;
+      if (
+        e.key !== "Escape" &&
+        on instanceof Element &&
+        (on.closest("input, textarea") !== null ||
+          (on as HTMLElement).isContentEditable === true)
+      ) {
+        return;
+      }
       /* the world handles this key, so the browser does not ALSO handle it:
          a native scroll or a focus move underneath the layout's own move is a
          second thing happening, and it reads as a fight */
@@ -7398,8 +7411,13 @@ function HomeExperience(): JSX.Element {
       }
       /* Left and right are the traveler's keys — they pass through even
          mid-flight, because travel() itself ignores the same direction and
-         treats the opposite one as a REVERSAL back to where it left from. */
+         treats the opposite one as a REVERSAL back to where it left from.
+         UNLESS A CARD IS OPEN: then they page the reading (founder,
+         2026-08-27), because the memory in your hand is the nearer subject
+         and stepping through what you kept must not become travelling to
+         somebody else's wall. */
       if (horiz) {
+        if (panelArrowRef.current(e.key === "ArrowRight" ? 1 : -1)) return;
         travel(e.key === "ArrowRight" ? 1 : -1);
         return;
       }
@@ -9139,6 +9157,21 @@ function HomeExperience(): JSX.Element {
     (e: ReactKeyboardEvent<HTMLDivElement>) => {
       const list = reachable;
       if (list.length === 0) return;
+      /* THE REACH OWNS THE KEYS IT TAKES. The world's own listener sits on
+         `window` and now also steps the open card on left/right (founder,
+         2026-08-27), so a key answered here would otherwise be answered
+         twice and land two memories away. The keys it deliberately does NOT
+         take — up, down, space — still pass through untouched, which is the
+         whole one-axis-per-meaning rule. */
+      if (
+        e.key === "ArrowLeft" ||
+        e.key === "ArrowRight" ||
+        e.key === "Home" ||
+        e.key === "End" ||
+        e.key === "Enter"
+      ) {
+        e.stopPropagation();
+      }
       const at = list.findIndex((m) => m.id === reachId);
       const go = (i: number) => {
         const next = list[Math.min(list.length - 1, Math.max(0, i))];
@@ -9581,6 +9614,9 @@ function HomeExperience(): JSX.Element {
    * the row simply loses that half rather than wrapping, which would make
    * "the oldest" and "the newest" impossible to feel.
    */
+  /** Whether an open card answered a left/right key — written every render,
+      read by the world's key listener. See the assignment below. */
+  const panelArrowRef = useRef<(dir: -1 | 1) => boolean>(() => false);
   const panelNeighbours = useMemo<{ prev: string | null; next: string | null }>(() => {
     if (!panelId || panelIsGroup) return { prev: null, next: null };
     const here = (inspirations ?? []).filter((c) => c.capturedMs <= TRef.current);
@@ -9604,6 +9640,29 @@ function HomeExperience(): JSX.Element {
    * than an inert one: a control that looks live and does nothing teaches that
    * the surface is broken, and the ends of what you have kept are real.
    */
+  /**
+   * THE ARROWS READ THE CARD WHILE A CARD IS OPEN (founder, 2026-08-27: "let
+   * user be able to use keyboard to move left and right for the inspiration
+   * cards"). The carets at the foot were the only way to page and they need a
+   * pointer; the reach's arrows only work while the reach holds focus, which
+   * a card opened by tapping an orb never has.
+   *
+   * Left is older and right is newer — the directions the carets point and
+   * the ones the reach walks, so one meaning per axis survives. Answered
+   * through a ref because the world's key listener is bound once, far above
+   * where the neighbours are known.
+   *
+   * Returns whether the card took the key. At the ends of the archive it
+   * still takes it: pressing past the oldest memory must not quietly become
+   * travel to somebody else's wall.
+   */
+  panelArrowRef.current = (dir) => {
+    if (!panelId || panelIsGroup) return false;
+    const id = dir === -1 ? panelNeighbours.prev : panelNeighbours.next;
+    /* called from a key event, long after `stepToMemory` is defined below */
+    if (id) stepToMemory(id);
+    return true;
+  };
   const panelStepCarets = panelIsGroup ? null : (
     <>
       {panelNeighbours.prev ? (
@@ -9816,8 +9875,15 @@ function HomeExperience(): JSX.Element {
     id: null,
     step: "rest",
   });
+  /** THE SAME ASK BEFORE UN-PUBLISHING (founder, 2026-08-27: "similar
+      warning should occur when changing what was public to private as
+      well"). Armed only when the memory is public AND a signal stands on
+      it — the mirror of delete's rule: a warning with nothing to warn
+      about is friction wearing a safety costume. */
+  const [unpublishAsk, setUnpublishAsk] = useState(false);
   useEffect(() => {
     setForget({ id: null, step: "rest" });
+    setUnpublishAsk(false);
   }, [panelId]);
 
   /* ============================ ROOMS ============================
@@ -12327,7 +12393,14 @@ function HomeExperience(): JSX.Element {
                    what they decide; the state is legible at a glance and the
                    consequence is not. */
                 title="Only you can read this. Nothing leaves your own ground."
-                onClick={() => (panelIsPublic ? togglePublic() : undefined)}
+                onClick={() => {
+                  if (!panelIsPublic) return;
+                  /* un-publishing a memory a signal stands on gets the same
+                     one ask deleting it does, in the same place — the card's
+                     own foot (founder, 2026-08-27) */
+                  if (panelPowersSignal) setUnpublishAsk(true);
+                  else togglePublic();
+                }}
               >
                 private
               </button>
@@ -12605,7 +12678,70 @@ function HomeExperience(): JSX.Element {
               this — three unrelated things in one corner. Stepping is
               movement, and movement belongs at the foot, centred, where it
               reads as "and then" rather than as another verb. */}
-          {panelCanReflect && reflect.step === "rest" && !editing.open ? (
+          {/* THE ASK STANDS WHERE THE VERB STOOD (founder, 2026-08-27: "dont
+              do hover card on a hover card"). The warning used to be a small
+              sheet floating over the card — a second surface answering a
+              press that happened on this one. It is the card's own state
+              now: while the question is open the foot's verbs step aside and
+              the sentence takes their row, so nothing covers the words you
+              are deciding about. */}
+          {forget.step === "asking" && forget.id === panelId ? (
+            <div className="jar-panel-askrow">
+              <p className="jar-panel-warn">
+                A signal was read from this memory and still stands on it.
+                Deleting the memory does not unlearn the signal — but the
+                signal loses this ground, and can no longer point back to
+                where it came from.
+              </p>
+              <p className="jar-ask jar-ask--row">
+                <button
+                  type="button"
+                  className="jar-where-on"
+                  onClick={() => setForget({ id: null, step: "rest" })}
+                >
+                  keep it
+                </button>
+                <span aria-hidden="true"> · </span>
+                <button type="button" className="jar-where-off" onClick={forgetIt}>
+                  delete it anyway
+                </button>
+              </p>
+            </div>
+          ) : unpublishAsk ? (
+            <div className="jar-panel-askrow">
+              <p className="jar-panel-warn">
+                A signal was read from this memory while it was public and
+                still stands on it. Making it private takes it off your
+                rooms’ ground — the signal is not unlearned, but it can no
+                longer point back to where it came from.
+              </p>
+              <p className="jar-ask jar-ask--row">
+                <button
+                  type="button"
+                  className="jar-where-on"
+                  onClick={() => setUnpublishAsk(false)}
+                >
+                  keep it public
+                </button>
+                <span aria-hidden="true"> · </span>
+                <button
+                  type="button"
+                  className="jar-where-off"
+                  onClick={() => {
+                    setUnpublishAsk(false);
+                    togglePublic();
+                  }}
+                >
+                  make it private anyway
+                </button>
+              </p>
+            </div>
+          ) : null}
+          {panelCanReflect &&
+          reflect.step === "rest" &&
+          !editing.open &&
+          !(forget.step === "asking" && forget.id === panelId) &&
+          !unpublishAsk ? (
             <p className="jar-ask jar-ask--after jar-panel-foot">
               <span className="jar-panel-foot-l">
               <button type="button" onClick={askToReflect}>
@@ -12725,34 +12861,9 @@ function HomeExperience(): JSX.Element {
         </div>
       ) : null}
 
-      {/* THE ONE ASK BEFORE A DELETE, AND ONLY WHEN IT IS TRUE. A modal, not
-          a clause crammed into the verb row: the situation deserves its own
-          sentence, and the destructive word must never sit pressed against
-          the row you were just reading. Keeping is the lit answer — this is
-          a door that would rather not be walked through. */}
-      {forget.step === "asking" && forget.id !== null ? (
-        <div className="jar-seek jar-forget-ask" data-jar-chrome="1" role="alertdialog">
-          <p className="jar-panel-warn">
-            A signal was read from this memory and still stands on it.
-            Deleting the memory does not unlearn the signal — but the signal
-            loses this ground, and can no longer point back to where it came
-            from.
-          </p>
-          <p className="jar-ask jar-ask--row">
-            <button
-              type="button"
-              className="jar-where-on"
-              onClick={() => setForget({ id: null, step: "rest" })}
-            >
-              keep it
-            </button>
-            <span aria-hidden="true"> · </span>
-            <button type="button" className="jar-where-off" onClick={forgetIt}>
-              delete it anyway
-            </button>
-          </p>
-        </div>
-      ) : null}
+      {/* the one ask before a delete used to float here as its own sheet —
+          a card over the card (founder, 2026-08-27). It lives on the card's
+          own foot now, beside the ask before un-publishing. */}
 
       <div className="jar-topbar" data-jar-chrome="1">
         {/* THE WAY OUT, AND THERE HAS TO BE ONE.

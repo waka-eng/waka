@@ -34,8 +34,8 @@ import { MemoryRouter } from "react-router-dom";
 import type { FieldAudit } from "../../src/pages/Home";
 
 export interface WorldFacts {
-  /** the viewer's own memories */
-  inspirations: Array<{ id: string; text: string; daysAgo: number }>;
+  /** the viewer's own memories; `isPublic` marks the ones a room can read */
+  inspirations: Array<{ id: string; text: string; daysAgo: number; isPublic?: boolean }>;
   /** groups the viewer belongs to, and whose memories stand in each */
   groups: Array<{
     id: string;
@@ -81,7 +81,7 @@ export function dataMockFrom(facts: WorldFacts) {
       const inspirations = facts.inspirations.map((c) => ({
         id: c.id,
         preview: c.text,
-        isPublic: false,
+        isPublic: c.isPublic ?? false,
         kind: "note" as const,
         source: "app" as const,
         capturedMs: at(c.daysAgo),
