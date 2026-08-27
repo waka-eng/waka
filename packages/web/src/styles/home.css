@@ -2098,6 +2098,21 @@
 .jar-ask button.jar-panel-save {
   color: var(--jar-ink);
 }
+/* THE KEY LIGHTS THE CARET IT PRESSED (founder, 2026-08-27: "using keyboard
+   to move left and right should brighten the respective button as well
+   temporarily"). The arrows page the card, and the control that means that
+   act sat unlit while they did — so the keyboard and the pointer were two
+   instruments for one thing. It fades back on its own; a light that stayed
+   would be a selection nobody made.
+   Named `.jar-ask button.…` for the same reason the save is: `.jar-ask
+   button { color: inherit }` is one class plus one element and outranks any
+   bare class, however far below it is written. */
+.jar-ask button.jar-caret-lit {
+  color: var(--jar-ink);
+}
+.jar-ask button.jar-caret-lit .jar-caret {
+  opacity: 1;
+}
 .jar-ask button.jar-panel-save:disabled {
   color: var(--jar-faint);
   cursor: default;
@@ -3526,11 +3541,15 @@
   }
   .jar-mouth-slot--note .jar-mouth-field {
     box-sizing: border-box;
-    /* the page is full-bleed, so the readable measure lives here: 1040
-       rather than 640 because a paste is what summons this face, and 640
-       wrapped a pasted paragraph into a narrow column with the whole screen
-       empty either side of it. */
-    width: min(calc(100% - 40px), 1040px);
+    /* the page is full-bleed, so the readable measure lives here. It went
+       to 1040 when this was a drawer, because 640 wrapped a pasted paragraph
+       into a narrow column with the whole screen empty either side of it —
+       and then the drawer became a veil over the world, where 1040 is a line
+       so long the eye loses its place returning (founder, 2026-08-27: the
+       pane's "width smaller"). 780 is the measure prose has wanted since
+       type was set on paper: long enough that a paste is not a column, short
+       enough to read. */
+    width: min(calc(100% - 40px), 780px);
     max-width: none;
     margin: 0 auto;
     /* the PAGE owns the height now, not the well: the slot is a column and

@@ -9853,6 +9853,25 @@ function HomeExperience(): JSX.Element {
   /** Whether an open card answered a left/right key — written every render,
       read by the world's key listener. See the assignment below. */
   const panelArrowRef = useRef<(dir: -1 | 1) => boolean>(() => false);
+  /**
+   * WHICH CARET THE KEY JUST PRESSED (founder, 2026-08-27: "using keyboard to
+   * move left and right should brighten the respective button as well
+   * temporarily").
+   *
+   * The arrows do what the carets do, and until now they did it invisibly:
+   * the card's contents changed and the control that means that change sat
+   * there unlit, so the keyboard and the pointer were two different
+   * instruments for one act. Light is the only meaning channel this world
+   * has — so the key lights the caret it pressed, briefly, the same way
+   * noticing a member lights the member.
+   */
+  const [caretLit, setCaretLit] = useState<-1 | 1 | null>(null);
+  useEffect(() => {
+    if (caretLit === null) return undefined;
+    const id = window.setTimeout(() => setCaretLit(null), 420);
+    return () => window.clearTimeout(id);
+  }, [caretLit]);
+
   const panelNeighbours = useMemo<{ prev: string | null; next: string | null }>(() => {
     if (!panelId || panelIsGroup) return { prev: null, next: null };
     const here = (inspirations ?? []).filter((c) => c.capturedMs <= TRef.current);
@@ -9869,6 +9888,38 @@ function HomeExperience(): JSX.Element {
     /* `panelId` and the archive are the whole of it: the neighbours change
        when the archive does or when you step, and nothing else. */
   }, [panelId, panelIsGroup, inspirations]);
+
+  /**
+   * WHICHEVER ROUTE MOVED THE CARD, THE CARET THAT MEANS IT LIGHTS.
+   *
+   * There are three ways to page — the world's arrows, the reach's arrows,
+   * and the carets themselves — and they do NOT share a function: the reach
+   * calls the simulation's `select` directly, which is why the first version
+   * of this (written beside the arrow keys, then inside `stepToMemory`) lit
+   * nothing whenever the ground held focus. So this watches the one thing
+   * all three change: which memory the card is showing. If the new one is
+   * the neighbour the old one had, the caret pointing that way lights.
+   *
+   * Opening a memory out of the field lights nothing, correctly — a tap on
+   * an orb is not a step, and nothing about the carets explains it.
+   */
+  const steppedFromRef = useRef<{ id: string | null; prev: string | null; next: string | null }>({
+    id: null,
+    prev: null,
+    next: null,
+  });
+  useEffect(() => {
+    const was = steppedFromRef.current;
+    if (panelId && was.id && panelId !== was.id) {
+      if (panelId === was.prev) setCaretLit(-1);
+      else if (panelId === was.next) setCaretLit(1);
+    }
+    steppedFromRef.current = {
+      id: panelId,
+      prev: panelNeighbours.prev,
+      next: panelNeighbours.next,
+    };
+  }, [panelId, panelNeighbours.prev, panelNeighbours.next]);
 
   /**
    * The two carets, built once and shown at the foot of BOTH faces of the card
@@ -9895,6 +9946,10 @@ function HomeExperience(): JSX.Element {
   panelArrowRef.current = (dir) => {
     if (!panelId || panelIsGroup) return false;
     const id = dir === -1 ? panelNeighbours.prev : panelNeighbours.next;
+    /* lit even at the ends, where there is no neighbour to step to and
+       `stepToMemory` never runs: the press happened, and a control that
+       stays dark when you press it reads as one that did not hear you */
+    if (!id) setCaretLit(dir);
     /* called from a key event, long after `stepToMemory` is defined below */
     if (id) stepToMemory(id);
     return true;
@@ -9906,6 +9961,7 @@ function HomeExperience(): JSX.Element {
           type="button"
           aria-label="the inspiration before this one"
           title="the inspiration before this one"
+          className={caretLit === -1 ? "jar-caret-lit" : undefined}
           onClick={() => stepToMemory(panelNeighbours.prev)}
         >
           <span className="jar-caret jar-caret--left" aria-hidden="true" />
@@ -9916,6 +9972,7 @@ function HomeExperience(): JSX.Element {
           type="button"
           aria-label="the inspiration after this one"
           title="the inspiration after this one"
+          className={caretLit === 1 ? "jar-caret-lit" : undefined}
           onClick={() => stepToMemory(panelNeighbours.next)}
         >
           <span className="jar-caret jar-caret--right" aria-hidden="true" />
@@ -12391,18 +12448,30 @@ function HomeExperience(): JSX.Element {
             className={`jar-mouth-slot${atNow ? "" : " jar-mouth-slot--away"}${
               mouthPage ? " jar-mouth-slot--note" : ""
             }`}
-            /* THE SHEET KEEPS THE CARET. The drawer is solid — it stops the
-               pointer rather than letting a press fall through to the world —
-               which means a press on its face would otherwise blur the note
-               and drop you out of what you were writing. Refusing the default
-               on mousedown leaves focus exactly where it was, so the whole
-               object behaves like one surface you are typing on. The buttons
-               inside it are exempt: they need the press. */
+            /* THE SHEET KEPT THE CARET, AND NOW THE MARGIN IS A DOOR.
+               While this was a drawer, a press on its face was a press on
+               the thing you were typing INTO, so it refused the default and
+               left focus exactly where it was — one surface, no way to
+               half-leave it.
+
+               As a veil over the world that reading changed (founder,
+               2026-08-27: "clicking outside the box should make it auto save
+               as draft"). The dark around the well is not the note any more,
+               it is the world showing through — and pressing the world while
+               writing means the same thing here as everywhere else in this
+               product: put this away, keep the words. It is the sheets' own
+               dismissal law (`lib/dismiss.ts`) with the kinder ending: not
+               closed, saved.
+
+               The well and the foot's buttons are exempt, and the exemption
+               is the whole care: a press inside the writing, or on `save`,
+               or on `private/public`, must do its own job. */
             onMouseDown={
               mouthPage
                 ? (e) => {
                     if (e.target instanceof Element && e.target.closest("textarea, button")) return;
                     e.preventDefault();
+                    saveAsDraft();
                   }
                 : undefined
             }
