@@ -171,6 +171,21 @@ jobs:
       DB_CONNECTION_URL: postgres://postgres:postgres@localhost:5432/waka_e2e
       AUTH_SECRET: ci-test-secret-not-a-real-key-000000
       JWT_SECRET: ci-test-secret-not-a-real-key-000000
+      # WHETHER THERE IS A MODEL KEY, AS A FACT RATHER THAN THE KEY ITSELF.
+      #
+      # The two steps below used to ask `if: secrets.GEMINI_API_KEY != ''`
+      # directly, and that is not a thing Actions can evaluate: the `secrets`
+      # context is unavailable in `if:`. The whole FILE then failed
+      # validation, which is why every run on every branch of this repo has
+      # completed as a failure with zero jobs scheduled since the day those
+      # two lines landed — the shape of a run rejected before it starts. It
+      # was read as an org policy for weeks; the parser said otherwise the
+      # first time anything asked it to dispatch the workflow by hand.
+      #
+      # `secrets` IS allowed here, in `env`. A comparison rather than the
+      # value, so the flag says only yes-or-no and the key itself reaches
+      # exactly the steps that were already given it.
+      HAS_MODEL_KEY: ${{ secrets.GEMINI_API_KEY != '' }}
       # The stack these gates drive is the same one `pnpm dev:local` boots: one
       # origin serving both the API and the built bundle, which is what makes
       # cookies and same-origin fetches behave the way they do in a browser.
@@ -310,14 +325,14 @@ jobs:
       # went. Without them it reports the byte checks as NOT RUN rather than
       # passing over them.
       - name: Erasure (needs a model key)
-        if: ${{ secrets.GEMINI_API_KEY != '' }}
+        if: ${{ env.HAS_MODEL_KEY == 'true' }}
         env:
           ATTACHMENTS_BUCKET: waka-ci
           ATTACHMENTS_ENDPOINT: http://127.0.0.1:8792
         run: pnpm e2e:erasure --base-url http://127.0.0.1:3010
 
       - name: Erasure — NOT RUN
-        if: ${{ secrets.GEMINI_API_KEY == '' }}
+        if: ${{ env.HAS_MODEL_KEY != 'true' }}
         run: |
           echo "::warning::e2e:erasure was NOT RUN — no GEMINI_API_KEY."
           echo "Account deletion is the highest-stakes path in the product and"
