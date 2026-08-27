@@ -212,6 +212,30 @@ export const READING_LINES: ReadingLine[] = [
       testPath: "packages/api/src/routes/consultations.db.test.ts",
     },
   },
+  /* WHAT THE LIGHT MEANS, WHERE THE RULES ARE (founder, 2026-08-27: "how to
+     add legend somewhere to explain why balls are different colors").
+
+     The world has two channels and only one of them was ever unexplained.
+     COLOUR already legends itself where it carries meaning: in a room, the
+     rows at the bottom-left name whose ground each hue belongs to, and on
+     your own wall there is one voice, so there is nothing to key. What had
+     no words anywhere was BRIGHTNESS — the channel that is the whole reason
+     the field is not a uniform scatter.
+
+     It belongs here rather than in a key floating over the world: a legend
+     pinned to the frame is chrome that must be read before the world makes
+     sense, and this product's answer to "what does that mean" is one
+     surface, reached from the sentence it explains. Said in the loop's own
+     voice and pinned like every other line, so the day light stops meaning
+     this, the build says so. */
+  {
+    sentence:
+      "A memory shines by how much of your thinking rests on it: the more sentences read from it, the brighter it stands in the ground.",
+    backing: {
+      kind: "contract",
+      testPath: "packages/web/test/home-light.test.tsx",
+    },
+  },
 ];
 
 /**
