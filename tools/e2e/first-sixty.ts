@@ -52,8 +52,8 @@
  *
  * Flags: `--base-url <url>` (default http://127.0.0.1:3010), `--headed`.
  */
-import { chromium, type BrowserContext, type Page, type Route } from "playwright";
-
+import { type BrowserContext, type Page, type Route } from "playwright";
+import { launchChromium } from "./browser";
 /**
  * TWO EMPTIES, NOT ONE.
  *
@@ -141,10 +141,52 @@ async function visibleLines(page: Page, samples = 4, gapMs = 700): Promise<strin
   const seen = new Set<string>();
   for (let i = 0; i < samples; i += 1) {
     const lines = (await page.evaluate(() => {
-      const text = (document.body.innerText || "")
-        .split("\n")
-        .map((l) => l.trim())
-        .filter((l) => l.length > 0);
+      /* ON SCREEN, NOT MERELY IN THE DOCUMENT.
+         This read `document.body.innerText`, which is every word the document
+         holds wherever it sits. That was true enough while the page was one
+         screen tall. It stopped being true the day the founder ruled that the
+         sky's words must already exist before you travel to them — "feels like
+         your philosophies text appears rather than it was in the sky already"
+         — because the sky lives one full viewport above headquarters. Its
+         sentences went into the BACKDROP, the backdrop is subtracted from
+         every surface, and so opening `philosophies & values` reported a
+         surface that says nothing while its two sentences sat on screen.
+         An instrument that calls a fixed defect a new one is worse than no
+         instrument. So: only text-bearing elements whose box actually meets
+         the viewport, and `innerText` per element so `text-transform` still
+         decides what is a label. */
+      const text: string[] = [];
+      /* AT THE PARAGRAPH LEVEL, WHICH IS WHERE A SENTENCE LIVES.
+         The first pass at this took text from every element that directly
+         owned any, and the poster is written one `<span class="jar-word">`
+         per word so the ambition can arrive the way a thought does. The walk
+         duly reported the wall's whole claim as "Solitude · might · be · a"
+         and called the surface furniture. `innerText` groups by block for
+         exactly this reason, so the unit here is the DEEPEST BLOCK that
+         holds text: the `<h1>`, not the words inside it, and not an ancestor
+         tall enough to reach into the sky above the screen. */
+      const blocks = Array.from(document.querySelectorAll<HTMLElement>("body *")).filter(
+        (el) => {
+          const d = getComputedStyle(el).display;
+          return !d.startsWith("inline") && d !== "none" && d !== "contents";
+        },
+      );
+      const holds = new Set(blocks.filter((el) => (el.innerText || "").trim().length > 0));
+      for (const el of holds) {
+        let deeper = false;
+        for (const kid of Array.from(el.querySelectorAll<HTMLElement>("*"))) {
+          if (holds.has(kid)) deeper = true;
+        }
+        if (deeper) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) continue;
+        if (r.bottom <= 0 || r.top >= window.innerHeight) continue;
+        if (r.right <= 0 || r.left >= window.innerWidth) continue;
+        for (const line of (el.innerText || "").split("\n")) {
+          const t = line.trim();
+          if (t.length > 0) text.push(t);
+        }
+      }
       /* A PLACEHOLDER IS SOMETHING A PERSON READS, and `innerText` does not
          contain one. Without this the mouth — the one thing the product is
          FOR — reads as an empty box with three labels round it, and this walk
@@ -158,6 +200,9 @@ async function visibleLines(page: Page, samples = 4, gapMs = 700): Promise<strin
       for (const el of Array.from(document.querySelectorAll("input, textarea"))) {
         const r = el.getBoundingClientRect();
         if (r.width === 0 || r.height === 0) continue;
+        /* the same rule: a field parked off screen is not something a person
+           is reading */
+        if (r.bottom <= 0 || r.top >= window.innerHeight) continue;
         const ph = (el as HTMLInputElement).placeholder;
         if (ph && ph.trim()) text.push(ph.trim());
       }
@@ -433,9 +478,8 @@ async function main(): Promise<void> {
           "              product say so, or does it look like a product that is broken?\n",
   );
 
-  const browser = await chromium.launch({
+  const browser = await launchChromium({
     headless: !args.headed,
-    executablePath: "/opt/pw-browsers/chromium",
   });
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const readings: Reading[] = [];

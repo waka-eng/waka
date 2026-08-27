@@ -52,8 +52,8 @@
  * Flags: `--base-url <url>` (default http://127.0.0.1:3010), `--only <id>`,
  * `--headed`.
  */
-import { chromium, type Browser, type BrowserContext, type Page, type Route } from "playwright";
-
+import { type Browser, type BrowserContext, type Page, type Route } from "playwright";
+import { launchChromium } from "./browser";
 /**
  * HOW THE ROUTE IS BROKEN. Three shapes, because `whyFailed` has three
  * branches and only one of them had ever run on screen.
@@ -582,9 +582,8 @@ async function main(): Promise<void> {
       "                The question is not whether it failed — it is whether anything said so.\n",
   );
 
-  const browser = await chromium.launch({
+  const browser = await launchChromium({
     headless: !args.headed,
-    executablePath: "/opt/pw-browsers/chromium",
   });
   const results: Array<{ act: Act; reading: Reading | null; error: string | null }> = [];
   try {

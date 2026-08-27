@@ -44,8 +44,8 @@
  *     pnpm e2e:usability
  *     pnpm e2e:usability --negative
  */
-import { chromium, type Browser, type Page } from "playwright";
-
+import { type Browser, type Page } from "playwright";
+import { launchChromium } from "./browser";
 interface Finding {
   check: string;
   surface: string;
@@ -246,9 +246,7 @@ async function main(): Promise<number> {
       : "",
   );
 
-  const browser = await chromium.launch({
-    executablePath: process.env.WAKA_CHROMIUM_PATH?.trim() || "/opt/pw-browsers/chromium",
-  });
+  const browser = await launchChromium();
   let found: Finding[] = [];
   try {
     found = await walk(browser, negative);

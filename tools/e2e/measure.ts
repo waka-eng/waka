@@ -65,8 +65,8 @@ import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium, type Browser, type Page } from "playwright";
-
+import { type Browser, type Page } from "playwright";
+import { launchChromium } from "./browser";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, "../..");
 const CSS = resolve(REPO, "packages/web/src/styles/home.css");
@@ -939,9 +939,7 @@ async function main(): Promise<number> {
         : "[measure] each case must pass\n",
     );
 
-    browser = await chromium.launch({
-      executablePath: process.env.PLAYWRIGHT_CHROMIUM ?? "/opt/pw-browsers/chromium",
-    });
+    browser = await launchChromium();
 
     for (let i = 0; i < chosen.length; i += 1) {
       const kase = chosen[i]!;

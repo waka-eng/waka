@@ -61,8 +61,8 @@
  *     pnpm e2e:phone              # every check must pass
  *     pnpm e2e:phone --negative   # each must fail when the defect is put back
  */
-import { chromium, type Browser, type Page } from "playwright";
-
+import { type Browser, type Page } from "playwright";
+import { launchChromium } from "./browser";
 interface View {
   name: string;
   width: number;
@@ -345,9 +345,7 @@ async function main(): Promise<number> {
       : "[phone] nothing may overflow, hide, zoom, or sit under the size it is held to\n",
   );
 
-  const browser = await chromium.launch({
-    executablePath: process.env.WAKA_CHROMIUM_PATH?.trim() || "/opt/pw-browsers/chromium",
-  });
+  const browser = await launchChromium();
   let found: Finding[] = [];
   try {
     for (const v of VIEWS) found = found.concat(await walk(browser, v, negative));

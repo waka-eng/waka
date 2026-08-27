@@ -36,7 +36,8 @@
  *
  *     pnpm e2e:answers-the-hand [--base-url <url>]
  */
-import { chromium, type Browser, type Page } from "playwright";
+import { type Browser, type Page } from "playwright";
+import { launchChromium } from "./browser";
 
 const DEFAULT_BASE = "http://127.0.0.1:3010";
 const PASSWORD = "answers-the-hand-1";
@@ -185,7 +186,7 @@ async function run(base: string): Promise<number> {
   const dead: Dead[] = [];
   let asked = 0;
   try {
-    browser = await chromium.launch();
+    browser = await launchChromium();
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const page = await ctx.newPage();
 

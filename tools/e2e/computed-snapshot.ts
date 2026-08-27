@@ -41,11 +41,12 @@
  * geometry difference as evidence only when a type property moved with it.
  */
 import { writeFileSync } from "node:fs";
-import { chromium } from "playwright";
+import { launchChromium } from "./browser";
+
 async function main() {
   const out = process.argv[2] ?? "snap.json";
   const base = "http://127.0.0.1:3010";
-  const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
+  const b = await launchChromium();
   const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } });
   const p = await ctx.newPage();
   const PROBE = `(() => {

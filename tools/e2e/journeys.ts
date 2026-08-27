@@ -44,8 +44,8 @@
  * hostile-network case and blocks them outright; here they are noise, and a
  * stub keeps a font CDN outage from being reported as a broken journey.
  */
-import { chromium, type Browser, type BrowserContext, type Page, type Route } from "playwright";
-
+import { type Browser, type BrowserContext, type Page, type Route } from "playwright";
+import { launchChromium } from "./browser";
 interface Args {
   baseUrl: string;
   negative: boolean;
@@ -1839,8 +1839,7 @@ async function main(): Promise<number> {
   let browser: Browser | undefined;
   const results: Array<{ id: string; ok: boolean; detail: string }> = [];
   try {
-    const executablePath = process.env.WAKA_CHROMIUM_PATH?.trim() || undefined;
-    browser = await chromium.launch(executablePath ? { executablePath } : {});
+    browser = await launchChromium();
 
     for (const [i, journey] of selected.entries()) {
       const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });

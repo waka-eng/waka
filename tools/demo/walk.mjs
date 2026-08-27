@@ -53,7 +53,13 @@ const cookies = loginRes.headers.getSetCookie().map((line) => {
 });
 
 const browser = await chromium.launch({
-  executablePath: process.env.PLAYWRIGHT_CHROMIUM ?? "/opt/pw-browsers/chromium",
+  /* the same rule `tools/e2e/browser.ts` states for the gates: an explicit
+     answer wins, then Playwright's own resolution, and the container's flat
+     layout only if that file is really on this disk. A path asserted rather
+     than checked is a machine's name embedded in a script. */
+  executablePath:
+    process.env.PLAYWRIGHT_CHROMIUM ??
+    (existsSync("/opt/pw-browsers/chromium") ? "/opt/pw-browsers/chromium" : undefined),
   args: ["--no-sandbox"],
 });
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });

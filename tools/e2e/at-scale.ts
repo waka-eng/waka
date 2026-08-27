@@ -41,7 +41,9 @@
  *
  * Flags: `--base-url`, `--counts a,b,c`, `--headed`.
  */
-import { chromium, type Browser, type Route } from "playwright";
+import { type Browser, type Route } from "playwright";
+import { launchChromium } from "./browser";
+
 import postgres from "postgres";
 
 interface Args {
@@ -324,9 +326,8 @@ async function main(): Promise<void> {
       "           straight into Postgres — derivation is a model call and this question\n" +
       "           is not about derivation — and spread across a year of captures.\n",
   );
-  const browser = await chromium.launch({
+  const browser = await launchChromium({
     headless: !args.headed,
-    executablePath: "/opt/pw-browsers/chromium",
   });
   const readings: Reading[] = [];
   try {

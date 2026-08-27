@@ -43,8 +43,8 @@
  *
  * Flags: `--base-url <url>`, `--headed`, `--keep <n>` (memories to seed).
  */
-import { chromium, type BrowserContext, type Page, type Route } from "playwright";
-
+import { type BrowserContext, type Page, type Route } from "playwright";
+import { launchChromium } from "./browser";
 interface Args {
   baseUrl: string;
   headed: boolean;
@@ -171,9 +171,8 @@ async function main(): Promise<void> {
       "              the product has a keyboard path to its own content.\n",
   );
 
-  const browser = await chromium.launch({
+  const browser = await launchChromium({
     headless: !args.headed,
-    executablePath: "/opt/pw-browsers/chromium",
   });
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   try {

@@ -63,8 +63,8 @@ import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { chromium, type BrowserContext, type CDPSession, type Page } from "playwright";
-
+import { type BrowserContext, type CDPSession, type Page } from "playwright";
+import { launchChromium } from "./browser";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STYLES = resolve(HERE, "../../packages/web/src/styles");
 /** The sheets a rule can be attributed back to, in load order. */
@@ -809,9 +809,7 @@ async function main(): Promise<number> {
   console.log("[dead-css] which rules still decide anything, asked of the browser");
   console.log("[dead-css] layers make this unanswerable by reading the files\n");
 
-  const browser = await chromium.launch({
-    executablePath: process.env.WAKA_CHROMIUM_PATH?.trim() || "/opt/pw-browsers/chromium",
-  });
+  const browser = await launchChromium();
   const seen = new Map<string, Seen>();
   try {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });

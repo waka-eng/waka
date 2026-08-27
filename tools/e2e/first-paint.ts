@@ -43,8 +43,8 @@
  *        `--email <addr>` / `--password <pw>` (an account that already
  *        exists; defaults match `pnpm demo:seed`'s documented invocation).
  */
-import { chromium, type Browser, type BrowserContext, type Route } from "playwright";
-
+import { type Browser, type BrowserContext, type Route } from "playwright";
+import { launchChromium } from "./browser";
 interface Args {
   baseUrl: string;
   email: string;
@@ -152,8 +152,7 @@ async function main(): Promise<number> {
     /* `WAKA_CHROMIUM_PATH` lets a machine whose Playwright browser build does
        not match this repo's pinned version point at the Chromium it already
        has, rather than downloading a second one. Unset everywhere normal. */
-    const executablePath = process.env.WAKA_CHROMIUM_PATH?.trim() || undefined;
-    browser = await chromium.launch(executablePath ? { executablePath } : {});
+    browser = await launchChromium();
 
     /* ---- 1. the world renders with the outside world unreachable ---- */
     {
