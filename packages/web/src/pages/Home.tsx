@@ -2878,6 +2878,19 @@ function HomeExperience(): JSX.Element {
            walk left or right would be an ambush rather than a welcome. */
         timers.push(
           window.setTimeout(() => {
+            /* UNLESS YOU HAVE TAKEN OVER, and this is the whole of the bug it
+               fixes. The greeting selects a memory, waits its beat and then
+               undoes itself — and it undid whatever was selected AT THAT
+               MOMENT, not what it had selected itself. Anyone who pressed a
+               caret, walked the reach or tapped another orb inside those 2.6
+               seconds watched their own card close and the camera leave, with
+               nothing on screen to explain it (it looked exactly like paging
+               being broken; found live 2026-08-27). A greeting may take back
+               its own gesture and nothing else. */
+            if (selectedIdRef.current !== newest.id) {
+              tell();
+              return;
+            }
             simApiRef.current?.release();
             simApiRef.current?.toTop();
             /* home again: the telling rides the end of the return */
