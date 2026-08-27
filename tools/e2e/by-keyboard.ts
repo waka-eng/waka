@@ -29,6 +29,9 @@
  *                the browser for the computed outline/box-shadow while focused
  *   the mouth    can a memory be kept without a pointer
  *   a memory     can one be opened and read without a pointer
+ *   the reach    is the ground named, and does its cursor move
+ *   a sheet      does Escape hand focus back to what opened it
+ *   a way        does arriving somewhere keep your place, or drop it
  *
  * A canvas that cannot be tabbed into is not a bug in the canvas. It is a
  * question about whether the product has a keyboard path to its own content,
@@ -219,9 +222,79 @@ async function main(): Promise<void> {
       keptByKeyboard = false;
     }
 
+    /**
+     * ── ESCAPE ROUTES, AND WHAT IS ACTUALLY BEING ESCAPED ──────────────────
+     *
+     * The question the first walk of this file listed as unasked: when
+     * something opens over the world and then closes, does focus go back where
+     * it came from?
+     *
+     * Two different things wear the same shape here, and telling them apart is
+     * the whole of the measurement:
+     *
+     *   A SHEET covers the world and goes away again. Escape should put focus
+     *   back on the control that opened it, because that control is still
+     *   there and it is where the person was.
+     *
+     *   A WAY takes you somewhere else. `philosophies & values` is not a
+     *   dialog — it is `toSky()` — and it exists only in the place you left,
+     *   so it UNMOUNTS on arrival and the browser drops focus to the document.
+     *   Nothing can be "returned" to. What has to happen instead is that the
+     *   place you arrived in takes the focus its own way in dropped.
+     *
+     * The first version of this called both of them sheets and reported
+     * `.jar-values` as a modal that fails to restore focus. Wrong about what
+     * the thing is, right that it was broken — and a report that misnames the
+     * mechanism sends whoever reads it to the wrong file.
+     *
+     * Opened with keys only: a pointer-opened control has nowhere in
+     * particular to return to and would flatter the result.
+     */
+    const focusAfterKey = async (opener: string, then: "Escape" | null): Promise<string> => {
+      try {
+        await page.goto(`${args.baseUrl}/`, { waitUntil: "domcontentloaded" });
+        await page.waitForTimeout(6_000);
+        await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+        for (let i = 0; i < 30; i += 1) {
+          await page.keyboard.press("Tab");
+          await page.waitForTimeout(100);
+          const here = (await page.evaluate(
+            () => String((document.activeElement as HTMLElement | null)?.className ?? ""),
+          )) as string;
+          if (!here.includes(opener)) continue;
+          await page.keyboard.press("Enter");
+          await page.waitForTimeout(then === null ? 4_000 : 1_200);
+          if (then !== null) {
+            await page.keyboard.press(then);
+            await page.waitForTimeout(900);
+          }
+          return (await page.evaluate(() => {
+            const el = document.activeElement as HTMLElement | null;
+            if (!el || el === document.body) return "(the document)";
+            return String(el.className || el.tagName).split(" ")[0] ?? "(unnamed)";
+          })) as string;
+        }
+        return "(never reached it)";
+      } catch {
+        return "(threw)";
+      }
+    };
+
+    /* the one real sheet in the world's chrome */
+    const sheetLandedOn = await focusAfterKey("jar-account", "Escape");
+    const sheetReturns = sheetLandedOn.includes("jar-account");
+
+    /* and the two ways out of the wall, each of which unmounts behind you */
+    const ways: Array<{ way: string; landedOn: string; kept: boolean }> = [];
+    for (const way of ["jar-values", "jar-saved"]) {
+      const landedOn = await focusAfterKey(way, null);
+      ways.push({ way, landedOn, kept: landedOn !== "(the document)" });
+    }
+
     /* AND READING ONE BACK. The door is a real button, so it can be reached;
        what matters is whether anything BEHIND it can be. */
     let memoryOpened = false;
+    let openedTheAnnouncedWay = false;
     let reachName = "";
     let reachRole = "";
     let reachMoves = false;
@@ -240,15 +313,60 @@ async function main(): Promise<void> {
         if (!onDoor) continue;
         await page.keyboard.press("Enter");
         await page.waitForTimeout(3_500);
-        /* From the archive, keep tabbing and pressing Enter — if any keyboard
-           route into a memory exists, this finds it. */
-        for (let j = 0; j < 25; j += 1) {
+        /**
+         * TWO WAYS IN, AND BOTH ARE ASKED.
+         *
+         * The announced one first: whatever the ground says it answers to is
+         * pressed, exactly as somebody who heard its label read out would
+         * press it. A route only a blind walk can find is a route nobody is
+         * told about, and this half is what says the label is true.
+         *
+         * Then the blind one — keep tabbing and pressing Enter, so any route
+         * at all is found even if it is undocumented. It needs a leash:
+         * pressing Enter on everything eventually presses Enter on the way
+         * back UP, and the rest of the walk then hunts for a memory on a wall
+         * that has none. That is exactly how this reported "the archive is
+         * write-only" against a working ground, the first time the ground took
+         * focus on arrival — the instrument left the room it was searching and
+         * never noticed it had gone. So each round checks it is still standing
+         * in the ground, and walks back down if it is not.
+         */
+        const inTheGround = async (): Promise<boolean> =>
+          (await page.locator(".jar-reach").count()) > 0;
+
+        await page.keyboard.press("ArrowDown");
+        await page.waitForTimeout(1_200);
+        if ((await page.locator(".jar-panel").count()) > 0) {
+          memoryOpened = true;
+          openedTheAnnouncedWay = true;
+        }
+
+        for (let j = 0; j < 25 && !memoryOpened; j += 1) {
+          if (!(await inTheGround())) {
+            for (let k = 0; k < 20; k += 1) {
+              await page.keyboard.press("Tab");
+              await page.waitForTimeout(100);
+              const backOnDoor = (await page.evaluate(() =>
+                String((document.activeElement as HTMLElement | null)?.className ?? "").includes(
+                  "jar-saved",
+                ),
+              )) as boolean;
+              if (!backOnDoor) continue;
+              await page.keyboard.press("Enter");
+              await page.waitForTimeout(3_000);
+              break;
+            }
+            if (!(await inTheGround())) break;
+          }
           await page.keyboard.press("Tab");
           await page.waitForTimeout(100);
           await page.keyboard.press("Enter");
           await page.waitForTimeout(400);
-          if ((await page.locator(".jar-panel").count()) > 0) {
-            memoryOpened = true;
+          if ((await page.locator(".jar-panel").count()) > 0) memoryOpened = true;
+        }
+
+        if (memoryOpened) {
+          {
             /**
              * AND WHAT IT WAS THAT OPENED IT.
              *
@@ -281,7 +399,6 @@ async function main(): Promise<void> {
             /* A cursor that does not move is a cursor that reaches exactly one
                memory, which is a door with one thing behind it. */
             reachMoves = before !== null && before.at !== "" && after !== "" && after !== before.at;
-            break;
           }
         }
         break;
@@ -299,8 +416,116 @@ async function main(): Promise<void> {
         `\n  the ground answers to:           ${
           reachName === "" ? "NOTHING NAMED" : `${reachRole || "no role"} — "${reachName}"`
         }` +
-        `\n  arrows move along it:            ${reachMoves ? "yes" : "NO"}`,
+        `\n  arrows move along it:            ${reachMoves ? "yes" : "NO"}` +
+        `\n  ...the way its own label says:   ${openedTheAnnouncedWay ? "yes" : "no — found by a blind walk"}`,
     );
+    console.log(
+      `\n  a sheet closed with Escape hands focus back: ${
+        sheetReturns ? "yes" : `NO — lands on ${sheetLandedOn}`
+      }`,
+    );
+    console.log("\n  travelling with keys keeps your place:");
+    for (const w of ways) {
+      console.log(
+        `    ${w.kept ? "yes " : "NO  "}  .${w.way.padEnd(12)} arrives with focus on ${w.landedOn}`,
+      );
+    }
+    /**
+     * ── THE GROUND THAT IS NOT YOURS ───────────────────────────────────────
+     *
+     * Everything above stands on the viewer's own wall. A room's ground is a
+     * different source entirely — its members' public memories, arriving
+     * through a different fetch into a different ref — and an agent's is a
+     * third. The reach reads all three, and only one of them had ever been
+     * walked: the shape of a keyboard path that works in the demo.
+     *
+     * Travelled to with keys only. The way to another wall is a real button
+     * that opens a real menu of real buttons, so the whole journey is
+     * tab-and-Enter and nothing here touches a pointer.
+     */
+    const roomReach = { travelled: false, options: 0, opened: false };
+    try {
+      /* A room needs a ground before it has one to reach. A person's memories
+         are private by default and a room draws only what its members marked
+         public, so they are published first and the room is made through the
+         same API a click would call. */
+      const roomName = `Room ${uniq()}`;
+      await page.evaluate(async (name) => {
+        const listed = await fetch("/api/inspirations?limit=50", { credentials: "include" });
+        const body = (await listed.json()) as { inspirations?: Array<{ id: string }> };
+        for (const row of body.inspirations ?? []) {
+          await fetch(`/api/inspirations/${row.id}`, {
+            method: "PATCH",
+            credentials: "include",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ visibility: "public" }),
+          });
+        }
+        await fetch("/api/groups", {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
+      }, roomName);
+
+      await page.goto(`${args.baseUrl}/`, { waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(7_000);
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+
+      for (let i = 0; i < 30; i += 1) {
+        await page.keyboard.press("Tab");
+        await page.waitForTimeout(100);
+        const here = (await page.evaluate(
+          () => String((document.activeElement as HTMLElement | null)?.className ?? ""),
+        )) as string;
+        if (!here.includes("jar-here-more")) continue;
+        await page.keyboard.press("Enter");
+        await page.waitForTimeout(800);
+        for (let j = 0; j < 12; j += 1) {
+          await page.keyboard.press("Tab");
+          await page.waitForTimeout(120);
+          const name = (await page.evaluate(
+            () => (document.activeElement as HTMLElement | null)?.textContent ?? "",
+          )) as string;
+          if (!name.toLowerCase().includes("room")) continue;
+          await page.keyboard.press("Enter");
+          await page.waitForTimeout(6_000);
+          roomReach.travelled = true;
+          break;
+        }
+        break;
+      }
+
+      if (roomReach.travelled) {
+        for (let i = 0; i < 30; i += 1) {
+          await page.keyboard.press("Tab");
+          await page.waitForTimeout(100);
+          const here = (await page.evaluate(
+            () => String((document.activeElement as HTMLElement | null)?.className ?? ""),
+          )) as string;
+          if (!here.includes("jar-saved")) continue;
+          await page.keyboard.press("Enter");
+          await page.waitForTimeout(4_000);
+          break;
+        }
+        roomReach.options = (await page.evaluate(
+          () => document.querySelectorAll('.jar-reach [role="option"]').length,
+        )) as number;
+        await page.keyboard.press("ArrowDown");
+        await page.waitForTimeout(1_500);
+        roomReach.opened = (await page.locator(".jar-panel").count()) > 0;
+      }
+    } catch {
+      /* left as whatever it reached — a throw here is a finding, not a crash */
+    }
+    console.log(
+      `\n  a room's ground, travelled to with keys only:` +
+        `\n    reached the room:              ${roomReach.travelled ? "yes" : "NO"}` +
+        `\n    memories the keyboard can see: ${roomReach.options}` +
+        `\n    one of them opens:             ${roomReach.opened ? "yes" : "NO"}`,
+    );
+
     console.log(
       "\n[by-keyboard] The canvas still takes no focus of its own, and that is now the\n" +
         "              answer rather than the question: the ground is reached through the\n" +
@@ -340,6 +565,13 @@ async function main(): Promise<void> {
     }
     if (memoryOpened && !reachMoves) {
       broke.push("the ground's cursor does not move — the keyboard reaches one memory, not the ground");
+    }
+    if (memoryOpened && !openedTheAnnouncedWay) {
+      broke.push("the ground's label promises keys that do not open a memory");
+    }
+    if (!sheetReturns) broke.push(`a sheet closed with Escape drops focus to ${sheetLandedOn}`);
+    for (const w of ways) {
+      if (!w.kept) broke.push(`travelling through .${w.way} drops focus to the document`);
     }
     if (broke.length > 0) {
       console.log(`\n[by-keyboard] the keyboard path got WORSE:\n${broke.map((b) => `                ${b}`).join("\n")}`);

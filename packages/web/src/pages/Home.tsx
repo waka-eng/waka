@@ -8733,6 +8733,71 @@ function HomeExperience(): JSX.Element {
     setReachId((cur) => cur ?? selectedIdRef.current);
   }, []);
 
+  /**
+   * ARRIVING SOMEWHERE KEEPS YOUR PLACE.
+   *
+   * The world's ways are real buttons — `philosophies & values` takes you up
+   * into the sky, the count under the door takes you down into the ground —
+   * and each of them only exists in the place you left. Press one and it
+   * unmounts on arrival, so the browser has nothing to hold focus on and
+   * drops it to the document.
+   *
+   * Nothing on screen shows this. A person using a pointer never notices. A
+   * person using the keyboard presses Enter on `philosophies & values`,
+   * arrives in the sky, presses Tab — and starts again from the very top of
+   * the page, having lost every stop they walked through to get there. Every
+   * travel in the world costs them their place, in a product whose whole
+   * shape is travel. Measured by `e2e:by-keyboard`: focus landed on `(the
+   * document)`.
+   *
+   * So a place that has just been arrived in takes the focus that its own way
+   * in dropped. Only when focus was actually LOST — `document.activeElement`
+   * back on the body — because a person who is typing in the mouth or reading
+   * a card has not lost anything and must not have it taken.
+   *
+   * WHAT EACH PLACE HANDS IT TO is the thing that place is for: the sky's one
+   * way back down, and — in the ground — the ground itself, whose label says
+   * where you are and which keys read it. Not the way back up: you came down
+   * to be among your memories, and the first thing Tab offers should not be
+   * the exit.
+   */
+  const arrivedFromRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (phase !== "ready") return undefined;
+    const place = `${inSky ? "sky" : inField ? "ground" : "wall"}:${atWall.kind}:${atWall.id}`;
+    const came = arrivedFromRef.current;
+    arrivedFromRef.current = place;
+    /**
+     * THE FIRST PLACE IS NOT A PLACE YOU ARRIVED IN.
+     *
+     * Without this, opening WAKA is itself an "arrival": the world becomes
+     * ready standing at the wall with focus on the body, and the rule below
+     * would hand it to the door — so the first Tab of a fresh visit would
+     * start two thirds of the way down the chrome, skipping the poster and
+     * the mouth, and the world would have moved something before the person
+     * touched anything. Nothing is dropped on first paint because nothing was
+     * held; there is nothing to give back.
+     */
+    if (came === null || came === place) return undefined;
+    /* after the arrival paints: the chrome of the new place mounts in the
+       same commit that flips these flags, but the browser has not yet settled
+       focus from whatever unmounted */
+    const id = window.requestAnimationFrame(() => {
+      const active = document.activeElement;
+      if (active && active !== document.body) return;
+      const want = inSky ? ".jar-up--down" : inField ? ".jar-reach" : ".jar-saved";
+      const el = document.querySelector<HTMLElement>(want);
+      /* `preventScroll`, because the ground's reach is a clipped one-pixel box
+         and scrolling the page to it would move the world under somebody who
+         only pressed a key */
+      el?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(id);
+    /* `atWall` too: walking sideways to a neighbour closes the menu you walked
+       through, which unmounts the button you were standing on. Same dropped
+       focus, same fix — the wall you arrive at takes it. */
+  }, [inSky, inField, phase, atWall]);
+
   const onReachKey = useCallback(
     (e: ReactKeyboardEvent<HTMLDivElement>) => {
       const list = reachable;

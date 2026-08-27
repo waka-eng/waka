@@ -148,13 +148,88 @@ cursor afterwards except the person moving it.
 focus. That is now the answer rather than the question — the ground is reached
 through the listbox, which is the thing a reader can be told about.
 
+### And the two questions this walk had listed as unasked
+
+**Travelling with keys kept losing your place, and that was a real defect.**
+`philosophies & values` and the count under the door are not dialogs; they are
+*ways*. Each exists only in the place you left, so pressing Enter on one
+unmounts it on arrival and the browser drops focus to the document. Nothing on
+screen shows this. A person using a pointer never notices. A person using the
+keyboard arrives in the sky, presses Tab, and starts again from the very top of
+the page having lost every stop they walked through — on every journey, in a
+product whose whole shape is travel.
+
+Fixed: a place that has just been arrived in takes the focus that its own way
+in dropped, and only when focus was actually lost, so somebody typing in the
+mouth or reading a card keeps it. The sky hands it to the one way back down;
+the ground hands it to the ground itself, whose label says where you are and
+which keys read it — not to the way back up, because you came down to be among
+your memories and the first thing Tab offers should not be the exit.
+
+The first paint is deliberately not an arrival. Without that, opening WAKA
+would hand focus to the door, so a fresh visit's first Tab would start two
+thirds of the way down the chrome — and the world would have moved something
+before the person touched anything. Nothing is dropped on first paint because
+nothing was held.
+
+```
+  a sheet closed with Escape hands focus back: yes
+  travelling with keys keeps your place:
+    yes   .jar-values   arrives with focus on jar-up
+    yes   .jar-saved    arrives with focus on sr-only
+```
+
+**A room's ground answers too.** The reach reads three different sources — your
+archive, an agent's own captures, a room's field of its members' public
+memories — and only the first had ever been walked, which is the shape of a
+keyboard path that works in the demo. The walk now makes a room, publishes some
+memories into it, travels there **with keys only** (the way to another wall is
+a real button opening a real menu of real buttons), descends, and reads:
+
+```
+  a room's ground, travelled to with keys only:
+    reached the room:              yes
+    memories the keyboard can see: 4
+    one of them opens:             yes
+```
+
+**Two instrument failures, both mine, both found by the instrument going red on
+working code:**
+
+- The probe called `.jar-values` a *sheet* and reported it as a modal that
+  fails to restore focus. Wrong about the mechanism, right that it was broken —
+  and a report that misnames the mechanism sends whoever reads it to the wrong
+  file. Sheets and ways are measured separately now.
+- The memory probe is a blind walk that presses Enter on everything it can
+  reach. The moment the ground started taking focus on arrival, that walk
+  pressed Enter on the way back **up** first, then spent its remaining
+  twenty-five rounds hunting for a memory on a wall that has none — and
+  reported "the archive is write-only again" against a ground that worked
+  perfectly. It has a leash now: each round checks it is still standing in the
+  ground and walks back down if it is not.
+
+The blind walk also gained a companion that is not blind: before it runs, the
+probe presses whatever the ground's own label says to press. A route only a
+blind walk can find is a route nobody is told about, and that half is what
+makes the label a promise rather than a description.
+
 ## Still unmeasured
+
+- **An actual screen reader**, unchanged from above: this measures accessible
+  names and focus visibility, not how they sound in order.
+- **An agent's wall.** The room's is walked now; the third source is not.
+- **The settings sheets' own focus traps** — whether Tab can leave a sheet
+  while it is open, which is a different question from whether Escape returns.
+
+## Still unmeasured, as of the original walk
 
 - **An actual screen reader.** This measures accessible names and focus
   visibility, which is what a reader reads — it does not run one. NVDA or
   VoiceOver on the door and the world would say whether the order and the
   phrasing make sense out loud, which no automated check can.
 - **The room and agent walls**, and the settings sheets, which have their own
-  focus traps.
+  focus traps. *(The room's ground and the sheets' escape were measured on
+  2026-08-27 — see above. An agent's wall still has not been.)*
 - **Keyboard escape routes.** Whether every modal returns focus where it came
-  from was not asked here.
+  from was not asked here. *(Asked on 2026-08-27; it found a real defect in
+  travel rather than in sheets.)*

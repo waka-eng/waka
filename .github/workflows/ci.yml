@@ -400,13 +400,23 @@ jobs:
       - name: First run — one memory kept
         run: pnpm e2e:first-sixty --stage kept
 
-      # The world with the mouse unplugged. A ratchet on the chrome — eight
-      # stops, all named, all visibly focused, the mouth usable with keys
-      # alone — all of which are true today and would be somebody's edit if
-      # they stopped being. Reaching a MEMORY is printed rather than failed:
-      # it has never worked, needs a design, and a check that is always red is
-      # a check everyone learns to skip.
-      - name: Keyboard reach (chrome must not regress)
+      # The world with the mouse unplugged, and now the whole path rather than
+      # the chrome around it. Eight stops, all named, all visibly focused, the
+      # mouth usable with keys alone — and, since 2026-08-27, a memory that
+      # OPENS: the ground answers to a listbox, it is named, its cursor moves,
+      # and the keys its own label promises are the keys that work.
+      #
+      # Reaching a memory was printed rather than failed for exactly one day,
+      # on the rule that a check which is always red is a check everyone
+      # learns to skip. It has a design and an implementation now, so it is a
+      # ratchet like the rest.
+      #
+      # Two more joined them, both found by asking a question this walk had
+      # itself listed as unasked: a sheet closed with Escape must hand focus
+      # back to what opened it, and travelling between places must not drop
+      # focus to the document — which it did, on every journey, until the
+      # place you arrive in started taking the focus its own way in dropped.
+      - name: Keyboard reach (the whole path, not just the chrome)
         run: pnpm e2e:by-keyboard
 
       # The field at 12, 200 and 800 memories, seeded straight into Postgres
