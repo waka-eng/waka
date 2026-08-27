@@ -12288,6 +12288,16 @@ function HomeExperience(): JSX.Element {
               }}
               className="jar-panel-text jar-panel-edit"
               aria-label="the words of this inspiration"
+              /* ONE, BECAUSE THE DEFAULT IS TWO. A textarea without `rows`
+                 is rows="2", so `height: auto` in `growPanelEdit` never
+                 measures below two lines — and a one-line memory grew a
+                 phantom line the reading face doesn't have, which is the
+                 height jump the founder recorded (view 164, edit 188, on
+                 the word "save"). The law is "dont make height different
+                 when viewing vs editing"; the honest way to equal heights
+                 is measuring the same words the same way, not teaching the
+                 reading face to hold invented air. */
+              rows={1}
               value={editing.open.text}
               onChange={(e) => {
                 editing.retype(e.target.value);
