@@ -150,7 +150,14 @@ jobs:
   browser:
     name: Browser gates (first paint, journeys, failure paths, first run, keyboard)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # 45 was enough while the job stopped at its first red step. It is not
+    # enough now that every gate runs and reports (see `!cancelled()` below):
+    # the full ladder is roughly 45 minutes of real browser work — journeys
+    # 7m, the sabotaged journeys 7m, dead-css 6m, and eleven more — so the
+    # first complete run was CANCELLED at the cap, which looks exactly like a
+    # gate failing and is not one. Sized to fit the work with room, because a
+    # timeout that trims the ladder is the skipping problem wearing a clock.
+    timeout-minutes: 75
 
     services:
       postgres:
