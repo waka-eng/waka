@@ -66,6 +66,7 @@
  */
 import {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -97,6 +98,20 @@ export interface OpenEdit {
   /** True while the keep is in flight, so the button can say so and refuse a
       second press. */
   readonly saving: boolean;
+  /**
+   * The words are written and this is the beat that says so.
+   *
+   * A keep used to close the edit the instant the server answered, which is
+   * correct and reads as nothing happening: the card blinks back to its
+   * reading face and the person is left wondering whether the press landed.
+   * Founder, 2026-08-27: "clicking save, just keep it opened, change the text
+   * save to saved, and a few sec later bring back the < >".
+   *
+   * So the edit stays open, saying `saved`, and closes itself a moment later —
+   * which is when the foot's carets return, because they are the reading
+   * face's and the reading face is what comes back.
+   */
+  readonly saved: boolean;
 }
 
 /**
@@ -136,12 +151,29 @@ export interface Editing {
   readonly retype: (text: string) => void;
   /** Leave it — close without writing anything. */
   readonly leave: () => void;
-  /** Keep these words: write them, lock the thing, close. */
+  /** Keep these words: write them, say so for a beat, then close. */
   readonly keep: () => void;
 }
 
+/**
+ * How long `saved` stays on screen before the card returns to its reading
+ * face. Long enough to read a five-letter word without looking for it, short
+ * enough that it never feels like a state you are stuck in.
+ */
+const SAVED_HELD_MS = 2_200;
+
 export function useEditing(deps: EditingDeps): Editing {
   const [open, setOpen] = useState<OpenEdit | null>(null);
+
+  /* the `saved` beat's timer, so every route out of an edit can cancel it */
+  const holdRef = useRef<number | null>(null);
+  const clearHold = useCallback(() => {
+    if (holdRef.current !== null) {
+      window.clearTimeout(holdRef.current);
+      holdRef.current = null;
+    }
+  }, []);
+  useEffect(() => clearHold, [clearHold]);
 
   /* The draft, again, where a callback can reach it. Written by `put` and by
      nothing else, so it cannot fall behind the state it mirrors. */
@@ -160,7 +192,12 @@ export function useEditing(deps: EditingDeps): Editing {
   depsRef.current = deps;
 
   const begin = useCallback(
-    (kind: EditKind, id: string, text: string) => put({ kind, id, text, saving: false }),
+    (kind: EditKind, id: string, text: string) => {
+      /* a new edit cancels the previous one's `saved` beat, or the old one
+         would close the new one out from under the person */
+      clearHold();
+      put({ kind, id, text, saving: false, saved: false });
+    },
     [put],
   );
 
@@ -172,7 +209,10 @@ export function useEditing(deps: EditingDeps): Editing {
     [put],
   );
 
-  const leave = useCallback(() => put(null), [put]);
+  const leave = useCallback(() => {
+    clearHold();
+    put(null);
+  }, [put, clearHold]);
 
   const keep = useCallback(() => {
     const held = heldRef.current;
@@ -181,7 +221,29 @@ export function useEditing(deps: EditingDeps): Editing {
     if (text === "") return;
     const d = depsRef.current;
     put({ ...held, saving: true });
-    const done = () => put(null);
+    /**
+     * THE BEAT BETWEEN WRITTEN AND GONE.
+     *
+     * `done` used to be `put(null)`. The words landed, the edit closed in the
+     * same frame, and the only evidence the press had done anything was that
+     * the card looked exactly as it had before you started typing.
+     *
+     * Now it says `saved` where it said `save`, holds there long enough to be
+     * read, and then closes — and the carets come back with the reading face
+     * they belong to. The timer is cleared by `leave`, by a new `begin`, and
+     * on unmount, so a closed card can never be reopened by an old beat.
+     */
+    const done = () => {
+      const still = heldRef.current;
+      put(still ? { ...still, saving: false, saved: true } : null);
+      clearHold();
+      holdRef.current = window.setTimeout(() => {
+        holdRef.current = null;
+        /* only if it is still the same saved edit: stepping to another memory
+           or beginning a new one has already replaced it */
+        if (heldRef.current?.saved === true) put(null);
+      }, SAVED_HELD_MS);
+    };
     /**
      * A FAILED EDIT, AND THE ONE FAILURE THAT IS NOT AN ERROR.
      *
@@ -197,7 +259,7 @@ export function useEditing(deps: EditingDeps): Editing {
      */
     const fail = (err?: unknown) => {
       const still = heldRef.current;
-      put(still ? { ...still, saving: false } : null);
+      put(still ? { ...still, saving: false, saved: false } : null);
       if (err instanceof ApiError && err.status === 404) {
         put(null);
         void loadTopOfMind()

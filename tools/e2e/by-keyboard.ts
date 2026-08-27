@@ -106,24 +106,43 @@ interface Stop {
 /**
  * WHAT THE BROWSER SAYS IS FOCUSED, AND WHETHER IT LOOKS IT.
  *
- * `litUp` compares the focused element's own outline and shadow against what
- * the same element computes when nothing is focused. Reading only `outline`
- * would call a design that marks focus with a background change unfocused,
- * and reading nothing at all would let a product with no focus ring pass a
- * keyboard audit — which is the failure this exists to catch.
+ * `litUp` compares what the element computes WHILE FOCUSED against what the
+ * same element computes with focus taken away — blur, read, focus again. Any
+ * difference at all counts, across ten properties: a ring, a shadow, a rule
+ * under the word, a brighter ink, a filter, an opacity, a fill.
+ *
+ * IT SAID IT DID THIS AND IT DID NOT. The first version carried this same
+ * paragraph and then checked three fixed properties — outline, box-shadow,
+ * a thick bottom border — against nothing, so a design that marks focus by
+ * brightening was "dark" and a design that marks it by not changing at all
+ * was indistinguishable from one that does. The comment described the right
+ * test and the code underneath it did a narrower one, which is worse than
+ * either alone: a reader checking whether the audit was sound would have read
+ * the paragraph and stopped.
+ *
+ * It matters more than it did. The founder's ruling on 2026-08-27 — "never
+ * show this white border ANYWHERE" — made brightening the whole of how this
+ * product says focus, and a probe that cannot see brightening would have
+ * failed the build on a world that had just been made to look right.
  */
 const FOCUS_PROBE = `(() => {
   var el = document.activeElement;
   if (!el || el === document.body) return null;
-  var cs = getComputedStyle(el);
-  var marks = [cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) > 0,
-               cs.boxShadow !== 'none',
-               parseFloat(cs.borderBottomWidth) > 2];
+  var read = function (node) {
+    var cs = getComputedStyle(node);
+    return [cs.outlineStyle, cs.outlineWidth, cs.boxShadow, cs.borderBottomWidth,
+            cs.color, cs.filter, cs.opacity, cs.backgroundColor,
+            cs.textDecorationLine, cs.transform].join('|');
+  };
+  var lit = read(el);
+  el.blur();
+  var dark = read(el);
+  el.focus();
   return {
     tag: el.tagName.toLowerCase(),
     cls: String(el.className || '').slice(0, 60),
     name: (el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 48),
-    litUp: marks.some(Boolean),
+    litUp: lit !== dark,
   };
 })()`;
 

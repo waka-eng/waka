@@ -283,10 +283,13 @@
     z-index 0s;
 }
 
-.nc-note:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--ink) 42%, white);
-  outline-offset: 6px;
-}
+/* A NOTE NEEDS NO FOCUS RULE OF ITS OWN. It used to wear a 3px ring; the
+   founder's ruling took every ring away, and the obvious replacement — lift it
+   toward the reader, the way its hover does — turned out to be already
+   written. `:focus-within` above matches an element that has focus ITSELF as
+   well as one containing it, so a focused note already lifts. Two attempts at
+   this added four colour literals between them and the palette ratchet caught
+   both; the third attempt is no rule at all. */
 
 .nc-note--featured {
   z-index: 5;
@@ -427,6 +430,37 @@ body {
 
 #root {
   min-height: 100vh;
+}
+
+/* ---------------------------------------------------------------------------
+ * FOCUS IS LIGHT, NEVER A BOX (founder, 2026-08-27: "never show this white
+ * border ANYWHERE").
+ *
+ * The browser's default focus ring is a white rectangle. On this product's
+ * near-black ground it is the brightest thing on screen — a hard-edged box
+ * around a word, in a world whose only meaning channel is light and which
+ * otherwise has no rectangles in it at all.
+ *
+ * It was invisible for a long time because nothing ever took focus without a
+ * person pressing Tab, and the founder does not press Tab. Then the world
+ * started handing focus to the place you had just arrived in (so that
+ * travelling by keyboard stopped costing you your place, 2026-08-27) and the
+ * box appeared on the door on every arrival.
+ *
+ * NOTHING IS LOST BY REMOVING IT. Every control in the world already says it
+ * has focus by brightening — `.jar-saved`, `.jar-when`, `.jar-way`,
+ * `.jar-values`, `.jar-up` all lift their colour on `:focus-visible`, and did
+ * so before this. The ring was a second, louder answer painted on top of an
+ * answer the design had already given. What follows this rule is the handful
+ * of places that had NO answer of their own and were leaning on the ring;
+ * each is given one.
+ *
+ * `e2e:by-keyboard` holds the floor here: it asks the browser what changes
+ * when an element takes focus, and a stop that changes nothing fails the
+ * build. Removing a focus indicator without replacing it cannot pass.
+ */
+:focus-visible {
+  outline: none;
 }
 
 .sr-only {
@@ -1641,9 +1675,10 @@ textarea {
 
 
 
+/* it rests at `--ink-3`; focus lifts it the rest of the way, which is the
+   same move its own `:hover` makes and the same one the world's chrome makes */
 .profile-tab:focus-visible {
-  outline: 2px solid var(--rule-strong);
-  outline-offset: 2px;
+  color: var(--ink-1);
 }
 
 /* Rooms arrive rather than blink: a short rise, no layout properties. */
@@ -1782,8 +1817,8 @@ textarea {
 }
 
 .profile-memory-action:focus-visible {
-  outline: 2px solid var(--rule-strong);
-  outline-offset: 2px;
+  color: var(--ink);
+  border-bottom-color: var(--rule-strong);
 }
 
 

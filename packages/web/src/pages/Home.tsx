@@ -8761,6 +8761,36 @@ function HomeExperience(): JSX.Element {
    * to be among your memories, and the first thing Tab offers should not be
    * the exit.
    */
+  /**
+   * WAS THE LAST THING THEY DID A KEYPRESS?
+   *
+   * The arrival focus below exists for people travelling by keyboard, and for
+   * them only. Handing a chrome button focus after a POINTER click is worse
+   * than useless: the button then holds focus silently, and the next Space —
+   * which is what a person presses to scroll — activates it. A dialog opens
+   * that nobody asked for, from a control they are not looking at, and it
+   * reads as the world doing things on its own.
+   *
+   * (Founder, 2026-08-27, on a modal appearing unbidden. Exactly one code path
+   * opens that dialog and it is a click handler, so something was clicking it.
+   * A focused button and a scroll are enough.)
+   */
+  const lastInputWasKeyRef = useRef(false);
+  useEffect(() => {
+    const key = () => {
+      lastInputWasKeyRef.current = true;
+    };
+    const point = () => {
+      lastInputWasKeyRef.current = false;
+    };
+    window.addEventListener("keydown", key, true);
+    window.addEventListener("pointerdown", point, true);
+    return () => {
+      window.removeEventListener("keydown", key, true);
+      window.removeEventListener("pointerdown", point, true);
+    };
+  }, []);
+
   const arrivedFromRef = useRef<string | null>(null);
   useEffect(() => {
     if (phase !== "ready") return undefined;
@@ -8782,6 +8812,10 @@ function HomeExperience(): JSX.Element {
     /* after the arrival paints: the chrome of the new place mounts in the
        same commit that flips these flags, but the browser has not yet settled
        focus from whatever unmounted */
+    /* the whole point is a keyboard journey that keeps its place; a pointer
+       journey never lost one, and giving it focus arms a button nobody is
+       looking at */
+    if (!lastInputWasKeyRef.current) return undefined;
     const id = window.requestAnimationFrame(() => {
       const active = document.activeElement;
       if (active && active !== document.body) return;
@@ -12113,9 +12147,20 @@ function HomeExperience(): JSX.Element {
                   type="button"
                   className="jar-panel-save"
                   onClick={editing.keep}
-                  disabled={editing.open.saving || editing.open.text.trim() === ""}
+                  disabled={
+                    editing.open.saving ||
+                    editing.open.saved ||
+                    editing.open.text.trim() === ""
+                  }
                 >
-                  {editing.open.saving ? "saving…" : "save"}
+                  {/* three states in one word, in the slot the carets will
+                      have back in a moment: what you may do, what is
+                      happening, and what happened. */}
+                  {editing.open.saved
+                    ? "saved"
+                    : editing.open.saving
+                      ? "saving…"
+                      : "save"}
                 </button>
               </span>
               <span className="jar-panel-foot-r">
@@ -12661,8 +12706,18 @@ function HomeExperience(): JSX.Element {
           timeless, and the timeless half takes long enough to form that for
           now the place mostly says so. The door exists anyway, because a
           person can go and see that it is empty and why — a place is honest
-          where a promise in a tooltip is not. Only on your own column. */}
-      {phase === "ready" && !inField && !inSky && atWall.kind === "self" ? (
+          where a promise in a tooltip is not.
+
+          ON EVERY WALL, NOT ONLY YOUR OWN (founder, 2026-08-27: "philosophies
+          & value should be available on every page since every room will
+          eventually have its own philosophies and values"). It was gated to
+          your own column because yours was the only sky that could hold
+          anything. That was a fact about how much had been built, and it had
+          hardened into a rule about whose thinking has a timeless half — which
+          is the opposite of what a room is for. The way up is a door to a
+          place that says honestly what it holds, and that is as true standing
+          in somebody else's room as in your own. */}
+      {phase === "ready" && !inField && !inSky ? (
         <button
           type="button"
           className="jar-values"
@@ -12809,6 +12864,20 @@ function HomeExperience(): JSX.Element {
           on its own wall. Two words in a strip could not carry that, so the
           choice is made here, where a sentence fits. */}
       {newPlace ? (
+        <>
+          {/* THE WAY OUT IS THE WORLD (founder, 2026-08-27: "remove not now
+              button. if click outside modal, close it"). A dialog offering
+              two places to go does not need a third control saying you would
+              rather stay — pressing anywhere that is not the dialog says that
+              already, and says it in the gesture a person already has. The
+              sheet is transparent and covers everything, so the world behind
+              it is what you press. Escape works too, and always did. */}
+          <div
+            className="jar-newplace-away"
+            data-jar-chrome="1"
+            aria-hidden="true"
+            onPointerDown={() => setNewPlace(false)}
+          />
         <div className="jar-seek jar-newplace" data-jar-chrome="1" role="dialog" aria-label="make another place">
           <p className="jar-prov-lead jar-label">make another place</p>
           <button
@@ -12840,12 +12909,8 @@ function HomeExperience(): JSX.Element {
               signs in as itself; until then the wall is empty, and says so.
             </span>
           </button>
-          <p className="jar-ask jar-ask--row jar-newplace-close">
-            <button type="button" onClick={() => setNewPlace(false)}>
-              not now
-            </button>
-          </p>
         </div>
+        </>
       ) : null}
 
       {/* ---------------- THE REFLECTION, ON ITS OWN ----------------
@@ -13108,7 +13173,7 @@ function HomeExperience(): JSX.Element {
 
           <p className="jar-ask">
             <Link className="jar-settings-verb" to="/profile" onClick={() => setAccountOpen(false)}>
-              open your account
+              all settings
             </Link>
           </p>
 

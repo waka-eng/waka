@@ -111,10 +111,37 @@
  * panel — the only two grounds this product has.
  */
 :focus-visible {
-  outline: 2px solid var(--jar-ink, #e8edf4);
-  outline-offset: 2px;
-  /* the rim: keeps the ring legible where it crosses light chrome */
-  box-shadow: 0 0 0 4px rgba(6, 8, 13, 0.55);
+  /*
+   * IT IS LIGHT NOW, NOT A RING (founder, 2026-08-27: "never show this white
+   * border ANYWHERE").
+   *
+   * This drew a two-pixel box in the world's own near-white ink. On the deep
+   * ground that is the brightest thing on screen and the only rectangle in a
+   * world that has none — and it appeared on the door on every arrival once
+   * the world began handing focus to the place you had just reached.
+   *
+   * The rule above this one still holds and is why this is a replacement
+   * rather than a deletion: a surface may draw a different-looking focus, it
+   * may not draw nothing. So focus says what everything else in this product
+   * says — the thing lights up. `filter` and not a shadow because a shadow
+   * has the element's shape, and the shape was the objection.
+   */
+  outline: none;
+}
+
+/*
+ * AND IN THE WORLD, THE THING LIGHTS UP.
+ *
+ * Scoped under `.jar` rather than left global, because the two grounds this
+ * product has are opposites: the world is near-black with pale ink, where
+ * brightening a word makes it clearer, and the flat pages are cream with dark
+ * ink, where brightening it would wash it out. A focus rule that made one of
+ * them legible by making the other one worse would be a rule that had only
+ * been looked at once. The flat pages say focus in their own tokens, beside
+ * the controls that use them.
+ */
+.jar :focus-visible {
+  filter: brightness(1.75);
 }
 /*
  * `border-radius: inherit` USED TO BE IN THAT RULE, and it was a bug with a
