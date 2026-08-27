@@ -511,6 +511,42 @@
 .jar-way:focus-visible {
   color: var(--jar-ink);
 }
+/* ═══ A WORD IS NOT A TARGET ═══
+   The founder's report about the rail — "not only hard to drag" — is not a
+   fact about the rail. Measured across the world, 2026-08-27: the two ways
+   at the sides are ELEVEN PIXELS TALL and one of them is thirty-one wide,
+   and they are the doors to everybody else's wall. The signposts are barely
+   twenty.
+
+   The ink stays exactly where it is: growing the word would make three
+   signposts at three sizes again, which is the thing the register exists to
+   prevent. A pseudo-element takes the press instead — it extends the
+   element's hit area and does NOT change its box, so the placement gates
+   that measure these edges (`e2e:measure`, "signposts-one-inset") still
+   measure the same ten pixels they always did. Nothing moves; the hand just
+   stops missing.
+
+   NOT THE MOUTH, and that exclusion is the whole care in this rule. The
+   resting phrase is already twelve hundred pixels wide — it has never been
+   hard to hit — and it lies across the middle of the field, so a halo around
+   it would take presses meant for the orbs behind it. A target is grown
+   because it is small, never because it is nearby. */
+.jar-way,
+.jar-values,
+.jar-saved,
+.jar-up {
+  position: relative;
+}
+.jar-way::after,
+.jar-values::after,
+.jar-saved::after,
+.jar-up::after {
+  content: "";
+  position: absolute;
+  /* from a line of text toward a finger's width, and no further: these sit
+     over the field, and every pixel of halo is a pixel an orb cannot have */
+  inset: -11px -12px;
+}
 
 /* ---------- what is forming overhead: philosophies and values ----------
    Top of mind is CURRENT — what this wall is holding today. Above it is the
