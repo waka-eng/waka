@@ -353,7 +353,7 @@ async function main(): Promise<void> {
         const inTheGround = async (): Promise<boolean> =>
           (await page.locator(".jar-reach").count()) > 0;
 
-        await page.keyboard.press("ArrowDown");
+        await page.keyboard.press("ArrowLeft");
         await page.waitForTimeout(1_200);
         if ((await page.locator(".jar-panel").count()) > 0) {
           memoryOpened = true;
@@ -407,7 +407,7 @@ async function main(): Promise<void> {
             })) as { cls: string; role: string; name: string; at: string } | null;
             reachName = before?.name ?? "";
             reachRole = before?.role ?? "";
-            await page.keyboard.press("ArrowDown");
+            await page.keyboard.press("ArrowLeft");
             await page.waitForTimeout(400);
             const after = (await page.evaluate(
               () =>
@@ -523,7 +523,7 @@ async function main(): Promise<void> {
         out.options = (await page.evaluate(
           () => document.querySelectorAll('.jar-reach [role="option"]').length,
         )) as number;
-        await page.keyboard.press("ArrowDown");
+        await page.keyboard.press("ArrowLeft");
         await page.waitForTimeout(1_500);
         out.opened = (await page.locator(".jar-panel").count()) > 0;
       } catch {

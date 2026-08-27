@@ -126,7 +126,11 @@ describe("the ground answers to the keyboard", () => {
        "your memories" tells a reader what it is and not what to do with it. */
     const label = el.getAttribute("aria-label") ?? "";
     expect(label).not.toBe("");
-    expect(label.toLowerCase()).toContain("arrow");
+    /* left and right BY NAME: ↑/↓ belong to the world's own travel, and a
+       label that just said "arrows" would promise the two keys that must
+       pass through (founder, 2026-08-27, after every second ↑/↓ opened a
+       card) */
+    expect(label.toLowerCase()).toContain("left and right");
     expect(label.toLowerCase()).toContain("enter");
   });
 
@@ -151,21 +155,33 @@ describe("the ground answers to the keyboard", () => {
     expect(options().filter((o) => o.getAttribute("aria-selected") === "true")).toEqual([]);
   });
 
-  it("starts at the newest and walks back through time", async () => {
-    await press("ArrowDown");
+  it("starts at the newest and walks left into the past", async () => {
+    /* ‹ into the past, › toward now — the card's own caret directions.
+       Vertical arrows are deliberately not the reach's: they move the WORLD
+       between its sections, and a reach that swallowed them opened a card on
+       every second press of a person just travelling (founder, 2026-08-27). */
+    await press("ArrowLeft");
     expect(reach().getAttribute("aria-activedescendant")).toBe("jar-reach-own-newest");
 
-    await press("ArrowDown");
+    await press("ArrowLeft");
     expect(reach().getAttribute("aria-activedescendant")).toBe("jar-reach-own-4");
 
-    await press("ArrowUp");
+    await press("ArrowRight");
     expect(reach().getAttribute("aria-activedescendant")).toBe("jar-reach-own-newest");
+  });
+
+  it("leaves the world's own keys alone", async () => {
+    /* ↑/↓ pass through untouched: no cursor moves, nothing opens */
+    await press("ArrowDown");
+    await press("ArrowUp");
+    expect(reach().getAttribute("aria-activedescendant")).toBeNull();
+    expect(layout.container.querySelector(".jar-panel--in")).toBeNull();
   });
 
   it("cannot be walked off either end", async () => {
     await press("End");
     expect(reach().getAttribute("aria-activedescendant")).toBe("jar-reach-own-oldest");
-    await press("ArrowDown");
+    await press("ArrowLeft");
     expect(
       reach().getAttribute("aria-activedescendant"),
       "past the oldest memory there is nothing, and nothing is where it stays",
@@ -173,13 +189,13 @@ describe("the ground answers to the keyboard", () => {
 
     await press("Home");
     expect(reach().getAttribute("aria-activedescendant")).toBe("jar-reach-own-newest");
-    await press("ArrowUp");
+    await press("ArrowRight");
     expect(reach().getAttribute("aria-activedescendant")).toBe("jar-reach-own-newest");
   });
 
   it("marks exactly one memory as the one in hand", async () => {
-    await press("ArrowDown");
-    await press("ArrowDown");
+    await press("ArrowLeft");
+    await press("ArrowLeft");
     const selected = options().filter((o) => o.getAttribute("aria-selected") === "true");
     expect(selected).toHaveLength(1);
     expect(selected[0]?.id).toBe("jar-reach-own-4");
@@ -219,7 +235,7 @@ describe("the ground answers to the keyboard", () => {
       "the oldest memory in the ground, read with one key and no pointer at all",
     ).toContain("the first thing I ever kept");
 
-    await press("ArrowUp");
+    await press("ArrowRight");
     const nextUp = layout.container.querySelector(".jar-panel--in");
     expect(nextUp?.textContent ?? "").toContain("a second thought");
   });

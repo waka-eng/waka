@@ -9088,18 +9088,33 @@ function HomeExperience(): JSX.Element {
            dial has wound past has not happened yet, and cannot be read. */
         simApiRef.current?.select(next.id);
       };
+      /**
+       * LEFT AND RIGHT, NEVER UP AND DOWN — and this is a lesson, not a
+       * preference. The first version read the ground with every arrow, and
+       * ↑/↓ are how the WORLD moves between its sections. The reach holds
+       * focus once you arrive in the ground (that is what makes it reachable
+       * at all), so a person travelling up and down had every second press
+       * swallowed by the reading — a card opening over and over, apparently
+       * on its own (founder, 2026-08-27: "why does this modal keep appearing
+       * when i go up and down").
+       *
+       * One axis per meaning. Vertical belongs to the world and passes
+       * through untouched; horizontal reads the ground — the same directions
+       * the card's own carets already speak, ‹ into the past and › toward
+       * now. Space goes with ↑/↓ for the same reason: it is a scroll key
+       * before it is anything else.
+       */
       switch (e.key) {
-        case "ArrowDown":
-        case "ArrowRight":
-          e.preventDefault();
-          /* from nowhere, forward is the newest — the top of the reading
-             order, and what somebody arriving at their own archive means */
-          go(at < 0 ? 0 : at + 1);
-          break;
-        case "ArrowUp":
         case "ArrowLeft":
           e.preventDefault();
-          go(at < 0 ? list.length - 1 : at - 1);
+          /* from nowhere, the first press lands on the newest — where
+             somebody arriving at their own archive starts — and each press
+             after walks into the past, the way the ‹ caret does */
+          go(at < 0 ? 0 : at + 1);
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          go(at < 0 ? 0 : at - 1);
           break;
         case "Home":
           e.preventDefault();
@@ -9110,7 +9125,6 @@ function HomeExperience(): JSX.Element {
           go(list.length - 1);
           break;
         case "Enter":
-        case " ":
           e.preventDefault();
           /* Enter on the memory already open closes it — `select` toggles, and
              the keyboard gets the same verb the pointer has rather than a
@@ -13018,7 +13032,7 @@ function HomeExperience(): JSX.Element {
           className="sr-only jar-reach"
           role="listbox"
           tabIndex={0}
-          aria-label="Your ground — arrow keys read through your memories, Enter opens and closes the one in hand"
+          aria-label="Your ground — left and right arrows read through your memories, Enter opens and closes the one in hand"
           aria-activedescendant={reachId ? `jar-reach-${reachId}` : undefined}
           onFocus={onReachFocus}
           onKeyDown={onReachKey}
