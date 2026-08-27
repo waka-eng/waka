@@ -68,18 +68,17 @@ export function deriveAmbition(
   T: number,
   adopted: Adopted | null,
   notes: JarNote[] | null,
-): { text: string | null; eyebrow: string } {
-  if (adopted && adopted.createdMs <= T)
-    return { text: adopted.ambition, eyebrow: adopted.groupName ?? "Top of mind" };
+): { text: string | null } {
+  if (adopted && adopted.createdMs <= T) return { text: adopted.ambition };
   const avail = notes ? notes.filter((n) => n.createdMs <= T) : [];
   const pinned = avail.find((n) => n.pinned);
-  if (pinned) return { text: pinned.body, eyebrow: "Top of mind" };
+  if (pinned) return { text: pinned.body };
   /* No confidence on an entry any more, and none is invented: the server's
      own order is the ranking, so the head of it is what the board leads with. */
   let best: JarNote | null = null;
   for (const n of avail) if (!best || n.sortOrder < best.sortOrder) best = n;
-  if (best) return { text: best.body, eyebrow: "Top of mind" };
-  return { text: null, eyebrow: "Top of mind" };
+  if (best) return { text: best.body };
+  return { text: null };
 }
 
 /**
@@ -112,30 +111,21 @@ export function formingWords(
  * is forming.
  */
 export interface WallChrome {
-  /**
-   * NOTHING READS THIS ANY MORE, and the render is right rather than broken.
-   *
-   * It used to be the wall's name under a rule that nothing else may ever
-   * stand in that slot. The founder overruled that on 2026-08-25 — "this
-   * should always say TOP OF MIND at the top no matter what room" — because
-   * the name is already on screen twice, in the pill at the top left and on
-   * the axis below, so the slot was spending itself on repetition. The JSX
-   * now writes those words literally and never consults this field.
-   *
-   * The comment that used to sit here still said "the wall's name, and
-   * nothing else in that slot, ever", which is the opposite of what the
-   * product does. An audit chasing dead fields read that contract, measured a
-   * room's wall saying `top of mind` where its own name should be, and came
-   * within one edit of reverting the ruling as a bug. A stale contract is
-   * worse than none: it makes correct code look broken and invites exactly
-   * that repair.
-   *
-   * Left in place rather than deleted because the ruling is a choice and
-   * choices get revisited; the plumbing that would serve the other one costs
-   * five object literals. `wall-chrome.test.ts` parks it explicitly so the
-   * gate that watches for newly-dark fields stays green and still watches.
-   */
-  eyebrow: string;
+  /* THE EYEBROW IS GONE, FIELD AND ALL (founder, 2026-08-27: "just remove
+     the word top of mind").
+
+     It was already dark: on 2026-08-25 the slot stopped carrying the wall's
+     name and the JSX wrote "top of mind" literally instead, so this field
+     was computed by three producers and read by none. It was kept anyway —
+     "the ruling is a choice and choices get revisited" — and parked in
+     `wall-chrome.test.ts`'s DARK_BY_DECISION with that reason.
+
+     Today the choice was revisited the other way: the words themselves are
+     gone from the poster, so the reason the field was being kept ("the JSX
+     writes those words literally") describes nothing that happens any more.
+     A field kept for a decision that has been reversed is just dead code
+     with a note on it. Found by `e2e:dead-css`, which reported
+     `.jar-eyebrow` as a selector no source file can put on an element. */
   text: string | null;
   /**
    * AND WHAT IT STOPPED DOING. A portrait that says only what it is, is a

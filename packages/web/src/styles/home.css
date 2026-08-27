@@ -227,9 +227,6 @@
   cursor: pointer;
 }
 
-.jar-eyebrow {
-  margin: 0 0 var(--sp-16);
-}
 .jar-poster {
   margin: 0;
   font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
@@ -2556,11 +2553,6 @@
   font-size: clamp(19px, 2vw, 27px);
   letter-spacing: -0.01em;
   line-height: 1.45;
-}
-/* Its eyebrow and its statements too — anything the agent itself authored. */
-.jar-wallcol[data-kind="agent"] .jar-eyebrow {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  letter-spacing: 0.1em;
 }
 .jar-wallcol[data-kind="agent"] .jar-wall-empty {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;

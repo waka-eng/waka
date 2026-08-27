@@ -11,7 +11,6 @@
  * calls this the third vocabulary: canon words in the API, world words inside
  * the world, and human words on screen. These are the human words.
  */
-import type { ApiGroupMember } from "./api";
 import { DAY_MS } from "./num";
 
 /**
@@ -112,61 +111,16 @@ export function givenName(full: string): string {
   return first || full.trim();
 }
 /**
- * WHO IS IN THIS ROOM.
+ * WHO IS IN THIS ROOM — said in words, and no longer said at all.
  *
- * Four rooms with four different populations were four identical walls: the
- * one where you sit alone, the one you share with your own agent, the one
- * with four other people in it, and the one where five machines talk about
- * their work all read the same. Who is in a room is the single most important
- * thing about it — you speak differently in each — so the eyebrow carries it
- * beside the name.
- *
- * IT USED TO CATEGORISE THEM AND THAT WAS NOT ENOUGH. The words it could
- * reach were "people", "agents only", "people and agents" — true of the room
- * and true of nothing in it, so a room with four other people in it announced
- * itself as "people" and read, at a glance, exactly like standing on your own
- * wall. Which is the whole complaint: a room POURS one member's ground at a
- * time by design, so the eyebrow is the only thing at headquarters that can
- * say anybody else is here. It names them now.
- *
- * Given names, because that is what a person would say out loud, and yourself
- * left out because you are the one reading it. Counts are prose past the
- * third name and never digits — `numWords`, the same rule the rest of this
- * file keeps. Nothing here says human or machine: a room of machines is
- * already set in the machine hand (`.jar-wallcol[data-kind="agent"]`), so
- * saying it again in words would be the second channel this world does not
- * have.
+ * `groupCompany` turned a room's member list into "with Jina and Minsu". Its
+ * only reader was the wall's eyebrow, and the eyebrow is gone: the room now
+ * DRAWS its company — a figure per member, standing in the ground, each one
+ * giving its name when you reach for it. That is the same fact in the channel
+ * this world actually has, so the sentence was a second telling of something
+ * already on screen. Removed rather than kept warm; `git show 65f6ce1` has it
+ * if the drawing ever needs words back.
  */
-export function groupCompany(
-  members: ApiGroupMember[] | undefined,
-  viewerId: string | null,
-): string | null {
-  if (!members || members.length === 0) return null;
-  /* WITHOUT KNOWING WHICH ONE IS YOU, THERE IS NOTHING TRUE TO SAY.
-     The viewer's id resolves a moment after a room's member list can, and
-     every row looks like somebody else until it does — so a room of just you
-     would announce itself as company, using your own name. It says only the
-     room's name until it knows, and gains the company when it does. */
-  if (!viewerId) return null;
-  const others = members.filter((m) => m.profileId !== viewerId);
-  /* a room you are the whole of: every member in it is you */
-  if (others.length === 0) return "on your own";
-  /* people before machines, and otherwise the order the room already has:
-     the member list is what the legend and the hues are numbered from, so
-     three places that name the same room name it in the same order. */
-  const ordered = [
-    ...others.filter((m) => m.type !== "agent"),
-    ...others.filter((m) => m.type === "agent"),
-  ];
-  const names = ordered.map((m) => givenName(m.name)).filter((n) => n.length > 0);
-  /* every name was blank, which is a broken row rather than an empty room */
-  if (names.length === 0) return "on your own";
-  if (names.length === 1) return `with ${names[0]}`;
-  if (names.length === 2) return `with ${names[0]} and ${names[1]}`;
-  if (names.length === 3) return `with ${names[0]}, ${names[1]} and ${names[2]}`;
-  const rest = names.length - 2;
-  return `with ${names[0]}, ${names[1]} and ${numWords(rest)} others`;
-}
 
 /** Ordinals as words — "twenty-fifth", never "25th". */
 export function ordWords(n: number): string {

@@ -20,7 +20,18 @@
  *               signal on the server: no forming line, before or after a
  *               reload.
  *
- *   `eyebrow`   went dark by a founder ruling on 2026-08-25 — "this should
+ *   `eyebrow`   went dark by a founder ruling on 2026-08-25, was parked here
+ *               with that reason, and is GONE as of 2026-08-27: the founder
+ *               removed the words themselves ("just remove the word top of
+ *               mind"), so the reason it was being kept — "the JSX writes
+ *               those words literally" — described nothing that still
+ *               happened. A field parked for a decision that has since been
+ *               reversed is dead code wearing a note. `e2e:dead-css` found
+ *               the other half of it, reporting `.jar-eyebrow` as a selector
+ *               no source file can put on an element. The history below is
+ *               kept because it is the whole reason this gate exists:
+ *
+ *               it went dark by a founder ruling on 2026-08-25 — "this should
  *               always say TOP OF MIND at the top no matter what room" — and
  *               the JSX writes those words literally. Nothing was wrong with
  *               that. What was wrong is that the field's doc comment still
@@ -67,10 +78,6 @@ const BINDINGS = ["c", "chrome"];
  * whole difference this gate exists to keep visible.
  */
 const DARK_BY_DECISION: Record<string, string> = {
-  eyebrow:
-    "RULED (founder, 2026-08-25): 'this should always say TOP OF MIND at the top " +
-    "no matter what room' — the JSX writes those words literally. The name is " +
-    "already on screen twice, in the pill and on the axis.",
   forming:
     "REPORTED, undecided — docs/audits/unreachable-behaviour-2026-08-26.md. " +
     "Deleting removes a designed piece of the product's voice; rendering it adds " +

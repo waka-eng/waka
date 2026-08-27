@@ -144,7 +144,6 @@ import {
   dateStamp,
   citedWords,
   dateWords,
-  groupCompany,
   monthTag,
 } from "../lib/words";
 
@@ -1483,7 +1482,6 @@ function HomeExperience(): JSX.Element {
   const parkedRef = useRef<number | null>(null);
   const [chrome, setChrome] = useState<WallChrome>({
     text: null,
-    eyebrow: "Top of mind",
     awayFrom: null,
     formingAlt: null,
     asOf: null,
@@ -2137,12 +2135,11 @@ function HomeExperience(): JSX.Element {
         groupBeyondRef.current.set(groupId, Math.max(0, ground.total - ground.field.length));
         setGroupFieldTick((n) => n + 1);
         const evidence = groupWallOrbs(wall, top);
-        const name = groupsRef.current.find((g) => g.id === groupId)?.name ?? "";
         const open = proposals.find((p) => p.status === "open");
         const openMs = open ? Date.parse(open.createdAt) || 0 : null;
         groupChromeRef.current.set(
           groupId,
-          deriveGroupChrome(name, top, openMs, evidence, groupCompany(membersRef.current.get(groupId), viewerIdRef.current)),
+          deriveGroupChrome(top, openMs, evidence),
         );
         cache.set(groupId, { status: "ready", data: { evidence, top } });
         simApiRef.current?.wake();
@@ -3125,11 +3122,10 @@ function HomeExperience(): JSX.Element {
    * forth across the same month never asks twice.
    */
   const groupChromeAt = useCallback(
-    (groupId: string, name: string, T: number, nowMs: number): WallChrome => {
+    (groupId: string, T: number, nowMs: number): WallChrome => {
       const live = groupChromeRef.current.get(groupId) ?? null;
       const blank = (asOf: string | null): WallChrome => ({
         text: null,
-        eyebrow: name,
         awayFrom: null,
         formingAlt: asOf === null ? null : "Nothing read together yet",
         asOf,
@@ -3175,7 +3171,6 @@ function HomeExperience(): JSX.Element {
       const lead = held.entries.find((e) => e.pinnedAt) ?? held.entries[0] ?? null;
       const text = lead?.body ?? null;
       return {
-        eyebrow: name,
         text,
         awayFrom: null,
         formingAlt: text ? null : "Nothing read together yet",
@@ -3227,12 +3222,11 @@ function HomeExperience(): JSX.Element {
                honestly blank — it says its own name and nothing else, rather
                than showing someone else's ambition under it. */
             atWall.kind === "group"
-            ? groupChromeAt(atWall.id, atWall.name, T, nowMs)
+            ? groupChromeAt(atWall.id, T, nowMs)
             : (() => {
               const current = deriveAmbition(nowMs, adopted, notes);
               const at = deriveAmbition(T, adopted, notes);
               return {
-                eyebrow: at.eyebrow,
                 text: at.text,
                 awayFrom: null,
                 formingAlt: null,
@@ -3254,7 +3248,6 @@ function HomeExperience(): JSX.Element {
             })();
       setChrome((prev) =>
         prev.text === next.text &&
-        prev.eyebrow === next.eyebrow &&
         prev.awayFrom === next.awayFrom &&
         prev.formingAlt === next.formingAlt &&
         prev.asOf === next.asOf &&
@@ -3326,7 +3319,6 @@ function HomeExperience(): JSX.Element {
       } else {
         const at = deriveAmbition(nowMs, adopted, notes);
         m.set(spaceKey(w), {
-          eyebrow: at.eyebrow,
           text: at.text,
           awayFrom: null,
           formingAlt: null,

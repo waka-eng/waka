@@ -94,17 +94,19 @@ export function groupWallOrbs(wall: ApiGroupWallSignal[], top: ApiGroupTopOfMind
  * its lead entry — pinned first, otherwise the top of the order — and there is
  * no generated stand-in when there is none.
  */
+/* The room's NAME and the company standing in it were parameters until
+   2026-08-27: they fed the eyebrow, and the eyebrow is gone (see
+   `board.ts`'s note where the field was). The name is still on screen twice
+   — the pill at the top left, and the axis below — and who is in the room is
+   said by the company itself, drawn behind your companion. */
 export function deriveGroupChrome(
-  name: string,
   top: ApiGroupTopOfMind,
   openProposalMs: number | null,
   evidence: GroupEvidence[],
-  company: string | null,
 ): WallChrome {
   const lead = top.entries.find((e) => e.pinnedAt) ?? top.entries[0] ?? null;
   const ambition = lead?.body ?? null;
   return {
-    eyebrow: company ? `${name} \u00b7 ${company}` : name,
     text: ambition,
     awayFrom: null,
     formingAlt: ambition ? null : "Forming — nothing read together yet",
