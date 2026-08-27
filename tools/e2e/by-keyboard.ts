@@ -443,12 +443,85 @@ async function main(): Promise<void> {
      * that opens a real menu of real buttons, so the whole journey is
      * tab-and-Enter and nothing here touches a pointer.
      */
-    const roomReach = { travelled: false, options: 0, opened: false };
+    const groundReach = (): { travelled: boolean; options: number; opened: boolean } => ({
+      travelled: false,
+      options: 0,
+      opened: false,
+    });
+
+    /**
+     * The journey both neighbours share: to the way-to-another-wall, through
+     * the menu it opens, down through the door, and one press of the key the
+     * ground's own label names. `matches` picks the neighbour out of the menu
+     * by the words on its button, which is all a person has too.
+     */
+    const walkToNeighbour = async (
+      matches: (name: string) => boolean,
+    ): Promise<{ travelled: boolean; options: number; opened: boolean }> => {
+      const out = groundReach();
+      try {
+        await page.goto(`${args.baseUrl}/`, { waitUntil: "domcontentloaded" });
+        await page.waitForTimeout(7_000);
+        await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+
+        for (let i = 0; i < 30; i += 1) {
+          await page.keyboard.press("Tab");
+          await page.waitForTimeout(100);
+          const here = (await page.evaluate(
+            () => String((document.activeElement as HTMLElement | null)?.className ?? ""),
+          )) as string;
+          if (!here.includes("jar-here-more")) continue;
+          await page.keyboard.press("Enter");
+          await page.waitForTimeout(800);
+          for (let j = 0; j < 12; j += 1) {
+            await page.keyboard.press("Tab");
+            await page.waitForTimeout(120);
+            const name = (await page.evaluate(
+              () => (document.activeElement as HTMLElement | null)?.textContent ?? "",
+            )) as string;
+            if (!matches(name)) continue;
+            await page.keyboard.press("Enter");
+            await page.waitForTimeout(6_000);
+            out.travelled = true;
+            break;
+          }
+          break;
+        }
+
+        if (!out.travelled) return out;
+
+        for (let i = 0; i < 30; i += 1) {
+          await page.keyboard.press("Tab");
+          await page.waitForTimeout(100);
+          const here = (await page.evaluate(
+            () => String((document.activeElement as HTMLElement | null)?.className ?? ""),
+          )) as string;
+          if (!here.includes("jar-saved")) continue;
+          await page.keyboard.press("Enter");
+          await page.waitForTimeout(4_000);
+          break;
+        }
+        out.options = (await page.evaluate(
+          () => document.querySelectorAll('.jar-reach [role="option"]').length,
+        )) as number;
+        await page.keyboard.press("ArrowDown");
+        await page.waitForTimeout(1_500);
+        out.opened = (await page.locator(".jar-panel").count()) > 0;
+      } catch {
+        /* left as whatever it reached — a throw here is a finding, not a crash */
+      }
+      return out;
+    };
+
+    let roomReach = groundReach();
+    let agentReach = groundReach();
     try {
-      /* A room needs a ground before it has one to reach. A person's memories
-         are private by default and a room draws only what its members marked
-         public, so they are published first and the room is made through the
-         same API a click would call. */
+      /* Both neighbours need a ground before they have one to reach. A
+         person's memories are private by default and a room draws only what
+         its members marked public, so they are published first; the agent is
+         given memories of its own, because an agent's wall is built from the
+         agent's OWN captures and never from its owner's. Everything here goes
+         through the same API a click would call. */
       const roomName = `Room ${uniq()}`;
       await page.evaluate(async (name) => {
         const listed = await fetch("/api/inspirations?limit=50", { credentials: "include" });
@@ -467,64 +540,43 @@ async function main(): Promise<void> {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ name }),
         });
+
+        const madeAgent = await fetch("/api/profiles", {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: "Scout" }),
+        });
+        const agent = (await madeAgent.json()) as { profile?: { id: string } };
+        const agentId = agent.profile?.id;
+        if (agentId) {
+          for (let i = 0; i < 3; i += 1) {
+            await fetch(`/api/inspirations?profile=${agentId}`, {
+              method: "POST",
+              credentials: "include",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ text: `something the agent kept ${i}` }),
+            });
+          }
+        }
       }, roomName);
 
-      await page.goto(`${args.baseUrl}/`, { waitUntil: "domcontentloaded" });
-      await page.waitForTimeout(7_000);
-      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-
-      for (let i = 0; i < 30; i += 1) {
-        await page.keyboard.press("Tab");
-        await page.waitForTimeout(100);
-        const here = (await page.evaluate(
-          () => String((document.activeElement as HTMLElement | null)?.className ?? ""),
-        )) as string;
-        if (!here.includes("jar-here-more")) continue;
-        await page.keyboard.press("Enter");
-        await page.waitForTimeout(800);
-        for (let j = 0; j < 12; j += 1) {
-          await page.keyboard.press("Tab");
-          await page.waitForTimeout(120);
-          const name = (await page.evaluate(
-            () => (document.activeElement as HTMLElement | null)?.textContent ?? "",
-          )) as string;
-          if (!name.toLowerCase().includes("room")) continue;
-          await page.keyboard.press("Enter");
-          await page.waitForTimeout(6_000);
-          roomReach.travelled = true;
-          break;
-        }
-        break;
-      }
-
-      if (roomReach.travelled) {
-        for (let i = 0; i < 30; i += 1) {
-          await page.keyboard.press("Tab");
-          await page.waitForTimeout(100);
-          const here = (await page.evaluate(
-            () => String((document.activeElement as HTMLElement | null)?.className ?? ""),
-          )) as string;
-          if (!here.includes("jar-saved")) continue;
-          await page.keyboard.press("Enter");
-          await page.waitForTimeout(4_000);
-          break;
-        }
-        roomReach.options = (await page.evaluate(
-          () => document.querySelectorAll('.jar-reach [role="option"]').length,
-        )) as number;
-        await page.keyboard.press("ArrowDown");
-        await page.waitForTimeout(1_500);
-        roomReach.opened = (await page.locator(".jar-panel").count()) > 0;
-      }
+      roomReach = await walkToNeighbour((name) => name.toLowerCase().includes("room"));
+      agentReach = await walkToNeighbour((name) => name.toLowerCase().includes("scout"));
     } catch {
       /* left as whatever it reached — a throw here is a finding, not a crash */
     }
-    console.log(
-      `\n  a room's ground, travelled to with keys only:` +
-        `\n    reached the room:              ${roomReach.travelled ? "yes" : "NO"}` +
-        `\n    memories the keyboard can see: ${roomReach.options}` +
-        `\n    one of them opens:             ${roomReach.opened ? "yes" : "NO"}`,
-    );
+    console.log("\n  the two grounds that are not your own, travelled to with keys only:");
+    for (const [what, r] of [
+      ["a room", roomReach],
+      ["an agent", agentReach],
+    ] as const) {
+      console.log(
+        `    ${what.padEnd(9)} reached: ${r.travelled ? "yes" : "NO "}   ` +
+          `memories the keyboard can see: ${String(r.options).padStart(3)}   ` +
+          `one opens: ${r.opened ? "yes" : "NO"}`,
+      );
+    }
 
     console.log(
       "\n[by-keyboard] The canvas still takes no focus of its own, and that is now the\n" +
@@ -572,6 +624,24 @@ async function main(): Promise<void> {
     if (!sheetReturns) broke.push(`a sheet closed with Escape drops focus to ${sheetLandedOn}`);
     for (const w of ways) {
       if (!w.kept) broke.push(`travelling through .${w.way} drops focus to the document`);
+    }
+    /* THE OTHER TWO GROUNDS, HELD AS TIGHTLY AS YOUR OWN.
+       The reach reads three sources and a fix that only lands on one of them
+       is the shape of a keyboard path that works in the demo. Both of these
+       were true the day they were first walked, on a fresh account seeded
+       through the same API a click would call, so losing either is somebody's
+       edit rather than an open question. */
+    for (const [what, r] of [
+      ["a room", roomReach],
+      ["an agent", agentReach],
+    ] as const) {
+      if (!r.travelled) {
+        broke.push(`${what}'s wall cannot be reached with the keyboard`);
+      } else if (r.options === 0) {
+        broke.push(`${what}'s ground offers the keyboard nothing`);
+      } else if (!r.opened) {
+        broke.push(`${what}'s ground can be moved along but nothing opens`);
+      }
     }
     if (broke.length > 0) {
       console.log(`\n[by-keyboard] the keyboard path got WORSE:\n${broke.map((b) => `                ${b}`).join("\n")}`);

@@ -179,19 +179,24 @@ nothing was held.
     yes   .jar-saved    arrives with focus on sr-only
 ```
 
-**A room's ground answers too.** The reach reads three different sources — your
-archive, an agent's own captures, a room's field of its members' public
-memories — and only the first had ever been walked, which is the shape of a
-keyboard path that works in the demo. The walk now makes a room, publishes some
-memories into it, travels there **with keys only** (the way to another wall is
-a real button opening a real menu of real buttons), descends, and reads:
+**All three grounds answer, not just your own.** The reach reads three
+different sources — your archive, an agent's own captures, a room's field of its
+members' public memories — and only the first had ever been walked, which is the
+shape of a keyboard path that works in the demo. The walk now makes a room and
+publishes memories into it, makes an agent and gives it captures of its own
+(an agent's wall is built from the agent's OWN memories and never from its
+owner's), then travels to each **with keys only** — the way to another wall is a
+real button opening a real menu of real buttons, so the whole journey is
+tab-and-Enter — descends, and presses the key the ground's label names:
 
 ```
-  a room's ground, travelled to with keys only:
-    reached the room:              yes
-    memories the keyboard can see: 4
-    one of them opens:             yes
+  the two grounds that are not your own, travelled to with keys only:
+    a room    reached: yes   memories the keyboard can see:   4   one opens: yes
+    an agent  reached: yes   memories the keyboard can see:   3   one opens: yes
 ```
+
+Both are ratchets. A fix that lands on one of three sources is the same defect
+wearing a smaller coat.
 
 **Two instrument failures, both mine, both found by the instrument going red on
 working code:**
@@ -217,7 +222,8 @@ makes the label a promise rather than a description.
 
 - **An actual screen reader**, unchanged from above: this measures accessible
   names and focus visibility, not how they sound in order.
-- **An agent's wall.** The room's is walked now; the third source is not.
+- **A screen reader's actual ORDER.** All three grounds are walked and named,
+  but "named" is not "reads well aloud in sequence".
 - **The settings sheets' own focus traps** — whether Tab can leave a sheet
   while it is open, which is a different question from whether Escape returns.
 
@@ -228,8 +234,9 @@ makes the label a promise rather than a description.
   VoiceOver on the door and the world would say whether the order and the
   phrasing make sense out loud, which no automated check can.
 - **The room and agent walls**, and the settings sheets, which have their own
-  focus traps. *(The room's ground and the sheets' escape were measured on
-  2026-08-27 — see above. An agent's wall still has not been.)*
+  focus traps. *(All three grounds and the sheets' escape were measured on
+  2026-08-27 — see above. Whether Tab can LEAVE an open sheet is still not
+  asked, which is a different question from whether Escape returns.)*
 - **Keyboard escape routes.** Whether every modal returns focus where it came
   from was not asked here. *(Asked on 2026-08-27; it found a real defect in
   travel rather than in sheets.)*
