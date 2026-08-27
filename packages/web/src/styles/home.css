@@ -1900,7 +1900,13 @@
   width: 1px;
   margin-left: -0.5px;
   border-radius: 999px;
-  background: var(--jar-faint);
+  /* THE PAST END DISSOLVES (founder, 2026-08-27: "make end of the line faded
+     so it naturally fades with background"). The rail hangs from now and
+     reaches into the past, and the past has no edge — a hard stop said the
+     history ends HERE, which is a claim the dial cannot make. Full ink for
+     most of the run so the eye still has a line to follow, then the last
+     stretch breathes out into the dark. */
+  background: linear-gradient(to bottom, var(--jar-faint) 72%, transparent);
   /* NO OPACITY HERE. This rule gives the hairline its shape and colour;
      whether it is SHOWN is decided above, by the rest state and the three
      ways in. It carried `opacity: 0.5` until 2026-08-25 — the same selector
