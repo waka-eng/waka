@@ -8652,6 +8652,142 @@ function HomeExperience(): JSX.Element {
     return (inspirations?.length ?? 0) + fieldBeyond;
   }, [atWall, agents, inspirations, groupFieldTick, fieldBeyond]);
 
+  /**
+   * THE REACH — the ground, addressable without a pointer.
+   *
+   * An orb is painted pixels. It has no `tabindex`, no element and no DOM
+   * proxy, so Tab has nothing to land on and a reader is not told a field
+   * exists — measured in `docs/audits/by-keyboard-2026-08-26.md`, which found
+   * the chrome excellent (eight stops, all named, all visibly focused, the
+   * mouth fully usable with keys) and then found this:
+   *
+   *     a person who cannot use a pointer can put memories IN
+   *     and cannot get a single one back OUT.
+   *
+   * For a product whose promise is that it keeps what you give it, that is the
+   * central act missing, not a rough edge on the way to it.
+   *
+   * The audit named two credible fixes and declined to choose between them: a
+   * DOM list behind the door — the archive as text, the canvas demoted to one
+   * view among two — or roving focus on the canvas, which keeps the world
+   * whole. This is the second. A list of saves is the shape this product spent
+   * its whole evolution retiring, and light is its only meaning channel, so
+   * the keyboard belongs IN the world with the light following it rather than
+   * beside the world in a column of text.
+   *
+   * So: one tab stop for the entire ground, arrows to move along it, and the
+   * ordinary `select` on the way — which lights the orb, leans the companion
+   * toward it and opens the panel beside it, exactly as a tap does. The
+   * keyboard is not given a second, quieter version of the act.
+   *
+   * NEWEST FIRST, which is not the field's own order. The field lays memories
+   * down oldest-first so its layout never moves; a person reading their
+   * archive starts at what they last kept. Nothing is being sorted twice —
+   * this is a reading order over the same ground.
+   */
+  const reachable = useMemo<Array<{ id: string; label: string }>>(() => {
+    const clean = (text: string) => text.replace(/\s+/g, " ").trim();
+    if (atWall.kind === "agent") {
+      const a = (agents ?? []).find((x) => x.agent.id === atWall.id);
+      return (a?.inspirations ?? [])
+        .slice()
+        .sort((x, y) => Date.parse(y.capturedAt) - Date.parse(x.capturedAt))
+        .map((m) => ({ id: m.id, label: clean(m.textPreview) }));
+    }
+    if (atWall.kind === "group") {
+      return (groupFieldRef.current.get(atWall.id) ?? [])
+        .slice()
+        .sort((x, y) => Date.parse(y.createdAt) - Date.parse(x.createdAt))
+        /* whose memory it is, said out loud — on a room's ground that is the
+           fact the per-member hue carries, and a hue is not readable aloud */
+        .map((m) => ({ id: m.id, label: `${m.ownerName}: ${clean(m.text)}` }));
+    }
+    return (inspirations ?? [])
+      .slice()
+      .sort((x, y) => y.capturedMs - x.capturedMs)
+      .map((m) => ({ id: m.id, label: clean(m.preview) }));
+  }, [atWall, agents, inspirations, groupFieldTick]);
+
+  /**
+   * Where the reach is standing. Null until a key is pressed or an orb is
+   * tapped — a cursor that appeared before anybody asked for one would be the
+   * world moving without the user, which it never does.
+   */
+  const [reachId, setReachId] = useState<string | null>(null);
+
+  /**
+   * THE CURSOR IS THE KEYBOARD'S, AND ONLY THE KEYBOARD'S.
+   *
+   * This began as an effect — `if (selectedId) setReachId(selectedId)` — so
+   * that tapping an orb and then tabbing in would carry on from the memory
+   * already open. It made the world's selection authoritative over the
+   * cursor, and the world has its own reasons to release and re-select: a
+   * travel, a wind of the dial, an orb leaving the ground under you. The
+   * cursor jumped back under the arrows, intermittently, which is the worst
+   * version of an input bug — it works while you are watching it.
+   *
+   * So the handoff happens ONCE, when focus arrives, and nothing after that
+   * moves the cursor except the person moving it.
+   */
+  const onReachFocus = useCallback(() => {
+    setReachId((cur) => cur ?? selectedIdRef.current);
+  }, []);
+
+  const onReachKey = useCallback(
+    (e: ReactKeyboardEvent<HTMLDivElement>) => {
+      const list = reachable;
+      if (list.length === 0) return;
+      const at = list.findIndex((m) => m.id === reachId);
+      const go = (i: number) => {
+        const next = list[Math.min(list.length - 1, Math.max(0, i))];
+        if (!next) return;
+        setReachId(next.id);
+        /* `select` is the whole act, and it is the same one a tap runs: the
+           orb lights, the companion leans, the panel opens beside it. It
+           refuses an orb that is not on this ground right now — a memory the
+           dial has wound past has not happened yet, and cannot be read. */
+        simApiRef.current?.select(next.id);
+      };
+      switch (e.key) {
+        case "ArrowDown":
+        case "ArrowRight":
+          e.preventDefault();
+          /* from nowhere, forward is the newest — the top of the reading
+             order, and what somebody arriving at their own archive means */
+          go(at < 0 ? 0 : at + 1);
+          break;
+        case "ArrowUp":
+        case "ArrowLeft":
+          e.preventDefault();
+          go(at < 0 ? list.length - 1 : at - 1);
+          break;
+        case "Home":
+          e.preventDefault();
+          go(0);
+          break;
+        case "End":
+          e.preventDefault();
+          go(list.length - 1);
+          break;
+        case "Enter":
+        case " ":
+          e.preventDefault();
+          /* Enter on the memory already open closes it — `select` toggles, and
+             the keyboard gets the same verb the pointer has rather than a
+             one-way version of it. */
+          go(at < 0 ? 0 : at);
+          break;
+        case "Escape":
+          /* not preventDefault: Escape belongs to whatever else is open too */
+          simApiRef.current?.release();
+          break;
+        default:
+          break;
+      }
+    },
+    [reachable, reachId],
+  );
+
   /* ---------------- the mouth ----------------
      The one verb this layout was missing. It says one phrase at rest, becomes
      a plain field when you touch it, and commits on Enter — guarded, because
@@ -12490,6 +12626,45 @@ function HomeExperience(): JSX.Element {
         >
           <span className="jar-caret" aria-hidden="true" />
         </button>
+      ) : null}
+
+      {/* THE REACH. See its note above `reachable` — this is the ground made
+          addressable without a pointer, and it is deliberately drawn nowhere.
+
+          A listbox rather than a row of buttons, because that is what it is:
+          one thing selected out of many, one tab stop for the whole ground,
+          and the cursor named by `aria-activedescendant` rather than by moving
+          real focus between two thousand elements.
+
+          It sits beside the door in the DOM so the tab order reads the way the
+          world does — the chrome, then the way in, then what is behind it. The
+          two are never on screen together: the door is the way INTO the ground
+          and this is the ground itself.
+
+          WHAT A SIGHTED PERSON SEES when focus lands here is the orb lighting
+          up, out in the field, because that is where the content is. There is
+          nothing to outline: the element has no size and never did. */}
+      {phase === "ready" && inField && reachable.length > 0 ? (
+        <div
+          className="sr-only jar-reach"
+          role="listbox"
+          tabIndex={0}
+          aria-label="Your ground — arrow keys read through your memories, Enter opens and closes the one in hand"
+          aria-activedescendant={reachId ? `jar-reach-${reachId}` : undefined}
+          onFocus={onReachFocus}
+          onKeyDown={onReachKey}
+        >
+          {reachable.map((m) => (
+            <div
+              key={m.id}
+              id={`jar-reach-${m.id}`}
+              role="option"
+              aria-selected={m.id === reachId}
+            >
+              {m.label}
+            </div>
+          ))}
+        </div>
       ) : null}
       {phase === "ready" && inSky ? (
         <div className="jar-values-room" data-jar-chrome="1">

@@ -88,6 +88,66 @@ carries no `role` and no `aria-label`, so nothing announces that a field is
 there. Even before either design lands, saying *what* the region is costs one
 attribute.
 
+### Closed, 2026-08-27 — the second form
+
+**The reach.** Standing in the ground, one tab stop carries the whole field: a
+`listbox` with `aria-activedescendant` naming the cursor, arrow keys moving
+along it, `Home` and `End` at the ends, and `Enter` toggling the memory in
+hand. It is drawn nowhere — it wears `.sr-only` — because what a sighted
+person sees when it takes focus is the orb lighting up out in the field.
+
+The first form was the cheaper one and it was not chosen. A list of saves
+beside the world is the shape this product spent its whole evolution retiring;
+`docs/pr-draft.md` opens by saying WAKA is "not a list of saves, but a world
+you move through". Putting one back for the keyboard would have made that true
+for people with a mouse and false for everyone else.
+
+**Arrows select, they do not merely move.** An arrow runs the same `select` a
+tap runs — the orb lights, the companion leans, the card opens beside it.
+A cursor that moved without lighting anything would leave a sighted keyboard
+user pressing keys at a world that does not react, which is the exact quiet
+corner this family of work exists to close. Light is the only meaning channel,
+so the focus indicator for a memory is the memory.
+
+Measured, live:
+
+```
+  opening one to read it:          works
+  the ground answers to:           listbox — "Your ground — arrow keys read
+                                    through your memories, Enter opens and
+                                    closes the one in hand"
+  arrows move along it:            yes
+```
+
+`memoryOpened` is now a **ratchet** rather than a report, together with two
+new ones the earlier version could not have held: the ground must be *named*,
+and its cursor must *move*. One lucky Enter on anything satisfies "a memory
+opened"; a route nobody can describe or move along is a door with one thing
+behind it. All three were verified by breaking them — the reach removed, its
+label removed, its cursor frozen — and each failure named itself correctly.
+
+**What it costs at scale: nothing measurable.** The reach renders one
+`role="option"` per memory in the ground, which at the field's ceiling is two
+thousand DOM nodes beside a canvas that exists precisely so a field of
+thousands is not thousands of elements. `e2e:at-scale` now samples frames down
+in the ground as well as at the wall: **60 fps at twelve memories and 60 fps at
+two and a half thousand**, with 2,000 reachable. No windowing was needed, and
+the measurement is kept rather than the assumption.
+
+**One bug found on the way, and it was mine.** The cursor first followed the
+world's selection through an effect, so tapping an orb and then tabbing in
+carried on from the memory already open. It also let the world overwrite the
+cursor: the world releases and re-selects for its own reasons — a travel, a
+wind of the dial, an orb leaving the ground — and the cursor jumped back under
+the arrows, intermittently. It surfaced as a test that failed three times and
+then passed, which is the worst version of an input bug: it works while you
+are watching it. The handoff happens once now, on focus, and nothing moves the
+cursor afterwards except the person moving it.
+
+**Still open, and smaller than it was:** the canvas itself still takes no
+focus. That is now the answer rather than the question — the ground is reached
+through the listbox, which is the thing a reader can be told about.
+
 ## Still unmeasured
 
 - **An actual screen reader.** This measures accessible names and focus

@@ -222,6 +222,9 @@ async function main(): Promise<void> {
     /* AND READING ONE BACK. The door is a real button, so it can be reached;
        what matters is whether anything BEHIND it can be. */
     let memoryOpened = false;
+    let reachName = "";
+    let reachRole = "";
+    let reachMoves = false;
     try {
       await page.goto(`${args.baseUrl}/`, { waitUntil: "domcontentloaded" });
       await page.waitForTimeout(7_000);
@@ -246,6 +249,38 @@ async function main(): Promise<void> {
           await page.waitForTimeout(400);
           if ((await page.locator(".jar-panel").count()) > 0) {
             memoryOpened = true;
+            /**
+             * AND WHAT IT WAS THAT OPENED IT.
+             *
+             * "A memory opened" is satisfied by one lucky Enter on anything.
+             * The route is only a route if it can be described: something
+             * focused, named for a listener, holding a cursor that moves. So
+             * the element that did it is asked what it is, moved once, and
+             * asked again.
+             */
+            const before = (await page.evaluate(() => {
+              const el = document.activeElement as HTMLElement | null;
+              if (!el) return null;
+              return {
+                cls: el.className,
+                role: el.getAttribute("role") ?? "",
+                name: (el.getAttribute("aria-label") ?? "").trim(),
+                at: el.getAttribute("aria-activedescendant") ?? "",
+              };
+            })) as { cls: string; role: string; name: string; at: string } | null;
+            reachName = before?.name ?? "";
+            reachRole = before?.role ?? "";
+            await page.keyboard.press("ArrowDown");
+            await page.waitForTimeout(400);
+            const after = (await page.evaluate(
+              () =>
+                (document.activeElement as HTMLElement | null)?.getAttribute(
+                  "aria-activedescendant",
+                ) ?? "",
+            )) as string;
+            /* A cursor that does not move is a cursor that reaches exactly one
+               memory, which is a door with one thing behind it. */
+            reachMoves = before !== null && before.at !== "" && after !== "" && after !== before.at;
             break;
           }
         }
@@ -260,27 +295,36 @@ async function main(): Promise<void> {
         `\n  ${dark.length} of ${stops.length} stops show no visible focus` +
         `\n  the canvas ${canvasFocusable ? "can be focused" : "CANNOT be focused — no tabindex"}` +
         `\n  keeping a memory with keys alone: ${keptByKeyboard ? "works" : "DID NOT WORK"}` +
-        `\n  opening one to read it:          ${memoryOpened ? "works" : "DID NOT WORK"}`,
+        `\n  opening one to read it:          ${memoryOpened ? "works" : "DID NOT WORK"}` +
+        `\n  the ground answers to:           ${
+          reachName === "" ? "NOTHING NAMED" : `${reachRole || "no role"} — "${reachName}"`
+        }` +
+        `\n  arrows move along it:            ${reachMoves ? "yes" : "NO"}`,
     );
     console.log(
-      "\n[by-keyboard] A canvas that cannot be tabbed into is not a defect in the canvas.\n" +
-        "              It is a question about whether the product has a keyboard path to\n" +
-        "              its own content — reported, not ruled on.",
+      "\n[by-keyboard] The canvas still takes no focus of its own, and that is now the\n" +
+        "              answer rather than the question: the ground is reached through the\n" +
+        "              listbox above, which is what a reader can be told about, and the\n" +
+        "              focus a sighted person sees is the orb lighting up out in the field.",
     );
 
-    /* ── WHAT THIS GATE HOLDS, AND WHAT IT ONLY REPORTS ────────────────────
-       The chrome is perfect today: every stop named, every stop visibly
-       focused, and the mouth usable with keys alone. Those are ratchets — a
-       regression in any of them fails, because they were true once and losing
-       them would be somebody's edit rather than an open question.
+    /* ── WHAT THIS GATE HOLDS ──────────────────────────────────────────────
+       Every stop named, every stop visibly focused, the mouth usable with keys
+       alone — true once, so losing any of them is somebody's edit rather than
+       an open question.
 
-       Reaching a MEMORY is not a ratchet, because it has never worked. Making
-       it fail here would paint the branch red on a finding that needs a
-       design decision (see docs/audits/by-keyboard-2026-08-26.md), and a
-       check that is always red is a check everyone learns to skip. It is
-       printed loudly on every run instead, so it cannot be forgotten — and
-       the day the archive grows a text route, `memoryOpened` becomes a
-       ratchet too and this comment goes with it. */
+       READING A MEMORY BACK JOINED THEM ON 2026-08-27. It was reported and not
+       ratcheted for exactly one day, on the rule that a check which is always
+       red is a check everyone learns to skip; the audit had found the archive
+       write-only without a pointer and the fix was a design decision, not an
+       oversight. The decision was made — roving focus in the world rather than
+       a list of saves beside it — so the ground now answers to a `listbox` with
+       one tab stop and a cursor the arrows move, and all three facts are held
+       here.
+
+       Named AND moving, not merely opened: one lucky Enter on anything
+       satisfies "a memory opened", and a route nobody can describe or move
+       along is a door with one thing behind it. */
     const broke: string[] = [];
     if (stops.length < 8) broke.push(`Tab reaches ${stops.length} stops, was 8`);
     if (unnamed.length > 0) {
@@ -290,11 +334,12 @@ async function main(): Promise<void> {
       broke.push(`${dark.length} stop(s) show no visible focus: ${dark.map((s2) => s2.cls).join(", ")}`);
     }
     if (!keptByKeyboard) broke.push("a memory can no longer be kept with the keyboard alone");
-    if (!memoryOpened) {
-      console.log(
-        "\n[by-keyboard] STILL OPEN: no keyboard route into a memory. Not failed here —\n" +
-          "              see the audit. Printed every run so it cannot go quiet.",
-      );
+    if (!memoryOpened) broke.push("no keyboard route opens a memory — the archive is write-only again");
+    if (memoryOpened && reachName === "") {
+      broke.push("the ground opens to the keyboard but announces nothing to a reader");
+    }
+    if (memoryOpened && !reachMoves) {
+      broke.push("the ground's cursor does not move — the keyboard reaches one memory, not the ground");
     }
     if (broke.length > 0) {
       console.log(`\n[by-keyboard] the keyboard path got WORSE:\n${broke.map((b) => `                ${b}`).join("\n")}`);

@@ -773,6 +773,29 @@
 .jar-saved:focus-visible {
   color: var(--jar-ink);
 }
+
+/* ---------- THE REACH ----------
+   The ground, addressable without a pointer. It is drawn nowhere on purpose:
+   what a person SEES when it takes focus is the orb lighting up out in the
+   field, which is where the memory is. Light is this product's only meaning
+   channel, so the focus indicator for a memory is the memory.
+
+   Hidden the way an accessible name is hidden, NOT with `display: none` or
+   `visibility: hidden` — either of those would take it out of the tab order
+   and out of a reader's tree, which is the whole of what it is for. That
+   idiom already exists as `.sr-only` in global.css and is worn here rather
+   than written again: a second copy of a clip-rect box is a second thing to
+   get wrong, and the spacing ratchet counts every raw pixel either copy
+   spends.
+
+   What is left is one rule. A clipped 1px box with a focus ring paints a
+   small bright dot in the corner of the screen every time somebody tabs into
+   their archive, so its own outline is suppressed — the focus is drawn out in
+   the field, on the orb, where the memory is. */
+.jar-reach:focus,
+.jar-reach:focus-visible {
+  outline: none;
+}
 /* two lit edges of a rotated square, so no glyph and no font can go missing */
 /* ---------- ONE CARET, FOUR DIRECTIONS ----------
    Every signpost in this world points somewhere, and until now each pointed

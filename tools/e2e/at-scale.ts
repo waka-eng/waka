@@ -164,6 +164,10 @@ interface Reading {
   saidHolding: number;
   /** The door's sentence, whole. Kept because the verdict is about words. */
   doorText: string;
+  /** Frames sampled DOWN IN THE GROUND, where the keyboard's reach exists. */
+  groundFps: number;
+  /** How many memories the keyboard can address from where it is standing. */
+  reachOptions: number;
 }
 
 async function measure(browser: Browser, base: string, sql: postgres.Sql, count: number): Promise<Reading> {
@@ -232,7 +236,7 @@ async function measure(browser: Browser, base: string, sql: postgres.Sql, count:
        transformed. `dead-css.ts` reached the same conclusion by the same
        route; this file rediscovered it, which is the fourth time in this
        session, so it is written down here too. */
-    const frames = (await page.evaluate(`new Promise((resolve) => {
+    const SAMPLER = `new Promise((resolve) => {
       var gaps = [];
       var last = performance.now();
       var until = last + 4000;
@@ -248,7 +252,8 @@ async function measure(browser: Browser, base: string, sql: postgres.Sql, count:
           });
         }
       });
-    })`)) as { fps: number; worst: number };
+    })`;
+    const frames = (await page.evaluate(SAMPLER)) as { fps: number; worst: number };
 
     const heap = (await page.evaluate(() => {
       const m = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
@@ -258,9 +263,28 @@ async function measure(browser: Browser, base: string, sql: postgres.Sql, count:
     /* AND IS IT STILL A PRODUCT. A field nobody can open a memory in is not
        slow, it is broken, and the two are worth telling apart. */
     let reachable = false;
+    /**
+     * THE GROUND COSTS MORE THAN THE WALL, AND ONLY THE GROUND WAS UNMEASURED.
+     *
+     * Everything above is sampled standing at the wall. The keyboard route to
+     * a memory (2026-08-27) renders one `role="option"` per memory in the
+     * ground you are standing in — two and a half thousand of them at the top
+     * end — and it renders NOWHERE ELSE, so a walk that never descends could
+     * not see its cost at all.
+     *
+     * A canvas exists so that a field of thousands is not thousands of
+     * elements. Putting thousands of elements back beside it for the keyboard
+     * is either free or a mistake, and the difference is a measurement.
+     */
+    let groundFps = 0;
+    let reachOptions = 0;
     try {
       await page.locator(".jar-saved").first().click({ timeout: 10_000 });
       await page.waitForTimeout(3_000);
+      reachOptions = (await page.evaluate(
+        () => document.querySelectorAll('.jar-reach [role="option"]').length,
+      )) as number;
+      groundFps = ((await page.evaluate(SAMPLER)) as { fps: number }).fps;
       outer: for (const y of [390, 350, 430, 310, 470]) {
         for (let i = 0; i < 30; i += 1) {
           await page.mouse.click(160 + i * 28, y);
@@ -284,6 +308,8 @@ async function measure(browser: Browser, base: string, sql: postgres.Sql, count:
       reachable,
       saidHolding,
       doorText,
+      groundFps,
+      reachOptions,
     };
   } finally {
     await ctx.close();
@@ -312,6 +338,10 @@ async function main(): Promise<void> {
           `${String(r.fps).padStart(3)} fps   worst frame ${String(r.worstFrameMs).padStart(5)}ms   ` +
           `heap ${r.heapMb === null ? "  n/a" : `${String(r.heapMb).padStart(4)}mb`}   ` +
           `${r.reachable ? "a memory opens" : "NOTHING OPENS"}`,
+      );
+      console.log(
+        `        └─ in the ground: ${String(r.groundFps).padStart(3)} fps   ` +
+          `${r.reachOptions} memories the keyboard can reach`,
       );
       if (r.saidHolding !== r.count) {
         console.log(
