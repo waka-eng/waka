@@ -223,8 +223,27 @@
   pointer-events: auto;
 }
 /* and the sentence says it can be pressed before you press it */
+/* THE SENTENCE IS THE CONTROL, AND IT HAS TO ADMIT THAT.
+   The poster is pressable — it opens where the claim came from — and the
+   layout deliberately gives it no button, because "a button beside a poster
+   is furniture and this layout has none". That decision is right and it left
+   the sentence with nothing but `cursor: pointer` to say it can be pressed:
+   `e2e:answers-the-hand` put a pointer on it across three surfaces and
+   measured no change of any kind, on any of them.
+   It cannot answer the way the rest of the world does. Everything else here
+   is muted and brightens to `--jar-ink` under the hand; the poster is already
+   AT `--jar-ink`, being the loudest thing on the wall. So it answers in the
+   one direction still open to a thing at full brightness on a dark ground:
+   it glows. No furniture arrives, no ink changes, nothing moves — the
+   sentence just carries a little light while the hand is on it, which is the
+   same physics as every other lit thing in this world. */
 .jar-poster[role="button"] {
   cursor: pointer;
+  transition: text-shadow 0.2s ease;
+}
+.jar-poster[role="button"]:hover,
+.jar-poster[role="button"]:focus-visible {
+  text-shadow: 0 0 22px rgba(232, 237, 244, 0.32);
 }
 
 .jar-poster {

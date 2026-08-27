@@ -157,7 +157,27 @@ button[type="submit"] {
   text-decoration: underline;
   text-underline-offset: 5px;
   text-decoration-thickness: 1px;
-  transition: color 0.2s ease, opacity 0.2s ease;
+  /* THE RULE UNDER THE WORD IS WHERE THIS ANSWERS THE HAND.
+     An action here is a word at full ink, which leaves it nothing to
+     brighten: `e2e:answers-the-hand` put a pointer on `save profile` and
+     measured no change of any kind. There WAS a hover — `.btn-primary:hover`
+     in `global.css` — but `global.css` is the product layer and this rule is
+     the chrome layer, so chrome's flat `color` beat the hover's, and the
+     hover had been painting nothing since the layers landed. Specificity
+     never entered into it, which is exactly why reading the sheets could not
+     have found this and the engine could.
+     So the light moves to the underline: dim at rest, full when the hand
+     arrives. The word keeps its weight either way — what changes is the rule
+     beneath it, which is this product's own way of marking a thing. */
+  text-decoration-color: rgba(232, 237, 244, 0.4);
+  transition:
+    color 0.2s ease,
+    opacity 0.2s ease,
+    text-decoration-color 0.2s ease;
+}
+.btn-primary:hover:not(:disabled),
+button[type="submit"]:hover:not(:disabled) {
+  text-decoration-color: var(--w-ink);
 }
 .btn-destructive {
   color: var(--w-muted);
@@ -276,6 +296,15 @@ a:hover {
   background: #fff;
   color: #1f1f1f;
   border: 1px solid rgba(0, 0, 0, 0.12);
+  transition: border-color 0.2s ease;
+}
+/* it still has to answer the hand, and it cannot do it the way everything
+   else does: `global.css` wanted to invert it to ink on hover, which is the
+   recolouring the note above forbids — and the chrome layer had been
+   silently beating that rule anyway, so the button answered nothing at all.
+   The brand surface stays exactly as Google requires; its own edge darkens. */
+.btn-google:hover:not(:disabled) {
+  border-color: rgba(0, 0, 0, 0.34);
 }
 
 
@@ -347,6 +376,16 @@ a:hover {
 .login-tabs button[aria-selected="true"] {
   color: var(--w-ink);
   border-bottom-color: var(--w-ink);
+}
+/* AND THE ONE YOU ARE NOT ON ANSWERS TOO. Muted to ink is this world's whole
+   hover vocabulary — the ways at the side, the forming line, the board's
+   verbs all say it that way. The door's other tab was the one place a person
+   meets it first and it said nothing back: `global.css` had the rule, the
+   chrome layer above beat it. `:not([aria-selected])` so the tab you are
+   already on stays still — its light IS its state, and lighting it under the
+   hand would claim the press did something. */
+.login-tabs button:hover:not([aria-selected="true"]) {
+  color: var(--w-ink);
 }
 
 /* ================= THE ACCOUNT SCREEN, IN THE WORLD'S VOICE =================

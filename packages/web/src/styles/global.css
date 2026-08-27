@@ -1,3 +1,11 @@
+/* THREE HOVER RULES USED TO LIVE IN THIS FILE AND PAINT NOTHING.
+   `.btn-primary:hover`, `.login-tab:hover` and `.btn-google:hover` each set a
+   colour the chrome layer then overrode — layers, not specificity, so no
+   amount of reading these two sheets side by side would have shown it. They
+   were found by `e2e:answers-the-hand`, which puts a pointer on every control
+   a person can reach and asks the engine whether anything changed at all.
+   The hovers now live in `chrome.css`, in the layer that wins, and say what
+   each control can actually afford to say. */
 /* assigned to the `product` layer — see styles/layers.css for the order */
 @layer product {
 /*
@@ -1035,11 +1043,6 @@ body.dropped .bg-blob.b3 {
 
 
 
-.btn-primary:hover:not(:disabled) {
-  background: transparent;
-  color: var(--ink);
-}
-
 .btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -1084,10 +1087,6 @@ body.dropped .bg-blob.b3 {
   border-left: var(--border-hairline);
 }
 
-.login-tab:hover:not(.login-tab--active) {
-  color: var(--ink);
-}
-
 
 .login-link {
   background: none;
@@ -1128,11 +1127,6 @@ body.dropped .bg-blob.b3 {
     background var(--duration-fast) var(--ease-standard),
     color var(--duration-fast) var(--ease-standard),
     opacity var(--duration-fast) var(--ease-standard);
-}
-
-.btn-google:hover:not(:disabled) {
-  background: var(--ink);
-  color: var(--bg);
 }
 
 .btn-google:disabled {
