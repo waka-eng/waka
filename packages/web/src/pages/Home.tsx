@@ -3793,6 +3793,10 @@ function HomeExperience(): JSX.Element {
     /** The member being noticed, and until when — a beat, not a state: light
         that stayed would be a selection nobody made. */
     const companyNear = { id: "", until: 0 };
+    /** How long a notice lasts. Named because the draw pass works back from
+        `until` to find when the noticing started, and a second copy of this
+        number in two places is how a beat drifts out of time with itself. */
+    const COMPANY_NOTICE_MS = 1900;
     /** each member's form, derived once from their id and then held */
     const memberBeings = new Map<string, Being>();
     const beingOf = (id: string): Being => {
@@ -5941,8 +5945,20 @@ function HomeExperience(): JSX.Element {
           /* the same light tier your own body wears: the first version baked
              them a tier dimmer AND cool AND at half alpha, and three
              subtlety channels stacked read as flat grey stone. Cool and
-             alpha carry the "behind"; the bake keeps its gradient. */
-          const companyTier = Math.round(bodyLit * (BODY_TIERS - 1));
+             alpha carry the "behind"; the bake keeps its gradient.
+             AND THEN THE TIER LEARNED DEPTH (founder, 2026-08-27: "higher
+             quality craft"; the research is written up in
+             `group-company.ts`): one tier for everybody is what made three
+             members read as three copies of one card. A member's own depth
+             spends itself here, so the near ones stand in your light and the
+             far ones fall a tier back — which is how a photograph separates
+             planes, and the reason the group now has a front and a back. */
+          const nearTier = Math.round(bodyLit * (BODY_TIERS - 1));
+          /* FAR ONES FIRST, so the near ones overlap them. A row painted in
+             member order overlaps by accident; painted by depth it overlaps
+             the way standing people do, and the overlap is most of what says
+             "a group" rather than "a line". */
+          const seated = [...places].sort((a, b) => b.depth - a.depth);
           /**
            * ONE BAKE PER FRAME. A bake is four 240px rasters, and a room of
            * seven arriving all at once put a 133ms frame in the middle of the
@@ -5954,7 +5970,7 @@ function HomeExperience(): JSX.Element {
            * frame; nothing is skipped, only deferred.
            */
           let bakedThisFrame = false;
-          for (const seat of places) {
+          for (const seat of seated) {
             const be = beingOf(seat.profileId);
             /* an agent member shares the bake its own wall uses — same key,
                same params — so the same creature is the same pixels */
@@ -5964,13 +5980,48 @@ function HomeExperience(): JSX.Element {
               bakedThisFrame = true;
             }
             const sprites = bakeBeing(pal, key, be, true, seat.agent);
-            const ms = companion.size * 0.5;
-            /* its own hover, at its own rate, at reduced amplitude — alive,
-               quietly, rather than a sticker of the companion */
-            const mbob = view.reduced
-              ? 0
-              : Math.sin(t * 0.9 * be.bobRate + seat.phase * 6.283) * 2.4 * stir.amp;
-            const seatX = col * view.w + view.w / 2 + seat.dx * companion.size;
+            /* further back is smaller: the arc's own perspective, and the
+               half-size the founder asked for is the NEAREST member's size */
+            const ms = companion.size * (0.5 - seat.depth * 0.07);
+            const companyTier = Math.max(0, nearTier - (seat.depth > 0.55 ? 1 : 0));
+            /**
+             * FOUR WAYS OF STANDING (research, `group-company.ts`: a crowd
+             * sharing one idle "breaks immersion immediately"; 3–5 variants
+             * with staggered starts is the working number).
+             *
+             * Every member used to breathe on the same sine at its own rate,
+             * which is one behaviour wearing different clocks — and at a
+             * glance that reads as copies. These are four different things a
+             * body does while waiting, each phased by the member's own id:
+             *   0 breathes — the old hover, slowest and smallest
+             *   1 sways — the weight drifts side to side as well as up
+             *   2 shifts — mostly still, then settles onto the other foot
+             *   3 waits — barely moves at all; its life is in the head turn
+             * Reduced motion keeps every one of them at rest.
+             */
+            const ph = seat.phase * 6.283;
+            let mbob = 0;
+            let mswy = 0;
+            if (!view.reduced) {
+              const slow = t * 0.9 * be.bobRate + ph;
+              if (seat.idle === 0) {
+                mbob = Math.sin(slow) * 2.4 * stir.amp;
+              } else if (seat.idle === 1) {
+                mbob = Math.sin(slow) * 1.8 * stir.amp;
+                mswy = Math.sin(slow * 0.6 + 1.1) * 2.6 * stir.amp;
+              } else if (seat.idle === 2) {
+                /* a long dwell, then a settle: `sin^7` is flat for most of
+                   its period and moves quickly through the middle, which is
+                   what shifting your weight looks like from across a room */
+                const s = Math.sin(t * 0.32 * be.bobRate + ph);
+                mswy = Math.sign(s) * Math.abs(s) ** 7 * 3.4 * stir.amp;
+                mbob = Math.sin(slow) * 1.1 * stir.amp;
+              } else {
+                mbob = Math.sin(slow * 0.8) * 0.9 * stir.amp;
+              }
+            }
+            const seatX =
+              col * view.w + view.w / 2 + seat.dx * companion.size + mswy;
             const seatY = companion.y + seat.dy * companion.size + mbob;
             /* WHO THIS IS, WHEN YOU REACH FOR THEM (founder, 2026-08-27:
                "hovering/clicking on characters in the background should show
@@ -5990,9 +6041,19 @@ function HomeExperience(): JSX.Element {
               y: seatY,
               r: companion.size * 0.32,
             });
-            const lit =
+            /* NOTICED — and it answers in its own time. The delay is the
+               member's own (`notice`), so a room of seven turns to you
+               raggedly instead of snapping round in unison, which is the
+               difference between people and a chorus line. */
+            const sinceSeen =
               companyNear.id === seat.profileId
-                ? clamp((companyNear.until - performance.now()) / 900, 0, 1)
+                ? (performance.now() - (companyNear.until - COMPANY_NOTICE_MS)) / 1000 -
+                  seat.notice
+                : -1;
+            const lit =
+              companyNear.id === seat.profileId && sinceSeen > 0
+                ? clamp((companyNear.until - performance.now()) / 900, 0, 1) *
+                  clamp(sinceSeen / 0.18, 0, 1)
                 : 0;
             ctx!.save();
             /* ANCHORED TO THE ROOM, NOT TO YOU. `charSX` is the companion's
@@ -6006,8 +6067,26 @@ function HomeExperience(): JSX.Element {
                chorus that breathes in sync with you reads as puppetry. */
             ctx!.translate(seatX, seatY);
             /* noticed, it comes up toward your own strength and settles back —
-               light is the only meaning channel, so being seen IS more light */
-            ctx!.globalAlpha = company * (0.6 + lit * 0.4);
+               light is the only meaning channel, so being seen IS more light.
+               Depth is the other half: the far ones sit lower in the frame's
+               range, which is what "falls into softer light" means when you
+               have no depth of field to spend. */
+            ctx!.globalAlpha = company * ((0.84 - seat.depth * 0.26) + lit * 0.16);
+            /* A PRESENCE OF ITS OWN, and it is the difference between a being
+               standing in a dark room and a sticker on it. The bake has
+               always made each creature its own aura layers — the company
+               simply never spent them, so members had no light around them
+               at all and read as cut-outs on black. One layer, small and
+               faint, and dimmer the further back it stands: enough to say
+               something alive is there, never enough to compete with the
+               warm bloom that is yours. */
+            const halo = sprites.aura[0];
+            if (halo) {
+              ctx!.globalAlpha = company * (0.2 - seat.depth * 0.08 + lit * 0.16);
+              const hs = ms * 2.6;
+              ctx!.drawImage(halo, -hs / 2, -hs / 2, hs, hs);
+              ctx!.globalAlpha = company * ((0.84 - seat.depth * 0.26) + lit * 0.16);
+            }
             /* NO NUBS ON THE SMALL ONES (founder, 2026-08-27: "remove hands").
                They were added as anatomy in the quality pass and at half size
                they read as detached dots floating beside each silhouette —
@@ -6016,18 +6095,51 @@ function HomeExperience(): JSX.Element {
                a face is a creature; a silhouette with two loose beads is a
                diagram of one. */
             ctx!.drawImage(sprites.body[companyTier], -ms / 2, -ms / 2, ms, ms);
-            /* the face, at rest: the being's own two eyes, front-facing, no
-               blink and no yaw — a creature present rather than performing.
-               Clipped to its own silhouette like every feature is. */
+            /* THE FACE, AND IT IS NOT AT REST ANY MORE.
+               It used to be two eyes, front-facing, no blink and no glance —
+               written up as "a creature present rather than performing", and
+               that reading was wrong in the way the founder photographed:
+               present without any behaviour at all is a mask. Two cheap
+               channels put life in it without giving it a performance.
+
+               ONE: WHERE IT IS LOOKING. Games call this the reaction set,
+               and the research calls it the most neglected and most missed
+               part of an ambient character. A member looks at YOUR
+               companion, and when your companion is attending to something
+               (a memory you tapped) it looks that way instead, after its own
+               delay — noticing what somebody near you is looking at is the
+               most human thing a bystander does. It is a look, never a turn:
+               the body stays put, which is what keeps this a room of people
+               standing together rather than a crowd staring.
+
+               TWO: BLINKING. Rare, slow, and out of step by id — a blink in
+               unison would be the chorus line again. */
             bodyPath(ctx!, ms, ms, be);
             ctx!.clip();
             ctx!.fillStyle = "#2b2822";
             const er = ms * be.eyeR * 1.35;
             const eyY = ms * be.eyeLat;
+            /* toward you, or toward what you are looking at — in the member's
+               own local pixels, and never far enough to leave the face */
+            const gazeAt = charSX + companion.eyeX * 8;
+            const gaze = clamp((gazeAt - seatX) / (companion.size * 2), -1, 1);
+            const gx = gaze * er * 0.5;
+            /* the lid: `notice` doubles as the blink's offset, so the room
+               blinks raggedly; ~5.5s apart, ~140ms closed */
+            const bt = (t + seat.notice * 9 + seat.phase * 5.5) % 5.5;
+            const lid = view.reduced ? 1 : bt < 0.14 ? Math.abs(bt / 0.07 - 1) : 1;
             for (const lon of [-be.eyeLon, be.eyeLon]) {
               const ca = Math.cos(lon);
               ctx!.beginPath();
-              ctx!.ellipse(Math.sin(lon) * ms * FACE_R, eyY, er * Math.max(ca, 0.2), er, 0, 0, TAU);
+              ctx!.ellipse(
+                Math.sin(lon) * ms * FACE_R + gx,
+                eyY,
+                er * Math.max(ca, 0.2),
+                er * Math.max(lid, 0.08),
+                0,
+                0,
+                TAU,
+              );
               ctx!.fill();
             }
             ctx!.restore();
@@ -6994,7 +7106,7 @@ function HomeExperience(): JSX.Element {
     function noticeMember(id: string) {
       if (companyNear.id === id && companyNear.until > performance.now() + 500) return;
       companyNear.id = id;
-      companyNear.until = performance.now() + 1900;
+      companyNear.until = performance.now() + COMPANY_NOTICE_MS;
       wake();
     }
 
