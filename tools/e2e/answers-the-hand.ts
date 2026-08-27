@@ -147,6 +147,55 @@ async function handsOn(page: Page): Promise<{ where: string; label: string; quie
   })) as { where: string; label: string; quiet: string | null }[];
 }
 
+/**
+ * AND THE SAME QUESTION FOR THE KEYBOARD.
+ *
+ * The founder ruled "never show the white focus box anywhere", and that
+ * ruling removed the browser's own answer from every control in the product.
+ * Removing an answer obliges giving one: a person tabbing through this world
+ * has to be able to see where they are, and the ruling was about the BOX, not
+ * about being lost.
+ *
+ * IT WALKS WITH TAB RATHER THAN CALLING `focus()`. `:focus-visible` is a
+ * heuristic about how the focus was acquired — a programmatic `focus()` does
+ * not necessarily match it, so a gate built on `focus()` would report every
+ * control as dark and be wrong about all of them. Tab is what a person
+ * presses, so Tab is what this presses.
+ */
+async function askByKeyboard(page: Page, surface: string, dead: Dead[]): Promise<number> {
+  const hands = await handsOn(page);
+  const resting: (string | null)[] = [];
+  for (let i = 0; i < hands.length; i += 1) resting.push(hands[i].quiet ? null : await look(page, i));
+
+  /* start from the top of the document so the walk is the person's walk */
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  const seen = new Set<number>();
+  let asked = 0;
+  /* a generous bound: some surfaces have more tab stops than reachable
+     controls (a field is a stop and not a control), and the walk stops
+     early anyway once focus starts repeating */
+  for (let step = 0; step < hands.length * 3 + 20; step += 1) {
+    await page.keyboard.press("Tab");
+    await page.waitForTimeout(90);
+    const at = (await page.evaluate(() => {
+      const hands = (window as unknown as { __hands: HTMLElement[] }).__hands;
+      return hands.indexOf(document.activeElement as HTMLElement);
+    })) as number;
+    if (at < 0) continue;
+    if (seen.has(at)) continue;
+    seen.add(at);
+    const rest = resting[at];
+    if (rest === null || rest === undefined || rest === "gone") continue;
+    const lit = await look(page, at);
+    asked += 1;
+    if (lit !== "gone" && lit === rest) {
+      dead.push({ surface, where: hands[at].where, label: hands[at].label });
+    }
+  }
+  console.log(`  ${surface.padEnd(24)} ${String(asked).padStart(3)} controls tabbed to`);
+  return asked;
+}
+
 /** Walk one surface: hover every control on it and see what answers. */
 async function askSurface(page: Page, surface: string, dead: Dead[]): Promise<number> {
   const hands = await handsOn(page);
@@ -184,7 +233,9 @@ async function run(base: string): Promise<number> {
 
   let browser: Browser | null = null;
   const dead: Dead[] = [];
+  const unlit: Dead[] = [];
   let asked = 0;
+  let tabbed = 0;
   try {
     browser = await launchChromium();
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -193,6 +244,7 @@ async function run(base: string): Promise<number> {
     await page.goto(`${base}/login`, { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(2_000);
     asked += await askSurface(page, "the door (sign in)", dead);
+    tabbed += await askByKeyboard(page, "the door (sign in)", unlit);
 
     await page.click("#login-tab-signup");
     await page.waitForTimeout(900);
@@ -222,6 +274,7 @@ async function run(base: string): Promise<number> {
     await page.keyboard.press("Escape");
     await page.waitForTimeout(600);
     asked += await askSurface(page, "the world", dead);
+    tabbed += await askByKeyboard(page, "the world", unlit);
 
     /* the poster's band: the four things a person can say back */
     await page.evaluate(() => {
@@ -230,18 +283,21 @@ async function run(base: string): Promise<number> {
     });
     await page.waitForTimeout(1_400);
     asked += await askSurface(page, "the poster, answered", dead);
+    tabbed += await askByKeyboard(page, "the poster, answered", unlit);
 
     await page.keyboard.press("Escape");
     await page.waitForTimeout(400);
     await page.locator(".jar-mouth-rest").first().click();
     await page.waitForTimeout(900);
     asked += await askSurface(page, "the mouth open", dead);
+    tabbed += await askByKeyboard(page, "the mouth open", unlit);
     await page.keyboard.press("Escape");
     await page.waitForTimeout(500);
 
     await page.goto(`${base}/profile`, { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(2_500);
     asked += await askSurface(page, "your account", dead);
+    tabbed += await askByKeyboard(page, "your account", unlit);
 
     await ctx.close();
   } finally {
@@ -249,10 +305,17 @@ async function run(base: string): Promise<number> {
   }
 
   console.log("");
-  if (dead.length === 0) {
-    console.log(`[hand] every one of ${asked} controls answered the pointer.`);
+  if (unlit.length > 0) {
+    console.log(`[hand] ${unlit.length} of ${tabbed} controls showed nothing when the KEYBOARD reached them:\n`);
+    for (const d of unlit) console.log(`  ${d.surface.padEnd(24)} ${d.where}${d.label ? `  — ${d.label}` : ""}`);
+    console.log("");
+  }
+  if (dead.length === 0 && unlit.length === 0) {
+    console.log(`[hand] every one of ${asked} controls answered the pointer,`);
+    console.log(`       and every one of ${tabbed} said where the keyboard was.`);
     return 0;
   }
+  if (dead.length === 0) return 1;
   console.log(`[hand] ${dead.length} of ${asked} controls said nothing when the pointer arrived:\n`);
   const bySurface = new Map<string, Dead[]>();
   for (const d of dead) bySurface.set(d.surface, [...(bySurface.get(d.surface) ?? []), d]);

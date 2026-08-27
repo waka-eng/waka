@@ -137,6 +137,26 @@ select:focus {
   border-bottom-color: var(--w-muted);
 }
 
+
+/* ═══ THE KEYBOARD GETS THE SAME LIGHT AS THE HAND ═════════════════════════
+   Every `:hover` in this file now carries `:focus-visible` beside it, and
+   that pairing is the rule rather than a convenience.
+
+   `global.css` sets `:focus-visible { outline: none }` — the founder's
+   ruling, "never show the white focus box anywhere" — and the note there
+   argues, correctly, that removing an answer obliges giving one, and that
+   the handful of controls leaning on the ring were each given their own.
+   They were, IN THE PRODUCT LAYER. This file is the chrome layer, and every
+   one of those answers was being overruled here exactly the way the hovers
+   were. `e2e:answers-the-hand` tabbed through the door and the account and
+   found five stops that changed nothing at all when the keyboard reached
+   them — among them the door's own `sign in`, which is the first control a
+   person who does not use a mouse ever meets.
+
+   Pairing them is also the only version of this that stays true. A focus
+   answer written apart from the hover answer drifts from it the first time
+   one of the two is touched; written on the same rule, they cannot. */
+
 /* ---------- actions ----------
    Underlined words, not filled pills. The world's one interactive signal is a
    word you can press; nothing here earns more weight than that — including,
@@ -176,14 +196,17 @@ button[type="submit"] {
     text-decoration-color 0.2s ease;
 }
 .btn-primary:hover:not(:disabled),
-button[type="submit"]:hover:not(:disabled) {
+button[type="submit"]:hover:not(:disabled),
+.btn-primary:focus-visible:not(:disabled),
+button[type="submit"]:focus-visible:not(:disabled) {
   text-decoration-color: var(--w-ink);
 }
 .btn-destructive {
   color: var(--w-muted);
   opacity: 0.7;
 }
-.btn-destructive:hover {
+.btn-destructive:hover,
+.btn-destructive:focus-visible {
   opacity: 1;
   color: var(--w-ink);
 }
@@ -199,7 +222,9 @@ a {
   transition: color 0.2s ease;
 }
 .login-link:hover,
-a:hover {
+a:hover,
+.login-link:focus-visible,
+a:focus-visible {
   color: var(--w-ink);
 }
 
@@ -303,7 +328,8 @@ a:hover {
    recolouring the note above forbids — and the chrome layer had been
    silently beating that rule anyway, so the button answered nothing at all.
    The brand surface stays exactly as Google requires; its own edge darkens. */
-.btn-google:hover:not(:disabled) {
+.btn-google:hover:not(:disabled),
+.btn-google:focus-visible:not(:disabled) {
   border-color: rgba(0, 0, 0, 0.34);
 }
 
@@ -384,7 +410,8 @@ a:hover {
    chrome layer above beat it. `:not([aria-selected])` so the tab you are
    already on stays still — its light IS its state, and lighting it under the
    hand would claim the press did something. */
-.login-tabs button:hover:not([aria-selected="true"]) {
+.login-tabs button:hover:not([aria-selected="true"]),
+.login-tabs button:focus-visible:not([aria-selected="true"]) {
   color: var(--w-ink);
 }
 
@@ -519,7 +546,10 @@ a:hover {
 }
 .profile-memory-action:hover,
 .profile-row-actions button:hover,
-.profile-signout-button:hover {
+.profile-signout-button:hover,
+.profile-memory-action:focus-visible,
+.profile-row-actions button:focus-visible,
+.profile-signout-button:focus-visible {
   color: var(--w-ink);
 }
 .profile-row-actions .is-destructive,
@@ -527,7 +557,9 @@ a:hover {
   color: var(--w-faint);
 }
 .profile-row-actions .is-destructive:hover,
-.profile-memory-action.is-destructive:hover {
+.profile-memory-action.is-destructive:hover,
+.profile-row-actions .is-destructive:focus-visible,
+.profile-memory-action.is-destructive:focus-visible {
   color: var(--w-muted);
 }
 
@@ -842,7 +874,8 @@ body .profile-tabs-indicator {
    Hovering a tab on the account page did nothing. Said here, beside the rule
    that was silencing it, because a hover written in the losing sheet is how it
    went quiet in the first place. */
-body .profile-tabs button:hover {
+body .profile-tabs button:hover,
+body .profile-tabs button:focus-visible {
   color: var(--w-ink);
 }
 body .profile-tabs button {
@@ -922,7 +955,8 @@ body .profile-disclose button {
   text-decoration-thickness: 1px;
   transition: color 0.2s ease;
 }
-body .profile-disclose button:hover {
+body .profile-disclose button:hover,
+body .profile-disclose button:focus-visible {
   color: var(--w-ink);
 }
 /* a revealed section arrives, it does not appear */
@@ -1021,7 +1055,8 @@ body .login-card .btn-doorway {
   text-decoration: none;
   transition: opacity 0.18s ease;
 }
-body .login-card .btn-doorway:hover:not(:disabled) {
+body .login-card .btn-doorway:hover:not(:disabled),
+body .login-card .btn-doorway:focus-visible:not(:disabled) {
   opacity: 0.88;
 }
 body .login-card .btn-doorway:disabled {
@@ -1147,7 +1182,8 @@ body .profile-disclose-inline {
   text-decoration-thickness: 1px;
   transition: color 0.2s ease;
 }
-body .profile-disclose-inline:hover {
+body .profile-disclose-inline:hover,
+body .profile-disclose-inline:focus-visible {
   color: var(--w-muted);
 }
 /* sign out leaves the header and joins the foot, where leaving belongs */

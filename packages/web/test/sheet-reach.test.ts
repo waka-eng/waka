@@ -117,6 +117,14 @@ const KNOWN = [
   ":root",
   "a",
   "a:hover",
+  /* the focus twin of `a:hover`, and global for the same reason it is: the
+     door and the account are the only routes with bare links on them, and the
+     founder's "never show the white focus box anywhere" took away the
+     browser's own answer — so a link that lights under the hand and not under
+     the keyboard would be a link a person tabbing cannot find. Added the day
+     `e2e:answers-the-hand` tabbed the door and found `sign in` itself
+     changing nothing at all. */
+  "a:focus-visible",
   "body",
   "body input",
   "body select",
