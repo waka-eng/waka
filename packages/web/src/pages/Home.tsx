@@ -5212,10 +5212,24 @@ function HomeExperience(): JSX.Element {
       {
         const whenEl = document.querySelector(".jar-when");
         const railEl = dialRef.current;
-        if (whenEl && railEl) {
+        /* ONLY AT REST. The word this hangs from is the reading — scrubbing
+           rewrites it ("now" -> "Aug 12"), the box widens, its centre moves,
+           and a rail that keeps chasing its own label WANDERS UNDER THE HAND
+           (founder video, 2026-08-27: "line is not only hard to drag, but
+           moves around"). While the dial is open or being held the anchor is
+           frozen where it was when you reached for it; it takes the word's
+           new centre again once the rail is put away. */
+        if (
+          whenEl &&
+          railEl &&
+          !railEl.classList.contains("jar-dial--open") &&
+          !railEl.classList.contains("jar-dial--live")
+        ) {
           const wb = whenEl.getBoundingClientRect();
           if (wb.width > 0) {
-            const left = Math.round(wb.left + wb.width / 2 - 15);
+            /* half the rail's own width, read rather than restated, so a
+               wider grab area cannot silently un-centre the line */
+            const left = Math.round(wb.left + wb.width / 2 - railEl.offsetWidth / 2);
             if (view.dialLeft !== left) {
               view.dialLeft = left;
               railEl.style.left = `${left}px`;
