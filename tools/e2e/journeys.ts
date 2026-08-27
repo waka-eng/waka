@@ -1311,9 +1311,22 @@ const JOURNEYS: Journey[] = [
         window.addEventListener("load", () => {
           const style = document.createElement("style");
           style.setAttribute("data-sabotage", "acts-unreachable");
-          /* the rule exactly as it shipped */
+          /* THE SABOTAGE THE FIX OUTLIVED. It reproduced the defect exactly as
+             it shipped — `opacity: 0; pointer-events: none` on the CONTAINER —
+             and the fix for that defect was a rule giving every control inside
+             headquarters `pointer-events: auto` back. A child re-enabling the
+             pointer beats a parent refusing it, and opacity was never a
+             hit-test property at all, so from the day the product was fixed
+             this sabotage could not reach the thing it aims at: the buttons
+             stayed hit-testable, the journey passed, and it has been
+             decoration ever since. CI told us on its first ever run
+             (2026-08-27) — "survived sabotage; this journey is decoration".
+
+             What a sabotage must break is the CLAIM, not a historical
+             stylesheet: the claim is that the four verbs can be pressed, so
+             it takes the pointer away from the verbs themselves. */
           style.textContent =
-            ".jar-board-acts { opacity: 0 !important; pointer-events: none !important; }";
+            ".jar-board-act { pointer-events: none !important; }";
           document.head.appendChild(style);
         });
       });
@@ -1629,7 +1642,29 @@ const JOURNEYS: Journey[] = [
        Breaking the session read empties exactly that and leaves the absences
        intact, which is the difference between a suite that is passing and one
        that has stopped looking. */
-    breaks: (ctx) => breakRoute(ctx, (p, m) => p === "/api/auth/me" && m === "GET"),
+    /* A SABOTAGE HAS TO BREAK THE CLAIM. This one used to kill `/api/auth/me`,
+       which is a fine way to break a journey ABOUT SIGNING IN and has nothing
+       whatever to do with whether the product speaks English: the surfaces
+       render their own words either way, so the journey passed under its own
+       sabotage and had been decoration for as long as the claim has been the
+       English ruling rather than the locale one. CI said so on its first ever
+       run (2026-08-27) — "survived sabotage; this journey is decoration".
+
+       The claim here is three things: no second language, no raw ICU, no bare
+       keys. So the sabotage puts raw ICU on the screen — the exact defect the
+       journey was written for, when `{count, plural, other {{count} behind
+       it}}` printed verbatim because ICU cannot nest a placeholder inside a
+       branch. If the scan cannot see that, the scan is not looking. */
+    breaks: async (ctx) => {
+      await ctx.addInitScript(() => {
+        window.addEventListener("load", () => {
+          const leak = document.createElement("p");
+          leak.setAttribute("data-sabotage", "raw-icu");
+          leak.textContent = "{count, plural, other {{count} behind it}}";
+          document.body.appendChild(leak);
+        });
+      });
+    },
     run: async (page, base) => {
       await signUp(page, base);
 
