@@ -96,6 +96,7 @@ import { SpaceSettings, type GroupTrouble } from "../space/settings/SpaceSetting
 import { whyFailed as sayWhyFailed, whyOf } from "../lib/why-failed";
 import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
 import { agentBeing, OWNER_BEING, unit, type Being } from "../character/body";
+import { groupCompanyPlaces } from "../space/group-company";
 import { posterWords } from "../space/top-of-mind/poster";
 import {
   deriveAmbition,
@@ -1931,6 +1932,15 @@ function HomeExperience(): JSX.Element {
   const offlineViewerRef = useRef<string | null>(null);
   const viewerIdRef = useRef<string | null>(null);
   viewerIdRef.current = auth?.profile?.id ?? offlineViewerRef.current;
+  /**
+   * A room's member lists, where the SIM can read them. The state itself
+   * lives far below (it is fetched with the rest of a room's chrome); this
+   * ref is declared here, above the sim's effect, because the frame loop
+   * draws the room's company from it — one small being per member, behind
+   * yours. Same pattern as `setMembersRef`: the ref is the one honest way
+   * across a declaration-order boundary.
+   */
+  const membersRef = useRef<Map<string, ApiGroupMember[]>>(new Map());
   /* the hue map the legend reads — written where the orbs are tinted, so the
      two can never disagree about who is which colour */
   const hueByOwnerRef = useRef<Map<string, number>>(new Map());
@@ -3745,6 +3755,23 @@ function HomeExperience(): JSX.Element {
      * different kind of mind" said in the only grammar this world has.
      */
     let mech = 0;
+    /**
+     * THE ROOM'S COMPANY, AS PRESENCE. 0 on any wall that is not a room's,
+     * easing to 1 while you stand in one — the same spring `mech` rides, so
+     * the members fade in on the same clock the machine-ness would. It is a
+     * presence channel, not a count: what it scales is alpha.
+     */
+    let company = 0;
+    /** each member's form, derived once from their id and then held */
+    const memberBeings = new Map<string, Being>();
+    const beingOf = (id: string): Being => {
+      let b = memberBeings.get(id);
+      if (!b) {
+        b = agentBeing(id);
+        memberBeings.set(id, b);
+      }
+      return b;
+    };
     /* the eased body-turn toward whatever it is attending to */
     const mechAt = (x: number): number => {
       const here = x / Math.max(view.w, 1);
@@ -5760,6 +5787,82 @@ function HomeExperience(): JSX.Element {
            transition it rides ahead of centre by charOff, near the leading
            third of the screen, still bobbing. */
         const charSX = cam.x + view.w / 2 + companion.off;
+
+        /* ---------------- THE ROOM'S COMPANY ----------------
+           founder, 2026-08-27: "if room is group, show the character as many
+           times as number of members are there. but the character should feel
+           like its behind mine, and more small and subtle."
+
+           One being per member, standing behind yours. Drawn BEFORE your
+           aura and body, so yours occludes them and its emitted light washes
+           over them — that wash is the depth cue, not a painted shadow.
+
+           Each wears the form its own id derives (`agentBeing` is "a being,
+           from an id and nothing else" — the owner's median proportions are
+           punched out of its ladders, so none of them can wear yours), at
+           half your size, in COOL light: raster.ts's invariant that your
+           companion is the warmest body on any wall holds in a crowd too.
+           Humans first, in the room's own member order — the same order the
+           legend and the hues are numbered from — so the company reads in
+           the same sequence everywhere the room is named.
+
+           Size is ONE constant for all of them. A being's identity is shape,
+           never size (body.ts: mass is constant), and a row of members at
+           assorted sizes would read as a ranking nobody made. */
+        if (company > 0.015 && curWall().kind === "group") {
+          /* who stands where is a fact, not a frame — `groupCompanyPlaces`
+             holds the ordering, the viewer's exclusion and the deterministic
+             arc, and `group-company.test.ts` holds IT */
+          const places = groupCompanyPlaces(
+            membersRef.current.get(curWall().id),
+            viewerIdRef.current,
+          );
+          /* a step dimmer than your own body, before the alpha: presence,
+             not a second protagonist */
+          const companyTier = Math.max(0, Math.round(bodyLit * (BODY_TIERS - 1)) - 1);
+          for (const seat of places) {
+            const be = beingOf(seat.profileId);
+            /* an agent member shares the bake its own wall uses — same key,
+               same params — so the same creature is the same pixels */
+            const sprites = bakeBeing(
+              pal,
+              seat.agent ? `agent:${seat.profileId}` : `member:${seat.profileId}`,
+              be,
+              true,
+              seat.agent,
+            );
+            const ms = companion.size * 0.5;
+            /* its own hover, at its own rate, at reduced amplitude — alive,
+               quietly, rather than a sticker of the companion */
+            const mbob = view.reduced
+              ? 0
+              : Math.sin(t * 0.9 * be.bobRate + seat.phase * 6.283) * 2.4 * stir.amp;
+            ctx!.save();
+            ctx!.translate(
+              charSX + seat.dx * companion.size,
+              cyC + seat.dy * companion.size + mbob,
+            );
+            ctx!.globalAlpha = company * 0.55;
+            ctx!.drawImage(sprites.body[companyTier], -ms / 2, -ms / 2, ms, ms);
+            /* the face, at rest: the being's own two eyes, front-facing, no
+               blink and no yaw — a creature present rather than performing.
+               Clipped to its own silhouette like every feature is. */
+            bodyPath(ctx!, ms, ms, be);
+            ctx!.clip();
+            ctx!.fillStyle = "#2b2822";
+            const er = ms * be.eyeR;
+            const eyY = ms * be.eyeLat;
+            for (const lon of [-be.eyeLon, be.eyeLon]) {
+              const ca = Math.cos(lon);
+              ctx!.beginPath();
+              ctx!.ellipse(Math.sin(lon) * ms * FACE_R, eyY, er * Math.max(ca, 0.2), er, 0, 0, TAU);
+              ctx!.fill();
+            }
+            ctx!.restore();
+            ctx!.globalAlpha = 1;
+          }
+        }
+
         /* Squash-stretch coupled to the bob — and to the climb. Ascending it
            stretches a few percent and descending it compresses, which is the
            character's own response to being moved and not decoration on top
@@ -6193,6 +6296,10 @@ function HomeExperience(): JSX.Element {
          for this frame either way by the time we get here, which is what
          the paragraph above was always asking for. */
       mech = view.reduced ? mechAt(cam.x) : lerp(mech, mechAt(cam.x), kd(2e-3, dt));
+      /* the company arrives the way machine-ness does: eased, or instantly
+         under reduced motion */
+      const companyAt = curWall().kind === "group" ? 1 : 0;
+      company = view.reduced ? companyAt : lerp(company, companyAt, kd(2e-3, dt));
       /* ATTENTION EASES IN AND LETS GO. The target is the lean while the
          attention is live and zero once it lapses; both directions run
          through the same spring, so noticing and losing interest are the
@@ -9642,8 +9749,9 @@ function HomeExperience(): JSX.Element {
   /* the fixture fills membership from inside the sim's effect, which is
      declared above this state — a ref is the one honest way across */
   setMembersRef.current = setMembers;
-  /** read by the room loader, which is built once */
-  const membersRef = useRef<Map<string, ApiGroupMember[]>>(new Map());
+  /* `membersRef` is declared up beside `viewerIdRef`, above the sim's
+     effect, because the frame loop now reads it too — the room's company is
+     drawn from it. The mirror is written here, where the state lives. */
   membersRef.current = members;
   /**
    * ROOMS THAT ARE MACHINES' ROOMS.
