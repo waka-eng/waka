@@ -212,6 +212,7 @@ import {
   ApiError,
 } from "../lib/api";
 import { AntechamberPanel } from "../components/AntechamberPanel";
+import { LoadingHome } from "../components/LoadingHome";
 import { ReadingPanel } from "../components/ReadingPanel";
 import { RECEIPTS } from "../lib/receipts";
 import {
@@ -11008,6 +11009,16 @@ function HomeExperience(): JSX.Element {
 
   return (
     <div ref={measured.root} className="jar" aria-label="Waka">
+      {/* the world's early face, until the first real frame: the same ground,
+          the companion already home, one honest word. Shared with the auth
+          splash so the whole way in is one unbroken place (founder,
+          2026-08-27). z above every layer — chrome must not poke through a
+          frame that claims nothing is ready yet. */}
+      {phase !== "ready" ? (
+        <div style={{ position: "absolute", inset: 0, zIndex: 60 }}>
+          <LoadingHome />
+        </div>
+      ) : null}
       {/* the volume: a layout-tall gradient the camera descends through */}
       <div ref={measured.atmos} className="jar-atmos" aria-hidden="true" />
 

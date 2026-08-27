@@ -10,7 +10,6 @@
   "resultsCount": "{filteredCount} of {totalCount} {totalCount, plural, one {inspiration} other {inspirations}}",
   "bestRecentMirrorMomentsShownCount": "{count} recent mirror {count, plural, one {moment} other {moments}} shown.",
   "generatedFieldCounts": "{sourceCount} {sourceCount, plural, one {source} other {sources}}; {fieldCount} generated {fieldCount, plural, one {field} other {fields}}",
-  "loadingAuth": "Loading…",
   "loginEyebrow": "WAKA",
   "loginWelcome": "Welcome back.",
   "loginBegin": "Begin your archive.",
