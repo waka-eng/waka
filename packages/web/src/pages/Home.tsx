@@ -3774,6 +3774,12 @@ function HomeExperience(): JSX.Element {
      * presence channel, not a count: what it scales is alpha.
      */
     let company = 0;
+    /** Where each drawn member sits on screen this frame, so the pointer can
+        find them: canvas pixels answer to nothing else. */
+    const companySeats: Array<{ id: string; x: number; y: number; r: number }> = [];
+    /** The member being noticed, and until when — a beat, not a state: light
+        that stayed would be a selection nobody made. */
+    const companyNear = { id: "", until: 0 };
     /** each member's form, derived once from their id and then held */
     const memberBeings = new Map<string, Being>();
     const beingOf = (id: string): Being => {
@@ -5897,12 +5903,26 @@ function HomeExperience(): JSX.Element {
            Size is ONE constant for all of them. A being's identity is shape,
            never size (body.ts: mass is constant), and a row of members at
            assorted sizes would read as a ranking nobody made. */
-        if (company > 0.015 && curWall().kind === "group") {
+        /* EVERY ROOM IN FRAME, NOT ONLY THE ONE YOU STAND IN. During a
+           crossing both columns are on screen at once — the room you are
+           leaving and the room you are arriving at — and drawing only the
+           current wall's company is what made a room look like it populated
+           itself on arrival. */
+        const companyCols: number[] = [];
+        if (wallAt(trip.col)?.kind === "group") companyCols.push(trip.col);
+        if (trip.active && trip.dest !== trip.col && wallAt(trip.dest)?.kind === "group") {
+          companyCols.push(trip.dest);
+        }
+        /* the seats under the pointer, rebuilt each frame the company is
+           drawn — hovering a member names it (see `companyHitRef`) */
+        companySeats.length = 0;
+        for (const col of company > 0.015 ? companyCols : []) {
+          const colWall = wallAt(col)!;
           /* who stands where is a fact, not a frame — `groupCompanyPlaces`
              holds the ordering, the viewer's exclusion and the deterministic
              arc, and `group-company.test.ts` holds IT */
           const places = groupCompanyPlaces(
-            membersRef.current.get(curWall().id),
+            membersRef.current.get(colWall.id),
             viewerIdRef.current,
           );
           /* the same light tier your own body wears: the first version baked
@@ -5937,6 +5957,30 @@ function HomeExperience(): JSX.Element {
             const mbob = view.reduced
               ? 0
               : Math.sin(t * 0.9 * be.bobRate + seat.phase * 6.283) * 2.4 * stir.amp;
+            const seatX = col * view.w + view.w / 2 + seat.dx * companion.size;
+            const seatY = companion.y + seat.dy * companion.size + mbob;
+            /* WHO THIS IS, WHEN YOU REACH FOR THEM (founder, 2026-08-27:
+               "hovering/clicking on characters in the background should show
+               the name of the person above the character temporarily and
+               character should also brighten up temporarily"). The seats are
+               canvas pixels, so the pointer needs the geometry the draw pass
+               already knows; the hit list is rebuilt here rather than
+               guessed at anywhere else. */
+            const named = membersRef.current
+              .get(colWall.id)
+              ?.find((m) => m.profileId === seat.profileId);
+            companySeats.push({
+              id: seat.profileId,
+              /* screen x (the draw is in world space, the pointer is not) and
+                 world y, which is the space `onHover` already works in */
+              x: seatX - cam.x,
+              y: seatY,
+              r: companion.size * 0.32,
+            });
+            const lit =
+              companyNear.id === seat.profileId
+                ? clamp((companyNear.until - performance.now()) / 900, 0, 1)
+                : 0;
             ctx!.save();
             /* ANCHORED TO THE ROOM, NOT TO YOU. `charSX` is the companion's
                screen-anchored x — the world slides under it, which is what
@@ -5947,11 +5991,10 @@ function HomeExperience(): JSX.Element {
                while your companion alone moves. Their y is the resting
                anchor, not `cyC` — your bob and your lift are yours, and a
                chorus that breathes in sync with you reads as puppetry. */
-            ctx!.translate(
-              trip.col * view.w + view.w / 2 + seat.dx * companion.size,
-              companion.y + seat.dy * companion.size + mbob,
-            );
-            ctx!.globalAlpha = company * 0.6;
+            ctx!.translate(seatX, seatY);
+            /* noticed, it comes up toward your own strength and settles back —
+               light is the only meaning channel, so being seen IS more light */
+            ctx!.globalAlpha = company * (0.6 + lit * 0.4);
             /* NO NUBS ON THE SMALL ONES (founder, 2026-08-27: "remove hands").
                They were added as anatomy in the quality pass and at half size
                they read as detached dots floating beside each silhouette —
@@ -5975,6 +6018,23 @@ function HomeExperience(): JSX.Element {
               ctx!.fill();
             }
             ctx!.restore();
+            /* and the name, above them, for as long as the light lasts. It is
+               the only place a member's name is written in the world, so it
+               is written in the label register the rest of the chrome uses. */
+            if (lit > 0.01 && named?.name) {
+              ctx!.save();
+              ctx!.globalAlpha = lit;
+              ctx!.fillStyle = "#d6deea";
+              ctx!.font = '500 11px Pretendard, -apple-system, "Segoe UI", sans-serif';
+              ctx!.textAlign = "center";
+              ctx!.letterSpacing = "0.14em";
+              ctx!.fillText(
+                named.name.toUpperCase(),
+                seatX,
+                seatY - companion.size * 0.34,
+              );
+              ctx!.restore();
+            }
             ctx!.globalAlpha = 1;
           }
         }
@@ -6412,14 +6472,19 @@ function HomeExperience(): JSX.Element {
          for this frame either way by the time we get here, which is what
          the paragraph above was always asking for. */
       mech = view.reduced ? mechAt(cam.x) : lerp(mech, mechAt(cam.x), kd(2e-3, dt));
-      /* the company arrives the way machine-ness does: eased, or instantly
-         under reduced motion */
-      /* ...and not while a travel is in flight: leaving a room, the members
-         are already fading IN PLACE as you go (founder, 2026-08-27: "only
-         character should move, the characters in the back should stay") —
-         and arriving at one, they greet you after you have arrived rather
-         than materialising mid-glide. */
-      const companyAt = curWall().kind === "group" && !trip.active ? 1 : 0;
+      /* THEY ARE ALREADY THERE (founder, 2026-08-27, video: "text and
+         characters should already be there, not reload when my character
+         arrives"). The company used to fade out for the whole crossing and
+         greet you on arrival, which read as a room loading itself the moment
+         you looked at it. A room's members stand at their room whether or
+         not anyone is visiting: the alpha now holds for the wall you are on
+         AND the wall you are travelling to, so arriving is arriving at
+         people already standing there. Leaving still slides them away with
+         their own column, which was the earlier ruling and still holds. */
+      const companyAt =
+        curWall().kind === "group" || (trip.active && wallAt(trip.dest)?.kind === "group")
+          ? 1
+          : 0;
       company = view.reduced ? companyAt : lerp(company, companyAt, kd(2e-3, dt));
       /* ATTENTION EASES IN AND LETS GO. The target is the lean while the
          attention is live and zero once it lapses; both directions run
@@ -6895,6 +6960,31 @@ function HomeExperience(): JSX.Element {
     }
 
     /** Is the pointer over the companion? It sits in front of the field. */
+    /**
+     * WHICH MEMBER THE POINTER IS ON, IF ANY (founder, 2026-08-27).
+     *
+     * The seats are rebuilt by the draw pass every frame it paints company,
+     * so this asks the geometry that was actually painted rather than
+     * re-deriving it — the same rule the orb hit test follows, and the reason
+     * the pointer never lies about which being it would take.
+     */
+    function memberAt(cx: number, wy: number): string | null {
+      for (const seat of companySeats) {
+        const dx = cx - seat.x;
+        const dy = wy - seat.y;
+        if (dx * dx + dy * dy <= seat.r * seat.r) return seat.id;
+      }
+      return null;
+    }
+
+    /** Notice a member: it comes up in light and says its name, then lets go. */
+    function noticeMember(id: string) {
+      if (companyNear.id === id && companyNear.until > performance.now() + 500) return;
+      companyNear.id = id;
+      companyNear.until = performance.now() + 1900;
+      wake();
+    }
+
     function overChar(cx: number, wy: number): boolean {
       const dx = cx - (view.w / 2 + companion.off);
       const dy = wy - companion.y;
@@ -6943,6 +7033,14 @@ function HomeExperience(): JSX.Element {
         companion.flare = 1;
         sayTheWeatherRef.current(sayLine);
         wake();
+        return;
+      }
+      /* a member of the room answers with who it is — and nothing more.
+         Whose memories these are is a fact about the room; what they think
+         is on their own wall, which is a journey and not a tap. */
+      const member = memberAt(cx, cy + cam.y);
+      if (member) {
+        noticeMember(member);
         return;
       }
       const ball = hitAt(cx, cy);
@@ -7144,7 +7242,11 @@ function HomeExperience(): JSX.Element {
          lives on the ROOT: the canvas is pointer-events:none, so it is never
          the element the cursor resolves from. */
       if ((gesture.hoverTick++ & 1) === 0 && !gesture.dragging) {
+        /* a member under the pointer says who it is, for a beat */
+        const member = memberAt(e.clientX, e.clientY + cam.y);
+        if (member) noticeMember(member);
         const over =
+          member !== null ||
           overChar(e.clientX, e.clientY + cam.y) ||
           hitAt(e.clientX, e.clientY) !== null;
         const want = over ? "pointer" : "";
