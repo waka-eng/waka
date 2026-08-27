@@ -49,7 +49,27 @@ await ensureGroupMinds().catch((err: unknown) => {
 });
 
 const port = Number(process.env.PORT ?? 3001);
-const hostname = process.env.WAKA_SERVE_WEB_DIST === "1" ? "localhost" : undefined;
+/**
+ * LOOPBACK, SPELLED AS AN ADDRESS RATHER THAN A NAME.
+ *
+ * Serving the built web app means this process is the whole product, so it
+ * binds to loopback only: a dev server reachable from the café wifi is a
+ * person's entire archive reachable from the café wifi. That part was always
+ * right. The NAME was not.
+ *
+ * `localhost` is a resolution, and which family it resolves to first is a
+ * property of the machine. On this repo's dev containers it is 127.0.0.1, so
+ * the stack came up and every gate passed. On a GitHub runner it is `::1`,
+ * so the server bound IPv6-only and every probe in CI — all of which use
+ * 127.0.0.1 — was refused for two minutes until the wait step gave up. The
+ * browser gates have therefore never run in CI, and the log said so in one
+ * line nobody read: `[api] http://::1:3010`.
+ *
+ * An address cannot be resolved into the wrong family. Clients that ask for
+ * `localhost` still arrive: browsers and Node both fall back to the other
+ * family when the first is refused.
+ */
+const hostname = process.env.WAKA_SERVE_WEB_DIST === "1" ? "127.0.0.1" : undefined;
 serve({ fetch: fetchApp.fetch, port, ...(hostname ? { hostname } : {}) }, (info) => {
   console.log(`[api] http://${info.address}:${info.port}`);
 });

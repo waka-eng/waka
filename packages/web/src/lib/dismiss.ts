@@ -24,6 +24,15 @@
  * "let the open memory go". With a sheet up, the sheet is the nearer subject
  * — one layer at a time, the same rule the reading and its evidence already
  * follow — so the sheet takes the key and the card behind it stays open.
+ *
+ * AND WHY IT ASKS WHERE THE KEY WAS PRESSED FIRST. Capture runs before
+ * anything the target could do, so the first version of this ate the Escape
+ * belonging to every field inside a sheet — a room's name box, an agent's
+ * name, the reflect answer, each of which handles the key itself because
+ * leaving a half-typed name is not the same act as leaving the sheet. The
+ * comment here claimed fields kept their key; they did not, and a test
+ * written to say so failed the moment it existed. A press inside an editable
+ * thing belongs to that thing; the sheet takes Escape everywhere else.
  */
 import { useEffect } from "react";
 
@@ -51,8 +60,18 @@ export function useDismissAway(
     };
     const key = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      /* a field inside the sheet gets its own Escape first — leaving a name
-         half-typed is not the same act as leaving the sheet */
+      const at = e.target as Element | null;
+      /* the field's own key, left alone: `isContentEditable` catches the
+         rich cases, the tag list the plain ones */
+      if (
+        at instanceof HTMLElement &&
+        (at.isContentEditable ||
+          at instanceof HTMLInputElement ||
+          at instanceof HTMLTextAreaElement ||
+          at instanceof HTMLSelectElement)
+      ) {
+        return;
+      }
       e.stopPropagation();
       close();
     };

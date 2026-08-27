@@ -97,7 +97,7 @@ import { SpaceSettings, type GroupTrouble } from "../space/settings/SpaceSetting
 import { whyFailed as sayWhyFailed, whyOf } from "../lib/why-failed";
 import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
 import { agentBeing, OWNER_BEING, unit, type Being } from "../character/body";
-import { groupCompanyPlaces } from "../space/group-company";
+import { groupCompanyPlaces, type CompanyPlace } from "../space/group-company";
 import { posterWords } from "../space/top-of-mind/poster";
 import {
   deriveAmbition,
@@ -3799,6 +3799,12 @@ function HomeExperience(): JSX.Element {
     /** Where each drawn member sits on screen this frame, so the pointer can
         find them: canvas pixels answer to nothing else. */
     const companySeats: Array<{ id: string; x: number; y: number; r: number }> = [];
+    /** Each room's company, in painting order, held on the member list's own
+        identity — see `seatedFor` in the draw. */
+    const companyPlacesCache = new Map<
+      string,
+      { from: ApiGroupMember[] | undefined; viewer: string | null; seated: CompanyPlace[] }
+    >();
     /** The member being noticed, and until when — a beat, not a state: light
         that stayed would be a selection nobody made. */
     const companyNear = { id: "", until: 0 };
@@ -5944,13 +5950,39 @@ function HomeExperience(): JSX.Element {
         companySeats.length = 0;
         for (const col of company > 0.015 ? companyCols : []) {
           const colWall = wallAt(col)!;
-          /* who stands where is a fact, not a frame — `groupCompanyPlaces`
-             holds the ordering, the viewer's exclusion and the deterministic
-             arc, and `group-company.test.ts` holds IT */
-          const places = groupCompanyPlaces(
-            membersRef.current.get(colWall.id),
-            viewerIdRef.current,
-          );
+          /* WHO STANDS WHERE IS A FACT, NOT A FRAME — and this loop was
+             recomputing it sixty times a second. `groupCompanyPlaces` maps a
+             room's members into fresh objects and the depth pass sorts a
+             fresh copy on top, so a seven-person room was allocating an array
+             and seven objects, twice, every frame it was on screen. Nothing
+             in it can change without the member list changing, and that list
+             arrives once per room.
+
+             Found reviewing my own work rather than by a slow frame, but the
+             precedent is why it matters: the last thing built into this exact
+             loop put a 133ms frame in the middle of a travel glide. Cached on
+             the member list's own identity, so a room that gains a member
+             recomputes on the frame the new list lands and never again. */
+          const seatedFor = (): CompanyPlace[] => {
+            const from = membersRef.current.get(colWall.id);
+            const held = companyPlacesCache.get(colWall.id);
+            if (held && held.from === from && held.viewer === viewerIdRef.current) {
+              return held.seated;
+            }
+            /* FAR ONES FIRST, so the near ones overlap them. A row painted in
+               member order overlaps by accident; painted by depth it overlaps
+               the way standing people do, and the overlap is most of what
+               says "a group" rather than "a line". */
+            const seated = groupCompanyPlaces(from, viewerIdRef.current).sort(
+              (x, y) => y.depth - x.depth,
+            );
+            companyPlacesCache.set(colWall.id, {
+              from,
+              viewer: viewerIdRef.current,
+              seated,
+            });
+            return seated;
+          };
           /* the same light tier your own body wears: the first version baked
              them a tier dimmer AND cool AND at half alpha, and three
              subtlety channels stacked read as flat grey stone. Cool and
@@ -5963,11 +5995,7 @@ function HomeExperience(): JSX.Element {
              far ones fall a tier back — which is how a photograph separates
              planes, and the reason the group now has a front and a back. */
           const nearTier = Math.round(bodyLit * (BODY_TIERS - 1));
-          /* FAR ONES FIRST, so the near ones overlap them. A row painted in
-             member order overlaps by accident; painted by depth it overlaps
-             the way standing people do, and the overlap is most of what says
-             "a group" rather than "a line". */
-          const seated = [...places].sort((a, b) => b.depth - a.depth);
+          const seated = seatedFor();
           /**
            * ONE BAKE PER FRAME. A bake is four 240px rasters, and a room of
            * seven arriving all at once put a 133ms frame in the middle of the

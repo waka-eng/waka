@@ -59,6 +59,7 @@ function mount(open: boolean): { closed: () => number } {
           <button type="button" className="inside">
             a word inside the sheet
           </button>
+          <input className="field" defaultValue="half-typed name" />
         </div>
         <div className="world">the world behind it</div>
       </div>
@@ -106,6 +107,26 @@ describe("a sheet that is open", () => {
     const sheet = mount(true);
     escape();
     expect(sheet.closed()).toBe(1);
+  });
+});
+
+describe("a field inside the sheet", () => {
+  it("keeps its own Escape", () => {
+    /* A room's name box, an agent's name, the reflect answer — each handles
+       Escape itself (leaving a half-typed name is not the same act as
+       leaving the sheet). The sheet's listener is on the window in the
+       CAPTURE phase, which runs before anything the field could do, so a
+       sheet that does not check the target eats the field's key. */
+    const sheet = mount(true);
+    const field = host.querySelector(".field")!;
+    act(() => {
+      field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    expect(
+      sheet.closed(),
+      "Escape in a field belongs to the field first; the sheet takes it only " +
+        "when the press was not inside one",
+    ).toBe(0);
   });
 });
 
