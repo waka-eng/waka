@@ -188,7 +188,10 @@
 .jar-hq-inner {
   max-width: 680px;
   margin: 0 auto;
-  padding: calc(56px + env(safe-area-inset-top)) 20px 0;
+  /* 72, up from 56 (founder, 2026-08-27: "add a bit more spacing between
+     philosophies and values button and the top of mind text") — the way up
+     and the sentence are different instruments and need the air to say so */
+  padding: calc(72px + env(safe-area-inset-top)) 20px 0;
 }
 /* ═══ THE LAYER TAKES NO POINTER; ITS CONTROLS TAKE IT BACK, ALL OF THEM ═══
    `.jar-hq` is `pointer-events: none` so the world underneath stays draggable
@@ -577,12 +580,17 @@
 
 /* THE ROOM ITSELF, standing in it. Prose, centred, at a reading measure — no
    label register, because this is the one thing up here to read rather than a
-   sign pointing somewhere. */
+   sign pointing somewhere.
+   IN THE WORLD, NOT ON THE GLASS (founder, 2026-08-27): it lives inside the
+   wall's column now, at the sky's own height, so the camera reveals it the
+   way it reveals everything else. `--jar-sky-top` is written by the layout
+   pass; the fallback is the same place before the first measure — the sky
+   starts one viewport above HQ, and the sentence sits 42% down it. */
 .jar-values-room {
   position: absolute;
   z-index: 4;
   left: 50%;
-  top: 42%;
+  top: var(--jar-sky-top, -58vh);
   transform: translate(-50%, -50%);
   width: min(520px, calc(100vw - 56px));
   text-align: center;
@@ -1458,8 +1466,11 @@
   /* WIDER THAN THE WORDS (founder, 2026-08-25: "add more left and right
      padding to both buttons"). A name set in tracked uppercase already carries
      air between its letters, and at 14px of side padding the pill fit it like
-     a label rather than holding it like a control. */
-  padding: 7px var(--sp-20);
+     a label rather than holding it like a control.
+     Then one step back (founder, 2026-08-27: "reduce left and right margins
+     of all the buttons by just a tiny bit") — 20 overshot into a lozenge;
+     16 still holds the word without fitting it. */
+  padding: 7px var(--sp-16);
   border-radius: 999px;
   background: var(--jar-card);
   transition:

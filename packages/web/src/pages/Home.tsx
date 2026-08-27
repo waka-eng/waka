@@ -5190,6 +5190,19 @@ function HomeExperience(): JSX.Element {
         atmos.style.top = `${Math.round(view.layout.minCam)}px`;
         atmos.style.height = `${Math.round(view.layout.layoutH - view.layout.minCam)}px`;
       }
+      /* the sky's sentence stands at the sky's own height, in world space —
+         42% down the topmost frame, the place the arrival chrome used to
+         claim on screen. Written here beside the volume's box because both
+         are facts about where the sky IS, not about who is looking. */
+      {
+        const hqEl = measured.hq.current;
+        if (hqEl) {
+          hqEl.style.setProperty(
+            "--jar-sky-top",
+            `${Math.round(view.layout.minCam + view.h * 0.42)}px`,
+          );
+        }
+      }
       /* THE RAIL HANGS FROM ITS WORD, MEASURED (founder, 2026-08-27: "should
          align with the text NOW"). Its left inset was a guess in CSS, and the
          word it hangs under sits after the wall chip, whose width is the
@@ -11014,6 +11027,38 @@ function HomeExperience(): JSX.Element {
                 }
                 style={{ left: `calc(var(--jar-vw, 100vw) * ${w.col})` }}
               >
+                {/* THE SKY'S SENTENCE LIVES IN THE SKY (founder, 2026-08-27,
+                    video: "feels like your philosophies that text appears
+                    rather than it was in the sky already and we went to the
+                    sky"). It was chrome — screen-positioned, mounted on
+                    arrival — so the words appeared BECAUSE you looked, which
+                    is the one thing this world never does: the world never
+                    moves unless the user moved it, and it never materialises
+                    either. It stands in the wall's own column now, at the
+                    sky's own height (`--jar-sky-top`, written by the layout
+                    pass beside the volume's), and travelling up simply
+                    brings it into frame. One per wall — every wall has its
+                    own sky. */}
+                {ready ? (
+                  <div className="jar-values-room" data-jar-chrome="1">
+                    <p className="jar-values-lead">
+                      {w.kind === "self"
+                        ? "Your philosophies and values will form here."
+                        : `${w.name}’s philosophies and values will form here.`}
+                    </p>
+                    <p className="jar-values-sub">
+                      {w.kind === "self"
+                        ? "They are the timeless half of a mind — what you " +
+                          "keep coming back to, whatever the day is. They " +
+                          "take time, and they are worth it: keep capturing, " +
+                          "and this sky will start to fill."
+                        : "They are the timeless half of a mind — what it " +
+                          "keeps coming back to, whatever the day is. They " +
+                          "take time, and they are worth it: as patterns are " +
+                          "kept here, this sky will start to fill."}
+                    </p>
+                  </div>
+                ) : null}
                 {ready && c ? (
                   <div
                     className="jar-hq-inner"
@@ -11086,13 +11131,18 @@ function HomeExperience(): JSX.Element {
                         top of mind? it overlaps with the navigation buttons").
                         As a header above the poster it was a second floating
                         piece of chrome, colliding with the corner controls at
-                        small heights. Under the sentence it is a signature —
-                        the name of what you just read — sharing the one quiet
-                        line the date already owned, and it can never fight
-                        the top edge again. */}
-                    <div className="jar-asof jar-label">
-                      top of mind{c.asOf ? ` · as of ${c.asOf}` : ""}
-                    </div>
+                        small heights. Under the sentence it was a signature.
+
+                        AND THEN THE WORD ITSELF WENT (founder, same day:
+                        "just remove the word top of mind") — the slot's
+                        fourth ruling, kept in order like hasSky's: the wall's
+                        name, then TOP OF MIND above, then the signature
+                        below, now nothing. The sentence is the loudest claim
+                        in the product and it stands unlabelled; the date
+                        alone signs it, when there is one. */}
+                    {c.asOf ? (
+                      <div className="jar-asof jar-label">as of {c.asOf}</div>
+                    ) : null}
                     {/* WHAT IT RESTS ON. The same chain the sky shows under a
                         pattern, one layer up: the memories this sentence was
                         built from, each with the span that carried it at full
@@ -13144,28 +13194,8 @@ function HomeExperience(): JSX.Element {
           ))}
         </div>
       ) : null}
-      {phase === "ready" && inSky ? (
-        <div className="jar-values-room" data-jar-chrome="1">
-          <p className="jar-values-lead">
-            {/* whose timeless half this sky holds — yours on your wall, the
-                room's in a room, the agent's on its own (founder, 2026-08-27:
-                every room will eventually have its own) */}
-            {atWall.kind === "self"
-              ? "Your philosophies and values will form here."
-              : `${atWall.name}’s philosophies and values will form here.`}
-          </p>
-          <p className="jar-values-sub">
-            {atWall.kind === "self"
-              ? "They are the timeless half of a mind — what you keep coming " +
-                "back to, whatever the day is. They take time, and they are " +
-                "worth it: keep capturing, and this sky will start to fill."
-              : "They are the timeless half of a mind — what it keeps coming " +
-                "back to, whatever the day is. They take time, and they are " +
-                "worth it: as patterns are kept here, this sky will start to " +
-                "fill."}
-          </p>
-        </div>
-      ) : null}
+      {/* the sky's sentence used to mount here, on arrival; it stands in each
+          wall's own column now — see the block inside `.jar-wallcol` */}
 
       {/* AND THE WAY BACK UP, at the top edge, while you are in the ground
           (founder, 2026-08-25: "add carrot to go up at top of the screen when
