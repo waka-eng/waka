@@ -3566,6 +3566,9 @@ function HomeExperience(): JSX.Element {
       layout: computeLayout(1, 1, DIAL_H),
       /* the dial's real strip, read off the dial itself every measure */
       dialH: DIAL_H,
+      /* where the rail's left edge stands, written only when the word it
+         hangs under moves — 0 until first measured */
+      dialLeft: 0,
       /* first sizing has happened: before this, orbs start on their homes
          rather than pouring, and a resize must not re-anchor a held camera */
       primed: false,
@@ -5179,6 +5182,26 @@ function HomeExperience(): JSX.Element {
         atmos.style.top = `${Math.round(view.layout.minCam)}px`;
         atmos.style.height = `${Math.round(view.layout.layoutH - view.layout.minCam)}px`;
       }
+      /* THE RAIL HANGS FROM ITS WORD, MEASURED (founder, 2026-08-27: "should
+         align with the text NOW"). Its left inset was a guess in CSS, and the
+         word it hangs under sits after the wall chip, whose width is the
+         wall's NAME — so no constant can be under it on every wall. The
+         track's centre takes the word's centre, the way the reserve takes the
+         count's own box: chrome states its place, nothing guesses at it. */
+      {
+        const whenEl = document.querySelector(".jar-when");
+        const railEl = dialRef.current;
+        if (whenEl && railEl) {
+          const wb = whenEl.getBoundingClientRect();
+          if (wb.width > 0) {
+            const left = Math.round(wb.left + wb.width / 2 - 15);
+            if (view.dialLeft !== left) {
+              view.dialLeft = left;
+              railEl.style.left = `${left}px`;
+            }
+          }
+        }
+      }
       if (!view.motesPlaced) {
         view.motesPlaced = true;
         /* the same stillness for the dust: a save must not re-scatter it */
@@ -5893,18 +5916,13 @@ function HomeExperience(): JSX.Element {
               companion.y + seat.dy * companion.size + mbob,
             );
             ctx!.globalAlpha = company * 0.6;
-            /* the two soft nubs, peeking past the silhouette at the being's
-               own latitude — anatomy, so the small ones have it too; without
-               it they read as grey stones, which is what the founder saw
-               (2026-08-27: "more high quality and better looking") */
-            const nubY = ms * be.nubLat;
-            const nubRad = ms * 0.075;
-            ctx!.fillStyle = rgbCss(mix([166, 163, 156], [214, 209, 197], bodyLit), 1);
-            for (const side of [-1, 1]) {
-              ctx!.beginPath();
-              ctx!.arc(side * ms * 0.46, nubY, nubRad, 0, TAU);
-              ctx!.fill();
-            }
+            /* NO NUBS ON THE SMALL ONES (founder, 2026-08-27: "remove hands").
+               They were added as anatomy in the quality pass and at half size
+               they read as detached dots floating beside each silhouette —
+               static circles cannot do what the companion's live nubs do,
+               which is protrude from a turning form. A clean silhouette with
+               a face is a creature; a silhouette with two loose beads is a
+               diagram of one. */
             ctx!.drawImage(sprites.body[companyTier], -ms / 2, -ms / 2, ms, ms);
             /* the face, at rest: the being's own two eyes, front-facing, no
                blink and no yaw — a creature present rather than performing.
@@ -8403,6 +8421,14 @@ function HomeExperience(): JSX.Element {
   const hasPanelRef = useRef(false);
   hasPanelRef.current = panel !== null;
   panelOpenRef.current = panelOpen;
+
+  /* The one thing the card's remount key was doing that mattered: a long
+     memory read to its foot must not hand its scroll position to the next
+     one. The element persists now (that is what ended the blink), so the
+     reset is said out loud instead of inherited from a fresh node. */
+  useEffect(() => {
+    panelRef.current?.scrollTo?.({ top: 0 });
+  }, [panel?.id]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -10954,7 +10980,6 @@ function HomeExperience(): JSX.Element {
                         mind — current, held today — as against the timeless
                         half forming in the sky. Same words, same place, on
                         every wall; whose it is stays where it already was. */}
-                    <div className="jar-eyebrow jar-label">top of mind</div>
                     {c.text ? (
                       /* A STABLE KEY, AND A CARRIED/NEW SPLIT INSIDE IT.
                          The whole h1 used to be keyed by its words, so every
@@ -11005,9 +11030,18 @@ function HomeExperience(): JSX.Element {
                         {c.formingAlt ?? "Forming — nothing adopted yet"}
                       </p>
                     )}
-                    {c.asOf ? (
-                      <div className="jar-asof jar-label">As of {c.asOf}</div>
-                    ) : null}
+                    {/* THE NAME SIGNS THE SENTENCE FROM BELOW (founder,
+                        2026-08-27: "is there a better way to label this as
+                        top of mind? it overlaps with the navigation buttons").
+                        As a header above the poster it was a second floating
+                        piece of chrome, colliding with the corner controls at
+                        small heights. Under the sentence it is a signature —
+                        the name of what you just read — sharing the one quiet
+                        line the date already owned, and it can never fight
+                        the top edge again. */}
+                    <div className="jar-asof jar-label">
+                      top of mind{c.asOf ? ` · as of ${c.asOf}` : ""}
+                    </div>
                     {/* WHAT IT RESTS ON. The same chain the sky shows under a
                         pattern, one layer up: the memories this sentence was
                         built from, each with the span that carried it at full
@@ -12071,7 +12105,14 @@ function HomeExperience(): JSX.Element {
                   public
                 </button>
                 <span aria-hidden="true" className="jar-mouth-dot"> · </span>
-                <button type="button" className="jar-where-on" onClick={() => keepIt()}>
+                {/* NOT FULL INK (founder, 2026-08-27: "save should not be
+                    white"). `jar-where-on` is the CHOSEN STATE's light —
+                    private/public wear it to say which one stands. `save` is
+                    a verb, and a verb at state-light read as a third state
+                    that was somehow always selected. It rests at the verbs'
+                    own muted tier and lifts under the hand like every other
+                    pressable word. */}
+                <button type="button" className="jar-where-verb" onClick={() => keepIt()}>
                   save
                 </button>
                 <span aria-hidden="true" className="jar-mouth-dot"> · </span>
@@ -12109,8 +12150,15 @@ function HomeExperience(): JSX.Element {
       {/* The reading panel: a focused orb's information, beside the orb. It
           fades in and out; it never slides, and it never owns the screen. */}
       {panel && panelBall ? (
+        /* NO KEY, DELIBERATELY (founder, 2026-08-27: "card still blinks when
+           moving from one to another"). Keyed by the memory's id, every move
+           unmounted the card and mounted a fresh one — and `--in` is an
+           ANIMATION, so a fresh mount replays the appearance however the
+           open/close state is managed. That key WAS the blink: the state fix
+           before this one was correct and could not have been sufficient.
+           One element, contents turning like pages; what a new memory must
+           reset — the scroll — is reset explicitly where `panel.id` changes. */
         <div
-          key={panel.id}
           ref={panelRef}
           className={`jar-panel${panelOpen ? " jar-panel--in" : " jar-panel--out"}`}
           data-jar-chrome="1"

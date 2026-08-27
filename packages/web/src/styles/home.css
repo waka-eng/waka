@@ -548,7 +548,9 @@
 
      All four sit at faint now, and the parts inside inherit it rather than
      re-declaring — which is what let them drift apart in the first place. */
-  color: var(--jar-faint);
+  /* the same lit tier as the count (founder, 2026-08-27: "left, top, right
+     things should all be this color as well" — pointing at the count) */
+  color: var(--jar-muted);
   cursor: pointer;
   pointer-events: auto;
   transition: color 0.22s ease;
@@ -763,7 +765,7 @@
      TWICE — the second winning silently, one line below `white-space`, which
      is why the count read a whole tier brighter than the ways sideways and
      why reading the file did not show it. One declaration. */
-  color: var(--jar-faint);
+  color: var(--jar-muted);
   white-space: nowrap;
   cursor: pointer;
   pointer-events: auto;
@@ -1026,7 +1028,11 @@
   white-space: nowrap;
   pointer-events: auto;
   cursor: pointer;
-  color: var(--jar-faint);
+  /* NO COLOUR HERE. The ways' ink is declared once, in their voice rule above
+     — "muted rather than faint" was a decision with the founder's words on
+     it, and a faint here was silently winning over it by file order for who
+     knows how long. Gate 3 surfaced the drift the day the count joined the
+     muted tier and the ways failed to match it. */
   transition: opacity 0.3s ease, color 0.2s ease;
 }
 /* placed by its wall's column, so the inline `left` is its RIGHT edge */
@@ -1818,7 +1824,11 @@
      `top` clears the chip row the word sits in; `left` lines the rail up with
      the word's own text rather than the row's padding edge. */
   top: calc(var(--sp-24) * 2);
-  left: calc(var(--sp-24) + var(--sp-10));
+  /* `left` is written by the world per frame, centred under `.jar-when` —
+     the word's x depends on the wall chip's name, so no constant can be
+     under it on every wall (founder, 2026-08-27: "should align with the
+     text NOW"). This is the resting place before the first measure. */
+  left: var(--sp-24);
   bottom: auto;
   right: auto;
   display: flex;
@@ -3246,6 +3256,15 @@
 }
 .jar-where-off {
   color: var(--jar-faint);
+}
+/* a verb in the same row: quieter than the standing state, brighter than the
+   unchosen one, and it answers the hand */
+.jar-where-verb {
+  color: var(--jar-muted);
+}
+.jar-where-verb:hover,
+.jar-where-verb:focus-visible {
+  color: var(--jar-ink);
 }
 
 /* ================= the split button, top left =================
