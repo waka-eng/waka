@@ -229,6 +229,31 @@ export function setViewport(width: number, height: number): void {
         toJSON: () => ({}),
       } as DOMRect;
     }
+    /* THE RESTING BOTTOM CHROME, at an honest height. The reserve stopped
+       measuring the dial when the rail moved up beside its own word
+       (2026-08-27) and reads the count and the mouth's resting face instead.
+       Answering "the whole viewport" for those made every jsdom world carry a
+       silent 40%-of-screen reserve — the catastrophe clamp, engaged in every
+       test, with nothing failing. A count is about 22px tall and keeps 10px
+       from the glass, so that is the box it reports. */
+    if (
+      (this as HTMLElement).classList?.contains("jar-saved") ||
+      (this as HTMLElement).classList?.contains("jar-mouth-rest")
+    ) {
+      const h = 22;
+      const top = height - h - 10;
+      return {
+        x: 0,
+        y: top,
+        top,
+        left: 0,
+        right: width,
+        bottom: top + h,
+        width,
+        height: h,
+        toJSON: () => ({}),
+      } as DOMRect;
+    }
     return {
       x: 0,
       y: 0,

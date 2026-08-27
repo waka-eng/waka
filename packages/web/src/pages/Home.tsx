@@ -4964,14 +4964,33 @@ function HomeExperience(): JSX.Element {
            question it always meant: of the things that sit along the bottom
            edge, which one reaches highest? Nothing there reserves nothing. */
         let highest = 0;
-        for (const sel of [".jar-saved", ".jar-mouth", ".jar-mouth-rest"]) {
+        for (const sel of [".jar-saved", ".jar-mouth-rest"]) {
           const el = document.querySelector(sel);
           if (!el) continue;
           const b = el.getBoundingClientRect();
           if (b.height === 0) continue;
           highest = Math.max(highest, Math.round(view.h - b.top));
         }
-        const claimed = highest;
+        /**
+         * TWO RULES THE FIRST VERSION OF THIS BROKE, both the reserve's own,
+         * both written a few hundred lines up before it was mine to break:
+         *
+         * `.jar-mouth` is deliberately NOT in the list. "A reserve measured
+         * off the mouth's live height would make the world lurch" — the open
+         * drawer is tall, and a reserve that grows when it opens re-lays the
+         * whole field under a person who only started typing. The resting
+         * chrome is the reserve; the drawer borrows the air above it.
+         *
+         * And nothing-on-screen KEEPS the reserve rather than zeroing it. The
+         * count and the mouth exist at headquarters; down in the field they
+         * are gone, and a reserve that collapsed on descent would slide the
+         * ground underfoot mid-travel — the world moving when nobody moved
+         * it. The reserve is a fact about the resting page, so between
+         * measurable moments it simply holds. Zero only before the chrome
+         * has ever mounted, which is one frame of a field a few pixels too
+         * tall and never a wrong layout that persists.
+         */
+        const claimed = highest > 0 ? highest : view.dialH;
         /* A CEILING, AND IT IS A CATASTROPHE GUARD RATHER THAN A TIDY-UP.
            Two rows of small labels cannot honestly want two fifths of the
            screen; a number that large means the measurement is wrong, and the
@@ -5820,17 +5839,27 @@ function HomeExperience(): JSX.Element {
           /* a step dimmer than your own body, before the alpha: presence,
              not a second protagonist */
           const companyTier = Math.max(0, Math.round(bodyLit * (BODY_TIERS - 1)) - 1);
+          /**
+           * ONE BAKE PER FRAME. A bake is four 240px rasters, and a room of
+           * seven arriving all at once put a 133ms frame in the middle of the
+           * travel glide (measured live, this machine, dpr 1 — a retina
+           * screen bakes four times the pixels). The company's alpha eases in
+           * from zero over the same arrival, so members joining the frame one
+           * at a time is not even visible: the ease IS the stagger's cover.
+           * A member whose bake has not had its turn yet simply waits a
+           * frame; nothing is skipped, only deferred.
+           */
+          let bakedThisFrame = false;
           for (const seat of places) {
             const be = beingOf(seat.profileId);
             /* an agent member shares the bake its own wall uses — same key,
                same params — so the same creature is the same pixels */
-            const sprites = bakeBeing(
-              pal,
-              seat.agent ? `agent:${seat.profileId}` : `member:${seat.profileId}`,
-              be,
-              true,
-              seat.agent,
-            );
+            const key = seat.agent ? `agent:${seat.profileId}` : `member:${seat.profileId}`;
+            if (!pal.beings.has(key)) {
+              if (bakedThisFrame) continue;
+              bakedThisFrame = true;
+            }
+            const sprites = bakeBeing(pal, key, be, true, seat.agent);
             const ms = companion.size * 0.5;
             /* its own hover, at its own rate, at reduced amplitude — alive,
                quietly, rather than a sticker of the companion */

@@ -195,11 +195,22 @@ export function registerRecallRoutes(
      * Cheap: `inspirations_profile_created_idx` leads with `profile_id`, so
      * the unsearched case is an index-only scan.
      */
-    const [totals] = await db
-      .select({ total: sql<number>`cast(count(*) as int)` })
-      .from(inspirations)
-      .where(and(...contentFilters));
-    const total = Number(totals?.total ?? rows.length);
+    /* ON THE FIRST PAGE ONLY. The web field follows the cursor through up to
+       ten pages per pour, and counting on every one of them is ten identical
+       answers to a question that was answered before the walk began — the
+       count runs over `contentFilters`, which the cursor never enters, so no
+       later page can change it. A follower that wants the total has it from
+       page one; a page asked for with a cursor is by definition not the first.
+       This matters because the route was fast before the total existed, and
+       an addition has no business taxing a walk that predates it. */
+    let total: number | undefined;
+    if (!query.data.cursor) {
+      const [totals] = await db
+        .select({ total: sql<number>`cast(count(*) as int)` })
+        .from(inspirations)
+        .where(and(...contentFilters));
+      total = Number(totals?.total ?? rows.length);
+    }
 
     const ids = rows.map((row) => row.id);
 
@@ -266,7 +277,7 @@ export function registerRecallRoutes(
             reflectionCount: reflectionCounts.get(row.id) ?? 0,
           }),
         ),
-        total,
+        ...(total !== undefined ? { total } : {}),
         ...(last ? { nextCursor: encodeCursor(last) } : {}),
       },
       200,
