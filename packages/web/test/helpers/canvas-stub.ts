@@ -236,10 +236,12 @@ export function setViewport(width: number, height: number): void {
        silent 40%-of-screen reserve — the catastrophe clamp, engaged in every
        test, with nothing failing. A count is about 22px tall and keeps 10px
        from the glass, so that is the box it reports. */
-    if (
-      (this as HTMLElement).classList?.contains("jar-saved") ||
-      (this as HTMLElement).classList?.contains("jar-mouth-rest")
-    ) {
+    /* `.jar-mouth-rest` was in this branch too, and giving it a bottom-edge
+       box here is exactly how the wrong reserve stayed green in 212 tests
+       while pushing the companion visibly out of place on a real screen: the
+       stub had been taught the assumption instead of the page. The mouth
+       rests mid-page; only the count owns the bottom edge. */
+    if ((this as HTMLElement).classList?.contains("jar-saved")) {
       const h = 22;
       const top = height - h - 10;
       return {

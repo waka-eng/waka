@@ -4964,12 +4964,22 @@ function HomeExperience(): JSX.Element {
            question it always meant: of the things that sit along the bottom
            edge, which one reaches highest? Nothing there reserves nothing. */
         let highest = 0;
-        for (const sel of [".jar-saved", ".jar-mouth-rest"]) {
-          const el = document.querySelector(sel);
-          if (!el) continue;
-          const b = el.getBoundingClientRect();
-          if (b.height === 0) continue;
-          highest = Math.max(highest, Math.round(view.h - b.top));
+        {
+          /* THE COUNT IS THE BOTTOM CHROME — the whole of it. The first
+             rewrite of this block listed `.jar-mouth-rest` too, on the words
+             "bottom chrome", and the mouth does not rest at the bottom: it
+             rests mid-page, above the field, exactly where its own doc says
+             it holds still so the companion cannot be moved by it. Measuring
+             it handed the reserve nearly half the viewport and pushed the
+             companion out of its place — found by the founder's eyes, not by
+             a gate, because the jsdom stub had been taught the same wrong
+             assumption (founder, 2026-08-27: "character is no longer in
+             center"). One selector, one meaning. */
+          const el = document.querySelector(".jar-saved");
+          if (el) {
+            const b = el.getBoundingClientRect();
+            if (b.height > 0) highest = Math.round(view.h - b.top);
+          }
         }
         /**
          * TWO RULES THE FIRST VERSION OF THIS BROKE, both the reserve's own,
