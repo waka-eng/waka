@@ -1746,14 +1746,19 @@
   margin-bottom: var(--sp-14);
 }
 
-/* THE SAME PANEL, HUNG FROM THE OTHER PILL. Left is where you are, right is
-   who you are — the two permanent things at the top of the screen — so their
-   panels are the same object anchored to the control that opened it, rather
-   than two designs that happen to look alike. */
-.jar-settings--right {
-  left: auto;
-  right: 20px;
-}
+/* THE SHEET HUNG FROM THE OTHER PILL UNTIL IT DIDN'T, and the rule outlived
+   the design by long enough to become a lie. It read: "left is where you are,
+   right is who you are, so their panels are the same object anchored to the
+   control that opened it" — and then every modal in the world was centred by
+   one shared rule written below all of them on purpose (see `.jar-panel,
+   .jar-seek, .jar-settings, .jar-prov-room`), which set `left: 50%` and a
+   centring transform. `left` plus a fixed width wins over `right`, so this
+   variant stopped doing anything at all; the account sheet has opened in the
+   middle of the screen ever since, exactly like every other sheet.
+   Measured 2026-08-27 (430..850 in a 1280 frame, while the pill it claimed to
+   hang from ends at 1272) and deleted rather than restored: opening in the
+   middle is the founder's own ruling for panels, and a comment describing a
+   layout the product does not have is worse than no comment. */
 
 /* ---------- time dial: a horizontal band above the axis of walls ----------
    IT WENT TO THE RIGHT MARGIN TO KEEP TWO MEANINGS OFF ONE AXIS, AND NOBODY
