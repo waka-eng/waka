@@ -118,10 +118,9 @@
      (#12161f under 34% black ≈ this), and the well keeps only its SHAPE:
      the inset hairline that says "a place to type", with no tonal step. */
   --jar-sheet: #0c0e15;
+  /* the lip's light survives on the reflection notes (`.nc-note`), not here */
   --jar-sheet-lip: rgba(255, 255, 255, 0.2);
   --jar-sheet-edge: rgba(255, 255, 255, 0.07);
-  --jar-sheet-well: rgba(0, 0, 0, 0.34);
-  --jar-sheet-grip: rgba(232, 237, 244, 0.32);
 
   /* ---- the aliveness ramp: every orb, satellite and cloud is baked from
      these three, and from nothing else ---- */
@@ -1225,20 +1224,20 @@
    and returns to the line when the text shrinks again. It is the SAME
    field throughout: nothing is remounted, no caret is lost, no keystroke
    is dropped at the moment it changes. */
-/* A DRAWER, NOT A BLOCK OF TEXT OVER THE WORLD.
-   The quick slot hangs off the seam and grows UPWARD (`translateY(-100%)`),
-   which is right for one line and catastrophic for a page: a long paste
-   climbed up the screen and printed straight over the companion, the sky and
-   everything else, with no ground of its own.
-   So the note state stops being a taller version of the line and becomes a
-   real sheet: released from the seam, anchored to the bottom of the frame,
-   opaque, with its own edges and its own height. It rises from below the
-   frame the way a drawer does.
+/* THE PAGE IS THE NOTE (founder, 2026-08-27: "lets not make it a drawer but
+   just turn the full page into a typing area"), reversing 2026-08-25's
+   physical drawer the way the sky's rulings are recorded: first the long
+   paste was a block of text printed over the world, then a bottom sheet with
+   edges and a lip it could sink to, now the whole frame. The drawer earned
+   its edges by having world visible around them — and then spent them on a
+   third state (the minimized lip) that had to be learned. A page has two
+   honest states: writing, where nothing else exists, and away, where "save
+   as draft" has kept the words and the resting mouth says so.
 
    COVERING THE COMPANION IS FINE — the founder settled that: "I don't care
-   about the text covering the character." What was not fine was the sheet
-   being invisible. Every rule below is spent on one thing: that this reads as
-   an object in front of the world rather than words printed on it. */
+   about the text covering the character." What the page keeps from the
+   drawer era: one tone, the well's inset edge, the centred foot row, and the
+   rise from the seam — motion still explains where the note came from. */
 /* AND IT COVERS WHAT IT SLID IN FRONT OF. The mouth sits at z4, under the
    ground's own chrome at z5-6, so the bottom edge printed straight THROUGH
    the sheet's footer — which is the one thing an opaque object cannot do and
@@ -1258,41 +1257,22 @@
      `absolute` and pinned to a moving box. The drawer is portalled to
      `document.body` for exactly this reason — see `withMouthLayer`. */
   position: fixed;
-  left: 0;
-  right: 0;
-  top: auto;
-  bottom: 0;
+  inset: 0;
   /* above the world and its chrome: it is the thing you are typing into */
   z-index: 40;
-  /* an object with two visible sides, not a band across the frame: the edges
-     are most of what says "component" — so it still stops short of the frame
-     at any width. 1040 rather than 640 because a paste is what summons this
-     thing, and 640 wrapped a pasted paragraph into a narrow column with the
-     whole screen empty either side of it. */
-  width: min(calc(100% - 32px), 1040px);
-  margin: 0 auto;
   transform: none;
-  /* Deeper at the foot than it was: the drawer names two verbs now, and at
-     12px the second row sat on the frame's edge. */
-  padding: 0 0 calc(22px + env(safe-area-inset-bottom));
-  /* opaque, and lighter than the world it slid in front of */
+  /* the writing fills the height, the foot row keeps the floor: a column,
+     not a stack that grows. The old drawer's 18px of headroom survives as
+     the page's own top inset. */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: calc(var(--sp-18) + env(safe-area-inset-top)) 0
+    calc(22px + env(safe-area-inset-bottom));
+  /* opaque, one tone: with no world at the edges there is no edge to draw —
+     no border, no radius, no shadow. The well's inset hairline is the only
+     line on the page. */
   background: var(--jar-sheet);
-  border: 1px solid var(--jar-sheet-edge);
-  border-bottom: 0;
-  /* NO LIT LIP. It was a bright hairline across the full width of the sheet,
-     and at 1040px that is not an edge catching the light — it is a rule drawn
-     over the top of your writing. The sheet is already legible as an object
-     from its own value against the world and the shadow it casts upward. */
-  border-radius: 18px 18px 0 0;
-  /* the ceiling the drawer breathes under, and the value the step-aside
-     transition animates from — a transform here would fight the arrival
-     animation's fill, so the sinking is a height, not a move */
-  max-height: min(86vh, 760px);
-  transition: max-height 0.32s cubic-bezier(0.22, 1, 0.36, 1);
-  box-shadow:
-    /* and what it casts upward on the world behind it: this is the depth cue,
-       and it is why the field no longer looks printed on space */
-    0 -40px 90px -20px rgba(0, 0, 0, 0.95);
   animation: jar-drawer-up 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
   /* A SOLID THING STOPS THE POINTER. `.jar-mouth` is pointer-events: none so
      the world can be dragged through it; the sheet is the exception, because
@@ -1303,35 +1283,18 @@
 /* It comes from BELOW THE FRAME, its whole height, once. The old animation
    nudged it twelve pixels and faded it in — which is an appearance, not an
    arrival, and told you nothing about where the thing came from or where it
-   goes back to. Motion explains. */
-/* STEPPED ASIDE: the sheet sinks to a lip at the bottom edge. The strip that
-   stays is the sheet's own top — the first line of the draft showing through —
-   so the state renders as "your note is here" without a label saying so. */
-.jar-mouth-slot--note.jar-mouth-slot--min {
-  max-height: 52px;
-  overflow: hidden;
-}
-/* the step-aside word, on the sheet's shoulder */
-/* THE LEFT SHOULDER. It shared the right corner with the visibility pair the
-   moment that moved up here, and two unrelated controls stacked in one corner
-   is how a corner stops being readable. */
+   goes back to. Motion explains. (The keyframes keep the drawer's name:
+   the page still rises the same way, from the seam the quick line lives at.) */
+/* the way out that keeps the words, first in the foot's centred row */
 .jar-mouth-step {
   all: unset;
   cursor: pointer;
-  /* the minus sits in the foot's row with the verbs, at their resting tier */
+  /* it sits in the foot's row with the verbs, at their resting tier */
   color: var(--jar-muted);
   transition: color 0.18s ease;
 }
 .jar-mouth-step:hover {
   color: var(--jar-ink);
-}
-/* the way back: one press anywhere on the lip */
-.jar-mouth-lift {
-  all: unset;
-  position: absolute;
-  inset: 0;
-  cursor: pointer;
-  z-index: 1;
 }
 
 @keyframes jar-drawer-up {
@@ -1341,20 +1304,6 @@
   to {
     transform: none;
   }
-}
-/* THE GRAB RAIL. Not a control — the drawer is driven by the length of what
-   you wrote, and nothing else — but it is the mark every physical sheet in
-   the world wears at the edge you'd pull, and it is how this one says which
-   way it came from. */
-/* THE GRAB RAIL IS GONE. It was drawn as the handle of a thing you could
-   pull, and nothing was ever bound to it — the founder found that out by
-   clicking it. A control that looks draggable and is inert teaches that the
-   surface is broken, so the choice is to implement the drag or to stop
-   claiming it. The drawer opens and closes itself from what you type, which
-   is the behaviour it actually has. Its top padding stands in for the rail's
-   old spacing so nothing else shifts. */
-.jar-mouth-slot--note {
-  padding-top: var(--sp-18);
 }
 /* WHERE THIS ONE IS GOING, ON THE DRAWER'S OWN FOOTER. Inside the sheet, under
    a hairline, so the choice belongs to the note you are writing instead of
@@ -3504,15 +3453,21 @@
   }
   .jar-mouth-slot--note .jar-mouth-field {
     box-sizing: border-box;
-    width: calc(100% - 40px);
+    /* the page is full-bleed, so the readable measure lives here: 1040
+       rather than 640 because a paste is what summons this face, and 640
+       wrapped a pasted paragraph into a narrow column with the whole screen
+       empty either side of it. */
+    width: min(calc(100% - 40px), 1040px);
     max-width: none;
     margin: 0 auto;
-    /* the well owns its height: a drawer whose depth changed with every line
-       you typed would be a growing block of text again, not a notepad. Deeper
-       than it was, for the same reason it is wider — the thing that opens
-       this is a long paste, and 300px showed about a third of one. */
-    height: min(52vh, 520px);
-    max-height: min(52vh, 520px);
+    /* the PAGE owns the height now, not the well: the slot is a column and
+       the well is the part that stretches, so the writing fills whatever the
+       viewport gives and the foot row keeps the floor. A fixed depth here
+       would leave the bottom third of a full page as empty sheet. */
+    flex: 1 1 auto;
+    height: auto;
+    max-height: none;
+    min-height: 0;
     padding: var(--sp-14) var(--sp-16);
     border-radius: 12px;
     /* no fill of its own: one colour rules the drawer, and the well's claim

@@ -1788,16 +1788,15 @@ function HomeExperience(): JSX.Element {
       effect beside `reflect`. Null unless "keep it and reflect" was pressed. */
   const reflectOnOpenRef = useRef<string | null>(null);
   /**
-   * THE DRAWER CAN STEP ASIDE WITHOUT CLOSING (founder, 2026-08-25). Writing
-   * something long is exactly when you need to glance at the world — the
-   * pattern you are answering, the memory you half-remember — and the only
-   * options were to keep the drawer in your face or lose the draft's place.
-   * Minimized, the sheet sinks to a lip at the bottom edge with the first
-   * line of the draft showing, the world is yours again, and one press
-   * brings it back with the caret where it was. Closing the drawer (keeping,
-   * cancelling, shrinking the text) always resets this.
+   * THE LONG NOTE IS THE WHOLE PAGE, AND THE WAY OUT IS A DRAFT (founder,
+   * 2026-08-27, reversing the 2026-08-25 step-aside drawer). The drawer
+   * could minimize to a lip so you could glance at the world mid-thought —
+   * but a lip is a third state to learn, and the founder chose two honest
+   * ones instead: writing, where the page IS the note, and away, where
+   * "save as draft" has put the words somewhere safe and the resting mouth
+   * says so. Glancing at the world is now save-as-draft + one press back,
+   * and nothing is ever half-hidden behind a strip of itself.
    */
-  const [mouthMin, setMouthMin] = useState(false);
   const [draft, setDraft] = useState(() => {
     try {
       return window.localStorage.getItem("waka.draft") ?? "";
@@ -1805,6 +1804,12 @@ function HomeExperience(): JSX.Element {
       return "";
     }
   });
+  /* the words where a callback can reach them without re-binding per keystroke */
+  const draftRef = useRef("");
+  draftRef.current = draft;
+  /* where the pen last was, written on every keystroke — see the boundary
+     effect beside the focus effect for why the field needs to be told */
+  const mouthCaretRef = useRef(0);
   useEffect(() => {
     try {
       if (draft) window.localStorage.setItem("waka.draft", draft);
@@ -1843,10 +1848,13 @@ function HomeExperience(): JSX.Element {
    * serious.
    */
   const mouthLong = draft.length > 140 || draft.includes("\n");
-  /* a drawer that stops being a drawer forgets that it was stepped aside */
-  useEffect(() => {
-    if (!mouthLong) setMouthMin(false);
-  }, [mouthLong]);
+  /* THE PAGE FACE NEEDS BOTH: long words AND the mouth open. The length
+     alone decided it once, and the first saved draft proved that wrong — the
+     draft SURVIVES the mouth closing (that is the whole point of the door),
+     so a closed mouth holding a long draft wore the full-page sheet with
+     nothing in it but the resting phrase, and the world was gone. Away is
+     the world plus a phrase; the page exists only while you are writing. */
+  const mouthPage = mouthOpen && mouthLong;
 
   /**
    * THE DIAL'S RIGHT-HAND END IS NOW, AND KEEPING SOMETHING HAPPENS NOW.
@@ -9175,17 +9183,40 @@ function HomeExperience(): JSX.Element {
      The layout moves for it exactly once: an orb is born where the words are
      and falls to its home in the ground below. */
 
+  /**
+   * SAVE AS DRAFT IS A DOOR, NOT A STORE (founder, 2026-08-27: "remove
+   * minimize and instead say save as draft"). The store already existed —
+   * the mouth live-writes every keystroke to this device's `waka.draft` and
+   * restores it on arrival, and has since before the drawer. What did not
+   * exist was a way OUT that admits the words are kept: minimize held the
+   * page half-open, and Escape threw the words away. So the door closes the
+   * page and simply does not clear the draft — the words stay in state and
+   * in storage, the resting line says a draft waits, and opening the mouth
+   * is continuing.
+   */
   const openMouth = useCallback(() => {
     setMouthNote("");
     setMouthOpen(true);
   }, []);
 
-  /** Escape: back to the phrase, and the draft goes with it. */
+  /** The way out that keeps the words: the page folds, the draft stays. */
+  const saveAsDraft = useCallback(() => {
+    setMouthOpen(false);
+    setMouthNote("");
+  }, []);
+
+  /** Escape: back to the phrase — and for a long note, the words are KEPT.
+      Losing a page of writing to a reflex key is the one thing this surface
+      must never do; a short line still clears, as it always has. */
   const cancelMouth = useCallback(() => {
+    if (draftRef.current.length > 140 || draftRef.current.includes("\n")) {
+      saveAsDraft();
+      return;
+    }
     setMouthOpen(false);
     setDraft("");
     setMouthNote("");
-  }, []);
+  }, [saveAsDraft]);
 
   /**
    * KEEP IT. Optimism with honesty, in that order: the memory is born in the
@@ -9208,6 +9239,7 @@ function HomeExperience(): JSX.Element {
     [],
   );
 
+  /* a keep is the draft reaching home: nothing waits any more */
   const keepIt = useCallback(
     (andReflect = false) => {
     const text = draft.trim();
@@ -9439,14 +9471,14 @@ function HomeExperience(): JSX.Element {
      grows UPWARD, so the words stay the same distance above the ground the
      orb will drop into however many lines they wrap to.
 
-     EXCEPT IN THE DRAWER, WHERE THE WELL OWNS ITS HEIGHT — and this is not a
-     preference, it is the reason the sheet kept coming out the size of the
+     EXCEPT ON THE PAGE, WHERE THE PAGE OWNS THE HEIGHT — and this is not a
+     preference, it is the reason the old sheet kept coming out the size of the
      text inside it. An inline `style.height` outranks every stylesheet in the
-     document, cascade layers included, so the drawer's stated depth was being
+     document, cascade layers included, so the stated depth was being
      overwritten on each keystroke by whatever the words happened to measure.
-     Releasing the inline value hands the height back to the CSS: a notepad
-     that is a notepad-shaped thing the moment it opens, rather than a block of
-     text that grows until it hits a ceiling. */
+     Releasing the inline value hands the height back to the CSS: the well
+     stretches to the viewport the moment the note goes long, rather than
+     growing line by line until it hits a ceiling. */
   useLayoutEffect(() => {
     const el = mouthFieldRef.current;
     if (!el) return;
@@ -9466,6 +9498,25 @@ function HomeExperience(): JSX.Element {
     const end = el.value.length;
     el.setSelectionRange(end, end);
   }, [mouthOpen]);
+
+  /* CROSSING THE BOUNDARY MUST NOT DROP THE PEN. The page face is a portal
+     (`withMouthLayer`) and the quick line is not, so the keystroke that
+     carries the words across the long-note line REMOUNTS the field — and a
+     remount blurs it, which sent the very next key to the world instead of
+     the sentence (found live: Escape after shrinking a draft closed
+     nothing). The mouth-open effect above cannot catch it because the mouth
+     never closed. This one runs on the flip itself, and only when the field
+     actually lost focus, so it never fights the effect above: reopening
+     focuses to the end there, crossing the line refocuses to the caret the
+     last keystroke recorded here. */
+  useEffect(() => {
+    if (!mouthOpen) return;
+    const el = mouthFieldRef.current;
+    if (!el || document.activeElement === el) return;
+    el.focus();
+    const at = Math.min(mouthCaretRef.current, el.value.length);
+    el.setSelectionRange(at, at);
+  }, [mouthPage, mouthOpen]);
 
   const panelBall = panelId
     ? ballsRef.current?.byId.get(panelId) ?? groupBallsRef.current.get(panelId) ?? null
@@ -11923,7 +11974,7 @@ function HomeExperience(): JSX.Element {
       {phase === "ready" ? (
         <div
           ref={measured.mouth}
-          className={`jar-mouth${mouthLong ? " jar-mouth--note" : ""}`}
+          className={`jar-mouth${mouthPage ? " jar-mouth--note" : ""}`}
           data-jar-chrome="1"
         >
           {/* QUICK BY DEFAULT, A NOTEPAD WHEN IT HAS TO BE.
@@ -11939,12 +11990,12 @@ function HomeExperience(): JSX.Element {
               stay quick, and a control you have to find first is not quick.
               (Founder's choice of the three.) */}
           {withMouthLayer(
-            mouthLong,
+            mouthPage,
             measured.root.current,
             <div
             className={`jar-mouth-slot${atNow ? "" : " jar-mouth-slot--away"}${
-              mouthLong ? " jar-mouth-slot--note" : ""
-            }${mouthLong && mouthMin ? " jar-mouth-slot--min" : ""}`}
+              mouthPage ? " jar-mouth-slot--note" : ""
+            }`}
             /* THE SHEET KEEPS THE CARET. The drawer is solid — it stops the
                pointer rather than letting a press fall through to the world —
                which means a press on its face would otherwise blur the note
@@ -11953,7 +12004,7 @@ function HomeExperience(): JSX.Element {
                object behaves like one surface you are typing on. The buttons
                inside it are exempt: they need the press. */
             onMouseDown={
-              mouthLong
+              mouthPage
                 ? (e) => {
                     if (e.target instanceof Element && e.target.closest("textarea, button")) return;
                     e.preventDefault();
@@ -11961,23 +12012,6 @@ function HomeExperience(): JSX.Element {
                 : undefined
             }
           >
-            {mouthLong && mouthMin ? (
-              /* THE WHOLE LIP IS THE WAY BACK. While minimized the sheet's
-                 visible strip shows the first line of the draft — the state
-                 renders — and any press on it brings the drawer back up with
-                 the caret restored. An overlay rather than handlers on the
-                 children, so a press cannot land IN the text and start
-                 typing into a mostly-hidden page. */
-              <button
-                type="button"
-                className="jar-mouth-lift"
-                aria-label="open the note"
-                onClick={() => {
-                  setMouthMin(false);
-                  window.setTimeout(() => mouthFieldRef.current?.focus(), 330);
-                }}
-              />
-            ) : null}
             {mouthOpen ? (
               <textarea
                 ref={(el) => {
@@ -11993,6 +12027,7 @@ function HomeExperience(): JSX.Element {
                    nothing about it (founder, 2026-08-24) */
                 placeholder="Capture inspiration"
                 onChange={(e) => {
+                  mouthCaretRef.current = e.target.selectionStart ?? e.target.value.length;
                   setDraft(e.target.value);
                   if (mouthNote !== "") setMouthNote("");
                 }}
@@ -12021,7 +12056,10 @@ function HomeExperience(): JSX.Element {
                     had too many. It is the same slot now: the words change,
                     nothing moves, and the phrase comes back when the line has
                     been said. */}
-                {charSay || "Capture inspiration"}
+                {/* a waiting draft outranks the invitation: the line is the
+                    door back into your own words (mouth closed, words kept —
+                    the state renders) */}
+                {charSay || (draft.trim() !== "" ? "Continue your draft" : "Capture inspiration")}
               </button>
             )}
             {/* WHERE THIS ONE GOES, DECIDED WHILE WRITING IT.
@@ -12069,25 +12107,19 @@ function HomeExperience(): JSX.Element {
               <p
                 className={`jar-ask jar-ask--row jar-mouth-where${
                   draft.trim() !== "" ? " jar-mouth-where--armed" : ""
-                }${mouthLong ? " jar-mouth-where--sheet" : ""}`}
+                }${mouthPage ? " jar-mouth-where--sheet" : ""}`}
               >
-                {mouthLong && !mouthMin ? (
-                  /* THE MINUS, APPLE'S OWN GESTURE (founder, 2026-08-27:
-                     "dont write minimize. use the - thing that apple uses.
-                     the buttons should be at bottom center"). A glyph, not a
-                     word, first in the one centred row at the foot — the
-                     drawer's whole top edge is clean now. */
+                {mouthPage ? (
+                  /* THE WAY OUT THAT KEEPS THE WORDS (founder, 2026-08-27:
+                     "lets not make it a drawer but just turn the full page
+                     into a typing area … remove minimize and instead say save
+                     as draft"). The minus lasted one round: a page has no
+                     window chrome, and the honest name for folding it is what
+                     actually happens — the draft is saved. First in the one
+                     centred row at the foot. */
                   <>
-                    <button
-                      type="button"
-                      className="jar-mouth-step"
-                      aria-label="minimize the note"
-                      onClick={() => {
-                        mouthFieldRef.current?.blur();
-                        setMouthMin(true);
-                      }}
-                    >
-                      <span aria-hidden="true">−</span>
+                    <button type="button" className="jar-mouth-step" onClick={saveAsDraft}>
+                      save as draft
                     </button>
                     <span aria-hidden="true" className="jar-mouth-dot"> · </span>
                   </>
