@@ -67,6 +67,7 @@ import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
 
 import { hueCss } from "../lib/appearance";
+import { useDismissAway } from "../lib/dismiss";
 import { clamp, clamp01, DAY_MS, easeOut, hashStr, kd, lerp, mix32, TAU } from "../lib/num";
 import {
   GRAIN_PX,
@@ -1141,6 +1142,14 @@ export interface FieldAudit {
  * first render, before the ref is attached, and renders inline — which is
  * where the quick line lives anyway, so nothing flashes.
  */
+/* What is NOT "outside" for each sheet: the sheet, and the control that
+   opens it — pressing that again is the control's own toggle, not a
+   dismissal, and treating it as one closes and reopens in the same press. */
+const KEEP_ACCOUNT = [".jar-settings", ".jar-account"] as const;
+const KEEP_SHEET = [".jar-settings", ".jar-seek"] as const;
+const KEEP_PROV = [".jar-prov-room", ".jar-panel"] as const;
+const KEEP_ANTE = [".jar-antechamber", ".jar-settings"] as const;
+
 function withMouthLayer(
   isDrawer: boolean,
   host: HTMLElement | null,
@@ -10996,6 +11005,24 @@ function HomeExperience(): JSX.Element {
     window.history.replaceState({}, "", window.location.pathname);
     setPendingJoin(code);
   }, []);
+
+  /* ═══ EVERY SHEET CLOSES THE SAME TWO WAYS ═══
+     The founder ruled it about the make-another-place sheet ("if click
+     outside modal, close it") and about the dial's rail the same day; it is
+     not a fact about those two. The five sheets below closed only by finding
+     their own small word, and the way out of the last sheet is never where
+     the way out of this one is. See `lib/dismiss.ts` for why pointerdown and
+     why Escape stops propagating. */
+  const closeAccount = useCallback(() => setAccountOpen(false), []);
+  const closeSettings = useCallback(() => setSettingsFor(null), []);
+  const closeJoin = useCallback(() => setPendingJoin(null), []);
+  const closeProv = useCallback(() => setProv(null), []);
+  const closeAnte = useCallback(() => setAntechamberOpen(false), []);
+  useDismissAway(accountOpen, closeAccount, KEEP_ACCOUNT);
+  useDismissAway(settingsFor !== null, closeSettings, KEEP_SHEET);
+  useDismissAway(pendingJoin !== null, closeJoin, KEEP_SHEET);
+  useDismissAway(prov !== null, closeProv, KEEP_PROV);
+  useDismissAway(antechamberOpen, closeAnte, KEEP_ANTE);
   const acceptJoin = useCallback(() => {
     if (!pendingJoin) return;
     const code = pendingJoin;
