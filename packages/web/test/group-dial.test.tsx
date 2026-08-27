@@ -266,10 +266,15 @@ function posterText(): string {
  */
 async function windTo(pos: number): Promise<void> {
   const rail = one(".jar-dial-track");
-  const from = railAt * VIEW_W;
-  const to = pos * VIEW_W;
-  const at = (kind: string, x: number) =>
-    new PointerEvent(kind, { bubbles: true, cancelable: true, clientX: x, pointerId: 1 });
+  /* VERTICAL, AND NOW IS AT THE TOP (founder, 2026-08-27). `pos` still means
+     what it always meant — where along the ARCHIVE, 0 at the oldest and 1 at
+     today — because that is the fact each test below is about. The rail is
+     what turned over, so the flip lives here, in the one place that speaks to
+     it, rather than in a dozen assertions about time. */
+  const from = (1 - railAt) * VIEW_H;
+  const to = (1 - pos) * VIEW_H;
+  const at = (kind: string, y: number) =>
+    new PointerEvent(kind, { bubbles: true, cancelable: true, clientY: y, pointerId: 1 });
   await act(async () => {
     rail.dispatchEvent(at("pointerdown", from));
   });
@@ -288,8 +293,9 @@ async function windTo(pos: number): Promise<void> {
   });
   await layout.step(10);
 
-  const asked = pos * 100;
-  const landed = Number.parseFloat(one(".jar-dial-handle").style.left);
+  /* the handle is placed from the TOP, and the top is now */
+  const asked = (1 - pos) * 100;
+  const landed = Number.parseFloat(one(".jar-dial-handle").style.top);
   if (!Number.isFinite(landed) || Math.abs(landed - asked) > 0.5) {
     throw new Error(
       `the room's dial did not move to where the pointer asked: wanted ` +

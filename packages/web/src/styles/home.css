@@ -1795,38 +1795,32 @@
 .jar-dial {
   position: absolute;
   z-index: 5;
-  left: 0;
-  right: 0;
-  /* THE VERY BOTTOM EDGE (founder, 2026-08-25: "put the timeline at the very
-     bottom, and then the room navigation above it"). Time is the outermost
-     frame around everything else on the page — it is the one axis that applies
-     to every wall at once — so it sits under them all rather than between the
-     ground and the names. */
-  /* THE WORD MOVED; THE INSTRUMENT STAYED (founder, 2026-08-25: "let's find a
-     new home for timeline, doesn't need to stay at bottom").
+  /* UNDER THE WORD THAT SUMMONS IT (founder, 2026-08-27: "move timeline
+     slider vertically under this instead", pointing at `now`).
 
-     What was wrong with this edge was never the rail — it was that a WORD
-     reading `timeline` sat here above the count, so time was a fifth signpost
-     on a page whose whole grammar is four, and the fifth one was the only one
-     that named an instrument instead of a place. That word is now `.jar-when`
-     in the top-left, saying `now` or the day you are parked at, beside the
-     name of the wall you are parked on.
+     It was a full-width hairline along the very bottom edge, and the reason
+     given for that was sound: the top of the page is crossed by the chips and
+     the poster's block, so no full-width horizontal line can live up there
+     without cutting through the wall's own words at some sentence length.
 
-     The rail itself belongs here and nowhere else, and the top was measured
-     before this was written: the chips occupy 0–40px, the poster's block
-     starts at 56px and grows downward with the length of the sentence, so a
-     full-width hairline anywhere up there crosses the wall's own words at
-     some sentence length. Time is a horizontal instrument and the bottom edge
-     is the one clear full-width band on the page.
+     A VERTICAL rail has no such problem, because it never crosses them. It
+     hangs from `.jar-when` in the top-left — the word that says `now` or the
+     day you are parked at — so the instrument is attached to its own name
+     instead of living at the opposite corner of the screen from it. Time
+     stops being a band under everything and becomes a thing you pull down
+     beside the wall you are reading.
 
-     It rests ABOVE the count, and the count keeps the edge: the count's box is
-     10px up and about 22px tall, so 42px leaves the same 10px of air between
-     them that every signpost keeps from the glass. And at rest there is
-     nothing here at all — see the reveal rules below. */
-  bottom: calc(42px + env(safe-area-inset-bottom));
+     `top` clears the chip row the word sits in; `left` lines the rail up with
+     the word's own text rather than the row's padding edge. */
+  top: calc(var(--sp-24) * 2);
+  left: calc(var(--sp-24) + var(--sp-10));
+  bottom: auto;
+  right: auto;
   display: flex;
   align-items: stretch;
-  padding: 0 var(--sp-24);
+  /* the rail's own length: enough to scrub with, short of the ground below */
+  height: min(46vh, 380px);
+  padding: 0;
   /* NO SCRIM AT ALL, AND THAT IS THE FIX. It was a gradient to `--jar-deep`,
      written as "a scrim, not a band … without ever showing an edge" — and at
      the very bottom of the screen it showed one, a hard horizontal seam across
@@ -1917,18 +1911,20 @@
 .jar-dial-track {
   position: relative;
   flex: 1;
-  height: 30px;
+  /* the grabbable width of a vertical rail, where `height: 30px` was its
+     grabbable height when it lay along the bottom */
+  width: 30px;
   touch-action: none;
-  cursor: ew-resize;
+  cursor: ns-resize;
 }
 .jar-dial-track::before {
   content: "";
   position: absolute;
-  left: 0;
-  right: 0;
-  top: 50%;
-  height: 1px;
-  margin-top: -0.5px;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  margin-left: -0.5px;
   border-radius: 999px;
   background: var(--jar-faint);
   /* NO OPACITY HERE. This rule gives the hairline its shape and colour;
@@ -1943,10 +1939,10 @@
    thing your eye tracks */
 .jar-month {
   position: absolute;
-  top: 50%;
-  margin-top: 7px;
+  left: 50%;
+  margin-left: var(--sp-12);
   white-space: nowrap;
-  transform: translateX(-50%);
+  transform: translateY(-50%);
   pointer-events: none;
 }
 /* THE DOOR'S MARK ON THE RAIL — the one thing a room's history turns on.
@@ -1962,11 +1958,11 @@
    quiet-at-rest work. No accent, no glow; it still grows under the hand. */
 .jar-dial-handle {
   position: absolute;
-  top: 50%;
-  left: 100%;
+  left: 50%;
+  top: 0;
   width: 8px;
   height: 8px;
-  margin: -var(--sp-4) 0 0 -var(--sp-4);
+  margin: calc(var(--sp-4) * -1) 0 0 calc(var(--sp-4) * -1);
   border-radius: 50%;
   background: #fff;
   box-shadow: none;
@@ -1987,9 +1983,9 @@
    exists only while a finger is actually scrubbing. */
 .jar-dial-date {
   position: absolute;
-  bottom: calc(50% + 10px);
-  transform: translateX(-50%);
-  text-align: center;
+  left: calc(50% + var(--sp-16));
+  transform: translateY(-50%);
+  text-align: left;
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;

@@ -204,14 +204,19 @@ function one(selector: string): HTMLElement {
  */
 async function windTo(pos: number): Promise<void> {
   const rail = one(".jar-dial-track");
-  const from = railAt * VIEW_W;
-  const to = pos * VIEW_W;
+  /* VERTICAL, AND NOW IS AT THE TOP (founder, 2026-08-27). `pos` still means
+     what it always meant — where along the ARCHIVE, 0 at the oldest and 1 at
+     today — because that is the fact each test below is about. The rail is
+     what turned over, so the flip lives here, in the one place that speaks to
+     it, rather than in a dozen assertions about time. */
+  const from = (1 - railAt) * VIEW_H;
+  const to = (1 - pos) * VIEW_H;
   /* jsdom has PointerEvent, so this is the event the handler really receives
      rather than a mouse event wearing its name. The stubbed rect makes the
      rail the full viewport width, so clientX and position are the same
      number scaled. */
-  const at = (kind: string, x: number) =>
-    new PointerEvent(kind, { bubbles: true, cancelable: true, clientX: x, pointerId: 1 });
+  const at = (kind: string, y: number) =>
+    new PointerEvent(kind, { bubbles: true, cancelable: true, clientY: y, pointerId: 1 });
   await act(async () => {
     rail.dispatchEvent(at("pointerdown", from));
   });
@@ -230,12 +235,13 @@ async function windTo(pos: number): Promise<void> {
      exactly like a broken dial. */
   await layout.step(40);
 
-  const asked = pos * 100;
-  const landed = Number.parseFloat(one(".jar-dial-handle").style.left);
+  /* the handle is placed from the TOP, and the top is now */
+  const asked = (1 - pos) * 100;
+  const landed = Number.parseFloat(one(".jar-dial-handle").style.top);
   if (!Number.isFinite(landed) || Math.abs(landed - asked) > 0.5) {
     throw new Error(
       `the dial did not move to where the pointer asked: wanted ${asked.toFixed(2)}% ` +
-        `along the rail, handle sits at "${one(".jar-dial-handle").style.left || "(nowhere)"}". ` +
+        `down the rail, handle sits at "${one(".jar-dial-handle").style.top || "(nowhere)"}". ` +
         `Every assertion below this would otherwise pass by re-measuring the ` +
         `moment the page opened at. If the handle landed at the mirror of the ` +
         `position asked for, the rail is back to front: the left is the past.`,
@@ -346,7 +352,7 @@ describe("which end of the rail is which", () => {
    * newest memory is August eleventh. The words come from the product's own formatter — what is
    * pinned is which moment the rail's ends sit at, not the spelling of a month.
    */
-  it("runs from before your first memory at the left to today at the right", async () => {
+  it("runs from today at the top to before your first memory at the foot", async () => {
     await layout.toField();
     await windTo(0);
 

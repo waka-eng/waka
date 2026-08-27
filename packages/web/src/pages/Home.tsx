@@ -2043,6 +2043,33 @@ function HomeExperience(): JSX.Element {
   const [timeNear, setTimeNear] = useState(false);
 
   /**
+   * THE RAIL GOES AWAY WHEN YOU LOOK AWAY (founder, 2026-08-27: "timeline line
+   * should disappear if clicked outside of it").
+   *
+   * Pressing the word opened the rail and only pressing the word again closed
+   * it, so an instrument summoned for one glance stayed up over the world
+   * until you remembered to dismiss it — and the thing it hangs beside is the
+   * wall you are trying to read.
+   *
+   * A press anywhere that is not the rail or its own word is that dismissal.
+   * `pointerdown` and not `click`, so the rail is gone before whatever the
+   * press was actually for happens; capture phase, so a handler that stops
+   * propagation cannot leave it stranded. A scrub in flight is never
+   * interrupted: the pointer is on the rail then, and it says so.
+   */
+  useEffect(() => {
+    if (!timeOpen) return undefined;
+    const away = (e: PointerEvent) => {
+      const at = e.target as Element | null;
+      if (!at) return;
+      if (at.closest?.(".jar-dial") || at.closest?.(".jar-when")) return;
+      setTimeOpen(false);
+    };
+    window.addEventListener("pointerdown", away, true);
+    return () => window.removeEventListener("pointerdown", away, true);
+  }, [timeOpen]);
+
+  /**
    * Fetch one room's jar — its readings' evidence plus its direction —
    * starting the moment travel toward it begins, so arrival usually finds it
    * ready. The room wakes only when the character has arrived AND this has
@@ -4896,12 +4923,28 @@ function HomeExperience(): JSX.Element {
          it has mounted, which is one frame of a field a few pixels too tall
          and never a wrong layout that persists. */
       {
-        /* THE DIAL IS THE WHOLE BOTTOM CHROME NOW. It was measured off the
-           axis of walls, which sat above it — and the axis is gone, so the
-           reserve is the timeline's own band and the air under it. */
-        const rail = dialRef.current;
-        const box = rail ? rail.getBoundingClientRect() : null;
-        const claimed = box ? Math.round(view.h - box.top) : 0;
+        /* WHATEVER IS ACTUALLY DOWN THERE, WHICHEVER THING IT IS.
+           This measured the dial, because the dial was the bottom chrome. On
+           2026-08-27 the founder moved the timeline up beside the word that
+           summons it and turned it vertical — so the dial's box is now near
+           the TOP of the screen, and `view.h - box.top` became almost the
+           whole viewport. The clamp below would have caught it and handed the
+           field a permanent forty-percent bite out of the screen: not a
+           crash, just a world with far less ground in it, for a reason
+           nothing on screen explains.
+
+           So the reserve stops naming one piece of chrome and asks the
+           question it always meant: of the things that sit along the bottom
+           edge, which one reaches highest? Nothing there reserves nothing. */
+        let highest = 0;
+        for (const sel of [".jar-saved", ".jar-mouth", ".jar-mouth-rest"]) {
+          const el = document.querySelector(sel);
+          if (!el) continue;
+          const b = el.getBoundingClientRect();
+          if (b.height === 0) continue;
+          highest = Math.max(highest, Math.round(view.h - b.top));
+        }
+        const claimed = highest;
         /* A CEILING, AND IT IS A CATASTROPHE GUARD RATHER THAN A TIDY-UP.
            Two rows of small labels cannot honestly want two fifths of the
            screen; a number that large means the measurement is wrong, and the
@@ -8097,18 +8140,29 @@ function HomeExperience(): JSX.Element {
      * the rail was built to avoid was between two things sharing ONE band,
      * and they no longer do.
      *
-     * It reads clientX against the track's width, exactly as it read clientY
-     * against its height.
+     * VERTICAL AGAIN, AND HANGING FROM THE WORD (founder, 2026-08-27: "move
+     * timeline slider vertically under this instead", pointing at `now`).
+     *
+     * It read clientY against the track's height, then clientX against its
+     * width when the rail moved to the bottom edge, and now clientY again —
+     * because the instrument has gone back to the word that summons it. That
+     * is not a circle: what moved each time was WHERE TIME LIVES on the page,
+     * and the rail has always simply run along whichever edge that was.
+     *
+     * NOW IS AT THE TOP, under the word that says `now`, and the rail runs
+     * down into the past. So `p` counts DOWN from the present rather than up
+     * from the beginning — a person pulls the handle down to go back, which is
+     * the direction the archive itself is drawn in.
      */
-    (clientX: number) => {
+    (clientY: number) => {
       const track = dialTrackRef.current;
       if (!track || !dial) return;
       const rect = track.getBoundingClientRect();
-      const p = clamp((clientX - rect.left) / Math.max(rect.width, 1), 0, 1);
-      const T = dial.start + p * dial.span;
+      const p = clamp((clientY - rect.top) / Math.max(rect.height, 1), 0, 1);
+      const T = dial.end - p * dial.span;
       const pct = `${(p * 100).toFixed(2)}%`;
       const handle = dialHandleRef.current;
-      if (handle) handle.style.left = pct;
+      if (handle) handle.style.top = pct;
       const isNow = dial.end - T < DAY_MS / 2;
       setAtNow(isNow);
       parkedRef.current = isNow ? null : T;
@@ -8117,7 +8171,7 @@ function HomeExperience(): JSX.Element {
          is how the date came to be printed at poster size. */
       const date = dialDateRef.current;
       if (date) {
-        date.style.left = pct;
+        date.style.top = pct;
         /* SPOKEN, like every other date on this surface. This printed "Jun 25"
            — digits, in reading text — and it only appears mid-scrub, which is
            why a walk of the resting page never caught it. It shares the
@@ -8138,13 +8192,13 @@ function HomeExperience(): JSX.Element {
       e.currentTarget.setPointerCapture(e.pointerId);
       scrubbingRef.current = true;
       setScrubbing(true);
-      scrubClient(e.clientX);
+      scrubClient(e.clientY);
     },
     [scrubClient],
   );
   const onDialMove = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
-      if (scrubbingRef.current) scrubClient(e.clientX);
+      if (scrubbingRef.current) scrubClient(e.clientY);
     },
     [scrubClient],
   );
@@ -12610,7 +12664,12 @@ function HomeExperience(): JSX.Element {
               <span
                 key={m.pct}
                 className="jar-month jar-label"
-                style={{ left: `${(m.pct * 100).toFixed(2)}%` }}
+                /* `m.pct` runs 0 at the oldest to 1 at now, which is the
+                   archive's own order; the rail hangs the other way up, with
+                   now at the top under the word. Flipped here rather than at
+                   the source, because the source is the archive and it is not
+                   wrong. */
+                style={{ top: `${((1 - m.pct) * 100).toFixed(2)}%` }}
               >
                 {m.label}
               </span>

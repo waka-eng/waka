@@ -282,7 +282,7 @@ const BOXES = `(() => {
   return {
     vw: window.innerWidth, vh: window.innerHeight,
     values: box(".jar-values"), wayL: box(".jar-way"), wayR: box(".jar-way--r"),
-    saved: box(".jar-saved"), dial: box(".jar-dial"),
+    saved: box(".jar-saved"), dial: box(".jar-dial"), nowWord: box(".jar-when"),
     when: box(".jar-panel-when"), vis: box(".jar-panel-vis"),
     text: box(".jar-panel-text"),
     footL: box(".jar-panel-foot-l"), footC: box(".jar-panel-foot-c"), footR: box(".jar-panel-foot-r"),
@@ -412,7 +412,7 @@ const CASES: Case[] = [
   {
     id: "signposts-one-inset",
     name: "every signpost keeps the same air from the edge it is nearest",
-    needs: ["jar-values", "jar-way", "jar-saved", "jar-dial"],
+    needs: ["jar-values", "jar-way", "jar-saved", "jar-dial", "jar-when"],
     sabotage: ".jar-values { top: 40px; }",
     run: async (page) => {
       const b = (await page.evaluate(BOXES)) as Boxes;
@@ -425,20 +425,27 @@ const CASES: Case[] = [
          the count its own inset: it kept 10px from the RAIL while the rail
          kept 6px from the screen, so the sign a person reads most sat
          furthest from an edge of the four. */
-      const railGap = box("saved").top - box("dial").bottom;
+      /* THE RAIL HANGS FROM ITS OWN WORD NOW (founder, 2026-08-27: "move
+         timeline slider vertically under this instead"). It was the lower of
+         two bands along the bottom and the gap measured here was the air
+         between it and the count. It is vertical and up in the top-left, so
+         the air that matters is between the WORD that summons it and the rail
+         that answers — the same inset, between the same two things, in the
+         place they now both live. */
+      const railGap = box("dial").top - box("nowWord").bottom;
       const got = {
         top: box("values").top,
         left: box("wayL").left,
         right: b.vw - box("wayR").right,
-        /* THE COUNT HAS THE BOTTOM EDGE TO ITSELF, since 2026-08-25. First
-           the rail was under it, which cost the count its own inset — it kept
-           10px from the RAIL and the rail kept 6px from the screen, so the
-           sign a person reads most sat furthest from an edge of the four.
-           Then the rail moved above it, which is where it stays: the WORD
-           that used to sit here went to the top-left and became the reading
-           itself, so this edge is no longer naming two things. */
+        /* THE COUNT HAS THE BOTTOM EDGE ENTIRELY, since 2026-08-27. First the
+           rail was under it, which cost the count its own inset — it kept 10px
+           from the RAIL while the rail kept 6px from the screen, so the sign a
+           person reads most sat furthest from an edge of the four. Then the
+           rail moved above it. Now the rail has left this edge altogether and
+           gone to hang under its own word, and the count is the only thing
+           down here. */
         bottom: b.vh - box("saved").bottom,
-        "the rail above it": railGap,
+        "the rail under its word": railGap,
       };
       const wrong = Object.entries(got).filter(([, v]) => !near(v, INSET, 1));
       return {

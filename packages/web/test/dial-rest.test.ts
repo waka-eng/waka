@@ -101,21 +101,36 @@ describe("the rail rests, whatever the archive's dates are", () => {
     ).toBe(true);
   });
 
-  it("leaves the bottom edge itself to the count", () => {
-    /* The rail lives at the bottom — it is a horizontal instrument and that is
-       the only clear full-width band on the page. What it must not do is take
-       the EDGE, which belongs to the count: `e2e/measure.ts` proves the 10px
-       between them in a real engine, and this only pins the anchor that makes
-       that geometry possible at all. */
+  it("leaves the bottom edge entirely to the count", () => {
+    /**
+     * THE RAIL HAS LEFT THE BOTTOM (founder, 2026-08-27: "move timeline slider
+     * vertically under this instead", pointing at the word `now`).
+     *
+     * This used to pin the rail 42px off the bottom edge, so that the count
+     * kept its own 10px from the glass with the rail resting above it. The
+     * question it was really asking — does anything crowd the count out of the
+     * edge that belongs to it — is now answered more completely than the pin
+     * ever answered it: the rail hangs from the top-left beside its own word
+     * and is not at the bottom at all.
+     *
+     * So the assertion is the intent rather than the old number. A rail that
+     * grew a `bottom` again would be somebody putting a horizontal instrument
+     * back across the page's lowest band, which is the thing this file exists
+     * to notice.
+     */
     const at = CSS.indexOf("\n.jar-dial {");
     expect(at, "`.jar-dial` has no rule").toBeGreaterThan(-1);
     const rule = CSS.slice(at, CSS.indexOf("\n}", at));
     expect(
-      /bottom:\s*calc\(42px/.test(rule),
-      "the rail no longer stands 42px off the bottom. That number is what " +
-        "leaves the count its own 10px from the glass — if the rail is being " +
-        "moved, move `signposts-one-inset` in e2e/measure.ts with it rather " +
-        "than letting the two edges quietly disagree.",
+      /bottom:\s*auto/.test(rule),
+      "`.jar-dial` is anchored to the bottom again. The rail hangs from " +
+        "`.jar-when` in the top-left now and runs downward; the bottom edge " +
+        "belongs to the count alone.",
+    ).toBe(true);
+    expect(
+      /top:\s*calc\(/.test(rule),
+      "`.jar-dial` has lost its top anchor — it hangs from the word that " +
+        "summons it, and without a top it hangs from nothing.",
     ).toBe(true);
   });
 });
