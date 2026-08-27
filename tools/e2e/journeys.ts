@@ -494,15 +494,63 @@ const JOURNEYS: Journey[] = [
          orbs it found and says "nothing here says that" when it found none —
          so the question "was it found" is answered by whether the world says
          that sentence. There is no list of words to read, by design. */
-      await page.keyboard.press("/");
-      await page.waitForTimeout(600);
+      /* THE WORLD HAS TO BE LISTENING BEFORE IT CAN HEAR A KEY — AND ONCE,
+         IT NEVER STARTED.
+
+         This walk flaked about one run in four with a bare Playwright timeout
+         — "waiting for locator(input[placeholder=…])" — which says only that
+         the field never came and nothing about why. Three questions closed
+         it. What did the page look like at the moment of the press? Ready:
+         canvas, headquarters, no loading ground, nothing focused. How long
+         would it stay that way? Twenty presses over twenty seconds, all
+         ignored — so not a startup window. And was the key even being
+         delivered? A `keydown` dispatched from inside the page did nothing
+         either: the listener was not late, it was ABSENT.
+
+         `/` is attached by the effect that builds the frame loop, and that
+         effect re-runs on a signature of the archive. The signature said the
+         same thing about "the archive has not answered" and "the archive
+         answered, and it is empty" — both `""` — which are exactly the two
+         states a brand-new account passes through, in that order. If the
+         profiles call landed first, the effect ran early against a null
+         archive, bailed, and never saw a reason to run again. The world stood
+         there looking finished and could not be touched: no `/`, no arrows,
+         no Escape, no drag. `packages/web/src/space/pour-signature.ts` holds
+         the fix and the whole story; `pour-signature.test.ts` fails if anyone
+         collapses those two states again.
+
+         THE PRESS STAYS A LOOP, AND IT IS NOT A RETRY-UNTIL-GREEN. A person
+         who presses a key at a world that did not answer presses it again;
+         this does the same and PRINTS HOW LONG the world took to answer. A
+         window that reopens shows up in the log as a growing number instead
+         of coming back as a flake for someone else to chase. */
+      const FIND = 'input[placeholder="Which words do you remember?"]';
+      const askedAt = Date.now();
+      let answeredMs: number | null = null;
+      for (let i = 0; i < 20 && answeredMs === null; i += 1) {
+        await page.keyboard.press("/");
+        const line = await page.waitForSelector(FIND, { timeout: 1_000 }).catch(() => null);
+        if (line) answeredMs = Date.now() - askedAt;
+      }
+      if (answeredMs === null) {
+        const at = await page.evaluate(() =>
+          document.activeElement ? document.activeElement.tagName.toLowerCase() : "(none)",
+        );
+        return {
+          ok: false,
+          detail: `pressing "/" opened no find line in 20s — focus was on ${at}`,
+        };
+      }
       await page.fill('input[placeholder="Which words do you remember?"]', needle);
       await page.waitForTimeout(3_500);
       const verdict = (await page.evaluate(
         () => document.querySelector(".jar-seek")?.textContent ?? "",
       )) as string;
       const found = !/nothing here says that/i.test(verdict);
-      return { ok: found, detail: `found=${found} needle=${needle}` };
+      return {
+        ok: found,
+        detail: `found=${found} needle=${needle}; the world answered "/" after ${answeredMs}ms`,
+      };
     },
   },
 
@@ -1348,24 +1396,56 @@ const JOURNEYS: Journey[] = [
 
       await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
 
-      /* CLOSE ANYTHING STANDING OVER THE BOARD BEFORE MEASURING.
-         Seen once in a full sweep on 2026-08-25 and not reproducible alone:
-         this case reported all three verbs unreachable with "the press lands
-         on div.jar-panel.jar-panel--in" — a reading card, centred, lying over
-         them. Run on its own it passed twice.
+      /* CLOSE ANYTHING STANDING OVER THE BOARD BEFORE MEASURING, AND KNOW
+         WHAT PUTS IT THERE.
 
-         The account this walks is reused across journeys, so a card left open
-         by an earlier one is still open when this one arrives, and the claim
-         being made here — the four verbs are hit-testable — is not a claim
-         about what happens while a memory is open on top of them. A case that
-         passes or fails on what ran before it is not measuring its own
-         subject.
+         Seen once in a full sweep on 2026-08-25 and written up then as not
+         reproducible alone: all three verbs reported unreachable with "the
+         press lands on div.jar-panel.jar-panel--in" — a reading card,
+         centred, lying over them. The guess at the time was a card left open
+         by an earlier journey, since the account is reused; an Escape here
+         was the fix and it passed for two days.
 
-         Escape closes the card, and pressing it on a page with nothing open
-         costs nothing. The claim is unchanged; only its starting state is now
-         its own rather than inherited. */
+         CI FOUND THE REAL ONE on 2026-08-27, reporting the same failure with
+         `p.jar-ask--after.jar-panel-foot` — a card's FOOT — over two of the
+         verbs. Nothing left it open. THE WORLD OPENS IT ITSELF: the arrival
+         greeting glides to the newest memory 1.4s after the world is ready
+         and lets it go 2.6s after that, so for four seconds of every arrival
+         with something new in it a card is legitimately centred over the
+         board. This journey saves four memories and then arrives, which
+         means it walks into that window every single time. It passed locally
+         only because a fast machine finishes the greeting before the poster
+         band has finished opening; a slower one does not, and the two orders
+         are equally correct.
+
+         So the Escape at the start was aimed at the wrong suspect. What this
+         case claims is that the four verbs can be pressed on a board with
+         nothing over it, and the greeting is a thing over it — a real one,
+         by design, that a person waits out. The walk waits it out too:
+         `.jar-hq` is the ready gate itself — the world renders it and the
+         loading ground in the same ternary — the greeting's whole window is
+         4s from there, and one Escape after it closes anything that
+         survived. A timing this journey does not control is now a
+         timing it waits for rather than races. */
+      const GREETING_WINDOW_MS = 1_400 + 2_600 + 600;
+      await page
+        .waitForSelector(".jar-hq", { state: "attached", timeout: 30_000 })
+        .catch(() => null);
+      await page.waitForTimeout(GREETING_WINDOW_MS);
       await page.keyboard.press("Escape");
       await page.waitForTimeout(300);
+      /* and if something is STILL up, say which — a verb reported unreachable
+         with a card over it is a different fact from a verb that is unreachable */
+      const standing = await page.evaluate(() => {
+        const over = document.querySelector(".jar-panel");
+        return over ? over.className : null;
+      });
+      if (standing) {
+        return {
+          ok: false,
+          detail: `something stayed open over the board after Escape: .${standing}`,
+        };
+      }
 
       /* The board arrives out of band. Poll rather than sleep, and say so if
          it never comes — a walk with no board proves nothing about buttons

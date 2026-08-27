@@ -98,6 +98,7 @@ import { whyFailed as sayWhyFailed, whyOf } from "../lib/why-failed";
 import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
 import { agentBeing, OWNER_BEING, unit, type Being } from "../character/body";
 import { groupCompanyPlaces, type CompanyPlace } from "../space/group-company";
+import { pourSignature } from "../space/pour-signature";
 import { posterWords } from "../space/top-of-mind/poster";
 import {
   deriveAmbition,
@@ -1249,13 +1250,12 @@ function HomeExperience(): JSX.Element {
   inspirationsRef.current = inspirations;
   /** server ids of memories born in THIS session; the world already has them */
   const bornIdsRef = useRef<Set<string>>(new Set());
+  /* `pour-signature.ts` holds the rule and the reason it exists: an archive
+     that has not answered must not sign the same as one that answered empty,
+     or a fresh account whose profiles land first gets a world it cannot
+     touch. */
   const pourSig = useMemo(
-    () =>
-      (inspirations ?? [])
-        .map((c) => c.id)
-        .filter((id) => !bornIdsRef.current.has(id))
-        .sort()
-        .join(","),
+    () => pourSignature(inspirations, bornIdsRef.current),
     [inspirations],
   );
   const [notes, setNotes] = useState<JarNote[] | null>(null);
