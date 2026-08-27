@@ -30,3 +30,14 @@ tools/visual-diff/output/
 
 # Local file-first vault used by pnpm dev:local
 .waka-vault-local/
+
+# Throwaway browser probes, which have to sit in the repo root.
+#
+# A one-off question about the running world ("is anything covering this
+# control's centre?") is answered by a short Playwright script, and `tsx`
+# resolves `playwright` from the root — so the root is where such a script has
+# to live. They are written, read once, and deleted; none of them is a gate and
+# none should ever be committed. Ignored by name so a probe in flight does not
+# make the tree look dirty, and so nobody is tempted to commit one to make a
+# hook stop complaining.
+*-probe.ts
