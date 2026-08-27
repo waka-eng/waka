@@ -1234,10 +1234,18 @@
    honest states: writing, where nothing else exists, and away, where "save
    as draft" has kept the words and the resting mouth says so.
 
-   COVERING THE COMPANION IS FINE — the founder settled that: "I don't care
-   about the text covering the character." What the page keeps from the
-   drawer era: one tone, the well's inset edge, the centred foot row, and the
-   rise from the seam — motion still explains where the note came from. */
+   AND THE PAGE IS A VEIL, NOT A WALL (founder, same day, on seeing it:
+   "dont make the full screen feel like a new page, but like overlay softly
+   on the existing page … like the color of the sky today kinda darkens
+   above everything else like a cloud is covering the sun"). An opaque frame
+   read as leaving — a new page where a world had been. So the sheet's tone
+   goes translucent: the world stays exactly where it is and the light drops
+   over all of it at once, the orbs still glowing faintly through, and the
+   writing sits on top of the dimmed world rather than somewhere else. This
+   is the OPPOSITE call from the memory card's ("make modal full opacity so
+   whats behind doesnt show") and both stand: the card is a thing you READ,
+   and text over noise is noise; the veil is a place you WRITE, over a world
+   dark enough that what ghosts through is glow, not detail. */
 /* AND IT COVERS WHAT IT SLID IN FRONT OF. The mouth sits at z4, under the
    ground's own chrome at z5-6, so the bottom edge printed straight THROUGH
    the sheet's footer — which is the one thing an opaque object cannot do and
@@ -1269,22 +1277,22 @@
   align-items: center;
   padding: calc(var(--sp-18) + env(safe-area-inset-top)) 0
     calc(22px + env(safe-area-inset-bottom));
-  /* opaque, one tone: with no world at the edges there is no edge to draw —
-     no border, no radius, no shadow. The well's inset hairline is the only
-     line on the page. */
-  background: var(--jar-sheet);
-  animation: jar-drawer-up 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+  /* one tone, worn thin: the sheet's own navy at 86%, mixed rather than
+     restated so the veil can never drift from the tone it dims with. No
+     border, no radius, no shadow — a cloud has no edges; the well's inset
+     hairline is the only line on the page. */
+  background: color-mix(in srgb, var(--jar-sheet) 86%, transparent);
+  /* the cloud covers the sun: light drops over the whole world at once, so
+     the arrival is a fade and nothing moves — the world is still there and
+     still where it was. (The slide-up belonged to the drawer, an object
+     with a below-the-frame to come from; a veil has no elsewhere.) */
+  animation: jar-veil-in 0.36s ease-out both;
   /* A SOLID THING STOPS THE POINTER. `.jar-mouth` is pointer-events: none so
      the world can be dragged through it; the sheet is the exception, because
      a press that lands on a drawer and pans the sky behind it is a press that
      went through the drawer, and then it is not a drawer. */
   pointer-events: auto;
 }
-/* It comes from BELOW THE FRAME, its whole height, once. The old animation
-   nudged it twelve pixels and faded it in — which is an appearance, not an
-   arrival, and told you nothing about where the thing came from or where it
-   goes back to. Motion explains. (The keyframes keep the drawer's name:
-   the page still rises the same way, from the seam the quick line lives at.) */
 /* the way out that keeps the words, first in the foot's centred row */
 .jar-mouth-step {
   all: unset;
@@ -1297,12 +1305,14 @@
   color: var(--jar-ink);
 }
 
-@keyframes jar-drawer-up {
+/* the cloud's arrival: nothing translates, the light just goes — the drawer's
+   slide-from-below went with the drawer (a veil has no below to come from) */
+@keyframes jar-veil-in {
   from {
-    transform: translateY(100%);
+    opacity: 0;
   }
   to {
-    transform: none;
+    opacity: 1;
   }
 }
 /* WHERE THIS ONE IS GOING, ON THE DRAWER'S OWN FOOTER. Inside the sheet, under
