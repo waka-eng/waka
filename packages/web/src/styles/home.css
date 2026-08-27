@@ -111,7 +111,13 @@
      points UP from `--jar-atmos`; its top edge is lit like the lip of a real
      one; and the place you type is a WELL sunk into it, because a hollow takes
      less light than the face around it. */
-  --jar-sheet: #12161f;
+  /* ONE TONE, THE WELL'S (founder, 2026-08-27: "dont use two colors for it.
+     just use the inner navy color only"). The sheet used to sit a dozen
+     points up from the atmosphere with the well sunk 34% darker into it —
+     two colours. The whole drawer now wears what the well's mix computed
+     (#12161f under 34% black ≈ this), and the well keeps only its SHAPE:
+     the inset hairline that says "a place to type", with no tonal step. */
+  --jar-sheet: #0c0e15;
   --jar-sheet-lip: rgba(255, 255, 255, 0.2);
   --jar-sheet-edge: rgba(255, 255, 255, 0.07);
   --jar-sheet-well: rgba(0, 0, 0, 0.34);
@@ -1311,11 +1317,9 @@
    is how a corner stops being readable. */
 .jar-mouth-step {
   all: unset;
-  position: absolute;
-  top: 13px;
-  left: 20px;
   cursor: pointer;
-  color: var(--jar-faint);
+  /* the minus sits in the foot's row with the verbs, at their resting tier */
+  color: var(--jar-muted);
   transition: color 0.18s ease;
 }
 .jar-mouth-step:hover {
@@ -1358,17 +1362,13 @@
 /* No rule above it either: the well below has its own edge, and a second line
    a few pixels under the first was fencing off a footer that is already
    plainly outside the writing. */
-/* ON THE SHEET, IT RIDES THE TOP RIGHT. The footer had grown to two stacked
-   rows under the writing — where it goes, then what you can do — which is a
-   form growing out of the bottom of a page. Where a note is going is a
-   PROPERTY of the note, so it sits on the sheet's shoulder beside the
-   minimize word, and the footer keeps one row: what you can do. */
+/* ONE ROW AT THE FOOT, CENTRED (founder, 2026-08-27: "the buttons should be
+   at bottom center"). The row rode the sheet's top-right shoulder for a
+   while, beside the minimize word; the founder moved everything — the minus
+   included — into a single centred row at the foot, so the whole top edge of
+   the drawer is clean and the writing starts where the paper does. */
 .jar-mouth-slot--note .jar-mouth-where--sheet {
-  position: absolute;
-  top: 11px;
-  right: 20px;
-  margin: 0;
-  justify-content: flex-end;
+  justify-content: center;
 }
 
 /* The reserved row: present from the moment the mouth opens, visible once
@@ -3515,7 +3515,9 @@
     max-height: min(52vh, 520px);
     padding: var(--sp-14) var(--sp-16);
     border-radius: 12px;
-    background: var(--jar-sheet-well);
+    /* no fill of its own: one colour rules the drawer, and the well's claim
+       to being a well is carried by its inset edge alone */
+    background: none;
     box-shadow: inset 0 0 0 1px var(--jar-sheet-edge);
     font-size: var(--t-body);
     font-weight: 400;

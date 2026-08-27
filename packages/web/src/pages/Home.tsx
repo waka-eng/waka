@@ -11961,22 +11961,6 @@ function HomeExperience(): JSX.Element {
                 : undefined
             }
           >
-            {mouthLong && !mouthMin ? (
-              <button
-                type="button"
-                className="jar-mouth-step jar-label"
-                /* mousedown would blur the note before the click lands; the
-                   sheet's own guard already refuses that for presses on its
-                   face, and this button wants the click, so it blurs
-                   deliberately in the handler instead */
-                onClick={() => {
-                  mouthFieldRef.current?.blur();
-                  setMouthMin(true);
-                }}
-              >
-                minimize
-              </button>
-            ) : null}
             {mouthLong && mouthMin ? (
               /* THE WHOLE LIP IS THE WAY BACK. While minimized the sheet's
                  visible strip shows the first line of the draft — the state
@@ -12087,6 +12071,27 @@ function HomeExperience(): JSX.Element {
                   draft.trim() !== "" ? " jar-mouth-where--armed" : ""
                 }${mouthLong ? " jar-mouth-where--sheet" : ""}`}
               >
+                {mouthLong && !mouthMin ? (
+                  /* THE MINUS, APPLE'S OWN GESTURE (founder, 2026-08-27:
+                     "dont write minimize. use the - thing that apple uses.
+                     the buttons should be at bottom center"). A glyph, not a
+                     word, first in the one centred row at the foot — the
+                     drawer's whole top edge is clean now. */
+                  <>
+                    <button
+                      type="button"
+                      className="jar-mouth-step"
+                      aria-label="minimize the note"
+                      onClick={() => {
+                        mouthFieldRef.current?.blur();
+                        setMouthMin(true);
+                      }}
+                    >
+                      <span aria-hidden="true">−</span>
+                    </button>
+                    <span aria-hidden="true" className="jar-mouth-dot"> · </span>
+                  </>
+                ) : null}
                 <button
                   type="button"
                   className={keepPublic ? "jar-where-off" : "jar-where-on"}
