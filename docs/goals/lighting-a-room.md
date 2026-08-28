@@ -1,0 +1,155 @@
+# Goal: lighting a room
+
+Status: not started
+Branch: `goal/lighting-a-room`
+Depends on: nothing structural. Touches the join consent sheet
+(`a-room-you-can-trust` made joining an asked question; this goal keeps that
+sheet the moment of disclosure and gives it sight, not new powers).
+Decided by founder, 2026-08-28: the whole loop is in scope (maker, invitee,
+stranger, and the room's first week); a review-and-open pass runs at create
+and at join; solo creation stands, with the dark room rendered as staged
+states; this document is the plan of record.
+
+## Why
+
+Making a room is one line — a name, an owner seat, an invite link. Everything
+after that line is untold on the surface. A newborn room is structurally
+silent by design: its ground is its members' *public* captures and private is
+the default; a wall statement is served only once memories from two different
+members stand under it (`GROUP_SIGNAL_MIN_VOICES`); the first reading waits
+for affirmed statements (`GROUP_DRAFT_MIN_AFFIRMED_SMALL` in a small room —
+bars and values live in `docs/generation.md`). A room of one, or of members
+whose captures are all private, is dark, and today it says one sentence about
+all of that: "Forming — nothing read together yet."
+
+The silence is designed. The illegibility is not. Nothing tells the maker the
+room is waiting, in order, for a second voice, public memories, a pattern
+under two voices, an affirmation. Nothing shows the invitee what they are
+about to put on the table. And the person for whom an invite link is their
+first contact with WAKA — the growth loop, and the room with the longest dark
+period, since the join backfill finds nothing of theirs to read — walks the
+same path as everyone else, untold.
+
+Three people, one loop: the maker, the invitee already here, the stranger.
+This goal makes each next-needed act obvious from inside the room, and makes
+the room's brightening literal — light is the only meaning channel, and a
+room getting lit is the product working.
+
+## Load-bearing decisions
+
+- **The switch stays global.** Public means visible to every room you are in
+  — the pass says exactly that sentence, and per-room visibility stays out of
+  scope (`docs/data-model.md`). Opening a memory is per-capture and explicit:
+  bulk-assisted, never inferred.
+- **The consent sheet stays the ask.** A link-click joins nothing; the sheet
+  keeps its question and gains only sight of what the joiner already owns.
+- **Solo creation stands.** Paired birth — a room that materializes on the
+  second voice — is rejected: a dark room rendered honestly teaches the same
+  truth without blocking the maker.
+- **States render, numerals never.** Every stage sentence is a state, not a
+  count. The mechanics already withdraw and re-admit voices at serve time
+  (`packages/api/src/lib/room-visibility.db.test.ts`); the surface only has
+  to say where things stand.
+
+## Phases
+
+### Phase 1 — the maker lands in what they made
+
+"make it" travels to the new room's wall. The empty room's first object is
+its invite — copy-the-invite as the primary verb where you land, not a row in
+settings. The creation sheet carries one plain line about what a room does:
+it reads what its members keep public, and says only what stands under more
+than one of them.
+
+**Gate:** an e2e walk makes a room, arrives at it without a further tap, and
+copies the invite from where it landed.
+
+### Phase 2 — the dark room speaks in stages
+
+The one forming line becomes stage-honest states. The room reports the first
+missing thing, in a fixed order, and each stage names the single act that
+advances it (sentences below are drafts; the phase settles the copy):
+
+1. No second voice → the invite is the way in.
+2. Voices, bare ground → nothing public stands here yet; open a memory and
+   it will.
+3. Ground, nothing two-voiced → nothing stands under two voices yet; what
+   you keep open keeps feeding it.
+4. A statement waiting → something is forming; say whether it is true of
+   you.
+
+The stage is read from data the room already loads — roll, ground, wall,
+proposals — no new endpoint. Light renders the stage; motion happens only
+when an act lands.
+
+**Gate:** the offline fixture renders every stage; each sentence passes the
+mom test; nothing on the stage surface is a count.
+
+### Phase 3 — review-and-open
+
+At create and after join consent, a pass over your own captures: choose what
+to open. The honest sentence is fixed — opening a memory makes it public to
+every room you are in. The pass is also reachable any time from stage 2's
+verb: a door back, not a birth-only ceremony. Mechanics exist end to end:
+the switch fans out on open, withdraws at serve time on close, and the join
+backfill (`GROUP_JOIN_BACKFILL_LIMIT`) already reads what is public when a
+member arrives.
+
+**Gate:** the pass writes the same per-capture acts the editor writes; the
+room's ground shows them on the next read; an e2e walk takes a dark
+two-person room to a lit wall through the pass alone.
+
+### Phase 4 — the invitee sees what they bring
+
+The consent sheet gains "look first": your public captures, listed as what
+the room will see of you — your own data, no new disclosure. Joining then
+lands you at the room, where your memories visibly take their place on its
+ground: the consequence of joining, shown rather than described.
+
+**Gate:** e2e — arrive on a link, look first, join, and find your own orbs
+standing on the room's ground.
+
+### Phase 5 — the stranger's walk
+
+The login page reads the preserved destination and says so: you were invited
+to a room — sign in and we'll take you there. No room details leak pre-auth.
+After the name step, the consent sheet as today, then Phase 3's pass — which
+for a stranger doubles as the first-capture teacher, because there is
+nothing to open until they keep something.
+
+**Gate:** a cold browser walks link → account → consent → room without a
+dead end, and the join code never lands in history or a referrer (true
+today, kept true).
+
+## Open ruling (founder): the pre-join preview
+
+Whether the consent sheet may name the room and its roll *before* joining.
+Anyone holding the link can join and look, so a preview arguably discloses
+nothing new — but it would disclose without an act on the record, to whoever
+a link leaks to. Until ruled, the sheet stays nameless, as today.
+
+## What this goal will not do
+
+- Per-room visibility, or any third value for the switch.
+- Auto-join on click, email invitations, notification channels.
+- Seeded or placeholder room content — an empty room reads as empty, staged.
+- Disclose the room's name or roll pre-join (see the open ruling).
+- Growth numbers on any surface.
+
+## Budget
+
+No new model calls: stages derive from reads the room already makes, the
+pass writes visibility edits, and fan-out and backfill derivation already
+exist and are budgeted. E2e walks spend the standard derivation pennies.
+
+## Acceptance
+
+- A maker goes make → invite → open → second voice → first statement → first
+  reading, with each step told by the room itself in stage sentences.
+- An invitee sees what they bring before joining, and sees it land after.
+- A stranger reaches the room from a cold link without a dead end.
+- Every stage sentence passes the mom test; no counts anywhere on the loop.
+
+## Log
+
+_(phases append numbers and verdicts here)_
