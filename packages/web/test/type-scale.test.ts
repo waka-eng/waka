@@ -57,8 +57,14 @@ import { describe, expect, it } from "vitest";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STYLES = resolve(HERE, "../src/styles");
 
-/** The stylesheets the product is keeping. `surface.css` is exempt — see above. */
-const GOVERNED = ["home.css", "chrome.css", "global.css"] as const;
+/** The stylesheets the product is keeping. `surface.css` is exempt — see above.
+ *
+ * `landing.css` joined on 2026-08-28, on the day it was written rather than
+ * later. A new sheet outside this list is the parking lot again: a place a
+ * literal can be written because nothing is counting. It declares no colour,
+ * size or space of its own, so it enters at zero and moves none of the three
+ * ceilings below. */
+const GOVERNED = ["home.css", "chrome.css", "global.css", "landing.css"] as const;
 
 /**
  * THE CEILING, and it is a number to be lowered.
