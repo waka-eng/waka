@@ -172,7 +172,16 @@ const FIXTURE = `<!doctype html>
        whole point of it being here: a bare \`h1\` selector in another sheet
        reaches this element, and a fixture that rendered the poster as a
        \`div\` would be immune to the one defect the case below exists for. -->
-  <h1 class="jar-poster">a sentence the world is holding up</h1>
+  <!-- IN ITS COLUMN, because the column is where its left edge comes from.
+       The poster stood as a bare child of \`.jar\` and so began at x 0, which
+       made "does the signpost line up with the claim" unanswerable here: the
+       fixture had no claim edge to line up WITH. \`.jar-hq-inner\` carries the
+       side padding and the measure, and that is all this needs — not
+       \`.jar-hq\`, which is absolutely positioned and takes no pointer, and
+       would change what every other case in this file is standing on. -->
+  <div class="jar-hq-inner">
+    <h1 class="jar-poster">a sentence the world is holding up</h1>
+  </div>
   <button class="jar-values" data-jar-chrome="1">
     <span class="jar-values-words jar-label">philosophies &amp; values</span>
     <span class="jar-caret jar-caret--up" aria-hidden="true"></span>
@@ -913,6 +922,64 @@ const CASES: Case[] = [
             ? `${got.size}px ${got.weight} ${got.family} at ${got.tracking} — every one of them `
               + "`home.css`'s own"
             : wrong.join("; "),
+      };
+    },
+  },
+
+  {
+    id: "one-left-edge-on-a-phone",
+    name: "on a phone the signpost and the claim share one left edge",
+    needs: ["jar-values", "jar-poster", "jar-hq-inner"],
+    /* put the signpost back in the middle of the screen, which is where it was */
+    sabotage:
+      "@media (max-width: 560px) { .jar-values { left: 50% !important;" +
+      " transform: translateX(-50%) !important; } }",
+    run: async (page) => {
+      /* THE FOUNDER, over two screenshots of a phone: "so ugly" (2026-08-28).
+         Measured at 390px: the claim is set LEFT from x 20 and the signpost
+         above it was CENTRED at 195 — two alignment systems stacked. On a
+         desktop that reads as deliberate, because the claim sits in a 680px
+         column inside a 1440px frame and a centred label agrees with the
+         column's own centre. On a phone the claim IS the full width, so a
+         centred label agrees with nothing, and on a wall with nothing on it
+         yet the label floats over one short italic line at the far edge.
+
+         THE CASE RESIZES ITSELF, because the rule it measures lives behind
+         `max-width: 560px` and every other case here runs at 900. The
+         harness hands each case its own page, so this costs nothing but the
+         reflow.
+
+         AND IT COMPARES INK, NOT BOXES. The signpost is a button carrying
+         12px of side padding, so its BOX has to stand 12px further left than
+         the claim for their WORDS to line up. A case that compared boxes
+         would demand the wrong number and, worse, would be satisfied by a
+         signpost whose letters were visibly out. */
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.waitForTimeout(200);
+      const read = `(() => {
+        const e = document.querySelector(".jar-values");
+        const p = document.querySelector(".jar-poster");
+        if (!e || !p) return null;
+        const rg = document.createRange();
+        rg.selectNodeContents(e);
+        const ink = rg.getBoundingClientRect();
+        return JSON.stringify({
+          ink: Math.round(ink.left),
+          box: Math.round(e.getBoundingClientRect().left),
+          claim: Math.round(p.getBoundingClientRect().left),
+        });
+      })()`;
+      const raw = (await page.evaluate(read)) as string | null;
+      if (!raw) return { ok: false, detail: "no signpost or no claim on the fixture" };
+      const m = JSON.parse(raw) as { ink: number; box: number; claim: number };
+      const off = m.ink - m.claim;
+      return {
+        ok: near(off, 0, 1),
+        detail: near(off, 0, 1)
+          ? `both start at x ${m.claim} — the signpost's box stands at ${m.box}, ` +
+            `its own padding wide of it, so the letters line up`
+          : `the signpost's words start at x ${m.ink} and the claim's first letter at ` +
+            `x ${m.claim} — ${r1(off)}px apart, two left edges`,
       };
     },
   },

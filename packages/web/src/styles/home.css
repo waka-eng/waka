@@ -3050,6 +3050,28 @@
        is not an inset, it is a near miss: the signpost read as attached to the
        chrome above it rather than as its own thing. */
     top: calc(56px + env(safe-area-inset-top));
+    /* AND IT STANDS AT THE COLUMN'S EDGE, NOT THE SCREEN'S MIDDLE.
+       Founder, 2026-08-28, over two screenshots of a phone: "so ugly".
+
+       Measured at 390px: the claim is set LEFT from x 20, and this signpost
+       was CENTRED at 195 — their left edges 77px apart. On a desktop that
+       reads as deliberate, because the claim sits in a 680px column inside a
+       1440px frame and a centred label agrees with the column's own centre.
+       On a phone the claim is the full width, so a centred label stops
+       agreeing with anything: two alignment systems stacked, and on a wall
+       with nothing on it yet the label floats over one short italic line
+       hanging at the far edge.
+
+       It already steps out of the top row on a phone. Stepping to the
+       column's edge as well is the same adaptation finished: signpost, then
+       claim, one left edge, one column. 20px is `.jar-hq-inner`'s own side
+       padding, read off the same number rather than restated.
+
+       The 12px of side padding this button carries is subtracted, so its
+       WORDS line up with the claim's first letter — not its box. Nobody sees
+       a box. */
+    left: 8px;
+    transform: none;
   }
   /* AND THE COLUMN MAKES ROOM FOR THE SIGNPOST THAT STEPPED INTO IT.
      `.jar-hq-inner` pads 72px from the top, and that number was set for a
