@@ -41,3 +41,8 @@ tools/visual-diff/output/
 # make the tree look dirty, and so nobody is tempted to commit one to make a
 # hook stop complaining.
 *-probe.ts
+
+# `e2e:snapshot` writes this to the repo root: a scratch reading of every
+# computed style, for comparing two runs by hand. Not a committed baseline —
+# nothing reads it back — so running that gate should not dirty the tree.
+snap.json
