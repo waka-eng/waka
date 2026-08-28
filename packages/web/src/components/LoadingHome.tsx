@@ -10,21 +10,24 @@
  * one line under it says the only fact there is. When the world wakes, the
  * real being stands where this one stood.
  *
- * Inline styles, deliberately and only here: this face renders BEFORE `.jar`
- * exists, outside the subtree that defines every `--jar-*` token (the drawer
- * once portalled to `document.body` and lost the whole palette the same way),
- * so `var()` would resolve to nothing. The values mirror the world's: the
- * ground is `--jar-atmos`'s value, the glow is the warm note's, the body is
- * the being's ivory as the bake renders it.
+ * THE BEING ITSELF MOVED OUT, to `components/Companion.tsx`, and this file is
+ * where it was drawn. It left because the door and the name-ask needed the
+ * same creature: three screens stand before the frame loop exists, and each
+ * one drawing its own companion is how two companions end up in one product.
+ * The ground, the halo's reasoning and the resting line stay here — they are
+ * this screen's, not the being's.
+ *
+ * Inline styles, deliberately and only here and in `Companion`: this face
+ * renders BEFORE `.jar` exists, outside the subtree that defines every
+ * `--jar-*` token (the drawer once portalled to `document.body` and lost the
+ * whole palette the same way), so `var()` would resolve to nothing. The ground
+ * is `--jar-atmos`'s value.
  */
 
 import { readStoredLocale, t } from "../lib/locales";
+import { Companion } from "./Companion";
 
 const ground = "#06080d";
-const ivoryHigh = "#ece7db";
-const ivoryLow = "#d9d3c5";
-const nub = "#d9d4c8";
-const eye = "#141412";
 
 export function LoadingHome(): JSX.Element {
   return (
@@ -42,79 +45,7 @@ export function LoadingHome(): JSX.Element {
         justifyContent: "center",
       }}
     >
-      <div style={{ position: "relative", width: 240, height: 190 }}>
-        {/* the same warm halo the bake gives the resting being */}
-        <div
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            inset: -110,
-            background:
-              "radial-gradient(circle at 50% 46%, rgba(255,242,220,0.14), rgba(255,242,220,0) 62%)",
-          }}
-        />
-        {/* the hands, tucked at the cheeks the way the bake rests them */}
-        <div
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            left: -4,
-            bottom: 26,
-            width: 46,
-            height: 46,
-            borderRadius: "50%",
-            background: nub,
-          }}
-        />
-        <div
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            right: -4,
-            bottom: 26,
-            width: 46,
-            height: 46,
-            borderRadius: "50%",
-            background: nub,
-          }}
-        />
-        {/* the dome, lit from above the way the world lights it */}
-        <div
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            left: 10,
-            right: 10,
-            top: 0,
-            bottom: 0,
-            borderRadius: "52% 52% 46% 46% / 62% 62% 40% 40%",
-            background: `radial-gradient(ellipse at 50% 26%, ${ivoryHigh}, ${ivoryLow} 78%)`,
-          }}
-        >
-          <div
-            style={{
-              position: "absolute",
-              left: "33%",
-              top: "39%",
-              width: 13,
-              height: 13,
-              borderRadius: "50%",
-              background: eye,
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              right: "33%",
-              top: "39%",
-              width: 13,
-              height: 13,
-              borderRadius: "50%",
-              background: eye,
-            }}
-          />
-        </div>
-      </div>
+      <Companion />
       {/* the resting line's slot, wearing the label register's face; the word
           is the only honest one this early */}
       <div

@@ -59,6 +59,7 @@ import type {
   LoginRequest,
   SignupRequest,
 } from "./api";
+import { forgetAtDoor, rememberAtDoor } from "./door-memory";
 import { normalizeSupportedLocale, writeStoredLocale } from "./locales";
 import type { SupportedLocale } from "./locales";
 
@@ -270,6 +271,19 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       writeCachedViewer(next);
       if (next) {
         writeStoredLocale(normalizeSupportedLocale(next.profile.preferredLocale));
+        /* THE DOOR REMEMBERS FROM HERE, and only from here, because this is
+           the one function every way in passes through. The form knows when
+           it submitted, but the Google way in does not come back to a form —
+           it comes back as a page load that confirms a session, which is a
+           call to this. Recording it at the call sites would have covered two
+           of the three doors and looked complete.
+
+           A confirmed session refreshes the date as well as the name, which
+           is what makes "last here" mean the last time this person was in
+           WAKA rather than the last time they typed a password. See
+           `lib/door-memory` for why this record is not the cache one line
+           above it, and why signing out does not clear it. */
+        rememberAtDoor({ name: next.profile.name, email: next.account.email });
       }
     },
     [],
@@ -392,6 +406,12 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   const deleteAccount = useCallback(async (): Promise<void> => {
     await apiDeleteAccount();
     applyViewer(null);
+    /* Erasure is the model's one true delete, so the door forgets too. Signing
+       out deliberately does not do this — see `lib/door-memory` — but there is
+       nobody left to greet by name here, and a door that kept offering to
+       continue as a deleted account would be the product remembering something
+       the person had just destroyed. */
+    forgetAtDoor();
   }, [applyViewer]);
 
   /**

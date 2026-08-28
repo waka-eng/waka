@@ -251,7 +251,13 @@ describe("auth boundary", () => {
 
     expect(container.textContent).toContain("Welcome");
     expect(container.textContent).toContain("Sign in to return to what you kept.");
-    expect(container.querySelector("#login-tab-login")?.textContent).toBe("Sign in");
+    /* The menu says what the two doors DO, which is what this screen always
+       meant — the subtitle one line up has said "return to what you kept"
+       since long before the tabs stopped saying `Sign in`. The ids are
+       untouched on purpose: every e2e walk in `tools/` gets into the product
+       through `#login-tab-signup`. */
+    expect(container.querySelector("#login-tab-login")?.textContent).toBe("continue");
+    expect(container.querySelector("#login-tab-signup")?.textContent).toBe("begin");
     expect(container.textContent).not.toContain("PROTECTED HOME DATA");
   });
 
@@ -276,7 +282,7 @@ describe("auth boundary", () => {
     expect(container.querySelector<HTMLButtonElement>("#login-tab-signup")?.getAttribute("aria-selected")).toBe("true");
     expect(container.querySelector<HTMLButtonElement>("#login-tab-signup")?.tabIndex).toBe(0);
     expect(document.activeElement).toBe(container.querySelector("#login-tab-signup"));
-    expect(container.textContent).toContain("Create account");
+    expect(container.textContent).toContain("Begin your archive.");
 
     await act(async () => {
       signupTab?.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }));
@@ -339,8 +345,13 @@ describe("auth boundary", () => {
       loginElement: createElement(SignupForm),
     });
 
+    /* THE LANGUAGE FIELD IS BACK (founder, 2026-08-31, reversing 2026-08-22),
+       and it is on the signup form, so this case asserts it stands. */
     expect(container.querySelector('select[name="preferredLocale"]')).not.toBeNull();
-    expect(container.textContent).toContain("Create account");
+    /* Rendered with no props at all, which is the point of the case: the form
+       has to stand on its own, without the door's companion to report a gaze
+       to. `onLookAt` defaults to a no-op for exactly this. */
+    expect(container.querySelector(".btn-doorway")?.textContent).toBe("begin");
   });
 
   it("clears the cache and routes home visitors to login when /auth/me returns nobody", async () => {

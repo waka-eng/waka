@@ -1069,11 +1069,13 @@ body .profile-card .btn-primary {
    to out-rank it, filled in the page's own ink, and it sits at the end of the
    form it completes with the alternative below it rather than above.
 
-   ONLY `/login`'s SUBMITS. `.login-card` is also worn by `/profile`,
-   onboarding and the surface error screen, and a settings save has no
-   business being the loudest thing on a settings page. So it is asked for by
-   name in `Login.tsx` rather than reached by an ancestor selector that would
-   sweep all four.
+   ONLY THE THRESHOLDS' SUBMITS. `.login-card` is also worn by `/profile` and
+   the surface error screen, and a settings save has no business being the
+   loudest thing on a settings page. So it is asked for by name in `Login.tsx`
+   and `Onboarding.tsx` rather than reached by an ancestor selector that would
+   sweep all four. The name-ask joined the door on 2026-08-28: it is the last
+   step of the way in rather than a settings screen, and the only thing on its
+   page to press.
 
    AND IT LIVES DOWN HERE RATHER THAN BESIDE `.btn-google`, WHICH IS WHERE IT
    WAS FIRST WRITTEN. `button[type="submit"]` up in the actions block sets
@@ -1103,7 +1105,50 @@ body .login-card .btn-doorway {
   /* the underline is the world's signal that a WORD can be pressed; a pill
      already says so by being one, and both at once reads as a mistake */
   text-decoration: none;
-  transition: opacity 0.18s ease;
+  transition: opacity 0.18s ease, background-color 0.35s ease, color 0.35s ease,
+    box-shadow 0.35s ease;
+}
+
+/* ---------- AND IT LIGHTS AS THE FORM FILLS ----------
+
+   The rule above gives the doorway its ground and its footprint. What it could
+   not say is whether the form is ready, and so the loudest, brightest object
+   on a near-black screen was full ink from the first frame — before anybody
+   had typed anything into the form it completes.
+
+   Everywhere else in this product, light means SOMETHING IS HERE: an orb's
+   brightness is how much rests on it, the wall you are standing on is the one
+   in ink. `docs/generation.md` spends a whole section on the arithmetic behind
+   that, and the founder's law is shorter — light is the only meaning channel.
+   The door was the one surface spending it on nothing.
+
+   So the doorway arrives dim and reaches full ink when the form holds what it
+   needs, and the glow it reaches is the warm note, which is the same light the
+   companion above it is drawn in.
+
+   WHAT THIS IS NOT: a disabled state. `data-lit="dim"` never stops the press —
+   see `Doorway` in `Login.tsx` for why that distinction is the whole point.
+   `:disabled` stays spent on the one case where the press really has nothing
+   left to do, a request already in flight, and it keeps the dimming it had. */
+/* BOTH STATES ARE SPELLED IN THE PALETTE'S OWN WORDS, and the first draft of
+   them was not: a hand-mixed `rgba(232, 237, 244, 0.1)` for the dim ground and
+   a hand-mixed warm for the glow. `type-scale.test.ts` counts colour literals
+   and refused them, which was the right refusal — a tier chosen at a call site
+   is a tier the palette cannot retune. `--moon-raised` is already this file's
+   word for "a surface lifted just off the ground", which is exactly what a
+   doorway that is not ready yet is, and the glow is the warm note itself at a
+   fraction, mixed rather than re-typed. */
+body .login-card .btn-doorway[data-lit="dim"] {
+  background: var(--moon-raised);
+  color: var(--w-muted);
+}
+body .login-card .btn-doorway[data-lit="lit"] {
+  background: var(--w-ink);
+  color: var(--w-ground);
+  /* the same warm the companion above it is lit by. A browser without
+     `color-mix` drops this one declaration and keeps the fill, so the state
+     still reads — the glow is the grace note, never the signal. */
+  box-shadow: 0 0 var(--sp-24) color-mix(in srgb, var(--moon-warm) 16%, transparent);
 }
 body .login-card .btn-doorway:hover:not(:disabled),
 body .login-card .btn-doorway:focus-visible:not(:disabled) {
@@ -1112,6 +1157,97 @@ body .login-card .btn-doorway:focus-visible:not(:disabled) {
 body .login-card .btn-doorway:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+/* ================= THE THRESHOLDS WEAR THE WORLD =================
+
+   `/login` and `/onboarding` are the two screens a person meets BEFORE the
+   world exists, and they used to be the last costume change left in the
+   product. The founder ruled on this exact failure one screen along
+   (2026-08-27, the loading frame: "the product changing clothes twice on the
+   way in"), and the answer there was to make the screen the world's own early
+   face rather than a page about it.
+
+   These rules are the door's half of that. They sit beside the chrome rather
+   than inside it because they are NOT chrome: `/profile` and the surface error
+   wear `.login-card` too, and an account screen has no companion standing on
+   it and no threshold to light. Hence `door-*`, worn only by the two screens
+   that are actually a way in. */
+
+/* THE BEING STANDS WHERE A WORDMARK WOULD. Left, above the eyebrow, so the
+   column's composition is unchanged and its halo falls behind WAKA's own name.
+   Its glow is drawn with `inset: -55px` at this scale and deliberately allowed
+   to bleed past the box — it is light in a volume, not a picture in a frame. */
+.door-being {
+  align-self: flex-start;
+  margin-bottom: var(--sp-8);
+}
+
+/* WHAT THE SAVE FILE SAYS UNDER THE GREETING: when they were last here, and
+   the one press that removes them. Quiet, because the name above it is the
+   part that matters and this is its footnote. */
+.door-save {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-12);
+  /* THE ROOM UNDER IT IS A TARGET RULE, NOT A TASTE ONE. `.login-card` sets a
+     4px gap between its children, which put this row's press 24px from the
+     centre of the tab strip below it — inside the 44px `e2e:phone` holds any
+     pair of small controls to, and the shape it calls "crowded". A thumb going
+     for `begin` should not be able to land on "this is not me". */
+  margin: var(--sp-10) 0 var(--sp-20);
+  color: var(--w-faint);
+  font-size: var(--t-ui);
+}
+/* an action is an underlined word here — the same one `/profile`'s foot uses,
+   because there is one vocabulary for "this can be pressed" and it is not a
+   second button */
+.door-forget {
+  appearance: none;
+  background: none;
+  border: 0;
+  /* TWENTY-FOUR PIXELS, BECAUSE IT IS A CONTROL AND NOT A LINK IN A SENTENCE.
+     At `--t-ui` this word's own line box is about sixteen pixels tall, which is
+     under WCAG 2.2 AA's 24x24 and under what `e2e:phone` measures every control
+     on this screen against. The air is vertical only: the row is a flex line,
+     so horizontal padding would push the words apart rather than grow the
+     target. `.login-tab` next door buys its height the same way, and says so. */
+  padding: var(--sp-6) 0;
+  color: var(--w-faint);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 5px;
+  text-decoration-thickness: 1px;
+  transition: color 0.2s ease;
+}
+.door-forget:hover,
+.door-forget:focus-visible {
+  color: var(--w-muted);
+}
+
+/* THE EYES TRAVEL, and this is the only place that says how fast.
+   `components/Companion.tsx` puts them where they are looking with an inline
+   transform, which is the STATE and always renders. This is the journey
+   between two states, which is the part motion owns — and which the founder's
+   law says must explain rather than decorate. It explains: the being is
+   following the hands down the form.
+
+   250ms is a glance. Under reduced motion the glance is removed and the eyes
+   simply are where they are looking, which is the same rule the star's turn
+   keeps in `home.css`. */
+.companion-eye {
+  transition: transform 0.25s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .companion-eye {
+    transition: none;
+  }
+  /* the doorway's light is a state, not an animation — what goes is the fade
+     between the two, never the difference between them */
+  body .login-card .btn-doorway {
+    transition: none;
+  }
 }
 /* AND THE DIVIDER NEEDS ROOM NOW THAT SOMETHING SOLID IS ABOVE IT.
    It used to sit between a white pill and a row of text tabs, where the tabs'
