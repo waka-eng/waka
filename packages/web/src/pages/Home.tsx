@@ -965,6 +965,12 @@ interface SimApi {
   select: (id: string) => void;
   release: () => void;
   wake: () => void;
+  /**
+   * Re-hang the timeline under the word it belongs to. Called when the READING
+   * changes — the rail's anchor is the word's centre, and the word is rewritten
+   * by a scrub, which no resize follows.
+   */
+  hangRail: () => void;
   /** The companion glows for a beat — a tap was heard. */
   acknowledge: (moment?: Moment) => void;
   /**
@@ -4886,6 +4892,62 @@ function HomeExperience(): JSX.Element {
       return carryC;
     }
 
+    /**
+     * THE RAIL HANGS FROM ITS WORD, MEASURED (founder, 2026-08-27: "should
+     * align with the text NOW"). Its left inset was a guess in CSS, and the
+     * word it hangs under sits after the wall chip, whose width is the wall's
+     * NAME — so no constant can be under it on every wall. The track's centre
+     * takes the word's centre, the way the reserve takes the count's own box:
+     * chrome states its place, nothing guesses at it.
+     *
+     * IT IS ITS OWN FUNCTION BECAUSE IT HAS TWO CALLERS, AND THE SECOND ONE
+     * IS THE WHOLE FIX. It lived inline in `measure()`, and `measure()` runs
+     * on a resize — so the anchor was recomputed when the WINDOW changed and
+     * never when the WORD did. The word changes without the window: let go of
+     * a scrub and "now" becomes "Aug 27", 49px becomes 65, and its centre
+     * moves 8px right while the rail stays exactly where it was. Nothing was
+     * ever going to put it back, because nothing resized.
+     */
+    function hangRail() {
+      const whenEl = document.querySelector(".jar-when");
+      const railEl = dialRef.current;
+      /* ONLY WHILE IT IS NOT BEING HELD. The word this hangs from is the
+         reading — a scrub rewrites it ("now" -> "Aug 12"), the box widens,
+         its centre moves, and a rail that keeps chasing its own label
+         WANDERS UNDER THE HAND (founder video, 2026-08-27: "line is not
+         only hard to drag, but moves around"). So while the rail is HELD
+         the anchor is frozen where it was when you reached for it.
+
+         `--open` WAS IN THIS CONDITION TOO, AND THAT WAS THE BUG.
+         Reported 2026-08-28: "why is timeline not right under the word
+         'now'". Measured, on a 1440px wall: at rest the word reads NOW at
+         w49, centre 125, and the track's centre is 125 — dead on. Let go of
+         a scrub and the word becomes AUG 27 at w65, centre 133, while the
+         rail stays at 125. Eight pixels out, and it stays out, because the
+         pointer is still over the rail after a drag — that is where a hand
+         necessarily is — so `--open` held the anchor frozen against a word
+         that had already changed underneath it.
+
+         Hovering is not dragging. The word does not move when you merely
+         reach for the rail: it is rewritten by `onDialUp`, on release. So
+         `--live` alone is what has to freeze the anchor, and the moment the
+         hand lets go the line re-hangs from the reading it now belongs to.
+         That motion is the world answering something the person did, which
+         is the only reason anything here is allowed to move. */
+      if (whenEl && railEl && !railEl.classList.contains("jar-dial--live")) {
+        const wb = whenEl.getBoundingClientRect();
+        if (wb.width > 0) {
+          /* half the rail's own width, read rather than restated, so a
+             wider grab area cannot silently un-centre the line */
+          const left = Math.round(wb.left + wb.width / 2 - railEl.offsetWidth / 2);
+          if (view.dialLeft !== left) {
+            view.dialLeft = left;
+            railEl.style.left = `${left}px`;
+          }
+        }
+      }
+    }
+
     function measure() {
       const rect = root!.getBoundingClientRect();
       /*
@@ -5235,40 +5297,7 @@ function HomeExperience(): JSX.Element {
           );
         }
       }
-      /* THE RAIL HANGS FROM ITS WORD, MEASURED (founder, 2026-08-27: "should
-         align with the text NOW"). Its left inset was a guess in CSS, and the
-         word it hangs under sits after the wall chip, whose width is the
-         wall's NAME — so no constant can be under it on every wall. The
-         track's centre takes the word's centre, the way the reserve takes the
-         count's own box: chrome states its place, nothing guesses at it. */
-      {
-        const whenEl = document.querySelector(".jar-when");
-        const railEl = dialRef.current;
-        /* ONLY AT REST. The word this hangs from is the reading — scrubbing
-           rewrites it ("now" -> "Aug 12"), the box widens, its centre moves,
-           and a rail that keeps chasing its own label WANDERS UNDER THE HAND
-           (founder video, 2026-08-27: "line is not only hard to drag, but
-           moves around"). While the dial is open or being held the anchor is
-           frozen where it was when you reached for it; it takes the word's
-           new centre again once the rail is put away. */
-        if (
-          whenEl &&
-          railEl &&
-          !railEl.classList.contains("jar-dial--open") &&
-          !railEl.classList.contains("jar-dial--live")
-        ) {
-          const wb = whenEl.getBoundingClientRect();
-          if (wb.width > 0) {
-            /* half the rail's own width, read rather than restated, so a
-               wider grab area cannot silently un-centre the line */
-            const left = Math.round(wb.left + wb.width / 2 - railEl.offsetWidth / 2);
-            if (view.dialLeft !== left) {
-              view.dialLeft = left;
-              railEl.style.left = `${left}px`;
-            }
-          }
-        }
-      }
+      hangRail();
       if (!view.motesPlaced) {
         view.motesPlaced = true;
         /* the same stillness for the dust: a save must not re-scatter it */
@@ -7841,6 +7870,8 @@ function HomeExperience(): JSX.Element {
     } else primePour();
 
     simApiRef.current = {
+      /* the timeline re-hangs under the word, whose width the reading sets */
+      hangRail,
       /**
        * STAND IN SOMEONE ELSE'S GROUND — or back in your own, with null.
        *
@@ -8717,6 +8748,18 @@ function HomeExperience(): JSX.Element {
     setParkedAt(parkedRef.current);
     simApiRef.current?.wake();
   }, []);
+  /* AND THE LOOP IS WOKEN AGAIN ONCE THE NEW WORD IS ON SCREEN.
+     `onDialUp` wakes it too, but it wakes it BEFORE this render commits, so
+     that frame measures the word the scrub replaced. The rail hangs from the
+     word's centre and the word has just changed width, so the measurement has
+     to happen on the far side of the commit — which is exactly what an effect
+     on the reading is. Without it the anchor is correct only if the loop
+     happens to still be running when React gets round to the DOM, and the
+     world is deliberately built to stop running the moment nothing is
+     happening. */
+  useEffect(() => {
+    simApiRef.current?.hangRail();
+  }, [parkedAt]);
 
 
   /* ---------------- the reading panel ----------------
