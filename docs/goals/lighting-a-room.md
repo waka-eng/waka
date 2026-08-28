@@ -1,6 +1,6 @@
 # Goal: lighting a room
 
-Status: in progress — phase 1 passed 2026-08-28
+Status: in progress — phases 1–2 passed 2026-08-28
 Branch: `goal/lighting-a-room`
 Depends on: nothing structural. Touches the join consent sheet
 (`a-room-you-can-trust` made joining an asked question; this goal keeps that
@@ -190,5 +190,64 @@ Two things worth carrying forward:
 
 Joining travels the same way (both paths land through one function), but that
 is asserted by Phase 4's steps, not this one.
+
+**2026-08-28 — Phase 2, the dark room speaks in stages. PASS (3/3, from a
+measured baseline of 0/3).**
+
+Gate: `pnpm e2e:lighting --fixture <vite dev url>`, walking the axis with the
+traveller's own ArrowRight and reading each wall's line; plus
+`packages/web/test/group-stage.test.ts` (6 cases) over the pure function.
+
+| Step | Baseline | After |
+|---|---|---|
+| every wall says where it stands | FAIL — 5 walls walked, not one said anything | PASS — 6 walls, 5 said something |
+| all four stages stand on the axis | FAIL — 4 of 4 missing | PASS — alone, bare, one-voiced, unanswered |
+| no wall's line prints a number | FAIL — nothing read, so nothing proved | PASS — 5 walls read, not a digit |
+
+Baseline measured in this run by stashing the two source files; the vite dev
+server reloaded the old code, so it is this run's number and not a memory.
+
+The sentences, all four:
+
+- **alone** — "Nobody else is here yet — the invite is the way in."
+- **bare** — "Nothing is open here yet — a memory you open stands on this ground."
+- **one-voiced** — "Nothing here stands under more than one of you yet."
+- **unanswered** — "Something is forming — say whether it is true of you."
+
+Also checked: `typecheck` clean, full web suite 228/228 (40 suites), and the
+live Phase 1 gate still 4/4 after the change.
+
+**The baseline turned out to be worse than the phase assumed, and that is the
+real finding.** The phase was written as "one sentence describes four
+situations". Offline it was not even that: the fixture set no room chrome AND
+never marked its rooms ready, so no fixture room ever woke, and every room
+wall rendered *nothing at all* — the dark stages were the one part of a room
+that could not be looked at without a session. Both halves are fixed here
+(`groupChromeRef` and `groupCacheRef` are filled for every fixture room), and
+a fifth room, `fx-bare`, was added for the stage the fixture had no shape for:
+people in the room and nothing open.
+
+Three instrument defects found by reading the walk's own output, each of which
+had produced a green or plausible line while proving less than it claimed:
+
+- **`.jar-forming` first() reads the leftmost wall, not yours.** Every wall
+  renders at once, positioned in the world's coordinate space, so all six
+  walls reported the identical sentence. The walk now reads the
+  `.jar-wallcol` the viewport's centre falls inside.
+- **A numeral check over an empty set passes.** "0 walls read, not a digit
+  among them" is a green line reporting an unplugged instrument. It now fails
+  when nothing was read.
+- **Filtering rows by the name just read finds nothing** — `innerText` returns
+  the CSS-uppercased paint, `hasText` matches the DOM's own text. The repo
+  documents this trap in `first-sixty`; the walk hit it anyway.
+
+**Finding, recorded and not fixed (out of this phase's scope):** on the
+fixture, the walls-list menu cannot be clicked. Measured with
+`elementFromPoint`: `.jar-dial-track` is what actually sits under the pointer
+at every row's centre, though the list's z-index (8) is above the dial's (5) —
+they are in different stacking contexts. Playwright refuses the click and is
+right to; a person could not click those rows either. Not forced past, and the
+walk travels by keyboard instead. Whether this reaches a real account with
+many walls is unmeasured — the live stack's shorter axis did not reproduce it.
 
 _(phases append numbers and verdicts here)_
