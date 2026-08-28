@@ -2332,6 +2332,59 @@
   will-change: opacity, transform;
   pointer-events: none;
 }
+
+/* ═══════════ THE TWO SHEETS THAT HANG OFF THE BUTTON THAT OPENED THEM ═══════
+   Founder, 2026-08-28: "when clicking on the top left and top right button,
+   those cards should just appear right below the button rather than in the
+   center."
+
+   THIS NARROWS AN EARLIER RULING RATHER THAN OVERTURNING IT. On 2026-08-25,
+   pointing at a memory's card: "all modals must be centered and have same
+   style as this one." The STYLE half stands untouched — these two still wear
+   `.jar-modal-surface`, the same ground, radius, padding and hairline as
+   every other modal, and that is the part that was actually four different
+   answers. What changes is placement, for the two sheets that belong to a
+   control rather than to the world.
+
+   And it is the right distinction. A memory's card is about a thing you
+   picked out of the field, so the middle is where your eyes already are. The
+   wall's settings and your account are about the BUTTON — they are that
+   button's contents, and a menu that opens across the room from its own
+   handle makes you re-find the thread every time.
+
+   It also removes a collision `e2e:phone` kept finding and I kept reading as
+   flake: at 390px the centred settings sheet lands on top of the centred
+   memory card, so the walk measured a memory's controls as "covered" by
+   `.jar-settings-head` — true, and only true because both wanted the middle.
+
+   THE TRANSFORM SLOT IS SPOKEN FOR, so these cannot simply drop it. The
+   entrance animates `--jar-panel-rise` as a custom property and the shared
+   block spends `transform` on the centring; an anchored sheet keeps the rise
+   and gives up only the centring.
+
+   Written after the shared block on purpose — same specificity, later wins,
+   which is the rule this file has been bitten by three times. */
+.jar-settings--at-left,
+.jar-settings--at-right {
+  /* clear of the chrome row, which ends at 40px, by the same 8 the buttons
+     themselves keep from the left edge */
+  top: calc(48px + env(safe-area-inset-top));
+  transform: translateY(var(--jar-panel-rise));
+  /* on a narrow screen it stays inside the glass rather than hanging off the
+     side it is anchored to */
+  max-width: calc(100vw - 16px);
+}
+.jar-settings--at-left {
+  left: 8px;
+  right: auto;
+}
+.jar-settings--at-right {
+  /* 8, measured off the account pill itself: it sits x 1300..1432 in a 1440
+     frame, so its inset from the right edge is 8 and not the 10 the four
+     signposts keep. Aligned to the button, not to a rule about edges. */
+  right: 8px;
+  left: auto;
+}
 /* THE HEAD: date left, who-may-see right, centred against each other.
    It was not a row at all — the date was a block padded 56px/120px to dodge
    controls that had already moved to the foot, and the pair was absolutely

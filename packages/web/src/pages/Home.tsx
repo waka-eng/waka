@@ -14166,7 +14166,7 @@ function HomeExperience(): JSX.Element {
           `/profile` is for. This is the door and the label on it. */}
       {accountOpen && phase === "ready" ? (
         <div
-          className="jar-settings"
+          className="jar-settings jar-settings--at-right"
           data-jar-chrome="1"
           role="dialog"
           aria-label="Your account"

@@ -192,6 +192,7 @@ const FIXTURE = `<!doctype html>
       <span class="jar-here-split"><button class="jar-here jar-back jar-label">ME</button></span>
       <button class="jar-when jar-label">now</button>
     </div>
+    <button class="jar-account jar-back jar-label">Your account</button>
   </div>
   <div class="jar-dial jar-dial--open"><div class="jar-dial-track"><span class="jar-month jar-label" style="left:50%">aug</span><div class="jar-dial-handle"></div></div></div>
 
@@ -209,6 +210,12 @@ const FIXTURE = `<!doctype html>
 
   <div class="jar-settings" data-jar-chrome="1" role="dialog">
     <div class="jar-settings-head"><span class="jar-label">this wall</span></div>
+  </div>
+  <div class="jar-settings jar-settings--at-left" data-jar-chrome="1" role="dialog">
+    <div class="jar-settings-head"><span class="jar-label">this wall</span></div>
+  </div>
+  <div class="jar-settings jar-settings--at-right" data-jar-chrome="1" role="dialog">
+    <div class="jar-settings-head"><span class="jar-label">your account</span></div>
   </div>
   <div class="jar-prov-room" data-jar-chrome="1" role="dialog">
     <p class="jar-prov-room-lead">Where this came from.</p>
@@ -582,13 +589,17 @@ const CASES: Case[] = [
 
   {
     id: "every-modal-is-one-modal",
-    name: "every modal is centred, and they are all the same object",
+    name: "every modal wears one surface, and each is placed where it belongs",
     needs: ["jar-panel", "jar-seek", "jar-settings", "jar-prov-room"],
     /* one of the four given its old surface back — the exact drift this
        case exists to notice */
     sabotage:
       ".jar-settings { top: 58px !important; left: 20px !important; transform: none !important;" +
-      " border-radius: 14px !important; background: #0a0d14 !important; box-shadow: none !important; }",
+      " border-radius: 14px !important; background: #0a0d14 !important; box-shadow: none !important; }" +
+      /* and the second half of the ruling: an anchored sheet sent back to the
+         middle, which is what this case used to REQUIRE */
+      " .jar-settings--at-left { left: 50% !important; top: 50% !important;" +
+      " transform: translate(-50%, -50%) !important; }",
     run: async (page) => {
       /* THE FOUNDER'S RULING, 2026-08-25, pointing at a memory's card: "all
          modals must be centered and have same style as this one." There were
@@ -608,18 +619,38 @@ const CASES: Case[] = [
             offY: (b.top + b.height / 2) - window.innerHeight / 2,
           };
         };
+        const anchored = (s, btn, side) => {
+          const e = document.querySelector(s), b = document.querySelector(btn);
+          if (!e || !b) return null;
+          const er = e.getBoundingClientRect(), br = b.getBoundingClientRect();
+          const o = one(s);
+          o.below = er.top - br.bottom;
+          o.edge = side === "left" ? er.left - br.left : er.right - br.right;
+          return o;
+        };
         return { card: one(".jar-panel"), seek: one(".jar-seek"),
-                 settings: one(".jar-settings"), prov: one(".jar-prov-room") };
+                 settings: one(".jar-settings"), prov: one(".jar-prov-room"),
+                 atLeft: anchored(".jar-settings--at-left", ".jar-here", "left"),
+                 atRight: anchored(".jar-settings--at-right", ".jar-account", "right") };
       })()`;
-      type M = { skin: string; offX: number; offY: number };
+      type M = { skin: string; offX: number; offY: number; below?: number; edge?: number };
       const m = (await page.evaluate(read)) as Record<string, M | null>;
       const missing = Object.entries(m).filter(([, v]) => !v).map(([k]) => k);
       if (missing.length) return { ok: false, detail: `not in the fixture at all: ${missing.join(", ")}` };
       const card = m.card as M;
-      const others = ["seek", "settings", "prov"] as const;
+      const others = ["seek", "settings", "prov", "atLeft", "atRight"] as const;
 
-      const offCentre = Object.entries(m).filter(
-        ([, v]) => !near((v as M).offX, 0, 1) || !near((v as M).offY, 0, 1),
+      /* AND THE PLACEMENT RULING NARROWED, 2026-08-28: "when clicking on the
+         top left and top right button, those cards should just appear right
+         below the button rather than in the center." The SURFACE half of the
+         2026-08-25 ruling is untouched and still checked against the card for
+         all of them; what splits is where each one stands. A modal that
+         belongs to the WORLD takes the middle, because that is where your
+         eyes already are. A modal that belongs to a BUTTON hangs off that
+         button, because it is that button's contents. */
+      const centred = ["card", "seek", "settings", "prov"] as const;
+      const offCentre = centred.filter(
+        (k) => !near((m[k] as M).offX, 0, 1) || !near((m[k] as M).offY, 0, 1),
       );
       if (offCentre.length) {
         return {
@@ -627,7 +658,21 @@ const CASES: Case[] = [
           detail:
             "not centred: " +
             offCentre
-              .map(([k, v]) => `${k} sits ${r1((v as M).offX)}px across and ${r1((v as M).offY)}px down from the middle`)
+              .map((k) => `${k} sits ${r1((m[k] as M).offX)}px across and ${r1((m[k] as M).offY)}px down from the middle`)
+              .join("; "),
+        };
+      }
+      const adrift = (["atLeft", "atRight"] as const).filter((k) => {
+        const v = m[k] as M;
+        return !(v.below! > 0 && v.below! < 24 && near(v.edge!, 0, 2));
+      });
+      if (adrift.length) {
+        return {
+          ok: false,
+          detail:
+            "not under the button that opens it: " +
+            adrift
+              .map((k) => `${k} sits ${r1((m[k] as M).below!)}px below it and ${r1((m[k] as M).edge!)}px off its near edge`)
               .join("; "),
         };
       }
@@ -636,7 +681,8 @@ const CASES: Case[] = [
         ok: different.length === 0,
         detail:
           different.length === 0
-            ? `all four centred and wearing one surface — ${card.skin}`
+            ? `four centred, two hanging off their own button (${r1((m.atLeft as M).below!)}px and ` +
+              `${r1((m.atRight as M).below!)}px below it), all wearing one surface — ${card.skin}`
             : different
                 .map((k) => `${k} is a different object from the card:\n      card ${card.skin}\n      ${k.padEnd(4)} ${(m[k] as M).skin}`)
                 .join("\n    "),

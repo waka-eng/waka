@@ -156,7 +156,12 @@ export function SpaceSettings({
     ) : null;
 
   return (
-<div className="jar-settings" data-jar-chrome="1" role="dialog" aria-label="Space settings">
+<div
+  className="jar-settings jar-settings--at-left"
+  data-jar-chrome="1"
+  role="dialog"
+  aria-label="Space settings"
+>
   <div className="jar-settings-head">
     <span className="jar-label">
       {atWall.kind === "group" ? "This room" : atWall.kind === "agent" ? "This agent" : "You"}

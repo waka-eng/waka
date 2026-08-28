@@ -235,8 +235,24 @@ async function read(page: Page, view: string, surface: string): Promise<Finding[
  * sweep works at 844 and at 640.
  */
 async function openCard(page: Page, view: View): Promise<boolean> {
+  /* A MEMORY, NOT ANY PANEL.
+     This counted `.jar-panel`, and the wall's settings sheet IS one. So a tap
+     that missed an orb and landed on chrome opened settings, this reported
+     success, and the walk then measured the SETTINGS SHEET while labelling
+     the surface "a memory open" — six findings against controls that are not
+     on a memory card at all (`jar-settings-head`, `jar-settings-x`,
+     `jar-settings-verb`), on one run in three. `.jar-panel-text` is the
+     memory's own body and nothing else has it. */
   const panels = async (): Promise<number> =>
-    (await page.evaluate(() => document.querySelectorAll(".jar-panel").length)) as number;
+    (await page.evaluate(() => document.querySelectorAll(".jar-panel-text").length)) as number;
+  /* and whatever a stray tap DID open is put away before the next one, or it
+     stands over the orb the next tap is aimed at */
+  const putAway = async (): Promise<void> => {
+    if ((await page.evaluate(() => document.querySelectorAll(".jar-panel").length)) as number) {
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(400);
+    }
+  };
   try {
     await page.locator(".jar-saved").first().tap({ timeout: 20_000 });
   } catch {
@@ -269,10 +285,14 @@ async function openCard(page: Page, view: View): Promise<boolean> {
     if (!at) continue;
     await page.touchscreen.tap(at.x, at.y);
     await page.waitForTimeout(450);
-    if ((await panels()) === 0) continue;
+    if ((await panels()) === 0) {
+      await putAway();
+      continue;
+    }
     /* it may still be on its way in or on its way back out */
     await page.waitForTimeout(1_000);
     if ((await panels()) > 0) return true;
+    await putAway();
   }
 
   /* NOTHING LIT WAS AN ORB, OR NO ORB TOOK THE TAP.
