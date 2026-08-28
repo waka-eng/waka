@@ -148,7 +148,52 @@ export const SIZE_R = [6, 8.5, 11.5, 15, 19, 23, 26.5, 29.5, 32];
 /** Sprite bleed so the rim arc's outer antialiasing is never clipped. */
 export const ORB_PAD = 2;
 
-export const TIERS = 5;
+/**
+ * WHICH BAKED DISC A GIVEN RADIUS IS DRAWN FROM — one rule, in one place.
+ *
+ * `SIZE_R` grew from three sizes to nine so that nothing would be scaled at
+ * draw time. `fitField` was taught the new table; the two places that BUILD a
+ * ball were not, and kept a hand-written three-way test — `r < 26.5 ? 0 :
+ * r < 29.8 ? 1 : 2` — whose indices now mean 6px, 8.5px and 11.5px. So every
+ * orb that had not been through a fit was drawn from one of the three
+ * SMALLEST discs, blown up three to five times: a soft blob where the sphere's
+ * rim and specular used to be. The six larger bakes were never reached at all.
+ *
+ * That is every orb on a wall you are not standing on, every orb in a room's
+ * ground, and every orb in the beat between arriving and the next fit — which
+ * is exactly the set the founder saw and asked about ("why are some balls
+ * blurry? they should all be sharp").
+ *
+ * DOWN, NEVER UP, on a tie or an overshoot. The radius handed in is what the
+ * band could FIT; rounding up would hand a crowded field a few extra pixels
+ * per orb at the moment that matters most, and the fit would quietly stop
+ * holding. The smallest bake is the floor.
+ */
+export function sizeIdxFor(r: number): number {
+  let best = 0;
+  let bestD = Infinity;
+  for (let i = 0; i < SIZE_R.length; i += 1) {
+    const d = Math.abs((SIZE_R[i] as number) - r);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  if ((SIZE_R[best] as number) > r && best > 0) best -= 1;
+  return best;
+}
+
+/**
+ * How many bands the aliveness continuum is drawn in.
+ *
+ * Five could not resolve a real archive: with a seven-day half-life, two
+ * months of memories landed in the bottom two bands and the field read as one
+ * flat grey (founder, 2026-08-24). Nine, mapped through `FIELD_TIER_GAMMA`,
+ * makes a fortnight, three weeks and a month visibly different. The cost is
+ * sprites baked once per (hue, resolution) at first use — nine per size
+ * instead of five, still nothing per frame.
+ */
+export const TIERS = 9;
 
 /* the per-member hue system lives in lib/appearance.ts — see the note
    there for why, and docs/architecture.md for the seams generally */
@@ -208,24 +253,6 @@ export function orbsForHue(pal: HuedPalette, hue: number, pixel: boolean): HTMLC
   pal.hued.set(key, made);
   return made;
 }
-
-/**
- * WHAT AN UNDATED MEMORY LOOKS LIKE.
- *
- * Aliveness is a claim about WHEN something was saved and how it has been
- * returned to since. A room's proposal names no per-save date, so there is no
- * such claim to make about the memories it cites — and lighting them from the
- * newest edge of the declared span would print a number nobody measured, in
- * the one channel this page reserves for meaning.
- *
- * So an undated memory declares itself undated instead: one fixed tier, one
- * fixed power, the same for every satellite in that ring including any the
- * viewer saved themselves. A ring then says one kind of thing throughout,
- * which is the only honest thing it can say. The panel already prints who and
- * no when for these.
- */
-export const UNDATED_TIER = Math.round((TIERS - 1) / 2);
-export const UNDATED_POW = 0.5;
 
 export function makeSprite(px: number): [HTMLCanvasElement, CanvasRenderingContext2D | null] {
   const c = document.createElement("canvas");

@@ -27,7 +27,7 @@
  * previous system hid its failures in exactly that gap.
  */
 
-import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 
 import {
   groupMembers,
@@ -37,7 +37,6 @@ import {
   profiles,
   signalEvidence,
   signals,
-  signalShares,
   topOfMindEntries,
   topOfMindEntrySignals,
   topOfMinds,
@@ -47,6 +46,7 @@ import {
 } from "../db/index.js";
 import { getDb } from "./db.js";
 import { computeSignalConfidence } from "./signal-derivation.js";
+import { GROUP_SIGNAL_MIN_VOICES } from "./signal-derivation-thresholds.js";
 import { normalizeSupportedLocale } from "./locales.js";
 import {
   getDefaultModelProvider,
@@ -424,6 +424,7 @@ async function loadLiveArtifact(
 
   const citationsByEntry = new Map<string, string[]>();
   for (const row of citationRows) {
+    if (row.signalId === null) continue;
     const bucket = citationsByEntry.get(row.entryId);
     if (bucket) bucket.push(row.signalId);
     else citationsByEntry.set(row.entryId, [row.signalId]);
@@ -922,7 +923,7 @@ export async function refreshTopOfMindForProfile(
 // ---------------------------------------------------------------------------
 
 export interface GroupTopOfMindRefreshResult {
-  status: "versioned" | "nothing_to_synthesize";
+  status: "versioned" | "nothing_to_synthesize" | "waiting_for_affirmations";
   topOfMindId: string | null;
   version: number;
   reason: TopOfMindRevisionReason | null;
@@ -952,7 +953,15 @@ interface GroupSharedSignal {
   confidence: number;
   evidenceCount: number;
   lastEvidenceAt: Date | null;
-  ownerProfileId: string;
+  /**
+   * Null since 2026-08-24: a ROOM-GROWN signal belongs to the mind of the
+   * group, not to any member. The type name kept "Shared" through the
+   * transition so every reader did not churn in one commit; the loader
+   * below says what actually fills it now.
+   */
+  ownerProfileId: string | null;
+  /** whose memories stand under it (room-grown); empty for legacy rows */
+  contributorNames: string[];
 }
 
 export interface GroupProposalToApply {
@@ -1057,6 +1066,7 @@ async function loadLiveGroupArtifact(
   const citationsByEntry = new Map<string, string[]>();
   const citationOwners = new Map<string, string>();
   for (const row of citationRows) {
+    if (row.signalId === null) continue;
     const bucket = citationsByEntry.get(row.entryId);
     if (bucket) bucket.push(row.signalId);
     else citationsByEntry.set(row.entryId, [row.signalId]);
@@ -1084,36 +1094,64 @@ async function loadLiveGroupArtifact(
 }
 
 /**
- * The wall, with live confidence. Same at-read computation as the personal
- * selector: the stored column froze the decay term the moment evidence last
- * landed, and a wall ranked by it would keep a long-quiet signal looking
- * current.
+ * THE WALL IS THE SELECTION — and the wall is the ROOM'S OWN LAYER 2 now
+ * (founder rulings, 2026-08-24). This reads the live signals of the group's
+ * mind, gated exactly as the wall gates them: at least
+ * `GROUP_SIGNAL_MIN_VOICES` distinct CURRENT members' memories under each.
+ * A one-member pattern is that member's own, and a departed member's voice
+ * no longer carries — the same withdrawal rule the share wall applied.
+ * Confidence is computed live from the evidence rows, which this loader may
+ * now touch because they are the room's rows.
  */
 async function loadGroupSharedSignals(
   db: WakaDb,
   groupId: string,
   now: Date,
 ): Promise<GroupSharedSignal[]> {
+  const mindRows = await db
+    .select({ mindId: profiles.id })
+    .from(profiles)
+    .where(and(eq(profiles.groupId, groupId), eq(profiles.type, "group")))
+    .limit(1);
+  const mind = mindRows[0];
+  if (!mind) return [];
+
   const rows = await db
     .select({
       id: signals.id,
       statement: signals.statement,
       lastEvidenceAt: signals.lastEvidenceAt,
-      ownerProfileId: signals.profileId,
     })
-    .from(signalShares)
-    .innerJoin(signals, eq(signals.id, signalShares.signalId))
-    .where(eq(signalShares.groupId, groupId));
+    .from(signals)
+    .where(
+      and(
+        eq(signals.profileId, mind.mindId),
+        ne(signals.status, "retired"),
+        isNull(signals.dismissedAt),
+      ),
+    );
   if (rows.length === 0) return [];
 
   const evidenceRows = await db
     .select({
       signalId: signalEvidence.signalId,
-      createdAt: inspirations.createdAt,
+      createdAt: signalEvidence.createdAt,
       source: inspirations.source,
+      visibility: inspirations.visibility,
+      ownerProfileId: signalEvidence.ownerProfileId,
+      ownerName: profiles.name,
+      memberProfileId: groupMembers.profileId,
     })
     .from(signalEvidence)
     .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
+    .innerJoin(profiles, eq(profiles.id, signalEvidence.ownerProfileId))
+    .leftJoin(
+      groupMembers,
+      and(
+        eq(groupMembers.groupId, groupId),
+        eq(groupMembers.profileId, signalEvidence.ownerProfileId),
+      ),
+    )
     .where(
       inArray(
         signalEvidence.signalId,
@@ -1121,24 +1159,43 @@ async function loadGroupSharedSignals(
       ),
     );
 
-  const evidenceBySignal = new Map<string, Array<{ createdAt: Date; source: "app" | "agent" }>>();
+  const evidenceBySignal = new Map<
+    string,
+    Array<{ createdAt: Date; source: "app" | "agent" }>
+  >();
+  const voicesBySignal = new Map<string, Map<string, string>>();
   for (const row of evidenceRows) {
     const bucket = evidenceBySignal.get(row.signalId);
     if (bucket) bucket.push(row);
     else evidenceBySignal.set(row.signalId, [row]);
+    /* a voice counts only while its member is in the room AND the memory
+       behind it is still public: sharing IS visibility, so taking a memory
+       private has to take its voice out of the room's count too. Read here
+       rather than withdrawn from the table, so flipping public again puts
+       the voice back. */
+    if (row.memberProfileId && row.visibility === "public") {
+      const voices = voicesBySignal.get(row.signalId) ?? new Map<string, string>();
+      voices.set(row.ownerProfileId, row.ownerName);
+      voicesBySignal.set(row.signalId, voices);
+    }
   }
 
   return rows
-    .map((row) => {
+    .flatMap((row) => {
+      const voices = voicesBySignal.get(row.id);
+      if (!voices || voices.size < GROUP_SIGNAL_MIN_VOICES) return [];
       const evidence = evidenceBySignal.get(row.id) ?? [];
-      return {
-        id: row.id,
-        statement: row.statement,
-        confidence: computeSignalConfidence(evidence, now),
-        evidenceCount: evidence.length,
-        lastEvidenceAt: row.lastEvidenceAt,
-        ownerProfileId: row.ownerProfileId,
-      };
+      return [
+        {
+          id: row.id,
+          statement: row.statement,
+          confidence: computeSignalConfidence(evidence, now),
+          evidenceCount: evidence.length,
+          lastEvidenceAt: row.lastEvidenceAt,
+          ownerProfileId: null,
+          contributorNames: [...voices.values()],
+        },
+      ];
     })
     .sort((a, b) => {
       if (b.confidence !== a.confidence) return b.confidence - a.confidence;
@@ -1260,6 +1317,107 @@ async function writeGroupVersion(
   return created;
 }
 
+/**
+ * A ROOM'S FIRST DRAFT WAITS FOR AFFIRMED MATERIAL.
+ *
+ * The goal's rule: synthesis fires on accumulated evidence, never on a clock
+ * or a button — a cadence would draft from thin evidence in a slow week,
+ * which is exactly how ungrounded statements reach a sky. The same shape as
+ * `emerging → active` at 3, one level up: a shared statement is AFFIRMED
+ * when at least one current member other than its owner has said "true" of
+ * it (their latest verdict is the one that stands — a later "not true"
+ * withdraws the affirmation), and the room's FIRST generative draft waits
+ * until that many shared statements are affirmed.
+ *
+ * Only the first model draft is gated. An established room re-reads its
+ * standing artifact as shares and verdicts move — that is maintenance of
+ * something the room already said, not the room speaking first. And member
+ * decisions are NEVER gated: an accepted proposal materializes a version
+ * whatever the count, because the members speaking directly is the strongest
+ * evidence there is.
+ *
+ * A SMALL ROOM IS HELD TO A SMALLER NUMBER, WHICH IS THE SAME RULE.
+ *
+ * Founder ruling, 2026-08-25. Three affirmations is a proportion argument
+ * wearing an absolute number's clothes: in a room of eight it is a modest
+ * corroboration, and in a room of two it is most of everything the room has
+ * ever said. The count is over SHARED STATEMENTS, not over agreements — a
+ * pair who have put two statements up can never reach three however many
+ * times each of them is affirmed — so the gate did not slow a small room
+ * down, it closed it. Measured on this stack: across fourteen successful
+ * synthesis jobs, not one of thirteen rooms had ever produced a top of mind.
+ *
+ * So the threshold reads the room. At or below
+ * GROUP_DRAFT_SMALL_MAX_MEMBERS the bar is two; above it, three. Two is
+ * the floor and never one, because one affirmation is a single person
+ * agreeing with a single statement, and a room that speaks off that has not
+ * been corroborated by anybody — it has been asserted twice.
+ */
+export const GROUP_DRAFT_MIN_AFFIRMED = 3;
+
+/** A room this size or smaller is held to the smaller bar. */
+export const GROUP_DRAFT_SMALL_MAX_MEMBERS = 3;
+
+/** The bar for a small room. Two, never one — see the note above. */
+export const GROUP_DRAFT_MIN_AFFIRMED_SMALL = 2;
+
+/**
+ * How many affirmed shared statements THIS room needs before it drafts.
+ *
+ * Takes the CURRENT member count, which is the count at the moment the job
+ * runs: a room that grows past the small-room size before it has ever spoken
+ * is held to the larger bar from then on, and one that shrinks back is held
+ * to the smaller. Neither retroactively unsays anything, because only the
+ * FIRST draft is gated at all.
+ */
+export function groupDraftMinAffirmed(memberCount: number): number {
+  return memberCount <= GROUP_DRAFT_SMALL_MAX_MEMBERS
+    ? GROUP_DRAFT_MIN_AFFIRMED_SMALL
+    : GROUP_DRAFT_MIN_AFFIRMED;
+}
+
+async function countAffirmedSharedSignals(
+  db: WakaDb,
+  groupId: string,
+  shared: GroupSharedSignal[],
+): Promise<number> {
+  if (shared.length === 0) return 0;
+  const rows = await db
+    .select({
+      targetId: feedback.targetId,
+      reactorProfileId: feedback.profileId,
+      value: feedback.value,
+    })
+    .from(feedback)
+    .innerJoin(
+      groupMembers,
+      and(eq(groupMembers.groupId, groupId), eq(groupMembers.profileId, feedback.profileId)),
+    )
+    .where(
+      and(
+        eq(feedback.targetType, "signal"),
+        inArray(
+          feedback.targetId,
+          shared.map((signal) => signal.id),
+        ),
+      ),
+    )
+    .orderBy(desc(feedback.createdAt));
+
+  const ownerBySignal = new Map(shared.map((signal) => [signal.id, signal.ownerProfileId]));
+  const seenPair = new Set<string>();
+  const affirmedSignals = new Set<string>();
+  // Newest-first: the first (signal, reactor) pair seen is the standing verdict.
+  for (const row of rows) {
+    if (ownerBySignal.get(row.targetId) === row.reactorProfileId) continue;
+    const pair = `${row.targetId}:${row.reactorProfileId}`;
+    if (seenPair.has(pair)) continue;
+    seenPair.add(pair);
+    if (row.value === "true") affirmedSignals.add(row.targetId);
+  }
+  return affirmedSignals.size;
+}
+
 export async function refreshTopOfMindForGroup(
   input: { groupId: string; reason: string },
   deps: TopOfMindRefreshDependencies = {},
@@ -1313,6 +1471,21 @@ export async function refreshTopOfMindForGroup(
     return nothing;
   }
 
+  // The first-draft gate. Legible silence rather than a silent pass: the
+  // caller learns the room is waiting, not that there was nothing to say.
+  let waitingForAffirmations = false;
+  if (liveBefore === null && shared.length > 0) {
+    const affirmed = await countAffirmedSharedSignals(db, input.groupId, shared);
+    if (affirmed < groupDraftMinAffirmed(memberRows.length)) {
+      if (pending.length === 0) {
+        return { ...nothing, status: "waiting_for_affirmations" };
+      }
+      // Accepted proposals still materialize — the members spoke directly —
+      // but the model does not draft alongside them yet.
+      waitingForAffirmations = true;
+    }
+  }
+
   // Members' decisions land before the model writes a word.
   const appliedBefore = applyGroupProposals(liveBefore?.entries ?? [], pending, now);
   const lockedNow = appliedBefore.entries.filter(
@@ -1331,7 +1504,7 @@ export async function refreshTopOfMindForGroup(
   let modelSaidNoChange = false;
   let droppedCitations = 0;
 
-  if (shared.length > 0) {
+  if (shared.length > 0 && !waitingForAffirmations) {
     const synthesis = await provider.synthesizeTopOfMind({
       profileId: input.groupId,
       preferredLocale: hostLocale,
@@ -1347,7 +1520,12 @@ export async function refreshTopOfMindForGroup(
         confidence: signal.confidence,
         evidenceCount: signal.evidenceCount,
         lastEvidenceAt: signal.lastEvidenceAt,
-        ownerName: memberNameById.get(signal.ownerProfileId) ?? "a former member",
+        /* a room-grown statement is the room's, standing on named voices; a
+           legacy shared one still names its owner */
+        ownerName:
+          signal.ownerProfileId === null
+            ? signal.contributorNames.join(" & ") || "the room"
+            : memberNameById.get(signal.ownerProfileId) ?? "a former member",
       })),
       lockedEntries: lockedNow.map((entry, index) => ({
         id: `${liveBefore?.id ?? "pending"}:${index}`,
@@ -1414,7 +1592,11 @@ export async function refreshTopOfMindForGroup(
             : "regenerated";
 
     const ownerBySignalId = new Map<string, string>(previous?.citationOwners ?? []);
-    for (const signal of shared) ownerBySignalId.set(signal.id, signal.ownerProfileId);
+    for (const signal of shared) {
+      /* a room-grown signal has no single owner: its citation row carries a
+         null owner and the board derives contributors from the evidence */
+      if (signal.ownerProfileId !== null) ownerBySignalId.set(signal.id, signal.ownerProfileId);
+    }
 
     const created = await writeGroupVersion(tx, {
       groupId: input.groupId,

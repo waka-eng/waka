@@ -1,0 +1,2 @@
+CREATE TYPE "public"."group_stance" AS ENUM('affirmed', 'declined');--> statement-breakpoint
+ALTER TABLE "group_top_of_mind_affirmations" ADD COLUMN "stance" "group_stance" DEFAULT 'affirmed' NOT NULL;

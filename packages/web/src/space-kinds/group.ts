@@ -3,8 +3,8 @@
  *
  * `index.ts` beside this file says what KINDS of space exist and which of them
  * have a sky or a dial. This says what a group's own wall is made of: the
- * shared signals that become its orbs (`groupWallOrbs`), how one of those is
- * built into a ball (`makeGroupBall`), and what its headquarters says
+ * shared signals that become its orbs (`groupWallOrbs`) and what its
+ * headquarters says
  * (`deriveGroupChrome`).
  *
  * The canon draws the boundary this module exists to hold: sharing is a
@@ -15,9 +15,6 @@
  * is able to reach rather than by remembering not to.
  */
 import type { ApiGroupTopOfMind, ApiGroupWallSignal } from "../lib/api";
-import { hashStr, TAU } from "../lib/num";
-import { colorBall } from "../space/inspiration/field";
-import { scatterSeed, type Ball } from "../space/inspiration/orb";
 import { formingWords, type WallChrome } from "../space/top-of-mind/board";
 
 
@@ -28,8 +25,10 @@ export interface GroupEvidence {
   quote: string | null;
   kind: string | null;
   createdMs: number;
-  authorUserId: string;
-  authorName: string;
+  /** the LEAD contributor of a room-grown statement; null when the room
+      served no names (never on a gated wall, defensive elsewhere) */
+  authorUserId: string | null;
+  authorName: string | null;
   /** Every reading of the room's that cited it — the panel's links sentence. */
   citedBy: string[];
 }
@@ -68,97 +67,23 @@ export function groupWallOrbs(wall: ApiGroupWallSignal[], top: ApiGroupTopOfMind
   const seen = new Map<string, GroupEvidence>();
   for (const s of wall) {
     if (seen.has(s.signalId)) continue;
+    /* a room-grown statement leads with its first contributor — the member
+       whose memory reached it first — and the board's citedBy is collected
+       across every contributor, since the entry may credit any of them */
+    const lead = s.contributors[0] ?? null;
+    const cited = s.contributors.flatMap((c) => fedBy.get(c.profileId) ?? []);
     seen.set(s.signalId, {
       signalId: s.signalId,
       textPreview: s.statement,
       quote: null,
       kind: null,
       createdMs: Date.parse(s.sharedAt) || Date.now(),
-      authorUserId: s.ownerProfileId,
-      authorName: s.ownerName,
-      citedBy: fedBy.get(s.ownerProfileId) ?? [],
+      authorUserId: lead?.profileId ?? null,
+      authorName: lead?.name ?? null,
+      citedBy: [...new Set(cited)],
     });
   }
   return [...seen.values()];
-}
-
-/**
- * A room orb: the same ball, built from an evidence preview. Aliveness decays
- * from `createdAt` on the personal jar's own half-life; the reflection and
- * note boosts are omitted because the payload cannot know them. Tint hashes
- * the signal id — evidence previews carry no theme terms.
- */
-export function makeGroupBall(
-  ev: GroupEvidence,
-  groupId: string,
-  colIdx: number,
-  viewerId: string | null,
-): Ball {
-  const r = 24 + ((hashStr(ev.signalId + "r") % 1000) / 1000) * 8;
-  const b: Ball = {
-    id: `${groupId}:${ev.signalId}`,
-    capturedMs: ev.createdMs,
-    updatedMs: ev.createdMs,
-    reflections: 0,
-    hasNotes: false,
-    frontier: false,
-    hasGroup: false,
-    textPreview: ev.textPreview,
-    kind: ev.kind,
-    quote: ev.quote,
-    terms: [],
-    r,
-    rBase: r,
-    sizeIdx: r < 26.5 ? 0 : r < 29.8 ? 1 : 2,
-    frac: (hashStr(ev.signalId) % 1000) / 1000,
-    scat: scatterSeed(ev.signalId),
-    x: 0,
-    y: 0,
-    homeX: 0,
-    homeY: 0,
-    peekX: 0,
-    peekY: 0,
-    ampX: 10 + Math.random() * 8,
-    ampY: 10 + Math.random() * 8,
-    ampBaseX: 0,
-    ampBaseY: 0,
-    rateX: TAU / (7 + Math.random() * 6),
-    rateY: TAU / (7 + Math.random() * 6),
-    phX: Math.random() * TAU,
-    phY: Math.random() * TAU,
-    arrive: 1,
-    entryH: 0,
-    active: false,
-    leaving: false,
-    gone: 0,
-    spawnAt: -1,
-    peek: false,
-    relightAt: 0,
-    relight: 0,
-    aliveFrom: 0,
-    aliveTo: 0,
-    alive: 0,
-    alivePow: 0,
-    breathRate: 0.9 + Math.random() * 0.5,
-    breathPhase: Math.random() * TAU,
-    hold: 0,
-    dim: 0,
-    glow: 0,
-    press: 0,
-    img: null,
-    imgUrl: null,
-    col: colIdx,
-    sigId: ev.signalId,
-    authorName: ev.authorName,
-    own: viewerId !== null && ev.authorUserId === viewerId,
-    citedBy: ev.citedBy,
-    origin: "human",
-    lens: 0,
-  };
-  b.ampBaseX = b.ampX;
-  b.ampBaseY = b.ampY;
-  colorBall(b, Date.now());
-  return b;
 }
 
 /**
@@ -169,17 +94,19 @@ export function makeGroupBall(
  * its lead entry — pinned first, otherwise the top of the order — and there is
  * no generated stand-in when there is none.
  */
+/* The room's NAME and the company standing in it were parameters until
+   2026-08-27: they fed the eyebrow, and the eyebrow is gone (see
+   `board.ts`'s note where the field was). The name is still on screen twice
+   — the pill at the top left, and the axis below — and who is in the room is
+   said by the company itself, drawn behind your companion. */
 export function deriveGroupChrome(
-  name: string,
   top: ApiGroupTopOfMind,
   openProposalMs: number | null,
   evidence: GroupEvidence[],
-  company: string | null,
 ): WallChrome {
   const lead = top.entries.find((e) => e.pinnedAt) ?? top.entries[0] ?? null;
   const ambition = lead?.body ?? null;
   return {
-    eyebrow: company ? `${name} \u00b7 ${company}` : name,
     text: ambition,
     awayFrom: null,
     formingAlt: ambition ? null : "Forming — nothing read together yet",

@@ -34,6 +34,7 @@ import {
 } from "../db/index.js";
 import { getDb } from "./db.js";
 import { normalizeSupportedLocale } from "./locales.js";
+import { writePrincipleStatementChain } from "./statement-chains.js";
 import {
   getDefaultModelProvider,
   type ModelProvider,
@@ -207,6 +208,7 @@ async function loadCitationEvidence(
       and(eq(topOfMinds.profileId, profileId), inArray(topOfMindEntrySignals.signalId, signalIds)),
     );
   for (const row of tomRows) {
+    if (row.signalId === null) continue;
     const bucket = out.get(row.signalId);
     if (bucket && !bucket.tomVersionIds.includes(row.topOfMindId)) {
       bucket.tomVersionIds.push(row.topOfMindId);
@@ -400,6 +402,15 @@ export async function refreshPrinciplesForProfile(
           signalId,
         })),
       );
+      // The chain begins at birth — the machine's sentence every later
+      // revert returns to (no-quiet-corners Phase 2).
+      await writePrincipleStatementChain(tx, {
+        profileId: input.profileId,
+        principleId: row!.id,
+        statement: candidate.statement,
+        reason: "minted",
+        now,
+      });
       return row!;
     });
     existing.push(minted);

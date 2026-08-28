@@ -396,6 +396,12 @@ export interface CaptureInput {
   reflections?: Array<{ question: string; answer?: string; skipped?: boolean }>;
   /** Capture into another profile of the same account, per the matrix. */
   profile?: string;
+  /**
+   * Public is what puts a memory on the ground of every room its keeper is
+   * in — since 2026-08-24 there is no other way a statement reaches a room,
+   * so a harness that wants a room to have anything to say must say this.
+   */
+  visibility?: "private" | "public";
 }
 
 export async function capture(session: Session, input: CaptureInput): Promise<Inspiration> {
@@ -546,6 +552,81 @@ export async function attachLink(
  * it anyway. A stack with no bucket configured fails at the presign step with
  * that said plainly, rather than at some confusing point downstream.
  */
+/**
+ * MINT AN AGENT-BOUND CREDENTIAL, the way `waka-mcp` does.
+ *
+ * The loopback login end to end: open the consent page, submit its form as the
+ * signed-in human, follow the redirect for the one-time code, exchange it. What
+ * comes back is a token bound to ONE profile, and the last check here is that
+ * the profile it is bound to is the profile that was asked for — a consent
+ * screen that quietly bound a credential to the wrong profile would hand an
+ * agent somebody else's memory, and every response would still look correct.
+ *
+ * IT LIVES HERE RATHER THAN IN ONE SUITE. It was written inside `groups.ts`
+ * and a second suite needed it the moment there was a second question about
+ * what an agent may do. This file is where the e2e family keeps the things
+ * more than one of them speaks — and a rule with two copies is two places for
+ * it to drift, silently, in a direction nobody re-reads.
+ */
+export async function mintAgentToken(browser: Session, profileId: string): Promise<string> {
+  const callback = "http://127.0.0.1:65535/callback";
+  const state = "e2e-state";
+
+  const page = await fetch(
+    `${browser.baseUrl}/api/auth/cli/start?callback=${encodeURIComponent(callback)}` +
+      `&state=${state}&profile=${profileId}&device=e2e`,
+    { headers: { Authorization: `Bearer ${browser.token}` } },
+  );
+  if (!page.ok) throw new Error(`cli/start → ${page.status}`);
+  const html = await page.text();
+
+  const field = (name: string): string => {
+    const match = html.match(new RegExp(`name="${name}" value="([^"]*)"`));
+    if (!match) throw new Error(`consent form is missing ${name}`);
+    return match[1]!.replace(/&amp;/g, "&").replace(/&#39;/g, "'");
+  };
+
+  const form = new URLSearchParams({
+    callback: field("callback"),
+    state: field("state"),
+    device: field("device"),
+    consent: field("consent"),
+    profileId,
+  });
+
+  const consented = await fetch(`${browser.baseUrl}/api/auth/cli/consent`, {
+    method: "POST",
+    redirect: "manual",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: `Bearer ${browser.token}`,
+    },
+    body: form.toString(),
+  });
+  if (consented.status !== 302) throw new Error(`cli/consent → ${consented.status}`);
+
+  const code = new URL(consented.headers.get("location")!).searchParams.get("code");
+  if (!code) throw new Error("consent redirect carried no code");
+
+  const exchanged = await fetch(`${browser.baseUrl}/api/auth/cli/exchange`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
+  if (!exchanged.ok) throw new Error(`cli/exchange → ${exchanged.status}`);
+  const { token } = (await exchanged.json()) as { token: string };
+  const who = await fetch(`${browser.baseUrl}/api/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  }).then((r) => r.json() as Promise<{ profile: { id: string; type: string } }>);
+  if (who.profile.id !== profileId) {
+    throw new Error(
+      `consent bound the credential to ${who.profile.type} ${who.profile.id}, not the requested ${profileId}`,
+    );
+  }
+  return token;
+}
+
+
 /**
  * Record an image that already lives at a URL, the way a pasted image arrives.
  *
@@ -857,6 +938,32 @@ function parseArgs(argv: string[]): CliArgs | null {
   return args;
 }
 
+/**
+ * THIS STACK CANNOT EXERCISE THE CLAIM — WHICH IS NOT THE PRODUCT FAILING.
+ *
+ * Founder, 2026-08-25: every workflow should reach its end "without breaking
+ * in the middle". Auditing the eleven suites against that found the same shape
+ * four times over: a step discovers, at run time, that the stack it is pointed
+ * at cannot host the thing being claimed — no attachments bucket, a fixture on
+ * loopback that the API's SSRF guard refuses by design — and reports FAIL. The
+ * product is fine. The guard blocking loopback IS the product working.
+ *
+ * A red run whose red is environmental is worse than a missing gate, because a
+ * genuine regression then arrives into a suite that is already red and nobody
+ * looks twice. Every suite here already had a skip concept; none of them used
+ * it for the conditions they can only discover while running.
+ *
+ * The rule for using this, and it is narrow: throw `NotExercised` ONLY when
+ * the stack lacks a capability the claim needs. Never when the product
+ * answered and answered wrongly — that is a failure and stays one.
+ */
+class NotExercised extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "NotExercised";
+  }
+}
+
 interface StepResult {
   number: number;
   title: string;
@@ -1040,7 +1147,20 @@ const STEPS: Step[] = [
   {
     title: "a saved link is enriched from the page body",
     run: async (state) => {
-      const session = state.primary!;
+      /* ITS OWN ACCOUNT, BECAUSE STEP 4 SPENDS THIS ONE'S BUDGET.
+         `MODEL_BUDGET_JOBS_PER_ACCOUNT` is 60 per rolling hour
+         (`lib/model-budget.ts`). Step 4 buries its marker under 205 filler
+         captures, each of which enqueues a `derive_signals` job, so by the
+         time these steps run the primary account has started exactly 60 and
+         the queue has deferred its ENTIRE remaining backlog — including this
+         enrichment job — to the next window boundary, an hour out.
+         Measured 2026-08-22: with `--filler 205` these two steps failed after
+         90s each; with `--filler 12` they passed in 1.5s each. Nothing about
+         enrichment was ever broken. The harness was competing with itself,
+         and the timeout could not say so.
+         A fresh account carries a fresh budget and needs two jobs of it. */
+      const session = await newAccount(state, "enrichment link");
+
       const inspiration = await capture(session, {
         text: "Saving this to read properly later.",
         kind: "link",
@@ -1058,11 +1178,11 @@ const STEPS: Step[] = [
       });
 
       if (settled.enrichment.errorReason === "private_address") {
-        throw new Error(
-          "enrichment refused the fixture as a private address. The API's SSRF guard blocks " +
-            "loopback by design, so this step needs either a dev-only allowance for the fixture " +
-            "host in packages/api/src/lib/signal-enrichment.ts, or --fixture-url pointing at a " +
-            "routable address that reaches this machine.",
+        throw new NotExercised(
+          "the fixture is on loopback and the API's SSRF guard refuses private addresses — " +
+            "by design, so this is the product working rather than failing. To exercise the " +
+            "claim, pass --fixture-url pointing at an address that routes back to this machine, " +
+            "or add a dev-only allowance in packages/api/src/lib/signal-enrichment.ts.",
         );
       }
       assert(
@@ -1089,7 +1209,8 @@ const STEPS: Step[] = [
   {
     title: "a saved image is enriched from what it depicts",
     run: async (state) => {
-      const session = state.primary!;
+      /* Its own account, for the reason spelled out on the link step above. */
+      const session = await newAccount(state, "enrichment image");
       const inspiration = await capture(session, {
         text: "A screenshot I want findable by what it says.",
         kind: "image",
@@ -1111,6 +1232,17 @@ const STEPS: Step[] = [
         label: "the fixture image's enrichment",
       });
 
+      /* THE SAME GUARD AS THE LINK STEP ABOVE. This one reached a plain
+         `assert` instead and so reported the identical environmental cause as
+         a product failure — the two steps share a cause and must share an
+         answer. */
+      if (settled.enrichment.errorReason === "private_address") {
+        throw new NotExercised(
+          "the fixture image is on loopback and the API's SSRF guard refuses private " +
+            "addresses — by design. Pass --fixture-url pointing at an address that routes " +
+            "back to this machine to exercise the claim.",
+        );
+      }
       assert(
         settled.enrichment.status === "ready",
         `enrichment settled as ${settled.enrichment.status} (${settled.enrichment.errorReason ?? "no reason"}), expected ready`,
@@ -1187,14 +1319,17 @@ async function runScenario(args: CliArgs): Promise<number> {
         });
       } catch (err) {
         const message = redact(err instanceof Error ? err.message : String(err));
+        /* A capability this stack has not got is a SKIP, not a FAIL, and it
+           never aborts the run — see `NotExercised`. */
+        const notExercised = err instanceof NotExercised;
         results.push({
           number,
           title: step.title,
-          outcome: "fail",
-          detail: message,
+          outcome: notExercised ? "skip" : "fail",
+          detail: notExercised ? `NOT EXERCISED — ${message}` : message,
           ms: Date.now() - startedAt,
         });
-        if (step.critical) aborted = true;
+        if (step.critical && !notExercised) aborted = true;
       }
       console.log(formatResult(results[results.length - 1]!));
     }
@@ -1222,7 +1357,13 @@ async function runScenario(args: CliArgs): Promise<number> {
   const skipped = results.filter((row) => row.outcome === "skip").length;
   const passed = results.filter((row) => row.outcome === "pass").length;
   console.log(`\n[organic] ${passed} passed, ${failed} failed, ${skipped} skipped`);
-  return failed + skipped > 0 ? 1 : 0;
+  /* A SKIP NO LONGER MAKES THE RUN RED, and the distinction is the point. Two
+     things wear the skip badge: a step this stack cannot host (`NotExercised`)
+     and a step abandoned because an earlier one failed. The second only ever
+     happens alongside a real failure, so `failed` is already non-zero and the
+     run is red anyway; keeping `skipped` in this sum only had the effect of
+     painting a healthy stack red for lacking an object store. */
+  return failed > 0 ? 1 : 0;
 }
 
 async function main(): Promise<void> {

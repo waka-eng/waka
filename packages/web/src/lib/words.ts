@@ -11,7 +11,6 @@
  * calls this the third vocabulary: canon words in the API, world words inside
  * the world, and human words on screen. These are the human words.
  */
-import type { ApiGroupMember } from "./api";
 import { DAY_MS } from "./num";
 
 /**
@@ -46,12 +45,10 @@ export function citedWords(titles: string[]): string {
 }
 
 /**
- * The absolute date, spelled all the way out — "May eighteenth", and with the
- * year when it is not this one. It used to format the day (and sometimes the
- * year) as digits, which put "June 25" in the panel directly beside a
- * relative line that obeyed the rule: states render, numerals never. The
- * spelled form is also the one a person would say aloud, which is the test
- * this whole surface is written to.
+ * The absolute date — "Aug 23", and with the year when it is not this one.
+ * It was spelled all the way out ("May eighteenth") to obey "states render,
+ * numerals never"; see the note inside `dateWords` for why a date is not one
+ * of the states that rule is about.
  */
 const ORD_ONES = [
   "zeroth", "first", "second", "third", "fourth", "fifth", "sixth", "seventh",
@@ -69,12 +66,40 @@ const ONES = [
   "seventeen", "eighteen", "nineteen",
 ];
 
+/**
+ * The full date stamp a person writes at the top of a page: `Aug 24, 2026`.
+ * The card's head wears this instead of the spoken pair — "Two days ago ·
+ * Aug 24" said the same fact twice and went stale as the card stayed open
+ * (founder, 2026-08-27: "just keep date. also add year"). The year is always
+ * present: a memory product's dates are read across years, and a stamp that
+ * drops its year is a stamp that will one day be misread by exactly the
+ * person this is built for.
+ */
+export function dateStamp(ms: number): string {
+  const d = new Date(ms);
+  const month = d.toLocaleDateString("en-US", { month: "short" });
+  return `${month} ${d.getDate()}, ${d.getFullYear()}`;
+}
+
 export function dateWords(ms: number, T: number): string {
   const d = new Date(ms);
-  const month = d.toLocaleDateString("en-US", { month: "long" });
-  const day = ordWords(d.getDate());
-  if (d.getFullYear() === new Date(T).getFullYear()) return `${month} ${day}`;
-  return `${month} ${day}, ${yearWords(d.getFullYear())}`;
+  /*
+   * A DATE IS READ, NOT COUNTED.
+   *
+   * "August twenty-third" spelled out obeyed the letter of "states render,
+   * numerals never" and missed its point. That law is about STATES — a count
+   * of members, a score, a tally — where a numeral turns a fact about people
+   * into a readout. A calendar date is none of those: it is a label, everyone
+   * already reads it as digits, and spelling it out makes the reader do
+   * arithmetic to find out when something was.
+   *
+   * `Aug 23`, which is what a person writes down. The month stays short so it
+   * cannot be mistaken for a count, and the year is only there when it is not
+   * this one.
+   */
+  const month = d.toLocaleDateString("en-US", { month: "short" });
+  if (d.getFullYear() === new Date(T).getFullYear()) return `${month} ${d.getDate()}`;
+  return `${month} ${d.getDate()}, ${d.getFullYear()}`;
 }
 /**
  * The name a whisper says: the given name alone. The first whitespace-
@@ -86,28 +111,16 @@ export function givenName(full: string): string {
   return first || full.trim();
 }
 /**
- * WHAT KIND OF COMPANY THIS IS.
+ * WHO IS IN THIS ROOM — said in words, and no longer said at all.
  *
- * Four rooms with four different populations were four identical walls: the
- * one where you sit alone, the one you share with your own agent, the one
- * with four other people in it, and the one where five machines talk about
- * their work all read the same. Who is in a room is the single most important
- * thing about it — you speak differently in each — so the eyebrow carries it
- * beside the name.
- *
- * In words and never as a count, and never as a badge: it is a description of
- * the company, which is what a person would actually say about a room.
+ * `groupCompany` turned a room's member list into "with Jina and Minsu". Its
+ * only reader was the wall's eyebrow, and the eyebrow is gone: the room now
+ * DRAWS its company — a figure per member, standing in the ground, each one
+ * giving its name when you reach for it. That is the same fact in the channel
+ * this world actually has, so the sentence was a second telling of something
+ * already on screen. Removed rather than kept warm; `git show 65f6ce1` has it
+ * if the drawing ever needs words back.
  */
-export function groupCompany(members: ApiGroupMember[] | undefined): string | null {
-  if (!members || members.length === 0) return null;
-  const agents = members.filter((m) => m.type === "agent").length;
-  const people = members.length - agents;
-  if (members.length === 1) return "on your own";
-  if (people === 0) return "agents only";
-  if (agents === 0) return people === 2 ? "the two of you" : "people";
-  if (people === 1 && agents === 1) return "you and your agent";
-  return "people and agents";
-}
 
 /** Ordinals as words — "twenty-fifth", never "25th". */
 export function ordWords(n: number): string {

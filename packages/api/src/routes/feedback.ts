@@ -17,7 +17,8 @@
  * private verdict on a shared entry would be a vote nobody else can see.
  */
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull, ne } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
@@ -27,6 +28,7 @@ import {
   feedbackTargetTypeValues,
   feedbackValueValues,
   groupMembers,
+  profiles,
   signalShares,
   signals,
   topOfMindEntries,
@@ -35,6 +37,7 @@ import {
   type FeedbackTargetType,
   type FeedbackValue,
 } from "../db/index.js";
+import { resolveContestedPairs } from "../lib/contested-pairs.js";
 import { getDb } from "../lib/db.js";
 import { enqueueGroupTopOfMindRefresh } from "../lib/queue.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
@@ -193,18 +196,84 @@ async function targetBelongsToProfile(
      * author's memories stay where they are; sharing a statement has never
      * shipped its grounds and does not start now.
      */
+    /**
+     * STANDING MIRRORS THE WALL, EXACTLY. The wall withholds a share whose
+     * owner has left (leaving withdraws it) and drops retired signals — so
+     * answerability must too, or a member could keep filing verdicts against
+     * a statement the room can no longer see. Three joins, three facts: you
+     * are in the room now, its owner is in the room now, and the signal
+     * still stands.
+     */
+    const ownerSeat = alias(groupMembers, "owner_seat");
     const [shared] = await db
       .select({ id: signalShares.id })
       .from(signalShares)
-      .innerJoin(groupMembers, eq(groupMembers.groupId, signalShares.groupId))
-      .where(
+      .innerJoin(
+        signals,
+        and(eq(signals.id, signalShares.signalId), ne(signals.status, "retired")),
+      )
+      .innerJoin(
+        groupMembers,
         and(
-          eq(signalShares.signalId, input.targetId),
+          eq(groupMembers.groupId, signalShares.groupId),
           eq(groupMembers.profileId, input.profileId),
         ),
       )
+      .innerJoin(
+        ownerSeat,
+        and(
+          eq(ownerSeat.groupId, signalShares.groupId),
+          eq(ownerSeat.profileId, signalShares.profileId),
+        ),
+      )
+      .where(eq(signalShares.signalId, input.targetId))
       .limit(1);
-    return mayAnswerSignal({ ownsIt, sharedIntoARoomYouAreIn: Boolean(shared) });
+
+    /**
+     * A STATEMENT YOUR ROOM GREW CAN BE ANSWERED (2026-08-24). A room-grown
+     * signal belongs to the room's mind, so the share join above never sees
+     * it — its standing rule is simpler: you are a current member of the
+     * room whose mind holds it, and it still stands. Two joins, two facts.
+     * The two-voices serve gate is a WALL rule, deliberately not repeated
+     * here: a member who saw a statement on the wall a moment ago may still
+     * answer it while a co-contributor's departure has it below the bar —
+     * a stance filed on something the room genuinely grew is never invalid.
+     */
+    const [grown] = await db
+      .select({ id: signals.id })
+      .from(signals)
+      .innerJoin(
+        profiles,
+        and(eq(profiles.id, signals.profileId), eq(profiles.type, "group")),
+      )
+      .innerJoin(
+        groupMembers,
+        and(
+          eq(groupMembers.groupId, profiles.groupId),
+          eq(groupMembers.profileId, input.profileId),
+        ),
+      )
+      .where(
+        and(
+          eq(signals.id, input.targetId),
+          ne(signals.status, "retired"),
+          /* AND NOT SET ASIDE. The wall refuses to serve a dismissed
+             statement, so a member cannot be looking at one; accepting a
+             stance on it would file an answer to something the room has
+             already put down, and nothing would ever show it back. The
+             two-voices gate is deliberately NOT repeated here (see above) —
+             that one is about a statement drifting below the bar while
+             somebody had it on screen, which is a race worth forgiving.
+             A dismissal is a decision, and there is nothing to forgive. */
+          isNull(signals.dismissedAt),
+        ),
+      )
+      .limit(1);
+
+    return mayAnswerSignal({
+      ownsIt,
+      sharedIntoARoomYouAreIn: Boolean(shared) || Boolean(grown),
+    });
   }
 
   if (input.targetType === "principle") {
@@ -247,6 +316,30 @@ export async function createFeedbackForProfile(
       correctionText: input.correctionText ?? null,
     })
     .returning();
+
+  // A verdict on the owner's OWN signal arbitrates any contested pair it
+  // stands in: true → the other side yields, not_true → this side yields,
+  // partly → nothing (an invitation to sharpen, not an arbitration). Owner
+  // only — a room member answering a shared statement judges the statement,
+  // not the owner's disputes, so the ownership check is explicit here.
+  if (
+    row &&
+    input.targetType === "signal" &&
+    (input.value === "true" || input.value === "not_true")
+  ) {
+    const [ownSignal] = await db
+      .select({ id: signals.id })
+      .from(signals)
+      .where(and(eq(signals.id, input.targetId), eq(signals.profileId, input.profileId)))
+      .limit(1);
+    if (ownSignal) {
+      await resolveContestedPairs(db, {
+        profileId: input.profileId,
+        signalId: input.targetId,
+        act: input.value === "true" ? "affirm" : "deny",
+      });
+    }
+  }
 
   // The owner's dispute marks the principle contested at feedback time —
   // immediate state maintenance, deliberately outside the nightly cadence:

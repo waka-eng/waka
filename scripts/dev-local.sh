@@ -85,6 +85,32 @@ load_env_local
 # port nothing is listening on. Override with WAKA_LOCAL_PORT.
 export PORT="${WAKA_LOCAL_PORT:-3010}"
 local_origin="http://localhost:${PORT}"
+
+# SAY WHO HAS THE PORT, rather than letting node throw EADDRINUSE.
+#
+# The failure mode this replaces: a previous `dev:local` is still running in a
+# terminal you have closed or forgotten, and the new one dies eight lines into
+# a stack trace about `::1:3010` — after building the web app and after the
+# API has already done its startup work, so the useful output scrolls past the
+# cause. The port is a one-line question; ask it before doing any of that.
+if command -v lsof >/dev/null 2>&1; then
+  holder="$(lsof -ti "tcp:${PORT}" -sTCP:LISTEN 2>/dev/null | head -n 1 || true)"
+  if [[ -n "$holder" ]]; then
+    holder_cmd="$(ps -p "$holder" -o comm= 2>/dev/null | tr -d ' ' || true)"
+    cat >&2 <<MSG
+Port ${PORT} is already in use by pid ${holder}${holder_cmd:+ (${holder_cmd})}.
+
+That is almost always a dev:local you started in another terminal. Either:
+
+  kill ${holder}            # stop it and run this again
+  WAKA_LOCAL_PORT=3011 pnpm dev:local   # or leave it and use another port
+
+If you use another port, open the browser there too — the OAuth callback
+follows this value, so http://localhost:${PORT} would answer from the old one.
+MSG
+    exit 1
+  fi
+fi
 export PUBLIC_API_URL="$local_origin"
 export PUBLIC_WEB_URL="$local_origin"
 export VITE_API_URL=""

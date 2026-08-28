@@ -83,13 +83,22 @@ const MODULES: Record<string, Record<string, unknown>> = {
  * is enough, and it fails loudly if the file moves — which is the correct
  * outcome, since the doc names its path.
  */
-const WEB_TUNING = new URL("../../../web/src/lib/aliveness.ts", import.meta.url);
+/*
+ * A list rather than a glob: a new painter that exports tuning constants has to
+ * be added here by hand. Weaker than a glob, but honest — the test names the
+ * files it reads, and the doc names the same paths.
+ */
+const WEB_TUNING = [
+  new URL("../../../web/src/lib/aliveness.ts", import.meta.url),
+];
 
 function webTuningExports(): Map<string, string> {
   const out = new Map<string, string>();
-  const src = readFileSync(fileURLToPath(WEB_TUNING), "utf8");
-  for (const m of src.matchAll(/^export const ([A-Z][A-Z0-9_]+) = ([0-9.]+);/gm)) {
-    out.set(m[1] as string, String(m[2]));
+  for (const file of WEB_TUNING) {
+    const src = readFileSync(fileURLToPath(file), "utf8");
+    for (const m of src.matchAll(/^export const ([A-Z][A-Z0-9_]+) = ([0-9.]+);/gm)) {
+      out.set(m[1] as string, String(m[2]));
+    }
   }
   return out;
 }
@@ -180,6 +189,29 @@ describe("the doc's [checked] structural claims", () => {
     );
     expect(derivation.SIGNAL_MATCH_MIN_COSINE).toBeLessThan(
       derivation.SIGNAL_BATCH_DEDUPE_MIN_COSINE,
+    );
+  });
+
+  it("keeps the ground's refusal ahead of the match", () => {
+    // The doc claims a candidate near a dismissed anchor is refused BEFORE
+    // the match is even looked at — so a refused pattern cannot re-enter as
+    // evidence for something else, and a refused candidate never spends a
+    // judge call. The behavior is proven on a real database in
+    // signal-suppression.db.test.ts; this pins the code shape the ordering
+    // claim rests on, the way the queue's `changed` check is pinned below.
+    const source = readFileSync(
+      resolve(REPO_ROOT, "packages/api/src/lib/signal-match-or-mint.ts"),
+      "utf8",
+    );
+    const refusal = source.indexOf("findSuppressionAnchor(candidate.embedding");
+    const match = source.indexOf("findBestMatch(candidate.embedding");
+    expect(refusal).toBeGreaterThan(-1);
+    expect(match).toBeGreaterThan(-1);
+    expect(refusal).toBeLessThan(match);
+    // A refusal bar below the judge band would silence candidates the match
+    // would not even have asked about.
+    expect(derivation.SIGNAL_SUPPRESSION_MIN_COSINE).toBeGreaterThanOrEqual(
+      derivation.SIGNAL_MERGE_JUDGE_MIN_COSINE,
     );
   });
 

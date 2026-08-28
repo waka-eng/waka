@@ -45,7 +45,6 @@ export function deriveAgentChrome(a: AgentBundle, T: number, nowMs: number): Wal
   }));
   const empty = a.inspirations.length === 0;
   return {
-    eyebrow: a.agent.name,
     text: held?.ambition ?? null,
     awayFrom: held?.awayFrom ?? null,
     /* An agent that has not worked yet says so, in its own voice, once. */

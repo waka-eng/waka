@@ -28,7 +28,7 @@ import type { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 
 import { useAuth } from "../lib/auth-context";
-import { readStoredLocale, t } from "../lib/locales";
+import { LoadingHome } from "./LoadingHome";
 
 export interface RequireAuthProps {
   children: ReactNode;
@@ -38,38 +38,14 @@ export interface RequireAuthProps {
 export function RequireAuth({ children, requireAdmin = false }: RequireAuthProps): JSX.Element {
   const { isAuthenticated, isLoading, account } = useAuth();
   const location = useLocation();
-  const locale = readStoredLocale();
 
   if (isLoading) {
-    // Neutral splash. Kept deliberately minimal — once Home renders its own
-    // skeleton we can lift this to a shared <PageLoading /> primitive, but
-    // for now any non-flashing surface is enough to satisfy the guard
-    // contract.
-    return (
-      <div
-        role="status"
-        aria-live="polite"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          minHeight: "100vh",
-          // The splash is the first frame of the product and it was set in
-          // serif italic on parchment -- an editorial flourish for a moment
-          // that should be furniture. Sans, small, quiet, on the same white
-          // the surface uses, so the app does not appear to change clothes
-          // between the splash and the first paint.
-          background: "#fcfcfb",
-          fontFamily:
-            '"Inter Tight", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif',
-          fontSize: 13,
-          letterSpacing: 0,
-          color: "rgba(23, 22, 19, 0.4)",
-        }}
-      >
-        {t(locale, "loadingAuth")}
-      </div>
-    );
+    // The splash was a white page with a word on it — the product changing
+    // clothes between the door and the world (founder, 2026-08-27: "loading
+    // page should be this black color … can we have the character already
+    // there"). It is the world's own early face now, shared with Home's
+    // pre-ready frame, so the way in never flashes.
+    return <LoadingHome />;
   }
 
   if (!isAuthenticated) {

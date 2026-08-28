@@ -42,6 +42,12 @@
  *     effects. `mouthSpot` IS here, because a newborn memory leaves from the
  *     middle of the sentence that made it and the loop measures that.
  *
+ * Three members LEFT by this rule on 2026-08-25 — `nebEls`, `clusterEls` and
+ * `satSay`, the sky's words. Nothing on the canvas side dereferenced them any
+ * more, because nothing rendered the elements: the whole candidate layer went
+ * with the sky engine. They are the rule working in the other direction, and
+ * worth naming here because the membership test is what this file is for.
+ *
  * Adding a ref here that the canvas never reads would make this object a
  * grab-bag of "refs in Home.tsx", which answers no question. The membership
  * rule is the whole value of the file.
@@ -92,9 +98,6 @@ export interface Measured {
       what the companion's slot is solved against, and observing the outer
       element instead would be a resize feedback loop. */
   readonly hqInner: RefObject<HTMLDivElement>;
-  /** The companion's whisper. Screen-anchored, so the loop writes both its top
-      and a transform that cancels the horizontal camera. */
-  readonly charSay: RefObject<HTMLDivElement>;
 
   /* ---- the mouth (59 lines): where a memory is said ---- */
   /** The mouth's camera-riding layer. It stands on the seam and is a sibling of
@@ -105,18 +108,6 @@ export interface Measured {
       leaves from the middle of the sentence that made it however many lines
       that had wrapped to. Assigned by a callback ref, hence mutable. */
   readonly mouthSpot: MutableRefObject<HTMLElement | null>;
-
-  /* ---- the sky (216 lines): layer two's words ---- */
-  /** One sentence per candidate, keyed by candidate id, positioned on its cloud
-      every frame. The map is mutated by callback refs as candidates mount and
-      unmount; `.current` itself is never replaced. */
-  readonly nebEls: MutableRefObject<Map<string, HTMLDivElement>>;
-  /** One line per cluster, keyed by the joined ids, placed under the lowest
-      cloud in the cluster. Same lifecycle as `nebEls`. */
-  readonly clusterEls: MutableRefObject<Map<string, HTMLDivElement>>;
-  /** The one whisper the orbits carry: whose memory the pointer is on. The loop
-      writes both its words and its place. */
-  readonly satSay: RefObject<HTMLDivElement>;
 }
 
 /**
@@ -137,12 +128,8 @@ export function useMeasured(): Measured {
       grain: { current: null },
       hq: { current: null },
       hqInner: { current: null },
-      charSay: { current: null },
       mouth: { current: null },
       mouthSpot: { current: null },
-      nebEls: { current: new Map() },
-      clusterEls: { current: new Map() },
-      satSay: { current: null },
     };
   }
   return held.current;

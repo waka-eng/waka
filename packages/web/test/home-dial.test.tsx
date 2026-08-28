@@ -97,9 +97,11 @@ const FACTS = {
     daysAgo,
   })),
   /**
-   * No groups. The dial stays out of a group — a group's ground is many
-   * people's and there is no one history to wind — so a group on the axis
-   * would only add a wall this file never stands on.
+   * No groups. A room has a dial of its own now — it winds the room's board
+   * along the room's own chain — but that is a different rail with a
+   * different span, and it is `group-dial.test.tsx`'s subject. Every case
+   * here is about YOUR archive, so a group on the axis would only add a wall
+   * this file never stands on.
    */
   groups: [],
 };
@@ -148,7 +150,7 @@ beforeEach(async () => {
   /* The same rows the page was handed, asked of the same mock. Reading the
      moments back out of this rather than recomputing them from a base date
      means the test cannot drift out of agreement with the fixture helper. */
-  keptMs = (await dataMockFrom(FACTS).loadInspirations())
+  keptMs = (await dataMockFrom(FACTS).loadInspirations()).inspirations
     .map((row) => row.capturedMs)
     .sort((a, b) => a - b);
   /* The rail runs from three days before your earliest memory to now. Both
@@ -202,11 +204,16 @@ function one(selector: string): HTMLElement {
  */
 async function windTo(pos: number): Promise<void> {
   const rail = one(".jar-dial-track");
-  const from = railAt * VIEW_H;
-  const to = pos * VIEW_H;
+  /* VERTICAL, AND NOW IS AT THE TOP (founder, 2026-08-27). `pos` still means
+     what it always meant — where along the ARCHIVE, 0 at the oldest and 1 at
+     today — because that is the fact each test below is about. The rail is
+     what turned over, so the flip lives here, in the one place that speaks to
+     it, rather than in a dozen assertions about time. */
+  const from = (1 - railAt) * VIEW_H;
+  const to = (1 - pos) * VIEW_H;
   /* jsdom has PointerEvent, so this is the event the handler really receives
      rather than a mouse event wearing its name. The stubbed rect makes the
-     rail the full viewport height, so clientY and position are the same
+     rail the full viewport width, so clientX and position are the same
      number scaled. */
   const at = (kind: string, y: number) =>
     new PointerEvent(kind, { bubbles: true, cancelable: true, clientY: y, pointerId: 1 });
@@ -228,7 +235,8 @@ async function windTo(pos: number): Promise<void> {
      exactly like a broken dial. */
   await layout.step(40);
 
-  const asked = pos * 100;
+  /* the handle is placed from the TOP, and the top is now */
+  const asked = (1 - pos) * 100;
   const landed = Number.parseFloat(one(".jar-dial-handle").style.top);
   if (!Number.isFinite(landed) || Math.abs(landed - asked) > 0.5) {
     throw new Error(
@@ -236,7 +244,7 @@ async function windTo(pos: number): Promise<void> {
         `down the rail, handle sits at "${one(".jar-dial-handle").style.top || "(nowhere)"}". ` +
         `Every assertion below this would otherwise pass by re-measuring the ` +
         `moment the page opened at. If the handle landed at the mirror of the ` +
-        `position asked for, the rail is upside down: the top is the past.`,
+        `position asked for, the rail is back to front: the left is the past.`,
     );
   }
 }
@@ -330,8 +338,8 @@ describe("which end of the rail is which", () => {
    *
    * The counts alone cannot say what this case is called. "Nothing is present
    * at the top" is true of any top end earlier than your first memory, three
-   * days or three years; "everything is present at the bottom" is true of any
-   * bottom end at or after your NEWEST memory, which in this fixture is four
+   * days or three years; "everything is present at the right end" is true of
+   * any right end at or after your NEWEST memory, which in this fixture is four
    * days before today. A rail that ran to your last save instead of to now
    * would satisfy every count below and be wrong in the way a person would
    * notice first — the days since their last save would have vanished from
@@ -339,41 +347,41 @@ describe("which end of the rail is which", () => {
    *
    * So the rail's own date readout is asked at each end and checked against
    * the moment the test computed for it. Both are far from the neighbour they
-   * could be confused with: the top says "May third" where the first memory is
-   * May sixth, the bottom says "August sixteenth" where the newest memory is
-   * August eleventh. The words come from the product's own formatter — what is
+   * could be confused with: the left end says "May third" where the first
+   * memory is May sixth, the right end says "August sixteenth" where the
+   * newest memory is August eleventh. The words come from the product's own formatter — what is
    * pinned is which moment the rail's ends sit at, not the spelling of a month.
    */
-  it("runs from before your first memory at the top to today at the bottom", async () => {
+  it("runs from today at the top to before your first memory at the foot", async () => {
     await layout.toField();
     await windTo(0);
 
     /* The rail opens three days before the earliest thing you ever kept, so
-       its top end is a day on which this ground was genuinely empty. This is
+       its left end is a day on which this ground was genuinely empty. This is
        the one place that cannot use expectGroundIsWhole — nothing present is
        the correct answer — so wholeness is stated the other way round:
        nothing present, and nothing left switched on behind it. */
     const top = layout.audit();
-    expect(top.present, "the top of the rail is before your first memory").toBe(0);
+    expect(top.present, "the left end of the rail is before your first memory").toBe(0);
     expect(top.drawn.active, "and nothing is left lit after the last one leaves").toBe(0);
     expect(top.onScreen).toBe(0);
     /* the exact day, not merely "early enough": three days before the first
        memory, which is the page's own `earliest - 3 * DAY_MS` */
     expect(
       one(".jar-dial-date").textContent,
-      "the top of the rail should name the day three days before your first memory",
+      "the left end of the rail should name the day three days before your first memory",
     ).toBe(dateWords(railStart, railEnd));
 
     await windTo(1);
 
-    expect(layout.audit().present, "the bottom of the rail is now").toBe(keptMs.length);
-    /* AND THE BOTTOM IS TODAY, not the day of your last save. This is the
+    expect(layout.audit().present, "the right end of the rail is now").toBe(keptMs.length);
+    /* AND THE RIGHT END IS TODAY, not the day of your last save. This is the
        assertion the counts cannot make: every memory is present either way. */
     expect(
       one(".jar-dial-date").textContent,
-      "the bottom of the rail should name today, not the day of your newest memory",
+      "the right end of the rail should name today, not the day of your newest memory",
     ).toBe(dateWords(railEnd, railEnd));
-    expectGroundIsWhole("at the bottom of the rail");
+    expectGroundIsWhole("at the right end of the rail");
   });
 });
 

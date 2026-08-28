@@ -36,7 +36,6 @@ import {
   fetchTopOfMind,
   refreshTopOfMind,
   holdTopOfMindEntry,
-  shareSignal,
   updateAuthPreferences,
   updateSignal,
   updateTopOfMindEntry,
@@ -210,14 +209,14 @@ describe("the session", () => {
   it("PATCHes the preferred locale and returns both halves back", async () => {
     stubFetch(Response.json(viewer));
 
-    await expect(updateAuthPreferences({ preferredLocale: "ko-KR" })).resolves.toEqual(
+    await expect(updateAuthPreferences({ preferredLocale: "en-US" })).resolves.toEqual(
       viewer,
     );
     expect(fetch).toHaveBeenCalledWith("/api/auth/me/preferences", {
       method: "PATCH",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ preferredLocale: "ko-KR" }),
+      body: JSON.stringify({ preferredLocale: "en-US" }),
     });
   });
 });
@@ -332,17 +331,6 @@ describe("signals", () => {
     });
   });
 
-  it("shares one signal with one group", async () => {
-    stubFetch(Response.json({ shared: true, groupId: "group-1" }, { status: 201 }));
-
-    await expect(shareSignal("signal-1", "group-1")).resolves.toBeUndefined();
-    expect(fetch).toHaveBeenCalledWith("/api/signals/signal-1/shares", {
-      method: "POST",
-      credentials: "include",
-      headers: { Accept: "application/json", "Content-Type": "application/json" },
-      body: JSON.stringify({ groupId: "group-1" }),
-    });
-  });
 });
 
 describe("top of mind", () => {

@@ -64,6 +64,21 @@ export interface OfflineHome {
   adopted: Adopted;
   /** What the poster rests on — the peek row is elected out of this. */
   provenance: Provenance;
+  /**
+   * WHICH INVENTED PERSON THE VIEWER IS.
+   *
+   * Signed out there is no profile, so `viewerIdRef` was null and every
+   * derivation that asks "is this one mine?" answered no about all of them.
+   * That is not cosmetic on this surface: a room's ground is the members whose
+   * id matches the viewer's (`onThisWall`), so all four fixture rooms stood
+   * empty until you picked somebody out of the corner — the layout this file
+   * exists to let a person LOOK AT was the one thing it could not show.
+   *
+   * The fixture already invents the member it calls "You". Naming it here is
+   * what lets the page treat it as the viewer, so whose-is-whose works
+   * offline exactly as it does with a session behind it.
+   */
+  viewerProfileId: string;
 }
 
 /** The quote a fixture signal took from a fixture memory, kept out of band
@@ -169,6 +184,7 @@ function offlineReading(
       inspirationId: `offline-m${m}`,
       preview: "",
       quote,
+      quoteSource: quote ? ("own" as const) : null,
       reason: null,
       createdMs: at,
     })),
@@ -397,7 +413,9 @@ export function offlineHome(): OfflineHome | null {
     pinned: i === 0,
     dismissed: false,
     sortOrder: i,
-    citedSignals: [{ id: r.signal.id, statement: r.signal.statement }],
+    /* unanswered, honestly: the offline visitor has said nothing yet, and
+       dim grounds are the state that invites the answering */
+    citedSignals: [{ id: r.signal.id, statement: r.signal.statement, answered: false, locked: false }],
     createdMs: boardMs,
   }));
 
@@ -413,6 +431,8 @@ export function offlineHome(): OfflineHome | null {
     signals: readings.map((r) => r.signal),
     citations,
     notes,
+    /* the same id `Home`'s fixture rooms give their "You" member */
+    viewerProfileId: "fx-you",
     adopted: {
       ambition: "I am making the surface that shows what I meant, so I stop having to explain it.",
       /* your own board, so there is no room to name */

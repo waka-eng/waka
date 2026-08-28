@@ -124,3 +124,401 @@ jobs:
 
       - name: Web tests
         run: pnpm --filter @waka/web test
+
+  # ---------------------------------------------------------------------------
+  # THE TWO GATES THAT OPEN A BROWSER, AND WHY THEY ARE A SEPARATE JOB
+  # ---------------------------------------------------------------------------
+  #
+  # `e2e:first-paint` and `e2e:journeys` both existed and both failed correctly
+  # on the commit before the fixes they gate — and neither ran automatically,
+  # so every regression they are shaped against could still ship. That is the
+  # whole gap this job closes.
+  #
+  # They are the only checks in this repo that answer "can a person do this",
+  # as opposed to "does this function return the right value". The defects they
+  # were written for — a world that renders as a blank black screen, a keep
+  # that never appears, six screens you can reach and not leave, a sign-in
+  # whose submit is a footnote, a page of near-white text on near-white paper —
+  # every one of them threw nothing, failed no assertion, and left every count
+  # in the `check` job green.
+  #
+  # SEPARATE FROM `check` ON PURPOSE. This one needs a built web bundle and a
+  # running server, which `check` needs for nothing else; a browser download;
+  # and about three minutes. Keeping them apart means a typecheck failure still
+  # reports in seconds, and this job's own failure names itself rather than
+  # hiding inside a long unit-test log.
+  browser:
+    name: Browser gates (first paint, journeys, failure paths, first run, keyboard)
+    runs-on: ubuntu-latest
+    # 45 was enough while the job stopped at its first red step. It is not
+    # enough now that every gate runs and reports (see `!cancelled()` below):
+    # the full ladder is roughly 45 minutes of real browser work — journeys
+    # 7m, the sabotaged journeys 7m, dead-css 6m, and eleven more — so the
+    # first complete run was CANCELLED at the cap, which looks exactly like a
+    # gate failing and is not one. Sized to fit the work with room, because a
+    # timeout that trims the ladder is the skipping problem wearing a clock.
+    timeout-minutes: 75
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: waka_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DB_CONNECTION_URL: postgres://postgres:postgres@localhost:5432/waka_e2e
+      AUTH_SECRET: ci-test-secret-not-a-real-key-000000
+      JWT_SECRET: ci-test-secret-not-a-real-key-000000
+      # WHETHER THERE IS A MODEL KEY, AS A FACT RATHER THAN THE KEY ITSELF.
+      #
+      # The two steps below used to ask `if: secrets.GEMINI_API_KEY != ''`
+      # directly, and that is not a thing Actions can evaluate: the `secrets`
+      # context is unavailable in `if:`. The whole FILE then failed
+      # validation, which is why every run on every branch of this repo has
+      # completed as a failure with zero jobs scheduled since the day those
+      # two lines landed — the shape of a run rejected before it starts. It
+      # was read as an org policy for weeks; the parser said otherwise the
+      # first time anything asked it to dispatch the workflow by hand.
+      #
+      # `secrets` IS allowed here, in `env`. A comparison rather than the
+      # value, so the flag says only yes-or-no and the key itself reaches
+      # exactly the steps that were already given it.
+      HAS_MODEL_KEY: ${{ secrets.GEMINI_API_KEY != '' }}
+      # The stack these gates drive is the same one `pnpm dev:local` boots: one
+      # origin serving both the API and the built bundle, which is what makes
+      # cookies and same-origin fetches behave the way they do in a browser.
+      WAKA_LOCAL_PORT: "3010"
+      # A one-off build. The watcher exists so a developer's edits reach the
+      # page without a manual rebuild; in CI nothing edits anything, and a
+      # rebuild loop would keep the job alive after the tests finish.
+      WAKA_NO_WATCH: "1"
+      # `showsDebug()` gates `window.wakaField()`, and two journeys read it to
+      # check things no DOM assertion can reach — whether the sky is actually
+      # leaning into headquarters, and how far each statement came. Without it
+      # `ways-out` reports "sky NOT CHECKED (no audit on this build)" and
+      # passes on the horizontal half alone. It says so rather than pretending,
+      # which is how this gap was noticed; setting it here is what closes it.
+      VITE_SHOW_INTERNAL: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Apply migrations
+        run: |
+          psql "$DB_CONNECTION_URL" -c 'CREATE EXTENSION IF NOT EXISTS vector;'
+          pnpm db:migrate
+
+      # `dev:local` builds the web bundle and then serves it alongside the API
+      # from one process. Backgrounded, with its output kept, because when this
+      # job fails the server's log is usually the thing that says why.
+      # BEFORE THE STACK, because the API reads the endpoint at boot. Setting
+      # it on the erasure step instead would configure the test process and
+      # leave the server still talking to real S3 — which, with no
+      # credentials, means every upload fails and the suite reports a broken
+      # bucket rather than anything about erasure.
+      - name: Start the object store stub
+        run: |
+          pnpm e2e:s3-stub --port 8792 > /tmp/waka-s3-stub.log 2>&1 &
+          echo $! > /tmp/waka-s3-stub.pid
+          # any HTTP answer means it is listening; a 404 for a key that does
+          # not exist is a healthy stub. Only a refused connection is "not yet".
+          for i in $(seq 1 30); do
+            curl -sS -o /dev/null "http://127.0.0.1:8792/waka-ci/probe" && exit 0
+            sleep 1
+          done
+          echo "::error::the object store stub never came up"
+          cat /tmp/waka-s3-stub.log
+          exit 1
+
+      - name: Boot the local stack
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ATTACHMENTS_BUCKET: waka-ci
+          ATTACHMENTS_ENDPOINT: http://127.0.0.1:8792
+        run: |
+          pnpm dev:local > /tmp/waka-stack.log 2>&1 &
+          echo $! > /tmp/waka-stack.pid
+
+      # A fixed sleep would be either flaky or wasteful, and the build in front
+      # of the server takes most of the time. Poll, with a ceiling, and print
+      # the log on the way out so a boot failure is legible rather than a bare
+      # timeout.
+      - name: Wait for the stack
+        run: |
+          for i in $(seq 1 120); do
+            if curl -fsS "http://127.0.0.1:3010/api/health" > /dev/null 2>&1; then
+              echo "stack healthy after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::the local stack never became healthy"
+          cat /tmp/waka-stack.log
+          exit 1
+
+      # No sign-in, no database rows: this one asks whether the world draws at
+      # all when every third-party host is unreachable. It is first because if
+      # it fails, nothing after it means anything.
+      # ONE FAILING GATE MUST NEVER AGAIN HIDE THE ONES BELOW IT.
+      #
+      # A step's default is `if: success()`, so the first red step skips the
+      # rest of the job. On 2026-08-27 that turned a one-second launch error
+      # in `measure` into TEN gates that had never executed — reported as
+      # "skipped", which reads like a decision rather than an accident. The
+      # job still fails if any gate fails; what changes is that every gate
+      # gets to say what it found, in one run, instead of the run stopping at
+      # the first bad news.
+      #
+      # `!cancelled()` rather than `always()`: a run the person cancelled
+      # should stop, and a job whose stack never came up has nothing to say.
+      - name: First paint
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:first-paint
+
+      # WHY THIS IS BLOCKING RATHER THAN NON-BLOCKING. Every journey drives
+      # paths that need only Postgres — sign-up, capture, search (which is
+      # `to_tsvector` and `ilike`, not embeddings), reflect, delete, rename,
+      # navigation, geometry, contrast. `GEMINI_API_KEY` is passed through
+      # because declaring a principle routes through the model, but its absence
+      # narrows one journey's coverage rather than failing it — and `the-hand`
+      # prints `NOT CHECKED: principle` when that happens, so a thinner run
+      # says so in its own result line instead of passing quietly.
+      - name: Journeys
+        if: ${{ !cancelled() }}
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: pnpm e2e:journeys
+
+      # The negative run is what keeps the journeys honest: each one is put
+      # through its own sabotage and MUST fail. A journey that survives is
+      # reported as decoration, and it has caught two of these already.
+      - name: Journeys, sabotaged (each must fail)
+        if: ${{ !cancelled() }}
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: pnpm e2e:journeys --negative
+
+      # No model calls and no object store — just Postgres and the API. It is
+      # the cheapest suite in the repo and one of the most security-relevant:
+      # a revoke that returns 200 and leaves the token working would pass every
+      # other check here. There is no reason it should not run on every change.
+      - name: Connections (list and revoke)
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:connections --base-url http://127.0.0.1:3010
+
+      # ERASURE NEEDS TWO THINGS THIS WORKFLOW MAY NOT HAVE, so it asks first.
+      #
+      # An object store, because the promise that fails most quietly is that
+      # the BYTES go before the rows that inventory them — `s3-stub.ts` is
+      # enough to prove our half of that. And a model key, because a room has
+      # to actually synthesise something that cites the leaving account before
+      # there is a citation for erasure to remove. Without the key the suite
+      # would sit through two five-minute derivation waits and then fail for a
+      # reason that has nothing to do with erasure, so it is skipped visibly
+      # rather than run into a timeout.
+      # The suite needs the same two variables the server was booted with, so
+      # it can HEAD the object directly and see for itself whether the bytes
+      # went. Without them it reports the byte checks as NOT RUN rather than
+      # passing over them.
+      - name: Erasure (needs a model key)
+        if: ${{ !cancelled() && env.HAS_MODEL_KEY == 'true' }}
+        env:
+          ATTACHMENTS_BUCKET: waka-ci
+          ATTACHMENTS_ENDPOINT: http://127.0.0.1:8792
+        run: pnpm e2e:erasure --base-url http://127.0.0.1:3010
+
+      - name: Erasure — NOT RUN
+        if: ${{ !cancelled() && env.HAS_MODEL_KEY != 'true' }}
+        run: |
+          echo "::warning::e2e:erasure was NOT RUN — no GEMINI_API_KEY."
+          echo "Account deletion is the highest-stakes path in the product and"
+          echo "its failures are invisible from every surface. Add the secret"
+          echo "to turn this into a gate."
+
+      # THE GATE FOR WHAT NEITHER READING NOR LOOKING FINDS.
+      #
+      # Two defects in one week were found by the founder's eye and by no
+      # gate here: a card head whose two halves were separately positioned
+      # and so could never line up, and a rule that declared `color` twice
+      # with the second winning a line below `white-space`. The unit suites
+      # run in jsdom, which has no layout engine and applies no stylesheet —
+      # so a rendered assertion about either would have passed green over an
+      # unasked question.
+      #
+      # This one opens a browser and asks the engine what the cascade decided
+      # and where the boxes landed. It needs no database, no API and no
+      # account: it serves the product's own stylesheet with fixture markup,
+      # so it is seconds rather than minutes.
+      - name: Measured style (alignment and tone)
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:measure
+
+      # Same reason the journeys have one: a check about a number is easy to
+      # write so that it can never fail. Each case carries a sabotage that
+      # breaks precisely what it asserts and must go red under it.
+      - name: Measured style, broken (must fail)
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:measure --negative
+
+      # WHICH RULES STILL DECIDE ANYTHING, and WHETHER EVERY CONTROL ANSWERS
+      # THE HAND. Both ask the engine rather than the sheets, because `@layer`
+      # makes the cascade unanswerable by reading files: a hover written in
+      # the product layer and beaten by a flat colour in the chrome layer
+      # looks correct in every diff and paints nothing on screen. Three of
+      # them were doing exactly that until 2026-08-27.
+      #
+      # They are here for the reason this whole job exists. Ten gates below
+      # this line had never executed once, because a launch error in the step
+      # above skipped every one of them, and nobody could tell from the
+      # workflow: a gate that CI does not run is not a gate, it is a file.
+      - name: Dead CSS (which rules still decide anything)
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:dead-css --base-url http://127.0.0.1:3010
+
+      # NON-BLOCKING UNTIL IT STOPS ACCUSING WORKING CODE.
+      #
+      # This repo already holds the rule, in the PR that introduced the API
+      # route sweep: "a check that needed three corrections to stop accusing
+      # working code has not earned the right to fail a build unattended."
+      # This gate has now accused working code once — it calls `.jar-saved`
+      # dead on the poster's surface here, and on the build machine that same
+      # control reads rgba(232,237,244,0.55) at rest and rgb(232,237,244)
+      # under the pointer, with `:hover` true and the pointer on itself. The
+      # product answers; the gate does not see it, and only here.
+      #
+      # It still runs and still prints, because the finding is real until
+      # explained and hiding it would be the quiet corner this whole branch is
+      # about. It just does not fail the build while the disagreement is
+      # between the instrument and one machine. The step goes blocking again
+      # the moment a run shows what it is looking at — it now reports the
+      # element's box, the viewport, whether `:hover` actually matched, and
+      # the colour it read.
+      - name: Every control answers the hand
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: pnpm e2e:answers-the-hand --base-url http://127.0.0.1:3010
+
+      # THE SKY SUITE IS GONE, with the engine it measured. It grew a real
+      # sky and photometered the top band of the canvas against an account
+      # that had none — the only gate that could see `SKY_PEEK_DEPTH = 0.62`,
+      # which elected the right statements, eased them to `peekY` to the
+      # pixel, and drew nothing anyone could see.
+      #
+      # There is nothing left for it to look at. The candidate layer came out
+      # of headquarters on 2026-08-24 and the engine behind it was deleted on
+      # 2026-08-25; what stands above the wall now is `.jar-values`, plain DOM
+      # saying that philosophies and values are still forming. `journeys:
+      # ways-out` counts that as one of the ways out and needs no model key,
+      # so the promise it stood for is measured on every pull request instead
+      # of only on the runs that had one.
+      # ── THE GATES THIS BRANCH ADDED ─────────────────────────────────────
+      #
+      # All five were built and run by hand over one session and then left
+      # unwired, which is the state every one of them exists to find: a check
+      # that only runs when somebody remembers is not a check. They need a
+      # live stack and a browser, so they belong here rather than in
+      # `pnpm -r test`.
+
+      # Every act pressed against a 500 on the route it rests on. The question
+      # is not whether it failed — `journeys --negative` already asks that —
+      # but whether ANYTHING SAID SO. Seven acts; three used to say nothing.
+      - name: Failure paths (every act must say what went wrong)
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:when-it-fails
+
+      # The same seven against a dead connection. An act that speaks under a
+      # 500 can still be silent here, because a thrown TypeError is not an
+      # ApiError — which is exactly how the world came to show people the
+      # browser's own "Failed to fetch".
+      - name: Failure paths, connection dropped
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:when-it-fails --kind drop
+
+      # And against a session that expired between opening the surface and
+      # pressing. The one failure kind that is also a security question: a
+      # person whose session died must not be left looking at what reads as
+      # success.
+      - name: Failure paths, session expired
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:when-it-fails --kind 401
+
+      # The three empties, in the order a person meets them: the door before
+      # there is an account, the account with nothing in it, and the account
+      # one save old. Surfaces that show only furniture must be named in
+      # BARE_BY_DECISION with the ruling that made them bare — and a listed one
+      # that starts speaking fails too, so an excuse cannot quietly go stale.
+      - name: First run — the door
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:first-sixty --stage door
+      - name: First run — an empty account
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:first-sixty --stage empty
+      - name: First run — one memory kept
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:first-sixty --stage kept
+
+      # The world with the mouse unplugged, and now the whole path rather than
+      # the chrome around it. Eight stops, all named, all visibly focused, the
+      # mouth usable with keys alone — and, since 2026-08-27, a memory that
+      # OPENS: the ground answers to a listbox, it is named, its cursor moves,
+      # and the keys its own label promises are the keys that work.
+      #
+      # Reaching a memory was printed rather than failed for exactly one day,
+      # on the rule that a check which is always red is a check everyone
+      # learns to skip. It has a design and an implementation now, so it is a
+      # ratchet like the rest.
+      #
+      # Two more joined them, both found by asking a question this walk had
+      # itself listed as unasked: a sheet closed with Escape must hand focus
+      # back to what opened it, and travelling between places must not drop
+      # focus to the document — which it did, on every journey, until the
+      # place you arrive in started taking the focus its own way in dropped.
+      - name: Keyboard reach (the whole path, not just the chrome)
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:by-keyboard
+
+      # The field at 12, 200 and 800 memories, seeded straight into Postgres
+      # because 800 keeps would be 800 model calls. Report-only by design:
+      # there is no agreed frame-budget yet, and inventing one in CI would be
+      # a workflow file deciding a product question. It prints the numbers so
+      # a regression is visible in the log the day it appears.
+      - name: At scale (report only)
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:at-scale --counts 12,200,800
+
+      - name: Stack log
+        if: always()
+        run: tail -n 200 /tmp/waka-stack.log || true
+
+      - name: Stop the stack
+        if: always()
+        run: |
+          kill "$(cat /tmp/waka-stack.pid)" 2>/dev/null || true
+          kill "$(cat /tmp/waka-s3-stub.pid)" 2>/dev/null || true

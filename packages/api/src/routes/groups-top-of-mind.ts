@@ -8,14 +8,18 @@
  * here rather than taken from the caller.
  */
 
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 
 import {
   groupMembers,
+  groupMembershipEvents,
+  inspirations,
+  signalEvidence,
   profiles,
   topOfMindEntries,
   topOfMindEntrySignals,
   topOfMinds,
+  type GroupMembershipEventKind,
   type RefreshGroupTopOfMindPayload,
   type TopOfMindEntryType,
   type TopOfMindRevisionReason,
@@ -53,6 +57,120 @@ export interface GroupTopOfMindView {
   entries: GroupTopOfMindEntryView[];
 }
 
+export interface GroupTimelineView {
+  /** The artifact's chain, newest first. Entry counts, never entry bodies:
+      an old version's words are read by opening it, not skimmed in a list. */
+  versions: Array<{
+    id: string;
+    version: number;
+    status: TopOfMindStatus;
+    reason: TopOfMindRevisionReason;
+    entryCount: number;
+    createdAt: string;
+  }>;
+  /** The door's ledger, oldest first: who arrived, who left, who was
+      removed — named, because the room reads people, not counts. Null
+      profile and name mean the person has since erased their account: the
+      mark outlives them (the erasure doctrine) and the surface says
+      "someone". */
+  doorMarks: Array<{
+    profileId: string | null;
+    name: string | null;
+    kind: GroupMembershipEventKind;
+    occurredAt: string;
+  }>;
+}
+
+const MAX_TIMELINE_VERSIONS = 30;
+const MAX_DOOR_MARKS = 100;
+
+/**
+ * THE ROOM REMEMBERS BECOMING ITSELF.
+ *
+ * Versions were always stored — supersede chains, explicit no_change rows —
+ * and nothing served them for a room: the record existed and could not be
+ * read, which is the difference between having a history and keeping one.
+ * Beside the chain, the door's ledger (append-only since the record stopped
+ * being destroyable): joins and departures are the hinges a room's story
+ * turns on.
+ */
+export async function loadGroupTimeline(
+  db: WakaDb,
+  groupId: string,
+): Promise<GroupTimelineView> {
+  const [versionRows, markRows] = await Promise.all([
+    db
+      .select({
+        id: topOfMinds.id,
+        version: topOfMinds.version,
+        status: topOfMinds.status,
+        reason: topOfMinds.reason,
+        createdAt: topOfMinds.createdAt,
+      })
+      .from(topOfMinds)
+      .where(eq(topOfMinds.groupId, groupId))
+      .orderBy(desc(topOfMinds.version))
+      .limit(MAX_TIMELINE_VERSIONS),
+    db
+      .select({
+        profileId: groupMembershipEvents.profileId,
+        name: profiles.name,
+        kind: groupMembershipEvents.kind,
+        occurredAt: groupMembershipEvents.occurredAt,
+      })
+      .from(groupMembershipEvents)
+      // LEFT join: a mark whose person has erased their account has no
+      // profile row any more, and an inner join would silently drop it —
+      // unwriting the door's ledger, which is the destruction 0a closed.
+      .leftJoin(profiles, eq(profiles.id, groupMembershipEvents.profileId))
+      .where(eq(groupMembershipEvents.groupId, groupId))
+      .orderBy(asc(groupMembershipEvents.occurredAt), asc(groupMembershipEvents.id))
+      .limit(MAX_DOOR_MARKS),
+  ]);
+
+  const countRows =
+    versionRows.length === 0
+      ? []
+      : await db
+          .select({ topOfMindId: topOfMindEntries.topOfMindId })
+          .from(topOfMindEntries)
+          .where(
+            inArray(
+              topOfMindEntries.topOfMindId,
+              versionRows.map((row) => row.id),
+            ),
+          );
+  const counts = new Map<string, number>();
+  for (const row of countRows) {
+    counts.set(row.topOfMindId, (counts.get(row.topOfMindId) ?? 0) + 1);
+  }
+
+  const labels = labelMembersByProfileId(
+    markRows.flatMap((row) =>
+      row.profileId ? [{ profileId: row.profileId, name: row.name }] : [],
+    ),
+  );
+
+  return {
+    versions: versionRows.map((row) => ({
+      id: row.id,
+      version: row.version,
+      status: row.status,
+      reason: row.reason,
+      entryCount: counts.get(row.id) ?? 0,
+      createdAt: row.createdAt.toISOString(),
+    })),
+    doorMarks: markRows.map((row) => ({
+      profileId: row.profileId,
+      name: row.profileId
+        ? (labels.get(row.profileId)?.displayName ?? row.name)
+        : null,
+      kind: row.kind,
+      occurredAt: row.occurredAt.toISOString(),
+    })),
+  };
+}
+
 /**
  * The group's live artifact and its entries.
  *
@@ -62,9 +180,28 @@ export interface GroupTopOfMindView {
  * entries are left out — the group took them down; they stay in the record
  * rather than on the wall.
  */
+/**
+ * READING THE ROOM AS IT STOOD.
+ *
+ * `loadGroupTimeline` says of itself: "entry counts, never entry bodies — an
+ * old version's words are read by OPENING it, not skimmed in a list." Nothing
+ * could open one. The chain was served, the door's marks were served, and the
+ * only artifact a caller could actually read was the live one, so a room's
+ * history was a list of dates with nothing behind them.
+ *
+ * Naming a version reads that version instead — the same shape, the same
+ * serialization, the same membership gate. Absent, it reads the live one, so
+ * every existing caller is untouched.
+ */
+export interface GroupTopOfMindQuery {
+  /** Which version to read. Absent = whatever is live now. */
+  version?: number;
+}
+
 export async function loadGroupTopOfMind(
   db: WakaDb,
   groupId: string,
+  query: GroupTopOfMindQuery = {},
 ): Promise<GroupTopOfMindView> {
   const [artifact] = await db
     .select({
@@ -75,7 +212,15 @@ export async function loadGroupTopOfMind(
       createdAt: topOfMinds.createdAt,
     })
     .from(topOfMinds)
-    .where(and(eq(topOfMinds.groupId, groupId), eq(topOfMinds.status, "live")))
+    .where(
+      /* BY VERSION, AND STILL BY ROOM. The group id stays in the predicate
+         when a version is named — a version number is only unique within a
+         room, so matching on it alone would serve another room's board to
+         anyone who could guess an integer. */
+      query.version === undefined
+        ? and(eq(topOfMinds.groupId, groupId), eq(topOfMinds.status, "live"))
+        : and(eq(topOfMinds.groupId, groupId), eq(topOfMinds.version, query.version)),
+    )
     .limit(1);
   if (!artifact) return { topOfMind: null, entries: [] };
 
@@ -114,19 +259,90 @@ export async function loadGroupTopOfMind(
       .where(inArray(topOfMindEntrySignals.entryId, entryIds))
       .orderBy(asc(topOfMindEntrySignals.entryId));
 
-    const labels = labelMembersByProfileId(
-      citationRows.flatMap((row) =>
+    /**
+     * ROOM-GROWN CITATIONS carry a null owner — the signal is the room's,
+     * not any member's — so their contribution is derived from the
+     * EVIDENCE: whose memories stand under the cited signal. This is the
+     * canon's evidence asymmetry doing its narrow job (a room's entries may
+     * name what fed them; a person's own top of mind keeps that-never-
+     * which), and it names PEOPLE, never memories: no text, quote, or
+     * memory id crosses here.
+     *
+     * The two joins that narrow it are the same two the wall applies, and
+     * for the same reasons — this list is a NAMING, and a board that named
+     * someone the wall had already stopped naming would be the room telling
+     * two different stories about who is in it:
+     *
+     *   - CURRENT MEMBERS ONLY. A person who left the room stops being
+     *     credited by it; their statement-shaping is over the moment their
+     *     seat is.
+     *   - PUBLIC MEMORIES ONLY. Being credited here is the visible half of
+     *     sharing, so taking the memory private takes the credit with it.
+     */
+    const grownRows = await db
+      .selectDistinct({
+        entryId: topOfMindEntrySignals.entryId,
+        contributorProfileId: signalEvidence.ownerProfileId,
+        contributorName: profiles.name,
+      })
+      .from(topOfMindEntrySignals)
+      .innerJoin(
+        signalEvidence,
+        eq(signalEvidence.signalId, topOfMindEntrySignals.signalId),
+      )
+      .innerJoin(profiles, eq(profiles.id, signalEvidence.ownerProfileId))
+      .innerJoin(
+        inspirations,
+        and(
+          eq(inspirations.id, signalEvidence.inspirationId),
+          eq(inspirations.visibility, "public"),
+        ),
+      )
+      .innerJoin(
+        groupMembers,
+        and(
+          eq(groupMembers.groupId, groupId),
+          eq(groupMembers.profileId, signalEvidence.ownerProfileId),
+        ),
+      )
+      .where(
+        and(
+          inArray(topOfMindEntrySignals.entryId, entryIds),
+          isNull(topOfMindEntrySignals.ownerProfileId),
+        ),
+      )
+      .orderBy(asc(topOfMindEntrySignals.entryId));
+
+    const labels = labelMembersByProfileId([
+      ...citationRows.flatMap((row) =>
         row.ownerProfileId
           ? [{ profileId: row.ownerProfileId, name: row.ownerName }]
           : [],
       ),
-    );
-    for (const row of citationRows) {
-      if (!row.ownerProfileId) continue;
-      const list = contributorsByEntry.get(row.entryId) ?? [];
+      ...grownRows.map((row) => ({
+        profileId: row.contributorProfileId,
+        name: row.contributorName,
+      })),
+    ]);
+    const merged = [
+      ...citationRows.flatMap((row) =>
+        row.ownerProfileId
+          ? [{ entryId: row.entryId, profileId: row.ownerProfileId, name: row.ownerName }]
+          : [],
+      ),
+      ...grownRows.map((row) => ({
+        entryId: row.entryId,
+        profileId: row.contributorProfileId,
+        name: row.contributorName,
+      })),
+    ];
+    for (const row of merged) {
+      const already = contributorsByEntry.get(row.entryId);
+      if (already?.some((c) => c.profileId === row.profileId)) continue;
+      const list = already ?? [];
       list.push({
-        profileId: row.ownerProfileId,
-        name: labels.get(row.ownerProfileId)?.displayName ?? row.ownerName,
+        profileId: row.profileId,
+        name: labels.get(row.profileId)?.displayName ?? row.name,
       });
       contributorsByEntry.set(row.entryId, list);
     }

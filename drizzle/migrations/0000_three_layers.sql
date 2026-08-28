@@ -1,4 +1,21 @@
-CREATE TYPE "public"."profile_type" AS ENUM('human', 'agent');--> statement-breakpoint
+-- 'group' is here, in the CREATE, rather than only in 0024's ALTER (2026-08-24).
+--
+-- A room's mind is a profile of a third kind, and 0024 adds that value to the
+-- enum for databases that already exist. That is correct for THEM and fatal
+-- for a FRESH one: drizzle runs every pending migration inside a single
+-- transaction, and PostgreSQL refuses to use an enum value that was ADDED
+-- earlier in the same uncommitted transaction — so 0025's shape CHECK, which
+-- names 'group', aborted the entire first-time migration. Every new
+-- environment, every CI database and every developer's first `pnpm db:migrate`
+-- hit it; the dev database only survived because it was migrated by hand.
+--
+-- The restriction is specifically about values ADDED to a pre-existing type.
+-- A value belonging to a type CREATED in the same transaction is usable
+-- immediately, so naming it here fixes the fresh path completely, and 0024's
+-- `ADD VALUE IF NOT EXISTS` becomes a verified no-op rather than a hazard.
+-- Databases that already ran 0000 are untouched: the migrator decides what to
+-- replay by timestamp alone and never re-reads this file.
+CREATE TYPE "public"."profile_type" AS ENUM('human', 'agent', 'group');--> statement-breakpoint
 CREATE TYPE "public"."inspiration_kind" AS ENUM('note', 'link', 'image', 'mixed');--> statement-breakpoint
 CREATE TYPE "public"."inspiration_source" AS ENUM('app', 'agent');--> statement-breakpoint
 CREATE TYPE "public"."attachment_enrichment_kind" AS ENUM('page_body', 'image_description');--> statement-breakpoint

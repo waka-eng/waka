@@ -58,6 +58,23 @@ export function classifyMatch(similarity: number | null): "attach" | "judge" | "
 }
 
 /**
+ * At or above this cosine to a DISMISSED signal's vector, a candidate is the
+ * pattern its owner already threw out, and the ground refuses it: no mint, no
+ * evidence, no judge call — one `suppressions` row naming the anchor instead.
+ * The refusal is checked BEFORE the match, so a refused pattern cannot
+ * re-enter as evidence for something else, and a refused candidate never
+ * spends a model call.
+ *
+ * Deliberately the same number as the match bar today: "close enough to be
+ * the same pattern" must mean one thing whether the pattern is wanted or
+ * refused. A separate export all the same, because the two may need to tune
+ * apart — a false refusal is visible in the antechamber and reversible by
+ * restore, while a false match is the invisible fusion the match bar is set
+ * high against.
+ */
+export const SIGNAL_SUPPRESSION_MIN_COSINE = 0.86;
+
+/**
  * Two candidates from the *same* capture this close are one pattern said
  * twice. Higher than the match bar because both came from one model call on
  * one input, so genuine distinctness needs more separation to be believable.
@@ -66,6 +83,39 @@ export const SIGNAL_BATCH_DEDUPE_MIN_COSINE = 0.94;
 
 /** Evidence count at which an `emerging` signal becomes `active`. */
 export const SIGNAL_PROMOTION_MIN_EVIDENCE = 3;
+
+/**
+ * HOW MANY DIFFERENT MEMBERS' MEMORIES A ROOM SIGNAL NEEDS BEFORE IT
+ * APPEARS (founder, 2026-08-24). Counted as DISTINCT `owner_profile_id`
+ * over the signal's evidence — not evidence rows, voices. A pattern one
+ * person's memories support is that person's own signal, already forming
+ * on their own wall, and must not wear the room's name; two voices is the
+ * moment a statement about the room stops being a statement about one of
+ * its members. The signal is minted and accumulates below the bar — it
+ * has to be, or the second voice would have nothing to land on — it is
+ * SERVED (wall, sky, synthesis) only at or above it.
+ */
+export const GROUP_SIGNAL_MIN_VOICES = 2;
+
+/**
+ * HOW MUCH OF A MEMBER'S EXISTING GROUND A ROOM READS WHEN THEY ARRIVE.
+ *
+ * Fan-out fires when a memory is kept, so without this a room only ever sees
+ * what its members keep AFTER they join. That is the wrong way round: a
+ * person joins a room already carrying the memories that would tell it
+ * something, and a room that ignores all of them stays empty for exactly the
+ * people who have the most to pool. Joining therefore asks the room to read
+ * the ground the joiner already stands on.
+ *
+ * Bounded, because the ask is one model pass per memory and an archive has no
+ * ceiling. The newest hundred public memories are the ones that describe who
+ * somebody is now; a memory older than that is history the room can live
+ * without, and the person's own wall already holds its pattern. The jobs are
+ * owned by the JOINER, so their own budget and the queue's fairness pace the
+ * spend — joining ten rooms is ten times the work for the person who asked
+ * for it, not for anyone else.
+ */
+export const GROUP_JOIN_BACKFILL_LIMIT = 100;
 
 /** Evidence count at which the support term of confidence saturates. */
 export const CONFIDENCE_SATURATION_EVIDENCE = 6;

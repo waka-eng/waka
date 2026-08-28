@@ -58,6 +58,7 @@ A session bound to an agent profile gets:
 |---|---|
 | Its own agent profile | Full read/write: capture, curate signals, edit its top of mind, declare and curate its own principles |
 | The account's human profile | **Read + capture only**: read top of mind, signals, and principles (the conditioning use case), and capture inspirations into it — never edit or delete the human's signals, top of mind, or principles, and never declare into them. Principles are curation, so capture does not extend to them |
+| A sibling agent's profile | **Read + capture only, and only through an explicit grant** (`agent_read_grants`, `POST /api/agent-grants`): human-granted, one-directional, revocable — revocation takes effect on the next request, and the revoked grant stays as record. Ungranted, the door is closed. The open default retired 2026-08-24 with `goals/no-quiet-corners.md` Phase 6 (the flip is the founder's ruling of 2026-08-23, decision log below) |
 | Other accounts | Nothing |
 
 The human-profile session can do everything in every profile of the
@@ -77,12 +78,42 @@ the auth-hardening track.
 | Cardinality | Unbounded list per profile — editable, deletable, **not** append-only | Evolving set per profile | **Exactly one** per profile; exactly one per group | Growing, **uncapped** set per profile — expensive to earn, merged on overlap |
 | Visibility | Private to the owning profile's account | Private by default; shareable per group — the unit walls consume | Profile: account (+ optional public surface); group: members | Account-private; **not shareable** (v1); served to the profile's own credentialed tools via the canonical machine rendering |
 
-The pipeline, per profile: inspirations accumulate → WAKA distills
-signals → signals synthesize into the top of mind → what keeps surviving
-distills, nightly, into principles. The group flow reuses the second
-layer: members share signals to a group wall, and the group's top of
-mind is generated from those shared signals; principles do not
-participate in groups (v1).
+The pipeline, per SPACE, and the rules are the same in every one of
+them: a space's ground is what is visible in it; a space's signals are
+distilled from its own ground; a space's top of mind is those signals
+after people have acted on them — alone in your own space, together in
+a room. For a person: inspirations accumulate → WAKA distills signals →
+signals synthesize into the top of mind → what keeps surviving
+distills, nightly, into principles.
+
+**A room runs the same pipeline over a pooled ground** (founder ruling,
+2026-08-24: "that room should create signals based on x+y+z"). A room's
+ground is its members' public memories — x from one person, y from
+another, z from a third — and the room distils ITS OWN signals from
+them, owned by the room's mind (a `group`-type profile, migrations
+0024/0025) rather than by any member. Three rules keep that honest:
+
+- **Visibility stays global and two-valued.** One switch — private, or
+  public to every room its owner is in. Per-room visibility is
+  deliberately out of scope.
+- **A room's signal appears only once memories from at least two
+  different members stand under it.** A pattern one person's memories
+  support is that person's own signal, already forming on their own
+  wall, and must not wear the room's name — everything a room says
+  about itself is genuinely collective.
+- **The evidence asymmetry is deliberate, and it is not a global
+  relaxation.** A ROOM's entries may name the memories that fed them,
+  because a room's ground is public-to-the-room by construction — every
+  memory on it was put there by its owner's own switch. **Your own top
+  of mind keeps "that, never which."**
+
+The room's top of mind is generated from the room's own signals through
+the same synthesis pipeline, still gated by the members' affirmations
+and proposals. Sharing an already-formed personal signal into a room
+("say out loud") retires as the way statements reach a room — the
+`signal_shares` record survives as history (the export still carries
+it; the record outlives the verb), but the wall's future is what the
+room grew. Principles do not participate in groups (v1).
 
 ## Inspiration (layer 1)
 
@@ -134,6 +165,38 @@ agent's relayed excerpt, an agent's own observation.
   input to extraction. The guided question *generator* is a parked
   feature; the stored reflections are not.
 
+## Experience (layer-1 grouping)
+
+The named ground a run of memories was gathered on (meeting decision,
+2026-08-17 — deliberately **experience**, not "project": a project is a rule
+scope, an experience is a stretch of lived work). One row per
+`(profile, name)`, born at capture: naming an experience on a keep
+finds-or-creates it in the capture's own transaction, so there is no second
+birthplace to drift from.
+
+- **An inspiration names at most one experience**, through a composite
+  `(profile_id, experience_id)` FK — the same tenancy net every child of
+  layer 1 uses, so a memory can never stand on another profile's ground.
+- **Signals are deliberately NOT keyed to experiences.** A signal's relation
+  to an experience is a fact of its *evidence* — which memories stand under
+  it and where they were kept — so it is derived by joining
+  `signal_evidence → inspirations → experiences`, never stored twice.
+- **The lens**: `?experience=` on the inspirations and signals lists narrows
+  recall to one ground; `GET /api/graph` draws
+  principle → signal → experience from the same joins, statements and names
+  only — capture text never crosses.
+
+## Agent keys
+
+The standing credential an agent profile holds (meeting decision,
+2026-08-17: per-agent names and API keys). Issued and revoked by a
+**human session only**; binds to an **agent profile only**; resolves through
+`requireAuth` to an ordinary agent-bound session, so the access matrix and
+`humanSessionsOnly` apply unchanged — a key is a way in, never a wider set
+of powers once in. Only the secret's SHA-256 lands in `agent_keys`
+(sessions-table posture); the secret is shown once at issue time. Revocation
+is a timestamp and takes effect on the key's next request.
+
 ## Signal (layer 2)
 
 **An evidence-backed pattern**: a durable distilled statement — a taste,
@@ -154,6 +217,19 @@ evidence.
   shared signal appears on that group's wall as its distilled statement.
   Its evidence (the underlying inspirations) stays private — members see
   the pattern, never the raw captures.
+- **Disagreement, in three words** (no-quiet-corners Phase 5). A
+  **tension** is two patterns held on purpose — both true, pulling against
+  each other; it is layer-3 material, never a defect. **Contested** is an
+  unresolved conflict: the three-way merge judge answered *opposed* in the
+  ambiguous band, the new signal minted anyway, and an undirected
+  `contradicts` pair (`signal_contradictions`) holds the dispute — both
+  sides serve as contested until arbitration. Resolution comes **only from
+  an owner act** — a lock, a verdict (`true` settles for the answered
+  side, `not_true` against it; `partly` settles nothing), or a dismissal —
+  never from evidence weight, however lopsided (founder ruling 2026-08-23,
+  decision log below). The loser becomes **yielded**: a state read off the
+  resolved pair at serve time, its row and evidence untouched. A state,
+  never a deletion.
 
 ## Top of mind (layer 3)
 
@@ -168,10 +244,12 @@ agent's distilled working memory.
   mutated in place.
 - **Profile-scoped**: generated from that profile's signals; the admin
   can edit entries (which locks them), pin, dismiss, reorder.
-- **Group**: generated from the signals members have shared to that
-  group; entries can attribute which members' signals fed them. Members
-  change it together — proposals and affirmations are the co-editing
-  mechanism — and accepted changes create new versions.
+- **Group**: generated from the room's OWN signals — distilled from the
+  pooled public memories of its members (ruling 2026-08-24; previously
+  from signals members shared in, whose record survives as history).
+  Entries can attribute contribution. Members change it together —
+  proposals and affirmations are the co-editing mechanism — and
+  accepted changes create new versions.
 
 ## Principle (layer 4)
 
@@ -403,6 +481,102 @@ follows the permission matrix.
   dismisses, addition arrives locked), citations carry per-member
   attribution, and the groups e2e asserts that acceptance materializes
   a version. Mechanics: `docs/generation.md` §"The group's top of mind".
+
+- **2026-08-22** — **Erasure is the model's one true delete, and its blast
+  radius is now named.** Account erasure deletes every version of every
+  group top of mind for any group the departing member was in or whose
+  artifact cites their signals (`lib/account-erasure.ts`), then the room
+  regenerates clean — one member's erasure destroys the whole room's
+  co-authored version history. This is the sole exception to "fading
+  never deletes," recorded here so the vocabulary of record stops being
+  falsified by the code it governs. **Open ruling, gated on the founder
+  and counsel** (`goals/a-room-you-can-trust.md`, Phase 0b): whether a
+  majority-approved entry is the room's collective speech (versions
+  survive, the departed rendered nameless and groundless) or the departed
+  member's personal data (the current cascade is correct). Until ruled,
+  no audit-of-record claim may be made for rooms.
+- **2026-08-22** — **Open ruling, recorded before any non-human mind can
+  touch a room: the decline asymmetry.** Accepting a group proposal
+  needs a strict majority of current members; any single member can
+  decline — kill — any open proposal alone
+  (`routes/groups-proposals.ts`). Proposed resolution: refusal becomes a
+  counted stance like affirmation — a proposal dies when a majority
+  against is assured, or on timeout — so "a member is a member" holds
+  for both verbs. Gated on the founder (`goals/a-room-you-can-trust.md`,
+  Phase 0c); the code keeps today's rule until the ruling lands.
+- **2026-08-23** — **RULED (founder): the sibling door flips to opt-in.**
+  An agent-bound session reads and captures only the profile it is bound
+  to and the human's; reading a sibling agent's memory requires an
+  explicit, revocable, human-granted pairing listed beside credentials.
+  The open intra-account default (`resolveProfileAccess` granting every
+  agent read+capture on every profile) is retired with the grant
+  machinery in `goals/no-quiet-corners.md` Phase 6 — no longer
+  founder-gated; the flip ships with the phase.
+
+- **2026-08-23** — **RULED (founder): WAKA is both.** The identity
+  question is answered in the plural: a world for one person and their
+  minds, AND infrastructure for teams — neither is a pivot away from the
+  other. Sequencing is unchanged (the personal trust core ships first;
+  the team door still stands behind its hard gates — the security audit
+  before hosting strangers, eyes before hands before votes), but the
+  team direction is identity now, not a hypothesis awaiting pilot
+  evidence to justify its existence. Pilot evidence still decides
+  *pace*, never *whether*.
+
+- **2026-08-23** — **RULED (founder): the machine never picks between two
+  things it believes about you.** The register's standing arbitration
+  question is closed in the strictest direction: when derivation holds
+  two opposed beliefs, both stand as **contested** and resolution comes
+  only from an owner act (a lock or a verdict), after which the loser
+  becomes **yielded** — a state, never a deletion. No evidence weight,
+  however lopsided, resolves a pair on its own; the machine may name a
+  tension, never settle one. This is "the world never moves unless the
+  user moved it," applied to belief. Governs
+  `goals/no-quiet-corners.md` Phase 5 (contested pairs), whose design
+  assumed exactly this and is now doctrine rather than proposal.
+
+- **2026-08-23** — **RULED (founder): a sentence the room approved belongs
+  to the room.** The erasure question above is closed. Erasure stays the
+  one true delete for everything the person OWNS — profiles, inspirations,
+  signals, sessions, uploaded bytes — and now touches nothing the room
+  settled: versions, entries, settled proposals, settled stances, and door
+  marks all survive as **departed marks** (their `profiles` FKs are
+  `set null`; the surface reads "someone" where a name was). The name is
+  what erasure removes; the fact that someone was here is the room's.
+  Live hands are withdrawn in the same transaction — the erased person's
+  open proposals, and their stances on anyone's open proposals, go the way
+  a removed member's do — and a `left` door mark is written per seat.
+  "Fading never deletes" no longer has an exception for rooms.
+  Implemented in `lib/account-erasure.ts`, migration
+  `0016_the_departed_keep_their_marks`, pinned by
+  `lib/account-erasure.db.test.ts` on real Postgres.
+
+- **2026-08-23** — **RULED (founder): refusal is a counted stance, not a
+  veto.** The decline asymmetry above is closed, in the direction
+  proposed. A "not us" is recorded per member beside the yeses
+  (`group_top_of_mind_affirmations.stance`: affirmed | declined; one row
+  per member per proposal, answering again replaces the answer). A
+  proposal carries on a strict majority of yeses against the current
+  roll, exactly as before; it falls only when the nos make that majority
+  arithmetically impossible (`fallsToDeclines`: declines × 2 ≥ members —
+  in a room of two, one refusal still settles the question, now as
+  arithmetic rather than as a veto). The author's own decline still
+  resolves alone: withdrawing your own sentence is not a veto over
+  anyone else. "A member is a member" now holds for both verbs.
+  Implemented in `routes/groups-proposals.ts`, migration `0015_no_veto`,
+  pinned by `routes/room-decline.db.test.ts` on real Postgres.
+
+- **2026-08-22** — **The room's record survives its members** (Phase 0a
+  of `goals/a-room-you-can-trust.md`): membership events are append-only
+  history (`group_membership_events` — joined/left/removed; the seat row
+  remains only the current seat), removal takes votes only from open
+  proposals (who carried an accepted version is history), and a deleted
+  signal leaves entry citations in place with a null reference rather
+  than unwriting them from past versions. Evidence quotes are now stored
+  only as verified spans, labeled whose words they are
+  (`signal_evidence.quote_source`: own | enrichment); the lock gained
+  its promised other half as **release** (the words stand; the generator
+  regains jurisdiction; releasing unsupported words retires them).
 
 The migration itself (schema, API, web, MCP phases and gates) belongs in a
 `docs/goals/` goal document that references this file — for this layer,

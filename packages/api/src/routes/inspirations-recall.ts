@@ -13,7 +13,7 @@
 import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 
-import { attachments, inspirations, reflections } from "../db/index.js";
+import { attachments, experiences, inspirations, reflections } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import type { AuthEnv } from "../lib/middleware.js";
 import { attachmentSelection, serializeAttachment } from "./attachments.js";
@@ -70,7 +70,7 @@ function decodeCursor(raw: string): ListCursor | null {
  * handed everything. `!` as the escape character keeps the SQL literal free of
  * backslashes.
  */
-function buildLikePattern(query: string): string {
+export function buildLikePattern(query: string): string {
   return `%${query.replace(/[!%_]/g, (char) => `!${char}`)}%`;
 }
 
@@ -120,6 +120,37 @@ export function registerRecallRoutes(
       if (matches) filters.push(matches);
     }
 
+    /* THE NAMED GROUND AS A LENS (meeting, 2026-08-17). By name, because a
+       name is how the caller — usually an agent mid-task — refers to the
+       stretch of work; resolved under the target profile so one profile's
+       "NixOS PR" can never read another's. An unknown name matches nothing,
+       which is the honest answer rather than an error: the ground exists
+       the moment a memory is kept on it, and not before. */
+    if (query.data.experience !== undefined) {
+      filters.push(
+        inArray(
+          inspirations.experienceId,
+          db
+            .select({ id: experiences.id })
+            .from(experiences)
+            .where(
+              and(
+                eq(experiences.profileId, target.profileId),
+                eq(experiences.name, query.data.experience),
+              ),
+            ),
+        ),
+      );
+    }
+
+    /* WHAT THE WHOLE ARCHIVE HOLDS, BEFORE THE CURSOR NARROWS IT.
+       Snapshotted here on purpose: everything above describes *which* memories
+       the caller is asking for, and the cursor below describes *where in them
+       this page starts*. Counting after the cursor was pushed would answer
+       "how many are left", which is a fact about a scroll position and not
+       about the archive. */
+    const contentFilters = [...filters];
+
     if (query.data.cursor) {
       const cursor = decodeCursor(query.data.cursor);
       if (!cursor) return c.json({ error: "Invalid cursor" }, 400);
@@ -145,6 +176,41 @@ export function registerRecallRoutes(
       // share a timestamp.
       .orderBy(desc(inspirations.createdAt), desc(inspirations.id))
       .limit(limit);
+
+    /**
+     * HOW MANY THERE ARE, WHICH IS NOT HOW MANY WERE SENT.
+     *
+     * A client that follows the cursor still stops somewhere — the web field
+     * stops at ten pages, deliberately, so that one very old account cannot
+     * stall the world's first paint. Until this existed there was no way for
+     * it to know it had stopped short, so the count under the door read the
+     * length of what had arrived: at two and a half thousand memories the
+     * product said it held two thousand and said nothing about the rest.
+     *
+     * An archive that quietly understates itself is the worst direction for
+     * this failure to run in — the person has every reason to read it as
+     * memories lost. So the size of the archive is served as a fact about the
+     * archive, and the surface decides how to say it.
+     *
+     * Cheap: `inspirations_profile_created_idx` leads with `profile_id`, so
+     * the unsearched case is an index-only scan.
+     */
+    /* ON THE FIRST PAGE ONLY. The web field follows the cursor through up to
+       ten pages per pour, and counting on every one of them is ten identical
+       answers to a question that was answered before the walk began — the
+       count runs over `contentFilters`, which the cursor never enters, so no
+       later page can change it. A follower that wants the total has it from
+       page one; a page asked for with a cursor is by definition not the first.
+       This matters because the route was fast before the total existed, and
+       an addition has no business taxing a walk that predates it. */
+    let total: number | undefined;
+    if (!query.data.cursor) {
+      const [totals] = await db
+        .select({ total: sql<number>`cast(count(*) as int)` })
+        .from(inspirations)
+        .where(and(...contentFilters));
+      total = Number(totals?.total ?? rows.length);
+    }
 
     const ids = rows.map((row) => row.id);
 
@@ -211,6 +277,7 @@ export function registerRecallRoutes(
             reflectionCount: reflectionCounts.get(row.id) ?? 0,
           }),
         ),
+        ...(total !== undefined ? { total } : {}),
         ...(last ? { nextCursor: encodeCursor(last) } : {}),
       },
       200,

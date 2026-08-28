@@ -18,11 +18,13 @@
  * queue means a burst of captures still costs one synthesis.
  */
 
+import { recordConsultation } from "../lib/consultations.js";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
 import {
+  feedback,
   signals,
   topOfMindEntries,
   topOfMindEntrySignals,
@@ -102,8 +104,14 @@ export interface TopOfMindEntryView {
   pinned: boolean;
   dismissed: boolean;
   sortOrder: number;
-  /** What the entry rests on. Every id here is a signal the profile holds. */
-  citedSignals: Array<{ id: string; statement: string }>;
+  /** What the entry rests on. Every id here is a signal the profile holds.
+      `answered` is the RATIFIED standing of that ground: true when the owner
+      has spoken to it — a verdict (any feedback on the signal) or a star
+      (their own locked words) — false while only the machine believes it.
+      Computed from the feedback and lock records at serve time, never
+      stored: the light must move the moment the person answers
+      (goals/the-legible-loop.md Phase 4). */
+  citedSignals: Array<{ id: string; statement: string; answered: boolean; locked: boolean }>;
   createdAt: string;
 }
 
@@ -136,6 +144,7 @@ function toIso(value: Date | null): string | null {
 
 async function loadEntries(
   db: WakaDb,
+  profileId: string,
   topOfMindId: string,
   includeDismissed: boolean,
 ): Promise<TopOfMindEntryView[]> {
@@ -155,6 +164,9 @@ async function loadEntries(
       entryId: topOfMindEntrySignals.entryId,
       signalId: topOfMindEntrySignals.signalId,
       statement: signals.statement,
+      // The star half of the ratified standing rides the join it needs no
+      // extra query for: the owner's locked words are their answer.
+      lockedAt: signals.lockedAt,
     })
     .from(topOfMindEntrySignals)
     .innerJoin(signals, eq(signals.id, topOfMindEntrySignals.signalId))
@@ -165,9 +177,55 @@ async function loadEntries(
       ),
     );
 
-  const citationsByEntry = new Map<string, Array<{ id: string; statement: string }>>();
+  // The verdict half: which of these grounds the owner has answered. Read
+  // from the feedback rows at serve time — computed, never stored — so a
+  // verdict given a second ago already moves the light on this serve. Any
+  // verdict counts, not_true included: ratified means "we have spoken about
+  // this", not "it is true".
+  const citedIds = [
+    ...new Set(
+      citationRows
+        .map((row) => row.signalId)
+        .filter((id): id is string => id !== null),
+    ),
+  ];
+  const answeredIds = new Set<string>();
+  if (citedIds.length > 0) {
+    const verdictRows = await db
+      .selectDistinct({ targetId: feedback.targetId })
+      .from(feedback)
+      .where(
+        and(
+          eq(feedback.profileId, profileId),
+          eq(feedback.targetType, "signal"),
+          inArray(feedback.targetId, citedIds),
+        ),
+      );
+    for (const row of verdictRows) answeredIds.add(row.targetId);
+  }
+
+  const citationsByEntry = new Map<
+    string,
+    Array<{ id: string; statement: string; answered: boolean; locked: boolean }>
+  >();
   for (const row of citationRows) {
-    const cited = { id: row.signalId, statement: row.statement };
+    // The inner join already excludes citations whose signal was deleted;
+    // this narrows the type to match.
+    if (row.signalId === null) continue;
+    const cited = {
+      id: row.signalId,
+      statement: row.statement,
+      answered: row.lockedAt !== null || answeredIds.has(row.signalId),
+      /* `answered` CONFLATES TWO DIFFERENT THINGS, deliberately — a verdict and
+         a rewrite both mean the person has dealt with this sentence, and the
+         poster only asks about the ones they have not. But the WORLD needs to
+         tell them apart: rewriting a signal locks its words against
+         regeneration, and only a locked one has anything to hand back. Sent
+         separately so the client can offer the way out of a door it was
+         letting people walk through in one direction. The value is already in
+         hand a line above; nothing extra is read for it. */
+      locked: row.lockedAt !== null,
+    };
     const bucket = citationsByEntry.get(row.entryId);
     if (bucket) bucket.push(cited);
     else citationsByEntry.set(row.entryId, [cited]);
@@ -204,7 +262,7 @@ export async function getLiveTopOfMind(
     version: artifact.version,
     reason: artifact.reason,
     createdAt: artifact.createdAt.toISOString(),
-    entries: await loadEntries(db, artifact.id, input.includeDismissed === true),
+    entries: await loadEntries(db, input.profileId, artifact.id, input.includeDismissed === true),
   };
 }
 
@@ -295,7 +353,7 @@ export async function updateLiveEntry(
   });
 
   if (topOfMindId === null) return null;
-  const entries = await loadEntries(db, topOfMindId.topOfMindId, true);
+  const entries = await loadEntries(db, input.profileId, topOfMindId.topOfMindId, true);
   return entries.find((row) => row.id === topOfMindId.entryId) ?? null;
 }
 
@@ -400,6 +458,14 @@ export function createTopOfMindRoutes(
       profileId: scope.profileId,
       includeDismissed: parsedQuery.data.includeDismissed === true,
     });
+    /* the read side answers for itself — the version served is the receipt,
+       and "nothing synthesized yet" is a serve worth recording too */
+    await recordConsultation(db, {
+      profileId: scope.profileId,
+      session: c.get("session"),
+      surface: "top_of_mind",
+      artifactVersion: topOfMind?.version ?? null,
+    });
     // Null rather than an empty artifact: "nothing has been synthesized yet"
     // is a different state from "the synthesis found nothing to say", and a
     // reader deserves to be able to tell them apart.
@@ -503,7 +569,7 @@ export function createTopOfMindRoutes(
   });
 
   const entryStateRoute = (
-    path: "/entries/:entryId/pin" | "/entries/:entryId/dismiss" | "/entries/:entryId/restore",
+    path: "/entries/:entryId/pin" | "/entries/:entryId/dismiss" | "/entries/:entryId/restore" | "/entries/:entryId/release",
     patch: () => Parameters<typeof updateLiveEntry>[1]["patch"],
   ) => {
     routes.post(path, async (c) => {
@@ -548,6 +614,12 @@ export function createTopOfMindRoutes(
   entryStateRoute("/entries/:entryId/pin", () => ({ pinnedAt: new Date() }));
   entryStateRoute("/entries/:entryId/dismiss", () => ({ dismissedAt: new Date() }));
   entryStateRoute("/entries/:entryId/restore", () => ({ dismissedAt: null }));
+  // Release is the unlock the canon promised ("unlocking is an explicit human
+  // act"): the words stay exactly as the person left them, and from the next
+  // synthesis on the generator may reword or retire them like any generated
+  // entry. The act is the owner handing the sentence back — nothing is
+  // rewritten at release time.
+  entryStateRoute("/entries/:entryId/release", () => ({ lockedAt: null }));
 
   return routes;
 }

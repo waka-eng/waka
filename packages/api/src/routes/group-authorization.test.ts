@@ -263,9 +263,14 @@ describe("what a group can publish", () => {
   const overSelectedWallRow = {
     signalId,
     statement: "Rooms that instruct without speaking",
-    confidence: 72,
-    ownerProfileId: otherProfileId,
-    ownerName: "Grace",
+    confidenceAsWritten: 72,
+    locked: false,
+    reactions: [],
+    contributors: [
+      /* a contributor is a NAME — a leaky loader smuggling the memory behind
+         the name must lose it at the route's field list */
+      { profileId: otherProfileId, name: "Grace", quote: RAW_INSPIRATION },
+    ],
     sharedAt: "2026-08-10T00:00:00.000Z",
     inspirationText: RAW_INSPIRATION,
     quote: RAW_INSPIRATION,
@@ -302,7 +307,7 @@ describe("what a group can publish", () => {
     return mount(
       {
         loadMembership: vi.fn(async () => membership),
-        loadWall: vi.fn(async () => [overSelectedWallRow as GroupWallSignal]),
+        loadWall: vi.fn(async () => [overSelectedWallRow as unknown as GroupWallSignal]),
         loadTopOfMind: vi.fn(
           async () => overSelectedTopOfMind as unknown as GroupTopOfMindView,
         ),
@@ -317,15 +322,21 @@ describe("what a group can publish", () => {
     );
 
     expect(response.status).toBe(200);
-    const body = (await response.json()) as { wall: Array<Record<string, unknown>> };
+    const body = (await response.json()) as {
+      wall: Array<Record<string, unknown> & { contributors: Array<Record<string, unknown>> }>;
+    };
     expect(Object.keys(body.wall[0]!).sort()).toEqual([
-      "confidence",
-      "ownerName",
-      "ownerProfileId",
+      "confidenceAsWritten",
+      "contributors",
+      "locked",
+      "reactions",
       "sharedAt",
       "signalId",
       "statement",
     ]);
+    /* a contributor is a profile id and a display name; the quote a leaky
+       loader attached is not asked for */
+    expect(Object.keys(body.wall[0]!.contributors[0]!).sort()).toEqual(["name", "profileId"]);
     // No field for the capture behind the statement, under any name.
     expect(body.wall[0]).not.toHaveProperty("inspirationText");
     expect(body.wall[0]).not.toHaveProperty("quote");
@@ -440,6 +451,26 @@ describe("the group module itself", () => {
     return { files, code };
   };
 
+  /**
+   * COUNTING A GATE THAT LIVES IN ONE PLACE.
+   *
+   * A gate written at the read site is counted where it stands. A gate written
+   * once inside a named predicate is counted per USE of that name — and never
+   * at its definition, which guards nothing on its own.
+   *
+   * Found the hard way on 2026-08-27. The first version of this counted the
+   * definition as well, which left exactly one slot of slack, and a
+   * deliberately ungated third read of layer 1 walked straight through a test
+   * written to stop it. A gate that counts itself is not a gate.
+   */
+  const gatedReads = (code: string, gate: RegExp): number => {
+    const shared = code.match(/function memberPublicInspirations\([\s\S]*?\n\}/)?.[0] ?? "";
+    const everywhere = code.match(new RegExp(gate.source, "g")) ?? [];
+    const inShared = shared.match(new RegExp(gate.source, "g")) ?? [];
+    const byName = code.match(/\.where\(\s*memberPublicInspirations\(/g) ?? [];
+    return everywhere.length - inShared.length + byName.length;
+  };
+
   it("scans every file the group module is made of", () => {
     const { files } = groupModuleSource();
     // A rename that empties this list must fail here rather than turn the
@@ -455,9 +486,49 @@ describe("the group module itself", () => {
   it("reads layer 1 only through the public-visibility gate", () => {
     const { code } = groupModuleSource();
 
-    // Evidence and its join key stay out entirely.
-    expect(code).not.toMatch(/\bsignalEvidence\b/);
-    expect(code).not.toMatch(/\binspirationId\b/);
+    /**
+     * THE EVIDENCE BOUNDARY, restated twice.
+     *
+     * 2026-08-24, for the room-grown wall: the wall and the board may read
+     * `signalEvidence` — the two-voices gate and the contributor names live
+     * there — but only its WHO and WHEN. What must never cross is the text:
+     * the quote, the reason, and the memory behind the citation.
+     *
+     * Restated again when the visibility gate arrived. `inspirationId` was
+     * banned outright, which was right while the wall had no business in
+     * layer 1 at all. It has one now, and it is a PRIVACY business: a voice
+     * counts only while the memory under it is still public, and asking that
+     * question means joining evidence to `inspirations` through exactly this
+     * key. A blanket ban would have forced the choice between the guard and
+     * the gate.
+     *
+     * So the rule sharpens instead of loosening. The key may NARROW a query
+     * and may never LEAVE one: every occurrence must be the join predicate
+     * itself, and no projection may name it. A loader that selected the
+     * column would still be publishing one member's memory id to another,
+     * and would still fail here.
+     */
+    expect(code).not.toMatch(/signalEvidence\.quote\b/);
+    expect(code).not.toMatch(/signalEvidence\.reason\b/);
+
+    const JOIN_PREDICATE = /eq\(\s*inspirations\.id\s*,\s*signalEvidence\.inspirationId\s*\)/g;
+    const mentions = code.match(/\binspirationId\b/g) ?? [];
+    const predicates = code.match(JOIN_PREDICATE) ?? [];
+    expect(
+      predicates.length,
+      "every mention of the layer-1 join key must BE the join predicate — a " +
+        "mention that is not one is the key being carried somewhere it does " +
+        "not narrow anything",
+    ).toBe(mentions.length);
+
+    /* And never in a projection: `.select({ ... })` is what leaves the
+       process, so the ban stands there whatever the join is doing. */
+    for (const projection of code.match(/\.select(?:Distinct)?\(\{[\s\S]*?\}\)/g) ?? []) {
+      expect(
+        projection,
+        "a room's wall or board must never select the memory id behind a citation",
+      ).not.toMatch(/\binspirationId\b/);
+    }
 
     // A room's field reads layer 1 by design, so the read must be found. If it
     // is not, the scan has lost the code rather than the code having lost the
@@ -468,9 +539,24 @@ describe("the group module itself", () => {
     expect(code).toMatch(/eq\(\s*inspirations\.visibility\s*,\s*"public"\s*\)/);
     // ...and the gate must not be the only mention while some other query
     // quietly selects from the table without it.
-    const gates = code.match(/eq\(\s*inspirations\.visibility\s*,\s*"public"\s*\)/g) ?? [];
     const froms = code.match(/\.from\(\s*inspirations\s*\)/g) ?? [];
-    expect(gates.length).toBeGreaterThanOrEqual(froms.length);
+
+    /* A READ IS ALSO GATED WHEN IT NAMES THE PREDICATE THAT CARRIES THE GATE.
+       The room's ground became two queries on 2026-08-27 — the page, and the
+       count of what the page is a page of — and writing the predicate twice is
+       how a security predicate ends up existing in two versions. So it was
+       given a name, and this count learned the name. The assertion below it
+       proves the name still means what it says: without that, extracting the
+       predicate into an empty function would satisfy every count here. */
+    const visibility = /eq\(\s*inspirations\.visibility\s*,\s*"public"\s*\)/;
+    if (code.includes("memberPublicInspirations(")) {
+      expect(
+        code.match(/function memberPublicInspirations\([\s\S]*?\n\}/)?.[0] ?? "",
+        "the shared room-ground predicate must carry the visibility gate itself",
+      ).toMatch(visibility);
+    }
+
+    expect(gatedReads(code, visibility)).toBeGreaterThanOrEqual(froms.length);
   });
 
   /**
@@ -502,10 +588,21 @@ describe("the group module itself", () => {
        contains agents — an agent belongs in a room's list of who is here, it
        is only their MEMORIES that must not land on the ground. Same shape as
        the visibility count directly above, for the same reason. */
-    const humanGates = code.match(/eq\(\s*profiles\.type\s*,\s*"human"\s*\)/g) ?? [];
     const layerOneReads = code.match(/\.from\(\s*inspirations\s*\)/g) ?? [];
+
+    /* Same allowance, and the same proof, as the visibility count above: a
+       read may carry the gate by naming the one predicate that holds it, and
+       that predicate is checked for holding it. */
+    const humanOnly = /eq\(\s*profiles\.type\s*,\s*"human"\s*\)/;
+    if (code.includes("memberPublicInspirations(")) {
+      expect(
+        code.match(/function memberPublicInspirations\([\s\S]*?\n\}/)?.[0] ?? "",
+        "the shared room-ground predicate must carry the human-only gate itself",
+      ).toMatch(humanOnly);
+    }
+
     expect(
-      humanGates.length,
+      gatedReads(code, humanOnly),
       "every read of layer 1 through group membership needs the gate, not " +
         "just the first one",
     ).toBeGreaterThanOrEqual(layerOneReads.length);

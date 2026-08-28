@@ -53,7 +53,14 @@
 import { act } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { FIELD_CITED_LIFT, FIELD_FLOOR_CITED } from "../src/lib/aliveness";
+import {
+  carryOf,
+  FIELD_CARRY_PROMOTION_EVIDENCE,
+  FIELD_CARRY_SPAN,
+  FIELD_DECAY_HALF_LIFE_DAYS,
+  FIELD_FLOOR_CITED,
+  FIELD_RECENCY_WEIGHT,
+} from "../src/lib/aliveness";
 import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
 import {
   apiMockFrom,
@@ -187,8 +194,56 @@ afterEach(() => {
   layout?.unmount();
 });
 
-/** What a cited memory's light comes to: its floor, plus the lift above it. */
-const CITED_LIGHT = FIELD_FLOOR_CITED + FIELD_CITED_LIFT;
+/**
+ * What THIS cited memory's light comes to: its floor, what age still adds on
+ * top of that floor, and what it carries.
+ *
+ * Every term is the fixture stated honestly rather than decoration. One
+ * pattern rests on this memory; it is on no board and under no principle; and
+ * it is still emerging with a single piece of evidence, so it has got exactly
+ * one third of the way to the promotion the loop grades against. The freshest
+ * of the four memories is the one `aliveMax` reports, so the decay is read off
+ * that one. Written as the expression rather than as a number so that the day
+ * a share is retuned this test moves with the product instead of failing for a
+ * reason that has nothing to do with what it is watching.
+ *
+ * The age term used to be absent here, and correctly so: `colorBall` took the
+ * MAX of freshness and the floors, and at four weeks the floor won outright.
+ * It is additive now — a cited memory's age had otherwise stopped mattering
+ * forever past about five days — so it appears in the arithmetic too.
+ */
+const FRESHEST_DAYS = Math.min(...FACTS.inspirations.map((i) => i.daysAgo));
+/** The floor and the carry: every term that does not move with the clock. */
+const CITED_LIGHT =
+  FIELD_FLOOR_CITED +
+  FIELD_CARRY_SPAN *
+    carryOf({
+      roots: 1,
+      promotion: 1 / FIELD_CARRY_PROMOTION_EVIDENCE,
+      onPoster: false,
+      underPrinciple: false,
+    });
+/**
+ * And the most that age can still add on top of it.
+ *
+ * `BASE` is a fixed date; the loop colours the ball against the real clock. So
+ * the memories are AT LEAST `FRESHEST_DAYS` old and get older every day this
+ * suite is run, and the freshness term shrinks with them — which is why this
+ * is a band and not an equality. It used to be an equality and it used to be
+ * right, because `colorBall` took the max of freshness and the floors and at
+ * four weeks the floor won outright: the clock could not reach the number.
+ * Now that age is additive it can, and an equality here would have been a test
+ * that failed on a Tuesday.
+ *
+ * The band is nowhere near loose enough to let the bug back through: an
+ * UNCITED memory of this age lights at under a hundredth, and the floor alone
+ * is thirty times that.
+ */
+const CITED_CEILING =
+  CITED_LIGHT +
+  (1 - FIELD_FLOOR_CITED) *
+    FIELD_RECENCY_WEIGHT *
+    Math.pow(0.5, FRESHEST_DAYS / FIELD_DECAY_HALF_LIFE_DAYS);
 
 describe("a memory a pattern rests on", () => {
   /**
@@ -226,7 +281,11 @@ describe("a memory a pattern rests on", () => {
       layout.audit().drawn.aliveMax,
       "the citation never reached the orb: a memory a pattern rests on is " +
         "still decaying like an untended one",
-    ).toBeCloseTo(CITED_LIGHT, 3);
+    ).toBeGreaterThanOrEqual(CITED_LIGHT);
+    expect(
+      layout.audit().drawn.aliveMax,
+      "and it is lit by the citation, not by some new source of light",
+    ).toBeLessThanOrEqual(CITED_CEILING);
   });
 
   /**
@@ -243,6 +302,10 @@ describe("a memory a pattern rests on", () => {
     expect(
       layout.audit().drawn.aliveMax,
       "the pour itself no longer reads the sky",
-    ).toBeCloseTo(CITED_LIGHT, 3);
+    ).toBeGreaterThanOrEqual(CITED_LIGHT);
+    expect(
+      layout.audit().drawn.aliveMax,
+      "and it is lit by the citation, not by some new source of light",
+    ).toBeLessThanOrEqual(CITED_CEILING);
   });
 });

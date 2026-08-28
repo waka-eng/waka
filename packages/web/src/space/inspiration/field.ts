@@ -13,7 +13,10 @@
  * page call them from inside the loop without the loop owning them.
  */
 import {
-  FIELD_CITED_LIFT,
+  carryOf,
+  FIELD_ATTENTION_SPAN,
+  FIELD_CARRY_SPAN,
+  FIELD_RECENCY_WEIGHT,
   FIELD_DECAY_HALF_LIFE_DAYS,
   FIELD_FLOOR_ANSWERED,
   FIELD_FLOOR_CITED,
@@ -21,9 +24,11 @@ import {
   FIELD_FRONTIER_DAYS,
   FIELD_REFLECTION_SATURATION,
   FIELD_REFLECTION_WEIGHT,
+  FIELD_TIER_CEILING,
+  FIELD_TIER_GAMMA,
 } from "../../lib/aliveness";
 import { clamp, clamp01, DAY_MS } from "../../lib/num";
-import { SIZE_R, TIERS } from "../../canvas/sprites";
+import { SIZE_R, TIERS, sizeIdxFor } from "../../canvas/sprites";
 import type { Ball } from "./orb";
 
 /** However crowded the field gets, an orb never shrinks past this. */
@@ -50,7 +55,6 @@ export const ORB_R_MIN = 6;
  * they belong to a camera and a character, and nothing outside the loop reads
  * them.
  */
-export const EASE_LIGHT = 1.2e-4;
 /** Light in fast, out slow: τ ≈ 28ms arriving, ≈ 180ms leaving. */
 export const EASE_GLOW_IN = 1e-16;
 export const EASE_GLOW_OUT = 3.8e-3;
@@ -82,19 +86,65 @@ export function colorBall(b: Ball, T: number): void {
    * of the field still fades exactly as it did, which is where the passage
    * of time is supposed to be visible.
    */
+  /**
+   * AND HOW MUCH IT HOLDS UP DECIDES HOW FAR ABOVE THE FLOOR IT STANDS.
+   *
+   * Being cited was a boolean, so every load-bearing memory was lit exactly
+   * alike: the save a principle, the poster and three patterns all rest on
+   * looked the same as the one a single emerging pattern mentions once. The
+   * carry grades that (`carryOf`, lib/aliveness.ts) — roots, then the poster,
+   * then a principle — and the span it buys sits ON TOP of the cited floor,
+   * so being cited at all still means "cannot rot" and the rest of the range
+   * says how much of this person is standing here. Founder, 2026-08-24.
+   */
+  const carry = b.hasNotes
+    ? carryOf({
+        roots: b.roots,
+        promotion: b.promotion,
+        onPoster: b.onPoster,
+        underPrinciple: b.underPrinciple,
+      })
+    : 0;
   const tended =
     (b.hasNotes ? FIELD_FLOOR_CITED : 0) +
-    (b.reflections > 0 ? FIELD_FLOOR_ANSWERED : 0) +
+    (b.reflections > 0
+      ? FIELD_FLOOR_ANSWERED +
+        FIELD_ATTENTION_SPAN *
+          (Math.min(b.reflections, FIELD_REFLECTION_SATURATION) /
+            FIELD_REFLECTION_SATURATION)
+      : 0) +
     (b.hasGroup ? FIELD_FLOOR_IN_GROUP : 0);
-  const a = clamp01(
-    Math.max(
+  /* RECENCY IS CAPPED; THE CARRY RIDES ABOVE EVERYTHING. A memory kept this
+     morning used to hit the max and clamp the whole young field to one flat
+     top band (see FIELD_RECENCY_MAX). Now freshness can only carry a memory
+     so far, and the room above belongs to use: the carry is ADDED on top of
+     whichever of recency and the floors is winning, so a cited memory
+     outshines an uncited twin whatever their shared age is — which is the
+     founder's ruling, at both ends of an archive's life. */
+  /* Freshness SCALES across its own share of the range rather than being
+     capped into it — a cap returned the same value for everything kept in
+     the last week and erased the gradient at the end of the archive a person
+     reads most (see FIELD_RECENCY_WEIGHT, and the measurement in its note). */
+  const recency =
+    FIELD_RECENCY_WEIGHT *
+    Math.min(
       decay +
         FIELD_REFLECTION_WEIGHT *
           Math.min(b.reflections, FIELD_REFLECTION_SATURATION) *
           decay,
-      tended,
-    ) + (b.hasNotes ? FIELD_CITED_LIFT : 0),
-  );
+      1,
+    );
+  /* AGE SITS ON TOP OF THE FLOORS RATHER THAN COMPETING WITH THEM, and the
+     `Math.max` this replaces was a dead channel with a date on it: freshness
+     can only ever reach `FIELD_RECENCY_WEIGHT`, the cited floor is already
+     most of the way there, so past about five days the max returned the floor
+     and AGE CONTRIBUTED EXACTLY ZERO — forever, for every cited memory in the
+     archive — against this module's own header, which calls showing the
+     passage of time the one job it has. Now freshness spends its share of
+     whatever room is left above the floor: a memory that is cited, answered
+     and in a room has less of that room to spend, which is right, because by
+     then what it is holding up matters more than when it arrived. */
+  const a = clamp01(tended + (1 - tended) * recency + FIELD_CARRY_SPAN * carry);
   b.alive = a;
   b.alivePow = Math.pow(a, 1.4);
   /**
@@ -109,12 +159,14 @@ export function colorBall(b: Ball, T: number): void {
 }
 
 /**
- * The aliveness continuum, quantised to the baked sprite tiers. Five steps is
- * below what the eye resolves in a gradient this soft, so it still reads as a
- * continuum — and it keeps every appearance pre-rendered.
+ * The aliveness continuum, quantised to the baked sprite tiers — through a
+ * curve, because the continuum is exponential and a linear banding spent
+ * almost every step on the first week (see `FIELD_TIER_GAMMA`). Baked
+ * sprites still mean nothing is drawn per frame.
  */
 export function tierOf(b: Ball): number {
-  return Math.round(clamp01((b.alive - 0.05) / 0.55) * (TIERS - 1));
+  const lit = Math.pow(clamp01(b.alive / FIELD_TIER_CEILING), FIELD_TIER_GAMMA);
+  return Math.round(lit * (TIERS - 1));
 }
 
 /**
@@ -168,17 +220,11 @@ export function fitField(arr: Ball[], bandW: number, bandH: number): number {
     const r = clamp(Math.min(b.rBase, fitR), ORB_R_MIN, b.rBase);
     b.r = r;
     /* nearest baked size, so nothing is ever scaled by more than a few
-       percent — the sphere's rim and specular only survive at 1:1 */
-    let bi = 0;
-    let bd = Infinity;
-    for (let i = 0; i < SIZE_R.length; i++) {
-      const d = Math.abs(SIZE_R[i] - r);
-      if (d < bd) {
-        bd = d;
-        bi = i;
-      }
-    }
-    if (SIZE_R[bi] > r && bi > 0) bi -= 1;
+       percent — the sphere's rim and specular only survive at 1:1. The rule
+       lives in `sizeIdxFor` because it was written here and NOT written in the
+       two places that build a ball, and that divergence is what made every
+       orb outside a fit a blurry one. */
+    const bi = sizeIdxFor(r);
     b.sizeIdx = bi;
     /* and it is DRAWN at the size it was baked at. The radius jitter was
        always meaningless variation — size encodes nothing here, by law — so

@@ -92,6 +92,104 @@
       "when": 1787281000000,
       "tag": "0012_the_address_stays_unproven",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1787423975236,
+      "tag": "0013_the_room_remembers",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1787424931667,
+      "tag": "0014_no_invented_quotes",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1787443948797,
+      "tag": "0015_no_veto",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1787444368370,
+      "tag": "0016_the_departed_keep_their_marks",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1787525165888,
+      "tag": "0017_the_read_side_gets_a_record",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1787540383506,
+      "tag": "0018_the-ground-refuses",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1787541934309,
+      "tag": "0019_the-weather-is-consulted",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1787542769212,
+      "tag": "0020_the-machines-original-survives",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1787543153319,
+      "tag": "0021_the-export-is-consulted",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1787543670198,
+      "tag": "0022_contested-pairs-are-held",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1787544504282,
+      "tag": "0023_the-sibling-door-gets-a-hand",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1787544564282,
+      "tag": "0024_a-room-can-have-a-mind",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1787544624282,
+      "tag": "0025_the-rooms-mind-and-the-borrowed-ground",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1787544684282,
+      "tag": "0026_keys-for-agents-and-named-ground",
+      "breakpoints": true
     }
   ]
 }

@@ -49,6 +49,9 @@ const summary: SignalSummary = {
   lastEvidenceAt: "2026-05-30T12:00:00.000Z",
   locked: false,
   unsupported: false,
+  dismissed: false,
+  contested: false,
+  yielded: false,
   sharedGroupIds: [groupId],
   createdAt: "2026-05-01T10:00:00.000Z",
 };
@@ -61,14 +64,23 @@ const detail: SignalDetail = {
       preview: "A saved note about quiet research rooms.",
       reason: "The capture names the room as the condition, not the topic.",
       quote: "quiet research rooms",
+      quoteSource: "own",
       createdAt: "2026-05-30T12:00:00.000Z",
     },
   ],
 };
 
+
+/* A GET serve now writes a consultation through the real writer, so any db
+   a 200-path test injects must accept that one insert — the write itself is
+   pinned against real Postgres in consultations.db.test.ts. */
+function serveDb(): Record<string, unknown> {
+  return { insert: () => ({ values: async () => undefined }) };
+}
+
 describe("GET /api/signals", () => {
   it("scopes the list to the acting profile and passes status and limit through", async () => {
-    const db = {};
+    const db = serveDb();
     const listSignals = vi.fn(async () => [summary]);
     const app = new Hono();
     app.route(
@@ -88,6 +100,15 @@ describe("GET /api/signals", () => {
       status: "active",
       limit: 12,
     });
+    /* SCOPED RECALL (meeting, 2026-08-17): the q parameter reaches the
+       loader, so an agent can ask for the signals about one concern instead
+       of paging the whole wall through its context window. */
+    const scoped = await app.request("/api/signals?q=walking");
+    expect(scoped.status).toBe(200);
+    expect(listSignals).toHaveBeenLastCalledWith(
+      db,
+      expect.objectContaining({ profileId: humanProfileId, query: "walking" }),
+    );
     await expect(response.json()).resolves.toEqual({
       signals: [
         {
@@ -99,6 +120,9 @@ describe("GET /api/signals", () => {
           lastEvidenceAt: "2026-05-30T12:00:00.000Z",
           locked: false,
           unsupported: false,
+          dismissed: false,
+          contested: false,
+          yielded: false,
           sharedGroupIds: [groupId],
           createdAt: "2026-05-01T10:00:00.000Z",
         },
@@ -112,7 +136,7 @@ describe("GET /api/signals", () => {
     app.route(
       "/api/signals",
       createSignalRoutes({
-        getDatabase: () => ({}) as any,
+        getDatabase: () => serveDb() as any,
         listSignals,
         authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
       }),
@@ -133,7 +157,7 @@ describe("GET /api/signals", () => {
     app.route(
       "/api/signals",
       createSignalRoutes({
-        getDatabase: () => ({}) as any,
+        getDatabase: () => serveDb() as any,
         listSignals,
         authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
       }),
@@ -147,12 +171,12 @@ describe("GET /api/signals", () => {
 
   it("lets an agent session read the account's human profile", async () => {
     const listSignals = vi.fn(async () => [summary]);
-    const loadProfile = vi.fn(async () => ({ id: humanProfileId, accountId }));
+    const loadProfile = vi.fn(async () => ({ id: humanProfileId, accountId, type: "human" as const }));
     const app = new Hono();
     app.route(
       "/api/signals",
       createSignalRoutes({
-        getDatabase: () => ({}) as any,
+        getDatabase: () => serveDb() as any,
         listSignals,
         loadProfile,
         authMiddleware: authMiddleware(sessionFor(agentProfileId, "agent")),
@@ -176,12 +200,13 @@ describe("GET /api/signals", () => {
     const loadProfile = vi.fn(async () => ({
       id: humanProfileId,
       accountId: otherAccountId,
+      type: "human" as const,
     }));
     const app = new Hono();
     app.route(
       "/api/signals",
       createSignalRoutes({
-        getDatabase: () => ({}) as any,
+        getDatabase: () => serveDb() as any,
         listSignals,
         loadProfile,
         authMiddleware: authMiddleware(sessionFor(agentProfileId, "agent")),
@@ -202,7 +227,7 @@ describe("GET /api/signals/:signalId", () => {
     app.route(
       "/api/signals",
       createSignalRoutes({
-        getDatabase: () => ({}) as any,
+        getDatabase: () => serveDb() as any,
         getSignal,
         authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
       }),
@@ -222,6 +247,7 @@ describe("GET /api/signals/:signalId", () => {
         preview: "A saved note about quiet research rooms.",
         reason: "The capture names the room as the condition, not the topic.",
         quote: "quiet research rooms",
+        quoteSource: "own",
         createdAt: "2026-05-30T12:00:00.000Z",
       },
     ]);
@@ -233,7 +259,7 @@ describe("GET /api/signals/:signalId", () => {
     app.route(
       "/api/signals",
       createSignalRoutes({
-        getDatabase: () => ({}) as any,
+        getDatabase: () => serveDb() as any,
         getSignal,
         authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
       }),
@@ -269,7 +295,7 @@ describe("PATCH /api/signals/:signalId", () => {
     app.route(
       "/api/signals",
       createSignalRoutes({
-        getDatabase: () => ({}) as any,
+        getDatabase: () => serveDb() as any,
         updateStatement,
         dropEmbedding,
         requestReembed,
@@ -323,7 +349,7 @@ describe("PATCH /api/signals/:signalId", () => {
     app.route(
       "/api/signals",
       createSignalRoutes({
-        getDatabase: () => ({}) as any,
+        getDatabase: () => serveDb() as any,
         updateStatement,
         dropEmbedding: vi.fn(async () => undefined),
         requestReembed,
@@ -345,12 +371,12 @@ describe("PATCH /api/signals/:signalId", () => {
 
   it("refuses an agent session editing the human profile's signals", async () => {
     const updateStatement = vi.fn();
-    const loadProfile = vi.fn(async () => ({ id: humanProfileId, accountId }));
+    const loadProfile = vi.fn(async () => ({ id: humanProfileId, accountId, type: "human" as const }));
     const app = new Hono();
     app.route(
       "/api/signals",
       createSignalRoutes({
-        getDatabase: () => ({}) as any,
+        getDatabase: () => serveDb() as any,
         updateStatement,
         loadProfile,
         authMiddleware: authMiddleware(sessionFor(agentProfileId, "agent")),
@@ -376,7 +402,7 @@ describe("PATCH /api/signals/:signalId", () => {
     app.route(
       "/api/signals",
       createSignalRoutes({
-        getDatabase: () => ({}) as any,
+        getDatabase: () => serveDb() as any,
         updateStatement,
         authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
       }),
@@ -401,7 +427,7 @@ describe("DELETE /api/signals/:signalId", () => {
     app.route(
       "/api/signals",
       createSignalRoutes({
-        getDatabase: () => ({}) as any,
+        getDatabase: () => serveDb() as any,
         deleteSignal,
         reconcilePrinciples,
         authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
@@ -418,76 +444,38 @@ describe("DELETE /api/signals/:signalId", () => {
   });
 });
 
-describe("signal shares", () => {
-  it("shares a signal to a group the acting profile belongs to", async () => {
-    const shareSignal = vi.fn(async () => "shared" as const);
+describe("the retired share verb", () => {
+  /**
+   * A statement no longer reaches a room by being handed to it. The founder
+   * retired that on 2026-08-24 and the wall stopped reading `signal_shares`
+   * the same day; the endpoints outlived the wall for a few hours, answering
+   * 201 to a write that nothing anywhere would ever show.
+   *
+   * The claim now is that the door is CLOSED, not that it behaves politely:
+   * a route that still parsed the body and returned some considered refusal
+   * would be a verb that still exists. 404 is the router having nothing
+   * there, which is the honest shape of "this is not how rooms work".
+   */
+  it("no longer answers a request to put a statement up", async () => {
     const app = new Hono();
     app.route(
       "/api/signals",
       createSignalRoutes({
-        getDatabase: () => ({}) as any,
-        shareSignal,
+        getDatabase: () => serveDb() as any,
         authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
       }),
     );
 
-    const response = await app.request(`/api/signals/${signalId}/shares`, {
+    const put = await app.request(`/api/signals/${signalId}/shares`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ groupId }),
     });
+    expect(put.status, "there is no verb to put a statement up").toBe(404);
 
-    expect(response.status).toBe(201);
-    expect(shareSignal).toHaveBeenCalledWith(expect.anything(), {
-      profileId: humanProfileId,
-      signalId,
-      groupId,
-    });
-  });
-
-  it("refuses to share into a group the acting profile is not in", async () => {
-    const shareSignal = vi.fn(async () => "not_a_member" as const);
-    const app = new Hono();
-    app.route(
-      "/api/signals",
-      createSignalRoutes({
-        getDatabase: () => ({}) as any,
-        shareSignal,
-        authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
-      }),
-    );
-
-    const response = await app.request(`/api/signals/${signalId}/shares`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ groupId }),
-    });
-
-    expect(response.status).toBe(403);
-  });
-
-  it("removes a share", async () => {
-    const unshareSignal = vi.fn(async () => true);
-    const app = new Hono();
-    app.route(
-      "/api/signals",
-      createSignalRoutes({
-        getDatabase: () => ({}) as any,
-        unshareSignal,
-        authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
-      }),
-    );
-
-    const response = await app.request(`/api/signals/${signalId}/shares/${groupId}`, {
+    const took = await app.request(`/api/signals/${signalId}/shares/${groupId}`, {
       method: "DELETE",
     });
-
-    expect(response.status).toBe(200);
-    expect(unshareSignal).toHaveBeenCalledWith(expect.anything(), {
-      profileId: humanProfileId,
-      signalId,
-      groupId,
-    });
-    await expect(response.json()).resolves.toEqual({ shared: false, groupId });
+    expect(took.status, "nor one to take it back down").toBe(404);
   });
 });

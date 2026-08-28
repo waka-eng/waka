@@ -166,12 +166,37 @@ export async function writeJson<T>(
   payload: unknown,
   fallbackMessage: string,
 ): Promise<T> {
-  const res = await fetch(path, {
-    method,
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  /* THE ONE FETCH IN THIS FILE THAT WAS NOT WRAPPED.
+     `getJson` and `requestVoid` each catch a dead connection and rethrow it as
+     `ApiError { status: 0 }`, which is what `whyFailed` reads to say "the
+     server could not be reached". This one did not, so a `TypeError` walked
+     straight through it, hit `whyFailed`'s plain-Error branch, and put the
+     browser's own words on a person's screen:
+
+         "That name did not stick — Failed to fetch"
+
+     That is every POST and PATCH in the product — keeping a memory, renaming a
+     room, leaving one, proposing a change, issuing a key — speaking developer
+     under exactly the condition a person is least able to interpret it.
+
+     Found by `e2e:when-it-fails --kind drop`: the same six acts that all speak
+     properly under a 500 split into two voices under a dropped connection, and
+     the odd one out (`close this room`, on `requestVoid`) was the one that read
+     correctly. Two shapes of the same failure, one wrapped and one not. */
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method,
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    throw new ApiError({
+      status: 0,
+      message: `${fallbackMessage}: network unreachable`,
+    });
+  }
 
   let body: unknown = null;
   try {

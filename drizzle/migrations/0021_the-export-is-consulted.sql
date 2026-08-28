@@ -1,0 +1,1 @@
+ALTER TYPE "public"."consultation_surface" ADD VALUE 'export';

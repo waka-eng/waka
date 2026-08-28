@@ -43,6 +43,7 @@ import {
   profileColumns,
   serializeAccount,
   serializeProfile,
+  sessionProfileRow,
 } from "./auth-identity.js";
 
 // ---------------------------------------------------------------------------
@@ -283,7 +284,9 @@ export async function profileHandler(c: Context<AuthEnv>): Promise<Response> {
     });
 
     account = written.account ?? account;
-    profile = written.profile ?? profile;
+    /* the update wrote this session's own profile, which has an account by
+       the CHECK constraint; the narrow restates that for the types */
+    profile = written.profile ? sessionProfileRow(written.profile) : profile;
   } catch (err) {
     const code = (err as { code?: string } | null)?.code;
     if (code === "23505") {

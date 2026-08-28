@@ -203,9 +203,59 @@ export function setViewport(width: number, height: number): void {
   }
 
   Element.prototype.getBoundingClientRect = function rect(this: Element) {
-    /* The root is the viewport. Everything else reports the same box, which is
-       enough for the chrome measurements the engine takes (it only ever reads
-       widths and heights, never positions, from these). */
+    /* The root is the viewport, and everything else reported the same box —
+       which was enough while the engine only ever read widths and heights off
+       these. It reads a POSITION now: the field's bottom reserve is the
+       distance from the viewport's bottom to the top of the DIAL, measured
+       rather than guessed, so that the band of chrome along the bottom edge
+       and a phone's home indicator are both accounted for by the chrome
+       itself. Answering "the whole viewport" for that element reserves the
+       whole screen and leaves no field at all.
+       So the dial gets a real box, at the height it actually occupies. (It
+       was the strip of wall names until 2026-08-24; that strip was removed
+       and the dial became the lowest thing on the page.) */
+    if ((this as HTMLElement).classList?.contains("jar-dial")) {
+      const h = 36;
+      const top = height - h - 48;
+      return {
+        x: 0,
+        y: top,
+        top,
+        left: 0,
+        right: width,
+        bottom: top + h,
+        width,
+        height: h,
+        toJSON: () => ({}),
+      } as DOMRect;
+    }
+    /* THE RESTING BOTTOM CHROME, at an honest height. The reserve stopped
+       measuring the dial when the rail moved up beside its own word
+       (2026-08-27) and reads the count and the mouth's resting face instead.
+       Answering "the whole viewport" for those made every jsdom world carry a
+       silent 40%-of-screen reserve — the catastrophe clamp, engaged in every
+       test, with nothing failing. A count is about 22px tall and keeps 10px
+       from the glass, so that is the box it reports. */
+    /* `.jar-mouth-rest` was in this branch too, and giving it a bottom-edge
+       box here is exactly how the wrong reserve stayed green in 212 tests
+       while pushing the companion visibly out of place on a real screen: the
+       stub had been taught the assumption instead of the page. The mouth
+       rests mid-page; only the count owns the bottom edge. */
+    if ((this as HTMLElement).classList?.contains("jar-saved")) {
+      const h = 22;
+      const top = height - h - 10;
+      return {
+        x: 0,
+        y: top,
+        top,
+        left: 0,
+        right: width,
+        bottom: top + h,
+        width,
+        height: h,
+        toJSON: () => ({}),
+      } as DOMRect;
+    }
     return {
       x: 0,
       y: 0,

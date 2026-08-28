@@ -21,6 +21,7 @@
 
 import { relations } from "drizzle-orm";
 import {
+  doublePrecision,
   foreignKey,
   index,
   integer,
@@ -45,6 +46,13 @@ import { profiles } from "./schema-profiles";
 export const signalStatusValues = ["emerging", "active", "retired"] as const;
 export type SignalStatus = (typeof signalStatusValues)[number];
 export const signalStatusEnum = pgEnum("signal_status", signalStatusValues);
+
+export const evidenceQuoteSourceValues = ["own", "enrichment"] as const;
+export type EvidenceQuoteSource = (typeof evidenceQuoteSourceValues)[number];
+export const evidenceQuoteSourceEnum = pgEnum(
+  "evidence_quote_source",
+  evidenceQuoteSourceValues,
+);
 
 export const signals = pgTable(
   "signals",
@@ -75,6 +83,19 @@ export const signals = pgTable(
      * deserve to know that rather than seeing a confident orphan.
      */
     unsupportedAt: timestamp("unsupported_at", { withTimezone: true }),
+
+    /**
+     * Set when the owner throws the pattern out. The row, its evidence and
+     * its embedding all stay — dismissal deletes nothing — and from this
+     * moment the embedding is a SUPPRESSION ANCHOR: derivation refuses any
+     * candidate near it instead of minting, and writes a `suppressions` row
+     * naming this signal. Dismissed rows also carry `status = retired`, which
+     * is what already keeps them out of the match scan and the top of mind;
+     * this timestamp is the extra fact — refused by their owner, anchoring
+     * the ground — and clearing it (the restore verb) returns the pattern to
+     * the loop's sight. goals/the-legible-loop.md Phase 3.
+     */
+    dismissedAt: timestamp("dismissed_at", { withTimezone: true }),
 
     /**
      * Denormalized recency of the newest evidence link. Ranking reads it on
@@ -119,6 +140,19 @@ export const signalEvidence = pgTable(
       .notNull()
       .references(() => profiles.id, { onDelete: "cascade" }),
 
+    /**
+     * WHOSE MEMORY THIS ROW CITES — split from `profileId` on 2026-08-24,
+     * when rooms started distilling from their pooled ground. For a personal
+     * signal the two are the same profile; for a room's signal `profileId`
+     * is the room's mind and this is the member whose memory stands under
+     * the statement. The inspiration FK runs through THIS column, so an
+     * evidence row still cannot name a memory its stated owner does not
+     * hold — the room case is a lawful pairing, not a loosened net. It is
+     * also what the two-voices gate counts: a room signal appears only once
+     * `COUNT(DISTINCT owner_profile_id) >= 2`.
+     */
+    ownerProfileId: uuid("owner_profile_id").notNull(),
+
     signalId: uuid("signal_id").notNull(),
     inspirationId: uuid("inspiration_id").notNull(),
 
@@ -127,8 +161,19 @@ export const signalEvidence = pgTable(
     /**
      * A verbatim span from the inspiration or its attachment enrichment.
      * Nullable on purpose: a missing quote is honest, an invented one is not.
+     * Since 2026-08-22 a quote is stored only after `verifyQuote` confirmed
+     * it is a literal (whitespace-normalized) span of its source; rows
+     * written before then carry a quote with a null `quoteSource`, which is
+     * how a surface tells a verified span from a legacy unverified one.
      */
     quote: text("quote"),
+    /**
+     * Whose words the verified quote is: the person's own text (their
+     * capture and reflections) or the fetched page behind their link. The
+     * two are different claims about a person and must never render alike.
+     * Null when there is no quote — or when the quote predates verification.
+     */
+    quoteSource: evidenceQuoteSourceEnum("quote_source"),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -148,10 +193,15 @@ export const signalEvidence = pgTable(
       name: "signal_evidence_signal_fk",
     }).onDelete("cascade"),
     inspirationFk: foreignKey({
-      columns: [table.profileId, table.inspirationId],
+      columns: [table.ownerProfileId, table.inspirationId],
       foreignColumns: [inspirations.profileId, inspirations.id],
       name: "signal_evidence_inspiration_fk",
     }).onDelete("cascade"),
+    /** The two-voices gate's index: COUNT(DISTINCT owner) per signal. */
+    signalOwnerIdx: index("signal_evidence_signal_owner_idx").on(
+      table.signalId,
+      table.ownerProfileId,
+    ),
   }),
 );
 
@@ -198,6 +248,142 @@ export type SignalShare = typeof signalShares.$inferSelect;
 export type NewSignalShare = typeof signalShares.$inferInsert;
 
 // ---------------------------------------------------------------------------
+// signal_contradictions — contested pairs, held on the record
+// ---------------------------------------------------------------------------
+
+/** What owner act settled a contested pair. */
+export const contradictionResolutionValues = ["lock", "verdict", "dismissal"] as const;
+export type ContradictionResolution = (typeof contradictionResolutionValues)[number];
+export const contradictionResolutionEnum = pgEnum(
+  "contradiction_resolution",
+  contradictionResolutionValues,
+);
+
+/**
+ * An undirected `contradicts` relation between two of one profile's signals,
+ * minted when the three-way judge answers `opposed` in the ambiguous cosine
+ * band (goals/no-quiet-corners.md Phase 5). While `resolvedAt` is null both
+ * sides serve as CONTESTED — an unresolved conflict awaiting arbitration.
+ *
+ * Resolution comes ONLY from an owner act — a lock, a verdict, a dismissal.
+ * That is doctrine, not design: ruled by the founder 2026-08-23 ("never —
+ * the owner resolves", signed in docs/data-model.md's decision log). No
+ * evidence weight, however lopsided, resolves a pair on its own. The loser
+ * becomes YIELDED — `yieldedSignalId`, a state read off this row — and its
+ * signal row stands untouched: a state, never a deletion.
+ *
+ * Undirected: the pair is stored once with `aSignalId < bSignalId`
+ * (normalized by the writer in lib/contested-pairs.ts), so "A contradicts
+ * B" and "B contradicts A" cannot drift into two rows.
+ */
+export const signalContradictions = pgTable(
+  "signal_contradictions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+
+    profileId: uuid("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+
+    aSignalId: uuid("a_signal_id").notNull(),
+    bSignalId: uuid("b_signal_id").notNull(),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    /** The side that yielded; one of a/b, null while unresolved. */
+    yieldedSignalId: uuid("yielded_signal_id"),
+    resolvedBy: contradictionResolutionEnum("resolved_by"),
+  },
+  (table) => ({
+    pairUnique: uniqueIndex("signal_contradictions_pair_unique_idx").on(
+      table.aSignalId,
+      table.bSignalId,
+    ),
+    aIdx: index("signal_contradictions_a_idx").on(table.aSignalId),
+    bIdx: index("signal_contradictions_b_idx").on(table.bSignalId),
+    aFk: foreignKey({
+      columns: [table.profileId, table.aSignalId],
+      foreignColumns: [signals.profileId, signals.id],
+      name: "signal_contradictions_a_fk",
+    }).onDelete("cascade"),
+    bFk: foreignKey({
+      columns: [table.profileId, table.bSignalId],
+      foreignColumns: [signals.profileId, signals.id],
+      name: "signal_contradictions_b_fk",
+    }).onDelete("cascade"),
+  }),
+);
+
+export type SignalContradiction = typeof signalContradictions.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// suppressions — the ground's refusals, on the record
+// ---------------------------------------------------------------------------
+
+/**
+ * One row per candidate the ground refused: derivation found the candidate at
+ * or above `SIGNAL_SUPPRESSION_MIN_COSINE` to a DISMISSED signal's vector and
+ * dropped it instead of minting. Every refusal is written here — a silence
+ * this system creates is a logged, legible silence, never a quiet one
+ * (goals/the-legible-loop.md Phase 3; the antechamber in Phase 5 renders
+ * these rows).
+ *
+ * FK doctrine, same as consultations: the record belongs to the profile whose
+ * ground refused (cascade — erasing the person takes their record). The
+ * anchor and the capture are simple set-null references — the mark outlives
+ * both, which is why the two statements are snapshotted as text: "what was
+ * refused, and how close to what" must stay answerable after either row is
+ * truly deleted.
+ */
+export const suppressions = pgTable(
+  "suppressions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+
+    profileId: uuid("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+
+    /** The dismissed signal whose vector refused this candidate. */
+    anchorSignalId: uuid("anchor_signal_id").references(() => signals.id, {
+      onDelete: "set null",
+    }),
+    /** What the anchor said at the moment it refused — survives its deletion. */
+    anchorStatement: text("anchor_statement").notNull(),
+
+    /** The capture whose derivation produced the refused candidate. */
+    inspirationId: uuid("inspiration_id").references(() => inspirations.id, {
+      onDelete: "set null",
+    }),
+    /** The refused candidate's words — what the antechamber shows. */
+    candidateStatement: text("candidate_statement").notNull(),
+
+    /**
+     * The cosine that decided, at decision time. Stored because it cannot be
+     * recomputed later (vectors move when statements are re-embedded) and a
+     * refusal a person cannot audit is not a record. Renders nowhere — the
+     * numeral law binds the chrome, not the archive.
+     */
+    similarity: doublePrecision("similarity").notNull(),
+
+    suppressedAt: timestamp("suppressed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    // The antechamber and the weather report both read one profile's
+    // refusals newest-first.
+    profileSuppressedIdx: index("suppressions_profile_suppressed_idx").on(
+      table.profileId,
+      table.suppressedAt,
+    ),
+    anchorIdx: index("suppressions_anchor_idx").on(table.anchorSignalId),
+  }),
+);
+
+export type Suppression = typeof suppressions.$inferSelect;
+export type NewSuppression = typeof suppressions.$inferInsert;
+
+// ---------------------------------------------------------------------------
 // Relations
 // ---------------------------------------------------------------------------
 
@@ -217,6 +403,21 @@ export const signalEvidenceRelations = relations(signalEvidence, ({ one }) => ({
   }),
   inspiration: one(inspirations, {
     fields: [signalEvidence.inspirationId],
+    references: [inspirations.id],
+  }),
+}));
+
+export const suppressionsRelations = relations(suppressions, ({ one }) => ({
+  profile: one(profiles, {
+    fields: [suppressions.profileId],
+    references: [profiles.id],
+  }),
+  anchorSignal: one(signals, {
+    fields: [suppressions.anchorSignalId],
+    references: [signals.id],
+  }),
+  inspiration: one(inspirations, {
+    fields: [suppressions.inspirationId],
     references: [inspirations.id],
   }),
 }));

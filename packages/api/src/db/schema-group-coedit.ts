@@ -36,6 +36,17 @@ export const groupProposalStatusEnum = pgEnum(
   groupProposalStatusValues,
 );
 
+/**
+ * What a member said to a proposal. Founder ruling (2026-08-23): refusal is a
+ * COUNTED STANCE, not a veto — a "declined" row is a recorded no that sits in
+ * the tally beside the yeses, and the proposal falls only when the nos make a
+ * majority of yeses impossible. One person can no longer kill a sentence for
+ * a room of five by pressing first.
+ */
+export const groupStanceValues = ["affirmed", "declined"] as const;
+export type GroupStance = (typeof groupStanceValues)[number];
+export const groupStanceEnum = pgEnum("group_stance", groupStanceValues);
+
 export const groupTopOfMindProposals = pgTable(
   "group_top_of_mind_proposals",
   {
@@ -48,9 +59,16 @@ export const groupTopOfMindProposals = pgTable(
     /** Null for add_entry — there is no entry yet. */
     entryId: uuid("entry_id").references(() => topOfMindEntries.id, { onDelete: "cascade" }),
 
-    proposedByProfileId: uuid("proposed_by_profile_id")
-      .notNull()
-      .references(() => profiles.id, { onDelete: "cascade" }),
+    /**
+     * Nullable since the erasure doctrine (founder ruling, 2026-08-23): a
+     * SETTLED proposal is the room's record of a decision, so it outlives
+     * its author — erasure sets this null and the surface reads "someone".
+     * The erased author's OPEN proposals are withdrawn explicitly by
+     * `eraseAccount` instead: an unanswered ask leaves with the asker.
+     */
+    proposedByProfileId: uuid("proposed_by_profile_id").references(() => profiles.id, {
+      onDelete: "set null",
+    }),
 
     kind: groupProposalKindEnum("kind").notNull(),
     status: groupProposalStatusEnum("status").notNull().default("open"),
@@ -85,15 +103,30 @@ export const groupTopOfMindAffirmations = pgTable(
       .notNull()
       .references(() => groupTopOfMindProposals.id, { onDelete: "cascade" }),
 
-    profileId: uuid("profile_id")
-      .notNull()
-      .references(() => profiles.id, { onDelete: "cascade" }),
+    /**
+     * Nullable since the erasure doctrine (founder ruling, 2026-08-23): a
+     * stance on a SETTLED decision is history and outlives the person who
+     * held it — erasure sets this null. Stances on still-open proposals are
+     * withdrawn explicitly by `eraseAccount`, the same way removal from a
+     * room withdraws a live hand.
+     */
+    profileId: uuid("profile_id").references(() => profiles.id, {
+      onDelete: "set null",
+    }),
+
+    /**
+     * The answer itself. The table name predates the ruling that made a no
+     * recordable — it now holds every stance, and renaming it would churn
+     * the room-history record for a word. The default keeps every row from
+     * before the ruling meaning what it meant: those rows were all yeses.
+     */
+    stance: groupStanceEnum("stance").notNull().default("affirmed"),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
-    // One affirmation per member per proposal — agreement is not a counter
-    // you can run up by clicking repeatedly.
+    // One stance per member per proposal — an answer is not a counter you can
+    // run up by clicking repeatedly; answering again replaces your answer.
     proposalProfileUnique: uniqueIndex("group_top_of_mind_affirmations_unique_idx").on(
       table.proposalId,
       table.profileId,

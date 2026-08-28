@@ -1,3 +1,11 @@
+/* THREE HOVER RULES USED TO LIVE IN THIS FILE AND PAINT NOTHING.
+   `.btn-primary:hover`, `.login-tab:hover` and `.btn-google:hover` each set a
+   colour the chrome layer then overrode — layers, not specificity, so no
+   amount of reading these two sheets side by side would have shown it. They
+   were found by `e2e:answers-the-hand`, which puts a pointer on every control
+   a person can reach and asks the engine whether anything changed at all.
+   The hovers now live in `chrome.css`, in the layer that wins, and say what
+   each control can actually afford to say. */
 /* assigned to the `product` layer — see styles/layers.css for the order */
 @layer product {
 /*
@@ -32,7 +40,7 @@
    *
    * Lifted verbatim from index.html so the React rebuild renders pixel-
    * compatible against the prototype. `--error` is new (the prototype
-   * never surfaced inline error states); it follows Material's #B3261E
+   * never surfaced inline error states); it follows Material's var(--error)
    * for accessible contrast against the parchment background.
    * -------------------------------------------------------------------*/
   --bg: #f4f2ee;
@@ -106,64 +114,11 @@
   --duration-page: 1400ms;
 }
 
-.top-home-capture .cell.capture {
-  position: relative;
-  inset: auto;
-  width: 100%;
-  min-height: 0;
-  flex: 1;
-  margin-top: 12px;
-  transform: none;
-  box-shadow: none;
-}
 
-.top-home-capture .cell.capture.focused {
-  position: fixed;
-  inset: 0;
-  z-index: 260;
-  width: auto;
-  min-height: 100dvh;
-  margin: 0;
-  padding: clamp(18px, 4vw, 42px);
-  background: #fffdf7;
-}
 
-.reference-tabs button.active,
-.reference-language button.active {
-  background: #111;
-  color: #fff;
-}
 
-.reference-capture-modal .cell.capture {
-  position: relative;
-  width: 100%;
-  min-height: min(520px, calc(100dvh - 180px));
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
 
-.reference-capture-modal .reflect-bar.visible {
-  display: flex;
-  margin-top: 16px;
-}
 
-.reference-capture-page-form .cell.capture {
-  grid-column: auto;
-  grid-row: auto;
-  width: 100%;
-  max-width: none;
-  min-width: 0;
-  min-height: 340px;
-  aspect-ratio: auto;
-  box-sizing: border-box;
-}
-
-.nc-canvas--drawer-open .nc-stage,
-.nc-canvas--drawer-open .nc-titlecard,
-.nc-canvas--drawer-open .nc-footnote {
-  opacity: 0.52;
-}
 
 @keyframes contentsFlowIn {
   from {
@@ -208,12 +163,12 @@
 .nc-titlecard {
   position: relative;
   z-index: 2;
-  padding: clamp(32px, 5vh, 56px) clamp(28px, 6vw, 64px) clamp(16px, 3vh, 32px);
+  padding: clamp(var(--sp-32), 5vh, var(--sp-56)) clamp(var(--sp-28), 6vw, var(--sp-64)) clamp(var(--sp-16), 3vh, var(--sp-32));
   max-width: 1100px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--sp-16);
 }
 
 .nc-title {
@@ -251,13 +206,13 @@
   align-content: center;
   align-items: start;
   justify-content: center;
-  gap: clamp(24px, 5vw, 56px) clamp(18px, 4vw, 44px);
+  gap: clamp(var(--sp-24), 5vw, var(--sp-56)) clamp(var(--sp-18), 4vw, var(--sp-44));
   width: min(1180px, calc(100vw - 32px));
   /* Fill the space between the room title and the capture bar, rather than
      reserving a fixed block and letting the remainder fall out as void. */
   min-height: max(300px, calc(100dvh - 340px));
-  margin: clamp(14px, 3vh, 32px) auto 0;
-  padding: 12px clamp(4px, 2vw, 18px) 24px;
+  margin: clamp(var(--sp-14), 3vh, var(--sp-32)) auto 0;
+  padding: var(--sp-12) clamp(var(--sp-4), 2vw, var(--sp-18)) var(--sp-24);
 }
 
 .nc-stage--top-of-mind-wall::before {
@@ -271,12 +226,6 @@
   justify-self: center;
 }
 
-.nc-first-run-guide .nc-loading {
-  max-width: 560px;
-  justify-self: center;
-  color: rgba(70, 64, 54, 0.74);
-  line-height: 1.5;
-}
 
 .nc-loading {
   position: absolute;
@@ -286,7 +235,7 @@
   transform: translateX(-50%);
   color: #999;
   font-family: "Inter Tight", sans-serif;
-  font-size: 14px;
+  font-size: var(--t-note);
 }
 
 .nc-note {
@@ -297,10 +246,10 @@
   min-height: 132px;
   background: var(--bg);
   background-image:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 38%),
+    linear-gradient(135deg, var(--jar-sheet-lip), rgba(255, 255, 255, 0) 38%),
     linear-gradient(rgba(0, 0, 0, 0.018), rgba(0, 0, 0, 0.018));
   color: var(--ink);
-  padding: 26px 28px 56px;
+  padding: var(--sp-26) var(--sp-28) var(--sp-56);
   border-radius: 2px;
   border: 1px solid rgba(0, 0, 0, 0.05);
   transform: translate(var(--dx, 0), var(--dy, 0)) rotate(var(--tilt, 0deg));
@@ -319,7 +268,7 @@
     z-index 0s linear 320ms;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: var(--sp-18);
   opacity: var(--decay, 1);
   filter: saturate(calc(0.5 + 0.5 * var(--decay, 1)));
 }
@@ -342,60 +291,24 @@
     z-index 0s;
 }
 
-.nc-note:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--ink) 42%, white);
-  outline-offset: 6px;
-}
+/* A NOTE NEEDS NO FOCUS RULE OF ITS OWN. It used to wear a 3px ring; the
+   founder's ruling took every ring away, and the obvious replacement — lift it
+   toward the reader, the way its hover does — turned out to be already
+   written. `:focus-within` above matches an element that has focus ITSELF as
+   well as one containing it, so a focused note already lifts. Two attempts at
+   this added four colour literals between them and the palette ratchet caught
+   both; the third attempt is no rule at all. */
 
 .nc-note--featured {
   z-index: 5;
 }
 
-.nc-note-modal .nc-note-body {
-  font-family: var(--font-sans);
-  font-size: 27px;
-  font-weight: 450;
-  line-height: 1.2;
-  letter-spacing: 0;
-}
 
-.nc-note-modal.nc-note--text-long .nc-note-body,
-.nc-note--text-long .nc-note-body--preview,
-.nc-note--text-long .nc-note-body-edit--inline {
-  font-size: 20px;
-  line-height: 1.18;
-}
 
-.nc-note-modal.nc-note--text-compact .nc-note-body,
-.nc-note--text-compact .nc-note-body--preview,
-.nc-note--text-compact .nc-note-body-edit--inline {
-  font-size: 17px;
-  line-height: 1.2;
-}
 
-.nc-note--text-tiny .nc-note-body--preview,
-.nc-note--text-tiny .nc-note-body-edit--inline {
-  font-size: 14px;
-  line-height: 1.22;
-}
 
-.nc-note--text-micro .nc-note-body--preview,
-.nc-note--text-micro .nc-note-body-edit--inline {
-  font-size: 12px;
-  line-height: 1.24;
-}
 
-.nc-note--text-nano .nc-note-body--preview,
-.nc-note--text-nano .nc-note-body-edit--inline {
-  font-size: 10.5px;
-  line-height: 1.24;
-}
 
-.nc-note--text-ultra .nc-note-body--preview,
-.nc-note--text-ultra .nc-note-body-edit--inline {
-  font-size: 9px;
-  line-height: 1.22;
-}
 
 @keyframes nc-note-modal-open {
   from {
@@ -419,13 +332,6 @@
   }
 }
 
-.nc-note--expanded.nc-note--featured .nc-note-body,
-.nc-note--expanded .nc-note-body {
-  font-size: 40px;
-  font-weight: 420;
-  line-height: 1.04;
-  letter-spacing: -0.018em;
-}
 
 .nc-note-body {
   margin: 0;
@@ -442,7 +348,7 @@
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--sp-10);
 }
 
 .nc-note-body--preview {
@@ -457,9 +363,6 @@
   overflow-wrap: normal;
 }
 
-.nc-note--featured .nc-note-inspirations {
-  max-height: 90px;
-}
 
 @keyframes nc-note-spinner {
   to {
@@ -470,15 +373,15 @@
 @media (max-width: 760px) {
 
   .nc-titlecard {
-    padding-top: 32px;
+    padding-top: var(--sp-32);
   }
 
   .nc-stage {
     overflow: auto;
-    padding: 20px 20px 120px;
+    padding: var(--sp-20) var(--sp-20) 120px;
     display: flex;
     flex-direction: column;
-    gap: 28px;
+    gap: var(--sp-28);
   }
 
   .nc-stage::before {
@@ -499,24 +402,12 @@
     font-size: 22px;
   }
 
-  .nc-note-modal .nc-note-body {
-    font-size: 30px;
-    line-height: 1.1;
   }
-}
 
 @media (max-width: 900px) {
 
-  .top-home-capture .cell.capture {
-    min-height: 360px;
   }
-}
 
-.react-flow__node.dragging .meaning-flow-node {
-  box-shadow:
-    0 0 0 3px rgba(15, 15, 14, 0.08),
-    0 12px 26px rgba(15, 15, 14, 0.12);
-}
 
 /* -----------------------------------------------------------------------
  * Reset + global baseline
@@ -527,9 +418,6 @@
  * on the transition fading rather than snapping.
  * ---------------------------------------------------------------------*/
 
-* {
-  box-sizing: border-box;
-}
 
 html,
 body {
@@ -550,6 +438,37 @@ body {
 
 #root {
   min-height: 100vh;
+}
+
+/* ---------------------------------------------------------------------------
+ * FOCUS IS LIGHT, NEVER A BOX (founder, 2026-08-27: "never show this white
+ * border ANYWHERE").
+ *
+ * The browser's default focus ring is a white rectangle. On this product's
+ * near-black ground it is the brightest thing on screen — a hard-edged box
+ * around a word, in a world whose only meaning channel is light and which
+ * otherwise has no rectangles in it at all.
+ *
+ * It was invisible for a long time because nothing ever took focus without a
+ * person pressing Tab, and the founder does not press Tab. Then the world
+ * started handing focus to the place you had just arrived in (so that
+ * travelling by keyboard stopped costing you your place, 2026-08-27) and the
+ * box appeared on the door on every arrival.
+ *
+ * NOTHING IS LOST BY REMOVING IT. Every control in the world already says it
+ * has focus by brightening — `.jar-saved`, `.jar-when`, `.jar-way`,
+ * `.jar-values`, `.jar-up` all lift their colour on `:focus-visible`, and did
+ * so before this. The ring was a second, louder answer painted on top of an
+ * answer the design had already given. What follows this rule is the handful
+ * of places that had NO answer of their own and were leaning on the ring;
+ * each is given one.
+ *
+ * `e2e:by-keyboard` holds the floor here: it asks the browser what changes
+ * when an element takes focus, and a stop that changes nothing fails the
+ * build. Removing a focus indicator without replacing it cannot pass.
+ */
+:focus-visible {
+  outline: none;
 }
 
 .sr-only {
@@ -655,18 +574,6 @@ body.dropped .bg-blob.b3 {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
 }
 
-body.dragging .drop-overlay {
-  opacity: 1;
-}
-.drop-overlay .card {
-  border: 1px dashed var(--ink);
-  padding: 22px 26px;
-  background: #fffdf7;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
 
 /* -----------------------------------------------------------------------
  * Content well + page header
@@ -709,11 +616,7 @@ body.dragging .drop-overlay {
 }
 
 .meta {
-  font-family: var(--font-mono);
-  font-size: 11px;
   color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
   cursor: pointer;
   transition: color var(--duration-fast) var(--ease-standard);
 }
@@ -739,22 +642,10 @@ body.dragging .drop-overlay {
   position: relative;
 }
 
-.grid.home-grid {
-  grid-template-columns: repeat(3, 1fr);
-  max-width: 720px;
-  margin-inline: auto;
-}
 
 @media (max-width: 760px) {
-  .grid.home-grid {
-    grid-template-columns: repeat(2, 1fr);
-    max-width: 480px;
   }
-}
 
-.history-overlay.visible {
-  display: flex;
-}
 
 @keyframes histSlide {
   from {
@@ -809,53 +700,8 @@ body.dragging .drop-overlay {
   }
 }
 
-/* Home grid hides the inline capture cell; focused mode is the overlay. */
-.grid.home-grid > .cell.capture {
-  display: none;
-}
-.grid.home-grid > .cell.capture.focused {
-  display: flex;
-  position: absolute;
-  inset: 0;
-  grid-column: unset;
-  grid-row: unset;
-  border: var(--border-hairline);
-  border-radius: var(--radius-sm);
-  box-shadow:
-    0 30px 80px rgba(15, 15, 14, 0.1),
-    0 6px 16px rgba(15, 15, 14, 0.04);
-}
 
-/*
- * Empty-state home grid — the user has no classified saves yet, so the
- * 3×3 cluster rhythm has nothing to fill. Promote the capture cell to a
- * single centred square so the first-run target is obvious without
- * forcing the user to discover the header "+ CAPTURE" pill.
- */
-.grid.home-grid--empty {
-  grid-template-columns: 1fr;
-  grid-template-rows: 1fr;
-  max-width: 480px;
-  aspect-ratio: 1 / 1;
-}
-.grid.home-grid--empty > .cell.capture {
-  display: flex;
-  grid-column: unset;
-  grid-row: unset;
-  aspect-ratio: unset;
-  min-height: 100%;
-}
 
-/*
- * Loading-state placeholders — six dimmed tiles trace the eventual
- * 3×3 cluster rhythm while the parent's first fetch is in flight, so
- * the page never momentarily reads as empty before the server answers.
- * The capture cell stays hidden in this state (it's only relevant once
- * we know the user has zero saves).
- */
-.grid.home-grid--loading > .cell.capture {
-  display: none;
-}
 
 @keyframes skeletonPulse {
   0%,
@@ -870,27 +716,14 @@ body.dragging .drop-overlay {
 .capture {
   display: flex;
   flex-direction: column;
-  padding: 8px;
+  padding: var(--sp-8);
   border: 1px dashed transparent;
   transition:
     border-color 200ms ease,
     background 400ms ease;
 }
-.capture.dragover {
-  border-color: var(--ink);
-  background: #f6f2e8;
-}
 
-.cap-save.visible,
-.reference-capture-modal .cap-save.visible {
-  opacity: 1;
-  pointer-events: auto;
-  transform: scale(1);
-}
 
-.cap-save--quick.visible {
-  transform: scale(1.03);
-}
 
 /* Focus-mode expansion: capture grows to cover the entire grid. The
    prototype uses absolute positioning on top of `.grid` so the cluster
@@ -911,12 +744,6 @@ body.dragging .drop-overlay {
   min-height: unset;
   background: var(--cell);
   border: none;
-}
-.capture.focus-enter {
-  animation: capExpand 500ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-.capture.focus-exit {
-  animation: capCollapse 400ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 @keyframes capExpand {
   0% {
@@ -939,10 +766,6 @@ body.dragging .drop-overlay {
   }
 }
 
-.cap-confirm.visible {
-  opacity: 1;
-  pointer-events: auto;
-}
 
 /* Save-flash + reflect-glow ambient feedback animations on the capture
    cell. The prototype declares both as one-shot keyframes that the JS
@@ -959,9 +782,6 @@ body.dragging .drop-overlay {
     box-shadow: inset 0 0 0 0 rgba(15, 15, 14, 0);
   }
 }
-.capture.save-flash {
-  animation: capPulse 600ms var(--ease-organic);
-}
 @keyframes warmGlow {
   0% {
     background: var(--cell);
@@ -973,13 +793,7 @@ body.dragging .drop-overlay {
     background: var(--cell);
   }
 }
-.capture.reflect-glow {
-  animation: warmGlow 2.2s ease;
-}
 
-.reflect-area.visible {
-  display: flex;
-}
 
 @keyframes reflectQuestionSpin {
   to {
@@ -997,35 +811,12 @@ body.dragging .drop-overlay {
   }
 }
 
-.reflect-bar.visible {
-  display: flex;
-}
 
-.reflect-complete.visible {
-  opacity: 1;
-}
 
-.close-confirm.visible {
-  display: flex;
-}
 
-.thread-toggle.open .thread-toggle-caret {
-  transform: rotate(90deg);
-}
 
-.thread-body.open {
-  display: block;
-}
 
-.thread-a.skipped {
-  color: var(--muted);
-  font-style: italic;
-  opacity: 0.6;
-}
 
-.hitl-menu.open {
-  display: block;
-}
 
 /* -----------------------------------------------------------------------
  * /login page
@@ -1036,13 +827,6 @@ body.dragging .drop-overlay {
  * future face swaps cascade automatically.
  * ---------------------------------------------------------------------*/
 
-.login-shell {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-6);
-}
 
 .login-card {
   width: 100%;
@@ -1053,21 +837,10 @@ body.dragging .drop-overlay {
 }
 
 .login-eyebrow {
-  font-family: var(--font-mono);
-  font-size: 11px;
   color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  margin: 0 0 14px 0;
+  margin: 0 0 var(--sp-14) 0;
 }
 
-.login-title {
-  margin: 0 0 6px 0;
-  font-family: var(--font-serif);
-  font-weight: 400;
-  font-size: 36px;
-  letter-spacing: -0.01em;
-}
 
 .login-title em {
   font-style: italic;
@@ -1076,9 +849,9 @@ body.dragging .drop-overlay {
 }
 
 .login-subtitle {
-  margin: 0 0 28px 0;
+  margin: 0 0 var(--sp-28) 0;
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--t-note);
   line-height: 1.5;
 }
 
@@ -1091,28 +864,10 @@ body.dragging .drop-overlay {
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-6);
 }
 
-.field-label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: var(--muted);
-}
 
-.field-input {
-  font-family: inherit;
-  font-size: 15px;
-  color: var(--ink);
-  background: transparent;
-  border: var(--border-hairline);
-  border-radius: var(--radius-none);
-  padding: var(--space-3) 14px;
-  outline: none;
-  transition: border-color var(--duration-fast) var(--ease-standard);
-}
 
 .field-input:focus {
   border-color: var(--ink);
@@ -1125,13 +880,13 @@ body.dragging .drop-overlay {
 
 .field-error {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-meta);
   color: var(--error);
   letter-spacing: 0.04em;
 }
 
 .form-error {
-  font-size: 13px;
+  font-size: var(--t-ui);
   color: var(--error);
   background: rgba(179, 38, 30, 0.06);
   border: 1px solid rgba(179, 38, 30, 0.25);
@@ -1139,22 +894,19 @@ body.dragging .drop-overlay {
 }
 
 .form-success {
-  font-size: 13px;
+  font-size: var(--t-ui);
   color: var(--ink);
   background: rgba(15, 15, 14, 0.04);
   border: var(--border-hairline);
   padding: 10px var(--space-3);
 }
 
-.profile-card {
-  max-width: 520px;
-}
 
 .profile-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 18px;
+  gap: var(--sp-18);
   margin-bottom: var(--space-5);
 }
 
@@ -1170,12 +922,8 @@ body.dragging .drop-overlay {
   background: transparent;
   color: var(--ink);
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.12em;
   line-height: 1;
-  padding: 10px 13px;
-  text-transform: uppercase;
+  padding: var(--sp-10) 13px;
   transition:
     background var(--duration-fast) var(--ease-standard),
     color var(--duration-fast) var(--ease-standard),
@@ -1201,7 +949,7 @@ body.dragging .drop-overlay {
 .profile-memories-heading,
 .profile-danger-heading {
   display: grid;
-  gap: 8px;
+  gap: var(--sp-8);
 }
 
 .profile-public-heading .login-eyebrow,
@@ -1219,25 +967,22 @@ body.dragging .drop-overlay {
 }
 
 .profile-handle-prefix {
-  padding-right: 10px;
+  padding-right: var(--sp-10);
   color: var(--ink);
   font-family: var(--font-serif);
   font-size: 24px;
   line-height: 1;
 }
 
-.profile-handle-input {
-  width: 100%;
-}
 
 .profile-toggle-row {
   display: grid;
   grid-template-columns: 20px minmax(0, 1fr);
   align-items: start;
-  gap: 10px;
+  gap: var(--sp-10);
   color: var(--ink);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--t-note);
   line-height: 1.35;
 }
 
@@ -1273,14 +1018,10 @@ body.dragging .drop-overlay {
   opacity: 1;
 }
 
-.profile-toggle-row input:disabled {
-  cursor: not-allowed;
-  opacity: 0.42;
-}
 
 .profile-public-link {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--t-fine);
   overflow-wrap: anywhere;
 }
 
@@ -1300,33 +1041,7 @@ body.dragging .drop-overlay {
   outline: 0;
 }
 
-.btn-destructive:disabled,
-.profile-signout-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
 
-.btn-primary {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  background: var(--ink);
-  color: var(--bg);
-  border: 1px solid var(--ink);
-  padding: 14px var(--space-4);
-  cursor: pointer;
-  transition:
-    background var(--duration-fast) var(--ease-standard),
-    color var(--duration-fast) var(--ease-standard),
-    border-color var(--duration-fast) var(--ease-standard),
-    opacity var(--duration-fast) var(--ease-standard);
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: transparent;
-  color: var(--ink);
-}
 
 .btn-primary:disabled {
   opacity: 0.5;
@@ -1335,7 +1050,7 @@ body.dragging .drop-overlay {
 
 .login-footer {
   margin-top: var(--space-6);
-  font-size: 12px;
+  font-size: var(--t-fine);
   color: var(--muted);
   text-align: center;
 }
@@ -1358,10 +1073,6 @@ body.dragging .drop-overlay {
 
 .login-tab {
   flex: 1;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
   background: transparent;
   color: var(--muted);
   border: none;
@@ -1376,14 +1087,6 @@ body.dragging .drop-overlay {
   border-left: var(--border-hairline);
 }
 
-.login-tab:hover:not(.login-tab--active) {
-  color: var(--ink);
-}
-
-.login-tab--active {
-  background: var(--ink);
-  color: var(--bg);
-}
 
 .login-link {
   background: none;
@@ -1409,15 +1112,11 @@ body.dragging .drop-overlay {
  * ---------------------------------------------------------------------*/
 
 .btn-google {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
   color: var(--ink);
   background: var(--cell);
   border: 1px solid var(--ink);
   padding: var(--space-3) var(--space-4);
-  margin: 0 0 18px 0;
+  margin: 0 0 var(--sp-18) 0;
   width: 100%;
   display: inline-flex;
   align-items: center;
@@ -1428,11 +1127,6 @@ body.dragging .drop-overlay {
     background var(--duration-fast) var(--ease-standard),
     color var(--duration-fast) var(--ease-standard),
     opacity var(--duration-fast) var(--ease-standard);
-}
-
-.btn-google:hover:not(:disabled) {
-  background: var(--ink);
-  color: var(--bg);
 }
 
 .btn-google:disabled {
@@ -1449,12 +1143,6 @@ body.dragging .drop-overlay {
  * "or" divider between OAuth and the email/password form.
  * ---------------------------------------------------------------------*/
 
-.login-divider {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  margin: 0 0 18px 0;
-}
 
 .login-divider__line {
   flex: 1;
@@ -1463,10 +1151,6 @@ body.dragging .drop-overlay {
 }
 
 .login-divider__label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
   color: var(--muted);
 }
 
@@ -1490,34 +1174,14 @@ body.dragging .drop-overlay {
   overflow: hidden;
 }
 
-.detail-view.visible {
-  display: flex;
-}
 
 
 @media (max-width: 760px) {
 
-  .detail-body {
-    width: 100%;
-    padding: 24px 18px 34px;
-    gap: 22px;
   }
-}
 
-.home-view-switcher button:hover,
-.home-view-switcher button.active {
-  background: rgba(15, 15, 14, 0.08);
-  color: var(--ink);
-}
 
-.home-view-switcher button.active {
-  box-shadow: inset 0 0 0 1px rgba(15, 15, 14, 0.08);
-}
 
-.inspiration-first-capture > .cell.capture {
-  min-height: 280px;
-  aspect-ratio: unset;
-}
 
 @keyframes ncSaveSavedFlash {
   0% {
@@ -1540,26 +1204,6 @@ body.dragging .drop-overlay {
   }
 }
 
-.reference-capture-modal .cell.capture {
-  min-height: inherit;
-  padding: 0;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr);
-  gap: 0;
-  position: relative;
-}
-
-.reference-capture-modal .cap-body,
-.reference-capture-modal .reflect-area.visible {
-  border: 0;
-  border-radius: 34px;
-  background: rgba(255, 255, 255, 0.97);
-  box-shadow:
-    0 22px 70px -44px rgba(26, 23, 20, 0.13);
-  padding: clamp(28px, 5vw, 58px);
-  padding-bottom: clamp(74px, 6vw, 92px);
-  overflow: visible;
-}
 
 @keyframes captureBackdropIn {
   from {
@@ -1653,13 +1297,6 @@ body.dragging .drop-overlay {
   }
 }
 
-.nc-canvas--drawer-open .nc-stage,
-.nc-canvas--drawer-open .nc-titlecard,
-.nc-canvas--drawer-open .nc-footnote {
-  opacity: 0.78;
-  transition: opacity 260ms ease;
-}
-
 @keyframes drawerLabelFade {
   from {
     opacity: 0;
@@ -1689,13 +1326,8 @@ body.dragging .drop-overlay {
   border-radius: 999px;
   background: rgba(255, 253, 247, 0.62);
   color: rgba(26, 23, 20, 0.68);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.12em;
   padding: 0 13px;
   text-decoration: none;
-  text-transform: uppercase;
   transition:
     background var(--duration-fast) var(--ease-standard),
     border-color var(--duration-fast) var(--ease-standard),
@@ -1708,18 +1340,6 @@ body.dragging .drop-overlay {
   background: rgba(255, 253, 247, 0.9);
   color: rgba(26, 23, 20, 0.92);
   outline: 0;
-}
-
-[data-locale="ko-KR"] .nc-note-body,
-[data-locale="ko-KR"] .memory-contents-item-text,
-[data-locale="ko-KR"] .memory-detail-head--mockup h2,
-[data-locale="ko-KR"] .memory-readable-signal,
-[data-locale="ko-KR"] .memory-path-filter,
-[data-locale="ko-KR"] .nc-save-cta {
-  font-weight: 430;
-  line-height: 1.34;
-  word-break: keep-all;
-  overflow-wrap: normal;
 }
 
 @keyframes drawerSearchMorph {
@@ -1780,12 +1400,6 @@ body.dragging .drop-overlay {
 }
 
 @media (max-width: 760px) {
-
-  .reference-capture-modal .cap-body,
-  .reference-capture-modal .reflect-area.visible {
-    border-radius: 22px;
-    padding: 22px 18px 126px;
-  }
 }
 
 /* -----------------------------------------------------------------------
@@ -1830,20 +1444,7 @@ textarea {
 }
 
 @media (hover: none) and (pointer: coarse) {
-  .capture-trigger,
-  .locale-setting select,
-  .meta,
-  .history-close,
-  .history-item,
-  .home-view-switcher button,
-  .cap-file-btn,
-  .cap-expand,
-  .cap-save,
-  .memory-contents-back,
-  .memory-detail-close,
-  .nc-drawer-object,
-  .nc-save-cta,
-  .memory-map-node .memory-group-hitarea {
+.meta {
     min-height: 44px;
   }
 
@@ -1855,7 +1456,7 @@ textarea {
 
 @media (min-width: 761px) {
   .wrap > header {
-    gap: clamp(18px, 3vw, 48px);
+    gap: clamp(var(--sp-18), 3vw, var(--sp-48));
   }
 }
 
@@ -1870,8 +1471,8 @@ textarea {
     display: grid;
     grid-template-columns: 1fr;
     align-items: start;
-    gap: 14px;
-    margin-bottom: 22px;
+    gap: var(--sp-14);
+    margin-bottom: var(--sp-22);
     padding-bottom: 0;
   }
 
@@ -1883,13 +1484,13 @@ textarea {
 
   .wrap h1 em {
     display: block;
-    margin-top: 2px;
+    margin-top: var(--sp-2);
     font-size: 0.64em;
     line-height: 1.08;
   }
 
   .nc-titlecard {
-    padding-top: 72px;
+    padding-top: var(--sp-72);
     padding-right: 124px;
   }
 
@@ -1897,9 +1498,9 @@ textarea {
     grid-column: 1 / -1;
     width: 100%;
     justify-content: space-between;
-    padding: 10px 0 0;
+    padding: var(--sp-10) 0 0;
     border-top: 1px solid rgba(15, 15, 14, 0.08);
-    font-size: 10px;
+    font-size: var(--t-label);
     line-height: 1.2;
   }
 
@@ -1910,25 +1511,9 @@ textarea {
     padding-block: 8px;
   }
 
-  .inspiration-first-capture > .cell.capture {
-    min-height: min(430px, calc(100dvh - 210px));
-  }
-
-  .history-overlay.visible {
-    align-items: stretch;
-    background: rgba(244, 242, 238, 0.82);
-  }
-
-  .reference-capture-modal .cell.capture {
-    min-height: 0;
-  }
-
-  .reference-capture-modal .cap-body,
-  .reference-capture-modal .reflect-area.visible {
-    min-height: 0;
-    padding: 22px 18px;
-  }
-
+  
+  
+  
   .nc-lang--top {
     top: max(20px, env(safe-area-inset-top));
     right: 18px;
@@ -1936,13 +1521,10 @@ textarea {
 
   .nc-profile-link {
     min-height: 40px;
-    padding: 0 14px;
+    padding: 0 var(--sp-14);
   }
 }
 
-.nc-note--passive .nc-note-preview {
-  pointer-events: none;
-}
 
 @keyframes histSheetUp {
   from {
@@ -1980,27 +1562,12 @@ textarea {
  * asked for.
  * ============================================================ */
 
-.nc-note .nc-note-actions {
-  opacity: 0;
-  transition: opacity 180ms ease;
-}
 
-.nc-note:hover .nc-note-actions,
-.nc-note:focus-within .nc-note-actions {
-  opacity: 1;
-}
 
-/* Keyboard users must never lose a control to a hover rule. */
-.nc-note .nc-note-actions:focus-within {
-  opacity: 1;
-}
 
 /* Coarse pointers have no hover, so nothing may hide behind one. */
 @media (hover: none) {
-  .nc-note .nc-note-actions {
-    opacity: 1;
   }
-}
 
 /* ============================================================
  * The thought is set as a thought.
@@ -2009,27 +1576,14 @@ textarea {
  * in the same voice as its chrome. Fraunces separates the two: everything the
  * product says about itself stays in sans, and the thoughts are in serif.
  * ============================================================ */
-
-.nc-note-body--preview,
-.nc-note-body-edit--inline {
+.nc-note-body--preview {
   font-family: "Fraunces", "Times New Roman", serif;
   font-weight: 400;
   letter-spacing: -0.005em;
   line-height: 1.32;
 }
 
-/* Travel. The wall does not cross-fade to the next room — this room's notes
-   leave upward and the next room's arrive from below, staggered by their
-   position so the set moves like a stack rather than a slide. */
-.nc-stage--travelling-out .nc-note {
-  animation: nc-wall-leave 260ms cubic-bezier(0.4, 0, 1, 1) forwards;
-  animation-delay: calc(var(--travel-i, 0) * 26ms);
-}
 
-.nc-stage--travelling-in .nc-note {
-  animation: nc-wall-arrive 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
-  animation-delay: calc(var(--travel-i, 0) * 34ms);
-}
 
 @keyframes nc-wall-leave {
   to {
@@ -2049,39 +1603,13 @@ textarea {
 
 /* Motion is the whole idea here, but it is not worth making anyone ill. */
 @media (prefers-reduced-motion: reduce) {
-  .nc-rail,
-  .nc-rail-room,
-  .nc-rail-room-edge,
-  .nc-stage--travelling-out .nc-note,
-  .nc-stage--travelling-in .nc-note {
-    transition-duration: 1ms;
-    animation: none;
-  }
 }
 
 /* The wall is centred; on a narrow screen the rail would sit on top of it. */
 @media (max-width: 720px) {
-  .nc-rail {
-    top: auto;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    transform: none;
-    grid-auto-flow: column;
-    justify-content: center;
-    gap: 4px;
-    padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
-    background: linear-gradient(rgba(250, 249, 246, 0), rgba(250, 249, 246, 0.92) 40%);
+  
+  
   }
-
-  .nc-rail-room {
-    padding: 6px 10px;
-  }
-
-  .nc-rail-room-edge {
-    display: none;
-  }
-}
 
 
 /* ---------------------------------------------------------------------------
@@ -2128,31 +1656,23 @@ textarea {
 .profile-tab {
   position: relative;
   z-index: 1;
-  padding: 9px 4px;
+  padding: 9px var(--sp-4);
   border: 0;
   background: transparent;
   font: inherit;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--ink-3);
   cursor: pointer;
   border-radius: var(--r-pill);
   transition: color var(--dur) var(--ease);
 }
 
-.profile-tab:hover {
-  color: var(--ink-2);
-}
 
-.profile-tab.is-active {
-  color: var(--ink-1);
-}
 
+
+/* it rests at `--ink-3`; focus lifts it the rest of the way, which is the
+   same move its own `:hover` makes and the same one the world's chrome makes */
 .profile-tab:focus-visible {
-  outline: 2px solid var(--rule-strong);
-  outline-offset: 2px;
+  color: var(--ink-1);
 }
 
 /* Rooms arrive rather than blink: a short rise, no layout properties. */
@@ -2160,15 +1680,6 @@ textarea {
   animation: profile-room-in var(--dur-slow) var(--ease) both;
 }
 
-/*
-  `hidden` is a UA-stylesheet `display: none`, and any explicit `display` in
-  our own CSS outranks it — a panel declaring `display: grid` stays visible
-  while claiming to be hidden. Reassert it at a specificity that wins.
-*/
-.profile-panel[hidden],
-.profile-room[hidden] {
-  display: none;
-}
 
 @keyframes profile-room-in {
   from {
@@ -2181,12 +1692,6 @@ textarea {
   }
 }
 
-/* Deleting an account should not sit level with a language picker. */
-.profile-danger-panel {
-  margin-top: var(--space-6);
-  padding-top: var(--space-5);
-  border-top: 1px solid var(--rule);
-}
 
 @media (prefers-reduced-motion: reduce) {
   .profile-tabs-indicator {
@@ -2199,9 +1704,9 @@ textarea {
 
 @media (max-width: 520px) {
   .profile-tab {
-    font-size: 10px;
+    font-size: var(--t-label);
     letter-spacing: 0.04em;
-    padding: 8px 2px;
+    padding: var(--sp-8) var(--sp-2);
   }
 }
 
@@ -2222,34 +1727,18 @@ textarea {
   background: color-mix(in srgb, var(--ink) 2%, transparent);
 }
 
-.profile-list-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: 52px;
-  padding: 6px var(--space-3);
-}
 
 .profile-list-row + .profile-list-row {
   border-top: 1px solid var(--rule);
 }
 
-/* The fixed left column: what kind of thing this row is, said in a word. */
-.profile-memory-badge {
-  flex: 0 0 52px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
 
 /* Inline, borderless name. The underline appears only when editing, so a
    resting row reads as text and a touched one declares itself. */
 .profile-row-name {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 6px 0;
+  padding: var(--sp-6) 0;
   border: 0;
   border-bottom: 1px solid transparent;
   border-radius: 0;
@@ -2269,30 +1758,23 @@ textarea {
   border-bottom-color: var(--rule-strong);
 }
 
-.profile-row-name::placeholder {
-  color: var(--ink-4);
-}
 
 .profile-row-main {
   flex: 1 1 auto;
   min-width: 0;
   display: grid;
-  gap: 2px;
+  gap: var(--sp-2);
 }
 
 .profile-row-title {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--sp-8);
   font-size: var(--t-body);
   color: var(--ink-1);
 }
 
 .profile-row-tag {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--ink-3);
   border: 1px solid var(--rule);
   border-radius: var(--r-pill);
@@ -2301,7 +1783,7 @@ textarea {
 }
 
 .profile-row-meta {
-  font-size: 12px;
+  font-size: var(--t-fine);
   color: var(--ink-3);
 }
 
@@ -2314,18 +1796,6 @@ textarea {
   justify-content: flex-end;
 }
 
-.profile-memory-action {
-  border: 0;
-  padding: 6px 2px;
-  background: transparent;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-  cursor: pointer;
-  transition: color var(--dur-fast) var(--ease);
-}
 
 .profile-memory-action:hover:not(:disabled) {
   color: var(--ink-1);
@@ -2341,16 +1811,10 @@ textarea {
 }
 
 .profile-memory-action:focus-visible {
-  outline: 2px solid var(--rule-strong);
-  outline-offset: 2px;
+  color: var(--ink);
+  border-bottom-color: var(--rule-strong);
 }
 
-/* The add row lives inside the tray as its last line; the + in the kind
-   column keeps the grid, and the verb appears once there is a name. */
-.profile-memory-new .profile-memory-badge {
-  font-size: 13px;
-  color: var(--ink-4);
-}
 
 /* Section hints stay readable: one measure, not full-bleed. */
 .profile-memories-heading .login-subtitle {

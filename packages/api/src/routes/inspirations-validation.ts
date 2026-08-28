@@ -59,10 +59,36 @@ export const createInspirationSchema = z.object({
     (v) => (typeof v === "string" ? v.trim() || undefined : v),
     z
       .enum(inspirationKindValues, {
-        errorMap: () => ({ message: "kind must be note, link, image, or mixed" }),
+        errorMap: () => ({
+          message: "kind must be note, link, image, mixed, or decision",
+        }),
       })
       .optional(),
   ),
+  /**
+   * The principles a decision leaned on — meaningful only with
+   * kind=decision (a note does not consult). The route stores these
+   * through composite FKs, so an id that is not a principle of the
+   * capturing profile is refused by the schema itself.
+   */
+  citedPrincipleIds: z
+    .array(z.string().uuid("citedPrincipleIds must be principle uuids"))
+    .max(20, "a decision cites at most 20 principles")
+    .optional(),
+  /**
+   * The experience this memory was kept during (meeting, 2026-08-17: the
+   * unit is an EXPERIENCE, not a project). A name, not an id, because that
+   * is how the keeper says it — "this was during the NixOS PR" — and the
+   * capture route finds-or-creates it under the capturing profile. Absent
+   * means the memory belongs to no named stretch of work, which is most of
+   * a person's captures and none the worse for it.
+   */
+  experience: z
+    .string()
+    .trim()
+    .min(1, "experience cannot be empty")
+    .max(80, "experience must be <= 80 characters")
+    .optional(),
   /** Honored only for an agent session — see the provenance note in `inspirations.ts`. */
   source: z
     .enum(inspirationSourceValues, {
@@ -145,6 +171,8 @@ const MAX_LIST_LIMIT = 200;
 export const listQuerySchema = z
   .object({
     q: z.string().trim().max(200, "q is too long").optional(),
+    /** Only the memories kept during this named experience. */
+    experience: z.string().trim().min(1).max(80, "experience is too long").optional(),
     limit: z
       .string()
       .regex(/^\d+$/, "limit must be a whole number")

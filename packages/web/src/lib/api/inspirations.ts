@@ -118,6 +118,10 @@ export interface FetchInspirationsOptions extends ProfileScoped {
 export interface ApiInspirationPage {
   inspirations: ApiInspirationSummary[];
   nextCursor?: string;
+  /** How many the archive holds under this query — not how many were sent.
+      Absent from an older server, which is why every reader treats a missing
+      total as "no better information than the length of what arrived". */
+  total?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -186,6 +190,7 @@ export async function fetchInspirationPage(
   return {
     inspirations: Array.isArray(body.inspirations) ? body.inspirations : [],
     nextCursor: body.nextCursor,
+    total: typeof body.total === "number" ? body.total : undefined,
   };
 }
 
@@ -252,16 +257,6 @@ export async function createReflection(
   return body.reflection;
 }
 
-/** GET /inspirations/:id/reflections — oldest first. */
-export async function fetchReflections(
-  inspirationId: string,
-): Promise<ApiReflection[]> {
-  const body = await getJson<{ reflections: ApiReflection[] }>(
-    apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/reflections`),
-    "Failed to load reflections",
-  );
-  return Array.isArray(body.reflections) ? body.reflections : [];
-}
 
 /** DELETE /inspirations/:id/reflections/:reflectionId */
 export async function deleteReflection(

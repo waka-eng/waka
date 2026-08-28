@@ -144,6 +144,27 @@ const GROUPS = new Set([
 ]);
 
 /**
+ * NAMES THAT ARE GONE ON PURPOSE, and are not drift.
+ *
+ * The check below exists because a RENAME that is not mirrored here silently
+ * changes every row. A DELETION is the other thing that can happen, and it
+ * produces the identical symptom — so without this set, deleting a state
+ * group means the gate fails on every run, forever, for a group that is never
+ * coming back, and the only way out is to weaken the check.
+ *
+ * `sky` went on 2026-08-25 with the engine it named: the candidate layer's
+ * clouds, their satellites, the focused subject. What is left of it in the
+ * loop is `held`, one field — not a group, and read by three functions, well
+ * under what makes a name worth tracking.
+ *
+ * It stays in `GROUPS` above because the fixtures measure with that set and a
+ * dozen of them are written around `sky`; against the real file the name is
+ * simply inert, since nothing there is called that any more. The numbers in
+ * docs/goals/close-the-two-gaps.md were taken while it was still live.
+ */
+const RETIRED = new Set(["sky"]);
+
+/**
  * Names bound inside a function: params, locals, catch clauses. Not free.
  *
  * TWO LINES THAT LOOKED LIKE COVERAGE HAVE BEEN REMOVED FROM HERE, both proven
@@ -465,7 +486,9 @@ function measure(source, fileName) {
  * the numbers rather than absent from them.
  */
 function groupsNotDeclared(declaredInEffect) {
-  return [...GROUPS].filter((g) => !declaredInEffect.has(g)).sort();
+  return [...GROUPS]
+    .filter((g) => !RETIRED.has(g) && !declaredInEffect.has(g))
+    .sort();
 }
 
 /**

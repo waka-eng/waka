@@ -55,4 +55,109 @@
  * sheet belongs to carries the same hazard, and has to move every sheet at
  * that precedence level together.
  */
-@layer base, product, chrome;
+/* AND `register` LAST, holding exactly one rule.
+ *
+ * The label register — small, uppercase, tracked — was declared twenty-five
+ * times across three sheets, and collapsing it to one declaration ran
+ * straight into the two hazards this file exists to describe:
+ *
+ *   `chrome.css` carries `font: inherit` on `.profile-tabs button`, and a
+ *   SHORTHAND in a later layer re-sets `font-size` and `font-weight` even
+ *   though it names neither. Stripping the longhands beside it left that
+ *   shorthand as the winner, and the account page's tabs jumped from 10px to
+ *   the inherited 16px.
+ *
+ *   `home.css` is loaded by `Home.tsx` and therefore lands AFTER `system.css`
+ *   in the same `product` layer, so `.jar-ask`'s 13px beat a register written
+ *   in `system.css` at equal specificity, and the mouth's verbs went to 13px.
+ *
+ * Both were caught by `e2e:snapshot` diffing computed styles across the
+ * change rather than by anything failing. Both have the same shape: a single
+ * declaration cannot be "the one place" while anything at all is allowed to
+ * out-rank it. A layer after `chrome` makes that structural instead of a
+ * matter of which file happens to be imported where.
+ *
+ * NOTHING ELSE MAY BE PUT IN THIS LAYER. It is not a convenience for winning
+ * an argument with the cascade; it holds the register and `type-scale.test.ts`
+ * fails if a second rule appears in it. Anything else that needs to win
+ * should be corrected where it loses. */
+@layer base, product, chrome, register;
+
+/**
+ * AND ONE RULE THAT BEATS ALL THREE LAYERS, ON PURPOSE.
+ *
+ * `e2e:usability` walked the product on 2026-08-25 and found THIRTEEN controls
+ * whose focused state is pixel-identical to their resting state — the capture
+ * control, both private/public verbs, the wall pills, the account link, the
+ * way up, and every text field at the door. A keyboard user tabbing through
+ * this product has no cursor at all. WCAG 2.2 AA, 2.4.7 Focus Visible.
+ *
+ * It got that way honestly: `outline: none` appears twelve times across the
+ * three stylesheets, each time to stop a browser's default ring from ruining a
+ * shape somebody had just designed, and each time the replacement was left for
+ * later. Two places did write one.
+ *
+ * THIS IS UNLAYERED, which is the whole point. Unlayered rules beat every
+ * layer regardless of specificity — the hazard `layers.css` exists to explain
+ * — so the floor cannot be removed by a later `outline: none` in `product` or
+ * `chrome`. That is not a trick played on the other stylesheets; it is a
+ * statement that being able to see where you are is not a design preference
+ * one of them gets to override. A surface that needs a different-looking ring
+ * may draw one; it may not draw nothing.
+ *
+ * `:focus-visible`, not `:focus`, so a pointer press does not leave a ring
+ * behind on a page whose whole manner is quiet. The ring is the world's own
+ * ink with a dark rim under it, so it reads on the deep ground and on a
+ * panel — the only two grounds this product has.
+ */
+:focus-visible {
+  /*
+   * IT IS LIGHT NOW, NOT A RING (founder, 2026-08-27: "never show this white
+   * border ANYWHERE").
+   *
+   * This drew a two-pixel box in the world's own near-white ink. On the deep
+   * ground that is the brightest thing on screen and the only rectangle in a
+   * world that has none — and it appeared on the door on every arrival once
+   * the world began handing focus to the place you had just reached.
+   *
+   * The rule above this one still holds and is why this is a replacement
+   * rather than a deletion: a surface may draw a different-looking focus, it
+   * may not draw nothing. So focus says what everything else in this product
+   * says — the thing lights up. `filter` and not a shadow because a shadow
+   * has the element's shape, and the shape was the objection.
+   */
+  outline: none;
+}
+
+/*
+ * AND IN THE WORLD, THE THING LIGHTS UP.
+ *
+ * Scoped under `.jar` rather than left global, because the two grounds this
+ * product has are opposites: the world is near-black with pale ink, where
+ * brightening a word makes it clearer, and the flat pages are cream with dark
+ * ink, where brightening it would wash it out. A focus rule that made one of
+ * them legible by making the other one worse would be a rule that had only
+ * been looked at once. The flat pages say focus in their own tokens, beside
+ * the controls that use them.
+ */
+.jar :focus-visible {
+  filter: brightness(1.75);
+}
+/*
+ * `border-radius: inherit` USED TO BE IN THAT RULE, and it was a bug with a
+ * long reach. This block is UNLAYERED, which means it beats every layer at
+ * any specificity — the property that makes it a floor. So the line did not
+ * merely round the ring: it replaced the ELEMENT'S OWN CORNERS with its
+ * parent's, on every focused thing in the product.
+ *
+ * Found on the answer box, which asks for `border-radius: 14px` and rendered
+ * 18px — the reflection sheet's radius, inherited the moment the box took
+ * focus, which for a textarea is immediately since Chromium treats every
+ * keyboard-accepting element as focus-visible. Chased first as a cascade
+ * collision with `chrome.css` (which is a real and separate bug, fixed in
+ * `home.css`), and it was this instead.
+ *
+ * It was never needed. An `outline` follows the element's own
+ * `border-radius` on its own; the ring was already the right shape, and the
+ * line was only ever changing what it was tracing.
+ */

@@ -12,7 +12,7 @@ import {
   apiPath,
   getJson,
   patchJson,
-  requestVoid,
+  postJson,
   type ProfileScoped,
 } from "./http";
 
@@ -37,6 +37,14 @@ export interface ApiSignal {
   lastEvidenceAt: string | null;
   locked: boolean;
   unsupported: boolean;
+  /** Thrown out by its owner — the row and evidence stay, and the server
+      refuses new candidates near it, on the record. Reads as `retired`. */
+  dismissed: boolean;
+  /** Standing in an unresolved contradicts pair — awaiting the owner's
+      arbitration, the only kind there is. */
+  contested: boolean;
+  /** Gave way when its owner settled a pair — a state, never a deletion. */
+  yielded: boolean;
   sharedGroupIds: string[];
   createdAt: string;
 }
@@ -46,6 +54,13 @@ export interface ApiSignalEvidence {
   inspirationId: string;
   preview: string;
   quote: string | null;
+  /**
+   * Whose words the quote is: the person's own ("own") or the page behind
+   * their link ("enrichment"). Null means no quote — or a quote written
+   * before the server verified spans, which a surface must treat as
+   * unverified rather than light up as the person's words.
+   */
+  quoteSource: "own" | "enrichment" | null;
   reason: string | null;
   createdAt: string;
 }
@@ -109,43 +124,38 @@ export async function updateSignal(
   return body.signal;
 }
 
-/** DELETE /signals/:id */
-export async function deleteSignal(id: string): Promise<void> {
-  await requestVoid(
-    apiPath(`/signals/${encodeURIComponent(id)}`),
-    "DELETE",
-    undefined,
-    "Failed to delete this signal",
+/**
+ * POST /signals/:id/release
+ *
+ * The lock's other half: the words stay exactly as the person left them, and
+ * from the next pass on the generator may reword or retire them like any of
+ * its own. Releasing words that were standing on no evidence retires the
+ * signal in the same act — no evidence and no lock means no signal.
+ */
+export async function releaseSignal(id: string): Promise<ApiSignal> {
+  const body = await postJson<{ signal: ApiSignal }>(
+    apiPath(`/signals/${encodeURIComponent(id)}/release`),
+    {},
+    "Failed to hand this sentence back",
   );
+  return body.signal;
 }
 
-// ---------------------------------------------------------------------------
-// Sharing one into a group
-// ---------------------------------------------------------------------------
 
 /**
- * POST /signals/:id/shares
+ * POST /signals/:id/restore
  *
- * Sharing is per-signal and per-group. What reaches the group is the
- * statement; the captures underneath it never leave the account.
+ * The dismissal's undo: the refusals stop and the pattern returns to the
+ * loop's sight, standing wherever its evidence puts it.
  */
-export async function shareSignal(id: string, groupId: string): Promise<void> {
-  await requestVoid(
-    apiPath(`/signals/${encodeURIComponent(id)}/shares`),
-    "POST",
-    { groupId },
-    "Failed to share this signal",
+export async function restoreSignal(id: string): Promise<ApiSignal> {
+  const body = await postJson<{ signal: ApiSignal }>(
+    apiPath(`/signals/${encodeURIComponent(id)}/restore`),
+    {},
+    "Failed to put this signal back",
   );
+  return body.signal;
 }
 
-/** DELETE /signals/:id/shares/:groupId */
-export async function unshareSignal(id: string, groupId: string): Promise<void> {
-  await requestVoid(
-    apiPath(
-      `/signals/${encodeURIComponent(id)}/shares/${encodeURIComponent(groupId)}`,
-    ),
-    "DELETE",
-    undefined,
-    "Failed to stop sharing this signal",
-  );
-}
+
+

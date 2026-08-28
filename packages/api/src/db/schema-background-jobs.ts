@@ -63,6 +63,15 @@ export interface DeriveSignalsPayload {
   inspirationId: string;
   /** "created" on capture, "edited" when re-derivation follows an edit. */
   reason: "created" | "edited";
+  /**
+   * WHERE THE SIGNALS LAND (2026-08-24). Absent — the overwhelmingly common
+   * case — they land on the inspiration's own profile, exactly as always.
+   * Set, they land on a ROOM'S MIND: a public keep fans out one of these
+   * jobs per room its keeper is in, the job still OWNED by the keeper's
+   * profile so the model budget and queue fairness bill the person whose
+   * keep asked for the work, with this field carrying the destination.
+   */
+  deriveIntoProfileId?: string;
 }
 
 export interface RefreshTopOfMindPayload {
@@ -72,7 +81,12 @@ export interface RefreshTopOfMindPayload {
 
 export interface RefreshGroupTopOfMindPayload {
   groupId: string;
-  reason: "shares_changed" | "membership_changed" | "proposal_accepted" | "manual";
+  reason:
+    | "shares_changed"
+    | "membership_changed"
+    | "proposal_accepted"
+    | "signals_changed"
+    | "manual";
 }
 
 export interface RefreshPrinciplesPayload {

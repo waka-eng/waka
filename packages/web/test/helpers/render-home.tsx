@@ -34,8 +34,8 @@ import { MemoryRouter } from "react-router-dom";
 import type { FieldAudit } from "../../src/pages/Home";
 
 export interface WorldFacts {
-  /** the viewer's own memories */
-  inspirations: Array<{ id: string; text: string; daysAgo: number }>;
+  /** the viewer's own memories; `isPublic` marks the ones a room can read */
+  inspirations: Array<{ id: string; text: string; daysAgo: number; isPublic?: boolean }>;
   /** groups the viewer belongs to, and whose memories stand in each */
   groups: Array<{
     id: string;
@@ -73,18 +73,24 @@ const iso = (daysAgo: number) => new Date(at(daysAgo)).toISOString();
  */
 export function dataMockFrom(facts: WorldFacts) {
   return {
-    loadInspirations: async () =>
-      facts.inspirations.map((c) => ({
+    /* A FIELD, NOT A LIST. `loadInspirations` answers with what arrived AND
+       how much the archive holds, because past the walk's ceiling those are
+       different numbers and the door has to be able to say so. A fixture is
+       the whole of itself, so here they are equal and `short` is false. */
+    loadInspirations: async () => {
+      const inspirations = facts.inspirations.map((c) => ({
         id: c.id,
         preview: c.text,
-        isPublic: false,
+        isPublic: c.isPublic ?? false,
         kind: "note" as const,
         source: "app" as const,
         capturedMs: at(c.daysAgo),
         updatedMs: at(c.daysAgo),
         attachments: [],
         reflectionCount: 0,
-      })),
+      }));
+      return { inspirations, total: inspirations.length, short: false };
+    },
     loadSignals: async () => [],
     loadTopOfMind: async () => null,
   };
@@ -104,7 +110,7 @@ export function apiMockFrom(facts: WorldFacts) {
       })),
     fetchGroupField: async (groupId: string) => {
       const g = facts.groups.find((x) => x.id === groupId);
-      return (g?.field ?? []).map((f) => ({
+      const field = (g?.field ?? []).map((f) => ({
         id: f.id,
         text: `memory ${f.id}`,
         kind: "note",
@@ -115,6 +121,9 @@ export function apiMockFrom(facts: WorldFacts) {
         ownerName: f.ownerName,
         ownerType: "human",
       }));
+      /* like the personal field above: what came, and what there is. A room in
+         a fixture holds exactly what it hands over. */
+      return { field, total: field.length };
     },
     fetchGroupMembers: async (groupId: string) => {
       const g = facts.groups.find((x) => x.id === groupId);
@@ -161,13 +170,22 @@ export function apiMockFrom(facts: WorldFacts) {
     },
     fetchGroupWall: async (groupId: string) => {
       const g = facts.groups.find((x) => x.id === groupId);
+      /* the wall is ROOM-GROWN now (2026-08-24): one statement standing on
+         every member as its contributors, which is also the smallest wall
+         that satisfies the serve gate's two-voices rule */
+      const contributors = [
+        ...new Map(
+          (g?.field ?? []).map((f) => [f.ownerProfileId, f.ownerName]),
+        ).entries(),
+      ].map(([profileId, name]) => ({ profileId, name }));
       return (g?.field ?? []).map((f, i) => ({
         signalId: `sig-${f.id}`,
-        statement: `a statement from ${f.ownerName}`,
-        confidence: 50,
-        ownerProfileId: f.ownerProfileId,
-        ownerName: f.ownerName,
+        statement: `a statement the room grew near ${f.ownerName}`,
+        confidenceAsWritten: 50,
+        locked: false,
+        contributors,
         sharedAt: iso(f.daysAgo + i),
+        reactions: [],
       }));
     },
     fetchGroupProposals: none,
@@ -394,10 +412,39 @@ export async function mountWorld(facts: WorldFacts): Promise<MountedWorld> {
     audit,
     step,
     async travelTo(name) {
+      /*
+       * THE ROUTE A PERSON ACTUALLY HAS.
+       *
+       * This used to click the wall-names strip along the bottom of the
+       * screen. That strip is gone (founder, 2026-08-24: "remove") — every
+       * wall now hangs off the caret beside the name in the top-left corner,
+       * and a helper that still reaches for the old strip finds an empty list
+       * and fails twelve tests with a message about the group mock, which is
+       * not what is wrong.
+       *
+       * So travel the way the person travels: open the list, press the row.
+       * The list closes on the press, hence re-opening it each attempt.
+       */
+      const openWallList = async () => {
+        const caret = container.querySelector<HTMLElement>(".jar-here-more");
+        if (!caret) {
+          throw new Error(
+            "no .jar-here-more — the top-left name has no caret, so there is " +
+              "no way to another wall at all. The top bar did not mount.",
+          );
+        }
+        if (caret.getAttribute("aria-expanded") !== "true") {
+          await act(async () => {
+            caret.click();
+          });
+        }
+      };
+
       for (let attempt = 0; attempt < 8; attempt += 1) {
         const here = container.querySelector(".jar-here")?.textContent ?? "";
         if (name.test(here.trim())) break;
-        await clickByText(".jar-axis a, .jar-axis button", name);
+        await openWallList();
+        await clickByText(".jar-here-row", name);
         await step(90); /* travel eases over ~670ms */
       }
       await step(30);
@@ -405,19 +452,20 @@ export async function mountWorld(facts: WorldFacts): Promise<MountedWorld> {
        * ARRIVAL IS ASSERTED, NEVER ASSUMED.
        *
        * `goToWall` clamps its target to the walls that actually exist, so if
-       * the group never reached the axis the click is a silent no-op and the
+       * the group never reached the list the click is a silent no-op and the
        * camera stays where it was. A test that then checked the ground would
        * be checking the wall it started on and passing — which is exactly the
        * kind of green that let the original bug through. Better to be loud.
        */
       const here = (container.querySelector(".jar-here")?.textContent ?? "").trim();
       if (!name.test(here)) {
-        const axis = [...container.querySelectorAll(".jar-axis a, .jar-axis button")].map((n) =>
+        await openWallList();
+        const offered = [...container.querySelectorAll(".jar-here-row")].map((n) =>
           (n.textContent ?? "").trim(),
         );
         throw new Error(
           `travelTo(${name}) did not arrive — still standing on "${here}". ` +
-            `The axis offers: ${JSON.stringify(axis)}. ` +
+            `The wall list offers: ${JSON.stringify(offered)}. ` +
             `If the wall is missing from that list, the group fetch mock is wrong.`,
         );
       }

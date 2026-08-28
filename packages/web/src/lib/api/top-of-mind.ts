@@ -52,8 +52,11 @@ export interface ApiTopOfMindEntry {
   pinned: boolean;
   dismissed: boolean;
   sortOrder: number;
-  /** What the entry rests on: signals this profile holds, named. */
-  citedSignals: Array<{ id: string; statement: string }>;
+  /** What the entry rests on: signals this profile holds, named. `answered`
+      is the ground's ratified standing — the owner has spoken to it (a
+      verdict or their own locked words) — computed server-side from the
+      feedback and lock records at serve time, never stored. */
+  citedSignals: Array<{ id: string; statement: string; answered: boolean; locked: boolean }>;
   createdAt: string;
 }
 
@@ -175,6 +178,24 @@ export async function dismissTopOfMindEntry(
     apiPath(`/top-of-mind/entries/${encodeURIComponent(entryId)}/dismiss`),
     {},
     "Failed to take that entry down",
+  );
+  return body.entry;
+}
+
+/**
+ * POST /top-of-mind/entries/:entryId/release
+ *
+ * Hands an edited entry back to the generator: the words stand until the
+ * next synthesis, which may then reword or retire them like any generated
+ * line. Nothing is rewritten at release time.
+ */
+export async function releaseTopOfMindEntry(
+  entryId: string,
+): Promise<ApiTopOfMindEntry> {
+  const body = await postJson<{ entry: ApiTopOfMindEntry }>(
+    apiPath(`/top-of-mind/entries/${encodeURIComponent(entryId)}/release`),
+    {},
+    "Failed to hand this line back",
   );
   return body.entry;
 }

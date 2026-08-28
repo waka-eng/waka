@@ -29,6 +29,16 @@ filter over yours.
 | [`docs/architecture.md`](docs/architecture.md) | **Where things live** — the three layers as the three sections of the world, one column per mind, and the four seams that carry the coupling. Read it before `Home.tsx`; that file assumes this map. |
 | [`docs/codebase.md`](docs/codebase.md) | **How the codebase is organised, and the plan for making it easier to build on.** Read it before a change that spans more than one file. |
 
+## Naming
+
+[`GLOSSARY.md`](GLOSSARY.md) — one skeleton, three dialects. Every name
+crosses one of three dialects (data/API infrastructure English, the world's
+UI language with its plain-line explanations, sales/docs English), and the
+glossary's translation table is where a metaphor must exist before it may
+be used. The product speaks English only (founder ruling, 2026-08-22).
+`docs/data-model.md` stays the schema's truth; the glossary is the dialect
+boundary's.
+
 ## The two canonical docs
 
 | Doc | What it owns |

@@ -58,8 +58,9 @@ import { getDb } from "../lib/db.js";
 import {
   type AuthEnv,
   humanSessionsOnly,
-  profileAccessError,
+  resolveProfileAccess,
   requireAuth,
+  asAccountProfile,
 } from "../lib/middleware.js";
 import {
   type AuthenticatedSession,
@@ -365,7 +366,14 @@ export async function bindableProfiles(
     .where(eq(profiles.accountId, session.profile.accountId))
     .orderBy(profiles.type, profiles.createdAt);
 
-  return rows.filter((row) => !profileAccessError(session, row, "write"));
+  /* The WHERE proved every row is this account's (NULL never equals an id),
+     so a room's mind cannot appear here; the narrow states that for the
+     types. Write never rides a grant, so the sync matrix answers alone. */
+  return rows.flatMap((row) => {
+    const held = asAccountProfile(row);
+    if (!held) return [];
+    return resolveProfileAccess(session, held, "write") === "allowed" ? [held] : [];
+  });
 }
 
 /**

@@ -163,6 +163,17 @@ export type NewTopOfMindEntry = typeof topOfMindEntries.$inferInsert;
  * language model naming signals, and a real FK is what makes "every cited
  * signal exists" a database guarantee instead of a validation someone has to
  * remember to run.
+ *
+ * The FK guarantees the signal existed WHEN THE CITATION WAS WRITTEN. It does
+ * not follow that deleting the signal later should unwrite the citation: this
+ * used to be `notNull` + `onDelete: "cascade"`, which meant one signal delete
+ * silently stripped citation rows out of every HISTORICAL version of every
+ * artifact that had ever rested on it — personal and group alike. An old
+ * version's entry then read as if it had cited nothing, which is
+ * indistinguishable from the horoscope the validation exists to prevent, and
+ * "history is walkable" was false one delete at a time. Now the signal's
+ * departure leaves the row with a null `signalId`: the record that this entry
+ * rested on something, whose owner has since taken it back.
  */
 export const topOfMindEntrySignals = pgTable(
   "top_of_mind_entry_signals",
@@ -173,16 +184,21 @@ export const topOfMindEntrySignals = pgTable(
       .notNull()
       .references(() => topOfMindEntries.id, { onDelete: "cascade" }),
 
-    signalId: uuid("signal_id")
-      .notNull()
-      .references(() => signals.id, { onDelete: "cascade" }),
+    /** Null means the cited signal was deleted after this version was written. */
+    signalId: uuid("signal_id").references(() => signals.id, {
+      onDelete: "set null",
+    }),
 
     /**
      * Which member's signal fed a group entry. Null on personal artifacts,
-     * where the answer is never in question.
+     * where the answer is never in question — and null after the owner
+     * erases their account: the erasure doctrine (founder ruling,
+     * 2026-08-23) says a sentence the room approved belongs to the room,
+     * so the citation survives as a departed mark rather than cascading
+     * away with the person.
      */
     ownerProfileId: uuid("owner_profile_id").references(() => profiles.id, {
-      onDelete: "cascade",
+      onDelete: "set null",
     }),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

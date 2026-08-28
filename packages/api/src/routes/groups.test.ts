@@ -61,9 +61,13 @@ const groupSummary: GroupSummary = {
 const wallSignal: GroupWallSignal = {
   signalId,
   statement: "Rooms that instruct without speaking",
-  confidence: 72,
-  ownerProfileId: otherProfileId,
-  ownerName: "Grace",
+  confidenceAsWritten: 72,
+  locked: false,
+  reactions: [],
+  contributors: [
+    { profileId: otherProfileId, name: "Grace" },
+    { profileId, name: "Ada" },
+  ],
   sharedAt: "2026-08-10T00:00:00.000Z",
 };
 
@@ -76,10 +80,15 @@ const proposalView: GroupProposalView = {
   rationale: "Both of us keep circling instruction.",
   proposedByProfileId: profileId,
   proposedByName: "Ada",
-  affirmations: [
-    { profileId, name: "Ada", createdAt: "2026-08-11T00:00:00.000Z" },
+  stances: [
+    {
+      profileId,
+      name: "Ada",
+      value: "affirmed",
+      createdAt: "2026-08-11T00:00:00.000Z",
+    },
   ],
-  viewerAffirmed: true,
+  viewerStance: "affirmed",
   resolvedAt: null,
   createdAt: "2026-08-11T00:00:00.000Z",
 };
@@ -384,7 +393,7 @@ describe("GET /api/groups/:groupId/members", () => {
 });
 
 describe("GET /api/groups/:groupId/wall", () => {
-  it("returns members' shared signals, statement and owner only", async () => {
+  it("returns the room's grown statements — statement, contributors, stances, nothing beneath", async () => {
     const loadWall = vi.fn(async () => [wallSignal]);
     const app = mountWith({ loadWall });
 
@@ -397,10 +406,14 @@ describe("GET /api/groups/:groupId/wall", () => {
         {
           signalId,
           statement: "Rooms that instruct without speaking",
-          confidence: 72,
-          ownerProfileId: otherProfileId,
-          ownerName: "Grace",
+          confidenceAsWritten: 72,
+          locked: false,
+          contributors: [
+            { profileId: otherProfileId, name: "Grace" },
+            { profileId, name: "Ada" },
+          ],
           sharedAt: "2026-08-10T00:00:00.000Z",
+          reactions: [],
         },
       ],
     });
@@ -697,7 +710,7 @@ describe("a proposal carries on a majority of the room", () => {
 describe("a room's field", () => {
   it("is membership-gated: a non-member is told the group does not exist", async () => {
     const loadMembership = vi.fn(async () => null);
-    const loadField = vi.fn(async () => []);
+    const loadField = vi.fn(async () => ({ inspirations: [], total: 0 }));
     const app = mountWith({ loadMembership, loadField });
     const res = await app.request(`/api/groups/${groupId}/field`);
     expect(res.status).toBe(404);
@@ -708,27 +721,38 @@ describe("a room's field", () => {
 
   it("serialises field by field, so a loader that selects more cannot publish it", async () => {
     const loadMembership = vi.fn(async () => plainMembership);
-    const loadField = vi.fn(async () => [
-      {
-        id: "i1",
-        text: "kept this",
-        kind: "note",
-        source: "app",
-        createdAt: new Date("2026-08-01T00:00:00.000Z"),
-        updatedAt: new Date("2026-08-01T00:00:00.000Z"),
-        ownerProfileId: "p1",
-        ownerName: "Sora",
-        ownerType: "human",
-        secret: "must not appear",
-      },
-    ]);
+    const loadField = vi.fn(async () => ({
+      inspirations: [
+        {
+          id: "i1",
+          text: "kept this",
+          kind: "note",
+          source: "app",
+          createdAt: new Date("2026-08-01T00:00:00.000Z"),
+          updatedAt: new Date("2026-08-01T00:00:00.000Z"),
+          ownerProfileId: "p1",
+          ownerName: "Sora",
+          ownerType: "human",
+          secret: "must not appear",
+        },
+      ],
+      total: 1,
+    }));
     const app = mountWith({ loadMembership, loadField } as never);
     const res = await app.request(`/api/groups/${groupId}/field`);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { field: Array<Record<string, unknown>> };
+    const body = (await res.json()) as {
+      field: Array<Record<string, unknown>>;
+      total?: number;
+    };
     expect(body.field).toHaveLength(1);
     expect(body.field[0]?.ownerName).toBe("Sora");
     expect(body.field[0]).not.toHaveProperty("secret");
+    /* The loader's total reaches the room's door. Serialized beside the field
+       rather than left to be inferred from its length, because past the
+       loader's ceiling those two numbers are different and the length is the
+       one that reads as loss. */
+    expect(body.total).toBe(1);
   });
 });
 

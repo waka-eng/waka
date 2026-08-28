@@ -59,13 +59,30 @@ export interface ApiGroupMember {
  * A group wall row. The distilled statement crosses the account boundary;
  * the captures it rests on never do, which is why there is no evidence here.
  */
+export interface ApiGroupWallReaction {
+  profileId: string;
+  name: string;
+  value: "true" | "partly" | "not_true";
+}
+
 export interface ApiGroupWallSignal {
   signalId: string;
   statement: string;
-  confidence: number;
-  ownerProfileId: string;
-  ownerName: string;
+  /** The room's own confidence, as its lifecycle last wrote it. */
+  confidenceAsWritten: number;
+  /** The words are held (locked) — the star renders where they are read. */
+  locked: boolean;
+  /**
+   * WHOSE MEMORIES STAND UNDER IT (2026-08-24). A wall statement is the
+   * ROOM'S — grown from its members' pooled public memories — so it carries
+   * contributors rather than an owner: at least two current members, in
+   * first-contributed order, by the serve gate.
+   */
+  contributors: Array<{ profileId: string; name: string }>;
+  /** When the room first held this statement. */
   sharedAt: string;
+  /** Latest verdict per current member — contributors' stances count too. */
+  reactions: ApiGroupWallReaction[];
 }
 
 /**
@@ -99,10 +116,18 @@ export interface ApiGroupProposal {
   entryId: string | null;
   body: string | null;
   rationale: string | null;
-  proposedByProfileId: string;
-  proposedByName: string;
-  affirmations: Array<{ profileId: string; name: string; createdAt: string }>;
-  viewerAffirmed: boolean;
+  /** Null when the proposer erased their account after a settled decision —
+      the record outlives its author and the world says "someone". */
+  proposedByProfileId: string | null;
+  proposedByName: string | null;
+  /** Every recorded answer, yes and no alike — one per member, latest wins. */
+  stances: Array<{
+    profileId: string | null;
+    name: string | null;
+    value: "affirmed" | "declined";
+    createdAt: string;
+  }>;
+  viewerStance: "affirmed" | "declined" | null;
   resolvedAt: string | null;
   createdAt: string;
 }
@@ -146,7 +171,7 @@ export interface ApiGroupTopOfMind {
 export async function fetchGroups(): Promise<ApiGroupSummary[]> {
   const body = await getJson<{ groups: ApiGroupSummary[] }>(
     apiPath("/groups"),
-    "Failed to load groups",
+    "Failed to load rooms",
   );
   return Array.isArray(body.groups) ? body.groups : [];
 }
@@ -156,7 +181,7 @@ export async function createGroup(name: string): Promise<ApiGroupSummary> {
   const body = await postJson<{ group: ApiGroupSummary }>(
     apiPath("/groups"),
     { name },
-    "Failed to create group",
+    "Failed to create room",
   );
   return body.group;
 }
@@ -168,7 +193,7 @@ export async function joinGroup(
   const body = await postJson<{ group: ApiGroupSummary; alreadyMember?: boolean }>(
     apiPath("/groups/join"),
     { joinCode },
-    "Failed to join group",
+    "Failed to join room",
   );
   return { group: body.group, alreadyMember: Boolean(body.alreadyMember) };
 }
@@ -269,30 +294,50 @@ export async function fetchGroupMembers(groupId: string): Promise<ApiGroupMember
 export async function fetchGroupWall(groupId: string): Promise<ApiGroupWallSignal[]> {
   const body = await getJson<{ wall: ApiGroupWallSignal[] }>(
     apiPath(`/groups/${encodeURIComponent(groupId)}/wall`),
-    "Failed to load this group's wall",
+    "Failed to load this room's wall",
   );
   return Array.isArray(body.wall) ? body.wall : [];
 }
 
-export async function fetchGroupField(groupId: string): Promise<ApiGroupFieldInspiration[]> {
-  const body = await getJson<{ field: ApiGroupFieldInspiration[] }>(
+export interface ApiGroupField {
+  field: ApiGroupFieldInspiration[];
+  /** What the room's ground holds. Equals `field.length` until the room passes
+      the server's ceiling, and is the length for a server too old to say. */
+  total: number;
+}
+
+export async function fetchGroupField(groupId: string): Promise<ApiGroupField> {
+  const body = await getJson<{ field: ApiGroupFieldInspiration[]; total?: number }>(
     apiPath(`/groups/${encodeURIComponent(groupId)}/field`),
     "Failed to load this room's field",
   );
-  return Array.isArray(body.field) ? body.field : [];
+  const field = Array.isArray(body.field) ? body.field : [];
+  return {
+    field,
+    total: typeof body.total === "number" ? Math.max(body.total, field.length) : field.length,
+  };
 }
 
 // ---------------------------------------------------------------------------
 // A group's top of mind, and the proposals that change it
 // ---------------------------------------------------------------------------
 
-/** GET /groups/:id/top-of-mind — the group's own artifact. */
+/**
+ * GET /groups/:id/top-of-mind — the group's own artifact.
+ *
+ * Naming a version reads the room AS IT STOOD at that version instead of as
+ * it stands now: the same shape, the same gate, and an honest empty board for
+ * a version the room never had. Absent, it reads the live one, which is every
+ * caller that existed before the dial reached in here.
+ */
 export async function fetchGroupTopOfMind(
   groupId: string,
+  version?: number,
 ): Promise<ApiGroupTopOfMind> {
+  const at = version === undefined ? "" : `?version=${encodeURIComponent(String(version))}`;
   const body = await getJson<ApiGroupTopOfMind>(
-    apiPath(`/groups/${encodeURIComponent(groupId)}/top-of-mind`),
-    "Failed to load this group's top of mind",
+    apiPath(`/groups/${encodeURIComponent(groupId)}/top-of-mind${at}`),
+    "Failed to load this room's top of mind",
   );
   return { topOfMind: body.topOfMind ?? null, entries: body.entries ?? [] };
 }
@@ -303,8 +348,43 @@ export async function refreshGroupTopOfMind(groupId: string): Promise<void> {
     apiPath(`/groups/${encodeURIComponent(groupId)}/top-of-mind/refresh`),
     "POST",
     {},
-    "Failed to start a new group reading",
+    "Failed to start a new room reading",
   );
+}
+
+export interface ApiGroupTimelineVersion {
+  id: string;
+  version: number;
+  status: "live" | "superseded";
+  reason: string;
+  entryCount: number;
+  createdAt: string;
+}
+
+export interface ApiGroupDoorMark {
+  /** Null when the person has since erased their account: the mark outlives
+      them (the erasure doctrine) and the world says "someone". */
+  profileId: string | null;
+  name: string | null;
+  kind: "joined" | "left" | "removed";
+  occurredAt: string;
+}
+
+export interface ApiGroupTimeline {
+  versions: ApiGroupTimelineVersion[];
+  doorMarks: ApiGroupDoorMark[];
+}
+
+/** GET /groups/:id/top-of-mind/versions — the room's own becoming. */
+export async function fetchGroupTimeline(groupId: string): Promise<ApiGroupTimeline> {
+  const body = await getJson<ApiGroupTimeline>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/top-of-mind/versions`),
+    "Failed to load the room's timeline",
+  );
+  return {
+    versions: Array.isArray(body.versions) ? body.versions : [],
+    doorMarks: Array.isArray(body.doorMarks) ? body.doorMarks : [],
+  };
 }
 
 /** GET /groups/:id/proposals */

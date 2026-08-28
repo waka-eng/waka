@@ -15,7 +15,7 @@
  * it is kept because adopting a group's ambition as your own is a real act
  * that should say where the words came from.
  *
- * `formingWords` obeys the numerals law: "Four patterns are forming", never
+ * `formingWords` obeys the numerals law: "Four signals are forming", never
  * "4". The count is legible because the words are.
  */
 
@@ -68,18 +68,17 @@ export function deriveAmbition(
   T: number,
   adopted: Adopted | null,
   notes: JarNote[] | null,
-): { text: string | null; eyebrow: string } {
-  if (adopted && adopted.createdMs <= T)
-    return { text: adopted.ambition, eyebrow: adopted.groupName ?? "Top of mind" };
+): { text: string | null } {
+  if (adopted && adopted.createdMs <= T) return { text: adopted.ambition };
   const avail = notes ? notes.filter((n) => n.createdMs <= T) : [];
   const pinned = avail.find((n) => n.pinned);
-  if (pinned) return { text: pinned.body, eyebrow: "Top of mind" };
+  if (pinned) return { text: pinned.body };
   /* No confidence on an entry any more, and none is invented: the server's
      own order is the ranking, so the head of it is what the board leads with. */
   let best: JarNote | null = null;
   for (const n of avail) if (!best || n.sortOrder < best.sortOrder) best = n;
-  if (best) return { text: best.body, eyebrow: "Top of mind" };
-  return { text: null, eyebrow: "Top of mind" };
+  if (best) return { text: best.body };
+  return { text: null };
 }
 
 /**
@@ -102,7 +101,7 @@ export function formingWords(
   for (const f of forming ?? []) if (f.createdMs <= T) n++;
   if (n === 0) return null;
   const w = numWords(n);
-  return `${w[0].toUpperCase()}${w.slice(1)} ${n === 1 ? "pattern is" : "patterns are"} forming`;
+  return `${w[0].toUpperCase()}${w.slice(1)} ${n === 1 ? "signal is" : "signals are"} forming`;
 }
 /**
  * WHAT A WALL'S HEADQUARTERS SAYS. One shape for every kind of wall — yours,
@@ -112,8 +111,21 @@ export function formingWords(
  * is forming.
  */
 export interface WallChrome {
-  /** the wall's name, and nothing else in that slot, ever */
-  eyebrow: string;
+  /* THE EYEBROW IS GONE, FIELD AND ALL (founder, 2026-08-27: "just remove
+     the word top of mind").
+
+     It was already dark: on 2026-08-25 the slot stopped carrying the wall's
+     name and the JSX wrote "top of mind" literally instead, so this field
+     was computed by three producers and read by none. It was kept anyway —
+     "the ruling is a choice and choices get revisited" — and parked in
+     `wall-chrome.test.ts`'s DARK_BY_DECISION with that reason.
+
+     Today the choice was revisited the other way: the words themselves are
+     gone from the poster, so the reason the field was being kept ("the JSX
+     writes those words literally") describes nothing that happens any more.
+     A field kept for a decision that has been reversed is just dead code
+     with a note on it. Found by `e2e:dead-css`, which reported
+     `.jar-eyebrow` as a selector no source file can put on an element. */
   text: string | null;
   /**
    * AND WHAT IT STOPPED DOING. A portrait that says only what it is, is a

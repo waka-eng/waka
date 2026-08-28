@@ -1,11 +1,14 @@
 /**
- * `/api/groups` — groups, their wall of shared signals, and the top of mind
+ * `/api/groups` — groups, the wall of signals they GROW, and the top of mind
  * they co-edit.
  *
- * A group is where layer 2 crosses between people. Members share **signals**
- * to it; the group's single top-of-mind artifact is generated from those
- * shared statements; members change that artifact together through proposals
- * and affirmations.
+ * A group is where layer 2 crosses between people. Members do not hand
+ * statements to it: they keep memories publicly, the group distils its own
+ * signals from that pooled ground (2026-08-24), and a signal reaches the
+ * wall only once memories from two different current members stand under it.
+ * The group's single top-of-mind artifact is generated from those grown
+ * statements; members change that artifact together through proposals and
+ * affirmations.
  *
  * This file is the HTTP surface only — the schemas a request is checked
  * against, the two gates in front of every handler, and the handlers
@@ -17,7 +20,8 @@
  *                            them in — the answer to "may I?"
  *   `groups-field.ts`        a room's ground: layer 1, and the ONLY read of
  *                            layer 1 anywhere in the group module
- *   `groups-wall.ts`         a room's wall: the signals members shared in
+ *   `groups-wall.ts`         a room's wall: the signals the room grew, and
+ *                            the two-voices gate that decides what is served
  *   `groups-top-of-mind.ts`  the artifact a room co-owns, and its refresh
  *   `groups-proposals.ts`    proposals, affirmations, and what carries
  *
@@ -72,6 +76,7 @@ import {
 } from "./groups-proposals.js";
 import {
   enqueueGroupTopOfMindRefresh,
+  loadGroupTimeline,
   loadGroupTopOfMind,
 } from "./groups-top-of-mind.js";
 import { loadGroupWall } from "./groups-wall.js";
@@ -150,6 +155,7 @@ export interface GroupsRouteDependencies {
   loadField?: typeof loadGroupField;
   loadWall?: typeof loadGroupWall;
   loadTopOfMind?: typeof loadGroupTopOfMind;
+  loadTimeline?: typeof loadGroupTimeline;
   enqueueRefresh?: typeof enqueueGroupTopOfMindRefresh;
   listProposals?: typeof listGroupProposals;
   createProposal?: typeof createGroupProposal;
@@ -172,6 +178,7 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
   const loadField = deps.loadField ?? loadGroupField;
   const loadWall = deps.loadWall ?? loadGroupWall;
   const loadTopOfMind = deps.loadTopOfMind ?? loadGroupTopOfMind;
+  const loadTimeline = deps.loadTimeline ?? loadGroupTimeline;
   const enqueueRefresh = deps.enqueueRefresh ?? enqueueGroupTopOfMindRefresh;
   const listProposals = deps.listProposals ?? listGroupProposals;
   const createProposal = deps.createProposal ?? createGroupProposal;
@@ -395,7 +402,8 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
     return c.json({ members });
   });
 
-  // GET /api/groups/:groupId/wall — members' shared signals.
+  // GET /api/groups/:groupId/wall — the signals the room grew from its
+  // members' pooled public memories.
   routes.get("/:groupId/wall", async (c) => {
     const parsedParams = groupParamsSchema.safeParse(c.req.param());
     if (!parsedParams.success) return c.json({ error: "Invalid group id" }, 400);
@@ -416,10 +424,18 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
       wall: wall.map((shared) => ({
         signalId: shared.signalId,
         statement: shared.statement,
-        confidence: shared.confidence,
-        ownerProfileId: shared.ownerProfileId,
-        ownerName: shared.ownerName,
+        confidenceAsWritten: shared.confidenceAsWritten,
+        locked: shared.locked,
+        contributors: shared.contributors.map((c) => ({
+          profileId: c.profileId,
+          name: c.name,
+        })),
         sharedAt: shared.sharedAt,
+        reactions: shared.reactions.map((reaction) => ({
+          profileId: reaction.profileId,
+          name: reaction.name,
+          value: reaction.value,
+        })),
       })),
     });
   });
@@ -453,7 +469,8 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
     });
     if (!membership) return c.json({ error: "Group not found" }, 404);
 
-    const rows = await loadField(db, groupId);
+    const field = await loadField(db, groupId);
+    const rows = field.inspirations;
 
     // Serialized field by field, for the same reason the wall is: this is the
     // boundary between two people's memory, and a loader that one day selects
@@ -470,6 +487,11 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
         ownerName: row.ownerName,
         ownerType: row.ownerType,
       })),
+      /* What the room's ground HOLDS, beside what this response carries. Past
+         the loader's ceiling those differ, and until this was served the room's
+         door could only print the length of what arrived — a ceiling that reads
+         as loss. */
+      total: field.total,
     });
   });
 
@@ -486,7 +508,22 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
     });
     if (!membership) return c.json({ error: "Group not found" }, 404);
 
-    const view = await loadTopOfMind(getDatabase(), groupId);
+    /* WHICH VERSION — absent means the live one, which is every existing
+       caller. A version that is not this room's reads as an empty board
+       rather than as another room's, because the loader keeps the group id
+       in the predicate; a version that is not a number at all is a bad
+       request, not a silent fall back to now. */
+    const versionParam = c.req.query("version");
+    let version: number | undefined;
+    if (versionParam !== undefined) {
+      const parsed = Number(versionParam);
+      if (!Number.isInteger(parsed) || parsed < 1) {
+        return c.json({ error: "Invalid version" }, 400);
+      }
+      version = parsed;
+    }
+
+    const view = await loadTopOfMind(getDatabase(), groupId, { version });
     // Serialized field by field for the same reason as the wall: this is a
     // read across an account boundary, and it must publish exactly the fields
     // it means to, not whatever a loader's select list grows into.
@@ -514,6 +551,40 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
           profileId: contributor.profileId,
           name: contributor.name,
         })),
+      })),
+    });
+  });
+
+  // GET /api/groups/:groupId/top-of-mind/versions — the room's timeline:
+  // the artifact's chain plus the door's marks. Membership-gated like every
+  // group read, serialized field by field like every cross-account read.
+  routes.get("/:groupId/top-of-mind/versions", async (c) => {
+    const parsedParams = groupParamsSchema.safeParse(c.req.param());
+    if (!parsedParams.success) return c.json({ error: "Invalid group id" }, 400);
+    const session = c.get("session");
+    const { groupId } = parsedParams.data;
+
+    const membership = await loadMembership(getDatabase(), {
+      groupId,
+      profileId: session.profile.id,
+    });
+    if (!membership) return c.json({ error: "Group not found" }, 404);
+
+    const timeline = await loadTimeline(getDatabase(), groupId);
+    return c.json({
+      versions: timeline.versions.map((version) => ({
+        id: version.id,
+        version: version.version,
+        status: version.status,
+        reason: version.reason,
+        entryCount: version.entryCount,
+        createdAt: version.createdAt,
+      })),
+      doorMarks: timeline.doorMarks.map((mark) => ({
+        profileId: mark.profileId,
+        name: mark.name,
+        kind: mark.kind,
+        occurredAt: mark.occurredAt,
       })),
     });
   });

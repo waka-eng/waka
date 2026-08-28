@@ -102,6 +102,15 @@ export interface DeriveSignalsInput {
   inspirationId: string;
   /** "created" on capture, "edited" when a change re-derives the capture. */
   reason: "created" | "edited";
+  /**
+   * WHERE THE SIGNALS LAND (2026-08-24). Absent, on the inspiration's own
+   * profile — every personal pass, unchanged. Set, on a ROOM'S MIND: the
+   * same extraction over the same capture, but matched against the ROOM's
+   * existing statements, minted under the room's profile, and cited with
+   * the keeper as the evidence owner. One capture, several passes, several
+   * spaces — which is the founder's x+y+z, made literal.
+   */
+  deriveIntoProfileId?: string;
 }
 
 export interface SignalDerivationDependencies {
@@ -112,7 +121,7 @@ export interface SignalDerivationDependencies {
 }
 
 export interface SignalDerivationResult {
-  status: "derived" | "missing_inspiration" | "no_candidates";
+  status: "derived" | "missing_inspiration" | "no_candidates" | "not_public";
   inspirationId: string;
   profileId: string | null;
   candidateCount: number;
@@ -159,7 +168,40 @@ export async function deriveSignalsForInspiration(
     };
   }
 
-  const profileId = inspiration.profileId;
+  /* THE DERIVING PROFILE IS WHERE SIGNALS LAND — the inspiration's own
+     owner for a personal pass, a room's mind for a room pass. Everything
+     downstream of extraction keys off it: the existing-statement scan, the
+     match targets, the advisory lock, the mint. The one deliberate
+     exception is the capture's own layer-1 embedding, which stays with the
+     memory's owner wherever the pass is landing. */
+  const profileId = input.deriveIntoProfileId ?? inspiration.profileId;
+
+  /**
+   * A ROOM PASS RE-READS THE SWITCH IT WAS ENQUEUED ON.
+   *
+   * The fan-out reads `visibility` when it enqueues, and then the job waits
+   * in a queue — behind a backlog, a deferral, a retry. In that gap the
+   * keeper can turn the memory private, and without this check the room
+   * would read it anyway: the enqueue-time check would have been a promise
+   * about a value that had already changed. A memory going private is the
+   * one thing that must be true at the moment of reading, not at the moment
+   * of asking, so it is read here, against the row the pass is about to use.
+   *
+   * Personal passes are untouched: your own memory is yours to distil at any
+   * visibility, and `deriveIntoProfileId` is exactly the flag for "this pass
+   * is landing somewhere other than the keeper's own stack".
+   */
+  if (input.deriveIntoProfileId && inspiration.visibility !== "public") {
+    return {
+      status: "not_public",
+      inspirationId: input.inspirationId,
+      profileId,
+      candidateCount: 0,
+      matchedSignalIds: [],
+      mintedSignalIds: [],
+      promotedSignalIds: [],
+    };
+  }
 
   const [profileRows, reflectionRows, attachmentRows, existingStatements] = await Promise.all([
     db
@@ -219,15 +261,26 @@ export async function deriveSignalsForInspiration(
     Same model-call count as before; the vector was never optional.
   */
   const inspirationEmbedding = await ensureInspirationEmbedding({
-    profileId,
+    /* the memory's own vector belongs to the memory's OWNER, whichever space
+       this pass derives into — a room pass reuses it and must not write a
+       copy under the mind (the composite FK would refuse anyway) */
+    profileId: inspiration.profileId,
     inspirationId: inspiration.id,
+    db,
+    client: embeddingClient,
   });
   const relatedInspirations = inspirationEmbedding.embedding
     ? await findRelatedInspirations(db, {
-        profileId,
+        /* recurrence is retrieved over the KEEPER's earlier captures on every
+           pass — on a room pass the mind holds no captures to scan, and the
+           person recurring is the person, wherever the pattern lands */
+        profileId: inspiration.profileId,
         inspirationId: inspiration.id,
         embedding: inspirationEmbedding.embedding.embedding,
         model: inspirationEmbedding.embedding.model,
+        /* a room may cite only what its members chose to make public: a
+           private earlier capture must never become a room's evidence */
+        publicOnly: input.deriveIntoProfileId !== undefined,
       })
     : [];
 
@@ -279,16 +332,32 @@ export async function deriveSignalsForInspiration(
       .flatMap((row) => (row.text ? [row.text] : []))
       .join("\n\n") || null;
 
+  /* THE PERSON'S OWN WORDS include their reflection answers, not just the
+     capture: `quoteForEvidence` keeps own-words spans only (the enrichment
+     refusal is the rule's point), and a reflection is the person answering
+     in their own voice — refusing a verbatim span of it would refuse the
+     person themselves. Composed onto the own-words rule, not around it. */
+  const ownText = [inspiration.text, ...reflectionRows.map((row) => row.answer ?? "")]
+    .filter((piece) => piece.length > 0)
+    .join("\n\n");
+
   const statements = extraction.statements
     .map((candidate) => ({
       statement: clip(candidate.statement, MAX_STATEMENT_LENGTH),
       reason: candidate.reason ? clip(candidate.reason, MAX_REASON_LENGTH) : null,
       quote: quoteForEvidence(
         candidate.quote,
-        { text: inspiration.text, enrichment: enrichmentText },
+        { text: ownText, enrichment: enrichmentText },
         MAX_QUOTE_LENGTH,
       ),
       relatedEvidence: resolveRelatedEvidence(candidate, relatedInspirations, MAX_QUOTE_LENGTH),
+    }))
+    .map((candidate) => ({
+      ...candidate,
+      /* `quoteForEvidence` keeps only the person's OWN words (dev, PR #266
+         tightened this — an enrichment span is never quoted as evidence any
+         more), so a surviving quote's source is exactly one thing */
+      quoteSource: (candidate.quote ? "own" : null) as "own" | "enrichment" | null,
     }))
     .filter((candidate) => candidate.statement.length > 0);
 
@@ -319,6 +388,9 @@ export async function deriveSignalsForInspiration(
     await acquireSignalDerivationLock(tx, profileId);
     return applyCandidates(tx, {
       profileId,
+      /* a personal derivation reads its own memory; the room path (which
+         derives into a mind while citing a member) sets these apart */
+      evidenceOwnerProfileId: inspiration.profileId,
       inspirationId: inspiration.id,
       candidates: embedded,
       embeddingModel: embeddingClient.model,
@@ -351,6 +423,8 @@ async function findRelatedInspirations(
     inspirationId: string;
     embedding: number[];
     model: string;
+    /** a ROOM pass may only be shown captures their owner made public */
+    publicOnly?: boolean;
   },
 ): Promise<RelatedInspirationContext[]> {
   const rows = await db
@@ -366,6 +440,7 @@ async function findRelatedInspirations(
       and(
         eq(inspirationEmbeddings.profileId, input.profileId),
         eq(inspirationEmbeddings.model, input.model),
+        ...(input.publicOnly ? [eq(inspirations.visibility, "public" as const)] : []),
       ),
     )
     .orderBy(desc(inspirations.createdAt))

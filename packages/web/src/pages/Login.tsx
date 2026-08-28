@@ -53,7 +53,7 @@ import { GoogleSignInButton, oauthErrorMessageKey } from "../components/GoogleSi
 import { ApiError } from "../lib/api";
 import type { LoginFieldErrors, SignupFieldErrors } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
-import { formatMessage, normalizeSupportedLocale, readStoredLocale, supportedLocales, t, writeStoredLocale } from "../lib/locales";
+import { formatMessage, readStoredLocale, t } from "../lib/locales";
 import type { SupportedLocale } from "../lib/locales";
 import { resolveRedirect } from "../lib/sign-in-destination";
 
@@ -91,12 +91,10 @@ const EMPTY_SIGNUP: SignupValues = {
 
 interface SignupFormProps {
   locale?: SupportedLocale;
-  onLocaleChange?: (locale: SupportedLocale) => void;
 }
 
 export function SignupForm({
   locale: shellLocale = readStoredLocale(),
-  onLocaleChange,
 }: SignupFormProps = {}): JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
@@ -174,11 +172,31 @@ export function SignupForm({
       navigate(resolveRedirect(location), { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
-        if (err.fieldErrors) {
-          setFieldErrors(err.fieldErrors as SignupFieldErrors);
-        }
-        if (!err.fieldErrors || err.status === 409) {
-          setFormError(err.message);
+        /* STATUS 0 IS A DEAD CONNECTION, NOT AN ANSWER — and this branch is
+           new because the door lost its own words to a fix made elsewhere.
+
+           `writeJson` did not wrap its fetch, so a dead network threw a raw
+           `TypeError` and landed in the `else` below, which says
+           `loginNetworkError`: "We couldn't reach the server. Check your
+           connection and try again." Wrapping it (2026-08-26, so the world
+           would stop showing people the browser's `Failed to fetch`) turned
+           that TypeError into an `ApiError { status: 0 }` — which no longer
+           matches `else`, and fell through to `err.message`:
+
+               "Login failed: network unreachable"
+
+           The API client's voice, on the product's first surface. The fix for
+           the world quietly regressed the door, and only pressing the door's
+           submit with the network dead showed it. */
+        if (err.status === 0) {
+          setFormError(t(locale, "loginNetworkError"));
+        } else {
+          if (err.fieldErrors) {
+            setFieldErrors(err.fieldErrors as SignupFieldErrors);
+          }
+          if (!err.fieldErrors || err.status === 409) {
+            setFormError(err.message);
+          }
         }
       } else {
         setFormError(
@@ -269,31 +287,15 @@ export function SignupForm({
       </label>
 
 
-      <label className="field">
-        <span className="field-label">{t(locale, "languageLabel")}</span>
-        <select
-          className="field-input"
-          value={values.preferredLocale}
-          disabled={submitting}
-          onChange={(e) => {
-            const next = normalizeSupportedLocale(e.target.value);
-            handleChange("preferredLocale", next);
-            if (onLocaleChange) {
-              onLocaleChange(next);
-            } else {
-              writeStoredLocale(next);
-            }
-          }}
-        >
-          {supportedLocales.map((option) => (
-            <option key={option.code} value={option.code}>
-              {option.nativeLabel}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <button className="btn-primary" type="submit" disabled={submitting}>
+      {/* The language field left with the second language (founder ruling,
+          2026-08-22: the product speaks English only). preferredLocale still
+          travels in the payload at its default — the account keeps the
+          column, the person just has nothing to choose. */}
+      {/* `btn-doorway`: the login page's own submit, and NOT `.profile-card`'s
+          save or onboarding's. `.login-card` is shared by four screens, so
+          the weight this control needs had to be asked for by name rather
+          than inherited by ancestor. */}
+      <button className="btn-primary btn-doorway" type="submit" disabled={submitting}>
         {submitting ? t(locale, "loginCreatingAccount") : t(locale, "loginCreateAccount")}
       </button>
     </form>
@@ -320,6 +322,18 @@ export function LoginForm(): JSX.Element {
   const [values, setValues] = useState<LoginValues>(EMPTY_LOGIN);
   const [fieldErrors, setFieldErrors] = useState<LoginFieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
+  /**
+   * WHY THE KIND IS TRACKED AND NOT INFERRED FROM THE MESSAGE.
+   *
+   * The recovery line under a failed sign-in used to be rendered on
+   * `formError === t(locale, "loginInvalidCredentials")` — comparing a
+   * RENDERED SENTENCE to decide what to show. Reword that string and the line
+   * silently stops appearing, with nothing failing anywhere: the exact hazard
+   * this codebase has spent a week removing from its stylesheets, written
+   * fresh into a page the same week. A state flag set where the 401 is
+   * actually handled cannot drift from the copy, because it does not read it.
+   */
+  const [wrongCredentials, setWrongCredentials] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   function handleChange<K extends keyof LoginValues>(
@@ -356,17 +370,22 @@ export function LoginForm(): JSX.Element {
 
     setSubmitting(true);
     setFormError(null);
+    setWrongCredentials(false);
     setFieldErrors({});
     try {
       await login({ email, password: values.password });
       navigate(resolveRedirect(location), { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
-        // Treat 401 (bad credentials) as a form-level message rather than a
-        // field-level one — pinning the error to "password" would imply the
-        // email is correct, which is an information leak we'd rather avoid.
-        if (err.status === 401) {
+        // A dead connection is not an answer from the server — see the same
+        // branch in SignupForm above for why this exists and what it is
+        // repairing. Measured: "Login failed: network unreachable" where the
+        // catalogue already had the product's own sentence for it.
+        if (err.status === 0) {
+          setFormError(t(locale, "loginNetworkError"));
+        } else if (err.status === 401) {
           setFormError(t(locale, "loginInvalidCredentials"));
+          setWrongCredentials(true);
         } else if (err.status === 404) {
           // Endpoint not yet wired on the backend (earlier sub-ACs). Surface
           // a useful, non-scary message rather than letting the raw "HTTP
@@ -400,6 +419,30 @@ export function LoginForm(): JSX.Element {
       {formError ? (
         <div className="form-error" role="alert">
           {formError}
+          {/* THE WAY BACK IN, SAID WHERE THE PERSON IS STUCK.
+              Found in the heuristic pass, 2026-08-26: there is no password
+              reset anywhere in this product — `auth-password.ts` has exactly
+              `signup` and `login` — so someone who forgets one is locked out
+              of everything they kept, on a door that says "return to what you
+              kept". The message said "Incorrect email or password." and
+              stopped there, and a person would go looking for the reset link
+              that is not there.
+
+              What IS true is that `auth-google.ts` links an existing account
+              by VERIFIED email, so Continue with Google below really does open
+              the same archive — and it refuses to link an unverified claim,
+              which is why saying this is safe rather than an invitation. The
+              missing reset is stated plainly rather than left to be
+              discovered: this product's whole posture is that it does not have
+              quiet corners, and "there is no way to do this" is exactly the
+              kind of thing a quiet corner hides.
+
+              Only under the credentials failure. A network error or an
+              unavailable endpoint is not a person who has forgotten
+              something, and offering them a way back in would be noise. */}
+          {wrongCredentials ? (
+            <span className="login-recover">{t(locale, "loginNoResetYet")}</span>
+          ) : null}
         </div>
       ) : null}
 
@@ -446,7 +489,11 @@ export function LoginForm(): JSX.Element {
         ) : null}
       </label>
 
-      <button className="btn-primary" type="submit" disabled={submitting}>
+      {/* `btn-doorway`: the login page's own submit, and NOT `.profile-card`'s
+          save or onboarding's. `.login-card` is shared by four screens, so
+          the weight this control needs had to be asked for by name rather
+          than inherited by ancestor. */}
+      <button className="btn-primary btn-doorway" type="submit" disabled={submitting}>
         {submitting ? t(locale, "loginSigningIn") : t(locale, "loginTab")}
       </button>
     </form>
@@ -492,14 +539,12 @@ export default function LoginPage(): JSX.Element {
   const [mode, setMode] = useState<Mode>("login");
   const loginTabRef = useRef<HTMLButtonElement>(null);
   const signupTabRef = useRef<HTMLButtonElement>(null);
-  const [locale, setLocale] = useState<SupportedLocale>(() => readStoredLocale());
+  const [locale] = useState<SupportedLocale>(() => readStoredLocale());
   const location = useLocation();
   const navigate = useNavigate();
-
-  const handleLocaleChange = (next: SupportedLocale): void => {
-    setLocale(next);
-    writeStoredLocale(next);
-  };
+  /* Why the door is standing here, when the reason is "we could not ask" —
+     see `AuthContextValue.serverUnreachable`. It never decides access. */
+  const { serverUnreachable } = useAuth();
 
   /**
    * Surface the OAuth error code (if any) the API redirected us back with
@@ -585,6 +630,24 @@ export default function LoginPage(): JSX.Element {
         </h1>
         <p className="login-subtitle">{subtitle}</p>
 
+        {/* THE DOOR SAYS WHY IT IS THE DOOR.
+            A person whose network is down is bounced here by `RequireAuth`
+            with a valid session and greeted "Welcome back. Sign in to return
+            to what you kept." — which asserts they are signed out, in the one
+            situation where somebody is already afraid their archive is gone.
+            Measured by killing every /api/ request and reloading: the door
+            appears; restore the network and they are straight back in.
+
+            The greeting stays (it is right when the door is right). This says
+            what is actually known, above it, in the banner slot the OAuth
+            error already uses. Suppressed when an OAuth error is showing —
+            that one is about a specific attempt and outranks a condition. */}
+        {serverUnreachable && !oauthError ? (
+          <div className="form-error" role="alert">
+            {t(locale, "loginNetworkError")}
+          </div>
+        ) : null}
+
         {oauthError ? (
           <div
             className="form-error"
@@ -597,10 +660,6 @@ export default function LoginPage(): JSX.Element {
             {oauthError}
           </div>
         ) : null}
-
-        <GoogleSignInButton locale={locale} returnTo={resolveRedirect(location)} />
-
-        <OrDivider locale={locale} />
 
         <div
           className="login-tabs"
@@ -651,37 +710,24 @@ export default function LoginPage(): JSX.Element {
           {mode === "login" ? (
             <LoginForm />
           ) : (
-            <SignupForm locale={locale} onLocaleChange={handleLocaleChange} />
+            <SignupForm locale={locale} />
           )}
         </div>
 
-        <p className="login-footer">
-          {mode === "login" ? (
-            <>
-              {t(locale, "loginNewPrompt")} {" "}
-              <button
-                type="button"
-                className="login-link"
-                onClick={() => setMode("signup")}
-              >
-                {t(locale, "loginCreateAccount")}
-              </button>
-              .
-            </>
-          ) : (
-            <>
-              {t(locale, "loginExistingPrompt")} {" "}
-              <button
-                type="button"
-                className="login-link"
-                onClick={() => setMode("login")}
-              >
-                {t(locale, "loginTab")}
-              </button>
-              .
-            </>
-          )}
-        </p>
+        {/* THE ALTERNATIVE COMES AFTER THE THING IT IS AN ALTERNATIVE TO.
+            Google used to sit above the tabs, so the first and heaviest thing
+            on the screen was a full-width white pill handing the account to
+            somebody else, and the submit for the form a person had just
+            filled in was a 40x16 lowercase footnote at the bottom-left,
+            ranked below both tabs and the field labels.
+
+            Reading order now says what the product means: this is an
+            email-and-password product, and Google is one other way in. The
+            divider says so out loud in between. Nothing was removed — the
+            button is the same button, in the place an alternative goes. */}
+        <OrDivider locale={locale} />
+
+        <GoogleSignInButton locale={locale} returnTo={resolveRedirect(location)} />
       </section>
     </main>
   );

@@ -154,6 +154,10 @@ export interface Evidence {
   preview: string;
   /** The words that carried the reading, when the server named them. */
   quote: string | null;
+  /** Whose words the quote is — the person's own ("own") or the page behind
+      their link ("enrichment"). Null means the quote predates the server's
+      span verification: the surface must not light it as a read span. */
+  quoteSource: "own" | "enrichment" | null;
   /** "얘가 이걸 만든 이유가 이거다" — the explainability pointer, rendered
       on the orbit rather than restated as a sentence. */
   reason: string | null;
@@ -182,8 +186,10 @@ export interface Entry {
   dismissed: boolean;
   sortOrder: number;
   /** The signals beneath this statement, named. This is the provenance the
-      headquarters peek draws, and it points at layer 2 — not at inspirations. */
-  citedSignals: Array<{ id: string; statement: string }>;
+      headquarters peek draws, and it points at layer 2 — not at inspirations.
+      `answered` is the ground's ratified standing: the owner has spoken to it
+      (a verdict, a star) — false while only the machine believes it. */
+  citedSignals: Array<{ id: string; statement: string; answered: boolean; locked: boolean }>;
   createdMs: number;
 }
 
@@ -243,6 +249,7 @@ function toEvidence(signalId: string, row: ApiSignalEvidence): Evidence {
     inspirationId: row.inspirationId,
     preview: row.preview,
     quote: row.quote ?? null,
+    quoteSource: row.quoteSource ?? null,
     reason: row.reason ?? null,
     createdMs: ms(row.createdAt),
   };
@@ -259,7 +266,18 @@ function toEntry(row: ApiTopOfMindEntry): Entry {
     pinned: Boolean(row.pinned),
     dismissed: Boolean(row.dismissed),
     sortOrder: row.sortOrder ?? 0,
-    citedSignals: Array.isArray(row.citedSignals) ? row.citedSignals : [],
+    /* an older payload without the standing must read as unanswered — dim is
+       the honest default, never falsely lit */
+    citedSignals: Array.isArray(row.citedSignals)
+      ? row.citedSignals.map((c) => ({
+          ...c,
+          answered: Boolean(c.answered),
+          /* a payload from before the server sent this reads as unlocked,
+             which is the safe way round: it offers no way back rather than
+             offering one that would fail */
+          locked: Boolean(c.locked),
+        }))
+      : [],
     createdMs: ms(row.createdAt),
   };
 }
@@ -305,16 +323,55 @@ const FIELD_MAX_PAGES = 10;
  * is defined by the one before it, and the first page is what the world needs
  * to paint — the rest arrive behind it.
  */
-export async function loadInspirations(profile?: string): Promise<Inspiration[]> {
+export interface FieldLoad {
+  /** What arrived, oldest first — the order the ground lays them down in. */
+  inspirations: Inspiration[];
+  /**
+   * How many the archive holds. Equal to `inspirations.length` on every
+   * archive smaller than the ceiling, which is every archive for a long time.
+   */
+  total: number;
+  /**
+   * The walk stopped before the archive did. The one fact the world had no
+   * way of knowing until the server started serving a total — and without it
+   * the count under the door was the length of what had arrived, printed as
+   * though it were the size of the archive.
+   */
+  short: boolean;
+}
+
+/**
+ * The remainder: how many the archive holds that the walk never reached.
+ * Zero for every archive under the ceiling, which is nearly every archive.
+ */
+export function beyondOf(field: FieldLoad): number {
+  return Math.max(0, field.total - field.inspirations.length);
+}
+
+/** Nothing arrived, and nothing is behind it either — the shape a failed
+    walk falls back to, so a caller never has to invent a total. */
+export const EMPTY_FIELD: FieldLoad = { inspirations: [], total: 0, short: false };
+
+export async function loadInspirations(profile?: string): Promise<FieldLoad> {
   const out: Inspiration[] = [];
   let cursor: string | undefined;
+  let reported: number | undefined;
   for (let page = 0; page < FIELD_MAX_PAGES; page++) {
     const got = await fetchInspirationPage({ limit: FIELD_PAGE, profile, cursor });
     out.push(...got.inspirations.map(toInspiration));
+    if (typeof got.total === "number") reported = got.total;
     if (!got.nextCursor || got.inspirations.length === 0) break;
     cursor = got.nextCursor;
   }
-  return out.sort((a, b) => a.capturedMs - b.capturedMs);
+  /* `max` holds the invariant the door depends on — "N of M" with M below N
+     is worse than no sentence at all — across a server too old to report a
+     total, and across a capture or an erasure landing mid-walk. */
+  const total = Math.max(reported ?? 0, out.length);
+  return {
+    inspirations: out.sort((a, b) => a.capturedMs - b.capturedMs),
+    total,
+    short: total > out.length,
+  };
 }
 
 /** THE SKY. Patterns, brightest-first is decided by the sky's own layout;

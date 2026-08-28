@@ -61,6 +61,7 @@ import {
   profileColumns,
   serializeAccount,
   serializeProfile,
+  sessionProfileRow,
   type AccountRow,
   type ProfileRow,
 } from "./auth-identity.js";
@@ -217,7 +218,9 @@ export async function signupHandler(c: Context<AuthEnv>): Promise<Response> {
         })
         .returning(profileColumns);
 
-      return { account: account!, profile: profile! };
+      /* inserted with this account's id one statement up; the narrow only
+         teaches the types what the insert already wrote */
+      return { account: account!, profile: sessionProfileRow(profile!) };
     });
   } catch (err) {
     // postgres.js exposes the SQLSTATE on `err.code`. `23505` = unique
@@ -361,8 +364,17 @@ export async function loginHandler(c: Context<AuthEnv>): Promise<Response> {
     c.header("Retry-After", String(verdict.retryAfterSeconds));
     return c.json(
       {
-        error:
-          "Too many sign-in attempts. Wait a few minutes and try again, or reset your password.",
+        /* NO "or reset your password" HERE UNTIL THERE IS ONE.
+           This sentence used to offer it. There is no reset route, no token
+           table and no mail transport anywhere in this repo — so the one
+           person guaranteed to read this line, someone locked out and
+           anxious, was sent looking for a door that does not exist. Waiting
+           is genuinely the only thing that works right now, and saying only
+           that is kinder than naming an escape they cannot take.
+           `docs/goals/everything-in-the-world.md` Phase 4 owns building the real
+           one; this
+           line changes back in the same diff that makes it true. */
+        error: "Too many sign-in attempts. Wait a few minutes and try again.",
       },
       429,
     );
@@ -374,7 +386,9 @@ export async function loginHandler(c: Context<AuthEnv>): Promise<Response> {
   const rows = await db
     .select({
       account: accountColumns,
-      profile: profileColumns,
+      /* accountId through the JOIN, so the row's type carries what the join
+         proves: this profile has an account (see loadIdentity) */
+      profile: { ...profileColumns, accountId: accounts.id },
       passwordHash: accounts.passwordHash,
     })
     .from(accounts)

@@ -17,8 +17,10 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { getCookie } from "hono/cookie";
 
+import { looksLikeAgentKey, lookupAgentKeySession } from "./agent-key-auth.js";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "./auth.js";
 import { type AuthenticatedSession, lookupSession } from "./session.js";
+import { hasLiveSiblingGrant } from "./sibling-grants.js";
 
 export interface AuthEnv {
   Variables: {
@@ -32,37 +34,55 @@ export interface AuthEnv {
  * browser). Null when neither is present, so the caller decides whether
  * absence is a 401 or a fall-through.
  */
-function readToken(c: Context): string | null {
+function readToken(c: Context): { token: string; source: "header" | "cookie" } | null {
   const authHeader = c.req.header("Authorization");
   if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
     const token = authHeader.slice(7).trim();
-    if (token.length > 0) return token;
+    if (token.length > 0) return { token, source: "header" };
   }
 
   const cookieToken = getCookie(c, SESSION_COOKIE_NAME);
-  if (cookieToken && cookieToken.length > 0) return cookieToken;
+  if (cookieToken && cookieToken.length > 0) return { token: cookieToken, source: "cookie" };
 
   return null;
 }
 
 /** Shared by both middlewares so they cannot drift. */
 async function resolveSessionFromToken(token: string): Promise<AuthenticatedSession | null> {
+  /* An agent's standing key, told apart by its prefix rather than by trying
+     the JWT verify and falling through — the shapes are disjoint, so the
+     cheap check routes the credential without spending a signature check.
+     The session it yields is agent-bound: the whole access matrix below and
+     `humanSessionsOnly` apply to it unchanged (2026-08-17 meeting: per-agent
+     keys are a way IN, never a wider set of powers once in). */
   const decoded = await verifySessionToken(token);
   if (!decoded?.sub) return null;
   return lookupSession(token);
 }
 
 export const requireAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
-  const token = readToken(c);
-  if (!token) {
+  const read = readToken(c);
+  if (!read) {
     return c.json({ error: "Authentication required" }, 401);
   }
-  const session = await resolveSessionFromToken(token);
+  /* AN AGENT'S STANDING KEY RIDES THE HEADER, NEVER THE COOKIE. The prefix
+     routes it to the key lookup without spending a signature check; the
+     source check is the security half. A cookie is attached by the browser
+     to whatever asks — accepting a key there would let a page that can set
+     cookies fix a victim's browser to an attacker's agent, and every keep
+     the victim made would land in the attacker's stack. A server-to-server
+     credential has no business in a browser channel, so the shape is simply
+     not a credential there. */
+  const session = looksLikeAgentKey(read.token)
+    ? read.source === "header"
+      ? await lookupAgentKeySession(read.token)
+      : null
+    : await resolveSessionFromToken(read.token);
   if (!session) {
     return c.json({ error: "Authentication required" }, 401);
   }
   c.set("session", session);
-  c.set("sessionToken", token);
+  c.set("sessionToken", read.token);
   await next();
 };
 
@@ -97,12 +117,17 @@ export const humanSessionsOnly: MiddlewareHandler<AuthEnv> = async (c, next) => 
 };
 
 export const optionalAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
-  const token = readToken(c);
-  if (token) {
-    const session = await resolveSessionFromToken(token);
+  const read = readToken(c);
+  if (read) {
+    /* same header-only rule for keys as requireAuth, same reason */
+    const session = looksLikeAgentKey(read.token)
+      ? read.source === "header"
+        ? await lookupAgentKeySession(read.token)
+        : null
+      : await resolveSessionFromToken(read.token);
     if (session) {
       c.set("session", session);
-      c.set("sessionToken", token);
+      c.set("sessionToken", read.token);
     }
   }
   await next();
@@ -124,7 +149,28 @@ export type ProfileOperation = "read" | "capture" | "write";
 export interface ProfileAccessTarget {
   id: string;
   accountId: string;
+  /** Who the target is — the sibling rule turns on it. */
+  type: "human" | "agent";
 }
+
+/**
+ * Narrow a profiles row to an ACCOUNT-HELD target, or nothing.
+ *
+ * A room's mind (`type = 'group'`, null account — 2026-08-24) is a profile
+ * that no session can be and no personal route may act on: it belongs to a
+ * room, and rooms are reached through the group routes with their own
+ * membership gate. Every place that loads a profile as an access target
+ * passes through here, so a mind resolves to "no such profile" everywhere
+ * by one rule instead of by nine remembered checks.
+ */
+export function asAccountProfile<
+  T extends { accountId: string | null; type: "human" | "agent" | "group" },
+>(row: T): (T & { accountId: string; type: "human" | "agent" }) | null {
+  if (row.accountId === null || row.type === "group") return null;
+  return row as T & { accountId: string; type: "human" | "agent" };
+}
+
+export type ProfileAccessVerdict = "allowed" | "denied" | "sibling_grant_required";
 
 /**
  * May this session perform `operation` on `target`?
@@ -135,31 +181,52 @@ export interface ProfileAccessTarget {
  * - An **agent**-profile session may read and capture into the account's
  *   human profile — that is the conditioning-and-relaying case — but may
  *   never curate, edit, or delete the human's memory.
+ * - An **agent** session reaching for a SIBLING agent's memory needs an
+ *   explicit, human-granted, revocable grant — the matrix answers
+ *   `sibling_grant_required` and `profileAccessError` reads the live grant
+ *   rows. The open default retired with `goals/no-quiet-corners.md`
+ *   Phase 6 (the flip is founder-ruled, 2026-08-23, signed in
+ *   docs/data-model.md's decision log): no flag, no dark machinery.
  * - Nothing reaches across accounts, ever.
  */
 export function resolveProfileAccess(
   session: AuthenticatedSession,
   target: ProfileAccessTarget,
   operation: ProfileOperation,
-): boolean {
-  if (target.accountId !== session.profile.accountId) return false;
-  if (target.id === session.profile.id) return true;
-  if (session.profile.type === "human") return true;
+): ProfileAccessVerdict {
+  if (target.accountId !== session.profile.accountId) return "denied";
+  if (target.id === session.profile.id) return "allowed";
+  if (session.profile.type === "human") return "allowed";
   // Agent session, some other profile in the same account.
-  return operation === "read" || operation === "capture";
+  if (operation === "write") return "denied";
+  if (target.type === "human") return "allowed";
+  return "sibling_grant_required";
 }
 
 /**
- * Throwing form for handlers: returns nothing on success, or the 403 body to
- * return. Kept as a value rather than an exception so handlers stay explicit
- * about their failure responses.
+ * The handler form: null on success, or the 403 body to return. Async since
+ * the sibling flip — a `sibling_grant_required` verdict is answered from
+ * the live grant rows, read now rather than cached, so revocation takes
+ * effect on the very next request.
  */
-export function profileAccessError(
+export async function profileAccessError(
+  db: Parameters<typeof hasLiveSiblingGrant>[0],
   session: AuthenticatedSession,
   target: ProfileAccessTarget,
   operation: ProfileOperation,
-): { error: string } | null {
-  return resolveProfileAccess(session, target, operation)
-    ? null
-    : { error: "Not permitted for this profile" };
+): Promise<{ error: string } | null> {
+  const verdict = resolveProfileAccess(session, target, operation);
+  if (verdict === "allowed") return null;
+  if (verdict === "sibling_grant_required") {
+    const granted = await hasLiveSiblingGrant(db, {
+      granteeProfileId: session.profile.id,
+      targetProfileId: target.id,
+    });
+    if (granted) return null;
+    return {
+      error:
+        "No grant to read this agent's memory — the account holder can open that door",
+    };
+  }
+  return { error: "Not permitted for this profile" };
 }

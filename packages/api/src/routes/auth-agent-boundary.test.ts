@@ -158,7 +158,7 @@ describe("an agent session cannot act as the account holder", () => {
   });
 
   it("still lets an agent set its own locale", async () => {
-    const res = await app().request("/api/auth/me/preferences", json({ preferredLocale: "ko-KR" }));
+    const res = await app().request("/api/auth/me/preferences", json({ preferredLocale: "en-US" }));
     expect(res.status).not.toBe(403);
   });
 });

@@ -164,7 +164,12 @@ The extraction call (`extractSignalCandidates` — interface in
   never "this note is about X".
 - **Quotes must be verbatim spans.** Absent is honest; invented is not. The
   primary quote is verified in code against the capture's own text
-  (`packages/api/src/lib/salience.ts`) and dropped if it is not there.
+  (`packages/api/src/lib/salience.ts`) and dropped if it is not there —
+  including a span from attachment enrichment: only the person's OWN words
+  survive as evidence quotes now. `signal_evidence.quote_source` remains on
+  the row (`own` / `enrichment` / null): new rows carry `own` or null, and
+  older rows keep whatever they were verified as, because the two are
+  different claims about a person and must never render alike.
 - **Related captures are context, not material.** Every statement must be
   grounded in the current capture first; a pattern living only in the
   earlier captures is not the model's to name. When an earlier capture
@@ -187,6 +192,17 @@ dimensions — the same family as capture embeddings, see
 **Batch dedupe.** Candidates from one reply are compared to each other; at
 cosine ≥ `SIGNAL_BATCH_DEDUPE_MIN_COSINE` (0.94) they collapse — a model
 that says the same thing twice in one reply mints once.
+
+Next, the ground refuses: each candidate is compared against the vectors of
+the profile's **dismissed** signals (rows whose `dismissed_at` is set — the
+owner threw the pattern out, and the row, evidence and embedding all stayed).
+At or above `SIGNAL_SUPPRESSION_MIN_COSINE` (0.86) to any dismissed anchor,
+the candidate is dropped — no mint, no evidence, no judge call — and a
+`suppressions` row is written naming the anchor, snapshotting both statements
+and the cosine that decided. Every refusal is on the record; restoring the
+dismissed signal (clearing `dismissed_at`) returns the pattern to the loop's
+sight. Checked before the match on purpose: a pattern the owner refused must
+not re-enter as evidence for something else **[checked]**.
 
 **Match-or-mint.** Each candidate is compared against the profile's existing
 signal vectors — the `MATCH_CANDIDATE_SCAN_LIMIT` (500) most recently
@@ -436,12 +452,45 @@ A group's artifact runs the same pipeline with three deliberate differences
 (implemented 2026-08-21; before that the function was an explicit
 `not_implemented` seam, so groups had walls but never a reading):
 
-- **The wall is the selection.** No scoring pass, no cold start: members
-  chose what to share, so every shared signal is eligible, ranked by live
-  `computeSignalConfidence` and capped at `TOP_OF_MIND_SIGNAL_LIMIT` (12).
-  Each signal carries its owner's name into the prompt, and the group
-  instruction asks for cross-member entries in the group's plural voice —
-  an artifact of solo entries is named a failure in the instruction itself.
+- **The wall is the selection — exactly the wall.** No scoring pass, no
+  cold start: members chose what to share, so every shared signal is
+  eligible, ranked by live `computeSignalConfidence` and capped at
+  `TOP_OF_MIND_SIGNAL_LIMIT`. "Exactly" is enforced since 2026-08-22: the
+  loader mirrors the wall's own withholdings — a share whose owner has
+  left the group is withdrawn, and a retired signal has sunk — where it
+  previously read every share row bare and could feed a departed member's
+  statement into the room's next reading.
+- **The first draft waits for affirmed material.** A room with no standing
+  artifact does not draft from thin evidence: a shared statement is
+  *affirmed* when at least one current member other than its owner has
+  said "true" of it (their latest verdict stands — a later "not true"
+  withdraws it), and the first generative draft waits until enough shared
+  statements are affirmed — the `emerging → active` shape, one level up.
+
+  **The bar reads the room** (founder ruling, 2026-08-25). At or below
+  `GROUP_DRAFT_SMALL_MAX_MEMBERS` (3) members it is
+  `GROUP_DRAFT_MIN_AFFIRMED_SMALL` (2); above that,
+  `GROUP_DRAFT_MIN_AFFIRMED` (3). A flat three was a proportion argument
+  wearing an absolute number's clothes: the count is over SHARED
+  STATEMENTS, so a pair who have put two statements up could never reach
+  three however many times each was affirmed — the gate did not slow a
+  small room down, it closed it. Two is the floor and never one, because
+  one person agreeing with one statement is not a room agreeing. The
+  member count is read at the moment the job runs, and only the first
+  draft is gated at all, so crossing the size line never unsays anything.
+
+  Below the bar the pass returns
+  the explicit status `waiting_for_affirmations` rather than a silent
+  nothing. Only the first model draft is gated: an established room
+  re-reads its standing artifact as shares and verdicts move, and member
+  decisions are never gated — an accepted proposal materializes a version
+  whatever the count. Answerability mirrors the wall too: a member may
+  file a verdict on a statement only while it stands on a wall they and
+  its owner are both currently in
+  (`packages/api/src/routes/feedback.ts`). Each
+  signal carries its owner's name into the prompt, and the group instruction
+  asks for cross-member entries in the group's plural voice — an artifact of
+  solo entries is named a failure in the instruction itself.
 - **Members edit by accepted proposal, and code applies them.** Before the
   model writes a word, every proposal accepted since the previous version
   is materialized deterministically: an accepted edit rewrites its entry
@@ -576,8 +625,11 @@ The authoritative values. Machine-checked against code — see
 |---|---|---|
 | `SIGNAL_MATCH_MIN_COSINE` | 0.86 | At or above: attach as evidence |
 | `SIGNAL_MERGE_JUDGE_MIN_COSINE` | 0.7 | Band floor: ask the judge instead of minting blind |
+| `SIGNAL_SUPPRESSION_MIN_COSINE` | 0.86 | At or above a dismissed signal's vector: refuse the candidate, on the record |
 | `SIGNAL_BATCH_DEDUPE_MIN_COSINE` | 0.94 | Within one extraction batch, collapse near-identical candidates |
 | `SIGNAL_PROMOTION_MIN_EVIDENCE` | 3 | Evidence count where emerging becomes active |
+| `GROUP_SIGNAL_MIN_VOICES` | 2 | Distinct members' memories a room signal needs before it is served |
+| `GROUP_JOIN_BACKFILL_LIMIT` | 100 | Existing public memories a room is asked to read when a member arrives |
 | `CONFIDENCE_SUPPORT_WEIGHT` | 55 | Confidence: weight of evidence count |
 | `CONFIDENCE_SPREAD_WEIGHT` | 30 | Confidence: weight of time spread |
 | `CONFIDENCE_RECENCY_WEIGHT` | 15 | Confidence: weight of recency |
@@ -596,6 +648,9 @@ The authoritative values. Machine-checked against code — see
 |---|---|---|
 | `TOP_OF_MIND_SIGNAL_LIMIT` | 12 | Signals synthesis may consider |
 | `TOP_OF_MIND_MIN_SIGNALS` | 3 | Cold-start floor; below it, emerging signals backfill |
+| `GROUP_DRAFT_MIN_AFFIRMED` | 3 | A room's first draft waits for this many shared statements affirmed by someone other than their owner |
+| `GROUP_DRAFT_SMALL_MAX_MEMBERS` | 3 | A room this size or smaller is held to the small-room bar instead |
+| `GROUP_DRAFT_MIN_AFFIRMED_SMALL` | 2 | The small room's bar. Two, never one — one person agreeing once is not a room agreeing |
 | `SELECTION_CONFIDENCE_WEIGHT` | 0.45 | Selection: confidence term |
 | `SELECTION_EVIDENCE_WEIGHT` | 0.2 | Selection: support term |
 | `SELECTION_RECENCY_WEIGHT` | 0.2 | Selection: recency term |
@@ -697,11 +752,72 @@ Source: `packages/web/src/lib/aliveness.ts`.
 | `FIELD_DECAY_HALF_LIFE_DAYS` | 7 | Half-life of an untended memory's light |
 | `FIELD_REFLECTION_SATURATION` | 2 | Attention stops adding light past this many reflections |
 | `FIELD_REFLECTION_WEIGHT` | 0.25 | What each reflection adds, as a fraction of current decay |
-| `FIELD_FLOOR_CITED` | 0.34 | A memory a signal rests on cannot sink below this |
+| `FIELD_FLOOR_CITED` | 0.15 | A memory a signal rests on cannot sink below this |
 | `FIELD_FLOOR_ANSWERED` | 0.18 | Nor one you answered in your own words |
 | `FIELD_FLOOR_IN_GROUP` | 0.1 | Nor one that is out loud in a group |
-| `FIELD_CITED_LIFT` | 0.12 | Being cited also lifts a memory above its floor |
 | `FIELD_FRONTIER_DAYS` | 3 | Untouched longer than this and cited by nothing = a frontier |
+| `FIELD_CARRY_ROOT_SATURATION` | 3 | Roots stop adding carry past this many citing patterns |
+| `FIELD_CARRY_ROOTS_SHARE` | 0.1 | Carry: the share held by how many patterns cite it |
+| `FIELD_CARRY_PROMOTED_SHARE` | 0.45 | Carry: the share held by how far the pattern above it has got |
+| `FIELD_CARRY_PROMOTION_EVIDENCE` | 3 | Evidence that fills the promotion share — the loop's own promote-at |
+| `FIELD_CARRY_POSTER_SHARE` | 0.25 | Carry: the share held by reaching the live top of mind |
+| `FIELD_CARRY_PRINCIPLE_SHARE` | 0.2 | Carry: the share held by reaching a principle |
+| `FIELD_CARRY_SPAN` | 0.85 | Extra light a fully-carrying memory holds over a barely-cited one |
+| `FIELD_ATTENTION_SPAN` | 0.16 | Extra floor for coming back to a memory, graded by how often |
+| `FIELD_RECENCY_WEIGHT` | 0.25 | The share of the range freshness may spend; the rest belongs to use |
+| `FIELD_TIER_CEILING` | 1 | Aliveness at or above this draws in the brightest band |
+| `FIELD_TIER_GAMMA` | 0.7 | Bends the banding so the dim half gets the larger share of bands |
+
+**Why the light is banded through a curve.** An orb is drawn from a pre-baked
+sprite, so the aliveness continuum is quantised. That mapping was linear while
+aliveness is exponential in age: with a seven-day half-life a fortnight sits at
+0.25, three weeks at 0.125, four at 0.06 — so nearly every band went to the
+first week and everything past three weeks collapsed into the bottom one, and
+an archive with months in it rendered as one flat grey. `FIELD_TIER_GAMMA`
+bends the mapping toward the dim half, and `TIERS` (in
+`packages/web/src/canvas/sprites.ts`) widened from five bands to nine. Neither
+changes what a memory IS — only how finely the eye can read it.
+
+**Why promotion is the largest share, and why it grades.** Roots, the poster
+and a principle are all the same number for every memory in a young archive:
+nothing is adopted yet, no principles exist, and each capture derives its own
+lone candidate — so every memory has exactly one root and the light has nothing
+to say. Promotion is the one distinction that exists from the first week: a
+signal turns `active` when three memories say the same thing, so a memory under
+one is holding up something the loop has confirmed rather than a guess.
+
+It was a BOOLEAN first, and that was the same failure one level down. `active`
+is a cliff at three pieces of evidence, and a young archive lives entirely on
+the near side of it — no signal has three memories behind it yet, so the term
+was false for every memory and contributed exactly zero variance. Running the
+real modules over this repo's own fixture: thirteen of fourteen cited memories,
+spanning nine to ninety-one days, landed on the identical aliveness. So the
+share grades toward the threshold instead of switching at it — one memory
+behind the candidate is a guess, two is the loop starting to believe it, three
+promotes and the term is full — and it is sized so that each of those steps
+clears a whole band of `TIERS`. A share that buys less than a band is
+arithmetic nobody can see, which is how four correct terms produced one flat
+field.
+
+**What the nine bands are spent on.** Measured through the real pipeline at
+twenty days: uncited draws band 1; under one emerging candidate, 4; under a
+candidate with two behind it, 5; under a promoted one, 6; reaching the live top
+of mind, 7; and under a settled principle, 8. `FIELD_CARRY_ROOTS_SHARE` is
+deliberately smaller than a band — how many patterns rest on a memory refines
+its light WITHIN a band rather than moving it, because there are more
+distinctions worth drawing than there are bands to draw them in, and how far
+the loop has got with a memory beats how many times it has tried.
+
+**Why the carry is graded and the floor is not.** `FIELD_FLOOR_CITED` is what
+being cited AT ALL is worth: one root and nothing above it, and the memory can
+no longer rot. `FIELD_CARRY_SPAN` is the range above that floor, spent by
+`carryOf` on how far up the stack the memory actually reaches — roots, then
+the poster, then a principle. Being cited stopped being a boolean the day the
+field had to answer "how much of me is standing on this?" rather than "is
+anything?". The three shares sum to one, so the carry is a clean 0–1 and the
+spread it buys is the one named constant above rather than an emergent
+maximum. It renders as light and never as a number: no badge, no count, no
+bar — bright means load-bearing, dim means nothing rests here yet.
 
 **Why the field decays faster than confidence.** 7 days against 45 and 30 is
 deliberate. Those govern what the machine concludes over months; this governs
@@ -717,10 +833,23 @@ different things. `SELECTION_EVIDENCE_SATURATION` counts a pattern accumulating
 across many memories; `FIELD_REFLECTION_SATURATION` counts one person returning
 to a single memory. Two returns to the same thought is already unusual.
 
-**Why `hasNotes` appears twice.** A citation both sets a floor
-(`FIELD_FLOOR_CITED`) and lifts the result (`FIELD_CITED_LIFT`): being rested
-upon stops a memory sinking AND makes it brighter than an equally old one that
-is not. Deliberate, and named so it reads as a decision rather than a bug.
+**Why freshness is added to the floors rather than raced against them.**
+`colorBall` took `Math.max(recency, tended)` and that made age a dead channel
+with a date on it. Freshness can only ever reach `FIELD_RECENCY_WEIGHT`; the
+cited floor is already most of the way there; so past about five days the max
+returned the floor and a cited memory's age CONTRIBUTED EXACTLY ZERO — forever,
+for every cited memory in the archive. Now freshness spends its share of
+whatever room is left above the floor: `tended + (1 - tended) * recency`. An
+uncited memory is unaffected (its floor is nought, so it gets the whole share,
+exactly as before); a memory that is cited, answered and out loud in a room has
+less room to spend on being new, which is right, because by then what it holds
+up matters more than when it arrived.
+
+Age still saturates: with a seven-day half-life a memory three months old and
+one a year old are both simply old, and the light says so. That is deliberate.
+The founder's ask was that brightness track "how active this one is being used
+to form signals, top of mind, and principle" — use is the meaning, and age is
+the gradient underneath it.
 
 ## How this doc stays true
 

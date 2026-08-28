@@ -75,6 +75,52 @@
      normal leading looks like a document; tight leading looks like a poster.
   */
 
+  /* -----------------------------------------------------------------------
+   * SPACE
+   *
+   * A TWO-PIXEL GRID, WHICH IS WHAT THIS PRODUCT ALREADY WAS (2026-08-25).
+   * Measured before anything moved: 47 distinct spacing literals across the
+   * stylesheets, and all but six of the frequent ones were already even. The
+   * "random spacing here and there" the founder named was not a wild scatter —
+   * it was a grid nobody had written down, with a handful of odd values (1, 3,
+   * 5, 7, 9, 13) sitting off it.
+   *
+   * SO THE TOKENS ARE NAMED BY THEIR PIXEL VALUE, and that is deliberate. A
+   * ladder of `--sp-1 … --sp-12` where `--sp-7` means 14px is a second thing
+   * to learn and a second thing to get wrong. Naming a step after what it IS
+   * makes the grid legible at every call site and lets the gate below say
+   * exactly one thing: a spacing value that is not one of these is off the
+   * grid.
+   *
+   * What this buys is not shorter CSS — `var(--sp-14)` is longer than `14px`.
+   * It is that "off the grid" becomes a thing a machine can see.
+   * -------------------------------------------------------------------- */
+  --sp-2: 2px;
+  --sp-4: 4px;
+  --sp-6: 6px;
+  --sp-8: 8px;
+  --sp-10: 10px;
+  --sp-12: 12px;
+  --sp-14: 14px;
+  --sp-16: 16px;
+  --sp-18: 18px;
+  --sp-20: 20px;
+  --sp-22: 22px;
+  --sp-24: 24px;
+  --sp-26: 26px;
+  --sp-28: 28px;
+  --sp-30: 30px;
+  --sp-32: 32px;
+  --sp-36: 36px;
+  --sp-40: 40px;
+  --sp-44: 44px;
+  --sp-48: 48px;
+  --sp-56: 56px;
+  --sp-64: 64px;
+  --sp-72: 72px;
+  --sp-88: 88px;
+  --sp-96: 96px;
+
   /* --- the display cluster. Only the room's name lives here. --- */
   --t-display: clamp(64px, 13vw, 200px);
   --t-display-lh: 0.86;
@@ -86,8 +132,27 @@
   --t-reading: clamp(21px, 2.2vw, 30px);
   --t-lead: clamp(16px, 1.2vw, 19px);
   --t-body: 15px;
+  /* TWO STEPS NAMED BECAUSE THE PRODUCT REALLY USES THEM (2026-08-25).
+     `14px` appears at twenty sites and `12px` at thirteen, across three
+     stylesheets, and neither had a name. Folding them into `--t-ui` or
+     `--t-body` would move thirty-three pieces of type on screen — a visual
+     redesign, and one for the founder's eye rather than a refactor's. So the
+     scale describes what this product IS, and collapsing six reading steps to
+     four stays an open decision rather than a silent one. */
+  --t-note: 14px;
   --t-ui: 13px;
+  --t-fine: 12px;
   --t-meta: 11px;
+  /* THE LABEL REGISTER, WHICH HAD NO NAME UNTIL NOW (2026-08-25). Ten pixels,
+     tracked and uppercased, is what every signpost, eyebrow and quiet verb row
+     in this product is set in — the four edges of the world, the card's date,
+     the mouth's verbs. It was written as a bare `10px` in twenty-one places
+     across three stylesheets and referenced by nothing, so the one register a
+     person sees most often was the one the system could not name. */
+  --t-label: 10px;
+  /* the floor. Nothing legible is set smaller, and a size below this is a
+     mistake rather than a choice. */
+  --t-micro: 8px;
 
   /* -----------------------------------------------------------------------
    * VOICE
@@ -174,18 +239,8 @@
    8-9px with 0.18-0.22em tracking -- the single most repeated gesture in the
    product, and the one that made every screen read as an instrument panel.
    ======================================================================= */
-
-.nc-rail-room-count,
-.reference-capture-kicker,
-.reference-capture-close,
-.nc-note-evidence-label,
-.nc-note-evidence-source,
-.memory-reading-plain-where,
 .login-eyebrow,
-.field-label,
-.history-title,
-.capture-trigger-label,
-.cell .lbl {
+.field-label {
   font-family: var(--voice-you);
   font-size: var(--t-meta);
   font-weight: 500;
@@ -195,17 +250,6 @@
 }
 
 /* Counts, timestamps, provenance: quieter still, and never tracked. */
-.nc-note-when,
-.nc-note-provenance-text,
-.memory-contents-item-meta,
-.memory-led-summary,
-.memory-contents-readings-summary,
-.nc-room-item-count,
-.nc-drawer-count,
-.nc-bottom-hint,
-.history-item-meta,
-.history-attachment-meta,
-.nc-timerail-moment-when,
 .meta {
   font-family: var(--voice-you);
   font-size: var(--t-meta);
@@ -217,9 +261,6 @@
 /* ==========================================================================
    2. THE ROOM'S NAME -- the display cluster, and the only thing in it
    ======================================================================= */
-
-.nc-room-title-text,
-.nc-room-name,
 .login-title,
 .nc-title {
   font-family: var(--voice-room);
@@ -265,8 +306,6 @@
 /* Length tempers the size; the floor stays legible. The old ladder bottomed
    out at 9px, which is below the size at which anyone reads anything. */
 
-.nc-note:hover .nc-note-footer-row,
-.nc-note:focus-within .nc-note-footer-row { opacity: 1; }
 
 /* ==========================================================================
    5. CAPTURE
@@ -285,18 +324,7 @@
    13-15px -- the same as the buttons around it.
    ======================================================================= */
 
-.memory-contents-expanded-text,
-.memory-contents-expanded-reading,
-.memory-contents-expanded-editor,
-
 /* Anything the machine claims about a person takes the room's face. */
-.memory-reading-plain-title,
-.memory-contents-reflection-question,
-
-.memory-reading-plain-title,
-
-.history-empty,
-.memory-contents-reflection-empty,
 .nc-loading {
   font-family: var(--voice-you);
   font-size: var(--t-ui);
@@ -308,14 +336,6 @@
 
    One shape for a real action, one for a quiet one, on every surface.
    ======================================================================= */
-
-.memory-contents-secondary-action,
-.nc-edit-cancel,
-.nc-room-item-confirm-no,
-.nc-room-item-confirm-yes,
-.nc-drawer-reflect-actions button,
-.nc-join-confirm-accept,
-.nc-join-confirm-cancel,
 .btn-primary,
 .btn-destructive,
 .btn-google {
@@ -327,22 +347,6 @@
     border-color var(--dur-fast) var(--ease);
 }
 
-/* WHAT HAS FOCUS, and only what has focus.
-   `.field-input` used to lead this selector list, so a text input took the
-   outline unconditionally rather than on focus. That was invisible for as long
-   as the declaration was dead, and would have become a permanent 2px ring on
-   every input the moment the token existed -- overriding `outline: none` at
-   global.css:1113, which is a deliberate decision: an input already says it has
-   focus by taking its border to full ink (global.css:1117). It is dropped
-   rather than moved; no rule ever wanted it.
-
-   The offset matters. At 3px the ring sits OUTSIDE the control, on the ground,
-   so it is measured against `#06080d` everywhere -- including around the white
-   Google button, where a light ring drawn inside would have been invisible. */
-:where(button, a, input, textarea, [tabindex]):focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 3px;
-}
 
 /* ==========================================================================
    10. AUTH, ONBOARDING, PROFILE
@@ -384,21 +388,7 @@
    Everything that moves resolves to `--ease`. Timing only -- this cannot
    affect layout, so it is safe to apply broadly.
    ======================================================================= */
-
 .nc-note,
-.nc-note-footer-row,
-.nc-note-inspiration-slide,
-.nc-save,
-.nc-save-cta,
-.nc-rail,
-.nc-timerail,
-.nc-room-panel,
-.memory-contents-item,
-.memory-contents-secondary-action,
-.reference-capture-modal,
-.history-panel,
-.history-item,
-.capture-trigger,
 .btn-primary,
 .btn-destructive,
 .btn-google,
@@ -407,11 +397,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .nc-note,
-  .nc-note-footer-row,
-  .memory-contents-item,
-  .history-item,
-  .reference-capture-modal {
+.nc-note {
     transition-duration: 1ms;
     animation-duration: 1ms;
   }
@@ -426,8 +412,7 @@
    ======================================================================= */
 
 @media (prefers-reduced-motion: reduce) {
-  .nc-save-cta::after { transition: none; }
-}
+  }
 
 /* ==========================================================================
    14. THE GROUND
@@ -491,14 +476,102 @@ body {
   transform-origin: center top;
 }
 
-body:has(.memory-contents-item--expanded) .nc-stage--top-of-mind-wall,
-body:has(.reference-capture-modal) .nc-stage--top-of-mind-wall {
-  transform: scale(0.97) translateY(-10px);
-  opacity: 0.5;
-}
 
 @media (prefers-reduced-motion: reduce) {
   .nc-stage--top-of-mind-wall { transition: none; }
 }
 
+
+
+}
+
+@layer register {
+/* ══════════════════ THE LABEL REGISTER, DECLARED ONCE ══════════════════
+ *
+ * Founder, 2026-08-25: "ensure font and text style used is also consistent
+ * and feel like we built it from an official design system instead of using
+ * random font and sizes and spacing here and there."
+ *
+ * WHAT IT WAS. This one gesture — small, uppercase, tracked — is the most
+ * repeated in the product, and it was declared TWENTY-FIVE TIMES across
+ * `home.css`, `chrome.css` and `global.css`, in four sizes (10px, 11px, 12px
+ * and a raw 9px), five trackings (0.08, 0.12, 0.14, 0.16, 0.18em) and three
+ * weights. Not one of those was a decision; they were twenty-five separate
+ * attempts to write down the same thing from memory, and `chrome.css` had
+ * already begun correcting `global.css` by overriding it rather than by
+ * editing it, which is how a sheet ends up arguing with itself.
+ *
+ * WHAT DECIDED THE NUMBERS. Not taste and not the majority of the
+ * DECLARATIONS — what was actually on screen. `e2e:snapshot` was taken first
+ * and the computed values counted: 48 elements already rendered at
+ * 10px / 1.6px / 500, and every other value in the product was worn by ten
+ * elements or fewer. So the register is what the product already mostly
+ * looked like, and the change is that the stragglers stopped disagreeing.
+ * `--t-label` is 10px and 0.16em of it is 1.6px, so this is that value said
+ * in tokens rather than in pixels.
+ *
+ * WHAT IS NOT IN IT, and why the list is not simply "everything that had an
+ * uppercase declaration":
+ *
+ *   `.btn-primary` and the other things you PRESS. `chrome.css` already rules
+ *   that "the world has one uppercase register and it belongs to eyebrows,
+ *   never to things you press", and sets them lowercase. Their uppercase
+ *   declarations in `global.css` had been dead for as long as that rule
+ *   existed.
+ *
+ *   `.meta`. Its uppercase declaration in `global.css` was already beaten by
+ *   a `text-transform: none` rule in this file, so it renders lowercase
+ *   today. Adding it here would have been a silent redesign carried in on a
+ *   consolidation — caught by counting what rendered rather than what was
+ *   written.
+ *
+ * WHY HERE. `home.css` is only loaded by the world, so a register that lives
+ * there cannot dress the door. This sheet is loaded by every page, and it is
+ * written LAST in it on purpose: the two voice rules above also name
+ * `.login-eyebrow` and `.field-label`, and a register that lost to them
+ * would be a twenty-sixth attempt rather than the end of them.
+ *
+ * DECLARED ONCE MEANS LAYERS STOP MATTERING. There is no longer any rule in
+ * any layer to out-rank; `type-scale.test.ts` holds it at one. */
+.jar-label,
+.jar-saved,
+.jar-mouth-field::placeholder,
+.jar-mouth-step,
+.jar-mouth-where,
+.jar-panel-vis,
+.jar-ground,
+.login-eyebrow,
+.field-label,
+.profile-public-heading > .login-eyebrow,
+.profile-danger-heading > .login-eyebrow,
+.profile-memories-heading > .login-eyebrow,
+.login-divider,
+.login-divider__label,
+.login-tab,
+.profile-tab,
+.profile-tabs button,
+.profile-row-tag,
+.profile-memory-badge,
+.profile-memory-action,
+/* `.profile-signout-button` IS DELIBERATELY NOT HERE. It had an uppercase
+   declaration in `global.css` and rendered LOWERCASE, because `chrome.css`
+   already rules that the register "belongs to eyebrows, never to things you
+   press" and sets the sign-out verb accordingly. Consolidating a dead
+   declaration into a live one would have turned it uppercase — a redesign
+   smuggled in on a tidy-up. Caught by diffing computed styles, where it was
+   the single `text-transform` change in the whole walk.
+
+   `.btn-destructive` and `.profile-memory-action` below ARE here, and they
+   are things you press too. They were already rendering uppercase, so listing
+   them changes their numbers and not their voice. Whether those two should
+   join the sign-out verb in lower case is a design question, and it is not
+   this rule's to answer. */
+.btn-destructive,
+.btn-google,
+.nc-profile-link {
+  font-size: var(--t-label);
+  letter-spacing: 0.16em;
+  font-weight: 500;
+  text-transform: uppercase;
+}
 }

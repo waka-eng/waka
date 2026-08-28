@@ -16,6 +16,11 @@
  * kept as an inspiration — where they already belong, as evidence. The
  * response states what was created; no test verdict travels with it.
  *
+ * When the tests cannot RUN, that is not a routing outcome and is not
+ * reported as one: POST answers 503 `retryable` and writes nothing, so an
+ * outage can never be mistaken — by a person or by a later screen — for a
+ * judgment that their words were not a principle.
+ *
  * The matrix: curation is owner-side (the human session, who is admin of
  * every profile in the account; an agent session only on its own profile).
  * An agent session READS its human's principles — the conditioning use case —
@@ -23,6 +28,7 @@
  * extend to curation.
  */
 
+import { recordConsultation } from "../lib/consultations.js";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
@@ -37,7 +43,12 @@ import {
   signals,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
+import type { DeclarationRoute } from "../lib/model-provider.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
+import {
+  revertPrincipleStatement,
+  writePrincipleStatementChain,
+} from "../lib/statement-chains.js";
 import {
   getDefaultModelProvider,
   type ModelProvider,
@@ -222,7 +233,15 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
   routes.get("/", async (c) => {
     const resolved = await resolveRead(c);
     if ("error" in resolved) return resolved.error;
-    const views = await loadPrincipleViews(getDatabase(), resolved.profileId);
+    const db = getDatabase();
+    const views = await loadPrincipleViews(db, resolved.profileId);
+    /* the read side answers for itself: the JSON list is the serve the MCP
+       client actually reads, so it is on the record like the rendering */
+    await recordConsultation(db, {
+      profileId: resolved.profileId,
+      session: c.get("session"),
+      surface: "principles",
+    });
     return c.json({ principles: views });
   });
 
@@ -255,14 +274,41 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
 
     const session = c.get("session");
     const provider = await getProvider();
-    // Internal routing — the tests run, the outcome is a destination, and no
-    // verdict travels back with the response.
-    const route = await provider
-      .routeDeclaration({
+    /* Internal routing — the tests run, the outcome is a destination, and no
+       verdict travels back with the response.
+
+       WHAT THIS USED TO DO, AND WHY IT WAS WRONG. It ended
+       `.catch(() => ({ route: "inspiration" }))`. Every failure of the
+       provider — a missing key, a rate limit, a timeout, a malformed
+       response — became the same row and the same 201 as a considered
+       rejection. A person told WAKA how they choose, WAKA said nothing, and
+       their words were filed as a note. Nothing distinguished that from a
+       judgment, so no screen built later could distinguish it either.
+
+       The product rule is that no REFUSAL is ever shown. It is not that
+       nothing is ever said. "We could not consider this yet" is the other
+       sentence, and it is the honest one when the judge never sat. The
+       statement is not written anywhere on this path: a declaration the
+       person can send again is better than a note they did not ask for. */
+    let route: DeclarationRoute;
+    try {
+      route = await provider.routeDeclaration({
         preferredLocale: normalizeSupportedLocale(session.profile.preferredLocale),
         statement: parsed.data.statement,
-      })
-      .catch(() => ({ route: "inspiration" as const, type: "maxim" as const }));
+      });
+    } catch (err) {
+      console.warn("[principles] declaration could not be routed", err);
+      return c.json(
+        {
+          error: "Not considered yet",
+          /* The client's cue to offer the words back rather than report a
+             verdict. Named as a state, not as a reason — the reason is an
+             infrastructure detail and is nobody's business on this side. */
+          retryable: true,
+        },
+        503,
+      );
+    }
 
     if (route.route === "inspiration") {
       const [row] = await db
@@ -296,6 +342,14 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
           lockedAt: new Date(),
         })
         .returning();
+      // Chained from birth too — as the owner's words, so revert has
+      // nothing machine-side to reach for on a declaration, by design.
+      await writePrincipleStatementChain(tx, {
+        profileId: scope.profileId,
+        principleId: row!.id,
+        statement: parsed.data.statement,
+        reason: "declared",
+      });
       return row!;
     });
     const [view] = await loadPrincipleViews(db, scope.profileId).then((views) =>
@@ -325,17 +379,87 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
     );
     if (!scope.ok) return c.json(scope.body, scope.status);
 
-    const [updated] = await db
-      .update(principles)
-      .set({ statement: parsed.data.statement, lockedAt: new Date(), updatedAt: new Date() })
-      .where(
-        and(eq(principles.id, params.data.principleId), eq(principles.profileId, scope.profileId)),
-      )
-      .returning({ id: principles.id });
+    /* The edit joins the statement chain, and the sentence it replaces is
+       seeded first when the machine was still its author (unlocked) and
+       nothing recorded it yet — the machine's original survives the very
+       edit that would have destroyed it (no-quiet-corners Phase 2). */
+    const now = new Date();
+    const updated = await db.transaction(async (tx) => {
+      const [before] = await tx
+        .select({ statement: principles.statement, lockedAt: principles.lockedAt })
+        .from(principles)
+        .where(
+          and(
+            eq(principles.id, params.data.principleId),
+            eq(principles.profileId, scope.profileId),
+          ),
+        )
+        .limit(1);
+      if (!before) return false;
+
+      await writePrincipleStatementChain(tx, {
+        profileId: scope.profileId,
+        principleId: params.data.principleId,
+        statement: parsed.data.statement,
+        reason: "edited",
+        seedStatement: before.lockedAt === null ? before.statement : null,
+        now,
+      });
+      await tx
+        .update(principles)
+        .set({ statement: parsed.data.statement, lockedAt: now, updatedAt: now })
+        .where(
+          and(
+            eq(principles.id, params.data.principleId),
+            eq(principles.profileId, scope.profileId),
+          ),
+        );
+      return true;
+    });
     if (!updated) return c.json({ error: "Principle not found" }, 404);
 
     const [view] = await loadPrincipleViews(db, scope.profileId).then((views) =>
-      views.filter((v) => v.id === updated.id),
+      views.filter((v) => v.id === params.data.principleId),
+    );
+    return c.json({ principle: view });
+  });
+
+  /**
+   * The lock's third verb, at layer 4. Restores the machine's minted
+   * sentence byte-for-byte from the chain and clears the lock. A declared
+   * principle has no machine original — the chain holds only the owner's
+   * words — and the verb says so rather than inventing one.
+   */
+  routes.post("/:principleId/revert", async (c) => {
+    const params = principleParamsSchema.safeParse(c.req.param());
+    if (!params.success) return c.json({ error: "Principle not found" }, 404);
+    const parsedQuery = scopeQuerySchema.safeParse(c.req.query());
+    if (!parsedQuery.success) return c.json({ error: "Invalid query" }, 400);
+
+    const db = getDatabase();
+    const scope = await resolveProfileScope(
+      db,
+      c.get("session"),
+      parsedQuery.data.profile,
+      "write",
+      loadProfile,
+    );
+    if (!scope.ok) return c.json(scope.body, scope.status);
+
+    const result = await revertPrincipleStatement(db, {
+      profileId: scope.profileId,
+      principleId: params.data.principleId,
+    });
+    if (result.outcome === "not_found") return c.json({ error: "Principle not found" }, 404);
+    if (result.outcome === "nothing_to_revert") {
+      return c.json(
+        { error: "No machine statement to return to — the chain holds only your own words" },
+        409,
+      );
+    }
+
+    const [view] = await loadPrincipleViews(db, scope.profileId).then((views) =>
+      views.filter((v) => v.id === params.data.principleId),
     );
     return c.json({ principle: view });
   });
@@ -486,15 +610,30 @@ export function createPrincipleMarkdownRoute(
     );
     if (!scope.ok) return c.json(scope.body, scope.status);
 
-    const [profileRow] = await db
+    const [profileRaw] = await db
       .select({ name: profiles.name, type: profiles.type })
       .from(profiles)
       .where(eq(profiles.id, scope.profileId))
       .limit(1);
-    if (!profileRow) return c.json({ error: "Profile not found" }, 404);
+    /* principles are a person's or an agent's; a room's mind holds none
+       (rooms do not participate in layer 4 — data-model.md), so a mind here
+       reads as no profile at all */
+    if (!profileRaw || profileRaw.type === "group") {
+      return c.json({ error: "Profile not found" }, 404);
+    }
+    const profileRow = { name: profileRaw.name, type: profileRaw.type };
 
     const views = await loadPrincipleViews(db, scope.profileId);
-    const markdown = renderPrinciplesMarkdown(profileRow, views, new Date());
+    const renderedAt = new Date();
+    const markdown = renderPrinciplesMarkdown(profileRow, views, renderedAt);
+    /* the read side answers for itself: the canonical document is a daily
+       rendering, so the day-stamp is its version receipt */
+    await recordConsultation(db, {
+      profileId: scope.profileId,
+      session: c.get("session"),
+      surface: "principles",
+      renderedOn: renderedAt,
+    });
     return c.text(markdown, 200, { "Content-Type": "text/markdown; charset=utf-8" });
   });
 

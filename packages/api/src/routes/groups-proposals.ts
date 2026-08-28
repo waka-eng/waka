@@ -21,6 +21,7 @@ import {
   topOfMinds,
   type GroupProposalKind,
   type GroupProposalStatus,
+  type GroupStance,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import { labelMembersByProfileId } from "../lib/member-labels.js";
@@ -38,10 +39,22 @@ export interface GroupProposalView {
   entryId: string | null;
   body: string | null;
   rationale: string | null;
-  proposedByProfileId: string;
-  proposedByName: string;
-  affirmations: Array<{ profileId: string; name: string; createdAt: string }>;
-  viewerAffirmed: boolean;
+  /** Null when the proposer has since erased their account: a settled
+      proposal is the room's record, so it outlives its author (the erasure
+      doctrine) and the surface says "someone". */
+  proposedByProfileId: string | null;
+  proposedByName: string | null;
+  /** Every recorded answer, yes and no alike — one per member, latest wins.
+      Null profile and name mean the person has since erased their account:
+      a stance on a settled decision is history, and history keeps the mark
+      after the name is gone. */
+  stances: Array<{
+    profileId: string | null;
+    name: string | null;
+    value: GroupStance;
+    createdAt: string;
+  }>;
+  viewerStance: GroupStance | null;
   resolvedAt: string | null;
   createdAt: string;
 }
@@ -61,8 +74,8 @@ interface ProposalRow {
   entryId: string | null;
   body: string | null;
   rationale: string | null;
-  proposedByProfileId: string;
-  proposedByName: string;
+  proposedByProfileId: string | null;
+  proposedByName: string | null;
   resolvedAt: Date | null;
   createdAt: Date;
 }
@@ -73,15 +86,19 @@ async function loadProposalViews(
 ): Promise<GroupProposalView[]> {
   if (input.rows.length === 0) return [];
 
-  const affirmationRows = await db
+  const stanceRows = await db
     .select({
       proposalId: groupTopOfMindAffirmations.proposalId,
       profileId: groupTopOfMindAffirmations.profileId,
       name: profiles.name,
+      value: groupTopOfMindAffirmations.stance,
       createdAt: groupTopOfMindAffirmations.createdAt,
     })
     .from(groupTopOfMindAffirmations)
-    .innerJoin(profiles, eq(profiles.id, groupTopOfMindAffirmations.profileId))
+    // LEFT join: a settled stance whose holder erased their account keeps
+    // its row with a null profile, and an inner join would silently drop it
+    // from the record of who carried a decision.
+    .leftJoin(profiles, eq(profiles.id, groupTopOfMindAffirmations.profileId))
     .where(
       inArray(
         groupTopOfMindAffirmations.proposalId,
@@ -91,26 +108,32 @@ async function loadProposalViews(
     .orderBy(asc(groupTopOfMindAffirmations.createdAt));
 
   const labels = labelMembersByProfileId([
-    ...affirmationRows.map((row) => ({ profileId: row.profileId, name: row.name })),
-    ...input.rows.map((row) => ({
-      profileId: row.proposedByProfileId,
-      name: row.proposedByName,
-    })),
+    ...stanceRows.flatMap((row) =>
+      row.profileId ? [{ profileId: row.profileId, name: row.name }] : [],
+    ),
+    ...input.rows.flatMap((row) =>
+      row.proposedByProfileId
+        ? [{ profileId: row.proposedByProfileId, name: row.proposedByName }]
+        : [],
+    ),
   ]);
 
-  const byProposal = new Map<string, GroupProposalView["affirmations"]>();
-  for (const row of affirmationRows) {
+  const byProposal = new Map<string, GroupProposalView["stances"]>();
+  for (const row of stanceRows) {
     const list = byProposal.get(row.proposalId) ?? [];
     list.push({
       profileId: row.profileId,
-      name: labels.get(row.profileId)?.displayName ?? row.name,
+      name: row.profileId
+        ? (labels.get(row.profileId)?.displayName ?? row.name)
+        : null,
+      value: row.value,
       createdAt: row.createdAt.toISOString(),
     });
     byProposal.set(row.proposalId, list);
   }
 
   return input.rows.map((row) => {
-    const affirmations = byProposal.get(row.id) ?? [];
+    const stances = byProposal.get(row.id) ?? [];
     return {
       id: row.id,
       kind: row.kind,
@@ -119,12 +142,13 @@ async function loadProposalViews(
       body: row.body,
       rationale: row.rationale,
       proposedByProfileId: row.proposedByProfileId,
-      proposedByName:
-        labels.get(row.proposedByProfileId)?.displayName ?? row.proposedByName,
-      affirmations,
-      viewerAffirmed: affirmations.some(
-        (affirmation) => affirmation.profileId === input.viewerProfileId,
-      ),
+      proposedByName: row.proposedByProfileId
+        ? (labels.get(row.proposedByProfileId)?.displayName ?? row.proposedByName)
+        : null,
+      stances,
+      viewerStance:
+        stances.find((stance) => stance.profileId === input.viewerProfileId)?.value ??
+        null,
       resolvedAt: row.resolvedAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
     };
@@ -146,7 +170,9 @@ function selectProposalRows(db: WakaDb) {
       createdAt: groupTopOfMindProposals.createdAt,
     })
     .from(groupTopOfMindProposals)
-    .innerJoin(profiles, eq(profiles.id, groupTopOfMindProposals.proposedByProfileId));
+    // LEFT join: a settled proposal outlives an author who erased their
+    // account; an inner join would drop the room's record of the decision.
+    .leftJoin(profiles, eq(profiles.id, groupTopOfMindProposals.proposedByProfileId));
 }
 
 export async function listGroupProposals(
@@ -293,6 +319,74 @@ export function carriesMajority(affirmations: number, members: number): boolean 
   return members > 0 && affirmations * 2 > members;
 }
 
+/**
+ * DOES THE ROOM TURN IT DOWN? The mirror of {@link carriesMajority}, from the
+ * founder's ruling (2026-08-23) that refusal is a counted stance, not a veto:
+ * a proposal falls only when the recorded nos make a majority of yeses
+ * arithmetically impossible — the most yeses still reachable is
+ * `members - declines`, and `(members - declines) * 2 <= members` simplifies
+ * to this. In a room of two, one refusal still closes the question (1*2 >= 2)
+ * — the old behavior, now as arithmetic instead of as a veto. In a room of
+ * five, two nos leave it open and three close it.
+ */
+export function fallsToDeclines(declines: number, members: number): boolean {
+  return members > 0 && declines * 2 >= members;
+}
+
+/**
+ * Record one member's answer, replacing any earlier answer they gave.
+ * Answering is idempotent per (proposal, member) — the unique index — and
+ * changing your mind while the question is still open is answering again,
+ * not a second voice.
+ */
+async function recordStance(
+  db: WakaDb,
+  input: { proposalId: string; profileId: string; stance: GroupStance },
+): Promise<void> {
+  await db
+    .insert(groupTopOfMindAffirmations)
+    .values({
+      proposalId: input.proposalId,
+      profileId: input.profileId,
+      stance: input.stance,
+    })
+    .onConflictDoUpdate({
+      target: [
+        groupTopOfMindAffirmations.proposalId,
+        groupTopOfMindAffirmations.profileId,
+      ],
+      set: { stance: input.stance, createdAt: new Date() },
+    });
+}
+
+/** How many current members hold `stance` on the proposal, and the roll. */
+async function tallyStances(
+  db: WakaDb,
+  input: { groupId: string; proposalId: string; stance: GroupStance },
+): Promise<{ holding: number; members: number }> {
+  const [{ holding }] = await db
+    .select({ holding: sql<number>`count(*)::int` })
+    .from(groupTopOfMindAffirmations)
+    .innerJoin(
+      groupMembers,
+      and(
+        eq(groupMembers.profileId, groupTopOfMindAffirmations.profileId),
+        eq(groupMembers.groupId, input.groupId),
+      ),
+    )
+    .where(
+      and(
+        eq(groupTopOfMindAffirmations.proposalId, input.proposalId),
+        eq(groupTopOfMindAffirmations.stance, input.stance),
+      ),
+    );
+  const [{ members }] = await db
+    .select({ members: sql<number>`count(*)::int` })
+    .from(groupMembers)
+    .where(eq(groupMembers.groupId, input.groupId));
+  return { holding, members };
+}
+
 export async function affirmGroupProposal(
   db: WakaDb,
   input: { groupId: string; proposalId: string; profileId: string },
@@ -314,10 +408,11 @@ export async function affirmGroupProposal(
   if (!proposal) return { ok: false, reason: "not_found" };
   if (proposal.status !== "open") return { ok: false, reason: "already_resolved" };
 
-  await db
-    .insert(groupTopOfMindAffirmations)
-    .values({ proposalId: proposal.id, profileId: input.profileId })
-    .onConflictDoNothing();
+  await recordStance(db, {
+    proposalId: proposal.id,
+    profileId: input.profileId,
+    stance: "affirmed",
+  });
 
   /* the rule itself lives beside its tests — see carriesMajority below */
   /**
@@ -356,21 +451,14 @@ export async function affirmGroupProposal(
    * who never agreed. So the count joins current membership: a vote is a
    * statement by someone in the room, and leaving the room withdraws it.
    */
-  const [{ affirmations }] = await db
-    .select({ affirmations: sql<number>`count(*)::int` })
-    .from(groupTopOfMindAffirmations)
-    .innerJoin(
-      groupMembers,
-      and(
-        eq(groupMembers.profileId, groupTopOfMindAffirmations.profileId),
-        eq(groupMembers.groupId, input.groupId),
-      ),
-    )
-    .where(eq(groupTopOfMindAffirmations.proposalId, proposal.id));
-  const [{ members }] = await db
-    .select({ members: sql<number>`count(*)::int` })
-    .from(groupMembers)
-    .where(eq(groupMembers.groupId, input.groupId));
+  /* Only "affirmed" rows count toward carrying — a recorded no sits in the
+     same table (the counted-stance ruling) and counting it here would let
+     refusals push a sentence onto the wall. */
+  const { holding: affirmations, members } = await tallyStances(db, {
+    groupId: input.groupId,
+    proposalId: proposal.id,
+    stance: "affirmed",
+  });
   /* strictly more than half: 5 members needs 3, 4 needs 3, 1 needs 1 — a room
      of one is carried by its only member, which is the honest reading of
      "most of us" when us is one. */
@@ -408,41 +496,74 @@ export async function affirmGroupProposal(
 }
 
 /**
- * Turn a proposal down.
+ * Say no to a proposal.
  *
- * Any member can close an open proposal, including its author withdrawing it.
- * The mechanism is agreement: a change nobody will second is already dead, and
- * saying so plainly beats leaving it open forever as if it were still live.
+ * THIS USED TO BE A VETO: any member's decline resolved the proposal on the
+ * spot, so one person could kill a sentence for a room of five by pressing
+ * first. The founder ruled (2026-08-23) that refusal is a COUNTED STANCE —
+ * a no is recorded beside the yeses, visible in the record like any answer,
+ * and the proposal falls only when the nos make a yes-majority
+ * arithmetically impossible ({@link fallsToDeclines}).
+ *
+ * The one decline that still resolves alone is the author's: their proposal
+ * is their own sentence, and taking it back is withdrawal, not a veto over
+ * anyone else. Their stance is recorded as declined first, so the settled
+ * row reads as what happened rather than as an author who still backs a
+ * sentence the record says was turned down.
  */
 export async function declineGroupProposal(
   db: WakaDb,
   input: { groupId: string; proposalId: string; profileId: string },
 ): Promise<ResolveProposalResult> {
-  const now = new Date();
-  const declined = await db
-    .update(groupTopOfMindProposals)
-    .set({ status: "declined", resolvedAt: now, updatedAt: now })
+  const [proposal] = await db
+    .select({
+      id: groupTopOfMindProposals.id,
+      status: groupTopOfMindProposals.status,
+      proposedByProfileId: groupTopOfMindProposals.proposedByProfileId,
+    })
+    .from(groupTopOfMindProposals)
     .where(
       and(
         eq(groupTopOfMindProposals.id, input.proposalId),
         eq(groupTopOfMindProposals.groupId, input.groupId),
-        eq(groupTopOfMindProposals.status, "open"),
       ),
     )
-    .returning({ id: groupTopOfMindProposals.id });
+    .limit(1);
+  if (!proposal) return { ok: false, reason: "not_found" };
+  if (proposal.status !== "open") return { ok: false, reason: "already_resolved" };
 
-  if (declined.length === 0) {
-    const [existing] = await db
-      .select({ id: groupTopOfMindProposals.id })
-      .from(groupTopOfMindProposals)
+  await recordStance(db, {
+    proposalId: proposal.id,
+    profileId: input.profileId,
+    stance: "declined",
+  });
+
+  const withdrawal = proposal.proposedByProfileId === input.profileId;
+  let falls = withdrawal;
+  if (!falls) {
+    const { holding: declines, members } = await tallyStances(db, {
+      groupId: input.groupId,
+      proposalId: proposal.id,
+      stance: "declined",
+    });
+    falls = fallsToDeclines(declines, members);
+  }
+
+  if (falls) {
+    const now = new Date();
+    // Guard on `status = 'open'`: the open check above was a separate read,
+    // and an accept that commits between it and here would otherwise be
+    // flipped to declined. Whichever transition commits second finds the row
+    // no longer open and does nothing.
+    await db
+      .update(groupTopOfMindProposals)
+      .set({ status: "declined", resolvedAt: now, updatedAt: now })
       .where(
         and(
-          eq(groupTopOfMindProposals.id, input.proposalId),
-          eq(groupTopOfMindProposals.groupId, input.groupId),
+          eq(groupTopOfMindProposals.id, proposal.id),
+          eq(groupTopOfMindProposals.status, "open"),
         ),
-      )
-      .limit(1);
-    return { ok: false, reason: existing ? "already_resolved" : "not_found" };
+      );
   }
 
   const view = await loadProposalView(db, {

@@ -36,7 +36,14 @@ import {
 import { profiles } from "./schema-profiles";
 
 /** Shape of what arrived. Advisory: extraction reads the content regardless. */
-export const inspirationKindValues = ["note", "link", "image", "mixed"] as const;
+/**
+ * "decision" joined the shape kinds 2026-08-23 (goals/no-quiet-corners.md,
+ * Phase 1): a decision is a capture, not a layer — recorded by the acting
+ * session into its own profile, optionally citing the principles it
+ * consulted through `decision_principle_citations`, whose composite FKs
+ * make an invented citation physically unstorable.
+ */
+export const inspirationKindValues = ["note", "link", "image", "mixed", "decision"] as const;
 export type InspirationKind = (typeof inspirationKindValues)[number];
 export const inspirationKindEnum = pgEnum("inspiration_kind", inspirationKindValues);
 
@@ -73,6 +80,16 @@ export const inspirations = pgTable(
     kind: inspirationKindEnum("kind"),
     source: inspirationSourceEnum("source").notNull().default("app"),
     visibility: inspirationVisibilityEnum("visibility").notNull().default("private"),
+    /**
+     * The experience this memory was kept during — nullable, because most
+     * personal captures are not "during" anything nameable. The composite FK
+     * `(profile_id, experience_id) → experiences (profile_id, id)` lives in
+     * migration 0026 rather than here (same reason `profiles.group_id`'s
+     * does: it needs `ON DELETE SET NULL (experience_id)`, the column-list
+     * form, which the builder cannot express — a bare SET NULL on a
+     * composite key would null `profile_id` too).
+     */
+    experienceId: uuid("experience_id"),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

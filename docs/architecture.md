@@ -111,9 +111,37 @@ memories at the world origin.
 
 ## Screens that are deliberately NOT the world
 
-`/profile` and `/login` are flat, and should stay flat: text that reflows at
+Two kinds, and they are not the same kind.
+
+**`/profile` and `/login` are flat and should stay flat.** Text that reflows at
 200%, focus traps, plain confirmations — things in-world UI cannot give.
 `chrome.css` gives them the world's palette without its geometry.
+
+**The six Surface routes are a parking lot, in a different palette, and this
+document used to deny it.** `/capture`, `/inspirations`, `/signals`,
+`/principles`, `/top-of-mind` and `/rooms` are a paper register: white ground,
+warm sheets, a serif voice, contrast ratios measured against a light
+background. Sampled 2026-08-24 on the running build — the world averages
+`(6,8,13)` and these average `(247–252)`. That is not the world's palette
+flattened; it is a second palette. (`body` is dark on all of them, because
+`.sf` paints its own ground over it, so computed style agrees with the world
+and only the rendered pixels disagree. Measure the pixels.)
+
+They hold what has not yet been designed into the world, and the intent is
+that they are **deprecated by migration** — each capability moves into the
+world and the screen behind it stops being needed. So the split does not close
+by repainting them. It closes by them leaving.
+
+Two consequences are load-bearing while they exist:
+
+- **Nothing in the world links to them.** That is deliberate, and it is why
+  finding 4's "full-screen flash, repeatedly, in a session" stopped being true
+  the moment the `≡` menu was removed.
+- **Every one of them must still be leavable.** They removed the `≡` menu and
+  took the way home with it: for a while all six could be arrived at and not
+  left. `← the world` in the surface footer is that exit, and
+  `journeys:parking-lot` is what keeps it. A screen the world does not link to
+  is a screen whose only exit is its own.
 
 ## The laws
 

@@ -23,16 +23,22 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 import {
   groupMembers,
+  groupMembershipEvents,
   groups,
   groupTopOfMindAffirmations,
   groupTopOfMindProposals,
+  inspirations,
   profiles,
   type GroupMemberRole,
+  type GroupMembershipEventKind,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import { labelMembersByProfileId } from "../lib/member-labels.js";
+import { enqueueDeriveSignals } from "../lib/queue.js";
+import { GROUP_JOIN_BACKFILL_LIMIT } from "../lib/signal-derivation-thresholds.js";
 
 type WakaDb = ReturnType<typeof getDb>;
+type WakaTx = Parameters<Parameters<WakaDb["transaction"]>[0]>[0];
 
 /** No ambiguous 0/O/1/I — the code is read aloud and typed by hand. */
 const JOIN_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -68,6 +74,27 @@ export interface GroupMembership {
 export type JoinGroupResult =
   | { ok: true; group: GroupSummary; alreadyMember: boolean }
   | { ok: false; reason: "not_found" };
+
+/**
+ * THE DOOR KEEPS A LEDGER.
+ *
+ * The membership row is the current seat and nothing else — it is deleted on
+ * leave and removal, and a re-join writes a fresh row with a fresh
+ * `createdAt`. So every function below that changes who is in the room also
+ * appends a membership event in the same transaction: the seat says who is
+ * here, the events say how the room came to hold these people. Nothing in
+ * application code ever updates or deletes an event row.
+ */
+async function recordMembershipEvent(
+  db: WakaDb | WakaTx,
+  input: { groupId: string; profileId: string; kind: GroupMembershipEventKind },
+): Promise<void> {
+  await db.insert(groupMembershipEvents).values({
+    groupId: input.groupId,
+    profileId: input.profileId,
+    kind: input.kind,
+  });
+}
 
 /**
  * The caller's seat at this group, or null if they have none.
@@ -155,9 +182,154 @@ function generateJoinCode(): string {
 }
 
 /** Create a group; the caller takes the owner seat. */
+/**
+ * THE GROUND A PERSON ARRIVES CARRYING.
+ *
+ * A room distils from its members' pooled public memories, and the fan-out
+ * that feeds it fires when a memory is KEPT. On its own that means a room
+ * only ever sees what its members keep after they join — so somebody who
+ * joins with a full archive contributes nothing, possibly forever, and a room
+ * of such people stays empty while every memory that would have converged
+ * sits one table away. Joining has to reach back.
+ *
+ * One derivation pass per existing public memory, aimed at the room's mind,
+ * newest first and capped by `GROUP_JOIN_BACKFILL_LIMIT`. Three properties
+ * make this safe to fire and forget:
+ *
+ *   - IT IS THE JOINER'S SPEND. The jobs are owned by the joining profile, so
+ *     the per-account model budget and the queue's fairness bill the person
+ *     whose arrival asked for the work.
+ *   - IT IS IDEMPOTENT. The idempotency key already carries the target mind,
+ *     so re-joining a room, or a retry, collapses onto the jobs that exist
+ *     rather than deriving the same memory twice.
+ *   - IT NEVER FAILS THE JOIN. Being seated is the thing the person asked
+ *     for; a queue insert that fails is a room that fills late, which is
+ *     recoverable, while a 5xx on the join is a door that did not open.
+ *
+ * Visibility is read here and re-read by the worker: a memory turned private
+ * between the two is refused there, which is what makes this bound to the
+ * switch rather than to the moment somebody happened to arrive.
+ */
+/**
+ * EVERY ROOM THAT ALREADY EXISTS GROWS ITS MIND.
+ *
+ * A room's mind is written in the same transaction as the room itself, so
+ * every room made from 2026-08-24 onward has one and no code path has to ask.
+ * Rooms that predate that line still need one, and this is where they get it.
+ *
+ * It lives here rather than in migration 0025, where it started, because it
+ * physically cannot run there: writing a row whose `type` is 'group' resolves
+ * an enum value that 0024 added in the same uncommitted transaction, and
+ * PostgreSQL refuses. Every spelling fails for the same reason — a literal, a
+ * cast, a lookup through `pg_enum` — because they all reach the enum's input
+ * function. A separate transaction is the only fix, and this is one.
+ *
+ * Called at API startup, which is what keeps it off an operator's checklist.
+ * Idempotent by construction: the `NOT EXISTS` means running it a thousand
+ * times is the same as running it once, and the unique index on `group_id`
+ * would refuse a second mind even if two boots raced.
+ */
+export async function ensureGroupMinds(db: WakaDb = getDb()): Promise<number> {
+  /* Written as one statement rather than a read followed by writes: two
+     boots racing would otherwise both see the same room as mindless, and the
+     unique index would turn the loser into a crash at startup instead of a
+     no-op. `NOT EXISTS` inside the INSERT makes the whole thing one atomic,
+     repeatable question. */
+  const created = await db.execute<{ id: string }>(sql`
+    INSERT INTO "profiles" ("account_id", "type", "name", "group_id")
+    SELECT NULL, 'group', g."name", g."id"
+    FROM "groups" g
+    WHERE NOT EXISTS (SELECT 1 FROM "profiles" p WHERE p."group_id" = g."id")
+    RETURNING "id"
+  `);
+
+  const count = created.length;
+  if (count > 0) console.log(`[groups] gave ${count} existing room(s) a mind`);
+  return count;
+}
+
+export interface GroundBackfillDependencies {
+  /**
+   * How a memory is asked for. Seams here because `enqueueDeriveSignals`
+   * writes through the process-wide database handle rather than the one this
+   * function was handed, so a schema-isolated test cannot see what it wrote.
+   * What is worth holding is WHICH memories a room is asked to read — whose,
+   * how many, in what order — and that is this function's own work.
+   */
+  enqueueDerive?: typeof enqueueDeriveSignals;
+}
+
+async function backfillGroundIntoMind(
+  db: WakaDb,
+  input: { profileId: string; groupId: string },
+  deps: GroundBackfillDependencies = {},
+): Promise<void> {
+  const enqueue = deps.enqueueDerive ?? enqueueDeriveSignals;
+  const [mind] = await db
+    .select({ id: profiles.id })
+    .from(profiles)
+    .where(and(eq(profiles.groupId, input.groupId), eq(profiles.type, "group")))
+    .limit(1);
+  if (!mind) return;
+
+  /* HUMAN ONLY, joined rather than assumed. `docs/data-model.md` rule 5:
+     membership is between people, and an agent's memory is its own stack, not
+     ground a room may stand on. The join routes already refuse an agent a
+     seat — but this is the second path by which a profile's memories reach a
+     room, and a rule enforced only where somebody remembered to enforce it is
+     the rule that put six agent-seated rows in the dev database. So the read
+     carries the gate itself. */
+  const ground = await db
+    .select({ id: inspirations.id })
+    .from(inspirations)
+    .innerJoin(
+      profiles,
+      and(eq(profiles.id, inspirations.profileId), eq(profiles.type, "human")),
+    )
+    .where(
+      and(
+        eq(inspirations.profileId, input.profileId),
+        eq(inspirations.visibility, "public"),
+      ),
+    )
+    .orderBy(desc(inspirations.createdAt), desc(inspirations.id))
+    .limit(GROUP_JOIN_BACKFILL_LIMIT);
+
+  for (const memory of ground) {
+    await enqueue(input.profileId, memory.id, "created", mind.id);
+  }
+}
+
+/**
+ * Ask for the backfill without ever letting it fail the seating.
+ *
+ * Awaited rather than fired and forgotten. The work is a bounded run of queue
+ * inserts — no model call happens here, the drain does that later — so the
+ * cost to the join is milliseconds, and in exchange the room's state after a
+ * join is a fact rather than a race. An unawaited promise would also outlive
+ * the request into whatever ran next, which in a test suite is the next
+ * test's truncation.
+ */
+async function requestGroundBackfill(
+  db: WakaDb,
+  input: { profileId: string; groupId: string },
+  deps: GroundBackfillDependencies = {},
+): Promise<void> {
+  try {
+    await backfillGroundIntoMind(db, input, deps);
+  } catch (err: unknown) {
+    console.error("[groups] failed to backfill a member's ground into the room:", {
+      groupId: input.groupId,
+      profileId: input.profileId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 export async function createGroupForProfile(
   db: WakaDb,
   input: { profileId: string; name: string },
+  deps: GroundBackfillDependencies = {},
 ): Promise<GroupSummary> {
   const now = new Date();
   let lastError: unknown;
@@ -192,8 +364,29 @@ export async function createGroupForProfile(
           role: "owner",
           createdAt: now,
         });
+        await recordMembershipEvent(tx, {
+          groupId: group.id,
+          profileId: input.profileId,
+          kind: "joined",
+        });
+        /* THE ROOM'S MIND, born with the room (2026-08-24). The profile that
+           owns what this room distils from its pooled ground: no account --
+           it is the room's, not anyone's -- and deleted by the room's own
+           cascade. Same transaction as the group row, so no code path ever
+           meets a room without one; migration 0025 settled the rooms that
+           predate this line. */
+        await tx.insert(profiles).values({
+          accountId: null,
+          type: "group",
+          name: input.name,
+          groupId: group.id,
+        });
         return group;
       });
+
+      /* The maker is the room's first member, and they arrive carrying the
+         same ground anyone else would. */
+      await requestGroundBackfill(db, { profileId: input.profileId, groupId: created.id }, deps);
 
       return {
         id: created.id,
@@ -221,6 +414,7 @@ export async function createGroupForProfile(
 export async function joinGroupByCode(
   db: WakaDb,
   input: { profileId: string; joinCode: string },
+  deps: GroundBackfillDependencies = {},
 ): Promise<JoinGroupResult> {
   const normalized = input.joinCode.trim().toUpperCase();
   const [group] = await db
@@ -235,10 +429,23 @@ export async function joinGroupByCode(
     profileId: input.profileId,
   });
   if (!existing) {
-    await db
-      .insert(groupMembers)
-      .values({ groupId: group.id, profileId: input.profileId, role: "member" })
-      .onConflictDoNothing();
+    await db.transaction(async (tx) => {
+      // The conflict target tells a lost race from a real join: only the
+      // insert that actually seated someone writes the arrival event, so a
+      // double-submitted join is one arrival, not two.
+      const seated = await tx
+        .insert(groupMembers)
+        .values({ groupId: group.id, profileId: input.profileId, role: "member" })
+        .onConflictDoNothing()
+        .returning({ id: groupMembers.id });
+      if (seated.length > 0) {
+        await recordMembershipEvent(tx, {
+          groupId: group.id,
+          profileId: input.profileId,
+          kind: "joined",
+        });
+      }
+    });
   }
 
   const summaries = await listGroupsForProfile(db, input.profileId);
@@ -247,6 +454,12 @@ export async function joinGroupByCode(
   // removal, a deleted group. Say not-found rather than answering 200 with an
   // undefined group attached.
   if (!summary) return { ok: false, reason: "not_found" };
+  /* Only for a genuine arrival: re-submitting a join is not a second arrival,
+     and the enqueue is idempotent anyway, but asking for nothing is cheaper
+     than asking for a hundred jobs the queue will collapse. */
+  if (!existing) {
+    await requestGroundBackfill(db, { profileId: input.profileId, groupId: group.id }, deps);
+  }
   return { ok: true, group: summary, alreadyMember: Boolean(existing) };
 }
 
@@ -261,22 +474,29 @@ export async function leaveGroup(
   db: WakaDb,
   input: { profileId: string; groupId: string },
 ): Promise<{ ok: boolean }> {
-  const deleted = await db
-    .delete(groupMembers)
-    .where(
-      and(
-        eq(groupMembers.groupId, input.groupId),
-        eq(groupMembers.profileId, input.profileId),
-      ),
-    )
-    .returning({ id: groupMembers.id, role: groupMembers.role });
-  const removed = deleted[0];
-  if (!removed) return { ok: false };
-  if (removed.role === "owner") await promoteSuccessorOwner(db, input.groupId);
-  return { ok: true };
+  return db.transaction(async (tx) => {
+    const deleted = await tx
+      .delete(groupMembers)
+      .where(
+        and(
+          eq(groupMembers.groupId, input.groupId),
+          eq(groupMembers.profileId, input.profileId),
+        ),
+      )
+      .returning({ id: groupMembers.id, role: groupMembers.role });
+    const removed = deleted[0];
+    if (!removed) return { ok: false };
+    await recordMembershipEvent(tx, {
+      groupId: input.groupId,
+      profileId: input.profileId,
+      kind: "left",
+    });
+    if (removed.role === "owner") await promoteSuccessorOwner(tx, input.groupId);
+    return { ok: true };
+  });
 }
 
-async function promoteSuccessorOwner(db: WakaDb, groupId: string): Promise<void> {
+async function promoteSuccessorOwner(db: WakaDb | WakaTx, groupId: string): Promise<void> {
   const [remainingOwner] = await db
     .select({ id: groupMembers.id })
     .from(groupMembers)
@@ -344,17 +564,72 @@ export async function removeGroupMember(
   db: WakaDb,
   input: { groupId: string; memberProfileId: string },
 ): Promise<boolean> {
-  const removed = await db
-    .delete(groupMembers)
-    .where(
-      and(
-        eq(groupMembers.groupId, input.groupId),
-        eq(groupMembers.profileId, input.memberProfileId),
-      ),
-    )
-    .returning({ id: groupMembers.id, role: groupMembers.role });
-  if (removed.length === 0) return false;
-  if (removed[0]!.role === "owner") await promoteSuccessorOwner(db, input.groupId);
+  const didRemove = await db.transaction(async (tx) => {
+    const removed = await tx
+      .delete(groupMembers)
+      .where(
+        and(
+          eq(groupMembers.groupId, input.groupId),
+          eq(groupMembers.profileId, input.memberProfileId),
+        ),
+      )
+      .returning({ id: groupMembers.id, role: groupMembers.role });
+    if (removed.length === 0) return false;
+    await recordMembershipEvent(tx, {
+      groupId: input.groupId,
+      profileId: input.memberProfileId,
+      kind: "removed",
+    });
+    if (removed[0]!.role === "owner") await promoteSuccessorOwner(tx, input.groupId);
+    /**
+     * AND THEIR VOTES GO WITH THEM — FROM THE PROPOSALS STILL BEING DECIDED,
+     * AND NO OTHERS.
+     *
+     * The tally already ignores a non-member, so this delete is not what makes
+     * the count right; it is what stops re-joining from silently restoring a
+     * vote nobody cast again. Only an OPEN proposal can still be carried, so
+     * only open proposals need that protection — which is why the subquery
+     * carries `status = 'open'`.
+     *
+     * It did not always. This delete used to take every affirmation the
+     * member had ever made in the room, settled proposals included — which
+     * destroyed the record of WHO carried each accepted version. That record
+     * is the room's approval history: the surface that shows who stood behind
+     * a version reads from these rows, and an accepted proposal's affirmations
+     * are facts about a decision already made, which a later removal has no
+     * business unmaking. A removed member's vote on a settled proposal is
+     * history; their vote on an open one is a live hand in a decision they no
+     * longer belong to.
+     *
+     * The scoping lesson stands from the previous wording: the affirmations
+     * table has no `group_id` column, so the room scope must come through the
+     * proposals — a delete keyed on the profile alone would reach into every
+     * other room they are in. And it stays one statement with a subquery
+     * rather than read-then-delete: two statements would let a proposal opened
+     * between them keep an affirmation this removal was supposed to take.
+     */
+    await tx
+      .delete(groupTopOfMindAffirmations)
+      .where(
+        and(
+          eq(groupTopOfMindAffirmations.profileId, input.memberProfileId),
+          inArray(
+            groupTopOfMindAffirmations.proposalId,
+            tx
+              .select({ id: groupTopOfMindProposals.id })
+              .from(groupTopOfMindProposals)
+              .where(
+                and(
+                  eq(groupTopOfMindProposals.groupId, input.groupId),
+                  eq(groupTopOfMindProposals.status, "open"),
+                ),
+              ),
+          ),
+        ),
+      );
+    return true;
+  });
+  if (!didRemove) return false;
   /**
    * AND THE DOOR IS RE-KEYED.
    *
@@ -376,44 +651,6 @@ export async function removeGroupMember(
    * would leave a caller believing the removal did not happen.
    */
   await rotateJoinCode(db, input.groupId);
-  /**
-   * AND THEIR VOTES GO WITH THEM — OUT OF THIS ROOM, AND NO FURTHER.
-   *
-   * The tally already ignores a non-member, so this delete is not what makes
-   * the count right; it is what stops re-joining from silently restoring a
-   * vote nobody cast again.
-   *
-   * The predicate is the whole story. `group_top_of_mind_affirmations` has no
-   * `group_id` column — its only scoping is `proposal_id` — so a delete keyed
-   * on the profile alone does not mean "their votes here", it means "their
-   * votes anywhere". Removing someone from a room you own reached into every
-   * other room they are in: rooms you are not a member of, cannot read, and
-   * that were never named in the request. The agreements there simply stopped
-   * existing, which stalls whatever was resting on them and leaves nothing to
-   * tell it apart from "they never voted". So the scope has to come from the
-   * proposals, which are the only rows in this graph that know which room they
-   * belong to.
-   *
-   * A subquery rather than "read the proposal ids, then delete where in
-   * them": two statements would let a proposal opened between them keep an
-   * affirmation the removal was supposed to take, and would rebuild an empty
-   * list into a delete with no proposal predicate at all if the read came back
-   * empty. One statement cannot drift from itself.
-   */
-  await db
-    .delete(groupTopOfMindAffirmations)
-    .where(
-      and(
-        eq(groupTopOfMindAffirmations.profileId, input.memberProfileId),
-        inArray(
-          groupTopOfMindAffirmations.proposalId,
-          db
-            .select({ id: groupTopOfMindProposals.id })
-            .from(groupTopOfMindProposals)
-            .where(eq(groupTopOfMindProposals.groupId, input.groupId)),
-        ),
-      ),
-    );
   return true;
 }
 
@@ -457,8 +694,14 @@ export async function listGroupMembers(
     .where(eq(groupMembers.groupId, groupId))
     .orderBy(asc(groupMembers.createdAt), asc(groupMembers.profileId));
 
-  const labels = labelMembersByProfileId(rows);
-  return rows.map((row) => {
+  /* A room's mind is not a member of the room — it IS the room's layer 2.
+     `group_members` never holds one, so this filter is a type-level
+     restatement of that fact rather than a behavior change. */
+  const seated = rows.flatMap((row) =>
+    row.type === "group" ? [] : [{ ...row, type: row.type }],
+  );
+  const labels = labelMembersByProfileId(seated);
+  return seated.map((row) => {
     const label = labels.get(row.profileId);
     return {
       profileId: row.profileId,

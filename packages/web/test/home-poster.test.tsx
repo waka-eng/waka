@@ -68,6 +68,7 @@
  */
 import { act } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { RECEIPTS } from "../src/lib/receipts";
 
 import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
 import {
@@ -169,8 +170,12 @@ function board(body: string) {
         dismissed: false,
         sortOrder: 0,
         citedSignals: [
-          { id: SPEC, statement: "the spec is read as the promise" },
-          { id: CODE, statement: "the code is read as the truth" },
+          /* one ground the person has answered, one only the machine holds —
+             the pair the ratified-light cases below stand on. The truth of
+             the flag itself is the API's business, pinned against real rows
+             in ratified-light.db.test.ts; here it is a served fact. */
+          { id: SPEC, statement: "the spec is read as the promise", answered: true },
+          { id: CODE, statement: "the code is read as the truth", answered: false },
         ],
         createdMs: at(2),
       },
@@ -268,6 +273,20 @@ vi.mock("../src/lib/api", async (importOriginal) => {
       id: entryId,
       body: input.body,
     }),
+    /* The write behind answering a ground. Unmocked it would reach a network
+       that is not there, and the page — honestly — would take the answer
+       back off the map when the request died, unlighting the ground the
+       round-trip case just lit. */
+    createFeedback: async () => ({ id: "feedback-1" }),
+    /* The weather, as the server would tell it for the away-window. The
+       sentence's truth is the API's business (the-weather.db.test.ts —
+       every sentence a view of a stored record); what this file pins is
+       WHEN the world says it: after the glide has returned, never before. */
+    fetchTheWeather: async () => ({
+      told: "refused a candidate — too close to what you dismissed.",
+      days: [],
+      antechamber: [],
+    }),
   };
 });
 
@@ -336,7 +355,31 @@ function posterWordsHere(): Array<[string, "held" | "new"]> {
 /** just the sentence, with the trailing space each word carries trimmed off */
 const posterText = () => (posterHere().textContent ?? "").trim();
 
+/**
+ * THE VERBS LIVE BEHIND THE POSTER'S OWN PRESS.
+ *
+ * They used to sit permanently under the ambition, which made the resting
+ * page a sentence with a toolbar bolted to it. They fold into the same band
+ * the grounds and the history open into — asking the poster where it came
+ * from and changing what it says are one conversation — so a test that wants
+ * a verb has to have asked the question first, exactly as a person does.
+ */
+async function askThePoster(): Promise<void> {
+  /* THE SELF COLUMN'S POSTER, NAMED. Every wall in the row renders one, and
+     only the wall you are standing on is interrogable — so a bare
+     `.jar-poster` picks the leftmost agent's, which has no ask row at all. */
+  const poster = layout.container.querySelector<HTMLElement>(
+    '.jar-wallcol[data-kind="self"] .jar-poster',
+  );
+  if (!poster) throw new Error("no poster on your own wall to ask");
+  if (poster.getAttribute("aria-expanded") === "true") return;
+  await act(async () => {
+    poster.click();
+  });
+}
+
 async function press(selector: string, name: RegExp): Promise<void> {
+  if (selector === ".jar-board-act") await askThePoster();
   const el = [...layout.container.querySelectorAll(selector)].find((n) =>
     name.test((n.textContent ?? "").trim()),
   );
@@ -573,16 +616,186 @@ describe("what the poster is standing on", () => {
     await press('h1.jar-poster[data-jar-chrome="1"]', /./);
     await layout.step(5);
 
-    const lead = layout.container.querySelector(".jar-prov--poster .jar-prov-lead");
-    expect(lead?.textContent, "the poster was asked and answered with nothing").toBe("built from");
-
-    const rows = [...layout.container.querySelectorAll(".jar-prov--poster .jar-prov-row")].map(
+    /* the standing-on band (Phase 4) opens above this one, so the lead is
+       found by its words rather than by being first */
+    const leads = [...layout.container.querySelectorAll(".jar-prov--poster .jar-prov-lead")].map(
       (n) => (n.textContent ?? "").trim(),
+    );
+    expect(leads, "the poster was asked and answered with nothing").toContain("built from");
+
+    /* AND "BUILT FROM" IS A DOOR NOW, NOT A LABEL OVER A LIST. The rows used
+       to sit here and to TRAVEL — pressing one left headquarters for the
+       field — so they moved to a room that opens over the world and takes
+       nothing away from you (founder, 2026-08-25). The memories under the
+       ambition are the same memories; this follows them through the door. */
+    const door = [...layout.container.querySelectorAll<HTMLElement>(".jar-prov-open")].find(
+      (n) => (n.textContent ?? "").trim() === "built from",
+    );
+    if (!door) throw new Error("`built from` is not pressable — the grounds have no way in");
+    await act(async () => door.click());
+
+    const room = layout.container.querySelector(".jar-prov-room");
+    if (!room) throw new Error("`built from` opened nothing");
+    expect(
+      (room.querySelector(".jar-prov-room-lead")?.textContent ?? "").trim(),
+      "the room leads with the ambition it is accounting for",
+    ).not.toBe("");
+
+    const rows = [...room.querySelectorAll(".jar-prov-row")].map((n) =>
+      (n.textContent ?? "").trim(),
     );
     expect(rows).toHaveLength(CHAIN_SIZE);
     /* each row names a memory AND why it was read that way — the row is an
        explanation, and one without the reason is just a list of text */
     expect(rows.filter((r) => /read as sig-(spec|code)/.test(r))).toHaveLength(CHAIN_SIZE);
     expect(rows.some((r) => r.includes("something I kept, 3"))).toBe(true);
+  });
+});
+
+describe("board acts leave receipts", () => {
+  /**
+   * goal: the-legible-loop, Phase 2. A gesture on the board says what it
+   * taught the loop, in the registry's exact words — and the registry pins
+   * each claim to the API test that enforces it (`receipts.test.ts`), so
+   * these two cases close the loop from press to law.
+   */
+  it("pinning says it will be held through rewrites", async () => {
+    await press(".jar-board-act", /keep this one up/i);
+    const toast = layout.container.querySelector('[role="status"]');
+    expect(
+      toast?.textContent,
+      "the pin left no receipt — the gesture taught silently",
+    ).toBe(RECEIPTS.pinned.text);
+  });
+
+  it("dismissing states the law beside its own undo", async () => {
+    await press(".jar-board-act", /not this/i);
+    const row = layout.container.querySelector(".jar-receipt");
+    expect(
+      row?.textContent,
+      "the dismissal left no receipt beside the undo",
+    ).toBe(RECEIPTS.dismissed.text);
+    /* reversible is part of the stated law — the undo shares the line */
+    expect(
+      row?.parentElement?.textContent,
+      "the receipt and the way back must share one breath",
+    ).toContain("put it back");
+  });
+});
+
+describe("ratified light: the poster's grounds are lit by who holds them", () => {
+  /**
+   * goal: the-legible-loop, Phase 4. The board's sentence stands on named
+   * patterns, and the light must say whose each is: full ink where the
+   * person has answered (a verdict, a star — the SERVED flag, whose truth
+   * `ratified-light.db.test.ts` pins against real rows), dim where only the
+   * machine believes it. Light is the only channel: no badge, no label, no
+   * numeral. And answering must be one gesture away — pressing a dim ground
+   * opens the same yes/partly/not-true row the sky gives a pattern, and the
+   * answer moves the light in the same beat, before any refetch.
+   */
+  it("renders both ink states, and nothing but light tells them apart", async () => {
+    await press('h1.jar-poster[data-jar-chrome="1"]', /./);
+
+    const grounds = [...layout.container.querySelectorAll<HTMLElement>(".jar-ground")];
+    expect(grounds, "the poster hid what it stands on").toHaveLength(2);
+
+    const byText = new Map(grounds.map((g) => [(g.textContent ?? "").trim(), g]));
+    const answered = byText.get("the spec is read as the promise");
+    const machineOnly = byText.get("the code is read as the truth");
+    expect(answered, "the answered ground is missing").toBeTruthy();
+    expect(machineOnly, "the machine-only ground is missing").toBeTruthy();
+
+    expect(
+      answered!.classList.contains("jar-ground--answered"),
+      "an answered ground must hold full ink",
+    ).toBe(true);
+    expect(
+      machineOnly!.classList.contains("jar-ground--answered"),
+      "a ground only the machine believes must sit dim",
+    ).toBe(false);
+
+    /* light only: the band carries the lead line and the statements, and not
+       one digit, badge or count anywhere in it */
+    const band = answered!.closest(".jar-prov--poster");
+    expect(/\d/.test(band?.textContent ?? ""), "a numeral crept into the standing").toBe(false);
+  });
+
+  it("answering a dim ground moves the light in the same beat", async () => {
+    await press('h1.jar-poster[data-jar-chrome="1"]', /./);
+
+    /* the dim ground opens its own ask row — correction one gesture from
+       the explanation, the same verbs the sky uses */
+    await press(".jar-ground", /the code is read as the truth/);
+    await press(".jar-ask button", /^yes$/);
+
+    const lit = [...layout.container.querySelectorAll<HTMLElement>(".jar-ground")].find((g) =>
+      (g.textContent ?? "").includes("the code is read as the truth"),
+    );
+    expect(
+      lit?.classList.contains("jar-ground--answered"),
+      "the verdict did not move the light",
+    ).toBe(true);
+
+    /* and the act left its receipt, at the place the act happened */
+    const receipt = [...layout.container.querySelectorAll(".jar-receipt")].map(
+      (r) => r.textContent ?? "",
+    );
+    expect(receipt, "the answer taught silently").toContain(RECEIPTS.verdictKept.text);
+  });
+});
+
+describe("the weather is told on arrival, after the world has drawn", () => {
+  /**
+   * goal: the-legible-loop, Phase 5. On return after time away, the world
+   * glides to the newest thing, comes home — and only then whispers the
+   * told sentence through the companion's own line. Seeing first, telling
+   * second: the assertion in the middle of this case is the phase's law,
+   * not decoration. Never a notification — it is SAID IN THE MOUTH'S OWN
+   * SLOT, in the resting phrase's place, and goes on its own. It had a row of
+   * its own until 2026-08-25; putting it here costs the page a layer rather
+   * than adding one, and is why this case reads `.jar-mouth-rest`.
+   *
+   * `setTimeout` is faked for this case only: the glide's two beats are
+   * wall-clock timeouts, and a test that really waited four seconds would
+   * be a sleep, not a statement. The harness clock (rAF) is untouched.
+   */
+  it("whispers the away-window's sentence only after the glide returns", async () => {
+    layout.unmount();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    window.localStorage.setItem("waka.seen", String(Date.UTC(2026, 7, 10)));
+    try {
+      layout = await mountWorld(FACTS);
+      const said = () =>
+        layout.container.querySelector(".jar-mouth-rest")?.textContent ?? "";
+
+      /* the world has drawn, the glide has not begun: silence */
+      expect(said()).not.toContain("refused a candidate");
+
+      /* first beat: the camera goes to the newest thing — still silence */
+      await act(async () => {
+        vi.advanceTimersByTime(1400);
+      });
+      await layout.step(5);
+      expect(said(), "the telling must not precede the return").not.toContain(
+        "refused a candidate",
+      );
+
+      /* second beat: the camera comes home — now the weather is told */
+      await act(async () => {
+        vi.advanceTimersByTime(2600);
+      });
+      await layout.step(5);
+      expect(said()).toContain(
+        "refused a candidate — too close to what you dismissed.",
+      );
+      /* A count in the telling is now exact, not spelled (founder ruling,
+         2026-08-24) — the fixture's sentence carries none either way, and
+         what this case is about is WHEN the whisper arrives, not its
+         arithmetic. `the-weather.db.test.ts` owns the counting. */
+    } finally {
+      vi.useRealTimers();
+      window.localStorage.removeItem("waka.seen");
+    }
   });
 });

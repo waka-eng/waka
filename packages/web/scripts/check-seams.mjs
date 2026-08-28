@@ -527,7 +527,27 @@ function mockedSeams(source, key) {
  * does, and the gate would then contradict, in its own output, the sentence it
  * had just read.
  */
-const IMPORT_OF_HOME = /["'`][^"'`\s]*src\/pages\/Home(\.[cm]?[jt]sx?)?["'`]/;
+const IMPORT_OF_HOME = /(?:^|\/)src\/pages\/Home(\.[cm]?[jt]sx?)?$/;
+
+/*
+ * AND IT IS ASKED OF SPECIFIERS ONLY, WHICH IS THE NARROWING THAT MADE IT
+ * TRUE. It used to be asked of the whole blanked file: any string literal
+ * anywhere ending in `src/pages/Home` meant "this suite mounts the world".
+ * That read a PATH HANDED TO `readFileSync` as an import — so a suite that
+ * opens `Home.tsx` and asserts about the text in it, mounting nothing and
+ * mocking nothing, was told it had mounted the world on the wrong seam
+ * (`dial-rest.test.ts`, 2026-08-25). The advice was unfollowable: there is no
+ * `lib/data` mock that makes a file-read correct, and the only way to satisfy
+ * the gate was to spell the path in pieces so the regex would miss it — a
+ * gate whose remedy is an evasion teaches evasion.
+ *
+ * So the question is now asked of the specifiers `IMPORT_OF_ANY` already
+ * extracts, which is the one place in this file that decides what an import
+ * IS. Everything rule 2 was written for still answers yes: a static import, a
+ * `from` clause, and `await import("…")` are all import positions and all
+ * still caught — see the three self-test cases that say so. What stops
+ * answering yes is a quoted path that nothing imports.
+ */
 
 /** A file that is itself a suite, and so is not a helper anybody declares. */
 const SUITE_FILE = /\.test\.[cm]?[jt]sx?$/;
@@ -579,10 +599,13 @@ function followImports(source, read, fromKey, seen, depth) {
    * still JSX.
    */
   const code = commentsBlanked(source, fromKey);
-  let mounts = IMPORT_OF_HOME.test(code);
+  let mounts = false;
   const unfollowable = [];
   const helpers = [];
   for (const [, specifier] of code.matchAll(IMPORT_OF_ANY)) {
+    /* asked HERE, of a thing already established to be an import, rather than
+       of every quoted string in the file — see IMPORT_OF_HOME */
+    if (IMPORT_OF_HOME.test(specifier)) mounts = true;
     const found = read(specifier, fromKey);
     if (found.kind === "outside") continue;
     if (found.kind === "unreadable") {
@@ -1133,6 +1156,37 @@ const SELFTEST = [
       "/** WHAT THIS MOCKS, AND WHY: `lib/api`. */",
       'import { it } from "vitest";',
       'const page = await import("../src/pages/Home");',
+      'vi.mock("../src/lib/api", () => ({}));',
+    ].join("\n"),
+  },
+  {
+    flags: [],
+    why:
+      "READING THE PAGE IS NOT MOUNTING IT. A source gate that opens `Home.tsx` and " +
+      "asserts about the text in it mounts nothing, mocks nothing and has no seam to " +
+      "declare \u2014 and was told it had mounted the world on the wrong one, because the " +
+      "path it read was a quoted string ending in `src/pages/Home.tsx`. There is no " +
+      "`lib/data` mock that makes a file-read correct, so the only way to go green was " +
+      "to spell the path in pieces and hide from the regex, and a gate whose remedy is " +
+      "an evasion teaches evasion",
+    src: [
+      "/** WHAT THIS MOCKS, AND WHY: nothing; it reads one file and asserts about it. */",
+      'import { readFileSync } from "node:fs";',
+      'import { resolve } from "node:path";',
+      'import { it } from "vitest";',
+      'const HOME = readFileSync(resolve(HERE, "../src/pages/Home.tsx"), "utf8");',
+      'it("says something about the text", () => { HOME.length; });',
+    ].join("\n"),
+  },
+  {
+    flags: ["MOUNTS THE WORLD AND DOES NOT MOCK `lib/data`"],
+    why:
+      "AND THE NARROWING DID NOT COST RULE 2 ITS TEETH: the same path, one keyword " +
+      "different, is the incident again",
+    src: [
+      "/** WHAT THIS MOCKS, AND WHY: `lib/api`. */",
+      'import { it } from "vitest";',
+      'export * from "../src/pages/Home.tsx";',
       'vi.mock("../src/lib/api", () => ({}));',
     ].join("\n"),
   },

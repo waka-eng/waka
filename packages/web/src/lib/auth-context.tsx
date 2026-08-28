@@ -43,6 +43,7 @@ import {
 import type { ReactNode } from "react";
 
 import {
+  ApiError,
   fetchCurrentViewer,
   login as apiLogin,
   deleteAccount as apiDeleteAccount,
@@ -155,6 +156,27 @@ export interface UpdateProfileInput {
 }
 
 export interface AuthContextValue {
+  /**
+   * WE COULD NOT ASK, WHICH IS NOT THE SAME AS "NOT SIGNED IN".
+   *
+   * Hydration drops the cached viewer whenever `/auth/me` fails, and that is
+   * right and stays right: a cache is a display hint, never proof of a
+   * session, and rendering protected routes off stale localStorage is the one
+   * mistake this must never make. `isAuthenticated` is unchanged by this flag
+   * and `RequireAuth` still sends the visitor to the door.
+   *
+   * What was wrong is what the door then SAID. Measured 2026-08-26: kill every
+   * `/api/` request and reload, and a person with a perfectly valid session is
+   * shown "Welcome back. Sign in to return to what you kept." Restore the
+   * network, reload, and they are straight back in — nothing was ever wrong
+   * with their account. The product asserted a fact about their session that
+   * it had no way of knowing, in the one situation where a person is already
+   * inclined to fear the worst.
+   *
+   * So: access control reads `isAuthenticated`; the door reads this to choose
+   * its words. Never the other way round.
+   */
+  serverUnreachable: boolean;
   /** The signed-in account, or null when anonymous. */
   account: ApiAccount | null;
   /** The profile this session acts as, or null when anonymous. */
@@ -253,6 +275,9 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     [],
   );
 
+  /** See `AuthContextValue.serverUnreachable`. Says nothing about access. */
+  const [serverUnreachable, setServerUnreachable] = useState(false);
+
   // Initial hydration: confirm the cached viewer against the server.
   useEffect(() => {
     let cancelled = false;
@@ -261,10 +286,30 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       try {
         const fresh = await fetchCurrentViewer();
         if (cancelled || !aliveRef.current) return;
+        setServerUnreachable(false);
         if (authMutationRef.current === initialAuthMutation) {
           applyViewer(fresh, { countAsAuthMutation: false });
         }
-      } catch {
+      } catch (err) {
+        /* A STATUS OF 0 IS THE CLIENT SAYING IT NEVER GOT AN ANSWER — see
+           `http.ts`, where every helper rethrows a dead fetch as
+           `ApiError { status: 0 }`. A 401 is an answer and means signed out; a
+           0 means the question was never asked. Only the second sets this. */
+        if (!cancelled && aliveRef.current) {
+          /* AN UNKNOWN ERROR IS NOT EVIDENCE THE SERVER WAS UNREACHABLE.
+             This defaulted to `true` for anything that was not an `ApiError`,
+             which would have put "We couldn't reach the server" in front of a
+             person whose network was fine and whose session was fine — a
+             crash inside `applyViewer` reads the same from here. Claiming a
+             cause on no evidence is the exact mistake this flag was added to
+             stop; only a status of 0, which the client sets when it never got
+             an answer, is evidence of it.
+
+             Note a 401 never reaches this catch at all: `fetchCurrentViewer`
+             RETURNS null for it rather than throwing, so signed-out is
+             handled above and the door greets it normally. */
+          setServerUnreachable(err instanceof ApiError && err.status === 0);
+        }
         // The cache is only an optimistic display hint, not proof of an
         // authenticated session. If the initial server validation fails
         // before we have a fresh `/auth/me`, drop the hint rather than
@@ -285,6 +330,14 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   const login = useCallback(
     async (input: LoginRequest): Promise<ApiViewer> => {
       const { account, profile } = await apiLogin(input);
+      /* THE SERVER ANSWERED, so whatever the door was told earlier is stale.
+         Without this the flag survived the whole page session: a person who
+         hit a dead network, signed in once it came back, then signed out
+         again, met "We couldn't reach the server" on a door that had just
+         worked twice. Cleared wherever a round trip actually resolves —
+         `logout` is deliberately not one of those, because it wipes state
+         first and swallows its own network errors by design. */
+      setServerUnreachable(false);
       const next: ApiViewer = { account, profile };
       applyViewer(next);
       return next;
@@ -295,6 +348,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   const signup = useCallback(
     async (input: SignupRequest): Promise<ApiViewer> => {
       const { account, profile } = await apiSignup(input);
+      setServerUnreachable(false);
       const next: ApiViewer = { account, profile };
       applyViewer(next);
       return next;
@@ -312,6 +366,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
 
   const refresh = useCallback(async (): Promise<ApiViewer | null> => {
     const fresh = await fetchCurrentViewer();
+    setServerUnreachable(false);
     applyViewer(fresh);
     return fresh;
   }, [applyViewer]);
@@ -349,6 +404,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       profile: viewer?.profile ?? null,
       isLoading,
       isAuthenticated: viewer !== null,
+      serverUnreachable,
       login,
       signup,
       logout,
@@ -360,6 +416,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     [
       viewer,
       isLoading,
+      serverUnreachable,
       login,
       signup,
       logout,

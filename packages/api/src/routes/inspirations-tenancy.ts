@@ -20,7 +20,9 @@ import { eq } from "drizzle-orm";
 
 import { profiles } from "../db/index.js";
 import { getDb } from "../lib/db.js";
-import { profileAccessError, type ProfileOperation } from "../lib/middleware.js";
+import { profileAccessError, type ProfileOperation,
+  asAccountProfile,
+} from "../lib/middleware.js";
 import type { AuthenticatedSession } from "../lib/session.js";
 
 export type ProfileResolution =
@@ -45,17 +47,20 @@ export async function resolveTargetProfile(
     return { ok: true, profileId: session.profile.id };
   }
 
-  const [target] = await db
-    .select({ id: profiles.id, accountId: profiles.accountId })
+  const [row] = await db
+    .select({ id: profiles.id, accountId: profiles.accountId, type: profiles.type })
     .from(profiles)
     .where(eq(profiles.id, requested))
     .limit(1);
 
+  /* a room's mind (null account) narrows to nothing and lands in the same
+     404 as any profile outside this account — one rule, stated in the type */
+  const target = row ? asAccountProfile(row) : null;
   if (!target || target.accountId !== session.profile.accountId) {
     return { ok: false, status: 404, body: { error: "Profile not found" } };
   }
 
-  const denied = profileAccessError(session, target, operation);
+  const denied = await profileAccessError(db, session, target, operation);
   if (denied) return { ok: false, status: 403, body: denied };
 
   return { ok: true, profileId: target.id };

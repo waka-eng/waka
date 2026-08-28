@@ -211,9 +211,8 @@ This is what actually happens, in file order. Every hop below was read.
     as lossy where it is lossy.
 16. **The drawing.** Home builds one `Ball` per inspiration with `makeBall`
     (`packages/web/src/space/inspiration/orb.ts`) and lights it with `colorBall`
-    (`packages/web/src/space/inspiration/field.ts`); signals become the sky
-    through `packages/web/src/space/signal/sky.ts` and its frame step in
-    `sky-engine.ts`; the artifact becomes the poster through
+    (`packages/web/src/space/inspiration/field.ts`); the artifact becomes the
+    poster through
     `packages/web/src/space/top-of-mind/board.ts` and `poster.tsx`.
 17. **Generation is asynchronous, so the screen is not live.** The person sees
     their orb immediately (step 1). The signal it fed appears on the next read:
@@ -307,7 +306,6 @@ one trap a reader reliably falls into, which is that the `Space` type lives in
 | `pages/` | One file per route: `Home.tsx` (the canvas) and the four flat screens — `Login`, `Onboarding`, `Profile`, `PublicProfile`. |
 | `space/` | A container for the three layers, one subdirectory each, plus settings, a `README.md`, and one loose source file: `editing.ts`, the one act that is identical on all three layers (open the words, change them, keep them) and therefore belongs to none of them. **This is the axis that divides it from `space-kinds/`: `space/` is split by LAYER, `space-kinds/` by WHOSE space it is.** The README is the long form, and it names the trap: the `Space` type is declared in `space-kinds/`, so reading the two names cold gets it exactly backwards. |
 | `space/inspiration/` | Layer 1: what a save *is* on screen (`orb.ts` — the `Ball`, and `agentId`, which decides which wall it stands on) and what the ground does with one (`field.ts` — brightness, size band, packing, scatter). |
-| `space/signal/` | Layer 2: `sky.ts` is the model (a candidate, its light, its evidence in orbit); `sky-engine.ts` is the frame step, lifted out of Home only after measuring that it needs three of the loop's eleven state groups. `sky-engine.ts` is over the 800-line limit and carries the header G1 asks for instead: its 1,051 lines are 583 of code and 446 of prose, and all three of its state interfaces are needed by both sides of every cut that was measured, so every split would need a third file holding nothing but the contract. |
 | `space/top-of-mind/` | Layer 3: `board.ts` is the artifact's entries and which sentence leads; `poster.tsx` is the one part that needs markup — which words survived the last rewrite stay lit, and only new words arrive. |
 | `space/settings/` | `SpaceSettings.tsx` — what a space is and every verb you can apply to it. A layer-shaped directory holding a screen, which is the one place this tree's own rule bends. |
 | `space-kinds/` | What differs by KIND of space: `index.ts` (the three kinds and what follows from each, **and the `Space` type itself**), `agent.ts`, `group.ts`, `GroupPanel.tsx`. A fourth kind should be a new entry here, not a hunt through the page. The name is wrong and the fix is recorded in `space/README.md`: it should be `space/` and its sibling should be `layers/`, blocked only because `Home.tsx` holds 11 of the 18 imports that cross into the two directories. |
@@ -353,12 +351,13 @@ verified by opening the file.
   There is no `Jar.tsx`; `pages/Home.tsx` imports it.
 - **`docs/codebase.md` puts `space-kinds/` underneath `space/` in the dependency
   order — "pure predicates and constants", read by the layers and reading
-  nothing back. The imports go both ways.** `space/signal/sky-engine.ts` takes
-  `makeGroupBall` from `space-kinds/group.ts`, and `space-kinds/group.ts` takes
-  `colorBall`, `scatterSeed`, `Ball` and `formingWords` back out of
-  `space/inspiration/` and `space/top-of-mind/`. The cycle is not an accident:
-  a group's evidence has to exist as a real field orb before the sky can hang
-  it. Trace dependencies from the imports, not from that list. The same
+  nothing back. One import still goes the other way.** `space-kinds/group.ts`
+  takes `formingWords` and `WallChrome` out of `space/top-of-mind/`. It used to
+  take four more — `colorBall`, `scatterSeed` and `Ball` — for `makeGroupBall`,
+  which built a room's evidence into a real field orb so the sky could hang it;
+  that function had no caller once `space/signal/` was deleted on 2026-08-25
+  and went with it, and the true CYCLE went with it too. Trace dependencies
+  from the imports, not from that list. The same
   document also names a `space-kinds/self.ts` that was never written — nothing
   about your own space differs yet, which is the right outcome and a stale
   sentence. Both are written up at length in `packages/web/src/space/README.md`.

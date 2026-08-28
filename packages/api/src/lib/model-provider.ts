@@ -206,9 +206,17 @@ export interface SignalMatchJudgementInput {
   existingStatement: string;
 }
 
+/**
+ * Three-way since no-quiet-corners Phase 5 — the vocabulary principle
+ * judging already used, brought down to layer 2: `same` attaches, and
+ * `opposed` mints WITH an undirected `contradicts` relation so the dispute
+ * is held on the record instead of dissolved by whichever statement came
+ * second. `independent` is the conservative middle and every failure mode
+ * lands there: a duplicate is visible and mergeable, a phantom opposition
+ * manufactures a dispute the person never had.
+ */
 export interface SignalMatchJudgement {
-  /** True when both statements name the same durable pattern. */
-  samePattern: boolean;
+  relation: "same" | "independent" | "opposed";
 }
 
 // ---------------------------------------------------------------------------
@@ -274,6 +282,35 @@ export interface DeclarationRoute {
   route: "principle" | "inspiration";
   /** Classified shape when the route is principle; maxim when unsure. */
   type: PrincipleType;
+}
+
+/**
+ * THE JUDGE DID NOT SIT. NOT: THE JUDGE RULED AGAINST YOU.
+ *
+ * A declaration is routed, never refused — words that are really a rule or a
+ * goal are kept as an inspiration, which is where they already belong, and no
+ * verdict travels back. That silence is right when the tests actually ran.
+ *
+ * It was also, until 2026-08-22, what a person got when the tests could NOT
+ * run. A missing key, a rate limit, a timeout and a considered rejection all
+ * produced the same row and the same 201: the statement went in with the
+ * inspirations and nothing anywhere recorded that nobody had looked at it.
+ * They told WAKA how they choose, WAKA said nothing, and their words became a
+ * note. Nothing downstream could tell the two apart either, because no state
+ * distinguished them.
+ *
+ * So this exists to be the difference. "We could not consider this yet" is a
+ * different sentence from a refusal, and the product rule forbids the second,
+ * not the first.
+ */
+export class DeclarationNotConsideredError extends Error {
+  readonly cause?: unknown;
+
+  constructor(message: string, cause?: unknown) {
+    super(message);
+    this.name = "DeclarationNotConsideredError";
+    this.cause = cause;
+  }
 }
 
 export interface ModelProvider {

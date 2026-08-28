@@ -61,11 +61,14 @@ import {
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
 
 import { hueCss } from "../lib/appearance";
-import { clamp, clamp01, DAY_MS, easeOut, kd, lerp, TAU } from "../lib/num";
+import { useDismissAway } from "../lib/dismiss";
+import { clamp, clamp01, DAY_MS, easeOut, hashStr, kd, lerp, mix32, TAU } from "../lib/num";
 import {
   GRAIN_PX,
   GRAIN_TILE,
@@ -73,31 +76,6 @@ import {
   mix,
   rgbCss,
 } from "../canvas/sprites";
-import {
-  dedupeEvidence,
-  readSkyLayout,
-  type Candidate,
-  type Neb,
-  type Sat,
-} from "../space/signal/sky";
-import {
-  computeClusters,
-  focusOn,
-  layoutSky,
-  makeNeb,
-  persistSky,
-  releaseHolds,
-  sayWho,
-  solveSats,
-  springs,
-  stepSky,
-  CONDENSE_MS,
-  FOCUS_DIM,
-  FOCUS_POP,
-  NEB_CORE,
-  type SkyDeps,
-} from "../space/signal/sky-engine";
-import { paintSky } from "../space/signal/sky-paint";
 import { useEditing } from "../space/editing";
 import { deriveAgentChrome } from "../space-kinds/agent";
 import {
@@ -115,9 +93,12 @@ import {
 import { useMeasured } from "../canvas/measured";
 import { BODY_TIERS, bodyPath } from "../character/raster";
 import { GroupPanel } from "../space-kinds/GroupPanel";
-import { SpaceSettings } from "../space/settings/SpaceSettings";
+import { SpaceSettings, type GroupTrouble } from "../space/settings/SpaceSettings";
+import { whyFailed as sayWhyFailed, whyOf } from "../lib/why-failed";
 import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
 import { agentBeing, OWNER_BEING, unit, type Being } from "../character/body";
+import { groupCompanyPlaces, type CompanyPlace } from "../space/group-company";
+import { pourSignature } from "../space/pour-signature";
 import { posterWords } from "../space/top-of-mind/poster";
 import {
   deriveAmbition,
@@ -161,12 +142,10 @@ import type { AgentBundle } from "../lib/agent-contract";
 import { MOCK_AGENTS, MOCK_AGENT_BUNDLES } from "../lib/fixture/agent-walls";
 import { offlineHome, type OfflineHome } from "../lib/fixture/offline-home";
 import {
-  agoWords,
+  dateStamp,
   citedWords,
   dateWords,
-  groupCompany,
   monthTag,
-  numWords,
 } from "../lib/words";
 
 import {
@@ -174,17 +153,22 @@ import {
   declineGroupProposal,
   createInspiration,
   createGroup,
+  fetchPrinciples,
   createProfile,
   createReflection,
   deleteReflection,
   fetchGroupProposals,
   createGroupProposal,
   fetchGroupMembers,
+  fetchGroupTimeline,
+  type ApiGroupTimeline,
+  type ApiGroupTopOfMind,
   leaveGroup,
   removeGroupMember,
   renameGroup,
   deleteGroup,
   fetchGroupTopOfMind,
+  refreshGroupTopOfMind,
   fetchGroups,
   fetchGroupField,
   fetchGroupWall,
@@ -194,13 +178,13 @@ import {
   presignAttachment,
   uploadToPresignedUrl,
   joinGroup,
-  shareSignal,
-  unshareSignal,
   deleteInspiration,
   createFeedback,
-  deleteSignal,
+  releaseSignal,
+  restoreSignal,
   dismissTopOfMindEntry,
   restoreTopOfMindEntry,
+  releaseTopOfMindEntry,
   holdTopOfMindEntry,
   refreshTopOfMind,
   updateInspiration,
@@ -208,14 +192,35 @@ import {
   type ApiGroupProposal,
   type ApiGroupMember,
   type ApiGroupSummary,
+  createAgentKey,
+  fetchAgentKeys,
+  revokeAgentKey,
+  type ApiAgentKey,
+  type ApiMintedKey,
+  declarePrinciple,
+  deletePrinciple,
+  disputePrinciple,
+  reorderPrinciples,
+  updatePrinciple,
+  type ApiPrinciple,
   type ApiGroupFieldInspiration,
   type ApiGroupWallSignal,
   type ApiTopOfMindVersion,
+  type ApiReading,
+  fetchTheReading,
+  type ApiAntechamberRow,
+  fetchTheWeather,
   ApiError,
 } from "../lib/api";
+import { AntechamberPanel } from "../components/AntechamberPanel";
+import { LoadingHome } from "../components/LoadingHome";
+import { ReadingPanel } from "../components/ReadingPanel";
+import { RECEIPTS } from "../lib/receipts";
 import {
   loadInspiration,
   loadInspirations,
+  beyondOf,
+  EMPTY_FIELD,
   loadTopOfMind,
   loadSignal,
   loadSignals,
@@ -224,7 +229,6 @@ import {
   type InspirationDetail,
   type Entry,
   type Evidence,
-  type EvidenceRef,
   type Signal,
   type TopOfMind,
 } from "../lib/data";
@@ -406,6 +410,94 @@ const SPIN_TURNS = 2;
 /** Let go and it eases back to front-facing, the short way round. */
 const UNWIND_MS = 650;
 /**
+ * THE GATHER BEFORE A REACTION.
+ *
+ * Every moment in this world was a reaction with no wind-up: the thing
+ * happened and the creature was already at full flare on the next frame. That
+ * is the one shape a living thing never makes. Anticipation is the first of
+ * the three terms carrying Luxo Jr. — a lamp with no eyes and no hue — and it
+ * is the cheapest of them here, because it spends time rather than light.
+ *
+ * It is the creature's own wind-up, not a prediction of yours. The memory is
+ * already born and falling; what these numbers stage is the beat between
+ * seeing it and answering, which is why nothing about the keep is delayed to
+ * pay for them.
+ */
+const ANTICIPATE_MS = 130;
+/** How far it compresses at the bottom of the gather. Squash, so positive. */
+const ANTICIPATE_SQ = 0.03;
+/** And how long the body takes to come back up out of it, once released. */
+const ANTICIPATE_EASE = 4.6e-4;
+/**
+ * MOOD — A DISPOSITION, WHERE `flare` IS AN EVENT.
+ *
+ * `flare` decays in 0.7s and carries nothing to the next thing that happens,
+ * so the creature that greets your next act has not been changed by your last
+ * one. Loyall lists CHANGE as a requirement for a believable agent in its own
+ * right, and Anki's emotion engine is the production version: a state
+ * underneath, moving continuously, so the same stimulus twice does not produce
+ * the same response twice. This is that requirement at the smallest scale it
+ * can be had.
+ *
+ * THE LAW THIS ARGUES WITH, SAID PLAINLY. Mood spending LIGHT is not on the
+ * table: it would break invariant 4 outright — two beings at the same aliveness
+ * would stop being the same colour, and temperature would mean two things at
+ * once. So it spends RHYTHM, and that brushes against "light is the only
+ * meaning channel".
+ *
+ * The case for it: that law's real work is preventing a LEGEND — a key you
+ * have to learn before the screen means anything, which is what hue-per-
+ * category always becomes. A creature that blinks slower and moves smaller
+ * after you let something go needs no legend; it is read the way a tired
+ * person is read, without decoding. And rhythm is not a virgin channel —
+ * `bobRate` and `blinkMs` are already identity — so the honest cost is that it
+ * now carries TWO things, not that it starts carrying one.
+ *
+ * The one thing rhythm cannot do is survive reduced motion, where it is silent
+ * by design. There mood simply does not exist rather than falling back to
+ * light, because falling back to light is the version that breaks invariant 4.
+ */
+const MOOD_HALF_LIFE_MS = 90000;
+/** What each moment does to the disposition. `touch` is deliberately absent:
+    being tapped is not an experience. */
+const MOOD_OF: Partial<Record<Moment, number>> = {
+  kept: 0.5,
+  answered: 0.4,
+  shared: 0.3,
+  arrived: 0.1,
+  "let-go": -0.35,
+};
+/** How far mood may bend each rhythm. Small on purpose: this is a disposition
+    read at a glance, not a readout, and a legible one would be a legend. */
+const MOOD_BOB = 1;
+/**
+ * AND THE BREATH NEVER STOPS.
+ *
+ * At full gain a mood of -1 multiplies the bob's amplitude by zero, and
+ * measuring it is the only reason that was caught: 0.0px of travel, a
+ * companion holding perfectly still. The settle already refuses this a few
+ * lines down — "never below a fifth — still breathing, never frozen" —
+ * because a creature that stops moving does not read as low, it reads as
+ * crashed. Low mood is quieter, never absent.
+ */
+const MOOD_BOB_FLOOR = 0.4;
+/**
+ * AND THE RATE, WHICH IS THE ONE READ AT A GLANCE.
+ *
+ * Amplitude alone was not enough and the arithmetic says why: the bob is a
+ * squash of 0.022, so on a 140px body it is ±3px, and a quarter of three
+ * pixels is nothing. Restraint that lands below perception is not restraint,
+ * it is an effect that does not exist.
+ *
+ * SPEED is the channel a person reads instantly — sluggish against lively is
+ * legible in a second, long before an amplitude difference is. It is also the
+ * honest one for a disposition: what changes when someone is flat is not how
+ * far they move, it is how readily.
+ */
+const MOOD_RATE = 0.45;
+const MOOD_BLINK = 0.4;
+const MOOD_GLANCE = 0.45;
+/**
  * HOW LONG THE COMPANION TAKES TO BECOME THE ONE WHOSE WALL THIS IS.
  *
  * Shorter than UNWIND_MS on purpose: the change starts on the arrival beat
@@ -416,6 +508,22 @@ const UNWIND_MS = 650;
  */
 const FORM_FADE_MS = 320;
 /**
+ * ARRIVING IN A ROOM, WHOSE GROUNDS ARE HERE IS LIT THIS LONG.
+ *
+ * A room pours ONE member's memories — yours, until you move to somebody
+ * else's (see `onThisWall`, and the note above it for why a heap of five
+ * grounds is not evidence for anything). That decision is right and it has a
+ * cost nobody had paid for: standing in a room with four other people looks
+ * exactly like standing on your own wall. Every other ground was already on
+ * screen, in the corner, at the dim end of the one channel this world has —
+ * which is the correct RESTING state for a control and the wrong arrival.
+ *
+ * So travelling into a room lights all of them, and they settle back to the
+ * quiet register on their own. The world moved because you moved to it, and
+ * what the motion explains is that this ground is one of several.
+ */
+const GROUNDS_LIT_MS = 1600;
+/**
  * The turn is a PLANET, not a card: the silhouette never changes, and it is
  * the features that travel across it. An eye sits on the equator at this
  * longitude; the pair are ~1 radian apart, which is what puts them where they
@@ -424,8 +532,6 @@ const FORM_FADE_MS = 320;
 const EYE_LON = 0.5;
 /** The equator's radius as seen head-on, as a fraction of the body's width. */
 const FACE_R = 0.34;
-/** At most this many candidates get a body in the sky. */
-const SKY_MAX = 9;
 /**
  * The traveler (v8). Pressing toward a neighbouring column, the companion
  * turns and glides ahead of the world over this long, easing in…
@@ -496,24 +602,6 @@ const PITCH_FULL = 1400;
  * apart. What remains below is the page's own: read by what the page still
  * lays out itself and by nothing else.
  */
-/**
- * Air between a satellite and the name of whoever saved it — and the least the
- * name is ever left from the edge of the sky, which clips.
- */
-const SAT_SAY_GAP = 12;
-/**
- * THE MOST OF THE VIEWPORT ONE CANDIDATE'S SYSTEM MAY CLAIM.
- *
- * clampHome parks a candidate by a pad the size of its whole system, so the
- * range it may be parked in is what is left over — and at half the viewport
- * that range is empty. These are the pads' ceiling, and therefore also the
- * ceiling measureNeb cuts an orbit down to: an orbit wider than a pad may be
- * has nowhere at all to sit, and runs off both edges every revolution.
- */
-const SKY_PAD_X = 0.45;
-const SKY_PAD_Y = 0.42;
-/** The least of the viewport an orbit is ever left clear of an edge. */
-const SKY_EDGE = 12;
 
 
 // ---------------------------------------------------------------------------
@@ -643,11 +731,12 @@ async function loadAgentWalls(): Promise<AgentBundle[]> {
        borrowing anything to fill itself. */
     return Promise.all(
       real.map(async (p) => {
-        const [inspirations, signals, tom] = await Promise.all([
-          loadInspirations(p.id).catch(() => [] as Inspiration[]),
+        const [field, signals, tom] = await Promise.all([
+          loadInspirations(p.id).catch(() => EMPTY_FIELD),
           loadSignals(p.id).catch(() => [] as Signal[]),
           loadTopOfMind(p.id).catch(() => null),
         ]);
+        const inspirations = field.inspirations;
         const entries = (tom?.entries ?? []).slice().sort((a, b) => a.createdMs - b.createdMs);
         const lead = tom?.entries.find((e) => e.pinned) ?? tom?.entries[0] ?? null;
         const iso = (ms: number) => new Date(ms).toISOString();
@@ -702,6 +791,10 @@ async function loadAgentWalls(): Promise<AgentBundle[]> {
             updatedAt: iso(c.updatedMs),
             producedBy: null,
           })),
+          /* the same ceiling as every other ground: an agent that has kept
+             more than the walk follows says so rather than reporting the
+             length of what arrived */
+          inspirationTotal: field.total,
         };
       }),
     );
@@ -749,6 +842,16 @@ function computeLayout(vw: number, vh: number, dialH: number): Layout {
     wallR,
     layoutH,
     maxCam: vh,
+    /* THE PLACE ABOVE HEADQUARTERS COMES BACK, FOR SOMETHING ELSE.
+       It held the signals still forming, as clouds of light, and that was
+       removed — signals are the machine's working material, not a place a
+       person stands in. What goes there now is the OTHER half of a mind
+       (founder, 2026-08-25): "top of mind = current. philosophies and values
+       = timeless." The wall says what you are holding today; above it is what
+       you keep coming back to whatever the day is. It takes a long time to
+       form, so for now the room exists and says so — which is the honest
+       shape, and the reason it is a PLACE rather than a promise in a tooltip:
+       a person can go up and see that it is empty, and why. */
     minCam: -vh,
     /* The peek line sits clear of the time dial, which is fixed to the
        bottom of the viewport in both sections — otherwise the topmost orbs
@@ -874,26 +977,17 @@ interface SimApi {
   toTop: () => void;
   /** Glide up into the sky, where the ambitions are still forming. */
   toSky: () => void;
+  toGround: () => void;
   /** The traveler: one column left or right, the companion leading. */
   travel: (dir: 1 | -1) => void;
-  /** Hand the loop the current candidate list. */
-  syncSky: (list: Candidate[]) => void;
-  /** An adopted candidate contracts to a point. */
-  condense: (id: string) => void;
-  /** Join this pattern to its nearest neighbour without a drag — the
-      keyboard-and-pointer path for the one gesture that had none. */
-  joinTo: (id: string) => void;
   /** Walk to a wall by column, from the axis map along the bottom. */
   goToWall: (col: number) => void;
-  /**
-   * FOLLOW THE CHAIN DOWNWARD. A pattern in the sky names the memories it was
-   * read from; pressing one of them travels to that memory in the field and
-   * opens it. This is the only navigation in the world that is caused by
-   * reading rather than by moving, and it is the whole point of provenance:
-   * a claim about you that you cannot walk back to its source is just an
-   * assertion.
-   */
-  revealMemory: (inspirationId: string) => void;
+  /* `revealMemory` LIVED HERE and is gone. It flew the camera from a statement
+     down to the memory it was read from — the only navigation in the world
+     caused by reading rather than by moving, and the founder ruled it out
+     outright (2026-08-25: "never move from sky to ground"). Provenance is
+     answered without moving now: `.jar-prov-room` puts the grounds and the
+     whole memory on screen over the world you are standing in. */
   /** A reflection was kept: this memory's light genuinely comes back up. */
   relight: (id: string) => void;
   /**
@@ -978,7 +1072,91 @@ export interface FieldAudit {
     rMax: number;
     aliveMax: number;
     arriveMin: number;
+    /**
+     * HOW MANY ORBS ARE SUNK, AND HOW MANY ARE LIT.
+     *
+     * The audit could see everything about a memory except the one channel
+     * that carries meaning. Two things drive that channel — a search, and
+     * (since 2026-08-24) reading a pattern, which lights the memories it was
+     * read from where they live instead of setting them orbiting. Both say
+     * the same sentence to the field, "this one and everything else sinks",
+     * and neither was observable from outside: a light that never moved and
+     * a light that moved correctly looked identical to every test here.
+     */
+    dimmed: number;
+    glowing: number;
   };
+  /**
+   * WHETHER THE SKY IS LEANING DOWN, AND HOW FAR EACH STATEMENT CAME.
+   *
+   * Here for the same reason `provenanceCount` is: this is a promise nothing
+   * else can see fail. The elected statements ease toward the top edge from
+   * off-screen homes, so a peek that is elected but never applied, or applied
+   * to a part of the cloud sprite that has no light left in it, looks
+   * IDENTICAL to a peek that was never built — an empty top edge either way.
+   * That is exactly how the first attempt at it spent a day looking broken
+   * while working: `peekY` was correct and the clouds were reaching it, and
+   * the band it put them in was invisible.
+   *
+   * `lean` is the camera's own scalar, 1 at headquarters and 0 up in the sky.
+   * A statement with `peekY === homeY` was not elected and never moves.
+   */
+  sky: {
+    lean: number;
+    minCam: number;
+  };
+}
+
+/**
+ * THE DRAWER LEAVES THE WORLD'S COORDINATE SYSTEM.
+ *
+ * The quick line belongs to the seam: its layer takes the camera's offset
+ * every frame, so the line hangs off the field's top edge and scrolls away as
+ * you descend. A DRAWER wants none of that. It is stuck to the bottom of the
+ * SCREEN, and every ancestor between it and the screen is something that
+ * moves — the camera translates the mouth layer, and opening the drawer moves
+ * the world besides.
+ *
+ * Two narrower fixes were tried and both were wrong. `position: fixed` does
+ * nothing while an ancestor carries a transform, because a transform makes
+ * itself the containing block for fixed descendants. And cancelling the
+ * camera on the mouth layer fixed the case I could reproduce and not the
+ * founder's — it assumed the transform was the only thing moving, which is a
+ * guess about which ancestor is at fault when the honest answer is that it
+ * should not matter which.
+ *
+ * So the drawer renders into `.jar` — the world's own root — which is above
+ * every moving layer inside it and is itself `position: fixed; inset: 0` with
+ * no transform of its own. Nothing between the drawer and the viewport can
+ * move it, whatever the world does next.
+ *
+ * `.jar` rather than `document.body`, which was the first attempt and looked
+ * right until you saw it: every `--jar-*` token is defined ON `.jar`, so a
+ * drawer parented to the body lost the whole palette and rendered as
+ * transparent text over the world — the sheet, its lit lip and its sunken
+ * well all resolved to nothing. The host has to be inside the scope that
+ * defines the design, and outside everything that moves.
+ *
+ * The resting line stays exactly where it was, in the layer built for it:
+ * this branch is only ever taken while the drawer is out. A null host is the
+ * first render, before the ref is attached, and renders inline — which is
+ * where the quick line lives anyway, so nothing flashes.
+ */
+/* What is NOT "outside" for each sheet: the sheet, and the control that
+   opens it — pressing that again is the control's own toggle, not a
+   dismissal, and treating it as one closes and reopens in the same press. */
+const KEEP_ACCOUNT = [".jar-settings", ".jar-account"] as const;
+const KEEP_SHEET = [".jar-settings", ".jar-seek"] as const;
+const KEEP_PROV = [".jar-prov-room", ".jar-panel"] as const;
+const KEEP_ANTE = [".jar-antechamber", ".jar-settings"] as const;
+
+function withMouthLayer(
+  isDrawer: boolean,
+  host: HTMLElement | null,
+  slot: JSX.Element,
+): JSX.Element {
+  if (!isDrawer || !host) return slot;
+  return createPortal(slot, host) as JSX.Element;
 }
 
 export default function HomePage(): JSX.Element {
@@ -1036,6 +1214,50 @@ function HomeExperience(): JSX.Element {
   }
   const offlineRef = useRef(false);
   const [inspirations, setInspirations] = useState<Inspiration[] | null>(null);
+  /**
+   * HOW MANY MEMORIES THE WALK NEVER REACHED — the remainder, not the total.
+   *
+   * A total held here would go stale the moment anything is kept or let go,
+   * because the field is edited in place by three handlers below and none of
+   * them refetch. The remainder does not: it is a fact about the far end of
+   * the archive, and keeping one more memory changes the near end. So the
+   * count under the door is `inspirations.length + fieldBeyond`, and it stays
+   * true through a capture, an edit and a removal without any of them
+   * knowing this exists.
+   */
+  const [fieldBeyond, setFieldBeyond] = useState<number>(0);
+  /**
+   * THE POUR READS THIS; THE POUR DOES NOT DEPEND ON IT.
+   *
+   * `inspirations` is a dependency of the frame loop's setup effect, so every
+   * keep tore the whole world down and built it again: new Float32Arrays for
+   * the starfield and the dust, every orb reconstructed, the canvas backing
+   * store reallocated, the light re-eased from zero. That is the brightening
+   * and the reshuffled stars the founder reported four times — and an earlier
+   * session diagnosed the rebuild exactly, then guarded the canvas resize
+   * instead of stopping the rebuild, writing in the comment there that it was
+   * "not a fix for that symptom".
+   *
+   * It is a fix now, and at the cause: `simApi.born()` ALREADY puts the new
+   * orb in the world the instant you keep, so the rebuild that follows is
+   * pure waste — it reproduces a world that is already correct. The loop's
+   * dependency becomes a signature that ignores memories this session has
+   * already born, so keeping something no longer rebuilds anything, and a
+   * real change to the archive (a reload, an agent's capture, a deletion)
+   * still does.
+   */
+  const inspirationsRef = useRef<Inspiration[] | null>(null);
+  inspirationsRef.current = inspirations;
+  /** server ids of memories born in THIS session; the world already has them */
+  const bornIdsRef = useRef<Set<string>>(new Set());
+  /* `pour-signature.ts` holds the rule and the reason it exists: an archive
+     that has not answered must not sign the same as one that answered empty,
+     or a fresh account whose profiles land first gets a world it cannot
+     touch. */
+  const pourSig = useMemo(
+    () => pourSignature(inspirations, bornIdsRef.current),
+    [inspirations],
+  );
   const [notes, setNotes] = useState<JarNote[] | null>(null);
   /**
    * THE SKY, IN THE CANON'S SENSE — layer 2. Each is an evidence-backed
@@ -1069,12 +1291,90 @@ function HomeExperience(): JSX.Element {
    * pour, not this ref: the ref only keeps the pour honest about reading the
    * sky AT THE MOMENT IT POURS.
    */
+  /**
+   * LAYER 4, WHERE YOU STAND — NOT A FOURTH REGION.
+   *
+   * The world draws three sections because the canon's first three are
+   * places: memories below, statements above, and the sentence you are
+   * standing in. Layer 4 is not a fourth place. A principle is what is left
+   * of the top of mind once the weather has passed — the same material,
+   * further along — so it belongs where the top of mind already is: one quiet
+   * line under it, opened the way the sky is opened.
+   *
+   * This is what emptied the last entry out of the `≡` holding pen. Before
+   * it, `/principles` was the only layer with no address in the world at all,
+   * and the menu existed largely to carry it.
+   */
+  const [principles, setPrinciples] = useState<ApiPrinciple[]>([]);
+  const [principlesOpen, setPrinciplesOpen] = useState(false);
+  /**
+   * LAYER FOUR BECOMES SOMETHING YOU CAN ANSWER, not only read.
+   *
+   * The world has shown principles since they existed — sorted by rank, with
+   * `aspirational` marked — and offered NO verb on them. Declaring, correcting,
+   * disputing, ordering and removing were all on the flat `/principles` screen,
+   * which is five of the twelve verbs `one-product-one-system.md` counted as
+   * missing here.
+   *
+   * They follow the grammar the layer below already uses: press the sentence
+   * and its verbs open under it, exactly as pressing a pattern opens
+   * `yes · partly · not true`. A person who has learned that a claim answers
+   * back when you press it has already learned this.
+   *
+   * `pick` is which principle is open, `pDraft` is the words being typed
+   * (declaring when `pDraft.id` is null, correcting when it is not), and
+   * `pGoing` is the two-step on removal — a destructive word is never beside
+   * its own yes, the same rule the settings sheet keeps four times over.
+   */
+  const [pick, setPick] = useState<string | null>(null);
+  const [pDraft, setPDraft] = useState<{ id: string | null; text: string } | null>(null);
+  const [pGoing, setPGoing] = useState<string | null>(null);
+  /**
+   * WHAT A PRINCIPLE GREW FROM — the one edge the world could not draw.
+   *
+   * `/graph` drew three columns: principles over the signals they grew from,
+   * signals over the experiences that evidence them. The world already draws
+   * the lower half — pressing a pattern opens its roots down to the memories
+   * behind it — and it has never been able to draw the upper one. So the
+   * whole reason a flat graph existed was ONE MISSING LINK, not a missing
+   * picture.
+   *
+   * It is drawn the way this world draws everything else: one hop, asked for,
+   * under the thing it is about. Not a second diagram — the world IS the
+   * diagram, and a node-and-edge canvas inside it would be a picture of a
+   * place you are standing in.
+   *
+   * `citedSignals` already arrives on every principle, so this needs no
+   * request at all; the edge was in the payload the whole time.
+   */
+  const [pRoots, setPRoots] = useState<string | null>(null);
+  const [pBusy, setPBusy] = useState(false);
+
   const sky = useMemo(
     () => ({
       citations,
       signals: new Map((signals ?? []).map((p) => [p.id, p] as const)),
+      /**
+       * THE LAYERS ABOVE THE SKY, as the patterns they stand on.
+       *
+       * The field's light says how much of this person a memory holds up, and
+       * "how much" runs upward: a pattern (layer 2), what currently matters
+       * (layer 3), what has been settled (layer 4). Both sets are derived
+       * here, beside the sky they index into, so `skyOf` stays a pure lookup
+       * and there is exactly one place either can go stale.
+       *
+       * Layer 3 is the board's entries and NOT the poster's lead alone: the
+       * whole artifact is what currently matters, and a memory under its
+       * second entry is holding up the same thing as one under its first.
+       */
+      posterSignalIds: new Set(
+        (notes ?? []).flatMap((e) => e.citedSignals.map((c) => c.id)),
+      ) as ReadonlySet<string>,
+      principleSignalIds: new Set(
+        principles.flatMap((p) => p.citedSignals.map((c) => c.id)),
+      ) as ReadonlySet<string>,
     }),
-    [citations, signals],
+    [citations, signals, notes, principles],
   );
   const skyRef = useRef(sky);
   skyRef.current = sky;
@@ -1162,9 +1462,26 @@ function HomeExperience(): JSX.Element {
   const [scrubbing, setScrubbing] = useState(false);
   /* parked at now? then the date label and the return button say nothing */
   const [atNow, setAtNow] = useState(true);
+  /**
+   * WHEN YOU ARE PARKED, AS A FACT THE PAGE CAN PRINT.
+   *
+   * `atNow` is a boolean and could only ever say THAT you had wound back, so
+   * the only way to say WHEN was to leave the whole rail lit — which is why
+   * the founder kept seeing a line across the screen they had asked four
+   * times to remove. One drag set `!atNow`, `--live` followed it, and the
+   * hairline stayed drawn for the rest of the session: the only way back to
+   * the rest state was to land a scrub within half a day of the present, on
+   * a rail that is invisible unless you are touching it.
+   *
+   * A word can carry that fact. `null` is now; anything else is the millisecond
+   * the wall is wound to, written on scrub-end rather than on every pointer
+   * move — the readout that rides the handle already answers mid-scrub, and a
+   * number in state per frame is a re-render per frame.
+   */
+  const [parkedAt, setParkedAt] = useState<number | null>(null);
+  const parkedRef = useRef<number | null>(null);
   const [chrome, setChrome] = useState<WallChrome>({
     text: null,
-    eyebrow: "Top of mind",
     awayFrom: null,
     formingAlt: null,
     asOf: null,
@@ -1172,7 +1489,8 @@ function HomeExperience(): JSX.Element {
     empty: false,
     prevText: null,
   });
-  /** What the companion is glowing about; set only when it is tapped. */
+  /** What the companion is saying: its own line when tapped, and the told
+      weather when an arrival has something on the record to tell. */
   const [charSay, setCharSay] = useState("");
   /* The panel and the selection are ONE state: opening is selecting, and
      closing — by Esc, by a tap on the dimmed field, by tapping the same orb
@@ -1183,30 +1501,76 @@ function HomeExperience(): JSX.Element {
   /* The sky's two discrete facts, pushed up from the loop: is the camera
      standing in it (the dial has no meaning among candidates), and which
      nebulae have been drawn together. */
-  const [inSky, setInSky] = useState(false);
-  /* whether the camera is down on the ground, where the memories are */
-  const [inField, setInField] = useState(false);
+  /** Whether the axis is offering the two ways to make another place. */
+  /**
+   * MAKING A NEW PLACE — asked in one sheet, from either door.
+   *
+   * The offer used to live only on the `+` at the end of the axis, and it
+   * opened two more marks INTO the strip — so the one row that answers "where
+   * am I and where else is there" grew two answers to a different question
+   * while you were reading it. And the list under the wall name, which is the
+   * other place a person goes looking for their walls, offered no way to make
+   * one at all (founder, 2026-08-25: "give option to add new, and inside the
+   * modal, decide if they want to add new room or add new agent").
+   *
+   * One sheet, two doors into it, and the choice is made inside it where
+   * there is room to say what each thing IS.
+   */
+  const [newPlace, setNewPlace] = useState(false);
+  /** Whether the top-left split button is listing the other walls. */
+  const [wallPick, setWallPick] = useState(false);
   /** Which pattern in the sky is being read. Its verdict row belongs to it. */
-  const [focusCandId, setFocusCandId] = useState<string | null>(null);
-  /** Patterns with a neighbour close enough to join. Pushed from the loop so
-      the one word that teaches the gesture can exist in the DOM. */
-  const [pairableIds, setPairableIds] = useState<ReadonlySet<string>>(() => new Set());
+  /**
+   * WHOSE GROUNDS ARE OPEN — and why the grounds are not simply always shown.
+   *
+   * A pattern being read used to print, all at once and all at rest: the
+   * memories it was read from, the honest-empty line when it had none, who in
+   * the room had answered it, the verbs to answer it yourself, and then the
+   * receipt for the answer you just gave. Five things under one sentence.
+   * "So confusing" was the founder's whole review of it, and they were right:
+   * a claim about you buried under its own apparatus is not legible, it is
+   * just dense.
+   *
+   * So the rule is ONE LINE AT A TIME (founder ruling, 2026-08-24): the ask
+   * before you answer, the receipt after — and the grounds one tap away on
+   * the same line, never stacked beneath it. This is the sky obeying the rule
+   * the poster already obeys, where pressing the sentence is what asks it
+   * where it came from.
+   */
+  /**
+   * THE PROVENANCE OF ONE STATEMENT, IN A ROOM OF ITS OWN.
+   *
+   * Both entrances — "where from" under a signal in the sky, and "built from"
+   * under the ambition at headquarters — used to render a list of pressable
+   * rows in place, and pressing one flew the camera down into the field to
+   * the memory. Two faults in one gesture. The travel was ruled out outright
+   * (founder, 2026-08-25: "never move from sky to ground"): finding out where
+   * a claim came from must not cost you the place you were reading it. And a
+   * memory is longer than a row, so every ground arrived clipped with no way
+   * to see the rest of it except by leaving.
+   *
+   * So: one object, two panes. Left is every ground this statement stands on,
+   * each clamped to a few lines with the read span still lit. Right is the
+   * one you pressed, whole. Nothing moves behind it.
+   */
+  const [prov, setProv] = useState<{ lead: string; rows: Evidence[] } | null>(null);
+  const [provPick, setProvPick] = useState<string | null>(null);
+  /** the chosen ground, fetched whole — `null` while it is on its way */
+  const [provFull, setProvFull] = useState<{ id: string; text: string } | null>(null);
   /**
    * WHAT YOU HAVE SAID ABOUT A PATTERN, THIS SESSION.
    *
    * The server keeps the feedback; this is only so the row can answer in the
    * same beat rather than sitting inert until a refetch. `gone` is a pattern
-   * you deleted — it leaves the sky at once, and never comes back on a stale
-   * render.
+   * you let go — nothing is deleted: the star sinks to the retired layer, its
+   * spot carries the receipt and the way back.
    */
   const [verdicts, setVerdicts] = useState<Map<string, "true" | "partly" | "not_true" | "gone">>(
     () => new Map(),
   );
-  /** Which pattern the let-go has already been pressed for, so the word can
-      change to "gone" while the request is in flight. */
-  const [dropAsk] = useState<string | null>(null);
   /** The board's own state: at rest, asked about, or being rewritten. */
   const [board, setBoard] = useState<{ step: "rest" | "asking" | "working" }>({ step: "rest" });
+  const [boardToast, setBoardToast] = useState<string | null>(null);
 
   /** The statement the poster is currently showing, as an entry we can act on. */
   const lead = useMemo<Entry | null>(() => {
@@ -1234,6 +1598,17 @@ function HomeExperience(): JSX.Element {
         setTopOfMind(tom);
         setNotes(tom?.entries ?? []);
         setBoard({ step: "rest" });
+        /* the rewrite names what it could not touch: the person's stars.
+           The brief's own copy counted them; the English line keeps the
+           law instead — states render, numerals never — so the toast says
+           THAT the stars held, and the sky shows which. */
+        const anyStars = (tom?.entries ?? []).some((e) => e.locked && !e.dismissed);
+        setBoardToast(
+          anyStars
+            ? "the sky was redrawn — your stars kept their places"
+            : "the sky was redrawn",
+        );
+        window.setTimeout(() => setBoardToast(null), 6000);
         /* the poster re-arrives word by word, and the words that survived the
            rewrite stay lit — which is how you see what held */
         simApiRef.current?.toTop();
@@ -1251,6 +1626,9 @@ function HomeExperience(): JSX.Element {
     setNotes((prev) =>
       prev ? prev.map((n) => (n.id === entry.id ? { ...n, pinned: true } : n)) : prev,
     );
+    /* the receipt for the pin — the board's own quiet channel */
+    setBoardToast(RECEIPTS.pinned.text);
+    window.setTimeout(() => setBoardToast(null), 6000);
     if (offlineRef.current) return;
     holdTopOfMindEntry(entry.id).catch(() => {
       setNotes((prev) =>
@@ -1297,10 +1675,12 @@ function HomeExperience(): JSX.Element {
       })
       .catch(() => undefined);
   }, [undrop]);
-  const [clusterSig, setClusterSig] = useState("");
   /* ---- walls (v10): the columns either side of the owner's own ---- */
   /** The rooms, newest first: the columns to the RIGHT. */
   const [groups, setGroups] = useState<ApiGroupSummary[]>([]);
+  /* Layer 4's state is declared UP with the sky, because the field's light
+     reads it: see `principles` there, and `carryOf` for why. Its surface —
+     the quiet line under the top of mind — is far below. */
   /**
    * The agents: the columns to the LEFT. Mock until the endpoints land.
    * Null until the answer is in — the field is built from the owner's inspirations
@@ -1345,11 +1725,59 @@ function HomeExperience(): JSX.Element {
    * wall by the data you asked for is not.
    */
   const headingRef = useRef<number | null>(null);
+  /**
+   * WHAT A REBUILD OF THE LOOP MUST NOT FORGET.
+   *
+   * `headingRef` above is this idea applied to one field, and the comment on
+   * it explains why it had to exist: the loop is rebuilt when a destination's
+   * data arrives mid-crossing, and it used to resume at column zero. That
+   * fixed WHERE the loop resumed. It did not fix the fact that everything
+   * else about the crossing — the camera, whether a crossing was even running,
+   * and the creature's whole pose — is declared inside the effect and so is
+   * replaced by a fresh object on every rebuild.
+   *
+   * The visible cost, measured off a screen recording: travelling into a room
+   * for the first time after a hard refresh, the companion rides out to its
+   * full 190px lead, holds there while the fetch lands, and then teleports
+   * 288px back to centre in a single frame as the rebuilt state takes over.
+   * The ease that is supposed to bring it home moves 7.4% per frame and
+   * cannot produce that jump; the creature was not eased, it was replaced.
+   *
+   * So the crossing and the creature are snapshotted on teardown and restored
+   * on setup. Three things are deliberately NOT carried:
+   *
+   *   `gesture` — a pointer that was down before a rebuild is not down after
+   *     one. Restoring it would strand the world mid-drag with no pointer.
+   *   `pour` and `view.primed` — these are exactly what the dependency list
+   *     exists to reset. A rebuild happens because there is new data, and new
+   *     memories have to be allowed to arrive. Carrying them would trade this
+   *     bug for a field that never shows what just loaded.
+   *   `view.w/h/layout` — re-measured on setup, and must be: a rebuild can
+   *     straddle a resize.
+   */
+  const carryRef = useRef<{
+    cam: unknown;
+    trip: unknown;
+    companion: unknown;
+    /** the world has been sized, so a rebuild must not re-stage it */
+    primed: boolean;
+    /** where every memory had drifted to, by id */
+    balls: Map<string, { x: number; y: number }>;
+  } | null>(null);
   /** The camera is over a wall that has no dial: the dial fades, as in the sky. */
   const [dialAway, setDialAway] = useState(false);
+  /**
+   * WHETHER THE CAMERA IS STANDING IN THE GROUND.
+   *
+   * One discrete fact, pushed from the loop when it changes and never per
+   * frame. It exists so the count of what you have kept can point DOWN from
+   * headquarters and then get out of the way: a signpost to the room you are
+   * already standing in is furniture, and this world has none.
+   */
+  const [inField, setInField] = useState(false);
+  /** And whether it stands in the sky — where philosophies and values form. */
+  const [inSky, setInSky] = useState(false);
   /** Drafts assembled here, in this session. They live nowhere else. */
-  const [drafts, setDrafts] = useState<Candidate[]>([]);
-  const [adopting, setAdopting] = useState(false);
   /* ---- the mouth: the one verb this world was missing ----
      At rest it is a phrase. Open, it is a plain field at the seam between
      headquarters and the field, so what you type sits just above where the
@@ -1364,6 +1792,19 @@ function HomeExperience(): JSX.Element {
    * person is actively typing is the smallest and worst possible version of
    * breaking that promise.
    */
+  /** The memory that asked to be reflected on as it was kept — see the reset
+      effect beside `reflect`. Null unless "keep it and reflect" was pressed. */
+  const reflectOnOpenRef = useRef<string | null>(null);
+  /**
+   * THE LONG NOTE IS THE WHOLE PAGE, AND THE WAY OUT IS A DRAFT (founder,
+   * 2026-08-27, reversing the 2026-08-25 step-aside drawer). The drawer
+   * could minimize to a lip so you could glance at the world mid-thought —
+   * but a lip is a third state to learn, and the founder chose two honest
+   * ones instead: writing, where the page IS the note, and away, where
+   * "save as draft" has put the words somewhere safe and the resting mouth
+   * says so. Glancing at the world is now save-as-draft + one press back,
+   * and nothing is ever half-hidden behind a strip of itself.
+   */
   const [draft, setDraft] = useState(() => {
     try {
       return window.localStorage.getItem("waka.draft") ?? "";
@@ -1371,6 +1812,12 @@ function HomeExperience(): JSX.Element {
       return "";
     }
   });
+  /* the words where a callback can reach them without re-binding per keystroke */
+  const draftRef = useRef("");
+  draftRef.current = draft;
+  /* where the pen last was, written on every keystroke — see the boundary
+     effect beside the focus effect for why the field needs to be told */
+  const mouthCaretRef = useRef(0);
   useEffect(() => {
     try {
       if (draft) window.localStorage.setItem("waka.draft", draft);
@@ -1393,6 +1840,30 @@ function HomeExperience(): JSX.Element {
   });
   /** The one honest line: it did not keep. Never a modal, never a silence. */
   const [mouthNote, setMouthNote] = useState("");
+  /**
+   * WHEN THE MOUTH HAS OUTGROWN THE QUICK LINE.
+   *
+   * Measured off the text itself rather than off the element's height,
+   * because the two disagree at exactly the wrong moment: the height only
+   * changes AFTER the face has already reflowed, so a threshold read from it
+   * flickers on the character that crosses it. A count and a newline are
+   * both known before paint.
+   *
+   * Deliberately generous. A tweet-length thought, a pasted link, a line of
+   * quotation — all of those are things you say on the way past, and none of
+   * them should summon a notepad. This is the length at which a single
+   * tracked line stops being readable, not the length at which writing gets
+   * serious.
+   */
+  const mouthLong = draft.length > 140 || draft.includes("\n");
+  /* THE PAGE FACE NEEDS BOTH: long words AND the mouth open. The length
+     alone decided it once, and the first saved draft proved that wrong — the
+     draft SURVIVES the mouth closing (that is the whole point of the door),
+     so a closed mouth holding a long draft wore the full-page sheet with
+     nothing in it but the resting phrase, and the world was gone. Away is
+     the world plus a phrase; the page exists only while you are writing. */
+  const mouthPage = mouthOpen && mouthLong;
+
   /**
    * THE DIAL'S RIGHT-HAND END IS NOW, AND KEEPING SOMETHING HAPPENS NOW.
    *
@@ -1464,8 +1935,28 @@ function HomeExperience(): JSX.Element {
 
   /* ---- rooms (v8): session caches that survive the sim effect's re-runs ---- */
   const auth = useOptionalAuth();
+  /**
+   * WHO IS ASKING — and offline, which invented person is.
+   *
+   * Signed out there is no profile, and every derivation that asks "is this
+   * one mine?" then answered no about all of them: `onThisWall` matches a
+   * room's ground against this id, so all four fixture rooms stood empty. The
+   * fixture names the member it calls "You" (`viewerProfileId`), and it is
+   * only ever written on the offline path — a real session always wins here,
+   * and outside dev there is no fixture to hand one over.
+   */
+  const offlineViewerRef = useRef<string | null>(null);
   const viewerIdRef = useRef<string | null>(null);
-  viewerIdRef.current = auth?.profile?.id ?? null;
+  viewerIdRef.current = auth?.profile?.id ?? offlineViewerRef.current;
+  /**
+   * A room's member lists, where the SIM can read them. The state itself
+   * lives far below (it is fetched with the rest of a room's chrome); this
+   * ref is declared here, above the sim's effect, because the frame loop
+   * draws the room's company from it — one small being per member, behind
+   * yours. Same pattern as `setMembersRef`: the ref is the one honest way
+   * across a declaration-order boundary.
+   */
+  const membersRef = useRef<Map<string, ApiGroupMember[]>>(new Map());
   /* the hue map the legend reads — written where the orbs are tinted, so the
      two can never disagree about who is which colour */
   const hueByOwnerRef = useRef<Map<string, number>>(new Map());
@@ -1510,10 +2001,99 @@ function HomeExperience(): JSX.Element {
   const groupChromeRef = useRef<Map<string, WallChrome>>(new Map());
   /* a room's ground, by group id, filled when the room wakes */
   const groupFieldRef = useRef<Map<string, ApiGroupFieldInspiration[]>>(new Map());
+  /* and how much of that ground the ceiling did not let through, by group id —
+     zero for every room under it, which is nearly every room */
+  const groupBeyondRef = useRef<Map<string, number>>(new Map());
   /** Namespaced room-orb id → ball, for the panel and relight lookups. */
   const groupBallsRef = useRef<Map<string, Ball>>(new Map());
   /** Rooms whose orbs have already poured this session: no re-pour on return. */
   const groupVisitedRef = useRef<Set<string>>(new Set());
+  /**
+   * THE ROOM'S OWN BECOMING, so the dial has something to wind.
+   *
+   * The chain of boards with their reasons, and the door's ledger of arrivals
+   * and departures. `groupTimelines` (below, where the room's other arrival
+   * fetches live) is the state that owns this; this ref is its mirror, and it
+   * exists because the dial and the poster are derived far above that
+   * declaration and cannot reach forward to it.
+   */
+  const groupTimelineRef = useRef<Map<string, ApiGroupTimeline>>(new Map());
+  /**
+   * A room's board at a version it no longer stands at, fetched once and kept.
+   *
+   * Keyed `groupId:version`. Winding back and forth across the same month must
+   * not re-ask the server for a sentence that cannot have changed — a version
+   * is immutable by construction, superseded rather than edited.
+   */
+  const groupBoardAtRef = useRef<Map<string, ApiGroupTopOfMind>>(new Map());
+  /** Versions currently in flight, so one wind of the rail asks once. */
+  const groupBoardPendingRef = useRef<Set<string>>(new Set());
+  /** Both refs' change signal — they are filled from promises. */
+  const [groupPastTick, setGroupPastTick] = useState(0);
+  /**
+   * IS THE RAIL SHOWING? (founder, 2026-08-25: "i don't want the line to
+   * always be there. can we have a button called timeline and when user
+   * hovers on it, the line and the draggable circle only show then?")
+   *
+   * Time is the one axis that applies to every wall at once, so it earns a
+   * permanent place at the bottom edge — but a rail and a handle drawn across
+   * the full width, at rest, on every screen, is a control shouting while
+   * nothing is being wound. The word is what rests there now; the instrument
+   * arrives when you reach for it.
+   *
+   * A BUTTON AND NOT ONLY A HOVER. Hover is what was asked for and it is
+   * right on a pointer, but it does not exist on a phone — and this codebase
+   * has shipped three controls that were dead on touch for exactly that
+   * reason. Pressing the word opens the rail; hovering opens it too.
+   */
+  /**
+   * AN AGENT'S CREDENTIALS, NOW THAT THEY HAVE AN ADDRESS HERE.
+   *
+   * `createAgentKey` / `fetchAgentKeys` / `revokeAgentKey` lived only on the
+   * flat `/agents` screen. They are three of the twelve verbs
+   * `one-product-one-system.md` counted as missing from the world, and the
+   * first three to come home.
+   *
+   * Keys are fetched WHEN THE SHEET OPENS rather than on boot: this is the
+   * only surface that reads them, most sessions never open it, and a list of
+   * credentials is not something to hold in memory on the chance somebody
+   * asks. `minted` holds the one response that carries a secret, and nothing
+   * writes it to storage — see the sheet for why that sentence matters.
+   */
+  const [agentKeys, setAgentKeys] = useState<ApiAgentKey[]>([]);
+  const [minted, setMinted] = useState<ApiMintedKey | null>(null);
+  const [revoking, setRevoking] = useState<string | null>(null);
+  const [keysBusy, setKeysBusy] = useState(false);
+  const [timeOpen, setTimeOpen] = useState(false);
+  /* the pointer is on the word; the rail is a hover away and this is the hover */
+  const [timeNear, setTimeNear] = useState(false);
+
+  /**
+   * THE RAIL GOES AWAY WHEN YOU LOOK AWAY (founder, 2026-08-27: "timeline line
+   * should disappear if clicked outside of it").
+   *
+   * Pressing the word opened the rail and only pressing the word again closed
+   * it, so an instrument summoned for one glance stayed up over the world
+   * until you remembered to dismiss it — and the thing it hangs beside is the
+   * wall you are trying to read.
+   *
+   * A press anywhere that is not the rail or its own word is that dismissal.
+   * `pointerdown` and not `click`, so the rail is gone before whatever the
+   * press was actually for happens; capture phase, so a handler that stops
+   * propagation cannot leave it stranded. A scrub in flight is never
+   * interrupted: the pointer is on the rail then, and it says so.
+   */
+  useEffect(() => {
+    if (!timeOpen) return undefined;
+    const away = (e: PointerEvent) => {
+      const at = e.target as Element | null;
+      if (!at) return;
+      if (at.closest?.(".jar-dial") || at.closest?.(".jar-when")) return;
+      setTimeOpen(false);
+    };
+    window.addEventListener("pointerdown", away, true);
+    return () => window.removeEventListener("pointerdown", away, true);
+  }, [timeOpen]);
 
   /**
    * Fetch one room's jar — its readings' evidence plus its direction —
@@ -1542,19 +2122,24 @@ function HomeExperience(): JSX.Element {
          never generates a signal: every statement here was formed on some
          member's own wall out of their own inspirations and then shared in,
          so the ground was always real and simply never fetched. */
-      fetchGroupField(groupId).catch(() => [] as ApiGroupFieldInspiration[]),
+      fetchGroupField(groupId).catch(() => ({
+        field: [] as ApiGroupFieldInspiration[],
+        total: 0,
+      })),
     ])
-      .then(([top, wall, proposals, field]) => {
+      .then(([top, wall, proposals, ground]) => {
         wallSignalsRef.current.set(groupId, wall);
-        groupFieldRef.current.set(groupId, field);
+        groupFieldRef.current.set(groupId, ground.field);
+        /* the same remainder the personal field keeps, per room: what its
+           ground holds beyond what the ceiling let through */
+        groupBeyondRef.current.set(groupId, Math.max(0, ground.total - ground.field.length));
         setGroupFieldTick((n) => n + 1);
         const evidence = groupWallOrbs(wall, top);
-        const name = groupsRef.current.find((g) => g.id === groupId)?.name ?? "";
         const open = proposals.find((p) => p.status === "open");
         const openMs = open ? Date.parse(open.createdAt) || 0 : null;
         groupChromeRef.current.set(
           groupId,
-          deriveGroupChrome(name, top, openMs, evidence, groupCompany(membersRef.current.get(groupId))),
+          deriveGroupChrome(top, openMs, evidence),
         );
         cache.set(groupId, { status: "ready", data: { evidence, top } });
         simApiRef.current?.wake();
@@ -1612,6 +2197,8 @@ function HomeExperience(): JSX.Element {
      */
     const goOffline = (layout: OfflineHome) => {
       offlineRef.current = true;
+      /* before anything reads it: the rooms below are built against this id */
+      offlineViewerRef.current = layout.viewerProfileId;
       setOffline(true);
       setNotes(layout.notes);
       setSignals(layout.signals);
@@ -1703,9 +2290,10 @@ function HomeExperience(): JSX.Element {
     /* LAYER 1 — the field. The archive is the spine, so its answer alone
        decides whether this is the real layout or the fixture. */
     loadInspirations()
-      .then((rows) => {
+      .then((field) => {
         if (dead || offlineRef.current) return;
-        setInspirations(rows);
+        setInspirations(field.inspirations);
+        setFieldBeyond(beyondOf(field));
         setPhase("ready");
       })
       .catch((err: unknown) => {
@@ -1752,13 +2340,11 @@ function HomeExperience(): JSX.Element {
              The reason goes to the console for whoever is debugging, and the
              human-readable half goes on screen. */
           console.error("[waka] the field could not be poured:", err);
-          setFailReason(
-            err instanceof ApiError
-              ? `${err.status} — ${err.message}`
-              : err instanceof Error
-                ? err.message
-                : String(err),
-          );
+          /* THE SAME WORDS THE WORLD USES. This built its own sentence from
+             `${err.status} — ${err.message}`, which printed "0 — …" at a
+             person when the connection was dead — a status code as prose, on
+             the one screen somebody meets when nothing works at all. */
+          setFailReason(whyOf(err) || String(err));
           setPhase("failed");
           return;
         }
@@ -1825,6 +2411,20 @@ function HomeExperience(): JSX.Element {
        they were saved in. That is the canon's privacy line and it is why a
        room's orbit can say WHO fed an entry but never WHICH memory did. */
     (async () => {
+      /* Layer 4 rides along with the rooms load rather than opening its own
+         effect: both are account-level, both are wanted before the first
+         paint settles, and a second effect would be a second thing to keep
+         in step with sign-out. A failure here is silent on purpose — an
+         empty set and the line simply does not appear, which is the same
+         thing a profile with no principles yet shows. */
+      fetchPrinciples()
+        .then((rows) => {
+          if (!dead && !offlineRef.current) setPrinciples(rows);
+        })
+        .catch(() => {
+          /* no principles is a real state, not an error worth a banner */
+        });
+
       const rows = await fetchGroups();
       if (offlineRef.current) return;
       /* The map (v8): rooms line up to the right of your own wall,
@@ -1862,8 +2462,10 @@ function HomeExperience(): JSX.Element {
                 changeSummary: open.rationale,
                 createdMs: Date.parse(open.createdAt) || 0,
                 /* Who stands behind it, not what it was made of: the room can
-                   name its contributors and must not name their memories. */
-                evidence: open.affirmations.map((a) => ({
+                   name its contributors and must not name their memories.
+                   Only the yeses stand behind a sentence — a recorded no
+                   (the counted-stance ruling) is an answer, not backing. */
+                evidence: open.stances.filter((a) => a.value === "affirmed").map((a) => ({
                   signalId: `${open.id}:${a.profileId}`,
                   groupId: g.id,
                   authorUserId: a.profileId,
@@ -1938,7 +2540,94 @@ function HomeExperience(): JSX.Element {
    * (`rebuildBoard`, `restoreLead`, and the edit path), and a room rehydrates
    * when you travel toward it. Only the three genuinely frozen layers are here.
    */
+  /**
+   * TAKE IN A BOARD THAT ARRIVED AFTER MOUNT — all three pieces, not two.
+   *
+   * The boot path sets THREE things from one `loadTopOfMind`: the artifact,
+   * its entries, and `adopted` — which is the one the poster actually reads.
+   * The first version of the refetch below set the first two and the poster
+   * went on saying `Forming — nothing adopted yet` with a built board sitting
+   * in state behind it. The request fired at +6.1s, the fix looked done, and
+   * the screen was unchanged; only watching the screen rather than the network
+   * caught it.
+   *
+   * ONLY WHEN THE POSTER IS EMPTY. `adopted` is read in exactly one place —
+   * your own wall's chrome — and the comment on the room-ambition bug a few
+   * hundred lines down says why this matters: a poster that repaints seconds
+   * later "while you were reading it" breaks the law that the world never
+   * moves unless you moved it. Filling a blank poster with the answer to what
+   * you just typed is not that; replacing a sentence someone is mid-way
+   * through would be. So entries and artifact always refresh, and the poster
+   * only ever fills, never swaps.
+   */
+  const absorbBoard = useCallback((tom: TopOfMind | null) => {
+    setTopOfMind(tom);
+    setNotes(tom?.entries ?? []);
+    /* AND THE CLOCK HAS TO KNOW THE ENTRY EXISTS.
+       This is the whole reason the first two versions of this did nothing
+       visible. `deriveAmbition` gates on `adopted.createdMs <= T`, and `T`
+       starts at `Date.now()` when the page loads and afterwards only ever
+       advances to a MEMORY's `capturedMs`. A board entry is derived about
+       three seconds after the memory it comes from, so it is permanently in
+       the future of a clock that has never heard of it — the poster was
+       right to hide it, and `setAdopted` fired into a world that then
+       correctly ignored it.
+
+       The operation is line-for-line the one the pour loop already does for
+       layer 1, and that comment states the rule this obeys: "this only ever
+       moves `TRef` forward, and only to something that exists." An entry the
+       server has built exists. Winding BACK is untouched, because `Math.max`
+       cannot move a clock backwards — deliberately no dial guard here, for
+       the same reason the pour loop has none: the interaction between a wound
+       dial and something newly arrived is one behaviour, and it should not
+       have two answers depending on which layer arrived.
+
+       Three versions of this fix looked correct and changed nothing on
+       screen. The first set two of the three states the boot path sets; the
+       second added the third; only watching the POSTER rather than the
+       network or the state found the clock. */
+    for (const e of tom?.entries ?? []) TRef.current = Math.max(TRef.current, e.createdMs);
+    setAdopted((cur) => {
+      if (cur) return cur;
+      const lead = tom?.entries.find((e: Entry) => e.pinned) ?? tom?.entries[0];
+      return lead
+        ? { ambition: lead.body, groupName: null, createdMs: lead.createdMs }
+        : cur;
+    });
+  }, []);
+
   const AWAY_LONG_ENOUGH_MS = 30_000;
+  /**
+   * HOW LONG A KEEP TAKES TO BECOME A READING, with margin.
+   *
+   * Measured, not guessed: `GET /api/top-of-mind` carried a rebuilt artifact
+   * three seconds after a first save on the local stack. Six is that, doubled,
+   * because being early means fetching the board the person already has and
+   * showing them nothing — the exact failure this is here to end.
+   *
+   * Being LATE is cheap by comparison: the poster simply waits for the next
+   * thing the person does. So the error is deliberately biased late.
+   */
+  const DERIVATION_SETTLE_MS = 6_000;
+  /**
+   * The pending "ask what it made of it" timer, so it can be called off.
+   *
+   * Two reasons, both found reviewing this session's own diff rather than by
+   * a gate. A person who keeps something and then signs out inside six
+   * seconds left a timer that fired `loadTopOfMind()` against a cleared
+   * cookie — a stray 401 from a component that no longer exists. And two
+   * keeps inside six seconds stacked two timers, so the board was fetched
+   * twice for one answer.
+   *
+   * One timer, replaced on each keep and cleared on unmount.
+   */
+  const settleTimerRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
+    },
+    [],
+  );
   useEffect(() => {
     let hiddenAt: number | null = null;
     const onVisibility = () => {
@@ -1953,9 +2642,30 @@ function HomeExperience(): JSX.Element {
          business making three requests that will all 401 */
       if (offlineRef.current) return;
       void Promise.allSettled([
-        loadInspirations().then((rows) => setInspirations(rows)),
+        loadInspirations().then((field) => {
+          setInspirations(field.inspirations);
+          setFieldBeyond(beyondOf(field));
+        }),
         loadAgentWalls().then((rows) => setAgents(rows)),
         readSkyRef.current(),
+        /* LAYER 3 WAS THE ONE LEFT OUT, and it is the layer that changes most.
+           This handler exists to catch the world up after an absence and it
+           refreshed layer 1, layer 2 and the agent walls — every layer except
+           the board, which is fetched exactly once on mount and never again.
+
+           So a person who kept something, went away, and came back found their
+           memories updated, their patterns updated, and the poster still
+           showing what it showed before they typed. Measured: the server has a
+           built top of mind THREE SECONDS after a first save, and the world
+           does not show it within two minutes without a full page load.
+
+           `setNotes` alongside `setTopOfMind` because the mount path sets both
+           from one fetch — the canon's "exactly one artifact per profile"
+           showing up as exactly one request — and setting only one of them
+           here would leave the poster and the board's own entries disagreeing.
+
+           Found by `e2e:first-sixty --stage kept`. */
+        loadTopOfMind().then((tom) => absorbBoard(tom)),
       ]);
     };
     document.addEventListener("visibilitychange", onVisibility);
@@ -1990,19 +2700,149 @@ function HomeExperience(): JSX.Element {
   loadDetailRef.current = loadDetail;
 
   /**
+   * THE CREATURE, ASKED. A tap on the companion is a question — "what has
+   * been happening?" — and the answer is the weather's most recent day,
+   * fetched at the moment of asking so the telling is the record's current
+   * truth (founder ask, 2026-08-24: "your memory was consulted…" should
+   * appear whenever the character is tapped). The telling-only serve: no
+   * antechamber, and therefore no consultation written — the creature must
+   * not inflate the very count it is about to report. When the fortnight is
+   * quiet, or the fetch dies, or the page is offline, it falls back to its
+   * own field-state lines: the creature always answers something, and never
+   * with a made-up weather.
+   */
+  /** Which of the day's clauses the next tap speaks, keyed to the list. */
+  const weatherTurnRef = useRef<{ key: string; at: number }>({ key: "", at: 0 });
+  const sayTheWeather = useCallback((fallback: () => string) => {
+    if (offlineRef.current) {
+      setCharSay(fallback());
+      return;
+    }
+    fetchTheWeather({ antechamber: false })
+      .then((weather) => {
+        const day = weather.days[0];
+        /* counts only, and no day label — the founder liked the sentence
+           and struck the preamble ("just drop today and the sky held").
+           The full record keeps both; this is the spoken register. */
+        /* ONE CLAUSE. THE MOST NEWSWORTHY ONE (founder, 2026-08-25: "always
+           show the most relevant statement of the time when clicking on it to
+           show text. never show more than 1 thing"). This joined every clause
+           the day had, so a busy day came out as five statements in one
+           breath — a ticker, not a whisper, and the founder read it back to
+           us at that length twice.
+
+           Newsworthy is what changed ABOUT you before what you did: the poster
+           moving outranks a signal moving outranks being read outranks your
+           own keeping, which is last because you were there for it. Ties go to
+           the order the day already tells them in.
+
+           The same order is written down in `the-weather.ts`, which ranks its
+           own spoken line the same way. It is stated twice because these are
+           two packages with no shared module between them, and a single line
+           of ranking is a smaller thing to keep in step than a new seam. If a
+           third caller ever wants it, that is the moment it becomes one. */
+        const NEWS: Record<string, number> = {
+          top_of_minds: 0,
+          signals: 1,
+          signal_evidence: 2,
+          suppressions: 3,
+          consultations: 4,
+          inspirations: 5,
+        };
+        /* AND NOT A WORD ABOUT SIGNALS (founder, 2026-08-25: "we removed
+           signal concept"). Signals are the machine's working material — they
+           are derived, stored and used to write your top of mind, and there is
+           nowhere in this world a person meets one. A creature reporting that
+           "a signal found another memory behind it" is describing plumbing to
+           somebody who has never seen the pipes. The record keeps every
+           clause; the spoken line is only what a person has a word for. */
+        const spoken = (day?.sentences ?? [])
+          .filter((sentence) => sentence.text !== "the sky held")
+          .filter(
+            (sentence) =>
+              sentence.backing !== "signals" && sentence.backing !== "signal_evidence",
+          )
+          .map((sentence, i) => ({ sentence, i }))
+          .sort(
+            (a, b) =>
+              (NEWS[a.sentence.backing] ?? 9) - (NEWS[b.sentence.backing] ?? 9) || a.i - b.i,
+          );
+        /* AND EACH TAP TURNS THE PAGE (founder, 2026-08-25: "when clicking on
+           the character, change the text that is being shown … it can
+           rotate"). Still one clause at a time — the whisper rule holds — but
+           a creature that answered every tap with the same sentence read as a
+           recording. The ranked list is kept, a cursor walks it, and it wraps:
+           the most newsworthy thing leads, the rest arrive on curiosity. The
+           cursor resets whenever the list itself changes, so a fresh fetch
+           starts from the top again. */
+        /* THE DAY LANDS AT THE END (founder: "this should just say x and end
+           with today. today - is weird"). "Today — you kept nine memories" is
+           a headline with a dateline; "you kept nine memories today" is a
+           sentence somebody says. The label was already a phrase that reads
+           as an ending — "today", "two days ago" — so it only ever wanted to
+           be there. */
+        const lines = spoken.map(
+          (x) => `${x.sentence.text} ${day?.label ?? "today"}.`,
+        );
+        if (lines.length > 0) {
+          const key = lines.join("|");
+          if (weatherTurnRef.current.key !== key) {
+            weatherTurnRef.current = { key, at: 0 };
+          }
+          setCharSay(lines[weatherTurnRef.current.at % lines.length]!);
+          weatherTurnRef.current.at =
+            (weatherTurnRef.current.at + 1) % lines.length;
+        } else {
+          setCharSay(fallback());
+        }
+      })
+      .catch(() => setCharSay(fallback()));
+  }, []);
+  const sayTheWeatherRef = useRef(sayTheWeather);
+  sayTheWeatherRef.current = sayTheWeather;
+
+  /**
    * WHAT ARRIVED WHILE YOU WERE GONE — shown by going there, not by saying so.
    *
    * Held until the pour has settled, so the world is whole before it moves;
    * then the camera glides to the newest thing and lights it, and comes back
    * out. One beat, no summary, and nothing to dismiss. If nothing is new the
    * whole thing is silent, which is most days.
+   *
+   * AND THEN, ONLY THEN, THE WEATHER IS TOLD. One sentence for the
+   * away-window, assembled server-side purely from stored records
+   * (`the-weather.db.test.ts` — a deleted record loses its sentence),
+   * whispered through the companion's own line after the world has drawn
+   * and the camera has come home. Seeing first, telling second — the told
+   * line rides the return, it never precedes it, and it is never a
+   * notification: nothing to dismiss, gone on its own. A window in which
+   * the loop did nothing is told with silence
+   * (goals/the-legible-loop.md Phase 5).
    */
+  /**
+   * ONE GREETING PER VISIT — this is an ARRIVAL, and it must know that.
+   *
+   * The effect depends on `inspirations` because the glide cannot run before
+   * the archive is in hand — but the archive also changes every time you KEEP
+   * something, and `lastSeenRef` was read once at mount and never advanced
+   * when `stamp()` wrote the new time. So each save re-ran the greeting
+   * against the mount-time clock, found "something new since you were away"
+   * — the memory you had typed four seconds ago — glid the camera to it and
+   * opened its card over the mouth (founder, 2026-08-24: "dont show the
+   * thing i save in card format after saving"). Greeted once, and stamp
+   * advances the ref with the storage so nothing later re-reads a stale
+   * "away".
+   */
+  const greetedRef = useRef(false);
   useEffect(() => {
     if (!inspirations || phase !== "ready" || offlineRef.current) return undefined;
+    if (greetedRef.current) return undefined;
+    greetedRef.current = true;
     const since = lastSeenRef.current;
     const stamp = () => {
+      lastSeenRef.current = Date.now();
       try {
-        window.localStorage.setItem("waka.seen", String(Date.now()));
+        window.localStorage.setItem("waka.seen", String(lastSeenRef.current));
       } catch {
         /* private mode: every visit is a first visit, which is survivable */
       }
@@ -2013,25 +2853,60 @@ function HomeExperience(): JSX.Element {
       stamp();
       return undefined;
     }
+    /* fetched while the glide waits its beat; whichever timeout speaks reads
+       the settled value from the ref. A failed fetch is a silent arrival —
+       the weather is a courtesy, never a blocker. */
+    const toldRef = { current: null as string | null };
+    void fetchTheWeather({ since: new Date(since), antechamber: false })
+      .then((weather) => {
+        toldRef.current = weather.told;
+      })
+      .catch(() => undefined);
+    const timers: number[] = [];
+    const tell = () => {
+      if (toldRef.current) setCharSay(toldRef.current);
+    };
     const fresh = inspirations.filter((c) => c.capturedMs > since);
     if (fresh.length === 0) {
+      /* nothing to glide to — but the loop may still have worked (a refusal,
+         a held poster). The world is drawn; the whisper may come. */
+      timers.push(window.setTimeout(tell, 1400));
       stamp();
-      return undefined;
+      return () => timers.forEach((id) => window.clearTimeout(id));
     }
     const newest = fresh.reduce((a, b) => (b.capturedMs > a.capturedMs ? b : a));
-    const t = window.setTimeout(() => {
-      simApiRef.current?.select(newest.id);
-      /* AND BACK OUT, ALL THE WAY. Not just letting the selection go — the
-         camera returns to headquarters, because travelling between walls is
-         only possible from there, and a greeting that leaves you unable to
-         walk left or right would be an ambush rather than a welcome. */
+    timers.push(
       window.setTimeout(() => {
-        simApiRef.current?.release();
-        simApiRef.current?.toTop();
-      }, 2600);
-      stamp();
-    }, 1400);
-    return () => window.clearTimeout(t);
+        simApiRef.current?.select(newest.id);
+        /* AND BACK OUT, ALL THE WAY. Not just letting the selection go — the
+           camera returns to headquarters, because travelling between walls is
+           only possible from there, and a greeting that leaves you unable to
+           walk left or right would be an ambush rather than a welcome. */
+        timers.push(
+          window.setTimeout(() => {
+            /* UNLESS YOU HAVE TAKEN OVER, and this is the whole of the bug it
+               fixes. The greeting selects a memory, waits its beat and then
+               undoes itself — and it undid whatever was selected AT THAT
+               MOMENT, not what it had selected itself. Anyone who pressed a
+               caret, walked the reach or tapped another orb inside those 2.6
+               seconds watched their own card close and the camera leave, with
+               nothing on screen to explain it (it looked exactly like paging
+               being broken; found live 2026-08-27). A greeting may take back
+               its own gesture and nothing else. */
+            if (selectedIdRef.current !== newest.id) {
+              tell();
+              return;
+            }
+            simApiRef.current?.release();
+            simApiRef.current?.toTop();
+            /* home again: the telling rides the end of the return */
+            tell();
+          }, 2600),
+        );
+        stamp();
+      }, 1400),
+    );
+    return () => timers.forEach((id) => window.clearTimeout(id));
   }, [inspirations, phase]);
 
   /* ------------- the background sweep: newest first, four at a time -------------
@@ -2088,30 +2963,8 @@ function HomeExperience(): JSX.Element {
     return m;
   }, [inspirations, sweepDone]);
 
-  /**
-   * The personal capture set, by id. A pattern's evidence is resolved against
-   * THIS: an id with nothing behind it is skipped rather than invented, so
-   * every satellite up in the sky stands for a memory that genuinely exists
-   * down in the field.
-   */
-  const signalById = useMemo(() => {
-    const m = new Map<string, Inspiration>();
-    for (const s of inspirations ?? []) m.set(s.id, s);
-    return m;
-  }, [inspirations]);
-
-  const dial = useMemo(() => {
-    if (!inspirations || inspirations.length === 0) return null;
-    let earliest = Infinity;
-    for (const s of inspirations) {
-      const ms = s.capturedMs;
-      if (Number.isFinite(ms) && ms > 0 && ms < earliest) earliest = ms;
-    }
-    if (!Number.isFinite(earliest)) return null;
-    const start = earliest - 3 * DAY_MS;
-    /* now — and `now` moves when something is kept now (see clockMs) */
-    const end = clockMs;
-    const span = Math.max(end - start, DAY_MS);
+  /** The rail's month labels for whatever span it is currently covering. */
+  const monthMajors = useCallback((start: number, end: number, span: number) => {
     const majors: Array<{ pct: number; label: string }> = [];
     const cursor = new Date(start);
     cursor.setDate(1);
@@ -2124,8 +2977,51 @@ function HomeExperience(): JSX.Element {
       });
       cursor.setMonth(cursor.getMonth() + 1);
     }
-    return { start, end, span, majors };
-  }, [inspirations, clockMs]);
+    return majors;
+  }, []);
+
+  const dial = useMemo(() => {
+    /* A ROOM'S RAIL IS THE ROOM'S OWN LIFE, NOT YOURS.
+       The dial winds the wall you are standing on, and standing in a room it
+       has to span that room's history — the day it opened to the present —
+       rather than the day YOU first kept something. Your archive can predate
+       a room by years, and a rail whose whole left half is a room that did
+       not exist is a rail that lies about where its own marks are. */
+    if (atWall.kind === "group") {
+      const timeline = groupTimelineRef.current.get(atWall.id);
+      if (!timeline) return null;
+      let first = Infinity;
+      for (const mark of timeline.doorMarks) {
+        const ms = Date.parse(mark.occurredAt);
+        if (Number.isFinite(ms) && ms > 0 && ms < first) first = ms;
+      }
+      for (const version of timeline.versions) {
+        const ms = Date.parse(version.createdAt);
+        if (Number.isFinite(ms) && ms > 0 && ms < first) first = ms;
+      }
+      /* A room with no marks and no versions has no history to scrub, and an
+         empty rail under your finger is worse than no rail. */
+      if (!Number.isFinite(first)) return null;
+      const start = first - 3 * DAY_MS;
+      const end = clockMs;
+      const span = Math.max(end - start, DAY_MS);
+      return { start, end, span, majors: monthMajors(start, end, span), onGroup: atWall.id };
+    }
+    if (!inspirations || inspirations.length === 0) return null;
+    let earliest = Infinity;
+    for (const s of inspirations) {
+      const ms = s.capturedMs;
+      if (Number.isFinite(ms) && ms > 0 && ms < earliest) earliest = ms;
+    }
+    if (!Number.isFinite(earliest)) return null;
+    const start = earliest - 3 * DAY_MS;
+    /* now — and `now` moves when something is kept now (see clockMs) */
+    const end = clockMs;
+    const span = Math.max(end - start, DAY_MS);
+    return { start, end, span, majors: monthMajors(start, end, span), onGroup: null };
+    /* `groupPastTick` is the timeline ref's change signal: the room's history
+       lands a request after arrival, and the rail must re-span when it does. */
+  }, [inspirations, clockMs, atWall, groupPastTick]);
 
   /* ------------- palette: resolve vars once, re-raster sprites ------------- */
   useEffect(() => {
@@ -2212,6 +3108,87 @@ function HomeExperience(): JSX.Element {
   );
 
   /* ------------- HQ chrome derived from time T (discrete facts only) ------------- */
+  /**
+   * THE ROOM AS IT STOOD AT T.
+   *
+   * The one thing a history must never do is print today's sentence over a
+   * month that had a different one — or over a month that had none at all. So
+   * this never falls back to the live board: if the version that was up at T
+   * is not in hand yet, the wall says the room's name and waits, and if the
+   * room had no board at T it says so honestly with the month beside it.
+   *
+   * A version is immutable by construction — superseded, never edited — so
+   * one that has been fetched is kept for the session, and winding back and
+   * forth across the same month never asks twice.
+   */
+  const groupChromeAt = useCallback(
+    (groupId: string, T: number, nowMs: number): WallChrome => {
+      const live = groupChromeRef.current.get(groupId) ?? null;
+      const blank = (asOf: string | null): WallChrome => ({
+        text: null,
+        awayFrom: null,
+        formingAlt: asOf === null ? null : "Nothing read together yet",
+        asOf,
+        forming: null,
+        empty: false,
+        prevText: null,
+      });
+      const timeline = groupTimelineRef.current.get(groupId);
+      /* At now, or before the room's history is in hand, the room is simply
+         itself: the live chrome, forming line and all. */
+      if (!timeline || nowMs - T < DAY_MS / 2) return live ?? blank(null);
+
+      /* Newest first, as the endpoint serves them. */
+      const then = timeline.versions.find((v) => (Date.parse(v.createdAt) || 0) <= T);
+      if (!then) return blank(monthTag(T));
+
+      const latest = timeline.versions[0];
+      const stillStanding = latest !== undefined && then.version === latest.version;
+      if (stillStanding && live) {
+        /* The board has not moved since T, so what is up now is what was up
+           then — and there is nothing to date-stamp, because nothing changed. */
+        return { ...live, forming: null, asOf: null };
+      }
+
+      const key = `${groupId}:${then.version}`;
+      const held = groupBoardAtRef.current.get(key);
+      if (!held) {
+        if (!groupBoardPendingRef.current.has(key)) {
+          groupBoardPendingRef.current.add(key);
+          fetchGroupTopOfMind(groupId, then.version)
+            .then((board) => {
+              groupBoardAtRef.current.set(key, board);
+              setGroupPastTick((n) => n + 1);
+            })
+            .catch(() => undefined)
+            .finally(() => {
+              groupBoardPendingRef.current.delete(key);
+            });
+        }
+        return blank(monthTag(T));
+      }
+
+      const lead = held.entries.find((e) => e.pinnedAt) ?? held.entries[0] ?? null;
+      const text = lead?.body ?? null;
+      return {
+        text,
+        awayFrom: null,
+        formingAlt: text ? null : "Nothing read together yet",
+        /* WHEN THIS WAS THE ROOM. Stamped only when the sentence differs from
+           the one up now, exactly as your own wall stamps its own past: a date
+           on an unchanged sentence would report a change that did not happen. */
+        asOf: text && text !== (live?.text ?? null) ? monthTag(T) : null,
+        /* NOTHING IS FORMING IN THE PAST. An open proposal is a thing on its
+           way to becoming what the room believes, and in March it either
+           became it or it did not — either way it is not still on its way. */
+        forming: null,
+        empty: false,
+        prevText: null,
+      };
+    },
+    [],
+  );
+
   const applyChrome = useCallback(
     (T: number) => {
       const nowMs = dial ? dial.end : Date.now();
@@ -2245,21 +3222,11 @@ function HomeExperience(): JSX.Element {
                honestly blank — it says its own name and nothing else, rather
                than showing someone else's ambition under it. */
             atWall.kind === "group"
-            ? groupChromeRef.current.get(atWall.id) ?? {
-                text: null,
-                eyebrow: atWall.name,
-                awayFrom: null,
-                formingAlt: null,
-                asOf: null,
-                forming: null,
-                empty: false,
-                prevText: null,
-              }
+            ? groupChromeAt(atWall.id, T, nowMs)
             : (() => {
               const current = deriveAmbition(nowMs, adopted, notes);
               const at = deriveAmbition(T, adopted, notes);
               return {
-                eyebrow: at.eyebrow,
                 text: at.text,
                 awayFrom: null,
                 formingAlt: null,
@@ -2281,7 +3248,6 @@ function HomeExperience(): JSX.Element {
             })();
       setChrome((prev) =>
         prev.text === next.text &&
-        prev.eyebrow === next.eyebrow &&
         prev.awayFrom === next.awayFrom &&
         prev.formingAlt === next.formingAlt &&
         prev.asOf === next.asOf &&
@@ -2353,7 +3319,6 @@ function HomeExperience(): JSX.Element {
       } else {
         const at = deriveAmbition(nowMs, adopted, notes);
         m.set(spaceKey(w), {
-          eyebrow: at.eyebrow,
           text: at.text,
           awayFrom: null,
           formingAlt: null,
@@ -2429,6 +3394,7 @@ function HomeExperience(): JSX.Element {
        the layout without a pointer in the way. Bisecting "the button did not
        work" from "the command did not work" is otherwise guesswork. */
     w.wakaSim = () => simApiRef.current;
+
     return () => {
       delete w.wakaField;
       delete w.wakaSim;
@@ -2461,7 +3427,8 @@ function HomeExperience(): JSX.Element {
        having an agent arrive would make your own memory vanish. Anything the
        archive has already fetched back under either id wins, so a reload can
        never double it. */
-    const fetched = new Set(inspirations.map((s) => s.id));
+    const poured = inspirationsRef.current ?? [];
+    const fetched = new Set(poured.map((s) => s.id));
     const kept = bornRef.current.filter(
       (s) => !fetched.has(s.id) && !(s.sigId !== undefined && fetched.has(s.sigId)),
     );
@@ -2529,7 +3496,17 @@ function HomeExperience(): JSX.Element {
       b.hue = b.ownerProfileId ? hueOf.get(b.ownerProfileId) ?? -1 : -1;
     }
     const list = [
-      ...inspirations.map((c) => makeBall(seedOf(c, pouredSky.citations, pouredSky.signals))),
+      ...poured.map((c) =>
+        makeBall(
+          seedOf(
+            c,
+            pouredSky.citations,
+            pouredSky.signals,
+            pouredSky.posterSignalIds,
+            pouredSky.principleSignalIds,
+          ),
+        ),
+      ),
       ...agentBalls,
       ...groupBalls,
       ...kept.map(bornBall),
@@ -2612,12 +3589,21 @@ function HomeExperience(): JSX.Element {
       layout: computeLayout(1, 1, DIAL_H),
       /* the dial's real strip, read off the dial itself every measure */
       dialH: DIAL_H,
+      /* where the rail's left edge stands, written only when the word it
+         hangs under moves — 0 until first measured */
+      dialLeft: 0,
       /* first sizing has happened: before this, orbs start on their homes
          rather than pouring, and a resize must not re-anchor a held camera */
       primed: false,
       /* the dust has been scattered once; it is ambient and never re-placed */
       motesPlaced: false,
     };
+    /* A REBUILD HAS ALREADY BEEN SIZED. `measure()` snaps every memory back to
+       its home while `primed` is false, which is the arrival animation
+       replaying for orbs that never moved. `motesPlaced` is deliberately NOT
+       carried: the mote arrays are rebuilt with the loop, so skipping the
+       scatter would leave the dust stacked at the origin. See `carryRef`. */
+    if (carryRef.current) view.primed = carryRef.current.primed;
     /* ---- the horizontal axis (v8): columns of jars, one room each ----
        Column zero is the personal jar; column c ≥ 1 is groupsRef[c-1]. The
        camera gains cam.x = column × view.w with the same snap discipline as
@@ -2684,11 +3670,39 @@ function HomeExperience(): JSX.Element {
       /** how long this crossing takes; a held drag can stretch it */
       ms: TRAVEL_MS,
     };
+    /* THE CROSSING SURVIVES A REBUILD. Restored here rather than after the
+       whole preamble because `measure()` reads both: it resets `cam.x` to
+       `trip.col * view.w` unless a crossing is running, so a `trip` that has
+       forgotten it was mid-flight is what walks the camera back to the column
+       it started from. See `carryRef`. */
+    if (carryRef.current) {
+      Object.assign(cam, carryRef.current.cam as Partial<typeof cam>);
+      Object.assign(trip, carryRef.current.trip as Partial<typeof trip>);
+      /* A REBUILD CAN COME FROM THE WALLS THEMSELVES CHANGING — `walls` is on
+         the dependency list. A crossing whose start or destination no longer
+         exists is not resumable, and resuming it would aim the camera at a
+         column that is not there, which is worse than the jump this is here to
+         remove. Fall back to where React says you are and stand still; the
+         camera is deliberately left to `measure()`, which sets it from
+         `trip.col` once the viewport has a real width. */
+      const cols = wallsRef.current;
+      const lo = cols[0]?.col ?? 0;
+      const hi = cols[cols.length - 1]?.col ?? 0;
+      const stranded = (c: number) => c < lo || c > hi;
+      if (cols.length === 0 || stranded(trip.col) || (trip.active && stranded(trip.dest))) {
+        trip.col = atWallRef.current.col;
+        trip.active = false;
+        trip.awaitingWake = false;
+        cam.xBack = false;
+        cam.aiming = false;
+      }
+    }
 
     /** Which one-time hints have already been said, so they are said once. */
     const hinted = {
-      inField: false,
       dialAway: false,
+      inField: false,
+      inSky: false,
     };
     /**
      * STAGING ORBS INTO THE FIELD — the pour, and everything that schedules it.
@@ -2767,6 +3781,39 @@ function HomeExperience(): JSX.Element {
      * different kind of mind" said in the only grammar this world has.
      */
     let mech = 0;
+    /**
+     * THE ROOM'S COMPANY, AS PRESENCE. 0 on any wall that is not a room's,
+     * easing to 1 while you stand in one — the same spring `mech` rides, so
+     * the members fade in on the same clock the machine-ness would. It is a
+     * presence channel, not a count: what it scales is alpha.
+     */
+    let company = 0;
+    /** Where each drawn member sits on screen this frame, so the pointer can
+        find them: canvas pixels answer to nothing else. */
+    const companySeats: Array<{ id: string; x: number; y: number; r: number }> = [];
+    /** Each room's company, in painting order, held on the member list's own
+        identity — see `seatedFor` in the draw. */
+    const companyPlacesCache = new Map<
+      string,
+      { from: ApiGroupMember[] | undefined; viewer: string | null; seated: CompanyPlace[] }
+    >();
+    /** The member being noticed, and until when — a beat, not a state: light
+        that stayed would be a selection nobody made. */
+    const companyNear = { id: "", until: 0 };
+    /** How long a notice lasts. Named because the draw pass works back from
+        `until` to find when the noticing started, and a second copy of this
+        number in two places is how a beat drifts out of time with itself. */
+    const COMPANY_NOTICE_MS = 1900;
+    /** each member's form, derived once from their id and then held */
+    const memberBeings = new Map<string, Being>();
+    const beingOf = (id: string): Being => {
+      let b = memberBeings.get(id);
+      if (!b) {
+        b = agentBeing(id);
+        memberBeings.set(id, b);
+      }
+      return b;
+    };
     /* the eased body-turn toward whatever it is attending to */
     const mechAt = (x: number): number => {
       const here = x / Math.max(view.w, 1);
@@ -2835,12 +3882,6 @@ function HomeExperience(): JSX.Element {
          only written when it actually changes */
       hoverTick: 0,
       cursor: "",
-      nebDrag: null as Neb | null,
-      /** Did the press that grabbed a cloud ever become a drag? If not, it is a
-          tap, and a tap on a candidate is what makes it the subject. */
-      nebMoved: false,
-      nebOffX: 0,
-      nebOffY: 0,
       downX: 0,
       downY: 0,
       lastX: 0,
@@ -2875,15 +3916,25 @@ function HomeExperience(): JSX.Element {
     }
     /* A static scatter of very dim points in the deep background. Fractions
        of the viewport, so they survive a resize without being re-rolled. */
+    /* THE NIGHT SKY HOLDS STILL. These were Math.random, and the whole sim
+       effect re-runs whenever the archive list changes — so every KEEP
+       rerolled the starfield behind the world, and the founder watched the
+       background rearrange itself each time they saved (2026-08-24). The
+       world never moves unless the person moved it, and saving a memory is
+       not moving the stars. Seeded off each spark's own index — the same
+       stable-identity law every orb's scatter already obeys — so a rebuild
+       reproduces the identical sky. */
     const sparkX = new Float32Array(SPARKS);
     const sparkY = new Float32Array(SPARKS);
     const sparkR = new Float32Array(SPARKS);
     const sparkA = new Float32Array(SPARKS);
+    const sparkSeed = (i: number, salt: string) =>
+      (mix32(hashStr(`spark:${salt}:${i}`)) >>> 8) / 0x1000000;
     for (let i = 0; i < SPARKS; i++) {
-      sparkX[i] = Math.random();
-      sparkY[i] = Math.random();
-      sparkR[i] = 0.7 + Math.random() * 1.1;
-      sparkA[i] = 0.05 + Math.random() * 0.07;
+      sparkX[i] = sparkSeed(i, "x");
+      sparkY[i] = sparkSeed(i, "y");
+      sparkR[i] = 0.7 + sparkSeed(i, "r") * 1.1;
+      sparkA[i] = 0.05 + sparkSeed(i, "a") * 0.07;
     }
     /**
      * THE COMPANION — everything the character is doing right now.
@@ -2971,7 +4022,20 @@ function HomeExperience(): JSX.Element {
       glanceAt: 0,
       glanceUntil: 0,
       riseAt: 0,
+      /* the wind-up: when it began, what it is winding up TO, and how far
+         into the compression the body currently is */
+      antAt: 0,
+      antFlare: 0,
+      ant: 0,
+      /** the slow one: -1 … 1, half-life MOOD_HALF_LIFE_MS, rhythm only */
+      mood: 0,
     };
+    /* AND SO DOES THE CREATURE. Every field above is a number, a boolean or a
+       string — no canvas, no node, nothing bound to the palette this run baked
+       — so the pose carries across whole. See `carryRef`. */
+    if (carryRef.current) {
+      Object.assign(companion, carryRef.current.companion as Partial<typeof companion>);
+    }
 
     /* motes rising off the aura when the companion is genuinely inspired */
     const upX = new Float32Array(10);
@@ -3201,6 +4265,24 @@ function HomeExperience(): JSX.Element {
     }
 
     /**
+     * THE SAME RULE, ACROSS THE SEAM: how far the SKY has leaned down into
+     * headquarters. One where you stand, nothing once you are up in it.
+     *
+     * `peekLift` is 1 at headquarters and 0 down in the field; this is 1 at
+     * headquarters and 0 up in the sky. Together they are one sentence — the
+     * section you are NOT in leans toward you — so both edges of the screen
+     * say there is somewhere to go. It exists because a person told us they
+     * had no idea the world could be moved through: the ground had always
+     * said so and the sky never had.
+     *
+     * Camera, never a timer. Standing in the field it stays 1 and costs
+     * nothing, because the sky is a whole viewport away and culled.
+     */
+    function skyPeek(): number {
+      return clamp01(1 - cam.y / Math.min(view.layout.minCam, -1));
+    }
+
+    /**
      * WHERE THE WORDS ARE, RIGHT NOW — read off the mouth itself rather than
      * guessed at from the seam constant, so a newborn leaves from the middle
      * of the sentence that made it however many lines it had wrapped to.
@@ -3233,7 +4315,7 @@ function HomeExperience(): JSX.Element {
       const b = list[i];
       if (selectedIdRef.current === b.id) release();
       if (gesture.pressId === b.id) gesture.pressId = null;
-      if (sky.heldBall === b) sky.heldBall = null;
+      if (held.ball === b) held.ball = null;
       list.splice(i, 1);
       byId.delete(b.id);
       /* the depth order is an index permutation over `list`: it has to be
@@ -3755,224 +4837,138 @@ function HomeExperience(): JSX.Element {
      * pointer — and the engine no longer has to be trusted to stay inside it,
      * because it can no longer see anything else.
      */
-    const sky = {
-      nebs: [] as Neb[],
-      /* the cluster signature last handed to React, so the loop can push a
-         discrete fact without pushing it sixty times a second */
-      clusterSig: "",
-      shown: false,
-      /* who belongs to a cluster right now, and which cloud the pointer is on:
-         clustered sentences whisper, the touched one comes back to full */
-      clusterMembers: new Set<string>(),
-      hoverNeb: null as Neb | null,
-      /**
-       * THE SUBJECT: the one candidate carrying its evidence right now, or none.
-       * At rest the sky is sentences and bodies only — a skyful of orbiting
-       * evidence was unreadable, and it was the satellites that made it so.
-       * Exactly one at a time, because the point of the tap is to be able to
-       * read one claim's provenance without the others in the way.
-       */
-      focusNeb: null as Neb | null,
-      /* which satellite the pointer (or a finger) is on: its owner's given name
-         is whispered beside it, and it is what a tap would open */
-      hoverSat: null as Sat | null,
-      satSaid: "",
-      /* how wide that name came out, measured once when it CHANGES — the loop
-         needs it every frame to decide which side of the satellite it fits on,
-         and reading offsetWidth per frame would force a layout per frame */
-      satSayW: 0,
-      /* the satellite a selection came FROM, so the reading panel sits beside
-         the satellite that was tapped rather than beside the memory's own place
-         in a field a whole section below */
-      selSat: null as Sat | null,
-      /* a satellite's memory can live in a room column that has never been
-         built, so it is held directly and released directly */
-      heldBall: null as Ball | null,
-    };
-    /* tier-one persistence: where the clouds were left, last session */
-    const savedSky = readSkyLayout();
-
     /**
-     * WHAT THE SKY ENGINE STILL NEEDS FROM THIS PAGE — the whole list, once.
+     * THE ONE ORB BEING HELD, which is all that is left of the sky.
      *
-     * The thirteen functions that move the sky live in
-     * `space/signal/sky-engine.ts` now; this is the seam they reach back
-     * through. It is built once per effect run and every entry is either a
-     * function declaration hoisted above (so the order of this block and the
-     * order those are written in are independent) or an ACCESSOR onto a ref —
-     * never a ref's current value, because `viewerId` is rewritten on every
-     * render and `selectedId` on every selection, and a value read here would
-     * pin the engine to whatever was true when the loop started.
+     * There was a `SkyState` here — clouds, their satellites, a focused
+     * subject, a hovered one, a cluster signature — and thirteen engine
+     * functions that moved it. Every one of them went dormant on 2026-08-24
+     * when the candidate layer came out of headquarters, and none of it was
+     * deleted until the founder said so on 2026-08-25.
+     *
+     * This survived because it was never about the sky: it is the GROUND's
+     * bookkeeping. A memory being read is held, and a held memory has to be
+     * findable to let go of — it can live in a room column that has never
+     * been built, so it is kept by reference rather than looked up.
      */
-    const skyDeps: SkyDeps = {
-      byId,
-      findBall,
-      allBalls,
-      clampHome,
-      orbFitX,
-      orbFitY,
-      colOfGroup,
-      release,
-      wake,
-      groupBalls: () => groupBallsRef.current,
-      viewerId: () => viewerIdRef.current,
-      nebEl: (id) => measured.nebEls.current.get(id) ?? null,
-      satSayEl: () => measured.satSay.current,
-      selectedId: () => selectedIdRef.current,
-      setFocusCandId,
-    };
-
-    /** Which column a room's memories belong to; zero when it is not on the
-        map yet, which only ever reads as "this is a room's memory". */
-    function colOfGroup(groupId: string): number {
-      const i = groupsRef.current.findIndex((g) => g.id === groupId);
-      return i < 0 ? 0 : i + 1;
-    }
+    const held = { ball: null as Ball | null };
 
     /**
-     * The widest orbit this viewport can actually hold: the most a pad may be
-     * (SKY_PAD_X of the viewport), less the edge it is kept clear of, less the
-     * drift it swings by, and less the growth it takes on when it becomes the
-     * subject — because the pad covers the solved radius, and those three are
-     * what the solved radius does not include. clampHome's pad is written from
-     * the same three, so the cap and the pad can never disagree.
+     * Let go of every orb. Two steps, and the second is not redundant: the
+     * sweep clears whatever is in the ground right now, and the held one may
+     * live in a room column that has never been built — so it is cleared by
+     * the reference we kept rather than by being found.
      */
-    function orbFitX(n: Neb) {
-      return Math.max(24, (view.w * SKY_PAD_X - SKY_EDGE - n.ampX) / (1 + FOCUS_POP));
-    }
-    function orbFitY(n: Neb) {
-      return Math.max(24, (view.h * SKY_PAD_Y - SKY_EDGE - n.ampY) / (1 + FOCUS_POP));
-    }
-
-    /**
-     * Homes in section S. The proposal is the largest and sits nearest the
-     * centre — it is a whole ambition, not a fragment; the readings orbit it
-     * on a wide ellipse. A nebula the person has MOVED keeps where it was put
-     * (for this session — there is no endpoint to persist a sky layout to).
-     */
-    /**
-     * A candidate is parked where its whole SYSTEM fits, not merely where its
-     * cloud does: tapping it must never send half an orbit past an edge, and
-     * the answer to that is where it rests — never a camera move at the moment
-     * of the tap. It binds a dragged-and-kept position too: a spot restored
-     * from a previous session was chosen against a different viewport.
-     */
-    function clampHome(n: Neb) {
-      /* the system at its WIDEST, not at its average: the subject sits
-         FOCUS_POP bigger, and every candidate drifts by its own amplitude, so
-         a pad measured from the solved radius alone would still let the far
-         side of the ring cross an edge on the swing. measureNeb has already
-         cut the orbit to something a pad this size can cover, so the caps
-         below are a floor under a pathological viewport, not the normal path. */
-      const padX = Math.min(
-        Math.max(n.r * 0.5, n.orbRx * (1 + FOCUS_POP) + n.ampX) + SKY_EDGE,
-        view.w * SKY_PAD_X,
-      );
-      const padY = Math.min(
-        Math.max(n.r * 0.5, n.orbRy * (1 + FOCUS_POP) + n.ampY) + SKY_EDGE,
-        view.h * SKY_PAD_Y,
-      );
-      /* every sky is its own column wide, and no candidate ever wanders out
-         of the wall it belongs to */
-      const off = n.col * view.w;
-      n.homeX = clamp(n.homeX, off + padX, Math.max(off + padX, off + view.w - padX));
-      /* the pads are capped at a fraction of the viewport, so this range is
-         never empty however tall the words wrapped */
-      n.homeY = clamp(n.homeY, view.layout.minCam + padY + 28, -padY);
-    }
-
-    /** Rebuild the sky from the candidate list, keeping what is already up. */
-    function syncSky(list: Candidate[]) {
-      const prev = new Map(sky.nebs.map((n) => [n.id, n] as const));
-      const next: Neb[] = [];
-      /* the cap is PER SKY: a skyful is a skyful on each wall, and a room full
-         of agents must not crowd your own sky out of its own ceiling */
-      const perCol = new Map<number, number>();
-      for (let i = 0; i < list.length; i++) {
-        const c = list[i];
-        const taken = perCol.get(c.col) ?? 0;
-        if (taken >= SKY_MAX) continue;
-        perCol.set(c.col, taken + 1);
-        const had = prev.get(c.id);
-        if (had) {
-          /* the sky cannot exist before the inspirations do, so this is never a
-             late arrival — it is a candidate whose evidence genuinely
-             changed (a draft re-drafted), re-solved once. Phases are hashed
-             per candidate-and-memory, so every surviving satellite keeps the
-             exact place on the ellipse it already had. */
-          if (had.evSig !== c.evidence.map((e) => e.signalId).join(","))
-            solveSats(had, c, skyDeps);
-          next.push(had);
-          continue;
-        }
-        const n = makeNeb(c, i, skyDeps);
-        /* a draft is born between the nebulae it was drawn from */
-        if (c.originIds.length > 0) {
-          let sx = 0;
-          let sy = 0;
-          let hits = 0;
-          for (const oid of c.originIds) {
-            const o = prev.get(oid);
-            if (o) {
-              sx += o.x;
-              sy += o.y;
-              hits++;
-            }
-          }
-          if (hits > 0) {
-            n.x = sx / hits;
-            n.y = sy / hits;
-            n.homeX = n.x;
-            n.homeY = n.y;
-            n.pinned = true;
-          }
-        }
-        /* a place this candidate was left at in an earlier session comes
-           back BEFORE the sky is ever seen — no jump — clamped into the
-           sky this viewport actually has */
-        const saved = savedSky[c.id];
-        if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
-          const off = c.col * view.w;
-          n.x = n.homeX = off + clamp(saved.x, 12, view.w - 12);
-          n.y = n.homeY = clamp(saved.y, view.layout.minCam + 30, -20);
-          n.pinned = true;
-        }
-        next.push(n);
+    function releaseHolds() {
+      allBalls((arr) => {
+        for (const b of arr) b.hold = 0;
+      });
+      if (held.ball) {
+        held.ball.hold = 0;
+        held.ball = null;
       }
-      sky.nebs = next;
-      /* a candidate that has left the sky cannot be the subject of it */
-      if (sky.focusNeb && !next.includes(sky.focusNeb)) sky.focusNeb = null;
-      /* a selected satellite whose candidate has left the sky has nothing
-         left to sit beside */
-      const held = sky.selSat;
-      if (held && !next.some((n) => n.sats.includes(held))) release();
-      layoutSky(sky, view, skyDeps);
-      wake();
     }
 
-    /** What is under the pointer up in the sky, nearest-first. */
-    function nebAt(cx: number, cy: number): Neb | null {
-      const wx = cx + cam.x;
-      const wy = cy + cam.y;
-      for (let i = sky.nebs.length - 1; i >= 0; i--) {
-        const n = sky.nebs[i];
-        if (n.gone > 0.4 || n.condense < 0.99) continue;
-        const dx = n.x - wx;
-        const dy = n.y - wy;
-        /* the cloud is soft; its handle is its bright middle */
-        const rr = n.r * NEB_CORE;
-        if (dx * dx + dy * dy <= rr * rr) return n;
+    let carryC: HTMLCanvasElement | null = null;
+    function carry(w: number, h: number): HTMLCanvasElement | null {
+      if (!carryC) carryC = document.createElement("canvas");
+      if (carryC.width !== w || carryC.height !== h) {
+        carryC.width = w;
+        carryC.height = h;
       }
-      return null;
+      const c2 = carryC.getContext("2d");
+      if (!c2) return null;
+      /* it is a copy, not a layer: whatever it held from the last resize has
+         to be gone, or a shrink leaves the old edges showing round the new */
+      c2.clearRect(0, 0, w, h);
+      c2.drawImage(canvas!, 0, 0);
+      return carryC;
     }
 
     function measure() {
       const rect = root!.getBoundingClientRect();
-      view.w = Math.max(rect.width, 1);
-      view.h = Math.max(rect.height, 1);
+      /*
+       * A DEGENERATE RECT IS A LIE, NOT A SIZE.
+       *
+       * `.jar` is `position: fixed; inset: 0`. It is the viewport by
+       * construction and there is no state of the page in which it is one
+       * pixel wide — so a rect that small is a measurement taken while the
+       * subtree is mid-rebuild, and the old `Math.max(rect.width, 1)` wrote it
+       * straight through as a real size. That is the wobble the mutation log
+       * caught: three canvas resizes in two milliseconds on every keep, one of
+       * them to a viewport of nothing.
+       *
+       * The window's own dimensions are the honest answer here and cost no
+       * layout to read, so a rect that cannot be true defers to them rather
+       * than being clamped into a shape the loop will act on.
+       */
+      const trueW = rect.width >= 2 ? rect.width : window.innerWidth;
+      const trueH = rect.height >= 2 ? rect.height : window.innerHeight;
+      view.w = Math.max(trueW, 1);
+      view.h = Math.max(trueH, 1);
       const nextDpr = Math.min(window.devicePixelRatio || 1, 2);
-      canvas!.width = Math.round(view.w * nextDpr);
-      canvas!.height = Math.round(view.h * nextDpr);
+      /*
+       * ONLY WHEN THE SIZE ACTUALLY CHANGED.
+       *
+       * Assigning `canvas.width` or `canvas.height` CLEARS the canvas to
+       * transparent. The spec says so even when the value assigned is the one
+       * already there, which is the part that bit: `measure()` runs on every
+       * setup of the frame loop, and the loop is rebuilt whenever
+       * `inspirations` changes — which is what saving a memory does. So every
+       * keep threw away a full backing store, allocated an identical one, and
+       * left a window in which the world is blank until the next frame draws.
+       *
+       * WHETHER THAT WINDOW IS THE BLINK REPORTED AFTER A SAVE IS NOT
+       * ESTABLISHED. Recording the composited output either side of a forced
+       * rebuild showed the same brightness dip with this guard and without it,
+       * so it is committed as what it provably is — work that should not
+       * happen, and a blank frame that should not be possible — and not as a
+       * fix for that symptom.
+       *
+       * `draw` sets its own transform every frame (`ctx.setTransform` at the
+       * top of the pass), so nothing here relies on the state reset that
+       * resizing also performs. A real resize still clears, which is correct
+       * and unavoidable: the backing store genuinely changed.
+       */
+      const cw = Math.round(view.w * nextDpr);
+      const ch = Math.round(view.h * nextDpr);
+      /*
+       * AND WHEN IT DID CHANGE, CARRY THE PICTURE ACROSS.
+       *
+       * A recorded mutation log of a real keep settled what the paragraph
+       * above could not. The canvas is resized THREE times inside two
+       * milliseconds, six hundred milliseconds after the field closes —
+       * exactly when the server's row arrives and rebuilds the loop. The
+       * guard is working: three writes mean three genuinely different sizes,
+       * a measurement wobbling while the subtree is mid-rebuild. So the
+       * window is real, it is entered on every keep, and it is what the blink
+       * is.
+       *
+       * Chasing the wobble is the wrong repair. A resize is allowed to change
+       * the backing store — that is what it is for — and the world should
+       * survive one either way, including the honest ones nobody has
+       * complained about: dragging the window edge blanks the field today for
+       * the same reason. So the old surface is blitted into the new one before
+       * anything else can composite, and the frame on screen stays on screen
+       * until a real frame replaces it. Whatever makes the size move, there is
+       * no longer a blank to see.
+       *
+       * Stretched rather than re-laid out, on purpose: for the one frame this
+       * lives, a picture at slightly the wrong scale is invisible and a black
+       * screen is not. `draw` writes its own transform at the top of every
+       * pass, so the identity transform this blit needs cannot leak into it.
+       */
+      if (canvas!.width !== cw || canvas!.height !== ch) {
+        const pw = canvas!.width;
+        const ph = canvas!.height;
+        const keep = pw > 0 && ph > 0 ? carry(pw, ph) : null;
+        canvas!.width = cw;
+        canvas!.height = ch;
+        if (keep) {
+          ctx!.setTransform(1, 0, 0, 1, 0, 0);
+          ctx!.drawImage(keep, 0, 0, pw, ph, 0, 0, cw, ch);
+        }
+      }
       canvas!.style.width = `${view.w}px`;
       canvas!.style.height = `${view.h}px`;
       /* DPR changed (zoom / monitor move): halo sprites are rastered in
@@ -3986,10 +4982,76 @@ function HomeExperience(): JSX.Element {
          the guess was 92 plus forty of air, which is a fifth of a short
          viewport of field given away for nothing, and on a phone with a home
          indicator the guess was simply wrong. */
-      /* The dial is a vertical rail against the right edge now, so it takes
-         no height from the field at all — the bottom inset it used to claim
-         belongs to the axis of walls. */
-      view.dialH = 0;
+      /* WHAT THE BOTTOM CHROME ACTUALLY TAKES, measured rather than guessed.
+         It was a rail in the right margin for a while and took nothing; it is
+         two stacked bands along the bottom edge again — the timeline
+         underneath and the names of the walls above it — and the field has to
+         stop clear of both. The axis is the upper of the two, so the distance
+         from the viewport's bottom to its top edge IS the reserve, at every
+         viewport height and on every phone with a home indicator. Zero until
+         it has mounted, which is one frame of a field a few pixels too tall
+         and never a wrong layout that persists. */
+      {
+        /* WHATEVER IS ACTUALLY DOWN THERE, WHICHEVER THING IT IS.
+           This measured the dial, because the dial was the bottom chrome. On
+           2026-08-27 the founder moved the timeline up beside the word that
+           summons it and turned it vertical — so the dial's box is now near
+           the TOP of the screen, and `view.h - box.top` became almost the
+           whole viewport. The clamp below would have caught it and handed the
+           field a permanent forty-percent bite out of the screen: not a
+           crash, just a world with far less ground in it, for a reason
+           nothing on screen explains.
+
+           So the reserve stops naming one piece of chrome and asks the
+           question it always meant: of the things that sit along the bottom
+           edge, which one reaches highest? Nothing there reserves nothing. */
+        let highest = 0;
+        {
+          /* THE COUNT IS THE BOTTOM CHROME — the whole of it. The first
+             rewrite of this block listed `.jar-mouth-rest` too, on the words
+             "bottom chrome", and the mouth does not rest at the bottom: it
+             rests mid-page, above the field, exactly where its own doc says
+             it holds still so the companion cannot be moved by it. Measuring
+             it handed the reserve nearly half the viewport and pushed the
+             companion out of its place — found by the founder's eyes, not by
+             a gate, because the jsdom stub had been taught the same wrong
+             assumption (founder, 2026-08-27: "character is no longer in
+             center"). One selector, one meaning. */
+          const el = document.querySelector(".jar-saved");
+          if (el) {
+            const b = el.getBoundingClientRect();
+            if (b.height > 0) highest = Math.round(view.h - b.top);
+          }
+        }
+        /**
+         * TWO RULES THE FIRST VERSION OF THIS BROKE, both the reserve's own,
+         * both written a few hundred lines up before it was mine to break:
+         *
+         * `.jar-mouth` is deliberately NOT in the list. "A reserve measured
+         * off the mouth's live height would make the world lurch" — the open
+         * drawer is tall, and a reserve that grows when it opens re-lays the
+         * whole field under a person who only started typing. The resting
+         * chrome is the reserve; the drawer borrows the air above it.
+         *
+         * And nothing-on-screen KEEPS the reserve rather than zeroing it. The
+         * count and the mouth exist at headquarters; down in the field they
+         * are gone, and a reserve that collapsed on descent would slide the
+         * ground underfoot mid-travel — the world moving when nobody moved
+         * it. The reserve is a fact about the resting page, so between
+         * measurable moments it simply holds. Zero only before the chrome
+         * has ever mounted, which is one frame of a field a few pixels too
+         * tall and never a wrong layout that persists.
+         */
+        const claimed = highest > 0 ? highest : view.dialH;
+        /* A CEILING, AND IT IS A CATASTROPHE GUARD RATHER THAN A TIDY-UP.
+           Two rows of small labels cannot honestly want two fifths of the
+           screen; a number that large means the measurement is wrong, and the
+           cost of believing it is a world with no field in it at all. It is
+           set high on purpose — low enough to survive a nonsense reading,
+           high enough that ordinary drift in the chrome's real height still
+           reaches the layout and is still visible as itself. */
+        view.dialH = clamp(claimed, 0, Math.round(view.h * 0.4));
+      }
       /* WHICH SECTION THE CAMERA IS RESTING ON, read in the world that is
          about to be replaced. The rest points ARE ±vh, so a height change
          MOVES them — and the camera has to arrive on the same section it was
@@ -4122,8 +5184,15 @@ function HomeExperience(): JSX.Element {
        * preference wins and the body is where the eye expects it.
        */
       companion.y = hi >= lo ? clamp(view.h / 2, lo, hi) : (lo + hi) / 2;
-      const say = measured.charSay.current;
-      if (say) say.style.top = `${Math.round(companion.y + companion.size * 0.62)}px`;
+      /* WHAT SITS UNDER THE COMPANION, AND IN WHAT ORDER (founder, 2026-08-25:
+         "keep something should be shown right below the character").
+         The mouth first, directly beneath the body, because keeping something
+         is what this page is FOR and it should be under the hand before
+         anything else is. The companion's own line goes below the mouth: it
+         reports what the loop did, and it says so in the mouth's own slot
+         rather than in a row of its own — one place, one line. */
+      const chin = Math.round(companion.y + companion.size * 0.62);
+      root!.style.setProperty("--jar-mouth-top", `${chin + 18}px`);
       /* the columns' DOM measures itself off these — one write per resize */
       root!.style.setProperty("--jar-vw", `${Math.round(view.w)}px`);
       root!.style.setProperty("--jar-vh", `${Math.round(view.h)}px`);
@@ -4144,8 +5213,6 @@ function HomeExperience(): JSX.Element {
         }
       }
       view.primed = true;
-      /* homes for the sky's inhabitants, in the viewport they now have */
-      layoutSky(sky, view, skyDeps);
       /* The volume is a real, world-tall gradient: the sky at the top is a
          different place from the deep. It starts one viewport above HQ, so it
          covers all three sections. */
@@ -4154,11 +5221,59 @@ function HomeExperience(): JSX.Element {
         atmos.style.top = `${Math.round(view.layout.minCam)}px`;
         atmos.style.height = `${Math.round(view.layout.layoutH - view.layout.minCam)}px`;
       }
+      /* the sky's sentence stands at the sky's own height, in world space —
+         42% down the topmost frame, the place the arrival chrome used to
+         claim on screen. Written here beside the volume's box because both
+         are facts about where the sky IS, not about who is looking. */
+      {
+        const hqEl = measured.hq.current;
+        if (hqEl) {
+          hqEl.style.setProperty(
+            "--jar-sky-top",
+            `${Math.round(view.layout.minCam + view.h * 0.42)}px`,
+          );
+        }
+      }
+      /* THE RAIL HANGS FROM ITS WORD, MEASURED (founder, 2026-08-27: "should
+         align with the text NOW"). Its left inset was a guess in CSS, and the
+         word it hangs under sits after the wall chip, whose width is the
+         wall's NAME — so no constant can be under it on every wall. The
+         track's centre takes the word's centre, the way the reserve takes the
+         count's own box: chrome states its place, nothing guesses at it. */
+      {
+        const whenEl = document.querySelector(".jar-when");
+        const railEl = dialRef.current;
+        /* ONLY AT REST. The word this hangs from is the reading — scrubbing
+           rewrites it ("now" -> "Aug 12"), the box widens, its centre moves,
+           and a rail that keeps chasing its own label WANDERS UNDER THE HAND
+           (founder video, 2026-08-27: "line is not only hard to drag, but
+           moves around"). While the dial is open or being held the anchor is
+           frozen where it was when you reached for it; it takes the word's
+           new centre again once the rail is put away. */
+        if (
+          whenEl &&
+          railEl &&
+          !railEl.classList.contains("jar-dial--open") &&
+          !railEl.classList.contains("jar-dial--live")
+        ) {
+          const wb = whenEl.getBoundingClientRect();
+          if (wb.width > 0) {
+            /* half the rail's own width, read rather than restated, so a
+               wider grab area cannot silently un-centre the line */
+            const left = Math.round(wb.left + wb.width / 2 - railEl.offsetWidth / 2);
+            if (view.dialLeft !== left) {
+              view.dialLeft = left;
+              railEl.style.left = `${left}px`;
+            }
+          }
+        }
+      }
       if (!view.motesPlaced) {
         view.motesPlaced = true;
+        /* the same stillness for the dust: a save must not re-scatter it */
         for (let i = 0; i < MOTES; i++) {
-          moteX[i] = Math.random() * view.w;
-          moteY[i] = Math.random() * view.h;
+          moteX[i] = ((mix32(hashStr(`mote:x:${i}`)) >>> 8) / 0x1000000) * view.w;
+          moteY[i] = ((mix32(hashStr(`mote:y:${i}`)) >>> 8) / 0x1000000) * view.h;
         }
       }
       cam.y = clamp(cam.y, minCamNow(), view.layout.maxCam);
@@ -4295,7 +5410,6 @@ function HomeExperience(): JSX.Element {
      */
     function step(dt: number, now: number) {
       const t = now / 1000;
-      stepSky(sky, view, stir, skyDeps, dt, now, t);
 
       /* the arrival the founder likes, kept: oldest first, 60ms apart, each
          orb entering from above its home */
@@ -4517,7 +5631,7 @@ function HomeExperience(): JSX.Element {
          "the light already answered" reads as the product having nothing to
          say on the day somebody starts. Under a handful of memories, it says
          what is actually true instead. */
-      if (sky.nebs.length === 0 && trip.inspCol > 0 && trip.inspCol < 4)
+      if (trip.inspCol > 0 && trip.inspCol < 4)
         return pick([
           "A few so far. Say more and I will start to see it",
           "Not enough yet to see a shape",
@@ -4550,9 +5664,42 @@ function HomeExperience(): JSX.Element {
       b.active = true;
       b.gone = 0;
       b.arrive = view.reduced ? 1 : 0;
-      b.entryH = 90 + b.frac * 110;
-      b.x = b.homeX;
-      b.y = b.homeY - (view.reduced ? 0 : b.entryH);
+      /*
+       * IT ENTERS FROM JUST ABOVE WHERE IT IS ACTUALLY GOING.
+       *
+       * `entryH` is spent by the draw as `rise` against the EFFECTIVE home —
+       * the peek-lifted one, `lerp(homeY, peekY, lift)` — while this measured
+       * it from the field home that the lift is carrying the orb away from.
+       * For an orb in the peek row those are far apart: the row sits up under
+       * the poster and the field home is near the bottom of the world. So the
+       * entrance began a couple of hundred pixels above HEADQUARTERS instead
+       * of above the row, and a memory arrived out of the sky rather than out
+       * of the ground.
+       *
+       * `born` has always measured against the lifted home — that is how a
+       * newborn comes out of the sentence instead of off the top of the
+       * screen — and this is the same sum, for the orbs that arrive by pour.
+       *
+       * It was invisible while a rebuild re-poured the WHOLE field: every orb
+       * did it at once and it read as the world re-staging, which was the
+       * louder bug. With only genuinely new memories pouring, one orb does it
+       * alone, and then it is the only thing moving on the screen.
+       */
+      const enterLift = peekLift();
+      const fromY = b.peek ? lerp(b.homeY, b.peekY, enterLift) : b.homeY;
+      /* AND A PEEK ORB ENTERS FROM BELOW (founder's recording, 2026-08-25:
+         "the balls fly wierdly"). "From just above where it is going" is
+         right for an orb landing in the field — the fall is short and happens
+         down in the ground. A PEEK orb lands under the poster, so from-above
+         started it mid-headquarters and the pour's stagger turned arrival
+         into a two-second rain of spheres past the companion and the mouth.
+         The lift's own sentence is that these memories RISE out of the ground
+         to sit under the claim that stands on them — so the entrance rises
+         too: negative height, spent by the same `rise` term in the draw.
+         Motion explains, and this motion now explains the right thing. */
+      b.entryH = b.peek ? -(60 + b.frac * 70) : 90 + b.frac * 110;
+      b.x = b.peek ? lerp(b.homeX, b.peekX, enterLift) : b.homeX;
+      b.y = fromY - (view.reduced ? 0 : b.entryH);
     }
 
     function reconcileScrub() {
@@ -4647,13 +5794,6 @@ function HomeExperience(): JSX.Element {
           moteA[i] * (i % 3 === 0 ? 1 - thin * 0.85 : 1) * lerp(0.6, 1.15, companion.inspNow);
         ctx!.drawImage(pal.mote, mx + cam.x - mr * 3, moteY[i] + cam.y - mr * 3, mr * 6, mr * 6);
       }
-
-      /* pass 0b — THE SKY. Each candidate a cloud of light with its own
-         evidence in orbit around it. `space/signal/sky-paint.ts`, which reads
-         three of the loop's state groups and so was allowed to leave; the
-         satellite pass's occlusion rules and the two aliveness fixes recorded
-         in its comments went with it unchanged. */
-      paintSky({ ctx: ctx!, pal, sky, cam, view, t, grid });
 
       /* passes 1 and 2 — THE GROUND. Every memory's diffuse bloom laid down in
          additive light, then every memory's disc drawn over it. One appearance
@@ -4765,12 +5905,306 @@ function HomeExperience(): JSX.Element {
            transition it rides ahead of centre by charOff, near the leading
            third of the screen, still bobbing. */
         const charSX = cam.x + view.w / 2 + companion.off;
+
+        /* ---------------- THE ROOM'S COMPANY ----------------
+           founder, 2026-08-27: "if room is group, show the character as many
+           times as number of members are there. but the character should feel
+           like its behind mine, and more small and subtle."
+
+           One being per member, standing behind yours. Drawn BEFORE your
+           aura and body, so yours occludes them and its emitted light washes
+           over them — that wash is the depth cue, not a painted shadow.
+
+           Each wears the form its own id derives (`agentBeing` is "a being,
+           from an id and nothing else" — the owner's median proportions are
+           punched out of its ladders, so none of them can wear yours), at
+           half your size, in COOL light: raster.ts's invariant that your
+           companion is the warmest body on any wall holds in a crowd too.
+           Humans first, in the room's own member order — the same order the
+           legend and the hues are numbered from — so the company reads in
+           the same sequence everywhere the room is named.
+
+           Size is ONE constant for all of them. A being's identity is shape,
+           never size (body.ts: mass is constant), and a row of members at
+           assorted sizes would read as a ranking nobody made. */
+        /* EVERY ROOM IN FRAME, NOT ONLY THE ONE YOU STAND IN. During a
+           crossing both columns are on screen at once — the room you are
+           leaving and the room you are arriving at — and drawing only the
+           current wall's company is what made a room look like it populated
+           itself on arrival. */
+        const companyCols: number[] = [];
+        if (wallAt(trip.col)?.kind === "group") companyCols.push(trip.col);
+        if (trip.active && trip.dest !== trip.col && wallAt(trip.dest)?.kind === "group") {
+          companyCols.push(trip.dest);
+        }
+        /* the seats under the pointer, rebuilt each frame the company is
+           drawn — hovering a member names it (see `companyHitRef`) */
+        companySeats.length = 0;
+        for (const col of company > 0.015 ? companyCols : []) {
+          const colWall = wallAt(col)!;
+          /* WHO STANDS WHERE IS A FACT, NOT A FRAME — and this loop was
+             recomputing it sixty times a second. `groupCompanyPlaces` maps a
+             room's members into fresh objects and the depth pass sorts a
+             fresh copy on top, so a seven-person room was allocating an array
+             and seven objects, twice, every frame it was on screen. Nothing
+             in it can change without the member list changing, and that list
+             arrives once per room.
+
+             Found reviewing my own work rather than by a slow frame, but the
+             precedent is why it matters: the last thing built into this exact
+             loop put a 133ms frame in the middle of a travel glide. Cached on
+             the member list's own identity, so a room that gains a member
+             recomputes on the frame the new list lands and never again. */
+          const seatedFor = (): CompanyPlace[] => {
+            const from = membersRef.current.get(colWall.id);
+            const held = companyPlacesCache.get(colWall.id);
+            if (held && held.from === from && held.viewer === viewerIdRef.current) {
+              return held.seated;
+            }
+            /* FAR ONES FIRST, so the near ones overlap them. A row painted in
+               member order overlaps by accident; painted by depth it overlaps
+               the way standing people do, and the overlap is most of what
+               says "a group" rather than "a line". */
+            const seated = groupCompanyPlaces(from, viewerIdRef.current).sort(
+              (x, y) => y.depth - x.depth,
+            );
+            companyPlacesCache.set(colWall.id, {
+              from,
+              viewer: viewerIdRef.current,
+              seated,
+            });
+            return seated;
+          };
+          /* the same light tier your own body wears: the first version baked
+             them a tier dimmer AND cool AND at half alpha, and three
+             subtlety channels stacked read as flat grey stone. Cool and
+             alpha carry the "behind"; the bake keeps its gradient.
+             AND THEN THE TIER LEARNED DEPTH (founder, 2026-08-27: "higher
+             quality craft"; the research is written up in
+             `group-company.ts`): one tier for everybody is what made three
+             members read as three copies of one card. A member's own depth
+             spends itself here, so the near ones stand in your light and the
+             far ones fall a tier back — which is how a photograph separates
+             planes, and the reason the group now has a front and a back. */
+          const nearTier = Math.round(bodyLit * (BODY_TIERS - 1));
+          const seated = seatedFor();
+          /**
+           * ONE BAKE PER FRAME. A bake is four 240px rasters, and a room of
+           * seven arriving all at once put a 133ms frame in the middle of the
+           * travel glide (measured live, this machine, dpr 1 — a retina
+           * screen bakes four times the pixels). The company's alpha eases in
+           * from zero over the same arrival, so members joining the frame one
+           * at a time is not even visible: the ease IS the stagger's cover.
+           * A member whose bake has not had its turn yet simply waits a
+           * frame; nothing is skipped, only deferred.
+           */
+          let bakedThisFrame = false;
+          for (const seat of seated) {
+            const be = beingOf(seat.profileId);
+            /* an agent member shares the bake its own wall uses — same key,
+               same params — so the same creature is the same pixels */
+            const key = seat.agent ? `agent:${seat.profileId}` : `member:${seat.profileId}`;
+            if (!pal.beings.has(key)) {
+              if (bakedThisFrame) continue;
+              bakedThisFrame = true;
+            }
+            const sprites = bakeBeing(pal, key, be, true, seat.agent);
+            /* further back is smaller: the arc's own perspective, and the
+               half-size the founder asked for is the NEAREST member's size */
+            const ms = companion.size * (0.5 - seat.depth * 0.07);
+            const companyTier = Math.max(0, nearTier - (seat.depth > 0.55 ? 1 : 0));
+            /**
+             * FOUR WAYS OF STANDING (research, `group-company.ts`: a crowd
+             * sharing one idle "breaks immersion immediately"; 3–5 variants
+             * with staggered starts is the working number).
+             *
+             * Every member used to breathe on the same sine at its own rate,
+             * which is one behaviour wearing different clocks — and at a
+             * glance that reads as copies. These are four different things a
+             * body does while waiting, each phased by the member's own id:
+             *   0 breathes — the old hover, slowest and smallest
+             *   1 sways — the weight drifts side to side as well as up
+             *   2 shifts — mostly still, then settles onto the other foot
+             *   3 waits — barely moves at all; its life is in the head turn
+             * Reduced motion keeps every one of them at rest.
+             */
+            const ph = seat.phase * 6.283;
+            let mbob = 0;
+            let mswy = 0;
+            if (!view.reduced) {
+              const slow = t * 0.9 * be.bobRate + ph;
+              if (seat.idle === 0) {
+                mbob = Math.sin(slow) * 2.4 * stir.amp;
+              } else if (seat.idle === 1) {
+                mbob = Math.sin(slow) * 1.8 * stir.amp;
+                mswy = Math.sin(slow * 0.6 + 1.1) * 2.6 * stir.amp;
+              } else if (seat.idle === 2) {
+                /* a long dwell, then a settle: `sin^7` is flat for most of
+                   its period and moves quickly through the middle, which is
+                   what shifting your weight looks like from across a room */
+                const s = Math.sin(t * 0.32 * be.bobRate + ph);
+                mswy = Math.sign(s) * Math.abs(s) ** 7 * 3.4 * stir.amp;
+                mbob = Math.sin(slow) * 1.1 * stir.amp;
+              } else {
+                mbob = Math.sin(slow * 0.8) * 0.9 * stir.amp;
+              }
+            }
+            const seatX =
+              col * view.w + view.w / 2 + seat.dx * companion.size + mswy;
+            const seatY = companion.y + seat.dy * companion.size + mbob;
+            /* WHO THIS IS, WHEN YOU REACH FOR THEM (founder, 2026-08-27:
+               "hovering/clicking on characters in the background should show
+               the name of the person above the character temporarily and
+               character should also brighten up temporarily"). The seats are
+               canvas pixels, so the pointer needs the geometry the draw pass
+               already knows; the hit list is rebuilt here rather than
+               guessed at anywhere else. */
+            const named = membersRef.current
+              .get(colWall.id)
+              ?.find((m) => m.profileId === seat.profileId);
+            companySeats.push({
+              id: seat.profileId,
+              /* screen x (the draw is in world space, the pointer is not) and
+                 world y, which is the space `onHover` already works in */
+              x: seatX - cam.x,
+              y: seatY,
+              r: companion.size * 0.32,
+            });
+            /* NOTICED — and it answers in its own time. The delay is the
+               member's own (`notice`), so a room of seven turns to you
+               raggedly instead of snapping round in unison, which is the
+               difference between people and a chorus line. */
+            const sinceSeen =
+              companyNear.id === seat.profileId
+                ? (performance.now() - (companyNear.until - COMPANY_NOTICE_MS)) / 1000 -
+                  seat.notice
+                : -1;
+            const lit =
+              companyNear.id === seat.profileId && sinceSeen > 0
+                ? clamp((companyNear.until - performance.now()) / 900, 0, 1) *
+                  clamp(sinceSeen / 0.18, 0, 1)
+                : 0;
+            ctx!.save();
+            /* ANCHORED TO THE ROOM, NOT TO YOU. `charSX` is the companion's
+               screen-anchored x — the world slides under it, which is what
+               makes it the traveller — and the first version hung the whole
+               company off it, so leaving a room dragged the members along
+               like luggage. They stand at the ROOM's own column: travelling
+               away, the world slides them away with the wall they belong to
+               while your companion alone moves. Their y is the resting
+               anchor, not `cyC` — your bob and your lift are yours, and a
+               chorus that breathes in sync with you reads as puppetry. */
+            ctx!.translate(seatX, seatY);
+            /* noticed, it comes up toward your own strength and settles back —
+               light is the only meaning channel, so being seen IS more light.
+               Depth is the other half: the far ones sit lower in the frame's
+               range, which is what "falls into softer light" means when you
+               have no depth of field to spend. */
+            ctx!.globalAlpha = company * ((0.84 - seat.depth * 0.26) + lit * 0.16);
+            /* A PRESENCE OF ITS OWN, and it is the difference between a being
+               standing in a dark room and a sticker on it. The bake has
+               always made each creature its own aura layers — the company
+               simply never spent them, so members had no light around them
+               at all and read as cut-outs on black. One layer, small and
+               faint, and dimmer the further back it stands: enough to say
+               something alive is there, never enough to compete with the
+               warm bloom that is yours. */
+            const halo = sprites.aura[0];
+            if (halo) {
+              ctx!.globalAlpha = company * (0.2 - seat.depth * 0.08 + lit * 0.16);
+              const hs = ms * 2.6;
+              ctx!.drawImage(halo, -hs / 2, -hs / 2, hs, hs);
+              ctx!.globalAlpha = company * ((0.84 - seat.depth * 0.26) + lit * 0.16);
+            }
+            /* NO NUBS ON THE SMALL ONES (founder, 2026-08-27: "remove hands").
+               They were added as anatomy in the quality pass and at half size
+               they read as detached dots floating beside each silhouette —
+               static circles cannot do what the companion's live nubs do,
+               which is protrude from a turning form. A clean silhouette with
+               a face is a creature; a silhouette with two loose beads is a
+               diagram of one. */
+            ctx!.drawImage(sprites.body[companyTier], -ms / 2, -ms / 2, ms, ms);
+            /* THE FACE, AND IT IS NOT AT REST ANY MORE.
+               It used to be two eyes, front-facing, no blink and no glance —
+               written up as "a creature present rather than performing", and
+               that reading was wrong in the way the founder photographed:
+               present without any behaviour at all is a mask. Two cheap
+               channels put life in it without giving it a performance.
+
+               ONE: WHERE IT IS LOOKING. Games call this the reaction set,
+               and the research calls it the most neglected and most missed
+               part of an ambient character. A member looks at YOUR
+               companion, and when your companion is attending to something
+               (a memory you tapped) it looks that way instead, after its own
+               delay — noticing what somebody near you is looking at is the
+               most human thing a bystander does. It is a look, never a turn:
+               the body stays put, which is what keeps this a room of people
+               standing together rather than a crowd staring.
+
+               TWO: BLINKING. Rare, slow, and out of step by id — a blink in
+               unison would be the chorus line again. */
+            bodyPath(ctx!, ms, ms, be);
+            ctx!.clip();
+            ctx!.fillStyle = "#2b2822";
+            const er = ms * be.eyeR * 1.35;
+            const eyY = ms * be.eyeLat;
+            /* toward you, or toward what you are looking at — in the member's
+               own local pixels, and never far enough to leave the face */
+            const gazeAt = charSX + companion.eyeX * 8;
+            const gaze = clamp((gazeAt - seatX) / (companion.size * 2), -1, 1);
+            const gx = gaze * er * 0.5;
+            /* the lid: `notice` doubles as the blink's offset, so the room
+               blinks raggedly; ~5.5s apart, ~140ms closed */
+            const bt = (t + seat.notice * 9 + seat.phase * 5.5) % 5.5;
+            const lid = view.reduced ? 1 : bt < 0.14 ? Math.abs(bt / 0.07 - 1) : 1;
+            for (const lon of [-be.eyeLon, be.eyeLon]) {
+              const ca = Math.cos(lon);
+              ctx!.beginPath();
+              ctx!.ellipse(
+                Math.sin(lon) * ms * FACE_R + gx,
+                eyY,
+                er * Math.max(ca, 0.2),
+                er * Math.max(lid, 0.08),
+                0,
+                0,
+                TAU,
+              );
+              ctx!.fill();
+            }
+            ctx!.restore();
+            /* and the name, above them, for as long as the light lasts. It is
+               the only place a member's name is written in the world, so it
+               is written in the label register the rest of the chrome uses. */
+            if (lit > 0.01 && named?.name) {
+              ctx!.save();
+              ctx!.globalAlpha = lit;
+              ctx!.fillStyle = "#d6deea";
+              ctx!.font = '500 11px Pretendard, -apple-system, "Segoe UI", sans-serif';
+              ctx!.textAlign = "center";
+              ctx!.letterSpacing = "0.14em";
+              ctx!.fillText(
+                named.name.toUpperCase(),
+                seatX,
+                seatY - companion.size * 0.34,
+              );
+              ctx!.restore();
+            }
+            ctx!.globalAlpha = 1;
+          }
+        }
+
         /* Squash-stretch coupled to the bob — and to the climb. Ascending it
            stretches a few percent and descending it compresses, which is the
            character's own response to being moved and not decoration on top
            of it. (Its LIGHT still obeys the rule that juice lives in the
            bloom; this is the body, and a body may act.) */
-        const sq = view.reduced ? 0 : Math.sin(companion.bobPh + 1.5) * 0.022 - companion.pitch * PITCH_STRETCH;
+        const sq = view.reduced
+          ? 0
+          : Math.sin(companion.bobPh + 1.5) *
+              0.022 *
+              Math.max(MOOD_BOB_FLOOR, 1 + companion.mood * MOOD_BOB) -
+            companion.pitch * PITCH_STRETCH +
+            companion.ant;
         const bw = companion.size * (1 + sq);
         const bh = companion.size * (1 - sq);
 
@@ -4894,10 +6328,20 @@ function HomeExperience(): JSX.Element {
                grid by up to half a cell at the extremes of the breath. */
             const cx = bw / MACHINE_CELLS;
             const cy = bh / MACHINE_CELLS;
-            const wCells = Math.max(1, Math.round((nr * 2) / cx));
-            const hCells = Math.max(1, Math.round((nr * 2) / cy));
+            /* FLOOR, NOT ROUND, AND PULLED IN BY A CELL. A square of side d
+               carries 27% more area than a circle of diameter d, so matching
+               the arc's diameter made the nubs HEAVIER than the ones they
+               replaced — two blocks sitting beside the creature rather than
+               two soft nubs belonging to it. Flooring gives back the cell that
+               rounding up was adding, and the inset moves each one a cell
+               toward the middle so the body overlaps it instead of meeting it
+               edge to edge. Both are size, not light: a nub still swells with
+               the glow exactly as it did. */
+            const wCells = Math.max(1, Math.floor((nr * 2) / cx));
+            const hCells = Math.max(1, Math.floor((nr * 2) / cy));
+            const inset = nx === 0 ? 0 : Math.sign(nx) * cx;
             ctx!.fillRect(
-              Math.round((nx - (wCells * cx) / 2) / cx) * cx,
+              Math.round((nx - inset - (wCells * cx) / 2) / cx) * cx,
               Math.round((ny - (hCells * cy) / 2) / cy) * cy,
               wCells * cx,
               hCells * cy,
@@ -5074,92 +6518,20 @@ function HomeExperience(): JSX.Element {
         hq.style.transform = `translate3d(${(-cam.x).toFixed(1)}px, ${(-cam.y).toFixed(1)}px, 0)`;
       const atmos = measured.atmos.current;
       if (atmos) atmos.style.transform = `translate3d(0, ${(-cam.y).toFixed(1)}px, 0)`;
-      /* The mouth rides BOTH axes, like headquarters — it stands on your own
-         wall's seam, so it slides away when you travel and scrolls away when
-         you descend. It is a sibling of .jar-hq rather than a child of it
-         only because it has to sit ABOVE the canvas: a field you are typing
-         into cannot have orbs drawn over the words. */
+      /* THE MOUTH RIDES THE VERTICAL ONLY. It used to ride both axes like
+         headquarters, standing on your own wall's seam — so travelling to a
+         room slid it off the screen and there was no way to keep anything
+         while you were there (founder, 2026-08-24: "keep something should be
+         available in every room"). Keeping is a fact about YOU, not about
+         the wall you happen to be looking at: what you save is always yours,
+         and where it goes is the one line under the field. So it stays put
+         horizontally and still scrolls away as you descend, which is the
+         axis that genuinely changes what it means.
+         It is a sibling of .jar-hq rather than a child of it only because it
+         has to sit ABOVE the canvas: a field you are typing into cannot have
+         orbs drawn over the words. */
       const mouth = measured.mouth.current;
-      if (mouth)
-        mouth.style.transform = `translate3d(${(-cam.x).toFixed(1)}px, ${(-cam.y).toFixed(1)}px, 0)`;
-      /* the companion's whisper is screen-anchored, like the companion */
-      const say = measured.charSay.current;
-      if (say) say.style.transform = `translate3d(${cam.x.toFixed(1)}px, 0, 0)`;
-      /* Each candidate's sentence is DOM, positioned on its cloud every
-         frame: the canvas carries the light, the words stay crisp. */
-      const els = measured.nebEls.current;
-      if (els.size > 0) {
-        for (const n of sky.nebs) {
-          const el = els.get(n.id);
-          if (!el) continue;
-          /* the subject grows on the same curve and by the same amount its
-             body and its orbit do — the candidate is one thing */
-          const grow = 1 + FOCUS_POP * n.focus;
-          el.style.transform = `translate3d(${(n.x - cam.x).toFixed(1)}px, ${(n.y - cam.y).toFixed(1)}px, 0) translate(-50%, -50%) scale(${grow.toFixed(3)})`;
-          const op =
-            (1 - n.gone) * (n.condense > 0.5 ? 1 : 0) * n.dimS * lerp(1, FOCUS_DIM, n.dimN);
-          el.style.opacity = `${op}`;
-          /* AND AN INVISIBLE SENTENCE IS STILL A TARGET. `.jar-neb` carries
-             `pointer-events: auto` and starts at opacity zero until the loop
-             has given it a place; it also passes through zero while a
-             candidate condenses or disperses. Its one child is the least
-             reversible control in the layout, and on touch that child rests
-             visible by design — so the container has to stop taking the
-             pointer whenever it cannot actually be seen. The same rule the
-             action itself now obeys, applied one level up where the
-             stylesheet cannot reach it.
-
-             The threshold is well under the faintest state a candidate can
-             legitimately be READ in — a clustered member whispering at 0.25
-             while another candidate is the subject sits at 0.055, and it must
-             stay tappable, because tapping it is how it becomes the subject.
-             What this catches is the three states where the sentence is
-             genuinely not on screen: not yet placed, condensed by an
-             adoption, and dispersed. Those all reach exactly zero. */
-          el.style.pointerEvents = op > 0.02 ? "auto" : "none";
-          /* the layout width is NOT touched by focus: it is what the orbit was
-             measured from, and scale is a transform, so the box stays put */
-          el.style.width = `${Math.round(Math.min(n.r * 1.7, 320))}px`;
-        }
-        for (const [id, el] of measured.clusterEls.current) {
-          if (!el) continue;
-          let sx = 0;
-          let sy = 0;
-          let hits = 0;
-          let low = -Infinity;
-          for (const mid of id.split("+")) {
-            const n = sky.nebs.find((q) => q.id === mid);
-            if (!n) continue;
-            sx += n.x;
-            sy += n.y;
-            low = Math.max(low, n.y + n.r * 0.52);
-            hits++;
-          }
-          if (hits === 0) continue;
-          el.style.transform = `translate3d(${(sx / hits - cam.x).toFixed(1)}px, ${(low - cam.y).toFixed(1)}px, 0) translate(-50%, 0)`;
-        }
-      }
-      /* whose memory the pointer is on, beside it — it rides the satellite, so
-         the name stays where the memory is even while the orbit turns under
-         it. Absolutely positioned: it can never shift anything else. */
-      const who = measured.satSay.current;
-      if (who && sky.hoverSat) {
-        const sx = sky.hoverSat.x - cam.x;
-        const sy = sky.hoverSat.y - cam.y;
-        /* IT HAS TO STAY IN THE SKY. The name sits to the satellite's right by
-           default, but the sky clips and the name never wraps, so a satellite
-           on the right of its orbit would have its owner cut in half or lost
-           off the edge entirely — on a phone that is most of the ring, and a
-           room's ring is exactly where whose it is has to be readable. So it
-           flips to the other side when it would not fit, the way the reading
-           panel's own right-then-left placement does, and is clamped inside
-           the viewport as a floor. Transform only: still nothing can shift. */
-        let lx = sx + sky.hoverSat.dr + SAT_SAY_GAP;
-        if (lx + sky.satSayW > view.w - SAT_SAY_GAP)
-          lx = sx - sky.hoverSat.dr - SAT_SAY_GAP - sky.satSayW;
-        lx = clamp(lx, SAT_SAY_GAP, Math.max(SAT_SAY_GAP, view.w - sky.satSayW - SAT_SAY_GAP));
-        who.style.transform = `translate3d(${lx.toFixed(1)}px, ${sy.toFixed(1)}px, 0) translate(0, -50%)`;
-      }
+      if (mouth) mouth.style.transform = `translate3d(0, ${(-cam.y).toFixed(1)}px, 0)`;
     }
 
     function tick(now: number) {
@@ -5254,6 +6626,20 @@ function HomeExperience(): JSX.Element {
          for this frame either way by the time we get here, which is what
          the paragraph above was always asking for. */
       mech = view.reduced ? mechAt(cam.x) : lerp(mech, mechAt(cam.x), kd(2e-3, dt));
+      /* THEY ARE ALREADY THERE (founder, 2026-08-27, video: "text and
+         characters should already be there, not reload when my character
+         arrives"). The company used to fade out for the whole crossing and
+         greet you on arrival, which read as a room loading itself the moment
+         you looked at it. A room's members stand at their room whether or
+         not anyone is visiting: the alpha now holds for the wall you are on
+         AND the wall you are travelling to, so arriving is arriving at
+         people already standing there. Leaving still slides them away with
+         their own column, which was the earlier ruling and still holds. */
+      const companyAt =
+        curWall().kind === "group" || (trip.active && wallAt(trip.dest)?.kind === "group")
+          ? 1
+          : 0;
+      company = view.reduced ? companyAt : lerp(company, companyAt, kd(2e-3, dt));
       /* ATTENTION EASES IN AND LETS GO. The target is the lean while the
          attention is live and zero once it lapses; both directions run
          through the same spring, so noticing and losing interest are the
@@ -5285,9 +6671,15 @@ function HomeExperience(): JSX.Element {
         dt *
         wornBeing().bobRate *
         (1 + 0.6 * clamp01(Math.abs(companion.off) / DRAG_LEAD_PX)) *
-        (1 + 0.45 * companion.pitch);
+        (1 + 0.45 * companion.pitch) *
+        /* the disposition, on the term it is most legible on. Multiplied with
+           the being's own rate rather than replacing it, so a slow creature in
+           a good mood is still slower than a quick one in a bad one — identity
+           underneath, disposition on top, the same order as the blink. */
+        (1 + companion.mood * MOOD_RATE);
       /* arrived before the data: the wall holds still until it can wake whole */
       if (trip.awaitingWake && !trip.active) tryWakeWall();
+
 
       /* the hold: down over about a second when the world has been left
          alone, and never below a fifth — still breathing, never frozen */
@@ -5310,7 +6702,6 @@ function HomeExperience(): JSX.Element {
       const selActive = selectedIdRef.current !== null;
       /* The field never stops drifting, even while an orb is focused — only
          the focused orb itself holds still (step() skips anything held). */
-      if (selActive) springs(sky, skyDeps);
       step(dt, now);
 
       /* presentation lerps: the unrelated sink into the haze, the kin light
@@ -5325,7 +6716,11 @@ function HomeExperience(): JSX.Element {
              so it runs through dim and glow rather than through a results
              list. The memory keeps its place in the field, which is the one
              thing a list can never show you. */
-          const hits = foundRef.current;
+          /* A SEARCH OUTRANKS A READING. Both speak the same sentence to the
+             field — "this one, and everything else sinks" — but a query is
+             something you asked for in words and reading a pattern is not,
+             so while a search is open it owns the light. */
+          const hits = foundRef.current ?? readingLitRef.current;
           const missed = hits !== null && !hits.has(b.sigId ?? b.id);
           const wantDim = missed || (selActive && b.hold === 0) ? 1 : 0;
           const wantGlow = b.hold !== 0 || (hits !== null && !missed) ? 1 : 0;
@@ -5424,9 +6819,38 @@ function HomeExperience(): JSX.Element {
       /* the companion. Its glow eases toward the real signal; its flare
          decays; it blinks; and when it is genuinely inspired, motes rise. */
       companion.inspNow = view.reduced ? companion.insp : lerp(companion.inspNow, companion.insp, 1 - Math.pow(0.02, dt));
+      /* THE GATHER, AND THE RELEASE AT THE END OF IT. The compression eases IN
+         (u·u) so the body sinks rather than snapping down, and the flare it is
+         holding fires at the bottom — the fast half of a slow-in, fast-out.
+         The body then comes back up on its own clock, under the light, which
+         is what makes the release read as a push rather than a cut. */
+      if (companion.antAt > 0) {
+        const u = clamp01((now - companion.antAt) / ANTICIPATE_MS);
+        companion.ant = u * u * ANTICIPATE_SQ;
+        if (u >= 1) {
+          companion.flare = Math.max(companion.flare, companion.antFlare);
+          companion.antAt = 0;
+          companion.antFlare = 0;
+        }
+        easing = true;
+      } else if (companion.ant > 0.0005) {
+        companion.ant = lerp(companion.ant, 0, kd(ANTICIPATE_EASE, dt));
+        easing = true;
+      } else if (companion.ant !== 0) {
+        companion.ant = 0;
+      }
       if (companion.flare > 0) {
         companion.flare = Math.max(0, companion.flare - dt / 0.7);
         easing = true;
+      }
+      /* THE DISPOSITION FALLS BACK TOWARD LEVEL. A half-life, not a linear
+         decay: what a mood does is fade, and the last of it should take longer
+         than the first. It is never a reason to keep the world awake — a
+         creature settling is exactly what an idle world looks like — so this
+         does not set `easing`. */
+      if (companion.mood !== 0) {
+        companion.mood *= Math.pow(0.5, (dt * 1000) / MOOD_HALF_LIFE_MS);
+        if (Math.abs(companion.mood) < 0.002) companion.mood = 0;
       }
       /* Something was captured today. That is a STATE, and states render —
          so it is a steady offset under the companion's light, not a twitch.
@@ -5447,7 +6871,11 @@ function HomeExperience(): JSX.Element {
            aliveness is its own, not a readout of yours. */
         if (companion.idleAt === 0) companion.idleAt = now + 22000 + Math.random() * 14000;
         if (now >= companion.idleAt) {
-          companion.idleAt = now + 30000 + Math.random() * 30000;
+          /* and it looks around more readily when it is up, less when it is
+             down — the willingness to be interested, which is the thing a
+             mood most visibly changes */
+          companion.idleAt =
+            now + (30000 + Math.random() * 30000) * (1 - companion.mood * MOOD_GLANCE);
           const subject = idleSubject();
           if (subject) {
             /* it looks at a MEMORY of yours, chosen for being alive and near.
@@ -5468,7 +6896,7 @@ function HomeExperience(): JSX.Element {
             companion.eyeTX = (Math.random() - 0.5) * 1.6;
           }
         }
-        const forming = sky.nebs.length > 0;
+        const forming = false; /* nothing forms overhead since the sky went */
         if (forming) {
           if (companion.glanceAt === 0) companion.glanceAt = now + 4000;
           if (now >= companion.glanceAt) {
@@ -5520,7 +6948,10 @@ function HomeExperience(): JSX.Element {
              and on a machine's wall the jitter is quantized out of it, so the
              blink arrives on a beat rather than whenever. A metronome is what
              a clock looks like from the outside. */
-          const base = wornBeing().blinkMs;
+          /* LOW MOOD BLINKS SLOWER. The being's own interval is still the
+             thing being bent — identity first, disposition on top of it — so
+             two creatures in the same mood still blink at their own rates. */
+          const base = wornBeing().blinkMs * (1 - companion.mood * MOOD_BLINK);
           const jitter = 0.8 + Math.random() * 0.4;
           companion.blinkAt = now + base * lerp(jitter, 1, clamp01(mech));
           companion.blink = 1;
@@ -5559,66 +6990,42 @@ function HomeExperience(): JSX.Element {
         }
       }
 
-      /* which signals could be joined — recomputed only when the set itself
-         changes, so a still sky costs nothing */
-      {
-        let sig = "";
-        for (const n of sky.nebs) if (n.pairable) sig += n.id + "|";
-        if (sig !== companion.pairSig) {
-          companion.pairSig = sig;
-          setPairableIds(new Set(sky.nebs.filter((n) => n.pairable).map((n) => n.id)));
-        }
+      /* One discrete fact leaves the loop for React, and only when it
+         changes: the camera stands over a wall that has no dial, so the dial
+         fades away. Read off the camera rather than off arrival, so it goes
+         as the wall slides in. (There used to be a second — whether the
+         camera was in the sky — and there is no sky.) */
+      /* THE LEGEND BELONGED TO THE GROUND IT EXPLAINED — AND IT IS NOT A
+         LEGEND ANY MORE.
+         It was pushed to React from here so the corner rows could come up with
+         the field and go away with it, on the reasoning that a key to the orbs
+         answers nobody at headquarters. That was true of a key. It is a CHOICE
+         now — the rows moved you between the grounds in a room the moment they
+         stopped decoding hues — and a choice about the wall you are standing
+         on is not a fact about the ground you are hovering over. It is mounted
+         at every height below the sky instead, so nothing needs pushing here. */
+      /* AT EVERY HEIGHT. This was `!inField || …`, so a wall's history existed
+         only once you had descended into its ground — the timeline was a
+         thing you had to go and find rather than a permanent fact about where
+         you are. The only reason left to hide it is that this wall HAS no
+         history to wind, which is data, not altitude. */
+      const nowAway = !hasDial(wallAt(Math.round(cam.x / Math.max(view.w, 1))).kind);
+      /* and whether the ground is what the camera is standing in — read off
+         the camera, so it changes as the descent happens rather than on
+         arrival */
+      const nowInField = cam.y > view.layout.maxCam * 0.5;
+      if (nowInField !== hinted.inField) {
+        hinted.inField = nowInField;
+        setInField(nowInField);
       }
-      /* Two discrete facts leave the loop for React, and only when they
-         change: whether the camera is in the sky (the dial has no meaning
-         there) and which nebulae have been drawn together. */
-      const nowInSky = cam.y < view.layout.minCam * 0.45;
-      if (nowInSky !== sky.shown) {
-        sky.shown = nowInSky;
+      const nowInSky = cam.y < view.layout.minCam * 0.5;
+      if (nowInSky !== hinted.inSky) {
+        hinted.inSky = nowInSky;
         setInSky(nowInSky);
       }
-      /* and a third: the camera stands over a wall that has no dial, so the
-         dial fades away — exactly as it does in the sky. Read off the camera
-         rather than off arrival, so it goes as the wall slides in. */
-      /* AND TIME ONLY MEANS SOMETHING TO THE FIELD.
-         The dial lay across the bottom edge at all times — but in this layout
-         HORIZONTAL means "whose wall", and the dial means "when". Two
-         different horizontal meanings on the same edge, and the bottom edge
-         belongs to the axis. There is also nothing up here to wind: the sky
-         holds signals that are still forming and headquarters holds one
-         sentence, neither of which has a history to scrub. So it comes up
-         with the field and goes away with it. */
-      const inField = cam.y > view.layout.fieldTop * 0.5;
-      /* THE LEGEND BELONGS TO THE GROUND IT EXPLAINS.
-         It is a key to the orbs, so it exists where the orbs are. Standing at
-         headquarters reading one sentence, or up in the sky among signals,
-         a list of whose-colour-is-whose answers a question nobody is asking —
-         it was just chrome in the corner. It comes up with the field and goes
-         away with it, exactly as the timeline does. */
-      if (inField !== hinted.inField) {
-        hinted.inField = inField;
-        setInField(inField);
-      }
-      const nowAway =
-        !inField || !hasDial(wallAt(Math.round(cam.x / Math.max(view.w, 1))).kind);
       if (nowAway !== hinted.dialAway) {
         hinted.dialAway = nowAway;
         setDialAway(nowAway);
-      }
-      if (sky.nebs.length > 1) {
-        const sig = computeClusters(sky);
-        if (sig !== sky.clusterSig) {
-          sky.clusterSig = sig;
-          setClusterSig(sig);
-          /* who whispers: the members of any cluster, parsed once per change */
-          sky.clusterMembers = new Set();
-          for (const part of sig.split("|"))
-            if (part) for (const id of part.split("+")) sky.clusterMembers.add(id);
-        }
-      } else if (sky.clusterSig !== "") {
-        sky.clusterSig = "";
-        setClusterSig("");
-        sky.clusterMembers = new Set();
       }
 
       draw(now);
@@ -5663,8 +7070,7 @@ function HomeExperience(): JSX.Element {
     /* Nothing moved while an orb was focused, so nothing needs to re-settle:
        releasing lifts the haze and leaves the pile exactly as it was. */
     function release() {
-      releaseHolds(sky, skyDeps);
-      sky.selSat = null;
+      releaseHolds();
       selectedIdRef.current = null;
       setSelectedId(null);
       /* Nothing to give back: opening the panel moved nothing, so closing it
@@ -5688,8 +7094,7 @@ function HomeExperience(): JSX.Element {
         release();
         return;
       }
-      releaseHolds(sky, skyDeps);
-      sky.selSat = null;
+      releaseHolds();
       selectedIdRef.current = id;
       setSelectedId(id);
       /* IT LOOKS AT WHAT YOU TAPPED.
@@ -5700,7 +7105,7 @@ function HomeExperience(): JSX.Element {
          not rearrangement, and the layout stays where you left it. */
       attendTo(b.x, b.y);
       b.hold = 1;
-      sky.heldBall = b;
+      held.ball = b;
       /* the companion brightens in sympathy with an alive bubble */
       if (b.alive > 0.55) companion.flare = Math.max(companion.flare, 0.6);
       /* Its kin are NOT lit and NOT moved. Exactly one thing on screen is
@@ -5708,33 +7113,32 @@ function HomeExperience(): JSX.Element {
       wake();
     }
 
+    /** Is the pointer over the companion? It sits in front of the field. */
     /**
-     * Tapping a SATELLITE is tapping the memory it stands for. The same
-     * reading panel opens — and where that memory also has a place in a field
-     * below, it lights there too, because it is the same memory and not a
-     * copy of one. Another member's save is never fetched: its preview and its
-     * owner are all of it that is ours to show.
+     * WHICH MEMBER THE POINTER IS ON, IF ANY (founder, 2026-08-27).
+     *
+     * The seats are rebuilt by the draw pass every frame it paints company,
+     * so this asks the geometry that was actually painted rather than
+     * re-deriving it — the same rule the orb hit test follows, and the reason
+     * the pointer never lies about which being it would take.
      */
-    function selectSat(s: Sat) {
-      if (selectedIdRef.current === s.id) {
-        release();
-        return;
+    function memberAt(cx: number, wy: number): string | null {
+      for (const seat of companySeats) {
+        const dx = cx - seat.x;
+        const dy = wy - seat.y;
+        if (dx * dx + dy * dy <= seat.r * seat.r) return seat.id;
       }
-      releaseHolds(sky, skyDeps);
-      sky.selSat = s;
-      s.held = true;
-      selectedIdRef.current = s.id;
-      setSelectedId(s.id);
-      const b = findBall(s.id);
-      if (b) {
-        b.hold = 1;
-        sky.heldBall = b;
-        if (b.alive > 0.55) companion.flare = Math.max(companion.flare, 0.6);
-      }
+      return null;
+    }
+
+    /** Notice a member: it comes up in light and says its name, then lets go. */
+    function noticeMember(id: string) {
+      if (companyNear.id === id && companyNear.until > performance.now() + 500) return;
+      companyNear.id = id;
+      companyNear.until = performance.now() + COMPANY_NOTICE_MS;
       wake();
     }
 
-    /** Is the pointer over the companion? It sits in front of the field. */
     function overChar(cx: number, wy: number): boolean {
       const dx = cx - (view.w / 2 + companion.off);
       const dy = wy - companion.y;
@@ -5773,73 +7177,33 @@ function HomeExperience(): JSX.Element {
       return found;
     }
 
-    /**
-     * What is under the pointer up in the orbits — in the exact reverse of the
-     * paint order, so the satellite whose pixels are on top answers: the NEAR
-     * half before the far one, and within a half the nearest first. Both loops
-     * are reversed, and the inner one walks satPass's own `satOrd`: one
-     * ordering, read forward to draw and backward to pick, so the two can
-     * never disagree about which orb is on top.
-     */
-    function satAt(cx: number, cy: number): Sat | null {
-      /* only the subject has satellites, so there is only one system to test
-         — and a retracting one is on its way out and answers nothing */
-      const n = sky.focusNeb;
-      if (!n || n.gone > 0.4 || n.condense < 0.99) return null;
-      const wx = cx + cam.x;
-      const wy = cy + cam.y;
-      for (let half = 0; half < 2; half++) {
-        const near = half === 0;
-        for (let k = n.satOrd.length - 1; k >= 0; k--) {
-          const s = n.sats[n.satOrd[k]];
-          if ((s.front > 0) !== near) continue;
-          /* half-emerged is half under the words: it answers once it is out */
-          if (s.em < 0.5) continue;
-          const dx = s.x - wx;
-          const dy = s.y - wy;
-          const rr = s.dr + 4;
-          if (dx * dx + dy * dy <= rr * rr) return s;
-        }
-      }
-      return null;
-    }
-
-    /**
-     * Nearest-first across BOTH populations, by the same depth rule the paint
-     * order obeys: whichever sits lower in the world is the nearer, and the
-     * nearer answers. (The sky and the fields are a section apart, so this
-     * only ever has one candidate — but it is decided by depth rather than by
-     * which array happened to be walked first.)
-     */
-    function pickAt(cx: number, cy: number): { ball: Ball | null; sat: Sat | null } {
-      const sat = satAt(cx, cy);
-      const ball = hitAt(cx, cy);
-      if (sat && ball) return ball.y >= sat.y ? { ball, sat: null } : { ball: null, sat };
-      return { ball, sat };
-    }
-
     function tap(cx: number, cy: number) {
       /* mid-travel the page is the traveler's: taps wait for arrival */
       if (trip.active) return;
-      /* the companion answers first: it sits in front of the field */
+      /* the companion answers first: it sits in front of the field — and
+         what it answers with is the weather, its own lines only when the
+         record has nothing to tell */
       if (overChar(cx, cy + cam.y)) {
         companion.flare = 1;
-        setCharSay(sayLine());
+        sayTheWeatherRef.current(sayLine);
         wake();
         return;
       }
-      const hit = pickAt(cx, cy);
-      if (hit.sat) {
-        selectSat(hit.sat);
+      /* a member of the room answers with who it is — and nothing more.
+         Whose memories these are is a fact about the room; what they think
+         is on their own wall, which is a journey and not a tap. */
+      const member = memberAt(cx, cy + cam.y);
+      if (member) {
+        noticeMember(member);
         return;
       }
-      if (hit.ball) {
-        select(hit.ball.id);
+      const ball = hitAt(cx, cy);
+      if (ball) {
+        select(ball.id);
         return;
       }
-      /* bare sky: the subject gives its evidence back and everything returns
-         to rest — the same tap that releases a focused orb down in the field */
-      if (sky.focusNeb) focusOn(sky, skyDeps, null);
+      /* bare ground: a focused orb gives the light back and everything
+         returns to rest */
       if (selectedIdRef.current) release();
     }
 
@@ -5893,51 +7257,6 @@ function HomeExperience(): JSX.Element {
         /* a synthetic or already-released pointer: the window listeners still
            carry the gesture, they just do not get the off-window guarantee */
       }
-      /* A press on a nebula SENTENCE grabs its cloud — the words visually
-         ARE the cloud — and a press on the bare cloud does the same:
-         proximity is how candidates are gathered into one ambition. */
-      let nb: Neb | null = null;
-      const nebEl = e.target instanceof Element ? e.target.closest(".jar-neb") : null;
-      if (nebEl) {
-        for (const [id, el] of measured.nebEls.current) {
-          if (el === nebEl) {
-            const cand = sky.nebs.find((q) => q.id === id) ?? null;
-            if (cand && !(cand.gone > 0.4 || cand.condense < 0.99)) nb = cand;
-            break;
-          }
-        }
-      }
-      /* A satellite is NEARER than the cloud it orbits, and part of its
-         ellipse passes over the cloud's own handle — so it answers first, or
-         a press there would start a drag and the tap that opens the memory
-         would never happen. The sentence above keeps its precedence: the
-         words visually ARE the cloud. */
-      const onSat = nb ? null : satAt(e.clientX, e.clientY);
-      if (!nb && !onSat) nb = cam.y < view.layout.minCam * 0.3 ? nebAt(e.clientX, e.clientY) : null;
-      if (nb) {
-        /* a cloud on the move carries no whisper: the name belongs to the
-           memory under the pointer, and the pointer now owns the cloud */
-        sky.hoverSat = null;
-        sayWho(sky, skyDeps, null);
-        gesture.nebDrag = nb;
-        gesture.nebMoved = false;
-        nb.dragging = true;
-        gesture.nebOffX = nb.x - (e.clientX + cam.x);
-        gesture.nebOffY = nb.y - (e.clientY + cam.y);
-        nb.dragX = nb.x;
-        nb.dragY = nb.y;
-        /* a press is not yet a drag: it becomes one at the same six pixels
-           the rest of the page uses, and until then it is still a TAP */
-        gesture.downX = e.clientX;
-        gesture.downY = e.clientY;
-        wake();
-        return;
-      }
-      if (onSat) {
-        /* touching one raises its owner's name too, not only hovering */
-        sky.hoverSat = onSat;
-        sayWho(sky, skyDeps, onSat);
-      }
       gesture.down = true;
       gesture.dragging = false;
       gesture.axis = 0;
@@ -5960,7 +7279,7 @@ function HomeExperience(): JSX.Element {
          press-to-release interval, and it is free when the background sweep
          has already been here. Another member's room orb is never fetched —
          its preview is all that is ours to show. */
-      const warm = onSat ? findBall(onSat.id) ?? null : hitAt(e.clientX, e.clientY);
+      const warm = hitAt(e.clientX, e.clientY);
       if (warm && (warm.col === undefined || warm.own))
         void loadDetailRef.current(warm.sigId ?? warm.id);
       /* AND THE LIGHT ANSWERS AT TOUCHDOWN. The whole contact term was built
@@ -6071,23 +7390,17 @@ function HomeExperience(): JSX.Element {
       if (performance.now() < companion.attendUntil) return; /* it is looking at something */
       companion.eyeTX = clamp((dx / d) * 2, -2, 2);
       companion.eyeTY = clamp((dy / d) * 2, -2, 2);
-      /* which cloud the pointer rests on: a clustered member's whispered
-         sentence rises back to full while it is touched */
-      sky.hoverNeb = cam.y < view.layout.minCam * 0.3 ? nebAt(e.clientX, e.clientY) : null;
-      /* and which satellite: whose memory it is rises beside it, one fade */
-      if (!gesture.nebDrag) {
-        sky.hoverSat = satAt(e.clientX, e.clientY);
-        sayWho(sky, skyDeps, sky.hoverSat);
-      }
       /* The cursor says what a tap would do. Every other move is plenty for a
          couple of dozen orbs, and it is the same hit test the tap uses, so
          the pointer never lies about which orb it would take. The cursor
          lives on the ROOT: the canvas is pointer-events:none, so it is never
          the element the cursor resolves from. */
       if ((gesture.hoverTick++ & 1) === 0 && !gesture.dragging) {
+        /* a member under the pointer says who it is, for a beat */
+        const member = memberAt(e.clientX, e.clientY + cam.y);
+        if (member) noticeMember(member);
         const over =
-          sky.hoverNeb !== null ||
-          sky.hoverSat !== null ||
+          member !== null ||
           overChar(e.clientX, e.clientY + cam.y) ||
           hitAt(e.clientX, e.clientY) !== null;
         const want = over ? "pointer" : "";
@@ -6100,14 +7413,6 @@ function HomeExperience(): JSX.Element {
     const onMove = (e: PointerEvent) => {
       onHover(e);
       if (gesture.ownerId !== null && e.pointerId !== gesture.ownerId) return;
-      if (gesture.nebDrag) {
-        if (!gesture.nebMoved && Math.abs(e.clientX - gesture.downX) + Math.abs(e.clientY - gesture.downY) > TAP_SLOP)
-          gesture.nebMoved = true;
-        gesture.nebDrag.dragX = e.clientX + cam.x + gesture.nebOffX;
-        gesture.nebDrag.dragY = e.clientY + cam.y + gesture.nebOffY;
-        wake();
-        return;
-      }
       if (!gesture.down) return;
       if (!gesture.dragging && Math.abs(e.clientX - gesture.downX) + Math.abs(e.clientY - gesture.downY) > TAP_SLOP) {
         gesture.dragging = true;
@@ -6182,42 +7487,6 @@ function HomeExperience(): JSX.Element {
          is a finished gesture, and the capture and the identity go together —
          the cloud-drag paths used to return without either. */
       releaseOwner(e.pointerId);
-      if (gesture.nebDrag) {
-        const n = gesture.nebDrag;
-        n.dragging = false;
-        gesture.nebDrag = null;
-        if (!gesture.nebMoved) {
-          /* A PRESS THAT NEVER MOVED IS A TAP. The candidate becomes the
-             subject and its evidence emerges; tapping the subject again gives
-             the sky back. Nothing is pinned and nothing is persisted — the
-             cloud did not go anywhere. */
-          focusOn(sky, skyDeps, sky.focusNeb === n ? null : n);
-          return;
-        }
-        /* dragged off the top of the sky: it thins and disperses. Locally
-           only — there is no endpoint to tell that it was let go of. */
-        if (n.y < view.layout.minCam + n.r * 0.35) {
-          n.gone = 0.01;
-          /* A DISPERSING CANDIDATE IS NO LONGER THE SUBJECT OF ANYTHING. The
-             same teardown adoption's condense and syncSky already obey: a
-             memory being read from a system that is leaving has nothing left
-             to sit beside, and a subject that is not there still holds every
-             other candidate sunk at FOCUS_DIM for as long as it is the
-             subject. focusOn rather than a bare assignment, so focus0/em0 are
-             re-based and the retraction eases out with the dispersal instead
-             of snapping. */
-          if (sky.selSat && n.sats.includes(sky.selSat)) release();
-          if (sky.focusNeb === n) focusOn(sky, skyDeps, null);
-        } else {
-          /* it keeps where it was put — through reloads, too */
-          n.pinned = true;
-          n.homeX = n.x;
-          n.homeY = n.y;
-        }
-        persistSky(sky, view);
-        wake();
-        return;
-      }
       if (!gesture.down) return;
       gesture.down = false;
       if (gesture.axis === 2) {
@@ -6279,29 +7548,11 @@ function HomeExperience(): JSX.Element {
       gesture.interruptedSnap = false;
       gesture.dragging = false;
       gesture.axis = 0;
-      /* a finger has no hover to leave with: the name it raised goes on lift */
-      if (e.pointerType !== "mouse") {
-        sky.hoverSat = null;
-        sayWho(sky, skyDeps, null);
-      }
       wake();
     };
     const onCancel = (e: PointerEvent) => {
       if (gesture.ownerId !== null && e.pointerId !== gesture.ownerId) return;
       gesture.pressId = null;
-      sky.hoverSat = null;
-      sayWho(sky, skyDeps, null);
-      if (gesture.nebDrag) {
-        gesture.nebDrag.dragging = false;
-        /* a cancelled press that never moved never claimed a new place */
-        if (gesture.nebMoved) {
-          gesture.nebDrag.pinned = true;
-          gesture.nebDrag.homeX = gesture.nebDrag.x;
-          gesture.nebDrag.homeY = gesture.nebDrag.y;
-          persistSky(sky, view);
-        }
-        gesture.nebDrag = null;
-      }
       if (gesture.axis === 2) {
         cam.xTarget = trip.col * view.w;
         cam.xBack = true;
@@ -6324,7 +7575,16 @@ function HomeExperience(): JSX.Element {
     const onWheel = (e: WheelEvent) => {
       /* the panel scrolls its own content, and so does a long capture in the
          mouth; neither ever drives the camera */
-      if (e.target instanceof Element && e.target.closest(".jar-panel, .jar-mouth")) return;
+      /* `.jar-mouth-slot--note` by name, not by living inside `.jar-mouth`:
+         the drawer is portalled to the world's root so that nothing moving can
+         displace it, which took it out of the layer this selector used to find
+         it by — and the wheel started driving the camera while you were trying
+         to scroll a page of pasted text. */
+      if (
+        e.target instanceof Element &&
+        e.target.closest(".jar-panel, .jar-mouth, .jar-mouth-slot--note")
+      )
+        return;
       e.preventDefault();
       if (trip.active) return; /* mid-travel the wheel waits */
       const nowW = performance.now();
@@ -6375,6 +7635,19 @@ function HomeExperience(): JSX.Element {
       }
       const mine = step !== 0 || horiz || e.key === "Escape";
       if (!mine) return;
+      /* A FIELD'S KEYS ARE THE FIELD'S. The mouth stops its own keys from
+         reaching here, and the card's editor did not — so an arrow pressed
+         while editing a memory moved the caret AND travelled to the next
+         wall. Escape stays ours: leaving is what it means everywhere. */
+      const on = e.target;
+      if (
+        e.key !== "Escape" &&
+        on instanceof Element &&
+        (on.closest("input, textarea") !== null ||
+          (on as HTMLElement).isContentEditable === true)
+      ) {
+        return;
+      }
       /* the world handles this key, so the browser does not ALSO handle it:
          a native scroll or a focus move underneath the layout's own move is a
          second thing happening, and it reads as a fight */
@@ -6390,13 +7663,17 @@ function HomeExperience(): JSX.Element {
       if (e.key === "Escape") {
         /* one layer at a time: the reading first, then the subject's evidence */
         if (selectedIdRef.current) release();
-        else if (sky.focusNeb) focusOn(sky, skyDeps, null);
         return;
       }
       /* Left and right are the traveler's keys — they pass through even
          mid-flight, because travel() itself ignores the same direction and
-         treats the opposite one as a REVERSAL back to where it left from. */
+         treats the opposite one as a REVERSAL back to where it left from.
+         UNLESS A CARD IS OPEN: then they page the reading (founder,
+         2026-08-27), because the memory in your hand is the nearer subject
+         and stepping through what you kept must not become travelling to
+         somebody else's wall. */
       if (horiz) {
+        if (panelArrowRef.current(e.key === "ArrowRight" ? 1 : -1)) return;
         travel(e.key === "ArrowRight" ? 1 : -1);
         return;
       }
@@ -6483,14 +7760,84 @@ function HomeExperience(): JSX.Element {
     measure();
     /* `measure` is the first moment `vw` is real, so the horizontal camera can
        only be placed here — before it, `col * vw` is a column times one pixel. */
-    cam.x = trip.col * view.w;
-    cam.xTarget = cam.x;
+    /* NOT UNDER A CROSSING THAT IS STILL RUNNING. This is unconditional on a
+       first open, and has to be — before `measure()` there is no real viewport
+       and `col * vw` is a column times one pixel. But a rebuild that resumed a
+       crossing already has a camera partway across, and re-placing it here
+       restarts the slide from the column it set off from. `measure()` sets
+       `xTarget` from `trip.dest` on its own while a crossing is live. */
+    if (!trip.active) {
+      cam.x = trip.col * view.w;
+      cam.xTarget = cam.x;
+    }
     /* Resumed mid-journey: nobody ran the arrival, so run it now — the wall
        needs its ground solved, poured and woken exactly as a glide would. */
     if (resumedAt !== null) arriveColumn();
+    /*
+     * A ROOM THAT HAS NOT WOKEN YET HAS TO KEEP TRYING.
+     *
+     * `ready` gates the ENTIRE headquarters block — eyebrow, poster, forming
+     * line — on `wokenGroups.has(id)`, and the only thing that ever adds to
+     * that set is `tryWakeWall`. It is reached from exactly two places:
+     * `arriveColumn`, and the tick while `trip.awaitingWake` is true.
+     *
+     * Both are lost in the same instant. Arriving in a room whose field is
+     * still in flight sets `awaitingWake` and returns; the fetch then resolves
+     * and calls `setGroupFieldTick`, which rebuilds this effect — so `trip` is
+     * replaced by a fresh one with `awaitingWake` false, and `headingRef` was
+     * already cleared by the arrival, so the `resumedAt` branch above does not
+     * run either. Nothing asks again. The room stays unwoken and its
+     * headquarters renders NOTHING: no name, no sentence, not even the
+     * "Forming — nothing read together yet" that `deriveGroupChrome` prepared
+     * for exactly this case. It stays blank until you travel away and back.
+     *
+     * The rebuild that loses the flag is the same event that makes the answer
+     * available, so setting it on setup is not a retry loop — it is one
+     * question asked at the only moment it can now be answered. `tryWakeWall`
+     * clears the flag itself, and `groupVisitedRef` keeps the wake to once.
+     */
+    else if (curWall().kind === "group") trip.awaitingWake = true;
     measure();
     if (view.reduced) settleInstantly();
-    else primePour();
+    else if (carryRef.current) {
+      /*
+       * A REBUILD IS NOT AN ARRIVAL.
+       *
+       * `primePour()` with no argument stages the WHOLE archive, and on a
+       * rebuild that means every memory you were already looking at falls in
+       * from above again — the pour is how the field explains that something
+       * has arrived, and nothing has. But the rebuild happened BECAUSE there
+       * is new data, and those memories genuinely are arriving, so the answer
+       * is not to skip the pour: it is to pour only what this run did not
+       * already have.
+       *
+       * Identity is the ball's id. The objects are rebuilt from scratch every
+       * run, so the id is the only thing that survives, and it is what says
+       * whether a memory is new to the FIELD rather than new to this array.
+       */
+      const carried = carryRef.current.balls;
+      const fresh: Ball[] = [];
+      for (const b of list) {
+        const was = carried.get(b.id);
+        if (!was) {
+          fresh.push(b);
+          continue;
+        }
+        b.x = was.x;
+        b.y = was.y;
+        b.arrive = 1;
+        b.spawnAt = -1;
+        /* recomputed, never carried: `ground` is effect-local and resets, so a
+           carried `active` could disagree with whose ground is being stood in */
+        b.active = b.capturedMs <= TRef.current && onThisWall(b);
+      }
+      if (fresh.length > 0) primePour(fresh);
+      else {
+        pour.active = false;
+        pour.done = true;
+      }
+      computeInspiration();
+    } else primePour();
 
     simApiRef.current = {
       /**
@@ -6544,12 +7891,36 @@ function HomeExperience(): JSX.Element {
        * long it holds. Nothing new is drawn; what differs is the gesture.
        */
       acknowledge: (moment: Moment = "touch") => {
+        /*
+         * WHAT THIS DID TO THE CREATURE, BEFORE WHAT IT MADE IT DO.
+         *
+         * Set here rather than inside the arms below, so a moment added later
+         * cannot forget to say what it means — the same reason `attachEvidence`
+         * holds the lock check at the write. Clamped to ±1 so a run of keeps
+         * cannot wind the disposition somewhere it will not come back from,
+         * and skipped entirely under reduced motion, where every rhythm it
+         * bends is silent and the honest value is none.
+         */
+        if (!view.reduced) {
+          const felt = MOOD_OF[moment];
+          if (felt !== undefined) {
+            companion.mood = clamp(companion.mood + felt, -1, 1);
+          }
+        }
         switch (moment) {
           case "kept":
             /* SOMETHING NEW EXISTS. The biggest flare in the world, and the
                eyes go DOWN to the ground where it landed — the creature looks
-               at what was just made rather than at you making it. */
-            companion.flare = Math.max(companion.flare, 0.95);
+               at what was just made rather than at you making it.
+               IT GATHERS FIRST. The eyes travel during the wind-up, so the
+               look is already committed when the light arrives — the body
+               sinks toward the thing, then answers it. Under reduced motion
+               the gather is silent (it is rhythm) and the flare is immediate,
+               which is the same rule the bob and the lean already follow. */
+            if (!view.reduced) {
+              companion.antAt = performance.now();
+              companion.antFlare = 0.95;
+            } else companion.flare = Math.max(companion.flare, 0.95);
             companion.eyeTX = 0;
             companion.eyeTY = 1.5;
             companion.attendUntil = performance.now() + 1500;
@@ -6558,8 +7929,14 @@ function HomeExperience(): JSX.Element {
           case "answered":
             /* YOU TOLD IT SOMETHING TRUE ABOUT YOURSELF. It looks UP at the
                sky it read you from, and holds longer than anything else here:
-               this is the slow one, because being understood is not a ping. */
-            companion.flare = Math.max(companion.flare, 0.72);
+               this is the slow one, because being understood is not a ping.
+               It gathers too — the only other moment loud enough to deserve a
+               wind-up. The rest stay immediate on purpose: a creature that
+               winds up for a tap is a creature that is never simply present. */
+            if (!view.reduced) {
+              companion.antAt = performance.now();
+              companion.antFlare = 0.72;
+            } else companion.flare = Math.max(companion.flare, 0.72);
             companion.eyeTX = 0;
             companion.eyeTY = -1.6;
             companion.attendUntil = performance.now() + 2800;
@@ -6651,7 +8028,7 @@ function HomeExperience(): JSX.Element {
        */
       place: () => {
         const b = selectedIdRef.current ? findBall(selectedIdRef.current) : undefined;
-        if (!b && !sky.selSat) return null;
+        if (!b) return null;
         const M = 20; /* never closer than this to an edge */
         const w = Math.min(Math.max(360, Math.min(view.w * 0.3, 500)), view.w - 48);
         const cx = view.w / 2; /* the companion holds the middle of the frame */
@@ -6669,38 +8046,58 @@ function HomeExperience(): JSX.Element {
         if (left < M || left + w > view.w - M) {
           return { left: Math.round((view.w - w) / 2), top: null, bottom: Math.round(view.h - (view.h - M)) };
         }
-        /* vertically it meets the companion at the shoulder and reads
-           downward, clamped so a long memory never leaves the frame */
-        const top = clamp(cy - companion.size * 0.34, 56, Math.max(56, view.h * 0.52));
+        /*
+         * AND WHEN THE COMPANION IS NOT IN THE FRAME, IT MEETS THE MEMORY.
+         *
+         * "Beside the companion" is the right rule only while the companion
+         * can be seen. Down in the field it cannot: `cy` is far above the
+         * viewport, the clamp pins the card to 56px, and it opens hard against
+         * the top edge — nowhere near the orb, and nowhere near the creature
+         * either, which is the one thing this placement exists to avoid.
+         *
+         * So the anchor falls back to the orb itself. The gesture the block
+         * above describes — the orb, the companion turned toward it, then what
+         * it found — is still what happens whenever all three are on screen;
+         * this only decides where to read from when the middle term is gone.
+         *
+         * The ceiling is solved from the card's own declared height rather
+         * than a flat 52% of the viewport, or a memory beside a low orb gets
+         * pulled back up to the middle for no reason a reader can see.
+         */
+        const inFrame = cy > 80 && cy < view.h - 80;
+        const anchorY = inFrame ? cy : b ? b.y - cam.y : view.h * 0.5;
+        const h = Math.min(view.h * 0.62, 560);
+        const maxTop = Math.max(56, view.h - h - M);
+        const top = clamp(anchorY - companion.size * 0.34, 56, maxTop);
         return { left: Math.round(left), top: Math.round(top), bottom: null };
       },
       toTop: () => {
         aimTo(0, 0);
       },
-      revealMemory: (inspirationId: string) => {
-        const b = findBall(inspirationId);
-        if (!b) return;
-        /* bring it to a comfortable reading height rather than to the exact
-           centre: the companion sits mid-frame and the memory should land
-           beside it, not behind it */
-        const want = clamp(b.y - view.h * 0.5, view.layout.minCam, view.layout.maxCam);
-        if (Math.abs(want - cam.y) > 8) {
-          gesture.snapAt = 0;
-          cam.vel = 0;
-          aimTo(want, 0);
-        }
-        select(inspirationId);
-      },
-      /* the signal line's glide: programmatic, and exempt from the snap.
-         Only the personal column has a sky to glide into. */
+      /* UP TO WHAT IS TIMELESS — programmatic, exempt from the snap, from
+         EVERY column. This refused any column but your own, with the comment
+         "a room's values are not a thing this world claims to hold" — and the
+         founder reversed that claim (2026-08-27: "philosophies & value should
+         be available on every page since every room will eventually have its
+         own"). The sky over a room is empty today and says so honestly, in
+         the room's own name — a place is honest where a locked door is not,
+         which is the same reasoning the way up has always carried. */
       toSky: () => {
-        if (trip.col !== 0 || trip.active) return;
+        if (trip.active) return;
         gesture.snapAt = 0;
         cam.vel = 0;
         aimTo(view.layout.minCam, 0);
       },
+      /* DOWN TO THE GROUND, the same glide aimed the other way. It is what the
+         count of what you have kept opens: a line that says how much is down
+         there is a promise that you can go and look. */
+      toGround: () => {
+        if (trip.active) return;
+        gesture.snapAt = 0;
+        cam.vel = 0;
+        aimTo(view.layout.maxCam, 0);
+      },
       travel,
-      syncSky,
       /**
        * A reflection was kept. This is not a celebration animation: one more
        * answered reflection and a touch just now are exactly what the real
@@ -6934,47 +8331,6 @@ function HomeExperience(): JSX.Element {
         }
         go();
       },
-      joinTo: (id: string) => {
-        const n = sky.nebs.find((q) => q.id === id);
-        if (!n) return;
-        let best: Neb | null = null;
-        let bestD = Infinity;
-        for (const m of sky.nebs) {
-          if (m === n || m.gone > 0) continue;
-          const d = (m.x - n.x) ** 2 + (m.y - n.y) ** 2;
-          if (d < bestD) {
-            bestD = d;
-            best = m;
-          }
-        }
-        if (!best) return;
-        /* placed just inside the distance the release actually clusters at,
-           so the existing pass does the joining — one rule, not two */
-        const dx = n.x - best.x;
-        const dy = n.y - best.y;
-        const d = Math.hypot(dx, dy) || 1;
-        const want = (n.r + best.r) * 0.42;
-        n.homeX = n.x = best.x + (dx / d) * want;
-        n.homeY = n.y = best.y + (dy / d) * want;
-        n.haloX = n.x;
-        n.haloY = n.y;
-        n.pinned = true;
-        companion.flare = Math.max(companion.flare, view.reduced ? 0 : 0.4);
-        wake();
-      },
-      condense: (id: string) => {
-        const n = sky.nebs.find((q) => q.id === id);
-        if (!n) return;
-        n.condenseAt = performance.now();
-        /* THE HIERARCHY HAD ITS SIGN FLIPPED. Poking the companion flared it
-           to nearly full and changed nothing; adopting an ambition — the
-           rarest and least reversible act here — changed everything and
-           produced no light at all. */
-        companion.flare = 1;
-        /* its satellites spiral in with it, so nothing is left to read beside */
-        if (sky.selSat && n.sats.includes(sky.selSat)) release();
-        wake();
-      },
       /**
        * The invariant, counted rather than glanced at.
        *
@@ -7064,6 +8420,8 @@ function HomeExperience(): JSX.Element {
             let rMax = 0;
             let aliveMax = 0;
             let arriveMin = Infinity;
+            let dimmed = 0;
+            let glowing = 0;
             for (const b of list) {
               if (!onThisWall(b)) continue;
               if (b.active) active++;
@@ -7071,6 +8429,9 @@ function HomeExperience(): JSX.Element {
               rMax = Math.max(rMax, b.r);
               aliveMax = Math.max(aliveMax, b.alive);
               arriveMin = Math.min(arriveMin, b.arrive);
+              /* mid-ease values are neither yet; half is the crossing */
+              if (b.dim > 0.5) dimmed++;
+              if (b.glow > 0.5) glowing++;
             }
             return {
               active,
@@ -7078,8 +8439,18 @@ function HomeExperience(): JSX.Element {
               rMax: Math.round(rMax),
               aliveMax: Number(aliveMax.toFixed(3)),
               arriveMin: Number(arriveMin.toFixed(2)),
+              dimmed,
+              glowing,
             };
           })(),
+          /* the same question asked upward: how far the sky has leaned into
+             headquarters. There is nothing IN it to elect any more, so the
+             scalar is the whole answer — and it still tells a rip-out from a
+             quiet day, which is what this was always for. */
+          sky: {
+            lean: Number(skyPeek().toFixed(3)),
+            minCam: Math.round(view.layout.minCam),
+          },
         };
       },
     };
@@ -7098,6 +8469,40 @@ function HomeExperience(): JSX.Element {
       window.removeEventListener("keydown", onKey);
       document.removeEventListener("visibilitychange", onVis);
       mq.removeEventListener("change", onMq);
+      /* HAND THE WORLD TO WHOEVER REBUILDS THIS LOOP. Copies, not the live
+         objects: the next run mutates what it is given from its first frame,
+         and a teardown must not be able to reach into it. See `carryRef`. */
+      carryRef.current = {
+        cam: { ...cam },
+        trip: { ...trip },
+        companion: { ...companion },
+        primed: view.primed,
+        /*
+         * A MEMORY IS CARRIED UNDER BOTH OF ITS NAMES.
+         *
+         * A keep exists twice before it settles: the local seed born at the
+         * mouth, `kept-…`, and the row the server hands back with an id of its
+         * own. The pour builder drops the seed the moment `inspirations`
+         * contains either name (see `kept` above), so on the rebuild that
+         * arrival causes, the local ball LEAVES the list and the server ball
+         * ENTERS it — and keyed only by the local id, the carry has nothing to
+         * say about the newcomer. It reads as a memory that has never been
+         * seen, so it pours: falling in from above a second after you watched
+         * the same words fall out of the sentence.
+         *
+         * Filing each position under `sigId` as well is what lets the second
+         * name find the first one's place. It is the same memory; it should
+         * arrive once.
+         */
+        balls: new Map(
+          list.flatMap((b) => {
+            const at = { x: b.x, y: b.y };
+            const under: [string, { x: number; y: number }][] = [[b.id, at]];
+            if (b.sigId && b.sigId !== b.id) under.push([b.sigId, at]);
+            return under;
+          }),
+        ),
+      };
       simApiRef.current = null;
       ballsRef.current = null;
       /* room orbs belong to this run of the loop; the DATA cache stays */
@@ -7129,7 +8534,7 @@ function HomeExperience(): JSX.Element {
      * honest — the pour reads the sky through a ref, so it sees what is true at
      * the moment it pours rather than closing over a value that moves.
      */
-  }, [inspirations, agents, walls, groupFieldTick]);
+  }, [pourSig, agents, walls, groupFieldTick]);
 
   /**
    * AND WHEN THE SKY LANDS, THE GROUND IS LIT AGAIN — IN PLACE.
@@ -7182,8 +8587,19 @@ function HomeExperience(): JSX.Element {
       /* A memory kept in this session is known to the server under `sigId`,
          and the citation index is keyed by the server's id — so a pattern
          that lands on something said into the mouth minutes ago finds it. */
-      const above = skyOf(b.sigId ?? b.id, sky.citations, sky.signals);
+      const above = skyOf(
+        b.sigId ?? b.id,
+        sky.citations,
+        sky.signals,
+        sky.posterSignalIds,
+        sky.principleSignalIds,
+      );
       b.hasNotes = above.cited;
+      /* the three facts the light grades by — see carryOf */
+      b.roots = above.roots;
+      b.promotion = above.promotion;
+      b.onPoster = above.onPoster;
+      b.underPrinciple = above.underPrinciple;
       b.hasGroup = above.inGroup;
       b.quote = above.quote;
       b.terms = above.terms;
@@ -7217,26 +8633,46 @@ function HomeExperience(): JSX.Element {
 
   const scrubClient = useCallback(
     /**
-     * TIME IS THE VERTICAL AXIS NOW.
+     * TIME COMES BACK TO THE BOTTOM EDGE, AND IT IS ALWAYS THERE.
      *
-     * The bottom edge belongs to the axis of walls — whose mind you are
-     * standing in — and the timeline was laid across the same edge, so the
-     * one horizontal band in the world carried two unrelated meanings and a
-     * sideways drag could plausibly have meant either. Two meanings, two
-     * axes: side to side is WHOSE, up and down is WHEN. Nothing else about
-     * the dial changes; it reads clientY against the track's height exactly
-     * as it read clientX against its width.
+     * It was moved to a vertical rail on the right to keep two meanings off
+     * one axis: sideways is WHOSE mind, up and down is WHEN. The rail was
+     * legible and nobody used it — a hairline in the margin, mounted only
+     * while you were down in the field, so the history of a wall was a thing
+     * you had to descend to and then find.
+     *
+     * A timeline is a horizontal instrument. It is one again, laid just above
+     * the axis of walls rather than across it: two bands, stacked, each
+     * labelled by what it holds — names below, months above. The ambiguity
+     * the rail was built to avoid was between two things sharing ONE band,
+     * and they no longer do.
+     *
+     * VERTICAL AGAIN, AND HANGING FROM THE WORD (founder, 2026-08-27: "move
+     * timeline slider vertically under this instead", pointing at `now`).
+     *
+     * It read clientY against the track's height, then clientX against its
+     * width when the rail moved to the bottom edge, and now clientY again —
+     * because the instrument has gone back to the word that summons it. That
+     * is not a circle: what moved each time was WHERE TIME LIVES on the page,
+     * and the rail has always simply run along whichever edge that was.
+     *
+     * NOW IS AT THE TOP, under the word that says `now`, and the rail runs
+     * down into the past. So `p` counts DOWN from the present rather than up
+     * from the beginning — a person pulls the handle down to go back, which is
+     * the direction the archive itself is drawn in.
      */
     (clientY: number) => {
       const track = dialTrackRef.current;
       if (!track || !dial) return;
       const rect = track.getBoundingClientRect();
       const p = clamp((clientY - rect.top) / Math.max(rect.height, 1), 0, 1);
-      const T = dial.start + p * dial.span;
+      const T = dial.end - p * dial.span;
       const pct = `${(p * 100).toFixed(2)}%`;
       const handle = dialHandleRef.current;
       if (handle) handle.style.top = pct;
-      setAtNow(dial.end - T < DAY_MS / 2);
+      const isNow = dial.end - T < DAY_MS / 2;
+      setAtNow(isNow);
+      parkedRef.current = isNow ? null : T;
       /* The date rides ALONGSIDE the handle rather than inside it: the handle
          scales up while the dial is live, and a label inheriting that scale
          is how the date came to be printed at poster size. */
@@ -7276,6 +8712,8 @@ function HomeExperience(): JSX.Element {
   const onDialUp = useCallback(() => {
     scrubbingRef.current = false;
     setScrubbing(false);
+    /* the word in the corner takes the scrub's last reading and holds it */
+    setParkedAt(parkedRef.current);
     simApiRef.current?.wake();
   }, []);
 
@@ -7293,6 +8731,14 @@ function HomeExperience(): JSX.Element {
   const hasPanelRef = useRef(false);
   hasPanelRef.current = panel !== null;
   panelOpenRef.current = panelOpen;
+
+  /* The one thing the card's remount key was doing that mattered: a long
+     memory read to its foot must not hand its scroll position to the next
+     one. The element persists now (that is what ended the blink), so the
+     reset is said out loud instead of inherited from a fresh node. */
+  useEffect(() => {
+    panelRef.current?.scrollTo?.({ top: 0 });
+  }, [panel?.id]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -7338,17 +8784,36 @@ function HomeExperience(): JSX.Element {
        no wait at all, and still one single appearance. */
     const cached = detailsRef.current.get(fetchId);
     if (cached) {
+      steppingRef.current = false;
       setPanel({ id: selectedId, detail: cached, partial: false });
       setPanelOpen(true);
       return undefined;
     }
     /* otherwise: whatever was open leaves at once, and nothing takes its
-       place until the new content is complete */
-    setPanelOpen(false);
+       place until the new content is complete.
+
+       EXCEPT WHILE STEPPING, WHICH IS THE SAME CARD (founder's recording,
+       2026-08-25: "don't make card blink when switching"). Closing and
+       reopening is right when a DIFFERENT memory is opened out of the field —
+       that is a new appearance, and the animation says so. Paging with the
+       carets is not: the card is a frame you are turning pages inside, the
+       carets live in its own foot, and taking the whole object away and
+       bringing it back between pages reads as a blink. The old words stay up
+       until the new ones land, and only the contents change. */
+    /* AND NEITHER IS MOVING TO ANOTHER MEMORY BY ANY OTHER ROUTE. The
+       carets stopped blinking on 2026-08-25; tapping another orb and walking
+       with the reach's arrows still closed and reopened the card on every
+       move — the same page-turn, still blinking (founder, 2026-08-27: "dont
+       make card blink every time i move to another inspiration"). The rule
+       is the state, not the gesture: a card already up stays up, whatever
+       moved the selection. The appearance animation belongs to appearing —
+       from nothing, and back to nothing. */
+    if (!steppingRef.current && !panelOpenRef.current) setPanelOpen(false);
     let done = false;
     const show = (detail: InspirationDetail | null) => {
       if (done) return;
       done = true;
+      steppingRef.current = false;
       window.clearTimeout(timer);
       setPanel({ id: selectedId, detail, partial: detail === null });
       setPanelOpen(true);
@@ -7362,23 +8827,11 @@ function HomeExperience(): JSX.Element {
     };
   }, [selectedId, loadDetail]);
 
-  /* Placement: solved from the viewport and the orb alone (the panel's size is
-     declared, not measured), so it is written before the first paint and never
-     moves again while it is open. */
-  useLayoutEffect(() => {
-    if (!panel || !panelOpen) return undefined;
-    const place = () => {
-      const el = panelRef.current;
-      const spot = simApiRef.current?.place();
-      if (!el || !spot) return;
-      el.style.left = `${spot.left}px`;
-      el.style.top = spot.top === null ? "auto" : `${spot.top}px`;
-      el.style.bottom = spot.bottom === null ? "auto" : `${spot.bottom}px`;
-    };
-    place();
-    window.addEventListener("resize", place);
-    return () => window.removeEventListener("resize", place);
-  }, [panel, panelOpen]);
+  /* Placement is the stylesheet's now: the panel opens in the middle of the
+     frame, always (founder, 2026-08-24). It used to be solved from the orb
+     and placed beside it, which put the same thing in a different place on
+     every tap — see the note on `.jar-panel`. `simApi.place()` survives for
+     the sim's own use; nothing in the page asks it where to put a panel. */
 
   /* the companion's line is a whisper, not a status bar: it goes after 4s */
   useEffect(() => {
@@ -7388,9 +8841,22 @@ function HomeExperience(): JSX.Element {
   }, [charSay]);
 
 
-  const [provTick, setProvTick] = useState(0);
+  /* THE EVIDENCE INDEX HAS NO CHANGE SIGNAL ANY MORE, because it no longer
+     changes after load. `provTick` was how React was told the ref had been
+     topped up, and the only writer was the lazy fetch the sky's `focusOn`
+     triggered; the eager build at load is what fills it now, before any memo
+     below first runs. It was briefly kept as a constant so the dependency
+     lists still named it — but a constant in a dependency array is a
+     dependency that can never fire, which reads as a signal and is not one. */
   /* whether the poster is showing what it was built from */
   const [posterAsk, setPosterAsk] = useState(false);
+  /** Which ground in the poster's standing-on band is being asked about —
+      its verdict row belongs to it, exactly as `focusCandId` gives the sky's
+      pattern its own. Closing the band lets it go. */
+  const [groundAsk, setGroundAsk] = useState<string | null>(null);
+  useEffect(() => {
+    if (!posterAsk) setGroundAsk(null);
+  }, [posterAsk]);
   /**
    * THE POSTER'S OWN HISTORY.
    *
@@ -7483,6 +8949,26 @@ function HomeExperience(): JSX.Element {
     simApiRef.current?.standIn(ownerProfileId);
   }, []);
   /**
+   * Whether the grounds have just been arrived at. True for GROUNDS_LIT_MS
+   * after travelling onto a shared wall, and the class it drives is removed
+   * rather than animated out: the rows carry an opacity transition already, so
+   * dropping the class IS the settle, on the same curve everything else here
+   * uses.
+   */
+  const [groundsLit, setGroundsLit] = useState(false);
+  useEffect(() => {
+    if (grounds.length === 0) {
+      setGroundsLit(false);
+      return;
+    }
+    setGroundsLit(true);
+    const id = window.setTimeout(() => setGroundsLit(false), GROUNDS_LIT_MS);
+    return () => window.clearTimeout(id);
+    /* `wallKey` and not `grounds`: the identity of that array changes whenever
+       a room's field is refetched, and re-lighting the corner because a
+       background request landed is the world moving on its own. */
+  }, [wallKey, grounds.length]);
+  /**
    * WHAT THE POSTER RESTS ON — THE SAME QUESTION, ONE LAYER UP.
    *
    * A top of mind is the loudest claim in the product: one sentence, set
@@ -7515,6 +9001,9 @@ function HomeExperience(): JSX.Element {
           inspirationId: id,
           preview: cap.textPreview,
           quote: cap.quote ?? null,
+          /* the agent cache does not carry the server's span verdict yet, so
+             the quote renders unlit — a worse card and never a false one */
+          quoteSource: null,
           reason: null,
           createdMs: Date.parse(cap.capturedAt) || 0,
         });
@@ -7541,6 +9030,7 @@ function HomeExperience(): JSX.Element {
           inspirationId: ev.signalId,
           preview: ev.textPreview,
           quote: ev.quote,
+          quoteSource: null,
           /* whose sentence this is — in a room the author IS the provenance */
           reason: ev.authorName ? `said by ${ev.authorName}` : null,
           createdMs: ev.createdMs,
@@ -7559,20 +9049,43 @@ function HomeExperience(): JSX.Element {
         out.push(e);
       }
     return out;
-  }, [atWall, agents, notes, provTick, wokenGroups]);
+  }, [atWall, agents, notes, wokenGroups]);
 
   /**
-   * The evidence under a pattern. Candidates are a union — a server pattern, a
-   * room's proposal, a sentence you drafted here — and only the first has a
-   * chain to walk. A draft cites nothing because it came from you directly,
-   * and saying so with an empty section would be apparatus.
+   * THE GROUNDS THEMSELVES, AND WHOSE LIGHT EACH HOLDS.
+   *
+   * The chain above flattens to memories; this is the layer it walks
+   * through — the patterns the poster's sentence stands on. Each carries its
+   * ratified standing: full ink where the person has answered (a verdict, a
+   * star), dim where only the machine believes it. One glance separates
+   * "what we have agreed about me" from "what it currently thinks", and the
+   * dim ones are the recalibration queue — answering them is the existing
+   * gesture, up in the sky. goals/the-legible-loop.md Phase 4.
+   *
+   * The served flag is the record's truth at load; the union with this
+   * session's own verdicts is what lets the light move in the same beat as
+   * the answer, before any refetch. Your own wall only: a room's board
+   * stands on shared statements (its chain says who said each), and an
+   * agent's board grounds itself in its own memories.
    */
-  const evidenceFor = useCallback(
-    (c: Candidate): Evidence[] =>
-      c.kind === "reading" ? evidenceBySignalRef.current.get(c.id) ?? [] : [],
-    /* provTick is the ref's change signal — see the fetch effect above */
-    [provTick],
-  );
+  const posterGrounds = useMemo<
+    Array<{ id: string; statement: string; answered: boolean; locked: boolean }>
+  >(() => {
+    if (atWall.kind !== "self") return [];
+    const board = notes ?? [];
+    const lead = board.find((e) => e.pinned) ?? board[0];
+    if (!lead) return [];
+    return lead.citedSignals.map((cited) => ({
+      id: cited.id,
+      statement: cited.statement,
+      answered: cited.answered || verdicts.has(cited.id),
+      /* CARRIED SO THE DOOR SWINGS BOTH WAYS. `answered` is true for a
+         reworded signal AND for one that was given a verdict, which is right
+         for deciding what the poster still asks about and useless for deciding
+         what can be handed back. Only a locked one has words to return. */
+      locked: cited.locked,
+    }));
+  }, [atWall, notes, verdicts]);
 
   /**
    * SALIENCE, SET IN LIGHT.
@@ -7584,320 +9097,401 @@ function HomeExperience(): JSX.Element {
    * the pointer. So: the whole sentence, with the read span in full ink and
    * the rest dimmed to the same value the world dims an untended memory to.
    *
-   * If the quote is not a literal substring (the server may normalise
-   * whitespace or the preview may be truncated before it), the honest
-   * fallback is the quote by itself — never a guessed span.
+   * Only a VERIFIED span may light. The server now vouches for a quote by
+   * naming whose words it is (`quoteSource`): the person's own, or the page
+   * behind their link — different claims, never lit alike, so the page's
+   * words carry a quieter mark and say so on hover. A quote with no source
+   * predates verification, and lighting it would put words in the person's
+   * mouth at the exact moment this panel claims to show receipts
+   * (docs/known-issues.md H2 was exactly that bug) — so it renders as the
+   * plain preview, a worse card and never a false one.
    */
   const salience = useCallback((e: Evidence): JSX.Element => {
     const full = e.preview ?? "";
     const q = (e.quote ?? "").trim();
-    if (!q) return <>{full}</>;
+    if (!q || e.quoteSource === null) return <>{full}</>;
+    const lit =
+      e.quoteSource === "enrichment" ? "jar-prov-lit jar-prov-lit--page" : "jar-prov-lit";
+    const said =
+      e.quoteSource === "enrichment"
+        ? "a sentence from the page you saved — not your own words"
+        : "a sentence that is really in your record";
     const at = full.indexOf(q);
-    if (at < 0) return <mark className="jar-prov-lit">{q}</mark>;
+    if (at < 0)
+      return (
+        <mark className={lit} title={said}>
+          {q}
+        </mark>
+      );
     return (
       <>
         {full.slice(0, at)}
-        <mark className="jar-prov-lit">{full.slice(at, at + q.length)}</mark>
+        <mark className={lit} title={said}>
+          {full.slice(at, at + q.length)}
+        </mark>
         {full.slice(at + q.length)}
       </>
     );
   }, []);
 
-  /**
-   * FETCH THE CHAIN WHEN SOMEONE ASKS FOR IT.
-   *
-   * The evidence index is built eagerly for your own sky at load, but a
-   * pattern on an AGENT's wall or in a room is never in it — those walls load
-   * statements only, and pulling every agent's full evidence at startup would
-   * be a large fetch for something most visits never open.
-   *
-   * So the chain is fetched at the moment a statement is read, once, and kept.
-   * `bump` exists because the index lives in a ref (the render loop reads it
-   * every frame and must not re-subscribe): this is the one place that has to
-   * tell React the ref changed.
-   */
+  /* THE CHOSEN GROUND, WHOLE. The evidence row carries a preview — enough to
+     show which words did the reading, never enough to be the memory. The
+     right pane asks for the memory itself, once per selection, and says so
+     while it is on its way rather than rendering a shorter version of the
+     truth. */
   useEffect(() => {
-    if (!focusCandId) return undefined;
-    if (evidenceBySignalRef.current.has(focusCandId)) return undefined;
-    /* proposals and local drafts have no server pattern behind them */
-    if (focusCandId.startsWith("proposal:") || focusCandId.startsWith("draft:")) return undefined;
+    if (provPick === null) {
+      setProvFull(null);
+      return undefined;
+    }
     let dead = false;
-    loadSignal(focusCandId)
+    setProvFull(null);
+    loadInspiration(provPick)
       .then((full) => {
-        if (dead) return;
-        evidenceBySignalRef.current.set(full.id, full.evidence);
-        setProvTick((n) => n + 1);
+        if (!dead) setProvFull({ id: provPick, text: full.text });
       })
       .catch(() => {
-        /* no chain available: the statement still stands, unsourced, and the
-           section simply does not appear — better than an error where a
-           quotation should be */
-        if (!dead) evidenceBySignalRef.current.set(focusCandId, []);
+        /* the left pane still holds the span that was read, which is the
+           claim this room exists to back; the right pane says it could not
+           fetch the rest rather than pretending the preview is the whole */
+        if (!dead) setProvFull({ id: provPick, text: "" });
       });
     return () => {
       dead = true;
     };
-  }, [focusCandId]);
+  }, [provPick]);
 
   const panelId = panel ? panel.id : null;
 
-  /* ---------------- the sky's inhabitants ----------------
-     The candidates are NOT peers of the adopted ambition and are not shown
-     beside it: they live a section above it. The proposal leads (it is a
-     whole ambition), then the provisional readings — machine claims, honestly
-     labelled as not yet adoptable — then anything drafted here. */
-  const candidates = useMemo<Candidate[]>(() => {
-    const out: Candidate[] = [];
-    if (proposal) {
-      out.push({
-        id: `proposal:${proposal.proposalId}`,
-        kind: "proposal",
-        col: 0,
-        text: proposal.ambition,
-        evidence: proposal.evidence,
-        spanMs: proposal.spanMs,
-        adopt: { groupId: proposal.groupId, proposalId: proposal.proposalId },
-        originIds: [],
-      });
-    }
-    /* THE SKY IS LAYER 2 — the signals still forming.
-       A pattern that is `active` is what headquarters already stands on and a
-       `retired` one has sunk; what is overhead is what is EMERGING: something
-       the archive is saying about this person that has not become what they
-       hold yet. Each one's satellites are the memories it cites, resolved
-       against the field in hand — an id with nothing behind it is skipped,
-       never invented, so every satellite stands for a memory that exists. */
-    for (const p of signals ?? []) {
-      if (p.status !== "emerging") continue;
-      const evidence = new Map<string, EvidenceRef>();
-      for (const e of evidenceBySignalRef.current.get(p.id) ?? []) {
-        const s = signalById.get(e.inspirationId);
-        if (!s || evidence.has(e.inspirationId)) continue;
-        evidence.set(e.inspirationId, {
-          signalId: e.inspirationId,
-          groupId: null,
-          authorUserId: null,
-          authorName: null,
-          textPreview: e.preview || s.preview,
-          quote: e.quote,
-          kind: s.kind,
-          createdMs: e.createdMs || s.capturedMs || Date.now(),
-          dated: true,
-          /* NOT SCORED. The canon gives a pattern a confidence and a memory
-             nothing at all, so the satellites keep the server's own order
-             rather than being ranked by a number that does not exist. */
-          resonance: 0,
-        });
-      }
-      out.push({
-        id: p.id,
-        kind: "reading",
-        col: 0,
-        text: p.statement,
-        evidence: [...evidence.values()],
-        spanMs: null,
-        adopt: null,
-        originIds: [],
-      });
-    }
-    /* AND EVERY ROOM'S SKY: the statements members have said out loud in it.
-       Each one carries whose it is — a room may know WHO, never which memory —
-       so its satellite is the person, not a capture. This is the only home the
-       shared wall has: the field below is always your own by ruling, and the
-       room's headquarters holds only what it has already agreed. */
-    for (const g of groups) {
-      const col = walls.find((w) => w.kind === "group" && w.id === g.id)?.col;
-      if (col === undefined) continue;
-      for (const s of wallSignalsRef.current.get(g.id) ?? []) {
-        out.push({
-          id: `wall:${g.id}:${s.signalId}`,
-          kind: "reading",
-          col,
-          text: s.statement,
-          evidence: [
-            {
-              signalId: `${g.id}:${s.signalId}`,
-              groupId: g.id,
-              authorUserId: s.ownerProfileId,
-              authorName: s.ownerName,
-              textPreview: s.statement,
-              quote: null,
-              kind: null,
-              createdMs: Date.parse(s.sharedAt) || Date.now(),
-              dated: true,
-              resonance: 0,
-            },
-          ],
-          spanMs: null,
-          adopt: null,
-          originIds: [],
-        });
-      }
-    }
-    /* AND EVERY AGENT'S OWN SKY. What an agent is still distilling and has not
-       adopted stands over its own wall, in exactly the relationship your sky
-       has to your ambition — and each candidate's satellites are the memories
-       it was drawn from, which is where its "why" is finally readable. */
-    for (const a of agents ?? []) {
-      const col = walls.find((w) => w.kind === "agent" && w.id === a.agent.id)?.col;
-      if (col === undefined) continue;
-      const byId = new Map(a.inspirations.map((s) => [s.id, s] as const));
-      for (const n of a.topOfMind.notes) {
-        if (!n.isProvisional) continue;
-        const evidence: EvidenceRef[] = [];
-        for (const id of n.evidenceSignalIds) {
-          const s = byId.get(id);
-          if (!s) continue;
-          evidence.push({
-            signalId: id,
-            groupId: null,
-            authorUserId: null,
-            authorName: null,
-            /* a real agent memory has no recorded output behind it yet, and the
-               orbit prints nothing rather than inventing a reason */
-            why: s.producedBy?.why ?? null,
-            textPreview: s.textPreview,
-            quote: s.quote,
-            kind: s.kind,
-            createdMs: Date.parse(s.capturedAt) || Date.now(),
-            dated: true,
-            resonance: 0,
-          });
-        }
-        out.push({
-          id: n.id,
-          kind: "reading",
-          col,
-          text: n.title,
-          evidence,
-          spanMs: null,
-          adopt: null,
-          originIds: [],
-        });
-      }
-    }
-    return [...out, ...drafts];
-  /* `signals` for your own sky, `groups` and `wokenGroups` for a room's — the
-     shared statements arrive with the wall's wake, so the memo has to re-run
-     on it or a room's sky stays empty until something else moves */
-  }, [proposal, notes, drafts, signalById, agents, walls, signals, groups, wokenGroups]);
-
-  useEffect(() => {
-    simApiRef.current?.syncSky(candidates);
-  }, [candidates, inspirations]);
-
-  const byCandidateId = useMemo(() => {
-    const m = new Map<string, Candidate>();
-    for (const c of candidates) m.set(c.id, c);
-    return m;
-  }, [candidates]);
-
-  /** The groups the person has drawn together, as the loop last saw them. */
-  const clusters = useMemo(
-    () => (clusterSig ? clusterSig.split("|").filter(Boolean) : []),
-    [clusterSig],
-  );
-
   /**
-   * Draft one ambition from a cluster. There is NO endpoint that synthesises
-   * an ambition from a set of readings — verified against the API surface —
-   * so this composes the draft CLIENT-SIDE and says so on the face of it: the
-   * proposal's own words if a proposal is in the group, otherwise the
-   * readings' titles joined. It is deliberately not dressed up as machine
-   * synthesis. (Real synthesis wants an endpoint: ambition synthesis taking a
-   * set of note ids.)
-   */
-  const draftFrom = useCallback(
-    (sig: string) => {
-      const ids = sig.split("+");
-      const members = ids
-        .map((id) => byCandidateId.get(id))
-        .filter((c): c is Candidate => Boolean(c));
-      if (members.length < 2) return;
-      const lead = members.find((m) => m.kind === "proposal");
-      const text = lead ? lead.text : members.map((m) => m.text).join(" · ");
-      const id = `draft:${ids.join("+")}`;
-      setDrafts((prev) =>
-        prev.some((d) => d.id === id)
-          ? prev
-          : [
-              ...prev,
-              {
-                id,
-                kind: "draft",
-                /* a draft is born in the sky it was gathered in */
-                col: members[0].col,
-                text,
-                /* it inherits the memories its members were made of, once
-                   each — and the WIDEST span any of them declared, so a draft
-                   drawn from an old claim keeps that claim's slow orbit */
-                evidence: dedupeEvidence(members.flatMap((m) => m.evidence)),
-                spanMs: members.reduce<number | null>(
-                  (w, m) => (m.spanMs !== null && m.spanMs > (w ?? 0) ? m.spanMs : w),
-                  null,
-                ),
-                adopt: null,
-                originIds: ids,
-              },
-            ],
-      );
-    },
-    [byCandidateId],
-  );
-
-  /**
-   * Adopt. Only the room's real proposal has somewhere to go: on success the
-   * nebula condenses to a point, the camera glides down to headquarters, and
-   * the poster re-arrives word by word with the new text — the change is
-   * visible, which is the whole reason to make someone travel for it.
+   * HOW MANY MEMORIES ARE IN THE GROUND YOU ARE STANDING OVER.
    *
-   * Under the canon a room's board changes by AFFIRMATION rather than by one
-   * person accepting: affirming is this reader adding their name, and the
-   * board moves when the room's rule for that is met. So the poster only
-   * changes here if the server says the proposal is now accepted; otherwise
-   * the affirmation is recorded and the nebula stays where it is, which is
-   * the truth of what just happened.
+   * It read `inspirations.length` — the VIEWER's own archive — on every wall,
+   * so standing in a room or on an agent's wall the count said how many
+   * things you had kept, printed under somebody else's ground, next to a
+   * caret that takes you down into that ground (founder, 2026-08-25: "30
+   * inspirations shouldn't be hardcoded and reflect the number of balls in
+   * the ground per wall"). Not hardcoded, but wrong in the way that matters:
+   * a number beside a door has to describe what is behind the door.
+   *
+   * Each wall's ground has its own source, and they are the three the loop
+   * itself pours from — your archive, the agent's own captures, and the
+   * room's field of its members' public memories. `groupFieldTick` is in the
+   * deps because that last one lives in a ref the fetch fills.
    */
-  const adopt = useCallback(
-    (c: Candidate) => {
-      if (!c.adopt || adopting) return;
-      setAdopting(true);
-      affirmGroupProposal(c.adopt.groupId, c.adopt.proposalId)
-        .then((res) => {
-          if (!res.accepted) {
-            setAdopting(false);
-            return;
-          }
-          /* THE THING BEING ANIMATED HAS TO OUTLIVE THE ANIMATION.
-             `condense` starts a 700ms contraction on the cloud, and this used
-             to drop the proposal from state in the very same commit. React
-             batches the two, so the candidate left `candidates`, `syncSky`
-             dropped its Neb, and React unmounted its sentence — all before the
-             loop had drawn one frame of the contraction. Nothing contracted.
-             The cloud vanished, and the timer below then sat out an animation
-             nobody had been shown.
-             Under this layout's law that MOTION EXPLAINS, the contraction is
-             the sentence "this became yours"; without it the least reversible
-             act here happens in silence and the person is left inferring from
-             an empty sky that it worked.
-             So the proposal is released where it was always meant to be — with
-             the rest of the handover, once the contraction it is the subject of
-             has finished. Holding it here also keeps it the sky's subject for
-             those 700ms, which is what keeps the other candidates sunk behind
-             it until it has actually gone. */
-          simApiRef.current?.condense(c.id);
-          window.setTimeout(() => {
-            setProposal(null);
-            setAdopted({ ambition: c.text, groupName: null, createdMs: Date.now() });
-            simApiRef.current?.toTop();
-            setAdopting(false);
-          }, CONDENSE_MS);
-        })
-        .catch(() => setAdopting(false));
-    },
-    [adopting],
-  );
+  const wallCount = useMemo<number>(() => {
+    if (atWall.kind === "agent") {
+      const a = (agents ?? []).find((x) => x.agent.id === atWall.id);
+      return a?.inspirations.length ?? 0;
+    }
+    if (atWall.kind === "group") {
+      return (groupFieldRef.current.get(atWall.id) ?? []).length;
+    }
+    return inspirations?.length ?? 0;
+    /* `groupFieldTick` is the ref's change signal — a room's memories arrive
+       into `groupFieldRef` from a fetch, and this is how React is told. The
+       ref itself is stable and is deliberately not a dependency.
+       (This carried an `eslint-disable-next-line` until 2026-08-25. There is
+       no eslint in this repo, so it silenced nothing and told a reader a rule
+       was being held off when no rule exists — a line that looks like a guard
+       and guards nothing, which `measure-groups.mjs` argues against by name.) */
+  }, [atWall, agents, inspirations, groupFieldTick]);
 
+  /**
+   * HOW MANY ARE BEHIND THE DOOR, WHICH CAN BE MORE THAN ARE DRAWN.
+   *
+   * Every ground in this product is loaded up to a ceiling — ten pages of two
+   * hundred for a personal or agent archive, four hundred for a room's field.
+   * The ceilings are deliberate: following a cursor forever lets one very old
+   * account stall the world's first paint. What was not deliberate is that
+   * nothing said so. At two and a half thousand memories the door read
+   * `2000 inspirations`, the ground drew two thousand orbs, and five hundred
+   * memories were absent from both with nothing said — in a product whose
+   * whole promise is that it keeps what you give it, and whose posture is no
+   * quiet corners.
+   *
+   * The failure ran in the worst direction: it UNDERSTATED. Somebody who
+   * reached it had every reason to read it as memories lost.
+   *
+   * So the door prints both numbers when they differ. The first is still the
+   * balls in the ground the caret takes you into (founder, 2026-08-25) — the
+   * second is what the archive holds.
+   */
+  const wallTotal = useMemo<number>(() => {
+    if (atWall.kind === "agent") {
+      const a = (agents ?? []).find((x) => x.agent.id === atWall.id);
+      return a?.inspirationTotal ?? a?.inspirations.length ?? 0;
+    }
+    if (atWall.kind === "group") {
+      const loaded = (groupFieldRef.current.get(atWall.id) ?? []).length;
+      return loaded + (groupBeyondRef.current.get(atWall.id) ?? 0);
+    }
+    return (inspirations?.length ?? 0) + fieldBeyond;
+  }, [atWall, agents, inspirations, groupFieldTick, fieldBeyond]);
+
+  /**
+   * THE REACH — the ground, addressable without a pointer.
+   *
+   * An orb is painted pixels. It has no `tabindex`, no element and no DOM
+   * proxy, so Tab has nothing to land on and a reader is not told a field
+   * exists — measured in `docs/audits/by-keyboard-2026-08-26.md`, which found
+   * the chrome excellent (eight stops, all named, all visibly focused, the
+   * mouth fully usable with keys) and then found this:
+   *
+   *     a person who cannot use a pointer can put memories IN
+   *     and cannot get a single one back OUT.
+   *
+   * For a product whose promise is that it keeps what you give it, that is the
+   * central act missing, not a rough edge on the way to it.
+   *
+   * The audit named two credible fixes and declined to choose between them: a
+   * DOM list behind the door — the archive as text, the canvas demoted to one
+   * view among two — or roving focus on the canvas, which keeps the world
+   * whole. This is the second. A list of saves is the shape this product spent
+   * its whole evolution retiring, and light is its only meaning channel, so
+   * the keyboard belongs IN the world with the light following it rather than
+   * beside the world in a column of text.
+   *
+   * So: one tab stop for the entire ground, arrows to move along it, and the
+   * ordinary `select` on the way — which lights the orb, leans the companion
+   * toward it and opens the panel beside it, exactly as a tap does. The
+   * keyboard is not given a second, quieter version of the act.
+   *
+   * NEWEST FIRST, which is not the field's own order. The field lays memories
+   * down oldest-first so its layout never moves; a person reading their
+   * archive starts at what they last kept. Nothing is being sorted twice —
+   * this is a reading order over the same ground.
+   */
+  const reachable = useMemo<Array<{ id: string; label: string }>>(() => {
+    const clean = (text: string) => text.replace(/\s+/g, " ").trim();
+    if (atWall.kind === "agent") {
+      const a = (agents ?? []).find((x) => x.agent.id === atWall.id);
+      return (a?.inspirations ?? [])
+        .slice()
+        .sort((x, y) => Date.parse(y.capturedAt) - Date.parse(x.capturedAt))
+        .map((m) => ({ id: m.id, label: clean(m.textPreview) }));
+    }
+    if (atWall.kind === "group") {
+      return (groupFieldRef.current.get(atWall.id) ?? [])
+        .slice()
+        .sort((x, y) => Date.parse(y.createdAt) - Date.parse(x.createdAt))
+        /* whose memory it is, said out loud — on a room's ground that is the
+           fact the per-member hue carries, and a hue is not readable aloud */
+        .map((m) => ({ id: m.id, label: `${m.ownerName}: ${clean(m.text)}` }));
+    }
+    return (inspirations ?? [])
+      .slice()
+      .sort((x, y) => y.capturedMs - x.capturedMs)
+      .map((m) => ({ id: m.id, label: clean(m.preview) }));
+  }, [atWall, agents, inspirations, groupFieldTick]);
+
+  /**
+   * Where the reach is standing. Null until a key is pressed or an orb is
+   * tapped — a cursor that appeared before anybody asked for one would be the
+   * world moving without the user, which it never does.
+   */
+  const [reachId, setReachId] = useState<string | null>(null);
+
+  /**
+   * THE CURSOR IS THE KEYBOARD'S, AND ONLY THE KEYBOARD'S.
+   *
+   * This began as an effect — `if (selectedId) setReachId(selectedId)` — so
+   * that tapping an orb and then tabbing in would carry on from the memory
+   * already open. It made the world's selection authoritative over the
+   * cursor, and the world has its own reasons to release and re-select: a
+   * travel, a wind of the dial, an orb leaving the ground under you. The
+   * cursor jumped back under the arrows, intermittently, which is the worst
+   * version of an input bug — it works while you are watching it.
+   *
+   * So the handoff happens ONCE, when focus arrives, and nothing after that
+   * moves the cursor except the person moving it.
+   */
+  const onReachFocus = useCallback(() => {
+    setReachId((cur) => cur ?? selectedIdRef.current);
+  }, []);
+
+  /**
+   * ARRIVING SOMEWHERE KEEPS YOUR PLACE.
+   *
+   * The world's ways are real buttons — `philosophies & values` takes you up
+   * into the sky, the count under the door takes you down into the ground —
+   * and each of them only exists in the place you left. Press one and it
+   * unmounts on arrival, so the browser has nothing to hold focus on and
+   * drops it to the document.
+   *
+   * Nothing on screen shows this. A person using a pointer never notices. A
+   * person using the keyboard presses Enter on `philosophies & values`,
+   * arrives in the sky, presses Tab — and starts again from the very top of
+   * the page, having lost every stop they walked through to get there. Every
+   * travel in the world costs them their place, in a product whose whole
+   * shape is travel. Measured by `e2e:by-keyboard`: focus landed on `(the
+   * document)`.
+   *
+   * So a place that has just been arrived in takes the focus that its own way
+   * in dropped. Only when focus was actually LOST — `document.activeElement`
+   * back on the body — because a person who is typing in the mouth or reading
+   * a card has not lost anything and must not have it taken.
+   *
+   * WHAT EACH PLACE HANDS IT TO is the thing that place is for: the sky's one
+   * way back down, and — in the ground — the ground itself, whose label says
+   * where you are and which keys read it. Not the way back up: you came down
+   * to be among your memories, and the first thing Tab offers should not be
+   * the exit.
+   */
+  /**
+   * WAS THE LAST THING THEY DID A KEYPRESS?
+   *
+   * The arrival focus below exists for people travelling by keyboard, and for
+   * them only. Handing a chrome button focus after a POINTER click is worse
+   * than useless: the button then holds focus silently, and the next Space —
+   * which is what a person presses to scroll — activates it. A dialog opens
+   * that nobody asked for, from a control they are not looking at, and it
+   * reads as the world doing things on its own.
+   *
+   * (Founder, 2026-08-27, on a modal appearing unbidden. Exactly one code path
+   * opens that dialog and it is a click handler, so something was clicking it.
+   * A focused button and a scroll are enough.)
+   */
+  const lastInputWasKeyRef = useRef(false);
+  useEffect(() => {
+    const key = () => {
+      lastInputWasKeyRef.current = true;
+    };
+    const point = () => {
+      lastInputWasKeyRef.current = false;
+    };
+    window.addEventListener("keydown", key, true);
+    window.addEventListener("pointerdown", point, true);
+    return () => {
+      window.removeEventListener("keydown", key, true);
+      window.removeEventListener("pointerdown", point, true);
+    };
+  }, []);
+
+  const arrivedFromRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (phase !== "ready") return undefined;
+    const place = `${inSky ? "sky" : inField ? "ground" : "wall"}:${atWall.kind}:${atWall.id}`;
+    const came = arrivedFromRef.current;
+    arrivedFromRef.current = place;
+    /**
+     * THE FIRST PLACE IS NOT A PLACE YOU ARRIVED IN.
+     *
+     * Without this, opening WAKA is itself an "arrival": the world becomes
+     * ready standing at the wall with focus on the body, and the rule below
+     * would hand it to the door — so the first Tab of a fresh visit would
+     * start two thirds of the way down the chrome, skipping the poster and
+     * the mouth, and the world would have moved something before the person
+     * touched anything. Nothing is dropped on first paint because nothing was
+     * held; there is nothing to give back.
+     */
+    if (came === null || came === place) return undefined;
+    /* after the arrival paints: the chrome of the new place mounts in the
+       same commit that flips these flags, but the browser has not yet settled
+       focus from whatever unmounted */
+    /* the whole point is a keyboard journey that keeps its place; a pointer
+       journey never lost one, and giving it focus arms a button nobody is
+       looking at */
+    if (!lastInputWasKeyRef.current) return undefined;
+    const id = window.requestAnimationFrame(() => {
+      const active = document.activeElement;
+      if (active && active !== document.body) return;
+      const want = inSky ? ".jar-up--down" : inField ? ".jar-reach" : ".jar-saved";
+      const el = document.querySelector<HTMLElement>(want);
+      /* `preventScroll`, because the ground's reach is a clipped one-pixel box
+         and scrolling the page to it would move the world under somebody who
+         only pressed a key */
+      el?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(id);
+    /* `atWall` too: walking sideways to a neighbour closes the menu you walked
+       through, which unmounts the button you were standing on. Same dropped
+       focus, same fix — the wall you arrive at takes it. */
+  }, [inSky, inField, phase, atWall]);
+
+  const onReachKey = useCallback(
+    (e: ReactKeyboardEvent<HTMLDivElement>) => {
+      const list = reachable;
+      if (list.length === 0) return;
+      /* THE REACH OWNS THE KEYS IT TAKES. The world's own listener sits on
+         `window` and now also steps the open card on left/right (founder,
+         2026-08-27), so a key answered here would otherwise be answered
+         twice and land two memories away. The keys it deliberately does NOT
+         take — up, down, space — still pass through untouched, which is the
+         whole one-axis-per-meaning rule. */
+      if (
+        e.key === "ArrowLeft" ||
+        e.key === "ArrowRight" ||
+        e.key === "Home" ||
+        e.key === "End" ||
+        e.key === "Enter"
+      ) {
+        e.stopPropagation();
+      }
+      const at = list.findIndex((m) => m.id === reachId);
+      const go = (i: number) => {
+        const next = list[Math.min(list.length - 1, Math.max(0, i))];
+        if (!next) return;
+        setReachId(next.id);
+        /* `select` is the whole act, and it is the same one a tap runs: the
+           orb lights, the companion leans, the panel opens beside it. It
+           refuses an orb that is not on this ground right now — a memory the
+           dial has wound past has not happened yet, and cannot be read. */
+        simApiRef.current?.select(next.id);
+      };
+      /**
+       * LEFT AND RIGHT, NEVER UP AND DOWN — and this is a lesson, not a
+       * preference. The first version read the ground with every arrow, and
+       * ↑/↓ are how the WORLD moves between its sections. The reach holds
+       * focus once you arrive in the ground (that is what makes it reachable
+       * at all), so a person travelling up and down had every second press
+       * swallowed by the reading — a card opening over and over, apparently
+       * on its own (founder, 2026-08-27: "why does this modal keep appearing
+       * when i go up and down").
+       *
+       * One axis per meaning. Vertical belongs to the world and passes
+       * through untouched; horizontal reads the ground — the same directions
+       * the card's own carets already speak, ‹ into the past and › toward
+       * now. Space goes with ↑/↓ for the same reason: it is a scroll key
+       * before it is anything else.
+       */
+      switch (e.key) {
+        case "ArrowLeft":
+          e.preventDefault();
+          /* from nowhere, the first press lands on the newest — where
+             somebody arriving at their own archive starts — and each press
+             after walks into the past, the way the ‹ caret does */
+          go(at < 0 ? 0 : at + 1);
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          go(at < 0 ? 0 : at - 1);
+          break;
+        case "Home":
+          e.preventDefault();
+          go(0);
+          break;
+        case "End":
+          e.preventDefault();
+          go(list.length - 1);
+          break;
+        case "Enter":
+          e.preventDefault();
+          /* Enter on the memory already open closes it — `select` toggles, and
+             the keyboard gets the same verb the pointer has rather than a
+             one-way version of it. */
+          go(at < 0 ? 0 : at);
+          break;
+        case "Escape":
+          /* not preventDefault: Escape belongs to whatever else is open too */
+          simApiRef.current?.release();
+          break;
+        default:
+          break;
+      }
+    },
+    [reachable, reachId],
+  );
 
   /* ---------------- the mouth ----------------
      The one verb this layout was missing. It says one phrase at rest, becomes
@@ -7906,17 +9500,40 @@ function HomeExperience(): JSX.Element {
      The layout moves for it exactly once: an orb is born where the words are
      and falls to its home in the ground below. */
 
+  /**
+   * SAVE AS DRAFT IS A DOOR, NOT A STORE (founder, 2026-08-27: "remove
+   * minimize and instead say save as draft"). The store already existed —
+   * the mouth live-writes every keystroke to this device's `waka.draft` and
+   * restores it on arrival, and has since before the drawer. What did not
+   * exist was a way OUT that admits the words are kept: minimize held the
+   * page half-open, and Escape threw the words away. So the door closes the
+   * page and simply does not clear the draft — the words stay in state and
+   * in storage, the resting line says a draft waits, and opening the mouth
+   * is continuing.
+   */
   const openMouth = useCallback(() => {
     setMouthNote("");
     setMouthOpen(true);
   }, []);
 
-  /** Escape: back to the phrase, and the draft goes with it. */
+  /** The way out that keeps the words: the page folds, the draft stays. */
+  const saveAsDraft = useCallback(() => {
+    setMouthOpen(false);
+    setMouthNote("");
+  }, []);
+
+  /** Escape: back to the phrase — and for a long note, the words are KEPT.
+      Losing a page of writing to a reflex key is the one thing this surface
+      must never do; a short line still clears, as it always has. */
   const cancelMouth = useCallback(() => {
+    if (draftRef.current.length > 140 || draftRef.current.includes("\n")) {
+      saveAsDraft();
+      return;
+    }
     setMouthOpen(false);
     setDraft("");
     setMouthNote("");
-  }, []);
+  }, [saveAsDraft]);
 
   /**
    * KEEP IT. Optimism with honesty, in that order: the memory is born in the
@@ -7929,7 +9546,19 @@ function HomeExperience(): JSX.Element {
    * happens before the mouth is emptied. React's state updates are queued;
    * the DOM read below is of the field the person just typed into.
    */
-  const keepIt = useCallback(() => {
+  /**
+   * The product's one translation of an error into words, kept in `lib` so the
+   * boot's failure screen uses the SAME one — see `why-failed.ts` for the
+   * divergence that put it there.
+   */
+  const whyFailed = useCallback(
+    (err: unknown, fallback: string): string => sayWhyFailed(err, fallback),
+    [],
+  );
+
+  /* a keep is the draft reaching home: nothing waits any more */
+  const keepIt = useCallback(
+    (andReflect = false) => {
     const text = draft.trim();
     if (text === "") return;
     /* LINKS TYPED INTO THE MOUTH BECOME ATTACHMENTS.
@@ -7950,8 +9579,14 @@ function HomeExperience(): JSX.Element {
       reflectionCount: 0,
       /* Nothing has read it yet, and the world does not pretend otherwise:
          distillation is a background pass on the server, so a memory a second
-         old is genuinely uncited and is drawn that way. */
+         old is genuinely uncited, carries nothing, and is drawn that way.
+         When the pass lands, the re-light effect gives it whatever it turns
+         out to hold up. */
       cited: false,
+      roots: 0,
+      promotion: 0,
+      onPoster: false,
+      underPrinciple: false,
       inGroup: false,
       terms: [],
     };
@@ -7985,6 +9620,9 @@ function HomeExperience(): JSX.Element {
            Adopting it here means a reload finds the same memory rather than a
            duplicate, which is what `fetched` upstream is checking. */
         seed.sigId = made.id;
+        /* the world already has this orb (`born` above); recording the id
+           keeps it out of the pour signature so nothing is rebuilt */
+        bornIdsRef.current.add(made.id);
         setKeepPublic(false);
         simApiRef.current?.identify(seed.id, made.id);
         /* AND IT JOINS THE ARCHIVE, NOT ONLY THE GROUND.
@@ -8021,13 +9659,79 @@ function HomeExperience(): JSX.Element {
           finalizeAttachment({ type: "link", inspirationId: made.id, url }).catch(
             () => undefined,
           );
+
+        /* AND THEN ASK WHAT IT MADE OF IT.
+           A keep enqueues derivation, and the server had a rebuilt top of mind
+           THREE SECONDS later when this was measured. The client never asked.
+           So the product did its one trick, in three seconds, and hid it until
+           the person happened to reload — which a person in their first minute
+           has no reason to do. They save the first thing they have ever told
+           it, watch nothing happen, and conclude nothing did.
+
+           THE LAW SAYS THE WORLD NEVER MOVES UNLESS THE USER MOVED IT, and
+           this obeys it: the user pressed save, and this is that press
+           landing. It is the same shape `restoreLead` already uses one screen
+           away — `restoreTopOfMindEntry(id).then(() => loadTopOfMind())` — a
+           person's act, and then the board asked what it says now.
+
+           ONE fetch, not a poll. A poll would be the world moving on its own,
+           which is the thing the law forbids. If the derivation is slower than
+           the settle below, the poster waits for the person's next move, which
+           is the right way round.
+
+           The catch is silent on purpose and it is a READ, not an act: when
+           this fails the poster keeps showing what was last known, which is
+           true rather than quiet. The failure-path audit's own rule. */
+        if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
+        settleTimerRef.current = window.setTimeout(() => {
+          settleTimerRef.current = null;
+          if (offlineRef.current) return;
+          loadTopOfMind()
+            .then((tom) => absorbBoard(tom))
+            .catch(() => undefined);
+        }, DERIVATION_SETTLE_MS);
+
+        /* KEPT, AND THEN ASKED ABOUT (founder, 2026-08-25).
+           You cannot reflect on something that does not exist yet — a
+           reflection is a row against a memory's id — so "reflect on this"
+           cannot be an alternative to keeping. It is keeping, and then the
+           question, without making you find the orb you just made and open it
+           yourself. Selecting the new orb opens its panel through the same
+           path a click does, and the reflection is already open inside it. */
+        if (andReflect) {
+          /* SAY IT WAS SAVED BEFORE ASKING THE QUESTION (founder, 2026-08-25:
+             "when clicking on save and reflect, make clear it was saved —
+             character brightens with the word saved shown in the place of
+             capture inspiration, and then have reflect workflow in modal").
+
+             It went straight to the question. Two things happened at once and
+             only one of them was visible, so the gesture read as "reflect"
+             with the keep taken on trust — and a keep taken on trust is the
+             one thing this world has never asked anybody to do. The plain
+             `save` beside it flares the companion and drops an orb; this did
+             the same underneath and said nothing.
+
+             So the acknowledgement comes first, in the two channels the world
+             already has: the creature brightens, and the word lands in the
+             mouth's own resting slot where the phrase lives. Then the card
+             opens with the question already in it. */
+          simApiRef.current?.acknowledge("kept");
+          setCharSay("saved");
+          /* THE SHEET, NOT THE CARD. `made.id` and not `seed.id`: a
+             reflection is a row against the SERVER's id, and the seed's is a
+             local one minted before the keep left. */
+          setReflectOn({ id: made.id, text });
+          setReflect({ step: "open", question: "What did this stir in you?", answer: "" });
+        }
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         bornRef.current = bornRef.current.filter((s) => s.id !== seed.id);
         simApiRef.current?.unborn(seed.id);
         setDraft(text);
         setMouthOpen(true);
-        setMouthNote("That didn’t keep. The words are still here.");
+        setMouthNote(whyFailed(err, "That didn’t keep. The words are still here"));
+        /* and in a build with the internals on, the whole error, once */
+        if (showsDebug()) console.error("[waka] keep failed:", err);
       });
     /* `keepPublic` IS A DEPENDENCY, and leaving it out silently discarded the
        one privacy decision a person makes by hand. This callback reads
@@ -8040,7 +9744,9 @@ function HomeExperience(): JSX.Element {
        It fails closed, so nothing was ever published by accident — but a
        person who asked for something to reach their rooms was told it had and
        it had not, which is the same lie in the safer direction. */
-  }, [draft, keepPublic]);
+    },
+    [draft, keepPublic],
+  );
 
   const onMouthKey = useCallback(
     (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
@@ -8080,13 +9786,26 @@ function HomeExperience(): JSX.Element {
 
   /* The field is exactly as tall as what is in it. It hangs off the seam and
      grows UPWARD, so the words stay the same distance above the ground the
-     orb will drop into however many lines they wrap to. */
+     orb will drop into however many lines they wrap to.
+
+     EXCEPT ON THE PAGE, WHERE THE PAGE OWNS THE HEIGHT — and this is not a
+     preference, it is the reason the old sheet kept coming out the size of the
+     text inside it. An inline `style.height` outranks every stylesheet in the
+     document, cascade layers included, so the stated depth was being
+     overwritten on each keystroke by whatever the words happened to measure.
+     Releasing the inline value hands the height back to the CSS: the well
+     stretches to the viewport the moment the note goes long, rather than
+     growing line by line until it hits a ceiling. */
   useLayoutEffect(() => {
     const el = mouthFieldRef.current;
     if (!el) return;
+    if (mouthLong) {
+      el.style.height = "";
+      return;
+    }
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
-  }, [draft, mouthOpen]);
+  }, [draft, mouthOpen, mouthLong]);
 
   useEffect(() => {
     if (!mouthOpen) return;
@@ -8097,6 +9816,25 @@ function HomeExperience(): JSX.Element {
     el.setSelectionRange(end, end);
   }, [mouthOpen]);
 
+  /* CROSSING THE BOUNDARY MUST NOT DROP THE PEN. The page face is a portal
+     (`withMouthLayer`) and the quick line is not, so the keystroke that
+     carries the words across the long-note line REMOUNTS the field — and a
+     remount blurs it, which sent the very next key to the world instead of
+     the sentence (found live: Escape after shrinking a draft closed
+     nothing). The mouth-open effect above cannot catch it because the mouth
+     never closed. This one runs on the flip itself, and only when the field
+     actually lost focus, so it never fights the effect above: reopening
+     focuses to the end there, crossing the line refocuses to the caret the
+     last keystroke recorded here. */
+  useEffect(() => {
+    if (!mouthOpen) return;
+    const el = mouthFieldRef.current;
+    if (!el || document.activeElement === el) return;
+    el.focus();
+    const at = Math.min(mouthCaretRef.current, el.value.length);
+    el.setSelectionRange(at, at);
+  }, [mouthPage, mouthOpen]);
+
   const panelBall = panelId
     ? ballsRef.current?.byId.get(panelId) ?? groupBallsRef.current.get(panelId) ?? null
     : null;
@@ -8104,6 +9842,229 @@ function HomeExperience(): JSX.Element {
       member's save — no reflect action at all. */
   const panelIsGroup = panelBall !== null && panelBall.col !== undefined;
   const panelCanReflect = !panelIsGroup || panelBall?.own === true;
+  /* WHETHER ANYTHING WAS READ OUT OF THIS MEMORY. `roots` is the count of
+     signals standing on it — the same number the field grades its light by —
+     so the question "does deleting this cost anything a person cannot see"
+     is already answered on the orb, with no extra request. Zero means the
+     delete is silent; anything else opens the ask. */
+  const panelPowersSignal = (panelBall?.roots ?? 0) > 0;
+
+  /**
+   * THE MEMORY BEFORE THIS ONE, AND THE ONE AFTER — from the card itself.
+   *
+   * Reading a second memory meant closing the first, finding another orb in a
+   * field that had just re-lit, and tapping it: three gestures and a search to
+   * do the most ordinary thing there is, which is read on (founder,
+   * 2026-08-25: "add option to move between inspirations from the card
+   * itself").
+   *
+   * IN THE GROUND'S OWN ORDER, which is when you kept them — oldest to newest,
+   * the same order the field lays them out in and the same order the dial
+   * winds through. Any other order would be a second, invisible arrangement of
+   * the same things.
+   *
+   * ONLY WITHIN THE WALL YOU ARE STANDING ON, and only over memories that
+   * exist at the moment the dial is wound to: stepping out of the ground you
+   * are looking at, or into a memory that has not happened yet, is not a step,
+   * it is a teleport. Null at either end — the ends of an archive are real and
+   * the row simply loses that half rather than wrapping, which would make
+   * "the oldest" and "the newest" impossible to feel.
+   */
+  /** Whether an open card answered a left/right key — written every render,
+      read by the world's key listener. See the assignment below. */
+  const panelArrowRef = useRef<(dir: -1 | 1) => boolean>(() => false);
+  /**
+   * WHICH CARET THE KEY JUST PRESSED (founder, 2026-08-27: "using keyboard to
+   * move left and right should brighten the respective button as well
+   * temporarily").
+   *
+   * The arrows do what the carets do, and until now they did it invisibly:
+   * the card's contents changed and the control that means that change sat
+   * there unlit, so the keyboard and the pointer were two different
+   * instruments for one act. Light is the only meaning channel this world
+   * has — so the key lights the caret it pressed, briefly, the same way
+   * noticing a member lights the member.
+   */
+  const [caretLit, setCaretLit] = useState<-1 | 1 | null>(null);
+  useEffect(() => {
+    if (caretLit === null) return undefined;
+    const id = window.setTimeout(() => setCaretLit(null), 420);
+    return () => window.clearTimeout(id);
+  }, [caretLit]);
+
+  const panelNeighbours = useMemo<{ prev: string | null; next: string | null }>(() => {
+    if (!panelId || panelIsGroup) return { prev: null, next: null };
+    const here = (inspirations ?? []).filter((c) => c.capturedMs <= TRef.current);
+    if (here.length < 2) return { prev: null, next: null };
+    const order = [...here].sort(
+      (a, b) => a.capturedMs - b.capturedMs || a.id.localeCompare(b.id),
+    );
+    const at = order.findIndex((c) => c.id === panelId);
+    if (at < 0) return { prev: null, next: null };
+    return {
+      prev: at > 0 ? (order[at - 1] as { id: string }).id : null,
+      next: at < order.length - 1 ? (order[at + 1] as { id: string }).id : null,
+    };
+    /* `panelId` and the archive are the whole of it: the neighbours change
+       when the archive does or when you step, and nothing else. */
+  }, [panelId, panelIsGroup, inspirations]);
+
+  /**
+   * WHICHEVER ROUTE MOVED THE CARD, THE CARET THAT MEANS IT LIGHTS.
+   *
+   * There are three ways to page — the world's arrows, the reach's arrows,
+   * and the carets themselves — and they do NOT share a function: the reach
+   * calls the simulation's `select` directly, which is why the first version
+   * of this (written beside the arrow keys, then inside `stepToMemory`) lit
+   * nothing whenever the ground held focus. So this watches the one thing
+   * all three change: which memory the card is showing. If the new one is
+   * the neighbour the old one had, the caret pointing that way lights.
+   *
+   * Opening a memory out of the field lights nothing, correctly — a tap on
+   * an orb is not a step, and nothing about the carets explains it.
+   */
+  const steppedFromRef = useRef<{ id: string | null; prev: string | null; next: string | null }>({
+    id: null,
+    prev: null,
+    next: null,
+  });
+  useEffect(() => {
+    const was = steppedFromRef.current;
+    if (panelId && was.id && panelId !== was.id) {
+      if (panelId === was.prev) setCaretLit(-1);
+      else if (panelId === was.next) setCaretLit(1);
+    }
+    steppedFromRef.current = {
+      id: panelId,
+      prev: panelNeighbours.prev,
+      next: panelNeighbours.next,
+    };
+  }, [panelId, panelNeighbours.prev, panelNeighbours.next]);
+
+  /**
+   * The two carets, built once and shown at the foot of BOTH faces of the card
+   * — reading and editing. An end of the archive simply has no caret rather
+   * than an inert one: a control that looks live and does nothing teaches that
+   * the surface is broken, and the ends of what you have kept are real.
+   */
+  /**
+   * THE ARROWS READ THE CARD WHILE A CARD IS OPEN (founder, 2026-08-27: "let
+   * user be able to use keyboard to move left and right for the inspiration
+   * cards"). The carets at the foot were the only way to page and they need a
+   * pointer; the reach's arrows only work while the reach holds focus, which
+   * a card opened by tapping an orb never has.
+   *
+   * Left is older and right is newer — the directions the carets point and
+   * the ones the reach walks, so one meaning per axis survives. Answered
+   * through a ref because the world's key listener is bound once, far above
+   * where the neighbours are known.
+   *
+   * Returns whether the card took the key. At the ends of the archive it
+   * still takes it: pressing past the oldest memory must not quietly become
+   * travel to somebody else's wall.
+   */
+  panelArrowRef.current = (dir) => {
+    if (!panelId || panelIsGroup) return false;
+    const id = dir === -1 ? panelNeighbours.prev : panelNeighbours.next;
+    /* lit even at the ends, where there is no neighbour to step to and
+       `stepToMemory` never runs: the press happened, and a control that
+       stays dark when you press it reads as one that did not hear you */
+    if (!id) setCaretLit(dir);
+    /* called from a key event, long after `stepToMemory` is defined below */
+    if (id) stepToMemory(id);
+    return true;
+  };
+  const panelStepCarets = panelIsGroup ? null : (
+    <>
+      {panelNeighbours.prev ? (
+        <button
+          type="button"
+          aria-label="the inspiration before this one"
+          title="the inspiration before this one"
+          className={caretLit === -1 ? "jar-caret-lit" : undefined}
+          onClick={() => stepToMemory(panelNeighbours.prev)}
+        >
+          <span className="jar-caret jar-caret--left" aria-hidden="true" />
+        </button>
+      ) : null}
+      {panelNeighbours.next ? (
+        <button
+          type="button"
+          aria-label="the inspiration after this one"
+          title="the inspiration after this one"
+          className={caretLit === 1 ? "jar-caret-lit" : undefined}
+          onClick={() => stepToMemory(panelNeighbours.next)}
+        >
+          <span className="jar-caret jar-caret--right" aria-hidden="true" />
+        </button>
+      ) : null}
+    </>
+  );
+
+  /**
+   * Step to a neighbour without closing what is open — one gesture, in place.
+   *
+   * `editing` is declared further down and cannot be closed over here, so the
+   * words are left through a ref. That is not a workaround: leaving an open
+   * caret behind is a CORRECTNESS rule — an edit still open over the memory
+   * you have just stepped away from would be typed into the wrong one — and a
+   * rule that has to hold cannot depend on where in this file a hook happens
+   * to sit.
+   */
+  const leaveWordsRef = useRef<() => void>(() => {});
+  /** Set while a step is in flight, so the panel effect can tell paging
+      through the card from opening a different memory out of the field. */
+  const steppingRef = useRef(false);
+
+  /**
+   * AN OPEN EDIT IS ABANDONED BY EVERY ROUTE OUT OF ITS CARD, NOT JUST ONE.
+   *
+   * `stepToMemory` has always left the words behind, and while the carets were
+   * the only way to swap the card mid-edit that was the whole rule. The carets
+   * became `save` on 2026-08-25 (founder), which leaves the FIELD as the
+   * remaining way — and tapping another orb runs none of `stepToMemory`.
+   *
+   * WHAT THAT COSTS IS NOT THE CARET. Both the edit field and the editing
+   * footer are gated on `editing.open.id === panelId`, so the words never
+   * appear over the wrong memory; that much was already safe. It is the
+   * READING footer that breaks, because it is gated on `!editing.open` — so a
+   * card opened while an edit is still held for some other memory renders
+   * NEITHER footer: no reflect, no ways on, no delete. An edit left behind on
+   * a card you can no longer see silently strips the next card of everything
+   * it offers.
+   *
+   * A change of selection always abandons an edit, because an edit is always
+   * about the memory on screen. One rule for every route, rather than a line
+   * remembered per way in.
+   */
+  useEffect(() => {
+    leaveWordsRef.current();
+  }, [selectedId]);
+
+  const stepToMemory = useCallback((id: string | null) => {
+    if (!id) return;
+    leaveWordsRef.current();
+    setForget({ id: null, step: "rest" });
+    steppingRef.current = true;
+    /* AND THE GROUND FOLLOWS THE CARD (founder's recording, 2026-08-25: "the
+       balls in the back should reflect which ball we're moving to").
+
+       This set React's `selectedId` and nothing else. The loop mirrors that
+       ref, so the FIELD dimmed correctly — every other orb sank — but the one
+       you had stepped to was never held: `select()` is what lights an orb,
+       leans the companion toward it and takes the hold, and it was never
+       called. So paging through the card moved the words and left the light
+       on whichever orb you had originally tapped.
+
+       `select` sets `selectedId` itself, so this replaces the setter rather
+       than joining it. It cannot toggle the selection off by accident: React
+       state has not committed yet, so the ref it compares against is still
+       the memory being stepped AWAY from. The bare setter stays as the
+       fallback for the fixture, which has no simulation behind it. */
+    const sim = simApiRef.current;
+    if (sim) sim.select(id);
+    else setSelectedId(id);
+  }, []);
 
   /* ---------------- reflect ----------------
      The panel is the memory and ONE action. Reflecting happens here rather
@@ -8112,9 +10073,36 @@ function HomeExperience(): JSX.Element {
      an answer against the saved signal's own id, so the whole loop fits
      inside the card. */
   const [reflect, setReflect] = useState<ReflectState>({ step: "rest", question: "", answer: "" });
+  /**
+   * THE MEMORY A STANDALONE REFLECTION IS ABOUT.
+   *
+   * `reflect` alone is bound to whatever card is open, which is right for the
+   * card's own verb. Reflecting from the MOUTH has no card: you kept
+   * something and were asked about it, and dragging the whole reading panel
+   * open to hold one question puts a memory's words, its verbs, its date and
+   * its visibility on screen around a textarea (founder, 2026-08-25: "have
+   * reflect workflow in modal"). Null unless the mouth asked.
+   */
+  const [reflectOn, setReflectOn] = useState<{ id: string; text: string } | null>(null);
 
-  /* a new memory is a new reflection: nothing carries over */
+  /**
+   * A new memory is a new reflection: nothing carries over.
+   *
+   * ...unless the memory arrived BY WAY OF "keep it and reflect", which asks
+   * for the question in the same breath as the keep. That path sets the
+   * reflection before the panel exists — there is nothing to open it on until
+   * the orb is identified — so without this the reset ran a moment later and
+   * swallowed it, and the founder's one gesture landed them in front of a
+   * closed panel with a "reflect on this" button they had already pressed.
+   * The ref names WHICH memory asked, so a panel opened on any other one
+   * still rests.
+   */
   useEffect(() => {
+    if (panelId !== null && reflectOnOpenRef.current === panelId) {
+      reflectOnOpenRef.current = null;
+      setReflect({ step: "open", question: "What did this stir in you?", answer: "" });
+      return;
+    }
     setReflect({ step: "rest", question: "", answer: "" });
   }, [panelId]);
 
@@ -8140,10 +10128,23 @@ function HomeExperience(): JSX.Element {
    * from.
    */
   const sayVerdict = useCallback(
-    (id: string, value: "true" | "partly" | "not_true") => {
+    (id: string, value: "true" | "partly" | "not_true", targetId?: string) => {
       setVerdicts((prev) => new Map(prev).set(id, value));
+      /* the receipt: what this answer taught the loop, said where the act
+         happened, worded only as strongly as its enforcing test allows —
+         goals/the-legible-loop.md Phase 2 */
+      const receipt = targetId
+        ? RECEIPTS.verdictGroup.text
+        : value === "not_true"
+          ? RECEIPTS.verdictNo.text
+          : RECEIPTS.verdictKept.text;
+      setVerdictReceipt({ id, text: receipt });
+      window.setTimeout(
+        () => setVerdictReceipt((r) => (r?.id === id ? null : r)),
+        7000,
+      );
       if (offlineRef.current) return;
-      createFeedback({ targetType: "signal", targetId: id, value }).catch(() => {
+      createFeedback({ targetType: "signal", targetId: targetId ?? id, value }).catch(() => {
         /* it did not land, and the row should not claim it did */
         setVerdicts((prev) => {
           const next = new Map(prev);
@@ -8155,95 +10156,119 @@ function HomeExperience(): JSX.Element {
     [],
   );
 
-  /** Throw out a pattern of your own. The memories under it stay. */
-  const dropSignal = useCallback((id: string) => {
-    setVerdicts((prev) => new Map(prev).set(id, "gone"));
-    if (offlineRef.current) return;
-    deleteSignal(id)
-      .then(() => {
-        setSignals((prev) => (prev ? prev.filter((p) => p.id !== id) : prev));
-      })
-      .catch(() => {
-        setVerdicts((prev) => {
-          const next = new Map(prev);
-          next.delete(id);
-          return next;
-        });
-      });
-  }, []);
+  /** The verdict's receipt, shown briefly under the answered statement. */
+  const [verdictReceipt, setVerdictReceipt] = useState<{ id: string; text: string } | null>(
+    null,
+  );
 
+  /** Let a pattern of your own go. Nothing is deleted: the row, the memories
+      under it and its vector all stay on the server — the vector as the
+      anchor the ground refuses by. Like the poster's own set-aside, the
+      sentence HOLDS ITS PLACE here, carrying the receipt and the way back;
+      it sinks to the retired layer on the next arrival, not out from under
+      the person mid-thought. */
+  /** The letting-go undone: the refusals stop, the pattern stands back up
+      wherever its evidence puts it. */
   /** Which memory has been asked about, and how far the asking has got. */
-  /** the housekeeping actions, opened on request rather than always present */
-  const [more, setMore] = useState(false);
-  const [forget, setForget] = useState<{ id: string | null; step: "rest" | "asking" | "going" }>({
+  /**
+   * DELETING, AND THE FOUR THINGS THAT CAN BE TRUE OF IT.
+   *
+   * `failed` is separate from `asking` and the separation is the whole point.
+   * They were one state for a while: the request's catch put the flow back to
+   * `asking`, which was harmless while asking meant "are you sure" — and
+   * became a lie the moment asking meant "a signal stands on this memory".
+   * A dropped request would then explain, in confident detail, a consequence
+   * that had nothing to do with what went wrong. A surface may not borrow a
+   * sentence about one thing to report another.
+   */
+  const [forget, setForget] = useState<{
+    id: string | null;
+    step: "rest" | "asking" | "going" | "failed";
+  }>({
     id: null,
     step: "rest",
   });
+  /** THE SAME ASK BEFORE UN-PUBLISHING (founder, 2026-08-27: "similar
+      warning should occur when changing what was public to private as
+      well"). Armed only when the memory is public AND a signal stands on
+      it — the mirror of delete's rule: a warning with nothing to warn
+      about is friction wearing a safety costume. */
+  const [unpublishAsk, setUnpublishAsk] = useState(false);
   useEffect(() => {
     setForget({ id: null, step: "rest" });
-    setMore(false);
+    setUnpublishAsk(false);
   }, [panelId]);
 
   /* ============================ ROOMS ============================
      WHERE YOUR PATTERNS AND OTHER PEOPLE'S MEET.
 
      The canon draws the line and the whole feature follows from it: what is
-     shared is a SIGNAL — a distilled statement — and never an inspiration.
-     Your raw memories do not cross an account boundary, are never cited to
-     another member, and are never exported by a group flow. So a room is a
-     wall of statements, and the only act that fills it is you deciding a
-     pattern of yours is worth saying out loud.
-
-     That is why sharing comes first here. Room creation, invites, members and
-     the shared board are all stagecraft until something can be put on a wall.
+     on a wall is a STATEMENT — since 2026-08-24 one the room GREW from its
+     members' pooled public memories (two voices or more under each), no
+     longer one a member shared in. What crosses the boundary is still never
+     a raw memory: the wall serves sentences and contributor names, and the
+     evidence text stays home. The act that reaches a room is the mouth's
+     "going to your rooms" switch, at the memory.
   */
 
-  /** Which pattern is being offered to a room, and to which rooms so far. */
-  const [sharing, setSharing] = useState<string | null>(null);
 
   /**
-   * SAY THIS ONE OUT LOUD — or take it back.
+   * THE STAR'S OTHER HALF — handing a sentence back.
    *
-   * Per-signal, per-room, and reversible. The statement appears on that
-   * room's wall with your name on it; the memories it rests on stay here.
-   * Members see the pattern, never the inspirations.
+   * A starred line is one the person wrote; pressing its star offers the one
+   * verb the lock was missing: hand it back to WAKA. Nothing is rewritten at
+   * that moment — the words stand until the next reading, which may then
+   * treat them like any of its own. The server answers with the row as it
+   * now is, and the sky/poster re-light from state rather than from hope.
    */
-  const shareTo = useCallback((signalId: string, groupId: string, on: boolean) => {
-    /* only on the way out — taking a statement back is not an announcement */
-    if (on) simApiRef.current?.acknowledge("shared");
-    setSignals((prev) =>
-      prev
-        ? prev.map((p) =>
-            p.id === signalId
-              ? {
-                  ...p,
-                  sharedGroupIds: on
-                    ? [...p.sharedGroupIds, groupId]
-                    : p.sharedGroupIds.filter((g) => g !== groupId),
-                }
-              : p,
-          )
-        : prev,
-    );
-    if (offlineRef.current) return;
-    const call = on ? shareSignal(signalId, groupId) : unshareSignal(signalId, groupId);
-    call.catch(() => {
-      /* it did not land, so the pattern must not claim it is out loud */
-      setSignals((prev) =>
-        prev
-          ? prev.map((p) =>
-              p.id === signalId
-                ? {
-                    ...p,
-                    sharedGroupIds: on
-                      ? p.sharedGroupIds.filter((g) => g !== groupId)
-                      : [...p.sharedGroupIds, groupId],
-                  }
-                : p,
-            )
-          : prev,
-      );
-    });
+  const [entrusting, setEntrusting] = useState<string | null>(null);
+  const entrustLead = useCallback((entryId: string) => {
+    releaseTopOfMindEntry(entryId)
+      .then((updated) => {
+        setNotes((prev) =>
+          prev
+            ? prev.map((n) => (n.id === entryId ? { ...n, locked: Boolean(updated.locked) } : n))
+            : prev,
+        );
+        setEntrusting(null);
+      })
+      .catch(() => setEntrusting(null));
+  }, []);
+
+  /**
+   * THE SAME ACT, ON THE OTHER NOUN.
+   *
+   * Rewriting a signal LOCKS its words against regeneration — that is what
+   * `PATCH /signals/:id` does and what its own doc comment says. The world
+   * gained `say it in my words` on a ground this session and did not gain the
+   * way back, so a person could freeze a sentence and never unfreeze it. The
+   * board entry one surface away has had both halves all along (`Hand it
+   * back`), which is exactly why this was worth finding: the pattern was
+   * already right next door and the new verb was written without it.
+   *
+   * Found by censusing every verb in the world against the noun it sits on,
+   * after the founder asked whether some of the flat wall was better deleted
+   * than migrated. The answer that census keeps giving is that the question is
+   * never migrate-or-delete — it is whether the verb has the shape the noun
+   * needs, and half a pair is the wrong shape.
+   */
+  const [releasingGround, setReleasingGround] = useState<string | null>(null);
+  const releaseGround = useCallback((signalId: string) => {
+    releaseSignal(signalId)
+      .then(() => {
+        setNotes((prev) =>
+          prev
+            ? prev.map((n) => ({
+                ...n,
+                citedSignals: n.citedSignals.map((c) =>
+                  c.id === signalId ? { ...c, locked: false } : c,
+                ),
+              }))
+            : prev,
+        );
+        setReleasingGround(null);
+      })
+      .catch(() => setReleasingGround(null));
   }, []);
 
   /** Making a room, joining one, and the state of asking about either. */
@@ -8270,16 +10295,25 @@ function HomeExperience(): JSX.Element {
     if (groupForm.mode === "make") {
       createGroup(text)
         .then(landed)
-        .catch(() => failed("That group could not be made. Try another name."));
+        /* THROUGH `whyFailed`, AND THE 401 IS WHY.
+           This said "That room could not be made. Try another name." to every
+           failure alike, so `e2e:when-it-fails --kind 401` showed a signed-out
+           person being sent to think up a different name — advice that cannot
+           work, about a problem they do not have. The name IS the likely
+           cause of a 409, and the fallback still says so; what was missing is
+           that the server gets to disagree. */
+        .catch((err: unknown) =>
+          failed(whyFailed(err, "That room could not be made. Try another name.")),
+        );
     } else {
       /* a pasted invite link works as well as a bare code — the link is the
          thing people will actually send each other */
       const code = text.includes("/") ? text.split("/").filter(Boolean).pop() ?? text : text;
       joinGroup(code)
         .then((r) => landed(r.group))
-        .catch(() => failed("No group answered to that. Check the link."));
+        .catch((err: unknown) => failed(whyFailed(err, "No room answered to that. Check the link.")));
     }
-  }, [groupForm]);
+  }, [groupForm, whyFailed]);
 
   /**
    * WHO IS IN HERE — and it is the same act as inviting.
@@ -8293,8 +10327,9 @@ function HomeExperience(): JSX.Element {
   /* the fixture fills membership from inside the sim's effect, which is
      declared above this state — a ref is the one honest way across */
   setMembersRef.current = setMembers;
-  /** read by the room loader, which is built once */
-  const membersRef = useRef<Map<string, ApiGroupMember[]>>(new Map());
+  /* `membersRef` is declared up beside `viewerIdRef`, above the sim's
+     effect, because the frame loop now reads it too — the room's company is
+     drawn from it. The mirror is written here, where the state lives. */
   membersRef.current = members;
   /**
    * ROOMS THAT ARE MACHINES' ROOMS.
@@ -8331,6 +10366,206 @@ function HomeExperience(): JSX.Element {
    * what it is, a group's is the real one.
    */
   const [settingsFor, setSettingsFor] = useState<string | null>(null);
+
+  /**
+   * A ROOM'S BOARD, ASKED TO READ ITSELF AGAIN.
+   *
+   * `refreshGroupTopOfMind` was the last verb on the flat surface with no way
+   * in from the world. Your own wall has had `Read it again` since the board
+   * existed; a room's board could only go stale and stay stale.
+   *
+   * It is a SEPARATE block rather than the self wall's toolbar opened up to
+   * rooms. Those other verbs — hold this one up, say it in my words, not this
+   * — act on a self entry's id and its `pinned`/`locked` facts; a room's
+   * entries are a different row with a different shape, and letting the whole
+   * strip render for a group would have offered three verbs that would fail
+   * on press. One verb that works beats four that look right.
+   */
+  const [groupReading, setGroupReading] = useState<"rest" | "asking" | "working">("rest");
+  const rereadGroupBoard = useCallback(
+    (groupId: string) => {
+      setGroupReading("working");
+      refreshGroupTopOfMind(groupId)
+        .then(() => {
+          /* The reading is started, not finished — the server writes a new
+             version in the background and the wall picks it up on its own
+             sweep. Saying "reading" rather than "read" is the difference
+             between a receipt and a lie. */
+          setCharSay("The room is reading itself again.");
+          setGroupReading("rest");
+        })
+        .catch((err) => {
+          setCharSay(whyFailed(err, "That reading did not start."));
+          setGroupReading("rest");
+        });
+    },
+    [whyFailed],
+  );
+
+
+  /* ── THE FIVE ACTS ON A PRINCIPLE ──────────────────────────────────────
+     Each reloads from the server rather than patching state by hand: rank is
+     decided there (declaring re-ranks, disputing can change a state), and a
+     list this short is not worth a reconciliation that can disagree with it. */
+  const reloadPrinciples = useCallback(async () => {
+    const rows = await fetchPrinciples();
+    setPrinciples(rows);
+  }, []);
+
+  const savePrinciple = useCallback(() => {
+    const draft = pDraft;
+    if (!draft || pBusy) return;
+    const text = draft.text.trim();
+    if (text === "") return;
+    setPBusy(true);
+    /**
+     * DECLARING IS ROUTED, NOT REFUSED — and the world has to say which way it
+     * went. `POST /principles` never rejects: what qualifies comes back as a
+     * principle, and what is really a rule or a goal is KEPT AS AN INSPIRATION
+     * instead (`ApiDeclarationResult`).
+     *
+     * The first version of this ignored the answer, reloaded, and closed. So
+     * typing "I finish what I start." — a goal — returned 201, added nothing
+     * to the band, and said nothing: the person is told their words were
+     * saved by the absence of an error, and shown a list that does not
+     * contain them. Caught by walking it in a browser, which is the only
+     * reason it is not shipping.
+     */
+    const done = () => {
+      setPDraft(null);
+      setPick(null);
+    };
+    if (draft.id) {
+      void updatePrinciple(draft.id, text)
+        .then(() => reloadPrinciples())
+        .then(done)
+        .catch((err) => setCharSay(whyFailed(err, "That was not saved.")))
+        .finally(() => setPBusy(false));
+      return;
+    }
+    void declarePrinciple(text)
+      .then((result) => {
+        if (result.created === "inspiration") {
+          /* Not a failure and not a correction — a different filing, said in
+             the world's own voice rather than left for the person to infer
+             from an unchanged list. */
+          setCharSay(
+            "That reads as something to do rather than something you hold to, so it is kept as a memory.",
+          );
+          done();
+          return undefined;
+        }
+        return reloadPrinciples().then(done);
+      })
+      .catch((err) => setCharSay(whyFailed(err, "That was not saved.")))
+      .finally(() => setPBusy(false));
+  }, [pDraft, pBusy, reloadPrinciples, whyFailed]);
+
+  const disputeThisPrinciple = useCallback(
+    (id: string) => {
+      if (pBusy) return;
+      setPBusy(true);
+      disputePrinciple(id)
+        .then(() => reloadPrinciples())
+        .then(() => setPick(null))
+        .catch((err) => setCharSay(whyFailed(err, "That dispute was not recorded.")))
+        .finally(() => setPBusy(false));
+    },
+    [pBusy, reloadPrinciples, whyFailed],
+  );
+
+  const removePrinciple = useCallback(
+    (id: string) => {
+      if (pBusy) return;
+      setPBusy(true);
+      deletePrinciple(id)
+        .then(() => reloadPrinciples())
+        .then(() => {
+          setPGoing(null);
+          setPick(null);
+        })
+        .catch((err) => setCharSay(whyFailed(err, "That principle is still here.")))
+        .finally(() => setPBusy(false));
+    },
+    [pBusy, reloadPrinciples, whyFailed],
+  );
+
+  /* MOVED BY ONE PLACE, NOT DRAGGED. Rank IS the ordering — "states render,
+     numerals never" — so the act is `above the one before it`, and the whole
+     order is sent because that is what the route takes and what makes it
+     stick against the next generation. */
+  const movePrinciple = useCallback(
+    (id: string, by: -1 | 1) => {
+      if (pBusy) return;
+      const order = [...principles].sort((a, b) => a.rank - b.rank).map((x) => x.id);
+      const at = order.indexOf(id);
+      const to = at + by;
+      if (at < 0 || to < 0 || to >= order.length) return;
+      order.splice(to, 0, ...order.splice(at, 1));
+      setPBusy(true);
+      reorderPrinciples(order)
+        .then((rows) => setPrinciples(rows))
+        .catch((err) => setCharSay(whyFailed(err, "That order was not saved.")))
+        .finally(() => setPBusy(false));
+    },
+    [pBusy, principles, whyFailed],
+  );
+
+  /* Fetched when the sheet opens, on the wall it is about. A failure is
+     quiet: no keys is a real state, and a banner over a settings sheet for a
+     list nobody asked to see is noise. */
+  useEffect(() => {
+    if (!settingsFor || atWall.kind !== "agent" || offlineRef.current) return;
+    let dead = false;
+    fetchAgentKeys()
+      .then((rows) => {
+        if (!dead) setAgentKeys(rows);
+      })
+      .catch(() => undefined);
+    return () => {
+      dead = true;
+    };
+  }, [settingsFor, atWall]);
+
+  /* CLOSING THE SHEET FORGETS THE SECRET. It is shown once by the server's
+     design; holding it in state after the surface that shows it has gone is
+     keeping a credential around for no one to read. */
+  useEffect(() => {
+    if (settingsFor) return;
+    setMinted(null);
+    setRevoking(null);
+  }, [settingsFor]);
+
+  const issueKey = useCallback(
+    (profileId: string) => {
+      if (keysBusy) return;
+      setKeysBusy(true);
+      createAgentKey(profileId)
+        .then((key) => {
+          setMinted(key);
+          return fetchAgentKeys().then((rows) => setAgentKeys(rows));
+        })
+        .catch((err) => setCharSay(whyFailed(err, "That key was not issued.")))
+        .finally(() => setKeysBusy(false));
+    },
+    [keysBusy, whyFailed],
+  );
+
+  const revokeKey = useCallback(
+    (keyId: string) => {
+      if (keysBusy) return;
+      setKeysBusy(true);
+      revokeAgentKey(keyId)
+        .then(() => {
+          setRevoking(null);
+          return fetchAgentKeys().then((rows) => setAgentKeys(rows));
+        })
+        .catch((err) => setCharSay(whyFailed(err, "That key is still live.")))
+        .finally(() => setKeysBusy(false));
+    },
+    [keysBusy, whyFailed],
+  );
+
   /**
    * The account drop, top right — the mirror of the space settings top left.
    * They are mutually exclusive: opening one closes the other, because two
@@ -8338,9 +10573,30 @@ function HomeExperience(): JSX.Element {
    * have.
    */
   const [accountOpen, setAccountOpen] = useState(false);
-  /* TEMPORARY. See `.jar-flatmenu` in the JSX below — this is scaffolding for
-     the screens the world has no home for yet, and it goes when they do. */
-  const [flatMenuOpen, setFlatMenuOpen] = useState(false);
+  /* the reading: fetched once on first open, held for the session — the
+     rules do not change under a person mid-visit */
+  const [readingOpen, setReadingOpen] = useState(false);
+  const [theReading, setTheReading] = useState<ApiReading | null>(null);
+  /* the antechamber: fetched on every open — refusals accrue while the
+     world stands, and a stale dim place would claim the ground refused
+     less than it has */
+  const [antechamberOpen, setAntechamberOpen] = useState(false);
+  const [antechamber, setAntechamber] = useState<ApiAntechamberRow[] | null>(null);
+  /** Anchors put back from the antechamber this session, so its rows answer
+      in the same beat rather than waiting for a refetch. */
+  const [restoredAnchors, setRestoredAnchors] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const restoreFromAntechamber = useCallback((anchorSignalId: string) => {
+    if (offlineRef.current) return;
+    restoreSignal(anchorSignalId)
+      .then(() => {
+        setRestoredAnchors((prev) => new Set(prev).add(anchorSignalId));
+      })
+      .catch(() => {
+        /* it did not come back; the row keeps offering */
+      });
+  }, []);
   /** The rename box, while it is open: null when nobody is renaming. */
   const [renaming, setRenaming] = useState<{ id: string; text: string; busy: boolean } | null>(
     null,
@@ -8358,6 +10614,35 @@ function HomeExperience(): JSX.Element {
       dead = true;
     };
   }, [atWall, members]);
+
+  /**
+   * THE ROOM SO FAR. Fetched with the same trigger as the member list —
+   * standing on the wall — because they answer the same question at two
+   * depths: who is here, and how the room came to hold them. Kept per group
+   * and refetched on re-arrival, since a timeline that never moves is a
+   * timeline nobody trusts.
+   */
+  const [groupTimelines, setGroupTimelines] = useState<Map<string, ApiGroupTimeline>>(
+    () => new Map(),
+  );
+  useEffect(() => {
+    if (atWall.kind !== "group") return;
+    let dead = false;
+    const wallGroupId = atWall.id;
+    fetchGroupTimeline(wallGroupId)
+      .then((timeline) => {
+        if (dead) return;
+        /* the mirror the dial reads: it is derived hundreds of lines above
+           this declaration and cannot reach forward to the state */
+        groupTimelineRef.current.set(wallGroupId, timeline);
+        setGroupPastTick((n) => n + 1);
+        setGroupTimelines((prev) => new Map(prev).set(wallGroupId, timeline));
+      })
+      .catch(() => undefined);
+    return () => {
+      dead = true;
+    };
+  }, [atWall]);
 
   /**
    * CHANGING WHAT A ROOM BELIEVES.
@@ -8437,16 +10722,51 @@ function HomeExperience(): JSX.Element {
   const [leaving, setLeaving] = useState<string | null>(null);
   const [closing, setClosing] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
-  const leaveThisGroup = useCallback((groupId: string) => {
-    leaveGroup(groupId)
-      .then(() => {
-        setGroups((prev) => prev.filter((g) => g.id !== groupId));
-        setGroupPanel(null);
-        setLeaving(null);
-        simApiRef.current?.travel(-1);
-      })
-      .catch(() => setLeaving(null));
-  }, []);
+  /**
+   * WHAT THE ROOM'S PANEL SAYS WHEN THE SERVER REFUSES.
+   *
+   * Found by `e2e:when-it-fails`, which presses each act against a 500 on the
+   * one route it rests on and asks whether anything on screen said so. Three
+   * of this panel's four verbs said nothing at all:
+   *
+   *   rename   SILENT   — the screen was byte-identical before and after.
+   *   leave    MURMURS  — the confirm collapsed back to `leave this room`,
+   *                       which is exactly what pressing `stay` does.
+   *   close    MURMURS  — the same, back to `close this room`.
+   *
+   * A collapsing confirm is worse than silence: it is the shape of a
+   * successful cancel. The person pressed the yes, watched the panel agree,
+   * and the room is still there — with nothing anywhere to say which of those
+   * two things happened.
+   *
+   * The cure is the one the memory panel already proved: prose beside the
+   * verb, saying what is still true. Keyed by verb so it lands where the
+   * press did — an error at the top of a panel with four destructive words in
+   * it does not tell you which one refused.
+   */
+  const [groupTrouble, setGroupTrouble] = useState<GroupTrouble | null>(null);
+  const leaveThisGroup = useCallback(
+    (groupId: string) => {
+      setGroupTrouble(null);
+      leaveGroup(groupId)
+        .then(() => {
+          setGroups((prev) => prev.filter((g) => g.id !== groupId));
+          setGroupPanel(null);
+          setLeaving(null);
+          simApiRef.current?.travel(-1);
+        })
+        .catch((err: unknown) => {
+          /* DISARM AND SAY WHY, IN THAT ORDER. Leaving the confirm armed would
+             be the friendlier-looking choice and the wrong one: the armed word
+             is `leave — your statements come down`, and a person who reads the
+             failure and presses it again should be re-arming deliberately
+             rather than finding their finger already on the yes. */
+          setLeaving(null);
+          setGroupTrouble({ verb: "leave", text: whyFailed(err, "You are still in this room.") });
+        });
+    },
+    [whyFailed],
+  );
 
   /**
    * MAINTAINING A ROOM — three verbs the server has always answered.
@@ -8463,42 +10783,75 @@ function HomeExperience(): JSX.Element {
    * not go out until the database has agreed, which is the same rule the
    * memory panel's delete already follows.
    */
-  const renameThisGroup = useCallback((groupId: string, name: string) => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    setRenaming((cur) => (cur ? { ...cur, busy: true } : cur));
-    renameGroup(groupId, trimmed)
-      .then((updated) => {
-        setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, ...updated } : g)));
-        setRenaming(null);
-      })
-      .catch(() => setRenaming((cur) => (cur ? { ...cur, busy: false } : cur)));
-  }, []);
+  const renameThisGroup = useCallback(
+    (groupId: string, name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      setGroupTrouble(null);
+      setRenaming((cur) => (cur ? { ...cur, busy: true } : cur));
+      renameGroup(groupId, trimmed)
+        .then((updated) => {
+          setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, ...updated } : g)));
+          setRenaming(null);
+        })
+        .catch((err: unknown) => {
+          /* THE FORM STAYS OPEN AND KEEPS THE TYPED WORDS. This one measured
+             as SILENT — not "quiet", byte-identical — because clearing `busy`
+             is the whole of what used to happen and `busy` is invisible on a
+             request that fails in under a second. The words are still in the
+             box, so the recovery is one press; what was missing was any way to
+             know a press was needed. */
+          setRenaming((cur) => (cur ? { ...cur, busy: false } : cur));
+          setGroupTrouble({ verb: "rename", text: whyFailed(err, "That name did not stick.") });
+        });
+    },
+    [whyFailed],
+  );
 
-  const closeThisGroup = useCallback((groupId: string) => {
-    deleteGroup(groupId)
-      .then(() => {
-        setGroups((prev) => prev.filter((g) => g.id !== groupId));
-        setClosing(null);
-        setSettingsFor(null);
-        /* the column is gone, so stop standing in it */
-        simApiRef.current?.travel(-1);
-      })
-      .catch(() => setClosing(null));
-  }, []);
+  const closeThisGroup = useCallback(
+    (groupId: string) => {
+      setGroupTrouble(null);
+      deleteGroup(groupId)
+        .then(() => {
+          setGroups((prev) => prev.filter((g) => g.id !== groupId));
+          setClosing(null);
+          setSettingsFor(null);
+          /* the column is gone, so stop standing in it */
+          simApiRef.current?.travel(-1);
+        })
+        .catch((err: unknown) => {
+          setClosing(null);
+          setGroupTrouble({ verb: "close", text: whyFailed(err, "That room is still open.") });
+        });
+    },
+    [whyFailed],
+  );
 
-  const removeMember = useCallback((groupId: string, profileId: string) => {
-    removeGroupMember(groupId, profileId)
-      .then(async () => {
-        const fresh = await fetchGroupMembers(groupId).catch(() => null);
-        if (fresh) {
-          membersRef.current.set(groupId, fresh);
-          setMembers(new Map(membersRef.current));
-        }
-        setRemoving(null);
-      })
-      .catch(() => setRemoving(null));
-  }, []);
+  const removeMember = useCallback(
+    (groupId: string, profileId: string) => {
+      setGroupTrouble(null);
+      removeGroupMember(groupId, profileId)
+        .then(async () => {
+          const fresh = await fetchGroupMembers(groupId).catch(() => null);
+          if (fresh) {
+            membersRef.current.set(groupId, fresh);
+            setMembers(new Map(membersRef.current));
+          }
+          setRemoving(null);
+        })
+        .catch((err: unknown) => {
+          /* NOT WALKED by `e2e:when-it-fails` — a second member is a second
+             account and an invite round trip, which the walk does not do. It
+             is fixed here anyway because it is the same handler shape as the
+             three that WERE measured, written by the same hand on the same
+             day, and leaving it silent on the strength of not having been
+             looked at is how the other three got this way. */
+          setRemoving(null);
+          setGroupTrouble({ verb: "remove", text: whyFailed(err, "They are still in this room.") });
+        });
+    },
+    [whyFailed],
+  );
 
   /** read by the loop, which is created once and must not close over stale state */
 
@@ -8517,6 +10870,22 @@ function HomeExperience(): JSX.Element {
    * from the moment you name it, and stands honestly empty until then.
    */
   const [agentName, setAgentName] = useState<string | null>(null);
+  /**
+   * WHY GIVING AN AGENT A WALL DID NOT HAPPEN.
+   *
+   * `e2e:when-it-fails --only make-agent` read SILENT: the catch cleared
+   * `agentName`, which is what CLOSES the form, so a refusal and pressing
+   * `not now` were the same gesture — the dialog folded, no wall appeared,
+   * and nothing anywhere said which of those two things had happened. The
+   * same shape as the room's confirms, in the other half of the same dialog.
+   *
+   * Its sibling one row up — `submitGroup`, reached by choosing `a room`
+   * instead of `an agent` — has carried an `error` on its form state all
+   * along. This is that, kept as its own value rather than folded into
+   * `agentName`, because `agentName` is also the form's OPEN/CLOSED flag and
+   * an error must outlive neither more nor less than the form does.
+   */
+  const [agentTrouble, setAgentTrouble] = useState<string | null>(null);
   const makeAgent = useCallback(() => {
     const name = (agentName ?? "").trim();
     if (name === "") return;
@@ -8524,6 +10893,7 @@ function HomeExperience(): JSX.Element {
        human-bound session may call it and there is nothing else to create —
        so the kind is no longer passed, and the server caps how many an
        account may hold */
+    setAgentTrouble(null);
     createProfile(name)
       .then((p) => {
         setAgents((prev) => [
@@ -8537,8 +10907,14 @@ function HomeExperience(): JSX.Element {
         ]);
         setAgentName(null);
       })
-      .catch(() => setAgentName(null));
-  }, [agentName]);
+      .catch((err: unknown) => {
+        /* THE FORM STAYS OPEN AND KEEPS THE NAME. Clearing `agentName` was
+           the whole of the old handler, and clearing it is what shuts the
+           dialog — so the one recovery available (press it again) required
+           first re-opening a form that had closed for no stated reason. */
+        setAgentTrouble(whyFailed(err, "That agent has no wall yet."));
+      });
+  }, [agentName, whyFailed]);
 
   /**
    * KEEPING A PICTURE, OR A LINK.
@@ -8628,6 +11004,39 @@ function HomeExperience(): JSX.Element {
   }, [seek]);
   const foundRef = useRef<ReadonlySet<string> | null>(null);
   foundRef.current = found;
+  /**
+   * THE MEMORIES UNDER THE PATTERN YOU ARE READING — lit where they live.
+   *
+   * Reading one of your own patterns used to set its memories orbiting the
+   * sentence, which gave every one of them a second place to be while the
+   * field below held the first. The founder disliked it on sight and the
+   * reason is the world's own argument: a memory has a location and keeps
+   * it. So the grounds are published here instead, into the very channel a
+   * search uses — "this one, and everything else sinks" — and the field
+   * answers by lighting exactly those and dimming the rest.
+   *
+   * A search still outranks it: a query is a thing you asked for in words,
+   * and reading a pattern is not. Only your OWN wall lights, because only
+   * your own memories are in the ground to light (a room's evidence names
+   * people, and those keep their ring — see `solveSats`).
+   */
+  /* AND WHAT IT FOLLOWS IS THE ROOM THAT IS OPEN. It used to follow
+     `focusCandId`, which only the sky's `focusOn` ever set — so when the
+     candidate layer went dormant this light went out with it, silently, and
+     stayed out. The provenance room is the same act by the same person
+     ("what is this built from"), it carries the very rows this needs, and it
+     is the one a person can actually reach. */
+  const readingLit = useMemo<ReadonlySet<string> | null>(() => {
+    if (!prov || atWall.kind !== "self") return null;
+    if (prov.rows.length === 0) return null;
+    return new Set(prov.rows.map((e) => e.inspirationId));
+  }, [prov, atWall]);
+  const readingLitRef = useRef<ReadonlySet<string> | null>(null);
+  readingLitRef.current = readingLit;
+  /* the loop is parked when nothing moves; a new set is a change to draw */
+  useEffect(() => {
+    simApiRef.current?.wake();
+  }, [readingLit]);
   /** The invite link for a room, and whether it has just been copied. */
   const [copied, setCopied] = useState<string | null>(null);
   const copyInvite = useCallback((g: ApiGroupSummary) => {
@@ -8673,6 +11082,24 @@ function HomeExperience(): JSX.Element {
     window.history.replaceState({}, "", window.location.pathname);
     setPendingJoin(code);
   }, []);
+
+  /* ═══ EVERY SHEET CLOSES THE SAME TWO WAYS ═══
+     The founder ruled it about the make-another-place sheet ("if click
+     outside modal, close it") and about the dial's rail the same day; it is
+     not a fact about those two. The five sheets below closed only by finding
+     their own small word, and the way out of the last sheet is never where
+     the way out of this one is. See `lib/dismiss.ts` for why pointerdown and
+     why Escape stops propagating. */
+  const closeAccount = useCallback(() => setAccountOpen(false), []);
+  const closeSettings = useCallback(() => setSettingsFor(null), []);
+  const closeJoin = useCallback(() => setPendingJoin(null), []);
+  const closeProv = useCallback(() => setProv(null), []);
+  const closeAnte = useCallback(() => setAntechamberOpen(false), []);
+  useDismissAway(accountOpen, closeAccount, KEEP_ACCOUNT);
+  useDismissAway(settingsFor !== null, closeSettings, KEEP_SHEET);
+  useDismissAway(pendingJoin !== null, closeJoin, KEEP_SHEET);
+  useDismissAway(prov !== null, closeProv, KEEP_PROV);
+  useDismissAway(antechamberOpen, closeAnte, KEEP_ANTE);
   const acceptJoin = useCallback(() => {
     if (!pendingJoin) return;
     const code = pendingJoin;
@@ -8711,6 +11138,10 @@ function HomeExperience(): JSX.Element {
     setAdopted,
     setSelectedId,
   });
+  /* the one thing `stepToMemory` needs and cannot close over: see its note */
+  leaveWordsRef.current = () => {
+    if (editing.open) editing.leave();
+  };
 
   /**
    * THROW IT AWAY, FOR REAL.
@@ -8738,6 +11169,74 @@ function HomeExperience(): JSX.Element {
     panel?.detail?.isPublic ??
     (inspirations ?? []).find((c) => c.id === (panelBall?.sigId ?? panelId))?.isPublic ??
     false;
+  /**
+   * THE MEMORY'S OWN WORDS ARE THE EDITOR.
+   *
+   * There used to be an `edit` verb in the row at the bottom, and pressing it
+   * opened a second box UNDER the memory holding a copy of the same text. So
+   * the panel showed the words twice — read them up here, change them down
+   * there — and the founder said what that is: "its weird that you read on
+   * top and edit at the bottom. just make it editable no matter what. dont
+   * have separate edit button."
+   *
+   * Now the paragraph IS the control. Press it anywhere and it becomes a
+   * field in the same place, at the same measure, in the same face, with the
+   * caret where you pressed — nothing moves, nothing is duplicated, and there
+   * is no verb to find first.
+   *
+   * WHY NOT SIMPLY ALWAYS A FIELD. The resting paragraph lights the spans a
+   * signal actually read out of this memory (`markPassages`), which is the
+   * receipt behind every claim the sky makes about you. A textarea cannot
+   * carry marks. So the words are lit while you are reading them and plain
+   * while you are changing them, which is also the honest thing to show: what
+   * you are typing into is the text, not the reading of it.
+   */
+  const panelEditRef = useRef<HTMLTextAreaElement | null>(null);
+  /** Where the press landed, so the caret opens there rather than at the end. */
+  const panelCaretRef = useRef<number | null>(null);
+  /* The field is exactly as tall as its words. A fixed `rows` would either
+     letterbox a long memory or leave a short one sitting in a pit, and both
+     are a change of shape at the moment the press asks for none. */
+  const growPanelEdit = useCallback((el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
+
+  const beginPanelEdit = useCallback(
+    (ev: ReactMouseEvent<HTMLParagraphElement>) => {
+      if (!panelId || panelIsGroup || !panelCanReflect || editing.open) return;
+      /* THE CARET GOES WHERE THE FINGER WENT. Without this the press lands
+         you at the end of a page of text and you scroll back to the sentence
+         you meant — which is the same "find your place again" cost the
+         separate box had, moved rather than removed. Both spellings, because
+         the standard changed names and neither browser family has both. */
+      let at: number | null = null;
+      const doc = document as Document & {
+        caretPositionFromPoint?: (x: number, y: number) => { offset: number } | null;
+        caretRangeFromPoint?: (x: number, y: number) => Range | null;
+      };
+      try {
+        const pos = doc.caretPositionFromPoint?.(ev.clientX, ev.clientY);
+        if (pos) at = pos.offset;
+        else {
+          const range = doc.caretRangeFromPoint?.(ev.clientX, ev.clientY);
+          if (range) at = range.startOffset;
+        }
+      } catch {
+        /* no caret API here: the field opens at the end, which is the old
+           behaviour and never wrong, only less kind */
+      }
+      panelCaretRef.current = at;
+      editing.begin(
+        "memory",
+        panelId,
+        panel?.detail ? panel.detail.text : panelBall?.textPreview ?? "",
+      );
+    },
+    [panelId, panelIsGroup, panelCanReflect, editing, panel, panelBall],
+  );
+
   const [publishing, setPublishing] = useState(false);
   const togglePublic = useCallback(() => {
     const id = panelBall?.sigId ?? panelId;
@@ -8746,15 +11245,38 @@ function HomeExperience(): JSX.Element {
     setPublishing(true);
     updateInspiration(id, { visibility: next })
       .then(() => {
+        const isPublic = next === "public";
         setInspirations((cur) =>
-          (cur ?? []).map((c) => (c.id === id ? { ...c, isPublic: next === "public" } : c)),
+          (cur ?? []).map((c) => (c.id === id ? { ...c, isPublic } : c)),
+        );
+        /* AND THE DETAIL, WHICH IS WHAT THE WORD ACTUALLY READS.
+           `panelIsPublic` takes `panel.detail.isPublic` FIRST and falls back
+           to the archive — "the detail is authoritative once it lands", which
+           it is, and nothing here updated it. So the request went out, the
+           server changed the row, the archive was corrected, and the word did
+           not move, because the stale detail kept winning (founder,
+           2026-08-25: "private doesn't switch to public"). The detail lands
+           the instant the card opens, so this was every press after the first
+           frame — which is every press.
+
+           Both copies, because both are read: the ref is what a re-open
+           serves from, and the state is what this render is showing. */
+        const cached = detailsRef.current.get(id);
+        if (cached) detailsRef.current.set(id, { ...cached, isPublic });
+        setPanel((cur) =>
+          cur && cur.id === panelId && cur.detail
+            ? { ...cur, detail: { ...cur.detail, isPublic } }
+            : cur,
         );
         /* it went out to people, or it came home */
-        simApiRef.current?.acknowledge(next === "public" ? "shared" : "touch");
+        simApiRef.current?.acknowledge(isPublic ? "shared" : "touch");
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         /* left as it was: the word is the state, so an unchanged word is an
-           honest report that nothing moved */
+           honest report that nothing moved — but silence about WHY is not,
+           and this one is a privacy control */
+        setMouthNote(whyFailed(err, "That didn’t change who can see it"));
+        if (showsDebug()) console.error("[waka] visibility change failed:", err);
       })
       .finally(() => setPublishing(false));
   }, [panelBall, panelId, panelIsPublic, publishing]);
@@ -8782,8 +11304,10 @@ function HomeExperience(): JSX.Element {
         setForget({ id: null, step: "rest" });
       })
       .catch(() => {
-        /* it is still there, and the world still shows it: back to the ask */
-        setForget({ id, step: "asking" });
+        /* IT IS STILL THERE, AND THE WORLD STILL SHOWS IT. Not back to the
+           ask: the ask is a sentence about what a signal loses, and nothing
+           about this failure is that. Its own state, its own line. */
+        setForget({ id, step: "failed" });
       });
   }, [panelId, panelBall, forget.step]);
 
@@ -8801,23 +11325,32 @@ function HomeExperience(): JSX.Element {
   }, [panelId, panelBall]);
 
   const keepReflection = useCallback(() => {
-    if (!panelId || reflect.step !== "open" || reflect.answer.trim() === "") return;
+    /* the sheet's own memory when the mouth asked, the open card's otherwise */
+    const onId = reflectOn?.id ?? (panelBall?.sigId ?? panelId);
+    if (!onId || reflect.step !== "open" || reflect.answer.trim() === "") return;
     const answer = reflect.answer.trim();
     setReflect((r) => ({ ...r, step: "keeping" }));
     /* a room orb reflects against its real signal id; the relight below
        still addresses the namespaced ball on screen */
-    createReflection(panelBall?.sigId ?? panelId, { question: reflect.question, answer })
+    createReflection(onId, { question: reflect.question, answer })
       .then((made) => {
         setReflect((r) => ({ ...r, step: "kept", lastId: made.id }));
         /* THE PAYOFF: the memory comes back to life in front of you. A saved
            reflection is a real state change — one more answered reflection,
            touched just now — so the orb's aliveness genuinely rises and the
            light shows it. Fading → touch → reflect → re-lit, made visible. */
-        simApiRef.current?.relight(panelId);
+        if (panelId) simApiRef.current?.relight(panelId);
         simApiRef.current?.acknowledge("answered");
       })
-      .catch(() => setReflect((r) => ({ ...r, step: "open" })));
-  }, [panelId, reflect, panelBall]);
+      .catch((err: unknown) => {
+        /* THE ANSWER IS NEVER THROWN AWAY. It goes back to `open` with the
+           words still in the box — and now it says why, instead of looking
+           like the button simply did nothing. */
+        setReflect((r) => ({ ...r, step: "open" }));
+        setMouthNote(whyFailed(err, "That reflection didn’t save. Your words are still here"));
+        if (showsDebug()) console.error("[waka] reflection failed:", err);
+      });
+  }, [panelId, reflect, panelBall, reflectOn, whyFailed]);
 
   /* The passages worth marking inside the text: the words a PATTERN carried
      out of this memory, and only those. The second tier used to be the
@@ -8873,6 +11406,16 @@ function HomeExperience(): JSX.Element {
 
   return (
     <div ref={measured.root} className="jar" aria-label="Waka">
+      {/* the world's early face, until the first real frame: the same ground,
+          the companion already home, one honest word. Shared with the auth
+          splash so the whole way in is one unbroken place (founder,
+          2026-08-27). z above every layer — chrome must not poke through a
+          frame that claims nothing is ready yet. */}
+      {phase !== "ready" ? (
+        <div style={{ position: "absolute", inset: 0, zIndex: 60 }}>
+          <LoadingHome />
+        </div>
+      ) : null}
       {/* the volume: a layout-tall gradient the camera descends through */}
       <div ref={measured.atmos} className="jar-atmos" aria-hidden="true" />
 
@@ -8906,14 +11449,55 @@ function HomeExperience(): JSX.Element {
                 }
                 style={{ left: `calc(var(--jar-vw, 100vw) * ${w.col})` }}
               >
+                {/* THE SKY'S SENTENCE LIVES IN THE SKY (founder, 2026-08-27,
+                    video: "feels like your philosophies that text appears
+                    rather than it was in the sky already and we went to the
+                    sky"). It was chrome — screen-positioned, mounted on
+                    arrival — so the words appeared BECAUSE you looked, which
+                    is the one thing this world never does: the world never
+                    moves unless the user moved it, and it never materialises
+                    either. It stands in the wall's own column now, at the
+                    sky's own height (`--jar-sky-top`, written by the layout
+                    pass beside the volume's), and travelling up simply
+                    brings it into frame. One per wall — every wall has its
+                    own sky. */}
+                {ready ? (
+                  <div className="jar-values-room" data-jar-chrome="1">
+                    <p className="jar-values-lead">
+                      {w.kind === "self"
+                        ? "Your philosophies and values will form here."
+                        : `${w.name}’s philosophies and values will form here.`}
+                    </p>
+                    <p className="jar-values-sub">
+                      {w.kind === "self"
+                        ? "They are the timeless half of a mind — what you " +
+                          "keep coming back to, whatever the day is. They " +
+                          "take time, and they are worth it: keep capturing, " +
+                          "and this sky will start to fill."
+                        : "They are the timeless half of a mind — what it " +
+                          "keeps coming back to, whatever the day is. They " +
+                          "take time, and they are worth it: as patterns are " +
+                          "kept here, this sky will start to fill."}
+                    </p>
+                  </div>
+                ) : null}
                 {ready && c ? (
                   <div
                     className="jar-hq-inner"
                     ref={w.kind === "self" ? measured.hqInner : undefined}
                   >
-                    {/* the wall's name, and nothing else in this slot, ever —
-                        no kind label, no model, no chip */}
-                    <div className="jar-eyebrow jar-label">{c.eyebrow}</div>
+                    {/* THE LAYER, NOT THE NAME (founder, 2026-08-25: "this
+                        should always say TOP OF MIND at the top no matter
+                        what room"). This slot held the wall's name, under a
+                        rule that nothing else may ever stand here — and the
+                        name is already on screen twice, in the pill at the
+                        top left and on the axis below, so here it was the
+                        repetition. What the slot answers now is WHAT KIND OF
+                        SENTENCE IS UNDER ME, which is the one fact nothing
+                        else on the page states: this is the wall's top of
+                        mind — current, held today — as against the timeless
+                        half forming in the sky. Same words, same place, on
+                        every wall; whose it is stays where it already was. */}
                     {c.text ? (
                       /* A STABLE KEY, AND A CARRIED/NEW SPLIT INSIDE IT.
                          The whole h1 used to be keyed by its words, so every
@@ -8964,34 +11548,212 @@ function HomeExperience(): JSX.Element {
                         {c.formingAlt ?? "Forming — nothing adopted yet"}
                       </p>
                     )}
+                    {/* THE NAME SIGNS THE SENTENCE FROM BELOW (founder,
+                        2026-08-27: "is there a better way to label this as
+                        top of mind? it overlaps with the navigation buttons").
+                        As a header above the poster it was a second floating
+                        piece of chrome, colliding with the corner controls at
+                        small heights. Under the sentence it was a signature.
+
+                        AND THEN THE WORD ITSELF WENT (founder, same day:
+                        "just remove the word top of mind") — the slot's
+                        fourth ruling, kept in order like hasSky's: the wall's
+                        name, then TOP OF MIND above, then the signature
+                        below, now nothing. The sentence is the loudest claim
+                        in the product and it stands unlabelled; the date
+                        alone signs it, when there is one. */}
                     {c.asOf ? (
-                      <div className="jar-asof jar-label">As of {c.asOf}</div>
+                      <div className="jar-asof jar-label">as of {c.asOf}</div>
                     ) : null}
                     {/* WHAT IT RESTS ON. The same chain the sky shows under a
                         pattern, one layer up: the memories this sentence was
                         built from, each with the span that carried it at full
                         ink and the surround dimmed. Pressing one travels to
                         that memory in the field. */}
+                    {/* THE PATTERNS IT STANDS ON, LIT BY WHO HOLDS THEM.
+                        Full ink: you have answered this ground — a verdict, a
+                        star. Dim: only the machine believes it. Light is the
+                        only difference — no badge, no label, no count — and
+                        pressing a ground opens the same ask row the sky
+                        gives a pattern being read, because explanation and
+                        correction belong one gesture apart: the dim ones are
+                        the recalibration queue, and answering is the
+                        existing verb, not a new control. */}
+                    {here && posterAsk && posterGrounds.length > 0 ? (
+                      <div className="jar-prov jar-prov--poster" data-jar-chrome="1">
+                        <p className="jar-prov-lead jar-label">standing on</p>
+                        {posterGrounds.map((ground) => (
+                          <div key={ground.id}>
+                            {/* SAYING IT IN YOUR OWN WORDS, on the layer below
+                                the board. `editing.ts` has implemented the
+                                `signal` kind since it was written — the
+                                request, the optimistic update, the 404
+                                reload — and NOTHING CALLED IT. A whole branch
+                                of a hook, complete and unreachable, because
+                                the only way in was on the flat `/signals`
+                                screen (2026-08-25).
+
+                                It is the same act the board already offers on
+                                its own entries, so it is the same shape: the
+                                sentence becomes a field in place, and the row
+                                under it says keep or leave. A pattern is a
+                                claim about you; being able to correct its
+                                words without leaving the world is the whole
+                                point of it being here. */}
+                            {editing.open?.kind === "signal" &&
+                            editing.open.id === ground.id ? (
+                              <>
+                                <textarea
+                                  className="jar-ground-edit"
+                                  aria-label="this pattern in your own words"
+                                  value={editing.open.text}
+                                  rows={2}
+                                  autoFocus
+                                  onChange={(e) => editing.retype(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Escape") {
+                                      e.preventDefault();
+                                      editing.leave();
+                                    }
+                                  }}
+                                />
+                                <p className="jar-ask">
+                                  <button
+                                    type="button"
+                                    disabled={editing.open.saving}
+                                    onClick={editing.keep}
+                                  >
+                                    {editing.open.saving ? "saving…" : "save"}
+                                  </button>
+                                  <span aria-hidden="true"> · </span>
+                                  <button type="button" onClick={editing.leave}>
+                                    leave it
+                                  </button>
+                                </p>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                className={
+                                  ground.answered
+                                    ? "jar-ground jar-ground--answered"
+                                    : "jar-ground"
+                                }
+                                onClick={() =>
+                                  setGroundAsk((cur) => (cur === ground.id ? null : ground.id))
+                                }
+                              >
+                                {ground.statement}
+                              </button>
+                            )}
+                            {groundAsk === ground.id ? (
+                              <p className="jar-ask">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setGroundAsk(null);
+                                    sayVerdict(ground.id, "true");
+                                  }}
+                                >
+                                  yes
+                                </button>
+                                <span aria-hidden="true"> · </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setGroundAsk(null);
+                                    sayVerdict(ground.id, "partly");
+                                  }}
+                                >
+                                  partly
+                                </button>
+                                <span aria-hidden="true"> · </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setGroundAsk(null);
+                                    sayVerdict(ground.id, "not_true");
+                                  }}
+                                >
+                                  not true
+                                </button>
+                                <span aria-hidden="true"> · </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setGroundAsk(null);
+                                    editing.begin("signal", ground.id, ground.statement);
+                                  }}
+                                >
+                                  say it in my words
+                                </button>
+                                {/* and the way back out of that, in the same
+                                    row and only once there is something to
+                                    hand back. Asked twice, like the board's,
+                                    because releasing words lets the generator
+                                    reword or retire them from the next pass. */}
+                                {ground.locked ? (
+                                  releasingGround === ground.id ? (
+                                    <>
+                                      <span aria-hidden="true"> · </span>
+                                      <span className="jar-board-warn">
+                                        {RECEIPTS.releaseOffer.text}
+                                      </span>
+                                      <span aria-hidden="true"> · </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => releaseGround(ground.id)}
+                                      >
+                                        hand it back
+                                      </button>
+                                      <span aria-hidden="true"> · </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => setReleasingGround(null)}
+                                      >
+                                        leave it as it is
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span aria-hidden="true"> · </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => setReleasingGround(ground.id)}
+                                      >
+                                        hand it back
+                                      </button>
+                                    </>
+                                  )
+                                ) : null}
+                              </p>
+                            ) : null}
+                            {verdictReceipt?.id === ground.id ? (
+                              <p className="jar-ask">
+                                <span className="jar-receipt">{verdictReceipt.text}</span>
+                              </p>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                     {here && posterAsk ? (
                       posterChain.length > 0 ? (
+                        /* THE SAME ROOM THE SKY OPENS. These rows travelled
+                           too — press one and the camera left headquarters
+                           for the field — and they were clipped the same way.
+                           One object, two entrances. */
                         <div className="jar-prov jar-prov--poster" data-jar-chrome="1">
-                          <p className="jar-prov-lead jar-label">built from</p>
-                          {posterChain.map((e) => (
-                            <button
-                              key={e.inspirationId}
-                              type="button"
-                              className="jar-prov-row"
-                              onClick={() => {
-                                setPosterAsk(false);
-                                simApiRef.current?.revealMemory(e.inspirationId);
-                              }}
-                            >
-                              <span className="jar-prov-text">{salience(e)}</span>
-                              {e.reason ? (
-                                <span className="jar-prov-why">{e.reason}</span>
-                              ) : null}
-                            </button>
-                          ))}
+                          <button
+                            type="button"
+                            className="jar-prov-lead jar-prov-open jar-label"
+                            onClick={() => {
+                              setProvPick(null);
+                              setProv({ lead: c.text ?? "", rows: posterChain });
+                            }}
+                          >
+                            built from
+                          </button>
                         </div>
                       ) : (
                         /* the honest empty: a sentence with no chain is a
@@ -9001,6 +11763,44 @@ function HomeExperience(): JSX.Element {
                           <p className="jar-prov-lead jar-label">written by hand</p>
                         </div>
                       )
+                    ) : null}
+                    {/* A ROOM'S BOARD ASKS TO BE READ AGAIN, in its own words
+                        and its own block — see `rereadGroupBoard` for why this is
+                        not the self wall's strip opened up to groups. */}
+                    {here && w.kind === "group" && lead && !editing.open && posterAsk ? (
+                      <div className="jar-board-acts" data-jar-chrome="1">
+                        {groupReading === "asking" ? (
+                          <>
+                            <span className="jar-board-warn">
+                              Reading everything the room has put up. What it says may change.
+                            </span>
+                            <button
+                              type="button"
+                              className="jar-board-act jar-label"
+                              onClick={() => rereadGroupBoard(w.id)}
+                            >
+                              Read again
+                            </button>
+                            <button
+                              type="button"
+                              className="jar-board-act jar-label"
+                              onClick={() => setGroupReading("rest")}
+                            >
+                              Leave it
+                            </button>
+                          </>
+                        ) : groupReading === "working" ? (
+                          <span className="jar-board-act jar-label">Reading…</span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="jar-board-act jar-label"
+                            onClick={() => setGroupReading("asking")}
+                          >
+                            Read it again
+                          </button>
+                        )}
+                      </div>
                     ) : null}
                     {/* WHAT IT USED TO SAY. Only where there is a past — one
                         version is not a history, it is the first sentence. */}
@@ -9014,22 +11814,285 @@ function HomeExperience(): JSX.Element {
                         ))}
                       </div>
                     ) : null}
-                    {/* The one quiet line, and the page's single interactive
-                        signal. The candidates that could replace this ambition
-                        are separate entities living a section above, and this
-                        is the way up — on any wall that has a sky. */}
-                    {c.forming ? (
+                    {/* THE WAY UP IS NOT UNDER THE THING YOU ARE READING.
+                        This line used to sit here, beneath the ambition —
+                        which put the page's only "there is more above you"
+                        BELOW the sentence you had already got to, pointing
+                        down to say up. It is fixed chrome at the top edge
+                        now; see `.jar-overhead`. */}
+                    {/* HOW YOU CHOOSE — layer 4, in the place layer 3 already
+                        occupies.
+
+                        It is the second quiet line, deliberately built from
+                        the same two pieces as the first: a `jar-forming-line`
+                        that opens something, and the `jar-prov` band the
+                        poster already opens into. A person who has learned
+                        that the forming line takes them up to the sky has
+                        already learned this one.
+
+                        Only on your own wall, and only when there are
+                        principles. A room does not choose and an agent's
+                        principles are its own; and a wall with none says
+                        nothing rather than showing an empty band — the same
+                        rule the poster follows about never inventing a
+                        placeholder.
+
+                        NO COUNT. "States render, numerals never" — the line
+                        says that there is a way you choose, not how many
+                        ways. */}
+                    {here && w.kind === "self" && principles.length > 0 ? (
                       <button
                         type="button"
-                        className="jar-forming-line jar-label"
+                        className="jar-forming-line jar-forming-line--choose jar-label"
                         data-jar-chrome="1"
-                        onClick={() => {
-                          simApiRef.current?.acknowledge();
-                          if (hasSky(w.kind)) simApiRef.current?.toSky();
-                        }}
+                        aria-expanded={principlesOpen}
+                        onClick={() => setPrinciplesOpen((v) => !v)}
                       >
-                        {c.forming}
+                        how you choose
                       </button>
+                    ) : null}
+                    {here && w.kind === "self" && principlesOpen ? (
+                      <div className="jar-prov jar-prov--poster" data-jar-chrome="1">
+                        {/* Ranked, and the rank is the order — never a number
+                            beside a statement. */}
+                        {[...principles]
+                          .sort((a, b) => a.rank - b.rank)
+                          .map((pr, i, ranked) => (
+                            <p key={pr.id} className="jar-was">
+                              {/* CORRECTING IT IN PLACE, the same shape the
+                                  card and the pattern already use: the
+                                  sentence becomes a field where it stands, so
+                                  the words do not move when the caret
+                                  arrives. */}
+                              {pDraft && pDraft.id === pr.id ? (
+                                <>
+                                  <textarea
+                                    className="jar-ground-edit"
+                                    aria-label="this principle in your own words"
+                                    value={pDraft.text}
+                                    rows={2}
+                                    autoFocus
+                                    onChange={(e) =>
+                                      setPDraft({ id: pr.id, text: e.target.value })
+                                    }
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Escape") {
+                                        e.preventDefault();
+                                        setPDraft(null);
+                                      }
+                                    }}
+                                  />
+                                  <span className="jar-ask">
+                                    <button type="button" disabled={pBusy} onClick={savePrinciple}>
+                                      {pBusy ? "saving…" : "save"}
+                                    </button>
+                                    <span aria-hidden="true"> · </span>
+                                    <button type="button" onClick={() => setPDraft(null)}>
+                                      leave it
+                                    </button>
+                                  </span>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="jar-was-open"
+                                  aria-expanded={pick === pr.id}
+                                  onClick={() =>
+                                    setPick((cur) => (cur === pr.id ? null : pr.id))
+                                  }
+                                >
+                                  {pr.statement}
+                                </button>
+                              )}
+                              {pr.state === "aspirational" ? (
+                                /* The one distinction worth carrying up here:
+                                   declared-but-not-yet-demonstrated is a
+                                   different claim from earned, and the canon
+                                   already has the word for it. */
+                                <span className="jar-poster-away"> aspirational</span>
+                              ) : null}
+                              {/* THE VERBS, under the sentence they are about.
+                                  Order is by consequence: correcting is
+                                  harmless, moving is reversible, disputing is
+                                  a stance the machine will read, and removing
+                                  is last and asks. */}
+                              {/* THE ROOTS, one layer down. From here the
+                                  world's existing path continues: each of
+                                  these is a pattern, and pressing a pattern
+                                  in the grounds band opens the memories under
+                                  IT. Four layers, reachable in hops, with no
+                                  second picture of the place. */}
+                              {pRoots === pr.id && !pDraft ? (
+                                <span className="jar-was-roots">
+                                  {pr.citedSignals.map((c) => (
+                                    <span key={c.id} className="jar-was-root">
+                                      {c.statement}
+                                    </span>
+                                  ))}
+                                </span>
+                              ) : null}
+                              {pick === pr.id && !pDraft ? (
+                                <span className="jar-ask">
+                                  <button
+                                    type="button"
+                                    onClick={() => setPDraft({ id: pr.id, text: pr.statement })}
+                                  >
+                                    say it in my words
+                                  </button>
+                                  {pr.citedSignals.length > 0 ? (
+                                    <>
+                                      <span aria-hidden="true"> · </span>
+                                      <button
+                                        type="button"
+                                        aria-expanded={pRoots === pr.id}
+                                        onClick={() =>
+                                          setPRoots((cur) => (cur === pr.id ? null : pr.id))
+                                        }
+                                      >
+                                        what it grew from
+                                      </button>
+                                    </>
+                                  ) : null}
+                                  {i > 0 ? (
+                                    <>
+                                      <span aria-hidden="true"> · </span>
+                                      <button
+                                        type="button"
+                                        disabled={pBusy}
+                                        onClick={() => movePrinciple(pr.id, -1)}
+                                      >
+                                        matters more
+                                      </button>
+                                    </>
+                                  ) : null}
+                                  {i < ranked.length - 1 ? (
+                                    <>
+                                      <span aria-hidden="true"> · </span>
+                                      <button
+                                        type="button"
+                                        disabled={pBusy}
+                                        onClick={() => movePrinciple(pr.id, 1)}
+                                      >
+                                        matters less
+                                      </button>
+                                    </>
+                                  ) : null}
+                                  {/* WHOSE SENTENCE IT IS DECIDES WHICH WAY OUT
+                                      IT HAS, and until 2026-08-26 both were
+                                      offered on every principle regardless.
+
+                                      `schema-principles.ts` already draws the
+                                      line: `origin` is `minted` — written by
+                                      the nightly generation — or `declared`,
+                                      the owner's own words. Offering both
+                                      verbs on both kinds got each one exactly
+                                      backwards. A sentence you wrote yourself
+                                      was offered `not mine`, which is not a
+                                      thing a person can coherently say about
+                                      their own words. And a sentence the
+                                      MACHINE concluded was offered a hard
+                                      `remove` — which is the flat screens'
+                                      administrative affordance, and precisely
+                                      the one this project refused to migrate
+                                      for signals, on the grounds that the
+                                      world answers a wrong claim with a
+                                      counted stance and that fading never
+                                      deletes.
+
+                                      The same ruling, applied to the other
+                                      noun: you ANSWER what the machine claims,
+                                      and you WITHDRAW what you said yourself.
+                                      Found because the founder asked whether
+                                      some of the flat wall was better deleted
+                                      than migrated — the answer being that the
+                                      question is not migrate-or-delete per
+                                      screen, it is whether a verb belongs on
+                                      that noun in that state. */}
+                                  {pr.origin === "minted" ? (
+                                    <>
+                                      <span aria-hidden="true"> · </span>
+                                      <button
+                                        type="button"
+                                        disabled={pBusy}
+                                        onClick={() => disputeThisPrinciple(pr.id)}
+                                      >
+                                        not mine
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span aria-hidden="true"> · </span>
+                                      {pGoing === pr.id ? (
+                                        <>
+                                          <button
+                                            type="button"
+                                            disabled={pBusy}
+                                            onClick={() => removePrinciple(pr.id)}
+                                          >
+                                            {pBusy ? "withdrawing…" : "yes, withdraw it"}
+                                          </button>
+                                          <span aria-hidden="true"> · </span>
+                                          <button type="button" onClick={() => setPGoing(null)}>
+                                            keep it
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <button type="button" onClick={() => setPGoing(pr.id)}>
+                                          withdraw
+                                        </button>
+                                      )}
+                                    </>
+                                  )}
+                                </span>
+                              ) : null}
+                            </p>
+                          ))}
+                        {/* DECLARING ONE, which is the only act here that is
+                            not about a sentence already on screen — so it is
+                            the only one that does not hang off one. Layer four
+                            is what you choose to be; up to now the world could
+                            only show you what it had inferred. */}
+                        {pDraft && pDraft.id === null ? (
+                          <p className="jar-was">
+                            <textarea
+                              className="jar-ground-edit"
+                              aria-label="a principle of your own"
+                              value={pDraft.text}
+                              rows={2}
+                              autoFocus
+                              placeholder="What you hold to"
+                              onChange={(e) => setPDraft({ id: null, text: e.target.value })}
+                              onKeyDown={(e) => {
+                                if (e.key === "Escape") {
+                                  e.preventDefault();
+                                  setPDraft(null);
+                                }
+                              }}
+                            />
+                            <span className="jar-ask">
+                              <button type="button" disabled={pBusy} onClick={savePrinciple}>
+                                {pBusy ? "declaring…" : "declare it"}
+                              </button>
+                              <span aria-hidden="true"> · </span>
+                              <button type="button" onClick={() => setPDraft(null)}>
+                                not now
+                              </button>
+                            </span>
+                          </p>
+                        ) : (
+                          <p className="jar-ask">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPick(null);
+                                setPDraft({ id: null, text: "" });
+                              }}
+                            >
+                              declare one
+                            </button>
+                          </p>
+                        )}
+                      </div>
                     ) : null}
                     {/* THE BOARD'S OWN VERBS — and this is what makes the
                         layout an instrument rather than a display.
@@ -9056,7 +12119,7 @@ function HomeExperience(): JSX.Element {
                           value={editing.open.text}
                           onChange={(e) => editing.retype(e.target.value)}
                         />
-                        <p className="jar-neb-ask">
+                        <p className="jar-ask">
                           <button type="button" disabled={editing.open.saving} onClick={editing.keep}>
                             {editing.open.saving ? "…" : "keep these words"}
                           </button>
@@ -9068,13 +12131,32 @@ function HomeExperience(): JSX.Element {
                       </div>
                     ) : null}
                     {w.kind === "self" && undrop ? (
-                      <p className="jar-neb-ask jar-neb-ask--after" data-jar-chrome="1">
+                      <p className="jar-ask jar-ask--after" data-jar-chrome="1">
+                        {/* the dismissal's receipt rides beside its undo —
+                            reversible is part of the law being stated */}
+                        <span className="jar-receipt">{RECEIPTS.dismissed.text}</span>
+                        <span aria-hidden="true"> · </span>
                         <button type="button" onClick={restoreLead}>
                           put it back
                         </button>
                       </p>
                     ) : null}
-                    {w.kind === "self" && !offline && lead && !editing.open ? (
+                    {/* WHAT YOU MAY DO ABOUT IT, ONLY ONCE YOU HAVE ASKED.
+                        Four verbs sat permanently under the ambition, so the
+                        resting page was a sentence with a toolbar under it —
+                        furniture, which this layout does not have. They fold
+                        into the poster's own press, beside the grounds and
+                        the history, because "where did this come from" and
+                        "change it" are the same conversation. A read in
+                        progress keeps them mounted regardless: a control that
+                        vanished mid-work would take its own progress report
+                        with it. */}
+                    {here &&
+                    w.kind === "self" &&
+                    !offline &&
+                    lead &&
+                    !editing.open &&
+                    (posterAsk || board.step !== "rest") ? (
                       <div className="jar-board-acts" data-jar-chrome="1">
                         {board.step === "asking" ? (
                           <>
@@ -9107,6 +12189,11 @@ function HomeExperience(): JSX.Element {
                           <span className="jar-board-act jar-label">Reading…</span>
                         ) : (
                           <>
+                            {boardToast ? (
+                              <span className="jar-board-warn" role="status">
+                                {boardToast}
+                              </span>
+                            ) : null}
                             <button
                               type="button"
                               className="jar-board-act jar-label"
@@ -9137,6 +12224,38 @@ function HomeExperience(): JSX.Element {
                             >
                               Say it in my words
                             </button>
+                            {lead.locked ? (
+                              entrusting === lead.id ? (
+                                <>
+                                  <span className="jar-board-warn">
+                                    {RECEIPTS.releaseOffer.text}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="jar-board-act jar-label"
+                                    onClick={() => entrustLead(lead.id)}
+                                  >
+                                    Hand it back
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="jar-board-act jar-label"
+                                    onClick={() => setEntrusting(null)}
+                                  >
+                                    Leave it as it is
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="jar-board-act jar-label jar-star-act"
+                                  title="Your own words — WAKA will not rewrite them"
+                                  onClick={() => setEntrusting(lead.id)}
+                                >
+                                  Hand it back to WAKA
+                                </button>
+                              )
+                            ) : null}
                             <button
                               type="button"
                               className="jar-board-act jar-label jar-board-act--quiet"
@@ -9161,15 +12280,12 @@ function HomeExperience(): JSX.Element {
                     collecting" reads as a scold. Saying what the machine is
                     actually waiting for is both truer and kinder, and it is
                     the one sentence that makes the first week make sense. */}
-                {ready && hasSky(w.kind) && !candidates.some((q) => q.col === w.col) ? (
-                  <p className="jar-sky-empty jar-label">
-                    {w.kind === "agent"
-                      ? "Nothing forming yet"
-                      : (inspirations?.length ?? 0) === 0
-                        ? "Nothing is forming yet"
-                        : "Patterns come from what repeats — nothing has, yet"}
-                  </p>
-                ) : null}
+                {/* THE "NOTHING IS FORMING YET" LINE WENT WITH THE SKY. It
+                    explained an empty place above the wall; there is no place
+                    above the wall now, and a sentence about the absence of
+                    something a person can no longer see is worse than
+                    silence. The poster already says what an empty wall means,
+                    which is the one line that has to survive. */}
                 {/* An empty wall is a beginning, not a fault — and the way it
                     fills is stated, because the person is trying to decide
                     whether to delegate and the honest answer is "you cannot
@@ -9208,11 +12324,19 @@ function HomeExperience(): JSX.Element {
                     walls and rooms keep their own sentence below: those say
                     what the machine or the room is waiting FOR, which is
                     information, not scaffolding. */}
-                {ready && c?.empty && !c?.formingAlt && w.kind !== "self" ? (
+                {/* AND THE ROOM'S SENTENCE GOES TOO (founder, 2026-08-25:
+                    "dont show this"). The reasoning above held while the room
+                    could not say anything for itself; it says what it is
+                    waiting for through its own poster now, and a second voice
+                    saying the same thing in a different register on the same
+                    empty wall is the duplicate this note was already written
+                    against. An agent keeps its line: an agent that has been
+                    given nothing genuinely is waiting on YOU, and that is a
+                    fact about what to do next rather than a description of
+                    the emptiness. */}
+                {ready && c?.empty && !c?.formingAlt && w.kind === "agent" ? (
                   <p className="jar-wall-empty">
-                    {w.kind === "agent"
-                      ? "Give me something to work on and I’ll start"
-                      : "This room hasn’t noticed anything yet — share more, read together."}
+                    Give me something to work on and I’ll start
                   </p>
                 ) : null}
                 {w.kind === "group" && failedGroups.has(w.id) && !ready ? (
@@ -9237,45 +12361,20 @@ function HomeExperience(): JSX.Element {
                     layout runs out, not a sentence in the middle of the room.
                     Centred under the poster it read as a statement about your
                     ambition, which it is not. */}
-                {ready ? (
-                  <>
-                    <button
-                      type="button"
-                      className="jar-edge jar-edge--r jar-label"
-                      data-jar-chrome="1"
-                      onClick={() =>
-                        setGroupForm({ mode: "make", text: "", busy: false, error: null })
-                      }
-                    >
-                      Make a room
-                    </button>
-                    <button
-                      type="button"
-                      className="jar-edge jar-edge--l jar-label"
-                      data-jar-chrome="1"
-                      onClick={() => setAgentName("")}
-                    >
-                      Add an agent
-                    </button>
-                  </>
-                ) : null}
+                {/* The two create rails that hung in these margins are gone
+                    (founder, 2026-08-24). Making a room and adding an agent
+                    both mean "a new place appears on the axis", and the axis
+                    is along the bottom — so they are a `+` at the end of it,
+                    beside the places they would join, instead of two words
+                    printed sideways down the sides of the world. */}
               </div>
             );
           })}
-          {/* what the companion is glowing about — its one line, in words */}
-          <div ref={measured.charSay} className="jar-char-say">
-            {charSay ? (
-              <p key={charSay} className="jar-label">
-                {charSay.split(/\s+/).map((word, i) => (
-                  <Fragment key={`${i}-${word}`}>
-                    <span className="jar-word" style={{ animationDelay: `${i * 28}ms` }}>
-                      {word}
-                    </span>{" "}
-                  </Fragment>
-                ))}
-              </p>
-            ) : null}
-          </div>
+          {/* THE COMPANION'S OWN ROW IS GONE. It was a second line of words
+              under the mouth, which made tapping the creature a way to ADD a
+              layer to a page that already had too many. What it said now
+              arrives in the mouth's own slot, in the resting phrase's place —
+              same words, same face, one row fewer. */}
 
           {/* ---- THE LENS lived here ----
               Excised while half-built: the control existed but nothing read
@@ -9283,11 +12382,18 @@ function HomeExperience(): JSX.Element {
               (`Ball.lens`) was never written from it, so it filtered nothing.
               The field field and the derive side survive for the rebuild. */}
 
-          {/* The edge affordances: a neighbour's name waiting at the side it
-              lives past. They live in headquarters' own chrome, so they scroll
-              away with it — which is also how the field section ends up with
-              none, exactly as it should, since there is nothing different to
-              travel to down there. */}
+          {/* THE WAYS OUT: a neighbour's name waiting at the side it lives
+              past. They live in headquarters' own chrome, so they scroll away
+              with it — which is also how the field section ends up with none,
+              exactly as it should, since there is nothing different to travel
+              to down there.
+
+              `.jar-way` is now the ONLY thing in these margins: the create
+              rails that shared them moved to the axis at the bottom, beside
+              the places they would join. The two once shared a class name
+              through two whole conflicting stylesheets and neither got the
+              layout it was written for; there is nothing left to collide
+              with. */}
           {walls.map((w, i) => {
             const left = walls[i - 1] ?? null;
             const right = walls[i + 1] ?? null;
@@ -9296,25 +12402,27 @@ function HomeExperience(): JSX.Element {
                 {left ? (
                   <button
                     type="button"
-                    className="jar-edge jar-label"
+                    className="jar-way jar-label"
                     data-jar-chrome="1"
-                    style={{ left: `calc(var(--jar-vw, 100vw) * ${w.col} + 16px)` }}
+                    style={{ left: `calc(var(--jar-vw, 100vw) * ${w.col} + 10px)` }}
                     onPointerDown={() => loadWall(left)}
                     onClick={() => simApiRef.current?.travel(-1)}
                   >
-                    ‹ {left.name}
+                    <span className="jar-caret jar-caret--left" aria-hidden="true" />
+                    <span>{left.name}</span>
                   </button>
                 ) : null}
                 {right ? (
                   <button
                     type="button"
-                    className="jar-edge jar-edge--r jar-label"
+                    className="jar-way jar-way--r jar-label"
                     data-jar-chrome="1"
-                    style={{ left: `calc(var(--jar-vw, 100vw) * ${w.col + 1} - 16px)` }}
+                    style={{ left: `calc(var(--jar-vw, 100vw) * ${w.col + 1} - 10px)` }}
                     onPointerDown={() => loadWall(right)}
                     onClick={() => simApiRef.current?.travel(1)}
                   >
-                    {right.name} ›
+                    <span>{right.name}</span>
+                    <span className="jar-caret jar-caret--right" aria-hidden="true" />
                   </button>
                 ) : null}
               </Fragment>
@@ -9336,8 +12444,58 @@ function HomeExperience(): JSX.Element {
           headquarters' own transform every frame, so it belongs to your wall
           and to the seam exactly as if it lived there. */}
       {phase === "ready" ? (
-        <div ref={measured.mouth} className="jar-mouth" data-jar-chrome="1">
-          <div className={`jar-mouth-slot${atNow ? "" : " jar-mouth-slot--away"}`}>
+        <div
+          ref={measured.mouth}
+          className={`jar-mouth${mouthPage ? " jar-mouth--note" : ""}`}
+          data-jar-chrome="1"
+        >
+          {/* QUICK BY DEFAULT, A NOTEPAD WHEN IT HAS TO BE.
+              The mouth is for a few sentences, a link, an image — the thing
+              you say on the way past. So it keeps the resting phrase's own
+              face while you type: same size, same tracking, same letters, so
+              opening it is not a change of instrument (founder, 2026-08-24).
+
+              But a long paste has nowhere to go in one tracked line. Past a
+              few lines it GROWS — the bar slides up into a notepad with a
+              prose face, and slides back down when the text shrinks. It
+              opens itself rather than offering a handle: quick save must
+              stay quick, and a control you have to find first is not quick.
+              (Founder's choice of the three.) */}
+          {withMouthLayer(
+            mouthPage,
+            measured.root.current,
+            <div
+            className={`jar-mouth-slot${atNow ? "" : " jar-mouth-slot--away"}${
+              mouthPage ? " jar-mouth-slot--note" : ""
+            }`}
+            /* THE SHEET KEPT THE CARET, AND NOW THE MARGIN IS A DOOR.
+               While this was a drawer, a press on its face was a press on
+               the thing you were typing INTO, so it refused the default and
+               left focus exactly where it was — one surface, no way to
+               half-leave it.
+
+               As a veil over the world that reading changed (founder,
+               2026-08-27: "clicking outside the box should make it auto save
+               as draft"). The dark around the well is not the note any more,
+               it is the world showing through — and pressing the world while
+               writing means the same thing here as everywhere else in this
+               product: put this away, keep the words. It is the sheets' own
+               dismissal law (`lib/dismiss.ts`) with the kinder ending: not
+               closed, saved.
+
+               The well and the foot's buttons are exempt, and the exemption
+               is the whole care: a press inside the writing, or on `save`,
+               or on `private/public`, must do its own job. */
+            onMouseDown={
+              mouthPage
+                ? (e) => {
+                    if (e.target instanceof Element && e.target.closest("textarea, button")) return;
+                    e.preventDefault();
+                    saveAsDraft();
+                  }
+                : undefined
+            }
+          >
             {mouthOpen ? (
               <textarea
                 ref={(el) => {
@@ -9348,9 +12506,12 @@ function HomeExperience(): JSX.Element {
                 value={draft}
                 rows={1}
                 spellCheck={false}
-                aria-label="something worth keeping"
-                placeholder="Something worth keeping"
+                aria-label="capture inspiration"
+                /* the resting phrase, kept — opening the mouth changes
+                   nothing about it (founder, 2026-08-24) */
+                placeholder="Capture inspiration"
                 onChange={(e) => {
+                  mouthCaretRef.current = e.target.selectionStart ?? e.target.value.length;
                   setDraft(e.target.value);
                   if (mouthNote !== "") setMouthNote("");
                 }}
@@ -9363,10 +12524,26 @@ function HomeExperience(): JSX.Element {
                 ref={(el) => {
                   measured.mouthSpot.current = el;
                 }}
-                className="jar-mouth-rest jar-label"
-                onClick={openMouth}
+                className={`jar-mouth-rest jar-label${charSay ? " jar-mouth-rest--said" : ""}`}
+                onClick={() => {
+                  /* whatever the companion was saying is answered by starting
+                     to write, which is the reply the sentence was asking for */
+                  if (charSay) setCharSay("");
+                  openMouth();
+                }}
               >
-                Keep something
+                {/* THE COMPANION SPEAKS HERE, IN THE PHRASE'S OWN PLACE
+                    (founder, 2026-08-25: "replace the today - text with keep
+                    something when user clicks on character"). Its line used to
+                    be a second row of its own under the mouth, so tapping the
+                    creature added a layer to a page the founder had just said
+                    had too many. It is the same slot now: the words change,
+                    nothing moves, and the phrase comes back when the line has
+                    been said. */}
+                {/* a waiting draft outranks the invitation: the line is the
+                    door back into your own words (mouth closed, words kept —
+                    the state renders) */}
+                {charSay || (draft.trim() !== "" ? "Continue your draft" : "Capture inspiration")}
               </button>
             )}
             {/* WHERE THIS ONE GOES, DECIDED WHILE WRITING IT.
@@ -9380,236 +12557,105 @@ function HomeExperience(): JSX.Element {
                 Private is the resting state and the one you get by not
                 touching this, which is the whole safety property: the only
                 way to publish is to say so. */}
-            {mouthOpen && draft.trim() !== "" ? (
-              <p className="jar-neb-ask jar-neb-ask--row jar-mouth-where">
-                <button type="button" onClick={() => setKeepPublic((v) => !v)}>
-                  {keepPublic ? "going to your rooms" : "kept to yourself"}
+            {/* BOTH WORDS, ALWAYS — the chosen one lit, the other dimmed.
+                One word that swapped when pressed gave no sign it could be
+                pressed at all: "kept to yourself" read as a statement of
+                fact, and the founder said so. A pair says there is a choice
+                and which way it currently sits, in the one channel this
+                world has. Private is still the resting state and still the
+                one you get by not touching it. */}
+            {/* RENDERED WHENEVER THE MOUTH IS OPEN, VISIBLE ONCE THERE ARE
+                WORDS (founder, 2026-08-25: "keep something is always same
+                position"). The slot hangs upward from the seam, so a row
+                that MOUNTS on the first keystroke grew the slot and shoved
+                the line you were typing into a new place — the one moment a
+                surface must hold still. The space is reserved from the
+                start and the row fades in, which is an appearance, not a
+                layout change. Invisible it is also inert, so the empty
+                mouth still offers no control — the "no forms" rule holds. */}
+            {/* ONE ROW, IN THE ORDER THE FOUNDER DREW IT (2026-08-25:
+                `private/public • save • reflect`).
+
+                It was two rows — who may see it above, what to do with it
+                below — which put four controls and two separators under a
+                single line of typing, and made the drawer taller than the
+                words in it. They are one row now, in the label register, so
+                the mouth's foot matches the card's and the signposts'.
+
+                "save and reflect" becomes "reflect" for the same reason: the
+                row already says `save` beside it, so the longer name was
+                spending three words to say "and also". It still KEEPS first —
+                you cannot reflect on something that does not exist yet — and
+                the beat that follows is what says so. */}
+            {mouthOpen ? (
+              <p
+                className={`jar-ask jar-ask--row jar-mouth-where${
+                  draft.trim() !== "" ? " jar-mouth-where--armed" : ""
+                }${mouthPage ? " jar-mouth-where--sheet" : ""}`}
+              >
+                {mouthPage ? (
+                  /* THE WAY OUT THAT KEEPS THE WORDS (founder, 2026-08-27:
+                     "lets not make it a drawer but just turn the full page
+                     into a typing area … remove minimize and instead say save
+                     as draft"). The minus lasted one round: a page has no
+                     window chrome, and the honest name for folding it is what
+                     actually happens — the draft is saved. First in the one
+                     centred row at the foot. */
+                  <>
+                    <button type="button" className="jar-mouth-step" onClick={saveAsDraft}>
+                      save as draft
+                    </button>
+                    <span aria-hidden="true" className="jar-mouth-dot"> · </span>
+                  </>
+                ) : null}
+                <button
+                  type="button"
+                  className={keepPublic ? "jar-where-off" : "jar-where-on"}
+                  aria-pressed={!keepPublic}
+                  onClick={() => setKeepPublic(false)}
+                >
+                  private
+                </button>
+                <span aria-hidden="true">/</span>
+                <button
+                  type="button"
+                  className={keepPublic ? "jar-where-on" : "jar-where-off"}
+                  aria-pressed={keepPublic}
+                  onClick={() => setKeepPublic(true)}
+                >
+                  public
+                </button>
+                <span aria-hidden="true" className="jar-mouth-dot"> · </span>
+                {/* NOT FULL INK (founder, 2026-08-27: "save should not be
+                    white"). `jar-where-on` is the CHOSEN STATE's light —
+                    private/public wear it to say which one stands. `save` is
+                    a verb, and a verb at state-light read as a third state
+                    that was somehow always selected. It rests at the verbs'
+                    own muted tier and lifts under the hand like every other
+                    pressable word. */}
+                <button type="button" className="jar-where-verb" onClick={() => keepIt()}>
+                  save
+                </button>
+                <span aria-hidden="true" className="jar-mouth-dot"> · </span>
+                <button type="button" className="jar-where-off" onClick={() => keepIt(true)}>
+                  reflect
                 </button>
               </p>
             ) : null}
             {/* the one honest line, in prose and never in the label register */}
             {mouthNote !== "" ? <p className="jar-mouth-note">{mouthNote}</p> : null}
-          </div>
+            </div>,
+          )}
         </div>
       ) : null}
 
-      {/* Section S — the sky. The canvas draws the nebulae; these are their
-          sentences and their one action each, positioned on their clouds by
-          the loop every frame. */}
-      <div className="jar-sky" data-jar-chrome="1">
-        {candidates.map((c) => (
-          <div
-            key={c.id}
-            ref={(el) => {
-              if (el) measured.nebEls.current.set(c.id, el);
-              else measured.nebEls.current.delete(c.id);
-            }}
-            className={`jar-neb jar-neb--${c.kind}`}
-          >
-            {/* WHAT YOU SAID IS CARRIED BY THE STATEMENT, NOT BY A LABEL BESIDE
-                IT. A pattern you agreed with holds its full weight; one you
-                half-agreed with lightens; one you called untrue is set in the
-                layout's dimmest ink and struck through — still there, because
-                nothing here is deleted for disagreeing with it. */}
-            <p className="jar-neb-text" data-said={verdicts.get(c.id) ?? undefined}>
-              {c.text}
-            </p>
-            {c.kind === "draft" ? (
-              <p className="jar-neb-note jar-label">a draft, unsaved</p>
-            ) : null}
-            {/* WHAT IT WAS READ FROM, AND WHICH WORDS DID THE READING.
-                A pattern is a claim the machine made about you. Until now the
-                sky stated the claim and stopped there, which is the exact
-                shape of an assertion you cannot argue with — you were asked
-                to agree or disagree with a sentence whose grounds were not on
-                screen.
-
-                So under the statement sit the memories it came from, and
-                inside each memory the QUOTED SPAN carries full ink while the
-                rest of the sentence stays dim. That is salience rendered in
-                the layout's only meaning channel: same words, same size, same
-                face — light is the difference. No highlighter, no percentage,
-                no confidence bar. You can see at a glance that four memories
-                said the same thing and exactly which fragment of each one did
-                the saying.
-
-                And each is pressable: it travels to that memory in the field
-                and opens it, so the chain runs downward as well as upward. */}
-            {focusCandId === c.id && evidenceFor(c).length > 0 ? (
-              <div className="jar-prov">
-                <p className="jar-prov-lead jar-label">read from</p>
-                {evidenceFor(c).map((e) => (
-                  <button
-                    key={`${e.signalId}:${e.inspirationId}`}
-                    type="button"
-                    className="jar-prov-row"
-                    onClick={() => simApiRef.current?.revealMemory(e.inspirationId)}
-                  >
-                    <span className="jar-prov-text">{salience(e)}</span>
-                    {e.reason ? <span className="jar-prov-why">{e.reason}</span> : null}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            {/* The one action, and only where there is genuinely one to take.
-                A candidate with nowhere to be adopted to renders NOTHING: the
-                absence of an affordance already says so, and saying it in
-                words as well — under a greyed-out control — was apparatus. */}
-            {c.adopt ? (
-              <button
-                type="button"
-                className="jar-neb-act jar-label"
-                disabled={adopting}
-                onClick={() => adopt(c)}
-              >
-                Adopt as your ambition
-              </button>
-            ) : null}
-            {/* ANSWERING IT. Only on the one being read, only for a pattern
-                the server actually made (a draft is your own sentence and a
-                proposal belongs to a room), and never as a score: the answer
-                you gave comes back as the words you said. */}
-            {/* ANSWERING IT, IN THE SENTENCE'S OWN VOICE.
-                This was four uppercase chips in a row under the statement —
-                a survey stapled to a sentence. The research this was built
-                from says the opposite in every case it examined: confidence
-                is discrete and TYPOGRAPHIC, carried by how the claim is set
-                rather than by controls beside it. Obra Dinn separates your
-                marks from the layout's by handwriting versus print; Umineko
-                types the assertion by colour. None of them grew a toolbar.
-
-                So there is nothing here at rest. The answers are one quiet
-                line in the same face the statement is set in, and they arrive
-                only on the pattern being read. Once answered they are gone
-                and the STATEMENT itself carries what you said. */}
-            {c.kind === "reading" && focusCandId === c.id && !verdicts.has(c.id) ? (
-              <p className="jar-neb-ask">
-                {/* The non-drag route, and the only thing on screen that ever
-                    says joining is possible before you have tried it. */}
-                {pairableIds.has(c.id) ? (
-                  <>
-                    <button type="button" onClick={() => simApiRef.current?.joinTo(c.id)}>
-                      join to the nearest
-                    </button>
-                    <span aria-hidden="true"> · </span>
-                  </>
-                ) : null}
-                {/* SAY IT OUT LOUD. The only act that puts anything on a
-                    room's wall, so it lives on the pattern itself rather than
-                    in a share menu somewhere else. Your own wall only: an
-                    agent's statements are its own to make public. */}
-                {atWall.kind === "self" && groups.length > 0 ? (
-                  <>
-                    <button type="button" onClick={() => setSharing(sharing === c.id ? null : c.id)}>
-                      {(signals ?? []).find((p) => p.id === c.id)?.sharedGroupIds.length
-                        ? "out loud in"
-                        : "say out loud"}
-                    </button>
-                    <span aria-hidden="true"> · </span>
-                  </>
-                ) : null}
-                <button type="button" onClick={() => sayVerdict(c.id, "true")}>yes</button>
-                <span aria-hidden="true"> · </span>
-                <button type="button" onClick={() => sayVerdict(c.id, "partly")}>partly</button>
-                <span aria-hidden="true"> · </span>
-                <button type="button" onClick={() => sayVerdict(c.id, "not_true")}>not true</button>
-                {/* CHANGE ITS WORDS, AND IT BECOMES YOURS. A human edit locks
-                    the statement: the server keeps attaching evidence under it
-                    and never rewrites the sentence again. That is the act that
-                    turns a machine's reading of you into your own line. */}
-                {atWall.kind === "self" ? (
-                  <>
-                    <span aria-hidden="true"> · </span>
-                    <button
-                      type="button"
-                      onClick={() => editing.begin("signal", c.id, c.text)}
-                    >
-                      say it better
-                    </button>
-                  </>
-                ) : null}
-              </p>
-            ) : null}
-            {editing.open?.kind === "signal" && editing.open.id === c.id ? (
-              <div className="jar-reflect">
-                <textarea
-                  className="jar-reflect-box"
-                  rows={3}
-                  autoFocus
-                  value={editing.open.text}
-                  onChange={(e) => editing.retype(e.target.value)}
-                />
-                <p className="jar-neb-ask">
-                  <button type="button" disabled={editing.open.saving} onClick={editing.keep}>
-                    {editing.open.saving ? "…" : "keep these words"}
-                  </button>
-                  <span aria-hidden="true"> · </span>
-                  <button type="button" onClick={editing.leave}>
-                    leave it
-                  </button>
-                </p>
-              </div>
-            ) : null}
-            {/* WHICH ROOMS IT IS OUT LOUD IN. One line per room, each a
-                toggle — the same statement can be said in several rooms and
-                taken back from any one of them independently. */}
-            {sharing === c.id ? (
-              <div className="jar-share">
-                {groups.map((g) => {
-                  const on = (signals ?? []).find((p) => p.id === c.id)?.sharedGroupIds.includes(g.id) ?? false;
-                  return (
-                    <button
-                      key={g.id}
-                      type="button"
-                      className={on ? "jar-share-row jar-share-row--on" : "jar-share-row"}
-                      onClick={() => shareTo(c.id, g.id, !on)}
-                    >
-                      {g.name}
-                    </button>
-                  );
-                })}
-                <p className="jar-share-note">
-                  They read the statement. The memories under it stay here.
-                </p>
-              </div>
-            ) : null}
-            {/* AND ONLY THEN MAY IT GO. Throwing out a reading of yourself is
-                offered after you have said it is untrue, not alongside the
-                question — a sequence rather than a menu, so the destructive
-                option is never sitting next to the harmless ones. */}
-            {c.kind === "reading" &&
-            focusCandId === c.id &&
-            atWall.kind === "self" &&
-            verdicts.get(c.id) === "not_true" ? (
-              <p className="jar-neb-ask jar-neb-ask--after">
-                <button type="button" onClick={() => dropSignal(c.id)}>
-                  {dropAsk === c.id ? "gone" : "then let it go"}
-                </button>
-              </p>
-            ) : null}
-          </div>
-        ))}
-        {clusters.map((sig) => (
-          <div
-            key={sig}
-            ref={(el) => {
-              if (el) measured.clusterEls.current.set(sig, el);
-              else measured.clusterEls.current.delete(sig);
-            }}
-            className="jar-cluster"
-          >
-            <button type="button" className="jar-cluster-act jar-label" onClick={() => draftFrom(sig)}>
-              Draft one ambition from these {numWords(sig.split("+").length)}
-            </button>
-          </div>
-        ))}
-        {/* Whose memory the pointer is on. In a room's candidate the orbiting
-            memories belong to different people, and this is how you see whose:
-            a given name, beside the satellite, one fade. The loop writes both
-            its words and its place — it has no React children, so it can
-            never shift anything on the page. */}
-        <div ref={measured.satSay} className="jar-satsay jar-label" aria-hidden="true" />
-      </div>
+      {/* SECTION S IS GONE. The sky — a whole viewport above headquarters
+          holding every signal still forming, its sentences, its satellites and
+          its verbs — is no longer shown to anyone (founder, 2026-08-25: "we
+          decided to remove showing the signals to the end users, so remove the
+          sky"). Signals are still derived, still stored, and still what the top
+          of mind is written from; they are simply not a place you can stand in
+          any more. The world is headquarters and the ground. */}
 
       <canvas ref={measured.canvas} className="jar-canvas" aria-hidden="true" />
 
@@ -9625,14 +12671,31 @@ function HomeExperience(): JSX.Element {
       {/* The reading panel: a focused orb's information, beside the orb. It
           fades in and out; it never slides, and it never owns the screen. */}
       {panel && panelBall ? (
+        /* NO KEY, DELIBERATELY (founder, 2026-08-27: "card still blinks when
+           moving from one to another"). Keyed by the memory's id, every move
+           unmounted the card and mounted a fresh one — and `--in` is an
+           ANIMATION, so a fresh mount replays the appearance however the
+           open/close state is managed. That key WAS the blink: the state fix
+           before this one was correct and could not have been sufficient.
+           One element, contents turning like pages; what a new memory must
+           reset — the scroll — is reset explicitly where `panel.id` changes. */
         <div
-          key={panel.id}
           ref={panelRef}
           className={`jar-panel${panelOpen ? " jar-panel--in" : " jar-panel--out"}`}
           data-jar-chrome="1"
           role="dialog"
           aria-label="a saved inspiration"
         >
+          {/* THE HEAD IS ONE ROW (founder's sketch, 2026-08-25: "must be
+              aligned centered"). The date and the visibility pair were two
+              independently placed things that only LOOKED like a row — the
+              date a block padded 56px left and 120px right to dodge controls
+              that have since moved, the pair absolutely positioned at
+              `top: 14px`. Two different boxes, two different vertical
+              origins, so nothing lined up with anything and the gap changed
+              with the length of the date. They are one grid now, centred
+              against each other, and neither knows where the other ends. */}
+          <div className="jar-panel-head">
           {panelIsGroup ? (
             /* whisper attribution: whose save this is, and when — where the
                evidence named no date of its own, who alone. Leaving a fact
@@ -9644,17 +12707,117 @@ function HomeExperience(): JSX.Element {
             </span>
           ) : (
             <span className="jar-panel-when jar-label">
-              {agoWords(panelBall.capturedMs, TRef.current)} ·{" "}
-              {dateWords(panelBall.capturedMs, TRef.current)}
+              {/* the date alone, with its year — "Two days ago · Aug 24" said
+                  one fact twice, and the relative half goes stale while the
+                  card stays open (founder, 2026-08-27) */}
+              {dateStamp(panelBall.capturedMs)}
             </span>
           )}
-
-          <p ref={panelTextRef} className="jar-panel-text" style={markStyle}>
-            {markPassages(
-              panel.detail ? panel.detail.text : panelBall.textPreview,
-              panelMarks,
-            )}
-          </p>
+          {!panelIsGroup ? (
+            /* WHO MAY SEE THIS, AT THE TOP RIGHT (founder, 2026-08-25:
+               "top right should have option to switch between Private •
+               Public. also call it private and public everywhere"). The
+               same lit/dim pair the mouth wears while writing: both words
+               always present, the standing one lit, pressing the other one
+               moves it. Private remains the state you get by touching
+               nothing. */
+            <p
+              className={`jar-ask jar-ask--row jar-panel-vis${
+                publishing ? " jar-panel-vis--busy" : ""
+              }`}
+            >
+              <button
+                type="button"
+                className={panelIsPublic ? "jar-where-off" : "jar-where-on"}
+                aria-pressed={!panelIsPublic}
+                /* WHAT THE WORD MEANS, ON HOVER (founder's sketch, 2026-08-25:
+                   "when hovering, show tooltip of what that means"). Two words
+                   that decide who can read something have to be able to say
+                   what they decide; the state is legible at a glance and the
+                   consequence is not. */
+                title="Only you can read this. Nothing leaves your own ground."
+                onClick={() => {
+                  if (!panelIsPublic) return;
+                  /* un-publishing a memory a signal stands on gets the same
+                     one ask deleting it does, in the same place — the card's
+                     own foot (founder, 2026-08-27) */
+                  if (panelPowersSignal) setUnpublishAsk(true);
+                  else togglePublic();
+                }}
+              >
+                private
+              </button>
+              <span aria-hidden="true">/</span>
+              <button
+                type="button"
+                className={panelIsPublic ? "jar-where-on" : "jar-where-off"}
+                aria-pressed={panelIsPublic}
+                title="Rooms you are in can read this, and it can feed what a room says."
+                onClick={() => (panelIsPublic ? undefined : togglePublic())}
+              >
+                public
+              </button>
+            </p>
+          ) : null}
+          </div>
+          {editing.open?.kind === "memory" && editing.open.id === panelId ? (
+            /* THE SAME SLOT, THE SAME MEASURE, THE SAME FACE. It is the words
+               you were just reading, with a caret in them — see
+               `beginPanelEdit`. Nothing has moved and nothing is duplicated. */
+            <textarea
+              ref={(el) => {
+                panelEditRef.current = el;
+                if (!el) return;
+                growPanelEdit(el);
+                if (document.activeElement !== el) {
+                  el.focus();
+                  const at = panelCaretRef.current;
+                  const to = at === null ? el.value.length : Math.min(at, el.value.length);
+                  el.setSelectionRange(to, to);
+                  panelCaretRef.current = null;
+                }
+              }}
+              className="jar-panel-text jar-panel-edit"
+              aria-label="the words of this inspiration"
+              /* ONE, BECAUSE THE DEFAULT IS TWO. A textarea without `rows`
+                 is rows="2", so `height: auto` in `growPanelEdit` never
+                 measures below two lines — and a one-line memory grew a
+                 phantom line the reading face doesn't have, which is the
+                 height jump the founder recorded (view 164, edit 188, on
+                 the word "save"). The law is "dont make height different
+                 when viewing vs editing"; the honest way to equal heights
+                 is measuring the same words the same way, not teaching the
+                 reading face to hold invented air. */
+              rows={1}
+              value={editing.open.text}
+              onChange={(e) => {
+                editing.retype(e.target.value);
+                growPanelEdit(e.currentTarget);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  editing.leave();
+                }
+              }}
+            />
+          ) : (
+            <p
+              ref={panelTextRef}
+              className={
+                panelCanReflect && !panelIsGroup
+                  ? "jar-panel-text jar-panel-text--yours"
+                  : "jar-panel-text"
+              }
+              style={markStyle}
+              onClick={panelCanReflect && !panelIsGroup ? beginPanelEdit : undefined}
+            >
+              {markPassages(
+                panel.detail ? panel.detail.text : panelBall.textPreview,
+                panelMarks,
+              )}
+            </p>
+          )}
           {panel.partial ? (
             <p className="jar-panel-note">Couldn’t load the rest.</p>
           ) : null}
@@ -9679,7 +12842,7 @@ function HomeExperience(): JSX.Element {
                read back empty every time */
             verdicts.has(panelBall.sigId) ? null : (
               /* the same one quiet line the sky uses — not a row of controls */
-              <p className="jar-neb-ask">
+              <p className="jar-ask">
                 <button type="button" onClick={() => sayVerdict(panelBall.sigId as string, "true")}>
                   yes
                 </button>
@@ -9736,7 +12899,7 @@ function HomeExperience(): JSX.Element {
               just typed. A reflection is layer-1 detail and feeds extraction,
               so removing one re-derives what stood on it. */}
           {reflect.step === "kept" ? (
-            <p className="jar-neb-ask jar-neb-ask--after">
+            <p className="jar-ask jar-ask--after">
               <span>kept</span>
               {reflect.lastId ? (
                 <>
@@ -9766,81 +12929,32 @@ function HomeExperience(): JSX.Element {
               own: another member's is theirs, and a room orb is a statement
               that was shared rather than a memory that can be reached.
               It asks once, in place, because there is no undo behind it. */}
-          {/* EDITING THE MEMORY ITSELF — the last thing the archive could do
-              that this layout could not. Editing a capture re-derives the
-              signals resting on it, which is why it belongs here beside the
-              words rather than on a settings screen somewhere. */}
-          {panelCanReflect && !panelIsGroup && editing.open?.id === panelId ? (
-            <div className="jar-reflect">
-              <textarea
-                className="jar-reflect-box"
-                value={editing.open.text}
-                rows={5}
-                autoFocus
-                onChange={(e) => editing.retype(e.target.value)}
-              />
-              <p className="jar-neb-ask">
-                <button type="button" onClick={editing.keep} disabled={editing.open.saving}>
-                  {editing.open.saving ? "keeping…" : "keep the change"}
-                </button>
-                <span aria-hidden="true"> · </span>
-                <button type="button" onClick={editing.leave}>
-                  leave it
-                </button>
-              </p>
-            </div>
-          ) : null}
-          {/* ONE ACTION IN THE OPEN, THE REST BEHIND A WORD.
-              This became four lines under every memory — reflect, change the
-              words, add a picture, forget this — which is a menu attached to
-              a sentence. Reflecting is the act this panel exists for and the
-              only one anybody does often; the other three are housekeeping
-              you go looking for. They live behind one quiet word now. */}
-          {/* ONE ROW, ONE VOICE.
-              This was three separate things: an uppercase `REFLECT ON THIS`
-              set as a label-button, then `more`, then `forget this`, each its
-              own block — a memory ending in a small ransom note of three
-              registers. The act this panel exists for and the way to the rest
-              of the acts are now one lowercase line in the same face as the
-              memory above them, which is the grammar the sky has used all
-              along. `forget this` is not on it: throwing a memory away is
-              housekeeping, and it lives behind `more` with the other two. */}
-          {panelCanReflect && reflect.step === "rest" && !editing.open && !more ? (
-            <p className="jar-neb-ask jar-neb-ask--after jar-neb-ask--row">
-              <button type="button" onClick={askToReflect}>
-                reflect on this
-              </button>
-              {!panelIsGroup ? (
-                <>
-                  <span aria-hidden="true"> · </span>
-                  <button type="button" onClick={() => setMore(true)}>
-                    more
-                  </button>
-                </>
-              ) : null}
-            </p>
-          ) : null}
-          {panelCanReflect && !panelIsGroup && reflect.step === "rest" && !editing.open && more ? (
-            <p className="jar-neb-ask jar-neb-ask--after">
-              <button
-                type="button"
-                onClick={() =>
-                  editing.begin(
-                    "memory",
-                    panelId as string,
-                    panel.detail ? panel.detail.text : panelBall.textPreview,
-                  )
-                }
-              >
-                change the words
-              </button>
-              <span aria-hidden="true"> · </span>
-              {/* THE PICTURE GOES INSIDE THE GLASS. A memory that carries an
-                  image is drawn with it, which is the thing this layout was
-                  first sketched around — and the server reads the picture at
-                  capture time, so it feeds the signals too. */}
+          {/* ONE ROW, THREE VERBS, IN THE MEMORY'S OWN VOICE (founder,
+              2026-08-25: "the bottom should be Reflect • Edit • Delete").
+              The nest — one act in the open, the rest behind "more" — put
+              the housekeeping a press further away than anybody expected it
+              to be. Three lowercase words in the panel's own grammar now,
+              reflecting first because it is the act this panel exists for.
+              Visibility is not on this row any more: where the memory may be
+              seen is a state, and it reads at the top right beside the date,
+              not among the verbs.
+
+              A room orb keeps its own law: another member's save offers no
+              verb here at all (the verdict row above is the answer), and
+              your own save in a room reflects but is never edited or
+              deleted from the room's wall. */}
+          {/* WHILE THE WORDS ARE OPEN, THE ROW IS ABOUT THE WORDS. Same place,
+              same face as the resting verbs — the row does not move and does
+              not grow; what it offers changes, because what you are doing has.
+              The picture lives here rather than beside `delete`: changing what
+              a memory IS — its words and what it carries — is one job, and the
+              server reads a picture at capture time, so it feeds the signals
+              exactly as the text does. */}
+          {editing.open?.kind === "memory" && editing.open.id === panelId ? (
+            <p className="jar-ask jar-ask--after jar-panel-foot">
+              <span className="jar-panel-foot-l">
               <label className="jar-attach">
-                {attaching ? "keeping the picture…" : "add a picture"}
+                {attaching ? "adding attachment…" : "add attachment"}
                 <input
                   type="file"
                   accept="image/*"
@@ -9853,53 +12967,246 @@ function HomeExperience(): JSX.Element {
                   }}
                 />
               </label>
-              <span aria-hidden="true"> · </span>
-              {/* WHO ELSE MAY SEE THIS.
-                  The one verb the data model gained and the layout could not
-                  perform: rooms were rendering a ground nobody could put
-                  anything on. It reads as a state rather than as a switch —
-                  the word says where the memory currently is, and pressing it
-                  moves it — because "public/private" as a pair of options
-                  invites a choice, and this is a fact about one memory.
+              </span>
+              {/* THE MIDDLE BECOMES `save` WHILE YOU TYPE (founder,
+                  2026-08-25: "when user edits sth, replace the center left
+                  right arrow icon with save button").
 
-                  Closing it again takes it out of every room at once. There
-                  is no copy anywhere else, so this is genuinely reversible,
-                  which is why it needs no confirmation while forgetting
-                  does. */}
-              <button type="button" onClick={togglePublic} disabled={publishing}>
-                {publishing
-                  ? "…"
-                  : panelIsPublic
-                    ? "in your rooms · take it back"
-                    : "kept to yourself · put it in your rooms"}
-              </button>
-              <span aria-hidden="true"> · </span>
-              {/* AND ONLY THEN MAY IT GO. Forgetting sits at the end of the
-                  same line as the other two housekeeping acts rather than in
-                  a block of its own: it is the last thing you would reach
-                  for, not a different category of thing. Asking still happens
-                  in sequence — the confirmation replaces this word, so the
-                  destructive option is never sitting next to its own
-                  confirmation. */}
-              {forget.step === "going" ? (
-                "letting go…"
-              ) : forget.id === panelId ? (
-                <>
-                  <button type="button" onClick={forgetIt}>forget it</button>
-                  <span aria-hidden="true"> · </span>
-                  <button type="button" onClick={() => setForget({ id: null, step: "rest" })}>
-                    keep it
-                  </button>
-                </>
-              ) : (
-                <button type="button" onClick={() => setForget({ id: panelId, step: "asking" })}>
-                  forget this
+                  This argued the other way until today: that the carets should
+                  stay, because taking the way out of a screen away from
+                  somebody mid-use is a mistake this codebase has fixed three
+                  times in other corners. The founder's ruling is better and
+                  the old argument does not survive it. Stepping to another
+                  memory with an edit open was never a way OUT — it was the way
+                  to leave unsaved words behind on a card you are no longer
+                  looking at. Leaving is `leave it`, one cell to the right, and
+                  closing the card is the other. Neither has moved.
+
+                  So the centre says what this footer is for while it is open.
+                  It is the same word the mouth uses for the same act, in the
+                  same slot the carets had, so nothing shifts under the
+                  pointer when the edit begins. */}
+              <span className="jar-panel-foot-c">
+                <button
+                  type="button"
+                  className="jar-panel-save"
+                  onClick={editing.keep}
+                  disabled={
+                    editing.open.saving ||
+                    editing.open.saved ||
+                    editing.open.text.trim() === ""
+                  }
+                >
+                  {/* three states in one word, in the slot the carets will
+                      have back in a moment: what you may do, what is
+                      happening, and what happened. */}
+                  {editing.open.saved
+                    ? "saved"
+                    : editing.open.saving
+                      ? "saving…"
+                      : "save"}
                 </button>
-              )}
+              </span>
+              <span className="jar-panel-foot-r">
+                <button type="button" onClick={editing.leave}>
+                  cancel edit
+                </button>
+              </span>
+            </p>
+          ) : null}
+          {/* THE FOOT OF THE CARD, IN THREE PARTS (founder's sketch,
+              2026-08-25): what you can DO at the ends, and the way to read on
+              in the middle. The two carets were at the top left, in the
+              corner the date wants and beside the pair that says who may see
+              this — three unrelated things in one corner. Stepping is
+              movement, and movement belongs at the foot, centred, where it
+              reads as "and then" rather than as another verb. */}
+          {/* THE ASK STANDS WHERE THE VERB STOOD (founder, 2026-08-27: "dont
+              do hover card on a hover card"). The warning used to be a small
+              sheet floating over the card — a second surface answering a
+              press that happened on this one. It is the card's own state
+              now: while the question is open the foot's verbs step aside and
+              the sentence takes their row, so nothing covers the words you
+              are deciding about. */}
+          {forget.step === "asking" && forget.id === panelId ? (
+            <div className="jar-panel-askrow">
+              <p className="jar-panel-warn">
+                A signal was read from this memory and still stands on it.
+                Deleting the memory does not unlearn the signal — but the
+                signal loses this ground, and can no longer point back to
+                where it came from.
+              </p>
+              <p className="jar-ask jar-ask--row">
+                <button
+                  type="button"
+                  className="jar-where-on"
+                  onClick={() => setForget({ id: null, step: "rest" })}
+                >
+                  keep it
+                </button>
+                <span aria-hidden="true"> · </span>
+                <button type="button" className="jar-where-off" onClick={forgetIt}>
+                  delete it anyway
+                </button>
+              </p>
+            </div>
+          ) : unpublishAsk ? (
+            <div className="jar-panel-askrow">
+              <p className="jar-panel-warn">
+                A signal was read from this memory while it was public and
+                still stands on it. Making it private takes it off your
+                rooms’ ground — the signal is not unlearned, but it can no
+                longer point back to where it came from.
+              </p>
+              <p className="jar-ask jar-ask--row">
+                <button
+                  type="button"
+                  className="jar-where-on"
+                  onClick={() => setUnpublishAsk(false)}
+                >
+                  keep it public
+                </button>
+                <span aria-hidden="true"> · </span>
+                <button
+                  type="button"
+                  className="jar-where-off"
+                  onClick={() => {
+                    setUnpublishAsk(false);
+                    togglePublic();
+                  }}
+                >
+                  make it private anyway
+                </button>
+              </p>
+            </div>
+          ) : null}
+          {panelCanReflect &&
+          reflect.step === "rest" &&
+          !editing.open &&
+          !(forget.step === "asking" && forget.id === panelId) &&
+          !unpublishAsk ? (
+            <p className="jar-ask jar-ask--after jar-panel-foot">
+              <span className="jar-panel-foot-l">
+              <button type="button" onClick={askToReflect}>
+                reflect
+              </button>
+              </span>
+              <span className="jar-panel-foot-c">{panelStepCarets}</span>
+              <span className="jar-panel-foot-r">
+              {!panelIsGroup ? (
+                <>
+                  {/* DELETING ASKS ONLY WHEN THERE IS SOMETHING TO SAY
+                      (founder, 2026-08-25: "delete it without warning if
+                      inspiration is not powering a signal. if it does, then
+                      show a new modal to explain the situation"). A memory
+                      nothing was read from goes the moment you say so —
+                      a warning with nothing to warn about is friction wearing
+                      a safety costume. A memory a signal stands on opens the
+                      ask below instead. */}
+                  {forget.step === "going" ? (
+                    "deleting…"
+                  ) : forget.step === "failed" ? (
+                    /* PROSE, AND IT SAYS WHAT IS TRUE: the memory is still
+                       here. Beside the verb rather than in a sheet, because
+                       nothing happened and nothing needs deciding — pressing
+                       delete again is the whole recovery. */
+                    <span className="jar-panel-warn">
+                      That didn’t go through — it is still here.
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        panelPowersSignal
+                          ? setForget({ id: panelId, step: "asking" })
+                          : forgetIt()
+                      }
+                    >
+                      delete
+                    </button>
+                  )}
+                </>
+              ) : null}
+              </span>
             </p>
           ) : null}
         </div>
       ) : null}
+
+      {/* ================= WHERE A STATEMENT CAME FROM =================
+          It leads with the statement itself, because the question the room
+          answers is "how did THIS get said" and the claim has to be present
+          for the grounds under it to mean anything.
+
+          Then two panes. LEFT: every memory this statement stands on, in the
+          order it was read, each clamped to a few lines with the span that
+          did the reading still at full ink and its surround dim — the same
+          salience the rows always carried, now with an honest edge instead of
+          a silent truncation. RIGHT: the one you pressed, whole, fetched as
+          the memory itself rather than as the preview the evidence carries.
+
+          NOTHING MOVES BEHIND IT. The old rows flew the camera down into the
+          field, which cost you the place you were reading from to find out
+          where it came from — ruled out by the founder outright. */}
+      {prov !== null ? (
+        <div
+          className="jar-prov-room"
+          data-jar-chrome="1"
+          role="dialog"
+          aria-label="where this came from"
+        >
+          <p className="jar-prov-room-lead">{prov.lead}</p>
+          <div className="jar-prov-room-panes">
+            <div className="jar-prov-room-list">
+              <p className="jar-prov-lead jar-label">read from</p>
+              {prov.rows.map((e) => (
+                <button
+                  key={`${e.signalId}:${e.inspirationId}`}
+                  type="button"
+                  className={`jar-prov-row${
+                    provPick === e.inspirationId ? " jar-prov-row--picked" : ""
+                  }`}
+                  aria-pressed={provPick === e.inspirationId}
+                  onClick={() => setProvPick(e.inspirationId)}
+                >
+                  <span className="jar-prov-text">{salience(e)}</span>
+                  {e.reason ? <span className="jar-prov-why">{e.reason}</span> : null}
+                </button>
+              ))}
+            </div>
+            <div className="jar-prov-room-full">
+              {provPick === null ? (
+                /* THE PANE SAYS WHAT IT IS FOR RATHER THAN SITTING BLANK, and
+                   it never guesses by pre-selecting the first ground: which
+                   memory you are reading is a thing you chose, and a pane
+                   that chose for you would put words on screen you did not
+                   ask for and could not tell apart from your own choice. */
+                <p className="jar-prov-room-idle">
+                  Press one to read the whole memory it came from.
+                </p>
+              ) : provFull === null || provFull.id !== provPick ? (
+                <p className="jar-prov-room-idle">Fetching it…</p>
+              ) : provFull.text === "" ? (
+                <p className="jar-prov-room-idle">
+                  Couldn’t fetch the rest of this one. The words on the left are
+                  the span that was read.
+                </p>
+              ) : (
+                <p className="jar-prov-room-text">{provFull.text}</p>
+              )}
+            </div>
+          </div>
+          <p className="jar-ask jar-ask--row jar-prov-room-close">
+            <button type="button" onClick={() => setProv(null)}>
+              enough
+            </button>
+          </p>
+        </div>
+      ) : null}
+
+      {/* the one ask before a delete used to float here as its own sheet —
+          a card over the card (founder, 2026-08-27). It lives on the card's
+          own foot now, beside the ask before un-publishing. */}
 
       <div className="jar-topbar" data-jar-chrome="1">
         {/* THE WAY OUT, AND THERE HAS TO BE ONE.
@@ -9962,19 +13269,112 @@ function HomeExperience(): JSX.Element {
                disappears the way the account link used to — and settings are
                PER SPACE, because renaming a room, taking someone out of it or
                closing it are all facts about the space you are standing in. */
+            /* A SPLIT BUTTON: the name opens where you are, the caret opens
+               where else you could be (founder, 2026-08-24). This is the one
+               way into a wall's own panel now — the name over the poster
+               stopped being a second door — and the right half answers the
+               question that used to need a walk to the edge of the world:
+               which other walls exist, and take me there. */
+            <span className="jar-here-split">
+              <button
+                type="button"
+                className="jar-here jar-back jar-label"
+                aria-expanded={settingsFor === spaceKey(atWall)}
+                onClick={() => {
+                  setWallPick(false);
+                  setSettingsFor(
+                    settingsFor === spaceKey(atWall) ? null : spaceKey(atWall),
+                  );
+                }}
+              >
+                {atWall.kind === "group"
+                  ? groups.find((g) => g.id === atWall.id)?.name ?? atWall.name
+                  : atWall.name}
+              </button>
+              <button
+                type="button"
+                className="jar-here-more jar-back jar-label"
+                aria-expanded={wallPick}
+                aria-label="go to another wall"
+                onClick={() => {
+                  setSettingsFor(null);
+                  setWallPick((v) => !v);
+                }}
+              >
+                <span aria-hidden="true">▾</span>
+              </button>
+              {wallPick ? (
+                <span className="jar-here-list" role="menu">
+                  {walls.map((w) => {
+                    const mine = w.kind === atWall.kind && w.id === atWall.id;
+                    return (
+                      <button
+                        key={spaceKey(w)}
+                        type="button"
+                        role="menuitem"
+                        className={`jar-here-row jar-label${mine ? " is-here" : ""}`}
+                        onClick={() => {
+                          setWallPick(false);
+                          simApiRef.current?.goToWall(w.col);
+                        }}
+                      >
+                        {w.name}
+                      </button>
+                    );
+                  })}
+                  {/* THE LIST OF YOUR WALLS IS ALSO WHERE YOU MAKE ONE. It
+                      listed every place you could go and offered no way to
+                      make another, so a person looking for their rooms in the
+                      obvious place had to know about a `+` at the far end of
+                      the screen. */}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="jar-here-row jar-here-row--make jar-label"
+                    onClick={() => {
+                      setWallPick(false);
+                      setNewPlace(true);
+                    }}
+                  >
+                    add new
+                  </button>
+                </span>
+              ) : null}
+            </span>
+          }
+
+          {/* WHEN YOU ARE, BESIDE WHERE YOU ARE.
+              Founder, 2026-08-25: "let's find a new home for timeline. doesn't
+              need to stay at bottom."
+
+              It was a word at the bottom edge with the count under it, which
+              made time a FIFTH signpost on a screen whose whole grammar is
+              four: up is what you believe, down is what you kept, left and
+              right are whose mind. Time is not a direction you can walk — it
+              is a lens on whichever wall you are already standing on. So it
+              belongs with the sentence that says which wall that is, and the
+              bottom edge goes back to holding one thing.
+
+              AND IT IS THE READING, NOT A LABEL. It said `timeline`, a name
+              for an instrument, and the instrument then had to stay lit to
+              say you had wound back. This says `now`, or the day you are
+              parked at — so the fact lives in a word that is always there and
+              the rail can be genuinely absent until you reach for it. */}
+          {dial && phase === "ready" && !dialAway ? (
             <button
               type="button"
-              className="jar-here jar-back jar-label"
-              aria-expanded={settingsFor === spaceKey(atWall)}
-              onClick={() =>
-                setSettingsFor(settingsFor === spaceKey(atWall) ? null : spaceKey(atWall))
-              }
+              className={`jar-when jar-label${parkedAt === null ? "" : " jar-when--away"}`}
+              aria-expanded={timeOpen}
+              aria-label="wind this wall back through time"
+              onClick={() => setTimeOpen((v) => !v)}
+              onPointerEnter={() => setTimeNear(true)}
+              onPointerLeave={() => setTimeNear(false)}
+              onFocus={() => setTimeNear(true)}
+              onBlur={() => setTimeNear(false)}
             >
-              {atWall.kind === "group"
-                ? groups.find((g) => g.id === atWall.id)?.name ?? atWall.name
-                : atWall.name}
+              {parkedAt === null ? "now" : dateWords(parkedAt, dial.end)}
             </button>
-          }
+          ) : null}
         </div>
 
         {/* AND THE WAY OUT MOVES RIGHT. Two permanent things at the top of the
@@ -9983,72 +13383,22 @@ function HomeExperience(): JSX.Element {
             the same slot the moment the room's name needed somewhere to live,
             and putting them at opposite ends means neither can ever hide the
             other — which is exactly the bug the ternary here used to cause. */}
-        {/* SCAFFOLDING, AND NAMED AS SUCH.
-            Everything else in this bar earned its place by being a fact about
-            where you are standing. This did not: it is a drawer, and the
-            comments above are right that a toolbar is what this layout was
-            built to not have.
+        {/* The ≡ drawer that stood here is gone (founder ask, 2026-08-24).
+            It was scaffolding and said so; its rows did not vanish — the
+            flat screens and the loop's two doors now live in the account
+            drop, the one sheet this bar already had. */}
+        {readingOpen ? (
+          <ReadingPanel reading={theReading} onClose={() => setReadingOpen(false)} />
+        ) : null}
 
-            It exists because `dev` grew screens the world has no geometry for.
-            /principles is layer 4 — declared statements resting on signals —
-            and the world draws three layers, not four, so there is nowhere to
-            put it. The list views are the same memories in another register,
-            which the archive comment above already calls a thing that "goes
-            away once the layout can do everything it can".
-
-            So they are reachable rather than orphaned, from one control that
-            admits what it is. Top centre because the two ends of this bar are
-            taken and neither may be crowded — the way out is on the left and
-            the account is on the right, and the bug that produced this comment
-            once was exactly one of them hiding the other.
-
-            DELETE THIS when /principles has a home in the world. That is the
-            real fix; this is the placeholder that keeps it usable meanwhile. */}
-        <div className="jar-flatmenu" data-jar-chrome="1">
-          <button
-            type="button"
-            className="jar-flatmenu-toggle jar-label"
-            aria-expanded={flatMenuOpen}
-            aria-haspopup="menu"
-            aria-label="Other screens"
-            onClick={() => {
-              setFlatMenuOpen((v) => !v);
-              setAccountOpen(false);
-              setSettingsFor(null);
-            }}
-          >
-            <span aria-hidden="true">≡</span>
-          </button>
-          {flatMenuOpen ? (
-            <div className="jar-flatmenu-sheet" role="menu">
-              {[
-                /* The flat screen's own bottom bar, in its order and its
-                   words, so the two do not drift into naming the same screen
-                   two ways. `top of mind` is Surface's `wall` view, which
-                   `surface-route.ts` resolves to "/" — and "/" is the world,
-                   whose headquarters IS top of mind. So it lands on the same
-                   layer either way; it simply arrives in the world's rendering
-                   of it rather than the list's. */
-                ["/capture", "capture"],
-                ["/inspirations", "inspirations"],
-                ["/signals", "signals"],
-                ["/top-of-mind", "top of mind"],
-                ["/rooms", "rooms"],
-                ["/principles", "principles"],
-              ].map(([to, label]) => (
-                <Link
-                  key={to}
-                  to={to}
-                  role="menuitem"
-                  className="jar-flatmenu-item jar-label"
-                  onClick={() => setFlatMenuOpen(false)}
-                >
-                  {label}
-                </Link>
-              ))}
-            </div>
-          ) : null}
-        </div>
+        {antechamberOpen ? (
+          <AntechamberPanel
+            rows={antechamber}
+            onClose={() => setAntechamberOpen(false)}
+            onRestoreAnchor={restoreFromAntechamber}
+            restoredAnchorIds={restoredAnchors}
+          />
+        ) : null}
 
         <button
           type="button"
@@ -10073,9 +13423,23 @@ function HomeExperience(): JSX.Element {
         ) : null}
       </div>
 
-      {grounds.length > 0 && inField && phase === "ready" ? (
+      {/* THE WAY UP IS GONE WITH THE PLACE IT LED TO. It sat on the top edge
+          and said what was forming overhead; there is no overhead any more,
+          and a door onto a room that has been removed is worse than no door.
+          The signals it counted are still derived and still write the poster —
+          they are simply not somewhere a person goes. */}
+
+
+      {/* AT EVERY HEIGHT, NOT JUST DOWN IN THE FIELD.
+          It was gated on `inField`, so it was not even mounted at the height
+          you ARRIVE at — the one moment a person needs telling that this
+          ground is one of several. It is a fact about the wall you are
+          standing on, so like the offline line it holds still while you
+          descend. Only the sky is exempt: up there you are reading patterns,
+          and whose ground is under you is not the question. */}
+      {grounds.length > 0 && phase === "ready" ? (
         <div
-          className="jar-ground"
+          className={groundsLit ? "jar-ground jar-ground--lit" : "jar-ground"}
           data-jar-chrome="1"
           role="radiogroup"
           aria-label="Whose inspirations are on the ground"
@@ -10106,11 +13470,16 @@ function HomeExperience(): JSX.Element {
       {dial && phase === "ready" ? (
         <div
           ref={dialRef}
-          className={`jar-dial${scrubbing || !atNow ? " jar-dial--live" : ""}${
-            inSky || dialAway ? " jar-dial--away" : ""
-          }`}
+          className={`jar-dial${scrubbing ? " jar-dial--live" : ""}${
+            dialAway ? " jar-dial--away" : ""
+          }${timeOpen || timeNear || scrubbing ? " jar-dial--open" : ""}`}
           data-jar-chrome="1"
         >
+          {/* NO LABEL IN HERE ANY MORE. The word that summons this instrument
+              is `.jar-when`, up in the top-left beside the name of the wall —
+              see the comment there for why time stopped being a fifth thing
+              at the bottom edge. What is left is the instrument itself, and
+              at rest it is nothing at all. */}
           <div
             ref={dialTrackRef}
             className="jar-dial-track"
@@ -10123,7 +13492,12 @@ function HomeExperience(): JSX.Element {
               <span
                 key={m.pct}
                 className="jar-month jar-label"
-                style={{ top: `${(m.pct * 100).toFixed(2)}%` }}
+                /* `m.pct` runs 0 at the oldest to 1 at now, which is the
+                   archive's own order; the rail hangs the other way up, with
+                   now at the top under the word. Flipped here rather than at
+                   the source, because the source is the archive and it is not
+                   wrong. */
+                style={{ top: `${((1 - m.pct) * 100).toFixed(2)}%` }}
               >
                 {m.label}
               </span>
@@ -10158,7 +13532,7 @@ function HomeExperience(): JSX.Element {
               if (e.key === "Escape") setAgentName(null);
             }}
           />
-          <p className="jar-neb-ask">
+          <p className="jar-ask">
             <button type="button" onClick={makeAgent}>
               give it a wall
             </button>
@@ -10167,6 +13541,11 @@ function HomeExperience(): JSX.Element {
               not now
             </button>
           </p>
+          {agentTrouble ? (
+            <p className="jar-settings-warn" role="status">
+              {agentTrouble}
+            </p>
+          ) : null}
           <p className="jar-share-note">
             It writes here once it signs in as itself. Until then the wall is empty,
             and says so.
@@ -10192,22 +13571,318 @@ function HomeExperience(): JSX.Element {
 
           It is also the keyboard-and-pointer route to travel, which dragging
           alone never offered. */}
-      <nav className="jar-axis" data-jar-chrome="1" aria-label="walls">
-        {walls.map((w) => {
-          const here = atWall.kind === w.kind && atWall.id === w.id;
-          return (
-            <button
-              key={spaceKey(w)}
-              type="button"
-              className={`jar-axis-mark${here ? " is-here" : ""} jar-axis-mark--${w.kind}`}
-              aria-current={here ? "true" : undefined}
-              onClick={() => simApiRef.current?.goToWall(w.col)}
+      {/* HOW MUCH IS DOWN THERE, AND THE WAY TO IT (founder, 2026-08-25:
+          "x inspirations saved should be at the bottom with a carrot").
+          The ground is a whole section below and nothing on the resting page
+          said it existed, let alone how much was in it. A count and a caret:
+          the number is what you have, the caret is which way.
+
+          THE NUMERAL IS DELIBERATE AND IT IS AN EXCEPTION. "States render,
+          numerals never" holds everywhere it means something — an aliveness,
+          a confidence, how many people agreed — because a number there invites
+          a person to optimise a score. This is not that: it is the SIZE OF
+          YOUR OWN ARCHIVE, the one quantity that is simply a fact about you
+          and cannot be gamed by anybody but yourself. Asked for by name.
+
+          It is not shown while you are already standing in the ground: a
+          signpost pointing at the room you are in is furniture. */}
+      {/* WHAT IS FORMING OVERHEAD — the way up, at the top edge, while you
+          stand at headquarters (founder, 2026-08-25: "have a carrot and text
+          to say philosophies and value to indicate sth will start forming up
+          there"). Top of mind is current; philosophies and values are
+          timeless, and the timeless half takes long enough to form that for
+          now the place mostly says so. The door exists anyway, because a
+          person can go and see that it is empty and why — a place is honest
+          where a promise in a tooltip is not.
+
+          ON EVERY WALL, NOT ONLY YOUR OWN (founder, 2026-08-27: "philosophies
+          & value should be available on every page since every room will
+          eventually have its own philosophies and values"). It was gated to
+          your own column because yours was the only sky that could hold
+          anything. That was a fact about how much had been built, and it had
+          hardened into a rule about whose thinking has a timeless half — which
+          is the opposite of what a room is for. The way up is a door to a
+          place that says honestly what it holds, and that is as true standing
+          in somebody else's room as in your own. */}
+      {phase === "ready" && !inField && !inSky ? (
+        <button
+          type="button"
+          className="jar-values"
+          data-jar-chrome="1"
+          onClick={() => simApiRef.current?.toSky()}
+        >
+          <span className="jar-values-words jar-label">philosophies &amp; values</span>
+          <span className="jar-caret jar-caret--up" aria-hidden="true" />
+        </button>
+      ) : null}
+
+      {/* AND WHAT THE SKY SAYS, STANDING IN IT. One sentence, in prose. The
+          numeral law needs nothing here: what is forming is not countable
+          yet, which is the whole point of the sentence. */}
+      {/* AND THE WAY BACK DOWN IS A CARET AND NOTHING ELSE (founder,
+          2026-08-25: "from the sky, just have a carrot icon to go back
+          down"). Up here there is one other place and you came from it — a
+          name beside the mark would be telling somebody where they live. */}
+      {phase === "ready" && inSky ? (
+        <button
+          type="button"
+          className="jar-up jar-up--down"
+          data-jar-chrome="1"
+          aria-label="back down to your wall"
+          onClick={() => simApiRef.current?.toTop()}
+        >
+          <span className="jar-caret" aria-hidden="true" />
+        </button>
+      ) : null}
+
+      {/* THE REACH. See its note above `reachable` — this is the ground made
+          addressable without a pointer, and it is deliberately drawn nowhere.
+
+          A listbox rather than a row of buttons, because that is what it is:
+          one thing selected out of many, one tab stop for the whole ground,
+          and the cursor named by `aria-activedescendant` rather than by moving
+          real focus between two thousand elements.
+
+          It sits beside the door in the DOM so the tab order reads the way the
+          world does — the chrome, then the way in, then what is behind it. The
+          two are never on screen together: the door is the way INTO the ground
+          and this is the ground itself.
+
+          WHAT A SIGHTED PERSON SEES when focus lands here is the orb lighting
+          up, out in the field, because that is where the content is. There is
+          nothing to outline: the element has no size and never did. */}
+      {phase === "ready" && inField && reachable.length > 0 ? (
+        <div
+          className="sr-only jar-reach"
+          role="listbox"
+          tabIndex={0}
+          aria-label="Your ground — left and right arrows read through your memories, Enter opens and closes the one in hand"
+          aria-activedescendant={reachId ? `jar-reach-${reachId}` : undefined}
+          onFocus={onReachFocus}
+          onKeyDown={onReachKey}
+        >
+          {reachable.map((m) => (
+            <div
+              key={m.id}
+              id={`jar-reach-${m.id}`}
+              role="option"
+              aria-selected={m.id === reachId}
             >
-              <span className="jar-axis-name">{w.name}</span>
-            </button>
-          );
-        })}
-      </nav>
+              {m.label}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {/* the sky's sentence used to mount here, on arrival; it stands in each
+          wall's own column now — see the block inside `.jar-wallcol` */}
+
+      {/* AND THE WAY BACK UP, at the top edge, while you are in the ground
+          (founder, 2026-08-25: "add carrot to go up at top of the screen when
+          at ground"). The count and its caret point DOWN from headquarters and
+          then get out of the way; this is the same promise aimed the other
+          way, and it is the only thing on screen down here that says the world
+          continues above you. Its opposite number never shows at the same
+          time — one of the two is always the wrong direction. */}
+      {phase === "ready" && inField ? (
+        <button
+          type="button"
+          className="jar-up"
+          data-jar-chrome="1"
+          aria-label="back up to the wall"
+          onClick={() => simApiRef.current?.toTop()}
+        >
+          <span className="jar-caret jar-caret--up" aria-hidden="true" />
+        </button>
+      ) : null}
+
+      {/* NOT IN THE SKY (founder, 2026-08-25: "30 inspirations should be gone
+          from here"). It is the door into the ground, printed with how much
+          is behind it — and from up here the ground is two sections away, so
+          it was a door to somewhere you cannot get to in one step, sitting
+          under a sentence about the timeless half of a mind. */}
+      {phase === "ready" && !inField && !inSky && wallCount > 0 ? (
+        <button
+          type="button"
+          className="jar-saved"
+          data-jar-chrome="1"
+          onClick={() => simApiRef.current?.toGround()}
+        >
+          <span className="jar-saved-count">
+            {/* TWO NUMBERS ONLY WHEN THEY DISAGREE. Under the ceiling — which
+                is where every account lives for a long time — this is exactly
+                what it always was: one number and the word. Past it, the door
+                stops printing the size of what arrived as though it were the
+                size of the archive. */}
+            {wallTotal > wallCount ? `${wallCount} of ${wallTotal}` : wallCount}
+            {wallTotal === 1 ? " inspiration" : " inspirations"}
+          </span>
+          <span className="jar-caret" aria-hidden="true" />
+        </button>
+      ) : null}
+
+      {/* THE STRIP OF WALL NAMES IS GONE (founder, 2026-08-25: "remove").
+          It listed every wall along the bottom edge and lit the one you were
+          on. I argued to keep it — on a first account its two marks were the
+          only visible ways out — and the founder ruled twice, so it goes.
+
+          WHAT KEEPS ITS PROMISE NOW, because a promise is not kept by a menu:
+          up and down are on screen at all times, as `philosophies & values`
+          at the top edge and the count of what you have kept at the bottom.
+          Sideways is `.jar-way`, the neighbour's own name printed in the
+          margin it lives past — which only exists when there IS a neighbour,
+          and a first account has none to point at. So the case the strip was
+          protecting is the case where sideways means nothing yet. The wall
+          list under the name at the top left carries the rest, including the
+          way to make another place. */}
+
+      {/* WHICH KIND OF PLACE — asked once, with room to say what each is.
+          A room and an agent are both a new column on the axis and they are
+          nothing like each other: one is people, one is a machine that writes
+          on its own wall. Two words in a strip could not carry that, so the
+          choice is made here, where a sentence fits. */}
+      {newPlace ? (
+        <>
+          {/* THE WAY OUT IS THE WORLD (founder, 2026-08-27: "remove not now
+              button. if click outside modal, close it"). A dialog offering
+              two places to go does not need a third control saying you would
+              rather stay — pressing anywhere that is not the dialog says that
+              already, and says it in the gesture a person already has. The
+              sheet is transparent and covers everything, so the world behind
+              it is what you press. Escape works too, and always did. */}
+          <div
+            className="jar-newplace-away"
+            data-jar-chrome="1"
+            aria-hidden="true"
+            onPointerDown={() => setNewPlace(false)}
+          />
+        <div className="jar-seek jar-newplace" data-jar-chrome="1" role="dialog" aria-label="make another place">
+          <p className="jar-prov-lead jar-label">make another place</p>
+          <button
+            type="button"
+            className="jar-newplace-row"
+            onClick={() => {
+              setNewPlace(false);
+              setGroupForm({ mode: "make", text: "", busy: false, error: null });
+            }}
+          >
+            <span className="jar-newplace-name">a room</span>
+            <span className="jar-newplace-what">
+              A wall a few of you keep. Members put up chosen signals — never
+              the captures behind them — and the room reads them into one
+              shared top of mind.
+            </span>
+          </button>
+          <button
+            type="button"
+            className="jar-newplace-row"
+            onClick={() => {
+              setNewPlace(false);
+              setAgentName("");
+            }}
+          >
+            <span className="jar-newplace-name">an agent</span>
+            <span className="jar-newplace-what">
+              A mind of its own, with its own wall. It writes there once it
+              signs in as itself; until then the wall is empty, and says so.
+            </span>
+          </button>
+        </div>
+        </>
+      ) : null}
+
+      {/* ---------------- THE REFLECTION, ON ITS OWN ----------------
+          Founder, 2026-08-25: "have reflect workflow in modal."
+
+          Reflecting from the CARD stays inside the card, because the memory
+          is already open and the question belongs under its words. Reflecting
+          from the MOUTH had no card, so it borrowed one — it selected the orb
+          it had just made, which dragged the whole reading panel open to hold
+          one question, with the memory's words, its verbs, its date and its
+          visibility arranged around a textarea. You had just typed those
+          words. You do not need them read back to you to answer a question
+          about them.
+
+          So it is its own sheet, in the shape this world already uses for a
+          moment that owns the screen — the same one the seek line and the
+          delete ask wear. It says what was kept, asks, takes the answer, and
+          goes. */}
+      {reflectOn && reflect.step !== "rest" ? (
+        <div
+          className="jar-seek jar-reflect-room"
+          data-jar-chrome="1"
+          role="dialog"
+          aria-label="reflect on what you just kept"
+        >
+          <p className="jar-prov-lead jar-label">saved</p>
+          {/* what it was, in one line: enough to know which memory this is
+              about, never the whole thing back */}
+          <p className="jar-reflect-on">{reflectOn.text}</p>
+          {reflect.step === "kept" ? (
+            <>
+              <p className="jar-reflect-q">Kept.</p>
+              <p className="jar-ask jar-ask--row">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const rid = reflect.lastId;
+                    const owner = reflectOn.id;
+                    setReflect({ step: "rest", question: "", answer: "" });
+                    setReflectOn(null);
+                    if (rid && !offlineRef.current)
+                      deleteReflection(owner, rid).catch(() => undefined);
+                  }}
+                >
+                  take it back
+                </button>
+                <span aria-hidden="true"> · </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReflect({ step: "rest", question: "", answer: "" });
+                    setReflectOn(null);
+                  }}
+                >
+                  done
+                </button>
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="jar-reflect-q">{reflect.question}</p>
+              <textarea
+                className="jar-reflect-box"
+                value={reflect.answer}
+                rows={4}
+                autoFocus
+                placeholder="In your own words"
+                onChange={(e) => setReflect((r) => ({ ...r, answer: e.target.value }))}
+              />
+              <p className="jar-ask jar-ask--row">
+                <button
+                  type="button"
+                  disabled={reflect.step === "keeping" || reflect.answer.trim() === ""}
+                  onClick={keepReflection}
+                >
+                  {reflect.step === "keeping" ? "keeping…" : "keep"}
+                </button>
+                <span aria-hidden="true"> · </span>
+                {/* NOT NOW IS NOT A LOSS. The memory is already kept — that
+                    is the whole point of the beat before this one — so
+                    leaving the question costs nothing and says so. */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReflect({ step: "rest", question: "", answer: "" });
+                    setReflectOn(null);
+                  }}
+                >
+                  not now
+                </button>
+              </p>
+            </>
+          )}
+        </div>
+      ) : null}
 
       {/* SEARCHING, AND IT IS ONE LINE. No results panel, no counts, no list —
           the answer is in the field, lit. Escape puts the field back. */}
@@ -10223,7 +13898,7 @@ function HomeExperience(): JSX.Element {
               if (e.key === "Escape") setSeek(null);
             }}
           />
-          <p className="jar-neb-ask">
+          <p className="jar-ask">
             {found && found.size === 0 && seek.trim().length > 1 ? (
               <span>nothing here says that</span>
             ) : (
@@ -10248,7 +13923,17 @@ function HomeExperience(): JSX.Element {
               className={groupForm.mode === "make" ? "is-on" : undefined}
               onClick={() => setGroupForm({ ...groupForm, mode: "make", error: null })}
             >
-              Make a group
+              {/* "ROOM", NOT "GROUP". This repo's rule is that identifiers
+                  speak canon and copy speaks human — `group` in the code,
+                  `room` on the screen — and this button was the one place the
+                  canon word reached a person. The comment eight lines above it
+                  says "MAKING OR JOINING A ROOM", the dialog that opens it
+                  offers "a room", and then the tab said Make a group.
+
+                  Found while fixing an e2e walk that could not reach this
+                  form, which is the second copy defect in two days turned up
+                  by reading a surface closely for an unrelated reason. */}
+              Make a room
             </button>
             <button
               type="button"
@@ -10270,7 +13955,7 @@ function HomeExperience(): JSX.Element {
             }}
           />
           {groupForm.error ? <p className="jar-roomform-err">{groupForm.error}</p> : null}
-          <p className="jar-neb-ask">
+          <p className="jar-ask">
             <button type="button" onClick={submitGroup} disabled={groupForm.busy}>
               {groupForm.busy ? "…" : groupForm.mode === "make" ? "make it" : "go in"}
             </button>
@@ -10309,6 +13994,7 @@ function HomeExperience(): JSX.Element {
           members={members}
           space={atWall}
           openProposals={openProposals}
+          timeline={groupTimelines.get(groupPanel) ?? null}
           propose={propose}
           setPropose={setPropose}
           sendProposal={sendProposal}
@@ -10345,7 +14031,7 @@ function HomeExperience(): JSX.Element {
           `/profile` is for. This is the door and the label on it. */}
       {accountOpen && phase === "ready" ? (
         <div
-          className="jar-settings jar-settings--right"
+          className="jar-settings"
           data-jar-chrome="1"
           role="dialog"
           aria-label="Your account"
@@ -10362,16 +14048,67 @@ function HomeExperience(): JSX.Element {
             <p className="jar-settings-note">{auth.account.email}</p>
           ) : null}
 
-          <p className="jar-neb-ask">
+          <p className="jar-ask">
             <Link className="jar-settings-verb" to="/profile" onClick={() => setAccountOpen(false)}>
-              open your account
+              all settings
             </Link>
           </p>
+
+          {/* THE LOOP'S TWO DOORS. Not flat screens, so not Links: each opens
+              a panel over the world — the rules it reads you by, and the dim
+              place where its refusals stand. They lived in the ≡ drawer until
+              the founder removed it (2026-08-24); this sheet was already
+              here, so they moved in rather than growing a new toggle. */}
+          <p className="jar-ask">
+            <button
+              type="button"
+              onClick={() => {
+                setAccountOpen(false);
+                setReadingOpen(true);
+                if (!theReading) {
+                  fetchTheReading()
+                    .then(setTheReading)
+                    .catch(() => undefined);
+                }
+              }}
+            >
+              how it reads you
+            </button>
+            <span aria-hidden="true"> · </span>
+            <button
+              type="button"
+              onClick={() => {
+                setAccountOpen(false);
+                setAntechamberOpen(true);
+                setAntechamber(null);
+                fetchTheWeather()
+                  .then((weather) => setAntechamber(weather.antechamber))
+                  .catch(() => setAntechamber([]));
+              }}
+            >
+              the antechamber
+            </button>
+          </p>
+
+          {/* THE SIX LINKS TO THE FLAT SCREENS USED TO BE HERE, and the comment
+              that held them set their own condition: "they go when the world
+              can do everything they do". The world can, as of 2026-08-26 — the
+              screens and their eleven routes were deleted — and these were
+              left behind pointing at nothing.
+
+              Pressing one closed this sheet and dropped you back in the world
+              with no message, which is the same thing the product does for an
+              address that never existed. Six controls that look like doors and
+              are not is the worst kind of navigation a settings sheet can
+              offer, and it survived the deletion because the deletion swept
+              routes and stylesheets and never swept the things POINTING at
+              them. Found by walking the surfaces for the heuristic pass rather
+              than by any gate. */}
 
           {/* SIGNING OUT IS NOT DESTRUCTIVE, so it does not ask twice — nothing
               is lost and signing back in restores everything. It is last
               because it is the one thing here that ends the session. */}
-          <p className="jar-neb-ask jar-neb-ask--after">
+          <p className="jar-ask jar-ask--after">
             <button
               type="button"
               onClick={() => {
@@ -10386,7 +14123,7 @@ function HomeExperience(): JSX.Element {
       ) : null}
 
       {pendingJoin && phase === "ready" ? (
-        <div className="jar-settings" data-jar-chrome="1" role="dialog" aria-label="Join this group">
+        <div className="jar-settings" data-jar-chrome="1" role="dialog" aria-label="Join this room">
           <div className="jar-settings-head">
             <span className="jar-label">Someone invited you</span>
           </div>
@@ -10395,7 +14132,7 @@ function HomeExperience(): JSX.Element {
               "have marked public become part of its ground. You can leave " +
               "whenever you like."}
           </p>
-          <p className="jar-neb-ask">
+          <p className="jar-ask">
             <button type="button" className="jar-settings-verb" onClick={acceptJoin}>
               {"join this room"}
             </button>
@@ -10420,6 +14157,8 @@ function HomeExperience(): JSX.Element {
           setRemoving={setRemoving}
           renaming={renaming}
           setRenaming={setRenaming}
+          trouble={groupTrouble}
+          clearTrouble={() => setGroupTrouble(null)}
           viewerProfileId={auth?.profile?.id ?? null}
           copied={copied}
           copyInvite={copyInvite}
@@ -10428,6 +14167,14 @@ function HomeExperience(): JSX.Element {
           renameThisGroup={renameThisGroup}
           closeThisGroup={closeThisGroup}
           removeMember={removeMember}
+          agentKeys={agentKeys}
+          minted={minted}
+          setMinted={setMinted}
+          issueKey={issueKey}
+          revoking={revoking}
+          setRevoking={setRevoking}
+          revokeKey={revokeKey}
+          keysBusy={keysBusy}
         />
       ) : null}
 

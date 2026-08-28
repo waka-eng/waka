@@ -22,15 +22,23 @@
  * The lock rule is enforced downstream of the match: a signal whose `lockedAt`
  * is set never has its statement rewritten here, no matter how the candidate
  * that matched it is worded. See `restateSignal`.
+ *
+ * Upstream of the match sits the ground's refusal: a candidate at or above
+ * `SIGNAL_SUPPRESSION_MIN_COSINE` to a DISMISSED signal's vector is dropped
+ * before any of the above runs, and every refusal writes a `suppressions`
+ * row naming its anchor. Arithmetic only, no model — and checked first, so a
+ * pattern the owner threw out cannot re-enter as evidence for something else
+ * (goals/the-legible-loop.md Phase 3).
  */
 
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 
 import {
   inspirations,
   signalEmbeddings,
   signalEvidence,
   signals,
+  suppressions,
   type SignalStatus,
 } from "../db/index.js";
 import { cosineSimilarity } from "../scoring/vector.js";
@@ -47,9 +55,12 @@ import {
   classifyMatch,
   MATCH_CANDIDATE_SCAN_LIMIT,
   SIGNAL_MERGE_JUDGE_MIN_COSINE,
+  SIGNAL_SUPPRESSION_MIN_COSINE,
 } from "./signal-derivation-thresholds.js";
+import { recordContradiction } from "./contested-pairs.js";
 import { writeSignalEmbedding } from "./signal-embeddings.js";
 import { refreshSignalLifecycle } from "./signal-lifecycle.js";
+import { writeSignalStatementChain } from "./statement-chains.js";
 
 type WakaDb = ReturnType<typeof getDb>;
 type WakaTx = Parameters<Parameters<WakaDb["transaction"]>[0]>[0];
@@ -80,6 +91,8 @@ export interface ResolvedCandidate {
   statement: string;
   reason: string | null;
   quote: string | null;
+  /** Whose words the verified quote is; null when quote is null. */
+  quoteSource: "own" | "enrichment" | null;
   embedding: number[];
   /**
    * Earlier captures of the same profile that co-witness this pattern —
@@ -95,6 +108,15 @@ export interface ResolvedCandidate {
 interface ApplyCandidatesInput {
   profileId: string;
   inspirationId: string;
+  /**
+   * WHOSE MEMORY THE EVIDENCE CITES — the inspiration's owner. Equal to
+   * `profileId` for every personal derivation; different exactly when a
+   * ROOM distils (2026-08-24): `profileId` is then the room's mind and this
+   * is the member whose public memory is being read. The evidence rows carry
+   * it, and the inspiration foreign key runs through it, so a wrong value is
+   * refused by Postgres rather than stored.
+   */
+  evidenceOwnerProfileId: string;
   candidates: ResolvedCandidate[];
   embeddingModel: string;
   provider: ModelProvider;
@@ -107,29 +129,55 @@ export async function applyCandidates(
   input: ApplyCandidatesInput,
 ): Promise<Pick<SignalDerivationResult, "matchedSignalIds" | "mintedSignalIds" | "promotedSignalIds">> {
   const targets = await loadMatchTargets(tx, input.profileId, input.embeddingModel);
+  const anchors = await loadSuppressionAnchors(tx, input.profileId, input.embeddingModel);
 
   const matchedSignalIds: string[] = [];
   const mintedSignalIds: string[] = [];
   const touched = new Set<string>();
 
   for (const candidate of input.candidates) {
+    // The ground refuses first, before the match is even looked at. A
+    // dismissed signal is a pattern its owner threw out; a candidate this
+    // close to one IS that pattern, and letting the match see it would
+    // re-admit it as evidence for something else — or spend a judge call
+    // deciding the fate of a sentence whose fate the owner already decided.
+    // Every refusal is written down: the silence this creates is a logged,
+    // legible silence, and restoring the anchor ends it.
+    const refused = findSuppressionAnchor(candidate.embedding, anchors);
+    if (refused) {
+      await tx.insert(suppressions).values({
+        profileId: input.profileId,
+        anchorSignalId: refused.anchor.id,
+        anchorStatement: refused.anchor.statement,
+        inspirationId: input.inspirationId,
+        candidateStatement: candidate.statement,
+        similarity: refused.similarity,
+      });
+      continue;
+    }
+
     const nearest = findBestMatch(candidate.embedding, targets);
     let decision = classifyMatch(nearest?.similarity ?? null);
+    /** Set when the judge answers `opposed`: the mint below also records
+        the contested pair — the dispute is held, never dissolved by
+        whichever statement arrived second. */
+    let opposesSignalId: string | null = null;
 
     if (decision === "judge" && nearest) {
       // One bounded model call, held under the per-profile derivation lock.
       // Serializing a ~second of judgement is the price of the lock's whole
       // point: two concurrent captures must not each mint the same pattern.
-      // A judge failure falls through to minting — the duplicate is the
-      // recoverable mistake, and the fallthrough is the same verdict the
-      // judge itself returns when uncertain.
+      // A judge failure falls through to minting as `independent` — the
+      // duplicate is the recoverable mistake, and a phantom opposition
+      // would put a dispute on the record no one ever had.
       try {
         const judged = await input.provider.judgeSignalMatch({
           preferredLocale: input.preferredLocale,
           candidateStatement: candidate.statement,
           existingStatement: nearest.target.statement,
         });
-        decision = judged.samePattern ? "attach" : "mint";
+        decision = judged.relation === "same" ? "attach" : "mint";
+        if (judged.relation === "opposed") opposesSignalId = nearest.target.id;
       } catch {
         decision = "mint";
       }
@@ -140,14 +188,20 @@ export async function applyCandidates(
     if (match) {
       await attachEvidence(tx, {
         profileId: input.profileId,
+        ownerProfileId: input.evidenceOwnerProfileId,
         signalId: match.target.id,
         inspirationId: input.inspirationId,
         reason: candidate.reason,
         quote: candidate.quote,
+        quoteSource: candidate.quoteSource,
       });
       await attachRelatedEvidence(
         tx,
-        { profileId: input.profileId, signalId: match.target.id },
+        {
+          profileId: input.profileId,
+          ownerProfileId: input.evidenceOwnerProfileId,
+          signalId: match.target.id,
+        },
         candidate.relatedEvidence,
       );
 
@@ -163,6 +217,17 @@ export async function applyCandidates(
             statement: candidate.statement,
             embedding: candidate.embedding,
             model: input.embeddingModel,
+          });
+          // The restatement joins the chain: the sentence it replaced was
+          // seeded at mint (or is seeded here for pre-chain rows), so "what
+          // did it say before" stays answerable — no-quiet-corners Phase 2.
+          await writeSignalStatementChain(tx, {
+            profileId: input.profileId,
+            signalId: match.target.id,
+            statement: candidate.statement,
+            reason: "restated",
+            seedStatement: match.target.statement,
+            now: input.now,
           });
           match.target.statement = candidate.statement;
           match.target.embedding = candidate.embedding;
@@ -196,16 +261,44 @@ export async function applyCandidates(
       model: input.embeddingModel,
     });
 
+    // The chain begins at birth: the machine's first sentence is the row
+    // every later revert returns to.
+    await writeSignalStatementChain(tx, {
+      profileId: input.profileId,
+      signalId: minted.id,
+      statement: candidate.statement,
+      reason: "derived",
+      now: input.now,
+    });
+
+    // An opposed verdict mints AND holds the dispute: both sides now serve
+    // as contested until the owner arbitrates — never the machine
+    // (goals/no-quiet-corners.md Phase 5, founder-ruled).
+    if (opposesSignalId) {
+      await recordContradiction(tx, {
+        profileId: input.profileId,
+        signalId: minted.id,
+        opposesSignalId,
+        now: input.now,
+      });
+    }
+
     await attachEvidence(tx, {
       profileId: input.profileId,
+      ownerProfileId: input.evidenceOwnerProfileId,
       signalId: minted.id,
       inspirationId: input.inspirationId,
       reason: candidate.reason,
       quote: candidate.quote,
+      quoteSource: candidate.quoteSource,
     });
     await attachRelatedEvidence(
       tx,
-      { profileId: input.profileId, signalId: minted.id },
+      {
+        profileId: input.profileId,
+        ownerProfileId: input.evidenceOwnerProfileId,
+        signalId: minted.id,
+      },
       candidate.relatedEvidence,
     );
 
@@ -285,14 +378,69 @@ function findBestMatch(
   return best;
 }
 
+interface SuppressionAnchor {
+  id: string;
+  statement: string;
+  embedding: number[];
+}
+
+/**
+ * The vectors of the profile's dismissed signals. A dismissed row also
+ * carries `status = retired`, so `loadMatchTargets` never sees it — this is
+ * the other half of what dismissal means: the pattern stops being a home for
+ * evidence AND becomes ground that refuses. Bounded and ordered like the
+ * match scan, newest refusals first.
+ */
+async function loadSuppressionAnchors(
+  tx: WakaTx,
+  profileId: string,
+  embeddingModel: string,
+): Promise<SuppressionAnchor[]> {
+  return tx
+    .select({
+      id: signals.id,
+      statement: signals.statement,
+      embedding: signalEmbeddings.embedding,
+    })
+    .from(signals)
+    .innerJoin(signalEmbeddings, eq(signalEmbeddings.signalId, signals.id))
+    .where(
+      and(
+        eq(signals.profileId, profileId),
+        isNotNull(signals.dismissedAt),
+        eq(signalEmbeddings.model, embeddingModel),
+      ),
+    )
+    .orderBy(desc(signals.dismissedAt))
+    .limit(MATCH_CANDIDATE_SCAN_LIMIT);
+}
+
+function findSuppressionAnchor(
+  embedding: number[],
+  anchors: SuppressionAnchor[],
+): { anchor: SuppressionAnchor; similarity: number } | null {
+  let best: { anchor: SuppressionAnchor; similarity: number } | null = null;
+
+  for (const anchor of anchors) {
+    const similarity = cosineSimilarity(embedding, anchor.embedding);
+    if (similarity === null || similarity < SIGNAL_SUPPRESSION_MIN_COSINE) continue;
+    if (!best || similarity > best.similarity) best = { anchor, similarity };
+  }
+
+  return best;
+}
+
 async function attachEvidence(
   tx: WakaTx,
   input: {
     profileId: string;
+    /** whose memory this row cites; the inspiration FK runs through it */
+    ownerProfileId: string;
     signalId: string;
     inspirationId: string;
     reason: string | null;
     quote: string | null;
+    quoteSource: "own" | "enrichment" | null;
   },
 ): Promise<void> {
   // Re-derivation after an edit revisits captures this signal already cites.
@@ -303,10 +451,12 @@ async function attachEvidence(
     .insert(signalEvidence)
     .values({
       profileId: input.profileId,
+      ownerProfileId: input.ownerProfileId,
       signalId: input.signalId,
       inspirationId: input.inspirationId,
       reason: input.reason,
       quote: input.quote,
+      quoteSource: input.quoteSource,
     })
     .onConflictDoNothing();
 }
@@ -323,17 +473,20 @@ async function attachEvidence(
  */
 async function attachRelatedEvidence(
   tx: WakaTx,
-  input: { profileId: string; signalId: string },
+  input: { profileId: string; ownerProfileId: string; signalId: string },
   cited: ResolvedCandidate["relatedEvidence"],
 ): Promise<void> {
   if (cited.length === 0) return;
 
+  /* re-checked against the EVIDENCE OWNER's captures: the related memories
+     were retrieved from the keeper's archive, and on a room pass that owner
+     is not the deriving profile (the mind holds no captures at all) */
   const stillPresent = await tx
     .select({ id: inspirations.id })
     .from(inspirations)
     .where(
       and(
-        eq(inspirations.profileId, input.profileId),
+        eq(inspirations.profileId, input.ownerProfileId),
         inArray(
           inspirations.id,
           cited.map((row) => row.inspirationId),
@@ -346,10 +499,14 @@ async function attachRelatedEvidence(
     if (!presentIds.has(row.inspirationId)) continue;
     await attachEvidence(tx, {
       profileId: input.profileId,
+      ownerProfileId: input.ownerProfileId,
       signalId: input.signalId,
       inspirationId: row.inspirationId,
       reason: null,
       quote: row.quote,
+      /* `resolveRelatedEvidence` verifies against the capture's own text with
+         no enrichment offered, so a surviving quote is the person's words */
+      quoteSource: "own",
     });
   }
 }
