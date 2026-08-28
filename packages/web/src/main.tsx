@@ -28,6 +28,8 @@ import React, { Suspense, lazy } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
+import { FrontDoor } from "./components/FrontDoor";
+import { LoadingHome } from "./components/LoadingHome";
 import { RequireAuth } from "./components/RequireAuth";
 import { SurfaceBoundary } from "./components/SurfaceBoundary";
 import { AuthProvider } from "./lib/auth-context";
@@ -70,6 +72,20 @@ import "./styles/chrome.css";
 */
 const HomePage = lazy(() => import("./pages/Home"));
 
+/*
+  AND THE PAGE THAT SAYS WHAT ANY OF THIS IS.
+
+  `/` used to have two answers — the world, or a redirect to the door — so an
+  anonymous visitor's first and only impression of the product was a password
+  field for a thing nothing on screen had named. `lib/front-door.ts` holds the
+  rule that decides between the three answers, and says why a person the door
+  remembers must never be shown the third one.
+
+  Lazy for the same reason the world is: it carries its own stylesheet, and
+  the door must not pay for a page it never renders.
+*/
+const LandingPage = lazy(() => import("./pages/Landing"));
+
 /**
  * THE WORLD CAN BE LOOKED AT WITHOUT A SESSION, IN DEV ONLY.
  *
@@ -90,16 +106,7 @@ function ProtectedHome() {
      rejected lazy import left `fallback={null}` on screen permanently — the
      black rectangle of 2026-08-22. Loading forever and failing instantly
      rendered identically, and the product chose the silent one. */
-  if (import.meta.env.DEV) {
-    return (
-      <SurfaceBoundary surface="the world">
-        <Suspense fallback={null}>
-          <HomePage />
-        </Suspense>
-      </SurfaceBoundary>
-    );
-  }
-  return (
+  const home = (
     <RequireAuth>
       {/* No spinner: the layout's own first frame IS its loading state, and a
           flash of chrome before it would be the half-appearance the page
@@ -111,6 +118,40 @@ function ProtectedHome() {
         </Suspense>
       </SurfaceBoundary>
     </RequireAuth>
+  );
+
+  const landing = (
+    <SurfaceBoundary surface="the landing page">
+      <Suspense fallback={<LoadingHome />}>
+        <LandingPage />
+      </Suspense>
+    </SurfaceBoundary>
+  );
+
+  /* The dev bypass keeps its reason (see the route table below) and gains one
+     exception. With the guard permanently stepped aside, `/` in dev could only
+     ever render the world — so the landing page would become the one surface
+     in the product nobody could look at without deploying it, which is the
+     exact failure the bypass exists to prevent. `?landing` opens it. Compiled
+     out of production entirely, like the rest of this branch. */
+  if (import.meta.env.DEV) {
+    const wantsLanding =
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).has("landing");
+    return wantsLanding ? landing : (
+      <SurfaceBoundary surface="the world">
+        <Suspense fallback={null}>
+          <HomePage />
+        </Suspense>
+      </SurfaceBoundary>
+    );
+  }
+
+  /* Which of the three, and why: `components/FrontDoor.tsx` asks the question
+     and `lib/front-door.ts` answers it. Both are here rather than inline so a
+     test can execute the route as well as the rule. */
+  return (
+    <FrontDoor home={home} landing={landing} door={<Navigate to="/login" replace />} />
   );
 }
 

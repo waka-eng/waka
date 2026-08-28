@@ -19,8 +19,11 @@
  *                      load
  *
  * Routes intentionally cover the *publicly reachable* surfaces — the
- * legacy index.html has no auth, and the React `/` redirects to `/login`
- * for anonymous visitors (see AC 3). The authenticated board is captured
+ * legacy index.html has no auth, and on the React side `/` now answers an
+ * anonymous visitor with the landing page rather than redirecting to
+ * `/login` (2026-08-28; the redirect it used to do is what "see AC 3" here
+ * described). Somebody the door remembers is still sent to `/login` from
+ * `/`, so the door keeps its own pair below. The authenticated board is captured
  * by passing `--session-cookie` to `capture.ts`, which threads the cookie
  * onto the React page before navigation; legacy has no equivalent so its
  * board is rendered directly from `index.html`.
@@ -55,8 +58,10 @@ export const VIEWPORTS: Record<string, Viewport> = {
 
 export const DEFAULT_PAIRS: Pair[] = [
   {
-    // Default landing state. Legacy: cluster grid. React: /login (since
-    // the route guard bounces anonymous visitors away from /). This is
+    // Default landing state. Legacy: cluster grid. React: the door, which
+    // is what `/` answered with for anonymous visitors until the landing
+    // page existed. Addressed directly now rather than reached by redirect,
+    // so this pair keeps measuring the same screen it always did. This is
     // the visual baseline that EVERY commit should preserve.
     name: "landing",
     legacyPath: "/",
@@ -64,6 +69,23 @@ export const DEFAULT_PAIRS: Pair[] = [
     viewports: [VIEWPORTS.desktop, VIEWPORTS.tablet, VIEWPORTS.mobile],
     fullPage: true,
     waitForMs: 700,
+  },
+  {
+    // THE PAGE THAT SAYS WHAT WAKA IS. It has no legacy counterpart — the
+    // original app never explained itself to a stranger — so it is paired
+    // against the legacy front page, and the diff for this row is expected
+    // to be total. It is here to be CAPTURED on every run rather than to be
+    // matched: it is the first screen a new person sees, and a landing page
+    // nobody looks at is how one rots.
+    //
+    // `?landing` because the dev server steps the route guard aside, so `/`
+    // there is always the world (see `ProtectedHome` in `main.tsx`).
+    name: "landing-page",
+    legacyPath: "/",
+    reactPath: "/?landing",
+    viewports: [VIEWPORTS.desktop, VIEWPORTS.tablet, VIEWPORTS.mobile],
+    fullPage: true,
+    waitForMs: 900,
   },
   {
     // Authenticated home grid. Only meaningful when the React app is
