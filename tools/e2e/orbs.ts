@@ -1,6 +1,26 @@
 /**
  * FINDING A MEMORY ON A CANVAS, BY ITS OWN LIGHT.
  *
+ * ── NOTHING IN THE `READ` SOURCE MAY CONTAIN A BACKTICK ────────────────────
+ *
+ * It is a template literal handed to `page.evaluate`, so a backtick anywhere
+ * inside it — including inside a comment — ends the string and the rest of the
+ * browser code is parsed as TypeScript. I did exactly that while documenting
+ * the scale fix below, quoting two identifiers in backticks the way every
+ * other comment in this repo does, and it broke two gates at once with
+ * `Expected ";" but found "window"` pointing at a line that was fine. Prose
+ * about the code inside `READ` belongs in this header, where quoting is safe.
+ *
+ * ── THE SCALE COMES FROM THE CANVAS, NOT FROM THE DEVICE ───────────────────
+ *
+ * The read used `window.devicePixelRatio`, and on a phone that is a lie about
+ * this canvas: the world caps its backing store at 2x, so at dpr 3 the canvas
+ * is 780x1688 behind a 390x844 viewport. Sampling at 3x indexed 1.5x too far
+ * into every row and off the right edge entirely — almost nothing came back
+ * lit, `e2e:phone` reported "no memory could be opened", and the accusation
+ * was against the product for a defect that was entirely the instrument's.
+ * The canvas states its own scale; nothing else gets to guess at it.
+ *
  * An orb has no selector. It is paint, so every DOM-shaped instrument in this
  * repo is blind to the one thing the world is made of, and a walk that wants
  * to press one has to find it the way a person does — by looking.
@@ -39,14 +59,9 @@ const READ = `(() => {
   if (!cv) return "[]";
   const g = cv.getContext("2d");
   const W = window.innerWidth, H = window.innerHeight;
-  /* THE SCALE COMES FROM THE CANVAS, NOT FROM THE DEVICE.
-     This read `window.devicePixelRatio`, and on a phone that is a lie about
-     this canvas: the world caps its backing store at 2x, so at dpr 3 the
-     canvas is 780x1688 behind a 390x844 viewport. Sampling at 3x indexed 1.5x
-     too far into every row and off the right edge entirely — the read came
-     back with almost nothing lit, `e2e:phone` reported "no memory could be
-     opened", and the accusation was against the product. The canvas states
-     its own scale; nothing else gets to guess at it. */
+  /* THE SCALE COMES FROM THE CANVAS, NOT FROM THE DEVICE. See the note above
+     this template — it cannot be written here, because everything in here is
+     inside a template literal and a backtick would end it. */
   const dpr = cv.width / W || 1;
   const STEP = 4;
   const cols = Math.floor(W / STEP), rows = Math.floor(H / STEP);

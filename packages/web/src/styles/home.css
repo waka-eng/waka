@@ -2963,8 +2963,30 @@
    width. */
 @media (max-width: 560px) {
   .jar-values {
-    /* clear of the chrome row, which ends at 40px */
-    top: calc(48px + env(safe-area-inset-top));
+    /* 16px clear of the chrome row, which ends at 40px — the same inset the
+       four signposts keep from whatever edge each is nearest. It was 8, which
+       is not an inset, it is a near miss: the signpost read as attached to the
+       chrome above it rather than as its own thing. */
+    top: calc(56px + env(safe-area-inset-top));
+  }
+  /* AND THE COLUMN MAKES ROOM FOR THE SIGNPOST THAT STEPPED INTO IT.
+     `.jar-hq-inner` pads 72px from the top, and that number was set for a
+     desktop, where `.jar-values` floats at 10px — far above the column, with
+     41px of air between its bottom and the first line of the claim.
+
+     On a phone the signpost steps DOWN to clear the chrome row and lands
+     INSIDE that 72px. Measured on a 390x844 screen: the chrome ends at 40,
+     the signpost ran 48..69, and the claim began at 72. Three pixels. The
+     whole top of the product was one packed block — chrome, signpost, claim —
+     while 183px of nothing sat below the mouth (founder, 2026-08-28: "overall
+     balancing feels kinda off.. some places are more crowded than others.
+     which is exacerbated on mobile").
+
+     118 = the signpost's new bottom (77) plus the 41px of air the desktop
+     already gives between it and the claim. Not a new number: the phone gets
+     the relationship the desktop always had. */
+  .jar-hq-inner {
+    padding-top: calc(118px + env(safe-area-inset-top));
   }
 }
 

@@ -265,7 +265,30 @@ const SPARKS = 26;
  * time dial. A fixed promise at EVERY viewport height — the founder's
  * most-repeated note.
  */
-const PEEK = 96;
+/**
+ * HOW MUCH OF THE GROUND IS ALREADY ON SCREEN AT HEADQUARTERS.
+ *
+ * 96 became 140 on 2026-08-28. The founder: "overall balancing feels kinda
+ * off.. some places are more crowded than others. which is exacerbated on
+ * mobile." Measured, the imbalance was one gap, and it was always the same
+ * gap — between the mouth and this line:
+ *
+ *   the mouth -> the peek line   336px on 2000x1150
+ *                                211px on 1440x900
+ *                                183px on 390x844
+ *
+ * while the three things along the top of a phone sat 8px and 3px apart. And
+ * it grows with the screen because the character is anchored to the middle of
+ * the viewport while the field is anchored to the bottom, so every pixel of
+ * extra height lands in that one band and nowhere else.
+ *
+ * THE ANSWER IS NOT MORE SPACING SOMEWHERE ELSE. That band is empty because
+ * the ground was held down, and the thing that belongs in it is the ground.
+ * Raising the peek fills it with the world's own content — more of what you
+ * keep, already on screen when you arrive — rather than distributing the void
+ * more evenly. The world is what the space is for.
+ */
+const PEEK = 140;
 /**
  * The dial's strip, as a FALLBACK ONLY — the real number is measured off the
  * dial itself every time the world is measured (see `measure`).
