@@ -1,6 +1,6 @@
 # Goal: lighting a room
 
-Status: not started
+Status: in progress — phase 1 passed 2026-08-28
 Branch: `goal/lighting-a-room`
 Depends on: nothing structural. Touches the join consent sheet
 (`a-room-you-can-trust` made joining an asked question; this goal keeps that
@@ -151,5 +151,44 @@ exist and are budgeted. E2e walks spend the standard derivation pennies.
 - Every stage sentence passes the mom test; no counts anywhere on the loop.
 
 ## Log
+
+**2026-08-28 — Phase 1, the maker lands in what they made. PASS (4/4, from a
+measured baseline of 0/4).**
+
+Gate: `pnpm e2e:lighting` (new — `tools/e2e/lighting.ts`), a browser walk that
+signs up, makes a room, and touches nothing else.
+
+| Step | Baseline | After |
+|---|---|---|
+| the make form says what a room does | FAIL — prose found: `"·"` | PASS — "A room reads what its people keep open, and says only what more than one of you stands behind." |
+| making it takes you to the room, with no further tap | FAIL — "still standing on ME" | PASS — standing on the new room |
+| the invite is what greets you there | FAIL — nothing offers it | PASS — the room's panel, naming it |
+| the invite copies from where it landed | FAIL — no such control | PASS — clipboard holds `/?join=…` |
+
+Baseline measured in this run, by stashing the `Home.tsx` change and
+rebuilding — not remembered. The gate discriminates: every step fails on the
+unchanged product, and step 2's failure prints the defect the phase was
+written against.
+
+Also checked: `pnpm --filter @waka/web typecheck` clean; `pnpm --filter
+@waka/web test` 222/222 with vocabulary and seams clean.
+
+Two things worth carrying forward:
+
+- **The vocabulary checker caught the first draft.** `landedRoom` /
+  `setLandedRoom` were refused — identifiers speak canon (`group`), only
+  screen text says "room". Renamed to `landedGroup`. The rule in
+  `docs/architecture.md` is enforced, not aspirational.
+- **The gate's first version passed while proving less than it claimed.** It
+  read the whole form's `innerText`, and the tab labels ("Make a room", "Join
+  with a link") carry no full stop, so they joined the note into one run and
+  counted toward its eight-word minimum — a form with no sentence at all
+  would have cleared the bar on furniture alone. It now removes every
+  `<button>` before reading, which makes "prose, not furniture" structural
+  rather than a guess about wording. Caught by reading the PASS line's own
+  output, which is why the steps print what they found.
+
+Joining travels the same way (both paths land through one function), but that
+is asserted by Phase 4's steps, not this one.
 
 _(phases append numbers and verdicts here)_

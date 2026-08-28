@@ -47,7 +47,8 @@
     "e2e:when-it-fails": "tsx tools/e2e/when-it-fails.ts",
     "e2e:first-sixty": "tsx tools/e2e/first-sixty.ts",
     "e2e:at-scale": "tsx tools/e2e/at-scale.ts",
-    "e2e:by-keyboard": "tsx tools/e2e/by-keyboard.ts"
+    "e2e:by-keyboard": "tsx tools/e2e/by-keyboard.ts",
+    "e2e:lighting": "tsx tools/e2e/lighting.ts"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
