@@ -60,13 +60,28 @@ function isLocalDatabaseHost(hostname: string): boolean {
   return localHosts.has(host) || host.endsWith(".local");
 }
 
+/**
+ * Find the database the same way the rest of local development finds it.
+ *
+ * `.env.local` is FIRST and was missing until 2026-08-28, which made this
+ * script unreachable by the book. README's environment section says
+ * development reads `.env.local`, `scripts/dev-local.sh` reads nothing else,
+ * and `packages/api/test/setup.ts` lets it override `.env` — so a developer
+ * who set up the stack as documented had their connection string in the one
+ * file this function did not open. The failure was silent in the worst way:
+ * with no URL found, the argument parser fell through to printing usage, so
+ * the seeder looked like it was rejecting the command line rather than
+ * saying it could not find a database.
+ *
+ * `.env` and `.env.development` stay, after it. They are what `.env.example`
+ * tells operators to write and what the deployed tooling reads, and an
+ * existing setup must not break to fix a new one.
+ */
 export function loadDemoSeedEnv(cwd = process.cwd()): void {
-  if (process.env.DB_CONNECTION_URL) return;
-
-  loadDotenv({ path: join(cwd, ".env"), override: false });
-  if (process.env.DB_CONNECTION_URL) return;
-
-  loadDotenv({ path: join(cwd, ".env.development"), override: false });
+  for (const file of [".env.local", ".env", ".env.development"]) {
+    if (process.env.DB_CONNECTION_URL) return;
+    loadDotenv({ path: join(cwd, file), override: false });
+  }
 }
 
 export function readArg(name: string, argv = process.argv.slice(2)): string | undefined {

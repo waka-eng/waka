@@ -1,0 +1,43 @@
+# The local database, matching CI exactly.
+#
+# WHY THIS EXISTS. README told a new developer that "Postgres. Local is the
+# default for development" and then never said how to get one, and
+# `.env.example` shipped a `*.neon.tech` URL as its only example — so the
+# documented local path led to a remote database or to nothing. Worse, the
+# obvious move (install Postgres, create a database) fails: the first
+# migration declares `vector` columns for embeddings, so `pnpm db:migrate`
+# on a stock server stops at `type "vector" does not exist`, which reads
+# like a broken migration rather than a missing extension.
+#
+# The image is pinned to the one `.github/workflows/ci.yml` runs as its
+# service container. A local database that is not the CI database is a class
+# of "passes here, fails in CI" nobody should have to debug.
+#
+#   docker compose up -d
+#   psql postgres://waka:waka@127.0.0.1:5432/waka -c 'CREATE EXTENSION IF NOT EXISTS vector;'
+#   pnpm db:migrate
+#
+# The extension is a one-time step against a fresh volume; the healthcheck
+# below is what makes `up -d` safe to follow immediately with `db:migrate`.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: waka-postgres
+    environment:
+      POSTGRES_USER: waka
+      POSTGRES_PASSWORD: waka
+      POSTGRES_DB: waka
+    ports:
+      # Host-only. This database holds development data and has a password
+      # printed in a committed file; it must not be reachable off the machine.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - waka-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U waka -d waka"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  waka-pgdata:

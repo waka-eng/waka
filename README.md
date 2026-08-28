@@ -112,7 +112,22 @@ single surface), `packages/admin` (a small, undeployed queue inspector).
 
 ### Environment
 
-Development reads `.env.local`. The variables that matter:
+Development reads `.env.local`. Start it from the template:
+
+```bash
+cp .env.example .env.local
+```
+
+That one file is what `pnpm dev:local` reads, and what `pnpm demo:seed` reads
+first. `pnpm dev:local` only *warns* when it is missing and starts anyway —
+which is right for CI, where the variables are exported inline, and is why a
+missing file shows up later as a database error rather than as a missing file.
+
+> Some tooling reads `.env` instead: `drizzle-kit` (so `pnpm db:migrate` and
+> `pnpm db:studio`), and the `*.smoke.ts` harnesses. Copy the template there
+> too if you run those.
+
+The variables that matter:
 
 | Variable | Used by | Notes |
 | --- | --- | --- |
@@ -127,6 +142,26 @@ Development reads `.env.local`. The variables that matter:
 > one with `pnpm sst secret set <Name> "$VALUE"` — `GoogleClientId`,
 > `GoogleClientSecret`, `SessionSecret`, `JwtSecret`, `DbConnectionUrl`,
 > `GeminiApiKey`.
+
+### A database
+
+The migrations declare `vector` columns for embeddings, so a stock Postgres
+stops at `type "vector" does not exist`. Use the compose file, which pins the
+same image CI runs:
+
+```bash
+docker compose up -d
+psql postgres://waka:waka@127.0.0.1:5432/waka -c 'CREATE EXTENSION IF NOT EXISTS vector;'
+```
+
+Then point `DB_CONNECTION_URL` in `.env.local` at it:
+
+```
+DB_CONNECTION_URL=postgres://waka:waka@127.0.0.1:5432/waka
+```
+
+Bring your own Postgres if you prefer — it needs the `pgvector` extension
+available, and the same `CREATE EXTENSION` on the database you use.
 
 ### Install and migrate
 
@@ -163,11 +198,18 @@ and never prints secrets.
 ## Verifying
 
 ```bash
-pnpm --filter @waka/api typecheck
+pnpm test        # all three packages: typecheck, unit tests, web build
+```
+
+Everything it runs works on a bare checkout with no database. The pieces, when
+you want one of them on its own:
+
+```bash
+pnpm typecheck                        # all three packages
 pnpm --filter @waka/api test:unit     # no database, ~1s
-pnpm --filter @waka/web typecheck && pnpm --filter @waka/web test && pnpm --filter @waka/web build
-pnpm typecheck:admin
-pnpm db:check
+pnpm --filter @waka/web test
+pnpm --filter @waka/web build
+pnpm db:check                         # migrations; needs DB_CONNECTION_URL
 ```
 
 `test:unit` globs every test file, so a new one runs without being registered
