@@ -43,7 +43,7 @@
  *   a name there is a claim someone can check; leaving one there after its
  *   phase has passed is the next audit's finding.
  */
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -103,8 +103,23 @@ function walk(dir: string, out: string[] = []): string[] {
  * Lambda SDK and its own siblings that way, and a matcher that misses dynamic
  * imports reports live modules as dead.
  */
+/**
+ * Comments and their contents, removed before the matcher runs.
+ *
+ * A PROSE MENTION IS NOT AN IMPORT. The matcher below runs over raw text, so
+ * without this a doc-comment example — `src/db/index.ts` already carries
+ * `import { accounts } from "./db";` in its header — or a parting note like
+ * `// moved from "./top-of-mind-selection.js"` marks the file it names as
+ * reachable. That is the gate going quiet at exactly the moment it should
+ * fire: someone deletes a module, leaves a note saying where it went, and the
+ * dead file it points at is counted live.
+ */
+function withoutComments(text: string): string {
+  return text.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+}
+
 function importsOf(file: string): string[] {
-  const text = readFileSync(file, "utf8");
+  const text = withoutComments(readFileSync(file, "utf8"));
   const here = dirname(file);
   const found: string[] = [];
   for (const match of text.matchAll(/(?:from|import|require)\s*\(?\s*["']([^"']+)["']/g)) {
@@ -126,9 +141,41 @@ function importsOf(file: string): string[] {
   return found;
 }
 
+/**
+ * Root-level tools that legitimately reach into `packages/api/src`.
+ *
+ * A TOOL IS A CONSUMER. `tools/seed-demo.ts` imports `hashPassword` from
+ * `src/lib/auth.ts`, and `pnpm demo:seed` is a documented step in README. That
+ * import happens to be redundant today because `lambda.ts` reaches `auth.ts`
+ * too — but the first helper written for a tool and not for a request would
+ * land in the orphan list under a message telling the reader to delete it,
+ * and following that message breaks a documented command. Rooting the walk
+ * here as well costs nothing and removes a wrong answer the gate would
+ * otherwise give confidently.
+ */
+const TOOL_ROOTS = ["tools", "scripts"];
+
+function toolEntryPoints(): string[] {
+  const roots: string[] = [];
+  for (const dirName of TOOL_ROOTS) {
+    const dir = resolve(SRC, "../../..", dirName);
+    if (!existsSync(dir)) continue;
+    const stack = [dir];
+    while (stack.length > 0) {
+      const current = stack.pop() as string;
+      for (const entry of readdirSync(current)) {
+        const full = resolve(current, entry);
+        if (statSync(full).isDirectory()) stack.push(full);
+        else if (/\.(ts|mjs)$/.test(entry)) roots.push(full);
+      }
+    }
+  }
+  return roots;
+}
+
 function reachableFromEntries(): Set<string> {
   const reachable = new Set<string>();
-  const queue = ENTRY.map((name) => resolve(SRC, name));
+  const queue = [...ENTRY.map((name) => resolve(SRC, name)), ...toolEntryPoints()];
   while (queue.length > 0) {
     const file = queue.pop() as string;
     if (reachable.has(file)) continue;
@@ -170,8 +217,12 @@ describe("every module in the API is reachable from a deployed entry point", () 
     const reachable = reachableFromEntries();
     for (const [rel, why] of PARKED) {
       const full = resolve(SRC, rel);
+      /* `existsSync`, not `statSync`: `statSync` throws ENOENT before `expect`
+         ever sees it, so a stale allowance failed with a raw stack trace and
+         the message naming the entry and its justification never printed —
+         the half of "both halves fail loudly" that did not. */
       expect(
-        statSync(full).isFile(),
+        existsSync(full),
         `PARKED names ${rel}, which is not there. Remove the entry — ${why}`,
       ).toBe(true);
       expect(

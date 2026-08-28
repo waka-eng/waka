@@ -31,7 +31,8 @@
  * loaders and the instructions disagreed, and a fix to only one side of a
  * disagreement is not a fix.
  */
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -80,32 +81,98 @@ describe("the local env file is the same file everywhere", () => {
     expect(read("README.md")).toMatch(/\.env\.local/);
     expect(read("AGENTS.md")).toMatch(/\.env\.local/);
   });
+
+  it("has drizzle-kit prefer .env.local, which the docs now promise", () => {
+    /* THE LOADER THIS SUITE ORIGINALLY FORGOT. Its first version asserted the
+       two loaders it had just changed and said nothing about `drizzle.config.ts`
+       — so README could and did claim drizzle-kit reads `.env` instead, in a
+       diff whose whole thesis is that the docs and the loaders must agree.
+       The config loads `.env.local` FIRST and with `override` on, precisely so
+       a placeholder in `.env` cannot win, which is why `pnpm db:migrate` needs
+       nothing but `.env.local`. */
+    const config = read("drizzle.config.ts");
+    const localAt = config.indexOf('loadDotenv({ path: ".env.local"');
+    const plainAt = config.indexOf('loadDotenv({ path: ".env"');
+    expect(localAt, "drizzle.config.ts no longer loads .env.local").toBeGreaterThan(-1);
+    expect(plainAt, "drizzle.config.ts no longer loads .env").toBeGreaterThan(-1);
+    expect(localAt, ".env.local must be loaded before .env").toBeLessThan(plainAt);
+
+    expect(
+      read("README.md"),
+      "README must not send developers to `.env` for drizzle-kit — it reads " +
+        "`.env.local` and prefers it.",
+    ).not.toMatch(/`drizzle-kit` \(so `pnpm db:migrate`/);
+  });
+
+  it("names no harness that does not exist", () => {
+    /* `.env.example` and README both used to tell developers to maintain a
+       second copy of the template for "the `*.smoke.ts` harnesses". There are
+       none — the claim was inherited from the old template and repeated
+       without checking. */
+    const smokeFiles = execFileSync(
+      "git",
+      ["ls-files", "*.smoke.ts"],
+      { cwd: REPO_ROOT, encoding: "utf8" },
+    ).trim();
+    if (smokeFiles === "") {
+      for (const doc of [".env.example", "README.md"]) {
+        expect(read(doc), `${doc} names *.smoke.ts harnesses, and there are none`)
+          .not.toMatch(/smoke\.ts/);
+      }
+    }
+  });
 });
 
 describe("the local database is one a developer can actually create", () => {
-  it("ships a compose file on the image CI uses", () => {
-    /* The migrations declare `vector` columns, so a stock Postgres fails
-       `pnpm db:migrate` with `type "vector" does not exist` — which reads as
-       a broken migration rather than a missing extension. Pinning the compose
-       file to CI's own image is also what stops "passes locally, fails in
-       CI" from being a database difference. */
+  it("runs the local database on the same image as CI", () => {
+    /* The reason is version parity with CI's service container, and only
+       that. An earlier version of this test asserted the opposite reason —
+       that the migrations need pgvector — which is false: embeddings are
+       `jsonb` (`packages/api/src/db/schema-embeddings.ts`) and no migration
+       declares a `vector` column. Pinning the false reason into CI would have
+       kept a sentence alive that sends anyone with a stock Postgres 16 away
+       from a server that runs this schema perfectly well. */
     const ciImage = read(".github/workflows/ci.yml").match(/image:\s*(pgvector\/pgvector:\S+)/);
-    expect(ciImage, "CI no longer names a pgvector image — did the service move?").not.toBeNull();
-
-    const compose = read("docker-compose.yml");
-    expect(compose).toContain(ciImage?.[1] as string);
-    expect(
-      compose,
-      "the local database must bind to loopback only — it holds development " +
-        "data behind a password committed to this repository.",
-    ).toMatch(/"127\.0\.0\.1:5432:5432"/);
+    expect(ciImage, "CI no longer names that image — repoint the compose file").not.toBeNull();
+    expect(read("docker-compose.yml")).toContain(ciImage?.[1] as string);
   });
 
-  it("tells the reader about the extension the migrations need", () => {
-    /* Both places a person might look. The compose file is where they will be
-       when the container is up; the README is where they will be before it. */
-    expect(read("docker-compose.yml")).toMatch(/CREATE EXTENSION IF NOT EXISTS vector/);
-    expect(read("README.md")).toMatch(/CREATE EXTENSION IF NOT EXISTS vector/);
+  it("keeps the local database on loopback", () => {
+    /* It holds development data behind a password committed to this
+       repository. `"5432:5432"` would publish that on every interface. */
+    expect(read("docker-compose.yml")).toMatch(/"127\.0\.0\.1:5432:5432"/);
+  });
+
+  it("keeps no migration needing a Postgres extension", () => {
+    /* The claim the documentation now rests on, checked rather than trusted:
+       if someone adds a `vector` column, three files start lying at once and
+       this is where that gets caught. */
+    /* SQL COMMENTS STRIPPED FIRST. Without this, `0011_an_edit_is_model_work.sql`
+       fails on its own prose — "drops the stale vector (a delete, not a model
+       call)" matches `vector\s*\(` perfectly well. A scanner that reads
+       comments as code is the same defect this suite's sibling gate was fixed
+       for in the same diff; it is easy to write twice. */
+    const stripSql = (sql: string): string =>
+      sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ");
+    const offenders = readdirSync(resolve(REPO_ROOT, "drizzle/migrations"))
+      .filter((name) => name.endsWith(".sql"))
+      .filter((name) => /CREATE\s+EXTENSION|\bvector\s*\(|::vector\b|USING\s+(ivfflat|hnsw)/i
+        .test(stripSql(readFileSync(resolve(REPO_ROOT, "drizzle/migrations", name), "utf8"))));
+    expect(
+      offenders,
+      "a migration now needs a Postgres extension. README's \"A database\", " +
+        "`docker-compose.yml` and `.env.example` all currently tell developers " +
+        "any Postgres 16 will do. Update all three in this diff.",
+    ).toEqual([]);
+  });
+
+  it("tells developers `up -d` alone does not wait for the database", () => {
+    /* `up -d` returns when the container has started, not when Postgres is
+       accepting connections; on a fresh volume initdb is still running, so
+       the next command is refused. Nothing `depends_on` this service, so
+       `--wait` is the only thing the healthcheck gates. */
+    expect(read("README.md")).toMatch(/docker compose up -d --wait/);
+    expect(read("docker-compose.yml")).toMatch(/--wait/);
   });
 });
 
@@ -117,9 +184,26 @@ describe("the whole verification set has one name", () => {
     const scripts = JSON.parse(read("package.json")).scripts as Record<string, string>;
     expect(scripts.test, "the root `test` script is gone; `pnpm test` fails again").toBeDefined();
     expect(scripts.typecheck).toBeDefined();
-    for (const pkg of ["@waka/api", "@waka/web"]) {
-      expect(`${scripts.test} ${scripts.typecheck}`).toContain(pkg);
+
+    /* AGAINST `test` ALONE, NOT `test` AND `typecheck` CONCATENATED. The
+       first version of this checked the two strings joined, so `@waka/admin`
+       was satisfied by `typecheck`'s filter and admin's own vitest suite —
+       `packages/admin/test/admin-api.test.ts` — never ran under the command
+       README calls the whole verification set. A regression there was
+       invisible while this test stayed green. */
+    for (const pkg of ["@waka/api", "@waka/web", "@waka/admin"]) {
+      expect(
+        scripts.typecheck,
+        `\`pnpm typecheck\` does not cover ${pkg}`,
+      ).toContain(pkg);
     }
-    expect(`${scripts.test} ${scripts.typecheck}`).toContain("@waka/admin");
+    for (const pkg of ["@waka/api", "@waka/web", "@waka/admin"]) {
+      expect(
+        scripts.test,
+        `\`pnpm test\` does not run ${pkg}'s tests. Every package with a test ` +
+          `script has to be in the one command, or its suite runs nowhere a ` +
+          `contributor is told to look.`,
+      ).toContain(pkg);
+    }
   });
 });

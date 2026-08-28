@@ -7,7 +7,7 @@
   "description": "WAKA inspirations: SST + Hono + Vite/React multi-user app over Neon Postgres.",
   "scripts": {
     "typecheck": "pnpm --filter @waka/api typecheck && pnpm --filter @waka/web typecheck && pnpm --filter @waka/admin typecheck",
-    "test": "pnpm typecheck && pnpm --filter @waka/api test:unit && pnpm --filter @waka/web test && pnpm --filter @waka/web build",
+    "test": "pnpm typecheck && pnpm --filter @waka/api test:unit && pnpm --filter @waka/web test && pnpm --filter @waka/admin test && pnpm --filter @waka/web build",
     "dev": "sst dev",
     "dev:local": "bash scripts/dev-local.sh",
     "dev:drain": "bash scripts/dev-drain.sh",

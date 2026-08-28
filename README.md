@@ -124,9 +124,11 @@ first. `pnpm dev:local` only *warns* when it is missing and starts anyway —
 which is right for CI, where the variables are exported inline, and is why a
 missing file shows up later as a database error rather than as a missing file.
 
-> Some tooling reads `.env` instead: `drizzle-kit` (so `pnpm db:migrate` and
-> `pnpm db:studio`), and the `*.smoke.ts` harnesses. Copy the template there
-> too if you run those.
+> `drizzle-kit` reads `.env.local` too, and prefers it — `drizzle.config.ts`
+> loads it *over* `.env` unless you chose a URL deliberately, so
+> `pnpm db:migrate` and `pnpm db:studio` work from the one file as well. A
+> repo-root `.env` is only for `pnpm sst secret set` and other one-off
+> operator commands; local development needs nothing in it.
 
 The variables that matter:
 
@@ -146,23 +148,37 @@ The variables that matter:
 
 ### A database
 
-The migrations declare `vector` columns for embeddings, so a stock Postgres
-stops at `type "vector" does not exist`. Use the compose file, which pins the
-same image CI runs:
+Any Postgres 16 will do — nothing here needs an extension. Embeddings are
+`jsonb` and cosine similarity is computed in application code, which
+`packages/api/src/db/schema-embeddings.ts` explains and no migration
+contradicts. There is a compose file so you do not have to think about it:
 
 ```bash
-docker compose up -d
-psql postgres://waka:waka@127.0.0.1:5432/waka -c 'CREATE EXTENSION IF NOT EXISTS vector;'
+docker compose up -d --wait
 ```
 
-Then point `DB_CONNECTION_URL` in `.env.local` at it:
+`--wait` matters on a cold start: without it the command returns while initdb
+is still running, and the next thing you type is refused.
+
+The URL it serves is already the default in `.env.example`, so a
+`cp .env.example .env.local` needs no edit:
 
 ```
 DB_CONNECTION_URL=postgres://waka:waka@127.0.0.1:5432/waka
 ```
 
-Bring your own Postgres if you prefer — it needs the `pgvector` extension
-available, and the same `CREATE EXTENSION` on the database you use.
+**If you want to run the full API suite** (`pnpm --filter @waka/api test`,
+the database-backed one CI gates on), add its database once:
+
+```bash
+psql postgres://waka:waka@127.0.0.1:5432/waka -c 'CREATE DATABASE waka_test;'
+```
+
+That suite refuses any target whose name does not contain `test`
+(`packages/api/test/setup.ts`) — a guard against pointing it at a database
+someone cares about, since it migrates and truncates what it is given. Point
+`DB_CONNECTION_URL` at `.../waka_test` for that run only; `pnpm test` and
+everything above need none of this.
 
 ### Install and migrate
 

@@ -16,8 +16,13 @@ decided, is the part worth keeping.
 one shows you what a gate looks like when it has an answer. Nothing in
 **proposed** has been started, and several were written months ago.
 
-Statuses are read from each file's own `Status:` line, which
-`packages/web/test/goal-index.test.ts` keeps this table honest against.
+Each row's status is a summary of that file's own `Status:` line, written by
+hand. `packages/web/test/goal-index.test.ts` guarantees this table is
+**complete** — every goal has a row, every row names a real file, every goal
+carries a `Status:` line to be sorted by. It does not verify that a row's
+wording still matches the file's, and cannot say which section a goal belongs
+in. **The file is the authority on its own status**; if a row and a file
+disagree, the file is right and the row is stale.
 
 ## In flight
 

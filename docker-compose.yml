@@ -1,24 +1,28 @@
-# The local database, matching CI exactly.
+# The local database, on the image CI runs.
 #
 # WHY THIS EXISTS. README told a new developer that "Postgres. Local is the
 # default for development" and then never said how to get one, and
 # `.env.example` shipped a `*.neon.tech` URL as its only example — so the
-# documented local path led to a remote database or to nothing. Worse, the
-# obvious move (install Postgres, create a database) fails: the first
-# migration declares `vector` columns for embeddings, so `pnpm db:migrate`
-# on a stock server stops at `type "vector" does not exist`, which reads
-# like a broken migration rather than a missing extension.
+# documented local path led to a remote database or to nothing at all.
 #
-# The image is pinned to the one `.github/workflows/ci.yml` runs as its
-# service container. A local database that is not the CI database is a class
-# of "passes here, fails in CI" nobody should have to debug.
-#
-#   docker compose up -d
-#   psql postgres://waka:waka@127.0.0.1:5432/waka -c 'CREATE EXTENSION IF NOT EXISTS vector;'
+#   docker compose up -d --wait
 #   pnpm db:migrate
 #
-# The extension is a one-time step against a fresh volume; the healthcheck
-# below is what makes `up -d` safe to follow immediately with `db:migrate`.
+# `--wait` is not optional. A healthcheck gates startup only for a service
+# that another service declares `depends_on: service_healthy`, or when
+# `--wait` is passed. Nothing depends on this one, so a plain `up -d` returns
+# as soon as the container has STARTED — and on a fresh volume the entrypoint
+# is still running initdb, so the next command is refused with "the database
+# system is starting up". The healthcheck below is what `--wait` waits on.
+#
+# WHY pgvector/pgvector RATHER THAN postgres. Only because it is what
+# `.github/workflows/ci.yml` runs as its service container, and a local
+# database on a different Postgres than CI is a class of "passes here, fails
+# there" nobody should have to debug. NOT because anything needs the
+# extension: embeddings are `jsonb` and cosine similarity is computed in
+# application code — `packages/api/src/db/schema-embeddings.ts` says so, and
+# no migration declares a `vector` column. CI's `CREATE EXTENSION` step is
+# vestigial. Any Postgres 16 runs this schema.
 services:
   postgres:
     image: pgvector/pgvector:pg16
