@@ -214,9 +214,26 @@ async function askSurface(page: Page, surface: string, dead: Dead[]): Promise<nu
       return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
     }, i);
     await page.mouse.move(box.x, box.y);
-    /* long enough for a transition to have said whatever it is going to say */
-    await page.waitForTimeout(220);
-    const after = await look(page, i);
+    /* LOOK TWICE, AND THE SECOND TIME LATE.
+       The first version waited 220ms — which happens to be exactly the
+       `transition: color 0.22s` the ways carry, and that is a coincidence
+       worth not relying on. A hover has to travel: pointer move, hit test,
+       style recalc, first animated frame. On this machine that is over in a
+       few milliseconds and any sample after it reads the new colour. On a
+       loaded runner, painting a canvas world at the same time, the transition
+       can have rendered NO frame by the sample — and a transition that has
+       not started reads exactly like a control with no answer written for it.
+       CI called `.jar-saved` dead on a surface where it answers here, three
+       runs out of three.
+       So: look once early, and if nothing moved, look again well after any
+       transition in this stylesheet could still be running. The claim being
+       made is that the control answers, not that it answers inside 220ms. */
+    await page.waitForTimeout(250);
+    let after = await look(page, i);
+    if (after === before) {
+      await page.waitForTimeout(450);
+      after = await look(page, i);
+    }
     /* and off again, so the next control is measured from rest rather than
        from whatever the last hover left lit */
     await page.mouse.move(2, 2);
