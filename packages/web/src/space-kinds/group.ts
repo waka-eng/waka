@@ -88,6 +88,78 @@ export function groupWallOrbs(wall: ApiGroupWallSignal[], top: ApiGroupTopOfMind
 }
 
 /**
+ * WHAT A ROOM THAT HAS NOT SPOKEN YET IS WAITING FOR.
+ *
+ * A room's silence is designed, and that is exactly why it needs explaining. A
+ * room reads its members' PUBLIC memories, and serves a statement only once
+ * memories from more than one member stand under it — so a room of one, or a
+ * room of people whose memories are all private, is correctly dark. Nothing on
+ * the surface said which of those it was: every one of them rendered the same
+ * "Forming — nothing read together yet", a sentence that describes four
+ * different situations and names an act in none of them.
+ *
+ * The stages are ordered, and the room reports THE FIRST MISSING THING rather
+ * than the nearest one. Ordered this way because each stage is a precondition
+ * of the next: a room with nobody in it cannot have a ground, a room with no
+ * ground cannot have a two-voiced statement, and a statement nobody has
+ * answered is the last thing standing between a room and its first reading.
+ * Telling somebody to open a memory when there is nobody to read it would be
+ * advice that cannot work — which is the failure the room's one old sentence
+ * made four different ways.
+ */
+export type GroupStage = "alone" | "bare" | "one-voiced" | "unanswered";
+
+export interface GroupWaiting {
+  /** the roll, including you */
+  members: number;
+  /** public memories standing on the room's ground */
+  ground: number;
+  /** statements the room has grown from that ground */
+  wall: number;
+}
+
+/**
+ * The first thing a dark room is missing.
+ *
+ * Always answers: a room that has all four is not dark, and its own sentence
+ * is up instead — `deriveGroupChrome` asks this only when there is nothing
+ * adopted to say.
+ */
+export function groupStage(waiting: GroupWaiting): GroupStage {
+  if (waiting.members < 2) return "alone";
+  if (waiting.ground === 0) return "bare";
+  if (waiting.wall === 0) return "one-voiced";
+  return "unanswered";
+}
+
+/**
+ * The stage as a sentence — a STATE and the one act that moves it.
+ *
+ * No counts, in either half. "More than one of you" is the two-voices rule in
+ * words, and it is the closest this surface comes to a number on purpose: the
+ * law is that states render and numerals never, and a room that said "1 of 2
+ * voices" would be reporting its own arithmetic instead of its condition.
+ *
+ * THROUGH THE CATALOGUE, like every other word this surface says. These four
+ * were written as English literals in the week the product spoke English only;
+ * the language ruling that followed put the room's whole voice behind `t()`,
+ * and four untranslated sentences beside a translated one is not a smaller
+ * version of bilingual — it is a room that changes language mid-thought.
+ */
+export function groupStageWords(locale: SupportedLocale, stage: GroupStage): string {
+  switch (stage) {
+    case "alone":
+      return t(locale, "worldGroupStageAlone");
+    case "bare":
+      return t(locale, "worldGroupStageBare");
+    case "one-voiced":
+      return t(locale, "worldGroupStageOneVoiced");
+    case "unanswered":
+      return t(locale, "worldGroupStageUnanswered");
+  }
+}
+
+/**
  * What the room's HQ will say, resolved before the room may wake.
  *
  * A group's artifact is the same one-artifact shape as a person's: entries,
@@ -105,13 +177,29 @@ export function deriveGroupChrome(
   openProposalMs: number | null,
   evidence: GroupEvidence[],
   locale: SupportedLocale = "en-US",
+  /* What the room is still waiting for, when it has not spoken. The wall count
+     is `evidence` itself — the room's grown statements are what furnish it —
+     so only the two the orbs cannot answer are passed.
+
+     Optional, and last, because `locale` arrived first and every existing
+     caller passes it positionally. A caller that cannot say what the room is
+     waiting for gets the old single sentence rather than a wrong stage: not
+     knowing is a different thing from knowing there is nobody here. */
+  waiting?: Pick<GroupWaiting, "members" | "ground">,
 ): WallChrome {
   const lead = top.entries.find((e) => e.pinnedAt) ?? top.entries[0] ?? null;
   const ambition = lead?.body ?? null;
   return {
     text: ambition,
     awayFrom: null,
-    formingAlt: ambition ? null : t(locale, "worldGroupFormingAlt"),
+    formingAlt: ambition
+      ? null
+      : waiting
+        ? groupStageWords(
+            locale,
+            groupStage({ ...waiting, wall: evidence.length }),
+          )
+        : t(locale, "worldGroupFormingAlt"),
     asOf: null,
     /* A room forms through proposals, not through signals overhead: members'
        signals stay on their own walls, so an open proposal is the only thing
