@@ -86,11 +86,26 @@ const PARKED = new Map<string, string>([
   ],
 ]);
 
+/**
+ * `*.probe.ts` — fixtures another suite plants in `src/` while it runs.
+ *
+ * `test/vocabulary-gate.test.ts` writes `gate-torn-a-<pid>.probe.ts` and five
+ * siblings into `packages/api/src/`, runs the real scanner against them as a
+ * subprocess, and deletes them. Vitest runs test files in parallel, so this
+ * walk can arrive while they are on disk — and it did, on 2 of 5 runs before
+ * this line existed, reporting two files that had never been committed and
+ * telling the reader to delete them.
+ *
+ * A gate that fails 40% of the time on work that is not yours is worse than
+ * no gate: it trains everyone to re-run CI instead of reading it. Excluded by
+ * the suffix rather than by name, because the suffix is the convention every
+ * planted file already follows and a pid-keyed name cannot be listed.
+ */
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
     const full = resolve(dir, entry);
     if (statSync(full).isDirectory()) walk(full, out);
-    else if (/\.ts$/.test(entry) && !/\.(test|d)\.ts$/.test(entry)) out.push(full);
+    else if (/\.ts$/.test(entry) && !/\.(test|d|probe)\.ts$/.test(entry)) out.push(full);
   }
   return out;
 }
