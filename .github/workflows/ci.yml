@@ -425,6 +425,34 @@ jobs:
         continue-on-error: true
         run: pnpm e2e:answers-the-hand --base-url http://127.0.0.1:3010
 
+      # AND EVERY ORB, WHICH IS THE HALF THE STEP ABOVE CANNOT SEE. That one
+      # walks the DOM; an orb is paint on a canvas. This reads the picture —
+      # flood-fills the lit pixels into blobs and presses each one — and it is
+      # here because the founder found the gap by hand: a 1400px-wide
+      # invisible button was lying across the world and no gate could see it.
+      # Blocking, not continue-on-error: a memory you can see and cannot open
+      # has no other handle in this product.
+      - name: Every orb answers the hand
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:every-orb-answers --base-url http://127.0.0.1:3010
+
+      # THE DIAL HAD PRODUCED THREE FOUNDER REPORTS AND ZERO GATES, and
+      # nothing in tools/e2e had ever dragged it. Its two rules pull against
+      # each other — hold still while held, hang under the word once let go —
+      # so a repair to either one alone re-breaks the other, which is exactly
+      # what happened between 2026-08-27 and 2026-08-28.
+      - name: The timeline hangs from its word
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:the-timeline --base-url http://127.0.0.1:3010
+
+      # A WALL YOU RETURN TO IS ALREADY SAYING WHAT IT SAID. The poster's
+      # arrival animation was comparing each wall's sentence against whatever
+      # had been on screen a moment before — which on a travel is a DIFFERENT
+      # WALL'S — so every wall re-assembled itself every time you walked to it.
+      - name: Coming back to a wall does not re-read it
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:coming-back --base-url http://127.0.0.1:3010
+
       # THE SKY SUITE IS GONE, with the engine it measured. It grew a real
       # sky and photometered the top band of the canvas against an account
       # that had none — the only gate that could see `SKY_PEEK_DEPTH = 0.62`,

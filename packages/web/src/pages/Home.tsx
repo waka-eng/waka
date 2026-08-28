@@ -98,6 +98,7 @@ import { whyFailed as sayWhyFailed, whyOf } from "../lib/why-failed";
 import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
 import { agentBeing, OWNER_BEING, unit, type Being } from "../character/body";
 import { groupCompanyPlaces, type CompanyPlace } from "../space/group-company";
+import { groundCount } from "../space/ground-count";
 import { pourSignature } from "../space/pour-signature";
 import { posterWords } from "../space/top-of-mind/poster";
 import {
@@ -964,6 +965,12 @@ interface SimApi {
   select: (id: string) => void;
   release: () => void;
   wake: () => void;
+  /**
+   * Re-hang the timeline under the word it belongs to. Called when the READING
+   * changes — the rail's anchor is the word's centre, and the word is rewritten
+   * by a scrub, which no resize follows.
+   */
+  hangRail: () => void;
   /** The companion glows for a beat — a tap was heard. */
   acknowledge: (moment?: Moment) => void;
   /**
@@ -1489,6 +1496,28 @@ function HomeExperience(): JSX.Element {
     empty: false,
     prevText: null,
   });
+  /**
+   * WHAT EACH WALL LAST SAID, so returning to one is not a re-reading of it.
+   *
+   * The poster lights words that are NEW and leaves the ones that carried over
+   * already lit — that is the drift readout, and it is the right idea. It was
+   * being asked the wrong question. `prevText` was whatever sentence had been
+   * on screen a moment ago, which on a travel is A DIFFERENT WALL'S: walk from
+   * your own wall to a room and none of the room's words match, so every one
+   * of them arrives; walk back and every word of your own wall arrives again.
+   * The founder, 2026-08-28: "dont make the text keep reloding evertime i go
+   * to the wall."
+   *
+   * Compared against a different wall's sentence the reading was not merely
+   * noisy, it was meaningless in both directions — a word two unrelated
+   * ambitions happened to share would have read as "carried", which is a claim
+   * about drift that nothing supports.
+   *
+   * Keyed by wall, the question is the one the readout was built to answer:
+   * what is new since THIS wall last spoke. A wall you return to unchanged
+   * carries every word and simply is what it was.
+   */
+  const posterSaidRef = useRef(new Map<string, string>());
   /** What the companion is saying: its own line when tapped, and the told
       weather when an arrival has something on the record to tell. */
   const [charSay, setCharSay] = useState("");
@@ -3254,9 +3283,10 @@ function HomeExperience(): JSX.Element {
         prev.forming === next.forming &&
         prev.empty === next.empty
           ? prev
-          : /* the sentence it is replacing, carried forward so the poster can
-               tell what survived the rewrite from what is new */
-            { ...next, prevText: prev.text },
+          : /* what THIS WALL said last, so the poster lights the words that
+               are new to it rather than the words it does not share with
+               whatever wall was on screen a moment ago */
+            { ...next, prevText: posterSaidRef.current.get(atWall.id) ?? null },
       );
     },
     /* `wokenGroups` is here because a room's board arrives asynchronously into
@@ -3267,6 +3297,14 @@ function HomeExperience(): JSX.Element {
        already depends on it for the same reason. */
     [dial, adopted, notes, proposal, atWall, agents, emerging, topOfMind, inspirations, wokenGroups],
   );
+  /* AND THE WALL REMEMBERS WHAT IT SAID, once it is on screen saying it.
+     After the commit, not inside the updater: the sentence has to be recorded
+     as SHOWN, and a state updater can run more than once for one render. Empty
+     is not a thing a wall said — a wall that has nothing yet must still get
+     its first sentence delivered rather than held. */
+  useEffect(() => {
+    if (chrome.text) posterSaidRef.current.set(atWall.id, chrome.text);
+  }, [chrome.text, atWall.id]);
   /* The fallback chain's provenance: when the poster is showing an entry of
      the board rather than a room's, that entry's own citations are what led to
      it — and under the canon an entry cites PATTERNS, so this is what the peek
@@ -4885,6 +4923,62 @@ function HomeExperience(): JSX.Element {
       return carryC;
     }
 
+    /**
+     * THE RAIL HANGS FROM ITS WORD, MEASURED (founder, 2026-08-27: "should
+     * align with the text NOW"). Its left inset was a guess in CSS, and the
+     * word it hangs under sits after the wall chip, whose width is the wall's
+     * NAME — so no constant can be under it on every wall. The track's centre
+     * takes the word's centre, the way the reserve takes the count's own box:
+     * chrome states its place, nothing guesses at it.
+     *
+     * IT IS ITS OWN FUNCTION BECAUSE IT HAS TWO CALLERS, AND THE SECOND ONE
+     * IS THE WHOLE FIX. It lived inline in `measure()`, and `measure()` runs
+     * on a resize — so the anchor was recomputed when the WINDOW changed and
+     * never when the WORD did. The word changes without the window: let go of
+     * a scrub and "now" becomes "Aug 27", 49px becomes 65, and its centre
+     * moves 8px right while the rail stays exactly where it was. Nothing was
+     * ever going to put it back, because nothing resized.
+     */
+    function hangRail() {
+      const whenEl = document.querySelector(".jar-when");
+      const railEl = dialRef.current;
+      /* ONLY WHILE IT IS NOT BEING HELD. The word this hangs from is the
+         reading — a scrub rewrites it ("now" -> "Aug 12"), the box widens,
+         its centre moves, and a rail that keeps chasing its own label
+         WANDERS UNDER THE HAND (founder video, 2026-08-27: "line is not
+         only hard to drag, but moves around"). So while the rail is HELD
+         the anchor is frozen where it was when you reached for it.
+
+         `--open` WAS IN THIS CONDITION TOO, AND THAT WAS THE BUG.
+         Reported 2026-08-28: "why is timeline not right under the word
+         'now'". Measured, on a 1440px wall: at rest the word reads NOW at
+         w49, centre 125, and the track's centre is 125 — dead on. Let go of
+         a scrub and the word becomes AUG 27 at w65, centre 133, while the
+         rail stays at 125. Eight pixels out, and it stays out, because the
+         pointer is still over the rail after a drag — that is where a hand
+         necessarily is — so `--open` held the anchor frozen against a word
+         that had already changed underneath it.
+
+         Hovering is not dragging. The word does not move when you merely
+         reach for the rail: it is rewritten by `onDialUp`, on release. So
+         `--live` alone is what has to freeze the anchor, and the moment the
+         hand lets go the line re-hangs from the reading it now belongs to.
+         That motion is the world answering something the person did, which
+         is the only reason anything here is allowed to move. */
+      if (whenEl && railEl && !railEl.classList.contains("jar-dial--live")) {
+        const wb = whenEl.getBoundingClientRect();
+        if (wb.width > 0) {
+          /* half the rail's own width, read rather than restated, so a
+             wider grab area cannot silently un-centre the line */
+          const left = Math.round(wb.left + wb.width / 2 - railEl.offsetWidth / 2);
+          if (view.dialLeft !== left) {
+            view.dialLeft = left;
+            railEl.style.left = `${left}px`;
+          }
+        }
+      }
+    }
+
     function measure() {
       const rect = root!.getBoundingClientRect();
       /*
@@ -5234,40 +5328,7 @@ function HomeExperience(): JSX.Element {
           );
         }
       }
-      /* THE RAIL HANGS FROM ITS WORD, MEASURED (founder, 2026-08-27: "should
-         align with the text NOW"). Its left inset was a guess in CSS, and the
-         word it hangs under sits after the wall chip, whose width is the
-         wall's NAME — so no constant can be under it on every wall. The
-         track's centre takes the word's centre, the way the reserve takes the
-         count's own box: chrome states its place, nothing guesses at it. */
-      {
-        const whenEl = document.querySelector(".jar-when");
-        const railEl = dialRef.current;
-        /* ONLY AT REST. The word this hangs from is the reading — scrubbing
-           rewrites it ("now" -> "Aug 12"), the box widens, its centre moves,
-           and a rail that keeps chasing its own label WANDERS UNDER THE HAND
-           (founder video, 2026-08-27: "line is not only hard to drag, but
-           moves around"). While the dial is open or being held the anchor is
-           frozen where it was when you reached for it; it takes the word's
-           new centre again once the rail is put away. */
-        if (
-          whenEl &&
-          railEl &&
-          !railEl.classList.contains("jar-dial--open") &&
-          !railEl.classList.contains("jar-dial--live")
-        ) {
-          const wb = whenEl.getBoundingClientRect();
-          if (wb.width > 0) {
-            /* half the rail's own width, read rather than restated, so a
-               wider grab area cannot silently un-centre the line */
-            const left = Math.round(wb.left + wb.width / 2 - railEl.offsetWidth / 2);
-            if (view.dialLeft !== left) {
-              view.dialLeft = left;
-              railEl.style.left = `${left}px`;
-            }
-          }
-        }
-      }
+      hangRail();
       if (!view.motesPlaced) {
         view.motesPlaced = true;
         /* the same stillness for the dust: a save must not re-scatter it */
@@ -7840,6 +7901,8 @@ function HomeExperience(): JSX.Element {
     } else primePour();
 
     simApiRef.current = {
+      /* the timeline re-hangs under the word, whose width the reading sets */
+      hangRail,
       /**
        * STAND IN SOMEONE ELSE'S GROUND — or back in your own, with null.
        *
@@ -8716,6 +8779,18 @@ function HomeExperience(): JSX.Element {
     setParkedAt(parkedRef.current);
     simApiRef.current?.wake();
   }, []);
+  /* AND THE LOOP IS WOKEN AGAIN ONCE THE NEW WORD IS ON SCREEN.
+     `onDialUp` wakes it too, but it wakes it BEFORE this render commits, so
+     that frame measures the word the scrub replaced. The rail hangs from the
+     word's centre and the word has just changed width, so the measurement has
+     to happen on the far side of the commit — which is exactly what an effect
+     on the reading is. Without it the anchor is correct only if the loop
+     happens to still be running when React gets round to the DOM, and the
+     world is deliberately built to stop running the moment nothing is
+     happening. */
+  useEffect(() => {
+    simApiRef.current?.hangRail();
+  }, [parkedAt]);
 
 
   /* ---------------- the reading panel ----------------
@@ -9185,7 +9260,12 @@ function HomeExperience(): JSX.Element {
       return a?.inspirations.length ?? 0;
     }
     if (atWall.kind === "group") {
-      return (groupFieldRef.current.get(atWall.id) ?? []).length;
+      /* THE GROUND BENEATH THIS DOOR IS ONE MEMBER'S, so the door counts one
+         member's. It counted the room's whole pooled field until 2026-08-28,
+         when the founder stood in a room holding three memories, none of them
+         theirs, and read "3 INSPIRATIONS" over an empty ground.
+         `ground-count.ts` carries the whole argument. */
+      return groundCount(groupFieldRef.current.get(atWall.id), standing, viewerIdRef.current);
     }
     return inspirations?.length ?? 0;
     /* `groupFieldTick` is the ref's change signal — a room's memories arrive
@@ -9195,7 +9275,7 @@ function HomeExperience(): JSX.Element {
        no eslint in this repo, so it silenced nothing and told a reader a rule
        was being held off when no rule exists — a line that looks like a guard
        and guards nothing, which `measure-groups.mjs` argues against by name.) */
-  }, [atWall, agents, inspirations, groupFieldTick]);
+  }, [atWall, agents, inspirations, groupFieldTick, standing, auth?.profile?.id]);
 
   /**
    * HOW MANY ARE BEHIND THE DOOR, WHICH CAN BE MORE THAN ARE DRAWN.
@@ -9223,11 +9303,16 @@ function HomeExperience(): JSX.Element {
       return a?.inspirationTotal ?? a?.inspirations.length ?? 0;
     }
     if (atWall.kind === "group") {
-      const loaded = (groupFieldRef.current.get(atWall.id) ?? []).length;
-      return loaded + (groupBeyondRef.current.get(atWall.id) ?? 0);
+      /* and the remainder is NOT added: `groupBeyondRef` is what the room's
+         ceiling held back, for the ROOM, and nothing says whose those are.
+         Attributing them to the member you happen to be standing in would be
+         the same lie this door was just fixed for, pointing the other way.
+         D5's promise is kept where it can be honoured — your own archive and
+         an agent's, where the count and the remainder describe one set. */
+      return groundCount(groupFieldRef.current.get(atWall.id), standing, viewerIdRef.current);
     }
     return (inspirations?.length ?? 0) + fieldBeyond;
-  }, [atWall, agents, inspirations, groupFieldTick, fieldBeyond]);
+  }, [atWall, agents, inspirations, groupFieldTick, fieldBeyond, standing, auth?.profile?.id]);
 
   /**
    * THE REACH — the ground, addressable without a pointer.

@@ -1174,9 +1174,25 @@
    a jump, which is exactly what it was. Both are blocks at the same leading
    now, so the press changes what the words ARE and nothing about where they
    sit. */
+/* A WORD IS NOT A TARGET — BUT NEITHER IS A WHOLE ROW.
+   This was `display: block; width: 100%`, so the one act this product exists
+   for owned a box 1390px wide at 1440 while its ink is a centred label about
+   a seventh of that. Everything inside `.jar-hq` that takes the pointer also
+   REFUSES the world's tap — `onUp` will not call `tap()` when the press
+   landed on chrome — so every orb whose pixels fell in that band could not be
+   selected at all. Measured, not guessed: a grid of `elementFromPoint` over
+   the whole viewport found 67 lit canvas pixels a press could never take, and
+   every one of them was inside this button's row (founder, 2026-08-28: "some
+   inspiration balls are not clickable").
+   The founder's own rule for the small controls is the right one here too —
+   "a word is not a target: small controls carry a finger-sized hit area with
+   the ink unmoved" — so this takes the same `::after` halo the ways and the
+   signposts carry, and stops taking the rest of the line. The slot centres
+   its contents already, so nothing moves. */
 .jar-mouth-rest {
-  display: block;
-  width: 100%;
+  display: inline-block;
+  width: auto;
+  position: relative;
   appearance: none;
   -webkit-appearance: none;
   border: 0;
@@ -1272,6 +1288,13 @@
 }
 .jar-mouth-rest {
   text-decoration: none;
+}
+/* the finger's width around the words, and no further: the same inset the
+   ways and the signposts use, so one rule describes every small control */
+.jar-mouth-rest::after {
+  content: "";
+  position: absolute;
+  inset: -11px -12px;
 }
 
 /* ================= the drawer =================
