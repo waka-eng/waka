@@ -116,10 +116,37 @@ const READ = `(() => {
 export const isOrb = (b: Orb): boolean =>
   b.w >= 20 && b.h >= 20 && b.w <= 70 && b.h <= 70 && Math.max(b.w / b.h, b.h / b.w) <= 2.2;
 
+/** Every lit blob, unfiltered — the companion and root fragments included. */
+export async function readBlobs(page: Page): Promise<Orb[]> {
+  return JSON.parse((await page.evaluate(READ)) as string) as Orb[];
+}
+
 /** Every orb the world is drawing right now. */
 export async function readOrbs(page: Page): Promise<Orb[]> {
-  return (JSON.parse((await page.evaluate(READ)) as string) as Orb[]).filter(isOrb);
+  return (await readBlobs(page)).filter(isOrb);
 }
+
+/**
+ * EVERYTHING THAT MIGHT BE AN ORB, for a walk that only needs to open ONE.
+ *
+ * `isOrb` is deliberately strict because `every-orb-answers` requires every
+ * orb it finds to open, so a root fragment admitted there is a false
+ * accusation against the product. A walk that just wants a memory open has
+ * the opposite economics: a wrong guess costs one tap, and missing every orb
+ * costs the whole measurement.
+ *
+ * The floor drops to 12 because AN ORB'S CORE IS AS BRIGHT AS IT IS ALIVE.
+ * The read thresholds at the core so neighbouring orbs separate, and a
+ * dormant orb's core is a much smaller island of light than a live one's — at
+ * 390px `e2e:phone` was finding a single 56x52 blob beside 16x12 and 12x12
+ * ones that were also orbs, just cold, and reporting "no memory could be
+ * opened" on the strength of it.
+ */
+export const maybeOrbs = (all: readonly Orb[]): Orb[] =>
+  all
+    .filter((b) => b.w >= 12 && b.h >= 12 && b.w <= 90 && b.h <= 90 && Math.max(b.w / b.h, b.h / b.w) <= 2.4)
+    /* biggest first: the most alive orb is the most likely to be a memory */
+    .sort((a, b) => b.w * b.h - a.w * a.h);
 
 /**
  * Where that orb is NOW.

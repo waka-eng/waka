@@ -63,7 +63,7 @@
  */
 import { type Browser, type Page } from "playwright";
 import { settleAfterArrival } from "./arrival";
-import { aimAt, readOrbs } from "./orbs";
+import { aimAt, maybeOrbs, readBlobs, readOrbs } from "./orbs";
 import { launchChromium } from "./browser";
 interface View {
   name: string;
@@ -280,19 +280,34 @@ async function openCard(page: Page, view: View): Promise<boolean> {
      ground's listbox is a named way in and `e2e:by-keyboard` proves a reader
      can use it, but its options are 1px wide at x=-1. They are for a screen
      reader. Only this says a THUMB can open a memory. */
-  for (const target of await readOrbs(page)) {
-    const at = await aimAt(page, target);
-    if (!at) continue;
-    await page.touchscreen.tap(at.x, at.y);
-    await page.waitForTimeout(450);
-    if ((await panels()) === 0) {
+  /* IN ROUNDS, BECAUSE THE FIELD IS STILL ARRIVING.
+     Tapping the archive door starts a journey: the camera travels and the
+     ground pours, and a single sweep taken four seconds later sometimes finds
+     orbs that are still moving toward their homes, so every tap lands where
+     one was. Two rounds in three passed and the third reported "no memory
+     could be opened" — about the walk's patience, printed where a reader
+     looks for a sentence about the product. Three rounds, two seconds apart. */
+  for (let round = 0; round < 3; round += 1) {
+    if (round > 0) await page.waitForTimeout(2_000);
+    /* the strict reading first, then everything that might be one: this walk
+       needs ONE memory open, and a wrong guess costs a single tap */
+    const strict = await readOrbs(page);
+    const seen = new Set(strict.map((b) => `${b.x},${b.y}`));
+    const wider = maybeOrbs(await readBlobs(page)).filter((b) => !seen.has(`${b.x},${b.y}`));
+    for (const target of [...strict, ...wider]) {
+      const at = await aimAt(page, target);
+      if (!at) continue;
+      await page.touchscreen.tap(at.x, at.y);
+      await page.waitForTimeout(450);
+      if ((await panels()) === 0) {
+        await putAway();
+        continue;
+      }
+      /* it may still be on its way in or on its way back out */
+      await page.waitForTimeout(1_000);
+      if ((await panels()) > 0) return true;
       await putAway();
-      continue;
     }
-    /* it may still be on its way in or on its way back out */
-    await page.waitForTimeout(1_000);
-    if ((await panels()) > 0) return true;
-    await putAway();
   }
 
   /* NOTHING LIT WAS AN ORB, OR NO ORB TOOK THE TAP.

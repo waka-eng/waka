@@ -178,14 +178,14 @@ const signUp = async (page: Page, base: string, kept: string[]): Promise<void> =
   }
 };
 
-const run = async (base: string): Promise<number> => {
+const run = async (base: string, width: number, height: number): Promise<number> => {
   const browser = await launchChromium();
   const wide: Wide[] = [];
   const refused: string[] = [];
   let pressed = 0;
 
   try {
-    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const ctx = await browser.newContext({ viewport: { width, height } });
     const page = await ctx.newPage();
     await signUp(page, base, [
       "a memory about the sea",
@@ -259,7 +259,7 @@ const run = async (base: string): Promise<number> => {
     await browser?.close();
   }
 
-  console.log("");
+  console.log(`\n[orbs] at ${width}x${height}`);
   if (wide.length > 0) {
     console.log(`[orbs] ${wide.length} control(s) over the world claim ground they do not draw on:\n`);
     for (const c of wide)
@@ -294,5 +294,11 @@ const run = async (base: string): Promise<number> => {
 
 const args = process.argv.slice(2);
 const at = args.indexOf("--base-url");
-const base = at >= 0 ? args[at + 1] : DEFAULT_BASE;
-process.exit(await run(base));
+const base = at >= 0 ? args[at + 1]! : DEFAULT_BASE;
+/* `--viewport 360x640`, because "can a memory be opened" is a question about
+   a SIZE as much as about the code: `e2e:phone` could not open one at 360x640
+   on some runs and there was no way to ask this gate, which is the strict one,
+   whether that was the walk or the world. */
+const vp = args.indexOf("--viewport");
+const [w, h] = vp >= 0 ? args[vp + 1]!.split("x").map(Number) : [1440, 900];
+process.exit(await run(base, w!, h!));
