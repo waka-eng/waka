@@ -1,0 +1,347 @@
+/* assigned to the `chrome` layer — see styles/layers.css for the order */
+@layer chrome {
+/*
+ * THE PAGE THAT SAYS WHAT WAKA IS, wearing the world it is describing.
+ *
+ * Loaded only by `pages/Landing.tsx`, which is lazy, so this sheet ships as
+ * its own chunk: the door and the account screen never pay for a page they do
+ * not render. That is also what lets every selector here be short — nothing
+ * in this file can reach another route, because on another route this file
+ * does not exist.
+ *
+ * ── IT DECLARES NOT ONE COLOUR, SIZE OR SPACE OF ITS OWN ───────────────────
+ *
+ * Every value here is a token from `system.css` or `chrome.css`. That is not
+ * tidiness; it is the condition for this sheet joining the governed set in
+ * `test/type-scale.test.ts` beside `home.css`, `chrome.css` and `global.css`.
+ * A new stylesheet outside those ratchets is exactly the parking lot
+ * `one-product-one-system.md` named — a place where a literal can be written
+ * because nothing is counting. Adding the file to the list and then writing it
+ * in tokens costs one line in a test and keeps the palette one palette.
+ *
+ * The two apparent exceptions are not colours: `color-mix()` mixes a token
+ * with transparency rather than naming a new value, and the `clamp()` display
+ * sizes are the fluid steps the ratchet explicitly counts as on-scale.
+ *
+ * ── THE LIGHT RAMP IS THE ONE PIECE OF CONTENT IN THIS FILE ────────────────
+ *
+ * `.lp-rung-light` is not decoration. The four layers are ordered, and this is
+ * where the page says so — brightness rising from the memory you kept to the
+ * principle it became, which is the same ascent `lib/aliveness.ts` spends on
+ * an orb in the field. `--rung-light` arrives from the component as a 0-1
+ * position and every property below reads it, so the four rungs differ in
+ * exactly one number and cannot drift into four hand-tuned dots.
+ */
+
+.lp {
+  position: relative;
+  min-height: 100vh;
+  padding: var(--sp-28) var(--sp-24) var(--sp-96);
+  background: var(--w-ground);
+  color: var(--w-ink);
+}
+
+/* the world's grain, on the world's newest surface — the same overlay the
+   door and the account screen wear, so all three read as one material */
+.lp::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+  opacity: 0.09;
+  background-image: url("data:image/svg+xml;utf8,\
+<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'>\
+<filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/></filter>\
+<rect width='140' height='140' filter='url(%23n)' opacity='0.55'/></svg>");
+  background-repeat: repeat;
+}
+
+/* ONE COLUMN, ONE MEASURE. Everything on the page hangs off the same left
+   edge — the door's composition, given a page's worth of room. */
+.lp-top,
+.lp-hero,
+.lp-section {
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+}
+
+.lp-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-24);
+  margin-bottom: var(--sp-72);
+}
+
+/* the label register, byte for byte from `.jar-label` and the chrome's
+   eyebrow — one uppercase voice in the product, and it belongs to labels */
+.lp-label {
+  margin: 0;
+  color: var(--w-faint);
+  font-size: var(--t-fine);
+  font-weight: 500;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+}
+.lp-mark {
+  color: var(--w-muted);
+}
+
+/* a verb is an underlined word here, the same as everywhere else */
+.lp-quiet-verb {
+  /* TWENTY-FOUR PIXELS, for the reason `.door-forget` carries at length in
+     `chrome.css`: at this size the word's own line box is sixteen pixels tall,
+     under WCAG 2.2 AA and under what `e2e:phone` holds every control to. The
+     air is vertical only — both of these sit in flex rows, so horizontal
+     padding would push their neighbours apart rather than grow the target. */
+  padding: var(--sp-6) 0;
+  color: var(--w-muted);
+  font-size: var(--t-note);
+  text-decoration: underline;
+  text-underline-offset: 5px;
+  text-decoration-thickness: 1px;
+  transition: color 0.2s ease;
+}
+.lp-quiet-verb:hover,
+.lp-quiet-verb:focus-visible {
+  color: var(--w-ink);
+}
+
+/* ---------- the hero ---------- */
+
+.lp-hero {
+  padding-bottom: var(--sp-96);
+}
+.lp-being {
+  margin-bottom: var(--sp-24);
+}
+/* THE ONE DISPLAY SIZE ON THE PAGE. Jost 300 and never heavier: in a
+   geometric the elegance is the thin even stroke and the air around it, and
+   weight is what kills it — the same note `chrome.css` carries over the
+   door's title, for the same face. */
+.lp-headline {
+  margin: 0;
+  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-weight: 300;
+  font-size: clamp(44px, 7.4vw, 92px);
+  line-height: 1.02;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+  color: var(--w-ink);
+}
+.lp-lede {
+  max-width: 30ch;
+  margin: var(--sp-24) 0 0;
+  color: var(--w-muted);
+  font-size: var(--t-reading);
+  line-height: 1.45;
+}
+
+/* ---------- the acts ---------- */
+
+.lp-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-24);
+  margin-top: var(--sp-40);
+}
+/* THE PAGE'S OWN DOORWAY, and deliberately the same object as the door's:
+   filled with the page's ink, the ground as its letters, warm light behind
+   it. A person who presses this meets `btn-doorway` one navigation later, and
+   two differently-shaped primary buttons across one threshold would read as
+   two products. It is always lit — unlike the door's, there is no form here
+   for it to be waiting on. */
+.lp-act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--sp-48);
+  padding: 0 var(--sp-40);
+  border-radius: 999px;
+  background: var(--w-ink);
+  color: var(--w-ground);
+  font-size: var(--t-body);
+  text-decoration: none;
+  box-shadow: 0 0 var(--sp-24) color-mix(in srgb, var(--moon-warm) 16%, transparent);
+  transition: opacity 0.18s ease;
+}
+.lp-act:hover,
+.lp-act:focus-visible {
+  opacity: 0.88;
+  color: var(--w-ground);
+}
+.lp-act-aside {
+  color: var(--w-faint);
+  font-size: var(--t-ui);
+}
+
+/* ---------- sections ---------- */
+
+.lp-section {
+  padding-top: var(--sp-88);
+}
+.lp-section-title {
+  max-width: 24ch;
+  margin: var(--sp-14) 0 0;
+  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-weight: 300;
+  font-size: clamp(28px, 3.6vw, 44px);
+  line-height: 1.18;
+  letter-spacing: 0.012em;
+  text-wrap: balance;
+  color: var(--w-ink);
+}
+.lp-prose {
+  max-width: 62ch;
+  margin: var(--sp-14) 0 0;
+  color: var(--w-muted);
+  font-size: var(--t-note);
+  line-height: 1.65;
+}
+.lp-wide {
+  margin-top: var(--sp-20);
+}
+
+/* ---------- the ascent ---------- */
+
+.lp-rungs {
+  margin: var(--sp-40) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.lp-rung {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--sp-24);
+  padding: var(--sp-32) 0;
+}
+/* THE RAMP. One number decides all four: the dot's opacity, how far its glow
+   reaches and how bright the rule under it runs. A memory you just kept is
+   barely lit; a principle is the brightest thing on the page after the
+   headline. Nothing here is a number a person reads — it is the state,
+   rendered, which is the whole of the founder's law about light. */
+.lp-rung-light {
+  width: var(--sp-12);
+  height: var(--sp-12);
+  /* sits on the layer's NAME rather than on the label above it — the name is
+     the thing the light is grading */
+  margin-top: var(--sp-32);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--moon-warm) calc(var(--rung-light) * 100%), transparent);
+  box-shadow: 0 0 calc(var(--sp-24) * var(--rung-light))
+    color-mix(in srgb, var(--moon-warm) calc(var(--rung-light) * 45%), transparent);
+}
+.lp-rung-said {
+  border-bottom: 1px solid var(--w-edge);
+  padding-bottom: var(--sp-32);
+}
+.lp-rung:last-child .lp-rung-said {
+  border-bottom: 0;
+}
+/* THE FOUR NAMES ARE THE SPINE OF THE PAGE and were set two steps under the
+   headings introducing them: the section that explains what the product does
+   was the quietest thing on it. At reading size they carry, and the ascent
+   reads as four things rather than as one paragraph with dots. */
+.lp-rung-title {
+  margin: var(--sp-6) 0 0;
+  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-weight: 300;
+  color: var(--w-ink);
+  font-size: var(--t-reading);
+  line-height: 1.2;
+  letter-spacing: 0.012em;
+}
+/* THE SAME THOUGHT, AT THIS LAYER. Its rule brightens with the rung, so the
+   specimen column carries the ascent as well as the dots do — a person
+   skimming only the quotes still sees the thing climb. */
+.lp-rung-eg {
+  max-width: 56ch;
+  margin: var(--sp-16) 0 0;
+  padding-left: var(--sp-16);
+  border-left: 1px solid
+    color-mix(in srgb, var(--moon-warm) calc(var(--rung-light) * 60%), transparent);
+  color: var(--w-ink);
+  font-size: var(--t-note);
+  line-height: 1.6;
+}
+
+/* ---------- the rules it keeps ---------- */
+
+.lp-laws {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--sp-40);
+  margin: var(--sp-40) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.lp-law-title {
+  margin: 0;
+  color: var(--w-ink);
+  font-size: var(--t-lead);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+/* a law's own prose runs to its column rather than to the page's measure */
+.lp-law .lp-prose {
+  max-width: none;
+}
+
+/* ---------- the close ---------- */
+
+.lp-close {
+  padding-top: var(--sp-96);
+}
+.lp-close-title {
+  max-width: none;
+}
+
+/* ---------- a phone ---------- */
+
+@media (max-width: 600px) {
+  .lp {
+    padding-right: var(--sp-20);
+    padding-left: var(--sp-20);
+  }
+  .lp-section {
+    padding-top: var(--sp-64);
+  }
+  /* the ramp keeps its light and gives up its column: at this width the dot
+     and a 260px paragraph cannot both have room, and the light is the part
+     that carries meaning */
+  .lp-rung {
+    grid-template-columns: 1fr;
+    gap: var(--sp-12);
+  }
+  .lp-rung-light {
+    margin-top: 0;
+  }
+}
+
+/* THE BEING COMES TO THE MIDDLE ONCE THE COLUMN IS NEAR AN EDGE, and it is a
+   layout fix rather than a taste one.
+
+   Its halo is drawn with a negative inset — the glow is wider than the
+   creature, by design, since it is light in a volume rather than a picture in
+   a frame — so left-aligned it reaches about eighty pixels further left than
+   the being does. While the column has that much room beside it, nothing
+   notices. Below it, the halo's BOX crosses the viewport edge: nothing is
+   visible there (the gradient has already faded to nothing, and leftward
+   overflow scrolls nothing at all), but `e2e:phone` measures boxes, and a walk
+   that reports a harmless thing on every run is a walk people stop reading.
+
+   The number is where the column's own left edge stops clearing that reach —
+   `24px + (vw − 808) / 2 ≥ 79`, which is 918 — rounded up to a round one.
+   Centred, the glow has room on both sides at every width below it. */
+@media (max-width: 920px) {
+  .lp-being {
+    display: flex;
+    justify-content: center;
+  }
+}
+
+}

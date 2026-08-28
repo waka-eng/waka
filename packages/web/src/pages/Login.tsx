@@ -780,7 +780,33 @@ type Mode = "login" | "signup";
  * for the lifetime of the page render.
  */
 export default function LoginPage(): JSX.Element {
-  const [mode, setMode] = useState<Mode>("login");
+  const location = useLocation();
+  /**
+   * WHICH SIDE THE DOOR OPENS ON.
+   *
+   * `login` by default, because returning people outnumber new ones in
+   * steady state — and `?begin` for the one caller that knows better. The
+   * landing page's whole purpose is to send strangers here, and dropping them
+   * on the sign-in side would ask them for a password to an account the page
+   * had just finished persuading them to create.
+   *
+   * A query rather than router state, so the link survives being copied,
+   * shared and bookmarked. Read once, on mount: after that the tabs are the
+   * person's to move, and re-reading the URL would take that back.
+   *
+   * FROM THE ROUTER'S LOCATION, NOT `window.location`. The first version read
+   * the window and passed every test that did not click a link — the landing
+   * page's `begin` navigates in-app, so the address the router knows about is
+   * the only one that has `?begin` in it at the moment this runs. Reading the
+   * window would have shipped a funnel that worked when the URL was typed and
+   * silently failed for everybody who arrived by pressing the button the page
+   * is built around. (The OAuth banner below still reads the window, and that
+   * is correct for it: it is recovering a param from a FULL-PAGE return from
+   * Google, which the router never saw.)
+   */
+  const [mode, setMode] = useState<Mode>(() =>
+    new URLSearchParams(location.search).has("begin") ? "signup" : "login",
+  );
   const loginTabRef = useRef<HTMLButtonElement>(null);
   const signupTabRef = useRef<HTMLButtonElement>(null);
   const [locale, setLocale] = useState<SupportedLocale>(() => readStoredLocale());
