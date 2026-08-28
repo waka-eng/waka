@@ -252,9 +252,20 @@ async function askSurface(page: Page, surface: string, dead: Dead[]): Promise<nu
         const el = (window as unknown as { __hands: HTMLElement[] }).__hands[n];
         const r = el.getBoundingClientRect();
         const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-        if (!at) return "(nothing)";
-        if (at === el || el.contains(at)) return "itself";
-        return `${at.tagName.toLowerCase()}.${(at.className || "").toString().trim().split(/\s+/).join(".")}`;
+        /* AND WHETHER THE ENGINE THINKS THE POINTER IS ON IT AT ALL.
+           `elementFromPoint` says who WOULD get the event; `:hover` says who
+           IS getting it. They can disagree — a pointer that never actually
+           arrived reads as "itself" on the first and false on the second —
+           and the difference is the whole diagnosis. Reported with the box
+           and the viewport because the one control that has ever failed only
+           on CI sits ten pixels off the bottom edge. */
+        const hovering = el.matches(":hover");
+        const where = `${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}x${Math.round(r.height)} in ${window.innerWidth}x${window.innerHeight}`;
+        const who =
+          !at ? "(nothing)"
+          : at === el || el.contains(at) ? "itself"
+          : `${at.tagName.toLowerCase()}.${(at.className || "").toString().trim().split(/\s+/).join(".")}`;
+        return `${who}; :hover=${hovering}; ${where}; colour ${getComputedStyle(el).color}`;
       }, i);
       dead.push({ surface, where: hand.where, label: hand.label, over });
     }
@@ -354,7 +365,7 @@ async function run(base: string): Promise<number> {
   for (const [surface, list] of bySurface) {
     console.log(`  ${surface}`);
     for (const d of list) {
-      const under = d.over && d.over !== "itself" ? `   (the pointer landed on ${d.over})` : "";
+      const under = d.over ? `\n          ${d.over}` : "";
       console.log(`      ${d.where}${d.label ? `  — ${d.label}` : ""}${under}`);
     }
   }
