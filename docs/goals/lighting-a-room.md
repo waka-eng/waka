@@ -1,6 +1,6 @@
 # Goal: lighting a room
 
-Status: in progress — phases 1–2 passed 2026-08-28
+Status: blocked at phase 3 — phases 1–2 passed 2026-08-28; phase 3's gate needs a working GEMINI_API_KEY (see Log)
 Branch: `goal/lighting-a-room`
 Depends on: nothing structural. Touches the join consent sheet
 (`a-room-you-can-trust` made joining an asked question; this goal keeps that
@@ -250,4 +250,51 @@ right to; a person could not click those rows either. Not forced past, and the
 walk travels by keyboard instead. Whether this reaches a real account with
 many walls is unmeasured — the live stack's shorter axis did not reproduce it.
 
-_(phases append numbers and verdicts here)_
+**2026-08-28 — Phase 3, review-and-open. HALTED BEFORE IMPLEMENTATION — the
+gate cannot be measured in this environment.**
+
+Phase 3's gate has three clauses. The third — *"an e2e walk takes a dark
+two-person room to a lit wall through the pass alone"* — needs a **lit wall**,
+and a wall is layer 2: the room must derive a statement from its members'
+pooled public memories and serve it past the two-voices gate. That is
+extraction plus embeddings, which needs a real `GEMINI_API_KEY`.
+
+Measured rather than assumed. A capture was saved against the local stack and
+the queue was read:
+
+```
+      type      | status  | attempts |                    err
+----------------+---------+----------+-------------------------------------------
+ derive_signals | pending |        1 | Error: Gemini embedding failed: HTTP 400
+                                       Bad Request providerCode=INVALID_ARGUMENT
+```
+
+The other two clauses (*the pass writes the same per-capture acts the editor
+writes*; *the room's ground shows them on the next read*) are layer 1 and are
+measurable here — the room's ground is its members' public captures, no model
+call involved. **They are not enough on their own, and the bar was not
+lowered to fit what this machine can run.**
+
+Stopped before writing the phase rather than after: a surface built against a
+gate that cannot be run would land unverified code on the branch, which is the
+one thing the gate discipline exists to prevent.
+
+To unblock, one of:
+
+1. **A working `GEMINI_API_KEY` in `.env.local`**, and the phase runs as
+   written. Expected spend for the gate: one derivation per opened memory
+   (each is one extraction, one capture embedding, up to three candidate
+   embeddings and up to three judge calls — at most eight model calls per
+   memory, per `docs/generation.md`), plus one group synthesis. A two-person
+   room lit through the pass is a few dozen calls: cents, well inside the
+   figure in this goal's Budget.
+2. **A ruling that clause 3 belongs to a later phase** — the pass and the
+   ground are layer 1 and stand on their own; "and then the room speaks" is
+   arguably the room's first week (the acceptance list's first bullet) rather
+   than this phase's. That is a change to the plan, and it is the founder's to
+   make, not the runner's.
+
+Phases 4 and 5 do not need a key — their gates are the join walk and the cold
+link walk, both layer 1 — but they sit behind Phase 3 in the plan, and the
+`--phase N` flag that would skip a gate is the caller's to give, not the
+runner's to assume.
