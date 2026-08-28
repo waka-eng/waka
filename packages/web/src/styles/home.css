@@ -2230,7 +2230,33 @@
   font-family: inherit;
   user-select: text;
   -webkit-user-select: text;
-  will-change: opacity, transform;
+  /* `will-change: opacity, transform` STOOD HERE, and it stood here for the
+     panel's whole life rather than for the fifth of a second it animates.
+
+     The founder, 2026-08-28: "scroll shouldnt form that empty space in the
+     modal. keep the entire modal colored at all times."
+
+     I could not reproduce it, and I tried hard: their viewport, their device
+     pixel ratio, the reading face and the edit face, scrolled to the bottom,
+     reading the ACTUAL PAINTED PIXELS out of a screenshot rather than asking
+     `elementFromPoint` which element is on top. The ground came back
+     rgb(11, 14, 20) continuously from the panel's top edge to its bottom edge
+     every time.
+
+     Which is itself the clue. A defect that a headless engine cannot produce
+     and a real machine shows is a COMPOSITING defect, and this declaration is
+     what made one possible: `will-change` promotes the panel to its own GPU
+     layer permanently, and that layer is a scroll container (`overflow-y`)
+     with a rounded clip (`border-radius: 18px`) and a permanent transform
+     from the centring. A promoted, rounded, scrolling layer is the exact
+     shape that leaves unpainted regions during a scroll on some drivers —
+     and nowhere else.
+
+     It is also simply wrong as written. `will-change` is a hint to prepare
+     for an imminent change, not a property; holding a layer for an element
+     that is static 99% of the time is the documented misuse. The panel
+     animates only under `--in` and `--out`, which last 0.2s and 0.18s, so
+     that is where the hint belongs and where it now is. */
   /* an unobtrusive scrollbar: present when needed, never furniture */
   scrollbar-width: thin;
   scrollbar-color: var(--jar-scroll) transparent;
@@ -2249,6 +2275,8 @@
    in hand when it mounts, so this is the only latency between tap and read. */
 .jar-panel--in {
   animation: jar-panel-in 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+  /* the hint lives with the change it is hinting at, and expires with it */
+  will-change: opacity, transform;
 }
 
 /* ═══════════════ ONE SURFACE, AND EVERY MODAL WEARS IT ═══════════════
@@ -2301,6 +2329,7 @@
 
 .jar-panel--out {
   animation: jar-panel-out 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: opacity, transform;
   pointer-events: none;
 }
 /* THE HEAD: date left, who-may-see right, centred against each other.
