@@ -209,13 +209,26 @@ describe("the landing page", () => {
     const container = await renderFront("/");
     const text = container.textContent ?? "";
 
-    expect(text).toContain("Keep what moves you.");
-    /* The four layers, in the order they happen. A stranger who reads only
-       the headings should still come away knowing what the product does. */
-    expect(text).toContain("A memory");
-    expect(text).toContain("A pattern");
-    expect(text).toContain("Your top of mind");
-    expect(text).toContain("A principle");
+    expect(text).toContain("Everything deciding for you is guessing about you.");
+    /* The turn the page is built on, and the reason it may be that blunt: the
+       promise underneath the accusation is one the code keeps. */
+    expect(text).toContain("You will not be summarised. You will be quoted.");
+
+    /* The three places the world actually draws, in the order they happen. A
+       stranger who reads only the headings should still come away knowing
+       what the product does. Signals are deliberately NOT among them — they
+       are the machine's working material and not a place a person stands in
+       (founder, 2026-08-25), so a page that named them would be teaching a
+       layer its visitor will never meet. */
+    expect(text).toContain("What you keep");
+    expect(text).toContain("What matters now");
+    expect(text).toContain("What lasts");
+    expect(text).not.toContain("Four layers");
+
+    /* The two guarantees a stranger cannot get anywhere else, and the two the
+       first draft of this page left out. */
+    expect(text).toContain("Your own words are never rewritten.");
+    expect(text).toContain("You can leave with all of it.");
 
     /* Nothing is asked of them here: no field, no password, no form. */
     expect(container.querySelector("input")).toBeNull();
@@ -225,13 +238,13 @@ describe("the landing page", () => {
   it("draws the ascent as light rather than as numbers", async () => {
     const container = await renderFront("/");
     const rungs = Array.from(container.querySelectorAll<HTMLElement>(".lp-rung"));
-    expect(rungs).toHaveLength(4);
+    expect(rungs).toHaveLength(3);
 
-    /* THE RAMP IS THE CONTENT. The four layers are ordered, and this is the
+    /* THE RAMP IS THE CONTENT. The three stages are ordered, and this is the
        only place on the page that says so — brightness rising from the memory
-       you kept to the principle it became, the same ascent `lib/aliveness.ts`
+       you kept to the directive it became, the same ascent `lib/aliveness.ts`
        spends on an orb. Read off the elements rather than trusted: a ramp that
-       stopped rising would still look like a list of four dots. */
+       stopped rising would still look like a row of dots. */
     const light = rungs.map((el) => Number(el.style.getPropertyValue("--rung-light")));
     expect(light.every((n) => Number.isFinite(n))).toBe(true);
     for (let i = 1; i < light.length; i += 1) {
