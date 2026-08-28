@@ -516,7 +516,33 @@ async function main(): Promise<void> {
          grounded in what was said. An input nobody would give produces an
          output nobody should be shown, and reporting the second without
          noticing the first would have been the worst mistake available. */
-      const afterSave = await visibleLines(page, 12, 1_200);
+      /* AND IT WAITS FOR THE ANSWER RATHER THAN FOR A DURATION.
+         Twelve samples at 1.2s is 14.4 seconds, chosen against a derivation
+         that "lands around eight seconds in" on a developer's machine. A CI
+         runner is not that machine: this gate failed on a branch and passed
+         on `dev` twenty minutes later with the identical commit, and this
+         surface was half of the failure. A fixed window against a variable
+         answer measures the runner's load.
+
+         So it polls, and — this is the part a plain `waitForSelector` would
+         get wrong — it KEEPS WHAT IT SEES WHILE POLLING. The character's
+         acknowledgement of the save clears itself after four seconds, so the
+         two things this surface exists to catch arrive at opposite ends of
+         the wait: the receipt almost immediately and gone, the headline late.
+         Reading only at the end would report the second and lose the first.
+
+         If nothing ever arrives the loop simply runs out and the surface
+         reports BARE, which is a true finding rather than a slow one. */
+      const seenWhileWaiting = new Set<string>();
+      const deadline = Date.now() + 45_000;
+      let answered = false;
+      while (Date.now() < deadline && !answered) {
+        for (const l of await visibleLines(page, 1, 0)) seenWhileWaiting.add(l);
+        answered = [...seenWhileWaiting].filter((l) => !beforeSave.has(l)).some(isProse);
+        if (!answered) await page.waitForTimeout(1_000);
+      }
+      for (const l of await visibleLines(page, 3, 800)) seenWhileWaiting.add(l);
+      const afterSave = [...seenWhileWaiting];
       const said = afterSave.filter((l) => !beforeSave.has(l));
       const prose = said.filter(isProse);
       readings.push({
@@ -529,18 +555,32 @@ async function main(): Promise<void> {
       await page.waitForTimeout(3_000);
     }
 
-    /* WHAT THE WORLD SAYS BEFORE ANY SURFACE IS OPENED, held aside so every
-       later surface can be reported on what IT added rather than on the
-       backdrop it is drawn over. Without this the topbar's words would make
-       every panel look like it said something.
+    /* WHAT THE WORLD SAYS BEFORE THIS SURFACE IS OPENED, held aside so the
+       surface is reported on what IT added rather than on the backdrop it is
+       drawn over. Without this the topbar's words would make every panel look
+       like it said something.
 
-       Taken AFTER the stage's setup, so in `kept` the backdrop is the world
-       with one memory in it — otherwise the archive door's own count would be
-       reported as something the archive door said. */
+       AND IT IS RE-READ ON EVERY LOAD, WHICH IS THE WHOLE POINT.
+
+       It used to be captured once, from its own page load, and subtracted
+       from surfaces read on later loads. That is a race, and CI found it: the
+       same commit failed this gate on a branch and passed it on `dev` twenty
+       minutes later. The world's headline is WRITTEN BY THE MODEL and arrives
+       asynchronously, so the sentence standing behind the sheet on load 7 is
+       not the sentence that was standing behind it on load 1. Whatever
+       differed was subtracted from nothing and reported as the sheet's own
+       prose — which is how `your settings` came to "say"
+       *"Solitude might be a more effective tool for restoration…"*, a line
+       that belongs to the wall behind it.
+
+       The same race ran the other way too, and both readings were in the one
+       failure: four surfaces listed as deliberately bare "spoke" (they had
+       borrowed the world's new sentence), and one that speaks went bare.
+
+       Read on the same load, a moment before the surface opens, the world
+       behind the sheet is exactly the world this reading subtracts. There is
+       no window for the model to land in. */
     const home = args.stage === "door" ? `${args.baseUrl}/login` : `${args.baseUrl}/`;
-    await page.goto(home, { waitUntil: "domcontentloaded" });
-    await page.waitForTimeout(args.stage === "door" ? 2_500 : 6_000);
-    const backdrop = new Set(await visibleLines(page));
 
     for (const surface of SURFACES) {
       if (!(surface.stages ?? ["empty", "kept"]).includes(args.stage)) continue;
@@ -549,6 +589,8 @@ async function main(): Promise<void> {
          reason about, and Escape was measurably not enough. */
       await page.goto(home, { waitUntil: "domcontentloaded" });
       await page.waitForTimeout(args.stage === "door" ? 2_500 : 6_000);
+      /* this load's own world, read before the surface covers any of it */
+      const backdrop = new Set(await visibleLines(page));
 
       let detail = "";
       try {
