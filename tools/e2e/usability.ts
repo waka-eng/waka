@@ -62,7 +62,7 @@ const BASE = process.env.WAKA_BASE_URL ?? "http://127.0.0.1:3010";
  * decorative and is respected rather than second-guessed.
  */
 const PROBE = `(() => {
-  const out = { unnamed: [], unlabelled: [], noFocus: [], title: document.title, lang: document.documentElement.lang, disabled: [] };
+  const out = { unnamed: [], unlabelled: [], title: document.title, lang: document.documentElement.lang, disabled: [] };
   const named = (e) => {
     const cls = typeof e.className === "string" ? e.className.trim().split(/\\s+/).slice(0, 2).join(".") : "";
     return e.tagName.toLowerCase() + (cls ? "." + cls : "");
@@ -102,55 +102,41 @@ const PROBE = `(() => {
 interface Probe {
   unnamed: string[];
   unlabelled: string[];
-  noFocus: string[];
   title: string;
   lang: string;
   disabled: string[];
 }
 
 /**
- * H3, ASKED WITH THE KEYBOARD, because that is the only way to ask it.
+ * H3 IS NOT ASKED HERE ANY MORE, AND THE REASON IS A RULING.
  *
- * The first version called `element.focus()` from a script and compared the
- * computed style before and after. It reported thirteen controls with
- * invisible focus and went on reporting twelve of them AFTER the ring was
- * added and verified present in the build — because `:focus-visible` is a
- * HEURISTIC, and Chromium does not match it for a button focused by script.
- * The gate was measuring a state no keyboard user is ever in.
+ * This file used to walk the tab order and call focus invisible unless the
+ * focused control computed an OUTLINE — `outlineStyle !== "none" &&
+ * outlineWidth > 0`. It had already survived one correction: the first
+ * version called `element.focus()` from a script, which does not match
+ * `:focus-visible` in Chromium, and reported thirteen controls broken and
+ * went on reporting twelve of them after the ring was added. Pressing Tab
+ * fixed that. Nobody revisited the VERDICT.
  *
- * So this presses Tab. Whatever the browser then calls `document.activeElement`
- * is what a person tabbing has landed on, and `:focus-visible` means what it
- * means. A control whose lit state is pixel-identical to its resting state is
- * a person with no cursor.
+ * Then the founder ruled the ring away — "never show the white focus box
+ * anywhere" — with the argument that this world already says where you are
+ * the way it says everything else: with light. `global.css` sets
+ * `:focus-visible { outline: none }` and every control was given its own
+ * answer instead. So this check has since been demanding the one thing the
+ * product is not allowed to do, and failing fourteen controls for obeying a
+ * decision. An instrument that fails the build for following a ruling is
+ * worse than no instrument; it teaches people to ignore it.
+ *
+ * The floor still stands, asked correctly, in `e2e:answers-the-hand`: it
+ * tabs the same way and asks whether ANYTHING about the control changes
+ * against its own resting state — colour, underline, glow, whatever the
+ * design chose — which is the real question and the one an outline was only
+ * ever a proxy for. It walks the door, the world, the poster's band, the
+ * mouth and the account, so nothing this file used to cover is lost.
+ *
+ * `noFocus` went with it: the probe declared the field and never once pushed
+ * to it, so every H3 finding this file ever printed came from the tab walk.
  */
-async function focusWalk(page: Page, surface: string, steps = 25): Promise<Finding[]> {
-  const found: Finding[] = [];
-  const seen = new Set<string>();
-  await page.evaluate(`document.body.focus()`);
-  for (let i = 0; i < steps; i += 1) {
-    await page.keyboard.press("Tab");
-    const row = (await page.evaluate(`(() => {
-      const e = document.activeElement;
-      if (!e || e === document.body) return null;
-      if (e.closest("canvas") || e.getAttribute("aria-hidden") === "true") return null;
-      const cls = typeof e.className === "string" ? e.className.trim().split(/\\s+/).slice(0, 2).join(".") : "";
-      const name = e.tagName.toLowerCase() + (cls ? "." + cls : "");
-      const cs = getComputedStyle(e);
-      const lit = [cs.outlineStyle, cs.outlineWidth, cs.outlineColor, cs.boxShadow].join("|");
-      /* the same element with focus taken away, read from a clone in place is
-         not possible — so compare against what the engine says an unfocused
-         sibling of the same class computes */
-      return JSON.stringify({ name, lit, ring: cs.outlineStyle !== "none" && parseFloat(cs.outlineWidth) > 0 });
-    })()`)) as string | null;
-    if (!row) continue;
-    const { name, ring } = JSON.parse(row) as { name: string; lit: string; ring: boolean };
-    if (!ring && !seen.has(name)) {
-      seen.add(name);
-      found.push({ check: "H3 focus is invisible", surface, detail: name });
-    }
-  }
-  return found;
-}
 
 async function audit(page: Page, surface: string): Promise<Finding[]> {
   const p = JSON.parse((await page.evaluate(PROBE)) as string) as Probe;
@@ -159,7 +145,6 @@ async function audit(page: Page, surface: string): Promise<Finding[]> {
 
   for (const d of p.unnamed) add("H1 control has no name", d);
   for (const d of p.unlabelled) add("H2 field has no label", d);
-  for (const d of p.noFocus) add("H3 focus is invisible", d);
   for (const d of p.disabled) add("H7 disabled with no reason given", d);
   if (!p.title || p.title.trim().length === 0) add("H4 page has no title", "<title> is empty");
   if (!p.lang || p.lang.trim().length === 0) add("H5 no language declared", "<html lang> is empty");
@@ -194,7 +179,6 @@ async function walk(browser: Browser, negative: boolean): Promise<Finding[]> {
   await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(2_500);
   found.push(...(await audit(page, "the door")));
-  found.push(...(await focusWalk(page, "the door")));
 
   /* H6: AN ERROR HAS TO SAY WHAT WENT WRONG. Signing in with a password that
      is not the account's is the one failure every person meets, so it is the
@@ -225,12 +209,10 @@ async function walk(browser: Browser, negative: boolean): Promise<Finding[]> {
   await page.click("button[type=submit]");
   await page.waitForTimeout(9_000);
   found.push(...(await audit(page, "the world")));
-  found.push(...(await focusWalk(page, "the world")));
 
   await page.locator(".jar-mouth-rest").first().click();
   await page.waitForTimeout(900);
   found.push(...(await audit(page, "the mouth open")));
-  found.push(...(await focusWalk(page, "the mouth open")));
 
   await ctx.close();
   return found;
@@ -273,7 +255,7 @@ async function main(): Promise<number> {
   }
   console.log(
     unique.length === 0
-      ? "\n[usability] clean — every control named, every field labelled, focus visible, errors legible"
+      ? "\n[usability] clean — every control named, every field labelled, errors legible (focus is `e2e:answers-the-hand`'s floor)"
       : `\n[usability] ${unique.length} finding(s)`,
   );
   return unique.length === 0 ? 0 : 1;
