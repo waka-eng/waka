@@ -10800,6 +10800,16 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     error: string | null;
   } | null>(null);
 
+  /**
+   * The room a finished make or join should take the traveller to.
+   *
+   * Held as state rather than acted on where the request lands, because the
+   * column does not exist yet at that moment: the axis is a memo over
+   * `groups`, so the wall to walk to is born in the render AFTER the one that
+   * learns about the room. The effect below waits for it.
+   */
+  const [landedGroup, setLandedGroup] = useState<string | null>(null);
+
   const submitGroup = useCallback(() => {
     if (!groupForm || groupForm.busy) return;
     const text = groupForm.text.trim();
@@ -10807,9 +10817,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     setGroupForm({ ...groupForm, busy: true, error: null });
     const landed = (g: ApiGroupSummary) => {
       /* newest room first, which is where the axis puts it: a new column
-         appears to the right and the traveller can walk to it immediately */
+         appears to the right, and the traveller is taken to it */
       setGroups((prev) => [g, ...prev.filter((x) => x.id !== g.id)]);
       setGroupForm(null);
+      setLandedGroup(g.id);
     };
     const failed = (m: string) =>
       setGroupForm((f) => (f ? { ...f, busy: false, error: m } : f));
@@ -10876,6 +10887,36 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   }, [members]);
   machineGroupsRef.current = machineGroups;
   const [groupPanel, setGroupPanel] = useState<string | null>(null);
+
+  /**
+   * YOU ARE TAKEN TO WHAT YOU JUST MADE.
+   *
+   * Making a room used to leave you standing exactly where you were, with a
+   * new column somewhere off to the right and nothing saying so. The form
+   * closed, and that was the whole of the feedback: the one act in the world
+   * that creates a PLACE was the one act that did not move you.
+   *
+   * So the traveller walks there, on the same glide as any other journey —
+   * you moved, because you made something to move to. And the room's panel is
+   * armed on the way, so what greets you on arrival is the invite: the single
+   * thing a room of one is waiting for, offered where you are standing rather
+   * than filed behind the wall's name. The panel renders only once the camera
+   * has actually arrived (`atWall.id === groupPanel`), so arming it early
+   * cannot flash it over the wall you are leaving.
+   *
+   * The wait is real, not a defensive check: this effect runs on the render
+   * that first carries the room in `walls`, and until it does there is no
+   * column to ask for. `goToWall` clamps to the axis, so a stale target would
+   * silently walk somebody to the wrong wall rather than fail.
+   */
+  useEffect(() => {
+    if (!landedGroup) return;
+    const arriving = walls.find((w) => w.kind === "group" && w.id === landedGroup);
+    if (!arriving) return;
+    setGroupPanel(landedGroup);
+    simApiRef.current?.goToWall(arriving.col);
+    setLandedGroup(null);
+  }, [landedGroup, walls]);
 
   /**
    * THIS SPACE'S SETTINGS — keyed by the space, opened from its name.
@@ -14554,6 +14595,23 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               if (e.key === "Escape") setGroupForm(null);
             }}
           />
+          {/* WHAT A ROOM DOES, BEFORE YOU HAVE ONE.
+              A room is the only thing in the world whose silence is designed:
+              it reads its members' PUBLIC keeps and says only what stands
+              under more than one person, so a room of one, or of people whose
+              keeps are all private, is correctly dark. Someone who has just
+              typed a name has no way to know that, and the room they are
+              about to make cannot tell them until it exists. One sentence
+              here is the difference between a quiet room and a broken one.
+
+              The make tab only: joining is answered by the consent sheet,
+              which says what arriving discloses in the same voice. */}
+          {groupForm.mode === "make" ? (
+            <p className="jar-settings-note" style={{ margin: "10px 0 0" }}>
+              {"A room reads what its people keep open, and says only what more " +
+                "than one of you stands behind."}
+            </p>
+          ) : null}
           {groupForm.error ? <p className="jar-roomform-err">{groupForm.error}</p> : null}
           <p className="jar-ask">
             <button type="button" onClick={submitGroup} disabled={groupForm.busy}>
