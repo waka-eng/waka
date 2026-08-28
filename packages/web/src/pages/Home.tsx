@@ -1496,6 +1496,28 @@ function HomeExperience(): JSX.Element {
     empty: false,
     prevText: null,
   });
+  /**
+   * WHAT EACH WALL LAST SAID, so returning to one is not a re-reading of it.
+   *
+   * The poster lights words that are NEW and leaves the ones that carried over
+   * already lit — that is the drift readout, and it is the right idea. It was
+   * being asked the wrong question. `prevText` was whatever sentence had been
+   * on screen a moment ago, which on a travel is A DIFFERENT WALL'S: walk from
+   * your own wall to a room and none of the room's words match, so every one
+   * of them arrives; walk back and every word of your own wall arrives again.
+   * The founder, 2026-08-28: "dont make the text keep reloding evertime i go
+   * to the wall."
+   *
+   * Compared against a different wall's sentence the reading was not merely
+   * noisy, it was meaningless in both directions — a word two unrelated
+   * ambitions happened to share would have read as "carried", which is a claim
+   * about drift that nothing supports.
+   *
+   * Keyed by wall, the question is the one the readout was built to answer:
+   * what is new since THIS wall last spoke. A wall you return to unchanged
+   * carries every word and simply is what it was.
+   */
+  const posterSaidRef = useRef(new Map<string, string>());
   /** What the companion is saying: its own line when tapped, and the told
       weather when an arrival has something on the record to tell. */
   const [charSay, setCharSay] = useState("");
@@ -3261,9 +3283,10 @@ function HomeExperience(): JSX.Element {
         prev.forming === next.forming &&
         prev.empty === next.empty
           ? prev
-          : /* the sentence it is replacing, carried forward so the poster can
-               tell what survived the rewrite from what is new */
-            { ...next, prevText: prev.text },
+          : /* what THIS WALL said last, so the poster lights the words that
+               are new to it rather than the words it does not share with
+               whatever wall was on screen a moment ago */
+            { ...next, prevText: posterSaidRef.current.get(atWall.id) ?? null },
       );
     },
     /* `wokenGroups` is here because a room's board arrives asynchronously into
@@ -3274,6 +3297,14 @@ function HomeExperience(): JSX.Element {
        already depends on it for the same reason. */
     [dial, adopted, notes, proposal, atWall, agents, emerging, topOfMind, inspirations, wokenGroups],
   );
+  /* AND THE WALL REMEMBERS WHAT IT SAID, once it is on screen saying it.
+     After the commit, not inside the updater: the sentence has to be recorded
+     as SHOWN, and a state updater can run more than once for one render. Empty
+     is not a thing a wall said — a wall that has nothing yet must still get
+     its first sentence delivered rather than held. */
+  useEffect(() => {
+    if (chrome.text) posterSaidRef.current.set(atWall.id, chrome.text);
+  }, [chrome.text, atWall.id]);
   /* The fallback chain's provenance: when the poster is showing an entry of
      the board rather than a room's, that entry's own citations are what led to
      it — and under the canon an entry cites PATTERNS, so this is what the peek

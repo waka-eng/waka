@@ -445,6 +445,14 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm e2e:the-timeline --base-url http://127.0.0.1:3010
 
+      # A WALL YOU RETURN TO IS ALREADY SAYING WHAT IT SAID. The poster's
+      # arrival animation was comparing each wall's sentence against whatever
+      # had been on screen a moment before — which on a travel is a DIFFERENT
+      # WALL'S — so every wall re-assembled itself every time you walked to it.
+      - name: Coming back to a wall does not re-read it
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:coming-back --base-url http://127.0.0.1:3010
+
       # THE SKY SUITE IS GONE, with the engine it measured. It grew a real
       # sky and photometered the top band of the canvas against an account
       # that had none — the only gate that could see `SKY_PEEK_DEPTH = 0.62`,
