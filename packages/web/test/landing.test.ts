@@ -209,51 +209,45 @@ describe("the landing page", () => {
     const container = await renderFront("/");
     const text = container.textContent ?? "";
 
+    /* THE TURN THE PAGE IS BUILT ON, and the promise that answers it. A
+       stranger who reads only these two sentences should know what is being
+       offered and why it is not the thing they already have. */
     expect(text).toContain("Everything deciding for you is guessing about you.");
-    /* The turn the page is built on, and the reason it may be that blunt: the
-       promise underneath the accusation is one the code keeps. */
-    expect(text).toContain("You will not be summarised. You will be quoted.");
+    expect(text).toContain("read by whatever acts on your behalf");
 
-    /* The three places the world actually draws, in the order they happen. A
-       stranger who reads only the headings should still come away knowing
-       what the product does. Signals are deliberately NOT among them — they
-       are the machine's working material and not a place a person stands in
-       (founder, 2026-08-25), so a page that named them would be teaching a
-       layer its visitor will never meet. */
-    expect(text).toContain("What you keep");
-    expect(text).toContain("What matters now");
-    expect(text).toContain("What lasts");
-    expect(text).not.toContain("Four layers");
-
-    /* The two guarantees a stranger cannot get anywhere else, and the two the
-       first draft of this page left out. */
-    expect(text).toContain("Your own words are never rewritten.");
-    expect(text).toContain("You can leave with all of it.");
+    /* The three it has room for: what it does, why its sentences can be
+       trusted, and that you keep the pen and the exit. */
+    expect(text).toContain("WAKA does the rereading");
+    expect(text).toContain("It quotes you rather than summarising you.");
+    expect(text).toContain("Correct one and it stays corrected");
+    expect(text).toContain("Leave with all of it");
 
     /* Nothing is asked of them here: no field, no password, no form. */
     expect(container.querySelector("input")).toBeNull();
     expect(container.querySelector("form")).toBeNull();
   });
 
-  it("draws the ascent as light rather than as numbers", async () => {
+  it("is one screen — it has a stage and no sections under it", async () => {
     const container = await renderFront("/");
-    const rungs = Array.from(container.querySelectorAll<HTMLElement>(".lp-rung"));
-    expect(rungs).toHaveLength(3);
 
-    /* THE RAMP IS THE CONTENT. The three stages are ordered, and this is the
-       only place on the page that says so — brightness rising from the memory
-       you kept to the directive it became, the same ascent `lib/aliveness.ts`
-       spends on an orb. Read off the elements rather than trusted: a ramp that
-       stopped rising would still look like a row of dots. */
-    const light = rungs.map((el) => Number(el.style.getPropertyValue("--rung-light")));
-    expect(light.every((n) => Number.isFinite(n))).toBe(true);
-    for (let i = 1; i < light.length; i += 1) {
-      expect(light[i]!).toBeGreaterThan(light[i - 1]!);
-    }
+    /* THE SHAPE THE ONE-SCREEN RULING LEFT (founder, 2026-08-28). jsdom has
+       no layout, so it cannot see the page overflow — `tools/e2e/one-screen`
+       measures that in a real engine. What CAN be held here is the structure
+       that makes it possible, and the structure is the part a later change
+       would break first: a header, one stage, and nothing stacked below it.
+
+       The three sections this replaced are named so the test fails loudly if
+       one is pasted back rather than quietly growing a second screen. */
+    expect(container.querySelector(".lp-stage")).not.toBeNull();
+    expect(container.querySelectorAll(".lp-point")).toHaveLength(3);
+
+    expect(container.querySelector(".lp-section")).toBeNull();
+    expect(container.querySelector(".lp-rungs")).toBeNull();
+    expect(container.querySelector(".lp-laws")).toBeNull();
 
     /* And the founder's other law about numbers: none of them reaches a
-       person. No step counter, no "1 of 4", no percentage. */
-    const said = container.querySelector(".lp-rungs")?.textContent ?? "";
+       person. No step counter, no "one of three", no percentage. */
+    const said = container.querySelector(".lp-stage")?.textContent ?? "";
     expect(said).not.toMatch(/\b\d+\b/);
   });
 
@@ -262,10 +256,13 @@ describe("the landing page", () => {
     const begin = Array.from(container.querySelectorAll<HTMLAnchorElement>("a")).filter(
       (a) => a.getAttribute("href") === "/login?begin",
     );
-    /* Both acts on the page — the hero's and the closing one — go to the same
-       place. A landing page whose two calls to action disagree is one that has
-       been edited twice and read once. */
-    expect(begin.length).toBeGreaterThanOrEqual(2);
+    /* EXACTLY ONE, and that is the one-screen ruling showing up in the
+       funnel. The scrolling page repeated the act at the bottom because a
+       reader who had travelled three screens needed it again where they had
+       arrived; there is nowhere to arrive now, so a second copy would be a
+       duplicate rather than a repeat — and two acts that can disagree is how
+       a page gets edited twice and read once. */
+    expect(begin).toHaveLength(1);
 
     await act(async () => {
       begin[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true, button: 0 }));
