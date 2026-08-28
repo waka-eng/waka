@@ -98,6 +98,7 @@ import { whyFailed as sayWhyFailed, whyOf } from "../lib/why-failed";
 import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
 import { agentBeing, OWNER_BEING, unit, type Being } from "../character/body";
 import { groupCompanyPlaces, type CompanyPlace } from "../space/group-company";
+import { groundCount } from "../space/ground-count";
 import { pourSignature } from "../space/pour-signature";
 import { posterWords } from "../space/top-of-mind/poster";
 import {
@@ -9185,7 +9186,12 @@ function HomeExperience(): JSX.Element {
       return a?.inspirations.length ?? 0;
     }
     if (atWall.kind === "group") {
-      return (groupFieldRef.current.get(atWall.id) ?? []).length;
+      /* THE GROUND BENEATH THIS DOOR IS ONE MEMBER'S, so the door counts one
+         member's. It counted the room's whole pooled field until 2026-08-28,
+         when the founder stood in a room holding three memories, none of them
+         theirs, and read "3 INSPIRATIONS" over an empty ground.
+         `ground-count.ts` carries the whole argument. */
+      return groundCount(groupFieldRef.current.get(atWall.id), standing, viewerIdRef.current);
     }
     return inspirations?.length ?? 0;
     /* `groupFieldTick` is the ref's change signal — a room's memories arrive
@@ -9195,7 +9201,7 @@ function HomeExperience(): JSX.Element {
        no eslint in this repo, so it silenced nothing and told a reader a rule
        was being held off when no rule exists — a line that looks like a guard
        and guards nothing, which `measure-groups.mjs` argues against by name.) */
-  }, [atWall, agents, inspirations, groupFieldTick]);
+  }, [atWall, agents, inspirations, groupFieldTick, standing, auth?.profile?.id]);
 
   /**
    * HOW MANY ARE BEHIND THE DOOR, WHICH CAN BE MORE THAN ARE DRAWN.
@@ -9223,11 +9229,16 @@ function HomeExperience(): JSX.Element {
       return a?.inspirationTotal ?? a?.inspirations.length ?? 0;
     }
     if (atWall.kind === "group") {
-      const loaded = (groupFieldRef.current.get(atWall.id) ?? []).length;
-      return loaded + (groupBeyondRef.current.get(atWall.id) ?? 0);
+      /* and the remainder is NOT added: `groupBeyondRef` is what the room's
+         ceiling held back, for the ROOM, and nothing says whose those are.
+         Attributing them to the member you happen to be standing in would be
+         the same lie this door was just fixed for, pointing the other way.
+         D5's promise is kept where it can be honoured — your own archive and
+         an agent's, where the count and the remainder describe one set. */
+      return groundCount(groupFieldRef.current.get(atWall.id), standing, viewerIdRef.current);
     }
     return (inspirations?.length ?? 0) + fieldBeyond;
-  }, [atWall, agents, inspirations, groupFieldTick, fieldBeyond]);
+  }, [atWall, agents, inspirations, groupFieldTick, fieldBeyond, standing, auth?.profile?.id]);
 
   /**
    * THE REACH — the ground, addressable without a pointer.
