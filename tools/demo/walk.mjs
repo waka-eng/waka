@@ -12,7 +12,7 @@
  *
  *   node tools/demo/walk.mjs creds.json
  */
-import { mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -44,7 +44,14 @@ const cookies = loginRes.headers.getSetCookie().map((line) => {
   return {
     name: pair.slice(0, eq),
     value: pair.slice(eq + 1),
-    domain: "localhost",
+    /* THE DOMAIN HAS TO BE THE ONE WE ARE ACTUALLY DIALLING.
+       This said `"localhost"` while `BASE` is configurable, so pointing the
+       walk at 127.0.0.1 — the address the gates use, because `localhost`
+       resolves IPv6-first on some machines and IPv4-first on others — put a
+       cookie on a host the browser never visits. The walk then loads a signed
+       OUT world and dies thirty seconds later waiting for a poster, which
+       says nothing about the cause. Take the host from the URL. */
+    domain: new URL(BASE).hostname,
     path: "/",
     httpOnly: true,
     secure: false,
@@ -180,19 +187,56 @@ await scene("the-room", async () => {
   return visible("This circle reads for depth, not for volume", 15_000);
 });
 
+/* THE ROOM'S PANEL, OPENED ONCE.
+   The counted stance and the door's marks both live in it — the open
+   proposal with its one counted no, and the arrivals and departures under
+   "the room so far". Neither is on the wall, and scenes 5 and 6 were both
+   reading the wall. `.jar-here` TOGGLES, so this asks before it presses:
+   two scenes each clicking it would open the panel and then shut it again. */
+const openRoomPanel = async () => {
+  await page.waitForSelector(".jar-here", { timeout: 10_000 });
+  const opened = await page.evaluate(() => {
+    const pill = document.querySelector(".jar-here");
+    if (!pill) return false;
+    if (pill.getAttribute("aria-expanded") !== "true") pill.click();
+    return true;
+  });
+  if (opened) await page.waitForTimeout(1_200);
+  return opened;
+};
+
 /* Scene 5 — the counted stance: the open question hangs over the room —
    one no counted, the question still standing. */
 await scene("counted-stance", async () => {
+  if (!(await openRoomPanel())) return false;
   return visible("We keep choosing walks over meetings", 10_000);
 });
 
 /* Scene 6 — the door: who is in the room, and the mark of who passed
-   through. Dee joined and was removed; the door remembers. */
+   through. Dee joined and was removed; the door remembers.
+
+   THE DOOR STOPPED BEING A CONTROL. This scene pressed `.jar-eyebrow-door`
+   until 2026-08-24, when a dead-CSS review removed that class — and nothing
+   told the demo, because the demo is not a gate and nobody runs it between
+   demos. It has been failing this scene, ten seconds at a time, for four
+   days. Found on 2026-08-28 by grepping the tree for selectors no source
+   file can put on an element, which is the same question `e2e:dead-css`
+   asks of the stylesheet.
+
+   The marks did not go with the class. They moved INTO the room's panel,
+   told as sentences under "the room so far" — every version the reading
+   moved through and every arrival and departure, one story, newest first.
+   So the way in is the room's own name pill, which is the way into any
+   wall's panel and what `e2e:first-sixty` uses. */
 await scene("the-door", async () => {
-  await page.waitForSelector(".jar-eyebrow-door", { timeout: 10_000 });
-  await page.$eval(".jar-eyebrow-door", (el) => el.click());
-  await page.waitForTimeout(800);
-  return (await visible("Bo", 8_000)) && (await visible("Dee", 4_000));
+  if (!(await openRoomPanel())) return false;
+  /* the story itself, and then the two names in it: Bo is standing in the
+     room, Dee arrived and was removed and the room still says so */
+  return (
+    (await visible("the room so far", 8_000)) &&
+    (await visible("Bo", 8_000)) &&
+    (await visible("Dee", 4_000))
+  );
 });
 
 await browser.close();
