@@ -60,6 +60,7 @@ import type { Page } from "playwright";
 
 import { launchChromium } from "./browser";
 import { settleAfterArrival } from "./arrival";
+import { aimAt, readOrbs, type Orb } from "./orbs";
 
 const DEFAULT_BASE = "http://127.0.0.1:3010";
 const MEMORY = ".jar-panel-text";
@@ -103,71 +104,6 @@ const WIDE_BY_DECISION: Record<string, string> = {
  * text. The mouth was one line of 144px inside a box of 1400.
  */
 const WRAPPED = 1.5;
-
-interface Blob {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
-
-/* Read the field. Threshold at the orb's core so neighbours separate.
-   NO NAMED FUNCTIONS: esbuild's `keepNames` wraps them and the page throws
-   `__name is not defined`. Plain loops and an explicit stack only. */
-const READ_FIELD = `(() => {
-  const cv = document.querySelector("canvas");
-  if (!cv) return "[]";
-  const g = cv.getContext("2d");
-  const dpr = window.devicePixelRatio || 1;
-  const W = window.innerWidth, H = window.innerHeight;
-  const STEP = 4;
-  const cols = Math.floor(W / STEP), rows = Math.floor(H / STEP);
-  const img = g.getImageData(0, 0, Math.round(W * dpr), Math.round(H * dpr));
-  const d = img.data, iw = img.width;
-  const lit = new Uint8Array(cols * rows);
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const o = (Math.round(r * STEP * dpr) * iw + Math.round(c * STEP * dpr)) * 4;
-      if (0.2126 * d[o] + 0.7152 * d[o + 1] + 0.0722 * d[o + 2] > 150) lit[r * cols + c] = 1;
-    }
-  }
-  const seen = new Uint8Array(cols * rows);
-  const out = [];
-  for (let s = 0; s < cols * rows; s++) {
-    if (!lit[s] || seen[s]) continue;
-    const stack = [s];
-    seen[s] = 1;
-    let n = 0, sx = 0, sy = 0, x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1;
-    while (stack.length) {
-      const i = stack.pop();
-      const r = Math.floor(i / cols), c = i - r * cols;
-      n += 1; sx += c; sy += r;
-      if (c < x0) x0 = c; if (c > x1) x1 = c;
-      if (r < y0) y0 = r; if (r > y1) y1 = r;
-      if (c > 0 && lit[i - 1] && !seen[i - 1]) { seen[i - 1] = 1; stack.push(i - 1); }
-      if (c < cols - 1 && lit[i + 1] && !seen[i + 1]) { seen[i + 1] = 1; stack.push(i + 1); }
-      if (i >= cols && lit[i - cols] && !seen[i - cols]) { seen[i - cols] = 1; stack.push(i - cols); }
-      if (i < cols * rows - cols && lit[i + cols] && !seen[i + cols]) { seen[i + cols] = 1; stack.push(i + cols); }
-    }
-    out.push({
-      x: Math.round((sx / n) * STEP),
-      y: Math.round((sy / n) * STEP),
-      w: (x1 - x0 + 1) * STEP,
-      h: (y1 - y0 + 1) * STEP,
-    });
-  }
-  return JSON.stringify(out);
-})()`;
-
-/**
- * An orb, told from everything else that is lit.
- *
- * Smaller than 20px is a fragment of a root line where it crosses the sample
- * grid; larger than 70 is the companion. Round to within 2.2:1 — a root is a
- * line and never passes that.
- */
-const isOrb = (b: Blob): boolean =>
-  b.w >= 20 && b.h >= 20 && b.w <= 70 && b.h <= 70 && Math.max(b.w / b.h, b.h / b.w) <= 2.2;
 
 /* Every control floating over the world, measured against the text it draws.
    SCOPED BY `data-jar-chrome`, NOT BY `.jar-hq`. The first version of this
@@ -281,26 +217,17 @@ const run = async (base: string): Promise<number> => {
     await page.mouse.wheel(0, 1400);
     await page.waitForTimeout(2_000);
 
-    const orbs = (JSON.parse((await page.evaluate(READ_FIELD)) as string) as Blob[]).filter(isOrb);
+    const orbs = await readOrbs(page);
     for (const target of orbs) {
       let opened = 0;
       let aimed = "";
       /* two attempts: the field is live, and a press can arrive in the frame
          an orb is crossing the aim point */
       for (let attempt = 0; attempt < 2 && !opened; attempt++) {
-        const now = (JSON.parse((await page.evaluate(READ_FIELD)) as string) as Blob[]).filter(isOrb);
-        let best: Blob | null = null;
-        let bestD = 1e9;
-        for (const b of now) {
-          const d = Math.hypot(b.x - target.x, b.y - target.y);
-          if (d < bestD) {
-            bestD = d;
-            best = b;
-          }
-        }
+        const best: Orb | null = await aimAt(page, target);
         /* it drifted further than any orb drifts between two reads: it is not
            the same orb, and pressing it would measure the wrong thing */
-        if (!best || bestD > 60) {
+        if (!best) {
           aimed = "";
           break;
         }
