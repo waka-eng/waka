@@ -201,6 +201,21 @@ async function askByKeyboard(page: Page, surface: string, dead: Dead[]): Promise
 
 /** Walk one surface: hover every control on it and see what answers. */
 async function askSurface(page: Page, surface: string, dead: Dead[]): Promise<number> {
+  /* PUT THE LIGHT OUT BEFORE MEASURING, because this walk turns one on.
+     Every surface runs this pass and then the keyboard pass, and the keyboard
+     pass leaves focus wherever it last tabbed to. `.jar-saved` — and it is not
+     alone — answers `:focus-visible` with the SAME ink it answers `:hover`
+     with, so the next surface measured a control already lit by the previous
+     pass, and a hover had nothing left to change. The gate reported the
+     product silent when the gate itself was holding the light.
+
+     It cost three CI runs to see, and only because the report finally carried
+     the colour: `rgb(232, 237, 244)` with the pointer away, where this world
+     rests that control at `rgba(232, 237, 244, 0.55)`. On a fast machine the
+     tab order and the poster's press happened to move focus off it first,
+     which is why it passed here every time and failed there every time. */
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.waitForTimeout(150);
   const hands = await handsOn(page);
   let asked = 0;
   for (let i = 0; i < hands.length; i += 1) {
