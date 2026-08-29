@@ -322,6 +322,9 @@ export default function ProfilePage(): JSX.Element {
    * public page". Nothing is removed; it is simply not shouting.
    */
   const [showDoors, setShowDoors] = useState(false);
+  /** Connections and the read record: the tab's ACTIVITY, at the bottom,
+      collapsed (founder, 2026-08-29) — consulted, not read every visit. */
+  const [showActivity, setShowActivity] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -841,53 +844,6 @@ export default function ProfilePage(): JSX.Element {
             </div>
           ) : null}
         </section>
-        <section className="profile-memories-panel" aria-labelledby="profile-connections-title">
-          <div className="profile-memories-heading">
-            <p className="login-eyebrow" id="profile-connections-title">
-              {t(locale, "profileConnectionsTitle")}
-            </p>
-            <p className="login-subtitle">{t(locale, "profileConnectionsHint")}</p>
-          </div>
-
-          <ul className="profile-list">
-            {(connections ?? []).map((connection) => {
-              const busy = busyConnectionId === connection.id;
-              return (
-                <li key={connection.id} className="profile-list-row profile-connection-row">
-                  <div className="profile-row-main">
-                    <span className="profile-row-title">
-                      {connection.deviceLabel ?? t(locale, "profileConnectionUnlabelled")}
-                      {connection.current ? (
-                        <span className="profile-row-tag">
-                          {t(locale, "profileConnectionThisDevice")}
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="profile-row-meta">
-                      {connection.profile.name} · {t(locale, "profileConnectionLastSeen")}{" "}
-                      {whenShort(connection.lastSeenAt)}
-                    </span>
-                  </div>
-                  <span className="profile-row-actions">
-                    <button
-                      className="profile-memory-action is-destructive"
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void handleEndConnection(connection)}
-                    >
-                      {busy
-                        ? t(locale, "profileConnectionEnding")
-                        : t(locale, "profileConnectionEnd")}
-                    </button>
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-          {connections !== null && connections.length === 0 ? (
-            <p className="login-subtitle">{t(locale, "profileConnectionsEmpty")}</p>
-          ) : null}
-        </section>
         <section className="profile-memories-panel" aria-labelledby="profile-keys-title">
           <div className="profile-memories-heading">
             <p className="login-eyebrow" id="profile-keys-title">
@@ -1184,6 +1140,63 @@ export default function ProfilePage(): JSX.Element {
               </li>
             </ul>
           )}
+        </section>
+          </>
+        )}
+        {!showActivity ? (
+          <p className="profile-disclose">
+            <button type="button" onClick={() => setShowActivity(true)}>
+              {t(locale, "profileMoreActivity")}
+            </button>
+          </p>
+        ) : (
+          <>
+        <section className="profile-memories-panel" aria-labelledby="profile-connections-title">
+          <div className="profile-memories-heading">
+            <p className="login-eyebrow" id="profile-connections-title">
+              {t(locale, "profileConnectionsTitle")}
+            </p>
+            <p className="login-subtitle">{t(locale, "profileConnectionsHint")}</p>
+          </div>
+
+          <ul className="profile-list">
+            {(connections ?? []).map((connection) => {
+              const busy = busyConnectionId === connection.id;
+              return (
+                <li key={connection.id} className="profile-list-row profile-connection-row">
+                  <div className="profile-row-main">
+                    <span className="profile-row-title">
+                      {connection.deviceLabel ?? t(locale, "profileConnectionUnlabelled")}
+                      {connection.current ? (
+                        <span className="profile-row-tag">
+                          {t(locale, "profileConnectionThisDevice")}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="profile-row-meta">
+                      {connection.profile.name} · {t(locale, "profileConnectionLastSeen")}{" "}
+                      {whenShort(connection.lastSeenAt)}
+                    </span>
+                  </div>
+                  <span className="profile-row-actions">
+                    <button
+                      className="profile-memory-action is-destructive"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void handleEndConnection(connection)}
+                    >
+                      {busy
+                        ? t(locale, "profileConnectionEnding")
+                        : t(locale, "profileConnectionEnd")}
+                    </button>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+          {connections !== null && connections.length === 0 ? (
+            <p className="login-subtitle">{t(locale, "profileConnectionsEmpty")}</p>
+          ) : null}
         </section>
         <section className="profile-memories-panel" aria-labelledby="profile-read-record-title">
           <div className="profile-memories-heading">
