@@ -4,16 +4,25 @@ import { Link, useNavigate } from "react-router-dom";
 
 import {
   ApiError,
+  createAgentGrant,
   createKeeperKey,
   createProfile,
   endConnection,
+  fetchAgentGrants,
+  fetchAgentKeys,
   fetchConnections,
+  fetchConsultations,
   fetchKeeperKeys,
   deleteProfile,
   fetchProfiles,
   renameProfile,
+  revokeAgentGrant,
+  revokeAgentKey,
   revokeKeeperKey,
+  type ApiAgentGrant,
+  type ApiAgentKey,
   type ApiConnection,
+  type ApiConsultation,
   type ApiKeeperKey,
   type ApiMintedKeeperKey,
   type ApiOwnedProfile,
@@ -264,6 +273,116 @@ export default function ProfilePage(): JSX.Element {
       setBusyKeyId(null);
     }
   }
+
+  /**
+   * The rest of the account's doors (2026-08-29): every agent key in one
+   * list, the sibling-read grants the canon promised "beside credentials",
+   * and the read record — the reads those rules permit, actually happening.
+   */
+  const [agentKeys, setAgentKeys] = useState<ApiAgentKey[] | null>(null);
+  const [busyAgentKeyId, setBusyAgentKeyId] = useState<string | null>(null);
+  const [grants, setGrants] = useState<ApiAgentGrant[] | null>(null);
+  const [busyGrantId, setBusyGrantId] = useState<string | null>(null);
+  const [grantReader, setGrantReader] = useState("");
+  const [grantTarget, setGrantTarget] = useState("");
+  const [givingGrant, setGivingGrant] = useState(false);
+  const [readRecord, setReadRecord] = useState<ApiConsultation[] | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        setAgentKeys(await fetchAgentKeys());
+      } catch {
+        setAgentKeys([]);
+      }
+      try {
+        setGrants(await fetchAgentGrants());
+      } catch {
+        setGrants([]);
+        setError(t(locale, "profileGrantsError"));
+      }
+      try {
+        setReadRecord(await fetchConsultations(8));
+      } catch {
+        setReadRecord([]);
+        setError(t(locale, "profileReadRecordError"));
+      }
+    })();
+  }, [locale]);
+
+  /** A profile's name, for rows that carry only an id. */
+  const memoryName = (id: string): string =>
+    (memories ?? []).find((m) => m.id === id)?.name ?? t(locale, "profileReadRecordSomeone");
+
+  const agentMemories = (memories ?? []).filter((m) => m.type === "agent");
+
+  async function handleRevokeAgentKey(key: ApiAgentKey): Promise<void> {
+    if (!window.confirm(t(locale, "profileKeyRevokeConfirm"))) return;
+    setBusyAgentKeyId(key.id);
+    setStatus(null);
+    setError(null);
+    try {
+      await revokeAgentKey(key.id);
+      setAgentKeys((current) => (current ?? []).filter((row) => row.id !== key.id));
+      setStatus(t(locale, "profileKeyRevoked"));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t(locale, "profileKeysError"));
+    } finally {
+      setBusyAgentKeyId(null);
+    }
+  }
+
+  async function handleGiveGrant(): Promise<void> {
+    if (!grantReader || !grantTarget || grantReader === grantTarget) return;
+    setGivingGrant(true);
+    setStatus(null);
+    setError(null);
+    try {
+      const grant = await createAgentGrant(grantReader, grantTarget);
+      setGrants((current) => {
+        const rest = (current ?? []).filter((row) => row.id !== grant.id);
+        return [...rest, grant];
+      });
+      setGrantReader("");
+      setGrantTarget("");
+      setStatus(t(locale, "profileGrantGiven"));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t(locale, "profileGrantsError"));
+    } finally {
+      setGivingGrant(false);
+    }
+  }
+
+  async function handleRevokeGrant(grant: ApiAgentGrant): Promise<void> {
+    // No confirm, deliberately: a revoked grant is restored by granting
+    // again, so the way back exists and the door can close in one press.
+    setBusyGrantId(grant.id);
+    setStatus(null);
+    setError(null);
+    try {
+      await revokeAgentGrant(grant.id);
+      setGrants((current) => (current ?? []).filter((row) => row.id !== grant.id));
+      setStatus(t(locale, "profileGrantRevoked"));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t(locale, "profileGrantsError"));
+    } finally {
+      setBusyGrantId(null);
+    }
+  }
+
+  const surfaceWord = (surface: ApiConsultation["surface"]): string =>
+    t(
+      locale,
+      (
+        {
+          signals: "profileSurfaceSignals",
+          top_of_mind: "profileSurfaceTopOfMind",
+          principles: "profileSurfacePrinciples",
+          weather: "profileSurfaceWeather",
+          export: "profileSurfaceExport",
+        } as const
+      )[surface],
+    );
 
   async function handleEndConnection(connection: ApiConnection): Promise<void> {
     // Ending the device you are holding logs you out of it, which is a
@@ -746,6 +865,10 @@ export default function ProfilePage(): JSX.Element {
               <p className="login-eyebrow">{t(locale, "profileKeyCopyNow")}</p>
               <code className="profile-secret">{mintedKey.secret}</code>
               <p className="login-subtitle">{t(locale, "profileKeyShownOnce")}</p>
+              <p className="login-subtitle">{t(locale, "profileKeyConfigHint")}</p>
+              <code className="profile-secret">
+                {`WAKA_API_KEY=${mintedKey.secret}\nWAKA_API_URL=${window.location.origin}`}
+              </code>
               <button
                 className="profile-memory-action"
                 type="button"
@@ -778,6 +901,174 @@ export default function ProfilePage(): JSX.Element {
               </li>
             </ul>
           )}
+        </section>
+        <section className="profile-memories-panel" aria-labelledby="profile-agent-keys-title">
+          <div className="profile-memories-heading">
+            <p className="login-eyebrow" id="profile-agent-keys-title">
+              {t(locale, "profileAgentKeysTitle")}
+            </p>
+            <p className="login-subtitle">{t(locale, "profileAgentKeysHint")}</p>
+          </div>
+
+          <ul className="profile-list">
+            {(agentKeys ?? [])
+              .filter((key) => key.revokedAt === null)
+              .map((key) => {
+                const busy = busyAgentKeyId === key.id;
+                return (
+                  <li key={key.id} className="profile-list-row profile-connection-row">
+                    <div className="profile-row-main">
+                      <span className="profile-row-title">{memoryName(key.profileId)}</span>
+                      <span className="profile-row-meta">
+                        {key.label ? `${key.label} · ` : ""}
+                        {key.prefix}… · {t(locale, "profileKeyMintedOn")} {whenShort(key.createdAt)} ·{" "}
+                        {key.lastUsedAt
+                          ? `${t(locale, "profileKeyLastUsed")} ${whenShort(key.lastUsedAt)}`
+                          : t(locale, "profileKeyNeverUsed")}
+                      </span>
+                    </div>
+                    <span className="profile-row-actions">
+                      <button
+                        className="profile-memory-action is-destructive"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void handleRevokeAgentKey(key)}
+                      >
+                        {busy ? t(locale, "profileKeyRevoking") : t(locale, "profileKeyRevoke")}
+                      </button>
+                    </span>
+                  </li>
+                );
+              })}
+          </ul>
+          {agentKeys !== null && agentKeys.every((key) => key.revokedAt !== null) ? (
+            <p className="login-subtitle">{t(locale, "profileAgentKeysEmpty")}</p>
+          ) : null}
+        </section>
+        <section className="profile-memories-panel" aria-labelledby="profile-grants-title">
+          <div className="profile-memories-heading">
+            <p className="login-eyebrow" id="profile-grants-title">
+              {t(locale, "profileGrantsTitle")}
+            </p>
+            <p className="login-subtitle">{t(locale, "profileGrantsHint")}</p>
+          </div>
+
+          <ul className="profile-list">
+            {(grants ?? [])
+              .filter((grant) => grant.revokedAt === null)
+              .map((grant) => {
+                const busy = busyGrantId === grant.id;
+                return (
+                  <li key={grant.id} className="profile-list-row profile-connection-row">
+                    <div className="profile-row-main">
+                      <span className="profile-row-title">
+                        {memoryName(grant.granteeProfileId)} {t(locale, "profileGrantReads")}{" "}
+                        {memoryName(grant.targetProfileId)}
+                      </span>
+                      <span className="profile-row-meta">
+                        {t(locale, "profileGrantGrantedOn")} {whenShort(grant.createdAt)}
+                      </span>
+                    </div>
+                    <span className="profile-row-actions">
+                      <button
+                        className="profile-memory-action is-destructive"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void handleRevokeGrant(grant)}
+                      >
+                        {busy
+                          ? t(locale, "profileGrantRevoking")
+                          : t(locale, "profileGrantRevoke")}
+                      </button>
+                    </span>
+                  </li>
+                );
+              })}
+          </ul>
+          {grants !== null &&
+          grants.every((grant) => grant.revokedAt !== null) &&
+          agentMemories.length >= 2 ? (
+            <p className="login-subtitle">{t(locale, "profileGrantsEmpty")}</p>
+          ) : null}
+
+          {agentMemories.length < 2 ? (
+            <p className="login-subtitle">{t(locale, "profileGrantsNeedTwo")}</p>
+          ) : (
+            <ul className="profile-list">
+              <li className="profile-list-row profile-memory-new">
+                <select
+                  className="profile-row-name"
+                  value={grantReader}
+                  aria-label={t(locale, "profileGrantReader")}
+                  disabled={givingGrant}
+                  onChange={(event) => setGrantReader(event.currentTarget.value)}
+                >
+                  <option value="">{t(locale, "profileGrantReader")}</option>
+                  {agentMemories.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="profile-row-name"
+                  value={grantTarget}
+                  aria-label={t(locale, "profileGrantTarget")}
+                  disabled={givingGrant}
+                  onChange={(event) => setGrantTarget(event.currentTarget.value)}
+                >
+                  <option value="">{t(locale, "profileGrantTarget")}</option>
+                  {agentMemories
+                    .filter((m) => m.id !== grantReader)
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                </select>
+                <span className="profile-row-actions">
+                  {grantReader && grantTarget ? (
+                    <button
+                      className="profile-memory-action profile-memory-create"
+                      type="button"
+                      disabled={givingGrant}
+                      onClick={() => void handleGiveGrant()}
+                    >
+                      {givingGrant
+                        ? t(locale, "profileGrantGiving")
+                        : t(locale, "profileGrantGive")}
+                    </button>
+                  ) : null}
+                </span>
+              </li>
+            </ul>
+          )}
+        </section>
+        <section className="profile-memories-panel" aria-labelledby="profile-read-record-title">
+          <div className="profile-memories-heading">
+            <p className="login-eyebrow" id="profile-read-record-title">
+              {t(locale, "profileReadRecordTitle")}
+            </p>
+            <p className="login-subtitle">{t(locale, "profileReadRecordHint")}</p>
+          </div>
+
+          <ul className="profile-list">
+            {(readRecord ?? []).map((row) => (
+              <li key={row.id} className="profile-list-row profile-connection-row">
+                <div className="profile-row-main">
+                  <span className="profile-row-title">
+                    {row.reader?.name ?? t(locale, "profileReadRecordSomeone")}{" "}
+                    {t(locale, "profileReadRecordRead")} {row.profile.name}
+                    {t(locale, "profileReadRecordOwnSuffix")} {surfaceWord(row.surface)}
+                  </span>
+                  <span className="profile-row-meta">{whenShort(row.servedAt)}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {readRecord !== null && readRecord.length === 0 ? (
+            <p className="login-subtitle">{t(locale, "profileReadRecordEmpty")}</p>
+          ) : null}
         </section>
         </div>
 

@@ -24,6 +24,7 @@ import { inspirationsRoutes } from "./routes/inspirations.js";
 import { profilesRoutes } from "./routes/profiles.js";
 import { principlesMarkdownRoutes, principlesRoutes } from "./routes/principles.js";
 import { createAgentGrantRoutes } from "./routes/agent-grants.js";
+import { createConsultationRoutes } from "./routes/consultations.js";
 import { agentKeyRoutes } from "./routes/agent-keys.js";
 import { keeperKeyRoutes } from "./routes/keeper-keys.js";
 import { experienceRoutes } from "./routes/experiences.js";
@@ -90,6 +91,7 @@ app.route("/api/export", createExportRoute());
 // The hand on the sibling door: explicit, human-granted, revocable
 // agent-to-agent read grants. The open default retired with this route.
 app.route("/api/agent-grants", createAgentGrantRoutes());
+app.route("/api/consultations", createConsultationRoutes());
 
 // Deliberately unauthenticated: returns only the owner-approved surface.
 app.route("/api/public/profiles", publicProfileRoutes);

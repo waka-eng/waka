@@ -143,6 +143,10 @@ const REGISTER: Record<string, string> = {
   // the keeper's own keys (2026-08-29): same door, the person's hand
   createKeeperKey: "revokeKeeperKey",
   revokeKeeperKey: "createKeeperKey",
+
+  // the sibling door (2026-08-29): opened and closed by the owner's hand
+  createAgentGrant: "revokeAgentGrant",
+  revokeAgentGrant: "createAgentGrant",
 };
 
 describe("every verb has a way back, or a reason it does not", () => {
