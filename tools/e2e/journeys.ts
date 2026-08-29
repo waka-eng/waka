@@ -730,6 +730,58 @@ const JOURNEYS: Journey[] = [
   },
 
   {
+    id: "agent-grants",
+    name: "the sibling door opens by the owner's hand, and closes by it",
+    breaks: (ctx) => breakRoute(ctx, (p, m) => p === "/api/agent-grants" && m === "POST"),
+    run: async (page, base) => {
+      await signUp(page, base);
+      await goSurface(page, base, "/profile");
+      await page.click('button[role=tab]:has-text("Memories & connections")');
+      await page.waitForTimeout(600);
+      // The audit surfaces are folded by default; the journey opens the door.
+      await page.click('.profile-disclose button:has-text("grants")');
+      await page.waitForTimeout(400);
+
+      // Two agents, made through the same screen that will pair them. Each
+      // creation now hands over the machine key — the box must show a real
+      // agent secret, and pressing "I have it" returns the create row.
+      for (const name of ["Scout", "Courier"]) {
+        await page.fill('input[placeholder="Add an agent memory"]', name);
+        await page.click('button:has-text("Add memory")');
+        await page.waitForTimeout(1_500);
+        const secret = await page.evaluate(
+          () => document.querySelector(".profile-minted .profile-secret")?.textContent ?? "",
+        );
+        if (!secret.startsWith("waka_agent_")) {
+          return { ok: false, detail: `no machine key handed over for ${name}` };
+        }
+        await page.click('.profile-minted button:has-text("I have it")');
+        await page.waitForTimeout(400);
+      }
+
+      const pick = async (label: string, name: string) =>
+        page.selectOption(`select[aria-label="${label}"]`, { label: name });
+      await pick("which agent", "Scout");
+      await pick("may read which", "Courier");
+      await page.click('button:has-text("grant")');
+      await page.waitForTimeout(2_000);
+
+      const rowShows = await page
+        .locator(".profile-row-title", { hasText: "Scout reads Courier" })
+        .isVisible();
+      if (!rowShows) return { ok: false, detail: "the grant row never appeared" };
+
+      await page.click('li:has-text("Scout reads Courier") button:has-text("revoke")');
+      await page.waitForTimeout(2_000);
+      const rowGone =
+        (await page.locator(".profile-row-title", { hasText: "Scout reads Courier" }).count()) ===
+        0;
+
+      return { ok: rowGone, detail: `granted=true revoked=${rowGone}` };
+    },
+  },
+
+  {
     id: "a11y-floor",
     name: "every control in the world can be named out loud",
     /* THE FIRST SABOTAGE HERE DID NOT WORK, AND THE GATE SAID SO.

@@ -13,7 +13,13 @@
  *      honest null when nothing has been synthesized yet). Two serves are
  *      two rows — a record accumulates, it does not overwrite.
  *
- *   2. **An invented citation is unstorable.** A decision (kind=decision
+ *   2. **The record reads back — to the owner alone.** GET
+ *      /api/consultations returns the account's rows newest first, named
+ *      (reader, served profile, surface); another account's serves never
+ *      appear, and an agent session is refused at the door — the audit
+ *      surface is the owner's.
+ *
+ *   3. **An invented citation is unstorable.** A decision (kind=decision
  *      capture) cites principles through composite (profile_id, id)
  *      foreign keys, so an id that is not a principle of the capturing
  *      profile — invented, or another profile's — is refused by Postgres
@@ -30,6 +36,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
 import type { AuthEnv } from "../lib/middleware.js";
 import type { AuthenticatedSession } from "../lib/session.js";
+import { createConsultationRoutes } from "./consultations.js";
 import { createInspirationsRoutes } from "./inspirations.js";
 import { createPrincipleMarkdownRoute } from "./principles.js";
 import { createSignalRoutes } from "./signals.js";
@@ -92,6 +99,7 @@ function appFor(person: Person): Hono {
   app.route("/api/principles.md", createPrincipleMarkdownRoute(deps));
   app.route("/api/inspirations", createInspirationsRoutes(deps));
   app.route("/api/weather", createWeatherRoute(deps));
+  app.route("/api/consultations", createConsultationRoutes(deps));
   return app as unknown as Hono;
 }
 
@@ -270,5 +278,58 @@ describe("the gate: every serve is on the record, and no citation can be invente
       session_id: owner.sessionId,
       reader_profile_id: owner.profileId,
     });
+  });
+});
+
+describe("the record reads back — to the owner alone", () => {
+  beforeEach(async () => {
+    t ??= await createTestDatabase();
+    await t.truncateAll();
+  });
+
+  it("names the reader, the surface, and whose memory it was", async () => {
+    const owner = await seedPerson("Owner");
+    const stranger = await seedPerson("Stranger");
+
+    /* two real serves — one per account — through the real routes */
+    expect((await appFor(owner).request("/api/signals")).status).toBe(200);
+    expect((await appFor(stranger).request("/api/signals")).status).toBe(200);
+
+    const res = await appFor(owner).request("/api/consultations");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      consultations: Array<{
+        profile: { id: string; name: string };
+        reader: { id: string; name: string } | null;
+        surface: string;
+      }>;
+    };
+    expect(body.consultations, "the stranger's serve is not in this record").toHaveLength(1);
+    expect(body.consultations[0]).toMatchObject({
+      surface: "signals",
+      profile: { id: owner.profileId, name: "Owner" },
+      reader: { id: owner.profileId, name: "Owner" },
+    });
+  });
+
+  it("refuses an agent session — the audit surface is the owner's", async () => {
+    const owner = await seedPerson("Owner");
+    const [agentProfile] = await t.sql`
+      INSERT INTO profiles (account_id, type, name)
+      VALUES (${owner.accountId}, 'agent', 'Scout') RETURNING id`;
+    const asAgent: Person = {
+      ...owner,
+      session: {
+        ...owner.session,
+        profile: {
+          ...owner.session.profile,
+          id: agentProfile.id as string,
+          type: "agent",
+          name: "Scout",
+        },
+      },
+    };
+    const res = await appFor(asAgent).request("/api/consultations");
+    expect(res.status).toBe(403);
   });
 });

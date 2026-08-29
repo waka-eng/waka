@@ -582,6 +582,23 @@ a:focus-visible {
   padding: 0;
 }
 
+/* ---------- the tab reads as rooms, not one body of text ----------
+   Founder, 2026-08-29: every section ran into the next — same size, same
+   ink, no boundary — "very hard to read and follow". A hairline and a
+   breath of space above each section (and each folded door's line) is the
+   world's own way of saying "a new thing starts here": light, not weight. */
+.profile-room > .profile-memories-panel,
+.profile-room > .profile-disclose {
+  border-top: 1px solid var(--line);
+  margin-top: var(--sp-22);
+  padding-top: var(--sp-18);
+}
+.profile-room > .profile-memories-panel:first-child {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+
 /* ---------- the minted key ----------
    A keeper key's secret exists on screen exactly once (Profile.tsx). The box
    is the account screen's translation of the wall sheet's
