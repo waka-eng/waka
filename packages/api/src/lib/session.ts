@@ -105,6 +105,15 @@ export interface AuthenticatedSession {
     name: string;
     preferredLocale: SupportedLocale;
   };
+  /**
+   * Set only by a KEEPER KEY lookup (`waka_keeper_`, 2026-08-29): a standing
+   * credential the person holds so their own MCP/CLI can keep and recall.
+   * A scoped session reads and captures its OWN profile and does nothing
+   * else — not the account's other profiles, not curation, not account
+   * decisions. The browser session and the loopback login never set this,
+   * so their powers are exactly what they were. Absent means unscoped.
+   */
+  keyScoped?: true;
 }
 
 /**

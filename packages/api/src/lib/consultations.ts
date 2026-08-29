@@ -32,14 +32,15 @@ export async function recordConsultation(
     renderedOn?: Date | null;
   },
 ): Promise<void> {
-  /* A KEY-BOUND READER HAS NO SESSION ROW. An agent acting through its
-     standing key (2026-08-17) carries a synthetic `agent-key:<id>` session
-     id — not a uuid, and not a row in `sessions` — and writing it here
-     turned the agent's first READ into a 500 at `string_to_uuid`. The mark
-     records null for the credential and keeps the reader profile, which is
-     the same shape a pruned session leaves: "this profile read it", with the
-     credential's own row (`agent_keys.last_used_at`) carrying the rest. */
-  const sessionRowId = input.session.sessionId.startsWith("agent-key:")
+  /* A KEY-BOUND READER HAS NO SESSION ROW. A standing key — an agent's
+     (2026-08-17) or the keeper's (2026-08-29) — carries a synthetic
+     `agent-key:<id>` / `keeper-key:<id>` session id: not a uuid, not a row
+     in `sessions`, and writing it here turned the credential's first READ
+     into a 500 at `string_to_uuid` (twice — once per key kind, because the
+     first fix named one prefix instead of the shape). The mark records null
+     for the credential and keeps the reader profile, the same shape a
+     pruned session leaves; the key's own `last_used_at` carries the rest. */
+  const sessionRowId = input.session.sessionId.includes(":")
     ? null
     : input.session.sessionId;
   await db.insert(consultations).values({

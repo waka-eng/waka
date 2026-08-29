@@ -39,16 +39,26 @@ export interface MintedAgentKey {
   prefix: string;
 }
 
-export async function mintAgentKey(): Promise<MintedAgentKey> {
+/**
+ * One mint for every standing-key kind. The prefix is the only thing that
+ * differs between an agent's key and the keeper's (`keeper-key-auth.ts`),
+ * and a second copy of the random-bytes-and-hash dance would be a second
+ * place for the entropy or the hashing to quietly diverge.
+ */
+export async function mintStandingKey(prefix: string): Promise<MintedAgentKey> {
   const bytes = crypto.getRandomValues(new Uint8Array(24));
   let hex = "";
   for (let i = 0; i < bytes.length; i++) hex += bytes[i]!.toString(16).padStart(2, "0");
-  const secret = `${AGENT_KEY_PREFIX}${hex}`;
+  const secret = `${prefix}${hex}`;
   return {
     secret,
     tokenHash: await hashSessionToken(secret),
     prefix: secret.slice(0, AGENT_KEY_DISPLAY_CHARS),
   };
+}
+
+export async function mintAgentKey(): Promise<MintedAgentKey> {
+  return mintStandingKey(AGENT_KEY_PREFIX);
 }
 
 /** Is this bearer credential shaped like an agent key at all? */

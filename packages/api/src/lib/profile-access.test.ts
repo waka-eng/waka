@@ -125,3 +125,31 @@ describe("nothing reaches across accounts", () => {
     }
   });
 });
+
+describe("a keeper key is the person, scoped down to keep-and-recall", () => {
+  /* The standing credential in an MCP config file (2026-08-29): it reads
+     and captures its OWN profile and does nothing else — never the account
+     admin the same person is at a browser. */
+  const keeperSession = { ...session(HUMAN, "human"), keyScoped: true as const };
+  const ownAgent = { id: AGENT, accountId: ACCOUNT, type: "agent" as const };
+
+  it("reads and captures its own profile", () => {
+    expect(resolveProfileAccess(keeperSession, ownProfile, "read")).toBe("allowed");
+    expect(resolveProfileAccess(keeperSession, ownProfile, "capture")).toBe("allowed");
+  });
+
+  it("may not curate even its own profile — a config file does not edit memory", () => {
+    expect(resolveProfileAccess(keeperSession, ownProfile, "write")).toBe("denied");
+  });
+
+  it.each(OPERATIONS)(
+    "gets nothing on the account's other profiles — %s denied",
+    (operation) => {
+      expect(resolveProfileAccess(keeperSession, ownAgent, operation)).toBe("denied");
+    },
+  );
+
+  it.each(OPERATIONS)("and nothing across accounts — %s denied", (operation) => {
+    expect(resolveProfileAccess(keeperSession, foreignProfile, operation)).toBe("denied");
+  });
+});

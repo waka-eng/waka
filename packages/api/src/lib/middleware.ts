@@ -18,6 +18,7 @@ import type { Context, MiddlewareHandler } from "hono";
 import { getCookie } from "hono/cookie";
 
 import { looksLikeAgentKey, lookupAgentKeySession } from "./agent-key-auth.js";
+import { looksLikeKeeperKey, lookupKeeperKeySession } from "./keeper-key-auth.js";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "./auth.js";
 import { type AuthenticatedSession, lookupSession } from "./session.js";
 import { hasLiveSiblingGrant } from "./sibling-grants.js";
@@ -60,6 +61,31 @@ async function resolveSessionFromToken(token: string): Promise<AuthenticatedSess
   return lookupSession(token);
 }
 
+/**
+ * WHAT A KEEPER KEY MAY ASK FOR AT ALL — a positive list, enforced at the
+ * one place every authed request passes, rather than a refusal remembered
+ * in each route. The matrix still guards the same session underneath (a
+ * `?profile=` toward anyone else is denied there), but the matrix's own
+ * self-profile short-circuits live in the route resolvers, so a chokepoint
+ * is what makes "keep and recall, nothing else" a fact rather than a
+ * convention. Exported pure, so the list is a unit test away.
+ */
+export function keeperKeyMayPass(method: string, path: string): boolean {
+  if (method === "POST") return path === "/api/inspirations";
+  if (method !== "GET") return false;
+  return [
+    "/api/inspirations",
+    "/api/signals",
+    "/api/top-of-mind",
+    "/api/principles",
+    "/api/principles.md",
+    "/api/weather",
+    "/api/weather.md",
+    "/api/experiences",
+    "/api/graph",
+  ].some((allowed) => path === allowed || path.startsWith(`${allowed}/`));
+}
+
 export const requireAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
   const read = readToken(c);
   if (!read) {
@@ -77,9 +103,19 @@ export const requireAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
     ? read.source === "header"
       ? await lookupAgentKeySession(read.token)
       : null
-    : await resolveSessionFromToken(read.token);
+    : looksLikeKeeperKey(read.token)
+      ? read.source === "header"
+        ? await lookupKeeperKeySession(read.token)
+        : null
+      : await resolveSessionFromToken(read.token);
   if (!session) {
     return c.json({ error: "Authentication required" }, 401);
+  }
+  if (session.keyScoped && !keeperKeyMayPass(c.req.method, c.req.path)) {
+    return c.json(
+      { error: "Beyond this key's scope — a keeper key keeps and recalls; the rest needs you at a browser" },
+      403,
+    );
   }
   c.set("session", session);
   c.set("sessionToken", read.token);
@@ -107,7 +143,10 @@ export const requireAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
  */
 export const humanSessionsOnly: MiddlewareHandler<AuthEnv> = async (c, next) => {
   const session = c.get("session");
-  if (session.profile.type !== "human") {
+  /* A keeper key IS the human, and still may not decide for the account: a
+     standing credential in a config file on disk does not get to delete the
+     account, mint keys, or open grants. Those need the person at a browser. */
+  if (session.profile.type !== "human" || session.keyScoped) {
     return c.json(
       { error: "This is the account holder's decision and cannot be made by an agent session" },
       403,
@@ -124,7 +163,11 @@ export const optionalAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
       ? read.source === "header"
         ? await lookupAgentKeySession(read.token)
         : null
-      : await resolveSessionFromToken(read.token);
+      : looksLikeKeeperKey(read.token)
+        ? read.source === "header"
+          ? await lookupKeeperKeySession(read.token)
+          : null
+        : await resolveSessionFromToken(read.token);
     if (session) {
       c.set("session", session);
       c.set("sessionToken", read.token);
@@ -201,6 +244,15 @@ export function resolveProfileAccess(
   operation: ProfileOperation,
 ): ProfileAccessVerdict {
   if (target.accountId !== session.profile.accountId) return "denied";
+  /* A keeper key (2026-08-29): the person's standing MCP credential is
+     deliberately LESS than the person — read and capture on its own
+     profile, nothing anywhere else. Checked before the human-admin rule,
+     which must never apply to a key sitting in a config file. */
+  if (session.keyScoped) {
+    return target.id === session.profile.id && operation !== "write"
+      ? "allowed"
+      : "denied";
+  }
   if (target.id === session.profile.id) return "allowed";
   if (session.profile.type === "human") return "allowed";
   // Agent session, some other profile in the same account: reading is the

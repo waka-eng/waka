@@ -66,6 +66,20 @@ account. Enforcement is server-side, keyed off the session's bound
 profile — this is the concrete shape of the CLI-session scoping planned in
 the auth-hardening track.
 
+### What a keeper-key session may do
+
+The one exception to "the human session is the account's admin": a session
+resolved from a **keeper key** (below) is bound to the human profile but
+carries `keyScoped`, and gets exactly two verbs on exactly one profile —
+**read and capture on its own**. Keep an inspiration; read the four
+layers; nothing else. No curation (an inspiration kept through the key is
+edited at a browser), no other profiles (not even the account's own
+agents), no account decisions (`humanSessionsOnly` refuses it). The scope
+is enforced twice, deliberately: a positive route allowlist at the
+`requireAuth` chokepoint (`keeperKeyMayPass`), and the `keyScoped` branch
+of the access matrix underneath — a standing credential in a config file
+on disk must not be the account's admin, however it is presented.
+
 ---
 
 ## The four layers
@@ -197,7 +211,20 @@ of powers once in. Only the secret's SHA-256 lands in `agent_keys`
 (sessions-table posture); the secret is shown once at issue time. Revocation
 is a timestamp and takes effect on the key's next request.
 
-## Signal (layer 2)
+## Keeper keys
+
+The mirror credential for the person (founder ask, 2026-08-29, completing
+that day's ruling: with agents unable to capture into the human profile,
+the person needs a first-class way to keep from their own MCP). Same
+posture as an agent key in every mechanical respect — `waka_keeper_` +
+48 hex, SHA-256-only at rest in `keeper_keys`, prefix for telling keys
+apart, header-only (a key in a cookie is not a credential), revocation as
+a timestamp effective on the next request, issued and revoked by the
+unscoped human session only (a key cannot mint its successor). What
+differs is the binding and the power: it binds to a **human profile
+only**, re-checked at lookup so a hand-forged row cannot re-point it at an
+agent, and the session it resolves is `keyScoped` — keep and recall on the
+person's own memory, nothing else (matrix section above).
 
 **An evidence-backed pattern**: a durable distilled statement — a taste,
 a theme, a tension, a belief — that cites the profile's inspirations as
@@ -504,6 +531,16 @@ follows the permission matrix.
   against is assured, or on timeout — so "a member is a member" holds
   for both verbs. Gated on the founder (`goals/a-room-you-can-trust.md`,
   Phase 0c); the code keeps today's rule until the ruling lands.
+- **2026-08-29** — **The keeper key ships**: a standing credential for
+  the PERSON, so their own MCP can keep and recall without the browser
+  consent dance — the ask that completes the same day's separation
+  ruling, which had retired the last way an agent could add to the
+  human's stack. Deliberately LESS than the person: the session it
+  resolves is `keyScoped` (read + capture on the person's own profile,
+  nothing else), so a config file on disk never holds the account's
+  admin. `keeper_keys` table, `waka_keeper_` prefix, `keeperKeyMayPass`
+  allowlist at the `requireAuth` chokepoint, `keyScoped` branch in the
+  matrix beneath it.
 - **2026-08-29** — **RULED (founder): agent-generated memory is fully
   separate from the human's.** An agent session may READ the human
   profile (conditioning) and nothing more: the capture verb on the human
