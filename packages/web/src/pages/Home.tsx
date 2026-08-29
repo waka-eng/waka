@@ -265,7 +265,30 @@ const SPARKS = 26;
  * time dial. A fixed promise at EVERY viewport height — the founder's
  * most-repeated note.
  */
-const PEEK = 96;
+/**
+ * HOW MUCH OF THE GROUND IS ALREADY ON SCREEN AT HEADQUARTERS.
+ *
+ * 96 became 140 on 2026-08-28. The founder: "overall balancing feels kinda
+ * off.. some places are more crowded than others. which is exacerbated on
+ * mobile." Measured, the imbalance was one gap, and it was always the same
+ * gap — between the mouth and this line:
+ *
+ *   the mouth -> the peek line   336px on 2000x1150
+ *                                211px on 1440x900
+ *                                183px on 390x844
+ *
+ * while the three things along the top of a phone sat 8px and 3px apart. And
+ * it grows with the screen because the character is anchored to the middle of
+ * the viewport while the field is anchored to the bottom, so every pixel of
+ * extra height lands in that one band and nowhere else.
+ *
+ * THE ANSWER IS NOT MORE SPACING SOMEWHERE ELSE. That band is empty because
+ * the ground was held down, and the thing that belongs in it is the ground.
+ * Raising the peek fills it with the world's own content — more of what you
+ * keep, already on screen when you arrive — rather than distributing the void
+ * more evenly. The world is what the space is for.
+ */
+const PEEK = 140;
 /**
  * The dial's strip, as a FALLBACK ONLY — the real number is measured off the
  * dial itself every time the world is measured (see `measure`).
@@ -318,7 +341,21 @@ const FIELD_EDGE = 6;
  */
 const SELF_WALL_NAME = "Me";
 
-const CHAR_MIN = 32;
+/**
+ * THE CHARACTER'S SIZE, EVERYWHERE AND ALWAYS.
+ *
+ * Ruled by the founder on 2026-08-28: "character shouldnt be responsive to
+ * screensize. it should always be consistent size."
+ *
+ * 120 is what the old `view.h * 0.14` gave on a 857px-tall screen, which is
+ * both the middle of the range it used to move through (84..150) and very
+ * close to what a phone was already showing — so this is the size the
+ * character mostly WAS, made into the size it always is.
+ *
+ * `CHAR_MIN` stood here: the floor the body shrank to when headquarters ran
+ * out of room. Nothing shrinks now, so there is no floor to name.
+ */
+const CHAR_SIZE = 120;
 /** An orb eases down into its home over this long. */
 const ARRIVE_MS = 520;
 /** How many of the newest orbs share the peek row in section A. */
@@ -5217,30 +5254,35 @@ function HomeExperience(): JSX.Element {
         const last = ink[ink.length - 1];
         if (last) hqH = last.getBoundingClientRect().bottom - hqEl.getBoundingClientRect().top;
       }
-      /* IT SHRINKS BEFORE ANYTHING ELSE IN HQ GIVES WAY — and that promise
-         used to be broken by its own floor. charSize was clamped to a hard
-         minimum of 84 and the slot was then solved with
-         `clamp(v, lo, Math.max(lo, hi))`, which silently prefers `lo` the
-         moment the section is too short. Below about 575px of viewport the
-         companion stopped tracking the viewport entirely, pinned at 352 while
-         the peek row and the dial climbed past it — at vh 400 it sat inside
-         the dial scrim. Solve the slot instead of clamping it away: measure
-         the room actually available and let the body shrink into it. */
+      /* THE CHARACTER IS ONE SIZE, EVERYWHERE (founder, 2026-08-28: "character
+         shouldnt be responsive to screensize. it should always be consistent
+         size").
+
+         It used to be `clamp(view.h * 0.14, 84, 150)` and then shrunk again
+         into whatever room headquarters had left — 126px on a tall desktop,
+         84 on a laptop, down to CHAR_MIN on a short window. Two rules, both
+         reasonable on their own, and together they meant the one character in
+         the product had no fixed identity: it was a different creature on
+         every screen, and on a short one it read as one more orb.
+
+         It is not a layout element. It is the being you are talking to, and a
+         being does not change size because the window did. Everything else in
+         headquarters is text and chrome and can reflow; this cannot, because
+         its size IS part of what it is.
+
+         So the slot no longer decides the body. The body is a constant and the
+         SLOT gives way — `companion.y` still clamps into whatever room there
+         is, which keeps it out of the poster and off the mouth wherever that
+         is possible, and where it genuinely is not possible the section is
+         honestly too short rather than quietly repopulated with a smaller
+         character. */
       const gap = 24;
       /* THE MOUTH STANDS ON THE SEAM, so headquarters ends above it rather
          than at it. The strip is a CONSTANT (see MOUTH_H): a reserve measured
          off the mouth's live height would move the companion every time a
          line of typing wrapped, and the layout moves only when you move it. */
       const seam = view.layout.fieldTop - MOUTH_H;
-      const avail = seam - hqH - gap * 2;
-      companion.size = clamp(view.h * 0.14, 84, 150);
-      /* The floor yields to the room before the room yields to the floor. The
-         shrink must NOT be gated on `room > 0`: a section whose poster already
-         fills it has negative room, which is exactly the case that most needs
-         the companion small, and skipping the shrink there put the body back
-         across the peek line. Below CHAR_MIN the body stops reading as a body,
-         so that is where it stops. */
-      if (companion.size > avail) companion.size = Math.max(Math.min(avail, companion.size), CHAR_MIN);
+      companion.size = CHAR_SIZE;
       /*
        * NO GRID SNAP HERE, AND THE REASON IS WORTH KEEPING.
        *
@@ -5287,6 +5329,14 @@ function HomeExperience(): JSX.Element {
          rather than in a row of its own — one place, one line. */
       const chin = Math.round(companion.y + companion.size * 0.62);
       root!.style.setProperty("--jar-mouth-top", `${chin + 18}px`);
+      /* AND THE CHARACTER STATES ITS SIZE, rather than being guessed at.
+         The same rule as the seam and the mouth's top: chrome states its
+         place, nothing guesses at it. It is a constant now (CHAR_SIZE), and
+         writing it here is what lets that be CHECKED — the body is painted on
+         a canvas, so without a stated number the only way to ask how big the
+         character is would be to measure its glow, and its glow is clipped by
+         a narrow viewport and merges with whatever is lit beside it. */
+      root!.style.setProperty("--jar-char", `${Math.round(companion.size)}px`);
       /* the columns' DOM measures itself off these — one write per resize */
       root!.style.setProperty("--jar-vw", `${Math.round(view.w)}px`);
       root!.style.setProperty("--jar-vh", `${Math.round(view.h)}px`);
@@ -14116,7 +14166,7 @@ function HomeExperience(): JSX.Element {
           `/profile` is for. This is the door and the label on it. */}
       {accountOpen && phase === "ready" ? (
         <div
-          className="jar-settings"
+          className="jar-settings jar-settings--at-right"
           data-jar-chrome="1"
           role="dialog"
           aria-label="Your account"

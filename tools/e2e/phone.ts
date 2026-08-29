@@ -63,6 +63,7 @@
  */
 import { type Browser, type Page } from "playwright";
 import { settleAfterArrival } from "./arrival";
+import { aimAt, maybeOrbs, readBlobs, readOrbs } from "./orbs";
 import { launchChromium } from "./browser";
 interface View {
   name: string;
@@ -234,8 +235,44 @@ async function read(page: Page, view: string, surface: string): Promise<Finding[
  * sweep works at 844 and at 640.
  */
 async function openCard(page: Page, view: View): Promise<boolean> {
+  /* A MEMORY, NOT ANY PANEL.
+     This counted `.jar-panel`, and the wall's settings sheet IS one. So a tap
+     that missed an orb and landed on chrome opened settings, this reported
+     success, and the walk then measured the SETTINGS SHEET while labelling
+     the surface "a memory open" — six findings against controls that are not
+     on a memory card at all (`jar-settings-head`, `jar-settings-x`,
+     `jar-settings-verb`), on one run in three. `.jar-panel-text` is the
+     memory's own body and nothing else has it. */
   const panels = async (): Promise<number> =>
-    (await page.evaluate(() => document.querySelectorAll(".jar-panel").length)) as number;
+    (await page.evaluate(() => document.querySelectorAll(".jar-panel-text").length)) as number;
+  /* AND WHATEVER A STRAY TAP DID OPEN IS PUT AWAY BEFORE THE NEXT ONE, or it
+     stands over the orb the next tap is aimed at — and worse, it is still
+     standing when the walk measures.
+
+     This asked whether a `.jar-panel` was open, which is the same mistake one
+     layer out as the one `panels()` above was making. A tap that misses an orb
+     can land on the caret and open the WALLS LIST, and a list is not a panel:
+     it survived, and the walk then reported its rows as crowded controls on a
+     surface it had labelled "a memory open" — two findings against a list that
+     has nothing to do with a memory, on some runs and not others.
+
+     Escape unconditionally, because there is nothing to lose by pressing it
+     into an empty world and everything to lose by guessing at the shape of
+     what a stray tap raised — AND THEN COLLAPSE THE WALLS LIST BY ITS OWN
+     CARET, because Escape does not close it. It is a toggle with
+     `aria-expanded`, dismissed by a press outside it or by the caret again,
+     and I shipped a comment claiming Escape was enough before checking: the
+     list came back on the very next run. It says whether it is open, so ask
+     it rather than assuming. */
+  const putAway = async (): Promise<void> => {
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(300);
+    const caret = page.locator('.jar-here-more[aria-expanded="true"]');
+    if (await caret.count()) {
+      await caret.first().tap();
+      await page.waitForTimeout(300);
+    }
+  };
   try {
     await page.locator(".jar-saved").first().tap({ timeout: 20_000 });
   } catch {
@@ -243,49 +280,59 @@ async function openCard(page: Page, view: View): Promise<boolean> {
   }
   await page.waitForTimeout(4_000);
 
-  /* ASK THE GROUND, BEFORE HUNTING IT.
-     The field is a canvas: the sweep below aims a hundred taps at pixels and
-     lets the world decide whether any of them landed on an orb. That works
-     when orbs are under the taps and reports "no memory could be opened" when
-     they are not — which is a sentence about the walk, printed where a reader
-     looks for a sentence about the product.
+  /* LOOK FIRST, THEN TAP — the walk no longer hunts.
+     This aimed a hundred and seventeen taps along nine horizontal bands and
+     let the world say whether any of them landed. That worked only while it
+     was quietly leaning on the arrival greeting: the greeting glides the
+     camera DOWN to the newest memory, so a walk measuring inside that window
+     found the field conveniently under its bands. Waiting the greeting out
+     properly — which every gate does now — took the crutch away and the sweep
+     began missing every single time, reporting "no memory could be opened":
+     a sentence about the walk, printed where a reader looks for a sentence
+     about the product.
 
-     It was also quietly leaning on the arrival greeting. The greeting glides
-     the camera DOWN to the newest memory, so a walk that measured inside that
-     window found the field conveniently on screen; waiting the greeting out
-     properly (which every other gate now does) took the crutch away and the
-     sweep started missing every time. A measurement that only worked while
-     the page was still moving was never measuring what it claimed.
+     An orb has no selector, but it is not invisible. `readOrbs` finds it the
+     way a person does, by its own light, and `aimAt` re-reads the field
+     immediately before each tap because THE FIELD DRIFTS — a centroid read
+     once and tapped a few seconds later is a tap at where the orb was.
 
-     The ground answers to a listbox — the same one `e2e:by-keyboard` proves a
-     reader can use — so there is a named, deterministic way in. The sweep
-     stays as the fallback: it is the only route that proves a THUMB can open
-     a memory, and that is a different claim worth keeping. */
-  for (const fraction of [0.5, 0.45, 0.55, 0.4, 0.6, 0.35, 0.65, 0.3, 0.7]) {
-    const y = Math.round(view.height * fraction);
-    for (let x = 40; x <= view.width - 40; x += 26) {
-      await page.mouse.click(x, y);
+     This is still the thumb's route and that is the point of keeping it: the
+     ground's listbox is a named way in and `e2e:by-keyboard` proves a reader
+     can use it, but its options are 1px wide at x=-1. They are for a screen
+     reader. Only this says a THUMB can open a memory. */
+  /* IN ROUNDS, BECAUSE THE FIELD IS STILL ARRIVING.
+     Tapping the archive door starts a journey: the camera travels and the
+     ground pours, and a single sweep taken four seconds later sometimes finds
+     orbs that are still moving toward their homes, so every tap lands where
+     one was. Two rounds in three passed and the third reported "no memory
+     could be opened" — about the walk's patience, printed where a reader
+     looks for a sentence about the product. Three rounds, two seconds apart. */
+  for (let round = 0; round < 3; round += 1) {
+    if (round > 0) await page.waitForTimeout(2_000);
+    /* the strict reading first, then everything that might be one: this walk
+       needs ONE memory open, and a wrong guess costs a single tap */
+    const strict = await readOrbs(page);
+    const seen = new Set(strict.map((b) => `${b.x},${b.y}`));
+    const wider = maybeOrbs(await readBlobs(page)).filter((b) => !seen.has(`${b.x},${b.y}`));
+    for (const target of [...strict, ...wider]) {
+      const at = await aimAt(page, target);
+      if (!at) continue;
+      await page.touchscreen.tap(at.x, at.y);
       await page.waitForTimeout(450);
-      if ((await panels()) === 0) continue;
+      if ((await panels()) === 0) {
+        await putAway();
+        continue;
+      }
       /* it may still be on its way in or on its way back out */
       await page.waitForTimeout(1_000);
       if ((await panels()) > 0) return true;
+      await putAway();
     }
   }
 
-  /* THE SWEEP IS THE ONLY ROUTE IN, AND IT DOES NOT ALWAYS LAND.
-     The field is a canvas: the taps above aim at pixels and let the world say
-     whether any hit an orb. When none do, this reports `unmeasured` rather
-     than passing — an unmeasured surface must not read like a clean one.
-
-     TWO OTHER ROUTES WERE TRIED AND ARE NOT HERE. The ground's listbox looks
-     like a deterministic way in, and it is the one `e2e:by-keyboard` uses,
-     but its options are 1px wide at x=-1: they are for a screen reader, not a
-     thumb, so they cannot be tapped, and focusing one and pressing Enter did
-     not open a card from this walk either. Neither is written up as a product
-     defect, because neither is a route a person on a phone would take — but
-     neither made this walk deterministic, so it is still honest about
-     missing rather than quietly certain. */
+  /* NOTHING LIT WAS AN ORB, OR NO ORB TOOK THE TAP.
+     Reported as `unmeasured` rather than passed: an unmeasured surface must
+     not read like a clean one. */
   return false;
 }
 

@@ -172,7 +172,16 @@ const FIXTURE = `<!doctype html>
        whole point of it being here: a bare \`h1\` selector in another sheet
        reaches this element, and a fixture that rendered the poster as a
        \`div\` would be immune to the one defect the case below exists for. -->
-  <h1 class="jar-poster">a sentence the world is holding up</h1>
+  <!-- IN ITS COLUMN, because the column is where its left edge comes from.
+       The poster stood as a bare child of \`.jar\` and so began at x 0, which
+       made "does the signpost line up with the claim" unanswerable here: the
+       fixture had no claim edge to line up WITH. \`.jar-hq-inner\` carries the
+       side padding and the measure, and that is all this needs — not
+       \`.jar-hq\`, which is absolutely positioned and takes no pointer, and
+       would change what every other case in this file is standing on. -->
+  <div class="jar-hq-inner">
+    <h1 class="jar-poster">a sentence the world is holding up</h1>
+  </div>
   <button class="jar-values" data-jar-chrome="1">
     <span class="jar-values-words jar-label">philosophies &amp; values</span>
     <span class="jar-caret jar-caret--up" aria-hidden="true"></span>
@@ -192,6 +201,7 @@ const FIXTURE = `<!doctype html>
       <span class="jar-here-split"><button class="jar-here jar-back jar-label">ME</button></span>
       <button class="jar-when jar-label">now</button>
     </div>
+    <button class="jar-account jar-back jar-label">Your account</button>
   </div>
   <div class="jar-dial jar-dial--open"><div class="jar-dial-track"><span class="jar-month jar-label" style="left:50%">aug</span><div class="jar-dial-handle"></div></div></div>
 
@@ -209,6 +219,12 @@ const FIXTURE = `<!doctype html>
 
   <div class="jar-settings" data-jar-chrome="1" role="dialog">
     <div class="jar-settings-head"><span class="jar-label">this wall</span></div>
+  </div>
+  <div class="jar-settings jar-settings--at-left" data-jar-chrome="1" role="dialog">
+    <div class="jar-settings-head"><span class="jar-label">this wall</span></div>
+  </div>
+  <div class="jar-settings jar-settings--at-right" data-jar-chrome="1" role="dialog">
+    <div class="jar-settings-head"><span class="jar-label">your account</span></div>
   </div>
   <div class="jar-prov-room" data-jar-chrome="1" role="dialog">
     <p class="jar-prov-room-lead">Where this came from.</p>
@@ -582,13 +598,17 @@ const CASES: Case[] = [
 
   {
     id: "every-modal-is-one-modal",
-    name: "every modal is centred, and they are all the same object",
+    name: "every modal wears one surface, and each is placed where it belongs",
     needs: ["jar-panel", "jar-seek", "jar-settings", "jar-prov-room"],
     /* one of the four given its old surface back — the exact drift this
        case exists to notice */
     sabotage:
       ".jar-settings { top: 58px !important; left: 20px !important; transform: none !important;" +
-      " border-radius: 14px !important; background: #0a0d14 !important; box-shadow: none !important; }",
+      " border-radius: 14px !important; background: #0a0d14 !important; box-shadow: none !important; }" +
+      /* and the second half of the ruling: an anchored sheet sent back to the
+         middle, which is what this case used to REQUIRE */
+      " .jar-settings--at-left { left: 50% !important; top: 50% !important;" +
+      " transform: translate(-50%, -50%) !important; }",
     run: async (page) => {
       /* THE FOUNDER'S RULING, 2026-08-25, pointing at a memory's card: "all
          modals must be centered and have same style as this one." There were
@@ -608,18 +628,38 @@ const CASES: Case[] = [
             offY: (b.top + b.height / 2) - window.innerHeight / 2,
           };
         };
+        const anchored = (s, btn, side) => {
+          const e = document.querySelector(s), b = document.querySelector(btn);
+          if (!e || !b) return null;
+          const er = e.getBoundingClientRect(), br = b.getBoundingClientRect();
+          const o = one(s);
+          o.below = er.top - br.bottom;
+          o.edge = side === "left" ? er.left - br.left : er.right - br.right;
+          return o;
+        };
         return { card: one(".jar-panel"), seek: one(".jar-seek"),
-                 settings: one(".jar-settings"), prov: one(".jar-prov-room") };
+                 settings: one(".jar-settings"), prov: one(".jar-prov-room"),
+                 atLeft: anchored(".jar-settings--at-left", ".jar-here", "left"),
+                 atRight: anchored(".jar-settings--at-right", ".jar-account", "right") };
       })()`;
-      type M = { skin: string; offX: number; offY: number };
+      type M = { skin: string; offX: number; offY: number; below?: number; edge?: number };
       const m = (await page.evaluate(read)) as Record<string, M | null>;
       const missing = Object.entries(m).filter(([, v]) => !v).map(([k]) => k);
       if (missing.length) return { ok: false, detail: `not in the fixture at all: ${missing.join(", ")}` };
       const card = m.card as M;
-      const others = ["seek", "settings", "prov"] as const;
+      const others = ["seek", "settings", "prov", "atLeft", "atRight"] as const;
 
-      const offCentre = Object.entries(m).filter(
-        ([, v]) => !near((v as M).offX, 0, 1) || !near((v as M).offY, 0, 1),
+      /* AND THE PLACEMENT RULING NARROWED, 2026-08-28: "when clicking on the
+         top left and top right button, those cards should just appear right
+         below the button rather than in the center." The SURFACE half of the
+         2026-08-25 ruling is untouched and still checked against the card for
+         all of them; what splits is where each one stands. A modal that
+         belongs to the WORLD takes the middle, because that is where your
+         eyes already are. A modal that belongs to a BUTTON hangs off that
+         button, because it is that button's contents. */
+      const centred = ["card", "seek", "settings", "prov"] as const;
+      const offCentre = centred.filter(
+        (k) => !near((m[k] as M).offX, 0, 1) || !near((m[k] as M).offY, 0, 1),
       );
       if (offCentre.length) {
         return {
@@ -627,7 +667,21 @@ const CASES: Case[] = [
           detail:
             "not centred: " +
             offCentre
-              .map(([k, v]) => `${k} sits ${r1((v as M).offX)}px across and ${r1((v as M).offY)}px down from the middle`)
+              .map((k) => `${k} sits ${r1((m[k] as M).offX)}px across and ${r1((m[k] as M).offY)}px down from the middle`)
+              .join("; "),
+        };
+      }
+      const adrift = (["atLeft", "atRight"] as const).filter((k) => {
+        const v = m[k] as M;
+        return !(v.below! > 0 && v.below! < 24 && near(v.edge!, 0, 2));
+      });
+      if (adrift.length) {
+        return {
+          ok: false,
+          detail:
+            "not under the button that opens it: " +
+            adrift
+              .map((k) => `${k} sits ${r1((m[k] as M).below!)}px below it and ${r1((m[k] as M).edge!)}px off its near edge`)
               .join("; "),
         };
       }
@@ -636,7 +690,8 @@ const CASES: Case[] = [
         ok: different.length === 0,
         detail:
           different.length === 0
-            ? `all four centred and wearing one surface — ${card.skin}`
+            ? `four centred, two hanging off their own button (${r1((m.atLeft as M).below!)}px and ` +
+              `${r1((m.atRight as M).below!)}px below it), all wearing one surface — ${card.skin}`
             : different
                 .map((k) => `${k} is a different object from the card:\n      card ${card.skin}\n      ${k.padEnd(4)} ${(m[k] as M).skin}`)
                 .join("\n    "),
@@ -867,6 +922,131 @@ const CASES: Case[] = [
             ? `${got.size}px ${got.weight} ${got.family} at ${got.tracking} — every one of them `
               + "`home.css`'s own"
             : wrong.join("; "),
+      };
+    },
+  },
+
+  {
+    id: "one-left-edge-on-a-phone",
+    name: "on a phone the signpost and the claim share one left edge",
+    needs: ["jar-values", "jar-poster", "jar-hq-inner"],
+    /* put the signpost back in the middle of the screen, which is where it was */
+    sabotage:
+      "@media (max-width: 560px) { .jar-values { left: 50% !important;" +
+      " transform: translateX(-50%) !important; } }",
+    run: async (page) => {
+      /* THE FOUNDER, over two screenshots of a phone: "so ugly" (2026-08-28).
+         Measured at 390px: the claim is set LEFT from x 20 and the signpost
+         above it was CENTRED at 195 — two alignment systems stacked. On a
+         desktop that reads as deliberate, because the claim sits in a 680px
+         column inside a 1440px frame and a centred label agrees with the
+         column's own centre. On a phone the claim IS the full width, so a
+         centred label agrees with nothing, and on a wall with nothing on it
+         yet the label floats over one short italic line at the far edge.
+
+         THE CASE RESIZES ITSELF, because the rule it measures lives behind
+         `max-width: 560px` and every other case here runs at 900. The
+         harness hands each case its own page, so this costs nothing but the
+         reflow.
+
+         AND IT COMPARES INK, NOT BOXES. The signpost is a button carrying
+         12px of side padding, so its BOX has to stand 12px further left than
+         the claim for their WORDS to line up. A case that compared boxes
+         would demand the wrong number and, worse, would be satisfied by a
+         signpost whose letters were visibly out. */
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.waitForTimeout(200);
+      const read = `(() => {
+        const e = document.querySelector(".jar-values");
+        const p = document.querySelector(".jar-poster");
+        if (!e || !p) return null;
+        const rg = document.createRange();
+        rg.selectNodeContents(e);
+        const ink = rg.getBoundingClientRect();
+        return JSON.stringify({
+          ink: Math.round(ink.left),
+          box: Math.round(e.getBoundingClientRect().left),
+          claim: Math.round(p.getBoundingClientRect().left),
+        });
+      })()`;
+      const raw = (await page.evaluate(read)) as string | null;
+      if (!raw) return { ok: false, detail: "no signpost or no claim on the fixture" };
+      const m = JSON.parse(raw) as { ink: number; box: number; claim: number };
+      const off = m.ink - m.claim;
+      return {
+        ok: near(off, 0, 1),
+        detail: near(off, 0, 1)
+          ? `both start at x ${m.claim} — the signpost's box stands at ${m.box}, ` +
+            `its own padding wide of it, so the letters line up`
+          : `the signpost's words start at x ${m.ink} and the claim's first letter at ` +
+            `x ${m.claim} — ${r1(off)}px apart, two left edges`,
+      };
+    },
+  },
+
+  {
+    id: "the-claim-keeps-its-measure",
+    name: "the claim does not lose its measure when the column narrows",
+    needs: ["jar-poster", "jar-hq-inner"],
+    /* the type pinned back at its old flat floor, which is the defect */
+    sabotage: "@media (max-width: 560px) { .jar-poster { font-size: 23px !important; } }",
+    run: async (page) => {
+      /* MEASURED AS CHARACTERS THAT FIT, not as the sentence's length over its
+         line count. The second is a coarse proxy — it moves in whole lines, so
+         two very different settings that happen to take the same number of
+         lines read identical, and it flattered this by five characters when I
+         first took it. The column over the font's real advance is exact, and
+         says nothing about whatever sentence the wall is holding today.
+
+         `clamp(23px, 2.5vw, 34px)` hits its floor at a 920px viewport while the
+         column keeps shrinking below 680, so the type stopped responding before
+         the column did and the measure fell away on exactly the widths people
+         hold in their hand.
+
+         IT DOES NOT REACH THE DESKTOP'S NUMBER AND IS NOT MEANT TO. Matching it
+         exactly needs 18.5px in a 350px column, which would put the wall's
+         claim at 1.23x body text and stop it reading as the claim; on a desktop
+         it is 2.27x. See `home.css` for that trade written out. */
+      const read = `(() => {
+        const p = document.querySelector(".jar-poster");
+        if (!p) return null;
+        const cs = getComputedStyle(p);
+        const probe = document.createElement("span");
+        probe.textContent = "abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz";
+        probe.style.cssText =
+          "position:absolute;visibility:hidden;white-space:pre;left:-9999px;font-family:" +
+          cs.fontFamily + ";font-size:" + cs.fontSize + ";font-weight:" + cs.fontWeight +
+          ";letter-spacing:" + cs.letterSpacing;
+        document.body.appendChild(probe);
+        const per = probe.getBoundingClientRect().width / probe.textContent.length;
+        probe.remove();
+        return JSON.stringify({
+          size: Math.round(parseFloat(cs.fontSize) * 10) / 10,
+          fits: Math.round(p.getBoundingClientRect().width / per),
+        });
+      })()`;
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.waitForTimeout(200);
+      const deskRaw = (await page.evaluate(read)) as string | null;
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.waitForTimeout(200);
+      const phoneRaw = (await page.evaluate(read)) as string | null;
+      if (!deskRaw || !phoneRaw) return { ok: false, detail: "no claim on the fixture to measure" };
+      const desk = JSON.parse(deskRaw) as { size: number; fits: number };
+      const phone = JSON.parse(phoneRaw) as { size: number; fits: number };
+      const lost = Math.round(((desk.fits - phone.fits) / desk.fits) * 100);
+      /* A PHONE KEEPS AT LEAST FOUR FIFTHS OF THE DESKTOP'S MEASURE, and the
+         number is chosen from both sides: the flat 23px floor this replaces
+         loses a quarter and must fail; scaling with the column loses 18% and
+         must pass. 18 as the line was the first try and sat exactly on the
+         measured value — a threshold with no room on the passing side is one
+         font-metric change away from failing for nothing. */
+      return {
+        ok: lost <= 20,
+        detail:
+          `desktop ${desk.size}px fits ${desk.fits} characters, a phone at ${phone.size}px fits ` +
+          `${phone.fits} — ${lost}% of the desktop's measure given up ` +
+          `${lost <= 20 ? "(within the fifth allowed)" : "*** MORE THAN A FIFTH ***"}`,
       };
     },
   },
