@@ -258,6 +258,15 @@ export interface SignalSeed {
   quote: string | null;
   /** The statements that rest on this memory, in the server's words. */
   terms: string[];
+  /**
+   * WHO CHOSE TO KEEP THIS, on the self wall too. The agent walls always
+   * carried it; the self wall hard-coded "human", which painted the
+   * pre-ruling rows an agent relayed here as if the person had kept them
+   * (agent→human capture retired 2026-08-29 — new rows cannot be agent-kept,
+   * but history stays and must not be repainted). Optional: absent means
+   * human, which is what a ball born from the mouth is.
+   */
+  origin?: "agent" | "human";
 }
 
 /**
@@ -384,6 +393,8 @@ export function seedOf(
     reflectionCount: c.reflectionCount,
     textPreview: c.preview,
     kind: c.kind,
+    /* the canon's own distinction, same translation the group ground uses */
+    origin: c.source === "agent" ? "agent" : "human",
     ...skyOf(c.id, citations, signalById, posterSignalIds, principleSignalIds),
   };
 }
@@ -451,7 +462,7 @@ export function makeBall(s: SignalSeed, agentId = ""): Ball {
     press: 0,
     img: null,
     imgUrl: null,
-    origin: "human",
+    origin: s.origin ?? "human",
     lens: 0,
   };
   /* the drift it would have with room to spare; assignHomes scales it down
