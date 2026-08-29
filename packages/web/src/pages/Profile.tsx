@@ -287,6 +287,14 @@ export default function ProfilePage(): JSX.Element {
   const [grantTarget, setGrantTarget] = useState("");
   const [givingGrant, setGivingGrant] = useState(false);
   const [readRecord, setReadRecord] = useState<ApiConsultation[] | null>(null);
+  /**
+   * FOLDED BY DEFAULT (founder, 2026-08-29: "leave only the necessary
+   * ones"). The tab's daily work is memories, connections, and your own
+   * keys; the audit surfaces — agent keys, grants, the read record — are
+   * the screen's quiet corner, one word away, same grammar as "make a
+   * public page". Nothing is removed; it is simply not shouting.
+   */
+  const [showDoors, setShowDoors] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -902,6 +910,14 @@ export default function ProfilePage(): JSX.Element {
             </ul>
           )}
         </section>
+        {!showDoors ? (
+          <p className="profile-disclose">
+            <button type="button" onClick={() => setShowDoors(true)}>
+              {t(locale, "profileMoreAccess")}
+            </button>
+          </p>
+        ) : (
+          <>
         <section className="profile-memories-panel" aria-labelledby="profile-agent-keys-title">
           <div className="profile-memories-heading">
             <p className="login-eyebrow" id="profile-agent-keys-title">
@@ -1070,6 +1086,8 @@ export default function ProfilePage(): JSX.Element {
             <p className="login-subtitle">{t(locale, "profileReadRecordEmpty")}</p>
           ) : null}
         </section>
+          </>
+        )}
         </div>
 
         <section

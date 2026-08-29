@@ -738,6 +738,9 @@ const JOURNEYS: Journey[] = [
       await goSurface(page, base, "/profile");
       await page.click('button[role=tab]:has-text("Memories & connections")');
       await page.waitForTimeout(600);
+      // The audit surfaces are folded by default; the journey opens the door.
+      await page.click('.profile-disclose button:has-text("grants")');
+      await page.waitForTimeout(400);
 
       // Two agents, made through the same screen that will pair them.
       for (const name of ["Scout", "Courier"]) {
