@@ -89,9 +89,9 @@ export const requireAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
 /**
  * THIS IS A PERSON'S DECISION, NOT AN AGENT'S.
  *
- * `docs/data-model.md` grants an agent-bound session read on the human
- * profile and full access only to its own (2026-08-29 ruling) — never the
- * power to act on the ACCOUNT. Every owner surface honours that (profiles.ts, sessions.ts,
+ * `docs/data-model.md` grants an agent-bound session read + capture on the
+ * human profile and full access only to its own — never the power to act on
+ * the ACCOUNT. Every owner surface honours that (profiles.ts, sessions.ts,
  * groups.ts) except the one that cannot be undone: `DELETE /api/auth/me` was
  * mounted on `requireAuth` alone and never read `session.profile.type`, so a
  * credential minted through the documented CLI/MCP loopback login — bound to
