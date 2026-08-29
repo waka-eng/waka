@@ -38,6 +38,7 @@ Work happening now, or stopped mid-way with a recorded reason.
 | [`room-timeline.md`](room-timeline.md) | Phases 0–1 shipped; Phase 2 largely built, not finished. |
 | [`no-quiet-corners.md`](no-quiet-corners.md) | In flight, yielding — queue position handed to `the-legible-loop.md`. |
 | [`durable-interest.md`](durable-interest.md) | **Halted** at the Phase 1 gate (2026-08-09). A halt with a number is a result. |
+| [`lighting-a-room.md`](lighting-a-room.md) | **Blocked** at the Phase 3 gate (2026-08-28). Phases 1–2 passed; the gate wants a lit wall, which wants a real model key. |
 
 ## Done
 
