@@ -37,6 +37,7 @@ import { getDb } from "../lib/db.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
 import { enqueueTopOfMindRefresh } from "../lib/queue.js";
 import { acquireTopOfMindArtifactLock } from "../lib/top-of-mind-family-lock.js";
+import { validationDetails } from "../lib/validation.js";
 import { loadProfileTarget, resolveProfileScope } from "./signals.js";
 
 type WakaDb = ReturnType<typeof getDb>;
@@ -438,7 +439,7 @@ export function createTopOfMindRoutes(
       return c.json(
         {
           error: "Invalid top of mind query",
-          details: parsedQuery.error.flatten().fieldErrors,
+          details: validationDetails(parsedQuery.error),
         },
         400,
       );
@@ -476,7 +477,7 @@ export function createTopOfMindRoutes(
     const parsedQuery = versionsQuerySchema.safeParse(c.req.query());
     if (!parsedQuery.success) {
       return c.json(
-        { error: "Invalid version query", details: parsedQuery.error.flatten().fieldErrors },
+        { error: "Invalid version query", details: validationDetails(parsedQuery.error) },
         400,
       );
     }
@@ -502,7 +503,7 @@ export function createTopOfMindRoutes(
     const parsedQuery = scopeQuerySchema.safeParse(c.req.query());
     if (!parsedQuery.success) {
       return c.json(
-        { error: "Invalid refresh query", details: parsedQuery.error.flatten().fieldErrors },
+        { error: "Invalid refresh query", details: validationDetails(parsedQuery.error) },
         400,
       );
     }
@@ -526,14 +527,14 @@ export function createTopOfMindRoutes(
     const parsedParams = entryParamsSchema.safeParse(c.req.param());
     if (!parsedParams.success) {
       return c.json(
-        { error: "Invalid entry id", details: parsedParams.error.flatten().fieldErrors },
+        { error: "Invalid entry id", details: validationDetails(parsedParams.error) },
         400,
       );
     }
     const parsedQuery = scopeQuerySchema.safeParse(c.req.query());
     if (!parsedQuery.success) {
       return c.json(
-        { error: "Invalid entry query", details: parsedQuery.error.flatten().fieldErrors },
+        { error: "Invalid entry query", details: validationDetails(parsedQuery.error) },
         400,
       );
     }
@@ -542,7 +543,7 @@ export function createTopOfMindRoutes(
     const parsedBody = updateEntryBodySchema.safeParse(rawBody);
     if (!parsedBody.success) {
       return c.json(
-        { error: "Invalid entry update", details: parsedBody.error.flatten().fieldErrors },
+        { error: "Invalid entry update", details: validationDetails(parsedBody.error) },
         400,
       );
     }
@@ -576,14 +577,14 @@ export function createTopOfMindRoutes(
       const parsedParams = entryParamsSchema.safeParse(c.req.param());
       if (!parsedParams.success) {
         return c.json(
-          { error: "Invalid entry id", details: parsedParams.error.flatten().fieldErrors },
+          { error: "Invalid entry id", details: validationDetails(parsedParams.error) },
           400,
         );
       }
       const parsedQuery = scopeQuerySchema.safeParse(c.req.query());
       if (!parsedQuery.success) {
         return c.json(
-          { error: "Invalid entry query", details: parsedQuery.error.flatten().fieldErrors },
+          { error: "Invalid entry query", details: validationDetails(parsedQuery.error) },
           400,
         );
       }

@@ -24,6 +24,7 @@ import {
   mintKeeperKey,
 } from "../lib/keeper-key-auth.js";
 import { humanSessionsOnly, requireAuth, type AuthEnv } from "../lib/middleware.js";
+import { validationDetails } from "../lib/validation.js";
 
 /** Same ceiling an agent gets; a person with five live keys has five machines. */
 export const MAX_KEEPER_KEYS = 5;
@@ -62,7 +63,7 @@ export function createKeeperKeyRoutes(deps: KeeperKeyRouteDependencies = {}): Ho
     const parsed = issueSchema.safeParse(body ?? {});
     if (!parsed.success) {
       return c.json(
-        { error: "Invalid key request", details: parsed.error.flatten().fieldErrors },
+        { error: "Invalid key request", details: validationDetails(parsed.error) },
         400,
       );
     }

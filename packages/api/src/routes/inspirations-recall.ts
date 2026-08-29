@@ -16,6 +16,7 @@ import { Hono } from "hono";
 import { attachments, experiences, inspirations, reflections } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import type { AuthEnv } from "../lib/middleware.js";
+import { validationDetails } from "../lib/validation.js";
 import { attachmentSelection, serializeAttachment } from "./attachments.js";
 import {
   attachmentLabel,
@@ -97,7 +98,7 @@ export function registerRecallRoutes(
     const query = listQuerySchema.safeParse(c.req.query());
     if (!query.success) {
       return c.json(
-        { error: "Invalid query", details: query.error.flatten().fieldErrors },
+        { error: "Invalid query", details: validationDetails(query.error) },
         400,
       );
     }
@@ -299,7 +300,7 @@ export function registerRecallRoutes(
     const query = profileQuerySchema.safeParse(c.req.query());
     if (!query.success) {
       return c.json(
-        { error: "Invalid query", details: query.error.flatten().fieldErrors },
+        { error: "Invalid query", details: validationDetails(query.error) },
         400,
       );
     }

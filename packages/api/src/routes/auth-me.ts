@@ -37,6 +37,7 @@ import {
   normalizePublicHandle,
   validatePublicHandle,
 } from "../lib/public-handles.js";
+import { validationDetails } from "../lib/validation.js";
 import {
   accountColumns,
   loadIdentity,
@@ -129,7 +130,7 @@ export async function preferencesHandler(c: Context<AuthEnv>): Promise<Response>
     return c.json(
       {
         error: "Invalid preferences payload",
-        details: parsed.error.flatten().fieldErrors,
+        details: validationDetails(parsed.error),
       },
       400,
     );
@@ -181,7 +182,7 @@ export async function profileHandler(c: Context<AuthEnv>): Promise<Response> {
     return c.json(
       {
         error: "Invalid profile payload",
-        details: parsed.error.flatten().fieldErrors,
+        details: validationDetails(parsed.error),
       },
       400,
     );
@@ -326,7 +327,7 @@ export async function eraseAccountHandler(c: Context<AuthEnv>): Promise<Response
     return c.json(
       {
         error: "Invalid delete confirmation",
-        details: parsed.error.flatten().fieldErrors,
+        details: validationDetails(parsed.error),
       },
       400,
     );

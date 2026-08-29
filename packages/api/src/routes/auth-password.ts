@@ -56,6 +56,7 @@ import {
 import { DEFAULT_LOCALE, supportedLocaleSchema } from "../lib/locales.js";
 import type { AuthEnv } from "../lib/middleware.js";
 import { createSessionRow, describeUserAgent } from "../lib/session.js";
+import { validationDetails } from "../lib/validation.js";
 import {
   accountColumns,
   profileColumns,
@@ -99,7 +100,7 @@ const signupSchema = z.object({
     .max(120, "Display name is too long")
     .optional(),
   preferredLocale: supportedLocaleSchema.optional(),
-});
+}).strict();
 
 export type SignupInput = z.infer<typeof signupSchema>;
 
@@ -129,7 +130,7 @@ const loginSchema = z.object({
     .string()
     .min(1, "Password is required")
     .max(200, "Password is too long"),
-});
+}).strict();
 
 export type LoginInput = z.infer<typeof loginSchema>;
 
@@ -169,7 +170,7 @@ export async function signupHandler(c: Context<AuthEnv>): Promise<Response> {
         error: "Invalid signup payload",
         // zod's `flatten()` gives a stable shape the frontend can render
         // directly under the relevant input field.
-        details: parsed.error.flatten().fieldErrors,
+        details: validationDetails(parsed.error),
       },
       400,
     );
@@ -333,7 +334,7 @@ export async function loginHandler(c: Context<AuthEnv>): Promise<Response> {
     return c.json(
       {
         error: "Invalid login payload",
-        details: parsed.error.flatten().fieldErrors,
+        details: validationDetails(parsed.error),
       },
       400,
     );

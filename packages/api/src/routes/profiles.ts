@@ -21,6 +21,7 @@ import { z } from "zod";
 import { profiles, type Profile } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import { type AuthEnv, requireAuth } from "../lib/middleware.js";
+import { validationDetails } from "../lib/validation.js";
 
 /**
  * How many agent profiles one account may hold. The schema supports any
@@ -94,7 +95,7 @@ profilesRoutes.post("/", async (c) => {
   const parsed = createProfileSchema.safeParse(rawBody);
   if (!parsed.success) {
     return c.json(
-      { error: "Invalid profile payload", details: parsed.error.flatten().fieldErrors },
+      { error: "Invalid profile payload", details: validationDetails(parsed.error) },
       400,
     );
   }
@@ -142,7 +143,7 @@ profilesRoutes.patch("/:profileId", async (c) => {
   const parsed = updateProfileSchema.safeParse(rawBody);
   if (!parsed.success) {
     return c.json(
-      { error: "Invalid profile payload", details: parsed.error.flatten().fieldErrors },
+      { error: "Invalid profile payload", details: validationDetails(parsed.error) },
       400,
     );
   }

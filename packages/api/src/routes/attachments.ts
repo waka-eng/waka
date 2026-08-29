@@ -53,6 +53,7 @@ import {
 import { getDb } from "../lib/db.js";
 import { type AuthEnv, profileAccessError, requireAuth, asAccountProfile } from "../lib/middleware.js";
 import { enqueueEnrichAttachment } from "../lib/queue.js";
+import { validationDetails } from "../lib/validation.js";
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -100,7 +101,7 @@ const presignRequestSchema = z.object({
     .int("size must be an integer number of bytes")
     .min(1, "size must be > 0")
     .max(MAX_UPLOAD_BYTES, `size exceeds the ${MAX_UPLOAD_BYTES}-byte cap`),
-});
+}).strict();
 
 export type PresignRequest = z.infer<typeof presignRequestSchema>;
 
@@ -123,7 +124,7 @@ const finalizeLinkSchema = z.object({
     .min(1, "url is required")
     .max(2048, "url is too long")
     .url("url must be a valid URL"),
-});
+}).strict();
 
 /**
  * An image that already lives somewhere — pasted from the web rather than
@@ -146,7 +147,11 @@ const finalizeRemoteImageSchema = z.object({
     .max(255, "contentType is too long")
     .optional()
     .transform((v) => (v && v.length > 0 ? v : undefined)),
-});
+})
+  /* Strict does real routing work here: these schemas are tried in order,
+     and before it, a payload carrying BOTH `url` and `key` parsed as a
+     remote image with the key silently dropped. */
+  .strict();
 
 const finalizeS3Schema = z.object({
   ...baseFinalizeFields,
@@ -164,7 +169,7 @@ const finalizeS3Schema = z.object({
     .min(0, "size must be >= 0")
     .max(MAX_UPLOAD_BYTES, `size exceeds the ${MAX_UPLOAD_BYTES}-byte cap`)
     .optional(),
-});
+}).strict();
 
 /**
  * Ordered rather than discriminated: `image` arrives two ways, carrying a
@@ -471,7 +476,7 @@ attachmentsRoutes.post("/", async (c) => {
     return c.json(
       {
         error: "Invalid attachment payload",
-        details: parsed.error.flatten().fieldErrors,
+        details: validationDetails(parsed.error),
       },
       400,
     );
@@ -618,7 +623,7 @@ attachmentsRoutes.post("/presign", async (c) => {
     return c.json(
       {
         error: "Invalid presign payload",
-        details: parsed.error.flatten().fieldErrors,
+        details: validationDetails(parsed.error),
       },
       400,
     );

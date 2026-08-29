@@ -42,6 +42,7 @@ import { getDb } from "../lib/db.js";
 import { enqueueGroupTopOfMindRefresh } from "../lib/queue.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
 import { enqueueTopOfMindRefresh } from "../lib/queue.js";
+import { validationDetails } from "../lib/validation.js";
 
 type WakaDb = ReturnType<typeof getDb>;
 
@@ -455,7 +456,7 @@ export function createFeedbackRoutes(
       return c.json(
         {
           error: "Invalid feedback payload",
-          details: parsed.error.flatten().fieldErrors,
+          details: validationDetails(parsed.error),
         },
         400,
       );
@@ -497,7 +498,7 @@ export function createFeedbackRoutes(
       return c.json(
         {
           error: "Invalid feedback query",
-          details: parsedQuery.error.flatten().fieldErrors,
+          details: validationDetails(parsedQuery.error),
         },
         400,
       );

@@ -29,6 +29,7 @@ import {
 import { getDb } from "../lib/db.js";
 import type { AuthEnv } from "../lib/middleware.js";
 import type { AuthenticatedSession } from "../lib/session.js";
+import { validationDetails } from "../lib/validation.js";
 import { requestSignalDerivation } from "./inspirations-derivation.js";
 import {
   inspirationSelection,
@@ -109,7 +110,7 @@ export function registerCaptureRoutes(
       return c.json(
         {
           error: "Invalid inspiration payload",
-          details: parsed.error.flatten().fieldErrors,
+          details: validationDetails(parsed.error),
         },
         400,
       );
@@ -118,7 +119,7 @@ export function registerCaptureRoutes(
     const query = profileQuerySchema.safeParse(c.req.query());
     if (!query.success) {
       return c.json(
-        { error: "Invalid query", details: query.error.flatten().fieldErrors },
+        { error: "Invalid query", details: validationDetails(query.error) },
         400,
       );
     }

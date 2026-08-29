@@ -29,6 +29,7 @@ import { z } from "zod";
 import { getDb } from "../lib/db.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
 import { assembleTheWeather, renderTheWeather } from "../lib/the-weather.js";
+import { validationDetails } from "../lib/validation.js";
 import { loadProfileTarget, resolveProfileScope } from "./signals.js";
 
 const weatherQuerySchema = z
@@ -66,7 +67,7 @@ export function createWeatherRoute(deps: WeatherRouteDependencies = {}): Hono<Au
     const parsed = weatherQuerySchema.safeParse(c.req.query());
     if (!parsed.success) {
       return c.json(
-        { error: "Invalid weather query", details: parsed.error.flatten().fieldErrors },
+        { error: "Invalid weather query", details: validationDetails(parsed.error) },
         400,
       );
     }
@@ -116,7 +117,7 @@ export function createWeatherMarkdownRoute(
     const parsed = weatherQuerySchema.safeParse(c.req.query());
     if (!parsed.success) {
       return c.json(
-        { error: "Invalid weather query", details: parsed.error.flatten().fieldErrors },
+        { error: "Invalid weather query", details: validationDetails(parsed.error) },
         400,
       );
     }

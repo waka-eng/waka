@@ -19,6 +19,7 @@ import { Hono } from "hono";
 import { inspirations, reflections } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import type { AuthEnv } from "../lib/middleware.js";
+import { validationDetails } from "../lib/validation.js";
 import { requestSignalDerivation } from "./inspirations-derivation.js";
 import {
   reflectionSelection,
@@ -60,7 +61,7 @@ export function registerReflectionRoutes(
       return c.json(
         {
           error: "Invalid reflection payload",
-          details: parsed.error.flatten().fieldErrors,
+          details: validationDetails(parsed.error),
         },
         400,
       );
@@ -69,7 +70,7 @@ export function registerReflectionRoutes(
     const query = profileQuerySchema.safeParse(c.req.query());
     if (!query.success) {
       return c.json(
-        { error: "Invalid query", details: query.error.flatten().fieldErrors },
+        { error: "Invalid query", details: validationDetails(query.error) },
         400,
       );
     }
@@ -129,7 +130,7 @@ export function registerReflectionRoutes(
     const query = profileQuerySchema.safeParse(c.req.query());
     if (!query.success) {
       return c.json(
-        { error: "Invalid query", details: query.error.flatten().fieldErrors },
+        { error: "Invalid query", details: validationDetails(query.error) },
         400,
       );
     }
@@ -182,7 +183,7 @@ export function registerReflectionRoutes(
     const query = profileQuerySchema.safeParse(c.req.query());
     if (!query.success) {
       return c.json(
-        { error: "Invalid query", details: query.error.flatten().fieldErrors },
+        { error: "Invalid query", details: validationDetails(query.error) },
         400,
       );
     }

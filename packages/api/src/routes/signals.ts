@@ -59,6 +59,7 @@ import {
   writeSignalStatementChain,
 } from "../lib/statement-chains.js";
 import type { AuthenticatedSession } from "../lib/session.js";
+import { validationDetails } from "../lib/validation.js";
 
 type WakaDb = ReturnType<typeof getDb>;
 
@@ -756,7 +757,7 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
       return c.json(
         {
           error: "Invalid signal query",
-          details: parsedQuery.error.flatten().fieldErrors,
+          details: validationDetails(parsedQuery.error),
         },
         400,
       );
@@ -793,14 +794,14 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
     const parsedParams = signalParamsSchema.safeParse(c.req.param());
     if (!parsedParams.success) {
       return c.json(
-        { error: "Invalid signal id", details: parsedParams.error.flatten().fieldErrors },
+        { error: "Invalid signal id", details: validationDetails(parsedParams.error) },
         400,
       );
     }
     const parsedQuery = signalScopeQuerySchema.safeParse(c.req.query());
     if (!parsedQuery.success) {
       return c.json(
-        { error: "Invalid signal query", details: parsedQuery.error.flatten().fieldErrors },
+        { error: "Invalid signal query", details: validationDetails(parsedQuery.error) },
         400,
       );
     }
@@ -827,14 +828,14 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
     const parsedParams = signalParamsSchema.safeParse(c.req.param());
     if (!parsedParams.success) {
       return c.json(
-        { error: "Invalid signal id", details: parsedParams.error.flatten().fieldErrors },
+        { error: "Invalid signal id", details: validationDetails(parsedParams.error) },
         400,
       );
     }
     const parsedQuery = signalScopeQuerySchema.safeParse(c.req.query());
     if (!parsedQuery.success) {
       return c.json(
-        { error: "Invalid signal query", details: parsedQuery.error.flatten().fieldErrors },
+        { error: "Invalid signal query", details: validationDetails(parsedQuery.error) },
         400,
       );
     }
@@ -843,7 +844,7 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
     const parsedBody = updateSignalBodySchema.safeParse(rawBody);
     if (!parsedBody.success) {
       return c.json(
-        { error: "Invalid signal update", details: parsedBody.error.flatten().fieldErrors },
+        { error: "Invalid signal update", details: validationDetails(parsedBody.error) },
         400,
       );
     }
@@ -906,14 +907,14 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
     const parsedParams = signalParamsSchema.safeParse(c.req.param());
     if (!parsedParams.success) {
       return c.json(
-        { error: "Invalid signal id", details: parsedParams.error.flatten().fieldErrors },
+        { error: "Invalid signal id", details: validationDetails(parsedParams.error) },
         400,
       );
     }
     const parsedQuery = signalScopeQuerySchema.safeParse(c.req.query());
     if (!parsedQuery.success) {
       return c.json(
-        { error: "Invalid signal query", details: parsedQuery.error.flatten().fieldErrors },
+        { error: "Invalid signal query", details: validationDetails(parsedQuery.error) },
         400,
       );
     }
@@ -949,14 +950,14 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
     const parsedParams = signalParamsSchema.safeParse(c.req.param());
     if (!parsedParams.success) {
       return c.json(
-        { error: "Invalid signal id", details: parsedParams.error.flatten().fieldErrors },
+        { error: "Invalid signal id", details: validationDetails(parsedParams.error) },
         400,
       );
     }
     const parsedQuery = signalScopeQuerySchema.safeParse(c.req.query());
     if (!parsedQuery.success) {
       return c.json(
-        { error: "Invalid signal query", details: parsedQuery.error.flatten().fieldErrors },
+        { error: "Invalid signal query", details: validationDetails(parsedQuery.error) },
         400,
       );
     }
@@ -1007,14 +1008,14 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
     const parsedParams = signalParamsSchema.safeParse(c.req.param());
     if (!parsedParams.success) {
       return c.json(
-        { error: "Invalid signal id", details: parsedParams.error.flatten().fieldErrors },
+        { error: "Invalid signal id", details: validationDetails(parsedParams.error) },
         400,
       );
     }
     const parsedQuery = signalScopeQuerySchema.safeParse(c.req.query());
     if (!parsedQuery.success) {
       return c.json(
-        { error: "Invalid signal query", details: parsedQuery.error.flatten().fieldErrors },
+        { error: "Invalid signal query", details: validationDetails(parsedQuery.error) },
         400,
       );
     }
@@ -1044,14 +1045,14 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
     const parsedParams = signalParamsSchema.safeParse(c.req.param());
     if (!parsedParams.success) {
       return c.json(
-        { error: "Invalid signal id", details: parsedParams.error.flatten().fieldErrors },
+        { error: "Invalid signal id", details: validationDetails(parsedParams.error) },
         400,
       );
     }
     const parsedQuery = signalScopeQuerySchema.safeParse(c.req.query());
     if (!parsedQuery.success) {
       return c.json(
-        { error: "Invalid signal query", details: parsedQuery.error.flatten().fieldErrors },
+        { error: "Invalid signal query", details: validationDetails(parsedQuery.error) },
         400,
       );
     }
@@ -1080,14 +1081,14 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
     const parsedParams = signalParamsSchema.safeParse(c.req.param());
     if (!parsedParams.success) {
       return c.json(
-        { error: "Invalid signal id", details: parsedParams.error.flatten().fieldErrors },
+        { error: "Invalid signal id", details: validationDetails(parsedParams.error) },
         400,
       );
     }
     const parsedQuery = signalScopeQuerySchema.safeParse(c.req.query());
     if (!parsedQuery.success) {
       return c.json(
-        { error: "Invalid signal query", details: parsedQuery.error.flatten().fieldErrors },
+        { error: "Invalid signal query", details: validationDetails(parsedQuery.error) },
         400,
       );
     }

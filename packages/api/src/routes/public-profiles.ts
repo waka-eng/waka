@@ -34,6 +34,7 @@ import {
   normalizePublicHandle,
   validatePublicHandle,
 } from "../lib/public-handles.js";
+import { validationDetails } from "../lib/validation.js";
 
 type WakaDb = ReturnType<typeof getDb>;
 
@@ -214,7 +215,7 @@ export function createPublicProfileRoutes(
       return c.json(
         {
           error: "Invalid public profile query",
-          details: parsedQuery.error.flatten().fieldErrors,
+          details: validationDetails(parsedQuery.error),
         },
         400,
       );
