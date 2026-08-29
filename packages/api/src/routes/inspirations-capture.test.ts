@@ -84,7 +84,9 @@ function authMiddleware(session: AuthenticatedSession) {
  * in play, so one line meant "what the spy recorded" and the next meant "the
  * inspiration".
  */
-function fakeDatabase(profileRows: Array<{ id: string; accountId: string }> = []) {
+function fakeDatabase(
+  profileRows: Array<{ id: string; accountId: string; type?: "human" | "agent" }> = [],
+) {
   const writtenRows: Array<Record<string, unknown>> = [];
 
   const selectChain: any = {
