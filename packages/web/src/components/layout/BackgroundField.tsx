@@ -1,8 +1,9 @@
 /**
  * <BackgroundField /> — fixed-position decorative background layer.
  *
- * Reproduces the three-blob parchment wash + grain noise overlay from the
- * original `index.html`:
+ * Reproduces the three-blob parchment wash + grain noise overlay the product
+ * was born with, in the single-file `index.html` prototype that the React
+ * tree replaced and that was deleted once the replacement was complete:
  *
  *   <div class="bg-field" aria-hidden="true">
  *     <div class="bg-blob b1" id="blob1"></div>

@@ -40,6 +40,11 @@ Two rules that decide most arguments:
 
 Work comes from **goals** in [`docs/goals/`](docs/goals/), run by
 [`.claude/commands/goal.md`](.claude/commands/goal.md).
+[`docs/goals/README.md`](docs/goals/README.md) sorts all 28 by status — which
+are in flight, which are finished records, which were superseded. Read that
+before picking one up. A gate keeps it complete (no goal missing, no row
+dangling); the row text is written by hand, so confirm against the goal's own
+`Status:` line before acting on one.
 
 A goal is not a task list. It is a body of work with **gates** — points where a
 measurement decides whether the next phase is worth doing, or whether the

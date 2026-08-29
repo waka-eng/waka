@@ -1,0 +1,47 @@
+# The local database, on the image CI runs.
+#
+# WHY THIS EXISTS. README told a new developer that "Postgres. Local is the
+# default for development" and then never said how to get one, and
+# `.env.example` shipped a `*.neon.tech` URL as its only example — so the
+# documented local path led to a remote database or to nothing at all.
+#
+#   docker compose up -d --wait
+#   pnpm db:migrate
+#
+# `--wait` is not optional. A healthcheck gates startup only for a service
+# that another service declares `depends_on: service_healthy`, or when
+# `--wait` is passed. Nothing depends on this one, so a plain `up -d` returns
+# as soon as the container has STARTED — and on a fresh volume the entrypoint
+# is still running initdb, so the next command is refused with "the database
+# system is starting up". The healthcheck below is what `--wait` waits on.
+#
+# WHY pgvector/pgvector RATHER THAN postgres. Only because it is what
+# `.github/workflows/ci.yml` runs as its service container, and a local
+# database on a different Postgres than CI is a class of "passes here, fails
+# there" nobody should have to debug. NOT because anything needs the
+# extension: embeddings are `jsonb` and cosine similarity is computed in
+# application code — `packages/api/src/db/schema-embeddings.ts` says so, and
+# no migration declares a `vector` column. CI's `CREATE EXTENSION` step is
+# vestigial. Any Postgres 16 runs this schema.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: waka-postgres
+    environment:
+      POSTGRES_USER: waka
+      POSTGRES_PASSWORD: waka
+      POSTGRES_DB: waka
+    ports:
+      # Host-only. This database holds development data and has a password
+      # printed in a committed file; it must not be reachable off the machine.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - waka-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U waka -d waka"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  waka-pgdata:

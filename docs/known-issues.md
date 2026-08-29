@@ -335,7 +335,7 @@ and the companion `toMatch` assertion is already satisfied by the one gate on th
 
 This is not a hypothetical spelling. All six existing layer-1 joins in `packages/api` are
 written `.innerJoin(inspirations, …)` (`signal-lifecycle.ts:100,173`;
-`top-of-mind-selection.ts:193`; `inspirations-editing.ts:276`; `signals.ts:197,320`), and the
+`top-of-mind-synthesis.ts:270`; `inspirations-editing.ts:276`; `signals.ts:197,320`), and the
 codebase uses no Drizzle relational reads. The join is the idiomatic form.
 
 **Reproduction.** **[static · re-verified]** The scan is three lines and counts `.from(` only —

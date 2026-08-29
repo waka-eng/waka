@@ -12,8 +12,18 @@ load_env_local() {
 
   export WAKA_API_DOTENV_PATH="$env_file"
 
+  # NOT FATAL, ON PURPOSE: CI boots this stack with the variables exported
+  # inline and no file on disk (.github/workflows/ci.yml, "Boot the local
+  # stack"). But a developer who hits this is usually one command from a
+  # working stack and has no way to know which one, so the warning names it
+  # rather than describing the situation.
   if [[ ! -f "$env_file" ]]; then
     echo "Warning: $env_file not found; continuing with existing environment only." >&2
+    if [[ -z "${DB_CONNECTION_URL:-}${DATABASE_URL:-}" ]]; then
+      echo "  No DB_CONNECTION_URL in the environment either, so the API will" >&2
+      echo "  start and then fail on its first query. If you meant to run" >&2
+      echo "  locally:  cp .env.example .env.local  and fill in DB_CONNECTION_URL." >&2
+    fi
     return 0
   fi
 
