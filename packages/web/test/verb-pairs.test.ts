@@ -139,6 +139,10 @@ const REGISTER: Record<string, string> = {
   renameProfile: "RULED: an edit is its own inverse",
   createAgentKey: "revokeAgentKey",
   revokeAgentKey: "createAgentKey",
+
+  // the keeper's own keys (2026-08-29): same door, the person's hand
+  createKeeperKey: "revokeKeeperKey",
+  revokeKeeperKey: "createKeeperKey",
 };
 
 describe("every verb has a way back, or a reason it does not", () => {
