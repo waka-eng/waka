@@ -4,13 +4,18 @@ import { Link, useNavigate } from "react-router-dom";
 
 import {
   ApiError,
+  createKeeperKey,
   createProfile,
   endConnection,
   fetchConnections,
+  fetchKeeperKeys,
   deleteProfile,
   fetchProfiles,
   renameProfile,
+  revokeKeeperKey,
   type ApiConnection,
+  type ApiKeeperKey,
+  type ApiMintedKeeperKey,
   type ApiOwnedProfile,
 } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
@@ -194,6 +199,71 @@ export default function ProfilePage(): JSX.Element {
   useEffect(() => {
     void loadConnections();
   }, [loadConnections]);
+
+  /**
+   * The keeper's standing keys (2026-08-29). A key is the way the person's
+   * OWN tools — an MCP, a CLI — keep and recall without the login dance,
+   * scoped server-side to exactly that. The secret exists in one response:
+   * `mintedKey` holds it until the person says they have it, and nothing
+   * here ever stores it anywhere else.
+   */
+  const [keeperKeys, setKeeperKeys] = useState<ApiKeeperKey[] | null>(null);
+  const [mintedKey, setMintedKey] = useState<ApiMintedKeeperKey | null>(null);
+  const [newKeyLabel, setNewKeyLabel] = useState("");
+  const [mintingKey, setMintingKey] = useState(false);
+  const [busyKeyId, setBusyKeyId] = useState<string | null>(null);
+
+  const loadKeeperKeys = useCallback(async (): Promise<void> => {
+    try {
+      setKeeperKeys(await fetchKeeperKeys());
+    } catch {
+      setKeeperKeys([]);
+      setError(t(locale, "profileKeysError"));
+    }
+  }, [locale]);
+
+  useEffect(() => {
+    void loadKeeperKeys();
+  }, [loadKeeperKeys]);
+
+  async function handleMintKey(): Promise<void> {
+    setMintingKey(true);
+    setStatus(null);
+    setError(null);
+    try {
+      const minted = await createKeeperKey(newKeyLabel.trim() || undefined);
+      setMintedKey(minted);
+      setNewKeyLabel("");
+      setKeeperKeys((current) => [
+        { ...minted, lastUsedAt: null, revokedAt: null },
+        ...(current ?? []),
+      ]);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t(locale, "profileKeysError"));
+    } finally {
+      setMintingKey(false);
+    }
+  }
+
+  async function handleRevokeKey(key: ApiKeeperKey): Promise<void> {
+    if (!window.confirm(t(locale, "profileKeyRevokeConfirm"))) return;
+    setBusyKeyId(key.id);
+    setStatus(null);
+    setError(null);
+    try {
+      await revokeKeeperKey(key.id);
+      setKeeperKeys((current) => (current ?? []).filter((row) => row.id !== key.id));
+      // Revoking the key whose secret is still on screen withdraws the
+      // secret too — showing a credential that no longer opens anything
+      // would be the screen lying.
+      setMintedKey((current) => (current?.id === key.id ? null : current));
+      setStatus(t(locale, "profileKeyRevoked"));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t(locale, "profileKeysError"));
+    } finally {
+      setBusyKeyId(null);
+    }
+  }
 
   async function handleEndConnection(connection: ApiConnection): Promise<void> {
     // Ending the device you are holding logs you out of it, which is a
@@ -620,6 +690,94 @@ export default function ProfilePage(): JSX.Element {
           {connections !== null && connections.length === 0 ? (
             <p className="login-subtitle">{t(locale, "profileConnectionsEmpty")}</p>
           ) : null}
+        </section>
+        <section className="profile-memories-panel" aria-labelledby="profile-keys-title">
+          <div className="profile-memories-heading">
+            <p className="login-eyebrow" id="profile-keys-title">
+              {t(locale, "profileKeysTitle")}
+            </p>
+            <p className="login-subtitle">{t(locale, "profileKeysHint")}</p>
+          </div>
+
+          <ul className="profile-list">
+            {/* Live keys only. A revoked key opens nothing and names nothing
+                current — it is history, and history's place is the audit
+                trail, not the list of what can act. */}
+            {(keeperKeys ?? [])
+              .filter((key) => key.revokedAt === null)
+              .map((key) => {
+                const busy = busyKeyId === key.id;
+                return (
+                  <li key={key.id} className="profile-list-row profile-connection-row">
+                    <div className="profile-row-main">
+                      <span className="profile-row-title">
+                        {key.label ?? t(locale, "profileKeyUnlabelled")}
+                      </span>
+                      <span className="profile-row-meta">
+                        {key.prefix}… · {t(locale, "profileKeyMintedOn")} {whenShort(key.createdAt)} ·{" "}
+                        {key.lastUsedAt
+                          ? `${t(locale, "profileKeyLastUsed")} ${whenShort(key.lastUsedAt)}`
+                          : t(locale, "profileKeyNeverUsed")}
+                      </span>
+                    </div>
+                    <span className="profile-row-actions">
+                      <button
+                        className="profile-memory-action is-destructive"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void handleRevokeKey(key)}
+                      >
+                        {busy ? t(locale, "profileKeyRevoking") : t(locale, "profileKeyRevoke")}
+                      </button>
+                    </span>
+                  </li>
+                );
+              })}
+          </ul>
+          {keeperKeys !== null && keeperKeys.every((key) => key.revokedAt !== null) ? (
+            <p className="login-subtitle">{t(locale, "profileKeysEmpty")}</p>
+          ) : null}
+
+          {mintedKey ? (
+            /* The secret's one appearance. The mint control stays hidden
+               until the person says they have it — two uncopied secrets on
+               one screen is one too many. */
+            <div className="profile-minted">
+              <p className="login-eyebrow">{t(locale, "profileKeyCopyNow")}</p>
+              <code className="profile-secret">{mintedKey.secret}</code>
+              <p className="login-subtitle">{t(locale, "profileKeyShownOnce")}</p>
+              <button
+                className="profile-memory-action"
+                type="button"
+                onClick={() => setMintedKey(null)}
+              >
+                {t(locale, "profileKeyHaveIt")}
+              </button>
+            </div>
+          ) : (
+            <ul className="profile-list">
+              <li className="profile-list-row profile-memory-new">
+                <input
+                  className="profile-row-name"
+                  type="text"
+                  value={newKeyLabel}
+                  placeholder={t(locale, "profileKeyNewLabel")}
+                  disabled={mintingKey}
+                  onChange={(event) => setNewKeyLabel(event.currentTarget.value)}
+                />
+                <span className="profile-row-actions">
+                  <button
+                    className="profile-memory-action profile-memory-create"
+                    type="button"
+                    disabled={mintingKey}
+                    onClick={() => void handleMintKey()}
+                  >
+                    {mintingKey ? t(locale, "profileKeyMinting") : t(locale, "profileKeyMint")}
+                  </button>
+                </span>
+              </li>
+            </ul>
+          )}
         </section>
         </div>
 

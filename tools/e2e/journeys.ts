@@ -686,6 +686,50 @@ const JOURNEYS: Journey[] = [
   },
 
   {
+    id: "keeper-key",
+    name: "a keeper key is minted once, shown once, and revocable",
+    breaks: (ctx) => breakRoute(ctx, (p, m) => p === "/api/keeper-keys" && m === "POST"),
+    run: async (page, base) => {
+      await signUp(page, base);
+      await goSurface(page, base, "/profile");
+      await page.click('button[role=tab]:has-text("Memories & connections")');
+      await page.waitForTimeout(600);
+
+      await page.fill('input[placeholder="what machine is this for"]', "journey laptop");
+      await page.click('button:has-text("mint a key")');
+      await page.waitForTimeout(2_500);
+
+      // The secret's one appearance: a waka_keeper_ credential on screen,
+      // beside the words that say it will never be shown again.
+      const secret = await page.evaluate(
+        () => document.querySelector(".profile-secret")?.textContent ?? "",
+      );
+      if (!secret.startsWith("waka_keeper_")) {
+        return { ok: false, detail: `no minted secret on screen (${JSON.stringify(secret.slice(0, 24))})` };
+      }
+      await page.click('button:has-text("I have it")');
+      await page.waitForTimeout(600);
+      const secretGone =
+        (await page.evaluate(() => document.querySelectorAll(".profile-secret").length)) === 0;
+      const rowShows = await page
+        .locator(".profile-row-title", { hasText: "journey laptop" })
+        .isVisible();
+
+      // Revocation asks its question through window.confirm; answer yes.
+      page.once("dialog", (dialog) => void dialog.accept());
+      await page.click('li:has-text("journey laptop") button:has-text("revoke")');
+      await page.waitForTimeout(2_500);
+      const rowGone =
+        (await page.locator(".profile-row-title", { hasText: "journey laptop" }).count()) === 0;
+
+      return {
+        ok: secretGone && rowShows && rowGone,
+        detail: `secret=${secret.slice(0, 16)}… shownOnce=${secretGone} listed=${rowShows} revoked=${rowGone}`,
+      };
+    },
+  },
+
+  {
     id: "a11y-floor",
     name: "every control in the world can be named out loud",
     /* THE FIRST SABOTAGE HERE DID NOT WORK, AND THE GATE SAID SO.

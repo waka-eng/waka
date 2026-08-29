@@ -582,6 +582,39 @@ a:focus-visible {
   padding: 0;
 }
 
+/* ---------- the minted key ----------
+   A keeper key's secret exists on screen exactly once (Profile.tsx). The box
+   is the account screen's translation of the wall sheet's
+   `.jar-settings-minted`: quiet, bordered, every child its own line so
+   "I have it" reads as the thing you press, not the end of the sentence.
+   The secret itself is selectable in one gesture and wraps rather than
+   scrolls — a credential you have to scroll to copy is a credential you
+   copy half of. */
+.profile-minted {
+  display: block;
+  margin: var(--sp-12) 0 0;
+  padding: var(--sp-12);
+  border: 1px solid var(--line);
+  border-radius: var(--sp-12);
+}
+.profile-minted > * {
+  display: block;
+}
+.profile-minted .profile-memory-action {
+  margin-top: var(--sp-10);
+}
+.profile-secret {
+  display: block;
+  margin: var(--sp-8) 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--t-fine);
+  line-height: 1.5;
+  color: var(--ink);
+  word-break: break-all;
+  user-select: all;
+  -webkit-user-select: all;
+}
+
 /* ---------- toggles ----------
    These rendered as two bare checkboxes with invisible labels: the row is a
    flex container whose text was inheriting a colour meant for a dark-on-light
