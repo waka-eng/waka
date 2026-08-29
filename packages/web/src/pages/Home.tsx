@@ -2155,8 +2155,21 @@ function HomeExperience(): JSX.Element {
         field: [] as ApiGroupFieldInspiration[],
         total: 0,
       })),
+      /* THE ROLL, AND WHY IT IS FETCHED HERE RATHER THAN ON ARRIVAL.
+         A dark room's first question is whether anyone else is in it — the
+         difference between "the invite is the way in" and "open a memory" —
+         and the chrome that answers it is resolved right here, before the
+         room is allowed to wake. Fetched on arrival instead, the room would
+         wake saying the wrong thing and correct itself a moment later.
+
+         It is not a second request either: the arrival effect below asks only
+         when `members` has nothing for this room, so filling it here means
+         that fetch does not happen. */
+      fetchGroupMembers(groupId).catch(() => [] as ApiGroupMember[]),
     ])
-      .then(([top, wall, proposals, ground]) => {
+      .then(([top, wall, proposals, ground, roll]) => {
+        membersRef.current.set(groupId, roll);
+        setMembersRef.current(new Map(membersRef.current));
         wallSignalsRef.current.set(groupId, wall);
         groupFieldRef.current.set(groupId, ground.field);
         /* the same remainder the personal field keeps, per room: what its
@@ -2168,7 +2181,10 @@ function HomeExperience(): JSX.Element {
         const openMs = open ? Date.parse(open.createdAt) || 0 : null;
         groupChromeRef.current.set(
           groupId,
-          deriveGroupChrome(top, openMs, evidence),
+          deriveGroupChrome(top, openMs, evidence, {
+            members: roll.length,
+            ground: ground.total,
+          }),
         );
         cache.set(groupId, { status: "ready", data: { evidence, top } });
         simApiRef.current?.wake();
@@ -2250,6 +2266,10 @@ function HomeExperience(): JSX.Element {
       const iso = (t: number) => new Date(t).toISOString();
       const fixtureGroups: ApiGroupSummary[] = [
         { id: "fx-alone", name: "Just me", joinCode: "FIXTURE1", role: "owner", memberCount: 1, createdAt: iso(Date.now()) },
+        /* A ROOM WITH PEOPLE IN IT AND NOTHING OPEN — the one dark state the
+           fixture could not previously show, and the commonest one in life: a
+           room fills up before anybody opens a memory to it. */
+        { id: "fx-bare", name: "Nothing open yet", joinCode: "FIXTURE5", role: "owner", memberCount: 2, createdAt: iso(Date.now()) },
         { id: "fx-pair", name: "Me and my agent", joinCode: "FIXTURE2", role: "owner", memberCount: 2, createdAt: iso(Date.now()) },
         { id: "fx-people", name: "The four of us", joinCode: "FIXTURE3", role: "member", memberCount: 5, createdAt: iso(Date.now()) },
         { id: "fx-agents", name: "Our agents", joinCode: "FIXTURE4", role: "member", memberCount: 6, createdAt: iso(Date.now()) },
@@ -2274,25 +2294,21 @@ function HomeExperience(): JSX.Element {
       const bots = ["Jae Gyu's agent", "Sora's agent", "Minho's agent", "Hana's agent"].map(
         (n, i) => mem(`fx-a${i}`, n, "agent"),
       );
-      setMembersRef.current(
-        new Map<string, ApiGroupMember[]>([
-          ["fx-alone", [you]],
-          ["fx-pair", [you, yours]],
-          ["fx-people", [you, ...people]],
-          ["fx-agents", [you, yours, ...bots]],
-        ]),
-      );
+      const roll = new Map<string, ApiGroupMember[]>([
+        ["fx-alone", [you]],
+        ["fx-bare", [you, mem("fx-bare-other", "Somebody else", "human")]],
+        ["fx-pair", [you, yours]],
+        ["fx-people", [you, ...people]],
+        ["fx-agents", [you, yours, ...bots]],
+      ]);
+      setMembersRef.current(roll);
+      membersRef.current = roll;
       /* each room's ground: the members' public memories, so the hues, the
-         legend and the pixelated agent orbs all have something to render */
+         legend and the pixelated agent orbs all have something to render.
+         `fx-bare` is deliberately given none — it is the room whose whole
+         subject is having nothing open in it. */
       for (const group of fixtureGroups) {
-        const who =
-          group.id === "fx-alone"
-            ? [you]
-            : group.id === "fx-pair"
-              ? [you, yours]
-              : group.id === "fx-people"
-                ? [you, ...people]
-                : [you, yours, ...bots];
+        const who = group.id === "fx-bare" ? [] : roll.get(group.id) ?? [];
         const field = who.flatMap((m, mi) =>
           Array.from({ length: 3 + (mi % 3) }, (_, k) => ({
             id: `${group.id}-${m.profileId}-${k}`,
@@ -2309,6 +2325,55 @@ function HomeExperience(): JSX.Element {
         groupFieldRef.current.set(group.id, field);
       }
       setGroupFieldTick((n) => n + 1);
+
+      /* WHAT EACH FIXTURE ROOM SAYS WHILE IT IS STILL DARK.
+         The fixture set no chrome at all, so every room offline fell through
+         to `groupChromeAt`'s blank and said NOTHING — the four dark stages
+         were the one part of a room that could not be looked at without a
+         session, which is exactly the gap this fixture exists to close.
+
+         The rooms are shaped so all four stages stand somewhere on the axis:
+         `fx-alone` has nobody else in it, `fx-bare` has somebody and nothing
+         open, `fx-pair` and `fx-people` have ground but nothing two-voiced,
+         and `fx-agents` has grown a statement that nobody has answered. */
+      const fixtureWall: ApiGroupWallSignal[] = [
+        {
+          signalId: "fx-wall-1",
+          statement: "We keep choosing the tool we can read over the one that is faster.",
+          confidenceAsWritten: 61,
+          locked: false,
+          contributors: [
+            { profileId: you.profileId, name: you.name },
+            { profileId: bots[0]!.profileId, name: bots[0]!.name },
+          ],
+          sharedAt: iso(Date.now() - 4 * 86400000),
+          reactions: [],
+        },
+      ];
+      wallSignalsRef.current.set("fx-agents", fixtureWall);
+      const noBoard: ApiGroupTopOfMind = { topOfMind: null, entries: [] };
+      for (const group of fixtureGroups) {
+        const wall = wallSignalsRef.current.get(group.id) ?? [];
+        const evidence = groupWallOrbs(wall, noBoard);
+        groupChromeRef.current.set(
+          group.id,
+          deriveGroupChrome(noBoard, null, evidence, {
+            members: (roll.get(group.id) ?? []).length,
+            ground: (groupFieldRef.current.get(group.id) ?? []).length,
+          }),
+        );
+        /* AND THE ROOM MUST BE ALLOWED TO WAKE. A room's wall renders nothing
+           until it is in `wokenGroups`, and the sim only puts it there once
+           this cache says the room is ready — which offline nothing ever set,
+           so every fixture room stayed asleep and drew no chrome however
+           carefully the chrome was derived. That is why the four dark stages
+           were unlookable without a session: not a missing sentence, a room
+           that never woke to say one. */
+        groupCacheRef.current.set(group.id, {
+          status: "ready",
+          data: { evidence, top: noBoard },
+        });
+      }
       setGroups(fixtureGroups);
       setProposal(null);
       setAdopted(layout.adopted);
@@ -10364,6 +10429,16 @@ function HomeExperience(): JSX.Element {
     error: string | null;
   } | null>(null);
 
+  /**
+   * The room a finished make or join should take the traveller to.
+   *
+   * Held as state rather than acted on where the request lands, because the
+   * column does not exist yet at that moment: the axis is a memo over
+   * `groups`, so the wall to walk to is born in the render AFTER the one that
+   * learns about the room. The effect below waits for it.
+   */
+  const [landedGroup, setLandedGroup] = useState<string | null>(null);
+
   const submitGroup = useCallback(() => {
     if (!groupForm || groupForm.busy) return;
     const text = groupForm.text.trim();
@@ -10371,9 +10446,10 @@ function HomeExperience(): JSX.Element {
     setGroupForm({ ...groupForm, busy: true, error: null });
     const landed = (g: ApiGroupSummary) => {
       /* newest room first, which is where the axis puts it: a new column
-         appears to the right and the traveller can walk to it immediately */
+         appears to the right, and the traveller is taken to it */
       setGroups((prev) => [g, ...prev.filter((x) => x.id !== g.id)]);
       setGroupForm(null);
+      setLandedGroup(g.id);
     };
     const failed = (m: string) =>
       setGroupForm((f) => (f ? { ...f, busy: false, error: m } : f));
@@ -10440,6 +10516,36 @@ function HomeExperience(): JSX.Element {
   }, [members]);
   machineGroupsRef.current = machineGroups;
   const [groupPanel, setGroupPanel] = useState<string | null>(null);
+
+  /**
+   * YOU ARE TAKEN TO WHAT YOU JUST MADE.
+   *
+   * Making a room used to leave you standing exactly where you were, with a
+   * new column somewhere off to the right and nothing saying so. The form
+   * closed, and that was the whole of the feedback: the one act in the world
+   * that creates a PLACE was the one act that did not move you.
+   *
+   * So the traveller walks there, on the same glide as any other journey —
+   * you moved, because you made something to move to. And the room's panel is
+   * armed on the way, so what greets you on arrival is the invite: the single
+   * thing a room of one is waiting for, offered where you are standing rather
+   * than filed behind the wall's name. The panel renders only once the camera
+   * has actually arrived (`atWall.id === groupPanel`), so arming it early
+   * cannot flash it over the wall you are leaving.
+   *
+   * The wait is real, not a defensive check: this effect runs on the render
+   * that first carries the room in `walls`, and until it does there is no
+   * column to ask for. `goToWall` clamps to the axis, so a stale target would
+   * silently walk somebody to the wrong wall rather than fail.
+   */
+  useEffect(() => {
+    if (!landedGroup) return;
+    const arriving = walls.find((w) => w.kind === "group" && w.id === landedGroup);
+    if (!arriving) return;
+    setGroupPanel(landedGroup);
+    simApiRef.current?.goToWall(arriving.col);
+    setLandedGroup(null);
+  }, [landedGroup, walls]);
 
   /**
    * THIS SPACE'S SETTINGS — keyed by the space, opened from its name.
@@ -14039,6 +14145,23 @@ function HomeExperience(): JSX.Element {
               if (e.key === "Escape") setGroupForm(null);
             }}
           />
+          {/* WHAT A ROOM DOES, BEFORE YOU HAVE ONE.
+              A room is the only thing in the world whose silence is designed:
+              it reads its members' PUBLIC keeps and says only what stands
+              under more than one person, so a room of one, or of people whose
+              keeps are all private, is correctly dark. Someone who has just
+              typed a name has no way to know that, and the room they are
+              about to make cannot tell them until it exists. One sentence
+              here is the difference between a quiet room and a broken one.
+
+              The make tab only: joining is answered by the consent sheet,
+              which says what arriving discloses in the same voice. */}
+          {groupForm.mode === "make" ? (
+            <p className="jar-settings-note" style={{ margin: "10px 0 0" }}>
+              {"A room reads what its people keep open, and says only what more " +
+                "than one of you stands behind."}
+            </p>
+          ) : null}
           {groupForm.error ? <p className="jar-roomform-err">{groupForm.error}</p> : null}
           <p className="jar-ask">
             <button type="button" onClick={submitGroup} disabled={groupForm.busy}>
