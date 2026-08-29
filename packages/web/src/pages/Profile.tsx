@@ -5,6 +5,7 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   ApiError,
   createAgentGrant,
+  createAgentKey,
   createKeeperKey,
   createProfile,
   endConnection,
@@ -25,6 +26,7 @@ import {
   type ApiConsultation,
   type ApiKeeperKey,
   type ApiMintedKeeperKey,
+  type ApiMintedKey,
   type ApiOwnedProfile,
 } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
@@ -89,6 +91,14 @@ export default function ProfilePage(): JSX.Element {
   /** The id currently being renamed or removed, so only its own row is busy. */
   const [busyMemoryId, setBusyMemoryId] = useState<string | null>(null);
   const [memoryDrafts, setMemoryDrafts] = useState<Record<string, string>>({});
+  /**
+   * A MEMORY AND ITS MACHINE KEY ARE ONE ACT (founder, 2026-08-29:
+   * "shouldn't they go together?"). Nobody makes an agent memory except
+   * because a machine is about to use it, so creation mints the first key
+   * and opens the one-time secret box right here. Later keys are additions
+   * — the wall and the folded audit keep those deliberate.
+   */
+  const [mintedAgentKey, setMintedAgentKey] = useState<ApiMintedKey | null>(null);
 
   const loadMemories = useCallback(async (): Promise<void> => {
     try {
@@ -120,6 +130,18 @@ export default function ProfilePage(): JSX.Element {
       setMemoryDrafts((current) => ({ ...current, [created.id]: created.name }));
       setNewMemoryName("");
       setStatus(t(locale, "profileMemoryCreated"));
+      try {
+        const minted = await createAgentKey(created.id);
+        setMintedAgentKey(minted);
+        setAgentKeys((current) => [
+          { ...minted, lastUsedAt: null, revokedAt: null },
+          ...(current ?? []),
+        ]);
+      } catch {
+        // The memory stands; only its key is missing, and the wall can
+        // issue one. Saying so beats a box with nothing to show.
+        setError(t(locale, "profileMemoryKeyFailed"));
+      }
     } catch (err) {
       // The server's own words carry information this page cannot invent —
       // the per-account ceiling, above all.
@@ -742,6 +764,7 @@ export default function ProfilePage(): JSX.Element {
                 </li>
               );
             })}
+            {mintedAgentKey ? null : (
             <li className="profile-list-row profile-memory-new">
               <span className="profile-memory-badge" aria-hidden="true">
                 +
@@ -769,7 +792,29 @@ export default function ProfilePage(): JSX.Element {
                 ) : null}
               </span>
             </li>
+            )}
           </ul>
+          {mintedAgentKey ? (
+            <div className="profile-minted">
+              <p className="login-eyebrow">{t(locale, "profileKeyCopyNow")}</p>
+              <p className="login-subtitle">
+                {t(locale, "profileMemoryKeyFor")} {memoryName(mintedAgentKey.profileId)}.
+              </p>
+              <code className="profile-secret">{mintedAgentKey.secret}</code>
+              <p className="login-subtitle">{t(locale, "profileKeyShownOnce")}</p>
+              <p className="login-subtitle">{t(locale, "profileKeyConfigHint")}</p>
+              <code className="profile-secret">
+                {`WAKA_API_KEY=${mintedAgentKey.secret}\nWAKA_API_URL=${window.location.origin}`}
+              </code>
+              <button
+                className="profile-memory-action"
+                type="button"
+                onClick={() => setMintedAgentKey(null)}
+              >
+                {t(locale, "profileKeyHaveIt")}
+              </button>
+            </div>
+          ) : null}
         </section>
         <section className="profile-memories-panel" aria-labelledby="profile-connections-title">
           <div className="profile-memories-heading">

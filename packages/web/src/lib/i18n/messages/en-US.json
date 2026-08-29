@@ -83,6 +83,8 @@
   "profileMemoryNewLabel": "Add an agent memory",
   "profileMemoryCreate": "Add memory",
   "profileMemoryCreating": "Adding…",
+  "profileMemoryKeyFor": "The machine key for",
+  "profileMemoryKeyFailed": "The memory was made, but its key was not — issue one from its wall.",
   "profileMemoryNameRequired": "Give the memory a name first.",
   "profileMemoriesError": "Your memories could not be loaded.",
   "profileMemoryCreated": "Memory added.",

@@ -742,11 +742,21 @@ const JOURNEYS: Journey[] = [
       await page.click('.profile-disclose button:has-text("grants")');
       await page.waitForTimeout(400);
 
-      // Two agents, made through the same screen that will pair them.
+      // Two agents, made through the same screen that will pair them. Each
+      // creation now hands over the machine key — the box must show a real
+      // agent secret, and pressing "I have it" returns the create row.
       for (const name of ["Scout", "Courier"]) {
         await page.fill('input[placeholder="Add an agent memory"]', name);
         await page.click('button:has-text("Add memory")');
         await page.waitForTimeout(1_500);
+        const secret = await page.evaluate(
+          () => document.querySelector(".profile-minted .profile-secret")?.textContent ?? "",
+        );
+        if (!secret.startsWith("waka_agent_")) {
+          return { ok: false, detail: `no machine key handed over for ${name}` };
+        }
+        await page.click('.profile-minted button:has-text("I have it")');
+        await page.waitForTimeout(400);
       }
 
       const pick = async (label: string, name: string) =>
