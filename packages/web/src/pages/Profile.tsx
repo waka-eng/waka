@@ -303,6 +303,11 @@ export default function ProfilePage(): JSX.Element {
    */
   const [agentKeys, setAgentKeys] = useState<ApiAgentKey[] | null>(null);
   const [busyAgentKeyId, setBusyAgentKeyId] = useState<string | null>(null);
+  /** Reissue, for the forgotten key: a new secret for an EXISTING agent,
+      right where the old keys are listed — recreation is never the answer. */
+  const [reissueAgentId, setReissueAgentId] = useState("");
+  const [reissuing, setReissuing] = useState(false);
+  const [reissuedKey, setReissuedKey] = useState<ApiMintedKey | null>(null);
   const [grants, setGrants] = useState<ApiAgentGrant[] | null>(null);
   const [busyGrantId, setBusyGrantId] = useState<string | null>(null);
   const [grantReader, setGrantReader] = useState("");
@@ -359,6 +364,26 @@ export default function ProfilePage(): JSX.Element {
       setError(err instanceof ApiError ? err.message : t(locale, "profileKeysError"));
     } finally {
       setBusyAgentKeyId(null);
+    }
+  }
+
+  async function handleReissueKey(): Promise<void> {
+    if (!reissueAgentId) return;
+    setReissuing(true);
+    setStatus(null);
+    setError(null);
+    try {
+      const minted = await createAgentKey(reissueAgentId);
+      setReissuedKey(minted);
+      setAgentKeys((current) => [
+        { ...minted, lastUsedAt: null, revokedAt: null },
+        ...(current ?? []),
+      ]);
+      setReissueAgentId("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t(locale, "profileKeysError"));
+    } finally {
+      setReissuing(false);
     }
   }
 
@@ -1004,6 +1029,61 @@ export default function ProfilePage(): JSX.Element {
           </ul>
           {agentKeys !== null && agentKeys.every((key) => key.revokedAt !== null) ? (
             <p className="login-subtitle">{t(locale, "profileAgentKeysEmpty")}</p>
+          ) : null}
+
+          {reissuedKey ? (
+            <div className="profile-minted">
+              <p className="login-eyebrow">{t(locale, "profileKeyCopyNow")}</p>
+              <p className="login-subtitle">
+                {t(locale, "profileMemoryKeyFor")} {memoryName(reissuedKey.profileId)}.
+              </p>
+              <code className="profile-secret">{reissuedKey.secret}</code>
+              <p className="login-subtitle">{t(locale, "profileKeyShownOnce")}</p>
+              <p className="login-subtitle">{t(locale, "profileKeyConfigHint")}</p>
+              <code className="profile-secret">
+                {`WAKA_API_KEY=${reissuedKey.secret}\nWAKA_API_URL=${window.location.origin}`}
+              </code>
+              <button
+                className="profile-memory-action"
+                type="button"
+                onClick={() => setReissuedKey(null)}
+              >
+                {t(locale, "profileKeyHaveIt")}
+              </button>
+            </div>
+          ) : agentMemories.length > 0 ? (
+            <ul className="profile-list">
+              <li className="profile-list-row profile-memory-new">
+                <select
+                  className="profile-row-name"
+                  value={reissueAgentId}
+                  aria-label={t(locale, "profileAgentKeyWhich")}
+                  disabled={reissuing}
+                  onChange={(event) => setReissueAgentId(event.currentTarget.value)}
+                >
+                  <option value="">{t(locale, "profileAgentKeyWhich")}</option>
+                  {agentMemories.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="profile-row-actions">
+                  {reissueAgentId ? (
+                    <button
+                      className="profile-memory-action profile-memory-create"
+                      type="button"
+                      disabled={reissuing}
+                      onClick={() => void handleReissueKey()}
+                    >
+                      {reissuing
+                        ? t(locale, "profileAgentKeyIssuing")
+                        : t(locale, "profileAgentKeyIssue")}
+                    </button>
+                  ) : null}
+                </span>
+              </li>
+            </ul>
           ) : null}
         </section>
         <section className="profile-memories-panel" aria-labelledby="profile-grants-title">
