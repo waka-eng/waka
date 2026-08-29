@@ -983,6 +983,73 @@ const CASES: Case[] = [
       };
     },
   },
+
+  {
+    id: "the-claim-keeps-its-measure",
+    name: "the claim does not lose its measure when the column narrows",
+    needs: ["jar-poster", "jar-hq-inner"],
+    /* the type pinned back at its old flat floor, which is the defect */
+    sabotage: "@media (max-width: 560px) { .jar-poster { font-size: 23px !important; } }",
+    run: async (page) => {
+      /* MEASURED AS CHARACTERS THAT FIT, not as the sentence's length over its
+         line count. The second is a coarse proxy — it moves in whole lines, so
+         two very different settings that happen to take the same number of
+         lines read identical, and it flattered this by five characters when I
+         first took it. The column over the font's real advance is exact, and
+         says nothing about whatever sentence the wall is holding today.
+
+         `clamp(23px, 2.5vw, 34px)` hits its floor at a 920px viewport while the
+         column keeps shrinking below 680, so the type stopped responding before
+         the column did and the measure fell away on exactly the widths people
+         hold in their hand.
+
+         IT DOES NOT REACH THE DESKTOP'S NUMBER AND IS NOT MEANT TO. Matching it
+         exactly needs 18.5px in a 350px column, which would put the wall's
+         claim at 1.23x body text and stop it reading as the claim; on a desktop
+         it is 2.27x. See `home.css` for that trade written out. */
+      const read = `(() => {
+        const p = document.querySelector(".jar-poster");
+        if (!p) return null;
+        const cs = getComputedStyle(p);
+        const probe = document.createElement("span");
+        probe.textContent = "abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz";
+        probe.style.cssText =
+          "position:absolute;visibility:hidden;white-space:pre;left:-9999px;font-family:" +
+          cs.fontFamily + ";font-size:" + cs.fontSize + ";font-weight:" + cs.fontWeight +
+          ";letter-spacing:" + cs.letterSpacing;
+        document.body.appendChild(probe);
+        const per = probe.getBoundingClientRect().width / probe.textContent.length;
+        probe.remove();
+        return JSON.stringify({
+          size: Math.round(parseFloat(cs.fontSize) * 10) / 10,
+          fits: Math.round(p.getBoundingClientRect().width / per),
+        });
+      })()`;
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.waitForTimeout(200);
+      const deskRaw = (await page.evaluate(read)) as string | null;
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.waitForTimeout(200);
+      const phoneRaw = (await page.evaluate(read)) as string | null;
+      if (!deskRaw || !phoneRaw) return { ok: false, detail: "no claim on the fixture to measure" };
+      const desk = JSON.parse(deskRaw) as { size: number; fits: number };
+      const phone = JSON.parse(phoneRaw) as { size: number; fits: number };
+      const lost = Math.round(((desk.fits - phone.fits) / desk.fits) * 100);
+      /* A PHONE KEEPS AT LEAST FOUR FIFTHS OF THE DESKTOP'S MEASURE, and the
+         number is chosen from both sides: the flat 23px floor this replaces
+         loses a quarter and must fail; scaling with the column loses 18% and
+         must pass. 18 as the line was the first try and sat exactly on the
+         measured value — a threshold with no room on the passing side is one
+         font-metric change away from failing for nothing. */
+      return {
+        ok: lost <= 20,
+        detail:
+          `desktop ${desk.size}px fits ${desk.fits} characters, a phone at ${phone.size}px fits ` +
+          `${phone.fits} — ${lost}% of the desktop's measure given up ` +
+          `${lost <= 20 ? "(within the fifth allowed)" : "*** MORE THAN A FIFTH ***"}`,
+      };
+    },
+  },
 ];
 
 interface Args { negative: boolean; only: string | null }

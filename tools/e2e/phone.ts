@@ -245,12 +245,32 @@ async function openCard(page: Page, view: View): Promise<boolean> {
      memory's own body and nothing else has it. */
   const panels = async (): Promise<number> =>
     (await page.evaluate(() => document.querySelectorAll(".jar-panel-text").length)) as number;
-  /* and whatever a stray tap DID open is put away before the next one, or it
-     stands over the orb the next tap is aimed at */
+  /* AND WHATEVER A STRAY TAP DID OPEN IS PUT AWAY BEFORE THE NEXT ONE, or it
+     stands over the orb the next tap is aimed at — and worse, it is still
+     standing when the walk measures.
+
+     This asked whether a `.jar-panel` was open, which is the same mistake one
+     layer out as the one `panels()` above was making. A tap that misses an orb
+     can land on the caret and open the WALLS LIST, and a list is not a panel:
+     it survived, and the walk then reported its rows as crowded controls on a
+     surface it had labelled "a memory open" — two findings against a list that
+     has nothing to do with a memory, on some runs and not others.
+
+     Escape unconditionally, because there is nothing to lose by pressing it
+     into an empty world and everything to lose by guessing at the shape of
+     what a stray tap raised — AND THEN COLLAPSE THE WALLS LIST BY ITS OWN
+     CARET, because Escape does not close it. It is a toggle with
+     `aria-expanded`, dismissed by a press outside it or by the caret again,
+     and I shipped a comment claiming Escape was enough before checking: the
+     list came back on the very next run. It says whether it is open, so ask
+     it rather than assuming. */
   const putAway = async (): Promise<void> => {
-    if ((await page.evaluate(() => document.querySelectorAll(".jar-panel").length)) as number) {
-      await page.keyboard.press("Escape");
-      await page.waitForTimeout(400);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(300);
+    const caret = page.locator('.jar-here-more[aria-expanded="true"]');
+    if (await caret.count()) {
+      await caret.first().tap();
+      await page.waitForTimeout(300);
     }
   };
   try {

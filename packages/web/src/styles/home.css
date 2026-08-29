@@ -3092,6 +3092,44 @@
   .jar-hq-inner {
     padding-top: calc(118px + env(safe-area-inset-top));
   }
+  /* AND THE CLAIM KEEPS MOST OF ITS MEASURE WHEN THE COLUMN NARROWS.
+     Founder, 2026-08-28: "fix the type size on mobile."
+
+     THE TYPE STOPPED RESPONDING BEFORE THE COLUMN DID, and that is the
+     defect. `clamp(23px, 2.5vw, 34px)` reaches its floor at a 920px viewport,
+     so from there down the type is a flat 23px. The COLUMN goes on shrinking
+     to 640 and then, below a 680px viewport, all the way down with the
+     screen. Type held still against a narrowing column is a measure falling
+     away, and it falls on exactly the widths people hold.
+
+     Measured as CHARACTERS THAT FIT — the column over the font's real
+     advance, not the sentence's length over its line count, which is a coarse
+     proxy that moves in whole lines and flattered this by five characters
+     when I first took it:
+
+       viewport   type     column   fits
+           1440   34px        640   38     <- what the desktop sets at
+            768   23px        640   56
+            390   23px        350   30     <- before
+            390   21.5px      350   33     <- after
+            360   19.8px      320   33
+
+     AND IT DOES NOT REACH 38, WHICH IS THE HONEST PART. Matching the
+     desktop's measure exactly needs 18.5px in a 350px column. Body text is
+     15px, so the wall's claim would sit 1.23x the size of a memory's own
+     text and stop reading as the wall's claim at all — on the desktop it is
+     2.27x. A 350px column cannot hold both relationships, and this is the
+     trade taken deliberately: 1.43x body, and 33 of the desktop's 38
+     characters instead of 30.
+
+     23 is the ceiling, so it is today's size rather than a new one, and
+     nothing between 418px and 560px moves — the measure was never the
+     problem there. The floor is 18 for the 320px screens still in use, whose
+     column is 280.
+  */
+  .jar-poster {
+    font-size: clamp(18px, 5.5vw, 23px);
+  }
 }
 
 @media (max-width: 760px) {
