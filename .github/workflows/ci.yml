@@ -453,6 +453,36 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm e2e:coming-back --base-url http://127.0.0.1:3010
 
+      # THE WAY IN, WHICH NOTHING IN THIS LADDER HAD EVER WALKED. Every gate
+      # above this line signs in first, so the three surfaces a person meets
+      # BEFORE they have an account — the landing page, the door, the
+      # name-ask — were the only part of the product no browser had ever
+      # opened in CI.
+      #
+      # The landing page is one screen with its overflow hidden (founder,
+      # 2026-08-28), and that pairing is why it needs a gate rather than a
+      # review: a page that hides its overflow does not fail loudly, it
+      # quietly cuts the bottom off itself. No scrollbar appears, no error is
+      # logged, and no unit test can see it, because jsdom has no layout. The
+      # walk found exactly that on its first run — `begin` seventeen pixels
+      # under the fold at 320x568, unreachable by any gesture, with the whole
+      # suite green.
+      - name: The landing page is one screen
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:one-screen --base-url http://127.0.0.1:3010
+
+      # AND THE ROOM YOU JUST MADE. Making a room used to leave you standing
+      # where you were — the one act that creates a place was the one act that
+      # did not move you. This walks the maker's landing and the invite that
+      # greets them there.
+      #
+      # It derives nothing: no model call anywhere in the walk, which is why
+      # it can sit in the blocking ladder rather than behind the key check
+      # that `e2e:erasure` sits behind.
+      - name: The maker lands in the room they made
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:lighting --base-url http://127.0.0.1:3010
+
       # THE SKY SUITE IS GONE, with the engine it measured. It grew a real
       # sky and photometered the top band of the canvas against an account
       # that had none — the only gate that could see `SKY_PEEK_DEPTH = 0.62`,
