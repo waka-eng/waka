@@ -346,10 +346,11 @@ only where the arithmetic runs.
 The pass lives in `packages/api/src/lib/top-of-mind-synthesis.ts` and runs
 four stages in order: **select** which signals may be considered, read the
 **live artifact** as it stands, **synthesize** the whole next artifact in one
-model call, then **validate and version** what came back. (The ranking
-arithmetic is also pinned from `packages/api/src/lib/top-of-mind-selection.ts`
-— a stage-module mirror of the same constants and functions; folding the two
-copies into one is tracked work, and the drift lock holds both.)
+model call, then **validate and version** what came back. All four stages,
+and every Layer 3 constant in the tables below, are in that one file. A
+`top-of-mind-selection.ts` once mirrored the ranking stage constant for
+constant and function for function; nothing imported it but the drift lock,
+so the lock was holding the copy rather than the code, and it is deleted.
 
 Selection and validation are one guarantee in two halves: selection filters
 candidates to this profile's signals, and validation checks the model's
@@ -642,7 +643,7 @@ The authoritative values. Machine-checked against code — see
 | `RELATED_INSPIRATION_MIN_COSINE` | 0.6 | Floor below which an earlier capture is not offered as context |
 | `RELATED_INSPIRATION_CONTEXT_LIMIT` | 5 | Related captures the extractor is shown, strongest first |
 
-### Layer 3 — synthesis (`packages/api/src/lib/top-of-mind-selection.ts`)
+### Layer 3 — synthesis (`packages/api/src/lib/top-of-mind-synthesis.ts`)
 
 | Constant | Value | One line |
 |---|---|---|

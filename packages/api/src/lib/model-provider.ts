@@ -114,8 +114,8 @@ export interface TopOfMindSynthesisSignal {
  * An entry the human has edited. It is sent so the model can build around it
  * — and it must come back byte-identical. The caller enforces that rather
  * than trusting it; see `countLockViolations` in
- * `lib/top-of-mind-validation.ts` for the check, and `assembleEntries` in
- * `lib/top-of-mind-versioning.ts` for the copy that makes it true regardless.
+ * `lib/top-of-mind-synthesis.ts` for the check, and `assembleEntries` in the
+ * same file for the copy that makes it true regardless.
  */
 export interface TopOfMindLockedEntry {
   id: string;
