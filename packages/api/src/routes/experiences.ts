@@ -16,6 +16,7 @@ import { z } from "zod";
 import { experiences, inspirations } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
+import { validationDetails } from "../lib/validation.js";
 import { resolveTargetProfile } from "./inspirations-tenancy.js";
 
 const listQuerySchema = z
@@ -45,7 +46,7 @@ export function createExperienceRoutes(deps: ExperienceRouteDependencies = {}): 
     const parsed = listQuerySchema.safeParse(c.req.query());
     if (!parsed.success) {
       return c.json(
-        { error: "Invalid query", details: parsed.error.flatten().fieldErrors },
+        { error: "Invalid query", details: validationDetails(parsed.error) },
         400,
       );
     }

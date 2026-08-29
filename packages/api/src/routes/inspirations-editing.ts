@@ -39,6 +39,7 @@ import {
   acquireSignalDerivationLock,
   reconcileSignalsAfterEvidenceLoss,
 } from "../lib/signal-derivation.js";
+import { validationDetails } from "../lib/validation.js";
 import { attachmentSelection, serializeAttachment } from "./attachments.js";
 import { requestSignalDerivation } from "./inspirations-derivation.js";
 import {
@@ -151,7 +152,7 @@ export function registerEditingRoutes(
       return c.json(
         {
           error: "Invalid inspiration payload",
-          details: parsed.error.flatten().fieldErrors,
+          details: validationDetails(parsed.error),
         },
         400,
       );
@@ -160,7 +161,7 @@ export function registerEditingRoutes(
     const query = profileQuerySchema.safeParse(c.req.query());
     if (!query.success) {
       return c.json(
-        { error: "Invalid query", details: query.error.flatten().fieldErrors },
+        { error: "Invalid query", details: validationDetails(query.error) },
         400,
       );
     }
@@ -255,7 +256,7 @@ export function registerEditingRoutes(
     const query = profileQuerySchema.safeParse(c.req.query());
     if (!query.success) {
       return c.json(
-        { error: "Invalid query", details: query.error.flatten().fieldErrors },
+        { error: "Invalid query", details: validationDetails(query.error) },
         400,
       );
     }

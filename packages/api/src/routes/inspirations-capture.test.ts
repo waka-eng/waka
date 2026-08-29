@@ -208,6 +208,25 @@ describe("POST /api/inspirations", () => {
     expect(writtenRows).toHaveLength(0);
   });
 
+  /* `profile` travels as a QUERY parameter; in the body it used to parse
+     fine and mean nothing, so the capture landed in the session's own stack
+     while the caller believed it had targeted another. Twice, in live use.
+     Strict body schemas turn that lie into a 400 that names the key. */
+  it("refuses a body that smuggles `profile`, writing nothing", async () => {
+    const { db, writtenRows } = fakeDatabase();
+    const app = appFor(sessionFor(humanProfileId, "human"), db);
+
+    const response = await app.request("/api/inspirations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: "meant for the agent", profile: agentProfileId }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(JSON.stringify(await response.json())).toContain("profile");
+    expect(writtenRows).toHaveLength(0);
+  });
+
   it("writes no visibility column when the HUMAN captures into an agent profile", async () => {
     const { db, writtenRows } = fakeDatabase([
       { id: agentProfileId, accountId, type: "agent" },

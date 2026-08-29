@@ -54,6 +54,7 @@ import {
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
+import { validationDetails } from "../lib/validation.js";
 import { loadGroupField } from "./groups-field.js";
 import {
   createGroupForProfile,
@@ -235,7 +236,7 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
     const parsed = createGroupSchema.safeParse(body.value);
     if (!parsed.success) {
       return c.json(
-        { error: "Invalid group payload", details: parsed.error.flatten().fieldErrors },
+        { error: "Invalid group payload", details: validationDetails(parsed.error) },
         400,
       );
     }
@@ -254,7 +255,7 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
     const parsed = joinGroupSchema.safeParse(body.value);
     if (!parsed.success) {
       return c.json(
-        { error: "Invalid join payload", details: parsed.error.flatten().fieldErrors },
+        { error: "Invalid join payload", details: validationDetails(parsed.error) },
         400,
       );
     }
@@ -335,7 +336,7 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
     const parsed = renameGroupSchema.safeParse(body.value);
     if (!parsed.success) {
       return c.json(
-        { error: "Invalid group name", details: parsed.error.flatten().fieldErrors },
+        { error: "Invalid group name", details: validationDetails(parsed.error) },
         400,
       );
     }
@@ -626,7 +627,7 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
     const parsedQuery = listProposalsQuerySchema.safeParse(c.req.query());
     if (!parsedQuery.success) {
       return c.json(
-        { error: "Invalid query", details: parsedQuery.error.flatten().fieldErrors },
+        { error: "Invalid query", details: validationDetails(parsedQuery.error) },
         400,
       );
     }
@@ -657,7 +658,7 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
     const parsed = createProposalSchema.safeParse(body.value);
     if (!parsed.success) {
       return c.json(
-        { error: "Invalid proposal payload", details: parsed.error.flatten().fieldErrors },
+        { error: "Invalid proposal payload", details: validationDetails(parsed.error) },
         400,
       );
     }

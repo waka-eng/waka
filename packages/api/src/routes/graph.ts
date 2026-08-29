@@ -31,6 +31,7 @@ import {
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
+import { validationDetails } from "../lib/validation.js";
 import { resolveTargetProfile } from "./inspirations-tenancy.js";
 
 const graphQuerySchema = z
@@ -70,7 +71,7 @@ export function createGraphRoutes(deps: GraphRouteDependencies = {}): Hono<AuthE
     const parsed = graphQuerySchema.safeParse(c.req.query());
     if (!parsed.success) {
       return c.json(
-        { error: "Invalid query", details: parsed.error.flatten().fieldErrors },
+        { error: "Invalid query", details: validationDetails(parsed.error) },
         400,
       );
     }

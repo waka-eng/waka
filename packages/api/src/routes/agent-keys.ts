@@ -19,6 +19,7 @@ import { agentKeys, profiles } from "../db/index.js";
 import { AGENT_KEY_DISPLAY_CHARS, mintAgentKey } from "../lib/agent-key-auth.js";
 import { getDb } from "../lib/db.js";
 import { humanSessionsOnly, requireAuth, type AuthEnv } from "../lib/middleware.js";
+import { validationDetails } from "../lib/validation.js";
 
 type WakaDb = ReturnType<typeof getDb>;
 
@@ -78,7 +79,7 @@ export function createAgentKeyRoutes(deps: AgentKeyRouteDependencies = {}): Hono
     const parsed = createKeySchema.safeParse(body);
     if (!parsed.success) {
       return c.json(
-        { error: "Invalid key request", details: parsed.error.flatten().fieldErrors },
+        { error: "Invalid key request", details: validationDetails(parsed.error) },
         400,
       );
     }

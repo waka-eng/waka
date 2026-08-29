@@ -19,6 +19,7 @@ import { z } from "zod";
 import { agentReadGrants, profiles } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import { humanSessionsOnly, requireAuth, type AuthEnv } from "../lib/middleware.js";
+import { validationDetails } from "../lib/validation.js";
 
 type WakaDb = ReturnType<typeof getDb>;
 
@@ -90,7 +91,7 @@ export function createAgentGrantRoutes(deps: AgentGrantRouteDependencies = {}): 
     const parsed = createGrantSchema.safeParse(rawBody);
     if (!parsed.success) {
       return c.json(
-        { error: "Invalid grant", details: parsed.error.flatten().fieldErrors },
+        { error: "Invalid grant", details: validationDetails(parsed.error) },
         400,
       );
     }
