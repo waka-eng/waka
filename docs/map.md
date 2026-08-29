@@ -333,11 +333,14 @@ verified by opening the file.
   now runs from the Postgres column to the view model. That section now
   describes the three registers rather than a synonym table, and
   `map-paths.test.ts` fails if any path cited in these documents stops existing.
-- **`packages/api/src/db/client.ts` is imported by nothing.** The live client is
-  `packages/api/src/lib/db.ts`; every route and every generation module imports
-  `getDb` from there. `db/index.ts` does not re-export `client.ts` either. Two
-  files describing themselves as the one Drizzle client is exactly the "one
-  concept, two names" failure `db/index.ts`'s own header warns about.
+- ~~**`packages/api/src/db/client.ts` is imported by nothing.**~~ **FIXED —
+  deleted.** The live client is `packages/api/src/lib/db.ts`; every route and
+  every generation module imports `getDb` from there, and `db/index.ts` never
+  re-exported `client.ts`. Two files describing themselves as the one Drizzle
+  client was exactly the "one concept, two names" failure `db/index.ts`'s own
+  header warns about — and this one had teeth, because it built its pool in a
+  module-level initialiser, so the first import would have opened a second
+  Postgres connection per process before any caller asked for a query.
 - **`packages/api/src/index.ts` exports a `handler` that nothing invokes.**
   `sst.config.ts` deploys `packages/api/src/lambda.ts`, which re-wraps the same
   app. Harmless, but a reader looking for the entry point will find the wrong

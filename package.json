@@ -6,6 +6,8 @@
   "packageManager": "pnpm@9.12.0",
   "description": "WAKA inspirations: SST + Hono + Vite/React multi-user app over Neon Postgres.",
   "scripts": {
+    "typecheck": "pnpm --filter @waka/api typecheck && pnpm --filter @waka/web typecheck && pnpm --filter @waka/admin typecheck",
+    "test": "pnpm typecheck && pnpm --filter @waka/api test:unit && pnpm --filter @waka/web test && pnpm --filter @waka/admin test && pnpm --filter @waka/web build",
     "dev": "sst dev",
     "dev:local": "bash scripts/dev-local.sh",
     "dev:drain": "bash scripts/dev-drain.sh",
@@ -37,8 +39,7 @@
     "e2e:groups": "tsx tools/e2e/groups.ts",
     "e2e:fixtures": "tsx tools/e2e/fixture-server.ts",
     "e2e:s3-stub": "tsx tools/e2e/s3-stub.ts",
-    "visual-diff": "tsx tools/visual-diff/capture.ts",
-    "visual-diff:install": "playwright install chromium",
+    "e2e:install": "playwright install chromium",
     "e2e:phone": "tsx tools/e2e/phone.ts",
     "e2e:usability": "tsx tools/e2e/usability.ts",
     "e2e:dead-css": "tsx tools/e2e/dead-css.ts",
@@ -62,9 +63,7 @@
     "typescript": "^5.6.3"
   },
   "dependencies": {
-    "drizzle-orm": "^0.45.2",
-    "postgres": "^3.4.5",
-    "yaml": "^2.9.0"
+    "postgres": "^3.4.5"
   },
   "pnpm": {
     "overrides": {

@@ -60,13 +60,28 @@ function isLocalDatabaseHost(hostname: string): boolean {
   return localHosts.has(host) || host.endsWith(".local");
 }
 
+/**
+ * Find the database the same way the rest of local development finds it.
+ *
+ * `.env.local` is FIRST and was missing until 2026-08-28, which made this
+ * script unreachable by the book. README's environment section says
+ * development reads `.env.local`, `scripts/dev-local.sh` reads nothing else,
+ * and `packages/api/test/setup.ts` lets it override `.env` — so a developer
+ * who set up the stack as documented had their connection string in the one
+ * file this function did not open. The failure was silent in the worst way:
+ * with no URL found, the argument parser fell through to printing usage, so
+ * the seeder looked like it was rejecting the command line rather than
+ * saying it could not find a database.
+ *
+ * `.env` and `.env.development` stay, after it. They are what `.env.example`
+ * tells operators to write and what the deployed tooling reads, and an
+ * existing setup must not break to fix a new one.
+ */
 export function loadDemoSeedEnv(cwd = process.cwd()): void {
-  if (process.env.DB_CONNECTION_URL) return;
-
-  loadDotenv({ path: join(cwd, ".env"), override: false });
-  if (process.env.DB_CONNECTION_URL) return;
-
-  loadDotenv({ path: join(cwd, ".env.development"), override: false });
+  for (const file of [".env.local", ".env", ".env.development"]) {
+    if (process.env.DB_CONNECTION_URL) return;
+    loadDotenv({ path: join(cwd, file), override: false });
+  }
 }
 
 export function readArg(name: string, argv = process.argv.slice(2)): string | undefined {
@@ -89,7 +104,7 @@ Usage:
   pnpm demo:seed -- --email=demo@example.test --cleanup-demo-data
 
 Options:
-  --database-url=<url>  Defaults to DB_CONNECTION_URL or DATABASE_URL from the environment, .env, or .env.development.
+  --database-url=<url>  Defaults to DB_CONNECTION_URL or DATABASE_URL from the environment, then .env.local, .env, or .env.development.
   --account-id=<uuid>   Existing account id to seed for. Also accepted as --user-id.
   --email=<email>       Existing account email to seed for. Fails if missing unless --create-user is passed.
   --create-user         Create the --email account if missing. Requires --password so it can be signed into.
@@ -108,7 +123,19 @@ export function parseArgs(argv = process.argv.slice(2)): Args {
 
   const databaseUrl =
     readArg("--database-url", argv) ?? process.env.DB_CONNECTION_URL ?? process.env.DATABASE_URL;
-  if (!databaseUrl) usage();
+  /* NOT `usage()`. A missing database is not a malformed command line, and
+     printing the option list for it is what made this script look like it was
+     rejecting the invocation — a developer whose URL was in a file this tool
+     did not read retyped the same command instead of looking for the file.
+     Widening the search list narrowed who reaches this; it did not make the
+     message honest. Say which thing is missing and where it is looked for. */
+  if (!databaseUrl) {
+    throw new Error(
+      "No database URL. Set DB_CONNECTION_URL in .env.local (see .env.example), " +
+        "or export it, or pass --database-url=<url>. Files searched, in order: " +
+        ".env.local, .env, .env.development.",
+    );
+  }
 
   /* The id an account is selected by. `--user-id` names the same value, and
      is read so a command that has been in someone's shell history for months
