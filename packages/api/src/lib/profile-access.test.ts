@@ -74,13 +74,17 @@ describe("an agent-profile session works inside its own memory", () => {
   });
 });
 
-describe("an agent-profile session may read and capture into the human profile", () => {
+describe("an agent-profile session may only READ the human profile", () => {
   it("may read it — the conditioning case, no grant needed", () => {
     expect(resolveProfileAccess(agentSession, ownProfile, "read")).toBe("allowed");
   });
 
-  it("may capture into it — relaying what the person asked to save", () => {
-    expect(resolveProfileAccess(agentSession, ownProfile, "capture")).toBe("allowed");
+  /* The 2026-08-29 ruling: what an agent generates stays wholly in its own
+     stack, so nothing it saves can move the human's signals or top of mind.
+     This retires the read+capture default of 2026-08-15 — the relaying case
+     is the person keeping the memory themselves. */
+  it("may NOT capture into it — agent-generated memory never enters the human's stack", () => {
+    expect(resolveProfileAccess(agentSession, ownProfile, "capture")).toBe("denied");
   });
 
   it("may NOT write to it — curating the person's memory is not its to do", () => {
@@ -89,13 +93,17 @@ describe("an agent-profile session may read and capture into the human profile",
 });
 
 describe("the sibling door has a hand on it — the ruled flip", () => {
-  it("a sibling read or capture goes through the grant, never through the matrix alone", () => {
+  it("a sibling read goes through the grant, never through the matrix alone", () => {
     expect(resolveProfileAccess(agentSession, siblingAgent, "read")).toBe(
       "sibling_grant_required",
     );
-    expect(resolveProfileAccess(agentSession, siblingAgent, "capture")).toBe(
-      "sibling_grant_required",
-    );
+  });
+
+  /* Same 2026-08-29 ruling, sibling edition: a grant opens READING only.
+     Capture across agents would mix one agent's generated memory into
+     another's stack, which no grant may do. */
+  it("a sibling capture is denied outright — no grant mixes agents' stacks", () => {
+    expect(resolveProfileAccess(agentSession, siblingAgent, "capture")).toBe("denied");
   });
 
   it("may not write to another agent's profile — no grant reaches write", () => {

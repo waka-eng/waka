@@ -178,15 +178,21 @@ export type ProfileAccessVerdict = "allowed" | "denied" | "sibling_grant_require
  * - A session acting as its own profile may do anything to it.
  * - A **human**-profile session is the account's admin: full access to every
  *   profile the account owns, including its agents' memories.
- * - An **agent**-profile session may read and capture into the account's
- *   human profile — that is the conditioning-and-relaying case — but may
- *   never curate, edit, or delete the human's memory.
- * - An **agent** session reaching for a SIBLING agent's memory needs an
+ * - An **agent**-profile session may READ the account's human profile — the
+ *   conditioning case: an agent acting for the person reads their top of
+ *   mind and principles. It may not write anything there, captures
+ *   included. What an agent generates stays wholly in the agent's own
+ *   stack, so nothing an agent saves can ever move the human's signals or
+ *   top of mind (founder ruling, 2026-08-29, signed in docs/data-model.md's
+ *   decision log — it retires the 2026-08-15 read+capture default; the
+ *   relaying case is served by the human keeping the memory themselves).
+ * - An **agent** session READING a SIBLING agent's memory needs an
  *   explicit, human-granted, revocable grant — the matrix answers
  *   `sibling_grant_required` and `profileAccessError` reads the live grant
- *   rows. The open default retired with `goals/no-quiet-corners.md`
- *   Phase 6 (the flip is founder-ruled, 2026-08-23, signed in
- *   docs/data-model.md's decision log): no flag, no dark machinery.
+ *   rows. Grants open reading only: capture across agents is denied under
+ *   the same ruling, so no grant can mix one agent's generated memory into
+ *   another's. The open default retired with `goals/no-quiet-corners.md`
+ *   Phase 6 (founder-ruled 2026-08-23): no flag, no dark machinery.
  * - Nothing reaches across accounts, ever.
  */
 export function resolveProfileAccess(
@@ -197,8 +203,9 @@ export function resolveProfileAccess(
   if (target.accountId !== session.profile.accountId) return "denied";
   if (target.id === session.profile.id) return "allowed";
   if (session.profile.type === "human") return "allowed";
-  // Agent session, some other profile in the same account.
-  if (operation === "write") return "denied";
+  // Agent session, some other profile in the same account: reading is the
+  // only verb that can cross, and toward a sibling only through a grant.
+  if (operation !== "read") return "denied";
   if (target.type === "human") return "allowed";
   return "sibling_grant_required";
 }

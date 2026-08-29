@@ -57,8 +57,8 @@ A session bound to an agent profile gets:
 | Target | Allowed |
 |---|---|
 | Its own agent profile | Full read/write: capture, curate signals, edit its top of mind, declare and curate its own principles |
-| The account's human profile | **Read + capture only**: read top of mind, signals, and principles (the conditioning use case), and capture inspirations into it — never edit or delete the human's signals, top of mind, or principles, and never declare into them. Principles are curation, so capture does not extend to them |
-| A sibling agent's profile | **Read + capture only, and only through an explicit grant** (`agent_read_grants`, `POST /api/agent-grants`): human-granted, one-directional, revocable — revocation takes effect on the next request, and the revoked grant stays as record. Ungranted, the door is closed. The open default retired 2026-08-24 with `goals/no-quiet-corners.md` Phase 6 (the flip is the founder's ruling of 2026-08-23, decision log below) |
+| The account's human profile | **Read only**: top of mind, signals, and principles — the conditioning use case, an agent acting for the person reading how they choose. It writes NOTHING there, captures included: what an agent generates stays wholly in its own stack, so nothing an agent saves can move the human's inspirations, signals, or top of mind (founder ruling, 2026-08-29, decision log below — retires the read+capture default of 2026-08-15; relaying is the person keeping the memory themselves) |
+| A sibling agent's profile | **Read only, and only through an explicit grant** (`agent_read_grants`, `POST /api/agent-grants`): human-granted, one-directional, revocable — revocation takes effect on the next request, and the revoked grant stays as record. Ungranted, the door is closed; and no grant opens capture — agents' generated memories never mix (same 2026-08-29 ruling). The open default retired 2026-08-24 with `goals/no-quiet-corners.md` Phase 6 (the flip is the founder's ruling of 2026-08-23, decision log below) |
 | Other accounts | Nothing |
 
 The human-profile session can do everything in every profile of the
@@ -128,10 +128,10 @@ agent's relayed excerpt, an agent's own observation.
   - *which session captured it* (the bound profile — audit), and
   - *whose initiative the content is*: `source: "app"` for
     human-directed content (their words, relayed or typed), `source:
-    "agent"` for agent-initiated content. An agent-bound session saving
-    "이거 와카에 넣어줘" into the human profile writes `source: "app"`;
-    an agent spontaneously noting something about the human writes
-    `source: "agent"`.
+    "agent"` for agent-initiated content. Since the 2026-08-29 ruling an
+    agent-bound session cannot save into the human profile at all, so a
+    human stack gains `source: "agent"` rows only from history predating
+    the ruling; an agent's own stack is where its observations live.
 - Inspirations carry a **`visibility`** of `private` (the default, at the
   column level) or `public`, chosen by the person who saved it and editable
   in both directions afterwards. Only `public` ones cross an account
@@ -504,6 +504,18 @@ follows the permission matrix.
   against is assured, or on timeout — so "a member is a member" holds
   for both verbs. Gated on the founder (`goals/a-room-you-can-trust.md`,
   Phase 0c); the code keeps today's rule until the ruling lands.
+- **2026-08-29** — **RULED (founder): agent-generated memory is fully
+  separate from the human's.** An agent session may READ the human
+  profile (conditioning) and nothing more: the capture verb on the human
+  is retired, and sibling grants open reading only — capture across any
+  two profiles is now exclusively the human admin's act. Nothing an
+  agent saves can enter, and therefore ever move, another profile's
+  inspirations, signals, or top of mind. Supersedes the 2026-08-15
+  read+capture default; enforcement is the one matrix in
+  `resolveProfileAccess`, so every route inherits the flip. A
+  consequence recorded honestly: the confidence source-diversity bonus
+  can no longer newly arise on a human profile (agent-sourced evidence
+  cannot arrive there); historical rows keep counting.
 - **2026-08-23** — **RULED (founder): the sibling door flips to opt-in.**
   An agent-bound session reads and captures only the profile it is bound
   to and the human's; reading a sibling agent's memory requires an
