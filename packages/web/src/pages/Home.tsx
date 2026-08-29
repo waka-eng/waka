@@ -726,29 +726,19 @@ function markPassages(
 
 
 // ---------------------------------------------------------------------------
-// MOCK AGENTS — replaced by GET /api/agents when that lands
+// AGENT WALLS — each rebuilt from its agent's OWN layers
 // ---------------------------------------------------------------------------
 
 /**
- * The agents, exactly as the endpoints will hand them over. When the backend
- * lands this becomes the four fetches and everything downstream is unchanged.
- */
-/**
- * THE WALLS TO THE LEFT — real profiles first, and mocks only in their absence.
+ * THE WALLS TO THE LEFT — real profiles, each carrying its own stack.
  *
- * The canon made agent separation structural: `GET /api/profiles` returns every
- * profile this account owns, and each agent profile owns a full inspiration →
- * signal → top-of-mind stack of its own. So the IDENTITY of an agent wall is
- * real from today — its name, its kind, when it came into being.
- *
- * ITS CONTENTS ARE NOT REACHABLE YET, and this is the one gap worth naming:
- * `/inspirations`, `/signals` and `/top-of-mind` are each scoped to the
- * session's OWN bound profile, with no way to ask for another's. The canon says
- * the human is admin of every profile in their account and can see everything
- * in it; the server has not grown the parameter for that yet. Until it does, a
- * real agent wall stands there with an honest empty headquarters — which is
- * exactly what a newly created agent looks like anyway, and is never filled in
- * with something invented.
+ * Every layer endpoint takes `?profile=` and a human session is admin over
+ * every profile in its account, so an agent's wall is built from the agent's
+ * OWN inspirations, signals and top of mind. (A long-dead comment here said
+ * the contents were "not reachable yet" — it outlived the fetch below by
+ * weeks and sent one investigation hunting for a missing endpoint that has
+ * existed all along. A wall whose fetch fails stands empty rather than
+ * borrowing anything; a wall that is APPROACHED refetches, see `loadWall`.)
  *
  * The mocks are the founder's own two from the meeting, and they appear ONLY
  * in dev AND ONLY when the account has no real agent profiles. Standing an
@@ -767,8 +757,22 @@ async function loadAgentWalls(): Promise<AgentBundle[]> {
        The database has kept them separate all along; nothing is merged with
        the owner's, and a wall whose fetch fails stands empty rather than
        borrowing anything to fill itself. */
-    return Promise.all(
-      real.map(async (p) => {
+    return Promise.all(real.map(loadAgentBundle));
+  }
+  if (!MOCK_AGENTS) return [];
+  return MOCK_AGENT_BUNDLES;
+}
+
+/**
+ * One agent's wall, rebuilt from its own layers — used for every wall at
+ * load, and again for one wall each time travel toward it begins, so the
+ * ground an arrival finds is as current as the archive underneath it.
+ */
+async function loadAgentBundle(p: {
+  id: string;
+  name: string;
+  createdAt: string;
+}): Promise<AgentBundle> {
         const [field, signals, tom] = await Promise.all([
           loadInspirations(p.id).catch(() => EMPTY_FIELD),
           loadSignals(p.id).catch(() => [] as Signal[]),
@@ -834,11 +838,6 @@ async function loadAgentWalls(): Promise<AgentBundle[]> {
              length of what arrived */
           inspirationTotal: field.total,
         };
-      }),
-    );
-  }
-  if (!MOCK_AGENTS) return [];
-  return MOCK_AGENT_BUNDLES;
 }
 
 
@@ -2220,16 +2219,45 @@ function HomeExperience(): JSX.Element {
   loadGroupRef.current = loadGroup;
 
   /**
-   * Warm a wall, whatever kind it is. A room fetches; an agent already has
-   * everything (and will fetch the same way when the endpoints land); your own
-   * wall has nothing to warm. The loop calls this the moment travel toward a
-   * wall begins, so arrival usually finds it ready.
+   * THE GROUND AN ARRIVAL FINDS IS CURRENT. An agent's memories change while
+   * nobody is looking — its machine keeps through a key, on its own clock —
+   * and a wall poured once at mount goes quietly stale (founder, 2026-08-29:
+   * six keeps in the archive, an empty wall on screen). One in-flight guard
+   * per agent; a failed refresh keeps the last good ground rather than
+   * blanking a wall that was honest a second ago.
+   */
+  const agentRefreshBusyRef = useRef<Set<string>>(new Set());
+  const refreshAgentWall = useCallback(
+    (agentId: string) => {
+      const a = (agents ?? []).find((x) => x.agent.id === agentId);
+      if (!a || agentRefreshBusyRef.current.has(agentId)) return;
+      agentRefreshBusyRef.current.add(agentId);
+      void loadAgentBundle(a.agent)
+        .then((fresh) => {
+          setAgents((prev) =>
+            (prev ?? []).map((x) => (x.agent.id === agentId ? fresh : x)),
+          );
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          agentRefreshBusyRef.current.delete(agentId);
+        });
+    },
+    [agents],
+  );
+
+  /**
+   * Warm a wall, whatever kind it is. A room fetches its pooled field; an
+   * agent refetches its own layers; your own wall has nothing to warm. The
+   * loop calls this the moment travel toward a wall begins, so arrival
+   * usually finds it ready — and current.
    */
   const loadWall = useCallback(
     (w: Space) => {
       if (w.kind === "group") loadGroup(w.id);
+      if (w.kind === "agent") refreshAgentWall(w.id);
     },
-    [loadGroup],
+    [loadGroup, refreshAgentWall],
   );
   const loadWallRef = useRef(loadWall);
   loadWallRef.current = loadWall;
