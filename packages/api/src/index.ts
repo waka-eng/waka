@@ -25,6 +25,7 @@ import { profilesRoutes } from "./routes/profiles.js";
 import { principlesMarkdownRoutes, principlesRoutes } from "./routes/principles.js";
 import { createAgentGrantRoutes } from "./routes/agent-grants.js";
 import { agentKeyRoutes } from "./routes/agent-keys.js";
+import { keeperKeyRoutes } from "./routes/keeper-keys.js";
 import { experienceRoutes } from "./routes/experiences.js";
 import { graphRoutes } from "./routes/graph.js";
 import { createExportRoute } from "./routes/export.js";
@@ -66,6 +67,7 @@ app.route("/api/health", healthRoutes);
 // Signup, login, session, profile preferences, and the CLI loopback flow.
 app.route("/api/auth", authRoutes);
 app.route("/api/agent-keys", agentKeyRoutes);
+app.route("/api/keeper-keys", keeperKeyRoutes);
 app.route("/api/experiences", experienceRoutes);
 app.route("/api/graph", graphRoutes);
 

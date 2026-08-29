@@ -84,7 +84,9 @@ function authMiddleware(session: AuthenticatedSession) {
  * in play, so one line meant "what the spy recorded" and the next meant "the
  * inspiration".
  */
-function fakeDatabase(profileRows: Array<{ id: string; accountId: string }> = []) {
+function fakeDatabase(
+  profileRows: Array<{ id: string; accountId: string; type?: "human" | "agent" }> = [],
+) {
   const writtenRows: Array<Record<string, unknown>> = [];
 
   const selectChain: any = {
@@ -185,7 +187,11 @@ describe("sourceForCapture", () => {
 });
 
 describe("POST /api/inspirations", () => {
-  it("writes no visibility column when an agent captures into the human profile", async () => {
+  /* The 2026-08-29 ruling: what an agent generates stays wholly in its own
+     stack. The capture that used to relay into the human is refused at the
+     door, and refused means NOTHING WRITTEN — a 403 that still inserted
+     would be the ruling in name only. */
+  it("refuses an agent capturing into the human profile, writing nothing", async () => {
     const { db, writtenRows } = fakeDatabase([{ id: humanProfileId, accountId }]);
     const app = appFor(sessionFor(agentProfileId, "agent"), db);
 
@@ -198,9 +204,28 @@ describe("POST /api/inspirations", () => {
       },
     );
 
+    expect(response.status).toBe(403);
+    expect(writtenRows).toHaveLength(0);
+  });
+
+  it("writes no visibility column when the HUMAN captures into an agent profile", async () => {
+    const { db, writtenRows } = fakeDatabase([
+      { id: agentProfileId, accountId, type: "agent" },
+    ]);
+    const app = appFor(sessionFor(humanProfileId, "human"), db);
+
+    const response = await app.request(
+      `/api/inspirations?profile=${agentProfileId}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text: "seeded into the agent", visibility: "public" }),
+      },
+    );
+
     expect(response.status).toBe(201);
     expect(writtenRows).toHaveLength(1);
-    expect(writtenRows[0]!.profileId).toBe(humanProfileId);
+    expect(writtenRows[0]!.profileId).toBe(agentProfileId);
     // The key must be ABSENT, not "private": the column default is the single
     // place that decides what unset means.
     expect(
