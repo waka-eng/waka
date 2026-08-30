@@ -39,6 +39,7 @@ Work happening now, or stopped mid-way with a recorded reason.
 | [`no-quiet-corners.md`](no-quiet-corners.md) | In flight, yielding — queue position handed to `the-legible-loop.md`. |
 | [`durable-interest.md`](durable-interest.md) | **Halted** at the Phase 1 gate (2026-08-09). A halt with a number is a result. |
 | [`lighting-a-room.md`](lighting-a-room.md) | **Blocked** at the Phase 3 gate (2026-08-28). Phases 1–2 passed; the gate wants a lit wall, which wants a real model key. |
+| [`the-first-walk.md`](the-first-walk.md) | In flight — shape settled 2026-08-29 after measuring the movement API; Phase 0 next. |
 
 ## Done
 
