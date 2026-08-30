@@ -768,16 +768,29 @@ async function loadAgentWalls(): Promise<AgentBundle[]> {
  * load, and again for one wall each time travel toward it begins, so the
  * ground an arrival finds is as current as the archive underneath it.
  */
-async function loadAgentBundle(p: {
-  id: string;
-  name: string;
-  createdAt: string;
-}): Promise<AgentBundle> {
-        const [field, signals, tom] = await Promise.all([
-          loadInspirations(p.id).catch(() => EMPTY_FIELD),
-          loadSignals(p.id).catch(() => [] as Signal[]),
-          loadTopOfMind(p.id).catch(() => null),
-        ]);
+async function loadAgentBundle(
+  p: {
+    id: string;
+    name: string;
+    createdAt: string;
+  },
+  opts: { strict?: boolean } = {},
+): Promise<AgentBundle> {
+        /* TWO POSTURES, BY WHAT THE CALLER HOLDS. At first load there is
+           nothing yet, so a failed fetch degrades to an honest empty wall.
+           A REFRESH holds the last good ground, and replacing it with a
+           failure's emptiness is how the founder's wall kept vanishing —
+           one aborted request during a server restart and "6 inspirations"
+           became no foot at all until a minute and another travel lined up.
+           Strict mode lets the failure THROW, so the refresher keeps what
+           it has and retries on the next approach instead. */
+        const [field, signals, tom] = opts.strict
+          ? await Promise.all([loadInspirations(p.id), loadSignals(p.id), loadTopOfMind(p.id)])
+          : await Promise.all([
+              loadInspirations(p.id).catch(() => EMPTY_FIELD),
+              loadSignals(p.id).catch(() => [] as Signal[]),
+              loadTopOfMind(p.id).catch(() => null),
+            ]);
         const inspirations = field.inspirations;
         const entries = (tom?.entries ?? []).slice().sort((a, b) => a.createdMs - b.createdMs);
         const lead = tom?.entries.find((e) => e.pinned) ?? tom?.entries[0] ?? null;
@@ -2248,11 +2261,15 @@ function HomeExperience(): JSX.Element {
       if (Date.now() - last < 60_000) return;
       agentRefreshedAtRef.current.set(agentId, Date.now());
       agentRefreshBusyRef.current.add(agentId);
-      void loadAgentBundle(a.agent)
+      void loadAgentBundle(a.agent, { strict: true })
         .then((fresh) => {
           pendingAgentBundlesRef.current.set(agentId, fresh);
         })
-        .catch(() => undefined)
+        .catch(() => {
+          /* keep the last good ground, and let the very next approach
+             retry rather than waiting out the throttle window */
+          agentRefreshedAtRef.current.delete(agentId);
+        })
         .finally(() => {
           agentRefreshBusyRef.current.delete(agentId);
         });
