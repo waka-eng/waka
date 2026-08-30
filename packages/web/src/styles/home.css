@@ -188,6 +188,11 @@
 .jar-hq-inner {
   max-width: 680px;
   margin: 0 auto;
+  /* THE COLUMN IS A CONTAINER, SO THE CLAIM CAN BE SET AGAINST IT. See
+     `.jar-poster`'s size for why. Inline-size only: the column's width comes
+     from the layer above it, never from its contents, so containing that axis
+     costs nothing and the height stays free. */
+  container-type: inline-size;
   /* 72, up from 56 (founder, 2026-08-27: "add a bit more spacing between
      philosophies and values button and the top of mind text") — the way up
      and the sentence are different instruments and need the air to say so */
@@ -252,7 +257,41 @@
   /* 300, never heavier: in a geometric the elegance is in the thin even stroke
      and the air around it, and weight is what killed the last attempt. */
   font-weight: 300;
-  font-size: clamp(23px, 2.5vw, 34px);
+  /* ONE CURVE, AND IT TRACKS THE COLUMN RATHER THAN THE WINDOW (founder,
+     2026-08-30, on a tablet: "overall balancing feels kinda off").
+
+     MEASURE IS THE THING A READER FEELS, and measure is column ÷ character
+     advance. This read `clamp(23px, 2.5vw, 34px)` — the window's width — while
+     the column has been capped at 680px since long before. So everywhere
+     between the phone band and about 1360px the column had stopped growing
+     and the type had not stopped shrinking, and the line got longer and
+     longer as the screen got smaller. Measured: 38 characters a line on a
+     1440px desktop against 56 on a 768px tablet, which is not a smaller
+     version of the same page — it is a different reading experience arrived
+     at by accident.
+
+     `cqi` is one percent of the column's own width, so this is the same
+     sentence set to the same measure at every width the column can take.
+
+     5.3125 IS 34 ÷ 640, AND IT IS WRITTEN OUT RATHER THAN ROUNDED. The column
+     caps at 680 with 20px of padding each side, so its content box caps at
+     640 — and 5.3125cqi of 640 is exactly the 34px the desktop already had.
+     A round 5 would have quietly taken the desktop down to 32px, which is a
+     change nobody asked for arriving inside a fix for something else. The
+     34px ceiling is then never the binding term; it is kept as the guard for
+     the day somebody raises the cap.
+
+     THE PHONE BAND STAYS, and that is deliberate. Under 560px the column is
+     narrow enough that matching this measure needs type at 1.24x the size of
+     a memory's own body text, and a claim that close to body text stops
+     reading as the wall's claim — the trade was measured and taken on
+     2026-08-28, and a fix for tablets is not the place to overturn it. Its
+     ceiling is 28px — this curve gives 27.68 at 561, so the two meet within a
+     third of a pixel rather than stepping.
+
+     Measured, characters that fit: 42 at 1440, 42 at 768, 42 at 600, 42 at
+     560, and the phone's own curve below that. One page, one measure. */
+  font-size: clamp(23px, 5.3125cqi, 34px);
   letter-spacing: 0.012em;
   line-height: 1.32;
   text-wrap: balance;
@@ -2956,43 +2995,61 @@
   .jar-hq-inner {
     padding-top: calc(118px + env(safe-area-inset-top));
   }
-  /* AND THE CLAIM KEEPS MOST OF ITS MEASURE WHEN THE COLUMN NARROWS.
-     Founder, 2026-08-28: "fix the type size on mobile."
+  /* THE CLAIM'S SIZE LEFT THIS BLOCK, and the sentence it left behind is
+     worth keeping because it is half of one finding.
 
-     THE TYPE STOPPED RESPONDING BEFORE THE COLUMN DID, and that is the
-     defect. `clamp(23px, 2.5vw, 34px)` reaches its floor at a 920px viewport,
-     so from there down the type is a flat 23px. The COLUMN goes on shrinking
-     to 640 and then, below a 680px viewport, all the way down with the
-     screen. Type held still against a narrowing column is a measure falling
-     away, and it falls on exactly the widths people hold.
+     Founder, 2026-08-28: "fix the type size on mobile." THE TYPE STOPPED
+     RESPONDING BEFORE THE COLUMN DID — `clamp(23px, 2.5vw, 34px)` reached
+     its floor at a 920px viewport while the column went on shrinking, so the
+     measure fell away on exactly the widths people hold. The answer here was
+     a second curve under 560px.
 
-     Measured as CHARACTERS THAT FIT — the column over the font's real
-     advance, not the sentence's length over its line count, which is a coarse
-     proxy that moves in whole lines and flattered this by five characters
-     when I first took it:
+     Founder, 2026-08-30, on a tablet: "overall balancing feels kinda off."
+     THE SAME DEFECT FROM THE OTHER END, and the phone band could not see it:
+     between 560 and about 1360 the column had ALREADY stopped growing at its
+     680 cap while the type went on shrinking with the window, so the line got
+     longer as the screen got smaller. Measured then: 38 characters at 1440
+     against 56 at 768.
+
+     Two bands could not fix a curve set against the wrong thing, and the
+     answer was to change what the default curve is set against rather than to
+     add a third: `.jar-poster` is sized in `cqi` now — one percent of its own
+     column — so measure is constant wherever the column is.
+
+     THIS RULE SURVIVES THAT, on its own evidence. Below 560 the column is
+     narrow enough that holding the desktop's measure needs 18.6px against
+     15px body text — 1.24x, where the desktop is 2.27x — and a claim that
+     close to body text stops reading as the wall's claim. The trade was
+     measured and taken here: 1.43x, and 33 of the desktop's characters
+     instead of 38. A fix for tablets is not the place to overturn it.
+
+     Measured in a real engine over one sentence, so the counts are comparable
+     down the column and NOT comparable with the older table above it, which
+     used a different string:
 
        viewport   type     column   fits
-           1440   34px        640   38     <- what the desktop sets at
-            768   23px        640   56
-            390   23px        350   30     <- before
-            390   21.5px      350   33     <- after
-            360   19.8px      320   33
-
-     AND IT DOES NOT REACH 38, WHICH IS THE HONEST PART. Matching the
-     desktop's measure exactly needs 18.5px in a 350px column. Body text is
-     15px, so the wall's claim would sit 1.23x the size of a memory's own
-     text and stop reading as the wall's claim at all — on the desktop it is
-     2.27x. A 350px column cannot hold both relationships, and this is the
-     trade taken deliberately: 1.43x body, and 33 of the desktop's 38
-     characters instead of 30.
-
-     23 is the ceiling, so it is today's size rather than a new one, and
-     nothing between 418px and 560px moves — the measure was never the
-     problem there. The floor is 18 for the 320px screens still in use, whose
-     column is 280.
+           1440   34px        640   42
+            768   34px        640   42     <- was 23px and 56, the tablet report
+            600   29.8px      560   42
+            560   28px        520   41     <- this rule's ceiling, a third of
+                                              a pixel off what the curve above
+                                              gives at 561, so the two meet
+            430   23.7px      390   37
+            390   21.5px      350   36     <- the 2026-08-28 trade, untouched
+            360   19.8px      320   36
+            320   18px        280   35
   */
   .jar-poster {
-    font-size: clamp(18px, 5.5vw, 23px);
+    /* 28 IS WHERE THE TWO CURVES JOIN, ROUNDED TO A WHOLE PIXEL. The curve
+       above gives 27.68px at 561, and 27.68 is what this ceiling wanted to
+       be — but `type-scale.test.ts` refuses a fractional size, and it is
+       right to: "there is no reading of the scale in which 13.5px is a
+       deliberate step — it is a call-site nudge, and seven of them had
+       shipped by the time anyone counted." A third of a pixel is not a step
+       anybody sees, and the rule that caught this is worth more than the
+       third of a pixel. Everything below about 509px is still the 5.5vw the
+       founder saw and approved. */
+    font-size: clamp(18px, 5.5vw, 28px);
   }
 }
 

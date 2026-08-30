@@ -114,8 +114,50 @@ const PROBE = `(() => {
     const cls = typeof e.className === "string" ? e.className.trim().split(/\\s+/).slice(0, 2).join(".") : "";
     return e.tagName.toLowerCase() + (cls ? "." + cls : "");
   };
-  const out = { overflow: [], covered: [], zoom: [], targets: [], crowded: [], scrollW: document.documentElement.scrollWidth, vw };
+  const out = { overflow: [], covered: [], zoom: [], targets: [], crowded: [], scrollW: document.documentElement.scrollWidth, vw, sheet: "" };
   const seen = new Set();
+
+  /* WHAT IS THE PERSON'S BUSINESS RIGHT NOW.
+
+     The coverage rule below asks whether a control can be reached. It used to
+     ask that of EVERY control on the page, and reported the world's own chrome
+     as covered whenever a sheet was open — which is what a sheet IS. On a
+     phone the card fills most of the screen, so this walk spent its life
+     reporting that the jar's mouth was under an open memory. True, and not a
+     defect; and a gate that cries every run is a gate nobody reads.
+
+     When a sheet is open the person's business is the sheet, and everything
+     behind it is deliberately out of reach. So the question is scoped: the
+     topmost open sheet, if there is one, is the only place a control has to
+     be reachable.
+
+     DRAWN, NOT MERELY PRESENT — and that is the half that keeps this honest.
+     A sheet exempts what is behind it because a person can SEE it there. An
+     element that paints nothing and still takes presses exempts nothing: that
+     is the jar's mouth bug and the dial's 44px strip, both of which took
+     presses meant for the world while showing no reason. So a candidate has
+     to actually put ink on the screen to count as a sheet, and with none open
+     every control on the page is back in scope. */
+  const SHEETS = ".jar-panel, .jar-seek, .jar-settings, .jar-prov-room, .jar-roomform, .jar-dial";
+  const paints = (n) => {
+    const c = getComputedStyle(n);
+    if (c.backgroundImage !== "none") return true;
+    const m = (c.backgroundColor || "").match(/[\\d.]+/g);
+    if (!m) return false;
+    return (m.length > 3 ? Number(m[3]) : 1) > 0.02;
+  };
+  let sheet = null;
+  for (const n of document.querySelectorAll(SHEETS)) {
+    const r = n.getBoundingClientRect();
+    const c = getComputedStyle(n);
+    if (r.width === 0 || r.height === 0) continue;
+    if (c.visibility === "hidden" || c.display === "none" || Number(c.opacity) === 0) continue;
+    if (!paints(n)) continue;
+    /* the topmost, by paint order: the last one in the document wins ties, and
+       a higher z-index beats a lower one */
+    if (!sheet || (Number(c.zIndex) || 0) >= (Number(getComputedStyle(sheet).zIndex) || 0)) sheet = n;
+  }
+  out.sheet = sheet ? named(sheet) : "";
   /* EVERY control, undeduped and with its centre. The crowding rule is about
      PAIRS, and the seen-set above collapses by name: both stepping carets are
      a bare button element with no class, so they share one name and deduping
@@ -153,13 +195,19 @@ const PROBE = `(() => {
         out.targets.push({ name, w: Math.round(r.width), h: Math.round(r.height) });
       }
       /* IS ANYTHING LYING ON TOP OF IT. Asked at the control's own centre —
-         style tells you nothing about what the pointer will actually reach. */
+         style tells you nothing about what the pointer will actually reach.
+         Only of controls that are the person's business: see the sheet rule
+         above for why a control behind an open sheet is not one. */
+      const mine = !sheet || sheet.contains(e);
       const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-      if (cx >= 0 && cx <= vw && cy >= 0 && cy <= window.innerHeight) {
+      if (mine && cx >= 0 && cx <= vw && cy >= 0 && cy <= window.innerHeight) {
         const hit = document.elementFromPoint(cx, cy);
         if (hit && hit !== e && !e.contains(hit) && !hit.contains(e) && !seen.has("c" + name)) {
           seen.add("c" + name);
-          out.covered.push(name + " — its own centre reaches " + named(hit));
+          out.covered.push(
+            name + " — its own centre reaches " + named(hit) +
+              (sheet ? ", inside the open " + named(sheet) : ""),
+          );
         }
       }
     }
@@ -195,10 +243,16 @@ interface Probe {
   crowded: string[];
   scrollW: number;
   vw: number;
+  /** the open sheet the coverage rule scoped itself to, or "" for none */
+  sheet: string;
 }
+
+/** Which sheet each surface's coverage rule scoped itself to, for the report. */
+const scopedTo: string[] = [];
 
 async function read(page: Page, view: string, surface: string): Promise<Finding[]> {
   const p = JSON.parse((await page.evaluate(PROBE)) as string) as Probe;
+  scopedTo.push(`${view}  ${surface.padEnd(14)} ${p.sheet || "(nothing open — every control is in scope)"}`);
   const found: Finding[] = [];
   for (const d of p.overflow) found.push({ view, surface, kind: "overflow", detail: d });
   for (const d of p.covered) found.push({ view, surface, kind: "covered", detail: d });
@@ -436,6 +490,14 @@ async function main(): Promise<number> {
   } finally {
     await browser.close();
   }
+
+  /* WHAT THE COVERAGE RULE WAS ASKING OF, PRINTED WHETHER OR NOT IT FOUND
+     ANYTHING. A rule that quietly narrows its own scope is worse than one
+     that reports too much: this line is how a person checks that the walk
+     was still looking at the world when it said the world was clean. */
+  console.log("  the coverage rule's scope on each surface:");
+  for (const line of scopedTo) console.log(`    ${line}`);
+  console.log("");
 
   for (const f of found) {
     console.log(`  ${f.view}  ${f.surface.padEnd(14)} ${f.kind.padEnd(9)} ${f.detail}`);

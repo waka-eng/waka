@@ -61,11 +61,12 @@
  *
  * Flags: `--negative`, `--only <id>`.
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Browser, type Page } from "playwright";
+import ts from "typescript";
 import { launchChromium } from "./browser";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, "../..");
@@ -155,6 +156,17 @@ const FIXTURE = `<!doctype html>
 <link rel="stylesheet" href="/home.css">
 <link rel="stylesheet" href="/chrome.css">
 <style>
+  /* THE PRODUCT'S BOX MODEL, WHICH IS ONE DECLARATION AND WAS MISSING.
+     global.css sets border-box on every element and this fixture does not
+     serve that sheet, so .jar-hq-inner capped its CONTENT at 680 here while
+     the product caps its BORDER BOX at 680 and gives the column 640. The
+     headline case reads the column now (the claim is sized in cqi), and it
+     was reading a column 40px wider than any that exists. It still passed,
+     because the clamp's ceiling happened to swallow the difference — which is
+     a case passing for a reason nobody chose. Not the whole sheet: this one
+     rule is what the fixture's geometry depends on, and pulling in the rest
+     would change what every other case here is standing on. */
+  *, *::before, *::after { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: #0a0d14; }
   .jar { position: fixed; inset: 0; }
   /* the world writes these two as inline \`left\` from the wall's column */
@@ -383,6 +395,124 @@ const CASES: Case[] = [
             ? `${wanted.length} classes, all present in Home.tsx`
             : `the fixture stands on classes the world no longer renders: ${missing.join(", ")}` +
               " — every measurement below would be about a page nobody has",
+      };
+    },
+  },
+
+  {
+    id: "no-backtick-inside-a-probe",
+    name: "no gate has a comment that ends the string it is written inside",
+    needs: [],
+    /* A source check: there is no stylesheet to sabotage, and what it guards
+       is a file whose probe has been silently rewritten — which the harness
+       reports as a harness error, or worse does not report at all. */
+    sabotage: "",
+    run: async () => {
+      /**
+       * FOUR GATES HAVE BEEN KILLED BY THE SAME CHARACTER, and a warning in a
+       * comment did not stop the fifth.
+       *
+       * These walks read the page through long `page.evaluate` strings, which
+       * are template literals — and this repo quotes identifiers in backticks,
+       * because that is how every other comment here reads. One of those
+       * inside a template literal ENDS THE LITERAL mid-sentence, and what
+       * follows is parsed as code. `orbs.ts` took two gates down that way;
+       * `the-timeline.ts` and this file each took one, on 2026-08-30, after a
+       * header warning about exactly this had already been written.
+       *
+       * PARSING IS NOT ENOUGH, and the first version of this case only
+       * parsed. A quoted identifier is a PAIR of backticks: the first ends
+       * the literal and the second opens a new one, so the file very often
+       * re-synchronises into something that still compiles — and then the
+       * probe silently carries different text than it reads. Two of the four
+       * incidents failed at parse; one failed at runtime with
+       * `label is not defined`; the fourth would have run and lied. A check
+       * that catches half of them and is named for all of them is decoration
+       * of the kind these gates exist not to be.
+       *
+       * So this is lexical and exact: it walks the file tracking whether it
+       * is in code, a string, or a template, and reports any comment opened
+       * INSIDE a template that the template's own end arrives before closing.
+       * That is the trap itself rather than one of its symptoms, and it does
+       * not care whether the wreckage happens to compile.
+       */
+      const dir = resolve(dirname(fileURLToPath(import.meta.url)));
+      const files = readdirSync(dir).filter((f) => f.endsWith(".ts"));
+      const found: string[] = [];
+
+      for (const f of files) {
+        const src = readFileSync(join(dir, f), "utf8");
+        /* frames: a template, or the code inside one of its ${ } holes */
+        /* BLOCK COMMENTS ONLY, and that is a correction rather than a
+           narrowing. There are no comments at all inside a template's raw
+           text — it is a string — so this is looking for the SHAPE a person
+           writes when they mean one. Slash-star is that shape and nothing
+           else is: the first version also watched for two slashes and
+           reported three walks for the ones in an http:// URL, which is a
+           gate calling an address a defect. All four real incidents were
+           block comments. */
+        const frames: Array<{ tmpl: boolean; open: number; kind: "" | "block" }> = [];
+        let mode: "code" | "block" | "line" | "sq" | "dq" | "tmpl" = "code";
+        let line = 1;
+        const top = () => frames[frames.length - 1];
+        for (let i = 0; i < src.length; i += 1) {
+          const c = src[i]!;
+          const d = src[i + 1];
+          if (c === "\n") {
+            line += 1;
+            if (mode === "line") mode = "code";
+            continue;
+          }
+          if (mode === "block") {
+            if (c === "*" && d === "/") { mode = "code"; i += 1; }
+            continue;
+          }
+          if (mode === "line") continue;
+          if (mode === "sq" || mode === "dq") {
+            if (c === "\\") i += 1;
+            else if ((mode === "sq" && c === "'") || (mode === "dq" && c === '"')) mode = "code";
+            continue;
+          }
+          if (mode === "tmpl") {
+            const t = top()!;
+            if (c === "\\") { i += 1; continue; }
+            /* the shape of a comment, opened inside the template's own text */
+            if (t.kind === "" && c === "/" && d === "*") {
+              t.kind = "block";
+              t.open = line;
+              i += 1;
+              continue;
+            }
+            if (t.kind === "block" && c === "*" && d === "/") { t.kind = ""; i += 1; continue; }
+            if (c === "$" && d === "{") { frames.push({ tmpl: false, open: line, kind: "" }); mode = "code"; i += 1; continue; }
+            if (c === "\u0060") {
+              if (t.kind !== "") {
+                found.push(
+                  `${f}:${t.open} — a comment inside a template literal is ended by a backtick ` +
+                    `on line ${line}; everything after it is no longer that string`,
+                );
+              }
+              frames.pop();
+              mode = "code";
+            }
+            continue;
+          }
+          /* mode === "code" */
+          if (c === "/" && d === "*") { mode = "block"; i += 1; continue; }
+          if (c === "/" && d === "/") { mode = "line"; i += 1; continue; }
+          if (c === "'") { mode = "sq"; continue; }
+          if (c === '"') { mode = "dq"; continue; }
+          if (c === "\u0060") { frames.push({ tmpl: true, open: line, kind: "" }); mode = "tmpl"; continue; }
+          if (c === "}" && frames.length > 0 && !top()!.tmpl) { frames.pop(); mode = "tmpl"; continue; }
+        }
+      }
+
+      return {
+        ok: found.length === 0,
+        detail:
+          found.length === 0
+            ? `${files.length} walks in tools/e2e, no comment ends the probe it is written inside`
+            : found.join("\n    "),
       };
     },
   },
@@ -928,13 +1058,29 @@ const CASES: Case[] = [
         return hit ? hit[1]!.trim() : null;
       };
 
-      /* `clamp(a, b vw, c)` resolved at the fixture's own width, because that
-         is the only way to compare a fluid declaration with a rendered pixel */
+      /* `clamp(a, b <unit>, c)` resolved against whatever that unit measures,
+         because that is the only way to compare a fluid declaration with a
+         rendered pixel.
+
+         `cqi` IS ONE PERCENT OF THE COLUMN, NOT OF THE WINDOW, and the whole
+         point of the 2026-08-30 change is that those two stopped agreeing:
+         the column caps at 680 while the window goes on growing, so a case
+         that resolved `cqi` against the viewport would have declared the
+         product wrong at every width above the cap. The column's own content
+         box is measured here rather than restated — 640 is a number this
+         stylesheet is free to change. */
       const size = want("font-size");
-      const clamp = size?.match(/clamp\(\s*([\d.]+)px\s*,\s*([\d.]+)vw\s*,\s*([\d.]+)px\s*\)/);
+      const clamp = size?.match(/clamp\(\s*([\d.]+)px\s*,\s*([\d.]+)(vw|cqi)\s*,\s*([\d.]+)px\s*\)/);
       const width = page.viewportSize()?.width ?? 900;
+      const column = (await page.evaluate(`(() => {
+        const c = document.querySelector(".jar-hq-inner");
+        if (!c) return 0;
+        const s = getComputedStyle(c);
+        return c.getBoundingClientRect().width - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight);
+      })()`)) as number;
+      const against = clamp?.[3] === "cqi" ? column : width;
       const expected = clamp
-        ? Math.min(Math.max(Number(clamp[1]), (Number(clamp[2]) / 100) * width), Number(clamp[3]))
+        ? Math.min(Math.max(Number(clamp[1]), (Number(clamp[2]) / 100) * against), Number(clamp[4]))
         : null;
 
       const got = (await page.evaluate(() => {
@@ -971,6 +1117,7 @@ const CASES: Case[] = [
           wrong.length === 0
             ? `${got.size}px ${got.weight} ${got.family} at ${got.tracking} — every one of them `
               + "`home.css`'s own"
+              + (clamp?.[3] === "cqi" ? `, the size read off a ${Math.round(column)}px column` : "")
             : wrong.join("; "),
       };
     },
@@ -1036,30 +1183,49 @@ const CASES: Case[] = [
 
   {
     id: "the-claim-keeps-its-measure",
-    name: "the claim does not lose its measure when the column narrows",
+    name: "the claim reads the same width of line wherever the column is the same",
     needs: ["jar-poster", "jar-hq-inner"],
-    /* the type pinned back at its old flat floor, which is the defect */
-    sabotage: "@media (max-width: 560px) { .jar-poster { font-size: 23px !important; } }",
+    /* the old curve put back: type set against the WINDOW while the column
+       caps at 680, which is the defect in one declaration */
+    sabotage:
+      ".jar-poster { font-size: clamp(23px, 2.5vw, 34px) !important; }" +
+      " @media (max-width: 560px) { .jar-poster { font-size: clamp(18px, 5.5vw, 23px) !important; } }",
     run: async (page) => {
-      /* MEASURED AS CHARACTERS THAT FIT, not as the sentence's length over its
-         line count. The second is a coarse proxy — it moves in whole lines, so
-         two very different settings that happen to take the same number of
-         lines read identical, and it flattered this by five characters when I
-         first took it. The column over the font's real advance is exact, and
-         says nothing about whatever sentence the wall is holding today.
-
-         `clamp(23px, 2.5vw, 34px)` hits its floor at a 920px viewport while the
-         column keeps shrinking below 680, so the type stopped responding before
-         the column did and the measure fell away on exactly the widths people
-         hold in their hand.
-
-         IT DOES NOT REACH THE DESKTOP'S NUMBER AND IS NOT MEANT TO. Matching it
-         exactly needs 18.5px in a 350px column, which would put the wall's
-         claim at 1.23x body text and stop it reading as the claim; on a desktop
-         it is 2.27x. See `home.css` for that trade written out. */
+      /**
+       * MEASURE IS WHAT A READER FEELS, and measure is the column divided by
+       * the font's real advance — not the sentence's length over its line
+       * count, which moves in whole lines and flattered this by five
+       * characters when I first took it.
+       *
+       * THE CLAIM THIS MAKES CHANGED ON 2026-08-30, because the defect it was
+       * shaped against turned out to be half of a bigger one.
+       *
+       * It used to ask only whether a PHONE kept most of the desktop's
+       * measure. That question could not see the founder's tablet report
+       * ("overall balancing feels kinda off"): between 560px and about
+       * 1360px the column has ALREADY stopped growing at its 680 cap while
+       * type set in `vw` goes on shrinking with the window, so the line gets
+       * longer as the screen gets smaller — 38 characters at 1440 against 56
+       * at 768. Both widths are desktops as far as the old case was
+       * concerned, so it reported clean.
+       *
+       * So the first half is now the sharper question: AT TWO WIDTHS WHERE
+       * THE COLUMN IS IDENTICAL, THE MEASURE MUST BE IDENTICAL. That is not a
+       * threshold anybody has to choose — it is the same column, so it is the
+       * same answer, and a curve set against the wrong thing fails it by a
+       * mile rather than by a percentage point.
+       *
+       * The phone claim is kept as the second half, because the phone is
+       * where the column really does narrow and something really is given up.
+       * IT DOES NOT REACH THE DESKTOP'S NUMBER AND IS NOT MEANT TO: matching
+       * it exactly needs 18.6px in a 350px column, which puts the wall's claim
+       * at 1.24x body text and stops it reading as the claim; on a desktop it
+       * is 2.27x. See `home.css` for that trade written out.
+       */
       const read = `(() => {
         const p = document.querySelector(".jar-poster");
-        if (!p) return null;
+        const col = document.querySelector(".jar-hq-inner");
+        if (!p || !col) return null;
         const cs = getComputedStyle(p);
         const probe = document.createElement("span");
         probe.textContent = "abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz";
@@ -1072,31 +1238,53 @@ const CASES: Case[] = [
         probe.remove();
         return JSON.stringify({
           size: Math.round(parseFloat(cs.fontSize) * 10) / 10,
+          column: Math.round(p.getBoundingClientRect().width),
           fits: Math.round(p.getBoundingClientRect().width / per),
         });
       })()`;
-      await page.setViewportSize({ width: 1440, height: 900 });
-      await page.waitForTimeout(200);
-      const deskRaw = (await page.evaluate(read)) as string | null;
-      await page.setViewportSize({ width: 390, height: 844 });
-      await page.waitForTimeout(200);
-      const phoneRaw = (await page.evaluate(read)) as string | null;
-      if (!deskRaw || !phoneRaw) return { ok: false, detail: "no claim on the fixture to measure" };
-      const desk = JSON.parse(deskRaw) as { size: number; fits: number };
-      const phone = JSON.parse(phoneRaw) as { size: number; fits: number };
-      const lost = Math.round(((desk.fits - phone.fits) / desk.fits) * 100);
-      /* A PHONE KEEPS AT LEAST FOUR FIFTHS OF THE DESKTOP'S MEASURE, and the
-         number is chosen from both sides: the flat 23px floor this replaces
-         loses a quarter and must fail; scaling with the column loses 18% and
-         must pass. 18 as the line was the first try and sat exactly on the
-         measured value — a threshold with no room on the passing side is one
-         font-metric change away from failing for nothing. */
+      type Shot = { size: number; column: number; fits: number };
+      const at = async (w: number, h: number): Promise<Shot | null> => {
+        await page.setViewportSize({ width: w, height: h });
+        await page.waitForTimeout(200);
+        const raw = (await page.evaluate(read)) as string | null;
+        return raw ? (JSON.parse(raw) as Shot) : null;
+      };
+      const wide = await at(1440, 900);
+      const tablet = await at(768, 1024);
+      const phone = await at(390, 844);
+      if (!wide || !tablet || !phone) return { ok: false, detail: "no claim on the fixture to measure" };
+
+      const faults: string[] = [];
+      /* the premise: these two widths must be the same column, or the case is
+         asking a question about something else and should say so */
+      if (Math.abs(wide.column - tablet.column) > 1) {
+        faults.push(
+          `the column is ${wide.column} at 1440 and ${tablet.column} at 768 — this case ` +
+            "compares two widths on the assumption the column caps between them, and it no longer does",
+        );
+      } else if (Math.abs(wide.fits - tablet.fits) > 1) {
+        faults.push(
+          `the same ${wide.column}px column reads ${wide.fits} characters at 1440 and ` +
+            `${tablet.fits} at 768 — the type is set against the window while the column is capped, ` +
+            `so the line gets LONGER as the screen gets smaller (${wide.size}px against ${tablet.size}px)`,
+        );
+      }
+      /* A PHONE KEEPS AT LEAST FOUR FIFTHS OF THE DESKTOP'S MEASURE. */
+      const lost = Math.round(((wide.fits - phone.fits) / wide.fits) * 100);
+      if (lost > 20) {
+        faults.push(
+          `a phone at ${phone.size}px fits ${phone.fits} characters against the desktop's ` +
+            `${wide.fits} — ${lost}% given up, more than the fifth allowed`,
+        );
+      }
       return {
-        ok: lost <= 20,
+        ok: faults.length === 0,
         detail:
-          `desktop ${desk.size}px fits ${desk.fits} characters, a phone at ${phone.size}px fits ` +
-          `${phone.fits} — ${lost}% of the desktop's measure given up ` +
-          `${lost <= 20 ? "(within the fifth allowed)" : "*** MORE THAN A FIFTH ***"}`,
+          faults.length === 0
+            ? `${wide.fits} characters at 1440 and ${tablet.fits} at 768 on one ${wide.column}px ` +
+              `column (${wide.size}px both), and a phone at ${phone.size}px keeps ${phone.fits} — ` +
+              `${lost}% given up where the column really does narrow`
+            : faults.join("; "),
       };
     },
   },
