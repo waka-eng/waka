@@ -4253,6 +4253,9 @@ function HomeExperience(): JSX.Element {
         wall: curWall().id || "me",
         kind: curWall().kind,
         tripActive: trip.active,
+        cam: { x: Math.round(cam.x), y: Math.round(cam.y) },
+        viewH: view.h,
+        viewW: view.w,
         balls: list.map((b) => ({
           id: b.id.slice(0, 8),
           agent: (b.agentId ?? "").slice(0, 8) || "me",
@@ -4302,6 +4305,12 @@ function HomeExperience(): JSX.Element {
          is what sediment IS. */
       const px: number[] = [];
       const py: number[] = [];
+      /* THE WALL'S OWN COLUMN. Homes are solved in column-local coordinates
+         and stood at the column's x-origin; they were laid bare, which put
+         every ground but your own exactly one screen to the right of the
+         camera that travelled to see it (founder, 2026-08-30 — six counted,
+         none visible; measured at screen-x 1842 on a 1280 viewport). */
+      const colX = curWall().col * view.w;
       for (let i = 0; i < n; i++) {
         const b = present[i];
         const u = n > 1 ? i / (n - 1) : 0; /* 0 oldest → 1 newest */
@@ -4312,9 +4321,11 @@ function HomeExperience(): JSX.Element {
         const age = clamp01(1 - u + jitter); /* 1 oldest → 0 newest */
         const y = clamp(lerp(yTop, yBot, Math.pow(age, 1 / gamma)), yTop, yBot);
         b.homeY = y;
-        b.homeX = scatterX(b, y, px, py, spanL, spanR);
-        px.push(b.homeX);
+        b.colX = colX;
+        const lx = scatterX(b, y, px, py, spanL, spanR);
+        px.push(lx);
         py.push(b.homeY);
+        b.homeX = colX + lx;
       }
       electPeek(present);
     }
@@ -4395,7 +4406,9 @@ function HomeExperience(): JSX.Element {
             : scatterX(b, b.peekY, px, py, Math.min(rightLo, rightHi), rightHi);
           x = clamp(x, spanL + b.r, spanR - b.r);
         }
-        b.peekX = x;
+        /* the peek stands in its wall's own column, like the ground below */
+        b.colX = curWall().col * view.w;
+        b.peekX = b.colX + x;
         px.push(x);
         py.push(b.peekY);
       }
@@ -5729,7 +5742,7 @@ function HomeExperience(): JSX.Element {
         /* the field keeps to its own width */
         for (const b of arr) {
           if (!b.active) continue;
-          b.x = clamp(b.x, lo + b.r, hi - b.r);
+          b.x = clamp(b.x, b.colX + lo + b.r, b.colX + hi - b.r);
         }
       };
 

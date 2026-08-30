@@ -175,6 +175,12 @@ export interface Ball {
    * the lens reads, and the lens FADES rather than removes.
    */
   origin: "agent" | "human";
+  /** The x-origin of the COLUMN this ball's wall lives in (col × view width).
+      Homes and peeks are laid in column-local coords and offset by this, so
+      every wall's ground stands in front of its own camera — it was zero for
+      every wall, which put every ground except yours one screen to the right
+      of the camera that came to see it. */
+  colX: number;
   /** Which agent kept it, where one did. */
   agentId?: string;
   /* set only on a wall that holds more than one person's memories */
@@ -444,6 +450,7 @@ export function makeBall(s: SignalSeed, agentId = ""): Ball {
     arrive: 1,
     entryH: 0,
     active: true,
+    colX: 0,
     leaving: false,
     gone: 0,
     spawnAt: -1,
@@ -553,6 +560,7 @@ export function makeAgentBall(s: ApiAgentSignal): Ball {
     arrive: 1,
     entryH: 0,
     active: true,
+    colX: 0,
     leaving: false,
     gone: 0,
     spawnAt: -1,
