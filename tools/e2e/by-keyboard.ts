@@ -228,20 +228,34 @@ async function main(): Promise<void> {
          wall, so the walk reported the same failure and looked like the fix
          had not worked. A seed that is not scoped to the account under test
          is not a seed, it is a side effect. */
-      const aged = await sql`
-        update inspirations set created_at = now() - interval '31 days'
-        where id = (
-          select i.id from inspirations i
-          join profiles p on p.id = i.profile_id
-          join accounts a on a.id = p.account_id
-          where a.email = ${email}
-          order by i.created_at
-          limit 1
-        )
-        returning id
-      `;
-      if (aged.length === 0) {
-        console.log("  (nothing was aged — the wall has no past, so the timeline goes unwalked)");
+      /* AND A DATABASE THAT WILL NOT ANSWER COSTS ONE CLAIM, NOT ALL OF THEM.
+         Everything else this walk asks — whether the world can be tabbed
+         through, named, focused, travelled and read — needs no database at
+         all. Letting a connection error escape would turn a hiccup in the
+         seed into a red gate about the keyboard, which is a lie about what
+         went wrong. It is reported and the walk goes on with a wall that has
+         no past; the tab-count check below will then legitimately notice the
+         missing word, which is the honest outcome. */
+      try {
+        const aged = await sql`
+          update inspirations set created_at = now() - interval '31 days'
+          where id = (
+            select i.id from inspirations i
+            join profiles p on p.id = i.profile_id
+            join accounts a on a.id = p.account_id
+            where a.email = ${email}
+            order by i.created_at
+            limit 1
+          )
+          returning id
+        `;
+        if (aged.length === 0) {
+          console.log("  (nothing was aged — the wall has no past, so the timeline goes unwalked)");
+        }
+      } catch (err) {
+        console.log(
+          `  (the seed could not reach the database: ${err instanceof Error ? err.message : String(err)})`,
+        );
       }
       await sql.end({ timeout: 5 }).catch(() => undefined);
     } else {
