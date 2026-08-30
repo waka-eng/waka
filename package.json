@@ -53,7 +53,8 @@
     "e2e:every-orb-answers": "tsx tools/e2e/every-orb-answers.ts",
     "e2e:the-timeline": "tsx tools/e2e/the-timeline.ts",
     "e2e:coming-back": "tsx tools/e2e/coming-back.ts",
-    "e2e:the-character": "tsx tools/e2e/the-character.ts"
+    "e2e:the-character": "tsx tools/e2e/the-character.ts",
+    "e2e:lighting": "tsx tools/e2e/lighting.ts"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",

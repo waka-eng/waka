@@ -436,6 +436,18 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm e2e:every-orb-answers --base-url http://127.0.0.1:3010
 
+      # THE ROOM YOU JUST MADE, which no gate had ever walked. Making a room
+      # used to leave you standing where you were — the one act that creates a
+      # place was the one act that did not move you — and the invite sat
+      # filed behind the wall's name rather than offered where you landed.
+      #
+      # It derives nothing: no model call anywhere in the walk, so it belongs
+      # in this blocking ladder rather than behind the key check that
+      # `e2e:erasure` sits behind.
+      - name: The maker lands in the room they made
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:lighting --base-url http://127.0.0.1:3010
+
       # THE DIAL HAD PRODUCED THREE FOUNDER REPORTS AND ZERO GATES, and
       # nothing in tools/e2e had ever dragged it. Its two rules pull against
       # each other — hold still while held, hang under the word once let go —
