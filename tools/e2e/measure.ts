@@ -1070,17 +1070,57 @@ const CASES: Case[] = [
          box is measured here rather than restated — 640 is a number this
          stylesheet is free to change. */
       const size = want("font-size");
-      const clamp = size?.match(/clamp\(\s*([\d.]+)px\s*,\s*([\d.]+)(vw|cqi)\s*,\s*([\d.]+)px\s*\)/);
-      const width = page.viewportSize()?.width ?? 900;
+      const view = page.viewportSize() ?? { width: 900, height: 640 };
       const column = (await page.evaluate(`(() => {
         const c = document.querySelector(".jar-hq-inner");
         if (!c) return 0;
         const s = getComputedStyle(c);
         return c.getBoundingClientRect().width - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight);
       })()`)) as number;
-      const against = clamp?.[3] === "cqi" ? column : width;
+      /* one percent of whatever each unit measures */
+      const per: Record<string, number> = {
+        vw: view.width / 100,
+        vh: view.height / 100,
+        cqi: column / 100,
+      };
+      /**
+       * THE MIDDLE TERM IS A `min()` NOW, AND THE FIRST VERSION OF THIS JUST
+       * STOPPED CHECKING.
+       *
+       * It matched `clamp(a px, b <unit>, c px)` and nothing else. When the
+       * claim gained a second cap — `min(5.3125cqi, 5vh)`, one for the column
+       * and one for a short window — the pattern missed, `expected` fell to
+       * null, and the size comparison below was skipped in silence. The case
+       * went on passing while checking three properties instead of four,
+       * which is the exact way a gate becomes decoration: not by being
+       * deleted, by quietly narrowing.
+       *
+       * So an unparseable font-size is a FAILURE here rather than a skip. If
+       * this file cannot read what `home.css` declares, it cannot claim the
+       * product agrees with it.
+       */
+      const fluid = (term: string): number | null => {
+        const one = term.trim().match(/^([\d.]+)(vw|vh|cqi)$/);
+        if (one) return Number(one[1]) * per[one[2]!]!;
+        const least = term.trim().match(/^min\(([^)]+)\)$/);
+        if (!least) return null;
+        const parts = least[1]!.split(",").map((t) => fluid(t));
+        if (parts.some((v) => v === null)) return null;
+        return Math.min(...(parts as number[]));
+      };
+      const clamp = size?.match(/^clamp\(\s*([\d.]+)px\s*,(.+),\s*([\d.]+)px\s*\)$/s);
+      const middle = clamp ? fluid(clamp[2]!) : null;
+      if (size && middle === null) {
+        return {
+          ok: false,
+          detail:
+            `\`home.css\` declares \`font-size: ${size}\` and this case cannot read it, so it ` +
+            "cannot say whether the product agrees. Teach the parser the new shape rather than " +
+            "leaving a check that quietly passes on three properties instead of four.",
+        };
+      }
       const expected = clamp
-        ? Math.min(Math.max(Number(clamp[1]), (Number(clamp[2]) / 100) * against), Number(clamp[4]))
+        ? Math.min(Math.max(Number(clamp[1]), middle!), Number(clamp[3]))
         : null;
 
       const got = (await page.evaluate(() => {
@@ -1098,7 +1138,10 @@ const CASES: Case[] = [
 
       const wrong: string[] = [];
       if (expected !== null && Math.abs(got.size - expected) > 0.5) {
-        wrong.push(`size ${got.size}px, and \`home.css\` asks for ${expected}px at ${width}px wide`);
+        wrong.push(
+          `size ${got.size}px, and \`home.css\` asks for ${Math.round(expected * 100) / 100}px ` +
+            `in a ${view.width}x${view.height} frame on a ${Math.round(column)}px column`,
+        );
       }
       const weight = want("font-weight");
       if (weight && got.weight !== weight) wrong.push(`weight ${got.weight}, declared ${weight}`);
@@ -1117,7 +1160,7 @@ const CASES: Case[] = [
           wrong.length === 0
             ? `${got.size}px ${got.weight} ${got.family} at ${got.tracking} — every one of them `
               + "`home.css`'s own"
-              + (clamp?.[3] === "cqi" ? `, the size read off a ${Math.round(column)}px column` : "")
+              + (clamp ? `, the size solved against a ${Math.round(column)}px column in a ${view.width}x${view.height} frame` : "")
             : wrong.join("; "),
       };
     },

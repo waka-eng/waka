@@ -195,8 +195,17 @@
   container-type: inline-size;
   /* 72, up from 56 (founder, 2026-08-27: "add a bit more spacing between
      philosophies and values button and the top of mind text") — the way up
-     and the sentence are different instruments and need the air to say so */
-  padding: calc(72px + env(safe-area-inset-top)) 20px 0;
+     and the sentence are different instruments and need the air to say so.
+     AND IT IS THE FIRST THING TO GIVE WAY ON A SHORT WINDOW. The character is
+     a constant by ruling; the claim gives way second (see `.jar-poster`); the
+     AIR above the claim gives way first, because it is the only thing here
+     that costs nothing to lose. 48 is the floor and it is measured: the way
+     up ends at y 31, and 16 is the inset the four signposts keep, so 48 is
+     the nearest step on the spacing grid that still clears it with the air
+     every other signpost is given. 10.6vh reaches the full 72 at a 679px
+     viewport — the same 680 the column caps at and the same 680 the claim's
+     own height cap lands on, so all three stop growing together. */
+  padding: calc(clamp(48px, 10.6vh, 72px) + env(safe-area-inset-top)) 20px 0;
 }
 /* ═══ THE LAYER TAKES NO POINTER; ITS CONTROLS TAKE IT BACK, ALL OF THEM ═══
    `.jar-hq` is `pointer-events: none` so the world underneath stays draggable
@@ -290,8 +299,32 @@
      third of a pixel rather than stepping.
 
      Measured, characters that fit: 42 at 1440, 42 at 768, 42 at 600, 42 at
-     560, and the phone's own curve below that. One page, one measure. */
-  font-size: clamp(23px, 5.3125cqi, 34px);
+     560, and the phone's own curve below that. One page, one measure.
+
+     AND A SECOND CAP, FOR THE OTHER AXIS. Sizing by the column alone made a
+     SHORT window worse: at 1024 the claim went from 25.6px to 34px, which is
+     right for measure and wrong for a 380px-tall screen — it took the block
+     from two lines to three and pushed it 34px further into the character.
+     Found by measuring it rather than by anybody reporting it, and it was
+     mine: the character is a constant by ruling ("character shouldnt be
+     responsive to screensize"), so when the slot runs out the body has
+     nowhere to go and the overlap is real.
+
+     `5vh` is the claim's share of a short window, and it reaches 34px at a
+     680px viewport — the same 680 the column caps at. So the sentence is:
+     the claim never exceeds 5.3125% of its column's width or 5% of the
+     window's height, and both reach 34px at 680. Above that nothing changes;
+     below it the claim gives way, which is what the character's own comment
+     says text is for.
+
+     Measured against the curve this replaced, as the claim's block reaching
+     INTO the character (negative is clear of it):
+
+       1440x900   -183  ->  -183      1024x460    +11  ->    -4
+       1280x720   -101  ->   -93      1024x380    +51  ->   +36
+       1024x560    -53  ->   -23       900x380    +48  ->   +36
+                                       768x420    +28  ->   +16 */
+  font-size: clamp(23px, min(5.3125cqi, 5vh), 34px);
   letter-spacing: 0.012em;
   line-height: 1.32;
   text-wrap: balance;
