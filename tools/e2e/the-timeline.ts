@@ -1,215 +1,310 @@
 /**
- * THE TIMELINE HANGS FROM ITS WORD, AND HOLDS STILL UNDER THE HAND.
+ * THE TIMELINE IS A LIST OF DATES, AND EVERY ONE OF THEM ANSWERS.
  *
  * ── WHY THIS FILE EXISTS ───────────────────────────────────────────────────
  *
- * The dial has produced three separate reports from the founder and, until
- * this file, zero gates. Nothing in `tools/e2e` had ever dragged it:
+ * The dial has produced four separate reports from the founder. The first
+ * three were about one gesture:
  *
  *   2026-08-27  "line is not only hard to drag, but moves around"
  *   2026-08-27  "should align with the text NOW"
  *   2026-08-28  "why is timeline not right under the word 'now'"
  *
- * The first two were fixed by freezing the rail's anchor while the dial was
- * `--open` or `--live`. The third was CAUSED by that fix, and the two pull
- * against each other, which is exactly why they need holding together in one
- * file: a repair to either one alone re-breaks the other.
+ * Each was answered where it stood — freeze the anchor while held, then
+ * unfreeze it on release, then move the anchor out of `measure()` so it
+ * recomputes when the WORD changes rather than when the window does. Three
+ * fixes, in tension with each other, holding up a control nobody could hit.
  *
- * ── THE TWO RULES, WHICH ARE IN TENSION ────────────────────────────────────
+ *   2026-08-30  "instead of this draggable line, when clicking on now, just
+ *                show the major dates to make them clickable"
  *
- * The rail's left is set from the word's centre. The word is the READING —
- * "now" at rest, "Aug 27" after a scrub — so the word changes width, and the
- * rail is chasing a moving anchor.
+ * That is the fourth, and it removes the gesture rather than the symptoms. A
+ * wall does not change continuously — it changes on the days something was
+ * kept — so the days ARE the instrument, and the rail's whole length was one
+ * answer offered at a thousand heights.
  *
- *   HOLD STILL WHILE HELD.  A rail that re-centres mid-drag moves under the
- *                           hand that is dragging it. Unusable.
- *   HANG UNDER THE WORD.    Once let go, the line belongs under the reading
- *                           it now shows, or it is pointing at nothing.
+ * ── WHAT THIS WALK HOLDS ───────────────────────────────────────────────────
  *
- * Freezing on `--open` satisfied the first and broke the second, because
- * after a drag THE POINTER IS STILL OVER THE RAIL — that is where a hand
- * necessarily is — so `--open` stayed true and the anchor stayed frozen
- * against a word that had already changed. Measured on a 1440px wall: the
- * word went from NOW (w49, centre 125) to AUG 27 (w65, centre 133) while the
- * rail stayed at 125. Eight pixels, permanently.
+ *   1. NOTHING STANDS OVER THE WORLD AT REST. `.jar-dial-track` was a 44px
+ *      strip running nearly half the height of the screen, with no ink in it,
+ *      mounted at all times and live to every press. It swallowed presses
+ *      meant for the walls list behind it — measured at x 110..140, y 50..420
+ *      on 2026-08-30, and it took two attempts to reach ADD NEW through it.
+ *      So this walk reaches for that control the way a person would, once.
  *
- * `--live` is the honest condition: held, not merely hovered. Hovering never
- * moves the word — only releasing does.
+ *   2. THE DATES HANG UNDER THE WORD. The surviving half of the first three
+ *      reports: the word sits after the wall chip, so its place depends on
+ *      the wall's NAME and no stylesheet constant can be under it. The list
+ *      takes the word's own left edge — an edge, not a centre, so it cannot
+ *      drift when the widest date changes.
  *
- * ── AND THE SECOND HALF OF THE SAME BUG ────────────────────────────────────
+ *   3. PRESSING A DATE WINDS THE WALL TO IT. The claim the eye cannot check:
+ *      an instrument that opened, listed real dates and quietly kept showing
+ *      today would look completely correct in a screenshot.
  *
- * Fixing the condition alone still left it 8px out, because the anchor lived
- * inside `measure()` and `measure()` runs on a RESIZE. The word changes
- * without the window changing, so nothing recomputed. It is `hangRail()` now,
- * with a second caller: an effect on the reading. `onDialUp` cannot be that
- * caller — it runs before React commits the new word, so it would measure the
- * word the scrub replaced.
+ *   4. AND THE WAY BACK IS IN THE LIST. The rail had none — returning to the
+ *      present meant landing a drag within half a day of the top of a line
+ *      you could not see.
+ *
+ * ── WHY IT SEEDS THE DATABASE ──────────────────────────────────────────────
+ *
+ * The instrument exists only where there is history: a wall whose whole life
+ * is today offers nothing to wind back to, so the world does not render a
+ * word at all. A walk that signs up and saves two things has exactly that
+ * wall, and would measure the absence rather than the control. There is no
+ * way through the product to keep something LAST MONTH — deliberately — so
+ * the dates are backdated in one statement, the same seam `at-scale` uses and
+ * for the same reason.
  */
 import type { Page } from "playwright";
+import postgres from "postgres";
 
 import { launchChromium } from "./browser";
 import { settleAfterArrival } from "./arrival";
 
 const DEFAULT_BASE = "http://127.0.0.1:3010";
 
-/** A centre within this of the word's is under it, as far as an eye is concerned. */
+/** A left edge within this of the word's is under it, as far as an eye is concerned. */
 const ALIGNED = 2;
+/** How far below the word the sheet may stand — the anchored sheets' own air. */
+const BELOW_MAX = 24;
+/** How many days back the seeded memories are pushed, oldest first. */
+const BACK_DAYS = [61, 33, 12];
 
 const BOXES = `(() => {
   const pick = (s) => {
     const e = document.querySelector(s);
     if (!e) return null;
     const r = e.getBoundingClientRect();
-    return { l: Math.round(r.left), w: Math.round(r.width), c: Math.round(r.left + r.width / 2), t: Math.round(r.top), b: Math.round(r.bottom) };
+    return { l: Math.round(r.left), w: Math.round(r.width), t: Math.round(r.top), b: Math.round(r.bottom) };
   };
-  const dial = document.querySelector(".jar-dial");
+  /* textContent, NOT innerText. The label register uppercases these in CSS,
+     and innerText reports what is PAINTED — so a gate reading it compares the
+     product's typography against the test's spelling and fails on "NOW" vs
+     "now". The words are the claim; the case is a rendering decision made one
+     rule away, and the label register has its own gate.
+     (No backticks inside this string: it is a template literal, and one in a
+     comment ends it mid-sentence. That has cost this project three gates.) */
   return JSON.stringify({
     when: pick(".jar-when"),
-    track: pick(".jar-dial-track"),
-    word: (document.querySelector(".jar-when") || {}).innerText || "",
-    cls: dial ? dial.className : "",
+    sheet: pick(".jar-dial"),
+    word: ((document.querySelector(".jar-when") || {}).textContent || "").trim(),
+    rows: [...document.querySelectorAll(".jar-dial-stop")].map((b) => (b.textContent || "").trim()),
+    lit: ((document.querySelector(".jar-dial-stop--here") || {}).textContent || "").trim(),
   });
 })()`;
 
+interface Box { l: number; w: number; t: number; b: number }
 interface Shot {
-  when: { l: number; w: number; c: number; t: number; b: number } | null;
-  track: { l: number; w: number; c: number; t: number; b: number } | null;
+  when: Box | null;
+  sheet: Box | null;
   word: string;
-  cls: string;
+  rows: string[];
+  lit: string;
 }
 
 const read = async (page: Page): Promise<Shot> =>
   JSON.parse((await page.evaluate(BOXES)) as string) as Shot;
 
-const off = (s: Shot): number | null =>
-  s.when && s.track ? s.track.c - s.when.c : null;
+function connectionUrl(): string {
+  const url = process.env.DB_CONNECTION_URL ?? process.env.DATABASE_URL;
+  if (!url) {
+    console.error(
+      "[the-timeline] DB_CONNECTION_URL is not set. This walk backdates the\n" +
+        "               memories it keeps — the instrument does not exist on a\n" +
+        "               wall whose whole life is today — so it needs the same\n" +
+        "               connection string the API uses:\n\n" +
+        "                 export $(grep DB_CONNECTION_URL .env.local | xargs)\n",
+    );
+    process.exit(2);
+  }
+  return url;
+}
 
 const run = async (base: string): Promise<number> => {
   const browser = await launchChromium();
   const bad: string[] = [];
   const said: string[] = [];
+  const sql = postgres(connectionUrl(), { max: 2 });
 
   try {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const page = await ctx.newPage();
+    const email = `dial-${Date.now()}@example.test`;
     await page.goto(`${base}/login`, { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(2_000);
     await page.click("#login-tab-signup");
     await page.waitForTimeout(800);
-    await page.fill("input[name=email]", `dial-${Date.now()}@example.test`);
+    await page.fill("input[name=email]", email);
     await page.fill("input[name=password]", "the-timeline-gate-1");
     await page.fill("input[name=name]", "Dial");
     await page.click("button[type=submit]");
     await page.waitForTimeout(9_000);
-    for (const t of ["a memory to wind back to", "and a second one"]) {
+
+    const kept = [
+      "a memory to wind back to",
+      "and a second one, a month later",
+      "and a third, nearer the present",
+    ];
+    for (const t of kept) {
       await page.locator(".jar-mouth-rest").first().click();
       await page.waitForTimeout(450);
       await page.fill('textarea[aria-label="capture inspiration"]', t);
       await page.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click();
       await page.waitForTimeout(2_800);
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(300);
     }
+
+    /* THE HISTORY, WRITTEN THE ONLY WAY IT CAN BE. Each memory is pushed back
+       a different number of days, so the wall has three distinct days on it
+       and no two rows in the list can be confused. */
+    for (let i = 0; i < kept.length; i += 1) {
+      await sql`
+        update inspirations
+        set created_at = now() - (${BACK_DAYS[i]!} || ' days')::interval
+        where text = ${kept[i]!}
+      `;
+    }
+
     await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
     await settleAfterArrival(page);
-    await page.waitForTimeout(2_000);
+    await page.waitForTimeout(2_500);
 
-    /* ── at rest ── */
+    /* ── 1. at rest: the word alone, and nothing standing over the world ── */
     const rest = await read(page);
-    const restOff = off(rest);
-    if (restOff === null) {
-      bad.push("at rest: no word or no rail on screen at all");
+    if (!rest.when) {
+      bad.push("at rest there is no word to press — the wall has history and offers no way into it");
     } else {
-      said.push(`at rest the word reads ${JSON.stringify(rest.word)} at centre ${rest.when!.c}, the line at ${rest.track!.c}`);
-      if (Math.abs(restOff) > ALIGNED)
-        bad.push(`at rest the line sits ${restOff}px off the word's centre`);
+      said.push(`at rest the word reads ${JSON.stringify(rest.word)}`);
     }
+    if (rest.sheet) bad.push("the dates are on screen before anybody asked for them");
+    if (rest.rows.length > 0)
+      bad.push(`${rest.rows.length} date rows are standing at rest`);
 
-    /* ── reached for ──
-       PRESSED, NOT HOVERED, AND THAT DISTINCTION IS THE WHOLE GATE.
-       `--open` is `timeOpen || timeNear || scrubbing`, and `timeNear` is the
-       pointer on THE WORD — not on the rail. So a walk that hovers the word,
-       moves down to the handle (leaving the word), drags and lets go ends with
-       `--open` false, and cannot see a bug that only exists while it is true.
-       The first version of this file did exactly that and passed its own
-       sabotage.
+    /* THE STRIP'S OWN GROUND, ASKED DIRECTLY. `.jar-dial-track` stood here.
+       Anything interactive at this point, with the instrument closed, is the
+       same defect back. */
+    const under = (await page.evaluate(`(() => {
+      const e = document.elementFromPoint(125, 240);
+      return e ? String(e.className || e.tagName) : "(nothing)";
+    })()`)) as string;
+    said.push(`where the rail used to stand, a press now lands on ${JSON.stringify(under)}`);
+    if (/jar-dial/.test(under))
+      bad.push(`the dial still owns the point the rail stood at — a press there hits ${under}`);
 
-       A person who wants to scrub PRESSES the word: `timeOpen` latches, the
-       rail stays up after the hand lets go, and `--open` is still true with a
-       word that has just changed width underneath it. That is the founder's
-       screenshot, and it is the only flow in which the rail is still on screen
-       to be looked at afterwards. */
-    await page.locator(".jar-when").first().click();
+    /* ── 2. the walls list, which the rail used to block ── */
+    await page.locator(".jar-here-more").first().click();
     await page.waitForTimeout(900);
-    const hover = await read(page);
-    const hoverOff = off(hover);
-    if (hoverOff !== null && Math.abs(hoverOff) > ALIGNED)
-      bad.push(`reached for, the line sits ${hoverOff}px off the word's centre`);
+    const reached = await page
+      .getByText(/^add new$/i)
+      .first()
+      .click({ timeout: 4_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!reached) bad.push("ADD NEW could not be reached in the walls list — something is over it");
+    else said.push("the walls list answers a first press: ADD NEW was reached");
+    /* ADD NEW opens the make-another-place sheet, whose way out is a press on
+       the world. Reloading rather than hunting for it: what this walk is about
+       resumes on a fresh wall, and a chain of dismissals is a chain of things
+       that can fail for reasons this file is not about. */
+    await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+    await settleAfterArrival(page);
+    await page.waitForTimeout(2_500);
 
-    /* ── held: it must NOT move under the hand ── */
-    const handle = await page.locator(".jar-dial-handle").first().boundingBox();
-    if (!handle) {
-      bad.push("the rail has no handle to take hold of");
+    /* ── 3. pressing the word ── */
+    await page.locator(".jar-when").first().click();
+    await page.waitForTimeout(700);
+    const open = await read(page);
+    if (!open.sheet || open.rows.length === 0) {
+      bad.push("pressing the word opened nothing");
     } else {
-      const before = (await read(page)).track;
-      await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
-      await page.mouse.down();
-      await page.mouse.move(handle.x + handle.width / 2, handle.y + 150, { steps: 12 });
-      await page.waitForTimeout(500);
-      const held = await read(page);
-      if (before && held.track && held.track.l !== before.l)
-        bad.push(
-          `the line moved ${held.track.l - before.l}px sideways WHILE BEING DRAGGED — ` +
-            `it wanders under the hand holding it`,
-        );
-      said.push(`held, the line stayed at ${held.track ? held.track.l : "?"}`);
-
-      /* ── let go: the word changes, and the line must follow it ── */
-      await page.mouse.up();
-      await page.waitForTimeout(1_200);
-      const done = await read(page);
-      const doneOff = off(done);
-      /* the state has to be the one the bug lives in, or a pass is an accident */
-      if (!done.cls.includes("jar-dial--open"))
-        bad.push(
-          `after letting go the rail is not open (class ${JSON.stringify(done.cls)}) — ` +
-            `this walk is not in the state the founder reported and proves nothing`,
-        );
+      const edge = open.sheet.l - open.when!.l;
+      const below = open.sheet.t - open.when!.b;
       said.push(
-        `let go, the word reads ${JSON.stringify(done.word)} at centre ${done.when ? done.when.c : "?"}, ` +
-          `the line at ${done.track ? done.track.c : "?"}`,
+        `pressed, ${open.rows.length} rows: ${JSON.stringify(open.rows)} — ` +
+          `${edge}px off the word's left edge, ${below}px below it`,
       );
-      if (doneOff === null) bad.push("after the scrub there is no word or no rail to compare");
-      else if (Math.abs(doneOff) > ALIGNED)
+      if (Math.abs(edge) > ALIGNED)
+        bad.push(`the dates sit ${edge}px off the word's left edge — they hang from nothing`);
+      if (below <= 0 || below > BELOW_MAX)
+        bad.push(`the dates sit ${below}px below the word, outside the air the other sheets keep`);
+      if (open.rows[0] !== "now")
+        bad.push(`the first row is ${JSON.stringify(open.rows[0])} rather than the way back to now`);
+      if (open.lit !== "now")
+        bad.push(`standing at now, the lit row is ${JSON.stringify(open.lit)}`);
+      /* three days were seeded and none of them is today */
+      if (open.rows.length !== BACK_DAYS.length + 1)
         bad.push(
-          `after a scrub the line sits ${doneOff}px off the word's centre — the reading moved ` +
-            `(${JSON.stringify(rest.word)} -> ${JSON.stringify(done.word)}) and the line did not follow it`,
-        );
-      /* the reading has to have actually changed, or this proves nothing */
-      if (done.word.trim().toUpperCase() === rest.word.trim().toUpperCase())
-        bad.push(
-          `the scrub did not change the reading (still ${JSON.stringify(done.word)}) — ` +
-            `this gate measured nothing and must not be read as a pass`,
+          `${open.rows.length - 1} dates offered for ${BACK_DAYS.length} days of history — ` +
+            "the list is marking the calendar rather than the archive",
         );
     }
 
-    await ctx.close();
+    /* ── 4. pressing a date winds the wall to it ── */
+    if (open.rows.length > 1) {
+      const target = open.rows[1]!;
+      await page.locator(".jar-dial-stop", { hasText: new RegExp(`^${target}$`) }).first().click();
+      await page.waitForTimeout(1_800);
+      const wound = await read(page);
+      said.push(`pressed ${JSON.stringify(target)} — the word now reads ${JSON.stringify(wound.word)}`);
+      if (wound.word !== target)
+        bad.push(
+          `pressing ${JSON.stringify(target)} left the word reading ` +
+            `${JSON.stringify(wound.word)} — the press did not reach the wall`,
+        );
+      if (wound.rows.length > 0)
+        bad.push("the dates are still standing after one of them was answered");
+
+      /* the anchor after the word has changed width — the 2026-08-28 report */
+      await page.locator(".jar-when").first().click();
+      await page.waitForTimeout(700);
+      const again = await read(page);
+      if (again.sheet && again.when) {
+        const edge = again.sheet.l - again.when.l;
+        said.push(`re-opened under a longer word, ${edge}px off its left edge`);
+        if (Math.abs(edge) > ALIGNED)
+          bad.push(
+            `wound back, the dates sit ${edge}px off the word — the anchor did not follow ` +
+              "the reading (founder, 2026-08-28: \"why is timeline not right under the word 'now'\")",
+          );
+        if (again.lit !== target)
+          bad.push(`wound to ${JSON.stringify(target)}, the lit row is ${JSON.stringify(again.lit)}`);
+      }
+
+      /* ── 5. and the way back ── */
+      await page.locator(".jar-dial-stop", { hasText: /^now$/ }).first().click();
+      await page.waitForTimeout(1_500);
+      const back = await read(page);
+      said.push(`pressed now — the word reads ${JSON.stringify(back.word)}`);
+      if (back.word !== "now")
+        bad.push(`the way back left the word reading ${JSON.stringify(back.word)}`);
+    }
+  } catch (err) {
+    bad.push(`the walk threw: ${err instanceof Error ? err.message : String(err)}`);
   } finally {
-    await browser?.close();
+    await sql.end({ timeout: 5 }).catch(() => undefined);
+    await browser.close();
   }
 
-  console.log("");
-  for (const s of said) console.log(`  ${s}`);
-  console.log("");
+  console.log("\n[the-timeline] what the walk saw");
+  for (const s of said) console.log(`  · ${s}`);
   if (bad.length === 0) {
-    console.log("[timeline] the line hangs under its word at rest, reached for, and after a");
-    console.log("           scrub has rewritten the word — and it holds still while held.");
+    console.log("\n[the-timeline] PASS — the dates hang from the word, answer a press, and put themselves away\n");
     return 0;
   }
-  console.log(`[timeline] ${bad.length} finding(s):\n`);
-  for (const b of bad) console.log(`  ${b}`);
   console.log("");
+  for (const b of bad) console.log(`  ✗ ${b}`);
+  console.log(`\n[the-timeline] FAIL — ${bad.length} problem(s)\n`);
   return 1;
 };
 
 const args = process.argv.slice(2);
 const at = args.indexOf("--base-url");
-process.exit(await run(at >= 0 ? args[at + 1]! : DEFAULT_BASE));
+run(at >= 0 ? args[at + 1]! : DEFAULT_BASE).then(
+  (code) => process.exit(code),
+  (err) => {
+    console.error(err);
+    process.exit(1);
+  },
+);

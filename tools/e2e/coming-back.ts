@@ -41,6 +41,25 @@
  * The first arrival is deliberately NOT held to that rule: the first time you
  * see a sentence it should arrive. A gate that demanded stillness there would
  * be arguing for a poster that never animates at all.
+ *
+ * ── AND THE SECOND HALF OF THE SAME REPORT, WHICH THE FIRST FIX MISSED ─────
+ *
+ * The founder again, 2026-08-30, over another recording: *"i think i already
+ * asked u to fix this, but dont make the text be there and reload when
+ * character goes to the room. keep it rendered and dont rerender when
+ * character arrives"*.
+ *
+ * They were right that they had asked. The first fix answered WHICH WORDS
+ * ANIMATE on a return; this is about whether the block is THERE AT ALL while
+ * you travel. A room's chrome was gated on the room having been WOKEN — a
+ * state set when the character finishes arriving — so the room's column was
+ * empty for the whole journey and its words appeared at the moment of arrival.
+ * Every word new, every time, however much was already in hand.
+ *
+ * A room's words are ready when its jar has been fetched, which happens the
+ * moment travel toward it begins. So the second phase of this walk starts a
+ * journey to a room and watches two events race: when the room's column first
+ * says anything, and when the character gets there. The words must win.
  */
 import type { Page } from "playwright";
 
@@ -60,6 +79,25 @@ const WORDS = `(() => {
     held: held,
     text: h1 ? h1.innerText.replace(/\\s+/g, " ").trim() : "",
     wall: chip ? chip.innerText.replace(/\\s+/g, " ").trim() : "",
+  });
+})()`;
+
+/* A ROOM'S OWN COLUMN, and whether it is saying anything yet. Read off the
+   column rather than the poster: while you are travelling the poster still
+   belongs to the wall you left, and the question is whether the wall you are
+   walking TOWARD has its words up. */
+const ROOM = `(() => {
+  const cols = document.querySelectorAll(".jar-wallcol");
+  let room = null;
+  for (let i = 0; i < cols.length; i++) {
+    if (cols[i].getAttribute("data-kind") === "group") { room = cols[i]; break; }
+  }
+  const chip = document.querySelector(".jar-here");
+  const words = room ? (room.innerText || "").replace(/\\s+/g, " ").trim() : "";
+  return JSON.stringify({
+    says: words.length > 0,
+    words: words.slice(0, 60),
+    standingOn: chip ? (chip.innerText || "").trim() : "",
   });
 })()`;
 
@@ -163,6 +201,77 @@ const run = async (base: string): Promise<number> => {
         }
         if (back.text !== first.text)
           said.push("(the sentence itself changed while away, so some arrival is legitimate)");
+      }
+    }
+
+    /* ── THE SECOND PHASE: a ROOM's words, while you are still walking ──
+       An agent's wall was enough for the question above; this one is about
+       rooms specifically, because it was a room's chrome that waited on
+       arrival. */
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(500);
+    await page.locator(".jar-here-more").first().click();
+    await page.waitForTimeout(800);
+    await page.getByText(/^add new$/i).first().click();
+    await page.waitForTimeout(1_200);
+    await page.locator(".jar-newplace-row", { hasText: /a room/i }).first().click();
+    await page.waitForTimeout(1_200);
+    /* SCOPED, AND `make it` RATHER THAN `give it a wall`. Two forms share the
+       `.jar-roomform-box` class — the agent's and the room's — and they confirm
+       with different words. A walk that used the agent's button here would
+       simply never make a room, and every measurement after it would be about
+       a room that does not exist. */
+    await page.fill(".jar-roomform .jar-roomform-box", "Studio");
+    await page.locator(".jar-roomform button", { hasText: /^make it$/i }).first().click();
+    await page.waitForTimeout(7_000);
+
+    /* back to your own wall, so the trip to the room is a real journey */
+    await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+    await settleAfterArrival(page);
+    await page.waitForTimeout(3_000);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(400);
+    await page.locator(".jar-here-more").first().click();
+    await page.waitForTimeout(900);
+    const studio = page.locator(".jar-hq button", { hasText: /^studio$/i });
+    if ((await studio.count()) === 0) {
+      bad.push("the room was never made, so the journey to it could not be watched");
+    } else {
+      await studio.last().click();
+      const t0 = Date.now();
+      let wordsAt = -1;
+      let arrivedAt = -1;
+      let sample = "";
+      while (Date.now() - t0 < 14_000 && (wordsAt < 0 || arrivedAt < 0)) {
+        const b = JSON.parse((await page.evaluate(ROOM)) as string) as {
+          says: boolean;
+          words: string;
+          standingOn: string;
+        };
+        if (wordsAt < 0 && b.says) {
+          wordsAt = Date.now() - t0;
+          sample = b.words;
+        }
+        if (arrivedAt < 0 && /studio/i.test(b.standingOn)) arrivedAt = Date.now() - t0;
+        await page.waitForTimeout(80);
+      }
+      if (wordsAt < 0) {
+        bad.push("the room never said anything at all in fourteen seconds");
+      } else if (arrivedAt < 0) {
+        bad.push("the character never arrived at the room, so the race could not be called");
+      } else {
+        const lead = arrivedAt - wordsAt;
+        said.push(
+          `travelling to a room: its words were on screen at ${wordsAt}ms, the character ` +
+            `arrived at ${arrivedAt}ms — ${Math.abs(lead)}ms ${lead > 0 ? "earlier" : "later"}`,
+        );
+        said.push(`  it said ${JSON.stringify(sample)}`);
+        if (lead <= 0)
+          bad.push(
+            `the room's words appeared ${-lead}ms AFTER the character arrived — they ` +
+              "materialise on arrival rather than being ready before you get there " +
+              '(founder, 2026-08-30: "keep it rendered and dont rerender when character arrives")',
+          );
       }
     }
 

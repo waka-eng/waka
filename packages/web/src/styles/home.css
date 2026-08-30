@@ -1835,238 +1835,84 @@
    middle is the founder's own ruling for panels, and a comment describing a
    layout the product does not have is worse than no comment. */
 
-/* ---------- time dial: a horizontal band above the axis of walls ----------
-   IT WENT TO THE RIGHT MARGIN TO KEEP TWO MEANINGS OFF ONE AXIS, AND NOBODY
-   USED IT. The reasoning was sound — the bottom edge is the map of WHOSE mind
-   you are in, and laying WHEN across the same band makes a sideways drag
-   ambiguous — but the cure cost more than the disease: a hairline rail in the
-   margin, mounted only while you were down in the field, so a wall's history
-   was something you had to descend to and then hunt for.
+/* ═══════════ TIME: THE DATES THEMSELVES, HUNG FROM THE WORD ═══════════
+   Founder, 2026-08-30: "instead of this draggable line, when clicking on now,
+   just show the major dates to make them clickable."
 
-   A timeline is a horizontal instrument. It is one again, and the ambiguity
-   is answered by STACKING rather than by rotating: two bands, one above the
-   other, each holding exactly one meaning. Months and a scrub handle here;
-   names of walls below. They never overlap and neither is ever mistaken for
-   the other, because the thing that told them apart was never the axis — it
-   was what is written on them.
+   FOUR PLACEMENTS AND ONE GESTURE, AND THE GESTURE WAS THE PROBLEM. This was
+   a hairline in the right margin, then a band along the bottom edge, then a
+   vertical rail under the word — each move fixing where time LIVED, none of
+   them touching what you had to do once you got there: find an invisible
+   line, hold it, drag, read a date that appears under your own finger, let go,
+   and discover whether that was the moment you meant. "Hard to drag", "moves
+   around", "not right under the word" are three separate reports about one
+   gesture, and this is the fourth.
 
-   And it is present at every height now. Winding time rewrites the poster,
-   so it means something at headquarters; the only reason to hide it is a wall
-   with no history to wind, which is data, not altitude. */
+   A wall does not change continuously, so it never needed a continuous
+   control. It changes on the days something was kept, so those days are the
+   whole instrument now — a short list of them, and `now` at the top.
+
+   AND IT WEARS THE HOUSE SURFACE, HUNG FROM ITS OWN BUTTON. It is the third
+   of "the two sheets that hang off the button that opened them" (see that
+   block below, and the founder's ruling it narrows): a menu belonging to a
+   control rather than to the world, so it opens under its control. Joining
+   that group rather than inventing a ground is the whole point of the group
+   — the rail had a bespoke scrim once, and the founder saw the stack of bands
+   before anything else: "this is so many layers and ugly".
+
+   The `left` here is only what stands before the world has measured; the real
+   one is written per frame by `hangRail`, from the left edge of `.jar-when`,
+   because that word sits after the wall chip and no constant can be under it
+   on every wall. Placement is written AFTER the shared centring block, same
+   specificity, later wins — the rule this file has been bitten by three
+   times. */
 .jar-dial {
   position: absolute;
   z-index: 5;
-  /* UNDER THE WORD THAT SUMMONS IT (founder, 2026-08-27: "move timeline
-     slider vertically under this instead", pointing at `now`).
-
-     It was a full-width hairline along the very bottom edge, and the reason
-     given for that was sound: the top of the page is crossed by the chips and
-     the poster's block, so no full-width horizontal line can live up there
-     without cutting through the wall's own words at some sentence length.
-
-     A VERTICAL rail has no such problem, because it never crosses them. It
-     hangs from `.jar-when` in the top-left — the word that says `now` or the
-     day you are parked at — so the instrument is attached to its own name
-     instead of living at the opposite corner of the screen from it. Time
-     stops being a band under everything and becomes a thing you pull down
-     beside the wall you are reading.
-
-     `top` clears the chip row the word sits in; `left` lines the rail up with
-     the word's own text rather than the row's padding edge. */
-  top: calc(var(--sp-24) * 2);
-  /* `left` is written by the world per frame, centred under `.jar-when` —
-     the word's x depends on the wall chip's name, so no constant can be
-     under it on every wall (founder, 2026-08-27: "should align with the
-     text NOW"). This is the resting place before the first measure. */
-  left: var(--sp-24);
-  bottom: auto;
-  right: auto;
-  display: flex;
-  align-items: stretch;
-  /* the rail's own length: enough to scrub with, short of the ground below */
-  height: min(46vh, 380px);
-  padding: 0;
-  /* NO SCRIM AT ALL, AND THAT IS THE FIX. It was a gradient to `--jar-deep`,
-     written as "a scrim, not a band … without ever showing an edge" — and at
-     the very bottom of the screen it showed one, a hard horizontal seam across
-     the full width where its opaque end met the field. The founder saw the
-     stack of bands before anything else: "this is so many layers and ugly".
-
-     It needed a ground when it was a rail in the right margin with the field
-     drifting behind it. Down here it sits below everything, on ground that is
-     already the darkest thing on the page, and a hairline over black needs
-     nothing under it. One band fewer. */
-  /* At rest the timeline is present but quiet — a hairline, a small dot, and
-     dim months. It comes to full strength on approach or while scrubbing, so
-     it is never lost and never competing with the field. */
-  /* NO FADE ON THE BAND ITSELF. It rested at 0.42 and came up on approach —
-     but element opacity multiplies into every child, so the handle could
-     never be whiter than the band around it however it was styled. The parts
-     that should rest quiet (the months) carry their own fade below; the
-     hairline already does; the handle and the door-marks are FACTS — where
-     you are in time, when the room changed — and facts do not wait for the
-     pointer. */
-}
-/* ---------- the rail arrives when you reach for it ----------
-   Founder, 2026-08-25: "I don't want the line to always be there. Can we have
-   a button called timeline and when user hovers on it, the line and the
-   draggable circle only show then?"
-
-   A hairline drawn the full width of the screen with a lit handle on it, at
-   rest, on every wall, is an instrument left switched on in a room where
-   nobody is winding anything.
-
-   SO THE WORD RESTS AND THE INSTRUMENT ARRIVES — and the word is `.jar-when`,
-   up in the top-left beside the name of the wall, not a label lying over this
-   rail. That is what finally made the rest state REACHABLE. While the word
-   said `timeline` — a name for the instrument — the only way to show you had
-   wound back was to keep the whole instrument lit, so `--live` was set on
-   `!atNow` and one drag drew the hairline across the screen for the rest of
-   the session. Nothing put it away again except a scrub landing within half a
-   day of the present, on a rail you cannot see unless you are touching it.
-   That is the line the founder asked four times to remove, held up by the one
-   rule meant to make it meaningful. Now the word says `now`, or the day you
-   are parked at, the fact is carried in type, and `--live` means only "a
-   finger is on it".
-
-   THREE WAYS IN, and the third is the one that keeps it honest on a phone.
-   Reaching for the word is what was asked for and is right on a pointer;
-   focusing it carries a keyboard; pressing it is the touch answer, because a
-   hover-only control does not exist on a phone and this stylesheet has
-   shipped three of those already. All three arrive as `--open`, set by the
-   word rather than by a selector on this element — the rail and the word are
-   no longer in the same box, and that is the point. */
-.jar-dial-track::before,
-.jar-month,
-.jar-dial-handle {
-  opacity: 0;
-}
-.jar-dial:hover .jar-dial-track::before,
-.jar-dial:focus-within .jar-dial-track::before,
-.jar-dial--open .jar-dial-track::before,
-.jar-dial--live .jar-dial-track::before {
-  /* ONE STRENGTH FOR ALL FOUR WAYS IN. This said 0.5 while a second copy of
-     the hover half said 0.9 a hundred lines down — same selector, same
-     property, later winning — so reaching with the pointer lit the rail
-     brighter than pressing the word did, for no reason anyone chose. */
-  opacity: 0.9;
-}
-.jar-dial:hover .jar-dial-handle,
-.jar-dial:focus-within .jar-dial-handle,
-.jar-dial--open .jar-dial-handle,
-.jar-dial--live .jar-dial-handle {
-  opacity: 1;
-}
-.jar-month {
-  transition: opacity 0.28s ease;
-}
-.jar-dial:hover .jar-month,
-.jar-dial:focus-within .jar-month,
-.jar-dial--open .jar-month,
-.jar-dial--live .jar-month {
-  /* the months were the quietest part of a rail that was always up; now the
-     rail itself waits, they come back at the strength they were designed at */
-  opacity: 0.45;
 }
 /* nothing to wind on this wall */
 .jar-dial--away {
   opacity: 0;
   pointer-events: none;
 }
-.jar-dial-track {
-  position: relative;
-  flex: 1;
-  /* the grabbable width of a vertical rail, where `height: 30px` was its
-     grabbable height when it lay along the bottom. 44, up from 30 (founder,
-     2026-08-27: "hard to drag") — the hairline is one pixel but the hand
-     asks for a finger's width, and the loop centres the line from the
-     rail's measured width so the grab can grow without un-centring it. */
-  width: 44px;
-  touch-action: none;
-  cursor: ns-resize;
+.jar-dial-list {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  /* a menu's rows sit close: the gap between two dates is not a paragraph
+     break, and air here is what made the first draft read as four cards */
+  gap: var(--sp-4);
 }
-.jar-dial-track::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 1px;
-  margin-left: -0.5px;
-  border-radius: 999px;
-  /* THE PAST END DISSOLVES (founder, 2026-08-27: "make end of the line faded
-     so it naturally fades with background"). The rail hangs from now and
-     reaches into the past, and the past has no edge — a hard stop said the
-     history ends HERE, which is a claim the dial cannot make. Full ink for
-     most of the run so the eye still has a line to follow, then the last
-     stretch breathes out into the dark. */
-  background: linear-gradient(to bottom, var(--jar-faint) 72%, transparent);
-  /* NO OPACITY HERE. This rule gives the hairline its shape and colour;
-     whether it is SHOWN is decided above, by the rest state and the three
-     ways in. It carried `opacity: 0.5` until 2026-08-25 — the same selector
-     deciding the same property twice in one file, later winning — so the rail
-     the founder asked to hide was visible at rest anyway, and the first
-     screenshot of the finished work showed it. One property, one place. */
-  transition: opacity 0.28s ease;
-}
-/* the months read along the rail, set below it so the hairline stays the
-   thing your eye tracks */
-.jar-month {
-  position: absolute;
-  left: 50%;
-  margin-left: var(--sp-12);
+/* ONE ROW, ONE MOMENT. `all: unset` is how this file writes a button that is
+   really a word — the same start `.jar-mouth-step` and the ground rows make,
+   so nothing inherits a user-agent border, background or font. */
+.jar-dial-stop {
+  all: unset;
+  cursor: pointer;
+  /* THE ROW IS THE TARGET, NOT THE GLYPH. A date in the label register is ten
+     pixels of type and six characters wide, and the whole reason this replaced
+     a rail is that the rail was hard to hit ("hard to drag", "moves around").
+     Shipping a menu whose rows are twenty pixels tall would be the same defect
+     with a different shape. Twenty-eight clears the 24px a pointer target is
+     asked for and gives the column a rhythm besides. */
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 var(--sp-8);
+  margin: 0 calc(var(--sp-8) * -1);
+  border-radius: 8px;
   white-space: nowrap;
-  transform: translateY(-50%);
-  pointer-events: none;
+  color: var(--jar-muted);
+  transition: color 0.18s ease, background-color 0.18s ease;
 }
-/* THE DOOR'S MARK ON THE RAIL — the one thing a room's history turns on.
-   A short notch ACROSS the track, at full ink, so it reads as a HINGE rather
-   than as another month label: months are words beside the rail, this is a
-   notch in it. Arrivals and departures wear the same mark on purpose — the
-   fact is "the room changed who it is", and light is not spent sorting people
-   into good news and bad. Which of the two it was is what the name says. */
-/* THE HANDLE IS WHITE AND WHOLLY THERE (founder, 2026-08-25: "make this
-   circle just white and full opacity"). It was faint at rest and only came up
-   under the pointer — but it is WHERE YOU ARE IN TIME, a fact and not an
-   affordance being teased, and the dial around it already does the
-   quiet-at-rest work. No accent, no glow; it still grows under the hand. */
-.jar-dial-handle {
-  position: absolute;
-  left: 50%;
-  top: 0;
-  width: 8px;
-  height: 8px;
-  margin: calc(var(--sp-4) * -1) 0 0 calc(var(--sp-4) * -1);
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: none;
-  pointer-events: none;
-  /* the handle fades on the same clock as the hairline it rides — it
-     snapped in and out while the rail took 0.28s, which read as two
-     instruments rather than one arriving */
-  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.28s ease;
+.jar-dial-stop:hover {
+  color: var(--jar-ink);
+  background: var(--jar-panel-edge);
 }
-.jar-dial:hover .jar-dial-handle,
-.jar-dial--live .jar-dial-handle {
-  transform: scale(1.9);
-}
-/* The scrubbed date. A SIBLING of the handle, not a child: the handle scales
-   up while the dial is live, and a label inheriting that scale is how this
-   came to be printed at poster size. It sits just above the handle, and it
-   exists only while a finger is actually scrubbing. */
-.jar-dial-date {
-  position: absolute;
-  left: calc(50% + var(--sp-16));
-  transform: translateY(-50%);
-  text-align: left;
-  white-space: nowrap;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-.jar-dial-date--on {
-  opacity: 1;
+/* WHERE YOU ALREADY ARE, in the one channel this world has. It is lit, and
+   nothing else says it — no tick, no dot, no second colour. */
+.jar-dial-stop--here {
+  color: var(--jar-ink);
 }
 
 /* WHERE THIS MEMORY MAY BE SEEN — a state at the top right, not a verb in
@@ -2308,6 +2154,7 @@
 .jar-panel,
 .jar-seek,
 .jar-settings,
+.jar-dial,
 .jar-prov-room {
   /* dead centre, and the rise is a variable because the transform slot is
      spoken for by the centring — see `jar-panel-in` */
@@ -2384,6 +2231,24 @@
      signposts keep. Aligned to the button, not to a rule about edges. */
   right: 8px;
   left: auto;
+}
+/* AND THE THIRD SHEET IS THE DATES. Same case exactly: it belongs to the word
+   that says `now`, not to the world, so it opens under that word. The `left`
+   is a placeholder — `hangRail` writes the real one inline, from the word's
+   own box, because the word sits after the wall chip and moves with the
+   wall's name. `top` is the anchored sheets' own, so all three clear the
+   chrome row on the same line rather than on three guesses. */
+.jar-dial {
+  top: calc(48px + env(safe-area-inset-top));
+  left: var(--sp-24);
+  right: auto;
+  transform: translateY(var(--jar-panel-rise));
+  max-width: calc(100vw - 16px);
+  /* a long archive rolls up to months and then to years, so this is a
+     catastrophe stop rather than an expected state — but a menu that runs off
+     the bottom of a phone is not a menu */
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
 }
 /* THE HEAD: date left, who-may-see right, centred against each other.
    It was not a row at all — the date was a block padded 56px/120px to dodge
@@ -2638,7 +2503,6 @@
     opacity: 1;
   }
   .jar-back,
-  .jar-dial-handle,
   .jar-forming-line,
   .jar-way,
   .jar-mouth-rest,

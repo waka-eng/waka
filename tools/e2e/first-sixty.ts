@@ -437,9 +437,11 @@ const BARE_BY_DECISION: Record<string, string> = {
     "explaining a list of names is the same repetition the eyebrow ruling " +
     "removed one surface over.",
   "the timeline":
-    "A dial. Its whole content is a control for choosing a moment, and its " +
-    "own affordance is named for a listener — `wind this wall back through " +
-    "time` — which is where the sentence went.",
+    "A list of the days this wall changed. Its whole content is a control for " +
+    "choosing a moment — every row IS a date, read aloud as it stands — and " +
+    "the sheet is named for a listener, `wind this wall back to a date`, " +
+    "which is where the sentence went. It used to be a rail, and the answer " +
+    "was the same for the same reason.",
   "the archive door":
     "OPEN, NOT SETTLED. Behind the door is the field, and the field is a " +
     "CANVAS — its content is painted pixels, so there is no prose for this " +

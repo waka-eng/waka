@@ -167,6 +167,23 @@ const FIXTURE = `<!doctype html>
      read mid-animation. */
   .jar-panel, .jar-seek, .jar-settings, .jar-prov-room { animation: none !important; }
 </style>
+<script>
+  /* THE ONE THING THE WORLD WRITES INLINE, WRITTEN THE SAME WAY HERE.
+     hangRail sets the dates left edge from the left edge of the word that
+     says now, because that word sits after the wall chip and moves with the
+     wall's name — no constant in a stylesheet can be under it on every wall.
+     A fixture that left the stylesheet's placeholder in place would be asking
+     whether the sheet hangs off its button and answering about a guess.
+     This is the product's line, not an approximation of it.
+     (No backticks in here: this whole fixture is a template literal, and one
+     stray backtick in a comment ends it mid-sentence. That has cost this
+     project two gates already.) */
+  addEventListener("DOMContentLoaded", () => {
+    const w = document.querySelector(".jar-when");
+    const d = document.querySelector(".jar-dial");
+    if (w && d) d.style.left = Math.round(w.getBoundingClientRect().left) + "px";
+  });
+</script>
 <div class="jar" style="--jar-vh:100vh;--jar-vw:100vw">
   <!-- THE HEADLINE, and it is an <h1> because the world's is. That is the
        whole point of it being here: a bare \`h1\` selector in another sheet
@@ -203,7 +220,15 @@ const FIXTURE = `<!doctype html>
     </div>
     <button class="jar-account jar-back jar-label">Your account</button>
   </div>
-  <div class="jar-dial jar-dial--open"><div class="jar-dial-track"><span class="jar-month jar-label" style="left:50%">aug</span><div class="jar-dial-handle"></div></div></div>
+  <!-- THE DATES, which are only ever on screen while they are open — so the
+       fixture holds them open, the way it holds every other sheet open. -->
+  <div class="jar-dial" data-jar-chrome="1">
+    <div class="jar-dial-list">
+      <button class="jar-dial-stop jar-label jar-dial-stop--here">now</button>
+      <button class="jar-dial-stop jar-label">Aug 12</button>
+      <button class="jar-dial-stop jar-label">Jul 26</button>
+    </div>
+  </div>
 
   <div class="jar-mouth-slot">
     <p class="jar-ask jar-ask--row jar-mouth-where jar-mouth-where--armed">
@@ -428,7 +453,7 @@ const CASES: Case[] = [
   {
     id: "signposts-one-inset",
     name: "every signpost keeps the same air from the edge it is nearest",
-    needs: ["jar-values", "jar-way", "jar-saved", "jar-dial", "jar-when"],
+    needs: ["jar-values", "jar-way", "jar-saved"],
     sabotage: ".jar-values { top: 40px; }",
     run: async (page) => {
       const b = (await page.evaluate(BOXES)) as Boxes;
@@ -441,14 +466,14 @@ const CASES: Case[] = [
          the count its own inset: it kept 10px from the RAIL while the rail
          kept 6px from the screen, so the sign a person reads most sat
          furthest from an edge of the four. */
-      /* THE RAIL HANGS FROM ITS OWN WORD NOW (founder, 2026-08-27: "move
-         timeline slider vertically under this instead"). It was the lower of
-         two bands along the bottom and the gap measured here was the air
-         between it and the count. It is vertical and up in the top-left, so
-         the air that matters is between the WORD that summons it and the rail
-         that answers — the same inset, between the same two things, in the
-         place they now both live. */
-      const railGap = box("dial").top - box("nowWord").bottom;
+      /* THE DATES ARE NOT MEASURED HERE ANY MORE, and that is a claim moving
+         house rather than a claim being dropped. This case is about the four
+         SIGNPOSTS and the one air they all keep from the edge they are
+         nearest. The rail's gap was grafted on when the instrument moved up
+         here from the bottom band; the instrument is now the third of the
+         sheets that hang off the button that opened them, so how it stands
+         under `.jar-when` is asked by `every-modal-is-one-modal`, beside the
+         same question about the other two. One question, one place. */
       const got = {
         top: box("values").top,
         left: box("wayL").left,
@@ -461,7 +486,6 @@ const CASES: Case[] = [
            gone to hang under its own word, and the count is the only thing
            down here. */
         bottom: b.vh - box("saved").bottom,
-        "the rail under its word": railGap,
       };
       const wrong = Object.entries(got).filter(([, v]) => !near(v, INSET, 1));
       return {
@@ -506,49 +530,63 @@ const CASES: Case[] = [
   },
 
   {
-    id: "the-rail-rests-hidden",
-    name: "the timeline waits to be asked, and arrives when it is",
-    needs: ["jar-when", "jar-dial", "jar-dial-track", "jar-month"],
-    sabotage: ".jar-dial-track::before, .jar-dial-handle { opacity: 1 !important; }",
+    id: "a-date-is-worth-pressing",
+    name: "every date is a real target, and the one you are on is the lit one",
+    needs: ["jar-dial", "jar-dial-list", "jar-dial-stop"],
+    sabotage:
+      ".jar-dial-stop { min-height: 0 !important; padding: 0 !important; }" +
+      " .jar-dial-stop--here { color: inherit !important; }",
     run: async (page) => {
-      /* THE CASE THAT WOULD HAVE CAUGHT IT. The founder asked for the line
-         not to always be there; it was hidden by one rule and shown again by
-         another with the same selector, so it never went away and the first
-         screenshot of the finished work had it in frame. Read at rest and
-         read again opened — a reveal that cannot be seen to CHANGE proves
-         nothing. */
+      /**
+       * THE DEFECT THIS REPLACES A RAIL TO AVOID. The rail was reported hard
+       * to hit three separate times — "hard to drag", "moves around", "not
+       * right under the word" — and the answer to all three was to stop
+       * asking for a drag at all. A menu whose rows are twenty pixels of
+       * ten-pixel type would be the identical defect wearing a list's
+       * clothes, so the row's own box is measured rather than assumed.
+       *
+       * AND WHERE YOU ARE STANDING IS SAID IN LIGHT. It is the founder's
+       * first law and the reason the rail could be retired at all: the word
+       * carries the fact, the lit row carries it inside the list, and nothing
+       * anywhere draws a tick or a dot to say it twice.
+       */
       const read = `(() => {
-        const o = (s, pe) => { const e = document.querySelector(s); return e ? Number(getComputedStyle(e, pe || null).opacity) : -1; };
-        return { name: o(".jar-when"), handle: o(".jar-dial-handle"), rail: o(".jar-dial-track", "::before") };
+        /* ALPHA IS THE CHANNEL HERE, NOT HUE. Every quiet thing on this surface
+           is the same ink at a lower alpha, so a luminance that read only the
+           three colour stops answered 0.0 for a lit row against a muted one —
+           found by this case failing against correct CSS, which is the gate
+           being wrong rather than the product. */
+        const lum = (c) => { const p = c.match(/[\\d.]+/g).map(Number); const a = p.length > 3 ? p[3] : 1; return (0.2126*p[0] + 0.7152*p[1] + 0.0722*p[2]) * a; };
+        const rows = [...document.querySelectorAll(".jar-dial-stop")];
+        const box = rows.map((e) => { const b = e.getBoundingClientRect(); return { h: b.height, w: b.width, top: b.top }; });
+        const here = document.querySelector(".jar-dial-stop--here");
+        const rest = rows.filter((e) => e !== here);
+        return {
+          count: rows.length,
+          shortest: box.length ? Math.min(...box.map((b) => b.h)) : -1,
+          narrowest: box.length ? Math.min(...box.map((b) => b.w)) : -1,
+          /* a column, not a heap: every row strictly below the one before it */
+          stacked: box.every((b, i) => i === 0 || b.top >= box[i - 1].top + box[i - 1].h - 0.5),
+          hereLum: here ? lum(getComputedStyle(here).color) : -1,
+          restLum: rest.length ? Math.max(...rest.map((e) => lum(getComputedStyle(e).color))) : -1,
+        };
       })()`;
-      /* WAIT OUT THE FADE BEFORE READING. The first version of this case read
-         on the next frame and caught the rail mid-transition at 0.5, then
-         blamed the stylesheet for a bug that was in the gate. These parts
-         cross over 0.28s; 400ms is past the end of that with room to spare. */
-      await page.evaluate(`document.querySelector(".jar-dial").classList.remove("jar-dial--open")`);
-      await page.waitForTimeout(400);
-      const rest = (await page.evaluate(read)) as Record<string, number>;
-      await page.evaluate(`document.querySelector(".jar-dial").classList.add("jar-dial--open")`);
-      await page.waitForTimeout(400);
-      const open = (await page.evaluate(read)) as Record<string, number>;
-      /* THE WORD DOES NOT FADE ANY MORE, and that is the change. It used to
-         lie over the middle of the rail and step aside as the hairline
-         arrived. It now sits in the top-left saying WHEN you are, which is a
-         fact rather than a label — so it is legible in both states, and a
-         reading where it went dark would mean the readout had been turned
-         back into a signpost. */
-      const hidden = rest.rail! < 0.02 && rest.handle! < 0.02 && rest.name! > 0.5;
-      const shown = open.rail! > 0.2 && open.handle! > 0.5 && open.name! > 0.5;
+      const m = (await page.evaluate(read)) as Record<string, number | boolean>;
+      const count = m.count as number;
+      const shortest = m.shortest as number;
+      const lit = (m.hereLum as number) - (m.restLum as number);
+      const faults: string[] = [];
+      if (count < 2) faults.push(`only ${count} row(s) in the fixture`);
+      if (shortest < 24) faults.push(`the shortest row is ${r1(shortest)}px tall, under the 24 a pointer is owed`);
+      if ((m.narrowest as number) < 40) faults.push(`the narrowest row is ${r1(m.narrowest as number)}px wide`);
+      if (!m.stacked) faults.push("the rows overlap rather than stacking");
+      if (lit < 8) faults.push(`the row you are standing on is not lit — ${r1(lit)} points of luminance over the rest`);
       return {
-        ok: hidden && shown,
+        ok: faults.length === 0,
         detail:
-          hidden && shown
-            ? `at rest the word reads at ${rest.name} over rail ${rest.rail} and handle ${rest.handle}; asked, rail ${open.rail} and handle ${open.handle}, the word still at ${open.name}`
-            : !hidden
-              ? `the rail does not rest hidden — rail ${rest.rail}, handle ${rest.handle}, with the word at ${rest.name}`
-              : open.name! <= 0.5
-                ? `the word went dark when the rail arrived — it is the readout, it stays`
-                : `asked for, it did not arrive — rail ${open.rail}, handle ${open.handle}`,
+          faults.length === 0
+            ? `${count} dates, none shorter than ${r1(shortest)}px, the one you are on lit ${r1(lit)} points over the rest`
+            : faults.join("; "),
       };
     },
   },
@@ -599,7 +637,7 @@ const CASES: Case[] = [
   {
     id: "every-modal-is-one-modal",
     name: "every modal wears one surface, and each is placed where it belongs",
-    needs: ["jar-panel", "jar-seek", "jar-settings", "jar-prov-room"],
+    needs: ["jar-panel", "jar-seek", "jar-settings", "jar-prov-room", "jar-dial"],
     /* one of the four given its old surface back — the exact drift this
        case exists to notice */
     sabotage:
@@ -608,7 +646,10 @@ const CASES: Case[] = [
       /* and the second half of the ruling: an anchored sheet sent back to the
          middle, which is what this case used to REQUIRE */
       " .jar-settings--at-left { left: 50% !important; top: 50% !important;" +
-      " transform: translate(-50%, -50%) !important; }",
+      " transform: translate(-50%, -50%) !important; }" +
+      /* and the dates given a ground of their own, which is how the rail's
+         bespoke scrim got there in the first place */
+      " .jar-dial { background: #0a0d14 !important; box-shadow: none !important; }",
     run: async (page) => {
       /* THE FOUNDER'S RULING, 2026-08-25, pointing at a memory's card: "all
          modals must be centered and have same style as this one." There were
@@ -640,14 +681,15 @@ const CASES: Case[] = [
         return { card: one(".jar-panel"), seek: one(".jar-seek"),
                  settings: one(".jar-settings"), prov: one(".jar-prov-room"),
                  atLeft: anchored(".jar-settings--at-left", ".jar-here", "left"),
-                 atRight: anchored(".jar-settings--at-right", ".jar-account", "right") };
+                 atRight: anchored(".jar-settings--at-right", ".jar-account", "right"),
+                 dates: anchored(".jar-dial", ".jar-when", "left") };
       })()`;
       type M = { skin: string; offX: number; offY: number; below?: number; edge?: number };
       const m = (await page.evaluate(read)) as Record<string, M | null>;
       const missing = Object.entries(m).filter(([, v]) => !v).map(([k]) => k);
       if (missing.length) return { ok: false, detail: `not in the fixture at all: ${missing.join(", ")}` };
       const card = m.card as M;
-      const others = ["seek", "settings", "prov", "atLeft", "atRight"] as const;
+      const others = ["seek", "settings", "prov", "atLeft", "atRight", "dates"] as const;
 
       /* AND THE PLACEMENT RULING NARROWED, 2026-08-28: "when clicking on the
          top left and top right button, those cards should just appear right
@@ -671,7 +713,14 @@ const CASES: Case[] = [
               .join("; "),
         };
       }
-      const adrift = (["atLeft", "atRight"] as const).filter((k) => {
+      /* AND THE THIRD SHEET IS THE DATES (founder, 2026-08-30: "instead of
+         this draggable line, when clicking on now, just show the major dates
+         to make them clickable"). It belongs to the word that says `now`, so
+         it is the same case as the other two: a menu that opened across the
+         room from its own handle would make you re-find the thread every
+         time. Its left edge is written inline by the world, from the word's
+         own box — see the fixture's script, which is the product's line. */
+      const adrift = (["atLeft", "atRight", "dates"] as const).filter((k) => {
         const v = m[k] as M;
         return !(v.below! > 0 && v.below! < 24 && near(v.edge!, 0, 2));
       });
@@ -690,8 +739,9 @@ const CASES: Case[] = [
         ok: different.length === 0,
         detail:
           different.length === 0
-            ? `four centred, two hanging off their own button (${r1((m.atLeft as M).below!)}px and ` +
-              `${r1((m.atRight as M).below!)}px below it), all wearing one surface — ${card.skin}`
+            ? `four centred, three hanging off their own button (${r1((m.atLeft as M).below!)}px, ` +
+              `${r1((m.atRight as M).below!)}px and ${r1((m.dates as M).below!)}px below it), ` +
+              `all wearing one surface — ${card.skin}`
             : different
                 .map((k) => `${k} is a different object from the card:\n      card ${card.skin}\n      ${k.padEnd(4)} ${(m[k] as M).skin}`)
                 .join("\n    "),

@@ -437,10 +437,14 @@ jobs:
         run: pnpm e2e:every-orb-answers --base-url http://127.0.0.1:3010
 
       # THE DIAL HAD PRODUCED THREE FOUNDER REPORTS AND ZERO GATES, and
-      # nothing in tools/e2e had ever dragged it. Its two rules pull against
-      # each other — hold still while held, hang under the word once let go —
-      # so a repair to either one alone re-breaks the other, which is exactly
-      # what happened between 2026-08-27 and 2026-08-28.
+      # nothing in tools/e2e had ever dragged it. The drag is gone now
+      # (2026-08-30: "instead of this draggable line, when clicking on now,
+      # just show the major dates to make them clickable") and the walk went
+      # with it: it presses the word, presses a date, and checks the wall
+      # actually wound. It backdates the memories it keeps through
+      # DB_CONNECTION_URL — the instrument does not exist on a wall whose
+      # whole life is today, and there is no way through the product to keep
+      # something last month.
       - name: The timeline hangs from its word
         if: ${{ !cancelled() }}
         run: pnpm e2e:the-timeline --base-url http://127.0.0.1:3010
