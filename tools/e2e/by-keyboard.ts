@@ -44,7 +44,12 @@
  * Flags: `--base-url <url>`, `--headed`, `--keep <n>` (memories to seed).
  */
 import { type BrowserContext, type Page, type Route } from "playwright";
+import postgres from "postgres";
 import { launchChromium } from "./browser";
+
+/** The same seam `at-scale` and `the-timeline` use. Optional here — see below. */
+const dbUrl = (): string | undefined =>
+  process.env.DB_CONNECTION_URL ?? process.env.DATABASE_URL;
 interface Args {
   baseUrl: string;
   headed: boolean;
@@ -85,14 +90,17 @@ async function stubExternals(ctx: BrowserContext, base: string): Promise<void> {
   );
 }
 
-async function signUp(page: Page, base: string): Promise<void> {
+/** Returns the address it signed up with — the only handle on this account. */
+async function signUp(page: Page, base: string): Promise<string> {
+  const email = `kb-${uniq()}@example.test`;
   await page.goto(`${base}/login`, { waitUntil: "domcontentloaded" });
   await page.click("#login-tab-signup");
-  await page.fill("input[name=email]", `kb-${uniq()}@example.test`);
+  await page.fill("input[name=email]", email);
   await page.fill("input[name=password]", "by-keyboard-local-password-1");
   await page.fill("input[name=name]", "Keyboarder");
   await page.click("button[type=submit]");
   await page.waitForTimeout(6_000);
+  return email;
 }
 
 interface Stop {
@@ -178,7 +186,7 @@ async function main(): Promise<void> {
   try {
     await stubExternals(ctx, args.baseUrl);
     const page = await ctx.newPage();
-    await signUp(page, args.baseUrl);
+    const email = await signUp(page, args.baseUrl);
 
     /* SOMETHING TO REACH FOR. A field with nothing in it would report a clean
        keyboard pass over an empty world, which is the same vacuous success
@@ -193,6 +201,53 @@ async function main(): Promise<void> {
       await page.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click();
       await page.waitForTimeout(4_000);
     }
+
+    /* AND A WALL WITH A PAST, because a wall whose whole life is today has
+       nothing to wind back to and does not render the word that says `now` —
+       so the timeline, and every key that reaches it, would go unwalked and
+       the tab count would silently drop by one.
+
+       Found by this gate going red on 2026-08-30 after the dial became a list
+       of dates: "Tab reaches 7 stops, was 8". The missing stop was the word,
+       and it was missing because it is correctly absent on a wall like this
+       one. The number was never the claim — the claim is that the world is
+       reachable — so the fixture grows a past rather than the threshold
+       shrinking to fit a smaller world.
+
+       Through the database, because there is deliberately no way through the
+       product to keep something last month. Skipped, with a line saying so,
+       when no connection string is set: this walk answers plenty of questions
+       that need no database, and refusing to run any of them would be worse
+       than running most of them. */
+    const sql = dbUrl() ? postgres(dbUrl()!, { max: 2 }) : null;
+    if (sql) {
+      /* SCOPED TO THIS ACCOUNT, THROUGH ITS OWN ADDRESS. The first version
+         said `order by created_at limit 1` over the whole table and aged the
+         oldest row in the database — somebody else's memory, on a local
+         database every walk in this folder shares. It changed nothing on this
+         wall, so the walk reported the same failure and looked like the fix
+         had not worked. A seed that is not scoped to the account under test
+         is not a seed, it is a side effect. */
+      const aged = await sql`
+        update inspirations set created_at = now() - interval '31 days'
+        where id = (
+          select i.id from inspirations i
+          join profiles p on p.id = i.profile_id
+          join accounts a on a.id = p.account_id
+          where a.email = ${email}
+          order by i.created_at
+          limit 1
+        )
+        returning id
+      `;
+      if (aged.length === 0) {
+        console.log("  (nothing was aged — the wall has no past, so the timeline goes unwalked)");
+      }
+      await sql.end({ timeout: 5 }).catch(() => undefined);
+    } else {
+      console.log("  (no DB_CONNECTION_URL — the wall has no past, so the timeline goes unwalked)");
+    }
+
     await page.goto(`${args.baseUrl}/`, { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(7_000);
 
