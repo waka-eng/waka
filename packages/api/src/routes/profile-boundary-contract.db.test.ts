@@ -31,6 +31,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
 import type { AuthEnv } from "../lib/middleware.js";
 import type { AuthenticatedSession } from "../lib/session.js";
+import { createAttachmentRoutes } from "./attachments.js";
 import { createExperienceRoutes } from "./experiences.js";
 import { createGraphRoutes } from "./graph.js";
 import { createInspirationsRoutes } from "./inspirations.js";
@@ -181,7 +182,8 @@ async function writtenState(): Promise<string> {
     SELECT (SELECT count(*) FROM inspirations) AS inspirations,
            (SELECT count(*) FROM reflections) AS reflections,
            (SELECT count(*) FROM signals) AS signals,
-           (SELECT count(*) FROM principles) AS principles`;
+           (SELECT count(*) FROM principles) AS principles,
+           (SELECT count(*) FROM attachments) AS attachments`;
   return JSON.stringify(counts);
 }
 
@@ -268,6 +270,74 @@ describe("the profile boundary, route by route", () => {
         ).toBe(404);
       }
     }
+    expect(await writtenState()).toBe(before);
+  });
+});
+
+describe("the attachment door: a finalize is a capture, and answers like one", () => {
+  beforeEach(async () => {
+    t ??= await createTestDatabase();
+    await t.truncateAll();
+  });
+
+  /* Finalize-link needs no object store — the whole boundary is decided
+     before any S3 exists. The router uses the same injected-session seam as
+     everything else, which it grew for exactly this suite. */
+  const finalize = (person: Person, inspirationId: string) => {
+    const app = new Hono<AuthEnv>().route(
+      "/api/attachments",
+      createAttachmentRoutes({
+        getDatabase: () => t.db as never,
+        authMiddleware: (async (
+          c: { set: (k: "session", v: AuthenticatedSession) => void },
+          next: () => Promise<void>,
+        ) => {
+          c.set("session", person.session);
+          await next();
+        }) as never,
+      }),
+    );
+    return app.request("/api/attachments", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ type: "link", inspirationId, url: "https://example.test/a" }),
+    });
+  };
+  const seedInspiration = async (profileId: string): Promise<string> => {
+    const [row] = await t.sql`
+      INSERT INTO inspirations (profile_id, text) VALUES (${profileId}, 'a parent') RETURNING id`;
+    return row.id as string;
+  };
+
+  it("refuses an agent hanging anything on the human's memory, grant or no grant", async () => {
+    const { human, scout, courier } = await seedAccount();
+    const onHuman = await seedInspiration(human.profileId);
+    const onCourier = await seedInspiration(courier.profileId);
+    await t.sql`
+      INSERT INTO agent_read_grants (grantee_profile_id, target_profile_id, granted_by_profile_id)
+      VALUES (${scout.profileId}, ${courier.profileId}, ${human.profileId})`;
+
+    const before = await writtenState();
+    expect((await finalize(scout, onHuman)).status, "onto the human: a capture, refused").toBe(403);
+    expect(
+      (await finalize(scout, onCourier)).status,
+      "onto a granted sibling: the grant opens reading only",
+    ).toBe(403);
+    expect(await writtenState(), "and nothing hung anywhere").toBe(before);
+
+    expect(
+      (await finalize(human, onCourier)).status,
+      "the human hanging onto their own agent's memory is the admin's act",
+    ).toBe(201);
+  });
+
+  it("answers another account's inspiration as not-found, never forbidden", async () => {
+    const { scout } = await seedAccount();
+    const other = await seedAccount();
+    const foreign = await seedInspiration(other.human.profileId);
+
+    const before = await writtenState();
+    expect((await finalize(scout, foreign)).status).toBe(404);
     expect(await writtenState()).toBe(before);
   });
 });
