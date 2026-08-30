@@ -1,0 +1,352 @@
+/* assigned to the `chrome` layer — see styles/layers.css for the order */
+@layer chrome {
+/*
+ * THE PAGE THAT SAYS WHAT WAKA IS, wearing the world it is describing.
+ *
+ * Loaded only by `pages/Landing.tsx`, which is lazy, so this sheet ships as
+ * its own chunk: the door and the account screen never pay for a page they do
+ * not render. That is also what lets every selector here be short — nothing
+ * in this file can reach another route, because on another route this file
+ * does not exist.
+ *
+ * ── IT DECLARES NOT ONE COLOUR, SIZE OR SPACE OF ITS OWN ───────────────────
+ *
+ * Every value here is a token from `system.css` or `chrome.css`. That is not
+ * tidiness; it is the condition for this sheet joining the governed set in
+ * `test/type-scale.test.ts` beside `home.css`, `chrome.css` and `global.css`.
+ * A new stylesheet outside those ratchets is exactly the parking lot
+ * `one-product-one-system.md` named — a place where a literal can be written
+ * because nothing is counting.
+ *
+ * The two apparent exceptions are not colours: `color-mix()` mixes a token
+ * with transparency rather than naming a new value, and the `clamp()` display
+ * sizes are the fluid steps the ratchet explicitly counts as on-scale.
+ *
+ * ── THE PAGE IS ONE SCREEN AND DOES NOT SCROLL (founder, 2026-08-28) ───────
+ *
+ * `.lp` is exactly one viewport tall with its overflow hidden, so this file
+ * carries a duty an ordinary page's stylesheet does not: nothing here may
+ * grow past the screen, at any width or height, because there is no scrollbar
+ * to catch it. Three things do that work together, and removing any one of
+ * them brings the clipping back:
+ *
+ *   THE HEIGHT UNIT IS `dvh`, NOT `vh`. On mobile Safari and Chrome `100vh`
+ *   is the viewport with the browser's own chrome RETRACTED, which is taller
+ *   than what you can see on arrival — so a `100vh` page is clipped by the
+ *   address bar on the frame that matters most, the first one. `100dvh`
+ *   tracks the visible height instead.
+ *
+ *   THE STAGE CENTRES AGAINST THE VIEWPORT, not against its own content: the
+ *   header is a fixed row, the stage takes what is left and centres in it. So
+ *   a short screen tightens around the same composition rather than pushing
+ *   the button off the bottom.
+ *
+ *   EVERY VERTICAL SIZE IS FLUID AND HEIGHT-AWARE. The display size and the
+ *   gaps below shrink on short viewports, because a page that fits at one
+ *   height and clips at another has not met the ruling — it has met it once.
+ *
+ * `tools/e2e/one-screen.ts` measures exactly this in a real engine, across
+ * eight viewports, and is the only thing that can: jsdom has no layout, so no
+ * unit test in this repository can see a page overflow.
+ */
+
+.lp {
+  position: relative;
+  /* dvh, deliberately — see the note above. The fallback matters on engines
+     without dynamic units, where the old behaviour is the right one. */
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-28) var(--sp-24) var(--sp-32);
+  background: var(--w-ground);
+  color: var(--w-ink);
+}
+
+/* the world's grain, on the world's newest surface — the same overlay the
+   door and the account screen wear, so all three read as one material */
+.lp::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+  opacity: 0.09;
+  background-image: url("data:image/svg+xml;utf8,\
+<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'>\
+<filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/></filter>\
+<rect width='140' height='140' filter='url(%23n)' opacity='0.55'/></svg>");
+  background-repeat: repeat;
+}
+
+/* ONE COLUMN, ONE MEASURE. Both bands hang off the same left edge — the
+   door's composition, given a page's worth of room. */
+.lp-top,
+.lp-stage {
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+}
+
+.lp-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-24);
+  /* NO BOTTOM MARGIN. On a scrolling page the header pushed the hero down;
+     here it must not, because the stage below owns the remaining height and
+     centres in it. Space between them is the stage's to give. */
+  flex: none;
+}
+
+/* THE STAGE takes whatever the header left and centres its contents in it, so
+   the composition is measured against the screen rather than against itself.
+   `min-height: 0` because a flex child's default `min-height: auto` refuses
+   to shrink below its content — which is precisely how a one-screen page
+   quietly becomes a clipped page on a short viewport. */
+.lp-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(var(--sp-14), 2.2vh, var(--sp-28));
+}
+
+/* the label register, byte for byte from `.jar-label` and the chrome's
+   eyebrow — one uppercase voice in the product, and it belongs to labels */
+.lp-label {
+  margin: 0;
+  color: var(--w-faint);
+  font-size: var(--t-fine);
+  font-weight: 500;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+}
+.lp-mark {
+  color: var(--w-muted);
+}
+
+/* a verb is an underlined word here, the same as everywhere else */
+.lp-quiet-verb {
+  /* TWENTY-FOUR PIXELS, for the reason `.door-forget` carries at length in
+     `chrome.css`: at this size the word's own line box is sixteen pixels tall,
+     under WCAG 2.2 AA and under what `e2e:phone` holds every control to. The
+     air is vertical only — both of these sit in flex rows, so horizontal
+     padding would push their neighbours apart rather than grow the target. */
+  padding: var(--sp-6) 0;
+  color: var(--w-muted);
+  font-size: var(--t-note);
+  text-decoration: underline;
+  text-underline-offset: 5px;
+  text-decoration-thickness: 1px;
+  transition: color 0.2s ease;
+}
+.lp-quiet-verb:hover,
+.lp-quiet-verb:focus-visible {
+  color: var(--w-ink);
+}
+
+/* ---------- the being ---------- */
+
+/* IT SCALES WITH THE SCREEN'S HEIGHT, not its width. The being is the first
+   thing to give room back on a short viewport, because it is the only element
+   here carrying no words — and `transform` rather than a size change so the
+   halo, the dome and the eyes stay in the proportion `Companion.tsx` drew
+   them in. The origin is the left edge so it shrinks toward the measure
+   everything else hangs off rather than toward the middle of nowhere. */
+.lp-being {
+  flex: none;
+  transform-origin: left center;
+}
+
+/* ---------- what the page says ---------- */
+
+/* THE ONE DISPLAY SIZE ON THE PAGE. Jost 300 and never heavier: in a
+   geometric the elegance is the thin even stroke and the air around it, and
+   weight is what kills it — the same note `chrome.css` carries over the
+   door's title, for the same face.
+
+   The `vh` term in the clamp is the one-screen rule reaching the type: a wide
+   short window (a laptop with a browser's chrome on it) gets the size its
+   HEIGHT can afford, not the size its width would like. */
+.lp-headline {
+  margin: 0;
+  max-width: 20ch;
+  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-weight: 300;
+  font-size: clamp(30px, min(5.4vw, 6.4vh), 64px);
+  line-height: 1.04;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+  color: var(--w-ink);
+}
+
+.lp-lede {
+  max-width: 44ch;
+  margin: 0;
+  color: var(--w-muted);
+  font-size: clamp(15px, min(1.5vw, 2.1vh), 21px);
+  line-height: 1.5;
+}
+
+/* THE THREE THINGS THE PAGE HAS ROOM TO SAY, and they are deliberately not a
+   light ramp. The ramp on the old scrolling page meant something — the layers
+   are ordered, and brightness said so. These three are not ordered; they are
+   three faces of one claim, so rising light would be spending the meaning
+   channel on nothing. Equal weight is the honest rendering, and the rule at
+   the left is a measure rather than a signal. */
+.lp-points {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(var(--sp-8), 1.4vh, var(--sp-16));
+  max-width: 56ch;
+}
+.lp-point {
+  padding-left: var(--sp-16);
+  border-left: 1px solid var(--w-edge);
+  color: var(--w-muted);
+  font-size: clamp(13px, min(1.15vw, 1.7vh), 16px);
+  line-height: 1.55;
+}
+
+/* ---------- the acts ---------- */
+
+.lp-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-24);
+  margin-top: clamp(var(--sp-4), 1.2vh, var(--sp-16));
+}
+/* THE PAGE'S OWN DOORWAY, and deliberately the same object as the door's:
+   filled with the page's ink, the ground as its letters, warm light behind
+   it. A person who presses this meets `btn-doorway` one navigation later, and
+   two differently-shaped primary buttons across one threshold would read as
+   two products. It is always lit — unlike the door's, there is no form here
+   for it to be waiting on. */
+.lp-act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--sp-48);
+  padding: 0 var(--sp-40);
+  border-radius: 999px;
+  background: var(--w-ink);
+  color: var(--w-ground);
+  font-size: var(--t-body);
+  text-decoration: none;
+  box-shadow: 0 0 var(--sp-24) color-mix(in srgb, var(--moon-warm) 16%, transparent);
+  transition: opacity 0.18s ease;
+}
+.lp-act:hover,
+.lp-act:focus-visible {
+  opacity: 0.88;
+  color: var(--w-ground);
+}
+.lp-act-aside {
+  color: var(--w-faint);
+  font-size: var(--t-ui);
+}
+
+/* ---------- the short screen ---------- */
+
+/* A LAPTOP IS A SHORT SCREEN. The common failure this catches is not a phone
+   but a 1280x800 window with a browser's chrome on it, which leaves around
+   660 usable pixels — comfortably less than the composition wants at that
+   width. The being gives its room back first, because it is the only element
+   here with nothing to read. */
+@media (max-height: 780px) {
+  .lp-being {
+    transform: scale(0.76);
+  }
+}
+@media (max-height: 640px) {
+  .lp-being {
+    transform: scale(0.58);
+  }
+}
+@media (max-height: 620px) {
+  .lp-being {
+    transform: scale(0.46);
+  }
+}
+/* AND ON A SCREEN TOO SHORT FOR ALL OF IT, the being leaves rather than the
+   words. What it costs is the page's warmth; what keeping it would cost is a
+   clipped sentence or an unreachable button, and between an unreadable claim
+   and a missing decoration there is no argument.
+
+   IT IS ASKED AS SHORT *AND* NARROW, which is the shape of the failure rather
+   than a guess at it. Height alone is the wrong question: a short wide window
+   wraps the lede in two lines and clears the button comfortably, while the
+   same height at phone width wraps it in six and buries it. Measured at
+   320x568 — the smallest phone still in use — the button landed seventeen
+   pixels under the fold, and on a page with no scrollbar that is not a tight
+   fit, it is a control nobody can reach. The wide short window keeps its
+   being; the narrow short one spends it. */
+@media (max-height: 620px) and (max-width: 480px) {
+  .lp-being {
+    display: none;
+  }
+}
+@media (max-height: 540px) {
+  .lp-being {
+    display: none;
+  }
+}
+
+/* ---------- the phone ---------- */
+
+@media (max-width: 600px) {
+  .lp {
+    padding-left: var(--sp-20);
+    padding-right: var(--sp-20);
+  }
+  /* the measure is the screen now, so the headline's own cap would only make
+     it break earlier than it has to */
+  .lp-headline {
+    max-width: none;
+  }
+  .lp-lede,
+  .lp-points {
+    max-width: none;
+  }
+  /* THE TWO ACTS STACK RATHER THAN WRAP. Wrapped, `private by default` landed
+     alone on a line under a full-width button and read as a caption on it
+     rather than as a fact about the product; and the flex gap between them
+     was the row gap, which is larger than the note needs. */
+  .lp-acts {
+    gap: var(--sp-12);
+  }
+  .lp-act {
+    padding: 0 var(--sp-32);
+  }
+}
+
+/* THE BEING'S HALO REACHES PAST ITS BOX. `Companion.tsx` insets the glow by
+   110px, so at the page's measure the box overhangs the left edge on any
+   window under about 918px — derived rather than guessed: 24px of page
+   padding plus half the leftover width has to clear 79px, which resolves at
+   918. Rounded up, and the being is centred from there down. */
+@media (max-width: 920px) {
+  .lp-being {
+    transform-origin: center;
+    align-self: center;
+  }
+}
+
+/* Motion is the transition on the verbs and the doorway only; the being's own
+   gaze is excused in `Landing.tsx`, where the pointer listener is never
+   attached under a reduced-motion request. */
+@media (prefers-reduced-motion: reduce) {
+  .lp-quiet-verb,
+  .lp-act {
+    transition: none;
+  }
+}
+}

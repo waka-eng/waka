@@ -43,19 +43,55 @@
  * TRAVELS WITH THE FUNCTION. Separate files would strand it and invite the
  * next reader to "de-duplicate" two shapes that are alike by coincidence and
  * different on purpose.
+ *
+ * ── THE DOOR IS MADE OF THE WORLD NOW ──────────────────────────────────────
+ *
+ * The founder ruled once already on this exact failure, one screen along: the
+ * loading page was "the product changing clothes twice on the way in", and the
+ * answer was to make it the world's own early face — the world's ground, the
+ * companion already home. The door was the last costume change left. Inside,
+ * the product is lowercase verbs and light on `#06080d`; the door was Title
+ * Case tabs reading `Sign in` / `Create account` over a form, with no sign
+ * that anything lives here.
+ *
+ * Four things carry the change, and each is a corollary of "the door should be
+ * rendered by the world" rather than a decoration:
+ *
+ *   THE COMPANION STANDS HERE. The same being, from the same module, as the
+ *   loading frame and — a moment later — the world. It looks at the field you
+ *   are in, because gaze is the one channel `character/body.ts` leaves an
+ *   individual, and because the world never moves unless you moved it.
+ *
+ *   THE MENU SPEAKS THE PRODUCT'S VERBS. `continue` and `begin`, which is what
+ *   the two tabs always meant — the subtitle under them has said "return to
+ *   what you kept" all along. The ids do not change: `#login-tab-signup` is
+ *   how every e2e walk in `tools/` gets into the product.
+ *
+ *   THE DOORWAY LIGHTS AS THE FORM FILLS. Light is this product's only meaning
+ *   channel, so the submit starts dim and reaches full ink when the form has
+ *   what it needs. It is NEVER disabled by that state — see `Doorway`.
+ *
+ *   THE DOOR REMEMBERS WHO WAS LAST HERE, the way a save file does, and greets
+ *   them by name with the address already filled. `lib/door-memory` holds that
+ *   record and says why it is not the auth cache.
  */
 
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
+import { Companion, LOOKING_AHEAD } from "../components/Companion";
+import type { CompanionGaze } from "../components/Companion";
 import { GoogleSignInButton, oauthErrorMessageKey } from "../components/GoogleSignIn";
 import { ApiError } from "../lib/api";
 import type { LoginFieldErrors, SignupFieldErrors } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
+import { forgetAtDoor, readDoorMemory } from "../lib/door-memory";
+import type { DoorMemory } from "../lib/door-memory";
 import { formatMessage, readStoredLocale, t } from "../lib/locales";
 import type { SupportedLocale } from "../lib/locales";
 import { resolveRedirect } from "../lib/sign-in-destination";
+import { whenShort } from "../lib/when";
 
 // ---------------------------------------------------------------------------
 // Shared constants
@@ -70,6 +106,109 @@ import { resolveRedirect } from "../lib/sign-in-destination";
  * inverse (loose client, strict server) would be the dangerous direction.
  */
 const MIN_PASSWORD_LENGTH = 8;
+
+// ---------------------------------------------------------------------------
+// What the being is looking at
+// ---------------------------------------------------------------------------
+
+/**
+ * Which field has the person's hands, or nothing.
+ *
+ * The forms report the NAME of the field rather than a gaze, and the page
+ * turns that into where the eyes go. Two reasons, both learned from the way
+ * this file already keeps its rules: the mapping is a fact about the LAYOUT —
+ * where that field sits under the being — so it belongs with the layout, in
+ * one place, rather than copied into two forms that would drift apart the
+ * first time a field moved. And a form that knew about eye geometry would be
+ * a form nobody could render on its own, which is exactly what `SignupForm`'s
+ * standalone use forbids.
+ */
+export type DoorLook = "email" | "password" | "name" | null;
+
+/**
+ * DOWN THE COLUMN, AS THE HANDS GO DOWN IT.
+ *
+ * The three fields are stacked, full-width, in this order, so the only axis
+ * that carries any truth here is the vertical one — the being looks further
+ * down as you move further down the form, and back up when you leave it. The
+ * horizontal channel `CompanionGaze` offers is deliberately left unspent:
+ * nothing on this screen sits to one side of anything else, and a sideways
+ * glance would be motion that decorates rather than explains.
+ */
+const GAZE_BY_LOOK: Record<Exclude<DoorLook, null>, CompanionGaze> = {
+  email: { x: 0, y: 0.55 },
+  password: { x: 0, y: 0.8 },
+  name: { x: 0, y: 1 },
+};
+
+function gazeFor(look: DoorLook): CompanionGaze {
+  return look ? GAZE_BY_LOOK[look] : LOOKING_AHEAD;
+}
+
+/**
+ * Which of this form's fields the event came from, or null for anything else.
+ *
+ * It reads the NATIVE event's target rather than the React one. React types
+ * `event.target` as the element the handler is attached to — the form — which
+ * is exactly wrong for a delegated handler: focus bubbles, so the element that
+ * actually took focus is the native target, and asking React's type for it
+ * would require a cast asserting something untrue. A real `instanceof` also
+ * makes this honest about anything that is not an input at all.
+ */
+function fieldLookOf(target: EventTarget | null): DoorLook {
+  const name = target instanceof HTMLInputElement ? target.name : "";
+  return name === "email" || name === "password" || name === "name" ? name : null;
+}
+
+// ---------------------------------------------------------------------------
+// The doorway
+// ---------------------------------------------------------------------------
+
+interface DoorwayProps {
+  /** the form holds everything it needs — nothing is missing yet */
+  ready: boolean;
+  submitting: boolean;
+  label: string;
+  busyLabel: string;
+}
+
+/**
+ * THE SUBMIT, LIT BY HOW FAR THE FORM HAS GOT.
+ *
+ * It used to be full ink from the first frame: on a near-black page the
+ * brightest, largest object on screen was the button for the form nobody had
+ * filled in yet. Everywhere else in this product light means *something is
+ * here* — an orb's brightness is how much rests on it, a wall's ink is where
+ * you are standing — and the door was the one surface spending it on nothing.
+ *
+ * So the doorway arrives dim and reaches full ink when the form has what it
+ * needs. That is the same channel the world uses, applied to the only state a
+ * door has.
+ *
+ * AND IT IS NEVER DISABLED BY THAT STATE. This matters more than the look. A
+ * dimmed control that also refuses the press is a dead end: the person cannot
+ * find out WHY it will not open, because the field errors only exist once
+ * something has been submitted. Dim is a hint about what is missing; pressing
+ * it still submits, still runs the pre-flight, and still says which field is
+ * empty in words. `disabled` is spent on the one state where a press really
+ * has nothing left to do — a request already in flight.
+ */
+function Doorway({ ready, submitting, label, busyLabel }: DoorwayProps): JSX.Element {
+  return (
+    /* `btn-doorway`: the login page's own submit, and NOT `.profile-card`'s
+       save or onboarding's. `.login-card` is shared by four screens, so the
+       weight this control needs had to be asked for by name rather than
+       inherited by ancestor. */
+    <button
+      className="btn-primary btn-doorway"
+      type="submit"
+      data-lit={ready ? "lit" : "dim"}
+      disabled={submitting}
+    >
+      {submitting ? busyLabel : label}
+    </button>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Signup form
@@ -91,10 +230,18 @@ const EMPTY_SIGNUP: SignupValues = {
 
 interface SignupFormProps {
   locale?: SupportedLocale;
+  /**
+   * Where the hands are, for the being above the form. Optional and defaulted
+   * to a no-op: this form is rendered on its own — in `auth-boundary.test.ts`,
+   * and by anything that wants the signup form without the door around it —
+   * and it must not require a companion to exist.
+   */
+  onLookAt?: (look: DoorLook) => void;
 }
 
 export function SignupForm({
   locale: shellLocale = readStoredLocale(),
+  onLookAt = () => undefined,
 }: SignupFormProps = {}): JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
@@ -211,9 +358,31 @@ export function SignupForm({
   const emailError = fieldErrors.email?.[0];
   const passwordError = fieldErrors.password?.[0];
   const nameError = fieldErrors.name?.[0];
+  /* What the doorway's light is reading. The same three conditions the
+     pre-flight above checks, and deliberately not a second opinion about
+     them: if these two ever disagree, the light is lying about what the
+     press will do. */
+  const ready =
+    values.email.trim().length > 0 &&
+    values.password.length >= MIN_PASSWORD_LENGTH &&
+    values.name.trim().length > 0;
 
   return (
-    <form className="login-form" onSubmit={handleSubmit} noValidate>
+    <form
+      className="login-form"
+      onSubmit={handleSubmit}
+      noValidate
+      /* One pair of handlers for the whole form rather than three: focus and
+         blur both bubble (unlike the events they are named after on other
+         platforms), so the form can watch its own fields. `relatedTarget`
+         staying inside the form means the hands only moved between fields —
+         the being should follow, not look away and back. */
+      onFocus={(event) => onLookAt(fieldLookOf(event.nativeEvent.target))}
+      onBlur={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+        onLookAt(null);
+      }}
+    >
       {formError ? (
         <div className="form-error" role="alert">
           {formError}
@@ -291,13 +460,12 @@ export function SignupForm({
           2026-08-22: the product speaks English only). preferredLocale still
           travels in the payload at its default — the account keeps the
           column, the person just has nothing to choose. */}
-      {/* `btn-doorway`: the login page's own submit, and NOT `.profile-card`'s
-          save or onboarding's. `.login-card` is shared by four screens, so
-          the weight this control needs had to be asked for by name rather
-          than inherited by ancestor. */}
-      <button className="btn-primary btn-doorway" type="submit" disabled={submitting}>
-        {submitting ? t(locale, "loginCreatingAccount") : t(locale, "loginCreateAccount")}
-      </button>
+      <Doorway
+        ready={ready}
+        submitting={submitting}
+        label={t(locale, "loginCreateAccount")}
+        busyLabel={t(locale, "loginCreatingAccount")}
+      />
     </form>
   );
 }
@@ -313,13 +481,33 @@ interface LoginValues {
 
 const EMPTY_LOGIN: LoginValues = { email: "", password: "" };
 
-export function LoginForm(): JSX.Element {
+interface LoginFormProps {
+  /** see `SignupFormProps.onLookAt` — optional for the same reason */
+  onLookAt?: (look: DoorLook) => void;
+  /**
+   * Who the door remembers, or null for a stranger. Only the ADDRESS is used
+   * here — it starts in the email field so a returning person types one thing
+   * instead of two. The name is the page's to say, in the greeting.
+   *
+   * The page remounts this form when the memory is forgotten (see its `key`),
+   * so a cleared memory really does empty the field rather than leaving the
+   * address of somebody who just said "not me" sitting in it.
+   */
+  remembered?: DoorMemory | null;
+}
+
+export function LoginForm({
+  onLookAt = () => undefined,
+  remembered = null,
+}: LoginFormProps = {}): JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
   const { login } = useAuth();
   const locale = readStoredLocale();
 
-  const [values, setValues] = useState<LoginValues>(EMPTY_LOGIN);
+  const [values, setValues] = useState<LoginValues>(() =>
+    remembered ? { ...EMPTY_LOGIN, email: remembered.email } : EMPTY_LOGIN,
+  );
   const [fieldErrors, setFieldErrors] = useState<LoginFieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   /**
@@ -413,9 +601,23 @@ export function LoginForm(): JSX.Element {
 
   const emailError = fieldErrors.email?.[0];
   const passwordError = fieldErrors.password?.[0];
+  /* Presence only, mirroring this form's pre-flight exactly — including its
+     deliberate refusal to check the password length. A door that stayed dim
+     for an account created under an older policy would be telling that person
+     their own password is wrong before they had pressed anything. */
+  const ready = values.email.trim().length > 0 && values.password.length > 0;
 
   return (
-    <form className="login-form" onSubmit={handleSubmit} noValidate>
+    <form
+      className="login-form"
+      onSubmit={handleSubmit}
+      noValidate
+      onFocus={(event) => onLookAt(fieldLookOf(event.nativeEvent.target))}
+      onBlur={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+        onLookAt(null);
+      }}
+    >
       {formError ? (
         <div className="form-error" role="alert">
           {formError}
@@ -477,6 +679,11 @@ export function LoginForm(): JSX.Element {
           autoComplete="current-password"
           required
           disabled={submitting}
+          /* The one field a remembered person still has to fill. Autofocused
+             only for them: on an empty door the first field is the right
+             place to land, and stealing focus past it would be the page
+             deciding something the visitor had not. */
+          autoFocus={remembered !== null}
           value={values.password}
           onChange={(e) => handleChange("password", e.target.value)}
           aria-invalid={passwordError ? true : undefined}
@@ -489,13 +696,12 @@ export function LoginForm(): JSX.Element {
         ) : null}
       </label>
 
-      {/* `btn-doorway`: the login page's own submit, and NOT `.profile-card`'s
-          save or onboarding's. `.login-card` is shared by four screens, so
-          the weight this control needs had to be asked for by name rather
-          than inherited by ancestor. */}
-      <button className="btn-primary btn-doorway" type="submit" disabled={submitting}>
-        {submitting ? t(locale, "loginSigningIn") : t(locale, "loginTab")}
-      </button>
+      <Doorway
+        ready={ready}
+        submitting={submitting}
+        label={t(locale, "loginTab")}
+        busyLabel={t(locale, "loginSigningIn")}
+      />
     </form>
   );
 }
@@ -536,15 +742,60 @@ type Mode = "login" | "signup";
  * for the lifetime of the page render.
  */
 export default function LoginPage(): JSX.Element {
-  const [mode, setMode] = useState<Mode>("login");
+  const location = useLocation();
+  /**
+   * WHICH SIDE THE DOOR OPENS ON.
+   *
+   * `login` by default, because returning people outnumber new ones in
+   * steady state — and `?begin` for the one caller that knows better. The
+   * landing page's whole purpose is to send strangers here, and dropping them
+   * on the sign-in side would ask them for a password to an account the page
+   * had just finished persuading them to create.
+   *
+   * A query rather than router state, so the link survives being copied,
+   * shared and bookmarked. Read once, on mount: after that the tabs are the
+   * person's to move, and re-reading the URL would take that back.
+   *
+   * FROM THE ROUTER'S LOCATION, NOT `window.location`. The first version read
+   * the window and passed every test that did not click a link — the landing
+   * page's `begin` navigates in-app, so the address the router knows about is
+   * the only one that has `?begin` in it at the moment this runs. Reading the
+   * window would have shipped a funnel that worked when the URL was typed and
+   * silently failed for everybody who arrived by pressing the button the page
+   * is built around. (The OAuth banner below still reads the window, and that
+   * is correct for it: it is recovering a param from a FULL-PAGE return from
+   * Google, which the router never saw.)
+   */
+  const [mode, setMode] = useState<Mode>(() =>
+    new URLSearchParams(location.search).has("begin") ? "signup" : "login",
+  );
   const loginTabRef = useRef<HTMLButtonElement>(null);
   const signupTabRef = useRef<HTMLButtonElement>(null);
   const [locale] = useState<SupportedLocale>(() => readStoredLocale());
-  const location = useLocation();
   const navigate = useNavigate();
   /* Why the door is standing here, when the reason is "we could not ask" —
      see `AuthContextValue.serverUnreachable`. It never decides access. */
   const { serverUnreachable } = useAuth();
+
+  /** Where the being is looking. Nothing but a focused field moves it. */
+  const [look, setLook] = useState<DoorLook>(null);
+
+  /**
+   * WHO THE DOOR REMEMBERS. Read once, on mount: this is a display hint and
+   * re-reading it would let another tab's sign-out change the greeting under
+   * a person mid-sentence.
+   *
+   * It is only spent on the `continue` side. On `begin` the visitor is
+   * declaring they are somebody new, and greeting them by the last person's
+   * name there would be the door arguing with them.
+   */
+  const [remembered, setRemembered] = useState<DoorMemory | null>(() => readDoorMemory());
+  const greeted = mode === "login" ? remembered : null;
+
+  const forget = (): void => {
+    forgetAtDoor();
+    setRemembered(null);
+  };
 
   /**
    * Surface the OAuth error code (if any) the API redirected us back with
@@ -584,8 +835,17 @@ export default function LoginPage(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const headline = t(locale, mode === "login" ? "loginWelcome" : "loginBegin");
+  /* The greeting says the name when there is one to say. `loginWelcome` is
+     the same sentence without it, so the two never drift into two different
+     welcomes — one carries a name, the other does not. */
+  const headline = greeted
+    ? formatMessage(locale, "loginWelcomeNamed", { name: greeted.name })
+    : t(locale, mode === "login" ? "loginWelcome" : "loginBegin");
   const subtitle = t(locale, mode === "login" ? "loginSubtitle" : "signupSubtitle");
+  /* `whenShort` answers "" for a date it cannot read, and a memory written by
+     an older version may have no date at all. Either way the line is dropped
+     rather than rendered half-written: "last here" on its own says nothing. */
+  const lastHere = greeted ? whenShort(greeted.at) : "";
 
   const activateLoginTab = (): void => {
     setMode("login");
@@ -624,11 +884,41 @@ export default function LoginPage(): JSX.Element {
   return (
     <main className="login-shell">
       <section className="login-card" aria-labelledby="login-title">
+        {/* THE BEING IS AT THE DOOR, and it is the same one that will be
+            standing in the world a moment later — `LoadingHome` draws it
+            between the two. What made this screen read as a generic form was
+            never the fields: it was that nothing lived here. A title screen
+            with a character on it is a game; a column of inputs is a form.
+
+            `aria-hidden` comes with the component: it is a picture of the
+            product's inhabitant, and it says nothing a person needs read
+            aloud that the words below it do not already say. */}
+        <div className="door-being">
+          <Companion scale={0.5} gaze={gazeFor(look)} />
+        </div>
         <p className="login-eyebrow">{t(locale, "loginEyebrow")}</p>
         <h1 id="login-title" className="login-title">
           {headline}
         </h1>
         <p className="login-subtitle">{subtitle}</p>
+
+        {/* WHAT A SAVE FILE SHOWS: whose it is, and when it was last put down.
+            The name is in the greeting above; this is the rest of it, plus the
+            one press that removes it. A machine can be shared, and a person
+            who does not recognise this name must be able to clear it without
+            signing in as somebody they are not. */}
+        {greeted ? (
+          <p className="door-save">
+            {lastHere ? (
+              <span className="door-save-when">
+                {formatMessage(locale, "loginLastHere", { when: lastHere })}
+              </span>
+            ) : null}
+            <button type="button" className="door-forget" onClick={forget}>
+              {formatMessage(locale, "loginNotYou", { name: greeted.name })}
+            </button>
+          </p>
+        ) : null}
 
         {/* THE DOOR SAYS WHY IT IS THE DOOR.
             A person whose network is down is bounced here by `RequireAuth`
@@ -679,6 +969,14 @@ export default function LoginPage(): JSX.Element {
             }
             onClick={() => setMode("login")}
             onKeyDown={handleTabKeyDown}
+            /* THE VISIBLE WORD IS INSIDE THE SPOKEN ONE. A title screen's menu
+               says `continue`, and on its own that is thin for somebody who
+               cannot see the form under it. WCAG's label-in-name rule settles
+               how to fix that without weakening either: the accessible name
+               must CONTAIN the visible text, so the label opens with the same
+               word and then says what it opens. Speech control still reaches
+               it by "continue". */
+            aria-label={t(locale, "loginTabContinueAria")}
           >
             {t(locale, "loginTab")}
           </button>
@@ -695,6 +993,8 @@ export default function LoginPage(): JSX.Element {
             }
             onClick={() => setMode("signup")}
             onKeyDown={handleTabKeyDown}
+            /* see the sibling above */
+            aria-label={t(locale, "loginTabBeginAria")}
           >
             {t(locale, "signupTab")}
           </button>
@@ -708,9 +1008,22 @@ export default function LoginPage(): JSX.Element {
           }
         >
           {mode === "login" ? (
-            <LoginForm />
+            /* THE KEY IS WHAT MAKES "not you?" ACTUALLY EMPTY THE FIELD. The
+               form seeds its email from the memory once, in a state
+               initialiser, which is right — a person editing that address must
+               not have it overwritten on the next render. The cost is that
+               clearing the memory cannot reach the value any more, so
+               forgetting somebody would leave their address sitting in the
+               form they had just been removed from. Changing the key remounts
+               the form, and a remount re-runs the initialiser against a memory
+               that is now null. */
+            <LoginForm
+              key={remembered ? "remembered" : "stranger"}
+              onLookAt={setLook}
+              remembered={remembered}
+            />
           ) : (
-            <SignupForm locale={locale} />
+            <SignupForm locale={locale} onLookAt={setLook} />
           )}
         </div>
 

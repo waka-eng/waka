@@ -27,6 +27,7 @@
     "demo:world": "tsx tools/demo/seed.ts",
     "e2e:organic": "tsx tools/e2e/organic.ts",
     "e2e:first-paint": "tsx tools/e2e/first-paint.ts",
+    "e2e:one-screen": "tsx tools/e2e/one-screen.ts",
     "e2e:journeys": "tsx tools/e2e/journeys.ts",
     "e2e:measure": "tsx tools/e2e/measure.ts",
     "e2e:erasure": "tsx tools/e2e/erasure.ts",
