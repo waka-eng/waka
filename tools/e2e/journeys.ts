@@ -782,6 +782,87 @@ const JOURNEYS: Journey[] = [
   },
 
   {
+    id: "agent-ground",
+    name: "an agent's ground holds its own keeps, on camera",
+    breaks: (ctx) =>
+      breakRoute(ctx, (p, m) => p === "/api/inspirations" && m === "GET"),
+    run: async (page, base) => {
+      /* The 2026-08-30 family in one walk: the count, the reach, and the
+         PIXELS must agree. The count said six while the ground stood one
+         screen to the right of its camera for as long as the walls have
+         existed — data-level assertions all passed; only light would have
+         caught it. */
+      await signUp(page, base);
+      await goSurface(page, base, "/profile");
+      await page.click('button[role=tab]:has-text("Memories & connections")');
+      await page.fill('input[placeholder="Add an agent memory"]', "GroundScout");
+      await page.click('button:has-text("Add memory")');
+      await page.waitForTimeout(1_500);
+      const key = await page.evaluate(
+        () => document.querySelector(".profile-minted .profile-secret")?.textContent ?? "",
+      );
+      if (!key.startsWith("waka_agent_")) {
+        return { ok: false, detail: "creation handed over no machine key" };
+      }
+      await page.click('.profile-minted button:has-text("I have it")');
+
+      const texts = [
+        "Ground keep one, by the machine.",
+        "Ground keep two, by the machine.",
+        "Ground keep three, by the machine.",
+      ];
+      for (const text of texts) {
+        const res = await fetch(`${base}/api/inspirations`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        if (res.status !== 201) return { ok: false, detail: `keep via key → ${res.status}` };
+      }
+
+      await goSurface(page, base, "/");
+      await page.waitForTimeout(6_000);
+      await page.keyboard.press("ArrowLeft");
+      await page.waitForTimeout(9_000);
+
+      const foot = await page.evaluate(
+        () => document.querySelector(".jar-saved-count")?.textContent ?? "",
+      );
+      if (!foot.startsWith("3")) return { ok: false, detail: `foot says ${JSON.stringify(foot)}` };
+
+      await page.click(".jar-saved");
+      await page.waitForTimeout(6_000);
+
+      const reach = await page.evaluate(() =>
+        [...document.querySelectorAll(".jar-reach [role=option]")].map(
+          (o) => o.textContent ?? "",
+        ),
+      );
+      const allListed = texts.every((t) => reach.some((r) => r.includes(t.slice(0, 20))));
+      if (!allListed) return { ok: false, detail: `reach holds ${reach.length}, not the three` };
+
+      /* and the light: the ground's canvas must actually paint them. A wall
+         whose data is perfect and whose camera looks elsewhere fails HERE. */
+      const lit = await page.evaluate(() => {
+        const c = document.querySelector("canvas");
+        if (!c) return -1;
+        const g = c.getContext("2d");
+        if (!g) return -1;
+        const img = g.getImageData(0, 0, c.width, c.height).data;
+        let n = 0;
+        for (let i = 0; i < img.length; i += 40) {
+          if (img[i]! + img[i + 1]! + img[i + 2]! > 150) n++;
+        }
+        return n;
+      });
+      return {
+        ok: lit > 200,
+        detail: `foot=3 reach=${reach.length} litSamples=${lit}`,
+      };
+    },
+  },
+
+  {
     id: "a11y-floor",
     name: "every control in the world can be named out loud",
     /* THE FIRST SABOTAGE HERE DID NOT WORK, AND THE GATE SAID SO.
