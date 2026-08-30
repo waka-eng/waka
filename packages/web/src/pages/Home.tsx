@@ -2227,16 +2227,30 @@ function HomeExperience(): JSX.Element {
    * blanking a wall that was honest a second ago.
    */
   const agentRefreshBusyRef = useRef<Set<string>>(new Set());
+  /** When each agent's ground last refreshed. The refetch answers a TRAVEL,
+      but the loop re-announces an in-flight travel after every rebuild — and
+      the refetch's own setAgents IS a rebuild, so an unthrottled refresh
+      became a storm that restarted the trip forever: stuck mid-flight,
+      refetching both agents five times a second, no arrival, dark ground.
+      One refresh per approach is the meaning; the window is how it's said. */
+  const agentRefreshedAtRef = useRef<Map<string, number>>(new Map());
+  /** Fetched bundles wait here until the world is AT REST. Applying one
+      mid-travel rebuilds the whole simulation in flight, and everything
+      edge-triggered — the trip, the arrival, the pour — shears across that
+      boundary (observed as a wall that says six and lights none). Travel is
+      when the refresh is ASKED for; arrival is when it may land. */
+  const pendingAgentBundlesRef = useRef<Map<string, AgentBundle>>(new Map());
   const refreshAgentWall = useCallback(
     (agentId: string) => {
       const a = (agents ?? []).find((x) => x.agent.id === agentId);
       if (!a || agentRefreshBusyRef.current.has(agentId)) return;
+      const last = agentRefreshedAtRef.current.get(agentId) ?? 0;
+      if (Date.now() - last < 60_000) return;
+      agentRefreshedAtRef.current.set(agentId, Date.now());
       agentRefreshBusyRef.current.add(agentId);
       void loadAgentBundle(a.agent)
         .then((fresh) => {
-          setAgents((prev) =>
-            (prev ?? []).map((x) => (x.agent.id === agentId ? fresh : x)),
-          );
+          pendingAgentBundlesRef.current.set(agentId, fresh);
         })
         .catch(() => undefined)
         .finally(() => {
@@ -2263,6 +2277,18 @@ function HomeExperience(): JSX.Element {
   loadWallRef.current = loadWall;
 
   /** The camera came to rest on a wall. Discrete, pushed from the loop. */
+  /* THE PENDING BUNDLE LANDS AT ARRIVAL — the one moment the world is
+     provably at rest and freshly laid out. The rebuild this causes runs its
+     rest-convergence with the right wall under it, so the refreshed ground
+     settles in place instead of shearing a travel apart. */
+  useEffect(() => {
+    const pending = pendingAgentBundlesRef.current;
+    if (pending.size === 0) return;
+    const fresh = new Map(pending);
+    pending.clear();
+    setAgents((prev) => (prev ?? []).map((a) => fresh.get(a.agent.id) ?? a));
+  }, [atWall]);
+
   const pushArrived = useCallback((w: Space) => {
     setAtWall((prev) => (prev.kind === w.kind && prev.id === w.id ? prev : w));
   }, []);
@@ -4221,6 +4247,25 @@ function HomeExperience(): JSX.Element {
       return (b.ownerProfileId ?? "") === (ground ?? viewerIdRef.current ?? "");
     };
 
+    /* dev-only: the loop's own truth, askable from a console */
+    if (import.meta.env.VITE_SHOW_INTERNAL) {
+      (window as unknown as Record<string, unknown>).__waka = () => ({
+        wall: curWall().id || "me",
+        kind: curWall().kind,
+        tripActive: trip.active,
+        balls: list.map((b) => ({
+          id: b.id.slice(0, 8),
+          agent: (b.agentId ?? "").slice(0, 8) || "me",
+          active: b.active,
+          alive: Number(b.alive.toFixed(2)),
+          x: Math.round(b.x),
+          y: Math.round(b.y),
+          homeY: Math.round(b.homeY),
+          spawnAt: b.spawnAt,
+        })),
+      });
+    }
+
     function assignHomes() {
       const present: Ball[] = [];
       for (const b of list)
@@ -4802,6 +4847,8 @@ function HomeExperience(): JSX.Element {
          this is what makes them exist. Without it a travelled-to wall drew an
          empty ground however much was standing on it. */
       const here = presentBalls();
+      /* the last wall's light does not follow you in */
+      for (const b of list) if (b.active && !onThisWall(b)) b.active = false;
       if (view.reduced) settleInstantly();
       else primePour(here);
       electPeek(here);
@@ -5485,7 +5532,14 @@ function HomeExperience(): JSX.Element {
 
     /**
      * `only` is the set to pour — the wall you have just walked into. Left out,
-     * it is the whole archive, which is what the first open wants.
+     * it is the CURRENT WALL'S ground, filtered the same way homes are
+     * assigned. It used to be the whole `list`, "which is what the first open
+     * wants" — true when the list held only your own archive, and a leak the
+     * moment the list grew every wall's balls (founder, 2026-08-30: thirteen
+     * orbs on a ground that honestly holds one — your keep placed, and two
+     * agents' twelve drifting unplaced but poured active). Every wall reached
+     * by TRAVELLING always used the narrow form, which is why the leak only
+     * ever showed on the wall you open into.
      *
      * Arriving needs the narrow form for two reasons. The stagger is
      * POUR_MS/length, so pouring all 128 balls to show the 9 that belong here
@@ -5498,10 +5552,19 @@ function HomeExperience(): JSX.Element {
      */
     function primePour(only?: Ball[]) {
       const t0 = performance.now() + 300;
+      /* THE CONSTRUCTOR SAYS `active: true`, so a ball this pour does not
+         name would paint anyway — on whatever wall you happen to be. The
+         bare form is the first word about the whole field, so it starts by
+         switching the whole field off. */
+      if (!only) for (const b of list) b.active = false;
       /* Newest first: the peek band is the invitation, so it must fill on the
          first beat rather than the last. Nothing stacks in a float field, so
          arrival order no longer has to build the strata. */
-      const order = (only ?? list).slice().sort((a, b) => b.capturedMs - a.capturedMs);
+      const order = (
+        only ?? list.filter((b) => b.capturedMs <= TRef.current && onThisWall(b))
+      )
+        .slice()
+        .sort((a, b) => b.capturedMs - a.capturedMs);
       /* A FIXED STAGGER IS A LOCKOUT LONGER THAN THE THING IT PROTECTS. At
          thirty-five milliseconds apiece, two hundred memories are still
          arriving seven seconds after open — every morning, in a tool used
@@ -5574,6 +5637,22 @@ function HomeExperience(): JSX.Element {
           pour.active = false;
           pour.done = true;
           computeInspiration();
+        }
+      } else {
+        /* A POUR CAN DIE WITH BALLS STILL STAGED — a rebuild flips it off
+           while spawn times are pending, and those balls then wait forever
+           for a processor that is gone. The step owns the field's truth, so
+           it buries the orphans by the same rule the pour would have used. */
+        for (const b of list) {
+          if (b.spawnAt > 0) {
+            b.spawnAt = -1;
+            b.active = b.capturedMs <= TRef.current && onThisWall(b);
+            if (b.active) {
+              b.arrive = 1;
+              b.x = b.homeX;
+              b.y = b.homeY;
+            }
+          }
         }
       }
 
@@ -7959,7 +8038,18 @@ function HomeExperience(): JSX.Element {
       for (const b of list) {
         const was = carried.get(b.id);
         if (!was) {
-          fresh.push(b);
+          /* New to the field — but the pour is an ARRIVAL, and an arrival
+             happens on the wall it belongs to. A ball for another wall is
+             registered quiet; travelling there is what switches it on. */
+          if (b.capturedMs <= TRef.current && onThisWall(b)) {
+            fresh.push(b);
+          } else {
+            b.active = false;
+            b.spawnAt = -1;
+            b.arrive = 1;
+            b.x = b.homeX;
+            b.y = b.homeY;
+          }
           continue;
         }
         b.x = was.x;
@@ -7974,6 +8064,32 @@ function HomeExperience(): JSX.Element {
       else {
         pour.active = false;
         pour.done = true;
+      }
+      /* AT REST, THE FIELD EQUALS ITS RULES — not its event history. The
+         carried recompute above ran with wherever the trip stood at rebuild
+         time, and an arrival that happened across a rebuild boundary can
+         lose its pour: the wall says Scout, the only lit ball says me. So a
+         rebuild that lands at rest converges: whatever should stand on this
+         wall and is dark pours in; whatever is lit and belongs elsewhere
+         goes out. Mid-flight rebuilds leave it to the arrival, which does
+         the same thing in the same words. */
+      if (!trip.active) {
+        assignHomes();
+        for (const b of list) if (b.active && !onThisWall(b)) b.active = false;
+        /* SETTLED, NOT POURED. A pour is how the field says something has
+           ARRIVED; recovering light a rebuild dropped is repair, and repair
+           staged behind a pour can be orphaned by the next rebuild killing
+           `pour.active` with spawn times still pending — which is exactly
+           the corpse this block exists to bury. */
+        for (const b of list) {
+          if (b.capturedMs <= TRef.current && onThisWall(b) && !b.active) {
+            b.active = true;
+            b.spawnAt = -1;
+            b.arrive = 1;
+            b.x = b.homeX;
+            b.y = b.homeY;
+          }
+        }
       }
       computeInspiration();
     } else primePour();
