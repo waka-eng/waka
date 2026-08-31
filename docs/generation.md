@@ -392,6 +392,21 @@ citations against exactly that set. Neither is any use without the other.
 Refreshes are debounced to one pending pass per profile, with the same
 trailing-edge `rerun_requested` semantics as derivation.
 
+**And the board shifts at most once a day.** An automatic
+(`signals_changed`) refresh that arrives while the latest CONTENT version —
+reason ≠ `no_change`; the honest no-change rows record that a read
+happened, not that the board moved — is younger than
+`TOP_OF_MIND_MIN_SHIFT_HOURS` is **held**: its row sleeps until the floor
+opens (`run_after = lastShift + 24h`), further enqueues collapse into it,
+and signals keep accruing underneath so the one shift that lands reads
+everything. A hold is not a failure — no error, no attempt spent. The
+sleeping row runs on the next wake after the floor opens (any keep wakes
+the worker; an absent profile's shift lands with the daily sweep). Two
+exemptions, both deliberate: `manual` refreshes — the person's own "Read it
+again", a language change — never wait, and a profile with no content
+version yet has nothing to hold stable. The machine holds a day; the person
+never does.
+
 ### 2. Selection: deterministic, scored, bounded
 
 Eligible signals are `active` (or `emerging` — see the cold start) and not
