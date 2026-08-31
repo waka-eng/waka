@@ -401,6 +401,9 @@ describe("describeTimeShape — a pattern's life, worded for the synthesis", () 
   it("a long-held pattern anchors in months and years", () => {
     const shape = describeTimeShape([daysAgo(500), daysAgo(400), daysAgo(30)], NOW);
     expect(shape).toBe("held for over a year; last fed 4 weeks ago");
+  });
+});
+
 describe("diversifyRanked — no two voices on the board saying one thing", () => {
   /* orthogonal-ish toy vectors: A≈B (cos ~0.98), C far from both */
   const A = [1, 0.1, 0];
