@@ -2387,7 +2387,15 @@ function HomeExperience(): JSX.Element {
     if (openedAtRef.current || !wallParam) return;
     if (phase !== "ready") return;
     const wanted = decodeURIComponent(wallParam).toLowerCase();
-    const w = walls.find((x) => x.kind !== "self" && wallSlug(x.name) === wanted);
+    /* By name-slug first — the address people write — and by the profile's
+       own id as well, because an id is what every API surface hands out and
+       "/w/<uuid>" arriving home with no word read as broken (founder,
+       2026-08-31). */
+    const w = walls.find(
+      (x) =>
+        x.kind !== "self" &&
+        (wallSlug(x.name) === wanted || x.id.toLowerCase() === wanted),
+    );
     if (!w) {
       /* the axis may simply not be known yet — the roster lands after first
          paint. Only once it has does a missing name mean a missing wall,
