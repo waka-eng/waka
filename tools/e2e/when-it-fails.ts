@@ -401,6 +401,63 @@ const ACTS: Act[] = [
     },
   },
   {
+    id: "reflect",
+    name: "answering a memory, and the reflection refuses",
+    /* NOT A CONTROL, DELIBERATELY. It has a written line — `whyFailed(err,
+       "That reflection didn't save. Your words are still here")` — but the
+       line goes to `setMouthNote`, which renders inside the MOUTH, and this
+       act happens inside an open card. A line written into a slot that is
+       not on the surface the act happened on is exactly the shape that made
+       keeping from a room's wall silent, so this walk gets to answer it
+       rather than assume it. */
+    breaks: (p, m) => /^\/api\/inspirations\/[^/]+\/reflections$/.test(p) && m === "POST",
+    reach: async (page, base) => {
+      for (let i = 0; i < 5; i += 1) {
+        await keepOne(page, base, `a memory this walk will answer ${i} ${uniq()}`);
+      }
+      await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(7_000);
+      if (!(await openAMemory(page))) throw new Error("no memory would open in the field");
+      await page.locator(".jar-panel button", { hasText: /^reflect$/ }).first().click({
+        timeout: 8_000,
+      });
+      await page.waitForTimeout(1_200);
+      await page.locator(".jar-reflect-box").first().fill("what it stirred, for the record", {
+        timeout: 8_000,
+      });
+    },
+    press: async (page) => {
+      await page.locator(".jar-reflect button", { hasText: /^Keep$/ }).first().click({
+        timeout: 8_000,
+      });
+      await page.waitForTimeout(2_000);
+    },
+  },
+  {
+    id: "publish",
+    name: "letting a memory reach your rooms, and the change refuses",
+    /* The same question as `reflect`, about the other verb that lives in the
+       card and writes its failure into the mouth's slot. And the stakes are
+       higher here than a lost sentence: this one decides WHO CAN READ
+       something. A person told nothing has been told the change landed. */
+    breaks: (p, m) => /^\/api\/inspirations\/[^/]+$/.test(p) && m === "PATCH",
+    reach: async (page, base) => {
+      for (let i = 0; i < 5; i += 1) {
+        await keepOne(page, base, `a memory this walk will publish ${i} ${uniq()}`);
+      }
+      await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(7_000);
+      if (!(await openAMemory(page))) throw new Error("no memory would open in the field");
+    },
+    press: async (page) => {
+      /* a keep is private unless asked otherwise, so `public` is the change */
+      await page.locator(".jar-panel button", { hasText: /^public$/ }).first().click({
+        timeout: 8_000,
+      });
+      await page.waitForTimeout(2_000);
+    },
+  },
+  {
     id: "make-room",
     name: "making a room, and the server refuses",
     control: true,

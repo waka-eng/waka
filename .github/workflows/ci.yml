@@ -551,7 +551,15 @@ jobs:
 
       # Every act pressed against a 500 on the route it rests on. The question
       # is not whether it failed — `journeys --negative` already asks that —
-      # but whether ANYTHING SAID SO. Seven acts; three used to say nothing.
+      # but whether ANYTHING SAID SO. Nine acts; three used to say nothing.
+      #
+      # The two newest are the verbs that live inside an open CARD — answering
+      # a memory, and changing who may read it. Both write their failure with
+      # `setMouthNote`, and that slot renders inside the MOUTH, which is not
+      # where either act happens. A line written into a slot that is not on
+      # the surface the act happened on is exactly what made keeping from a
+      # room's wall silent. Measured rather than assumed: both speak, under a
+      # 500, a dropped connection and a 401.
       - name: Failure paths (every act must say what went wrong)
         if: ${{ !cancelled() }}
         run: pnpm e2e:when-it-fails
