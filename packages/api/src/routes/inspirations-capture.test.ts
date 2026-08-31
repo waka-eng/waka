@@ -155,6 +155,18 @@ describe("visibilityForCapture", () => {
     expect(visibilityForCapture(session, humanProfileId, undefined)).toBeUndefined();
   });
 
+  it("a keeper key's own capture is the person's — the choice is honored", () => {
+    /* The keeper key writes AS the person, scoped to keep-and-recall; a
+       visibility on its own capture is the person's own choice riding their
+       own credential, so it opens rooms exactly as a browser capture would.
+       Pinned so nobody later "hardens" this into dropping the field. */
+    const keeper: AuthenticatedSession = {
+      ...sessionFor(humanProfileId, "human"),
+      keyScoped: true,
+    };
+    expect(visibilityForCapture(keeper, humanProfileId, "public")).toBe("public");
+  });
+
   it("refuses to publish on behalf of another profile", () => {
     // The agent holds "capture" on the human profile and legitimately writes
     // here. Publishing is a different permission wearing the same request.
