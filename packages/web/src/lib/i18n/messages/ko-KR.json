@@ -409,5 +409,12 @@
   "worldWhyUnreachable": "서버에 닿지 못했어요.",
   "worldWhySignedOut": "로그아웃돼 있어요. 로그인하면 그대로 있어요.",
   "worldWhyServerSaidNo": "서버가 거절했어요 ({status}): {message}",
-  "worldMe": "나"
+  "worldMe": "나",
+  "worldGardenerAsks": "정원사의 질문",
+  "worldStillFetchingAsks": "질문을 가져오는 중…",
+  "worldGardenerQuiet": "물을 것이 없어요 — 하나로 보이는 패턴이 없어요",
+  "worldTheseAreOne": "이 둘은 하나예요",
+  "worldMergeExplain": "먼저 온 문장이 말을 지켜요. 지워지는 건 없고, 다른 쪽도 제 기록을 그대로 가져요",
+  "worldYesMerge": "네, 합칠게요",
+  "worldKeepApart": "따로 두기"
 }

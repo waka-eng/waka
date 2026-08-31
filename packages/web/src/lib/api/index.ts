@@ -56,6 +56,7 @@ export * from "./agents";
 export * from "./keeper-keys";
 export * from "./agent-grants";
 export * from "./consultations";
+export * from "./signal-duplicates";
 export * from "./feedback";
 export * from "./public-profiles";
 export * from "./reading";
