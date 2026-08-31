@@ -37,6 +37,7 @@ env:
   JWT_SECRET: ${{ secrets.JWT_SECRET }}
   DB_CONNECTION_URL: ${{ secrets.DB_CONNECTION_URL }}
   GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+  OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
 jobs:
   deploy:
@@ -76,6 +77,7 @@ jobs:
             JWT_SECRET
             DB_CONNECTION_URL
             GEMINI_API_KEY
+            OPENROUTER_API_KEY
           )
           missing=()
           for name in "${required[@]}"; do
@@ -133,6 +135,7 @@ jobs:
           pnpm sst secret set JwtSecret "$JWT_SECRET" --stage "$SST_STAGE"
           pnpm sst secret set DbConnectionUrl "$DB_CONNECTION_URL" --stage "$SST_STAGE"
           pnpm sst secret set GeminiApiKey "$GEMINI_API_KEY" --stage "$SST_STAGE"
+          pnpm sst secret set OpenRouterApiKey "$OPENROUTER_API_KEY" --stage "$SST_STAGE"
 
       - name: Apply production database migrations
         run: pnpm db:migrate

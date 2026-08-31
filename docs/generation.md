@@ -673,11 +673,18 @@ The authoritative values. Machine-checked against code — see
 | `PRINCIPLE_MAX_STATEMENT_LENGTH` | 200 | A principle is a directive, not an essay |
 | `PRINCIPLE_MAX_CANDIDATES_PER_RUN` | 3 | Candidates one nightly distillation may propose |
 
-### Model calls (`packages/api/src/queue/gemini.ts`, `packages/api/src/lib/inspiration-embeddings.ts`)
+### Model calls (`packages/api/src/queue/gemini.ts`, `packages/api/src/lib/openrouter-http.ts`, `packages/api/src/lib/inspiration-embeddings.ts`)
+
+One prompt, two roads: every generation task runs through OpenRouter on the
+pinned DeepSeek snapshot when `OPENROUTER_API_KEY` is present, and falls back
+to Gemini without it. Embeddings never switch roads — the stored vectors and
+every cosine threshold above live in `gemini-embedding-001`'s space.
 
 | Constant | Value | One line |
 |---|---|---|
-| `GEMINI_GENERATION_MODEL` | gemini-3.1-flash-lite | Extraction, judge, synthesis, vision |
+| `OPENROUTER_GENERATION_MODEL` | deepseek/deepseek-v4-flash-0731 | Extraction, judges, synthesis, routing — the default road |
+| `OPENROUTER_CHAT_URL` | https://openrouter.ai/api/v1/chat/completions | The second road's endpoint |
+| `GEMINI_GENERATION_MODEL` | gemini-3.1-flash-lite | Vision, and the whole road when no OpenRouter key is set |
 | `GEMINI_EMBEDDING_MODEL` | gemini-embedding-001 | All vectors |
 | `GEMINI_EMBEDDING_DIMENSIONS` | 768 | Vector width |
 | `MAX_GEMINI_EMBEDDING_VALUES` | 4096 | Sanity ceiling on values accepted back per vector |

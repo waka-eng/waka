@@ -90,7 +90,7 @@ inspirations, and no refusal is ever shown.
 | Frontend | Vite + React 18 + React Router (SST `StaticSite`) |
 | API | Hono on an AWS Lambda Function URL (SST `Function`) |
 | Async work | Postgres `background_jobs`, drained by a cron and an in-process tick |
-| Generation | Gemini — extraction, embeddings, synthesis, image description |
+| Generation | OpenRouter (DeepSeek V4 Flash, pinned) — extraction, judges, synthesis; Gemini — embeddings, image description, and the fallback road |
 | Storage | S3, presigned PUT only (SST `Bucket`) |
 | Database | Neon Postgres via Drizzle ORM (not provisioned by SST) |
 | Auth | Email + password, Google OAuth, and a loopback flow for CLI/MCP clients |
@@ -106,7 +106,10 @@ single surface), `packages/admin` (a small, undeployed queue inspector).
 
 - **Node** 20+ and **pnpm** 9+ (`corepack enable && corepack prepare pnpm@9.12.0 --activate`)
 - **Postgres**. Local is the default for development; `.env.local` points at it.
-- A **Gemini API key** from <https://aistudio.google.com/app/apikey>.
+- A **Gemini API key** from <https://aistudio.google.com/app/apikey>
+  (embeddings and image description always run here).
+- An **OpenRouter API key** from <https://openrouter.ai/keys> — the
+  generation road; without it everything falls back to Gemini.
 - For deploys only: an **AWS account** (region `us-west-2`, matching
   `sst.config.ts`) and a **Google OAuth** client — see
   [`docs/google-oauth-setup.md`](docs/google-oauth-setup.md).
@@ -137,7 +140,8 @@ The variables that matter:
 | `DB_CONNECTION_URL` | API, worker, `drizzle-kit` | `DATABASE_URL` is accepted as a fallback name. |
 | `AUTH_SECRET`, `JWT_SECRET` | session signing | `openssl rand -base64 48` |
 | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | `/api/auth/google` | Redirect URI must match the running API. |
-| `GEMINI_API_KEY` | generation | Never reaches the browser. |
+| `GEMINI_API_KEY` | embeddings, vision, fallback generation | Never reaches the browser. |
+| `OPENROUTER_API_KEY` | generation (DeepSeek V4 Flash) | Never reaches the browser. |
 | `ATTACHMENTS_BUCKET`, `ATTACHMENTS_REGION` | uploads | Only needed for S3-backed attachments. |
 | `WAKA_ENRICHMENT_ALLOWED_HOSTS` | enrichment | Empty by default. See "Enrichment and private addresses". |
 
