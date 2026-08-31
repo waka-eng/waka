@@ -60,16 +60,33 @@ let t: TestDatabase;
 
 /** Drain with a clock a second ahead (enqueue stamps run_after from the DB
     clock; a same-process JS clock can trail it), repeatedly until quiet —
-    derivations enqueue syntheses, so one pass is never the whole story. */
+    derivations enqueue syntheses, so one pass is never the whole story.
+
+    A quiet pass with a NEAR-future pending row is not done: that row is a
+    retry backoff (30s–15min), and in production real time would reach it.
+    The eval compresses that time by chasing the row's run_after — but only
+    within a 20-minute window, so the day-scale floor sleeper can never be
+    chased. Without this, one road-failed derivation ends the drain with the
+    retry still owed (the run-6 FAIL: held 0 because no refresh was ever
+    enqueued), which mistakes a provider stumble for a floor verdict. */
 async function drainUntilQuiet(maxPasses = 12): Promise<{ held: number }> {
   let held = 0;
+  let skewMs = 1000;
   for (let i = 0; i < maxPasses; i += 1) {
     const pass = await runBackgroundJobWorker({
       limit: 25,
-      now: new Date(Date.now() + 1000),
+      now: new Date(Date.now() + skewMs),
     });
     held += pass.held;
-    if (pass.claimed === 0) break;
+    if (pass.claimed === 0) {
+      const [next] = await t.sql`
+        SELECT min(run_after) AS at FROM background_jobs WHERE status = 'pending'`;
+      const gapMs = next?.at
+        ? new Date(next.at as string).getTime() - Date.now()
+        : Number.POSITIVE_INFINITY;
+      if (gapMs > 20 * 60 * 1000) break;
+      skewMs = Math.max(skewMs, gapMs + 2000);
+    }
   }
   return { held };
 }
@@ -111,8 +128,16 @@ describe.skipIf(!HAS_KEYS)("the pipeline, live", () => {
       const profileId = profile.id as string;
 
       // ---- 1 + 2: four keeps through the real road ----
+      /* Holds are counted across the WHOLE run, not per drain call: when the
+         provider is slow, version 1 lands mid-derives and the fourth keep's
+         refresh is held HERE — and step 4's enqueues then collapse into that
+         already-sleeping row (the burst-collapse law), so the step-4 drain
+         holds nothing itself. Where the hold lands is provider timing; that
+         it lands, and that the row sleeps to the exact floor moment, is the
+         machinery's promise (run-A misattribution, 2026-08-31). */
+      let heldAcrossRun = 0;
       for (const text of [...THEME, APART]) await keep(profileId, text);
-      await drainUntilQuiet();
+      heldAcrossRun += (await drainUntilQuiet()).held;
 
       const signals = await t.sql`
         SELECT id, statement, status FROM signals WHERE profile_id = ${profileId}`;
@@ -162,6 +187,7 @@ describe.skipIf(!HAS_KEYS)("the pipeline, live", () => {
       // ---- 4: the floor holds live ----
       for (const text of LATER) await keep(profileId, text);
       const drained = await drainUntilQuiet();
+      heldAcrossRun += drained.held;
       /* diagnosability before judgment: when this step fails, the job table
          says WHY — later derivations that died on a bad road (visible as
          failed derive rows since the failure-honesty change) are a provider
@@ -172,7 +198,10 @@ describe.skipIf(!HAS_KEYS)("the pipeline, live", () => {
         FROM background_jobs WHERE profile_id = ${profileId}
         GROUP BY type, status ORDER BY type, status`;
       console.log("[pipeline-eval] job ledger:", JSON.stringify(jobLedger));
-      expect(drained.held, "the early shift was held, not run").toBeGreaterThanOrEqual(1);
+      expect(
+        heldAcrossRun,
+        "a refresh inside the day was held, not run (whichever drain it landed in)",
+      ).toBeGreaterThanOrEqual(1);
       expect(
         (await contentVersions(profileId)).length,
         "no content shift inside the day",
