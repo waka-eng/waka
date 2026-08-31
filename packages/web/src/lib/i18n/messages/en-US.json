@@ -409,5 +409,12 @@
   "worldWhyUnreachable": "the server could not be reached.",
   "worldWhySignedOut": "you are signed out. Sign in and it is still here.",
   "worldWhyServerSaidNo": "the server said no ({status}): {message}",
-  "worldMe": "Me"
+  "worldMe": "Me",
+  "worldGardenerAsks": "the gardener's asks",
+  "worldStillFetchingAsks": "still fetching the asks…",
+  "worldGardenerQuiet": "nothing to ask — no two of your patterns look like one thing",
+  "worldTheseAreOne": "these are one",
+  "worldMergeExplain": "the elder keeps the words; nothing is deleted, and the other keeps its history",
+  "worldYesMerge": "yes, merge them",
+  "worldKeepApart": "keep them apart"
 }

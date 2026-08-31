@@ -11,6 +11,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  assessShiftFloor,
+  TOP_OF_MIND_MIN_SHIFT_HOURS,
   describeTimeShape,
   diversifyRanked,
   SELECTION_DIVERSITY_MAX_COSINE,
@@ -442,5 +444,30 @@ describe("diversifyRanked — no two voices on the board saying one thing", () =
     const once = diversifyRanked(ranked, vectors, SELECTION_DIVERSITY_MAX_COSINE);
     const twice = diversifyRanked(ranked, vectors, SELECTION_DIVERSITY_MAX_COSINE);
     expect(once).toEqual(twice);
+  });
+});
+
+
+describe("assessShiftFloor — the board shifts at most once a day", () => {
+  const NOW = new Date("2026-08-31T12:00:00Z");
+  const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 60 * 60 * 1000);
+
+  it("the cold start is exempt: nothing to hold stable", () => {
+    expect(assessShiftFloor(null, NOW)).toEqual({ held: false });
+  });
+
+  it("holds inside the floor, to the exact moment it opens", () => {
+    const verdict = assessShiftFloor(hoursAgo(23.9), NOW);
+    expect(verdict.held).toBe(true);
+    if (verdict.held) {
+      expect(verdict.heldUntil.getTime()).toBe(
+        hoursAgo(23.9).getTime() + TOP_OF_MIND_MIN_SHIFT_HOURS * 60 * 60 * 1000,
+      );
+    }
+  });
+
+  it("passes once the floor has opened", () => {
+    expect(assessShiftFloor(hoursAgo(24.1), NOW)).toEqual({ held: false });
+    expect(assessShiftFloor(hoursAgo(24), NOW)).toEqual({ held: false });
   });
 });

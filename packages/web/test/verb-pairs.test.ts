@@ -147,6 +147,17 @@ const REGISTER: Record<string, string> = {
   // the sibling door (2026-08-29): opened and closed by the owner's hand
   createAgentGrant: "revokeAgentGrant",
   revokeAgentGrant: "createAgentGrant",
+
+  // the gardener's asks (2026-08-31, waka#294): answering is deliberately
+  // standing. keep_apart is a permanent answer the gardener respects — the
+  // way to change your mind is that both signals still exist. A merge keeps
+  // every exit open by construction: the retired signal keeps its statement,
+  // its history, and its own evidence links, and the proposal row names the
+  // survivor — nothing is deleted, so there is nothing an un-merge verb
+  // would restore that the record does not already hold.
+  resolveSignalDuplicate:
+    "RULED: both answers are standing by design; a merge retires without deleting, " +
+    "so the record itself is the way back",
 };
 
 describe("every verb has a way back, or a reason it does not", () => {

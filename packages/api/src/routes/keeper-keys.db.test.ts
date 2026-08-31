@@ -214,6 +214,7 @@ describe("the keeper's standing key", () => {
       ["GET", "/api/inspirations"],
       ["GET", "/api/inspirations/00000000-0000-0000-0000-000000000000"],
       ["GET", "/api/signals"],
+      ["GET", "/api/recall"],
       ["GET", "/api/top-of-mind"],
       ["GET", "/api/principles"],
       ["GET", "/api/principles.md"],

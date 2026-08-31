@@ -38,6 +38,7 @@ Work happening now, or stopped mid-way with a recorded reason.
 | [`room-timeline.md`](room-timeline.md) | Phases 0–1 shipped; Phase 2 largely built, not finished. |
 | [`no-quiet-corners.md`](no-quiet-corners.md) | In flight, yielding — queue position handed to `the-legible-loop.md`. |
 | [`durable-interest.md`](durable-interest.md) | **Halted** at the Phase 1 gate (2026-08-09). A halt with a number is a result. |
+| [`one-shift-a-day.md`](one-shift-a-day.md) | Phases 1–3 passed; **halted** at the Phase 4 gate (2026-08-31) — floor 8/8 live, gate 1/2, one fresh-day re-run to finish. |
 
 ## Done
 

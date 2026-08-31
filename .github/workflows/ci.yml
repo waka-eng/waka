@@ -99,7 +99,9 @@ jobs:
             --exclude '**/dist/**' \
             --exclude '**/.sst/**' \
             --exclude '**/*.smoke.ts' \
-            --exclude 'test/judge-eval.test.ts'
+            --exclude 'test/judge-eval.test.ts' \
+            --exclude 'test/extraction-eval.test.ts' \
+            --exclude 'test/pipeline-eval.test.ts'
 
       # THE JUDGE ON THE BENCH — live-model quality gate on real judged pairs,
       # half of them Korean. The four suites this step used to name were
@@ -116,6 +118,7 @@ jobs:
         run: |
           pnpm --filter @waka/api eval:judge
           pnpm --filter @waka/api eval:extraction
+          pnpm --filter @waka/api eval:pipeline
 
       - name: Web tests
         run: pnpm --filter @waka/web test

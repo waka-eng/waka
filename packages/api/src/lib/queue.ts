@@ -156,6 +156,7 @@ import { tendSignalGarden } from "./signal-gardener.js";
 import {
   refreshTopOfMindForGroup,
   refreshTopOfMindForProfile,
+  ShiftFloorHeldError,
 } from "./top-of-mind-synthesis.js";
 
 const DEFAULT_MAX_ATTEMPTS = 3;
@@ -213,6 +214,12 @@ export interface DrainBackgroundJobsResult {
    * with a `run_after` naming the moment the window frees a slot.
    */
   deferred: number;
+  /**
+   * Jobs put back to sleep by a shift floor — the top of mind moves at most
+   * once a day, and a refresh that arrived early sleeps until the floor
+   * opens. Held, never failed: the attempt is handed back.
+   */
+  held: number;
 }
 
 /**
@@ -273,6 +280,9 @@ export interface BackgroundJobStore {
     exhausted: boolean,
     now: Date,
   ): Promise<void>;
+  /** Put a claimed job back to sleep until `until` — a hold, not a failure:
+      the claim's attempt is handed back and no error is recorded. */
+  holdJob(job: BackgroundJob, until: Date): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -664,6 +674,7 @@ export async function drainBackgroundJobs(
   const clock = () => options.now ?? new Date();
   const result: DrainBackgroundJobsResult = {
     claimed: 0,
+    held: 0,
     succeeded: 0,
     retried: 0,
     failed: 0,
@@ -733,6 +744,16 @@ export async function drainBackgroundJobs(
       await store.markSucceeded(job.id);
       result.succeeded += 1;
     } catch (err) {
+      if (err instanceof ShiftFloorHeldError) {
+        await store.holdJob(job, err.heldUntil);
+        result.held += 1;
+        console.log("[background-jobs] shift floor holds; refresh sleeps", {
+          jobId: job.id,
+          profileId: job.profileId,
+          heldUntil: err.heldUntil.toISOString(),
+        });
+        continue;
+      }
       const exhausted = job.attempts >= job.maxAttempts;
       await store.markFailedOrPending(job, err, exhausted, clock());
       if (exhausted) result.failed += 1;
@@ -1230,6 +1251,25 @@ async function markJobSucceeded(jobId: string): Promise<void> {
   `);
 }
 
+/**
+ * A hold is not a failure: status returns to pending, `run_after` names the
+ * moment the floor opens, the claim's attempt is handed back (a job held
+ * for days must not exhaust itself into `failed` without ever failing), and
+ * `last_error` stays clean — there is no error to record.
+ */
+async function holdBackgroundJob(job: BackgroundJob, until: Date): Promise<void> {
+  await getDb().execute(sql`
+    UPDATE background_jobs
+    SET status = 'pending'::background_job_status,
+        locked_at = NULL,
+        started_at = NULL,
+        attempts = GREATEST(attempts - 1, 0),
+        run_after = ${until.toISOString()}::timestamptz,
+        updated_at = now()
+    WHERE id = ${job.id}::uuid
+  `);
+}
+
 async function markJobFailedOrPending(
   job: BackgroundJob,
   err: unknown,
@@ -1266,6 +1306,7 @@ export const postgresBackgroundJobStore: BackgroundJobStore = {
   deferAccountBacklog: deferAccountBacklogForBudget,
   markSucceeded: markJobSucceeded,
   markFailedOrPending: markJobFailedOrPending,
+  holdJob: holdBackgroundJob,
 };
 
 export function summarizeBackgroundJob(job: BackgroundJob): BackgroundJobSummary {

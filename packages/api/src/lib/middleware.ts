@@ -76,6 +76,7 @@ export function keeperKeyMayPass(method: string, path: string): boolean {
   return [
     "/api/inspirations",
     "/api/signals",
+    "/api/recall",
     "/api/top-of-mind",
     "/api/principles",
     "/api/principles.md",

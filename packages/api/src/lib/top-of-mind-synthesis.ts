@@ -115,6 +115,56 @@ export const COMEBACK_MIN_DORMANT_DAYS = 21;
 export const COMEBACK_SATURATION_DAYS = 90;
 export const COMEBACK_MAX_RETURN_AGE_DAYS = 14;
 
+/**
+ * THE FLOOR: the top of mind shifts at most once a day.
+ *
+ * The founder's intended behavior (2026-08-31): inspirations shape the
+ * artifact naturally, but the artifact holds still — a board that rewrites
+ * itself three times over one active morning (observed live, 2026-08-30:
+ * versions 1→3 in ninety seconds) is a ticker, not a top of mind. The floor
+ * is queue arithmetic, never model behavior: a `signals_changed` refresh
+ * that arrives while the latest CONTENT version (reason ≠ no_change) is
+ * younger than this many hours is HELD — its row sleeps until the floor
+ * opens, further enqueues collapse into it, and the signals keep accruing
+ * underneath so the one shift that lands reads everything.
+ *
+ * `manual` refreshes never wait: the person's own "Read it again" and a
+ * language change are the user moving the world, and the machine holds a
+ * day while the person never does. A profile with no content version yet
+ * has nothing to hold stable — the cold start is exempt.
+ */
+export const TOP_OF_MIND_MIN_SHIFT_HOURS = 24;
+
+const SHIFT_FLOOR_MS = TOP_OF_MIND_MIN_SHIFT_HOURS * 60 * 60 * 1000;
+
+export type ShiftFloorVerdict = { held: false } | { held: true; heldUntil: Date };
+
+/** Pure: the rule alone, so the boundary can be tested without a database. */
+export function assessShiftFloor(
+  lastContentShiftAt: Date | null,
+  now: Date,
+): ShiftFloorVerdict {
+  if (lastContentShiftAt === null) return { held: false };
+  const opensAt = lastContentShiftAt.getTime() + SHIFT_FLOOR_MS;
+  if (now.getTime() >= opensAt) return { held: false };
+  return { held: true, heldUntil: new Date(opensAt) };
+}
+
+/**
+ * Thrown by the refresh when the floor holds. The drain catches it and puts
+ * the job back to sleep (pending, run_after = heldUntil, attempts untouched)
+ * — a hold, not a failure, exactly as the model budget defers.
+ */
+export class ShiftFloorHeldError extends Error {
+  readonly heldUntil: Date;
+
+  constructor(heldUntil: Date) {
+    super(`top-of-mind shift floor holds until ${heldUntil.toISOString()}`);
+    this.name = "ShiftFloorHeldError";
+    this.heldUntil = heldUntil;
+  }
+}
+
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 // ---------------------------------------------------------------------------
@@ -896,6 +946,27 @@ export async function refreshTopOfMindForProfile(
   const db = deps.db ?? getDb();
   const now = deps.now ?? new Date();
   const provider = deps.modelProvider ?? (await getDefaultModelProvider());
+
+  /* THE FLOOR, before any other work. Only the automatic path waits: a
+     `manual` refresh is the person (their own "Read it again", a language
+     change) and never holds. The last CONTENT shift is the newest version
+     whose reason is not the honest no_change — no_change rows record that a
+     read happened, not that the board moved, so they are invisible here. */
+  if (input.reason === "signals_changed") {
+    const [lastShift] = await db
+      .select({ createdAt: topOfMinds.createdAt })
+      .from(topOfMinds)
+      .where(
+        and(
+          eq(topOfMinds.profileId, input.profileId),
+          ne(topOfMinds.reason, "no_change"),
+        ),
+      )
+      .orderBy(desc(topOfMinds.createdAt))
+      .limit(1);
+    const verdict = assessShiftFloor(lastShift?.createdAt ?? null, now);
+    if (verdict.held) throw new ShiftFloorHeldError(verdict.heldUntil);
+  }
 
   const [profileRows, selection, liveBefore] = await Promise.all([
     db
