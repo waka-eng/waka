@@ -3893,13 +3893,42 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        cross-wall state has no container to exist in. The key is the wall id;
        the self wall's is the empty string, as everywhere. */
     const scenes = new Map<string, Ball[]>();
+    const sceneKeyOf = (b: Ball): string => b.agentId ?? "";
     for (const b of list) {
-      const key = b.agentId ?? "";
+      const key = sceneKeyOf(b);
       const bag = scenes.get(key);
       if (bag) bag.push(b);
       else scenes.set(key, [b]);
     }
     const sceneBalls = (wallId: string): Ball[] => scenes.get(wallId) ?? [];
+    /**
+     * THE SCENE IS AN INDEX OVER `list`, SO IT MOVES WHEN `list` MOVES.
+     *
+     * It is built once from the whole list, and `list` is then mutated in
+     * exactly two places at runtime: `born` pushes a newborn, `dropBall`
+     * splices a retracted one. Both have to say so here, or the index and
+     * the world disagree about what is standing on this wall.
+     *
+     * Measured when they did not: a brand-new account kept its first
+     * memory, the door said "1 inspiration" — and the ground stayed dark
+     * until the page was reloaded. `assignHomes` places `presentBalls()`,
+     * which reads the scene, so a newborn missing from it was given no
+     * home at all and fell to one that had never been solved. Reloading
+     * rebuilt the list, which rebuilt the scene, which is why the memory
+     * was always really there and only ever invisible.
+     */
+    const sceneAdd = (b: Ball): void => {
+      const key = sceneKeyOf(b);
+      const bag = scenes.get(key);
+      if (!bag) scenes.set(key, [b]);
+      else if (!bag.includes(b)) bag.push(b);
+    };
+    const sceneRemove = (b: Ball): void => {
+      const bag = scenes.get(sceneKeyOf(b));
+      if (!bag) return;
+      const i = bag.indexOf(b);
+      if (i >= 0) bag.splice(i, 1);
+    };
 
     /**
      * THE DIAL'S NOW IS NEVER BEHIND THE NEWEST MEMORY. THIS IS NOT A GUARD;
@@ -4763,6 +4792,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       if (held.ball === b) held.ball = null;
       list.splice(i, 1);
       byId.delete(b.id);
+      sceneRemove(b);
       /* the depth order is an index permutation over `list`: it has to be
          rebuilt, not spliced, or every index past `i` points one ball over */
       order.length = list.length;
@@ -8660,6 +8690,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         list.push(b);
         byId.set(b.id, b);
         order.push(list.length - 1);
+        sceneAdd(b);
         /* everyone eases to a new home; nobody leaves the screen, which is
            what assignHomes guarantees by construction */
         assignHomes();
