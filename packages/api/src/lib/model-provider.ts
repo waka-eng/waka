@@ -336,8 +336,21 @@ let defaultProvider: ModelProvider | null = null;
  */
 export async function getDefaultModelProvider(): Promise<ModelProvider> {
   if (!defaultProvider) {
-    const { createGeminiModelProvider } = await import("./gemini-model-provider.js");
-    defaultProvider = createGeminiModelProvider();
+    /* OpenRouter when its key is present (founder ruling, 2026-08-30:
+       deepseek-v4-flash everywhere); Gemini otherwise, so an environment
+       without the new key — CI before the secret lands, a fresh checkout —
+       keeps generating instead of failing. Rollback anywhere is deleting
+       one env var. Embeddings are untouched by this switch: they are pinned
+       to Gemini regardless of which road generation takes. */
+    if (process.env.OPENROUTER_API_KEY?.trim()) {
+      const { createOpenRouterModelProvider } = await import(
+        "./openrouter-model-provider.js"
+      );
+      defaultProvider = createOpenRouterModelProvider();
+    } else {
+      const { createGeminiModelProvider } = await import("./gemini-model-provider.js");
+      defaultProvider = createGeminiModelProvider();
+    }
   }
   return defaultProvider;
 }
