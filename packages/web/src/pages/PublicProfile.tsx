@@ -26,8 +26,7 @@ const NOTE_COLORS = [
   { hue: "#f1d7a8", ink: "#4f3921" },
 ];
 
-const COPY = {
-  "en-US": {
+const COPY_EN = {
     loading: "Loading public profile...",
     missingTitle: "Public profile not found",
     missingBody: "This handle is not shared yet, or the owner turned the page off.",
@@ -41,7 +40,13 @@ const COPY = {
     start: "Create your WAKA",
     open: "Open WAKA",
     controls: "public profile controls",
-  },
+} as const;
+
+const COPY = {
+  "en-US": COPY_EN,
+  /* generation speaks Korean for ko-KR profiles; this page's chrome
+     follows the same catalog-alias rule as the main i18n index */
+  "ko-KR": COPY_EN,
 } as const;
 
 
