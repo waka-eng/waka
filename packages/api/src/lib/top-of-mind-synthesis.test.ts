@@ -11,6 +11,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  describeTimeShape,
   applyGroupProposals,
   assembleEntries,
   chooseSelection,
@@ -365,5 +366,38 @@ describe("applying accepted group proposals", () => {
     );
     expect(applied).toBe(0);
     expect(input[0]!.lockedAt).toBeNull();
+  });
+});
+
+
+describe("describeTimeShape — a pattern's life, worded for the synthesis", () => {
+  const NOW = new Date("2026-08-31T12:00:00Z");
+  const daysAgo = (n: number) => new Date(NOW.getTime() - n * 24 * 60 * 60 * 1000);
+
+  it("no evidence is no shape", () => {
+    expect(describeTimeShape([], NOW)).toBeNull();
+  });
+
+  it("names the arrival", () => {
+    expect(describeTimeShape([daysAgo(2)], NOW)).toBe("new this week");
+  });
+
+  it("names the return — the gap, not the age, is the story", () => {
+    const shape = describeTimeShape([daysAgo(120), daysAgo(80), daysAgo(3)], NOW);
+    expect(shape).toBe("returning after 3 months quiet");
+  });
+
+  it("a short gap is a steady hum, not a comeback", () => {
+    const shape = describeTimeShape([daysAgo(60), daysAgo(10), daysAgo(3)], NOW);
+    expect(shape).toBe("held for 2 months; last fed 3 days ago");
+    expect(
+      describeTimeShape([daysAgo(30), daysAgo(15), daysAgo(1)], NOW),
+      "singular units stay singular",
+    ).toBe("held for 4 weeks; last fed 1 day ago");
+  });
+
+  it("a long-held pattern anchors in months and years", () => {
+    const shape = describeTimeShape([daysAgo(500), daysAgo(400), daysAgo(30)], NOW);
+    expect(shape).toBe("held for over a year; last fed 4 weeks ago");
   });
 });

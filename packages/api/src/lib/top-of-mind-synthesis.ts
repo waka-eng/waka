@@ -136,6 +136,50 @@ interface SelectedSignal {
   evidenceCount: number;
   lastEvidenceAt: Date | null;
   score: number;
+  /** the pattern's life in time, worded — see describeTimeShape */
+  timeShape: string | null;
+}
+
+const TIME_SHAPE_MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * A pattern's life in time, said in words the synthesis can use — because
+ * "top of MIND" is a claim about now, and the model was reading a bare
+ * ISO timestamp per signal and could not tell a pattern that has held for a
+ * year from one that appeared on Tuesday, or a comeback from a steady hum.
+ * Deterministic arithmetic over the evidence dates; English tokens on
+ * purpose (this is prompt-internal metadata — the Locale line governs what
+ * the ARTIFACT speaks).
+ */
+export function describeTimeShape(evidenceAt: Date[], now: Date): string | null {
+  if (evidenceAt.length === 0) return null;
+  const times = evidenceAt.map((d) => d.getTime()).sort((a, b) => a - b);
+  const first = times[0]!;
+  const last = times[times.length - 1]!;
+  const ageDays = Math.max(0, (now.getTime() - first) / TIME_SHAPE_MS_PER_DAY);
+  const quietDays = Math.max(0, (now.getTime() - last) / TIME_SHAPE_MS_PER_DAY);
+
+  const span = (days: number): string => {
+    const unit = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+    if (days < 14) return unit(Math.max(1, Math.round(days)), "day");
+    if (days < 60) return unit(Math.max(1, Math.round(days / 7)), "week");
+    if (days < 400) return unit(Math.max(1, Math.round(days / 30)), "month");
+    return "over a year";
+  };
+
+  if (ageDays < 7) return "new this week";
+
+  /* a return: the latest evidence is fresh, and the gap it ended was long —
+     the same dormancy bar the selection's comeback bonus uses */
+  if (times.length >= 2 && quietDays <= COMEBACK_MAX_RETURN_AGE_DAYS) {
+    const previous = times[times.length - 2]!;
+    const gapDays = (last - previous) / TIME_SHAPE_MS_PER_DAY;
+    if (gapDays >= COMEBACK_MIN_DORMANT_DAYS) {
+      return `returning after ${span(gapDays)} quiet`;
+    }
+  }
+
+  return `held for ${span(ageDays)}; last fed ${span(quietDays)} ago`;
 }
 
 export interface CarriedEntry {
@@ -355,6 +399,10 @@ async function selectSignals(
     evidenceCount: s.evidenceCount,
     lastEvidenceAt: s.lastEvidenceAt,
     score: s.score,
+    timeShape: describeTimeShape(
+      (evidenceBySignal.get(s.id) ?? []).map((item) => item.createdAt),
+      now,
+    ),
   });
 
   const chosen = chooseSelection(
@@ -817,6 +865,7 @@ export async function refreshTopOfMindForProfile(
         confidence: signal.confidence,
         evidenceCount: signal.evidenceCount,
         lastEvidenceAt: signal.lastEvidenceAt,
+        timeShape: signal.timeShape ?? undefined,
       })),
       lockedEntries: lockedBefore.map((entry, index) => ({
         id: `${liveBefore?.id ?? "pending"}:${index}`,

@@ -718,6 +718,14 @@ either it stays out, or what returns is visibly reshaped by their correction —
 their own words outrank your phrasing. A verdict of partly is an invitation to
 sharpen, not to repeat.
 
+Each signal's time line is the pattern's life, and it is why this artifact
+is a top of MIND rather than a summary of an archive: something marked new
+this week is spoken tentatively, if at all; a pattern returning after a long
+quiet is worth naming as a return — a comeback is often the most alive thing
+on the page; what has held for months can anchor the artifact and does not
+need re-arguing. Do not narrate the metadata itself — no dates, no counts —
+let it choose what leads and how firmly each thing is said.
+
 If the current artifact still says what the signals say, set noChange to true
 and return the current entries unchanged. Saying so is a real answer; churning
 the wording to look busy is not.
@@ -824,7 +832,8 @@ function buildTopOfMindSynthesisPrompt(input: TopOfMindSynthesisInput): string {
             ? signal.lastEvidenceAt.toISOString()
             : "no evidence yet";
           const owner = signal.ownerName ? `\nowner: ${signal.ownerName}` : "";
-          return `id: ${signal.id}${owner}\nconfidence: ${signal.confidence} | evidence: ${signal.evidenceCount} | last evidence: ${recency}\nstatement: ${signal.statement}`;
+          const shape = signal.timeShape ? ` | time: ${signal.timeShape}` : "";
+          return `id: ${signal.id}${owner}\nconfidence: ${signal.confidence} | evidence: ${signal.evidenceCount} | last evidence: ${recency}${shape}\nstatement: ${signal.statement}`;
         })
         .join("\n\n"),
     ),

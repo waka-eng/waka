@@ -420,9 +420,16 @@ single-observation noise. The rule is the pure function `chooseSelection`
 
 ### 3. Synthesis: one call, the whole artifact
 
-`synthesizeTopOfMind` receives the selected signals, the current live
-entries, every **locked** entry, recent feedback (newest first, with the
-person's own correction text), and the provisional flag. It returns the
+`synthesizeTopOfMind` receives the selected signals — each carrying its
+**time shape**, the pattern's life worded deterministically from the
+evidence dates ("held for 4 months; last fed 2 weeks ago", "returning
+after 5 weeks quiet", "new this week"), so the model can tell an anchor
+from an arrival and name a comeback as one — the current live entries,
+every **locked** entry, recent feedback (newest first, with the
+person's own correction text), and the provisional flag. The prompt
+forbids narrating the metadata itself: time chooses what leads and how
+firmly each thing is said, and never appears as dates or counts in the
+artifact. It returns the
 **entire artifact** — at most `MAX_TOP_OF_MIND_ENTRIES` (7) entries, each
 typed (`pattern`, `tension`, `question`, `hypothesis`, `action`), each
 citing signal ids — or an explicit `noChange`.
