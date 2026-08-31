@@ -454,6 +454,28 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm e2e:coming-back --base-url http://127.0.0.1:3010
 
+      # NOTHING INVISIBLE TAKES A PRESS. The same defect has shipped twice —
+      # the jar's mouth, and `.jar-dial-track`: a 44px strip running half the
+      # height of the screen with no ink in it, live to every press, which
+      # swallowed presses meant for the walls list behind it. Both were found
+      # by a person pressing something and watching the wrong thing happen.
+      # `dial-rest.test.ts` refuses that one strip by name; this refuses the
+      # class. It hides each box and looks again, because the only thing that
+      # knows whether something is painted is the engine that paints it.
+      - name: Nothing invisible takes a press
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:nothing-invisible --base-url http://127.0.0.1:3010
+
+      # AND THE SAME WALK AGAINST THE RAIL PUT BACK, because a gate that
+      # cannot fail is decoration. The sabotage rebuilds the shipped SHAPE —
+      # an inkless box laid out in normal flow inside an overlay — and not a
+      # convenient fixed strip: the rail was `position: relative`, and an
+      # earlier cut of this rule required the box itself to be out of flow
+      # and would have sailed straight past the defect it is named for.
+      - name: The rail put back is found
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:nothing-invisible --base-url http://127.0.0.1:3010 --negative
+
       # THE CHARACTER IS ONE SIZE EVERYWHERE. It used to be sized from the
       # viewport and then shrunk again into whatever room headquarters had
       # left — five different sizes across six screens, 84px to 150px.
