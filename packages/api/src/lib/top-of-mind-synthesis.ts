@@ -947,6 +947,27 @@ export async function refreshTopOfMindForProfile(
   const now = deps.now ?? new Date();
   const provider = deps.modelProvider ?? (await getDefaultModelProvider());
 
+  /* THE FLOOR, before any other work. Only the automatic path waits: a
+     `manual` refresh is the person (their own "Read it again", a language
+     change) and never holds. The last CONTENT shift is the newest version
+     whose reason is not the honest no_change — no_change rows record that a
+     read happened, not that the board moved, so they are invisible here. */
+  if (input.reason === "signals_changed") {
+    const [lastShift] = await db
+      .select({ createdAt: topOfMinds.createdAt })
+      .from(topOfMinds)
+      .where(
+        and(
+          eq(topOfMinds.profileId, input.profileId),
+          ne(topOfMinds.reason, "no_change"),
+        ),
+      )
+      .orderBy(desc(topOfMinds.createdAt))
+      .limit(1);
+    const verdict = assessShiftFloor(lastShift?.createdAt ?? null, now);
+    if (verdict.held) throw new ShiftFloorHeldError(verdict.heldUntil);
+  }
+
   const [profileRows, selection, liveBefore] = await Promise.all([
     db
       .select({ preferredLocale: profiles.preferredLocale })

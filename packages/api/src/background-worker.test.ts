@@ -4,7 +4,7 @@ import { handler } from "./background-worker.js";
 import { runBackgroundJobWorker } from "./lib/queue.js";
 
 /** A pass over an empty queue: nothing taken, nothing pushed out of the way. */
-const IDLE_PASS = { claimed: 0, succeeded: 0, retried: 0, failed: 0, deferred: 0 };
+const IDLE_PASS = { claimed: 0, held: 0, succeeded: 0, retried: 0, failed: 0, deferred: 0 };
 
 vi.mock("./lib/queue.js", () => ({
   runBackgroundJobWorker: vi.fn(),
@@ -50,8 +50,8 @@ describe("background worker cron handler", () => {
    */
   it("keeps draining when a pass only deferred, and reaches the work behind the cap", async () => {
     vi.mocked(runBackgroundJobWorker)
-      .mockResolvedValueOnce({ claimed: 0, succeeded: 0, retried: 0, failed: 0, deferred: 25 })
-      .mockResolvedValueOnce({ claimed: 1, succeeded: 1, retried: 0, failed: 0, deferred: 0 });
+      .mockResolvedValueOnce({ claimed: 0, held: 0, succeeded: 0, retried: 0, failed: 0, deferred: 25 })
+      .mockResolvedValueOnce({ held: 0, claimed: 1, succeeded: 1, retried: 0, failed: 0, deferred: 0 });
 
     const drained = await handler();
 

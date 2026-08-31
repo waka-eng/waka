@@ -768,6 +768,7 @@ The authoritative values. Machine-checked against code — see
 |---|---|---|
 | `TOP_OF_MIND_SIGNAL_LIMIT` | 12 | Signals synthesis may consider |
 | `TOP_OF_MIND_MIN_SIGNALS` | 3 | Cold-start floor; below it, emerging signals backfill |
+| `TOP_OF_MIND_MIN_SHIFT_HOURS` | 24 | The board shifts at most once a day; an early automatic refresh sleeps until the floor opens |
 | `GROUP_DRAFT_MIN_AFFIRMED` | 3 | A room's first draft waits for this many shared statements affirmed by someone other than their owner |
 | `GROUP_DRAFT_SMALL_MAX_MEMBERS` | 3 | A room this size or smaller is held to the small-room bar instead |
 | `GROUP_DRAFT_MIN_AFFIRMED_SMALL` | 2 | The small room's bar. Two, never one — one person agreeing once is not a room agreeing |
