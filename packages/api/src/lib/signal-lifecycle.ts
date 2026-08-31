@@ -17,9 +17,10 @@
  * that call is where the first hands over to the second.
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 
 import {
+  feedback,
   inspirations,
   signalEvidence,
   signals,
@@ -27,6 +28,7 @@ import {
 } from "../db/index.js";
 import { getDb } from "./db.js";
 import {
+  CONFIDENCE_AFFIRMED_BONUS,
   CONFIDENCE_RECENCY_HALF_LIFE_DAYS,
   CONFIDENCE_RECENCY_WEIGHT,
   CONFIDENCE_SATURATION_EVIDENCE,
@@ -48,12 +50,17 @@ export interface ConfidenceEvidence {
 }
 
 /**
- * Confidence from evidence alone: how much of it there is, how far it spreads
- * in time, how recently it last arrived, and whether more than one kind of
- * capturer supplied it. No model input — a number the owner can be told the
- * derivation of.
+ * Confidence from the rows alone: how much evidence there is, how far it
+ * spreads in time, how recently it last arrived, whether more than one kind
+ * of capturer supplied it — and whether the owner has said "yes, this is
+ * me" (their latest standing verdict, an arithmetic fact off the feedback
+ * rows). No model input — a number the owner can be told the derivation of.
  */
-export function computeSignalConfidence(evidence: ConfidenceEvidence[], now: Date): number {
+export function computeSignalConfidence(
+  evidence: ConfidenceEvidence[],
+  now: Date,
+  opts: { affirmed?: boolean } = {},
+): number {
   if (evidence.length === 0) return 0;
 
   const evidenceAt = evidence.map((row) => row.createdAt);
@@ -72,7 +79,8 @@ export function computeSignalConfidence(evidence: ConfidenceEvidence[], now: Dat
     CONFIDENCE_SUPPORT_WEIGHT * support +
     CONFIDENCE_SPREAD_WEIGHT * spread +
     CONFIDENCE_RECENCY_WEIGHT * recency +
-    (distinctSources > 1 ? CONFIDENCE_SOURCE_DIVERSITY_BONUS : 0);
+    (distinctSources > 1 ? CONFIDENCE_SOURCE_DIVERSITY_BONUS : 0) +
+    (opts.affirmed ? CONFIDENCE_AFFIRMED_BONUS : 0);
 
   return Math.max(0, Math.min(100, Math.round(score)));
 }
@@ -111,8 +119,26 @@ export async function refreshSignalLifecycle(
     .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
     .where(eq(signalEvidence.signalId, signalId));
 
+  /* the latest standing verdict, latest-wins — the same read selection
+     makes, kept in this transaction so the snapshot and the live number
+     agree about what the owner has said */
+  const [verdictRow] = await tx
+    .select({ value: feedback.value })
+    .from(feedback)
+    .where(
+      and(
+        eq(feedback.profileId, current.profileId),
+        eq(feedback.targetType, "signal"),
+        eq(feedback.targetId, signalId),
+      ),
+    )
+    .orderBy(desc(feedback.createdAt))
+    .limit(1);
+
   const evidenceAt = evidenceRows.map((row) => row.createdAt);
-  const confidence = computeSignalConfidence(evidenceRows, now);
+  const confidence = computeSignalConfidence(evidenceRows, now, {
+    affirmed: verdictRow?.value === "true",
+  });
   const lastEvidenceAt = evidenceAt.reduce<Date | null>(
     (latest, date) => (latest === null || date > latest ? date : latest),
     null,

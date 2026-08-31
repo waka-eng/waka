@@ -13,6 +13,8 @@
  * words, and the panel's own test re-asserts not one digit gets through.
  */
 import type { ApiReading } from "../lib/api";
+import { useOptionalAuth } from "../lib/auth-context";
+import { normalizeSupportedLocale, t } from "../lib/locales";
 
 export interface ReadingPanelProps {
   /** null until the fetch lands; the panel says it is still being fetched */
@@ -21,10 +23,11 @@ export interface ReadingPanelProps {
 }
 
 export function ReadingPanel({ reading, onClose }: ReadingPanelProps): JSX.Element {
+  const locale = normalizeSupportedLocale(useOptionalAuth()?.profile?.preferredLocale);
   return (
     <div className="jar-roomform jar-reading" data-jar-chrome="1">
       <div className="jar-label" style={{ marginBottom: 14 }}>
-        how it reads you
+        {t(locale, "worldHowItReadsYou")}
       </div>
       {reading ? (
         <>
@@ -38,11 +41,11 @@ export function ReadingPanel({ reading, onClose }: ReadingPanelProps): JSX.Eleme
           ) : null}
         </>
       ) : (
-        <p className="jar-reading-line">still fetching the reading…</p>
+        <p className="jar-reading-line">{t(locale, "worldStillFetchingReading")}</p>
       )}
       <p className="jar-ask" style={{ marginTop: 14 }}>
         <button type="button" onClick={onClose}>
-          close
+          {t(locale, "worldClose")}
         </button>
       </p>
     </div>

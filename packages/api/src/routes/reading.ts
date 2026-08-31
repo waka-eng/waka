@@ -25,11 +25,14 @@ export function createReadingRoute(deps: ReadingRouteDependencies = {}): Hono<Au
   const routes = new Hono<AuthEnv>();
   routes.use("*", deps.authMiddleware ?? requireAuth);
 
-  routes.get("/", (c) =>
-    c.text(renderTheReading(), 200, {
+  routes.get("/", (c) => {
+    /* the reading is the session's own surface — no profile parameter — so
+       it speaks the acting profile's language */
+    const preferred = c.get("session").profile.preferredLocale;
+    return c.text(renderTheReading(preferred === "ko-KR" ? "ko-KR" : "en-US"), 200, {
       "Content-Type": "text/markdown; charset=utf-8",
-    }),
-  );
+    });
+  });
 
   return routes;
 }

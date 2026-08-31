@@ -335,7 +335,9 @@ async function selectSignals(
       // it would keep a signal that went quiet months ago scoring as if it
       // were still current. Time only passes for this signal if it passes
       // here, at read.
-      const confidence = computeSignalConfidence(evidence, now);
+      const confidence = computeSignalConfidence(evidence, now, {
+        affirmed: latestVerdict.get(row.id) === "true",
+      });
       return {
         id: row.id,
         statement: row.statement,
@@ -1268,6 +1270,8 @@ async function loadGroupSharedSignals(
         {
           id: row.id,
           statement: row.statement,
+          /* no affirmed term on the group path: room statements answer to
+             member stances, not to a single owner's verdict */
           confidence: computeSignalConfidence(evidence, now),
           evidenceCount: evidence.length,
           lastEvidenceAt: row.lastEvidenceAt,
