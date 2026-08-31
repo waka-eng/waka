@@ -21,6 +21,7 @@ import {
   formatSafeGeminiError,
   safeGeminiErrorDetails,
 } from "./gemini-http.js";
+import { MODEL_DECLINED } from "./model-provider.js";
 
 export const OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -107,7 +108,7 @@ export function stripJsonFence(text: string): string {
 export async function callOpenRouter(
   request: OpenRouterChatRequest,
   label: string,
-): Promise<unknown | null> {
+): Promise<unknown | null | typeof MODEL_DECLINED> {
   const apiKey = getOpenRouterApiKey();
   if (!apiKey) {
     throw new Error("OpenRouter API key is not configured (OPENROUTER_API_KEY).");
@@ -150,6 +151,13 @@ export async function callOpenRouter(
   if (envelope.data.error) {
     console.warn("[openrouter] provider-level error in 200 envelope", { label });
     return null;
+  }
+
+  /* a content filter is the road's considered refusal — terminal, so the
+     caller keeps its safe posture instead of retrying the same material */
+  if (envelope.data.choices?.[0]?.finish_reason === "content_filter") {
+    console.warn("[openrouter] response declined by content filter", { label });
+    return MODEL_DECLINED;
   }
 
   const content = envelope.data.choices?.[0]?.message?.content;

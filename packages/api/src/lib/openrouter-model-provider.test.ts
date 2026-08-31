@@ -22,6 +22,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setDefaultModelProviderForTests, getDefaultModelProvider } from "./model-provider.js";
+import { ModelDidNotAnswerError } from "./model-provider.js";
 import { stripJsonFence } from "./openrouter-http.js";
 import {
   createOpenRouterModelProvider,
@@ -166,14 +167,38 @@ describe("the judge over the second road", () => {
     expect(second.model).toBe("some-lab/other-model");
   });
 
-  it("lands on independent when the road answers garbage — never an invented verdict", async () => {
+  it("throws when the road answers garbage — a malfunction retries, it never invents a verdict", async () => {
+    /* the old posture here was "independent", which quietly MINTED a
+       duplicate signal every time the provider had a bad hour; the queue
+       retries a thrown attempt instead */
     const provider = createOpenRouterModelProvider();
     fetchMock.mockResolvedValueOnce(chatReply("the model apologizes at length"));
+    await expect(
+      provider.judgeSignalMatch({
+        preferredLocale: "en-US",
+        candidateStatement: "a",
+        existingStatement: "b",
+      }),
+    ).rejects.toThrow(ModelDidNotAnswerError);
+  });
+
+  it("keeps the safe posture for a considered refusal — a content filter is terminal", async () => {
+    const provider = createOpenRouterModelProvider();
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: null }, finish_reason: "content_filter" }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
     const verdict = await provider.judgeSignalMatch({
       preferredLocale: "en-US",
       candidateStatement: "a",
       existingStatement: "b",
     });
-    expect(verdict).toEqual({ relation: "independent" });
+    expect(verdict, "declined ≠ broken: retrying a refusal cannot help").toEqual({
+      relation: "independent",
+    });
   });
 });
