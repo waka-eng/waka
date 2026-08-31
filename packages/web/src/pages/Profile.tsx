@@ -35,6 +35,7 @@ import {
   normalizeSupportedLocale,
   t,
   writeStoredLocale,
+  supportedLocales,
 } from "../lib/locales";
 import type { SupportedLocale } from "../lib/locales";
 
@@ -52,7 +53,7 @@ const PROFILE_TABS: ReadonlyArray<{ id: ProfileTab; labelKey: MessageKey }> = [
 ];
 
 export default function ProfilePage(): JSX.Element {
-  const { account, profile, logout, updateProfile, deleteAccount } = useAuth();
+  const { account, profile, logout, updateProfile, updatePreferredLocale, deleteAccount } = useAuth();
   const navigate = useNavigate();
   const [name, setName] = useState(profile?.name ?? "");
   const [publicHandle, setPublicHandle] = useState(profile?.publicHandle ?? "");
@@ -62,9 +63,10 @@ export default function ProfilePage(): JSX.Element {
   const [publicTopOfMindEnabled, setPublicTopOfMindEnabled] = useState(
     profile?.publicTopOfMindEnabled === true,
   );
-  const [preferredLocale] = useState<SupportedLocale>(() =>
+  const [preferredLocale, setPreferredLocale] = useState<SupportedLocale>(() =>
     normalizeSupportedLocale(profile?.preferredLocale),
   );
+  const [savingLocale, setSavingLocale] = useState(false);
   const [deleteText, setDeleteText] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -188,6 +190,28 @@ export default function ProfilePage(): JSX.Element {
       setError(err instanceof ApiError ? err.message : t(locale, "profileMemoriesError"));
     } finally {
       setBusyMemoryId(null);
+    }
+  }
+
+  /** The memory's own language (founder, 2026-08-31, reversing 2026-08-22):
+      saved immediately — a language choice deferred behind a save button is
+      a choice that looks ignored — and the server enqueues the top-of-mind
+      rewrite itself. */
+  async function handleLocaleChange(next: SupportedLocale): Promise<void> {
+    if (next === preferredLocale) return;
+    const before = preferredLocale;
+    setPreferredLocale(next);
+    setSavingLocale(true);
+    setStatus(null);
+    setError(null);
+    try {
+      await updatePreferredLocale(next);
+      setStatus(t(next, "profileLanguageSaved"));
+    } catch (err) {
+      setPreferredLocale(before);
+      setError(err instanceof ApiError ? err.message : t(before, "profileLanguageError"));
+    } finally {
+      setSavingLocale(false);
     }
   }
 
@@ -631,8 +655,28 @@ export default function ProfilePage(): JSX.Element {
               {t(locale, "profileNicknameNoSpacesHint")}
             </span>
           </label>
-          {/* The language field left with the second language (founder
-              ruling, 2026-08-22: the product speaks English only). */}
+          <label className="field">
+            <span className="field-label">{t(locale, "profileLanguageLabel")}</span>
+            <select
+              className="field-input"
+              name="preferredLocale"
+              value={preferredLocale}
+              disabled={submitting || deleting || savingLocale}
+              aria-describedby="profile-language-hint"
+              onChange={(event) =>
+                void handleLocaleChange(event.currentTarget.value as SupportedLocale)
+              }
+            >
+              {supportedLocales.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.nativeLabel}
+                </option>
+              ))}
+            </select>
+            <span id="profile-language-hint" className="field-hint">
+              {t(locale, "profileLanguageHint")}
+            </span>
+          </label>
           {open !== "public" ? (
             <p className="profile-disclose">
               <button type="button" onClick={() => setOpen("public")}>

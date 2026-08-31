@@ -21,6 +21,7 @@ import {
   formatSafeGeminiError,
   safeGeminiErrorDetails,
 } from "./gemini-http.js";
+import { MODEL_DECLINED } from "./model-provider.js";
 
 export const OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -53,10 +54,29 @@ export interface OpenRouterChatRequest {
   model: string;
   messages: Array<{ role: "system" | "user"; content: string }>;
   temperature?: number;
+  max_tokens?: number;
+  /** OpenRouter's unified reasoning control; providers that cannot honor it
+      ignore it, which is the behavior we want */
+  reasoning?: { enabled: boolean };
   response_format?:
     | { type: "json_object" }
     | { type: "json_schema"; json_schema: { name: string; strict?: boolean; schema: unknown } };
 }
+
+/**
+ * EVERY ANSWER HERE IS A BOUNDED JSON ARTIFACT, so the transport says so.
+ *
+ * Observed live (2026-08-30, local worker): OpenRouter routed a batch to a
+ * backend that reasons at length by default — single calls ran for minutes
+ * and then came back `finish_reason: "length"`, a JSON object truncated
+ * mid-key, which the parser correctly refuses… silently, as "no candidates".
+ * A judge that thinks for five minutes about a two-sentence comparison is
+ * not being careful, it is being routed somewhere this workload never asked
+ * to go. `max_tokens` bounds the answer far above anything a real artifact
+ * needs; `reasoning: { enabled: false }` asks the route not to spend tokens
+ * thinking out loud into the budget.
+ */
+export const OPENROUTER_MAX_OUTPUT_TOKENS = 8_192;
 
 const chatResponseSchema = z
   .object({
@@ -88,7 +108,7 @@ export function stripJsonFence(text: string): string {
 export async function callOpenRouter(
   request: OpenRouterChatRequest,
   label: string,
-): Promise<unknown | null> {
+): Promise<unknown | null | typeof MODEL_DECLINED> {
   const apiKey = getOpenRouterApiKey();
   if (!apiKey) {
     throw new Error("OpenRouter API key is not configured (OPENROUTER_API_KEY).");
@@ -131,6 +151,13 @@ export async function callOpenRouter(
   if (envelope.data.error) {
     console.warn("[openrouter] provider-level error in 200 envelope", { label });
     return null;
+  }
+
+  /* a content filter is the road's considered refusal — terminal, so the
+     caller keeps its safe posture instead of retrying the same material */
+  if (envelope.data.choices?.[0]?.finish_reason === "content_filter") {
+    console.warn("[openrouter] response declined by content filter", { label });
+    return MODEL_DECLINED;
   }
 
   const content = envelope.data.choices?.[0]?.message?.content;
