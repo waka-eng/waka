@@ -1,10 +1,11 @@
 import enUsMessages from "./messages/en-US.json";
+import koKrMessages from "./messages/ko-KR.json";
 
 /**
- * English is the product's only language — a founder ruling (2026-08-22).
- * The catalog machinery stays so a future locale is an entry here rather
- * than an unpicking; stored "ko-KR" preferences from before the ruling
- * normalize to the default on read.
+ * The product speaks English and Korean (founder, 2026-08-31, reversing the
+ * English-only ruling of 2026-08-22). One `preferredLocale` drives both what
+ * the memory is WRITTEN in — signals, the top of mind, principles — and the
+ * chrome around it. The catalogs enforce full key parity at compile time.
  */
 export const supportedLocaleValues = ["en-US", "ko-KR"] as const;
 
@@ -60,13 +61,7 @@ function exactCatalog<T extends Record<MessageKey, string>>(catalog: ExactCatalo
 
 export const messageCatalogs = {
   "en-US": exactCatalog(enUsMessages),
-  /* THE SETTING LEADS, THE CATALOG FOLLOWS. ko-KR is live as a GENERATION
-     language today — signals, the top of mind, and principles come back in
-     Korean for profiles that choose it — while the chrome deliberately
-     falls back to the English catalog until the Korean one is written.
-     An explicit alias, not a lookup fallback, so the day ko-KR.json lands
-     this is the one line that changes. */
-  "ko-KR": exactCatalog(enUsMessages),
+  "ko-KR": exactCatalog(koKrMessages),
 } satisfies Record<SupportedLocale, Record<MessageKey, string>>;
 
 

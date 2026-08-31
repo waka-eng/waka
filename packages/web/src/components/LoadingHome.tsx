@@ -18,6 +18,8 @@
  * the being's ivory as the bake renders it.
  */
 
+import { readStoredLocale, t } from "../lib/locales";
+
 const ground = "#06080d";
 const ivoryHigh = "#ece7db";
 const ivoryLow = "#d9d3c5";
@@ -127,7 +129,7 @@ export function LoadingHome(): JSX.Element {
           color: "rgba(214,222,234,0.45)",
         }}
       >
-        loading
+        {t(readStoredLocale(), "loading")}
       </div>
     </div>
   );
