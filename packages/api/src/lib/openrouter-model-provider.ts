@@ -38,6 +38,7 @@ import { DeclarationNotConsideredError, type ModelProvider } from "./model-provi
 import {
   callOpenRouter,
   OPENROUTER_GENERATION_MODEL,
+  OPENROUTER_MAX_OUTPUT_TOKENS,
   type OpenRouterChatRequest,
 } from "./openrouter-http.js";
 
@@ -111,6 +112,8 @@ export function toChatRequest(
     model,
     messages,
     temperature: request.generationConfig.temperature ?? 0,
+    max_tokens: OPENROUTER_MAX_OUTPUT_TOKENS,
+    reasoning: { enabled: false },
     response_format: schema
       ? { type: "json_schema", json_schema: { name: schemaName, schema: toJsonSchema(schema) } }
       : { type: "json_object" },
