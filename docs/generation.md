@@ -717,6 +717,7 @@ every cosine threshold above live in `gemini-embedding-001`'s space.
 | Constant | Value | One line |
 |---|---|---|
 | `OPENROUTER_GENERATION_MODEL` | deepseek/deepseek-v4-flash-0731 | Extraction, judges, synthesis, routing — the default road |
+| `OPENROUTER_MAX_OUTPUT_TOKENS` | 8192 | Bound on every answer — a small JSON artifact, never an essay; with reasoning declined, a truncated verdict cannot masquerade as "nothing here" |
 | `OPENROUTER_CHAT_URL` | https://openrouter.ai/api/v1/chat/completions | The second road's endpoint |
 | `GEMINI_GENERATION_MODEL` | gemini-3.1-flash-lite | Vision, and the whole road when no OpenRouter key is set |
 | `GEMINI_EMBEDDING_MODEL` | gemini-embedding-001 | All vectors |
