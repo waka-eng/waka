@@ -28,6 +28,7 @@ import { describe, expect, it } from "vitest";
 import * as embeddings from "./inspiration-embeddings.js";
 import * as principleGeneration from "./principle-generation.js";
 import * as modelBudget from "./model-budget.js";
+import * as openrouterHttp from "./openrouter-http.js";
 import * as derivation from "./signal-derivation.js";
 import * as derivationThresholds from "./signal-derivation-thresholds.js";
 import * as synthesis from "./top-of-mind-synthesis.js";
@@ -70,6 +71,7 @@ const MODULES: Record<string, Record<string, unknown>> = {
   // and a cap raised in code but not in the doc is exactly the drift the rest
   // of this file exists to catch.
   "model-budget.ts": modelBudget,
+  "openrouter-http.ts": openrouterHttp,
 };
 
 /**

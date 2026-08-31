@@ -114,6 +114,7 @@ jobs:
         continue-on-error: true
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           WAKA_ADMIN_EMAILS: ${{ secrets.WAKA_ADMIN_EMAILS }}
         run: |
           pnpm --filter @waka/api test -- \
@@ -260,6 +261,7 @@ jobs:
       - name: Boot the local stack
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           ATTACHMENTS_BUCKET: waka-ci
           ATTACHMENTS_ENDPOINT: http://127.0.0.1:8792
         run: |
@@ -314,6 +316,7 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: pnpm e2e:journeys
 
       # The negative run is what keeps the journeys honest: each one is put
@@ -323,6 +326,7 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: pnpm e2e:journeys --negative
 
       # No model calls and no object store — just Postgres and the API. It is
