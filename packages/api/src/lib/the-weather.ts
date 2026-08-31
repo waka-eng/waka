@@ -209,7 +209,7 @@ function tellCounts(c: WindowCounts, locale: ProseLocale = "en-US"): WeatherSent
     out.push({
       text: ko
         ? c.minted === 1
-          ? "새로운 신호가 하나 생겼어요"
+          ? "새 신호가 하나 생겼어요"
           : `새로운 신호가 ${exactCount(c.minted)}개 생겼어요`
         : c.minted === 1
           ? "a new signal was spoken"
@@ -222,7 +222,7 @@ function tellCounts(c: WindowCounts, locale: ProseLocale = "en-US"): WeatherSent
       text: ko
         ? c.roots === 1
           ? "신호 하나가 뒤에 선 기억을 하나 더 찾았어요"
-          : `당신의 신호들이 뒤에 선 기억을 ${exactCount(c.roots)}개 더 찾았어요`
+          : `신호들이 뒤에 선 기억을 ${exactCount(c.roots)}개 더 찾았어요`
         : c.roots === 1
           ? "a signal found another memory behind it"
           : `your signals found ${exactCount(c.roots)} more memories behind them`,
@@ -233,8 +233,8 @@ function tellCounts(c: WindowCounts, locale: ProseLocale = "en-US"): WeatherSent
     out.push({
       text: ko
         ? c.refusals === 1
-          ? "후보 하나를 거절했어요 — 당신이 치워 둔 것과 너무 가까워서요"
-          : `후보 ${exactCount(c.refusals)}개를 거절했어요 — 당신이 치워 둔 것과 너무 가까워서요`
+          ? "후보 하나를 거절했어요 — 치워 둔 것과 너무 가까워서요"
+          : `후보 ${exactCount(c.refusals)}개를 거절했어요 — 치워 둔 것과 너무 가까워서요`
         : c.refusals === 1
           ? "refused a candidate — too close to what you dismissed"
           : `refused ${exactCount(c.refusals)} candidates — too close to what you dismissed`,
@@ -249,7 +249,7 @@ function tellCounts(c: WindowCounts, locale: ProseLocale = "en-US"): WeatherSent
   if (c.posterFirst > 0) {
     out.push({
       text: ko
-        ? "당신의 톱 오브 마인드가 처음으로 쓰였어요"
+        ? "톱 오브 마인드가 처음으로 쓰였어요"
         : "your top of mind was written for the first time",
       backing: "top_of_minds",
     });
@@ -258,8 +258,8 @@ function tellCounts(c: WindowCounts, locale: ProseLocale = "en-US"): WeatherSent
     out.push({
       text: ko
         ? c.posterRewrites === 1
-          ? "당신의 톱 오브 마인드가 다시 쓰였어요"
-          : `당신의 톱 오브 마인드가 ${exactTimes(c.posterRewrites, locale)} 다시 쓰였어요`
+          ? "톱 오브 마인드가 다시 쓰였어요"
+          : `톱 오브 마인드가 ${exactTimes(c.posterRewrites, locale)} 다시 쓰였어요`
         : c.posterRewrites === 1
           ? "your top of mind was rewritten"
           : `your top of mind was rewritten ${exactTimes(c.posterRewrites)}`,
@@ -269,7 +269,7 @@ function tellCounts(c: WindowCounts, locale: ProseLocale = "en-US"): WeatherSent
   if (c.posterHeld > 0) {
     out.push({
       text: ko
-        ? "모든 것을 다시 읽었고, 당신의 톱 오브 마인드는 그대로였어요"
+        ? "전부 다시 읽었는데, 톱 오브 마인드는 그대로였어요"
         : "everything was read again, and your top of mind held",
       backing: "top_of_minds",
     });
@@ -277,7 +277,7 @@ function tellCounts(c: WindowCounts, locale: ProseLocale = "en-US"): WeatherSent
   if (c.posterYourHand > 0) {
     out.push({
       text: ko
-        ? "당신의 톱 오브 마인드가 당신의 말을 받아들였어요"
+        ? "톱 오브 마인드가 내 말을 받아들였어요"
         : "your top of mind took your own words",
       backing: "top_of_minds",
     });
@@ -286,8 +286,8 @@ function tellCounts(c: WindowCounts, locale: ProseLocale = "en-US"): WeatherSent
     out.push({
       text: ko
         ? c.consulted === 1
-          ? "당신의 기억이 참고되었어요"
-          : `당신의 기억이 ${exactTimes(c.consulted, locale)} 참고되었어요`
+          ? "기억이 참고됐어요"
+          : `기억이 ${exactTimes(c.consulted, locale)} 참고됐어요`
         : c.consulted === 1
           ? "your memory was consulted"
           : `your memory was consulted ${exactTimes(c.consulted)}`,
@@ -545,11 +545,11 @@ export function renderTheWeather(weather: TheWeather, locale: ProseLocale = "en-
   if (locale === "ko-KR") {
     lines.push("# 날씨");
     lines.push("");
-    lines.push("> 무엇이 일어났는지, 날들로 들려드려요 — 모든 문장은 저장된");
-    lines.push("> 기록을 비추는 것이지, 누군가 쓴 요약이 아니에요.");
+    lines.push("> 무엇이 있었는지 날들로 들려드려요 — 문장 하나하나가 저장된");
+    lines.push("> 기록을 비추는 것이지, 누가 쓴 요약이 아니에요.");
     lines.push("");
     if (weather.days.length === 0) {
-      lines.push("조용한 두 주였어요 — 아무것도 움직이지 않았어요.");
+      lines.push("조용한 두 주였어요. 아무것도 움직이지 않았어요.");
     }
   } else {
     lines.push("# The weather");
