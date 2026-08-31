@@ -152,6 +152,8 @@ import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
 import type { MessageKey } from "../lib/locales";
 
 import {
+  fetchSignalDuplicates,
+  resolveSignalDuplicate,
   affirmGroupProposal,
   declineGroupProposal,
   createInspiration,
@@ -212,10 +214,12 @@ import {
   type ApiReading,
   fetchTheReading,
   type ApiAntechamberRow,
+  type ApiSignalDuplicate,
   fetchTheWeather,
   ApiError,
 } from "../lib/api";
 import { AntechamberPanel } from "../components/AntechamberPanel";
+import { DuplicatesPanel } from "../components/DuplicatesPanel";
 import { LoadingHome } from "../components/LoadingHome";
 import { ReadingPanel } from "../components/ReadingPanel";
 import {
@@ -11082,6 +11086,26 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      less than it has */
   const [antechamberOpen, setAntechamberOpen] = useState(false);
   const [antechamber, setAntechamber] = useState<ApiAntechamberRow[] | null>(null);
+  /* the gardener's asks: fetched on every open — proposals accrue while the
+     panel is closed, and an ask answered stays answered */
+  const [duplicatesOpen, setDuplicatesOpen] = useState(false);
+  const [duplicates, setDuplicates] = useState<ApiSignalDuplicate[] | null>(null);
+  const [resolvedDuplicates, setResolvedDuplicates] = useState<ReadonlySet<string>>(new Set());
+  const resolveDuplicate = useCallback(
+    (id: string, act: "merge" | "keep_apart") => {
+      if (offlineRef.current) return;
+      /* answer at once; the row only comes back if the server refused */
+      setResolvedDuplicates((prev) => new Set(prev).add(id));
+      resolveSignalDuplicate(id, act).catch(() => {
+        setResolvedDuplicates((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      });
+    },
+    [],
+  );
   /** Anchors put back from the antechamber this session, so its rows answer
       in the same beat rather than waiting for a refetch. */
   const [restoredAnchors, setRestoredAnchors] = useState<ReadonlySet<string>>(
@@ -13891,6 +13915,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           />
         ) : null}
 
+        {duplicatesOpen ? (
+          <DuplicatesPanel
+            rows={duplicates}
+            onClose={() => setDuplicatesOpen(false)}
+            onResolve={resolveDuplicate}
+            resolvedIds={resolvedDuplicates}
+          />
+        ) : null}
+
         <button
           type="button"
           className="jar-account jar-back jar-label"
@@ -14577,6 +14610,20 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               }}
             >
               {say("worldTheAntechamber")}
+            </button>
+            <span aria-hidden="true"> · </span>
+            <button
+              type="button"
+              onClick={() => {
+                setAccountOpen(false);
+                setDuplicatesOpen(true);
+                setDuplicates(null);
+                fetchSignalDuplicates()
+                  .then(setDuplicates)
+                  .catch(() => setDuplicates([]));
+              }}
+            >
+              {say("worldGardenerAsks")}
             </button>
           </p>
 
