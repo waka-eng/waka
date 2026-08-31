@@ -22,17 +22,22 @@
  * One function now, two callers. The next divergence has to be deliberate.
  */
 import { ApiError } from "./api";
+import { formatMessage, t, type SupportedLocale } from "./locales";
 
 /**
  * The reason clause on its own — no leading sentence, no trailing full stop
  * discipline beyond what each case needs. Empty string when there is nothing
- * to add beyond the caller's own words.
+ * to add beyond the caller's own words. Speaks the caller's locale; the
+ * server's own message stays as the server said it.
  */
-export function whyOf(err: unknown): string {
+export function whyOf(err: unknown, locale: SupportedLocale = "en-US"): string {
   if (err instanceof ApiError) {
-    if (err.status === 0) return "the server could not be reached.";
-    if (err.status === 401) return "you are signed out. Sign in and it is still here.";
-    return `the server said no (${err.status}): ${err.message}`;
+    if (err.status === 0) return t(locale, "worldWhyUnreachable");
+    if (err.status === 401) return t(locale, "worldWhySignedOut");
+    return formatMessage(locale, "worldWhyServerSaidNo", {
+      status: err.status,
+      message: err.message,
+    });
   }
   if (err instanceof Error && err.message) return err.message;
   return "";
@@ -47,8 +52,12 @@ export function whyOf(err: unknown): string {
  * "That was not saved. — the server said no (500): …" everywhere in the
  * product until six of them were put side by side for the first time.
  */
-export function whyFailed(err: unknown, fallback: string): string {
-  const why = whyOf(err);
+export function whyFailed(
+  err: unknown,
+  fallback: string,
+  locale: SupportedLocale = "en-US",
+): string {
+  const why = whyOf(err, locale);
   if (why === "") return fallback;
   return `${fallback.replace(/\.\s*$/, "")} — ${why}`;
 }

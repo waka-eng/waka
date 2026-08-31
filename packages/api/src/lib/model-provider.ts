@@ -313,6 +313,41 @@ export class DeclarationNotConsideredError extends Error {
   }
 }
 
+/**
+ * THE MODEL NEVER ANSWERED USABLY — a transport failure, a truncated body,
+ * a malformed envelope. This is a different fact from "the model answered:
+ * nothing here", and for a long time the two were recorded identically:
+ * extraction mapped it to zero candidates (the capture was marked derived
+ * and never read again — silent, permanent loss of what the person kept),
+ * and the judges mapped it to "independent" (a bad provider hour minted
+ * duplicate signals that nothing ever revisits). Observed live 2026-08-30,
+ * when a routed backend spent minutes reasoning and returned JSON cut off
+ * mid-key: a whole batch of captures recorded as having nothing to teach.
+ *
+ * Thrown instead, it fails the JOB ATTEMPT — the queue already retries up
+ * to max_attempts and parks the row as `failed`, visible and re-runnable,
+ * which is the honest ending. Derivation is safe to retry by construction:
+ * evidence is unique per (signal, inspiration) and re-extracted statements
+ * land in the dedupe band of anything already minted.
+ */
+/**
+ * THE MODEL DECLINED — a considered refusal (a safety block, a content
+ * filter), which is terminal: retrying the same material cannot help, so
+ * callers keep their safe postures for it (extraction: nothing here;
+ * judges: independent). Distinct from `null`, which means the road failed
+ * and the attempt should be retried. The transport is the only layer that
+ * can tell the two apart, so it says which one happened.
+ */
+export const MODEL_DECLINED: unique symbol = Symbol("the model declined to answer");
+
+export class ModelDidNotAnswerError extends Error {
+  constructor(task: string, cause?: unknown) {
+    super(`the model did not answer usably: ${task}`);
+    this.name = "ModelDidNotAnswerError";
+    this.cause = cause;
+  }
+}
+
 export interface ModelProvider {
   readonly name: string;
   extractSignalCandidates(

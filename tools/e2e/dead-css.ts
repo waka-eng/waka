@@ -516,7 +516,7 @@ async function surfaces(
   ]) {
     await page.locator(".jar-mouth-rest").first().click();
     await page.waitForTimeout(700);
-    await page.fill('textarea[aria-label="capture inspiration"]', text);
+    await page.fill('textarea[aria-label="Capture inspiration"]', text);
     await page.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click();
     await page.waitForTimeout(4_500);
   }

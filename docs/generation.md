@@ -374,6 +374,7 @@ citations against exactly that set. Neither is any use without the other.
 | An inspiration is deleted | Always (its cascade may have retired signals) |
 | Feedback is given | Always (a verdict changes what synthesis should weigh) |
 | `POST /api/top-of-mind/refresh` | Manual, debounced |
+| The profile's language changes | Always (`PATCH /api/auth/me/preferences`) — the artifact must re-speak in the new language, not wait for an unrelated refresh |
 
 Refreshes are debounced to one pending pass per profile, with the same
 trailing-edge `rerun_requested` semantics as derivation.
@@ -440,6 +441,17 @@ Whole-artifact on purpose: a model asked to patch entries reasons about
 diffs it cannot see, and every incremental variant of this call drifted into
 appending. Temperature 0, schema-constrained, everything user-originated
 fenced as data.
+
+**The language of the artifact.** Every entry is written in the profile's
+`preferred_locale` (`en-US` or `ko-KR` — the person chooses at signup and can
+change it on their profile). The locale line in the prompt is authoritative:
+it governs even entries carried forward from the current artifact, so
+flipping the setting re-speaks the whole top of mind in the new language on
+the next refresh. Locked entries are the one exception — the person's own
+words are reproduced exactly, whatever language they wrote them in. Signal
+statements deliberately do NOT follow the setting: extraction writes them in
+the language the capture itself was written in, because a signal quotes the
+person's own vocabulary back to them.
 
 ### 4. What code enforces after the model answers
 
@@ -515,6 +527,28 @@ A group's artifact runs the same pipeline with three deliberate differences
 Triggers: a member requesting a reread, membership changes, and proposal
 acceptance — all enqueue the same `refresh_group_top_of_mind` job. The room
 speaks in its creator's preferred locale until groups carry their own.
+
+---
+
+## When the model fails
+
+Two absences, told apart at the transport and never conflated again
+(2026-08-31; before this, both were recorded as the safe verdict — a failed
+extraction became "this capture teaches nothing" forever, and a failed judge
+minted a duplicate signal):
+
+- **The model declined** — a safety block, a content filter. Terminal:
+  retrying the same material would be refused again, so callers keep their
+  safe postures (extraction: no candidates; the judges: independent).
+- **The road failed** — timeout, truncation, malformed envelope. The task
+  throws, the job attempt fails, and the queue retries up to its
+  `max_attempts`; an exhausted job parks as `failed`, visible and
+  re-runnable. Derivation is safe to retry by construction: evidence is
+  unique per (signal, inspiration), and a re-extracted statement lands in
+  the dedupe band of anything the earlier attempt already minted.
+
+Whole-artifact synthesis and declaration routing throw on **both** absences
+— an artifact must never record a decision the model did not make.
 
 ---
 
@@ -693,6 +727,7 @@ every cosine threshold above live in `gemini-embedding-001`'s space.
 | Constant | Value | One line |
 |---|---|---|
 | `OPENROUTER_GENERATION_MODEL` | deepseek/deepseek-v4-flash-0731 | Extraction, judges, synthesis, routing — the default road |
+| `OPENROUTER_MAX_OUTPUT_TOKENS` | 8192 | Bound on every answer — a small JSON artifact, never an essay; with reasoning declined, a truncated verdict cannot masquerade as "nothing here" |
 | `OPENROUTER_CHAT_URL` | https://openrouter.ai/api/v1/chat/completions | The second road's endpoint |
 | `GEMINI_GENERATION_MODEL` | gemini-3.1-flash-lite | Vision, and the whole road when no OpenRouter key is set |
 | `GEMINI_EMBEDDING_MODEL` | gemini-embedding-001 | All vectors |
