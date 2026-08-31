@@ -8726,7 +8726,8 @@ function HomeExperience(): JSX.Element {
              a full viewport above the band. An audit that grades a population
              the layout never placed reports a break that is not there, which
              is worse than no audit: it was the instrument, not the field. */
-          if ((b.agentId ?? "") !== curWall().id) continue;
+          if ((b.agentId ?? "") !== curWall().id || !standingOk(b, curWall()))
+            continue;
           if (b.capturedMs > TRef.current) continue;
           present++;
           const home = b.peek ? lerp(b.homeY, b.peekY, peekLift()) : b.homeY;
@@ -8788,7 +8789,8 @@ function HomeExperience(): JSX.Element {
             let dimmed = 0;
             let glowing = 0;
             for (const b of list) {
-              if ((b.agentId ?? "") !== curWall().id) continue;
+              if ((b.agentId ?? "") !== curWall().id || !standingOk(b, curWall()))
+                continue;
               if (b.active) active++;
               rMin = Math.min(rMin, b.r);
               rMax = Math.max(rMax, b.r);
