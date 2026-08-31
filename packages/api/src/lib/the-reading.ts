@@ -35,6 +35,8 @@ import {
   TOP_OF_MIND_SIGNAL_LIMIT,
 } from "./top-of-mind-synthesis.js";
 
+export type ProseLocale = "en-US" | "ko-KR";
+
 export type ReadingBacking =
   | {
       kind: "constant";
@@ -46,6 +48,9 @@ export type ReadingBacking =
           holds its own value→words expectation, so changing the constant
           fails until both the words here and the sentence change with it */
       words: string;
+      /** the same value's words in the Korean sentence — pinned the same way,
+          so neither language can drift alone */
+      wordsKo: string;
     }
   | {
       kind: "contract";
@@ -55,6 +60,8 @@ export type ReadingBacking =
 
 export interface ReadingLine {
   sentence: string;
+  /** the same rule in Korean — one registry, two voices, one backing */
+  sentenceKo: string;
   backing: ReadingBacking;
 }
 
@@ -62,105 +69,136 @@ export const READING_LINES: ReadingLine[] = [
   {
     sentence:
       "When three of your memories say the same thing, WAKA says it back to you in a sentence of its own.",
+    sentenceKo:
+      "당신의 기억 셋이 같은 것을 말하면, WAKA가 자기 문장으로 그것을 당신에게 되돌려 말해요.",
     backing: {
       kind: "constant",
       constant: "SIGNAL_PROMOTION_MIN_EVIDENCE",
       value: SIGNAL_PROMOTION_MIN_EVIDENCE,
       words: "three",
+      wordsKo: "셋",
     },
   },
   {
     sentence:
       "A new thought joins one of those sentences only when they are all but the same thought; otherwise it stands on its own.",
+    sentenceKo:
+      "새로운 생각은 거의 같은 생각일 때에만 기존 문장에 합류하고, 아니면 홀로 서요.",
     backing: {
       kind: "constant",
       constant: "SIGNAL_MATCH_MIN_COSINE",
       value: SIGNAL_MATCH_MIN_COSINE,
       words: "all but the same",
+      wordsKo: "거의 같은",
     },
   },
   {
     sentence:
       "A sentence nobody feeds cools — half of its warmth is gone in about a month and a half.",
+    sentenceKo:
+      "아무도 먹이지 않는 문장은 식어요 — 온기의 절반이 한 달 반이면 사라져요.",
     backing: {
       kind: "constant",
       constant: "CONFIDENCE_RECENCY_HALF_LIFE_DAYS",
       value: CONFIDENCE_RECENCY_HALF_LIFE_DAYS,
       words: "a month and a half",
+      wordsKo: "한 달 반",
     },
   },
   {
     sentence:
       "A sentence that stirs again after three quiet weeks is noticed for coming back.",
+    sentenceKo:
+      "조용한 세 주가 지나 다시 일렁이는 문장은 돌아온 것으로 알아봐요.",
     backing: {
       kind: "constant",
       constant: "COMEBACK_MIN_DORMANT_DAYS",
       value: COMEBACK_MIN_DORMANT_DAYS,
       words: "three quiet weeks",
+      wordsKo: "조용한 세 주",
     },
   },
   {
     sentence:
       "Your top of mind is first written once three of those sentences are alive to write it from.",
+    sentenceKo:
+      "당신의 톱 오브 마인드는 살아 있는 문장이 셋이 되어야 처음 쓰여요.",
     backing: {
       kind: "constant",
       constant: "TOP_OF_MIND_MIN_SIGNALS",
       value: TOP_OF_MIND_MIN_SIGNALS,
       words: "three",
+      wordsKo: "셋",
     },
   },
   {
     sentence:
       "Each rewrite of your top of mind reads from at most twelve of them — the ones with the most life in them.",
+    sentenceKo:
+      "톱 오브 마인드를 다시 쓸 때는 많아야 열두 문장을 읽어요 — 가장 생기 있는 것들로요.",
     backing: {
       kind: "constant",
       constant: "TOP_OF_MIND_SIGNAL_LIMIT",
       value: TOP_OF_MIND_SIGNAL_LIMIT,
       words: "twelve",
+      wordsKo: "열두",
     },
   },
   {
     sentence:
       "A sentence you called untrue steps far back in the choosing — and is never erased.",
+    sentenceKo:
+      "당신이 아니라고 한 문장은 고르는 자리에서 멀찍이 물러나요 — 그리고 지워지지 않아요.",
     backing: {
       kind: "constant",
       constant: "SELECTION_DISPUTED_MULTIPLIER",
       value: SELECTION_DISPUTED_MULTIPLIER,
       words: "far back",
+      wordsKo: "멀찍이",
     },
   },
   {
     sentence:
       "A room first speaks only after three shared statements have been affirmed by someone besides their owner.",
+    sentenceKo:
+      "방은 주인 아닌 누군가가 함께 실어 준 공유 문장이 셋이 되어야 처음 말해요.",
     backing: {
       kind: "constant",
       constant: "GROUP_DRAFT_MIN_AFFIRMED",
       value: GROUP_DRAFT_MIN_AFFIRMED,
       words: "three",
+      wordsKo: "셋",
     },
   },
   {
     sentence:
       "A room of three people or fewer is held to a smaller bar, because three statements is most of everything a pair has ever said.",
+    sentenceKo:
+      "세 명 이하의 방은 더 낮은 기준을 가져요 — 두 사람이 나눈 말의 거의 전부가 문장 셋이니까요.",
     backing: {
       kind: "constant",
       constant: "GROUP_DRAFT_SMALL_MAX_MEMBERS",
       value: GROUP_DRAFT_SMALL_MAX_MEMBERS,
       words: "three people or fewer",
+      wordsKo: "세 명 이하",
     },
   },
   {
     sentence:
       "That smaller bar is two, and it never falls to one: one person agreeing once is not a room agreeing.",
+    sentenceKo:
+      "그 낮은 기준은 둘이고, 하나까지 내려가지는 않아요: 한 사람이 한 번 동의한 것은 방이 동의한 게 아니에요.",
     backing: {
       kind: "constant",
       constant: "GROUP_DRAFT_MIN_AFFIRMED_SMALL",
       value: GROUP_DRAFT_MIN_AFFIRMED_SMALL,
       words: "two",
+      wordsKo: "둘",
     },
   },
   {
     sentence: "A sentence you have written yourself is never rewritten.",
+    sentenceKo: "당신이 직접 쓴 문장은 절대 다시 쓰이지 않아요.",
     backing: {
       kind: "contract",
       testPath: "packages/api/src/lib/signal-lock-contract.db.test.ts",
@@ -169,6 +207,8 @@ export const READING_LINES: ReadingLine[] = [
   {
     sentence:
       "Hand a sentence back, and WAKA may write it again; released words that nothing supports are let go to retire.",
+    sentenceKo:
+      "문장을 다시 맡기면 WAKA가 다시 쓸 수 있어요. 아무것도 받치지 않는 풀려난 말은 물러나도록 놓아줘요.",
     backing: {
       kind: "contract",
       testPath: "packages/api/src/lib/signal-lock-contract.db.test.ts",
@@ -177,6 +217,8 @@ export const READING_LINES: ReadingLine[] = [
   {
     sentence:
       "A sentence's receipts are verified quotes — your words, or your saved page's, and never invented.",
+    sentenceKo:
+      "문장의 영수증은 검증된 인용이에요 — 당신의 말이거나 당신이 저장한 페이지의 말이고, 지어내는 법은 없어요.",
     backing: {
       kind: "contract",
       testPath: "packages/api/src/lib/signal-lock-contract.db.test.ts",
@@ -184,6 +226,7 @@ export const READING_LINES: ReadingLine[] = [
   },
   {
     sentence: "A sentence you set aside does not return to your top of mind.",
+    sentenceKo: "당신이 치워 둔 문장은 톱 오브 마인드로 돌아오지 않아요.",
     backing: {
       kind: "contract",
       testPath: "packages/api/src/lib/top-of-mind-synthesis.test.ts",
@@ -192,6 +235,8 @@ export const READING_LINES: ReadingLine[] = [
   {
     sentence:
       "A sentence you let go is refused ground: nothing is deleted, nothing that close grows there again, and every refusal is written down — until you put it back.",
+    sentenceKo:
+      "당신이 놓아준 문장은 땅을 거절당해요: 아무것도 지워지지 않고, 그만큼 가까운 것은 다시 자라지 않고, 모든 거절이 기록돼요 — 당신이 되돌리기 전까지는.",
     backing: {
       kind: "contract",
       testPath: "packages/api/src/lib/signal-suppression.db.test.ts",
@@ -200,6 +245,8 @@ export const READING_LINES: ReadingLine[] = [
   {
     sentence:
       "A room's top of mind changes only when more than half the room carries the change — a no is counted, never a veto.",
+    sentenceKo:
+      "방의 톱 오브 마인드는 방의 절반 넘는 사람이 실어 줄 때에만 바뀌어요 — 아니오는 세어질 뿐, 거부권이 아니에요.",
     backing: {
       kind: "contract",
       testPath: "packages/api/src/routes/room-decline.db.test.ts",
@@ -207,6 +254,7 @@ export const READING_LINES: ReadingLine[] = [
   },
   {
     sentence: "Every reading of your memory is itself on the record.",
+    sentenceKo: "당신의 기억을 읽는 일은 그 자체로 기록에 남아요.",
     backing: {
       kind: "contract",
       testPath: "packages/api/src/routes/consultations.db.test.ts",
@@ -231,6 +279,8 @@ export const READING_LINES: ReadingLine[] = [
   {
     sentence:
       "A memory shines by how much of your thinking rests on it: the more sentences read from it, the brighter it stands in the ground.",
+    sentenceKo:
+      "기억은 당신의 생각이 얼마나 그 위에 기대는지만큼 빛나요: 읽어 간 문장이 많을수록 땅에서 더 밝게 서요.",
     backing: {
       kind: "contract",
       testPath: "packages/web/test/home-light.test.tsx",
@@ -242,8 +292,21 @@ export const READING_LINES: ReadingLine[] = [
  * The one rendering, markdown. The world's panel and the wire format both
  * derive from this — no second phrasing anywhere.
  */
-export function renderTheReading(): string {
+export function renderTheReading(locale: ProseLocale = "en-US"): string {
   const lines: string[] = [];
+  if (locale === "ko-KR") {
+    lines.push("# WAKA가 당신을 읽는 방식");
+    lines.push("");
+    lines.push("> 아래 문장 하나하나가 그것을 지키는 코드에 고정되어 있어요 —");
+    lines.push("> 그중 하나라도 사실이 아니게 되는 날, 빌드가 멈춰요.");
+    lines.push("");
+    for (const line of READING_LINES) {
+      lines.push(`- ${line.sentenceKo}`);
+    }
+    lines.push("");
+    lines.push("당신의 행동이 가르쳐요: 답은 무게가 되고, 별은 붙들고, 되맡기면 되돌아가요.");
+    return lines.join("\n") + "\n";
+  }
   lines.push("# How WAKA reads you");
   lines.push("");
   lines.push(

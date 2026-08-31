@@ -27,6 +27,10 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
 import { getDb } from "../lib/db.js";
+import { profiles } from "../db/index.js";
+import { eq } from "drizzle-orm";
+import { isSupportedLocale } from "../lib/locales.js";
+import type { ProseLocale } from "../lib/the-weather.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
 import { assembleTheWeather, renderTheWeather } from "../lib/the-weather.js";
 import { validationDetails } from "../lib/validation.js";
@@ -55,6 +59,22 @@ export interface WeatherRouteDependencies {
   getDatabase?: typeof getDb;
   loadProfile?: typeof loadProfileTarget;
   authMiddleware?: MiddlewareHandler<AuthEnv>;
+}
+
+/** THE MEMORY SPEAKS ITS OWN LANGUAGE. The weather can be read for another
+    profile in the account (an agent, a granted sibling), and the telling is
+    that profile's — so the locale is the TARGET's setting, not the
+    caller's. */
+async function localeOf(
+  db: ReturnType<typeof getDb>,
+  profileId: string,
+): Promise<ProseLocale> {
+  const [row] = await db
+    .select({ preferredLocale: profiles.preferredLocale })
+    .from(profiles)
+    .where(eq(profiles.id, profileId))
+    .limit(1);
+  return isSupportedLocale(row?.preferredLocale) ? row.preferredLocale : "en-US";
 }
 
 export function createWeatherRoute(deps: WeatherRouteDependencies = {}): Hono<AuthEnv> {
@@ -87,6 +107,7 @@ export function createWeatherRoute(deps: WeatherRouteDependencies = {}): Hono<Au
       profileId: scope.profileId,
       since: parsed.data.since ?? null,
       includeAntechamber,
+      locale: await localeOf(db, scope.profileId),
     });
     /* The antechamber carries refused candidates — derived readings of the
        person — so serving it is on the record. The telling alone is event
@@ -132,13 +153,14 @@ export function createWeatherMarkdownRoute(
     );
     if (!scope.ok) return c.json(scope.body, scope.status);
 
-    const weather = await assembleTheWeather(db, { profileId: scope.profileId });
+    const locale = await localeOf(db, scope.profileId);
+    const weather = await assembleTheWeather(db, { profileId: scope.profileId, locale });
     await recordConsultation(db, {
       profileId: scope.profileId,
       session: c.get("session"),
       surface: "weather",
     });
-    return c.text(renderTheWeather(weather), 200, {
+    return c.text(renderTheWeather(weather, locale), 200, {
       "Content-Type": "text/markdown; charset=utf-8",
     });
   });
