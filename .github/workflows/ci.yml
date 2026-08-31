@@ -99,29 +99,22 @@ jobs:
             --exclude '**/dist/**' \
             --exclude '**/.sst/**' \
             --exclude '**/*.smoke.ts' \
-            --exclude 'test/background-jobs.test.ts' \
-            --exclude 'test/wow-judge.test.ts' \
-            --exclude 'test/wow-moments.test.ts' \
-            --exclude 'test/inspiration-embeddings.test.ts'
+            --exclude 'test/judge-eval.test.ts'
 
-      # These four need configuration this workflow does not have: a Gemini key
-      # for the judge and embedding paths, and an admin allowlist that matches
-      # the randomly generated fixture users. Reported rather than skipped
-      # silently, and non-blocking rather than fabricated — a green tick for a
-      # test that never ran is worse than a visible gap. Add GEMINI_API_KEY and
-      # WAKA_ADMIN_EMAILS as repository secrets to turn this into a gate.
-      - name: API suite (needs credentials — non-blocking)
-        continue-on-error: true
+      # THE JUDGE ON THE BENCH — live-model quality gate on real judged pairs,
+      # half of them Korean. The four suites this step used to name were
+      # deleted with the pre-three-layers architecture, so for months it ran
+      # ghost paths under continue-on-error: a green tick for tests that never
+      # ran, exactly what its own comment warned against. It now runs the one
+      # live-model suite that exists, and it BLOCKS — a model that fails the
+      # bench fails the build. (The suite itself skips visibly when no model
+      # key is configured, so forks without secrets stay green honestly.)
+      - name: The judge on the bench (live model)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          WAKA_ADMIN_EMAILS: ${{ secrets.WAKA_ADMIN_EMAILS }}
         run: |
-          pnpm --filter @waka/api test -- \
-            test/background-jobs.test.ts \
-            test/wow-judge.test.ts \
-            test/wow-moments.test.ts \
-            test/inspiration-embeddings.test.ts
+          pnpm --filter @waka/api eval:judge
 
       - name: Web tests
         run: pnpm --filter @waka/web test

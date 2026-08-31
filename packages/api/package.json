@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node scripts/check-vocabulary.mjs && vitest run",
     "test:unit": "node scripts/check-vocabulary.mjs && vitest run --config vitest.unit.config.ts",
+    "eval:judge": "vitest run test/judge-eval.test.ts",
     "test:watch": "vitest",
     "vocabulary": "node scripts/check-vocabulary.mjs"
   },
