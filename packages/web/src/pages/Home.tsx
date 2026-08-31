@@ -726,29 +726,19 @@ function markPassages(
 
 
 // ---------------------------------------------------------------------------
-// MOCK AGENTS — replaced by GET /api/agents when that lands
+// AGENT WALLS — each rebuilt from its agent's OWN layers
 // ---------------------------------------------------------------------------
 
 /**
- * The agents, exactly as the endpoints will hand them over. When the backend
- * lands this becomes the four fetches and everything downstream is unchanged.
- */
-/**
- * THE WALLS TO THE LEFT — real profiles first, and mocks only in their absence.
+ * THE WALLS TO THE LEFT — real profiles, each carrying its own stack.
  *
- * The canon made agent separation structural: `GET /api/profiles` returns every
- * profile this account owns, and each agent profile owns a full inspiration →
- * signal → top-of-mind stack of its own. So the IDENTITY of an agent wall is
- * real from today — its name, its kind, when it came into being.
- *
- * ITS CONTENTS ARE NOT REACHABLE YET, and this is the one gap worth naming:
- * `/inspirations`, `/signals` and `/top-of-mind` are each scoped to the
- * session's OWN bound profile, with no way to ask for another's. The canon says
- * the human is admin of every profile in their account and can see everything
- * in it; the server has not grown the parameter for that yet. Until it does, a
- * real agent wall stands there with an honest empty headquarters — which is
- * exactly what a newly created agent looks like anyway, and is never filled in
- * with something invented.
+ * Every layer endpoint takes `?profile=` and a human session is admin over
+ * every profile in its account, so an agent's wall is built from the agent's
+ * OWN inspirations, signals and top of mind. (A long-dead comment here said
+ * the contents were "not reachable yet" — it outlived the fetch below by
+ * weeks and sent one investigation hunting for a missing endpoint that has
+ * existed all along. A wall whose fetch fails stands empty rather than
+ * borrowing anything; a wall that is APPROACHED refetches, see `loadWall`.)
  *
  * The mocks are the founder's own two from the meeting, and they appear ONLY
  * in dev AND ONLY when the account has no real agent profiles. Standing an
@@ -767,13 +757,40 @@ async function loadAgentWalls(): Promise<AgentBundle[]> {
        The database has kept them separate all along; nothing is merged with
        the owner's, and a wall whose fetch fails stands empty rather than
        borrowing anything to fill itself. */
-    return Promise.all(
-      real.map(async (p) => {
-        const [field, signals, tom] = await Promise.all([
-          loadInspirations(p.id).catch(() => EMPTY_FIELD),
-          loadSignals(p.id).catch(() => [] as Signal[]),
-          loadTopOfMind(p.id).catch(() => null),
-        ]);
+    return Promise.all(real.map(loadAgentBundle));
+  }
+  if (!MOCK_AGENTS) return [];
+  return MOCK_AGENT_BUNDLES;
+}
+
+/**
+ * One agent's wall, rebuilt from its own layers — used for every wall at
+ * load, and again for one wall each time travel toward it begins, so the
+ * ground an arrival finds is as current as the archive underneath it.
+ */
+async function loadAgentBundle(
+  p: {
+    id: string;
+    name: string;
+    createdAt: string;
+  },
+  opts: { strict?: boolean } = {},
+): Promise<AgentBundle> {
+        /* TWO POSTURES, BY WHAT THE CALLER HOLDS. At first load there is
+           nothing yet, so a failed fetch degrades to an honest empty wall.
+           A REFRESH holds the last good ground, and replacing it with a
+           failure's emptiness is how the founder's wall kept vanishing —
+           one aborted request during a server restart and "6 inspirations"
+           became no foot at all until a minute and another travel lined up.
+           Strict mode lets the failure THROW, so the refresher keeps what
+           it has and retries on the next approach instead. */
+        const [field, signals, tom] = opts.strict
+          ? await Promise.all([loadInspirations(p.id), loadSignals(p.id), loadTopOfMind(p.id)])
+          : await Promise.all([
+              loadInspirations(p.id).catch(() => EMPTY_FIELD),
+              loadSignals(p.id).catch(() => [] as Signal[]),
+              loadTopOfMind(p.id).catch(() => null),
+            ]);
         const inspirations = field.inspirations;
         const entries = (tom?.entries ?? []).slice().sort((a, b) => a.createdMs - b.createdMs);
         const lead = tom?.entries.find((e) => e.pinned) ?? tom?.entries[0] ?? null;
@@ -834,11 +851,6 @@ async function loadAgentWalls(): Promise<AgentBundle[]> {
              length of what arrived */
           inspirationTotal: field.total,
         };
-      }),
-    );
-  }
-  if (!MOCK_AGENTS) return [];
-  return MOCK_AGENT_BUNDLES;
 }
 
 
@@ -2220,21 +2232,80 @@ function HomeExperience(): JSX.Element {
   loadGroupRef.current = loadGroup;
 
   /**
-   * Warm a wall, whatever kind it is. A room fetches; an agent already has
-   * everything (and will fetch the same way when the endpoints land); your own
-   * wall has nothing to warm. The loop calls this the moment travel toward a
-   * wall begins, so arrival usually finds it ready.
+   * THE GROUND AN ARRIVAL FINDS IS CURRENT. An agent's memories change while
+   * nobody is looking — its machine keeps through a key, on its own clock —
+   * and a wall poured once at mount goes quietly stale (founder, 2026-08-29:
+   * six keeps in the archive, an empty wall on screen). One in-flight guard
+   * per agent; a failed refresh keeps the last good ground rather than
+   * blanking a wall that was honest a second ago.
+   */
+  const agentRefreshBusyRef = useRef<Set<string>>(new Set());
+  /** When each agent's ground last refreshed. The refetch answers a TRAVEL,
+      but the loop re-announces an in-flight travel after every rebuild — and
+      the refetch's own setAgents IS a rebuild, so an unthrottled refresh
+      became a storm that restarted the trip forever: stuck mid-flight,
+      refetching both agents five times a second, no arrival, dark ground.
+      One refresh per approach is the meaning; the window is how it's said. */
+  const agentRefreshedAtRef = useRef<Map<string, number>>(new Map());
+  /** Fetched bundles wait here until the world is AT REST. Applying one
+      mid-travel rebuilds the whole simulation in flight, and everything
+      edge-triggered — the trip, the arrival, the pour — shears across that
+      boundary (observed as a wall that says six and lights none). Travel is
+      when the refresh is ASKED for; arrival is when it may land. */
+  const pendingAgentBundlesRef = useRef<Map<string, AgentBundle>>(new Map());
+  const refreshAgentWall = useCallback(
+    (agentId: string) => {
+      const a = (agents ?? []).find((x) => x.agent.id === agentId);
+      if (!a || agentRefreshBusyRef.current.has(agentId)) return;
+      const last = agentRefreshedAtRef.current.get(agentId) ?? 0;
+      if (Date.now() - last < 60_000) return;
+      agentRefreshedAtRef.current.set(agentId, Date.now());
+      agentRefreshBusyRef.current.add(agentId);
+      void loadAgentBundle(a.agent, { strict: true })
+        .then((fresh) => {
+          pendingAgentBundlesRef.current.set(agentId, fresh);
+        })
+        .catch(() => {
+          /* keep the last good ground, and let the very next approach
+             retry rather than waiting out the throttle window */
+          agentRefreshedAtRef.current.delete(agentId);
+        })
+        .finally(() => {
+          agentRefreshBusyRef.current.delete(agentId);
+        });
+    },
+    [agents],
+  );
+
+  /**
+   * Warm a wall, whatever kind it is. A room fetches its pooled field; an
+   * agent refetches its own layers; your own wall has nothing to warm. The
+   * loop calls this the moment travel toward a wall begins, so arrival
+   * usually finds it ready — and current.
    */
   const loadWall = useCallback(
     (w: Space) => {
       if (w.kind === "group") loadGroup(w.id);
+      if (w.kind === "agent") refreshAgentWall(w.id);
     },
-    [loadGroup],
+    [loadGroup, refreshAgentWall],
   );
   const loadWallRef = useRef(loadWall);
   loadWallRef.current = loadWall;
 
   /** The camera came to rest on a wall. Discrete, pushed from the loop. */
+  /* THE PENDING BUNDLE LANDS AT ARRIVAL — the one moment the world is
+     provably at rest and freshly laid out. The rebuild this causes runs its
+     rest-convergence with the right wall under it, so the refreshed ground
+     settles in place instead of shearing a travel apart. */
+  useEffect(() => {
+    const pending = pendingAgentBundlesRef.current;
+    if (pending.size === 0) return;
+    const fresh = new Map(pending);
+    pending.clear();
+    setAgents((prev) => (prev ?? []).map((a) => fresh.get(a.agent.id) ?? a));
+  }, [atWall]);
+
   const pushArrived = useCallback((w: Space) => {
     setAtWall((prev) => (prev.kind === w.kind && prev.id === w.id ? prev : w));
   }, []);
@@ -4193,6 +4264,28 @@ function HomeExperience(): JSX.Element {
       return (b.ownerProfileId ?? "") === (ground ?? viewerIdRef.current ?? "");
     };
 
+    /* dev-only: the loop's own truth, askable from a console */
+    if (import.meta.env.VITE_SHOW_INTERNAL) {
+      (window as unknown as Record<string, unknown>).__waka = () => ({
+        wall: curWall().id || "me",
+        kind: curWall().kind,
+        tripActive: trip.active,
+        cam: { x: Math.round(cam.x), y: Math.round(cam.y) },
+        viewH: view.h,
+        viewW: view.w,
+        balls: list.map((b) => ({
+          id: b.id.slice(0, 8),
+          agent: (b.agentId ?? "").slice(0, 8) || "me",
+          active: b.active,
+          alive: Number(b.alive.toFixed(2)),
+          x: Math.round(b.x),
+          y: Math.round(b.y),
+          homeY: Math.round(b.homeY),
+          spawnAt: b.spawnAt,
+        })),
+      });
+    }
+
     function assignHomes() {
       const present: Ball[] = [];
       for (const b of list)
@@ -4229,6 +4322,12 @@ function HomeExperience(): JSX.Element {
          is what sediment IS. */
       const px: number[] = [];
       const py: number[] = [];
+      /* THE WALL'S OWN COLUMN. Homes are solved in column-local coordinates
+         and stood at the column's x-origin; they were laid bare, which put
+         every ground but your own exactly one screen to the right of the
+         camera that travelled to see it (founder, 2026-08-30 — six counted,
+         none visible; measured at screen-x 1842 on a 1280 viewport). */
+      const colX = curWall().col * view.w;
       for (let i = 0; i < n; i++) {
         const b = present[i];
         const u = n > 1 ? i / (n - 1) : 0; /* 0 oldest → 1 newest */
@@ -4239,9 +4338,11 @@ function HomeExperience(): JSX.Element {
         const age = clamp01(1 - u + jitter); /* 1 oldest → 0 newest */
         const y = clamp(lerp(yTop, yBot, Math.pow(age, 1 / gamma)), yTop, yBot);
         b.homeY = y;
-        b.homeX = scatterX(b, y, px, py, spanL, spanR);
-        px.push(b.homeX);
+        b.colX = colX;
+        const lx = scatterX(b, y, px, py, spanL, spanR);
+        px.push(lx);
         py.push(b.homeY);
+        b.homeX = colX + lx;
       }
       electPeek(present);
     }
@@ -4322,7 +4423,9 @@ function HomeExperience(): JSX.Element {
             : scatterX(b, b.peekY, px, py, Math.min(rightLo, rightHi), rightHi);
           x = clamp(x, spanL + b.r, spanR - b.r);
         }
-        b.peekX = x;
+        /* the peek stands in its wall's own column, like the ground below */
+        b.colX = curWall().col * view.w;
+        b.peekX = b.colX + x;
         px.push(x);
         py.push(b.peekY);
       }
@@ -4774,6 +4877,8 @@ function HomeExperience(): JSX.Element {
          this is what makes them exist. Without it a travelled-to wall drew an
          empty ground however much was standing on it. */
       const here = presentBalls();
+      /* the last wall's light does not follow you in */
+      for (const b of list) if (b.active && !onThisWall(b)) b.active = false;
       if (view.reduced) settleInstantly();
       else primePour(here);
       electPeek(here);
@@ -5457,7 +5562,14 @@ function HomeExperience(): JSX.Element {
 
     /**
      * `only` is the set to pour — the wall you have just walked into. Left out,
-     * it is the whole archive, which is what the first open wants.
+     * it is the CURRENT WALL'S ground, filtered the same way homes are
+     * assigned. It used to be the whole `list`, "which is what the first open
+     * wants" — true when the list held only your own archive, and a leak the
+     * moment the list grew every wall's balls (founder, 2026-08-30: thirteen
+     * orbs on a ground that honestly holds one — your keep placed, and two
+     * agents' twelve drifting unplaced but poured active). Every wall reached
+     * by TRAVELLING always used the narrow form, which is why the leak only
+     * ever showed on the wall you open into.
      *
      * Arriving needs the narrow form for two reasons. The stagger is
      * POUR_MS/length, so pouring all 128 balls to show the 9 that belong here
@@ -5470,10 +5582,19 @@ function HomeExperience(): JSX.Element {
      */
     function primePour(only?: Ball[]) {
       const t0 = performance.now() + 300;
+      /* THE CONSTRUCTOR SAYS `active: true`, so a ball this pour does not
+         name would paint anyway — on whatever wall you happen to be. The
+         bare form is the first word about the whole field, so it starts by
+         switching the whole field off. */
+      if (!only) for (const b of list) b.active = false;
       /* Newest first: the peek band is the invitation, so it must fill on the
          first beat rather than the last. Nothing stacks in a float field, so
          arrival order no longer has to build the strata. */
-      const order = (only ?? list).slice().sort((a, b) => b.capturedMs - a.capturedMs);
+      const order = (
+        only ?? list.filter((b) => b.capturedMs <= TRef.current && onThisWall(b))
+      )
+        .slice()
+        .sort((a, b) => b.capturedMs - a.capturedMs);
       /* A FIXED STAGGER IS A LOCKOUT LONGER THAN THE THING IT PROTECTS. At
          thirty-five milliseconds apiece, two hundred memories are still
          arriving seven seconds after open — every morning, in a tool used
@@ -5546,6 +5667,22 @@ function HomeExperience(): JSX.Element {
           pour.active = false;
           pour.done = true;
           computeInspiration();
+        }
+      } else {
+        /* A POUR CAN DIE WITH BALLS STILL STAGED — a rebuild flips it off
+           while spawn times are pending, and those balls then wait forever
+           for a processor that is gone. The step owns the field's truth, so
+           it buries the orphans by the same rule the pour would have used. */
+        for (const b of list) {
+          if (b.spawnAt > 0) {
+            b.spawnAt = -1;
+            b.active = b.capturedMs <= TRef.current && onThisWall(b);
+            if (b.active) {
+              b.arrive = 1;
+              b.x = b.homeX;
+              b.y = b.homeY;
+            }
+          }
         }
       }
 
@@ -5622,7 +5759,7 @@ function HomeExperience(): JSX.Element {
         /* the field keeps to its own width */
         for (const b of arr) {
           if (!b.active) continue;
-          b.x = clamp(b.x, lo + b.r, hi - b.r);
+          b.x = clamp(b.x, b.colX + lo + b.r, b.colX + hi - b.r);
         }
       };
 
@@ -7931,7 +8068,18 @@ function HomeExperience(): JSX.Element {
       for (const b of list) {
         const was = carried.get(b.id);
         if (!was) {
-          fresh.push(b);
+          /* New to the field — but the pour is an ARRIVAL, and an arrival
+             happens on the wall it belongs to. A ball for another wall is
+             registered quiet; travelling there is what switches it on. */
+          if (b.capturedMs <= TRef.current && onThisWall(b)) {
+            fresh.push(b);
+          } else {
+            b.active = false;
+            b.spawnAt = -1;
+            b.arrive = 1;
+            b.x = b.homeX;
+            b.y = b.homeY;
+          }
           continue;
         }
         b.x = was.x;
@@ -7946,6 +8094,32 @@ function HomeExperience(): JSX.Element {
       else {
         pour.active = false;
         pour.done = true;
+      }
+      /* AT REST, THE FIELD EQUALS ITS RULES — not its event history. The
+         carried recompute above ran with wherever the trip stood at rebuild
+         time, and an arrival that happened across a rebuild boundary can
+         lose its pour: the wall says Scout, the only lit ball says me. So a
+         rebuild that lands at rest converges: whatever should stand on this
+         wall and is dark pours in; whatever is lit and belongs elsewhere
+         goes out. Mid-flight rebuilds leave it to the arrival, which does
+         the same thing in the same words. */
+      if (!trip.active) {
+        assignHomes();
+        for (const b of list) if (b.active && !onThisWall(b)) b.active = false;
+        /* SETTLED, NOT POURED. A pour is how the field says something has
+           ARRIVED; recovering light a rebuild dropped is repair, and repair
+           staged behind a pour can be orphaned by the next rebuild killing
+           `pour.active` with spawn times still pending — which is exactly
+           the corpse this block exists to bury. */
+        for (const b of list) {
+          if (b.capturedMs <= TRef.current && onThisWall(b) && !b.active) {
+            b.active = true;
+            b.spawnAt = -1;
+            b.arrive = 1;
+            b.x = b.homeX;
+            b.y = b.homeY;
+          }
+        }
       }
       computeInspiration();
     } else primePour();
