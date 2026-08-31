@@ -494,7 +494,14 @@ jobs:
       # already produced one gate that passed here every time and failed there
       # every time. It reports; it does not yet gate. Make it blocking once a
       # run of green CI says it earns that.
-      - name: The product at phone size (report only)
+      #
+      # IT WALKS 768 TOO, since 2026-08-31. Not because a tablet was asked
+      # for: 768 is the seam between the phone band's media query and every
+      # desktop viewport this repo measures at, which is where a rule written
+      # for one side and a rule written for the other meet. The top edge
+      # lying across itself was that class of defect. Clean the day it was
+      # added; the sabotage finds five things there, so it is a live check.
+      - name: The product at hand-held size (report only)
         if: ${{ !cancelled() }}
         continue-on-error: true
         run: pnpm e2e:phone --base-url http://127.0.0.1:3010

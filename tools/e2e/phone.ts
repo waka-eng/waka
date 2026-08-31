@@ -71,10 +71,35 @@ interface View {
   height: number;
 }
 
-/** The two that matter: a current iPhone, and the smallest still in use. */
+/**
+ * A current iPhone, the smallest screen still in use — and the band between
+ * them and a desktop, which nothing had ever laid a touch viewport over.
+ *
+ * 768 IS THERE BECAUSE IT IS A SEAM, not because a tablet was asked for. The
+ * founder's report was about balance: "some places are more crowded than
+ * others, which is exacerbated on mobile". The measure half of that was a
+ * type curve sized in `vw` against a column that had stopped growing, fixed
+ * on 2026-08-30 and held by `e2e:measure` case 16. What was never asked is
+ * whether the LAYOUT holds there: 768 sits above the 560px media query that
+ * carries the phone band and below every desktop viewport in this repo, so
+ * it is exactly the width where a rule written for one side and a rule
+ * written for the other meet. `.jar-values` lying across the whole top edge
+ * was that class of defect and it lived between breakpoints.
+ *
+ * It found nothing on the day it was added, which is what a regression guard
+ * looks like when the regression has not happened yet.
+ *
+ * AND IT COSTS THE FILE'S NAME SOME ACCURACY, so this says it out loud: a
+ * 768x1024 touch screen is a tablet. The rules below are about a screen held
+ * in a hand — targets under a thumb, fields that zoom on focus, controls
+ * that lie across each other — and every one of them is as true of a tablet
+ * as of a phone. The file keeps its name because renaming it churns CI, the
+ * scripts and the docs for nothing.
+ */
 const VIEWS: View[] = [
   { name: "390x844", width: 390, height: 844 },
   { name: "360x640", width: 360, height: 640 },
+  { name: "768x1024", width: 768, height: 1024 },
 ];
 
 /** WCAG 2.2 AA 2.5.8 Target Size (Minimum). */
