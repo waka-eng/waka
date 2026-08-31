@@ -40,6 +40,7 @@
     "e2e:groups": "tsx tools/e2e/groups.ts",
     "e2e:fixtures": "tsx tools/e2e/fixture-server.ts",
     "e2e:s3-stub": "tsx tools/e2e/s3-stub.ts",
+    "e2e:holds-still": "tsx tools/e2e/the-world-holds-still.ts",
     "e2e:install": "playwright install chromium",
     "e2e:phone": "tsx tools/e2e/phone.ts",
     "e2e:usability": "tsx tools/e2e/usability.ts",

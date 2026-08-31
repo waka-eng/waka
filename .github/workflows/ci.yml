@@ -476,6 +476,28 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm e2e:nothing-invisible --base-url http://127.0.0.1:3010 --negative
 
+      # THE WORLD NEVER MOVES UNLESS THE USER MOVED IT — the one founder law
+      # with no instrument until now. It has been broken expensively before:
+      # orbs used to ORBIT, the whole ground turning forever with nobody
+      # touching it, and it took a ruling to take out.
+      #
+      # THE GROUND GOES UNWATCHED HERE AND THE RUN SAYS SO. The exact read is
+      # the loop's own ball positions behind VITE_SHOW_INTERNAL, which this
+      # build does not set; the canvas cannot answer instead, because on dim
+      # orbs it cannot tell one that MOVED from one that DIMMED. So what runs
+      # in CI is the chrome half. Closing the rest means a second web build
+      # here or internals on staging — a decision about how the product is
+      # built, left to be taken deliberately rather than smuggled in by a
+      # gate. Verified locally against a build with the flag on: the designed
+      # float travels 5px of the 20 it is allowed.
+      - name: The world holds still when nobody touches it
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:holds-still --base-url http://127.0.0.1:3010
+
+      - name: A world that drifts is found
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:holds-still --base-url http://127.0.0.1:3010 --negative
+
       # THE CHARACTER IS ONE SIZE EVERYWHERE. It used to be sized from the
       # viewport and then shrunk again into whatever room headquarters had
       # left — five different sizes across six screens, 84px to 150px.
