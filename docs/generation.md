@@ -509,6 +509,28 @@ speaks in its creator's preferred locale until groups carry their own.
 
 ---
 
+## When the model fails
+
+Two absences, told apart at the transport and never conflated again
+(2026-08-31; before this, both were recorded as the safe verdict — a failed
+extraction became "this capture teaches nothing" forever, and a failed judge
+minted a duplicate signal):
+
+- **The model declined** — a safety block, a content filter. Terminal:
+  retrying the same material would be refused again, so callers keep their
+  safe postures (extraction: no candidates; the judges: independent).
+- **The road failed** — timeout, truncation, malformed envelope. The task
+  throws, the job attempt fails, and the queue retries up to its
+  `max_attempts`; an exhausted job parks as `failed`, visible and
+  re-runnable. Derivation is safe to retry by construction: evidence is
+  unique per (signal, inspiration), and a re-extracted statement lands in
+  the dedupe band of anything the earlier attempt already minted.
+
+Whole-artifact synthesis and declaration routing throw on **both** absences
+— an artifact must never record a decision the model did not make.
+
+---
+
 ## How time is applied
 
 **Evidence is dated by the capture that witnesses it** — `inspirations

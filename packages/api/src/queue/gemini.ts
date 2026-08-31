@@ -89,7 +89,11 @@ import {
   formatSafeGeminiError,
   safeGeminiErrorDetails,
 } from "../lib/gemini-http.js";
-import { DeclarationNotConsideredError } from "../lib/model-provider.js";
+import {
+  DeclarationNotConsideredError,
+  MODEL_DECLINED,
+  ModelDidNotAnswerError,
+} from "../lib/model-provider.js";
 import type {
   DeclarationRoute,
   DeclarationRouteInput,
@@ -295,7 +299,7 @@ export function buildGenerateContentUrl(): string {
 async function callGemini(
   request: GenerateContentRequest,
   label: string,
-): Promise<unknown | null> {
+): Promise<unknown | null | typeof MODEL_DECLINED> {
   const apiKey = getGeminiApiKey();
 
   const response = await fetchModelWithTimeout(fetch, buildGenerateContentUrl(), {
@@ -333,8 +337,11 @@ async function callGemini(
 
   const blockReason = envelope.data.promptFeedback?.blockReason ?? null;
   if (blockReason) {
+    /* a considered refusal, not a road failure — terminal, so callers keep
+       their safe postures instead of retrying material that will be refused
+       again */
     console.warn("[gemini] prompt blocked", { label, blockReason });
-    return null;
+    return MODEL_DECLINED;
   }
 
   const text = envelope.data.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -575,7 +582,14 @@ export async function extractSignalCandidates(
   if (!hasMaterial) return { statements: [] };
 
   const payload = await callGemini(buildSignalExtractionRequest(input), "signal extraction");
-  if (payload === null) return { statements: [] };
+  /* a considered refusal is terminal — nothing to learn, and a retry would
+     be refused again */
+  if (payload === MODEL_DECLINED) return { statements: [] };
+  /* null is the transport saying it never got a usable answer — a different
+     fact from a valid answer with zero statements. Returning [] here marked
+     the capture as derived-with-nothing forever; throwing fails the attempt
+     and the queue retries. */
+  if (payload === null) throw new ModelDidNotAnswerError("signal extraction");
   return parseSignalCandidates(payload);
 }
 
@@ -671,7 +685,13 @@ export async function judgeSignalMatch(
     buildSignalMatchJudgementRequest(input),
     "signal match judgement",
   );
-  if (payload === null) return { relation: "independent" };
+  /* a refusal is terminal: no verdict exists and none ever will, and
+     "independent" is the one answer that never invents anything */
+  if (payload === MODEL_DECLINED) return { relation: "independent" };
+  /* "independent" on a ROAD failure minted a duplicate signal every time
+     the provider had a bad hour — pollution nothing revisits. The attempt
+     fails and retries instead. */
+  if (payload === null) throw new ModelDidNotAnswerError("signal match judgement");
   return parseSignalMatchJudgement(payload);
 }
 
@@ -973,11 +993,13 @@ export async function synthesizeTopOfMind(
     buildTopOfMindSynthesisRequest(input),
     "top-of-mind synthesis",
   );
-  if (payload === null) {
-    // Deliberately loud. An unusable synthesis response must not be written
-    // down as "nothing changed" — a refresh that records a decision it did
-    // not make is exactly the silent failure the versioned artifact exists
-    // to prevent. Let the queue retry, then let the job fail visibly.
+  if (payload === null || payload === MODEL_DECLINED) {
+    // Deliberately loud, for BOTH absences. An unusable synthesis response
+    // must not be written down as "nothing changed" — a refresh that records
+    // a decision it did not make is exactly the silent failure the versioned
+    // artifact exists to prevent. Let the queue retry, then let the job fail
+    // visibly. (A declined whole-artifact synthesis is bizarre enough that
+    // visible failure is the only honest record of it, too.)
     throw new Error("Gemini top-of-mind synthesis returned no usable artifact");
   }
   return parseTopOfMindSynthesis(payload);
@@ -1111,7 +1133,8 @@ export async function distillPrinciples(
   input: DistillPrinciplesInput,
 ): Promise<DistillPrinciplesResult> {
   const payload = await callGemini(buildPrincipleDistillRequest(input), "principle distillation");
-  if (payload === null) return { candidates: [] };
+  if (payload === MODEL_DECLINED) return { candidates: [] };
+  if (payload === null) throw new ModelDidNotAnswerError("principle distillation");
   return parseDistilledPrinciples(payload);
 }
 
@@ -1179,7 +1202,8 @@ export async function judgePrincipleRelation(
   input: PrincipleRelationInput,
 ): Promise<PrincipleRelation> {
   const payload = await callGemini(buildPrincipleRelationRequest(input), "principle relation");
-  if (payload === null) return { relation: "independent" };
+  if (payload === MODEL_DECLINED) return { relation: "independent" };
+  if (payload === null) throw new ModelDidNotAnswerError("principle relation judgement");
   return parsePrincipleRelation(payload);
 }
 
@@ -1253,7 +1277,7 @@ export async function routeDeclaration(input: DeclarationRouteInput): Promise<De
      later: it produced a verdict nobody reached. The caller decides what to
      say about an absent judge; this function's job is only to not invent
      one. */
-  if (payload === null) {
+  if (payload === null || payload === MODEL_DECLINED) {
     throw new DeclarationNotConsideredError(
       "declaration routing returned no usable verdict",
     );

@@ -34,7 +34,12 @@ import {
   parseSignalMatchJudgement,
   parseTopOfMindSynthesis,
 } from "../queue/gemini.js";
-import { DeclarationNotConsideredError, type ModelProvider } from "./model-provider.js";
+import {
+  DeclarationNotConsideredError,
+  MODEL_DECLINED,
+  ModelDidNotAnswerError,
+  type ModelProvider,
+} from "./model-provider.js";
 import {
   callOpenRouter,
   OPENROUTER_GENERATION_MODEL,
@@ -147,7 +152,8 @@ export function createOpenRouterModelProvider(): ModelProvider {
         "WAKA_MODEL_EXTRACT",
         "signal_candidates",
       );
-      if (payload === null) return { statements: [] };
+      if (payload === MODEL_DECLINED) return { statements: [] };
+      if (payload === null) throw new ModelDidNotAnswerError("signal extraction");
       return parseSignalCandidates(payload);
     },
     async judgeSignalMatch(input) {
@@ -157,7 +163,8 @@ export function createOpenRouterModelProvider(): ModelProvider {
         "WAKA_MODEL_JUDGE",
         "signal_match",
       );
-      if (payload === null) return { relation: "independent" };
+      if (payload === MODEL_DECLINED) return { relation: "independent" };
+      if (payload === null) throw new ModelDidNotAnswerError("signal match judgement");
       return parseSignalMatchJudgement(payload);
     },
     async synthesizeTopOfMind(input) {
@@ -167,7 +174,7 @@ export function createOpenRouterModelProvider(): ModelProvider {
         "WAKA_MODEL_SYNTHESIZE",
         "top_of_mind",
       );
-      if (payload === null) {
+      if (payload === null || payload === MODEL_DECLINED) {
         /* same loudness as the incumbent: an unusable synthesis must not be
            recorded as "nothing changed" */
         throw new Error("OpenRouter top-of-mind synthesis returned no usable artifact");
@@ -181,7 +188,8 @@ export function createOpenRouterModelProvider(): ModelProvider {
         "WAKA_MODEL_PRINCIPLES",
         "principles",
       );
-      if (payload === null) return { candidates: [] };
+      if (payload === MODEL_DECLINED) return { candidates: [] };
+      if (payload === null) throw new ModelDidNotAnswerError("principle distillation");
       return parseDistilledPrinciples(payload);
     },
     async judgePrincipleRelation(input) {
@@ -191,7 +199,8 @@ export function createOpenRouterModelProvider(): ModelProvider {
         "WAKA_MODEL_PRINCIPLE_JUDGE",
         "principle_relation",
       );
-      if (payload === null) return { relation: "independent" };
+      if (payload === MODEL_DECLINED) return { relation: "independent" };
+      if (payload === null) throw new ModelDidNotAnswerError("principle relation judgement");
       return parsePrincipleRelation(payload);
     },
     async routeDeclaration(input) {
@@ -201,7 +210,7 @@ export function createOpenRouterModelProvider(): ModelProvider {
         "WAKA_MODEL_ROUTE",
         "declaration_route",
       );
-      if (payload === null) {
+      if (payload === null || payload === MODEL_DECLINED) {
         throw new DeclarationNotConsideredError(
           "declaration routing returned no usable verdict",
         );
