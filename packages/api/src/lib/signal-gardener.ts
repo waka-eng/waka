@@ -38,7 +38,6 @@ import {
   signalDuplicates,
   signalContradictions,
   signalEmbeddings,
-  signalEvidence,
   signals,
 } from "../db/index.js";
 import { recordContradiction } from "./contested-pairs.js";

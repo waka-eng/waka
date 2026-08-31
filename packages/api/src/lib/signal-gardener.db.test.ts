@@ -80,7 +80,7 @@ function scriptedJudge(verdict: SignalMatchJudgement["relation"]): {
     calls,
     provider: {
       name: "scripted",
-      async judgeSignalMatch(input) {
+      async judgeSignalMatch(input: { candidateStatement: string; existingStatement: string }) {
         calls.push({ a: input.candidateStatement, b: input.existingStatement });
         return { relation: verdict };
       },
