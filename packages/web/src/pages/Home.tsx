@@ -745,22 +745,44 @@ function markPassages(
  * invented wall beside a real one is the same class of mistake as mixing
  * invented memories into a real archive, and it is not made twice.
  */
-async function loadAgentWalls(): Promise<AgentBundle[]> {
+interface AgentRosterEntry {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+/**
+ * IDENTITY IS EAGER; MEMORY IS ON APPROACH. The roster — which agent walls
+ * exist, their names, their columns — is one cheap profiles call at mount.
+ * Each wall's actual memory (its own inspirations, signals, top of mind)
+ * loads the moment travel toward it begins, the way a room's field always
+ * has. The old shape fetched EVERY agent's full stack before first paint —
+ * potentially thousands of rows for walls nobody visits that day (founder,
+ * 2026-08-30: "separate pages to make this more efficient").
+ */
+async function loadAgentRoster(): Promise<{
+  roster: AgentRosterEntry[];
+  /** dev fixture only: mock walls arrive with their bundles pre-loaded */
+  mockBundles: AgentBundle[] | null;
+}> {
   const real = await fetchProfiles()
     .then((rows) => rows.filter((p) => p.type === "agent"))
     .catch(() => []);
   if (real.length > 0) {
-    /* ITS OWN MEMORY, NOT A VIEW OF MINE.
-       Every layer endpoint takes `?profile=`, and a human-profile session is
-       admin over every profile in its account — so an agent's wall is built
-       from the agent's OWN inspirations, its OWN signals and its OWN top of mind.
-       The database has kept them separate all along; nothing is merged with
-       the owner's, and a wall whose fetch fails stands empty rather than
-       borrowing anything to fill itself. */
-    return Promise.all(real.map(loadAgentBundle));
+    return {
+      roster: real.map((p) => ({ id: p.id, name: p.name, createdAt: p.createdAt })),
+      mockBundles: null,
+    };
   }
-  if (!MOCK_AGENTS) return [];
-  return MOCK_AGENT_BUNDLES;
+  if (!MOCK_AGENTS) return { roster: [], mockBundles: null };
+  return {
+    roster: MOCK_AGENT_BUNDLES.map((b) => ({
+      id: b.agent.id,
+      name: b.agent.name,
+      createdAt: b.agent.createdAt,
+    })),
+    mockBundles: MOCK_AGENT_BUNDLES,
+  };
 }
 
 /**
@@ -1765,6 +1787,8 @@ function HomeExperience(): JSX.Element {
    * AND the agents' kept memories together, and it is built once, whole.
    */
   const [agents, setAgents] = useState<AgentBundle[] | null>(null);
+  /** The axis of agent walls — identities only; memories load on approach. */
+  const [agentRoster, setAgentRoster] = useState<AgentRosterEntry[] | null>(null);
   /** Rooms that have woken this session: their words exist, whole. */
   const [wokenGroups, setWokenGroups] = useState<ReadonlySet<string>>(() => new Set());
   /* the ref's change signal: the ball list is rebuilt when a room's ground lands */
@@ -2051,8 +2075,8 @@ function HomeExperience(): JSX.Element {
    */
   const walls = useMemo<Space[]>(() => {
     const out: Space[] = [];
-    (agents ?? []).forEach((a, i) => {
-      out.push({ kind: "agent", id: a.agent.id, name: a.agent.name, col: -(i + 1) });
+    (agentRoster ?? []).forEach((a, i) => {
+      out.push({ kind: "agent", id: a.id, name: a.name, col: -(i + 1) });
     });
     out.reverse(); /* leftmost first, so the array is the axis in order */
     out.push({ kind: "self", id: "", name: SELF_WALL_NAME, col: 0 });
@@ -2060,7 +2084,7 @@ function HomeExperience(): JSX.Element {
       out.push({ kind: "group", id: g.id, name: g.name, col: i + 1 });
     });
     return out;
-  }, [agents, groups]);
+  }, [agentRoster, groups]);
   const wallsRef = useRef<Space[]>([]);
   wallsRef.current = walls;
   const agentsRef = useRef<AgentBundle[]>([]);
@@ -2253,28 +2277,55 @@ function HomeExperience(): JSX.Element {
       boundary (observed as a wall that says six and lights none). Travel is
       when the refresh is ASKED for; arrival is when it may land. */
   const pendingAgentBundlesRef = useRef<Map<string, AgentBundle>>(new Map());
-  const refreshAgentWall = useCallback(
+  /** Whether an agent wall's FIRST load is underway or has failed. Success
+      needs no entry here — the bundle's presence in `agents` is readiness. */
+  const agentFirstLoadRef = useRef<Map<string, "pending" | "failed">>(new Map());
+  const loadAgentWall = useCallback(
     (agentId: string) => {
-      const a = (agents ?? []).find((x) => x.agent.id === agentId);
-      if (!a || agentRefreshBusyRef.current.has(agentId)) return;
-      const last = agentRefreshedAtRef.current.get(agentId) ?? 0;
-      if (Date.now() - last < 60_000) return;
-      agentRefreshedAtRef.current.set(agentId, Date.now());
+      const entry = (agentRoster ?? []).find((r) => r.id === agentId);
+      if (!entry || agentRefreshBusyRef.current.has(agentId)) return;
+      if (pendingAgentBundlesRef.current.has(agentId)) return;
+      const loaded = (agents ?? []).some((a) => a.agent.id === agentId);
+      if (loaded) {
+        /* REFRESH posture: strict, throttled, keep-last-good on failure. */
+        const last = agentRefreshedAtRef.current.get(agentId) ?? 0;
+        if (Date.now() - last < 60_000) return;
+        agentRefreshedAtRef.current.set(agentId, Date.now());
+        agentRefreshBusyRef.current.add(agentId);
+        void loadAgentBundle(entry, { strict: true })
+          .then((fresh) => {
+            pendingAgentBundlesRef.current.set(agentId, fresh);
+          })
+          .catch(() => {
+            /* keep the last good ground, and let the very next approach
+               retry rather than waiting out the throttle window */
+            agentRefreshedAtRef.current.delete(agentId);
+          })
+          .finally(() => {
+            agentRefreshBusyRef.current.delete(agentId);
+          });
+        return;
+      }
+      /* FIRST-LOAD posture: nothing is held yet, so failure degrades to an
+         honestly blank wall (wake-gated, like a room's) and the next
+         approach tries again. */
+      if (agentFirstLoadRef.current.get(agentId) === "pending") return;
+      agentFirstLoadRef.current.set(agentId, "pending");
       agentRefreshBusyRef.current.add(agentId);
-      void loadAgentBundle(a.agent, { strict: true })
+      void loadAgentBundle(entry)
         .then((fresh) => {
+          agentFirstLoadRef.current.delete(agentId);
+          agentRefreshedAtRef.current.set(agentId, Date.now());
           pendingAgentBundlesRef.current.set(agentId, fresh);
         })
         .catch(() => {
-          /* keep the last good ground, and let the very next approach
-             retry rather than waiting out the throttle window */
-          agentRefreshedAtRef.current.delete(agentId);
+          agentFirstLoadRef.current.set(agentId, "failed");
         })
         .finally(() => {
           agentRefreshBusyRef.current.delete(agentId);
         });
     },
-    [agents],
+    [agentRoster, agents],
   );
 
   /**
@@ -2286,9 +2337,9 @@ function HomeExperience(): JSX.Element {
   const loadWall = useCallback(
     (w: Space) => {
       if (w.kind === "group") loadGroup(w.id);
-      if (w.kind === "agent") refreshAgentWall(w.id);
+      if (w.kind === "agent") loadAgentWall(w.id);
     },
-    [loadGroup, refreshAgentWall],
+    [loadGroup, loadAgentWall],
   );
   const loadWallRef = useRef(loadWall);
   loadWallRef.current = loadWall;
@@ -2303,7 +2354,15 @@ function HomeExperience(): JSX.Element {
     if (pending.size === 0) return;
     const fresh = new Map(pending);
     pending.clear();
-    setAgents((prev) => (prev ?? []).map((a) => fresh.get(a.agent.id) ?? a));
+    setAgents((prev) => {
+      const replaced = (prev ?? []).map((a) => {
+        const f = fresh.get(a.agent.id);
+        fresh.delete(a.agent.id);
+        return f ?? a;
+      });
+      /* anything left is a FIRST load — the wall's memory arriving at all */
+      return [...replaced, ...fresh.values()];
+    });
   }, [atWall]);
 
   const pushArrived = useCallback((w: Space) => {
@@ -2530,16 +2589,20 @@ function HomeExperience(): JSX.Element {
       .catch(() => {
         /* no board — the world still pours, and headquarters says so */
       });
-    /* THE WALLS TO THE LEFT. Today this is the fixture; when the endpoints
-       land it is the same four calls behind the same shape, and nothing that
-       reads it changes. An outright failure means no agents, which is exactly
-       what a person with no agents sees. */
-    loadAgentWalls()
-      .then((rows) => {
-        if (!dead) setAgents(rows);
+    /* THE WALLS TO THE LEFT — identities now, memories on approach. An
+       outright failure means no agents, which is exactly what a person with
+       no agents sees. */
+    loadAgentRoster()
+      .then(({ roster, mockBundles }) => {
+        if (dead) return;
+        setAgentRoster(roster);
+        setAgents(mockBundles ?? []);
       })
       .catch(() => {
-        if (!dead) setAgents([]);
+        if (!dead) {
+          setAgentRoster([]);
+          setAgents([]);
+        }
       });
     /* THE ROOMS — the columns to the RIGHT.
        A room is a WALL OF STATEMENTS. Members share signals, never inspirations,
@@ -2783,7 +2846,18 @@ function HomeExperience(): JSX.Element {
           setInspirations(field.inspirations);
           setFieldBeyond(beyondOf(field));
         }),
-        loadAgentWalls().then((rows) => setAgents(rows)),
+        loadAgentRoster().then(({ roster }) => setAgentRoster(roster)),
+        /* only walls whose memory is already held refresh; the rest load on
+           approach as ever. Strict + at rest, so a failure changes nothing. */
+        ...agentsRef.current.map((a) =>
+          loadAgentBundle(a.agent, { strict: true })
+            .then((fresh) => {
+              setAgents((prev) =>
+                (prev ?? []).map((x) => (x.agent.id === fresh.agent.id ? fresh : x)),
+              );
+            })
+            .catch(() => undefined),
+        ),
         readSkyRef.current(),
         /* LAYER 3 WAS THE ONE LEFT OUT, and it is the layer that changes most.
            This handler exists to catch the world up after an absence and it
@@ -4816,6 +4890,12 @@ function HomeExperience(): JSX.Element {
           groupVisitedRef.current.add(w.id);
           pushWokenRef.current(w.id);
         }
+      } else if (w.kind === "agent") {
+        /* an agent's memory now loads on approach, so its wall wakes the way
+           a room's does: blank until its own bundle has landed */
+        const has = agentsRef.current.some((a) => a.agent.id === w.id);
+        trip.awaitingWake = !has;
+        if (!has) return;
       } else {
         trip.awaitingWake = false;
       }
@@ -8045,6 +8125,11 @@ function HomeExperience(): JSX.Element {
      * clears the flag itself, and `groupVisitedRef` keeps the wake to once.
      */
     else if (curWall().kind === "group") trip.awaitingWake = true;
+    else if (
+      curWall().kind === "agent" &&
+      !agentsRef.current.some((a) => a.agent.id === curWall().id)
+    )
+      trip.awaitingWake = true;
     measure();
     if (view.reduced) settleInstantly();
     else if (carryRef.current) {
@@ -11205,6 +11290,12 @@ function HomeExperience(): JSX.Element {
     setAgentTrouble(null);
     createProfile(name)
       .then((p) => {
+        /* the roster gains the wall; the empty bundle IS a newborn's memory,
+           so it counts as loaded rather than waiting on a fetch */
+        setAgentRoster((prev) => [
+          ...(prev ?? []),
+          { id: p.id, name: p.name, createdAt: p.createdAt ?? "" },
+        ]);
         setAgents((prev) => [
           ...(prev ?? []),
           {
@@ -11745,7 +11836,11 @@ function HomeExperience(): JSX.Element {
             /* the wall you are standing on is the one the dial winds; every
                other wall shows what it holds NOW */
             const c = here ? chrome : wallChromeNow.get(key) ?? null;
-            const ready = w.kind !== "group" || wokenGroups.has(w.id);
+            const ready =
+              w.kind === "self" ||
+              (w.kind === "group"
+                ? wokenGroups.has(w.id)
+                : (agents ?? []).some((a) => a.agent.id === w.id));
             return (
               <div
                 key={key}
