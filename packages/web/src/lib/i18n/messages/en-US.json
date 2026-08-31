@@ -25,7 +25,6 @@
   "loginPasswordMin": "Password must be at least {count} characters",
   "loginNetworkError": "We couldn’t reach the server. Check your connection and try again.",
   "loginInvalidCredentials": "Incorrect email or password.",
-  "loginNoResetYet": "WAKA cannot reset a password yet. If this address is also your Google address, Continue with Google opens the same archive.",
   "loginUnavailable": "Sign-in is not available yet. Create an account instead.",
   "loginSigningIn": "Signing in…",
   "loginCreateAccount": "Create account",
@@ -416,5 +415,15 @@
   "worldTheseAreOne": "these are one",
   "worldMergeExplain": "the elder keeps the words; nothing is deleted, and the other keeps its history",
   "worldYesMerge": "yes, merge them",
-  "worldKeepApart": "keep them apart"
+  "worldKeepApart": "keep them apart",
+  "loginForgot": "Forgot your password? A letter can open the way back.",
+  "resetTitle": "The way back in.",
+  "resetExplain": "Say which address keeps your memory; a letter will follow.",
+  "resetExplainNew": "The letter brought you here. Choose a new password.",
+  "resetSend": "send the letter",
+  "resetSent": "If that address keeps a memory here, a letter is on its way. It opens the door for half an hour.",
+  "resetNewPassword": "New password",
+  "resetConfirm": "open the door",
+  "resetSpent": "That letter has expired or was already used. Ask for a new one.",
+  "resetBack": "back to sign in"
 }

@@ -233,6 +233,15 @@ export default $config({
       NODE_ENV: "production",
       WAKA_VAULT_PREFIX: "vault/",
       WAKA_VAULT_REGION: AWS_REGION,
+      /*
+       * The post office's return address (lib/email.ts; reset letters are
+       * its first customer). Deliberately a plain deploy-time env rather
+       * than an sst.Secret: an address is not a secret, and an empty value
+       * must not block a deploy — unset, letters are printed to the
+       * function's log instead of posted, which is the same honest posture
+       * local dev has. Set it once the sender identity is verified in SES.
+       */
+      ...(process.env.SES_EMAIL_SENDER ? { SES_EMAIL_SENDER: process.env.SES_EMAIL_SENDER } : {}),
       ...(publicApiUrl ? { PUBLIC_API_URL: publicApiUrl } : {}),
       ...(publicWebUrl ? { PUBLIC_WEB_URL: publicWebUrl } : {}),
       ...(isDevelopmentDomain
@@ -330,6 +339,12 @@ export default $config({
         {
           actions: ["lambda:InvokeFunction"],
           resources: [backgroundWorker.arn],
+        },
+        // The reset letter (routes/auth-reset.ts). Send-only: the API never
+        // reads mailboxes, and the sender identity is pinned by env.
+        {
+          actions: ["ses:SendEmail"],
+          resources: ["*"],
         },
       ],
       // Group readings are bounded but intentionally synthesize across

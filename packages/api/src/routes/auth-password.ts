@@ -365,17 +365,12 @@ export async function loginHandler(c: Context<AuthEnv>): Promise<Response> {
     c.header("Retry-After", String(verdict.retryAfterSeconds));
     return c.json(
       {
-        /* NO "or reset your password" HERE UNTIL THERE IS ONE.
-           This sentence used to offer it. There is no reset route, no token
-           table and no mail transport anywhere in this repo — so the one
-           person guaranteed to read this line, someone locked out and
-           anxious, was sent looking for a door that does not exist. Waiting
-           is genuinely the only thing that works right now, and saying only
-           that is kinder than naming an escape they cannot take.
-           `docs/goals/everything-in-the-world.md` Phase 4 owns building the real
-           one; this
-           line changes back in the same diff that makes it true. */
-        error: "Too many sign-in attempts. Wait a few minutes and try again.",
+        /* This sentence names the reset door again, in the same diff that
+           built it (routes/auth-reset.ts, 2026-08-31) — exactly as the note
+           that removed it promised. The one person guaranteed to read this
+           line is locked out and anxious; now both things it says are true. */
+        error:
+          "Too many sign-in attempts. Wait a few minutes and try again, or reset your password.",
       },
       429,
     );

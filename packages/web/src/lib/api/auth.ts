@@ -131,6 +131,38 @@ export async function login(input: LoginRequest): Promise<AuthSessionResponse> {
 }
 
 // ---------------------------------------------------------------------------
+// Password reset — the way back in
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /auth/reset/request
+ *
+ * Asks for a reset letter. Answers 200 whether or not the address keeps a
+ * memory here — the response is deliberately not an oracle, so the UI can
+ * only ever say "if that address is known, a letter is on its way".
+ */
+export async function requestPasswordReset(email: string): Promise<void> {
+  await postJson(apiPath("/auth/reset/request"), { email }, "The letter could not be asked for");
+}
+
+/**
+ * POST /auth/reset/confirm
+ *
+ * Spends the letter's token on a new password. On success the server has
+ * signed the person in — same response shape as login, cookie already set.
+ */
+export async function confirmPasswordReset(input: {
+  token: string;
+  password: string;
+}): Promise<AuthSessionResponse> {
+  return postJson<AuthSessionResponse>(
+    apiPath("/auth/reset/confirm"),
+    input,
+    "That letter has expired or was already used",
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Logout
 // ---------------------------------------------------------------------------
 

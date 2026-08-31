@@ -65,6 +65,7 @@ import {
   profileHandler,
 } from "./auth-me.js";
 import { loginHandler, signupHandler } from "./auth-password.js";
+import { resetConfirmHandler, resetRequestHandler } from "./auth-reset.js";
 
 /*
  * Re-exported so `@waka/api/routes/auth` — a declared entry point in this
@@ -148,6 +149,8 @@ authRoutes.route("/cli", cliAuthRoutes);
  */
 authRoutes.post("/signup", signupHandler);
 authRoutes.post("/login", loginHandler);
+authRoutes.post("/reset/request", resetRequestHandler);
+authRoutes.post("/reset/confirm", resetConfirmHandler);
 
 /* A session, acting as itself: */
 authRoutes.get("/me", requireAuth, meHandler);

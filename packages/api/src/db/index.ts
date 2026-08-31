@@ -21,6 +21,7 @@ export * from "./schema-accounts";
 export * from "./schema-profiles";
 export * from "./schema-principles";
 export * from "./schema-login-failures";
+export * from "./schema-password-resets";
 export * from "./schema-sessions";
 export * from "./schema-consultations";
 export * from "./schema-statement-chains";

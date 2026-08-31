@@ -158,6 +158,14 @@ const REGISTER: Record<string, string> = {
   resolveSignalDuplicate:
     "RULED: both answers are standing by design; a merge retires without deleting, " +
     "so the record itself is the way back",
+
+  // the way back in (2026-08-31): recovery verbs, one-way on purpose
+  requestPasswordReset:
+    "RULED: the way back from asking is the letter itself — ignore it and " +
+    "nothing changes; it expires in half an hour and was never an obligation",
+  confirmPasswordReset:
+    "RULED: a reset's inverse is another reset — the old password is gone " +
+    "by design, because the person who lost it is who this door exists for",
 };
 
 describe("every verb has a way back, or a reason it does not", () => {

@@ -32,7 +32,7 @@ import { RequireAuth } from "./components/RequireAuth";
 import { SurfaceBoundary } from "./components/SurfaceBoundary";
 import { AuthProvider } from "./lib/auth-context";
 import { installPreloadRecovery } from "./lib/preload-recovery";
-import LoginPage from "./pages/Login";
+import LoginPage, { ResetPage } from "./pages/Login";
 import OnboardingPage from "./pages/Onboarding";
 import ProfilePage from "./pages/Profile";
 import PublicProfilePage from "./pages/PublicProfile";
@@ -138,6 +138,7 @@ ReactDOM.createRoot(root).render(
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/reset" element={<ResetPage />} />
           <Route path="/:handle" element={<PublicProfilePage />} />
           <Route
             path="/onboarding"

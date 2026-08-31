@@ -47,10 +47,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { GoogleSignInButton, oauthErrorMessageKey } from "../components/GoogleSignIn";
-import { ApiError } from "../lib/api";
+import { ApiError, confirmPasswordReset, requestPasswordReset } from "../lib/api";
 import type { LoginFieldErrors, SignupFieldErrors } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { formatMessage, readStoredLocale, supportedLocales, t, writeStoredLocale } from "../lib/locales";
@@ -466,7 +466,9 @@ export function LoginForm(): JSX.Element {
               unavailable endpoint is not a person who has forgotten
               something, and offering them a way back in would be noise. */}
           {wrongCredentials ? (
-            <span className="login-recover">{t(locale, "loginNoResetYet")}</span>
+            <span className="login-recover">
+              <Link to="/reset">{t(locale, "loginForgot")}</Link>
+            </span>
           ) : null}
         </div>
       ) : null}
@@ -521,6 +523,14 @@ export function LoginForm(): JSX.Element {
       <button className="btn-primary btn-doorway" type="submit" disabled={submitting}>
         {submitting ? t(locale, "loginSigningIn") : t(locale, "loginTab")}
       </button>
+
+      {/* The way back, standing on the door itself — not only after a
+          failure. The audit that commissioned the reset flow found the
+          absence of this link on the one screen a locked-out person is
+          guaranteed to be staring at (2026-08-31). */}
+      <p className="login-recover login-forgot">
+        <Link to="/reset">{t(locale, "loginForgot")}</Link>
+      </p>
     </form>
   );
 }
@@ -761,6 +771,156 @@ export default function LoginPage(): JSX.Element {
         <OrDivider locale={locale} />
 
         <GoogleSignInButton locale={locale} returnTo={resolveRedirect(location)} />
+      </section>
+    </main>
+  );
+}
+
+
+// ---------------------------------------------------------------------------
+// The way back in
+// ---------------------------------------------------------------------------
+
+/**
+ * /reset — request a letter, or spend one.
+ *
+ * One page, two stances, told apart by the URL: with no `?token` it asks
+ * which address keeps the memory and posts the letter; with one, it asks for
+ * the new password and spends the token. The request answer is deliberately
+ * not an oracle — the sent state says "if that address keeps a memory here"
+ * whatever the server knew — and a spent or expired token gets one message,
+ * the same one the server gives every bad token.
+ *
+ * On success the server has already signed the person in (cookie set), so
+ * the landing is a hard navigation to `/`: the app boots, `/auth/me`
+ * confirms, and they are standing in their memory again.
+ */
+export function ResetPage(): JSX.Element {
+  const locale = readStoredLocale();
+  const [token] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.search).get("token");
+  });
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [sent, setSent] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  async function handleRequest(e: FormEvent<HTMLFormElement>): Promise<void> {
+    e.preventDefault();
+    if (submitting) return;
+    const address = email.trim();
+    if (!address) {
+      setFormError(t(locale, "loginEmailRequired"));
+      return;
+    }
+    setSubmitting(true);
+    setFormError(null);
+    try {
+      await requestPasswordReset(address);
+      setSent(true);
+    } catch (err) {
+      setFormError(
+        err instanceof ApiError && err.status !== 0
+          ? err.message
+          : t(locale, "loginNetworkError"),
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleConfirm(e: FormEvent<HTMLFormElement>): Promise<void> {
+    e.preventDefault();
+    if (submitting || !token) return;
+    if (password.length < 8) {
+      setFormError(formatMessage(locale, "loginPasswordMin", { count: MIN_PASSWORD_LENGTH }));
+      return;
+    }
+    setSubmitting(true);
+    setFormError(null);
+    try {
+      await confirmPasswordReset({ token, password });
+      window.location.replace("/");
+    } catch (err) {
+      setFormError(
+        err instanceof ApiError && err.status === 400
+          ? t(locale, "resetSpent")
+          : err instanceof ApiError && err.status !== 0
+            ? err.message
+            : t(locale, "loginNetworkError"),
+      );
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <main className="login-shell">
+      <section className="login-card" aria-labelledby="reset-title">
+        <p className="login-eyebrow">{t(locale, "loginEyebrow")}</p>
+        <h1 id="reset-title" className="login-title">
+          {t(locale, "resetTitle")}
+        </h1>
+        <p className="login-subtitle">
+          {token ? t(locale, "resetExplainNew") : t(locale, "resetExplain")}
+        </p>
+
+        {formError ? (
+          <div className="form-error" role="alert">
+            {formError}
+          </div>
+        ) : null}
+
+        {token ? (
+          <form className="login-form" onSubmit={handleConfirm} noValidate>
+            <label className="field">
+              <span className="field-label">{t(locale, "resetNewPassword")}</span>
+              <input
+                className="field-input"
+                type="password"
+                name="password"
+                autoComplete="new-password"
+                required
+                disabled={submitting}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </label>
+            <button className="btn-primary btn-doorway" type="submit" disabled={submitting}>
+              {t(locale, "resetConfirm")}
+            </button>
+          </form>
+        ) : sent ? (
+          <p className="login-subtitle" role="status">
+            {t(locale, "resetSent")}
+          </p>
+        ) : (
+          <form className="login-form" onSubmit={handleRequest} noValidate>
+            <label className="field">
+              <span className="field-label">{t(locale, "loginEmail")}</span>
+              <input
+                className="field-input"
+                type="email"
+                name="email"
+                autoComplete="email"
+                inputMode="email"
+                required
+                disabled={submitting}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </label>
+            <button className="btn-primary btn-doorway" type="submit" disabled={submitting}>
+              {t(locale, "resetSend")}
+            </button>
+          </form>
+        )}
+
+        <p className="login-recover login-forgot">
+          <Link to="/login">{t(locale, "resetBack")}</Link>
+        </p>
       </section>
     </main>
   );

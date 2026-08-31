@@ -25,7 +25,6 @@
   "loginPasswordMin": "비밀번호는 {count}자 이상이어야 해요",
   "loginNetworkError": "서버에 닿지 못했어요. 연결을 확인하고 다시 시도해 주세요.",
   "loginInvalidCredentials": "이메일 또는 비밀번호가 맞지 않아요.",
-  "loginNoResetYet": "WAKA는 아직 비밀번호를 재설정하지 못해요. 이 주소가 Google 주소이기도 하다면, Google로 계속하기를 누르면 같은 기록이 열려요.",
   "loginUnavailable": "아직 로그인이 안 돼요. 대신 계정을 만들어 주세요.",
   "loginSigningIn": "로그인하는 중…",
   "loginCreateAccount": "계정 만들기",
@@ -416,5 +415,15 @@
   "worldTheseAreOne": "이 둘은 하나예요",
   "worldMergeExplain": "먼저 온 문장이 말을 지켜요. 지워지는 건 없고, 다른 쪽도 제 기록을 그대로 가져요",
   "worldYesMerge": "네, 합칠게요",
-  "worldKeepApart": "따로 두기"
+  "worldKeepApart": "따로 두기",
+  "loginForgot": "비밀번호를 잊으셨나요? 편지가 돌아갈 길을 열어 줘요.",
+  "resetTitle": "돌아가는 길.",
+  "resetExplain": "기록을 지키는 주소를 알려 주세요. 편지가 갈 거예요.",
+  "resetExplainNew": "편지를 따라 여기까지 오셨네요. 새 비밀번호를 정해 주세요.",
+  "resetSend": "편지 보내기",
+  "resetSent": "그 주소가 여기 기록을 지키고 있다면, 편지가 가고 있어요. 문은 삼십 분 동안 열려 있어요.",
+  "resetNewPassword": "새 비밀번호",
+  "resetConfirm": "문 열기",
+  "resetSpent": "그 편지는 시간이 지났거나 이미 쓰였어요. 새로 요청해 주세요.",
+  "resetBack": "로그인으로 돌아가기"
 }
