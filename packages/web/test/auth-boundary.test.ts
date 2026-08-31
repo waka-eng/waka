@@ -306,9 +306,10 @@ describe("auth boundary", () => {
     expect(document.activeElement).toBe(container.querySelector("#login-tab-login"));
   });
 
-  it("offers no language selector and speaks English on the signup shell", async () => {
-    // The pre-submit language selector left with the second language
-    // (founder ruling, 2026-08-22: the product speaks English only).
+  it("offers the language choice at the door — English and Korean", async () => {
+    // The pre-submit selector is BACK (founder, 2026-08-31, reversing
+    // 2026-08-22): the choice drives what language the memory itself is
+    // written in, so it belongs before the first keep.
     vi.mocked(fetchCurrentViewer).mockResolvedValue(null);
 
     const container = await renderAuthRoutes({ initialPath: "/login" });
@@ -321,10 +322,16 @@ describe("auth boundary", () => {
 
     expect(container.textContent).toContain("Begin your archive.");
     expect(container.textContent).toContain("Continue with Google");
-    expect(container.querySelector("select.field-input")).toBeNull();
+    const selector = container.querySelector<HTMLSelectElement>(
+      'select[name="preferredLocale"]',
+    );
+    expect(selector).not.toBeNull();
+    expect(Array.from(selector!.options).map((o) => o.value)).toEqual(["en-US", "ko-KR"]);
+    expect(selector!.value).toBe("en-US");
+    expect(container.textContent).toContain("한국어");
   });
 
-  it("renders the standalone SignupForm without a language field", async () => {
+  it("renders the standalone SignupForm with the language field", async () => {
     vi.mocked(fetchCurrentViewer).mockResolvedValue(null);
 
     const container = await renderAuthRoutes({
@@ -332,7 +339,7 @@ describe("auth boundary", () => {
       loginElement: createElement(SignupForm),
     });
 
-    expect(container.querySelector("select.field-input")).toBeNull();
+    expect(container.querySelector('select[name="preferredLocale"]')).not.toBeNull();
     expect(container.textContent).toContain("Create account");
   });
 

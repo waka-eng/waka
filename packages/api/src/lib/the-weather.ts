@@ -50,6 +50,8 @@ export const WEATHER_WINDOW_DAYS = 14;
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+export type ProseLocale = "en-US" | "ko-KR";
+
 const DAY_WORDS = [
   "zero",
   "one",
@@ -68,6 +70,26 @@ const DAY_WORDS = [
   "fourteen",
 ] as const;
 
+/* the native day words a Korean speaker actually says, out to the window's
+   own edge — the fortnight is fourteen, so the table is total */
+const KO_DAY_WORDS = [
+  "",
+  "",
+  "이틀",
+  "사흘",
+  "나흘",
+  "닷새",
+  "엿새",
+  "이레",
+  "여드레",
+  "아흐레",
+  "열흘",
+  "열하루",
+  "열이틀",
+  "열사흘",
+  "열나흘",
+] as const;
+
 /**
  * A count, exactly, as the record holds it. See the ruling in the header:
  * a telling that rounds its own rows off into "many" is a worse record than
@@ -77,14 +99,25 @@ export function exactCount(n: number): string {
   return String(n);
 }
 
-function exactTimes(n: number): string {
+function exactTimes(n: number, locale: ProseLocale = "en-US"): string {
+  if (locale === "ko-KR") {
+    if (n === 1) return "한 번";
+    if (n === 2) return "두 번";
+    return `${exactCount(n)}번`;
+  }
   if (n === 1) return "once";
   if (n === 2) return "twice";
   return `${exactCount(n)} times`;
 }
 
 /** "today", "yesterday", "two days ago" … — the day labels of the telling. */
-export function wordedDaysAgo(daysAgo: number): string {
+export function wordedDaysAgo(daysAgo: number, locale: ProseLocale = "en-US"): string {
+  if (locale === "ko-KR") {
+    if (daysAgo <= 0) return "오늘";
+    if (daysAgo === 1) return "어제";
+    const word = KO_DAY_WORDS[daysAgo];
+    return word ? `${word} 전` : `${daysAgo}일 전`;
+  }
   if (daysAgo <= 0) return "today";
   if (daysAgo === 1) return "yesterday";
   /* the window is a fortnight, so the table covers every label it can ever
@@ -151,12 +184,22 @@ interface WindowCounts {
  * nothing rather than "nothing happened" — absence of a row is absence of
  * a sentence.
  */
-function tellCounts(c: WindowCounts): WeatherSentence[] {
+/** "the sky held" is filtered out of the spoken line by identity, so the
+    phrase lives in exactly one place per language. */
+function skyHeldText(locale: ProseLocale): string {
+  return locale === "ko-KR" ? "하늘은 그대로였어요" : "the sky held";
+}
+
+function tellCounts(c: WindowCounts, locale: ProseLocale = "en-US"): WeatherSentence[] {
+  const ko = locale === "ko-KR";
   const out: WeatherSentence[] = [];
   if (c.kept > 0) {
     out.push({
-      text:
-        c.kept === 1
+      text: ko
+        ? c.kept === 1
+          ? "기억 하나를 간직했어요"
+          : `기억 ${exactCount(c.kept)}개를 간직했어요`
+        : c.kept === 1
           ? "you kept a memory"
           : `you kept ${exactCount(c.kept)} memories`,
       backing: "inspirations",
@@ -164,8 +207,11 @@ function tellCounts(c: WindowCounts): WeatherSentence[] {
   }
   if (c.minted > 0) {
     out.push({
-      text:
-        c.minted === 1
+      text: ko
+        ? c.minted === 1
+          ? "새로운 신호가 하나 생겼어요"
+          : `새로운 신호가 ${exactCount(c.minted)}개 생겼어요`
+        : c.minted === 1
           ? "a new signal was spoken"
           : `${exactCount(c.minted)} new signals were spoken`,
       backing: "signals",
@@ -173,8 +219,11 @@ function tellCounts(c: WindowCounts): WeatherSentence[] {
   }
   if (c.roots > 0) {
     out.push({
-      text:
-        c.roots === 1
+      text: ko
+        ? c.roots === 1
+          ? "신호 하나가 뒤에 선 기억을 하나 더 찾았어요"
+          : `당신의 신호들이 뒤에 선 기억을 ${exactCount(c.roots)}개 더 찾았어요`
+        : c.roots === 1
           ? "a signal found another memory behind it"
           : `your signals found ${exactCount(c.roots)} more memories behind them`,
       backing: "signal_evidence",
@@ -182,8 +231,11 @@ function tellCounts(c: WindowCounts): WeatherSentence[] {
   }
   if (c.refusals > 0) {
     out.push({
-      text:
-        c.refusals === 1
+      text: ko
+        ? c.refusals === 1
+          ? "후보 하나를 거절했어요 — 당신이 치워 둔 것과 너무 가까워서요"
+          : `후보 ${exactCount(c.refusals)}개를 거절했어요 — 당신이 치워 둔 것과 너무 가까워서요`
+        : c.refusals === 1
           ? "refused a candidate — too close to what you dismissed"
           : `refused ${exactCount(c.refusals)} candidates — too close to what you dismissed`,
       backing: "suppressions",
@@ -192,15 +244,23 @@ function tellCounts(c: WindowCounts): WeatherSentence[] {
   // The sky held: memories were read and no pattern moved. Only worth
   // saying when something was actually read — a quiet day is quiet.
   if (c.kept > 0 && c.minted === 0 && c.roots === 0 && c.refusals === 0) {
-    out.push({ text: "the sky held", backing: "inspirations" });
+    out.push({ text: skyHeldText(locale), backing: "inspirations" });
   }
   if (c.posterFirst > 0) {
-    out.push({ text: "your top of mind was written for the first time", backing: "top_of_minds" });
+    out.push({
+      text: ko
+        ? "당신의 톱 오브 마인드가 처음으로 쓰였어요"
+        : "your top of mind was written for the first time",
+      backing: "top_of_minds",
+    });
   }
   if (c.posterRewrites > 0) {
     out.push({
-      text:
-        c.posterRewrites === 1
+      text: ko
+        ? c.posterRewrites === 1
+          ? "당신의 톱 오브 마인드가 다시 쓰였어요"
+          : `당신의 톱 오브 마인드가 ${exactTimes(c.posterRewrites, locale)} 다시 쓰였어요`
+        : c.posterRewrites === 1
           ? "your top of mind was rewritten"
           : `your top of mind was rewritten ${exactTimes(c.posterRewrites)}`,
       backing: "top_of_minds",
@@ -208,17 +268,27 @@ function tellCounts(c: WindowCounts): WeatherSentence[] {
   }
   if (c.posterHeld > 0) {
     out.push({
-      text: "everything was read again, and your top of mind held",
+      text: ko
+        ? "모든 것을 다시 읽었고, 당신의 톱 오브 마인드는 그대로였어요"
+        : "everything was read again, and your top of mind held",
       backing: "top_of_minds",
     });
   }
   if (c.posterYourHand > 0) {
-    out.push({ text: "your top of mind took your own words", backing: "top_of_minds" });
+    out.push({
+      text: ko
+        ? "당신의 톱 오브 마인드가 당신의 말을 받아들였어요"
+        : "your top of mind took your own words",
+      backing: "top_of_minds",
+    });
   }
   if (c.consulted > 0) {
     out.push({
-      text:
-        c.consulted === 1
+      text: ko
+        ? c.consulted === 1
+          ? "당신의 기억이 참고되었어요"
+          : `당신의 기억이 ${exactTimes(c.consulted, locale)} 참고되었어요`
+        : c.consulted === 1
           ? "your memory was consulted"
           : `your memory was consulted ${exactTimes(c.consulted)}`,
       backing: "consultations",
@@ -362,9 +432,12 @@ export async function assembleTheWeather(
         consultation for it. This is what lets the companion be ASKED
         without the asking inflating its own "consulted" count. */
     includeAntechamber?: boolean;
+    /** the language the telling is spoken in — the profile's own */
+    locale?: ProseLocale;
   },
 ): Promise<TheWeather> {
   const now = input.now ?? new Date();
+  const locale = input.locale ?? "en-US";
   const windowStart = new Date(now.getTime() - WEATHER_WINDOW_DAYS * MS_PER_DAY);
   const stamps = await loadStamps(db, input.profileId, windowStart, now);
 
@@ -384,8 +457,8 @@ export async function assembleTheWeather(
     .sort(([a], [b]) => a - b)
     .map(([daysAgo, counts]) => ({
       daysAgo,
-      label: wordedDaysAgo(daysAgo),
-      sentences: tellCounts(counts),
+      label: wordedDaysAgo(daysAgo, locale),
+      sentences: tellCounts(counts, locale),
     }))
     .filter((day) => day.sentences.length > 0);
 
@@ -413,7 +486,7 @@ export async function assembleTheWeather(
        Newsworthy means what changed ABOUT you before what you did: the poster
        moving outranks a signal moving outranks being read outranks your own
        keeping. Your own keeping is last on purpose — you were there for it. */
-    const clauses = tellCounts(away).filter((s) => s.text !== "the sky held");
+    const clauses = tellCounts(away, locale).filter((s) => s.text !== skyHeldText(locale));
     const NEWS: Record<WeatherSentence["backing"], number> = {
       top_of_minds: 0,
       signals: 1,
@@ -467,15 +540,26 @@ export async function assembleTheWeather(
  * "what did WAKA do lately". Digit-free by construction: labels and counts
  * are words, and nothing else is printed.
  */
-export function renderTheWeather(weather: TheWeather): string {
+export function renderTheWeather(weather: TheWeather, locale: ProseLocale = "en-US"): string {
   const lines: string[] = [];
-  lines.push("# The weather");
-  lines.push("");
-  lines.push("> What the loop did, told as days — every sentence a view of a");
-  lines.push("> stored record, never a summary someone wrote.");
-  lines.push("");
-  if (weather.days.length === 0) {
-    lines.push("A quiet fortnight — nothing moved.");
+  if (locale === "ko-KR") {
+    lines.push("# 날씨");
+    lines.push("");
+    lines.push("> 무엇이 일어났는지, 날들로 들려드려요 — 모든 문장은 저장된");
+    lines.push("> 기록을 비추는 것이지, 누군가 쓴 요약이 아니에요.");
+    lines.push("");
+    if (weather.days.length === 0) {
+      lines.push("조용한 두 주였어요 — 아무것도 움직이지 않았어요.");
+    }
+  } else {
+    lines.push("# The weather");
+    lines.push("");
+    lines.push("> What the loop did, told as days — every sentence a view of a");
+    lines.push("> stored record, never a summary someone wrote.");
+    lines.push("");
+    if (weather.days.length === 0) {
+      lines.push("A quiet fortnight — nothing moved.");
+    }
   }
   for (const day of weather.days) {
     lines.push(`## ${day.label}`);

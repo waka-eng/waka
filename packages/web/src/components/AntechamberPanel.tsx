@@ -19,6 +19,8 @@
  * not come to be.
  */
 import type { ApiAntechamberRow } from "../lib/api";
+import { useOptionalAuth } from "../lib/auth-context";
+import { normalizeSupportedLocale, t } from "../lib/locales";
 
 export interface AntechamberPanelProps {
   /** null until the fetch lands */
@@ -36,17 +38,16 @@ export function AntechamberPanel({
   onRestoreAnchor,
   restoredAnchorIds,
 }: AntechamberPanelProps): JSX.Element {
+  const locale = normalizeSupportedLocale(useOptionalAuth()?.profile?.preferredLocale);
   return (
     <div className="jar-roomform jar-antechamber" data-jar-chrome="1">
       <div className="jar-label" style={{ marginBottom: 14 }}>
-        the antechamber
+        {t(locale, "worldTheAntechamber")}
       </div>
       {rows === null ? (
-        <p className="jar-ante-candidate">still fetching the refusals…</p>
+        <p className="jar-ante-candidate">{t(locale, "worldStillFetchingRefusals")}</p>
       ) : rows.length === 0 ? (
-        <p className="jar-ante-candidate">
-          nothing stands here — the ground has refused nothing
-        </p>
+        <p className="jar-ante-candidate">{t(locale, "worldNothingRefused")}</p>
       ) : (
         rows.map((row) => {
           const restored =
@@ -56,10 +57,10 @@ export function AntechamberPanel({
             <div key={row.id} className="jar-ante-row">
               <p className="jar-ante-candidate">{row.candidateStatement}</p>
               <p className="jar-ante-anchor jar-label">
-                {"too close to: "}
+                {t(locale, "worldTooCloseTo")}
                 <span className="jar-ante-anchor-words">{row.anchorStatement}</span>
                 {row.anchorSignalId === null ? (
-                  <span className="jar-ante-standing"> — since removed</span>
+                  <span className="jar-ante-standing">{t(locale, "worldSinceRemoved")}</span>
                 ) : stillRefusing ? (
                   <>
                     {" — "}
@@ -68,11 +69,11 @@ export function AntechamberPanel({
                       className="jar-ante-restore"
                       onClick={() => onRestoreAnchor(row.anchorSignalId!)}
                     >
-                      put it back
+                      {t(locale, "worldPutItBack")}
                     </button>
                   </>
                 ) : (
-                  <span className="jar-ante-standing"> — stands again</span>
+                  <span className="jar-ante-standing">{t(locale, "worldStandsAgain")}</span>
                 )}
               </p>
             </div>
@@ -81,7 +82,7 @@ export function AntechamberPanel({
       )}
       <p className="jar-ask" style={{ marginTop: 14 }}>
         <button type="button" onClick={onClose}>
-          close
+          {t(locale, "worldClose")}
         </button>
       </p>
     </div>
