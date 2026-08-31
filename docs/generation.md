@@ -256,17 +256,26 @@ support = min(1, n / 6)                 n = evidence count; 6 = CONFIDENCE_SATUR
 spread  = min(1, span_days / 30)        span = newest − oldest evidence; 30 = CONFIDENCE_SATURATION_SPREAD_DAYS
 recency = 2^(−quiet_days / 45)          quiet = days since newest; 45 = CONFIDENCE_RECENCY_HALF_LIFE_DAYS
 
-confidence = round( 55·support + 30·spread + 15·recency + diversity )
+confidence = round( 55·support + 30·spread + 15·recency + diversity + affirmed )
              where diversity = CONFIDENCE_SOURCE_DIVERSITY_BONUS (8)
              when evidence spans app AND agent capture, else 0
+             and affirmed = CONFIDENCE_AFFIRMED_BONUS (8)
+             when the owner's LATEST verdict on the signal is "true", else 0
              — clamped to 0..100
 ```
 
 The weights are `CONFIDENCE_SUPPORT_WEIGHT` (55),
 `CONFIDENCE_SPREAD_WEIGHT` (30), `CONFIDENCE_RECENCY_WEIGHT` (15) — summing
-to 100 **[checked]**. Diversity is a *bonus*, not a fourth weight: most
-profiles are app-only, and a weight would cap every solo human below 100
-forever. Corroboration adds; its absence must not subtract.
+to 100 **[checked]**. Diversity and affirmation are *bonuses*, not
+weights: most profiles are app-only and most signals are unanswered, and a
+weight would cap them below 100 forever. Corroboration adds; its absence
+must not subtract. The affirmed bonus is the owner's own "yes, this is me"
+(latest verdict wins, the same read selection makes) — an answer weighing on
+the number the world lights by, not only on selection. "not_true" is
+deliberately NOT mirrored here: disputed already moves selection through
+`SELECTION_DISPUTED_MULTIPLIER`, and cutting confidence too would count one
+answer twice. Room statements take no affirmed term — they answer to member
+stances, not to a single owner's verdict.
 
 **Worked example.** Four pieces of evidence spanning 20 days, the newest 10
 days ago, all typed by the person:
@@ -638,6 +647,7 @@ The authoritative values. Machine-checked against code — see
 | `CONFIDENCE_SATURATION_SPREAD_DAYS` | 30 | Spread saturates at this many days |
 | `CONFIDENCE_RECENCY_HALF_LIFE_DAYS` | 45 | Recency half-life |
 | `CONFIDENCE_SOURCE_DIVERSITY_BONUS` | 8 | Added when app and agent evidence corroborate |
+| `CONFIDENCE_AFFIRMED_BONUS` | 8 | Added when the owner's latest verdict on the signal is "true" |
 | `MATCH_CANDIDATE_SCAN_LIMIT` | 500 | Most-recently-evidenced signals scanned per match |
 | `RELATED_INSPIRATION_SCAN_LIMIT` | 500 | Most recent capture vectors scanned for relatedness |
 | `RELATED_INSPIRATION_MIN_COSINE` | 0.6 | Floor below which an earlier capture is not offered as context |
