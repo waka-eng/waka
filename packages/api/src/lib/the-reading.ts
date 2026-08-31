@@ -31,6 +31,7 @@ import {
   GROUP_DRAFT_MIN_AFFIRMED_SMALL,
   GROUP_DRAFT_SMALL_MAX_MEMBERS,
   SELECTION_DISPUTED_MULTIPLIER,
+  TOP_OF_MIND_MIN_SHIFT_HOURS,
   TOP_OF_MIND_MIN_SIGNALS,
   TOP_OF_MIND_SIGNAL_LIMIT,
 } from "./top-of-mind-synthesis.js";
@@ -129,6 +130,19 @@ export const READING_LINES: ReadingLine[] = [
       value: TOP_OF_MIND_MIN_SIGNALS,
       words: "three",
       wordsKo: "셋",
+    },
+  },
+  {
+    sentence:
+      "Your top of mind shifts at most once a day — a rewrite that arrives early waits its turn, and your own hand never waits.",
+    sentenceKo:
+      "톱 오브 마인드는 하루에 한 번만 움직여요. 일찍 온 다시 쓰기는 차례를 기다리고, 내 손은 기다리지 않아요.",
+    backing: {
+      kind: "constant",
+      constant: "TOP_OF_MIND_MIN_SHIFT_HOURS",
+      value: TOP_OF_MIND_MIN_SHIFT_HOURS,
+      words: "once a day",
+      wordsKo: "하루에 한 번",
     },
   },
   {

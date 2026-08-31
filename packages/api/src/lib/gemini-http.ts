@@ -1,6 +1,24 @@
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 const DEFAULT_MODEL_REQUEST_TIMEOUT_MS = 25_000;
 
+/**
+ * The road's patience for the ENTIRE answer, headers and body both.
+ *
+ * With streaming off, the provider sends the body only when generation
+ * finishes — so "reading the body" IS the generation time, and the 25s
+ * header deadline used to be cleared the moment headers arrived, leaving
+ * `response.json()` unbounded. Observed live (2026-08-31, pipeline eval
+ * run 2): one extraction call answered 200 and then stalled its body for
+ * seven minutes until the test runner killed the process — the other half
+ * of the 2026-08-30 finish_reason:length incident, which bounded the
+ * answer's SIZE but not its TIME. Three minutes is far past any legitimate
+ * generation under OPENROUTER_MAX_OUTPUT_TOKENS with reasoning off (the
+ * slowest healthy full pipeline runs finish ~15 calls in under 100s); a
+ * stall past it is a hang, and the timeout error is classified transient
+ * so the queue's retry law recovers the job with time left to matter.
+ */
+const DEFAULT_MODEL_EXCHANGE_TIMEOUT_MS = 180_000;
+
 export class ModelRequestTimeoutError extends Error {
   constructor(readonly timeoutMs: number) {
     super(`Model request timed out after ${timeoutMs}ms`);
@@ -14,16 +32,33 @@ export function getModelRequestTimeoutMs(): number {
   return Math.max(1_000, Math.min(parsed, 120_000));
 }
 
+export function getModelExchangeTimeoutMs(): number {
+  const parsed = Number.parseInt(process.env.WAKA_MODEL_EXCHANGE_TIMEOUT_MS ?? "", 10);
+  if (!Number.isFinite(parsed)) return DEFAULT_MODEL_EXCHANGE_TIMEOUT_MS;
+  return Math.max(1_000, Math.min(parsed, 600_000));
+}
+
+/** Statuses the Response constructor refuses a body for. */
+const NULL_BODY_STATUSES = new Set([101, 204, 205, 304]);
+
 /**
  * Bound every provider round-trip. Abort is not enough on its own because an
  * injected or non-conforming fetch implementation may ignore the signal, so
  * the explicit race guarantees the worker gets control back and can retry.
+ *
+ * Two deadlines: `timeoutMs` to the response HEADERS (a road that cannot
+ * even answer in 25s is down), and `exchangeTimeoutMs` to the fully-read
+ * BODY (generation time lives here; see DEFAULT_MODEL_EXCHANGE_TIMEOUT_MS).
+ * The body is buffered inside the deadline and handed back as a rebuilt
+ * Response, so callers keep reading `.ok` / `.json()` exactly as before —
+ * now from memory, with nothing left unbounded.
  */
 export async function fetchModelWithTimeout(
   fetchFn: typeof fetch,
   input: Parameters<typeof fetch>[0],
   init: RequestInit = {},
   timeoutMs = getModelRequestTimeoutMs(),
+  exchangeTimeoutMs = Math.max(getModelExchangeTimeoutMs(), getModelRequestTimeoutMs()),
 ): Promise<Response> {
   const controller = new AbortController();
   const upstreamSignal = init.signal;
@@ -31,21 +66,37 @@ export async function fetchModelWithTimeout(
   if (upstreamSignal?.aborted) abortFromUpstream();
   else upstreamSignal?.addEventListener("abort", abortFromUpstream, { once: true });
 
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
+  let headerTimer: ReturnType<typeof setTimeout> | undefined;
+  let exchangeTimer: ReturnType<typeof setTimeout> | undefined;
+  const headerDeadline = new Promise<never>((_, reject) => {
+    headerTimer = setTimeout(() => {
       controller.abort();
       reject(new ModelRequestTimeoutError(timeoutMs));
     }, timeoutMs);
   });
+  const exchangeDeadline = new Promise<never>((_, reject) => {
+    exchangeTimer = setTimeout(() => {
+      controller.abort();
+      reject(new ModelRequestTimeoutError(exchangeTimeoutMs));
+    }, exchangeTimeoutMs);
+  });
 
   try {
-    return await Promise.race([
+    const response = await Promise.race([
       fetchFn(input, { ...init, signal: controller.signal }),
-      timeout,
+      headerDeadline,
+      exchangeDeadline,
     ]);
+    if (headerTimer) clearTimeout(headerTimer);
+    const body = await Promise.race([response.arrayBuffer(), exchangeDeadline]);
+    return new Response(NULL_BODY_STATUSES.has(response.status) ? null : body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
   } finally {
-    if (timer) clearTimeout(timer);
+    if (headerTimer) clearTimeout(headerTimer);
+    if (exchangeTimer) clearTimeout(exchangeTimer);
     upstreamSignal?.removeEventListener("abort", abortFromUpstream);
   }
 }
