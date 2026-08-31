@@ -64,7 +64,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { hueCss } from "../lib/appearance";
 import { useDismissAway } from "../lib/dismiss";
@@ -2367,9 +2367,56 @@ function HomeExperience(): JSX.Element {
 
   const pushArrived = useCallback((w: Space) => {
     setAtWall((prev) => (prev.kind === w.kind && prev.id === w.id ? prev : w));
+    /* THE WALL IN THE ADDRESS. Written with the browser's own replaceState,
+       never the router's navigate: both paths render this same component, and
+       a router navigation would remount the world mid-breath. Replace, not
+       push — reload lands where you stood; the back button still leaves the
+       app, exactly as before. */
+    const path = w.kind === "self" ? "/" : `/w/${wallSlug(w.name)}`;
+    if (window.location.pathname !== path) {
+      window.history.replaceState(null, "", path);
+    }
   }, []);
   const pushArrivedRef = useRef(pushArrived);
   pushArrivedRef.current = pushArrived;
+
+  /** The address's wall, when the page opened on `/w/:wall`. */
+  const { wall: wallParam } = useParams();
+  const openedAtRef = useRef(false);
+  useEffect(() => {
+    if (openedAtRef.current || !wallParam) return;
+    if (phase !== "ready") return;
+    const wanted = decodeURIComponent(wallParam).toLowerCase();
+    const w = walls.find((x) => x.kind !== "self" && wallSlug(x.name) === wanted);
+    if (!w) {
+      /* the axis may simply not be known yet — the roster lands after first
+         paint. Only once it has does a missing name mean a missing wall,
+         which says so by going home. Latching before that sent every
+         /w/<agent> reload back to ME (caught live, 2026-08-31). */
+      if (agentRoster === null) return;
+      openedAtRef.current = true;
+      window.history.replaceState(null, "", "/");
+      return;
+    }
+    /* `phase` turns ready a beat before the simulation assigns its API, and
+       an optional call on a null ref is a travel that silently never was —
+       the second latch bug this effect shipped with. Wait for the sim. */
+    let dead = false;
+    const attempt = () => {
+      if (dead || openedAtRef.current) return;
+      const api = simApiRef.current;
+      if (!api) {
+        window.setTimeout(attempt, 120);
+        return;
+      }
+      openedAtRef.current = true;
+      api.goToWall(w.col);
+    };
+    attempt();
+    return () => {
+      dead = true;
+    };
+  }, [wallParam, walls, phase, agentRoster]);
 
   /** A room woke: its words may exist now. Discrete, pushed from the loop. */
   const pushWoken = useCallback((groupId: string) => {
@@ -2796,7 +2843,13 @@ function HomeExperience(): JSX.Element {
     });
   }, []);
 
-  const AWAY_LONG_ENOUGH_MS = 30_000;
+  /** A wall's name as an address segment: lowercased, spaces to hyphens,
+    everything else URI-encoded — readable for latin names, correct for any. */
+function wallSlug(name: string): string {
+  return encodeURIComponent(name.trim().toLowerCase().replace(/\s+/g, "-"));
+}
+
+const AWAY_LONG_ENOUGH_MS = 30_000;
   /**
    * HOW LONG A KEEP TAKES TO BECOME A READING, with margin.
    *
@@ -3218,6 +3271,27 @@ function HomeExperience(): JSX.Element {
       const span = Math.max(end - start, DAY_MS);
       return { start, end, span, majors: monthMajors(start, end, span), onGroup: atWall.id };
     }
+    if (atWall.kind === "agent") {
+      /* AN AGENT'S RAIL IS THE AGENT'S OWN LIFE. This fell through to the
+         viewer's archive below, so standing on Scout's wall the rail spanned
+         YOUR years — and the scrub (scene-scoped since one-wall-one-scene)
+         wound Scout's ground against a stranger's timeline. The wall's rail
+         is the wall's memories, exactly as a room's is the room's. Null
+         until the bundle lands, like everything else behind the wake. */
+      const a = (agents ?? []).find((x) => x.agent.id === atWall.id);
+      const caps = a?.inspirations ?? [];
+      if (caps.length === 0) return null;
+      let first = Infinity;
+      for (const cap of caps) {
+        const ms = Date.parse(cap.capturedAt);
+        if (Number.isFinite(ms) && ms > 0 && ms < first) first = ms;
+      }
+      if (!Number.isFinite(first)) return null;
+      const start = first - 3 * DAY_MS;
+      const end = clockMs;
+      const span = Math.max(end - start, DAY_MS);
+      return { start, end, span, majors: monthMajors(start, end, span), onGroup: null };
+    }
     if (!inspirations || inspirations.length === 0) return null;
     let earliest = Infinity;
     for (const s of inspirations) {
@@ -3232,7 +3306,7 @@ function HomeExperience(): JSX.Element {
     return { start, end, span, majors: monthMajors(start, end, span), onGroup: null };
     /* `groupPastTick` is the timeline ref's change signal: the room's history
        lands a request after arrival, and the rail must re-span when it does. */
-  }, [inspirations, clockMs, atWall, groupPastTick]);
+  }, [inspirations, agents, clockMs, atWall, groupPastTick]);
 
   /* ------------- palette: resolve vars once, re-raster sprites ------------- */
   useEffect(() => {
@@ -4389,6 +4463,7 @@ function HomeExperience(): JSX.Element {
         wall: curWall().id || "me",
         kind: curWall().kind,
         tripActive: trip.active,
+        lastGo: lastGoRef.current,
         cam: { x: Math.round(cam.x), y: Math.round(cam.y) },
         viewH: view.h,
         viewW: view.w,

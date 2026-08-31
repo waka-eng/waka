@@ -172,6 +172,10 @@ ReactDOM.createRoot(root).render(
           */}
           {/* Home is the layout. */}
           <Route path="/" element={<ProtectedHome />} />
+          {/* the same world, opened standing at a named wall — reload lands
+              where you stood. Two segments, so the public-handle route
+              (`/:handle`) never swallows it. */}
+          <Route path="/w/:wall" element={<ProtectedHome />} />
           {/*
             THE ARCHIVE IS GONE. It was the same three layers in a list — the
             layout does everything it did, verified affordance by affordance
