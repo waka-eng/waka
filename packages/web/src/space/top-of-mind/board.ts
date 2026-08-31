@@ -19,6 +19,7 @@
  * "4". The count is legible because the words are.
  */
 
+import { formatMessage, t, type SupportedLocale } from "../../lib/locales";
 import { numWords } from "../../lib/words";
 import type { Entry, EvidenceRef } from "../../lib/data";
 
@@ -95,13 +96,15 @@ export function formingWords(
   T: number,
   proposalMs: number | null,
   forming: Array<{ createdMs: number }> | null,
+  locale: SupportedLocale = "en-US",
 ): string | null {
-  if (proposalMs !== null && proposalMs <= T) return "A new ambition is forming";
+  if (proposalMs !== null && proposalMs <= T) return t(locale, "worldNewAmbitionForming");
   let n = 0;
   for (const f of forming ?? []) if (f.createdMs <= T) n++;
   if (n === 0) return null;
-  const w = numWords(n);
-  return `${w[0].toUpperCase()}${w.slice(1)} ${n === 1 ? "signal is" : "signals are"} forming`;
+  const w = numWords(n, locale);
+  const countWords = locale === "ko-KR" ? w : `${w[0].toUpperCase()}${w.slice(1)}`;
+  return formatMessage(locale, "worldSignalsForming", { countWords, count: n });
 }
 /**
  * WHAT A WALL'S HEADQUARTERS SAYS. One shape for every kind of wall — yours,

@@ -14,6 +14,7 @@
  * never from anyone's raw saves, so the boundary is enforced by what this file
  * is able to reach rather than by remembering not to.
  */
+import { t, type SupportedLocale } from "../lib/locales";
 import type { ApiGroupTopOfMind, ApiGroupWallSignal } from "../lib/api";
 import { formingWords, type WallChrome } from "../space/top-of-mind/board";
 
@@ -103,18 +104,19 @@ export function deriveGroupChrome(
   top: ApiGroupTopOfMind,
   openProposalMs: number | null,
   evidence: GroupEvidence[],
+  locale: SupportedLocale = "en-US",
 ): WallChrome {
   const lead = top.entries.find((e) => e.pinnedAt) ?? top.entries[0] ?? null;
   const ambition = lead?.body ?? null;
   return {
     text: ambition,
     awayFrom: null,
-    formingAlt: ambition ? null : "Forming — nothing read together yet",
+    formingAlt: ambition ? null : t(locale, "worldGroupFormingAlt"),
     asOf: null,
     /* A room forms through proposals, not through signals overhead: members'
        signals stay on their own walls, so an open proposal is the only thing
        a room has that is on its way to becoming what it believes. */
-    forming: formingWords(Date.now(), openProposalMs, null),
+    forming: formingWords(Date.now(), openProposalMs, null, locale),
     empty: evidence.length === 0,
     prevText: null,
   };

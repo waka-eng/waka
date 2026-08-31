@@ -17,6 +17,9 @@ import type {
   ApiGroupSummary,
   ApiGroupTimeline,
 } from "../lib/api";
+import { useOptionalAuth } from "../lib/auth-context";
+import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
+import type { MessageKey } from "../lib/locales";
 import { dateWords, givenName } from "../lib/words";
 import type { Space } from "./index";
 
@@ -66,6 +69,8 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
     onClose,
   } = props;
   const setGroupPanel = (_: string | null) => onClose();
+  const locale = normalizeSupportedLocale(useOptionalAuth()?.profile?.preferredLocale);
+  const say = (key: MessageKey) => t(locale, key);
 
   return (
 <div className="jar-roomform" data-jar-chrome="1">
@@ -76,7 +81,7 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
     {(members.get(groupPanel) ?? []).map((m) => (
       <span key={m.profileId} className="jar-share-row">
         {m.name}
-        {m.role === "owner" ? <span className="jar-share-hint">made it</span> : null}
+        {m.role === "owner" ? <span className="jar-share-hint">{say("worldMadeIt")}</span> : null}
       </span>
     ))}
   </div>
@@ -88,7 +93,7 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
         if (g) copyInvite(g);
       }}
     >
-      {copied === groupPanel ? "link copied" : "copy the invite link"}
+      {copied === groupPanel ? say("worldLinkCopied") : say("worldCopyInviteLink")}
     </button>
   </p>
 
@@ -101,8 +106,9 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
           believe a thing — reading it without knowing who is asking is
           reading a petition with the signature torn off. */}
       <p className="jar-label">
-        {p.proposedByName ? givenName(p.proposedByName) : "someone"}
-        {" put this to the room"}
+        {formatMessage(locale, "worldPutThisToRoom", {
+          name: p.proposedByName ? givenName(p.proposedByName) : say("worldSomeoneWord"),
+        })}
       </p>
       <p className="jar-proposal-body">{p.body}</p>
       {/* THE WHOLE ROOM, NOT THE PART THAT AGREED.
@@ -134,10 +140,10 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
               }
               title={
                 said === "affirmed"
-                  ? "agreed"
+                  ? say("worldAgreedTitle")
                   : said === "declined"
-                    ? "said not us"
-                    : "has not answered yet"
+                    ? say("worldSaidNotUsTitle")
+                    : say("worldNotAnsweredTitle")
               }
             >
               {i > 0 ? " · " : ""}
@@ -151,28 +157,28 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
           your mind is answering again, and the record keeps only the latest. */}
       {p.viewerStance === "affirmed" ? (
         <p className="jar-ask">
-          <span>you agreed</span>
+          <span>{say("worldYouAgreed")}</span>
           <span aria-hidden="true"> · </span>
           <button type="button" onClick={() => answerProposal(groupPanel, p.id, false)}>
-            not us after all
+            {say("worldNotUsAfterAll")}
           </button>
         </p>
       ) : p.viewerStance === "declined" ? (
         <p className="jar-ask">
-          <span>you said not us</span>
+          <span>{say("worldYouSaidNotUs")}</span>
           <span aria-hidden="true"> · </span>
           <button type="button" onClick={() => answerProposal(groupPanel, p.id, true)}>
-            yes, that is us after all
+            {say("worldYesUsAfterAll")}
           </button>
         </p>
       ) : (
         <p className="jar-ask">
           <button type="button" onClick={() => answerProposal(groupPanel, p.id, true)}>
-            yes, that is us
+            {say("worldYesThatIsUs")}
           </button>
           <span aria-hidden="true"> · </span>
           <button type="button" onClick={() => answerProposal(groupPanel, p.id, false)}>
-            not us
+            {say("worldNotUs")}
           </button>
           <span aria-hidden="true"> · </span>
           {/* THE COUNTER. Saying no kills the sentence; saying it differently
@@ -182,7 +188,7 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
             type="button"
             onClick={() => setPropose({ text: p.body ?? "", busy: false })}
           >
-            say it differently
+            {say("worldSayItDifferently")}
           </button>
         </p>
       )}
@@ -198,7 +204,7 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
   {timeline &&
   (timeline.versions.length > 0 || timeline.doorMarks.length > 0) ? (
     <div className="jar-prov" style={{ marginTop: 14 }}>
-      <p className="jar-prov-lead jar-label">the room so far</p>
+      <p className="jar-prov-lead jar-label">{say("worldRoomSoFar")}</p>
       {[
         ...timeline.versions
           .filter((v) => v.reason !== "no_change")
@@ -207,12 +213,12 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
             at: Date.parse(v.createdAt) || 0,
             line:
               v.reason === "initial"
-                ? "the room first spoke"
+                ? say("worldRoomFirstSpoke")
                 : v.reason === "member_proposal"
-                  ? "a proposal carried"
+                  ? say("worldProposalCarried")
                   : v.reason === "human_edit"
-                    ? "a sentence was reworded"
-                    : "the room re-read itself",
+                    ? say("worldSentenceReworded")
+                    : say("worldRoomReRead"),
           })),
         ...timeline.doorMarks.map((m) => ({
           key: `d:${m.profileId ?? "departed"}:${m.kind}:${m.occurredAt}`,
@@ -220,9 +226,15 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
           /* a mark whose person has since erased their account keeps its
              place in the story as "someone" — the name is what erasure
              removes, the fact that someone was here is the room's */
-          line: `${m.name ? givenName(m.name) : "someone"} ${
-            m.kind === "joined" ? "arrived" : m.kind === "left" ? "left" : "was removed"
-          }`,
+          line: formatMessage(
+            locale,
+            m.kind === "joined"
+              ? "worldArrived"
+              : m.kind === "left"
+                ? "worldLeftRoom"
+                : "worldWasRemoved",
+            { name: m.name ? givenName(m.name) : say("worldSomeoneWord") },
+          ),
         })),
       ]
         .sort((a, b) => b.at - a.at)
@@ -231,7 +243,7 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
           <p key={event.key} className="jar-was">
             {event.line}
             {" · "}
-            {dateWords(event.at, Date.now())}
+            {dateWords(event.at, Date.now(), locale)}
           </p>
         ))}
     </div>
@@ -246,24 +258,24 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
         className="jar-reflect-box"
         rows={3}
         autoFocus
-        placeholder="What do you think this room believes?"
+        placeholder={say("worldProposePlaceholder")}
         value={propose.text}
         onChange={(e) => setPropose({ ...propose, text: e.target.value })}
       />
       <p className="jar-ask">
         <button type="button" disabled={propose.busy} onClick={() => sendProposal(groupPanel)}>
-          {propose.busy ? "…" : "put it to them"}
+          {propose.busy ? "…" : say("worldPutItToThem")}
         </button>
         <span aria-hidden="true"> · </span>
         <button type="button" onClick={() => setPropose(null)}>
-          not now
+          {say("worldNotNow")}
         </button>
       </p>
     </div>
   ) : (
     <p className="jar-ask">
       <button type="button" onClick={() => setPropose({ text: "", busy: false })}>
-        put something to this room
+        {say("worldPutSomethingToRoom")}
       </button>
     </p>
   )}
@@ -272,22 +284,22 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
     {leaving === groupPanel ? (
       <>
         <button type="button" onClick={() => leaveThisGroup(groupPanel)}>
-          leave — your statements come down
+          {say("worldLeaveStatementsDown")}
         </button>
         <span aria-hidden="true"> · </span>
         <button type="button" onClick={() => setLeaving(null)}>
-          stay
+          {say("worldStay")}
         </button>
       </>
     ) : (
       <button type="button" onClick={() => setLeaving(groupPanel)}>
-        leave this room
+        {say("worldLeaveThisRoom")}
       </button>
     )}
   </p>
   <p className="jar-ask" style={{ marginTop: 10 }}>
     <button type="button" onClick={() => setGroupPanel(null)}>
-      close
+      {say("worldClose")}
     </button>
   </p>
 </div>

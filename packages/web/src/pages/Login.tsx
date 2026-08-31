@@ -53,7 +53,7 @@ import { GoogleSignInButton, oauthErrorMessageKey } from "../components/GoogleSi
 import { ApiError } from "../lib/api";
 import type { LoginFieldErrors, SignupFieldErrors } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
-import { formatMessage, readStoredLocale, t } from "../lib/locales";
+import { formatMessage, readStoredLocale, supportedLocales, t, writeStoredLocale } from "../lib/locales";
 import type { SupportedLocale } from "../lib/locales";
 import { resolveRedirect } from "../lib/sign-in-destination";
 
@@ -91,10 +91,14 @@ const EMPTY_SIGNUP: SignupValues = {
 
 interface SignupFormProps {
   locale?: SupportedLocale;
+  /** the page around the form follows the choice — picking 한국어 must flip
+      the whole surface, not just the fields inside the border */
+  onLocaleChange?: (locale: SupportedLocale) => void;
 }
 
 export function SignupForm({
   locale: shellLocale = readStoredLocale(),
+  onLocaleChange,
 }: SignupFormProps = {}): JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
@@ -287,10 +291,31 @@ export function SignupForm({
       </label>
 
 
-      {/* The language field left with the second language (founder ruling,
-          2026-08-22: the product speaks English only). preferredLocale still
-          travels in the payload at its default — the account keeps the
-          column, the person just has nothing to choose. */}
+      {/* The language field is BACK (founder, 2026-08-31, reversing
+          2026-08-22): the choice drives what language the memory itself is
+          written in — signals, the top of mind, principles — so it belongs
+          at the door, before the first keep. */}
+      <label className="field">
+        <span className="field-label">{t(locale, "profileLanguageLabel")}</span>
+        <select
+          className="field-input"
+          name="preferredLocale"
+          disabled={submitting}
+          value={values.preferredLocale}
+          onChange={(e) => {
+            const next = e.target.value as SupportedLocale;
+            handleChange("preferredLocale", next);
+            onLocaleChange?.(next);
+          }}
+        >
+          {supportedLocales.map((l) => (
+            <option key={l.code} value={l.code}>
+              {l.nativeLabel}
+            </option>
+          ))}
+        </select>
+      </label>
+
       {/* `btn-doorway`: the login page's own submit, and NOT `.profile-card`'s
           save or onboarding's. `.login-card` is shared by four screens, so
           the weight this control needs had to be asked for by name rather
@@ -539,7 +564,7 @@ export default function LoginPage(): JSX.Element {
   const [mode, setMode] = useState<Mode>("login");
   const loginTabRef = useRef<HTMLButtonElement>(null);
   const signupTabRef = useRef<HTMLButtonElement>(null);
-  const [locale] = useState<SupportedLocale>(() => readStoredLocale());
+  const [locale, setLocale] = useState<SupportedLocale>(() => readStoredLocale());
   const location = useLocation();
   const navigate = useNavigate();
   /* Why the door is standing here, when the reason is "we could not ask" —
@@ -710,7 +735,15 @@ export default function LoginPage(): JSX.Element {
           {mode === "login" ? (
             <LoginForm />
           ) : (
-            <SignupForm locale={locale} />
+            <SignupForm
+              locale={locale}
+              onLocaleChange={(next) => {
+                setLocale(next);
+                /* remembered, so the sign-in tab and the next visit speak it
+                   too — the account's own setting takes over after signup */
+                writeStoredLocale(next);
+              }}
+            />
           )}
         </div>
 

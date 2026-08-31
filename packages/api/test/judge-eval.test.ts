@@ -80,6 +80,7 @@ async function judgeAll(): Promise<Array<Pair & { got: string }>> {
     const verdicts = await Promise.all(
       slice.map((pair) =>
         provider.judgeSignalMatch({
+          preferredLocale: "en-US",
           candidateStatement: pair.a,
           existingStatement: pair.b,
         }),

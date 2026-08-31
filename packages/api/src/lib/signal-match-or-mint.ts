@@ -167,20 +167,21 @@ export async function applyCandidates(
       // One bounded model call, held under the per-profile derivation lock.
       // Serializing a ~second of judgement is the price of the lock's whole
       // point: two concurrent captures must not each mint the same pattern.
-      // A judge failure falls through to minting as `independent` — the
-      // duplicate is the recoverable mistake, and a phantom opposition
-      // would put a dispute on the record no one ever had.
-      try {
-        const judged = await input.provider.judgeSignalMatch({
-          preferredLocale: input.preferredLocale,
-          candidateStatement: candidate.statement,
-          existingStatement: nearest.target.statement,
-        });
-        decision = judged.relation === "same" ? "attach" : "mint";
-        if (judged.relation === "opposed") opposesSignalId = nearest.target.id;
-      } catch {
-        decision = "mint";
-      }
+      //
+      // A judge failure PROPAGATES and fails the job attempt (it used to
+      // fall through to minting as `independent` — which called the
+      // duplicate "the recoverable mistake" while nothing ever revisited
+      // it: a bad provider hour minted siblings that split their evidence
+      // forever). The queue retries the attempt; evidence uniqueness and
+      // the dedupe band make the rerun safe. A phantom opposition is still
+      // impossible: no verdict is invented on any path.
+      const judged = await input.provider.judgeSignalMatch({
+        preferredLocale: input.preferredLocale,
+        candidateStatement: candidate.statement,
+        existingStatement: nearest.target.statement,
+      });
+      decision = judged.relation === "same" ? "attach" : "mint";
+      if (judged.relation === "opposed") opposesSignalId = nearest.target.id;
     }
 
     const match = decision === "attach" ? nearest : null;

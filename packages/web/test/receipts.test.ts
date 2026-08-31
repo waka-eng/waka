@@ -17,6 +17,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { messageCatalogs } from "../src/lib/i18n";
 import { RECEIPTS } from "../src/lib/receipts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -37,9 +38,18 @@ describe("gesture receipts", () => {
     }
   });
 
-  /* The star's standing line and the release confirm are IMPORTED from this
-     registry by Home (they render as {RECEIPTS.starHeld.text} and
-     {RECEIPTS.releaseOffer.text}), so their wording cannot fork — the type
-     system is the sync check, and the world's own suites pin the words on
-     screen. */
+  /* The world renders every receipt through the message catalog (Home says
+     `say(receipt.messageKey)`), so the sync check is here: the English
+     catalog must carry the registry's exact words, and the Korean entry must
+     exist and keep the no-digits law. */
+  it("the catalog speaks the registry's words, in both languages", () => {
+    for (const [key, receipt] of Object.entries(RECEIPTS)) {
+      const mk = receipt.messageKey;
+      expect(messageCatalogs["en-US"][mk], `${key} forked from the catalog`).toBe(receipt.text);
+      const ko = messageCatalogs["ko-KR"][mk];
+      expect(ko, `${key} has no Korean words`).toEqual(expect.any(String));
+      expect(ko.trim()).not.toBe("");
+      expect(/\d/.test(ko), `${key} carries a numeral in Korean`).toBe(false);
+    }
+  });
 });

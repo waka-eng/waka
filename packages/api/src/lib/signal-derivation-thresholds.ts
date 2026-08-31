@@ -139,6 +139,17 @@ export const CONFIDENCE_SATURATION_SPREAD_DAYS = 30;
 /** Half-life of the recency term: how fast a quiet signal reads as quiet. */
 export const CONFIDENCE_RECENCY_HALF_LIFE_DAYS = 45;
 
+/**
+ * Added when the owner's LATEST standing verdict on the signal is "true" —
+ * a person saying "yes, this is me" is corroboration of the strongest kind,
+ * and until 2026-08-31 it changed selection context only, never the number
+ * the world lights by. A bonus like the diversity bonus, not a weight:
+ * unanswered must not subtract, and disputed is deliberately NOT mirrored
+ * here — "not_true" already moves selection through its own multiplier, and
+ * cutting confidence too would count one answer twice.
+ */
+export const CONFIDENCE_AFFIRMED_BONUS = 8;
+
 /** Weights of the three confidence terms; they sum to 100. */
 export const CONFIDENCE_SUPPORT_WEIGHT = 55;
 export const CONFIDENCE_SPREAD_WEIGHT = 30;
