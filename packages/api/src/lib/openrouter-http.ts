@@ -24,9 +24,13 @@ import {
 
 export const OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
 
-/** The default for every generation task (founder ruling, 2026-08-30). */
+/** The default for every generation task (founder ruling, 2026-08-30).
+    Pinned to the 0731 GA snapshot, deliberately not the floating `-latest`
+    alias: a float would swap the judge under the canon the day a new
+    snapshot ships, and a model change should be a decision with an eval,
+    never a surprise. */
 export const OPENROUTER_GENERATION_MODEL =
-  process.env.OPENROUTER_GENERATION_MODEL ?? "deepseek/deepseek-v4-flash";
+  process.env.OPENROUTER_GENERATION_MODEL ?? "deepseek/deepseek-v4-flash-0731";
 
 export function getOpenRouterApiKey(): string | null {
   const key = process.env.OPENROUTER_API_KEY?.trim();

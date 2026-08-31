@@ -57,9 +57,9 @@ describe("the translation", () => {
       candidateStatement: "Small tools beat grand systems.",
       existingStatement: "Grand systems beat small tools.",
     }) as never;
-    const chat = toChatRequest(request, "deepseek/deepseek-v4-flash", "signal_match");
+    const chat = toChatRequest(request, "deepseek/deepseek-v4-flash-0731", "signal_match");
 
-    expect(chat.model).toBe("deepseek/deepseek-v4-flash");
+    expect(chat.model).toBe("deepseek/deepseek-v4-flash-0731");
     expect(chat.temperature, "a comparison, not a composition").toBe(0);
     expect(chat.messages[0]!.role).toBe("system");
     expect(chat.messages[0]!.content).toContain("Exactly one of three answers");
@@ -149,7 +149,7 @@ describe("the judge over the second road", () => {
     });
     expect(verdict).toEqual({ relation: "same" });
     const sent = JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string);
-    expect(sent.model).toBe("deepseek/deepseek-v4-flash");
+    expect(sent.model).toBe("deepseek/deepseek-v4-flash-0731");
     expect(String(fetchMock.mock.calls[0]![0])).toContain("openrouter.ai");
 
     process.env.WAKA_MODEL_JUDGE = "some-lab/other-model";
