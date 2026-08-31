@@ -145,8 +145,12 @@ import {
   dateStamp,
   citedWords,
   dateWords,
+  dialMonth,
+  dialYear,
   monthTag,
 } from "../lib/words";
+import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
+import type { MessageKey } from "../lib/locales";
 
 import {
   affirmGroupProposal,
@@ -215,7 +219,6 @@ import {
 import { AntechamberPanel } from "../components/AntechamberPanel";
 import { LoadingHome } from "../components/LoadingHome";
 import { ReadingPanel } from "../components/ReadingPanel";
-import { RECEIPTS } from "../lib/receipts";
 import {
   loadInspiration,
   loadInspirations,
@@ -232,6 +235,7 @@ import {
   type Signal,
   type TopOfMind,
 } from "../lib/data";
+import { RECEIPTS } from "../lib/receipts";
 import { useOptionalAuth } from "../lib/auth-context";
 
 import "../styles/home.css";
@@ -1732,7 +1736,7 @@ function HomeExperience(): JSX.Element {
       prev ? prev.map((n) => (n.id === entry.id ? { ...n, pinned: true } : n)) : prev,
     );
     /* the receipt for the pin — the board's own quiet channel */
-    setBoardToast(RECEIPTS.pinned.text);
+    setBoardToast(say(RECEIPTS.pinned.messageKey));
     window.setTimeout(() => setBoardToast(null), 6000);
     if (offlineRef.current) return;
     holdTopOfMindEntry(entry.id).catch(() => {
@@ -2038,6 +2042,23 @@ function HomeExperience(): JSX.Element {
 
   /* ---- rooms (v8): session caches that survive the sim effect's re-runs ---- */
   const auth = useOptionalAuth();
+  /* THE WORLD SPEAKS THE PROFILE'S LANGUAGE. One normalized value for this
+     render, one ref for the closures the sim and the handlers hold across
+     renders, and one stable `say` that always reads the ref — so a callback
+     minted before a language change still speaks the language of the moment
+     it fires. */
+  const locale = normalizeSupportedLocale(auth?.profile?.preferredLocale);
+  const localeRef = useRef(locale);
+  localeRef.current = locale;
+  const say = useCallback((key: MessageKey) => t(localeRef.current, key), []);
+  /* The self wall's NAME is canon ("Me" — it also mints the /w/me address);
+     what a person reads is the catalog's word for it. User-given names —
+     agents, rooms — render as given. */
+  const wallName = useCallback(
+    (w: { kind: string; name: string }): string =>
+      w.kind === "self" ? t(localeRef.current, "worldMe") : w.name,
+    [],
+  );
   /**
    * WHO IS ASKING — and offline, which invented person is.
    *
@@ -2247,7 +2268,7 @@ function HomeExperience(): JSX.Element {
         const openMs = open ? Date.parse(open.createdAt) || 0 : null;
         groupChromeRef.current.set(
           groupId,
-          deriveGroupChrome(top, openMs, evidence),
+          deriveGroupChrome(top, openMs, evidence, localeRef.current),
         );
         cache.set(groupId, { status: "ready", data: { evidence, top } });
         simApiRef.current?.wake();
@@ -2601,7 +2622,7 @@ function HomeExperience(): JSX.Element {
              `${err.status} — ${err.message}`, which printed "0 — …" at a
              person when the connection was dead — a status code as prose, on
              the one screen somebody meets when nothing works at all. */
-          setFailReason(whyOf(err) || String(err));
+          setFailReason(whyOf(err, localeRef.current) || String(err));
           setPhase("failed");
           return;
         }
@@ -3291,31 +3312,28 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     };
     const lastMs = (y: number, m: number, day: number) =>
       new Date(y, m, day, 23, 59, 59, 999).getTime();
-    const thisYear = new Date(end).getFullYear();
     const days = roll(
       (d) => `${d.getFullYear()}.${d.getMonth()}.${d.getDate()}`,
       (d) => lastMs(d.getFullYear(), d.getMonth(), d.getDate()),
-      (ms) => dateWords(ms, end),
+      (ms) => dateWords(ms, end, localeRef.current),
     );
     if (days.length <= DIAL_STOPS) return days;
     const months = roll(
       (d) => `${d.getFullYear()}.${d.getMonth()}`,
       /* day 0 of the next month is the last day of this one */
       (d) => lastMs(d.getFullYear(), d.getMonth() + 1, 0),
-      (ms) => {
-        const d = new Date(ms);
-        const name = d.toLocaleDateString("en-US", { month: "short" });
-        /* the year only when it is not this one — the rule `dateWords`
-           already applies, so a row never carries a year its neighbours
-           in the same list do not */
-        return d.getFullYear() === thisYear ? name : `${name} ${d.getFullYear()}`;
-      },
+      /* THE WORDS ARE `words.ts`'S, NOT THIS FILE'S. It carried a
+         `toLocaleDateString("en-US")` and its own year rule, which was
+         correct while the product spoke one language and silently wrong the
+         moment it spoke two — a Korean wall labelling its rows in English.
+         `dialMonth` keeps the rule and knows both hands. */
+      (ms) => dialMonth(ms, end, localeRef.current),
     );
     if (months.length <= DIAL_STOPS) return months;
     return roll(
       (d) => `${d.getFullYear()}`,
       (d) => lastMs(d.getFullYear(), 11, 31),
-      (ms) => `${new Date(ms).getFullYear()}`,
+      (ms) => dialYear(ms, localeRef.current),
     );
   }, []);
 
@@ -3481,7 +3499,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       const blank = (asOf: string | null): WallChrome => ({
         text: null,
         awayFrom: null,
-        formingAlt: asOf === null ? null : "Nothing read together yet",
+        formingAlt: asOf === null ? null : say("worldNothingReadTogether"),
         asOf,
         forming: null,
         empty: false,
@@ -3494,7 +3512,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
 
       /* Newest first, as the endpoint serves them. */
       const then = timeline.versions.find((v) => (Date.parse(v.createdAt) || 0) <= T);
-      if (!then) return blank(monthTag(T));
+      if (!then) return blank(monthTag(T, localeRef.current));
 
       const latest = timeline.versions[0];
       const stillStanding = latest !== undefined && then.version === latest.version;
@@ -3519,7 +3537,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               groupBoardPendingRef.current.delete(key);
             });
         }
-        return blank(monthTag(T));
+        return blank(monthTag(T, localeRef.current));
       }
 
       const lead = held.entries.find((e) => e.pinnedAt) ?? held.entries[0] ?? null;
@@ -3527,11 +3545,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       return {
         text,
         awayFrom: null,
-        formingAlt: text ? null : "Nothing read together yet",
+        formingAlt: text ? null : say("worldNothingReadTogether"),
         /* WHEN THIS WAS THE ROOM. Stamped only when the sentence differs from
            the one up now, exactly as your own wall stamps its own past: a date
            on an unchanged sentence would report a change that did not happen. */
-        asOf: text && text !== (live?.text ?? null) ? monthTag(T) : null,
+        asOf: text && text !== (live?.text ?? null) ? monthTag(T, localeRef.current) : null,
         /* NOTHING IS FORMING IN THE PAST. An open proposal is a thing on its
            way to becoming what the room believes, and in March it either
            became it or it did not — either way it is not still on its way. */
@@ -3560,6 +3578,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               },
               T,
               nowMs,
+              localeRef.current,
             )
           : /* A ROOM'S BOARD IS THE ROOM'S, AND IT LIVES WHERE THE ROOM PUT IT.
                There was no `room` branch here at all: standing in a room fell
@@ -3593,7 +3612,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                    literally above the poster. It is time-aware too: scrub back
                    past a pattern and it reports what existed then, or says
                    nothing at all. */
-                forming: formingWords(T, proposal ? proposal.createdMs : null, emerging),
+                forming: formingWords(T, proposal ? proposal.createdMs : null, emerging, localeRef.current),
                 /* Nothing synthesized and nothing kept: the honest empty, and
                    it is the artifact's absence that says so, not a guess. */
                 empty: topOfMind === null && (inspirations?.length ?? 0) === 0,
@@ -3696,7 +3715,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           awayFrom: null,
           formingAlt: null,
           asOf: null,
-          forming: formingWords(nowMs, proposal ? proposal.createdMs : null, emerging),
+          forming: formingWords(nowMs, proposal ? proposal.createdMs : null, emerging, localeRef.current),
           empty: topOfMind === null && (inspirations?.length ?? 0) === 0,
           prevText: null,
         });
@@ -6110,11 +6129,16 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     function sayLine(): string {
       /* PARKED, NOT SCRUBBING. This read `scrubbingRef` — true only while a
          finger was on the rail — so the line existed for the duration of a
-         gesture and never once after it. Being wound back is a STATE you sit
-         in, and it is the state in which this sentence is the only true thing
-         the companion has to say. */
-      if (parkedRef.current !== null) return `As it was in ${monthTag(TRef.current)}`;
-      const pick = (opts: string[]): string => {
+         gesture and never once after it. The rail is gone; being wound back
+         is a STATE you sit in, and it is the state in which this sentence is
+         the only true thing the companion has to say. The sentence itself is
+         the message catalogue's, in whichever hand the wall is written in. */
+      if (parkedRef.current !== null)
+        return formatMessage(localeRef.current, "worldAsItWasIn", {
+          month: monthTag(TRef.current, localeRef.current),
+        });
+      const pick = (keys: MessageKey[]): string => {
+        const opts = keys.map((k) => t(localeRef.current, k));
         const fresh = opts.filter((o) => o !== companion.lastSaid);
         const s = (fresh.length ? fresh : opts)[Math.floor(Math.random() * (fresh.length || opts.length))];
         companion.lastSaid = s;
@@ -6124,19 +6148,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
          and the layout's own vocabulary pointed at the dark beats any
          instruction: it asks for one thing, once, and then goes quiet. */
       if (trip.inspCol === 0 && list.every((b) => !b.active || b.leaving))
-        return pick([
-          "Nothing here yet — give me one worth keeping",
-          "Say one thing and I will hold it",
-        ]);
+        return pick(["worldSayEmpty1", "worldSayEmpty2"]);
       /* THE FRONTIER FIRST, because it is the only thing here that points
          forward. It names where nothing has been built yet, never how much is
          left — a compass, not a progress bar. */
       const open = list.filter((b) => b.active && !b.leaving && b.frontier).length;
       if (open > 2 && Math.random() < 0.55)
-        return pick([
-          "Some of these still hold nothing up",
-          "There are memories here nothing rests on",
-        ]);
+        return pick(["worldSayFrontier1", "worldSayFrontier2"]);
       /* WHEN IT IS GLOWING, THE GLOW IS THE ANSWER. A bright companion tapped
          for a sentence used to get "Plenty is still alight", which is the
          readout said twice — the founder's standing ruling against restating
@@ -6149,17 +6167,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
          say on the day somebody starts. Under a handful of memories, it says
          what is actually true instead. */
       if (trip.inspCol > 0 && trip.inspCol < 4)
-        return pick([
-          "A few so far. Say more and I will start to see it",
-          "Not enough yet to see a shape",
-        ]);
+        return pick(["worldSayYoung1", "worldSayYoung2"]);
       if (companion.insp > 0.55) return "";
       if (companion.insp > 0.22)
-        return pick([
-          "Something is still warm from last week",
-          "Last week is still holding on",
-        ]);
-      return pick(["Quiet lately", "It has been quiet", "Nothing new in a while"]);
+        return pick(["worldSayWarm1", "worldSayWarm2"]);
+      return pick(["worldSayQuiet1", "worldSayQuiet2", "worldSayQuiet3"]);
     }
 
     /** An orb enters from above its home and eases down into it. */
@@ -8690,6 +8702,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         list.push(b);
         byId.set(b.id, b);
         order.push(list.length - 1);
+        /* AND INTO ITS SCENE, or it is nowhere — #289 and this branch found
+           the same bug the same night. `sceneAdd` is that fix with its mirror
+           attached: `dropBall` had the omission facing the other way, and a
+           retracted keep went on holding a place on the ground. See the
+           helper for the measurement. */
         sceneAdd(b);
         /* everyone eases to a new home; nobody leaves the screen, which is
            what assignHomes guarantees by construction */
@@ -10063,7 +10080,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * divergence that put it there.
    */
   const whyFailed = useCallback(
-    (err: unknown, fallback: string): string => sayWhyFailed(err, fallback),
+    (err: unknown, fallback: string): string => sayWhyFailed(err, fallback, localeRef.current),
     [],
   );
 
@@ -10250,12 +10267,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
              mouth's own resting slot where the phrase lives. Then the card
              opens with the question already in it. */
           simApiRef.current?.acknowledge("kept");
-          setCharSay("saved");
+          setCharSay(say("worldSavedWord"));
           /* THE SHEET, NOT THE CARD. `made.id` and not `seed.id`: a
              reflection is a row against the SERVER's id, and the seed's is a
              local one minted before the keep left. */
           setReflectOn({ id: made.id, text });
-          setReflect({ step: "open", question: "What did this stir in you?", answer: "" });
+          setReflect({ step: "open", question: say("worldStirQuestion"), answer: "" });
         }
       })
       .catch((err: unknown) => {
@@ -10265,7 +10282,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         setMouthOpen(true);
         /* and the world stops saying it was saved, because it was not */
         setCharSay("");
-        setMouthNote(whyFailed(err, "That didn’t keep. The words are still here"));
+        setMouthNote(whyFailed(err, say("worldKeepFailed")));
         /* and in a build with the internals on, the whole error, once */
         if (showsDebug()) console.error("[waka] keep failed:", err);
       });
@@ -10636,7 +10653,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   useEffect(() => {
     if (panelId !== null && reflectOnOpenRef.current === panelId) {
       reflectOnOpenRef.current = null;
-      setReflect({ step: "open", question: "What did this stir in you?", answer: "" });
+      setReflect({ step: "open", question: say("worldStirQuestion"), answer: "" });
       return;
     }
     setReflect({ step: "rest", question: "", answer: "" });
@@ -10670,10 +10687,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
          happened, worded only as strongly as its enforcing test allows —
          goals/the-legible-loop.md Phase 2 */
       const receipt = targetId
-        ? RECEIPTS.verdictGroup.text
+        ? say(RECEIPTS.verdictGroup.messageKey)
         : value === "not_true"
-          ? RECEIPTS.verdictNo.text
-          : RECEIPTS.verdictKept.text;
+          ? say(RECEIPTS.verdictNo.messageKey)
+          : say(RECEIPTS.verdictKept.messageKey);
       setVerdictReceipt({ id, text: receipt });
       window.setTimeout(
         () => setVerdictReceipt((r) => (r?.id === id ? null : r)),
@@ -10839,7 +10856,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            cause of a 409, and the fallback still says so; what was missing is
            that the server gets to disagree. */
         .catch((err: unknown) =>
-          failed(whyFailed(err, "That room could not be made. Try another name.")),
+          failed(whyFailed(err, say("worldRoomNotMade"))),
         );
     } else {
       /* a pasted invite link works as well as a bare code — the link is the
@@ -10847,7 +10864,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       const code = text.includes("/") ? text.split("/").filter(Boolean).pop() ?? text : text;
       joinGroup(code)
         .then((r) => landed(r.group))
-        .catch((err: unknown) => failed(whyFailed(err, "No room answered to that. Check the link.")));
+        .catch((err: unknown) => failed(whyFailed(err, say("worldNoRoomAnswered"))));
     }
   }, [groupForm, whyFailed]);
 
@@ -10927,11 +10944,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
              version in the background and the wall picks it up on its own
              sweep. Saying "reading" rather than "read" is the difference
              between a receipt and a lie. */
-          setCharSay("The room is reading itself again.");
+          setCharSay(say("worldRoomRereading"));
           setGroupReading("rest");
         })
         .catch((err) => {
-          setCharSay(whyFailed(err, "That reading did not start."));
+          setCharSay(whyFailed(err, say("worldReadingNotStarted")));
           setGroupReading("rest");
         });
     },
@@ -10975,7 +10992,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       void updatePrinciple(draft.id, text)
         .then(() => reloadPrinciples())
         .then(done)
-        .catch((err) => setCharSay(whyFailed(err, "That was not saved.")))
+        .catch((err) => setCharSay(whyFailed(err, say("worldNotSaved"))))
         .finally(() => setPBusy(false));
       return;
     }
@@ -10993,7 +11010,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         }
         return reloadPrinciples().then(done);
       })
-      .catch((err) => setCharSay(whyFailed(err, "That was not saved.")))
+      .catch((err) => setCharSay(whyFailed(err, say("worldNotSaved"))))
       .finally(() => setPBusy(false));
   }, [pDraft, pBusy, reloadPrinciples, whyFailed]);
 
@@ -11004,7 +11021,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       disputePrinciple(id)
         .then(() => reloadPrinciples())
         .then(() => setPick(null))
-        .catch((err) => setCharSay(whyFailed(err, "That dispute was not recorded.")))
+        .catch((err) => setCharSay(whyFailed(err, say("worldDisputeNotRecorded"))))
         .finally(() => setPBusy(false));
     },
     [pBusy, reloadPrinciples, whyFailed],
@@ -11020,7 +11037,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           setPGoing(null);
           setPick(null);
         })
-        .catch((err) => setCharSay(whyFailed(err, "That principle is still here.")))
+        .catch((err) => setCharSay(whyFailed(err, say("worldPrincipleStillHere"))))
         .finally(() => setPBusy(false));
     },
     [pBusy, reloadPrinciples, whyFailed],
@@ -11041,7 +11058,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       setPBusy(true);
       reorderPrinciples(order)
         .then((rows) => setPrinciples(rows))
-        .catch((err) => setCharSay(whyFailed(err, "That order was not saved.")))
+        .catch((err) => setCharSay(whyFailed(err, say("worldOrderNotSaved"))))
         .finally(() => setPBusy(false));
     },
     [pBusy, principles, whyFailed],
@@ -11081,7 +11098,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           setMinted(key);
           return fetchAgentKeys().then((rows) => setAgentKeys(rows));
         })
-        .catch((err) => setCharSay(whyFailed(err, "That key was not issued.")))
+        .catch((err) => setCharSay(whyFailed(err, say("worldKeyNotIssued"))))
         .finally(() => setKeysBusy(false));
     },
     [keysBusy, whyFailed],
@@ -11096,7 +11113,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           setRevoking(null);
           return fetchAgentKeys().then((rows) => setAgentKeys(rows));
         })
-        .catch((err) => setCharSay(whyFailed(err, "That key is still live.")))
+        .catch((err) => setCharSay(whyFailed(err, say("worldKeyStillLive"))))
         .finally(() => setKeysBusy(false));
     },
     [keysBusy, whyFailed],
@@ -11298,7 +11315,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
              failure and presses it again should be re-arming deliberately
              rather than finding their finger already on the yes. */
           setLeaving(null);
-          setGroupTrouble({ verb: "leave", text: whyFailed(err, "You are still in this room.") });
+          setGroupTrouble({ verb: "leave", text: whyFailed(err, say("worldStillInRoomYou")) });
         });
     },
     [whyFailed],
@@ -11338,7 +11355,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
              box, so the recovery is one press; what was missing was any way to
              know a press was needed. */
           setRenaming((cur) => (cur ? { ...cur, busy: false } : cur));
-          setGroupTrouble({ verb: "rename", text: whyFailed(err, "That name did not stick.") });
+          setGroupTrouble({ verb: "rename", text: whyFailed(err, say("worldNameDidNotStick")) });
         });
     },
     [whyFailed],
@@ -11357,7 +11374,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         })
         .catch((err: unknown) => {
           setClosing(null);
-          setGroupTrouble({ verb: "close", text: whyFailed(err, "That room is still open.") });
+          setGroupTrouble({ verb: "close", text: whyFailed(err, say("worldRoomStillOpen")) });
         });
     },
     [whyFailed],
@@ -11383,7 +11400,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
              day, and leaving it silent on the strength of not having been
              looked at is how the other three got this way. */
           setRemoving(null);
-          setGroupTrouble({ verb: "remove", text: whyFailed(err, "They are still in this room.") });
+          setGroupTrouble({ verb: "remove", text: whyFailed(err, say("worldStillInRoomThey")) });
         });
     },
     [whyFailed],
@@ -11454,7 +11471,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            the whole of the old handler, and clearing it is what shuts the
            dialog — so the one recovery available (press it again) required
            first re-opening a form that had closed for no stated reason. */
-        setAgentTrouble(whyFailed(err, "That agent has no wall yet."));
+        setAgentTrouble(whyFailed(err, say("worldAgentNoWall")));
       });
   }, [agentName, whyFailed]);
 
@@ -11817,7 +11834,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         /* left as it was: the word is the state, so an unchanged word is an
            honest report that nothing moved — but silence about WHY is not,
            and this one is a privacy control */
-        setMouthNote(whyFailed(err, "That didn’t change who can see it"));
+        setMouthNote(whyFailed(err, say("worldVisibilityUnchanged")));
         if (showsDebug()) console.error("[waka] visibility change failed:", err);
       })
       .finally(() => setPublishing(false));
@@ -11863,7 +11880,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        GENERATOR. So the layout asks the plainest question there is, opens
        immediately, and spends no round trip on it. There is no "asking" beat
        to sit through and nothing to fail. */
-    setReflect({ step: "open", question: "What did this stir in you?", answer: "" });
+    setReflect({ step: "open", question: say("worldStirQuestion"), answer: "" });
   }, [panelId, panelBall]);
 
   const keepReflection = useCallback(() => {
@@ -11889,7 +11906,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            words still in the box — and now it says why, instead of looking
            like the button simply did nothing. */
         setReflect((r) => ({ ...r, step: "open" }));
-        setMouthNote(whyFailed(err, "That reflection didn’t save. Your words are still here"));
+        setMouthNote(whyFailed(err, say("worldReflectionNotSaved")));
         if (showsDebug()) console.error("[waka] reflection failed:", err);
       });
   }, [panelId, reflect, panelBall, reflectOn, whyFailed]);
@@ -12050,19 +12067,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   <div className="jar-values-room" data-jar-chrome="1">
                     <p className="jar-values-lead">
                       {w.kind === "self"
-                        ? "Your philosophies and values will form here."
-                        : `${w.name}’s philosophies and values will form here.`}
+                        ? say("worldValuesLeadSelf")
+                        : formatMessage(locale, "worldValuesLeadOther", { name: w.name })}
                     </p>
                     <p className="jar-values-sub">
                       {w.kind === "self"
-                        ? "They are the timeless half of a mind — what you " +
-                          "keep coming back to, whatever the day is. They " +
-                          "take time, and they are worth it: keep capturing, " +
-                          "and this sky will start to fill."
-                        : "They are the timeless half of a mind — what it " +
-                          "keeps coming back to, whatever the day is. They " +
-                          "take time, and they are worth it: as patterns are " +
-                          "kept here, this sky will start to fill."}
+                        ? say("worldValuesSubSelf")
+                        : say("worldValuesSubOther")}
                     </p>
                   </div>
                 ) : null}
@@ -12130,7 +12141,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                          reader that the poster is generated copy and destroy
                          the credibility of every wall they read afterwards. */
                       <p className="jar-forming">
-                        {c.formingAlt ?? "Forming — nothing adopted yet"}
+                        {c.formingAlt ?? say("worldFormingNothingAdopted")}
                       </p>
                     )}
                     {/* THE NAME SIGNS THE SENTENCE FROM BELOW (founder,
@@ -12148,7 +12159,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         in the product and it stands unlabelled; the date
                         alone signs it, when there is one. */}
                     {c.asOf ? (
-                      <div className="jar-asof jar-label">as of {c.asOf}</div>
+                      <div className="jar-asof jar-label">
+                        {formatMessage(locale, "worldAsOf", { month: c.asOf })}
+                      </div>
                     ) : null}
                     {/* WHAT IT RESTS ON. The same chain the sky shows under a
                         pattern, one layer up: the memories this sentence was
@@ -12166,7 +12179,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         existing verb, not a new control. */}
                     {here && posterAsk && posterGrounds.length > 0 ? (
                       <div className="jar-prov jar-prov--poster" data-jar-chrome="1">
-                        <p className="jar-prov-lead jar-label">standing on</p>
+                        <p className="jar-prov-lead jar-label">{say("worldStandingOn")}</p>
                         {posterGrounds.map((ground) => (
                           <div key={ground.id}>
                             {/* SAYING IT IN YOUR OWN WORDS, on the layer below
@@ -12190,7 +12203,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                               <>
                                 <textarea
                                   className="jar-ground-edit"
-                                  aria-label="this pattern in your own words"
+                                  aria-label={say("worldPatternInYourWords")}
                                   value={editing.open.text}
                                   rows={2}
                                   autoFocus
@@ -12208,11 +12221,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                     disabled={editing.open.saving}
                                     onClick={editing.keep}
                                   >
-                                    {editing.open.saving ? "saving…" : "save"}
+                                    {editing.open.saving ? say("worldSaving") : say("worldSave")}
                                   </button>
                                   <span aria-hidden="true"> · </span>
                                   <button type="button" onClick={editing.leave}>
-                                    leave it
+                                    {say("worldLeaveIt")}
                                   </button>
                                 </p>
                               </>
@@ -12240,7 +12253,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                     sayVerdict(ground.id, "true");
                                   }}
                                 >
-                                  yes
+                                  {say("worldYes")}
                                 </button>
                                 <span aria-hidden="true"> · </span>
                                 <button
@@ -12250,7 +12263,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                     sayVerdict(ground.id, "partly");
                                   }}
                                 >
-                                  partly
+                                  {say("worldPartly")}
                                 </button>
                                 <span aria-hidden="true"> · </span>
                                 <button
@@ -12260,7 +12273,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                     sayVerdict(ground.id, "not_true");
                                   }}
                                 >
-                                  not true
+                                  {say("worldNotTrue")}
                                 </button>
                                 <span aria-hidden="true"> · </span>
                                 <button
@@ -12270,7 +12283,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                     editing.begin("signal", ground.id, ground.statement);
                                   }}
                                 >
-                                  say it in my words
+                                  {say("worldSayItInMyWords")}
                                 </button>
                                 {/* and the way back out of that, in the same
                                     row and only once there is something to
@@ -12282,21 +12295,21 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                     <>
                                       <span aria-hidden="true"> · </span>
                                       <span className="jar-board-warn">
-                                        {RECEIPTS.releaseOffer.text}
+                                        {say(RECEIPTS.releaseOffer.messageKey)}
                                       </span>
                                       <span aria-hidden="true"> · </span>
                                       <button
                                         type="button"
                                         onClick={() => releaseGround(ground.id)}
                                       >
-                                        hand it back
+                                        {say("worldHandItBack")}
                                       </button>
                                       <span aria-hidden="true"> · </span>
                                       <button
                                         type="button"
                                         onClick={() => setReleasingGround(null)}
                                       >
-                                        leave it as it is
+                                        {say("worldLeaveItAsItIs")}
                                       </button>
                                     </>
                                   ) : (
@@ -12306,7 +12319,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                         type="button"
                                         onClick={() => setReleasingGround(ground.id)}
                                       >
-                                        hand it back
+                                        {say("worldHandItBack")}
                                       </button>
                                     </>
                                   )
@@ -12337,7 +12350,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                               setProv({ lead: c.text ?? "", rows: posterChain });
                             }}
                           >
-                            built from
+                            {say("worldBuiltFrom")}
                           </button>
                         </div>
                       ) : (
@@ -12345,7 +12358,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                            sentence somebody wrote by hand, and saying so is
                            more useful than an empty band */
                         <div className="jar-prov jar-prov--poster" data-jar-chrome="1">
-                          <p className="jar-prov-lead jar-label">written by hand</p>
+                          <p className="jar-prov-lead jar-label">{say("worldWrittenByHand")}</p>
                         </div>
                       )
                     ) : null}
@@ -12357,32 +12370,32 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         {groupReading === "asking" ? (
                           <>
                             <span className="jar-board-warn">
-                              Reading everything the room has put up. What it says may change.
+                              {say("worldRoomRereadWarn")}
                             </span>
                             <button
                               type="button"
                               className="jar-board-act jar-label"
                               onClick={() => rereadGroupBoard(w.id)}
                             >
-                              Read again
+                              {say("worldReadAgain")}
                             </button>
                             <button
                               type="button"
                               className="jar-board-act jar-label"
                               onClick={() => setGroupReading("rest")}
                             >
-                              Leave it
+                              {say("worldLeaveItCap")}
                             </button>
                           </>
                         ) : groupReading === "working" ? (
-                          <span className="jar-board-act jar-label">Reading…</span>
+                          <span className="jar-board-act jar-label">{say("worldReadingNow")}</span>
                         ) : (
                           <button
                             type="button"
                             className="jar-board-act jar-label"
                             onClick={() => setGroupReading("asking")}
                           >
-                            Read it again
+                            {say("worldReadItAgain")}
                           </button>
                         )}
                       </div>
@@ -12391,10 +12404,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         version is not a history, it is the first sentence. */}
                     {here && posterAsk && w.kind === "self" && (versions?.length ?? 0) > 1 ? (
                       <div className="jar-prov jar-prov--poster" data-jar-chrome="1">
-                        <p className="jar-prov-lead jar-label">before this</p>
+                        <p className="jar-prov-lead jar-label">{say("worldBeforeThis")}</p>
                         {(versions ?? []).slice(1, 5).map((v) => (
                           <p key={v.id} className="jar-was">
-                            {dateWords(Date.parse(v.createdAt) || 0, TRef.current)}
+                            {dateWords(Date.parse(v.createdAt) || 0, TRef.current, locale)}
                           </p>
                         ))}
                       </div>
@@ -12433,7 +12446,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         aria-expanded={principlesOpen}
                         onClick={() => setPrinciplesOpen((v) => !v)}
                       >
-                        how you choose
+                        {say("worldHowYouChoose")}
                       </button>
                     ) : null}
                     {here && w.kind === "self" && principlesOpen ? (
@@ -12453,7 +12466,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                 <>
                                   <textarea
                                     className="jar-ground-edit"
-                                    aria-label="this principle in your own words"
+                                    aria-label={say("worldPrincipleInYourWords")}
                                     value={pDraft.text}
                                     rows={2}
                                     autoFocus
@@ -12469,11 +12482,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                   />
                                   <span className="jar-ask">
                                     <button type="button" disabled={pBusy} onClick={savePrinciple}>
-                                      {pBusy ? "saving…" : "save"}
+                                      {pBusy ? say("worldSaving") : say("worldSave")}
                                     </button>
                                     <span aria-hidden="true"> · </span>
                                     <button type="button" onClick={() => setPDraft(null)}>
-                                      leave it
+                                      {say("worldLeaveIt")}
                                     </button>
                                   </span>
                                 </>
@@ -12494,7 +12507,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                    declared-but-not-yet-demonstrated is a
                                    different claim from earned, and the canon
                                    already has the word for it. */
-                                <span className="jar-poster-away"> aspirational</span>
+                                <span className="jar-poster-away"> {say("worldAspirational")}</span>
                               ) : null}
                               {/* THE VERBS, under the sentence they are about.
                                   Order is by consequence: correcting is
@@ -12522,7 +12535,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                     type="button"
                                     onClick={() => setPDraft({ id: pr.id, text: pr.statement })}
                                   >
-                                    say it in my words
+                                    {say("worldSayItInMyWords")}
                                   </button>
                                   {pr.citedSignals.length > 0 ? (
                                     <>
@@ -12534,7 +12547,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                           setPRoots((cur) => (cur === pr.id ? null : pr.id))
                                         }
                                       >
-                                        what it grew from
+                                        {say("worldWhatItGrewFrom")}
                                       </button>
                                     </>
                                   ) : null}
@@ -12546,7 +12559,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                         disabled={pBusy}
                                         onClick={() => movePrinciple(pr.id, -1)}
                                       >
-                                        matters more
+                                        {say("worldMattersMore")}
                                       </button>
                                     </>
                                   ) : null}
@@ -12558,7 +12571,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                         disabled={pBusy}
                                         onClick={() => movePrinciple(pr.id, 1)}
                                       >
-                                        matters less
+                                        {say("worldMattersLess")}
                                       </button>
                                     </>
                                   ) : null}
@@ -12601,7 +12614,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                         disabled={pBusy}
                                         onClick={() => disputeThisPrinciple(pr.id)}
                                       >
-                                        not mine
+                                        {say("worldNotMine")}
                                       </button>
                                     </>
                                   ) : (
@@ -12614,16 +12627,16 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                             disabled={pBusy}
                                             onClick={() => removePrinciple(pr.id)}
                                           >
-                                            {pBusy ? "withdrawing…" : "yes, withdraw it"}
+                                            {pBusy ? say("worldWithdrawing") : say("worldYesWithdrawIt")}
                                           </button>
                                           <span aria-hidden="true"> · </span>
                                           <button type="button" onClick={() => setPGoing(null)}>
-                                            keep it
+                                            {say("worldKeepIt")}
                                           </button>
                                         </>
                                       ) : (
                                         <button type="button" onClick={() => setPGoing(pr.id)}>
-                                          withdraw
+                                          {say("worldWithdraw")}
                                         </button>
                                       )}
                                     </>
@@ -12641,11 +12654,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                           <p className="jar-was">
                             <textarea
                               className="jar-ground-edit"
-                              aria-label="a principle of your own"
+                              aria-label={say("worldAPrincipleOfYourOwn")}
                               value={pDraft.text}
                               rows={2}
                               autoFocus
-                              placeholder="What you hold to"
+                              placeholder={say("worldWhatYouHoldTo")}
                               onChange={(e) => setPDraft({ id: null, text: e.target.value })}
                               onKeyDown={(e) => {
                                 if (e.key === "Escape") {
@@ -12656,11 +12669,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                             />
                             <span className="jar-ask">
                               <button type="button" disabled={pBusy} onClick={savePrinciple}>
-                                {pBusy ? "declaring…" : "declare it"}
+                                {pBusy ? say("worldDeclaring") : say("worldDeclareIt")}
                               </button>
                               <span aria-hidden="true"> · </span>
                               <button type="button" onClick={() => setPDraft(null)}>
-                                not now
+                                {say("worldNotNow")}
                               </button>
                             </span>
                           </p>
@@ -12673,7 +12686,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                 setPDraft({ id: null, text: "" });
                               }}
                             >
-                              declare one
+                              {say("worldDeclareOne")}
                             </button>
                           </p>
                         )}
@@ -12706,11 +12719,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         />
                         <p className="jar-ask">
                           <button type="button" disabled={editing.open.saving} onClick={editing.keep}>
-                            {editing.open.saving ? "…" : "keep these words"}
+                            {editing.open.saving ? "…" : say("worldKeepTheseWords")}
                           </button>
                           <span aria-hidden="true"> · </span>
                           <button type="button" onClick={editing.leave}>
-                            leave it
+                            {say("worldLeaveIt")}
                           </button>
                         </p>
                       </div>
@@ -12719,10 +12732,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       <p className="jar-ask jar-ask--after" data-jar-chrome="1">
                         {/* the dismissal's receipt rides beside its undo —
                             reversible is part of the law being stated */}
-                        <span className="jar-receipt">{RECEIPTS.dismissed.text}</span>
+                        <span className="jar-receipt">{say(RECEIPTS.dismissed.messageKey)}</span>
                         <span aria-hidden="true"> · </span>
                         <button type="button" onClick={restoreLead}>
-                          put it back
+                          {say("worldPutItBack")}
                         </button>
                       </p>
                     ) : null}
@@ -12753,25 +12766,25 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                 board from the signals as they now stand, so
                                 the sentence names exactly that. */}
                             <span className="jar-board-warn">
-                              Reading everything again. What it says may change.
+                              {say("worldBoardRereadWarn")}
                             </span>
                             <button
                               type="button"
                               className="jar-board-act jar-label"
                               onClick={rebuildBoard}
                             >
-                              Read again
+                              {say("worldReadAgain")}
                             </button>
                             <button
                               type="button"
                               className="jar-board-act jar-label"
                               onClick={() => setBoard({ step: "rest" })}
                             >
-                              Leave it
+                              {say("worldLeaveItCap")}
                             </button>
                           </>
                         ) : board.step === "working" ? (
-                          <span className="jar-board-act jar-label">Reading…</span>
+                          <span className="jar-board-act jar-label">{say("worldReadingNow")}</span>
                         ) : (
                           <>
                             {boardToast ? (
@@ -12784,14 +12797,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                               className="jar-board-act jar-label"
                               onClick={() => setBoard({ step: "asking" })}
                             >
-                              Read it again
+                              {say("worldReadItAgain")}
                             </button>
                             {/* Holding is the person overruling the ordering:
                                 the server keeps feeding the entry but never
                                 moves it off the poster again. */}
                             {lead.pinned ? (
                               <span className="jar-board-act jar-label jar-board-act--held">
-                                Held up
+                                {say("worldHeldUp")}
                               </span>
                             ) : (
                               <button
@@ -12799,7 +12812,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                 className="jar-board-act jar-label"
                                 onClick={() => holdLead(lead)}
                               >
-                                Keep this one up
+                                {say("worldKeepThisOneUp")}
                               </button>
                             )}
                             <button
@@ -12807,37 +12820,37 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                               className="jar-board-act jar-label"
                               onClick={() => editing.begin("entry", lead.id, lead.body)}
                             >
-                              Say it in my words
+                              {say("worldSayItInMyWordsCap")}
                             </button>
                             {lead.locked ? (
                               entrusting === lead.id ? (
                                 <>
                                   <span className="jar-board-warn">
-                                    {RECEIPTS.releaseOffer.text}
+                                    {say(RECEIPTS.releaseOffer.messageKey)}
                                   </span>
                                   <button
                                     type="button"
                                     className="jar-board-act jar-label"
                                     onClick={() => entrustLead(lead.id)}
                                   >
-                                    Hand it back
+                                    {say("worldHandItBackCap")}
                                   </button>
                                   <button
                                     type="button"
                                     className="jar-board-act jar-label"
                                     onClick={() => setEntrusting(null)}
                                   >
-                                    Leave it as it is
+                                    {say("worldLeaveItAsItIsCap")}
                                   </button>
                                 </>
                               ) : (
                                 <button
                                   type="button"
                                   className="jar-board-act jar-label jar-star-act"
-                                  title="Your own words — WAKA will not rewrite them"
+                                  title={say(RECEIPTS.starHeld.messageKey)}
                                   onClick={() => setEntrusting(lead.id)}
                                 >
-                                  Hand it back to WAKA
+                                  {say("worldHandItBackToWaka")}
                                 </button>
                               )
                             ) : null}
@@ -12846,7 +12859,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                               className="jar-board-act jar-label jar-board-act--quiet"
                               onClick={() => dropLead(lead)}
                             >
-                              Not this
+                              {say("worldNotThis")}
                             </button>
                           </>
                         )}
@@ -12921,11 +12934,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     the emptiness. */}
                 {ready && c?.empty && !c?.formingAlt && w.kind === "agent" ? (
                   <p className="jar-wall-empty">
-                    Give me something to work on and I’ll start
+                    {say("worldAgentEmptyGive")}
                   </p>
                 ) : null}
                 {w.kind === "group" && failedGroups.has(w.id) && !ready ? (
-                  <p className="jar-wall-hold jar-label">Couldn’t reach this room</p>
+                  <p className="jar-wall-hold jar-label">{say("worldRoomUnreachable")}</p>
                 ) : null}
                 {/* THE EDGE OF THE WORLD, AND WHAT IS BEYOND IT.
                     Making a room and adding an agent both mean "a new column
@@ -12994,7 +13007,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     onClick={() => simApiRef.current?.travel(-1)}
                   >
                     <span className="jar-caret jar-caret--left" aria-hidden="true" />
-                    <span>{left.name}</span>
+                    <span>{wallName(left)}</span>
                   </button>
                 ) : null}
                 {right ? (
@@ -13006,7 +13019,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     onPointerDown={() => loadWall(right)}
                     onClick={() => simApiRef.current?.travel(1)}
                   >
-                    <span>{right.name}</span>
+                    <span>{wallName(right)}</span>
                     <span className="jar-caret jar-caret--right" aria-hidden="true" />
                   </button>
                 ) : null}
@@ -13091,10 +13104,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 value={draft}
                 rows={1}
                 spellCheck={false}
-                aria-label="capture inspiration"
+                aria-label={say("worldCaptureInspiration")}
                 /* the resting phrase, kept — opening the mouth changes
                    nothing about it (founder, 2026-08-24) */
-                placeholder="Capture inspiration"
+                placeholder={say("worldCaptureInspiration")}
                 onChange={(e) => {
                   mouthCaretRef.current = e.target.selectionStart ?? e.target.value.length;
                   setDraft(e.target.value);
@@ -13128,7 +13141,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 {/* a waiting draft outranks the invitation: the line is the
                     door back into your own words (mouth closed, words kept —
                     the state renders) */}
-                {charSay || (draft.trim() !== "" ? "Continue your draft" : "Capture inspiration")}
+                {charSay || (draft.trim() !== "" ? say("worldContinueDraft") : say("worldCaptureInspiration"))}
               </button>
             )}
             {/* WHERE THIS ONE GOES, DECIDED WHILE WRITING IT.
@@ -13188,7 +13201,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                      centred row at the foot. */
                   <>
                     <button type="button" className="jar-mouth-step" onClick={saveAsDraft}>
-                      save as draft
+                      {say("worldSaveAsDraft")}
                     </button>
                     <span aria-hidden="true" className="jar-mouth-dot"> · </span>
                   </>
@@ -13199,7 +13212,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   aria-pressed={!keepPublic}
                   onClick={() => setKeepPublic(false)}
                 >
-                  private
+                  {say("worldPrivate")}
                 </button>
                 <span aria-hidden="true">/</span>
                 <button
@@ -13208,7 +13221,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   aria-pressed={keepPublic}
                   onClick={() => setKeepPublic(true)}
                 >
-                  public
+                  {say("worldPublic")}
                 </button>
                 <span aria-hidden="true" className="jar-mouth-dot"> · </span>
                 {/* NOT FULL INK (founder, 2026-08-27: "save should not be
@@ -13219,11 +13232,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     own muted tier and lifts under the hand like every other
                     pressable word. */}
                 <button type="button" className="jar-where-verb" onClick={() => keepIt()}>
-                  save
+                  {say("worldSave")}
                 </button>
                 <span aria-hidden="true" className="jar-mouth-dot"> · </span>
                 <button type="button" className="jar-where-off" onClick={() => keepIt(true)}>
-                  reflect
+                  {say("worldReflect")}
                 </button>
               </p>
             ) : null}
@@ -13269,7 +13282,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           className={`jar-panel${panelOpen ? " jar-panel--in" : " jar-panel--out"}`}
           data-jar-chrome="1"
           role="dialog"
-          aria-label="a saved inspiration"
+          aria-label={say("worldASavedInspiration")}
         >
           {/* THE HEAD IS ONE ROW (founder's sketch, 2026-08-25: "must be
               aligned centered"). The date and the visibility pair were two
@@ -13288,14 +13301,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             <span className="jar-panel-when jar-label">
               {panelBall.noDate
                 ? panelBall.authorName ?? ""
-                : `${panelBall.authorName ?? ""} · ${dateWords(panelBall.capturedMs, Date.now())}`}
+                : `${panelBall.authorName ?? ""} · ${dateWords(panelBall.capturedMs, Date.now(), locale)}`}
             </span>
           ) : (
             <span className="jar-panel-when jar-label">
               {/* the date alone, with its year — "Two days ago · Aug 24" said
                   one fact twice, and the relative half goes stale while the
                   card stays open (founder, 2026-08-27) */}
-              {dateStamp(panelBall.capturedMs)}
+              {dateStamp(panelBall.capturedMs, locale)}
             </span>
           )}
           {!panelIsGroup ? (
@@ -13320,7 +13333,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                    that decide who can read something have to be able to say
                    what they decide; the state is legible at a glance and the
                    consequence is not. */
-                title="Only you can read this. Nothing leaves your own ground."
+                title={say("worldPrivateTooltip")}
                 onClick={() => {
                   if (!panelIsPublic) return;
                   /* un-publishing a memory a signal stands on gets the same
@@ -13330,17 +13343,17 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   else togglePublic();
                 }}
               >
-                private
+                {say("worldPrivate")}
               </button>
               <span aria-hidden="true">/</span>
               <button
                 type="button"
                 className={panelIsPublic ? "jar-where-on" : "jar-where-off"}
                 aria-pressed={panelIsPublic}
-                title="Rooms you are in can read this, and it can feed what a room says."
+                title={say("worldPublicTooltip")}
                 onClick={() => (panelIsPublic ? undefined : togglePublic())}
               >
-                public
+                {say("worldPublic")}
               </button>
             </p>
           ) : null}
@@ -13363,7 +13376,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 }
               }}
               className="jar-panel-text jar-panel-edit"
-              aria-label="the words of this inspiration"
+              aria-label={say("worldWordsOfThisInspiration")}
               /* ONE, BECAUSE THE DEFAULT IS TWO. A textarea without `rows`
                  is rows="2", so `height: auto` in `growPanelEdit` never
                  measures below two lines — and a one-line memory grew a
@@ -13404,11 +13417,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             </p>
           )}
           {panel.partial ? (
-            <p className="jar-panel-note">Couldn’t load the rest.</p>
+            <p className="jar-panel-note">{say("worldCouldntLoadRest")}</p>
           ) : null}
           {panelIsGroup && panelBall.citedBy && panelBall.citedBy.length > 0 ? (
             /* the collapsed links sentence, adapted: what read this save */
-            <p className="jar-panel-cited jar-label">{citedWords(panelBall.citedBy)}</p>
+            <p className="jar-panel-cited jar-label">{citedWords(panelBall.citedBy, locale)}</p>
           ) : null}
 
           {/* A ROOM ORB IS SOMEBODY'S STATEMENT, AND YOU MAY ANSWER IT.
@@ -13429,21 +13442,21 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               /* the same one quiet line the sky uses — not a row of controls */
               <p className="jar-ask">
                 <button type="button" onClick={() => sayVerdict(panelBall.sigId as string, "true")}>
-                  yes
+                  {say("worldYes")}
                 </button>
                 <span aria-hidden="true"> · </span>
                 <button
                   type="button"
                   onClick={() => sayVerdict(panelBall.sigId as string, "partly")}
                 >
-                  partly
+                  {say("worldPartly")}
                 </button>
                 <span aria-hidden="true"> · </span>
                 <button
                   type="button"
                   onClick={() => sayVerdict(panelBall.sigId as string, "not_true")}
                 >
-                  not true
+                  {say("worldNotTrue")}
                 </button>
               </p>
             )
@@ -13455,7 +13468,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               reading what they saved. */}
 
           {reflect.step === "asking" ? (
-            <span className="jar-panel-act jar-label jar-panel-act--waiting">Finding a question…</span>
+            <span className="jar-panel-act jar-label jar-panel-act--waiting">{say("worldFindingQuestion")}</span>
           ) : null}
           {reflect.step === "open" || reflect.step === "keeping" ? (
             /* one appearance: the question and the box arrive together, whole */
@@ -13466,7 +13479,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 value={reflect.answer}
                 rows={4}
                 autoFocus
-                placeholder="In your own words"
+                placeholder={say("worldInYourOwnWords")}
                 onChange={(e) => setReflect((r) => ({ ...r, answer: e.target.value }))}
               />
               <button
@@ -13475,7 +13488,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 disabled={reflect.step === "keeping" || reflect.answer.trim() === ""}
                 onClick={keepReflection}
               >
-                Keep
+                {say("worldKeepCap")}
               </button>
             </div>
           ) : null}
@@ -13485,7 +13498,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               so removing one re-derives what stood on it. */}
           {reflect.step === "kept" ? (
             <p className="jar-ask jar-ask--after">
-              <span>kept</span>
+              <span>{say("worldKeptWord")}</span>
               {reflect.lastId ? (
                 <>
                   <span aria-hidden="true"> · </span>
@@ -13499,7 +13512,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         deleteReflection(owner, rid).catch(() => undefined);
                     }}
                   >
-                    take it back
+                    {say("worldTakeItBack")}
                   </button>
                 </>
               ) : null}
@@ -13539,7 +13552,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             <p className="jar-ask jar-ask--after jar-panel-foot">
               <span className="jar-panel-foot-l">
               <label className="jar-attach">
-                {attaching ? "adding attachment…" : "add attachment"}
+                {attaching ? say("worldAddingAttachment") : say("worldAddAttachment")}
                 <input
                   type="file"
                   accept="image/*"
@@ -13586,15 +13599,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       have back in a moment: what you may do, what is
                       happening, and what happened. */}
                   {editing.open.saved
-                    ? "saved"
+                    ? say("worldSavedWord")
                     : editing.open.saving
-                      ? "saving…"
-                      : "save"}
+                      ? say("worldSaving")
+                      : say("worldSave")}
                 </button>
               </span>
               <span className="jar-panel-foot-r">
                 <button type="button" onClick={editing.leave}>
-                  cancel edit
+                  {say("worldCancelEdit")}
                 </button>
               </span>
             </p>
@@ -13615,41 +13628,31 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               are deciding about. */}
           {forget.step === "asking" && forget.id === panelId ? (
             <div className="jar-panel-askrow">
-              <p className="jar-panel-warn">
-                A signal was read from this memory and still stands on it.
-                Deleting the memory does not unlearn the signal — but the
-                signal loses this ground, and can no longer point back to
-                where it came from.
-              </p>
+              <p className="jar-panel-warn">{say("worldDeleteWarn")}</p>
               <p className="jar-ask jar-ask--row">
                 <button
                   type="button"
                   className="jar-where-on"
                   onClick={() => setForget({ id: null, step: "rest" })}
                 >
-                  keep it
+                  {say("worldKeepIt")}
                 </button>
                 <span aria-hidden="true"> · </span>
                 <button type="button" className="jar-where-off" onClick={forgetIt}>
-                  delete it anyway
+                  {say("worldDeleteItAnyway")}
                 </button>
               </p>
             </div>
           ) : unpublishAsk ? (
             <div className="jar-panel-askrow">
-              <p className="jar-panel-warn">
-                A signal was read from this memory while it was public and
-                still stands on it. Making it private takes it off your
-                rooms’ ground — the signal is not unlearned, but it can no
-                longer point back to where it came from.
-              </p>
+              <p className="jar-panel-warn">{say("worldUnpublishWarn")}</p>
               <p className="jar-ask jar-ask--row">
                 <button
                   type="button"
                   className="jar-where-on"
                   onClick={() => setUnpublishAsk(false)}
                 >
-                  keep it public
+                  {say("worldKeepItPublic")}
                 </button>
                 <span aria-hidden="true"> · </span>
                 <button
@@ -13660,7 +13663,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     togglePublic();
                   }}
                 >
-                  make it private anyway
+                  {say("worldMakePrivateAnyway")}
                 </button>
               </p>
             </div>
@@ -13673,7 +13676,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             <p className="jar-ask jar-ask--after jar-panel-foot">
               <span className="jar-panel-foot-l">
               <button type="button" onClick={askToReflect}>
-                reflect
+                {say("worldReflect")}
               </button>
               </span>
               <span className="jar-panel-foot-c">{panelStepCarets}</span>
@@ -13689,14 +13692,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       a safety costume. A memory a signal stands on opens the
                       ask below instead. */}
                   {forget.step === "going" ? (
-                    "deleting…"
+                    say("worldDeleting")
                   ) : forget.step === "failed" ? (
                     /* PROSE, AND IT SAYS WHAT IS TRUE: the memory is still
                        here. Beside the verb rather than in a sheet, because
                        nothing happened and nothing needs deciding — pressing
                        delete again is the whole recovery. */
                     <span className="jar-panel-warn">
-                      That didn’t go through — it is still here.
+                      {say("worldDeleteFailed")}
                     </span>
                   ) : (
                     <button
@@ -13707,7 +13710,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                           : forgetIt()
                       }
                     >
-                      delete
+                      {say("worldDelete")}
                     </button>
                   )}
                 </>
@@ -13738,12 +13741,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           className="jar-prov-room"
           data-jar-chrome="1"
           role="dialog"
-          aria-label="where this came from"
+          aria-label={say("worldWhereThisCameFrom")}
         >
           <p className="jar-prov-room-lead">{prov.lead}</p>
           <div className="jar-prov-room-panes">
             <div className="jar-prov-room-list">
-              <p className="jar-prov-lead jar-label">read from</p>
+              <p className="jar-prov-lead jar-label">{say("worldReadFrom")}</p>
               {prov.rows.map((e) => (
                 <button
                   key={`${e.signalId}:${e.inspirationId}`}
@@ -13766,16 +13769,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                    memory you are reading is a thing you chose, and a pane
                    that chose for you would put words on screen you did not
                    ask for and could not tell apart from your own choice. */
-                <p className="jar-prov-room-idle">
-                  Press one to read the whole memory it came from.
-                </p>
+                <p className="jar-prov-room-idle">{say("worldProvIdle")}</p>
               ) : provFull === null || provFull.id !== provPick ? (
-                <p className="jar-prov-room-idle">Fetching it…</p>
+                <p className="jar-prov-room-idle">{say("worldFetchingIt")}</p>
               ) : provFull.text === "" ? (
-                <p className="jar-prov-room-idle">
-                  Couldn’t fetch the rest of this one. The words on the left are
-                  the span that was read.
-                </p>
+                <p className="jar-prov-room-idle">{say("worldProvFetchFailed")}</p>
               ) : (
                 <p className="jar-prov-room-text">{provFull.text}</p>
               )}
@@ -13783,7 +13781,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           </div>
           <p className="jar-ask jar-ask--row jar-prov-room-close">
             <button type="button" onClick={() => setProv(null)}>
-              enough
+              {say("worldEnough")}
             </button>
           </p>
         </div>
@@ -13874,13 +13872,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               >
                 {atWall.kind === "group"
                   ? groups.find((g) => g.id === atWall.id)?.name ?? atWall.name
-                  : atWall.name}
+                  : wallName(atWall)}
               </button>
               <button
                 type="button"
                 className="jar-here-more jar-back jar-label"
                 aria-expanded={wallPick}
-                aria-label="go to another wall"
+                aria-label={say("worldGoToAnotherWall")}
                 onClick={() => {
                   setSettingsFor(null);
                   setWallPick((v) => !v);
@@ -13903,7 +13901,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                           simApiRef.current?.goToWall(w.col);
                         }}
                       >
-                        {w.name}
+                        {wallName(w)}
                       </button>
                     );
                   })}
@@ -13921,7 +13919,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       setNewPlace(true);
                     }}
                   >
-                    add new
+                    {say("worldAddNew")}
                   </button>
                 </span>
               ) : null}
@@ -13950,10 +13948,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               type="button"
               className={`jar-when jar-label${parkedAt === null ? "" : " jar-when--away"}`}
               aria-expanded={timeOpen}
-              aria-label="wind this wall back to a date"
+              aria-label={say("worldWindBack")}
               onClick={() => setTimeOpen((v) => !v)}
             >
-              {parkedAt === null ? "now" : dateWords(parkedAt, dial.end)}
+              {parkedAt === null ? say("worldNow") : dateWords(parkedAt, dial.end, locale)}
             </button>
           ) : null}
         </div>
@@ -13990,7 +13988,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             setSettingsFor(null);
           }}
         >
-          Your account
+          {say("worldYourAccount")}
         </button>
 
         {/* WHAT YOU ARE LOOKING AT, WHEN IT IS NOT YOURS. It lives in the
@@ -13999,7 +13997,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             in the field, and it cannot be travelled away from. */}
         {offline ? (
           <p className="jar-offline jar-label">
-            Offline — showing sample memories, nothing is kept
+            {say("worldOffline")}
           </p>
         ) : null}
       </div>
@@ -14023,7 +14021,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           className={groundsLit ? "jar-ground jar-ground--lit" : "jar-ground"}
           data-jar-chrome="1"
           role="radiogroup"
-          aria-label="Whose inspirations are on the ground"
+          aria-label={say("worldWhoseGround")}
         >
           {grounds.map((m) => {
             const here = m.mine ? standing === null : standing === m.id;
@@ -14110,7 +14108,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             className="jar-roomform-box"
             autoFocus
             value={agentName}
-            placeholder="What do you call it?"
+            placeholder={say("worldAgentNamePlaceholder")}
             onChange={(e) => setAgentName(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") makeAgent();
@@ -14119,11 +14117,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           />
           <p className="jar-ask">
             <button type="button" onClick={makeAgent}>
-              give it a wall
+              {say("worldGiveItAWall")}
             </button>
             <span aria-hidden="true"> · </span>
             <button type="button" onClick={() => setAgentName(null)}>
-              not now
+              {say("worldNotNow")}
             </button>
           </p>
           {agentTrouble ? (
@@ -14131,10 +14129,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               {agentTrouble}
             </p>
           ) : null}
-          <p className="jar-share-note">
-            It writes here once it signs in as itself. Until then the wall is empty,
-            and says so.
-          </p>
+          <p className="jar-share-note">{say("worldAgentWritesOnce")}</p>
         </div>
       ) : null}
 
@@ -14196,7 +14191,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           data-jar-chrome="1"
           onClick={() => simApiRef.current?.toSky()}
         >
-          <span className="jar-values-words jar-label">philosophies &amp; values</span>
+          <span className="jar-values-words jar-label">{say("worldPhilosophiesValues")}</span>
           <span className="jar-caret jar-caret--up" aria-hidden="true" />
         </button>
       ) : null}
@@ -14213,7 +14208,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           type="button"
           className="jar-up jar-up--down"
           data-jar-chrome="1"
-          aria-label="back down to your wall"
+          aria-label={say("worldBackDown")}
           onClick={() => simApiRef.current?.toTop()}
         >
           <span className="jar-caret" aria-hidden="true" />
@@ -14241,7 +14236,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           className="sr-only jar-reach"
           role="listbox"
           tabIndex={0}
-          aria-label="Your ground — left and right arrows read through your memories, Enter opens and closes the one in hand"
+          aria-label={say("worldReachLabel")}
           aria-activedescendant={reachId ? `jar-reach-${reachId}` : undefined}
           onFocus={onReachFocus}
           onKeyDown={onReachKey}
@@ -14273,7 +14268,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           type="button"
           className="jar-up"
           data-jar-chrome="1"
-          aria-label="back up to the wall"
+          aria-label={say("worldBackUp")}
           onClick={() => simApiRef.current?.toTop()}
         >
           <span className="jar-caret jar-caret--up" aria-hidden="true" />
@@ -14298,8 +14293,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 what it always was: one number and the word. Past it, the door
                 stops printing the size of what arrived as though it were the
                 size of the archive. */}
-            {wallTotal > wallCount ? `${wallCount} of ${wallTotal}` : wallCount}
-            {wallTotal === 1 ? " inspiration" : " inspirations"}
+            {wallTotal > wallCount
+              ? formatMessage(locale, "worldInspirationCountCapped", {
+                  shown: wallCount,
+                  total: wallTotal,
+                })
+              : formatMessage(locale, "worldInspirationCount", { count: wallCount })}
           </span>
           <span className="jar-caret" aria-hidden="true" />
         </button>
@@ -14340,8 +14339,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             aria-hidden="true"
             onPointerDown={() => setNewPlace(false)}
           />
-        <div className="jar-seek jar-newplace" data-jar-chrome="1" role="dialog" aria-label="make another place">
-          <p className="jar-prov-lead jar-label">make another place</p>
+        <div
+          className="jar-seek jar-newplace"
+          data-jar-chrome="1"
+          role="dialog"
+          aria-label={say("worldMakeAnotherPlace")}
+        >
+          <p className="jar-prov-lead jar-label">{say("worldMakeAnotherPlace")}</p>
           <button
             type="button"
             className="jar-newplace-row"
@@ -14350,12 +14354,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               setGroupForm({ mode: "make", text: "", busy: false, error: null });
             }}
           >
-            <span className="jar-newplace-name">a room</span>
-            <span className="jar-newplace-what">
-              A wall a few of you keep. Members put up chosen signals — never
-              the captures behind them — and the room reads them into one
-              shared top of mind.
-            </span>
+            <span className="jar-newplace-name">{say("worldARoom")}</span>
+            <span className="jar-newplace-what">{say("worldRoomWhat")}</span>
           </button>
           <button
             type="button"
@@ -14365,11 +14365,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               setAgentName("");
             }}
           >
-            <span className="jar-newplace-name">an agent</span>
-            <span className="jar-newplace-what">
-              A mind of its own, with its own wall. It writes there once it
-              signs in as itself; until then the wall is empty, and says so.
-            </span>
+            <span className="jar-newplace-name">{say("worldAnAgent")}</span>
+            <span className="jar-newplace-what">{say("worldAgentWhat")}</span>
           </button>
         </div>
         </>
@@ -14396,15 +14393,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           className="jar-seek jar-reflect-room"
           data-jar-chrome="1"
           role="dialog"
-          aria-label="reflect on what you just kept"
+          aria-label={say("worldReflectOnKept")}
         >
-          <p className="jar-prov-lead jar-label">saved</p>
+          <p className="jar-prov-lead jar-label">{say("worldSavedLead")}</p>
           {/* what it was, in one line: enough to know which memory this is
               about, never the whole thing back */}
           <p className="jar-reflect-on">{reflectOn.text}</p>
           {reflect.step === "kept" ? (
             <>
-              <p className="jar-reflect-q">Kept.</p>
+              <p className="jar-reflect-q">{say("worldKeptDot")}</p>
               <p className="jar-ask jar-ask--row">
                 <button
                   type="button"
@@ -14417,7 +14414,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       deleteReflection(owner, rid).catch(() => undefined);
                   }}
                 >
-                  take it back
+                  {say("worldTakeItBack")}
                 </button>
                 <span aria-hidden="true"> · </span>
                 <button
@@ -14427,7 +14424,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     setReflectOn(null);
                   }}
                 >
-                  done
+                  {say("worldDone")}
                 </button>
               </p>
             </>
@@ -14439,7 +14436,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 value={reflect.answer}
                 rows={4}
                 autoFocus
-                placeholder="In your own words"
+                placeholder={say("worldInYourOwnWords")}
                 onChange={(e) => setReflect((r) => ({ ...r, answer: e.target.value }))}
               />
               <p className="jar-ask jar-ask--row">
@@ -14448,7 +14445,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   disabled={reflect.step === "keeping" || reflect.answer.trim() === ""}
                   onClick={keepReflection}
                 >
-                  {reflect.step === "keeping" ? "keeping…" : "keep"}
+                  {reflect.step === "keeping" ? say("worldKeeping") : say("worldKeepLower")}
                 </button>
                 <span aria-hidden="true"> · </span>
                 {/* NOT NOW IS NOT A LOSS. The memory is already kept — that
@@ -14461,7 +14458,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     setReflectOn(null);
                   }}
                 >
-                  not now
+                  {say("worldNotNow")}
                 </button>
               </p>
             </>
@@ -14477,7 +14474,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             className="jar-roomform-box"
             autoFocus
             value={seek}
-            placeholder="Which words do you remember?"
+            placeholder={say("worldSeekPlaceholder")}
             onChange={(e) => setSeek(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Escape") setSeek(null);
@@ -14485,10 +14482,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           />
           <p className="jar-ask">
             {found && found.size === 0 && seek.trim().length > 1 ? (
-              <span>nothing here says that</span>
+              <span>{say("worldNothingSaysThat")}</span>
             ) : (
               <button type="button" onClick={() => setSeek(null)}>
-                done
+                {say("worldDone")}
               </button>
             )}
           </p>
@@ -14518,21 +14515,21 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   Found while fixing an e2e walk that could not reach this
                   form, which is the second copy defect in two days turned up
                   by reading a surface closely for an unrelated reason. */}
-              Make a room
+              {say("worldMakeARoom")}
             </button>
             <button
               type="button"
               className={groupForm.mode === "join" ? "is-on" : undefined}
               onClick={() => setGroupForm({ ...groupForm, mode: "join", error: null })}
             >
-              Join with a link
+              {say("worldJoinWithLink")}
             </button>
           </div>
           <input
             className="jar-roomform-box"
             autoFocus
             value={groupForm.text}
-            placeholder={groupForm.mode === "make" ? "What is it about?" : "Paste the link"}
+            placeholder={groupForm.mode === "make" ? say("worldWhatIsItAbout") : say("worldPasteTheLink")}
             onChange={(e) => setGroupForm({ ...groupForm, text: e.target.value })}
             onKeyDown={(e) => {
               if (e.key === "Enter") submitGroup();
@@ -14542,11 +14539,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           {groupForm.error ? <p className="jar-roomform-err">{groupForm.error}</p> : null}
           <p className="jar-ask">
             <button type="button" onClick={submitGroup} disabled={groupForm.busy}>
-              {groupForm.busy ? "…" : groupForm.mode === "make" ? "make it" : "go in"}
+              {groupForm.busy ? "…" : groupForm.mode === "make" ? say("worldMakeIt") : say("worldGoIn")}
             </button>
             <span aria-hidden="true"> · </span>
             <button type="button" onClick={() => setGroupForm(null)}>
-              not now
+              {say("worldNotNow")}
             </button>
           </p>
           {groups.length > 0 ? (
@@ -14560,7 +14557,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 >
                   {g.name}
                   <span className="jar-share-hint">
-                    {copied === g.id ? "link copied" : "copy invite"}
+                    {copied === g.id ? say("worldLinkCopied") : say("worldCopyInvite")}
                   </span>
                 </button>
               ))}
@@ -14619,23 +14616,23 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           className="jar-settings jar-settings--at-right"
           data-jar-chrome="1"
           role="dialog"
-          aria-label="Your account"
+          aria-label={say("worldYourAccount")}
         >
           <div className="jar-settings-head">
-            <span className="jar-label">Signed in</span>
+            <span className="jar-label">{say("worldSignedIn")}</span>
             <button type="button" className="jar-settings-x" onClick={() => setAccountOpen(false)}>
-              close
+              {say("worldClose")}
             </button>
           </div>
 
-          <p className="jar-settings-name">{auth?.profile?.name ?? "You"}</p>
+          <p className="jar-settings-name">{auth?.profile?.name ?? say("worldYou")}</p>
           {auth?.account?.email ? (
             <p className="jar-settings-note">{auth.account.email}</p>
           ) : null}
 
           <p className="jar-ask">
             <Link className="jar-settings-verb" to="/profile" onClick={() => setAccountOpen(false)}>
-              all settings
+              {say("worldAllSettings")}
             </Link>
           </p>
 
@@ -14657,7 +14654,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 }
               }}
             >
-              how it reads you
+              {say("worldHowItReadsYou")}
             </button>
             <span aria-hidden="true"> · </span>
             <button
@@ -14671,7 +14668,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   .catch(() => setAntechamber([]));
               }}
             >
-              the antechamber
+              {say("worldTheAntechamber")}
             </button>
           </p>
 
@@ -14701,29 +14698,30 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 void auth?.logout();
               }}
             >
-              sign out
+              {say("worldSignOutLower")}
             </button>
           </p>
         </div>
       ) : null}
 
       {pendingJoin && phase === "ready" ? (
-        <div className="jar-settings" data-jar-chrome="1" role="dialog" aria-label="Join this room">
+        <div
+          className="jar-settings"
+          data-jar-chrome="1"
+          role="dialog"
+          aria-label={say("worldJoinThisRoom")}
+        >
           <div className="jar-settings-head">
-            <span className="jar-label">Someone invited you</span>
+            <span className="jar-label">{say("worldSomeoneInvited")}</span>
           </div>
-          <p className="jar-settings-note">
-            {"Joining puts your name on this room’s roll, and the memories you " +
-              "have marked public become part of its ground. You can leave " +
-              "whenever you like."}
-          </p>
+          <p className="jar-settings-note">{say("worldJoinExplain")}</p>
           <p className="jar-ask">
             <button type="button" className="jar-settings-verb" onClick={acceptJoin}>
-              {"join this room"}
+              {say("worldJoinThisRoom")}
             </button>
             <span aria-hidden="true"> · </span>
             <button type="button" onClick={() => setPendingJoin(null)}>
-              not now
+              {say("worldNotNow")}
             </button>
           </p>
         </div>
@@ -14763,10 +14761,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         />
       ) : null}
 
-      {phase === "loading" ? <div className="jar-skel jar-skel-line">Pouring Waka…</div> : null}
+      {phase === "loading" ? (
+        <div className="jar-skel jar-skel-line">{say("worldPouring")}</div>
+      ) : null}
       {phase === "failed" ? (
         <div className="jar-skel jar-skel-line">
-          Waka could not be poured — reload to try again
+          {say("worldPourFailed")}
           {failReason ? <span className="jar-skel-why">{failReason}</span> : null}
         </div>
       ) : null}

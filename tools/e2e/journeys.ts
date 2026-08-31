@@ -185,7 +185,7 @@ async function keepInWorld(page: Page, base: string, text: string): Promise<numb
   }
   await page.locator(".jar-mouth-rest").first().click();
   await page.waitForTimeout(700);
-  await page.fill('textarea[aria-label="capture inspiration"]', text);
+  await page.fill('textarea[aria-label="Capture inspiration"]', text);
   await page.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click();
   /* WHAT THE WORLD SAID, READ WHILE IT IS SAYING IT. The character's voice
      clears itself after four seconds, so a caller that waits for the keep to
@@ -441,7 +441,7 @@ const JOURNEYS: Journey[] = [
            for thirty seconds and reports the journey broken. Kept as the label
            rather than the class BECAUSE the accessible name is the claim: a
            person using a screen reader has to be told what this field is. */
-        'textarea[aria-label="capture inspiration"]',
+        'textarea[aria-label="Capture inspiration"]',
         `a lift button that dims once it has heard you ${uniq()}`,
       );
       await page.keyboard.press("Enter");
@@ -523,7 +523,7 @@ const JOURNEYS: Journey[] = [
       const phrase = `kept while standing somewhere else ${uniq()}`;
       await page.locator(".jar-mouth-rest").first().click();
       await page.waitForTimeout(700);
-      await page.fill('textarea[aria-label="capture inspiration"]', phrase);
+      await page.fill('textarea[aria-label="Capture inspiration"]', phrase);
       /* Enter rather than the `save` button `keepInWorld` presses: the same
          act, and the one a person writing a sentence actually reaches for. */
       await page.keyboard.press("Enter");
@@ -655,7 +655,7 @@ const JOURNEYS: Journey[] = [
          two-field form; it answers the question the world asked. */
       await page.locator(".jar-mouth-rest").first().click();
       await page.waitForTimeout(700);
-      await page.fill('textarea[aria-label="capture inspiration"]', phrase);
+      await page.fill('textarea[aria-label="Capture inspiration"]', phrase);
       await page.locator(".jar-mouth-where button", { hasText: /^reflect$/ }).first().click();
       await page.waitForTimeout(5_000);
 
@@ -1938,7 +1938,7 @@ const JOURNEYS: Journey[] = [
 
   {
     id: "english",
-    name: "the product speaks English, in words rather than in keys",
+    name: "the product speaks the chosen language, in words rather than in keys",
     /* THIS JOURNEY USED TO BE ITS OWN OPPOSITE, and the swap is a ruling, not
        a refactor. It was `locale`: pick Korean on `/profile`, sign in on a
        clean browser, and prove the choice reached the server rather than only
@@ -1998,11 +1998,14 @@ const JOURNEYS: Journey[] = [
       await signUp(page, base);
 
       const problems: string[] = [];
+      /* THE RULING REVERSED (founder, 2026-08-31): the person chooses English
+         or Korean, so the picker's ABSENCE is now the failure — the exact
+         inversion of the guard that held the 2026-08-24 ruling. */
       await goSurface(page, base, "/profile");
-      if ((await page.locator("select.field-input").count()) > 0) {
+      if ((await page.locator('select[name="preferredLocale"]').count()) === 0) {
         problems.push(
-          "a language picker is back on /profile — the product is English only " +
-            "(founder, 2026-08-24)",
+          "the language picker is missing from /profile — the person chooses " +
+            "their language (founder, 2026-08-31)",
         );
       }
 
@@ -2047,7 +2050,9 @@ const JOURNEYS: Journey[] = [
         problems.push(`rendered almost nothing: ${silent.join(", ")}`);
       }
       if (foreign.length > 0) {
-        problems.push(`a second language is on screen: ${foreign.join(", ")}`);
+        problems.push(
+          `Korean on screen for an English account: ${foreign.join(", ")}`,
+        );
       }
       if (rawIcu.length > 0) problems.push(`unformatted ICU on screen: ${rawIcu.join(", ")}`);
       if (bareKeys.length > 0) {
@@ -2056,12 +2061,25 @@ const JOURNEYS: Journey[] = [
         );
       }
 
+      /* THE POSITIVE HALF OF THE REVERSAL: flip the account to Korean on the
+         picker and the chrome must actually speak it — a picker wired to
+         nothing is the advisory-button lie in a dropdown. Same defect checks
+         hold in the other language. */
+      await goSurface(page, base, "/profile");
+      await page.selectOption('select[name="preferredLocale"]', "ko-KR");
+      await page.waitForTimeout(800);
+      const koText = await translatableText(page);
+      if (!otherScript.test(koText)) {
+        problems.push("chose Korean and /profile still speaks only English");
+      }
+      if (/\{\s*\w+\s*,/.test(koText)) problems.push("unformatted ICU on the Korean screen");
+
       return {
         ok: problems.length === 0,
         detail:
           problems.length === 0
-            ? `English on ${surfaces.length} surfaces, no second language offered or shown, ` +
-              "no raw ICU, no bare keys"
+            ? `English on ${surfaces.length} surfaces for an English account, the picker ` +
+              "stands on /profile, choosing Korean re-speaks the chrome, no raw ICU, no bare keys"
             : problems.join("; "),
       };
     },

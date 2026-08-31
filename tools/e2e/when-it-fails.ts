@@ -249,7 +249,7 @@ async function keepOne(page: Page, base: string, text: string): Promise<void> {
   }
   await page.locator(".jar-mouth-rest").first().click();
   await page.waitForTimeout(700);
-  await page.fill('textarea[aria-label="capture inspiration"]', text);
+  await page.fill('textarea[aria-label="Capture inspiration"]', text);
   await page.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click();
   await page.waitForTimeout(5_000);
 }
@@ -367,7 +367,7 @@ const ACTS: Act[] = [
       await page.waitForTimeout(6_000);
       await page.locator(".jar-mouth-rest").first().click();
       await page.waitForTimeout(700);
-      await page.fill('textarea[aria-label="capture inspiration"]', "a thought the server will refuse");
+      await page.fill('textarea[aria-label="Capture inspiration"]', "a thought the server will refuse");
     },
     press: async (page) => {
       await page.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click();

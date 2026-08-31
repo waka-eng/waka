@@ -195,7 +195,7 @@ async function main(): Promise<void> {
       await page.locator(".jar-mouth-rest").first().click({ timeout: 8_000 });
       await page.waitForTimeout(700);
       await page.fill(
-        'textarea[aria-label="capture inspiration"]',
+        'textarea[aria-label="Capture inspiration"]',
         `something worth finding again ${i} ${uniq()}`,
       );
       await page.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click();

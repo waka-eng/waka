@@ -352,20 +352,21 @@ export async function refreshPrinciplesForProfile(
     let matched: Principle | null = null;
     let conflicting: Principle | null = null;
     for (const standing of existing) {
-      try {
-        const { relation } = await provider.judgePrincipleRelation({
-          preferredLocale,
-          candidateStatement: candidate.statement,
-          existingStatement: standing.statement,
-        });
-        if (relation === "same") {
-          matched = standing;
-          break;
-        }
-        if (relation === "conflicting" && !conflicting) conflicting = standing;
-      } catch {
-        // An unreachable judge means independent for this pair.
+      /* An unreachable judge used to mean "independent for this pair" —
+         which minted near-duplicate principles on layer 4, the ranked,
+         visible surface, whenever the road was down. It propagates now:
+         the nightly job attempt fails and retries, and the candidate is
+         judged against the whole standing set or not at all. */
+      const { relation } = await provider.judgePrincipleRelation({
+        preferredLocale,
+        candidateStatement: candidate.statement,
+        existingStatement: standing.statement,
+      });
+      if (relation === "same") {
+        matched = standing;
+        break;
       }
+      if (relation === "conflicting" && !conflicting) conflicting = standing;
     }
 
     if (matched) {

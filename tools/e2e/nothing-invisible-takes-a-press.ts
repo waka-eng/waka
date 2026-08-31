@@ -435,7 +435,7 @@ async function walk(browser: Browser, base: string, negative: boolean): Promise<
   ]) {
     await page.locator(".jar-mouth-rest").first().click();
     await page.waitForTimeout(700);
-    await page.fill('textarea[aria-label="capture inspiration"]', `${text} ${uniq()}`);
+    await page.fill('textarea[aria-label="Capture inspiration"]', `${text} ${uniq()}`);
     await page.keyboard.press("Enter");
     await page.waitForTimeout(4_500);
   }

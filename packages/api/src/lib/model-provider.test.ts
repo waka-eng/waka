@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createGeminiModelProvider } from "./gemini-model-provider.js";
 import {
+  ModelDidNotAnswerError,
   getDefaultModelProvider,
   setDefaultModelProviderForTests,
   type ModelProvider,
@@ -200,6 +201,24 @@ describe("extractSignalCandidates", () => {
     await expect(
       createGeminiModelProvider().extractSignalCandidates(EXTRACTION_INPUT),
     ).resolves.toEqual({ statements: [] });
+  });
+
+  it("throws on a malformed envelope — a malfunction is never recorded as nothing-to-learn", async () => {
+    /* the old posture returned zero statements, which marked the capture as
+       derived-with-nothing FOREVER; observed live 2026-08-30 when a routed
+       backend truncated JSON mid-key. A thrown attempt retries instead. */
+    process.env.GEMINI_API_KEY = "test-key";
+    const fetchFn = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ candidates: "not-an-array" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchFn);
+
+    await expect(
+      createGeminiModelProvider().extractSignalCandidates(EXTRACTION_INPUT),
+    ).rejects.toThrow(ModelDidNotAnswerError);
   });
 
   it("throws on a provider error so the queue can back off and retry", async () => {

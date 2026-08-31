@@ -150,7 +150,9 @@ import {
   deriveSignalsForInspiration,
   reembedSignal,
 } from "./signal-derivation.js";
+import { isSupportedLocale } from "./locales.js";
 import { refreshPrinciplesForProfile } from "./principle-generation.js";
+import { tendSignalGarden } from "./signal-gardener.js";
 import {
   refreshTopOfMindForGroup,
   refreshTopOfMindForProfile,
@@ -310,7 +312,8 @@ async function enqueueKeyedJob(input: {
     | "derive_signals"
     | "refresh_group_top_of_mind"
     | "refresh_principles"
-    | "reembed_signal";
+    | "reembed_signal"
+    | "tend_signal_garden";
   payload:
     | EnrichAttachmentPayload
     | DeriveSignalsPayload
@@ -387,6 +390,23 @@ export async function enqueueRefreshPrinciples(
  * Keyed on the attachment: an attachment is enriched once, and a second
  * enqueue for the same one is the same work.
  */
+/**
+ * The weekly garden pass for one profile — enqueued nightly beside the
+ * principles cron, keyed per ISO week so six of the seven enqueues collapse
+ * into the row already there.
+ */
+export async function enqueueTendSignalGarden(
+  profileId: string,
+  weekKey: string,
+): Promise<EnqueueResult> {
+  return enqueueKeyedJob({
+    profileId,
+    type: "tend_signal_garden",
+    payload: { profileId },
+    idempotencyKey: `tend_signal_garden:${profileId}:${weekKey}`,
+  });
+}
+
 export async function enqueueEnrichAttachment(
   profileId: string,
   attachmentId: string,
@@ -849,6 +869,26 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<void> {
       // so an id that arrived in a payload can never reach another tenant's
       // signal even if a payload were ever forged.
       await reembedSignal({ profileId: job.profileId, signalId: payload.signalId });
+      return;
+    }
+
+    case "tend_signal_garden": {
+      const [profileRow] = await getDb()
+        .select({ preferredLocale: profiles.preferredLocale })
+        .from(profiles)
+        .where(eq(profiles.id, job.profileId))
+        .limit(1);
+      const summary = await tendSignalGarden(getDb(), {
+        profileId: job.profileId,
+        preferredLocale: isSupportedLocale(profileRow?.preferredLocale)
+          ? profileRow.preferredLocale
+          : "en-US",
+      });
+      console.log("[background-jobs] tended the signal garden", {
+        jobId: job.id,
+        profileId: job.profileId,
+        ...summary,
+      });
       return;
     }
 

@@ -115,6 +115,7 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           pnpm --filter @waka/api eval:judge
+          pnpm --filter @waka/api eval:extraction
 
       - name: Web tests
         run: pnpm --filter @waka/web test

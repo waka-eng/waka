@@ -276,7 +276,7 @@ async function keepOne(page: Page, base: string, text: string): Promise<void> {
   }
   await page.locator(".jar-mouth-rest").first().click({ timeout: 8_000 });
   await page.waitForTimeout(800);
-  await page.fill('textarea[aria-label="capture inspiration"]', text);
+  await page.fill('textarea[aria-label="Capture inspiration"]', text);
   await page.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click({
     timeout: 8_000,
   });
@@ -439,7 +439,7 @@ const BARE_BY_DECISION: Record<string, string> = {
   "the timeline":
     "A list of the days this wall changed. Its whole content is a control for " +
     "choosing a moment — every row IS a date, read aloud as it stands — and " +
-    "the sheet is named for a listener, `wind this wall back to a date`, " +
+    "the sheet is named for a listener, `wind this wall back through time`, " +
     "which is where the sentence went. It used to be a rail, and the answer " +
     "was the same for the same reason. AND ON THIS ACCOUNT IT IS NOT THERE " +
     "AT ALL, which is the design rather than a gap: a wall whose whole life " +
