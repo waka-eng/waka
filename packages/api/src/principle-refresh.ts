@@ -20,7 +20,11 @@ import { count, eq } from "drizzle-orm";
 import { profiles, signals } from "./db/index.js";
 import { getDb } from "./lib/db.js";
 import { PRINCIPLE_MIN_SIGNALS } from "./lib/principle-generation.js";
-import { enqueueRefreshPrinciples, runBackgroundJobWorker } from "./lib/queue.js";
+import {
+  enqueueRefreshPrinciples,
+  enqueueTendSignalGarden,
+  runBackgroundJobWorker,
+} from "./lib/queue.js";
 
 const MAX_DRAIN_PASSES = 12;
 const DRAIN_LIMIT = 25;
@@ -39,8 +43,17 @@ export async function handler() {
     .where(eq(signals.status, "active"))
     .groupBy(signals.profileId);
 
+  /* the garden pass rides the same night, keyed per ISO week — six of the
+     seven nightly enqueues collapse into the row already there, so each
+     profile's standing set is tended once a week. Two active signals is the
+     smallest set that can hold a duplicate. */
+  const weekKey = isoWeekKey(new Date());
+
   let enqueued = 0;
   for (const row of eligible) {
+    if (Number(row.actives) >= 2) {
+      await enqueueTendSignalGarden(row.profileId, weekKey);
+    }
     if (Number(row.actives) < PRINCIPLE_MIN_SIGNALS) continue;
     await enqueueRefreshPrinciples(row.profileId, dayKey);
     enqueued += 1;
@@ -61,4 +74,14 @@ export async function handler() {
   const summary = { dayKey, profiles: eligible.length, enqueued, ...total, passes };
   console.log("[principle-refresh] nightly run", summary);
   return summary;
+}
+
+/** ISO-8601 week key, e.g. "2026-W35" — the gardener's once-a-week lock. */
+export function isoWeekKey(at: Date): string {
+  const d = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
 }
