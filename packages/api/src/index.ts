@@ -11,6 +11,7 @@
  * shared signals and grow an artifact of their own.
  */
 
+import { createRecallRoutes } from "./routes/recall.js";
 import { createSignalDuplicatesRoutes } from "./routes/signal-duplicates.js";
 import { Hono } from "hono";
 import { handle } from "hono/aws-lambda";
@@ -113,6 +114,7 @@ app.route("/api/attachments", attachmentsRoutes);
 
 // Layer 2 — the evidence-backed patterns WAKA derives, and their shares.
 app.route("/api/signals", signalsRoutes);
+app.route("/api/recall", createRecallRoutes());
 app.route("/api/signal-duplicates", createSignalDuplicatesRoutes());
 
 // Layer 3 — the one live artifact per profile, and its version chain.
