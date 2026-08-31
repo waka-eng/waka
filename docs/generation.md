@@ -418,6 +418,18 @@ active-only, so an established profile is never diluted with
 single-observation noise. The rule is the pure function `chooseSelection`
 **[checked]**.
 
+**No two voices on the board saying one thing.** After scoring, the ranked
+list takes one greedy diversity pass (`diversifyRanked`): a candidate whose
+embedding sits at or above `SELECTION_DIVERSITY_MAX_COSINE` to an
+already-accepted one yields its slot and moves to the reserve, and the
+reserve returns whenever slots are left over — so the reorder only ever
+matters when the twelve-slot limit truncates, and nothing is excluded
+outright. The bar sits inside the judge band on purpose: at 0.8 the pair is
+close enough that derivation would already be asking whether they are the
+same pattern, while genuinely different signals about one theme are
+untouched. Deterministic, cosine in process over the stored vectors, no
+model anywhere.
+
 ### 3. Synthesis: one call, the whole artifact
 
 `synthesizeTopOfMind` receives the selected signals, the current live
@@ -657,6 +669,7 @@ The authoritative values. Machine-checked against code — see
 | `SELECTION_RECENCY_WEIGHT` | 0.2 | Selection: recency term |
 | `SELECTION_COMEBACK_WEIGHT` | 0.15 | Selection: comeback term |
 | `SELECTION_DISPUTED_MULTIPLIER` | 0.4 | Damping when the latest verdict is not_true |
+| `SELECTION_DIVERSITY_MAX_COSINE` | 0.8 | Ranked near-duplicates yield their slot; they return whenever slots are left |
 | `SELECTION_EVIDENCE_SATURATION` | 6 | Support saturates at this evidence count |
 | `SELECTION_RECENCY_HALF_LIFE_DAYS` | 30 | Selection recency half-life |
 | `COMEBACK_MIN_DORMANT_DAYS` | 21 | Minimum gap for a return to count |

@@ -11,6 +11,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  diversifyRanked,
+  SELECTION_DIVERSITY_MAX_COSINE,
   applyGroupProposals,
   assembleEntries,
   chooseSelection,
@@ -365,5 +367,47 @@ describe("applying accepted group proposals", () => {
     );
     expect(applied).toBe(0);
     expect(input[0]!.lockedAt).toBeNull();
+  });
+});
+
+
+describe("diversifyRanked — no two voices on the board saying one thing", () => {
+  /* orthogonal-ish toy vectors: A≈B (cos ~0.98), C far from both */
+  const A = [1, 0.1, 0];
+  const B = [1, 0.15, 0];
+  const C = [0, 0, 1];
+  const vectors = new Map<string, number[]>([
+    ["a", A],
+    ["b", B],
+    ["c", C],
+  ]);
+  const ranked = [{ id: "a" }, { id: "b" }, { id: "c" }];
+
+  it("holds a near-duplicate back so a distinct voice rises", () => {
+    const out = diversifyRanked(ranked, vectors, SELECTION_DIVERSITY_MAX_COSINE);
+    expect(out.map((s) => s.id)).toEqual(["a", "c", "b"]);
+  });
+
+  it("the reserve returns whenever there is room — nothing is excluded outright", () => {
+    const out = diversifyRanked(ranked, vectors, SELECTION_DIVERSITY_MAX_COSINE);
+    /* all three survive; only the ORDER moved, so a limit of three still
+       seats everyone and only a limit of two feels the reorder */
+    expect(out).toHaveLength(3);
+    expect(out.slice(0, 2).map((s) => s.id)).toEqual(["a", "c"]);
+  });
+
+  it("a signal without an embedding is never held back", () => {
+    const out = diversifyRanked(
+      [{ id: "a" }, { id: "ghost" }, { id: "b" }],
+      vectors,
+      SELECTION_DIVERSITY_MAX_COSINE,
+    );
+    expect(out.map((s) => s.id)).toEqual(["a", "ghost", "b"]);
+  });
+
+  it("is deterministic over identical input", () => {
+    const once = diversifyRanked(ranked, vectors, SELECTION_DIVERSITY_MAX_COSINE);
+    const twice = diversifyRanked(ranked, vectors, SELECTION_DIVERSITY_MAX_COSINE);
+    expect(once).toEqual(twice);
   });
 });
