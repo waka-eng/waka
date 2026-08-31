@@ -10,17 +10,20 @@
  * generated when new inspirations are added" (the founder's words) must be
  * a measurement, not an inference from unit tests with scripted providers.
  *
- * What one run proves, in order:
- *   1. Keeps derive: four captures (three naming one pattern, one apart)
- *      produce signals with evidence.
+ * What one run proves, in order — the MACHINERY's promises, never model
+ * variance (whether the distinct fourth capture mints its own signal is
+ * extraction's business, priced by the extraction bench's two-pattern
+ * cases; the count is logged here, never asserted — goal revision,
+ * founder-approved 2026-08-31):
+ *   1. Keeps derive: captures produce signals with evidence.
  *   2. Recurrence promotes: the shared pattern accumulates three witnesses
  *      and stands `active` — the db's own promotion guard on the real path.
  *   3. A top of mind is written whose entries cite only real signal ids,
  *      in the profile's language.
- *   4. The floor holds live: two more captures inside the day change the
- *      signals but write NO new content version — the refresh sleeps.
- *   5. The floor releases: age the chain past a day and the held shift
- *      lands on the next drain.
+ *   4. The floor holds live: two more captures inside the day write NO new
+ *      content version — the refresh sleeps to the exact opening moment.
+ *   5. The floor releases: age the chain past a day and the held refresh
+ *      runs and versions (content or honest no_change).
  *
  * Spend per run: ~15–25 model calls (extractions, judges, two syntheses)
  * plus embeddings — under $0.05 on the pinned road. Excluded from hermetic
@@ -117,7 +120,10 @@ describe.skipIf(!HAS_KEYS)("the pipeline, live", () => {
         "[pipeline-eval] signals:",
         signals.map((s) => `${s.status}: ${s.statement}`).join(" | "),
       );
-      expect(signals.length, "the captures produced signals").toBeGreaterThanOrEqual(2);
+      expect(signals.length, "the captures produced signals").toBeGreaterThanOrEqual(1);
+      /* breadth is logged, not gated — extraction variance is the extraction
+         bench's to price (goal one-shift-a-day, Phase 4 revision) */
+      console.log(`[pipeline-eval] distinct signals: ${signals.length}`);
 
       const evidence = await t.sql`
         SELECT signal_id, count(*)::int AS n FROM signal_evidence
@@ -156,6 +162,16 @@ describe.skipIf(!HAS_KEYS)("the pipeline, live", () => {
       // ---- 4: the floor holds live ----
       for (const text of LATER) await keep(profileId, text);
       const drained = await drainUntilQuiet();
+      /* diagnosability before judgment: when this step fails, the job table
+         says WHY — later derivations that died on a bad road (visible as
+         failed derive rows since the failure-honesty change) are a provider
+         problem, not a floor problem, and the two must never be confused
+         in a gate verdict again */
+      const jobLedger = await t.sql`
+        SELECT type, status, count(*)::int AS n, max(left(last_error, 90)) AS sample_error
+        FROM background_jobs WHERE profile_id = ${profileId}
+        GROUP BY type, status ORDER BY type, status`;
+      console.log("[pipeline-eval] job ledger:", JSON.stringify(jobLedger));
       expect(drained.held, "the early shift was held, not run").toBeGreaterThanOrEqual(1);
       expect(
         (await contentVersions(profileId)).length,
