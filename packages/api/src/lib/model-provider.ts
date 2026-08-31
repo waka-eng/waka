@@ -108,6 +108,14 @@ export interface TopOfMindSynthesisSignal {
    * cross-member reading is the whole point. Never set on personal passes.
    */
   ownerName?: string;
+  /**
+   * The pattern's life in time, worded — "held for 4 months; last fed 2
+   * weeks ago", "returning after 5 weeks quiet", "new this week". Personal
+   * passes set it; the prompt renders it so the synthesis can tell an
+   * anchor from an arrival. English tokens by design: prompt-internal
+   * metadata, while the Locale line governs what the artifact speaks.
+   */
+  timeShape?: string;
 }
 
 /**
