@@ -365,6 +365,7 @@ citations against exactly that set. Neither is any use without the other.
 | An inspiration is deleted | Always (its cascade may have retired signals) |
 | Feedback is given | Always (a verdict changes what synthesis should weigh) |
 | `POST /api/top-of-mind/refresh` | Manual, debounced |
+| The profile's language changes | Always (`PATCH /api/auth/me/preferences`) — the artifact must re-speak in the new language, not wait for an unrelated refresh |
 
 Refreshes are debounced to one pending pass per profile, with the same
 trailing-edge `rerun_requested` semantics as derivation.
@@ -431,6 +432,17 @@ Whole-artifact on purpose: a model asked to patch entries reasons about
 diffs it cannot see, and every incremental variant of this call drifted into
 appending. Temperature 0, schema-constrained, everything user-originated
 fenced as data.
+
+**The language of the artifact.** Every entry is written in the profile's
+`preferred_locale` (`en-US` or `ko-KR` — the person chooses at signup and can
+change it on their profile). The locale line in the prompt is authoritative:
+it governs even entries carried forward from the current artifact, so
+flipping the setting re-speaks the whole top of mind in the new language on
+the next refresh. Locked entries are the one exception — the person's own
+words are reproduced exactly, whatever language they wrote them in. Signal
+statements deliberately do NOT follow the setting: extraction writes them in
+the language the capture itself was written in, because a signal quotes the
+person's own vocabulary back to them.
 
 ### 4. What code enforces after the model answers
 

@@ -35,8 +35,11 @@ import {
 } from "../src/lib/locales";
 
 describe("i18n catalog", () => {
-  it("supports exactly English", () => {
-    expect(supportedLocaleValues).toEqual(["en-US"]);
+  it("supports English and Korean, defaulting to English", () => {
+    // REVERSED 2026-08-31: ko-KR returned as a first-class choice — the
+    // person picks the language their memory is WRITTEN in. The chrome
+    // catalog for ko-KR is an explicit alias of English until translated.
+    expect(supportedLocaleValues).toEqual(["en-US", "ko-KR"]);
     expect(DEFAULT_LOCALE).toBe("en-US");
   });
 
@@ -49,16 +52,17 @@ describe("i18n catalog", () => {
     }
   });
 
-  it("normalizes null, undefined, retired, and unsupported locales to the default", () => {
-    // "ko-KR" is the retired catalog: accounts that stored it before the
-    // ruling must read as the default, not crash on a missing catalog row.
-    expect(isSupportedLocale("ko-KR")).toBe(false);
+  it("normalizes null, undefined, and unsupported locales to the default — and honors ko-KR", () => {
+    // ko-KR rows that waited out the English-only year come back to life:
+    // the stored value reads as itself again, never coerced to the default.
+    expect(isSupportedLocale("ko-KR")).toBe(true);
     expect(isSupportedLocale("fr-FR")).toBe(false);
-    expect(normalizeSupportedLocale("ko-KR")).toBe(DEFAULT_LOCALE);
+    expect(normalizeSupportedLocale("ko-KR")).toBe("ko-KR");
     expect(normalizeSupportedLocale(null)).toBe(DEFAULT_LOCALE);
     expect(normalizeSupportedLocale(undefined)).toBe(DEFAULT_LOCALE);
     expect(normalizeSupportedLocale("fr-FR")).toBe(DEFAULT_LOCALE);
     expect(t(null, "tagline")).toBe(t(DEFAULT_LOCALE, "tagline"));
+    // the ko-KR CHROME deliberately speaks English until the catalog lands
     expect(t("ko-KR", "tagline")).toBe(t(DEFAULT_LOCALE, "tagline"));
   });
 

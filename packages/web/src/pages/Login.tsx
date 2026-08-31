@@ -53,7 +53,7 @@ import { GoogleSignInButton, oauthErrorMessageKey } from "../components/GoogleSi
 import { ApiError } from "../lib/api";
 import type { LoginFieldErrors, SignupFieldErrors } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
-import { formatMessage, readStoredLocale, t } from "../lib/locales";
+import { formatMessage, readStoredLocale, supportedLocales, t } from "../lib/locales";
 import type { SupportedLocale } from "../lib/locales";
 import { resolveRedirect } from "../lib/sign-in-destination";
 
@@ -287,10 +287,29 @@ export function SignupForm({
       </label>
 
 
-      {/* The language field left with the second language (founder ruling,
-          2026-08-22: the product speaks English only). preferredLocale still
-          travels in the payload at its default — the account keeps the
-          column, the person just has nothing to choose. */}
+      {/* The language field is BACK (founder, 2026-08-31, reversing
+          2026-08-22): the choice drives what language the memory itself is
+          written in — signals, the top of mind, principles — so it belongs
+          at the door, before the first keep. */}
+      <label className="field">
+        <span className="field-label">{t(locale, "profileLanguageLabel")}</span>
+        <select
+          className="field-input"
+          name="preferredLocale"
+          disabled={submitting}
+          value={values.preferredLocale}
+          onChange={(e) =>
+            handleChange("preferredLocale", e.target.value as SupportedLocale)
+          }
+        >
+          {supportedLocales.map((l) => (
+            <option key={l.code} value={l.code}>
+              {l.nativeLabel}
+            </option>
+          ))}
+        </select>
+      </label>
+
       {/* `btn-doorway`: the login page's own submit, and NOT `.profile-card`'s
           save or onboarding's. `.login-card` is shared by four screens, so
           the weight this control needs had to be asked for by name rather
