@@ -549,7 +549,7 @@ const FORM_FADE_MS = 320;
  * ARRIVING IN A ROOM, WHOSE GROUNDS ARE HERE IS LIT THIS LONG.
  *
  * A room pours ONE member's memories — yours, until you move to somebody
- * else's (see `onThisWall`, and the note above it for why a heap of five
+ * else's (see `standingOk`, and the note above it for why a heap of five
  * grounds is not evidence for anything). That decision is right and it has a
  * cost nobody had paid for: standing in a room with four other people looks
  * exactly like standing on your own wall. Every other ground was already on
@@ -2041,7 +2041,7 @@ function HomeExperience(): JSX.Element {
    * WHO IS ASKING — and offline, which invented person is.
    *
    * Signed out there is no profile, and every derivation that asks "is this
-   * one mine?" then answered no about all of them: `onThisWall` matches a
+   * one mine?" then answered no about all of them: scene membership matches a
    * room's ground against this id, so all four fixture rooms stood empty. The
    * fixture names the member it calls "You" (`viewerProfileId`), and it is
    * only ever written on the offline path — a real session always wins here,
@@ -3733,6 +3733,20 @@ function HomeExperience(): JSX.Element {
     ].sort((a, b) => a.capturedMs - b.capturedMs);
     const byId = new Map(list.map((b) => [b.id, b] as const));
     ballsRef.current = { list, byId };
+    /* ONE WALL, ONE SCENE (founder, 2026-08-30: "separate pages… more
+       efficient and consistent"). The flat `list` stays for the passes that
+       are honestly whole-world — paint, hit-test, the eased sweeps — but
+       everything that decides WHOSE ground is on it now reads a scene, so a
+       cross-wall state has no container to exist in. The key is the wall id;
+       the self wall's is the empty string, as everywhere. */
+    const scenes = new Map<string, Ball[]>();
+    for (const b of list) {
+      const key = b.agentId ?? "";
+      const bag = scenes.get(key);
+      if (bag) bag.push(b);
+      else scenes.set(key, [b]);
+    }
+    const sceneBalls = (wallId: string): Ball[] => scenes.get(wallId) ?? [];
 
     /**
      * THE DIAL'S NOW IS NEVER BEHIND THE NEWEST MEMORY. THIS IS NOT A GUARD;
@@ -4331,12 +4345,43 @@ function HomeExperience(): JSX.Element {
      * something you MOVED to, which is the only way this world says anything.
      */
     let ground: string | null = null;
-    const onThisWall = (b: Ball): boolean => {
-      if ((b.agentId ?? "") !== curWall().id) return false;
-      if (curWall().kind !== "group") return true;
-      /* on a group's wall the ground belongs to exactly one member */
-      return (b.ownerProfileId ?? "") === (ground ?? viewerIdRef.current ?? "");
-    };
+    /* on a group's wall the ground belongs to exactly one member; every
+       other wall's scene is wholly its own */
+    const standingOk = (b: Ball, w: Space): boolean =>
+      w.kind !== "group" ||
+      (b.ownerProfileId ?? "") === (ground ?? viewerIdRef.current ?? "");
+    /**
+     * THE ONE OWNER OF PRESENCE. At rest, what is lit IS what the rules say:
+     * the current wall's scene, time-gated, standing-gated — and nothing
+     * else. Every defense this file grew across three disappearances (the
+     * lights-out sweep at arrival, the rest-convergence, the orphan burial,
+     * the pour's all-off preamble, the carry's recompute) was this function,
+     * written five times from five directions. A ball mid-stage
+     * (spawnAt > 0) is left to the pour's own `enter`, which is the
+     * animation's half of the same rule.
+     */
+    function applyPresence() {
+      const w = curWall();
+      for (const [wallId, bag] of scenes) {
+        const here = wallId === w.id;
+        for (const b of bag) {
+          const present =
+            here && b.capturedMs <= TRef.current && standingOk(b, w);
+          if (!present) {
+            b.active = false;
+            b.spawnAt = -1;
+            continue;
+          }
+          if (b.spawnAt > 0) continue;
+          if (!b.active) {
+            b.active = true;
+            b.arrive = 1;
+            b.x = b.homeX;
+            b.y = b.homeY;
+          }
+        }
+      }
+    }
 
     /* dev-only: the loop's own truth, askable from a console */
     if (import.meta.env.VITE_SHOW_INTERNAL) {
@@ -4361,10 +4406,7 @@ function HomeExperience(): JSX.Element {
     }
 
     function assignHomes() {
-      const present: Ball[] = [];
-      for (const b of list)
-        if (b.capturedMs <= TRef.current && onThisWall(b)) present.push(b);
-      present.sort((a, b) => a.capturedMs - b.capturedMs); /* oldest first */
+      const present = presentBalls(); /* oldest first, the scene's own */
       const n = present.length;
       if (n === 0) return;
 
@@ -4924,9 +4966,10 @@ function HomeExperience(): JSX.Element {
 
     /** Every memory that exists at the dial's time, oldest first. */
     function presentBalls(): Ball[] {
+      const w = curWall();
       const out: Ball[] = [];
-      for (const b of list)
-        if (b.capturedMs <= TRef.current && onThisWall(b)) out.push(b);
+      for (const b of sceneBalls(w.id))
+        if (b.capturedMs <= TRef.current && standingOk(b, w)) out.push(b);
       out.sort((a, b) => a.capturedMs - b.capturedMs);
       return out;
     }
@@ -4956,9 +4999,8 @@ function HomeExperience(): JSX.Element {
       /* AND THEY ARE SWITCHED ON. The layout above gives them somewhere to be;
          this is what makes them exist. Without it a travelled-to wall drew an
          empty ground however much was standing on it. */
+      applyPresence();
       const here = presentBalls();
-      /* the last wall's light does not follow you in */
-      for (const b of list) if (b.active && !onThisWall(b)) b.active = false;
       if (view.reduced) settleInstantly();
       else primePour(here);
       electPeek(here);
@@ -5662,19 +5704,11 @@ function HomeExperience(): JSX.Element {
      */
     function primePour(only?: Ball[]) {
       const t0 = performance.now() + 300;
-      /* THE CONSTRUCTOR SAYS `active: true`, so a ball this pour does not
-         name would paint anyway — on whatever wall you happen to be. The
-         bare form is the first word about the whole field, so it starts by
-         switching the whole field off. */
-      if (!only) for (const b of list) b.active = false;
       /* Newest first: the peek band is the invitation, so it must fill on the
          first beat rather than the last. Nothing stacks in a float field, so
-         arrival order no longer has to build the strata. */
-      const order = (
-        only ?? list.filter((b) => b.capturedMs <= TRef.current && onThisWall(b))
-      )
-        .slice()
-        .sort((a, b) => b.capturedMs - a.capturedMs);
+         arrival order no longer has to build the strata. `applyPresence` owns
+         who is lit; this only stages the arrival's animation over its set. */
+      const order = (only ?? presentBalls()).slice().sort((a, b) => b.capturedMs - a.capturedMs);
       /* A FIXED STAGGER IS A LOCKOUT LONGER THAN THE THING IT PROTECTS. At
          thirty-five milliseconds apiece, two hundred memories are still
          arriving seven seconds after open — every morning, in a tool used
@@ -5696,8 +5730,8 @@ function HomeExperience(): JSX.Element {
 
     /** Reduced motion: no arrival animation — every orb starts at home. */
     function settleInstantly() {
-      for (const b of list) {
-        b.active = b.capturedMs <= TRef.current && onThisWall(b);
+      applyPresence();
+      for (const b of presentBalls()) {
         b.spawnAt = -1;
         b.arrive = 1;
         b.x = b.homeX;
@@ -5733,11 +5767,8 @@ function HomeExperience(): JSX.Element {
             waiting = true;
             if (now >= b.spawnAt) {
               b.spawnAt = -1;
-              if (b.capturedMs <= TRef.current && onThisWall(b)) {
-                enter(b);
-              } else {
-                b.active = false;
-              }
+              if (b.capturedMs <= TRef.current) enter(b);
+              else b.active = false;
             }
           } else if (b.active && b.arrive < 1) {
             arriving = true;
@@ -5747,22 +5778,6 @@ function HomeExperience(): JSX.Element {
           pour.active = false;
           pour.done = true;
           computeInspiration();
-        }
-      } else {
-        /* A POUR CAN DIE WITH BALLS STILL STAGED — a rebuild flips it off
-           while spawn times are pending, and those balls then wait forever
-           for a processor that is gone. The step owns the field's truth, so
-           it buries the orphans by the same rule the pour would have used. */
-        for (const b of list) {
-          if (b.spawnAt > 0) {
-            b.spawnAt = -1;
-            b.active = b.capturedMs <= TRef.current && onThisWall(b);
-            if (b.active) {
-              b.arrive = 1;
-              b.x = b.homeX;
-              b.y = b.homeY;
-            }
-          }
         }
       }
 
@@ -5975,20 +5990,9 @@ function HomeExperience(): JSX.Element {
 
     /** An orb enters from above its home and eases down into it. */
     function enter(b: Ball) {
-      /* A MEMORY FROM ANOTHER WALL IS NOT ON THIS GROUND.
-         The layout and the present-set were taught to filter by wall, but the
-         DRAW was not — so every ball belonging to somewhere else never got a
-         home, kept x=0,y=0, and was still painted: the entire off-wall
-         population stacked at the layout origin, which is the top-left of
-         headquarters. That pile was the shape over the poster.
-
-         `active` is the flag every consumer already honors — the draw, the
-         bloom, the hit-test, the aliveness pass — so the wall test belongs
-         here rather than repeated at each of them. */
-      if (!onThisWall(b)) {
-        b.active = false;
-        return;
-      }
+      /* Only the scene's own balls are ever staged (`primePour` reads
+         `presentBalls()`), so entering needs no wall test any more — the
+         scene container made the foreign-ball case unrepresentable. */
       b.active = true;
       b.gone = 0;
       b.arrive = view.reduced ? 1 : 0;
@@ -6032,15 +6036,19 @@ function HomeExperience(): JSX.Element {
 
     function reconcileScrub() {
       const T = TRef.current;
-      /* did the SET of present orbs change? only then are homes re-assigned */
+      /* did the SET of present orbs change? only then are homes re-assigned.
+         The scrub winds one wall's ground — the scene's — never the world's:
+         with `enter` no longer carrying a wall refusal, sourcing the scene
+         here is what keeps a foreign ball unlightable by the dial. */
+      const w = curWall();
       let changed = false;
       const entering: Ball[] = [];
-      for (const b of list) {
+      for (const b of sceneBalls(w.id)) {
         if (pour.active && b.spawnAt > 0) {
           colorBall(b, T);
           continue;
         }
-        const want = b.capturedMs <= T;
+        const want = b.capturedMs <= T && standingOk(b, w);
         const present = b.active && !b.leaving;
         if (want !== present) {
           changed = true;
@@ -8149,6 +8157,7 @@ function HomeExperience(): JSX.Element {
        * whether a memory is new to the FIELD rather than new to this array.
        */
       const carried = carryRef.current.balls;
+      const currentSceneId = curWall().id;
       const fresh: Ball[] = [];
       for (const b of list) {
         const was = carried.get(b.id);
@@ -8156,10 +8165,12 @@ function HomeExperience(): JSX.Element {
           /* New to the field — but the pour is an ARRIVAL, and an arrival
              happens on the wall it belongs to. A ball for another wall is
              registered quiet; travelling there is what switches it on. */
-          if (b.capturedMs <= TRef.current && onThisWall(b)) {
+          if (
+            b.capturedMs <= TRef.current &&
+            (b.agentId ?? "") === currentSceneId
+          ) {
             fresh.push(b);
           } else {
-            b.active = false;
             b.spawnAt = -1;
             b.arrive = 1;
             b.x = b.homeX;
@@ -8171,43 +8182,25 @@ function HomeExperience(): JSX.Element {
         b.y = was.y;
         b.arrive = 1;
         b.spawnAt = -1;
-        /* recomputed, never carried: `ground` is effect-local and resets, so a
-           carried `active` could disagree with whose ground is being stood in */
-        b.active = b.capturedMs <= TRef.current && onThisWall(b);
       }
+      /* PRESENCE IS DERIVED, NOT CARRIED — one owner, whatever the rebuild
+         interrupted: an arrival's lost pour, a mid-flight shear, a pour that
+         died with balls still staged. The staged `fresh` are excluded by
+         their own spawn times, so the arrival animation still lands. */
       if (fresh.length > 0) primePour(fresh);
       else {
         pour.active = false;
         pour.done = true;
       }
-      /* AT REST, THE FIELD EQUALS ITS RULES — not its event history. The
-         carried recompute above ran with wherever the trip stood at rebuild
-         time, and an arrival that happened across a rebuild boundary can
-         lose its pour: the wall says Scout, the only lit ball says me. So a
-         rebuild that lands at rest converges: whatever should stand on this
-         wall and is dark pours in; whatever is lit and belongs elsewhere
-         goes out. Mid-flight rebuilds leave it to the arrival, which does
-         the same thing in the same words. */
       if (!trip.active) {
         assignHomes();
-        for (const b of list) if (b.active && !onThisWall(b)) b.active = false;
-        /* SETTLED, NOT POURED. A pour is how the field says something has
-           ARRIVED; recovering light a rebuild dropped is repair, and repair
-           staged behind a pour can be orphaned by the next rebuild killing
-           `pour.active` with spawn times still pending — which is exactly
-           the corpse this block exists to bury. */
-        for (const b of list) {
-          if (b.capturedMs <= TRef.current && onThisWall(b) && !b.active) {
-            b.active = true;
-            b.spawnAt = -1;
-            b.arrive = 1;
-            b.x = b.homeX;
-            b.y = b.homeY;
-          }
-        }
+        applyPresence();
       }
       computeInspiration();
-    } else primePour();
+    } else {
+      applyPresence();
+      primePour();
+    }
 
     simApiRef.current = {
       /* the timeline re-hangs under the word, whose width the reading sets */
@@ -8225,8 +8218,8 @@ function HomeExperience(): JSX.Element {
         /* the ground that left goes dark, the one that arrived pours in — the
            same arrival the layout uses everywhere, so a swap reads as a ground
            filling rather than as a screen being replaced */
-        for (const b of list) if (!onThisWall(b)) b.active = false;
         assignHomes();
+        applyPresence();
         const here = presentBalls();
         if (view.reduced) settleInstantly();
         else primePour(here);
@@ -8733,7 +8726,7 @@ function HomeExperience(): JSX.Element {
              a full viewport above the band. An audit that grades a population
              the layout never placed reports a break that is not there, which
              is worse than no audit: it was the instrument, not the field. */
-          if (!onThisWall(b)) continue;
+          if ((b.agentId ?? "") !== curWall().id) continue;
           if (b.capturedMs > TRef.current) continue;
           present++;
           const home = b.peek ? lerp(b.homeY, b.peekY, peekLift()) : b.homeY;
@@ -8795,7 +8788,7 @@ function HomeExperience(): JSX.Element {
             let dimmed = 0;
             let glowing = 0;
             for (const b of list) {
-              if (!onThisWall(b)) continue;
+              if ((b.agentId ?? "") !== curWall().id) continue;
               if (b.active) active++;
               rMin = Math.min(rMin, b.r);
               rMax = Math.max(rMax, b.r);
