@@ -62,8 +62,9 @@ describe("i18n catalog", () => {
     expect(normalizeSupportedLocale(undefined)).toBe(DEFAULT_LOCALE);
     expect(normalizeSupportedLocale("fr-FR")).toBe(DEFAULT_LOCALE);
     expect(t(null, "tagline")).toBe(t(DEFAULT_LOCALE, "tagline"));
-    // the ko-KR CHROME deliberately speaks English until the catalog lands
-    expect(t("ko-KR", "tagline")).toBe(t(DEFAULT_LOCALE, "tagline"));
+    // and the ko-KR chrome genuinely speaks Korean now
+    expect(t("ko-KR", "tagline")).not.toBe(t(DEFAULT_LOCALE, "tagline"));
+    expect(/[가-힣]/.test(t("ko-KR", "tagline"))).toBe(true);
   });
 
   it("formats saved-count and result-count phrases", () => {
