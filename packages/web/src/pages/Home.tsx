@@ -8604,6 +8604,19 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         list.push(b);
         byId.set(b.id, b);
         order.push(list.length - 1);
+        /* AND INTO ITS SCENE, or it is nowhere. One-wall-one-scene made the
+           scene the source for everything that decides whose ground is on —
+           `assignHomes` reads `presentBalls()` reads `sceneBalls()` — so a
+           newborn left out of its bag gets no home and is never drawn: the
+           person's very first keep answered with nothing until a reload
+           rebuilt the bags from the fetch (`journeys:first-keep`, red from
+           the day the scenes landed; same key rule as the rebuild's). */
+        {
+          const sceneKey = b.agentId ?? "";
+          const bag = scenes.get(sceneKey);
+          if (bag) bag.push(b);
+          else scenes.set(sceneKey, [b]);
+        }
         /* everyone eases to a new home; nobody leaves the screen, which is
            what assignHomes guarantees by construction */
         assignHomes();
