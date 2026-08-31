@@ -10108,6 +10108,29 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     setMouthOpen(false);
     setMouthNote("");
     /**
+     * THE ORB IS THE RECEIPT — AND ON A WALL THAT IS NOT YOURS THERE IS NO
+     * ORB, SO THERE IS NO RECEIPT.
+     *
+     * A keep is always YOURS: it goes to your own archive wherever you happen
+     * to be standing when you write it. On your own wall that is invisible
+     * and right, because the memory drops into the ground in front of you and
+     * the drop is the acknowledgement. Standing in a room or on an agent's
+     * wall, the ground belongs to someone else, so nothing drops — and
+     * measured on this build, nothing else happened either: no orb, no line,
+     * no count (the archive door is not on a room's wall at all). The mouth
+     * simply emptied. A person who cannot tell whether it took writes it
+     * again.
+     *
+     * The world already owns the words for this. The founder ruled it for
+     * `save and reflect` on 2026-08-25 — the case where a keep happens and
+     * the orb is not what you are looking at: "make clear it was saved —
+     * character brightens with the word saved shown in the place of capture
+     * inspiration". Same shape, same slot, and it says WHERE as well as THAT,
+     * because "saved" alone would send somebody hunting this wall for an orb
+     * that was never going to be here.
+     */
+    if (atWallRef.current.kind !== "self") setCharSay("saved to your own wall");
+    /**
      * WITH NOTHING BEHIND THE WORLD, THE KEEP IS NOT ASKED FOR.
      *
      * The orb is born, the ground re-fits around it and the gesture is
@@ -10240,6 +10263,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         simApiRef.current?.unborn(seed.id);
         setDraft(text);
         setMouthOpen(true);
+        /* and the world stops saying it was saved, because it was not */
+        setCharSay("");
         setMouthNote(whyFailed(err, "That didn’t keep. The words are still here"));
         /* and in a build with the internals on, the whole error, once */
         if (showsDebug()) console.error("[waka] keep failed:", err);
