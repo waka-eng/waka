@@ -42,11 +42,25 @@ const COPY_EN = {
     controls: "public profile controls",
 } as const;
 
+const COPY_KO = {
+    loading: "공개 프로필을 불러오는 중...",
+    missingTitle: "공개 프로필을 찾지 못했어요",
+    missingBody: "아직 공유되지 않은 핸들이거나, 주인이 페이지를 닫아 두었어요.",
+    topOfMind: "톱 오브 마인드",
+    empty: "아직 공개된 톱 오브 마인드가 없어요.",
+    title: (name: string) => (
+      <>
+        <span className="nc-title-name">{name}</span>의 톱 오브 마인드
+      </>
+    ),
+    start: "나의 WAKA 시작하기",
+    open: "WAKA 열기",
+    controls: "공개 프로필 설정",
+} as const;
+
 const COPY = {
   "en-US": COPY_EN,
-  /* generation speaks Korean for ko-KR profiles; this page's chrome
-     follows the same catalog-alias rule as the main i18n index */
-  "ko-KR": COPY_EN,
+  "ko-KR": COPY_KO,
 } as const;
 
 

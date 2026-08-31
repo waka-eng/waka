@@ -53,7 +53,7 @@ import { GoogleSignInButton, oauthErrorMessageKey } from "../components/GoogleSi
 import { ApiError } from "../lib/api";
 import type { LoginFieldErrors, SignupFieldErrors } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
-import { formatMessage, readStoredLocale, supportedLocales, t } from "../lib/locales";
+import { formatMessage, readStoredLocale, supportedLocales, t, writeStoredLocale } from "../lib/locales";
 import type { SupportedLocale } from "../lib/locales";
 import { resolveRedirect } from "../lib/sign-in-destination";
 
@@ -91,10 +91,14 @@ const EMPTY_SIGNUP: SignupValues = {
 
 interface SignupFormProps {
   locale?: SupportedLocale;
+  /** the page around the form follows the choice — picking 한국어 must flip
+      the whole surface, not just the fields inside the border */
+  onLocaleChange?: (locale: SupportedLocale) => void;
 }
 
 export function SignupForm({
   locale: shellLocale = readStoredLocale(),
+  onLocaleChange,
 }: SignupFormProps = {}): JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
@@ -298,9 +302,11 @@ export function SignupForm({
           name="preferredLocale"
           disabled={submitting}
           value={values.preferredLocale}
-          onChange={(e) =>
-            handleChange("preferredLocale", e.target.value as SupportedLocale)
-          }
+          onChange={(e) => {
+            const next = e.target.value as SupportedLocale;
+            handleChange("preferredLocale", next);
+            onLocaleChange?.(next);
+          }}
         >
           {supportedLocales.map((l) => (
             <option key={l.code} value={l.code}>
@@ -558,7 +564,7 @@ export default function LoginPage(): JSX.Element {
   const [mode, setMode] = useState<Mode>("login");
   const loginTabRef = useRef<HTMLButtonElement>(null);
   const signupTabRef = useRef<HTMLButtonElement>(null);
-  const [locale] = useState<SupportedLocale>(() => readStoredLocale());
+  const [locale, setLocale] = useState<SupportedLocale>(() => readStoredLocale());
   const location = useLocation();
   const navigate = useNavigate();
   /* Why the door is standing here, when the reason is "we could not ask" —
@@ -729,7 +735,15 @@ export default function LoginPage(): JSX.Element {
           {mode === "login" ? (
             <LoginForm />
           ) : (
-            <SignupForm locale={locale} />
+            <SignupForm
+              locale={locale}
+              onLocaleChange={(next) => {
+                setLocale(next);
+                /* remembered, so the sign-in tab and the next visit speak it
+                   too — the account's own setting takes over after signup */
+                writeStoredLocale(next);
+              }}
+            />
           )}
         </div>
 
