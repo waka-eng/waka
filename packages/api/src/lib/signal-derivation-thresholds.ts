@@ -197,3 +197,10 @@ export const RELATED_INSPIRATION_MIN_COSINE = 0.6;
  * stays the loudest thing in the prompt.
  */
 export const RELATED_INSPIRATION_CONTEXT_LIMIT = 5;
+
+/** Recall's floor — the same relatedness floor derivation trusts (0.6 in
+    the pinned embedding space): below it, a match is a coincidence of
+    vocabulary, not a thought the person holds. */
+export const RECALL_MIN_COSINE = 0.6;
+/** Most matches one recall serves — an answer, not a dump. */
+export const RECALL_LIMIT = 8;

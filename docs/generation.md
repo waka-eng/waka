@@ -326,6 +326,19 @@ queue where the per-account budget can see it. In between, the signal is
 simply not a match target; a similar capture mints a visible near-duplicate.
 The recoverable mistake, again.
 
+### Asking the memory (`GET /api/recall?q=…`)
+
+The one door that turns the memory from something a mind receives into
+something it can ask. The question embeds as a `RETRIEVAL_QUERY` — the
+other half of the asymmetric pairing every stored vector was written in —
+and cosine runs in process over the standing signals' vectors: at or above
+`RECALL_MIN_COSINE`, strongest first, at most `RECALL_LIMIT`, each match a
+signal with live confidence. Never raw captures: recall answers "what do
+they think", and the capture behind a thought stays behind its own doors.
+Access is the read matrix unchanged, and every serve writes the same
+`signals` consultation row a list-read writes — a question about someone's
+mind is a read of it.
+
 ### Is there a maximum number of signals?
 
 **No hard cap — by design.** A memory that refused to learn a 501st pattern
@@ -642,6 +655,8 @@ The authoritative values. Machine-checked against code — see
 | `RELATED_INSPIRATION_SCAN_LIMIT` | 500 | Most recent capture vectors scanned for relatedness |
 | `RELATED_INSPIRATION_MIN_COSINE` | 0.6 | Floor below which an earlier capture is not offered as context |
 | `RELATED_INSPIRATION_CONTEXT_LIMIT` | 5 | Related captures the extractor is shown, strongest first |
+| `RECALL_MIN_COSINE` | 0.6 | Recall's floor — the relatedness floor derivation already trusts |
+| `RECALL_LIMIT` | 8 | Most matches one recall serves; an answer, not a dump |
 
 ### Layer 3 — synthesis (`packages/api/src/lib/top-of-mind-synthesis.ts`)
 
