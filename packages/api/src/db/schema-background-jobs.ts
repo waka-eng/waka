@@ -43,6 +43,7 @@ export const backgroundJobTypeValues = [
   "refresh_group_top_of_mind",
   "refresh_principles",
   "reembed_signal",
+  "tend_signal_garden",
 ] as const;
 export type BackgroundJobType = (typeof backgroundJobTypeValues)[number];
 export const backgroundJobTypeEnum = pgEnum("background_job_type", backgroundJobTypeValues);

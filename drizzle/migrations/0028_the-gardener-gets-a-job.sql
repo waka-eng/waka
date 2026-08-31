@@ -1,0 +1,18 @@
+-- The gardener gets a job type.
+--
+-- Data-layer plan, 2026-08-31: nothing ever revisits the standing set. Two
+-- active signals that drift toward saying one thing — minted on different
+-- days, or minted as siblings during a judge outage before the failure-
+-- honesty change — coexist forever, splitting their evidence, each weaker
+-- than the truth. The gardener is the pass that looks: it finds
+-- suspiciously-close active pairs, asks the judge once, and writes what it
+-- finds — a duplicate PROPOSAL for the person (the world never moves unless
+-- the user moved it; a merge moves their memory, so it is theirs to say),
+-- or a contradiction row when the judge answers opposed.
+--
+-- This migration carries the enum value alone, the same way 0011 carried
+-- `reembed_signal` and 0024 carried `group`: ALTER TYPE ... ADD VALUE cannot
+-- be used by later statements inside the same transaction, so the value
+-- lands here and 0029 builds the table that rides beside it. IF NOT EXISTS
+-- so a re-run does not fail on a value that is already there.
+ALTER TYPE "public"."background_job_type" ADD VALUE IF NOT EXISTS 'tend_signal_garden';

@@ -13,35 +13,47 @@
  * these copies so the wording cannot fork.
  */
 
+import type { MessageKey } from "./i18n";
+
 export interface Receipt {
   text: string;
   /** repo-relative path of the test that enforces this receipt's claim */
   enforcedBy: string;
+  /** the catalog key the world renders this receipt through — Home says
+      `say(RECEIPTS.x.messageKey)`, `text` is the canonical English, and
+      receipts.test.ts pins the en-US catalog to it so the wording cannot
+      fork between registry and screen */
+  messageKey: MessageKey;
 }
 
 export const RECEIPTS = {
   /** yes / partly on your own pattern: the record is the effect */
   verdictKept: {
+    messageKey: "worldReceiptVerdictKept",
     text: "on the record",
     enforcedBy: "packages/api/src/routes/feedback.test.ts",
   },
   /** not true: dampened in the choosing, never removed */
   verdictNo: {
+    messageKey: "worldReceiptVerdictNo",
     text: "steps far back in the choosing — never erased",
     enforcedBy: "packages/api/src/lib/top-of-mind-synthesis.test.ts",
   },
   /** an answer on a room's shared statement */
   verdictGroup: {
+    messageKey: "worldReceiptVerdictGroup",
     text: "answered — the room reads who stands where",
     enforcedBy: "packages/api/src/routes/room-reactions.db.test.ts",
   },
   /** Keep this one up */
   pinned: {
+    messageKey: "worldReceiptPinned",
     text: "held at the front — rewrites keep it there",
     enforcedBy: "packages/api/src/lib/top-of-mind-synthesis.test.ts",
   },
   /** Not this — rides beside the undo, because reversible is part of the law */
   dismissed: {
+    messageKey: "worldReceiptDismissed",
     text: "set aside — it will not return to your top of mind",
     enforcedBy: "packages/api/src/lib/top-of-mind-synthesis.test.ts",
   },
@@ -50,16 +62,19 @@ export const RECEIPTS = {
       Switched on by the-legible-loop Phase 3; until that phase shipped, the
       claim would have been the advisory-button lie. */
   groundRefuses: {
+    messageKey: "worldReceiptGroundRefuses",
     text: "the ground will refuse anything this close from now on",
     enforcedBy: "packages/api/src/lib/signal-suppression.db.test.ts",
   },
   /** the star's standing line, already on screen — documented here */
   starHeld: {
+    messageKey: "worldReceiptStarHeld",
     text: "your own words — WAKA will not rewrite them",
     enforcedBy: "packages/api/src/lib/signal-lock-contract.db.test.ts",
   },
   /** the release confirm, already on screen — documented here */
   releaseOffer: {
+    messageKey: "worldReceiptReleaseOffer",
     text: "WAKA will be allowed to rewrite this sentence",
     enforcedBy: "packages/api/src/lib/signal-lock-contract.db.test.ts",
   },

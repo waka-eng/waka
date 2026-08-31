@@ -12,10 +12,12 @@
  */
 
 import { createRecallRoutes } from "./routes/recall.js";
+import { createSignalDuplicatesRoutes } from "./routes/signal-duplicates.js";
 import { Hono } from "hono";
 import { handle } from "hono/aws-lambda";
 
 import { adminBackgroundJobsRoutes } from "./routes/admin-background-jobs.js";
+import { createAdminLoopHealthRoute } from "./routes/admin-loop-health.js";
 import { attachmentsRoutes } from "./routes/attachments.js";
 import { authRoutes } from "./routes/auth.js";
 import { feedbackRoutes } from "./routes/feedback.js";
@@ -101,6 +103,7 @@ app.route("/api/public/profiles", publicProfileRoutes);
 // gate, requireAuth, and admin allowlist, so the namespace stays hidden by
 // default while still returning 401 for anonymous callers when enabled.
 app.route("/api/admin/background-jobs", adminBackgroundJobsRoutes);
+app.route("/api/admin/loop-health", createAdminLoopHealthRoute());
 
 // Layer 1 — capture, edit, delete, and search the raw archive.
 app.route("/api/inspirations", inspirationsRoutes);
@@ -112,6 +115,7 @@ app.route("/api/attachments", attachmentsRoutes);
 // Layer 2 — the evidence-backed patterns WAKA derives, and their shares.
 app.route("/api/signals", signalsRoutes);
 app.route("/api/recall", createRecallRoutes());
+app.route("/api/signal-duplicates", createSignalDuplicatesRoutes());
 
 // Layer 3 — the one live artifact per profile, and its version chain.
 app.route("/api/top-of-mind", topOfMindRoutes);

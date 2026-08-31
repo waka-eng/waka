@@ -30,6 +30,7 @@
 import { and, asc, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 
 import {
+  signalEmbeddings,
   groupMembers,
   groups,
   groupTopOfMindProposals,
@@ -44,6 +45,7 @@ import {
   type TopOfMindRevisionReason,
   feedback,
 } from "../db/index.js";
+import { cosineSimilarity } from "../scoring/vector.js";
 import { getDb } from "./db.js";
 import { computeSignalConfidence } from "./signal-derivation.js";
 import { GROUP_SIGNAL_MIN_VOICES } from "./signal-derivation-thresholds.js";
@@ -83,6 +85,19 @@ export const SELECTION_COMEBACK_WEIGHT = 0.15;
  * uphill; they are not banished.
  */
 export const SELECTION_DISPUTED_MULTIPLIER = 0.4;
+
+/**
+ * NO TWO VOICES ON THE BOARD SAYING ONE THING. Selection is score-ranked, and
+ * a dominant theme can spend every slot restating itself — twelve sentences
+ * about work is not a top of MIND. At or above this cosine, two candidates
+ * are close enough that the judge band would already be asking whether they
+ * are the same pattern (0.70–0.86, docs/generation.md §4), so the stronger
+ * one holds the slot and the other waits in reserve — and comes back in
+ * whenever slots are left over, so nothing is ever excluded outright.
+ * Deliberately conservative: genuinely different signals about one theme
+ * (0.5–0.7 apart) are untouched until the funnel earns a lower bar.
+ */
+export const SELECTION_DIVERSITY_MAX_COSINE = 0.8;
 
 /** Evidence count at which the support term saturates. */
 export const SELECTION_EVIDENCE_SATURATION = 6;
@@ -136,6 +151,50 @@ interface SelectedSignal {
   evidenceCount: number;
   lastEvidenceAt: Date | null;
   score: number;
+  /** the pattern's life in time, worded — see describeTimeShape */
+  timeShape: string | null;
+}
+
+const TIME_SHAPE_MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * A pattern's life in time, said in words the synthesis can use — because
+ * "top of MIND" is a claim about now, and the model was reading a bare
+ * ISO timestamp per signal and could not tell a pattern that has held for a
+ * year from one that appeared on Tuesday, or a comeback from a steady hum.
+ * Deterministic arithmetic over the evidence dates; English tokens on
+ * purpose (this is prompt-internal metadata — the Locale line governs what
+ * the ARTIFACT speaks).
+ */
+export function describeTimeShape(evidenceAt: Date[], now: Date): string | null {
+  if (evidenceAt.length === 0) return null;
+  const times = evidenceAt.map((d) => d.getTime()).sort((a, b) => a - b);
+  const first = times[0]!;
+  const last = times[times.length - 1]!;
+  const ageDays = Math.max(0, (now.getTime() - first) / TIME_SHAPE_MS_PER_DAY);
+  const quietDays = Math.max(0, (now.getTime() - last) / TIME_SHAPE_MS_PER_DAY);
+
+  const span = (days: number): string => {
+    const unit = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+    if (days < 14) return unit(Math.max(1, Math.round(days)), "day");
+    if (days < 60) return unit(Math.max(1, Math.round(days / 7)), "week");
+    if (days < 400) return unit(Math.max(1, Math.round(days / 30)), "month");
+    return "over a year";
+  };
+
+  if (ageDays < 7) return "new this week";
+
+  /* a return: the latest evidence is fresh, and the gap it ended was long —
+     the same dormancy bar the selection's comeback bonus uses */
+  if (times.length >= 2 && quietDays <= COMEBACK_MAX_RETURN_AGE_DAYS) {
+    const previous = times[times.length - 2]!;
+    const gapDays = (last - previous) / TIME_SHAPE_MS_PER_DAY;
+    if (gapDays >= COMEBACK_MIN_DORMANT_DAYS) {
+      return `returning after ${span(gapDays)} quiet`;
+    }
+  }
+
+  return `held for ${span(ageDays)}; last fed ${span(quietDays)} ago`;
 }
 
 export interface CarriedEntry {
@@ -320,7 +379,9 @@ async function selectSignals(
       // it would keep a signal that went quiet months ago scoring as if it
       // were still current. Time only passes for this signal if it passes
       // here, at read.
-      const confidence = computeSignalConfidence(evidence, now);
+      const confidence = computeSignalConfidence(evidence, now, {
+        affirmed: latestVerdict.get(row.id) === "true",
+      });
       return {
         id: row.id,
         statement: row.statement,
@@ -355,13 +416,81 @@ async function selectSignals(
     evidenceCount: s.evidenceCount,
     lastEvidenceAt: s.lastEvidenceAt,
     score: s.score,
+    timeShape: describeTimeShape(
+      (evidenceBySignal.get(s.id) ?? []).map((item) => item.createdAt),
+      now,
+    ),
   });
 
+  /* the board's twelve slots are worth one bounded read of the candidate
+     vectors — jsonb rows, cosine in process, no model anywhere */
+  const embeddingRows = await db
+    .select({ signalId: signalEmbeddings.signalId, embedding: signalEmbeddings.embedding })
+    .from(signalEmbeddings)
+    .where(
+      inArray(
+        signalEmbeddings.signalId,
+        scored.map((s) => s.id),
+      ),
+    );
+  const embeddingById = new Map<string, number[]>();
+  for (const row of embeddingRows) {
+    if (!embeddingById.has(row.signalId)) embeddingById.set(row.signalId, row.embedding);
+  }
+
   const chosen = chooseSelection(
-    scored.filter((s) => s.status === "active"),
-    scored.filter((s) => s.status === "emerging"),
+    diversifyRanked(
+      scored.filter((s) => s.status === "active"),
+      embeddingById,
+      SELECTION_DIVERSITY_MAX_COSINE,
+    ),
+    diversifyRanked(
+      scored.filter((s) => s.status === "emerging"),
+      embeddingById,
+      SELECTION_DIVERSITY_MAX_COSINE,
+    ),
   );
   return { signals: chosen.signals.map(strip), provisional: chosen.provisional };
+}
+
+/**
+ * Greedy diversity over a ranked list: walk strongest-first, hold back any
+ * candidate whose embedding sits at or above `maxCosine` to one already
+ * accepted, then append the held-back in their own order — so the reorder
+ * only ever matters when the limit truncates, and a signal without an
+ * embedding (dropped on edit, or the write raced) is never held back.
+ * Deterministic by construction: same rows, same order, every run.
+ */
+export function diversifyRanked<T extends { id: string }>(
+  ranked: T[],
+  embeddingById: Map<string, number[]>,
+  maxCosine: number,
+): T[] {
+  const accepted: T[] = [];
+  const acceptedVectors: number[][] = [];
+  const reserve: T[] = [];
+  for (const candidate of ranked) {
+    const vector = embeddingById.get(candidate.id) ?? null;
+    let nearAccepted = false;
+    if (vector !== null) {
+      for (const held of acceptedVectors) {
+        /* cosineSimilarity answers null for degenerate vectors — mismatched
+           dimensions, a zero norm — and null is "not near", never a skip */
+        const similarity = cosineSimilarity(vector, held);
+        if (similarity !== null && similarity >= maxCosine) {
+          nearAccepted = true;
+          break;
+        }
+      }
+    }
+    if (nearAccepted) {
+      reserve.push(candidate);
+      continue;
+    }
+    accepted.push(candidate);
+    if (vector !== null) acceptedVectors.push(vector);
+  }
+  return [...accepted, ...reserve];
 }
 
 /**
@@ -817,6 +946,7 @@ export async function refreshTopOfMindForProfile(
         confidence: signal.confidence,
         evidenceCount: signal.evidenceCount,
         lastEvidenceAt: signal.lastEvidenceAt,
+        timeShape: signal.timeShape ?? undefined,
       })),
       lockedEntries: lockedBefore.map((entry, index) => ({
         id: `${liveBefore?.id ?? "pending"}:${index}`,
@@ -1189,6 +1319,8 @@ async function loadGroupSharedSignals(
         {
           id: row.id,
           statement: row.statement,
+          /* no affirmed term on the group path: room statements answer to
+             member stances, not to a single owner's verdict */
           confidence: computeSignalConfidence(evidence, now),
           evidenceCount: evidence.length,
           lastEvidenceAt: row.lastEvidenceAt,
