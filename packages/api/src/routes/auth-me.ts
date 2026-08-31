@@ -30,6 +30,7 @@ import { accounts, profiles } from "../db/index.js";
 import { eraseAccount } from "../lib/account-erasure.js";
 import { buildSessionClearCookie } from "../lib/auth.js";
 import { getDb } from "../lib/db.js";
+import { enqueueTopOfMindRefresh } from "../lib/queue.js";
 import { supportedLocaleSchema } from "../lib/locales.js";
 import type { AuthEnv } from "../lib/middleware.js";
 import {
@@ -139,6 +140,7 @@ export async function preferencesHandler(c: Context<AuthEnv>): Promise<Response>
   const session = c.get("session");
   const db = getDb();
 
+  const changed = parsed.data.preferredLocale !== session.profile.preferredLocale;
   const updated = await db
     .update(profiles)
     .set({
@@ -147,6 +149,15 @@ export async function preferencesHandler(c: Context<AuthEnv>): Promise<Response>
     })
     .where(eq(profiles.id, session.profile.id))
     .returning({ id: profiles.id });
+
+  /* The artifact should speak the new language soon, not at the next
+     unrelated refresh — a top of mind in a language you just left behind
+     reads as the setting not working. Fire-and-forget posture is wrong
+     here for the same reason it is everywhere: awaited, so a queue that
+     cannot take the job fails the preference change loudly. */
+  if (changed && updated.length > 0) {
+    await enqueueTopOfMindRefresh(session.profile.id, "manual");
+  }
 
   // RETURNING cannot reach across the join, so the answer is read back
   // through the one query that assembles the whole identity.

@@ -384,7 +384,7 @@ async function walk(browser: Browser, view: View, negative: boolean): Promise<Fi
   ]) {
     await page.locator(".jar-mouth-rest").first().tap();
     await page.waitForTimeout(700);
-    await page.fill('textarea[aria-label="capture inspiration"]', text);
+    await page.fill('textarea[aria-label="Capture inspiration"]', text);
     await page.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().tap();
     await page.waitForTimeout(4_500);
   }
