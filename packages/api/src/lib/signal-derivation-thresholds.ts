@@ -81,6 +81,15 @@ export const SIGNAL_SUPPRESSION_MIN_COSINE = 0.86;
  */
 export const SIGNAL_BATCH_DEDUPE_MIN_COSINE = 0.94;
 
+/** The gardener's suspect bar: at or above the attach threshold, two
+    STANDING signals are close enough that derivation would have attached
+    one to the other — exactly the pairs worth a judge's minute. */
+export const GARDENER_SUSPECT_MIN_COSINE = 0.86;
+/** Most-recently-evidenced signals one garden pass reads. */
+export const GARDENER_SCAN_LIMIT = 300;
+/** Judge calls one pass may spend — the rest of the suspects wait a week. */
+export const GARDENER_MAX_JUDGED_PAIRS = 8;
+
 /** Evidence count at which an `emerging` signal becomes `active`. */
 export const SIGNAL_PROMOTION_MIN_EVIDENCE = 3;
 

@@ -509,6 +509,44 @@ speaks in its creator's preferred locale until groups carry their own.
 
 ---
 
+## The gardener: the standing set, revisited
+
+Matching happens at candidate time and never again — so two standing
+signals that name one pattern (minted on different days as the wording
+drifted, or minted as siblings while the judge was unreachable) would
+coexist forever, splitting their evidence. Once a week per profile
+(enqueued nightly beside the principles cron, keyed per ISO week), the
+gardener looks:
+
+- **Scan**: pairwise cosine in process over the stored vectors of up to
+  `GARDENER_SCAN_LIMIT` most-recently-evidenced active and emerging
+  signals. Suspects are pairs at or above `GARDENER_SUSPECT_MIN_COSINE` —
+  the attach threshold itself, so only pairs derivation would already call
+  the same pattern.
+- **Judge**: at most `GARDENER_MAX_JUDGED_PAIRS` per pass, strongest
+  first, with the same austere judge derivation uses. Pairs already on the
+  record — a proposal in any state, or a contradiction — are never asked
+  about again.
+- **Record, never act**: `same` writes an unresolved `signal_duplicates`
+  row — a PROPOSAL; `opposed` writes the same contradiction row a
+  capture-time opposition writes; `independent` writes nothing.
+
+**The merge is the owner's act** (`POST /api/signal-duplicates/:id/resolve`,
+human sessions only — the world never moves unless the user moved it, and a
+merge moves their memory):
+
+- `merge` — the survivor is the locked side if exactly one side is locked
+  (the person's own words always win), otherwise the elder. The survivor
+  gains an evidence link for every inspiration the other side witnessed
+  that it lacked; the other side **retires** keeping its statement, its
+  history, and its own evidence links — retirement is provenance, never a
+  half-delete — and the proposal records the survivor in
+  `merged_into_signal_id`. Top-of-mind and principle citations repoint.
+  The survivor's confidence recomputes from its widened evidence.
+- `keep_apart` — a standing answer the gardener respects forever.
+
+---
+
 ## How time is applied
 
 **Evidence is dated by the capture that witnesses it** — `inspirations
@@ -629,6 +667,9 @@ The authoritative values. Machine-checked against code — see
 | `SIGNAL_SUPPRESSION_MIN_COSINE` | 0.86 | At or above a dismissed signal's vector: refuse the candidate, on the record |
 | `SIGNAL_BATCH_DEDUPE_MIN_COSINE` | 0.94 | Within one extraction batch, collapse near-identical candidates |
 | `SIGNAL_PROMOTION_MIN_EVIDENCE` | 3 | Evidence count where emerging becomes active |
+| `GARDENER_SUSPECT_MIN_COSINE` | 0.86 | Two STANDING signals this close are worth a judge's minute |
+| `GARDENER_SCAN_LIMIT` | 300 | Most-recently-evidenced signals one garden pass reads |
+| `GARDENER_MAX_JUDGED_PAIRS` | 8 | Judge calls one pass may spend; the rest wait a week |
 | `GROUP_SIGNAL_MIN_VOICES` | 2 | Distinct members' memories a room signal needs before it is served |
 | `GROUP_JOIN_BACKFILL_LIMIT` | 100 | Existing public memories a room is asked to read when a member arrives |
 | `CONFIDENCE_SUPPORT_WEIGHT` | 55 | Confidence: weight of evidence count |

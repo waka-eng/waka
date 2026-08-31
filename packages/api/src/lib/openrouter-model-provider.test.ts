@@ -54,6 +54,7 @@ const chatReply = (content: string): Response =>
 describe("the translation", () => {
   it("carries a judge request losslessly onto the chat shape", () => {
     const request = buildSignalMatchJudgementRequest({
+      preferredLocale: "en-US",
       candidateStatement: "Small tools beat grand systems.",
       existingStatement: "Grand systems beat small tools.",
     }) as never;
@@ -144,6 +145,7 @@ describe("the judge over the second road", () => {
 
     fetchMock.mockResolvedValueOnce(chatReply('{"relation":"same"}'));
     const verdict = await provider.judgeSignalMatch({
+      preferredLocale: "en-US",
       candidateStatement: "a",
       existingStatement: "b",
     });
@@ -155,6 +157,7 @@ describe("the judge over the second road", () => {
     process.env.WAKA_MODEL_JUDGE = "some-lab/other-model";
     fetchMock.mockResolvedValueOnce(chatReply('```json\n{"relation":"opposed"}\n```'));
     const fenced = await provider.judgeSignalMatch({
+      preferredLocale: "en-US",
       candidateStatement: "a",
       existingStatement: "b",
     });
@@ -167,6 +170,7 @@ describe("the judge over the second road", () => {
     const provider = createOpenRouterModelProvider();
     fetchMock.mockResolvedValueOnce(chatReply("the model apologizes at length"));
     const verdict = await provider.judgeSignalMatch({
+      preferredLocale: "en-US",
       candidateStatement: "a",
       existingStatement: "b",
     });
