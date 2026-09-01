@@ -2968,6 +2968,16 @@
     padding-top: var(--sp-8);
     padding-bottom: var(--sp-8);
   }
+  /* AND THE SKY'S OWN VERB, 15px -> 31px. `declare one` arrived with the
+     sky's honesty pass (#305 range, 2026-09-01) and came in at 70x15 — under
+     the 24 this block holds everything to, on the world, the mouth open and
+     a memory open, at all three viewports. It is not an exception to the rule
+     above; it is a control the rule had not been extended to yet, which is
+     what "brought to it where it falls short" means. Found by `e2e:phone`. */
+  .jar-values-declare button {
+    padding-top: var(--sp-8);
+    padding-bottom: var(--sp-8);
+  }
   /* the chrome pills sit at 25-26px and already clear 24; `.jar-here-more` is
      the one under it on the short axis, at 42px wide */
   .jar-here-more {
