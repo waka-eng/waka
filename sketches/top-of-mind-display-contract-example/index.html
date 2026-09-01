@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>WAKA — Top-of-Mind Sticky Display Contract Mockup</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #f6efe2;
+    color: #211915;
+  }
+  .page {
+    min-height: 100vh;
+    padding: 40px;
+    background:
+      radial-gradient(circle at 8% 8%, rgba(179, 108, 61, .11), transparent 28%),
+      linear-gradient(135deg, rgba(255,255,255,.42), transparent 48%),
+      #f6efe2;
+  }
+  header { max-width: 1180px; margin: 0 auto 28px; }
+  .eyebrow { font: 700 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .16em; text-transform: uppercase; color: #8b5b33; }
+  h1 { margin: 10px 0 8px; font-family: Georgia, "Times New Roman", serif; font-size: clamp(36px, 5vw, 64px); line-height: .95; letter-spacing: -.045em; }
+  .subtitle { max-width: 760px; font-size: 17px; line-height: 1.55; color: #6e5a4d; }
+  .board {
+    max-width: 1180px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: .95fr 1.25fr;
+    gap: 22px;
+    align-items: start;
+  }
+  .panel {
+    border: 1px solid rgba(69, 46, 27, .18);
+    border-radius: 28px;
+    background: rgba(255, 251, 242, .74);
+    box-shadow: 0 24px 60px rgba(64, 38, 18, .10);
+    padding: 22px;
+  }
+  .panel h2 { margin: 0 0 12px; font-size: 16px; text-transform: uppercase; letter-spacing: .08em; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #6f4d2c; }
+  .json {
+    background: #1f1a17;
+    color: #f8eacb;
+    border-radius: 18px;
+    padding: 18px;
+    overflow: hidden;
+    font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.08);
+  }
+  .key { color: #f2b36b; }
+  .str { color: #ffe7a8; }
+  .num { color: #b4e49d; }
+  .mapping { display: grid; gap: 10px; margin-top: 16px; }
+  .map-row { display: grid; grid-template-columns: 155px 1fr; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 16px; background: rgba(255,255,255,.48); border: 1px solid rgba(69,46,27,.10); }
+  .map-row b { font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: #83592f; text-transform: uppercase; letter-spacing: .08em; }
+  .product { background: #eadcc8; border-radius: 30px; padding: 28px; border: 1px solid rgba(69,46,27,.14); }
+  .product-head { display: flex; justify-content: space-between; gap: 20px; align-items: end; margin-bottom: 22px; }
+  .product h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 42px; letter-spacing: -.04em; text-transform: none; color: #241812; }
+  .product small { color: #866d5f; font-weight: 650; }
+  .sticky-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+  .sticky {
+    min-height: 280px;
+    padding: 24px 22px 20px;
+    background: var(--note, #fff2a6);
+    border: 1px solid rgba(80, 58, 20, .14);
+    box-shadow: 0 18px 30px rgba(73,43,16,.16), inset 0 -18px 32px rgba(172,123,33,.10);
+    transform: rotate(var(--rot, -1.5deg));
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .sticky::before { content: ""; position: absolute; top: -13px; left: 50%; width: 86px; height: 27px; transform: translateX(-50%) rotate(2deg); border-radius: 3px; background: rgba(232,211,168,.72); box-shadow: 0 3px 10px rgba(80,55,25,.12); }
+  .chip { align-self: flex-start; padding: 7px 10px; border: 1px solid rgba(50,38,16,.18); border-radius: 999px; font: 800 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; letter-spacing: .12em; background: rgba(255,255,255,.42); color: #5a4323; }
+  .sticky h3 { margin: 14px 0 0; font-family: Georgia, "Times New Roman", serif; font-size: 31px; line-height: 1.02; letter-spacing: -.045em; }
+  .why { margin-top: auto; padding-top: 14px; border-top: 1px dashed rgba(68,47,19,.24); }
+  .why span { display: block; margin-bottom: 6px; font: 800 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; letter-spacing: .13em; color: #75552c; }
+  .why p { margin: 0; font-size: 14px; line-height: 1.38; color: #4a3826; }
+  .detail {
+    margin-top: 24px;
+    background: #fffaf0;
+    border: 1px solid rgba(69,46,27,.13);
+    border-radius: 22px;
+    padding: 20px;
+  }
+  .detail h3 { margin: 0 0 14px; font-size: 22px; font-family: Georgia, "Times New Roman", serif; }
+  .detail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .detail-card { border-radius: 16px; background: #f8efdf; padding: 13px; border: 1px solid rgba(69,46,27,.10); }
+  .detail-card b { display: block; margin-bottom: 7px; font: 800 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; letter-spacing: .12em; color: #8a5a2d; }
+  .detail-card p { margin: 0; color: #584435; font-size: 14px; line-height: 1.4; }
+  .callout { margin-top: 16px; padding: 13px 14px; border-radius: 18px; background: #21341f; color: #e8f5da; font-size: 14px; line-height: 1.45; }
+  .bad { margin-top: 18px; padding: 14px; border: 1px dashed #b56b4f; color: #76432f; background: #fff2e9; border-radius: 18px; font-size: 14px; line-height: 1.45; }
+  @media (max-width: 920px) { .page { padding: 24px; } .board, .sticky-grid, .detail-grid { grid-template-columns: 1fr; } .product-head { align-items: start; flex-direction: column; } }
+</style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <div class="eyebrow">WAKA mockup · Gemini response ↔ sticky display parity</div>
+      <h1>One canonical note, rendered as a sticky.</h1>
+      <p class="subtitle">The model writes bounded fields. The API maps them into a canonical Top-of-Mind note. The sticky card displays those same canonical fields: type, headline, and evidence line — not a raw legacy <code>why</code> blob.</p>
+    </header>
+    <section class="board">
+      <aside class="panel">
+        <h2>Gemini response</h2>
+        <pre class="json">{
+  <span class="key">"firstPersonPostItCandidate"</span>: <span class="str">"places where the question can cost something"</span>,
+  <span class="key">"displayType"</span>: <span class="str">"question"</span>,
+  <span class="key">"environmentDirection"</span>: <span class="str">"A practical room where unfinished questions meet real stakes."</span>,
+  <span class="key">"rejectedEnvironment"</span>: <span class="str">"Private analysis loops that keep the question safe."</span>,
+  <span class="key">"evidenceRationale"</span>: <span class="str">"Three signals point toward public tests over private clarity."</span>,
+  <span class="key">"confidence"</span>: <span class="num">0.78</span>
+}</pre>
+        <div class="mapping" aria-label="field mapping">
+          <div class="map-row"><b>type</b><span><code>question</code> → chip: “open question”</span></div>
+          <div class="map-row"><b>headline</b><span><code>firstPersonPostItCandidate</code> → sticky title</span></div>
+          <div class="map-row"><b>why line</b><span><code>evidenceRationale</code> → short front-card explanation</span></div>
+          <div class="map-row"><b>detail</b><span>environment + anti-environment stay in the opened report</span></div>
+        </div>
+        <div class="bad"><strong>Avoid:</strong> showing raw “Ambient signal: / Matched environment: / Anti-environment:” text on the sticky card. That is storage/debug structure, not the user-facing note.</div>
+      </aside>
+
+      <section class="product" aria-label="proposed WAKA UI">
+        <div class="product-head">
+          <div>
+            <small>Top of Mind</small>
+            <h2>Sticky mirror</h2>
+          </div>
+          <small>3 provisional notes · click one to open the report</small>
+        </div>
+        <div class="sticky-grid">
+          <article class="sticky" style="--note:#fff2a6;--rot:-1.8deg">
+            <span class="chip">open question</span>
+            <h3>places where the question can cost something</h3>
+            <div class="why"><span>Why WAKA noticed this</span><p>Three signals point toward public tests over private clarity.</p></div>
+          </article>
+          <article class="sticky" style="--note:#d7f3c4;--rot:1.4deg">
+            <span class="chip">live tension</span>
+            <h3>not another impressive path that feels dead</h3>
+            <div class="why"><span>Why WAKA noticed this</span><p>Recent saves contrast status-safe work with rooms that feel alive.</p></div>
+          </article>
+        </div>
+        <section class="detail">
+          <h3>Opened note report</h3>
+          <div class="detail-grid">
+            <div class="detail-card"><b>Ambient signal</b><p>places where the question can cost something</p></div>
+            <div class="detail-card"><b>Matched environment</b><p>A practical room where unfinished questions meet real stakes.</p></div>
+            <div class="detail-card"><b>Anti-environment</b><p>Private analysis loops that keep the question safe and abstract.</p></div>
+            <div class="detail-card"><b>Rejected alternative</b><p>This is not just generic productivity; it is about testing identity in public conditions.</p></div>
+          </div>
+          <div class="callout">Display rule: the sticky front card and opened report both come from the same canonical <code>topOfMindNote</code> fields, so Gemini output, API type, and UI wording stay aligned.</div>
+        </section>
+      </section>
+    </section>
+  </main>
+</body>
+</html>
