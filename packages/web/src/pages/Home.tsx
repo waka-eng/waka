@@ -12015,7 +12015,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 {ready ? (
                   <div
                     className={
-                      w.kind === "self" && principles.length > 0
+                      w.kind === "self"
                         ? "jar-values-room jar-values-room--live"
                         : "jar-values-room"
                     }
@@ -12099,7 +12099,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                           ) : (
                             <button
                               type="button"
-                              className="jar-values-value"
+                              className={
+                                pr.state === "contested"
+                                  ? "jar-values-value jar-values-value--contested"
+                                  : "jar-values-value"
+                              }
                               aria-expanded={pick === pr.id}
                               onClick={() =>
                                 setPick((cur) => (cur === pr.id ? null : pr.id))
@@ -12108,7 +12112,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                               {pr.statement}
                             </button>
                           )}
-                          {pr.state === "aspirational" ? (
+                          {pr.state === "contested" ? (
+                            /* An unarbitrated conflict, one layer up — the
+                               same truth #307 gave signals: the record holds
+                               a dispute, so the page must not read settled.
+                               Rank decides meanwhile; your verbs settle it. */
+                            <span className="jar-poster-away jar-label"> {say("worldValueContested")}</span>
+                          ) : pr.state === "aspirational" ? (
                             /* The one distinction worth carrying up here:
                                declared-but-not-yet-demonstrated is a
                                different claim from earned, and the canon
@@ -12256,51 +12266,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                           ) : null}
                         </p>
                       ))}
-                    {/* DECLARING ONE, which is the only act here that is
-                        not about a sentence already on screen — so it is
-                        the only one that does not hang off one. Layer four
-                        is what you choose to be; up to now the world could
-                        only show you what it had inferred. */}
-                    {pDraft && pDraft.id === null ? (
-                      <p className="jar-values-held">
-                        <textarea
-                          className="jar-ground-edit"
-                          aria-label={say("worldAPrincipleOfYourOwn")}
-                          value={pDraft.text}
-                          rows={2}
-                          autoFocus
-                          placeholder={say("worldWhatYouHoldTo")}
-                          onChange={(e) => setPDraft({ id: null, text: e.target.value })}
-                          onKeyDown={(e) => {
-                            if (e.key === "Escape") {
-                              e.preventDefault();
-                              setPDraft(null);
-                            }
-                          }}
-                        />
-                        <span className="jar-ask">
-                          <button type="button" disabled={pBusy} onClick={savePrinciple}>
-                            {pBusy ? say("worldDeclaring") : say("worldDeclareIt")}
-                          </button>
-                          <span aria-hidden="true"> · </span>
-                          <button type="button" onClick={() => setPDraft(null)}>
-                            {say("worldNotNow")}
-                          </button>
-                        </span>
-                      </p>
-                    ) : (
-                      <p className="jar-ask jar-values-declare">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setPick(null);
-                            setPDraft({ id: null, text: "" });
-                          }}
-                        >
-                          {say("worldDeclareOne")}
-                        </button>
-                      </p>
-                    )}
                       </>
                     ) : (
                       <>
@@ -12316,6 +12281,55 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         </p>
                       </>
                     )}
+                    {/* DECLARING ONE — the only act here not about a
+                        sentence already on screen, so it does not hang off
+                        one, and it does not wait for one either: giving
+                        your word FIRST is what aspirational exists for, so
+                        the empty sky offers it under the forming words
+                        (founder, 2026-09-01 — before this, a person with
+                        no values had no way to declare their first). */}
+                    {w.kind === "self" ? (
+                      pDraft && pDraft.id === null ? (
+                        <p className="jar-values-held">
+                          <textarea
+                            className="jar-ground-edit"
+                            aria-label={say("worldAPrincipleOfYourOwn")}
+                            value={pDraft.text}
+                            rows={2}
+                            autoFocus
+                            placeholder={say("worldWhatYouHoldTo")}
+                            onChange={(e) => setPDraft({ id: null, text: e.target.value })}
+                            onKeyDown={(e) => {
+                              if (e.key === "Escape") {
+                                e.preventDefault();
+                                setPDraft(null);
+                              }
+                            }}
+                          />
+                          <span className="jar-ask">
+                            <button type="button" disabled={pBusy} onClick={savePrinciple}>
+                              {pBusy ? say("worldDeclaring") : say("worldDeclareIt")}
+                            </button>
+                            <span aria-hidden="true"> · </span>
+                            <button type="button" onClick={() => setPDraft(null)}>
+                              {say("worldNotNow")}
+                            </button>
+                          </span>
+                        </p>
+                      ) : (
+                        <p className="jar-ask jar-values-declare">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPick(null);
+                              setPDraft({ id: null, text: "" });
+                            }}
+                          >
+                            {say("worldDeclareOne")}
+                          </button>
+                        </p>
+                      )
+                    ) : null}
                   </div>
                 ) : null}
                 {ready && c ? (

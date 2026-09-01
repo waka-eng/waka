@@ -706,6 +706,19 @@
 .jar-values-declare {
   margin-top: var(--sp-28);
 }
+/* A contested value is a light that cannot settle — the same waver the
+   grounds carry (#307), one layer up, and the same stillness under
+   reduced motion: half-settled ink, state shown, motion home. */
+.jar-values-value--contested {
+  animation: jar-contested-pull 6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .jar-values-value--contested {
+    animation: none;
+    color: var(--jar-muted);
+    text-shadow: 0 0 12px var(--jar-scroll);
+  }
+}
 .jar-values-value {
   appearance: none;
   -webkit-appearance: none;
