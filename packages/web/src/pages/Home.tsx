@@ -1196,7 +1196,7 @@ const HOME_COPY = {
     room: "내 방",
     titleLineOne: (name: string) => (
       <>
-        <span className="nc-title-name">{name}'s</span> top of mind
+        <span className="nc-title-name">{name}</span>의 탑오브마인드
       </>
     ),
     titleLineTwo: "",
@@ -1206,9 +1206,14 @@ const HOME_COPY = {
     noteShifted: ["반복됨", "형성 중", "다시 돌아옴", "긴장", "확인 필요"],
     evidenceLabel: "시작된 곳",
     reactionGroup: "포스트잇 조정",
+    notePreviewAria: "포스트잇 미리보기",
     correctionLabel: "포스트잇 수정",
     correctionPlaceholder: "벽에 남길 문장으로 다듬기",
-    pinCta: "PIN",
+    pinCta: "고정",
+    unpinCta: "고정 해제",
+    pinTitle: "고정",
+    unpinTitle: "고정 해제",
+    deleteTitle: "삭제",
     rewriteCta: "저장",
     removeCta: "삭제",
     feedbackPinned: "고정됨",
@@ -1231,6 +1236,52 @@ const HOME_COPY = {
     savedSignalReflect: "조금 더 생각하기",
     savedSignalReflecting: "생각하는 중…",
     savedSignalDelete: "삭제",
+    savedSignalCollapseLabel: "영감 접기",
+    savedSignalEditLabel: "저장된 영감 수정",
+    savedSignalFeedbackLabel: "영감 피드백",
+    savedSignalFeedbackActionLabel: (label: string) => `영감 피드백: ${label}`,
+    savedSignalReflectionConversationLabel: "영감 돌아보기 대화",
+    savedSignalOpening: "영감을 여는 중...",
+    savedSignalReflectionCount: (count: number) => `이 영감에서 나온 돌아보기 ${count}개`,
+    savedSignalReflectionToggleShow: "보기",
+    savedSignalReflectionToggleHide: "숨기기",
+    savedSignalReflectionDelete: "삭제",
+    savedSignalReflectionLoading: "돌아보기를 불러오는 중...",
+    savedSignalReflectionEmpty: "돌아보기가 여기에 나타납니다.",
+    savedSignalListLabel: "저장된 영감 목록",
+    savedSignalPathsLabel: "저장된 영감 경로",
+    savedSignalNoSearchMatches: (query: string, path: string) => `${path}에서 “${query}”와 맞는 저장된 영감이 없습니다.`,
+    savedSignalNoPathMatches: (path: string) => `${path}에는 아직 저장된 영감이 없습니다.`,
+    savedSignalShowAllSaved: "/all-saved 보기",
+    allSavedPathLabel: "모든 영감",
+    recentlySavedPathLabel: "최근 저장",
+    allSavedPathDescription: "저장된 모든 영감, 최신순",
+    recentlySavedPathDescription: "최근 2일 안에 저장됨",
+    topOfMindEvidencePathLabel: "탑오브마인드",
+    topOfMindEvidenceDescription: (label: string) => `“${label}”로 이어진 영감`,
+    topOfMindEvidenceCount: (count: number) => `영감 ${count}개가 여기로 이어짐`,
+    groupingContentsLabel: "묶음 내용",
+    backToMap: "← 지도로 돌아가기",
+    nameCollectionLabel: "이 묶음 이름 짓기",
+    bottomActionsLabel: "하단 작업",
+    drawerUndoAria: "영감이 삭제됨, 되돌리기",
+    drawerUndoCta: "영감이 삭제됨 · 되돌리기",
+    drawerSaveEditedAria: "수정한 영감 저장",
+    drawerSaveEditedCta: "저장",
+    topOfMindUndoAria: "포스트잇이 삭제됨, 되돌리기",
+    topOfMindUndoCta: "포스트잇이 삭제됨 · 되돌리기",
+    savingShort: "저장 중...",
+    cancelEditAria: "수정 취소",
+    cancelEditCta: "수정 취소",
+    drawerBackHome: "방으로 돌아가기",
+    draftLabel: "임시 글",
+    reflectionQuestionLoading: "이 영감을 위한 질문을 찾는 중...",
+    reflectionAnswerLabel: "돌아보기 답변",
+    reflectionAnswerPlaceholder: "여기에 답하기",
+    reflectionPrevious: "이전",
+    reflectionNext: "다음",
+    reflectionSave: "저장",
+    reflectionCancel: "취소",
     loadingThoughts: "생각을 모으는 중...",
     emptyThoughts: "첫 영감을 기록하면 WAKA가 해석하고 연결합니다. 관련된 영감이 모이면 고치기 쉬운 임시 포스트잇이 여기에 나타납니다.",
     captureTitle: "첫 영감 붙잡기",
@@ -1276,9 +1327,14 @@ const HOME_COPY = {
     noteShifted: ["keeps returning", "newly forming", "came back", "tension", "needs testing"],
     evidenceLabel: "where it began",
     reactionGroup: "post-it controls",
+    notePreviewAria: "post-it preview",
     correctionLabel: "edit post-it",
     correctionPlaceholder: "write the version you would keep on the wall",
     pinCta: "PIN",
+    unpinCta: "unpin post-it",
+    pinTitle: "Pin",
+    unpinTitle: "Unpin",
+    deleteTitle: "Delete",
     rewriteCta: "save",
     removeCta: "delete",
     feedbackPinned: "pinned",
@@ -1301,6 +1357,52 @@ const HOME_COPY = {
     savedSignalReflect: "reflect",
     savedSignalReflecting: "reflecting",
     savedSignalDelete: "delete",
+    savedSignalCollapseLabel: "collapse inspiration",
+    savedSignalEditLabel: "edit saved inspiration",
+    savedSignalFeedbackLabel: "saved inspiration feedback",
+    savedSignalFeedbackActionLabel: (label: string) => `saved inspiration feedback: ${label}`,
+    savedSignalReflectionConversationLabel: "reflection conversation",
+    savedSignalOpening: "opening inspiration...",
+    savedSignalReflectionCount: (count: number) => `${count} reflection${count === 1 ? "" : "s"} from this inspiration`,
+    savedSignalReflectionToggleShow: "show",
+    savedSignalReflectionToggleHide: "hide",
+    savedSignalReflectionDelete: "delete",
+    savedSignalReflectionLoading: "loading reflections...",
+    savedSignalReflectionEmpty: "Your reflection will appear here.",
+    savedSignalListLabel: "saved inspiration list",
+    savedSignalPathsLabel: "saved inspiration paths",
+    savedSignalNoSearchMatches: (query: string, path: string) => `No saved inspirations match “${query}” in ${path}.`,
+    savedSignalNoPathMatches: (path: string) => `No saved inspirations in ${path} yet.`,
+    savedSignalShowAllSaved: "show /all-saved",
+    allSavedPathLabel: "all saved",
+    recentlySavedPathLabel: "recently saved",
+    allSavedPathDescription: "all saved inspirations, newest first",
+    recentlySavedPathDescription: "saved in the last 2 days",
+    topOfMindEvidencePathLabel: "top of mind",
+    topOfMindEvidenceDescription: (label: string) => `inspirations that led to "${label}"`,
+    topOfMindEvidenceCount: (count: number) => `${count} inspiration${count === 1 ? "" : "s"} led here`,
+    groupingContentsLabel: "grouping contents",
+    backToMap: "← back to map",
+    nameCollectionLabel: "name this collection",
+    bottomActionsLabel: "bottom actions",
+    drawerUndoAria: "inspiration was deleted, undo",
+    drawerUndoCta: "inspiration was deleted · undo",
+    drawerSaveEditedAria: "save edited inspiration",
+    drawerSaveEditedCta: "save",
+    topOfMindUndoAria: "sticky note was deleted, undo",
+    topOfMindUndoCta: "sticky note was deleted · undo",
+    savingShort: "saving...",
+    cancelEditAria: "cancel edit",
+    cancelEditCta: "cancel edit",
+    drawerBackHome: "back home",
+    draftLabel: "draft",
+    reflectionQuestionLoading: "Finding a question for this inspiration...",
+    reflectionAnswerLabel: "answer reflection prompt",
+    reflectionAnswerPlaceholder: "answer here",
+    reflectionPrevious: "previous",
+    reflectionNext: "next",
+    reflectionSave: "save",
+    reflectionCancel: "cancel",
     loadingThoughts: "gathering what is top of mind...",
     emptyThoughts: "Capture an inspiration and WAKA will interpret and connect it. Once related inspirations gather, provisional post-its you can correct will appear here.",
     captureTitle: "Catch the first inspiration",
@@ -1336,9 +1438,14 @@ const HOME_COPY = {
     noteShifted: string[];
     evidenceLabel: string;
     reactionGroup: string;
+    notePreviewAria: string;
     correctionLabel: string;
     correctionPlaceholder: string;
     pinCta: string;
+    unpinCta: string;
+    pinTitle: string;
+    unpinTitle: string;
+    deleteTitle: string;
     rewriteCta: string;
     removeCta: string;
     feedbackPinned: string;
@@ -1357,6 +1464,52 @@ const HOME_COPY = {
     savedSignalReflect: string;
     savedSignalReflecting: string;
     savedSignalDelete: string;
+    savedSignalCollapseLabel: string;
+    savedSignalEditLabel: string;
+    savedSignalFeedbackLabel: string;
+    savedSignalFeedbackActionLabel: (label: string) => string;
+    savedSignalReflectionConversationLabel: string;
+    savedSignalOpening: string;
+    savedSignalReflectionCount: (count: number) => string;
+    savedSignalReflectionToggleShow: string;
+    savedSignalReflectionToggleHide: string;
+    savedSignalReflectionDelete: string;
+    savedSignalReflectionLoading: string;
+    savedSignalReflectionEmpty: string;
+    savedSignalListLabel: string;
+    savedSignalPathsLabel: string;
+    savedSignalNoSearchMatches: (query: string, path: string) => string;
+    savedSignalNoPathMatches: (path: string) => string;
+    savedSignalShowAllSaved: string;
+    allSavedPathLabel: string;
+    recentlySavedPathLabel: string;
+    allSavedPathDescription: string;
+    recentlySavedPathDescription: string;
+    topOfMindEvidencePathLabel: string;
+    topOfMindEvidenceDescription: (label: string) => string;
+    topOfMindEvidenceCount: (count: number) => string;
+    groupingContentsLabel: string;
+    backToMap: string;
+    nameCollectionLabel: string;
+    bottomActionsLabel: string;
+    drawerUndoAria: string;
+    drawerUndoCta: string;
+    drawerSaveEditedAria: string;
+    drawerSaveEditedCta: string;
+    topOfMindUndoAria: string;
+    topOfMindUndoCta: string;
+    savingShort: string;
+    cancelEditAria: string;
+    cancelEditCta: string;
+    drawerBackHome: string;
+    draftLabel: string;
+    reflectionQuestionLoading: string;
+    reflectionAnswerLabel: string;
+    reflectionAnswerPlaceholder: string;
+    reflectionPrevious: string;
+    reflectionNext: string;
+    reflectionSave: string;
+    reflectionCancel: string;
     loadingThoughts: string;
     emptyThoughts: string;
     captureTitle: string;
@@ -2684,8 +2837,8 @@ export function HomePage(): JSX.Element {
             type="button"
             className={`nc-note-icon-btn nc-note-icon-btn--pin${pinned ? " nc-note-icon-btn--pinned" : ""}`}
             disabled={saving}
-            aria-label={pinned ? "unpin post-it" : copy.pinCta}
-            title={pinned ? "Unpin" : "Pin"}
+            aria-label={pinned ? copy.unpinCta : copy.pinCta}
+            title={pinned ? copy.unpinTitle : copy.pinTitle}
             onClick={(event) => {
               event.stopPropagation();
               void pinTopOfMindNote(signal);
@@ -2709,7 +2862,7 @@ export function HomePage(): JSX.Element {
             className="nc-note-icon-btn nc-note-icon-btn--delete"
             disabled={saving}
             aria-label={copy.removeCta}
-            title="Delete"
+            title={copy.deleteTitle}
             onClick={(event) => {
               event.stopPropagation();
               void pullDownTopOfMindNote(signal);
@@ -3092,11 +3245,21 @@ export function HomePage(): JSX.Element {
   );
   const selectedDrawerReflectionQuestion =
     selectedDrawerReflectionQuestionLoading && !savedSignalReflectionQuestions[savedSignalReflectionStepIndex]
-      ? "Finding a question for this inspiration..."
+      ? copy.reflectionQuestionLoading
       : savedSignalReflectionQuestions[savedSignalReflectionStepIndex] ??
         SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[savedSignalReflectionStepIndex] ??
         SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS.length - 1];
   const selectedDrawerReflectionProgress = `${savedSignalReflectionStepIndex + 1}/${SAVED_SIGNAL_REFLECTION_MAX_STEPS}`;
+  const localizedMemoryPathLabel = (filter: MemoryPathFilter): string => {
+    if (filter.id === "all-saved") return copy.allSavedPathLabel;
+    if (filter.id === "recently-saved") return copy.recentlySavedPathLabel;
+    return filter.label;
+  };
+  const localizedMemoryPathDescription = (filter: MemoryPathFilter): string => {
+    if (filter.id === "all-saved") return copy.allSavedPathDescription;
+    if (filter.id === "recently-saved") return copy.recentlySavedPathDescription;
+    return filter.description;
+  };
   const selectedDrawerReflectionCanGoNext =
     selectedDrawerReflectionCanSave &&
     !selectedDrawerReflectionQuestionLoading &&
@@ -3534,7 +3697,7 @@ export function HomePage(): JSX.Element {
           <button
             type="button"
             className="memory-contents-collapse"
-            aria-label="collapse inspiration"
+            aria-label={copy.savedSignalCollapseLabel}
             onClick={() => {
               if (hasEditedDraft) {
                 discardSavedSignalEditAndCollapse();
@@ -3560,7 +3723,7 @@ export function HomePage(): JSX.Element {
             className="memory-contents-expanded-copy memory-contents-expanded-copy--ready"
           >
             {detailPending ? (
-              <p className="memory-contents-loading">opening inspiration...</p>
+              <p className="memory-contents-loading">{copy.savedSignalOpening}</p>
             ) : (
               <textarea
                 className="memory-contents-expanded-text memory-contents-expanded-editor"
@@ -3572,14 +3735,14 @@ export function HomePage(): JSX.Element {
                   }));
                 }}
                 role="textbox"
-                aria-label="edit saved inspiration"
+                aria-label={copy.savedSignalEditLabel}
                 aria-multiline="true"
                 spellCheck={true}
               />
             )}
           </div>
           <section className="memory-contents-reflection-prompts">
-            <div className="memory-contents-feedback-actions" aria-label="saved inspiration feedback">
+            <div className="memory-contents-feedback-actions" aria-label={copy.savedSignalFeedbackLabel}>
               {copy.savedSignalFeedbackActions.map((action) => {
                 const isSelected = selectedFeedbackValue === action.value;
                 const isSaving = isFeedbackSaving && isSelected;
@@ -3588,7 +3751,7 @@ export function HomePage(): JSX.Element {
                     key={action.value}
                     type="button"
                     className={`memory-contents-feedback-action${isSelected ? " memory-contents-feedback-action--selected" : ""}`}
-                    aria-label={`saved inspiration feedback: ${action.label}`}
+                    aria-label={copy.savedSignalFeedbackActionLabel(action.label)}
                     aria-pressed={isSelected}
                     disabled={isFeedbackSaving}
                     onClick={() => {
@@ -3700,7 +3863,7 @@ export function HomePage(): JSX.Element {
             </div>
           </div>
           {reflectionRows.length > 0 || reflectionsLoading || isReflecting ? (
-            <section className="memory-contents-reflections" aria-label="reflection conversation">
+            <section className="memory-contents-reflections" aria-label={copy.savedSignalReflectionConversationLabel}>
               {reflectionRows.length > 0 ? (
                 <>
                   <button
@@ -3717,9 +3880,9 @@ export function HomePage(): JSX.Element {
                     }}
                   >
                     <span>
-                      {reflectionRows.length} reflection{reflectionRows.length === 1 ? "" : "s"} from this inspiration
+                      {copy.savedSignalReflectionCount(reflectionRows.length)}
                     </span>
-                    <small>{reflectionsExpanded ? "hide" : "show"}</small>
+                    <small>{reflectionsExpanded ? copy.savedSignalReflectionToggleHide : copy.savedSignalReflectionToggleShow}</small>
                   </button>
                   {reflectionsExpanded ? (
                     <div className="memory-contents-reflection-thread">
@@ -3735,7 +3898,7 @@ export function HomePage(): JSX.Element {
                               type="button"
                               onClick={() => deleteSavedSignalReflection(signal.id, reflection)}
                             >
-                              delete
+                              {copy.savedSignalReflectionDelete}
                             </button>
                           </footer>
                         </article>
@@ -3744,9 +3907,9 @@ export function HomePage(): JSX.Element {
                   ) : null}
                 </>
               ) : reflectionsLoading ? (
-                <p className="memory-contents-reflection-empty">loading reflections...</p>
+                <p className="memory-contents-reflection-empty">{copy.savedSignalReflectionLoading}</p>
               ) : isReflecting ? (
-                <p className="memory-contents-reflection-empty">Your reflection will appear here.</p>
+                <p className="memory-contents-reflection-empty">{copy.savedSignalReflectionEmpty}</p>
               ) : null}
             </section>
           ) : null}
@@ -3775,11 +3938,11 @@ export function HomePage(): JSX.Element {
         ? copy.loadingSaves
         : copy.emptySaves
       : savedSignalQuery
-        ? `No saved inspirations match “${inspirationFilters.search.trim()}” in ${activePath}.`
-        : `No saved inspirations in ${activePath} yet.`;
+        ? copy.savedSignalNoSearchMatches(inspirationFilters.search.trim(), activePath)
+        : copy.savedSignalNoPathMatches(activePath);
 
 	    return (
-	      <div className="memory-category-panel memory-path-panel" aria-label="saved inspiration list">
+	      <div className="memory-category-panel memory-path-panel" aria-label={copy.savedSignalListLabel}>
         {renderMemoryPathFilters()}
 	        {savedSignalsError ? <p className="memory-relationship-empty">{savedSignalsError}</p> : null}
         {savedSignalsLoading && allSavedSignals.length === 0 ? (
@@ -3798,7 +3961,7 @@ export function HomePage(): JSX.Element {
                   if (savedSignalQuery) setInspirationFilters({ search: "" });
                 }}
               >
-                show /all-saved
+                {copy.savedSignalShowAllSaved}
               </button>
             ) : null}
           </p>
@@ -3827,7 +3990,7 @@ export function HomePage(): JSX.Element {
       ...primaryFilters,
     ];
     return (
-	      <nav className="memory-path-filters" aria-label="saved inspiration paths">
+	      <nav className="memory-path-filters" aria-label={copy.savedSignalPathsLabel}>
 	        {visibleFilters.map((filter) => {
           const count = applySearchToSignals(filter.signals, savedSignalQuery).length;
           return (
@@ -3845,9 +4008,9 @@ export function HomePage(): JSX.Element {
                 setSelectedSavedSignalId(null);
                 setSavedSignalDetail(null);
               }}
-              title={`${filter.description} (${count})`}
+              title={`${localizedMemoryPathDescription(filter)} (${count})`}
             >
-	              <span>{filter.label}</span>
+	              <span>{localizedMemoryPathLabel(filter)}</span>
 	              <small>{count}</small>
 	            </button>
           );
@@ -3990,8 +4153,8 @@ export function HomePage(): JSX.Element {
     setActiveTopOfMindEvidenceFilter({
       id: filterId,
       path: "/top-of-mind",
-      label: "top of mind",
-      description: `inspirations that led to "${shortText(thoughtCardDisplayLabel(signal, locale), 64)}"`,
+      label: copy.topOfMindEvidencePathLabel,
+      description: copy.topOfMindEvidenceDescription(shortText(thoughtCardDisplayLabel(signal, locale), 64)),
       signals: evidenceSignals,
     });
     setSelectedSupportingSignalFallback(evidenceSignals[0] ?? null);
@@ -4035,7 +4198,7 @@ export function HomePage(): JSX.Element {
       }}
       onPointerDown={noteIsInteractive ? onNotePointerDown(index) : undefined}
     >
-      <div className="nc-note-preview" aria-label="post-it preview">
+      <div className="nc-note-preview" aria-label={copy.notePreviewAria}>
         {noteIsInteractive && signal.feedbackTargetId ? (
           <div className="nc-note-edit-shell">
             <textarea
@@ -4074,7 +4237,7 @@ export function HomePage(): JSX.Element {
               openTopOfMindEvidenceDrawer(signal);
             }}
           >
-            {supportingCount} inspiration{supportingCount === 1 ? "" : "s"} led here
+            {copy.topOfMindEvidenceCount(supportingCount)}
           </button>
         ) : <span />}
         {noteIsInteractive ? renderPostItActions(signal) : null}
@@ -4152,7 +4315,7 @@ export function HomePage(): JSX.Element {
 	        >
           <span className="memory-stack-glass" aria-hidden="true" />
           {selectedMemoryGroup ? (
-            <div className="memory-contents-flow" aria-label="grouping contents">
+            <div className="memory-contents-flow" aria-label={copy.groupingContentsLabel}>
               <button
                 type="button"
                 className="memory-contents-back"
@@ -4162,11 +4325,11 @@ export function HomePage(): JSX.Element {
                   setSavedSignalDetail(null);
                 }}
               >
-                ← back to map
+                {copy.backToMap}
               </button>
               {selectedMemoryGroup.source === "user" ? (
                 <label className="memory-contents-rename">
-                  <span className="sr-only">name this collection</span>
+                  <span className="sr-only">{copy.nameCollectionLabel}</span>
                   <input
                     value={selectedMemoryGroup.name}
                     onChange={(event) => renameMemoryGroup(selectedMemoryGroup.id, event.target.value)}
@@ -4195,7 +4358,7 @@ export function HomePage(): JSX.Element {
       <div
         className={`nc-bottom-bar${homeMode === "memoryDrawer" ? " nc-bottom-bar--drawer" : ""}`}
         data-locale={locale}
-        aria-label="bottom actions"
+        aria-label={copy.bottomActionsLabel}
       >
         <div
           className={`nc-primary-action${
@@ -4226,29 +4389,29 @@ export function HomePage(): JSX.Element {
               }
               aria-label={
                 showDrawerUndo
-                  ? "inspiration was deleted, undo"
+                  ? copy.drawerUndoAria
                   : showDrawerEditActions
-                    ? "save edited inspiration"
+                    ? copy.drawerSaveEditedAria
                     : showTopOfMindUndo
-                      ? "sticky note was deleted, undo"
+                      ? copy.topOfMindUndoAria
                       : copy.captureAria
               }
               disabled={showDrawerEditActions && savedSignalEditSaving}
             >
               <span className="nc-save-cta">
                 {showDrawerUndo
-                  ? "inspiration was deleted · undo"
+                  ? copy.drawerUndoCta
                   : showDrawerEditActions
                     ? savedSignalEditSaving
-                      ? "saving..."
-                      : "save"
+                      ? copy.savingShort
+                      : copy.drawerSaveEditedCta
                     : showTopOfMindUndo
-                      ? "sticky note was deleted · undo"
+                      ? copy.topOfMindUndoCta
                       : captureSaved
                         ? t(locale, "saved")
                         : copy.captureCta}
                 {showTopOfMindCapture && !captureSaved && captureHasDraft ? (
-                  <span className="nc-save-draft">(draft)</span>
+                  <span className="nc-save-draft">({copy.draftLabel})</span>
                 ) : null}
               </span>
             </button>
@@ -4258,9 +4421,9 @@ export function HomePage(): JSX.Element {
               type="button"
               className="nc-edit-cancel"
               onClick={cancelSavedSignalEdit}
-              aria-label="cancel edit"
+              aria-label={copy.cancelEditAria}
             >
-              cancel edit
+              {copy.cancelEditCta}
             </button>
           ) : null}
           {showDrawerSearch ? (
@@ -4294,7 +4457,7 @@ export function HomePage(): JSX.Element {
               </div>
               <textarea
                 ref={savedSignalReflectionInputRef}
-                aria-label="answer reflection prompt"
+                aria-label={copy.reflectionAnswerLabel}
                 aria-describedby="saved-signal-reflection-question"
                 value={savedSignalReflectionDraft}
                 onChange={(event) => {
@@ -4302,7 +4465,7 @@ export function HomePage(): JSX.Element {
                   event.currentTarget.style.height = "auto";
                   event.currentTarget.style.height = `${event.currentTarget.scrollHeight}px`;
                 }}
-                placeholder="answer here"
+                placeholder={copy.reflectionAnswerPlaceholder}
                 disabled={savedSignalReflectionSaving}
                 rows={1}
               />
@@ -4312,23 +4475,23 @@ export function HomePage(): JSX.Element {
                   onClick={goToPreviousSavedSignalReflection}
                   disabled={savedSignalReflectionSaving || savedSignalReflectionStepIndex === 0}
                 >
-                  previous
+                  {copy.reflectionPrevious}
                 </button>
                 <button
                   type="button"
                   onClick={goToNextSavedSignalReflection}
                   disabled={!selectedDrawerReflectionCanGoNext || savedSignalReflectionSaving}
                 >
-                  next
+                  {copy.reflectionNext}
                 </button>
                 <button
                   type="submit"
                   disabled={!selectedDrawerReflectionCanFinish || savedSignalReflectionSaving}
                 >
-                  {savedSignalReflectionSaving ? "saving..." : "save"}
+                  {savedSignalReflectionSaving ? copy.savingShort : copy.reflectionSave}
                 </button>
                 <button type="button" onClick={cancelSavedSignalReflection}>
-                  cancel
+                  {copy.reflectionCancel}
                 </button>
               </div>
               {savedSignalReflectionError ? (
@@ -4348,7 +4511,7 @@ export function HomePage(): JSX.Element {
                 chooseHomeMode("memoryDrawer");
               }
             }}
-            aria-label={homeMode === "memoryDrawer" ? "back home" : `${copy.drawerObjectBody}: ${copy.savesTitle}`}
+            aria-label={homeMode === "memoryDrawer" ? copy.drawerBackHome : `${copy.drawerObjectBody}: ${copy.savesTitle}`}
           >
             {homeMode === "memoryDrawer" ? (
               <span className="nc-drawer-icon" aria-hidden="true">
@@ -4381,7 +4544,7 @@ export function HomePage(): JSX.Element {
                 </svg>
               </span>
             )}
-            <span className="sr-only">{homeMode === "memoryDrawer" ? "back home" : copy.drawerObjectTitle}</span>
+            <span className="sr-only">{homeMode === "memoryDrawer" ? copy.drawerBackHome : copy.drawerObjectTitle}</span>
             <small className="nc-drawer-count">{formatSavedCount(locale, savedEntryCount)}</small>
           </button>
         ) : null}
