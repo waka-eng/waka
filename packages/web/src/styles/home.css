@@ -644,7 +644,7 @@
   left: 50%;
   top: var(--jar-sky-top, -58vh);
   transform: translate(-50%, -50%);
-  width: min(520px, calc(100vw - 56px));
+  width: min(580px, calc(100vw - 56px));
   text-align: center;
   pointer-events: none;
 }
@@ -666,11 +666,47 @@
 .jar-values-room--live {
   pointer-events: auto;
 }
+/* The layer names itself over the set — the board's TOP OF MIND ruling,
+   applied standing in the sky, where the signpost that names the place is
+   hidden. */
+.jar-values-eyebrow {
+  margin: 0 0 var(--sp-24);
+  color: var(--jar-faint);
+}
 .jar-values-held {
   margin: 0;
 }
 .jar-values-held + .jar-values-held {
-  margin-top: var(--sp-14);
+  margin-top: var(--sp-22);
+}
+/* RANK AS PRESENCE: the top value leads, one quiet step larger and fully
+   lit. Never a numeral — size and light are the world's own channels for
+   "this wins when two conflict". */
+.jar-values-held--first .jar-values-value {
+  font-size: clamp(22px, 2.4vw, 29px);
+  text-shadow: 0 0 14px var(--jar-scroll);
+}
+/* The roots under a value, standing in the sky: centered like everything
+   here, no ledger indent. */
+.jar-values-room .jar-was-roots {
+  margin: var(--sp-8) 0 0;
+}
+/* A value's state — aspirational, written by hand — is a whisper under the
+   sentence, never a rival to it: the statement is the thing, the state is
+   the smallest true note about it. */
+.jar-values-room .jar-poster-away {
+  display: block;
+  margin-top: var(--sp-2);
+  font-size: var(--t-fine);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--jar-faint);
+  text-shadow: none;
+}
+/* Declaring one of your own belongs to the SET, not to whichever value
+   happens to stand last — the extra air says so. */
+.jar-values-declare {
+  margin-top: var(--sp-28);
 }
 .jar-values-value {
   appearance: none;

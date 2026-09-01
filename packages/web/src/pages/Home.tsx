@@ -12036,12 +12036,33 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         values is designed on purpose. */}
                     {w.kind === "self" && principles.length > 0 ? (
                       <>
+                        {/* THE LAYER, NOT THE NAME — the same ruling the board
+                            follows ("this should always say TOP OF MIND at the
+                            top no matter what room"): standing in the sky,
+                            nothing else says what kind of sentences these are,
+                            because the signpost that names the place hides
+                            while you are in it. */}
+                        <p className="jar-values-eyebrow jar-label">
+                          {say("worldPhilosophiesValues")}
+                        </p>
                     {/* Ranked, and the rank is the order — never a number
                         beside a statement. */}
                     {[...principles]
                       .sort((a, b) => a.rank - b.rank)
                       .map((pr, i, ranked) => (
-                        <p key={pr.id} className="jar-values-held">
+                        <p
+                          key={pr.id}
+                          className={
+                            /* RANK AS PRESENCE, NEVER AS A NUMBER. The top
+                               value is the one that wins when two conflict,
+                               and it stands a step larger — the same channel
+                               (size, light) the world uses everywhere it
+                               means "this leads". */
+                            i === 0
+                              ? "jar-values-held jar-values-held--first"
+                              : "jar-values-held"
+                          }
+                        >
                           {/* CORRECTING IT IN PLACE, the same shape the
                               card and the pattern already use: the
                               sentence becomes a field where it stands, so
@@ -12093,6 +12114,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                different claim from earned, and the canon
                                already has the word for it. */
                             <span className="jar-poster-away"> {say("worldAspirational")}</span>
+                          ) : pr.locked ? (
+                            /* Your words, not the machine's — the same quiet
+                               mark the board gives a sentence the person took
+                               into their own hand. */
+                            <span className="jar-poster-away"> {say("worldWrittenByHand")}</span>
                           ) : null}
                           {/* THE VERBS, under the sentence they are about.
                               Order is by consequence: correcting is
@@ -12263,7 +12289,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         </span>
                       </p>
                     ) : (
-                      <p className="jar-ask">
+                      <p className="jar-ask jar-values-declare">
                         <button
                           type="button"
                           onClick={() => {
