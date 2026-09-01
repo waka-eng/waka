@@ -659,9 +659,48 @@
   color: var(--jar-ink);
 }
 /* A held value in the sky: the lead's own voice, stacked with air between
-   sentences. Rank is the order and nothing else — no numerals, ever. */
-.jar-values-lead--held + .jar-values-lead--held {
+   sentences. Rank is the order and nothing else — no numerals, ever. The
+   sky is the layer's one home, so the hands live here too: the statement
+   is a button whose press opens the same quiet verb row the wall used to
+   hold, and the room takes pointer events only when it has hands to offer. */
+.jar-values-room--live {
+  pointer-events: auto;
+}
+.jar-values-held {
+  margin: 0;
+}
+.jar-values-held + .jar-values-held {
   margin-top: var(--sp-14);
+}
+.jar-values-value {
+  appearance: none;
+  -webkit-appearance: none;
+  display: block;
+  width: 100%;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  text-align: center;
+  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-weight: 300;
+  font-size: clamp(19px, 2vw, 25px);
+  line-height: 1.34;
+  letter-spacing: 0.012em;
+  text-wrap: balance;
+  color: var(--jar-ink);
+}
+.jar-values-value:focus-visible {
+  outline: none;
+  text-shadow: 0 0 12px var(--jar-scroll);
+}
+/* THE SIGNPOST CARRIES THE SKY'S STATE: lit words mean the sky above holds
+   your values; dim means still forming. Same recipe as every answered
+   light in this world. */
+.jar-values--held .jar-values-words {
+  color: var(--jar-ink);
+  text-shadow: 0 0 12px var(--jar-scroll);
 }
 .jar-values-sub {
   margin: var(--sp-14) 0 0;
