@@ -12,6 +12,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "nightly": "tsx src/nightly-local.ts",
     "test": "node scripts/check-vocabulary.mjs && vitest run",
     "test:unit": "node scripts/check-vocabulary.mjs && vitest run --config vitest.unit.config.ts",
     "eval:judge": "WAKA_RUN_LIVE_EVALS=1 vitest run test/judge-eval.test.ts",
