@@ -53,19 +53,24 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = resolve(HERE, "../src");
 
 /**
- * Where the API starts, all four of them.
+ * Where the API starts, all five of them.
  *
  * `lambda.ts` and `background-worker.ts` are the deployed Lambda handlers and
  * `principle-refresh.ts` the nightly cron — all three named as `handler:`
  * strings in `sst.config.ts`, which `test/sst-config-env.test.ts` pins.
- * `server.ts` is the local stack, started by `scripts/dev-local.sh`. Nothing
- * else runs this package, so nothing else may root the graph.
+ * `server.ts` is the local stack, started by `scripts/dev-local.sh`, and
+ * `nightly-local.ts` is that same script's once-per-boot firing of the
+ * nightly clock (the `nightly` package script) — it imports the cron's own
+ * handler rather than enqueueing anything itself, so the sole-enqueuer
+ * ruling stays one function wide. Nothing else runs this package, so
+ * nothing else may root the graph.
  */
 const ENTRY = [
   "lambda.ts",
   "background-worker.ts",
   "principle-refresh.ts",
   "server.ts",
+  "nightly-local.ts",
 ];
 
 /**
