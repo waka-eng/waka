@@ -2060,6 +2060,66 @@
   color: #9f2d20;
 }
 
+.meaning-graph-status--running {
+  margin-bottom: var(--space-3);
+  color: #7a4d00;
+}
+
+.meaning-graph-rebuild-alert {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  max-width: 1480px;
+  margin: 0 auto var(--space-4);
+  border: 1px solid rgba(122, 77, 0, 0.34);
+  border-radius: 18px;
+  background: rgba(255, 247, 225, 0.78);
+  padding: var(--space-4);
+  color: var(--ink);
+}
+
+.meaning-graph-rebuild-alert strong {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 400;
+}
+
+.meaning-graph-rebuild-alert p {
+  max-width: 900px;
+  margin: 0;
+  color: #5f4630;
+  line-height: 1.5;
+}
+
+.meaning-graph-rebuild-alert-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.meaning-graph-rebuild-alert-actions button {
+  appearance: none;
+  border: var(--border-hairline);
+  border-radius: 999px;
+  background: var(--cell);
+  color: var(--ink);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  padding: 7px 14px;
+  text-transform: uppercase;
+}
+
+.meaning-graph-rebuild-alert-actions button:hover:not(:disabled) {
+  border-color: var(--ink);
+  background: var(--paper);
+}
+
 .meaning-graph-workbench {
   max-width: 1480px;
   margin: 0 auto;
