@@ -105,3 +105,35 @@ describe("the Korean closing word", () => {
     expect(prompt).not.toContain("Final check");
   });
 });
+
+
+/**
+ * The contested mark. Selection only ever marks ids present in the same
+ * delivered list, and the prompt must (a) show the mark beside the signal
+ * it belongs to and (b) tell the synthesis what it means — tension-only,
+ * never one side asserted as settled. Absent the mark, no line renders.
+ */
+describe("the contested mark", () => {
+  it("renders `contested with:` beside the marked signal only", () => {
+    const input = baseInput();
+    input.signals = [
+      { ...input.signals[0]!, id: "s1", contestedWithIds: ["s2"] },
+      { ...input.signals[0]!, id: "s2", statement: "Weeknights need no plan at all.", contestedWithIds: ["s1"] },
+      { ...input.signals[0]!, id: "s3", statement: "Walks untangle problems." },
+    ];
+    const prompt = buildTopOfMindSynthesisRequest(input).contents[0]!.parts[0]!.text!;
+    expect(prompt).toContain("id: s1");
+    expect(prompt).toContain("contested with: s2");
+    expect(prompt).toContain("contested with: s1");
+    expect(prompt.split("contested with:")).toHaveLength(3);
+  });
+
+  it("teaches the mark in the personal instruction: tension-only, owner arbitrates", () => {
+    expect(TOP_OF_MIND_SYNTHESIS_SYSTEM_INSTRUCTION).toMatch(/contested with:/);
+    expect(TOP_OF_MIND_SYNTHESIS_SYSTEM_INSTRUCTION).toMatch(/write it as a tension citing both ids/);
+    expect(TOP_OF_MIND_SYNTHESIS_SYSTEM_INSTRUCTION).toMatch(
+      /Never assert either side alone as a settled\s+pattern or belief/,
+    );
+    expect(TOP_OF_MIND_SYNTHESIS_SYSTEM_INSTRUCTION).toMatch(/the person arbitrates disputes,\s+never you/);
+  });
+});

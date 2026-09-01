@@ -394,3 +394,39 @@ describe("erasure, swept from the schema rather than from memory", () => {
     ).toEqual([]);
   });
 });
+
+/**
+ * The mixed-action race, pinned. `top_of_mind_entry_signals` points three
+ * ways — entry CASCADE, signal SET NULL, owner SET NULL — and before the
+ * pre-clear in eraseAccount, the account cascade could fire a SET NULL
+ * update on a citation whose entry was already deleted, re-validate the
+ * entry FK, and fail the WHOLE erasure (live, 2026-08-31: an account with
+ * a board citing its own signals answered 500 to DELETE /auth/me).
+ */
+describe("erasing an account whose board cites its own signals", () => {
+  it("erases cleanly — citations, board, signals, account all gone", async () => {
+    const [account] = await t.sql`
+      INSERT INTO accounts (email) VALUES ('cited-board@example.test') RETURNING id`;
+    const [profile] = await t.sql`
+      INSERT INTO profiles (account_id, type, name)
+      VALUES (${account.id}, 'human', 'Cited') RETURNING id`;
+    const [signal] = await t.sql`
+      INSERT INTO signals (profile_id, statement, status, confidence)
+      VALUES (${profile.id}, 'The pattern the board stands on.', 'emerging', 0) RETURNING id`;
+    const [tom] = await t.sql`
+      INSERT INTO top_of_minds (profile_id, version, status, reason)
+      VALUES (${profile.id}, 1, 'live', 'initial') RETURNING id`;
+    const [entry] = await t.sql`
+      INSERT INTO top_of_mind_entries (top_of_mind_id, type, body, sort_order)
+      VALUES (${tom.id}, 'pattern', 'It stands on one thing.', 0) RETURNING id`;
+    await t.sql`
+      INSERT INTO top_of_mind_entry_signals (entry_id, signal_id, owner_profile_id)
+      VALUES (${entry.id}, ${signal.id}, ${profile.id})`;
+
+    await erase(account.id as string);
+
+    expect(await t.sql`SELECT id FROM accounts WHERE id = ${account.id}`).toHaveLength(0);
+    expect(await t.sql`SELECT id FROM top_of_mind_entry_signals WHERE entry_id = ${entry.id}`).toHaveLength(0);
+    expect(await t.sql`SELECT id FROM signals WHERE id = ${signal.id}`).toHaveLength(0);
+  });
+});

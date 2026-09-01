@@ -416,5 +416,6 @@
   "worldTheseAreOne": "이 둘은 하나예요",
   "worldMergeExplain": "먼저 온 문장이 말을 지켜요. 지워지는 건 없고, 다른 쪽도 제 기록을 그대로 가져요",
   "worldYesMerge": "네, 합칠게요",
-  "worldKeepApart": "따로 두기"
+  "worldKeepApart": "따로 두기",
+  "worldContested": "서로 어긋나는 패턴이에요 — 어느 쪽인지 답해 주면 정리돼요"
 }
