@@ -52,6 +52,8 @@ pull the next item — do not surface the choice.
 
 - `docs/data-model.md` — the three layers: inspiration → signal → top of mind.
 - `docs/generation.md` — a signal promotes `emerging → active` at 3 evidence.
+- `docs/HANDOVER-2026-09-01.md` — session handover: open PRs, queue, gates,
+  local facts, deploy runbook. Start here when picking up mid-stream.
 - Founder laws: light is the only meaning channel; motion explains, never
   decorates; the world never moves unless the user moved it; fading never
   deletes; states render, numerals never.
