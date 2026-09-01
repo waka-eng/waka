@@ -44,6 +44,7 @@ import {
   type TopOfMindEntryType,
   type TopOfMindRevisionReason,
   feedback,
+  signalContradictions,
 } from "../db/index.js";
 import { cosineSimilarity } from "../scoring/vector.js";
 import { getDb } from "./db.js";
@@ -203,6 +204,9 @@ interface SelectedSignal {
   score: number;
   /** the pattern's life in time, worded — see describeTimeShape */
   timeShape: string | null;
+  /** open contested pairs whose other side is ALSO in this selection —
+      the only ids the model may cite, so a one-sided mark never exists */
+  contestedWithIds?: string[];
 }
 
 const TIME_SHAPE_MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -459,18 +463,45 @@ async function selectSignals(
       return a.id < b.id ? -1 : 1;
     });
 
-  const strip = (s: (typeof scored)[number]): SelectedSignal => ({
-    id: s.id,
-    statement: s.statement,
-    confidence: s.confidence,
-    evidenceCount: s.evidenceCount,
-    lastEvidenceAt: s.lastEvidenceAt,
-    score: s.score,
-    timeShape: describeTimeShape(
-      (evidenceBySignal.get(s.id) ?? []).map((item) => item.createdAt),
-      now,
-    ),
-  });
+  /* Open contested pairs, so the selection can keep both voices of a
+     dispute together (goal: contested-speaks, 2026-08-31). Ordered for
+     determinism — the pull below follows this order when one signal
+     stands in several pairs. */
+  const openPairs = await db
+    .select({
+      aSignalId: signalContradictions.aSignalId,
+      bSignalId: signalContradictions.bSignalId,
+    })
+    .from(signalContradictions)
+    .where(
+      and(
+        eq(signalContradictions.profileId, profileId),
+        isNull(signalContradictions.resolvedAt),
+      ),
+    )
+    .orderBy(asc(signalContradictions.createdAt), asc(signalContradictions.aSignalId));
+  const opposing = new Map<string, string[]>();
+  for (const pair of openPairs) {
+    opposing.set(pair.aSignalId, [...(opposing.get(pair.aSignalId) ?? []), pair.bSignalId]);
+    opposing.set(pair.bSignalId, [...(opposing.get(pair.bSignalId) ?? []), pair.aSignalId]);
+  }
+
+  const strip = (s: (typeof scored)[number], speaking: ReadonlySet<string>): SelectedSignal => {
+    const contestedWithIds = (opposing.get(s.id) ?? []).filter((other) => speaking.has(other));
+    return {
+      id: s.id,
+      statement: s.statement,
+      confidence: s.confidence,
+      evidenceCount: s.evidenceCount,
+      lastEvidenceAt: s.lastEvidenceAt,
+      score: s.score,
+      timeShape: describeTimeShape(
+        (evidenceBySignal.get(s.id) ?? []).map((item) => item.createdAt),
+        now,
+      ),
+      ...(contestedWithIds.length > 0 ? { contestedWithIds } : {}),
+    };
+  };
 
   /* the board's twelve slots are worth one bounded read of the candidate
      vectors — jsonb rows, cosine in process, no model anywhere */
@@ -500,7 +531,46 @@ async function selectSignals(
       SELECTION_DIVERSITY_MAX_COSINE,
     ),
   );
-  return { signals: chosen.signals.map(strip), provisional: chosen.provisional };
+
+  const finalList = keepContestedTogether(
+    chosen.signals,
+    new Map(scored.map((s) => [s.id, s])),
+    opposing,
+  );
+  const inList = new Set(finalList.map((s) => s.id));
+
+  return { signals: finalList.map((s) => strip(s, inList)), provisional: chosen.provisional };
+}
+
+/**
+ * A TENSION NEEDS BOTH VOICES. When a chosen signal stands in an open
+ * contested pair whose other side is standing (in `standing`) but was not
+ * chosen, the partner is pulled in behind it — the list may exceed the
+ * twelve slots by the pulled few, which is the honest trade: delivering one
+ * side of a dispute as if it were alone is the machine quietly arbitrating,
+ * and the machine never arbitrates. A partner that is not standing at all
+ * (retired, unsupported) cannot speak, and its pair stays dormant for this
+ * pass. Deliberately not transitive: a pulled partner's OWN other pairs are
+ * not chased — the walk covers what the chosen set stands in, and stops.
+ */
+export function keepContestedTogether<T extends { id: string }>(
+  chosen: readonly T[],
+  standing: ReadonlyMap<string, T>,
+  opposing: ReadonlyMap<string, readonly string[]>,
+): T[] {
+  const finalList = [...chosen];
+  const inList = new Set(finalList.map((s) => s.id));
+  for (const signal of chosen) {
+    for (const other of opposing.get(signal.id) ?? []) {
+      if (inList.has(other)) continue;
+      const partner = standing.get(other);
+      if (partner) {
+        finalList.push(partner);
+        inList.add(other);
+      }
+    }
+  }
+  return finalList;
 }
 
 /**
@@ -1018,6 +1088,7 @@ export async function refreshTopOfMindForProfile(
         evidenceCount: signal.evidenceCount,
         lastEvidenceAt: signal.lastEvidenceAt,
         timeShape: signal.timeShape ?? undefined,
+        contestedWithIds: signal.contestedWithIds,
       })),
       lockedEntries: lockedBefore.map((entry, index) => ({
         id: `${liveBefore?.id ?? "pending"}:${index}`,

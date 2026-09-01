@@ -197,7 +197,6 @@
   "worldReadAgain": "Read again",
   "worldReadingNow": "Reading…",
   "worldReadItAgain": "Read it again",
-  "worldHowYouChoose": "how you choose",
   "worldAspirational": "aspirational",
   "worldWhatItGrewFrom": "what it grew from",
   "worldMattersMore": "matters more",
@@ -416,5 +415,7 @@
   "worldTheseAreOne": "these are one",
   "worldMergeExplain": "the elder keeps the words; nothing is deleted, and the other keeps its history",
   "worldYesMerge": "yes, merge them",
-  "worldKeepApart": "keep them apart"
+  "worldKeepApart": "keep them apart",
+  "worldContested": "contested — two of your patterns pull against each other; your answer settles it",
+  "worldValueContested": "contested"
 }

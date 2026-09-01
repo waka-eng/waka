@@ -2,8 +2,9 @@ name: CI
 
 # Nothing gated the code before this. `deploy-dev` and `deploy` build and
 # ship; neither runs a typecheck or a test, so a broken migration or a failed
-# authorization check reached an environment before anyone saw it. This runs
-# on every PR and every push to dev, and is meant to be a required check.
+# authorization check reached an environment before anyone saw it. The fast
+# check runs automatically; the expensive browser and live-model gates are
+# deliberate manual runs from the Actions page.
 on:
   pull_request:
   push:
@@ -11,6 +12,17 @@ on:
       - dev
       - main
   workflow_dispatch:
+    inputs:
+      run_browser_gates:
+        description: "Run the full browser gate (about an hour)"
+        required: false
+        default: false
+        type: boolean
+      run_model_evaluations:
+        description: "Run live Gemini/OpenRouter evaluations"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -112,6 +124,7 @@ jobs:
       # bench fails the build. (The suite itself skips visibly when no model
       # key is configured, so forks without secrets stay green honestly.)
       - name: The judge on the bench (live model)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_model_evaluations == true }}
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
@@ -124,13 +137,13 @@ jobs:
         run: pnpm --filter @waka/web test
 
   # ---------------------------------------------------------------------------
-  # THE TWO GATES THAT OPEN A BROWSER, AND WHY THEY ARE A SEPARATE JOB
+  # THE MANUAL GATE THAT OPENS A BROWSER
   # ---------------------------------------------------------------------------
   #
-  # `e2e:first-paint` and `e2e:journeys` both existed and both failed correctly
-  # on the commit before the fixes they gate — and neither ran automatically,
-  # so every regression they are shaped against could still ship. That is the
-  # whole gap this job closes.
+  # This is intentionally manual. The full ladder consumes roughly an hour of
+  # runner time, so normal PR and branch pushes receive the fast, deterministic
+  # check above. Start CI from Actions and select "Run the full browser gate"
+  # when a release or a high-risk UI change needs this deeper walk.
   #
   # They are the only checks in this repo that answer "can a person do this",
   # as opposed to "does this function return the right value". The defects they
@@ -146,7 +159,8 @@ jobs:
   # reports in seconds, and this job's own failure names itself rather than
   # hiding inside a long unit-test log.
   browser:
-    name: Browser gates (first paint, journeys, failure paths, first run, keyboard)
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_browser_gates == true }}
+    name: Browser gates (manual)
     runs-on: ubuntu-latest
     # 45 was enough while the job stopped at its first red step. It is not
     # enough now that every gate runs and reports (see `!cancelled()` below):

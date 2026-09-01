@@ -109,6 +109,13 @@ export interface TopOfMindSynthesisSignal {
    */
   ownerName?: string;
   /**
+   * Open contested pairs: ids of signals IN THIS SAME LIST that this one
+   * pulls against, per the owner's unarbitrated record. Selection guarantees
+   * both voices are present before either is marked, so every id here is
+   * citable. Personal passes only — contested pairs are one person's.
+   */
+  contestedWithIds?: string[];
+  /**
    * The pattern's life in time, worded — "held for 4 months; last fed 2
    * weeks ago", "returning after 5 weeks quiet", "new this week". Personal
    * passes set it; the prompt renders it so the synthesis can tell an

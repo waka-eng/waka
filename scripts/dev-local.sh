@@ -183,4 +183,19 @@ echo "Starting monolithic local server. Press Ctrl+C to stop."
 pnpm --filter @waka/api exec tsx src/server.ts &
 api_pid=$!
 
+# THE CLOCK THE CLOUD HAS AND THIS STACK DID NOT. Deployed stages run the
+# PrincipleRefresh cron nightly; locally nothing ever fired it, so the sky
+# and the gardener only moved when someone ran the pass by hand. One firing
+# per boot is the honest local cadence: idempotency keys (day / ISO week)
+# collapse repeats, the cheap gates answer "not yet" for free on an
+# ordinary day, and a stack left running across midnight is what the real
+# cron exists for anyway. WAKA_NO_NIGHTLY=1 skips it.
+if [[ "${WAKA_NO_NIGHTLY:-}" != "1" ]]; then
+  (
+    sleep 5
+    echo "  Nightly pass: principles + garden (WAKA_NO_NIGHTLY=1 to skip)"
+    pnpm --filter @waka/api nightly 2>&1 | sed 's/^/  [nightly] /'
+  ) &
+fi
+
 wait "$api_pid"

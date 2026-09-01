@@ -716,7 +716,7 @@
   left: 50%;
   top: var(--jar-sky-top, -58vh);
   transform: translate(-50%, -50%);
-  width: min(520px, calc(100vw - 56px));
+  width: min(580px, calc(100vw - 56px));
   text-align: center;
   pointer-events: none;
 }
@@ -729,6 +729,97 @@
   letter-spacing: 0.012em;
   text-wrap: balance;
   color: var(--jar-ink);
+}
+/* A held value in the sky: the lead's own voice, stacked with air between
+   sentences. Rank is the order and nothing else — no numerals, ever. The
+   sky is the layer's one home, so the hands live here too: the statement
+   is a button whose press opens the same quiet verb row the wall used to
+   hold, and the room takes pointer events only when it has hands to offer. */
+.jar-values-room--live {
+  pointer-events: auto;
+}
+/* The layer names itself over the set — the board's TOP OF MIND ruling,
+   applied standing in the sky, where the signpost that names the place is
+   hidden. */
+.jar-values-eyebrow {
+  margin: 0 0 var(--sp-24);
+  color: var(--jar-faint);
+}
+.jar-values-held {
+  margin: 0;
+}
+.jar-values-held + .jar-values-held {
+  margin-top: var(--sp-22);
+}
+/* RANK AS PRESENCE: the top value leads, one quiet step larger and fully
+   lit. Never a numeral — size and light are the world's own channels for
+   "this wins when two conflict". */
+.jar-values-held--first .jar-values-value {
+  font-size: clamp(22px, 2.4vw, 29px);
+  text-shadow: 0 0 14px var(--jar-scroll);
+}
+/* The roots under a value, standing in the sky: centered like everything
+   here, no ledger indent. */
+.jar-values-room .jar-was-roots {
+  margin: var(--sp-8) 0 0;
+}
+/* A value's state — aspirational, written by hand — is a whisper under the
+   sentence, never a rival to it: the statement is the thing, the state is
+   the smallest true note about it. The voice comes from the label register
+   (the span wears `jar-label`); this only places and dims it. */
+.jar-values-room .jar-poster-away {
+  display: block;
+  margin-top: var(--sp-2);
+  color: var(--jar-faint);
+  text-shadow: none;
+}
+/* Declaring one of your own belongs to the SET, not to whichever value
+   happens to stand last — the extra air says so. */
+.jar-values-declare {
+  margin-top: var(--sp-28);
+}
+/* A contested value is a light that cannot settle — the same waver the
+   grounds carry (#307), one layer up, and the same stillness under
+   reduced motion: half-settled ink, state shown, motion home. */
+.jar-values-value--contested {
+  animation: jar-contested-pull 6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .jar-values-value--contested {
+    animation: none;
+    color: var(--jar-muted);
+    text-shadow: 0 0 12px var(--jar-scroll);
+  }
+}
+.jar-values-value {
+  appearance: none;
+  -webkit-appearance: none;
+  display: block;
+  width: 100%;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  text-align: center;
+  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-weight: 300;
+  font-size: clamp(19px, 2vw, 25px);
+  line-height: 1.34;
+  letter-spacing: 0.012em;
+  text-wrap: balance;
+  color: var(--jar-ink);
+}
+.jar-values-value:focus-visible {
+  outline: none;
+  text-shadow: 0 0 12px var(--jar-scroll);
+}
+/* THE SIGNPOST CARRIES THE SKY'S STATE: lit words mean the sky above holds
+   your values; dim means still forming. Same recipe as every answered
+   light in this world. */
+.jar-values--held .jar-values-words {
+  color: var(--jar-ink);
+  text-shadow: 0 0 12px var(--jar-scroll);
 }
 .jar-values-sub {
   margin: var(--sp-14) 0 0;
@@ -3240,6 +3331,33 @@
 .jar-ground--answered {
   color: var(--jar-ink);
   text-shadow: 0 0 12px var(--jar-scroll);
+}
+/* AN UNARBITRATED DISPUTE IS A LIGHT THAT CANNOT SETTLE. The row breathes
+   between the answered ink and the dim — the two statements pulling — and
+   holds still only when the owner's verdict resolves the pair. Slow on
+   purpose: motion explains the state, it does not wave for attention. */
+.jar-ground--contested {
+  color: var(--jar-ink);
+  animation: jar-contested-pull 6s ease-in-out infinite;
+}
+@keyframes jar-contested-pull {
+  0%,
+  100% {
+    color: var(--jar-ink);
+    text-shadow: 0 0 12px var(--jar-scroll);
+  }
+  50% {
+    color: var(--jar-muted);
+    text-shadow: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .jar-ground--contested {
+    /* the state still shows; only the motion stays home — half-settled ink */
+    animation: none;
+    color: var(--jar-muted);
+    text-shadow: 0 0 12px var(--jar-scroll);
+  }
 }
 
 /* THE WORDS THAT DID THE READING. <mark> is the correct element — this is
