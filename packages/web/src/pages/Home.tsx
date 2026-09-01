@@ -12113,12 +12113,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                declared-but-not-yet-demonstrated is a
                                different claim from earned, and the canon
                                already has the word for it. */
-                            <span className="jar-poster-away"> {say("worldAspirational")}</span>
+                            <span className="jar-poster-away jar-label"> {say("worldAspirational")}</span>
                           ) : pr.locked ? (
                             /* Your words, not the machine's — the same quiet
                                mark the board gives a sentence the person took
                                into their own hand. */
-                            <span className="jar-poster-away"> {say("worldWrittenByHand")}</span>
+                            <span className="jar-poster-away jar-label"> {say("worldWrittenByHand")}</span>
                           ) : null}
                           {/* THE VERBS, under the sentence they are about.
                               Order is by consequence: correcting is

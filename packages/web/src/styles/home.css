@@ -693,13 +693,11 @@
 }
 /* A value's state — aspirational, written by hand — is a whisper under the
    sentence, never a rival to it: the statement is the thing, the state is
-   the smallest true note about it. */
+   the smallest true note about it. The voice comes from the label register
+   (the span wears `jar-label`); this only places and dims it. */
 .jar-values-room .jar-poster-away {
   display: block;
   margin-top: var(--sp-2);
-  font-size: var(--t-fine);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--jar-faint);
   text-shadow: none;
 }
