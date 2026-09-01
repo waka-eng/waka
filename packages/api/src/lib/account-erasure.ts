@@ -52,6 +52,9 @@ import {
   groupTopOfMindAffirmations,
   groupTopOfMindProposals,
   profiles,
+  topOfMindEntries,
+  topOfMindEntrySignals,
+  topOfMinds,
 } from "../db/index.js";
 import { getDb } from "./db.js";
 
@@ -225,6 +228,26 @@ export async function eraseAccount(
             .where(eq(groupMembers.id, heir.id));
         }
       }
+    }
+
+    /* THE CITATIONS LEAVE BEFORE THE CASCADE RUNS. `entry_signals` points
+       three ways with mixed actions — entry CASCADE, signal SET NULL, owner
+       SET NULL — and inside the account cascade the SET NULL updates can
+       fire on a row whose entry is already deleted but whose own cascade
+       delete is still queued; the update re-validates the entry FK and the
+       whole erasure fails (observed live 2026-08-31: ri_ReportViolation,
+       "Key (entry_id) is not present"). The erased profiles' boards die
+       here anyway, so their citations are removed first, by hand, and the
+       cascade that follows has no mixed-action row left to trip on. */
+    if (profileIds.length > 0) {
+      const ownBoardEntryIds = tx
+        .select({ id: topOfMindEntries.id })
+        .from(topOfMindEntries)
+        .innerJoin(topOfMinds, eq(topOfMinds.id, topOfMindEntries.topOfMindId))
+        .where(inArray(topOfMinds.profileId, profileIds));
+      await tx
+        .delete(topOfMindEntrySignals)
+        .where(inArray(topOfMindEntrySignals.entryId, ownBoardEntryIds));
     }
 
     await tx.delete(accounts).where(eq(accounts.id, accountId));

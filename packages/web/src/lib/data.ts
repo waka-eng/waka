@@ -189,7 +189,7 @@ export interface Entry {
       headquarters peek draws, and it points at layer 2 — not at inspirations.
       `answered` is the ground's ratified standing: the owner has spoken to it
       (a verdict, a star) — false while only the machine believes it. */
-  citedSignals: Array<{ id: string; statement: string; answered: boolean; locked: boolean }>;
+  citedSignals: Array<{ id: string; statement: string; answered: boolean; locked: boolean; contested: boolean }>;
   createdMs: number;
 }
 
@@ -276,6 +276,9 @@ function toEntry(row: ApiTopOfMindEntry): Entry {
              which is the safe way round: it offers no way back rather than
              offering one that would fail */
           locked: Boolean(c.locked),
+          /* same safe direction: an older payload reads as settled — a
+             false calm until the next fetch, never a false dispute */
+          contested: Boolean(c.contested),
         }))
       : [],
     createdMs: ms(row.createdAt),

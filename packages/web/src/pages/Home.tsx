@@ -9563,7 +9563,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * agent's board grounds itself in its own memories.
    */
   const posterGrounds = useMemo<
-    Array<{ id: string; statement: string; answered: boolean; locked: boolean }>
+    Array<{ id: string; statement: string; answered: boolean; locked: boolean; contested: boolean }>
   >(() => {
     if (atWall.kind !== "self") return [];
     const board = notes ?? [];
@@ -9572,6 +9572,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     return lead.citedSignals.map((cited) => ({
       id: cited.id,
       statement: cited.statement,
+      contested: cited.contested,
       answered: cited.answered || verdicts.has(cited.id),
       /* CARRIED SO THE DOOR SWINGS BOTH WAYS. `answered` is true for a
          reworded signal AND for one that was given a verdict, which is right
@@ -10632,7 +10633,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * from.
    */
   const sayVerdict = useCallback(
-    (id: string, value: "true" | "partly" | "not_true", targetId?: string) => {
+    (
+      id: string,
+      value: "true" | "partly" | "not_true",
+      targetId?: string,
+      contested?: boolean,
+    ) => {
       setVerdicts((prev) => new Map(prev).set(id, value));
       /* the receipt: what this answer taught the loop, said where the act
          happened, worded only as strongly as its enforcing test allows —
@@ -10648,7 +10654,19 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         7000,
       );
       if (offlineRef.current) return;
-      createFeedback({ targetType: "signal", targetId: targetId ?? id, value }).catch(() => {
+      createFeedback({ targetType: "signal", targetId: targetId ?? id, value })
+        .then(() => {
+          /* AN ARBITRATION JUST HAPPENED. A verdict on a contested ground
+             resolves its pair on the server (lib/contested-pairs.ts), and
+             the pair has TWO sides — only the server knows the other one,
+             so the settled light is fetched, not guessed. `partly` resolves
+             nothing and the refetch honestly brings the waver back. */
+          if (!contested) return;
+          loadTopOfMind()
+            .then((tom) => setNotes(tom?.entries ?? []))
+            .catch(() => undefined);
+        })
+        .catch(() => {
         /* it did not land, and the row should not claim it did */
         setVerdicts((prev) => {
           const next = new Map(prev);
@@ -12165,9 +12183,26 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                               <button
                                 type="button"
                                 className={
-                                  ground.answered
-                                    ? "jar-ground jar-ground--answered"
-                                    : "jar-ground"
+                                  /* CONTESTED WAVERS BETWEEN THE TWO INKS.
+                                     Light is the only meaning channel, so an
+                                     unarbitrated dispute is a light that
+                                     cannot settle — pulling between the
+                                     answered ink and the dim, the way the
+                                     two statements pull. The verdict row one
+                                     press away is the arbitration itself
+                                     (lib/contested-pairs.ts): yes and not-
+                                     true both settle the pair, so the state
+                                     and its exit are one gesture apart. */
+                                  ground.contested
+                                    ? "jar-ground jar-ground--contested"
+                                    : ground.answered
+                                      ? "jar-ground jar-ground--answered"
+                                      : "jar-ground"
+                                }
+                                aria-label={
+                                  ground.contested
+                                    ? `${ground.statement} — ${say("worldContested")}`
+                                    : undefined
                                 }
                                 onClick={() =>
                                   setGroundAsk((cur) => (cur === ground.id ? null : ground.id))
@@ -12182,7 +12217,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                   type="button"
                                   onClick={() => {
                                     setGroundAsk(null);
-                                    sayVerdict(ground.id, "true");
+                                    sayVerdict(ground.id, "true", undefined, ground.contested);
                                   }}
                                 >
                                   {say("worldYes")}
@@ -12192,7 +12227,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                   type="button"
                                   onClick={() => {
                                     setGroundAsk(null);
-                                    sayVerdict(ground.id, "partly");
+                                    sayVerdict(ground.id, "partly", undefined, ground.contested);
                                   }}
                                 >
                                   {say("worldPartly")}
@@ -12202,7 +12237,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                   type="button"
                                   onClick={() => {
                                     setGroundAsk(null);
-                                    sayVerdict(ground.id, "not_true");
+                                    sayVerdict(ground.id, "not_true", undefined, ground.contested);
                                   }}
                                 >
                                   {say("worldNotTrue")}

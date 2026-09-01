@@ -19,7 +19,7 @@
  */
 
 import { recordConsultation } from "../lib/consultations.js";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
@@ -32,6 +32,7 @@ import {
   type TopOfMindEntryType,
   type TopOfMindRevisionReason,
   type TopOfMindStatus,
+  signalContradictions,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
@@ -112,7 +113,7 @@ export interface TopOfMindEntryView {
       Computed from the feedback and lock records at serve time, never
       stored: the light must move the moment the person answers
       (goals/the-legible-loop.md Phase 4). */
-  citedSignals: Array<{ id: string; statement: string; answered: boolean; locked: boolean }>;
+  citedSignals: Array<{ id: string; statement: string; answered: boolean; locked: boolean; contested: boolean }>;
   createdAt: string;
 }
 
@@ -205,9 +206,38 @@ async function loadEntries(
     for (const row of verdictRows) answeredIds.add(row.targetId);
   }
 
+  /* CONTESTED, CARRIED TO THE LIGHT. A signal standing in an open pair the
+     owner has not arbitrated must not render like a settled one — the world
+     is where the owner learns there is anything to arbitrate, and the
+     verdict gesture on this very row is what resolves the pair. Open pairs
+     only; a resolved row is the record of an arbitration, not a state. */
+  const contestedIds = new Set<string>();
+  if (citedIds.length > 0) {
+    const pairRows = await db
+      .select({
+        aSignalId: signalContradictions.aSignalId,
+        bSignalId: signalContradictions.bSignalId,
+      })
+      .from(signalContradictions)
+      .where(
+        and(
+          eq(signalContradictions.profileId, profileId),
+          isNull(signalContradictions.resolvedAt),
+          or(
+            inArray(signalContradictions.aSignalId, citedIds),
+            inArray(signalContradictions.bSignalId, citedIds),
+          ),
+        ),
+      );
+    for (const pair of pairRows) {
+      contestedIds.add(pair.aSignalId);
+      contestedIds.add(pair.bSignalId);
+    }
+  }
+
   const citationsByEntry = new Map<
     string,
-    Array<{ id: string; statement: string; answered: boolean; locked: boolean }>
+    Array<{ id: string; statement: string; answered: boolean; locked: boolean; contested: boolean }>
   >();
   for (const row of citationRows) {
     // The inner join already excludes citations whose signal was deleted;
@@ -226,6 +256,7 @@ async function loadEntries(
          letting people walk through in one direction. The value is already in
          hand a line above; nothing extra is read for it. */
       locked: row.lockedAt !== null,
+      contested: contestedIds.has(row.signalId),
     };
     const bucket = citationsByEntry.get(row.entryId);
     if (bucket) bucket.push(cited);

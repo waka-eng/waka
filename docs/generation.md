@@ -468,6 +468,19 @@ same pattern, while genuinely different signals about one theme are
 untouched. Deterministic, cosine in process over the stored vectors, no
 model anywhere.
 
+**A tension needs both voices.** When a chosen signal stands in an open
+contested pair (the judge answered `opposed` and the owner has not
+arbitrated), its partner is pulled into the selection behind it — the list
+may exceed the twelve slots by the pulled few, because delivering one side
+of a dispute as if it were alone would be the machine quietly arbitrating,
+and the machine never arbitrates. A partner that is no longer standing
+(retired, unsupported) cannot speak, and the pair stays dormant for that
+pass. Each side is then marked `contested with:` the other's id — only ever
+an id in the same delivered list, so the mark is always citable. The prompt
+tells the synthesis what the mark means: live tension material, written as
+a `tension` citing both ids when it matters now, and never one side alone
+asserted as a settled pattern or belief while the dispute stands.
+
 ### 3. Synthesis: one call, the whole artifact
 
 `synthesizeTopOfMind` receives the selected signals — each carrying its

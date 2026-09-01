@@ -3287,6 +3287,33 @@
   color: var(--jar-ink);
   text-shadow: 0 0 12px var(--jar-scroll);
 }
+/* AN UNARBITRATED DISPUTE IS A LIGHT THAT CANNOT SETTLE. The row breathes
+   between the answered ink and the dim — the two statements pulling — and
+   holds still only when the owner's verdict resolves the pair. Slow on
+   purpose: motion explains the state, it does not wave for attention. */
+.jar-ground--contested {
+  color: var(--jar-ink);
+  animation: jar-contested-pull 6s ease-in-out infinite;
+}
+@keyframes jar-contested-pull {
+  0%,
+  100% {
+    color: var(--jar-ink);
+    text-shadow: 0 0 12px var(--jar-scroll);
+  }
+  50% {
+    color: var(--jar-muted);
+    text-shadow: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .jar-ground--contested {
+    /* the state still shows; only the motion stays home — half-settled ink */
+    animation: none;
+    color: var(--jar-muted);
+    text-shadow: 0 0 12px var(--jar-scroll);
+  }
+}
 
 /* THE WORDS THAT DID THE READING. <mark> is the correct element — this is
    text marked for relevance in another context — but its default is a yellow

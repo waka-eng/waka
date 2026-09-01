@@ -755,6 +755,13 @@ on the page; what has held for months can anchor the artifact and does not
 need re-arguing. Do not narrate the metadata itself — no dates, no counts —
 let it choose what leads and how firmly each thing is said.
 
+A signal marked "contested with:" another id pulls against that signal by the
+person's own record, and the person has not arbitrated. That is live tension
+material: when it matters now, write it as a tension citing both ids, in the
+person's own two phrasings. Never assert either side alone as a settled
+pattern or belief while the dispute stands — the person arbitrates disputes,
+never you.
+
 If the current artifact still says what the signals say, set noChange to true
 and return the current entries unchanged. Saying so is a real answer; churning
 the wording to look busy is not.
@@ -867,7 +874,11 @@ function buildTopOfMindSynthesisPrompt(input: TopOfMindSynthesisInput): string {
             : "no evidence yet";
           const owner = signal.ownerName ? `\nowner: ${signal.ownerName}` : "";
           const shape = signal.timeShape ? ` | time: ${signal.timeShape}` : "";
-          return `id: ${signal.id}${owner}\nconfidence: ${signal.confidence} | evidence: ${signal.evidenceCount} | last evidence: ${recency}${shape}\nstatement: ${signal.statement}`;
+          const contested =
+            signal.contestedWithIds && signal.contestedWithIds.length > 0
+              ? `\ncontested with: ${signal.contestedWithIds.join(", ")}`
+              : "";
+          return `id: ${signal.id}${owner}\nconfidence: ${signal.confidence} | evidence: ${signal.evidenceCount} | last evidence: ${recency}${shape}${contested}\nstatement: ${signal.statement}`;
         })
         .join("\n\n"),
     ),
