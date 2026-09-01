@@ -658,6 +658,11 @@
   text-wrap: balance;
   color: var(--jar-ink);
 }
+/* A held value in the sky: the lead's own voice, stacked with air between
+   sentences. Rank is the order and nothing else — no numerals, ever. */
+.jar-values-lead--held + .jar-values-lead--held {
+  margin-top: var(--sp-14);
+}
 .jar-values-sub {
   margin: var(--sp-14) 0 0;
   font-size: var(--t-note);

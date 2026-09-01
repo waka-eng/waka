@@ -12015,16 +12015,39 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     own sky. */}
                 {ready ? (
                   <div className="jar-values-room" data-jar-chrome="1">
-                    <p className="jar-values-lead">
-                      {w.kind === "self"
-                        ? say("worldValuesLeadSelf")
-                        : formatMessage(locale, "worldValuesLeadOther", { name: w.name })}
-                    </p>
-                    <p className="jar-values-sub">
-                      {w.kind === "self"
-                        ? say("worldValuesSubSelf")
-                        : say("worldValuesSubOther")}
-                    </p>
+                    {/* THE SKY KEEPS ITS PROMISE. The forming copy says "keep
+                        capturing, and this sky will start to fill" — so once
+                        something HAS been adopted, showing the promise again
+                        would be the sky lying about itself (founder,
+                        2026-08-31: "shouldn't this show up in the
+                        philosophies & values page?"). Held values speak in
+                        the sky's own voice, rank as order, no numerals, no
+                        heading — the vista's label already names the layer.
+                        Your own wall only, like "how you choose": another
+                        wall's sky keeps the forming words until sharing
+                        values is designed on purpose. */}
+                    {w.kind === "self" && principles.length > 0 ? (
+                      [...principles]
+                        .sort((a, b) => a.rank - b.rank)
+                        .map((pr) => (
+                          <p key={pr.id} className="jar-values-lead jar-values-lead--held">
+                            {pr.statement}
+                          </p>
+                        ))
+                    ) : (
+                      <>
+                        <p className="jar-values-lead">
+                          {w.kind === "self"
+                            ? say("worldValuesLeadSelf")
+                            : formatMessage(locale, "worldValuesLeadOther", { name: w.name })}
+                        </p>
+                        <p className="jar-values-sub">
+                          {w.kind === "self"
+                            ? say("worldValuesSubSelf")
+                            : say("worldValuesSubOther")}
+                        </p>
+                      </>
+                    )}
                   </div>
                 ) : null}
                 {ready && c ? (
