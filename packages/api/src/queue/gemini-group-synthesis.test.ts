@@ -80,3 +80,28 @@ describe("the group synthesis request", () => {
     );
   });
 });
+
+/**
+ * The Korean closing word. The opening Locale line alone lost to "keep
+ * existing entries stable" (observed live, 2026-08-31: carried-forward
+ * entries stayed English after the person chose Korean), so a ko-KR
+ * synthesis ends on the language instruction — the last thing read wins.
+ * English gets no closing word: the personal prompt stays byte-stable.
+ */
+describe("the Korean closing word", () => {
+  it("ends a ko-KR prompt on the Korean final check", () => {
+    const prompt = buildTopOfMindSynthesisRequest({
+      ...baseInput(),
+      preferredLocale: "ko-KR",
+    }).contents[0]!.parts[0]!.text!;
+    expect(prompt.endsWith("마지막 점검: 모든 문장은 번역투 없는 자연스러운 한국어로 쓰세요.")).toBe(true);
+    expect(prompt).toMatch(/locked entries alone stay exactly as written/);
+  });
+
+  it("gives English no closing word at all", () => {
+    const prompt = buildTopOfMindSynthesisRequest(baseInput()).contents[0]!.parts[0]!
+      .text!;
+    expect(prompt).not.toContain("마지막 점검");
+    expect(prompt).not.toContain("Final check");
+  });
+});

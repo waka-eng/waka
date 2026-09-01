@@ -376,10 +376,16 @@ would still be true next month — not a summary of what the capture says.
 Write each statement:
 - in the same language the capture is written in, using the person's own
   words and register wherever the capture gives you them,
-- as one plain sentence that could stand on its own months later, without
-  referring to "this note", "the article", or "the user",
+- as one plain sentence, short enough to say aloud, that could stand on its
+  own months later, without referring to "this note", "the article", or "the
+  user",
 - specific enough that someone who knows this person would recognize it, and
   general enough that a different capture could also be evidence of it.
+
+One statement names ONE pattern. A capture that witnesses two unrelated
+patterns yields two statements — never one sentence gluing them together
+with "and" or "which suggests". Name the pattern in the person's own terms
+rather than a clinician's.
 
 Ground every statement. Quote a verbatim span from the capture, its
 reflections, or its attachment context that shows why you named it. If you
@@ -910,6 +916,21 @@ function buildTopOfMindSynthesisPrompt(input: TopOfMindSynthesisInput): string {
         )
       : "The artifact does not exist yet. Write it for the first time.",
   );
+
+  /* The last thing read is the instruction that wins, and language drift is
+     the observed failure (2026-08-31 live: carried-forward entries stayed
+     English after the person chose Korean — the opening Locale line alone
+     lost to "keep existing entries stable"). So Korean gets a closing word
+     too, itself in Korean. Locked entries stay exempt: their words are the
+     person's, whatever language they wrote them in. */
+  if (input.preferredLocale === "ko-KR") {
+    sections.push(
+      "Final check — the person reads in Korean: every entry body, belief, and " +
+        "prompt must be natural Korean, said from scratch rather than " +
+        "translated (locked entries alone stay exactly as written). " +
+        "마지막 점검: 모든 문장은 번역투 없는 자연스러운 한국어로 쓰세요.",
+    );
+  }
 
   return sections.join("\n\n");
 }
