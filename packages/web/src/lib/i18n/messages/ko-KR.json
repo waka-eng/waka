@@ -197,7 +197,6 @@
   "worldReadAgain": "다시 읽기",
   "worldReadingNow": "읽는 중…",
   "worldReadItAgain": "다시 읽어 보기",
-  "worldHowYouChoose": "내가 고르는 방식",
   "worldAspirational": "지향",
   "worldWhatItGrewFrom": "무엇에서 자랐나",
   "worldMattersMore": "더 중요해요",
@@ -417,5 +416,6 @@
   "worldMergeExplain": "먼저 온 문장이 말을 지켜요. 지워지는 건 없고, 다른 쪽도 제 기록을 그대로 가져요",
   "worldYesMerge": "네, 합칠게요",
   "worldKeepApart": "따로 두기",
-  "worldContested": "서로 어긋나는 패턴이에요 — 어느 쪽인지 답해 주면 정리돼요"
+  "worldContested": "서로 어긋나는 패턴이에요 — 어느 쪽인지 답해 주면 정리돼요",
+  "worldValueContested": "서로 어긋남"
 }

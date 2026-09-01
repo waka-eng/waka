@@ -1390,7 +1390,6 @@ function HomeExperience(): JSX.Element {
    * and the menu existed largely to carry it.
    */
   const [principles, setPrinciples] = useState<ApiPrinciple[]>([]);
-  const [principlesOpen, setPrinciplesOpen] = useState(false);
   /**
    * LAYER FOUR BECOMES SOMETHING YOU CAN ANSWER, not only read.
    *
@@ -12014,17 +12013,323 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     brings it into frame. One per wall — every wall has its
                     own sky. */}
                 {ready ? (
-                  <div className="jar-values-room" data-jar-chrome="1">
-                    <p className="jar-values-lead">
-                      {w.kind === "self"
-                        ? say("worldValuesLeadSelf")
-                        : formatMessage(locale, "worldValuesLeadOther", { name: w.name })}
-                    </p>
-                    <p className="jar-values-sub">
-                      {w.kind === "self"
-                        ? say("worldValuesSubSelf")
-                        : say("worldValuesSubOther")}
-                    </p>
+                  <div
+                    className={
+                      w.kind === "self"
+                        ? "jar-values-room jar-values-room--live"
+                        : "jar-values-room"
+                    }
+                    data-jar-chrome="1"
+                  >
+                    {/* THE SKY KEEPS ITS PROMISE. The forming copy says "keep
+                        capturing, and this sky will start to fill" — so once
+                        something HAS been adopted, showing the promise again
+                        would be the sky lying about itself (founder,
+                        2026-08-31: "shouldn't this show up in the
+                        philosophies & values page?"). Held values speak in
+                        the sky's own voice, rank as order, no numerals, no
+                        heading — and the sky is the layer's ONE home now:
+                        the verbs live here too (founder, 2026-09-01: retire
+                        "how you choose"; the wall line predated a sky that
+                        could hold anything). Your own wall's sky only:
+                        another wall's keeps the forming words until sharing
+                        values is designed on purpose. */}
+                    {w.kind === "self" && principles.length > 0 ? (
+                      <>
+                        {/* THE LAYER, NOT THE NAME — the same ruling the board
+                            follows ("this should always say TOP OF MIND at the
+                            top no matter what room"): standing in the sky,
+                            nothing else says what kind of sentences these are,
+                            because the signpost that names the place hides
+                            while you are in it. */}
+                        <p className="jar-values-eyebrow jar-label">
+                          {say("worldPhilosophiesValues")}
+                        </p>
+                    {/* Ranked, and the rank is the order — never a number
+                        beside a statement. */}
+                    {[...principles]
+                      .sort((a, b) => a.rank - b.rank)
+                      .map((pr, i, ranked) => (
+                        <p
+                          key={pr.id}
+                          className={
+                            /* RANK AS PRESENCE, NEVER AS A NUMBER. The top
+                               value is the one that wins when two conflict,
+                               and it stands a step larger — the same channel
+                               (size, light) the world uses everywhere it
+                               means "this leads". */
+                            i === 0
+                              ? "jar-values-held jar-values-held--first"
+                              : "jar-values-held"
+                          }
+                        >
+                          {/* CORRECTING IT IN PLACE, the same shape the
+                              card and the pattern already use: the
+                              sentence becomes a field where it stands, so
+                              the words do not move when the caret
+                              arrives. */}
+                          {pDraft && pDraft.id === pr.id ? (
+                            <>
+                              <textarea
+                                className="jar-ground-edit"
+                                aria-label={say("worldPrincipleInYourWords")}
+                                value={pDraft.text}
+                                rows={2}
+                                autoFocus
+                                onChange={(e) =>
+                                  setPDraft({ id: pr.id, text: e.target.value })
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === "Escape") {
+                                    e.preventDefault();
+                                    setPDraft(null);
+                                  }
+                                }}
+                              />
+                              <span className="jar-ask">
+                                <button type="button" disabled={pBusy} onClick={savePrinciple}>
+                                  {pBusy ? say("worldSaving") : say("worldSave")}
+                                </button>
+                                <span aria-hidden="true"> · </span>
+                                <button type="button" onClick={() => setPDraft(null)}>
+                                  {say("worldLeaveIt")}
+                                </button>
+                              </span>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              className={
+                                pr.state === "contested"
+                                  ? "jar-values-value jar-values-value--contested"
+                                  : "jar-values-value"
+                              }
+                              aria-expanded={pick === pr.id}
+                              onClick={() =>
+                                setPick((cur) => (cur === pr.id ? null : pr.id))
+                              }
+                            >
+                              {pr.statement}
+                            </button>
+                          )}
+                          {pr.state === "contested" ? (
+                            /* An unarbitrated conflict, one layer up — the
+                               same truth #307 gave signals: the record holds
+                               a dispute, so the page must not read settled.
+                               Rank decides meanwhile; your verbs settle it. */
+                            <span className="jar-poster-away jar-label"> {say("worldValueContested")}</span>
+                          ) : pr.state === "aspirational" ? (
+                            /* The one distinction worth carrying up here:
+                               declared-but-not-yet-demonstrated is a
+                               different claim from earned, and the canon
+                               already has the word for it. */
+                            <span className="jar-poster-away jar-label"> {say("worldAspirational")}</span>
+                          ) : pr.locked ? (
+                            /* Your words, not the machine's — the same quiet
+                               mark the board gives a sentence the person took
+                               into their own hand. */
+                            <span className="jar-poster-away jar-label"> {say("worldWrittenByHand")}</span>
+                          ) : null}
+                          {/* THE VERBS, under the sentence they are about.
+                              Order is by consequence: correcting is
+                              harmless, moving is reversible, disputing is
+                              a stance the machine will read, and removing
+                              is last and asks. */}
+                          {/* THE ROOTS, one layer down. From here the
+                              world's existing path continues: each of
+                              these is a pattern, and pressing a pattern
+                              in the grounds band opens the memories under
+                              IT. Four layers, reachable in hops, with no
+                              second picture of the place. */}
+                          {pRoots === pr.id && !pDraft ? (
+                            <span className="jar-was-roots">
+                              {pr.citedSignals.map((c) => (
+                                <span key={c.id} className="jar-was-root">
+                                  {c.statement}
+                                </span>
+                              ))}
+                            </span>
+                          ) : null}
+                          {pick === pr.id && !pDraft ? (
+                            <span className="jar-ask">
+                              <button
+                                type="button"
+                                onClick={() => setPDraft({ id: pr.id, text: pr.statement })}
+                              >
+                                {say("worldSayItInMyWords")}
+                              </button>
+                              {pr.citedSignals.length > 0 ? (
+                                <>
+                                  <span aria-hidden="true"> · </span>
+                                  <button
+                                    type="button"
+                                    aria-expanded={pRoots === pr.id}
+                                    onClick={() =>
+                                      setPRoots((cur) => (cur === pr.id ? null : pr.id))
+                                    }
+                                  >
+                                    {say("worldWhatItGrewFrom")}
+                                  </button>
+                                </>
+                              ) : null}
+                              {i > 0 ? (
+                                <>
+                                  <span aria-hidden="true"> · </span>
+                                  <button
+                                    type="button"
+                                    disabled={pBusy}
+                                    onClick={() => movePrinciple(pr.id, -1)}
+                                  >
+                                    {say("worldMattersMore")}
+                                  </button>
+                                </>
+                              ) : null}
+                              {i < ranked.length - 1 ? (
+                                <>
+                                  <span aria-hidden="true"> · </span>
+                                  <button
+                                    type="button"
+                                    disabled={pBusy}
+                                    onClick={() => movePrinciple(pr.id, 1)}
+                                  >
+                                    {say("worldMattersLess")}
+                                  </button>
+                                </>
+                              ) : null}
+                              {/* WHOSE SENTENCE IT IS DECIDES WHICH WAY OUT
+                                  IT HAS, and until 2026-08-26 both were
+                                  offered on every principle regardless.
+
+                                  `schema-principles.ts` already draws the
+                                  line: `origin` is `minted` — written by
+                                  the nightly generation — or `declared`,
+                                  the owner's own words. Offering both
+                                  verbs on both kinds got each one exactly
+                                  backwards. A sentence you wrote yourself
+                                  was offered `not mine`, which is not a
+                                  thing a person can coherently say about
+                                  their own words. And a sentence the
+                                  MACHINE concluded was offered a hard
+                                  `remove` — which is the flat screens'
+                                  administrative affordance, and precisely
+                                  the one this project refused to migrate
+                                  for signals, on the grounds that the
+                                  world answers a wrong claim with a
+                                  counted stance and that fading never
+                                  deletes.
+
+                                  The same ruling, applied to the other
+                                  noun: you ANSWER what the machine claims,
+                                  and you WITHDRAW what you said yourself.
+                                  Found because the founder asked whether
+                                  some of the flat wall was better deleted
+                                  than migrated — the answer being that the
+                                  question is not migrate-or-delete per
+                                  screen, it is whether a verb belongs on
+                                  that noun in that state. */}
+                              {pr.origin === "minted" ? (
+                                <>
+                                  <span aria-hidden="true"> · </span>
+                                  <button
+                                    type="button"
+                                    disabled={pBusy}
+                                    onClick={() => disputeThisPrinciple(pr.id)}
+                                  >
+                                    {say("worldNotMine")}
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <span aria-hidden="true"> · </span>
+                                  {pGoing === pr.id ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        disabled={pBusy}
+                                        onClick={() => removePrinciple(pr.id)}
+                                      >
+                                        {pBusy ? say("worldWithdrawing") : say("worldYesWithdrawIt")}
+                                      </button>
+                                      <span aria-hidden="true"> · </span>
+                                      <button type="button" onClick={() => setPGoing(null)}>
+                                        {say("worldKeepIt")}
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <button type="button" onClick={() => setPGoing(pr.id)}>
+                                      {say("worldWithdraw")}
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                            </span>
+                          ) : null}
+                        </p>
+                      ))}
+                      </>
+                    ) : (
+                      <>
+                        <p className="jar-values-lead">
+                          {w.kind === "self"
+                            ? say("worldValuesLeadSelf")
+                            : formatMessage(locale, "worldValuesLeadOther", { name: w.name })}
+                        </p>
+                        <p className="jar-values-sub">
+                          {w.kind === "self"
+                            ? say("worldValuesSubSelf")
+                            : say("worldValuesSubOther")}
+                        </p>
+                      </>
+                    )}
+                    {/* DECLARING ONE — the only act here not about a
+                        sentence already on screen, so it does not hang off
+                        one, and it does not wait for one either: giving
+                        your word FIRST is what aspirational exists for, so
+                        the empty sky offers it under the forming words
+                        (founder, 2026-09-01 — before this, a person with
+                        no values had no way to declare their first). */}
+                    {w.kind === "self" ? (
+                      pDraft && pDraft.id === null ? (
+                        <p className="jar-values-held">
+                          <textarea
+                            className="jar-ground-edit"
+                            aria-label={say("worldAPrincipleOfYourOwn")}
+                            value={pDraft.text}
+                            rows={2}
+                            autoFocus
+                            placeholder={say("worldWhatYouHoldTo")}
+                            onChange={(e) => setPDraft({ id: null, text: e.target.value })}
+                            onKeyDown={(e) => {
+                              if (e.key === "Escape") {
+                                e.preventDefault();
+                                setPDraft(null);
+                              }
+                            }}
+                          />
+                          <span className="jar-ask">
+                            <button type="button" disabled={pBusy} onClick={savePrinciple}>
+                              {pBusy ? say("worldDeclaring") : say("worldDeclareIt")}
+                            </button>
+                            <span aria-hidden="true"> · </span>
+                            <button type="button" onClick={() => setPDraft(null)}>
+                              {say("worldNotNow")}
+                            </button>
+                          </span>
+                        </p>
+                      ) : (
+                        <p className="jar-ask jar-values-declare">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPick(null);
+                              setPDraft({ id: null, text: "" });
+                            }}
+                          >
+                            {say("worldDeclareOne")}
+                          </button>
+                        </p>
+                      )
+                    ) : null}
                   </div>
                 ) : null}
                 {ready && c ? (
@@ -12385,280 +12690,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         BELOW the sentence you had already got to, pointing
                         down to say up. It is fixed chrome at the top edge
                         now; see `.jar-overhead`. */}
-                    {/* HOW YOU CHOOSE — layer 4, in the place layer 3 already
-                        occupies.
-
-                        It is the second quiet line, deliberately built from
-                        the same two pieces as the first: a `jar-forming-line`
-                        that opens something, and the `jar-prov` band the
-                        poster already opens into. A person who has learned
-                        that the forming line takes them up to the sky has
-                        already learned this one.
-
-                        Only on your own wall, and only when there are
-                        principles. A room does not choose and an agent's
-                        principles are its own; and a wall with none says
-                        nothing rather than showing an empty band — the same
-                        rule the poster follows about never inventing a
-                        placeholder.
-
-                        NO COUNT. "States render, numerals never" — the line
-                        says that there is a way you choose, not how many
-                        ways. */}
-                    {here && w.kind === "self" && principles.length > 0 ? (
-                      <button
-                        type="button"
-                        className="jar-forming-line jar-forming-line--choose jar-label"
-                        data-jar-chrome="1"
-                        aria-expanded={principlesOpen}
-                        onClick={() => setPrinciplesOpen((v) => !v)}
-                      >
-                        {say("worldHowYouChoose")}
-                      </button>
-                    ) : null}
-                    {here && w.kind === "self" && principlesOpen ? (
-                      <div className="jar-prov jar-prov--poster" data-jar-chrome="1">
-                        {/* Ranked, and the rank is the order — never a number
-                            beside a statement. */}
-                        {[...principles]
-                          .sort((a, b) => a.rank - b.rank)
-                          .map((pr, i, ranked) => (
-                            <p key={pr.id} className="jar-was">
-                              {/* CORRECTING IT IN PLACE, the same shape the
-                                  card and the pattern already use: the
-                                  sentence becomes a field where it stands, so
-                                  the words do not move when the caret
-                                  arrives. */}
-                              {pDraft && pDraft.id === pr.id ? (
-                                <>
-                                  <textarea
-                                    className="jar-ground-edit"
-                                    aria-label={say("worldPrincipleInYourWords")}
-                                    value={pDraft.text}
-                                    rows={2}
-                                    autoFocus
-                                    onChange={(e) =>
-                                      setPDraft({ id: pr.id, text: e.target.value })
-                                    }
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Escape") {
-                                        e.preventDefault();
-                                        setPDraft(null);
-                                      }
-                                    }}
-                                  />
-                                  <span className="jar-ask">
-                                    <button type="button" disabled={pBusy} onClick={savePrinciple}>
-                                      {pBusy ? say("worldSaving") : say("worldSave")}
-                                    </button>
-                                    <span aria-hidden="true"> · </span>
-                                    <button type="button" onClick={() => setPDraft(null)}>
-                                      {say("worldLeaveIt")}
-                                    </button>
-                                  </span>
-                                </>
-                              ) : (
-                                <button
-                                  type="button"
-                                  className="jar-was-open"
-                                  aria-expanded={pick === pr.id}
-                                  onClick={() =>
-                                    setPick((cur) => (cur === pr.id ? null : pr.id))
-                                  }
-                                >
-                                  {pr.statement}
-                                </button>
-                              )}
-                              {pr.state === "aspirational" ? (
-                                /* The one distinction worth carrying up here:
-                                   declared-but-not-yet-demonstrated is a
-                                   different claim from earned, and the canon
-                                   already has the word for it. */
-                                <span className="jar-poster-away"> {say("worldAspirational")}</span>
-                              ) : null}
-                              {/* THE VERBS, under the sentence they are about.
-                                  Order is by consequence: correcting is
-                                  harmless, moving is reversible, disputing is
-                                  a stance the machine will read, and removing
-                                  is last and asks. */}
-                              {/* THE ROOTS, one layer down. From here the
-                                  world's existing path continues: each of
-                                  these is a pattern, and pressing a pattern
-                                  in the grounds band opens the memories under
-                                  IT. Four layers, reachable in hops, with no
-                                  second picture of the place. */}
-                              {pRoots === pr.id && !pDraft ? (
-                                <span className="jar-was-roots">
-                                  {pr.citedSignals.map((c) => (
-                                    <span key={c.id} className="jar-was-root">
-                                      {c.statement}
-                                    </span>
-                                  ))}
-                                </span>
-                              ) : null}
-                              {pick === pr.id && !pDraft ? (
-                                <span className="jar-ask">
-                                  <button
-                                    type="button"
-                                    onClick={() => setPDraft({ id: pr.id, text: pr.statement })}
-                                  >
-                                    {say("worldSayItInMyWords")}
-                                  </button>
-                                  {pr.citedSignals.length > 0 ? (
-                                    <>
-                                      <span aria-hidden="true"> · </span>
-                                      <button
-                                        type="button"
-                                        aria-expanded={pRoots === pr.id}
-                                        onClick={() =>
-                                          setPRoots((cur) => (cur === pr.id ? null : pr.id))
-                                        }
-                                      >
-                                        {say("worldWhatItGrewFrom")}
-                                      </button>
-                                    </>
-                                  ) : null}
-                                  {i > 0 ? (
-                                    <>
-                                      <span aria-hidden="true"> · </span>
-                                      <button
-                                        type="button"
-                                        disabled={pBusy}
-                                        onClick={() => movePrinciple(pr.id, -1)}
-                                      >
-                                        {say("worldMattersMore")}
-                                      </button>
-                                    </>
-                                  ) : null}
-                                  {i < ranked.length - 1 ? (
-                                    <>
-                                      <span aria-hidden="true"> · </span>
-                                      <button
-                                        type="button"
-                                        disabled={pBusy}
-                                        onClick={() => movePrinciple(pr.id, 1)}
-                                      >
-                                        {say("worldMattersLess")}
-                                      </button>
-                                    </>
-                                  ) : null}
-                                  {/* WHOSE SENTENCE IT IS DECIDES WHICH WAY OUT
-                                      IT HAS, and until 2026-08-26 both were
-                                      offered on every principle regardless.
-
-                                      `schema-principles.ts` already draws the
-                                      line: `origin` is `minted` — written by
-                                      the nightly generation — or `declared`,
-                                      the owner's own words. Offering both
-                                      verbs on both kinds got each one exactly
-                                      backwards. A sentence you wrote yourself
-                                      was offered `not mine`, which is not a
-                                      thing a person can coherently say about
-                                      their own words. And a sentence the
-                                      MACHINE concluded was offered a hard
-                                      `remove` — which is the flat screens'
-                                      administrative affordance, and precisely
-                                      the one this project refused to migrate
-                                      for signals, on the grounds that the
-                                      world answers a wrong claim with a
-                                      counted stance and that fading never
-                                      deletes.
-
-                                      The same ruling, applied to the other
-                                      noun: you ANSWER what the machine claims,
-                                      and you WITHDRAW what you said yourself.
-                                      Found because the founder asked whether
-                                      some of the flat wall was better deleted
-                                      than migrated — the answer being that the
-                                      question is not migrate-or-delete per
-                                      screen, it is whether a verb belongs on
-                                      that noun in that state. */}
-                                  {pr.origin === "minted" ? (
-                                    <>
-                                      <span aria-hidden="true"> · </span>
-                                      <button
-                                        type="button"
-                                        disabled={pBusy}
-                                        onClick={() => disputeThisPrinciple(pr.id)}
-                                      >
-                                        {say("worldNotMine")}
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <span aria-hidden="true"> · </span>
-                                      {pGoing === pr.id ? (
-                                        <>
-                                          <button
-                                            type="button"
-                                            disabled={pBusy}
-                                            onClick={() => removePrinciple(pr.id)}
-                                          >
-                                            {pBusy ? say("worldWithdrawing") : say("worldYesWithdrawIt")}
-                                          </button>
-                                          <span aria-hidden="true"> · </span>
-                                          <button type="button" onClick={() => setPGoing(null)}>
-                                            {say("worldKeepIt")}
-                                          </button>
-                                        </>
-                                      ) : (
-                                        <button type="button" onClick={() => setPGoing(pr.id)}>
-                                          {say("worldWithdraw")}
-                                        </button>
-                                      )}
-                                    </>
-                                  )}
-                                </span>
-                              ) : null}
-                            </p>
-                          ))}
-                        {/* DECLARING ONE, which is the only act here that is
-                            not about a sentence already on screen — so it is
-                            the only one that does not hang off one. Layer four
-                            is what you choose to be; up to now the world could
-                            only show you what it had inferred. */}
-                        {pDraft && pDraft.id === null ? (
-                          <p className="jar-was">
-                            <textarea
-                              className="jar-ground-edit"
-                              aria-label={say("worldAPrincipleOfYourOwn")}
-                              value={pDraft.text}
-                              rows={2}
-                              autoFocus
-                              placeholder={say("worldWhatYouHoldTo")}
-                              onChange={(e) => setPDraft({ id: null, text: e.target.value })}
-                              onKeyDown={(e) => {
-                                if (e.key === "Escape") {
-                                  e.preventDefault();
-                                  setPDraft(null);
-                                }
-                              }}
-                            />
-                            <span className="jar-ask">
-                              <button type="button" disabled={pBusy} onClick={savePrinciple}>
-                                {pBusy ? say("worldDeclaring") : say("worldDeclareIt")}
-                              </button>
-                              <span aria-hidden="true"> · </span>
-                              <button type="button" onClick={() => setPDraft(null)}>
-                                {say("worldNotNow")}
-                              </button>
-                            </span>
-                          </p>
-                        ) : (
-                          <p className="jar-ask">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setPick(null);
-                                setPDraft({ id: null, text: "" });
-                              }}
-                            >
-                              {say("worldDeclareOne")}
-                            </button>
-                          </p>
-                        )}
-                      </div>
-                    ) : null}
                     {/* THE BOARD'S OWN VERBS — and this is what makes the
                         layout an instrument rather than a display.
 
@@ -14163,7 +14194,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       {phase === "ready" && !inField && !inSky ? (
         <button
           type="button"
-          className="jar-values"
+          /* THE SIGNPOST CARRIES THE SKY'S STATE. Dim, it is a door to a
+             place still forming; lit, the sky above this wall holds your
+             values now — light is the only meaning channel, so the word
+             itself is the announcement (founder, 2026-09-01: "make it more
+             clear that philosophies and values page exists above"). Only
+             your own wall's sky can hold anything yet, so it lights only
+             there. */
+          className={
+            atWall.kind === "self" && principles.length > 0
+              ? "jar-values jar-values--held"
+              : "jar-values"
+          }
           data-jar-chrome="1"
           onClick={() => simApiRef.current?.toSky()}
         >
