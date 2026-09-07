@@ -65,9 +65,19 @@ describe("i18n catalog", () => {
    * that translates to one word. "Philosophies & values" is a good subtitle
    * and a poor name, and a name is what a signpost is.
    *
-   * The rule is deliberately narrow: it governs the catalogs, which is where
-   * a user-facing name lives. Prose elsewhere may still describe the sky as
-   * holding a person's philosophy — describing is not naming.
+   * The rule is deliberately narrow in two ways, both chosen rather than
+   * overlooked.
+   *
+   * IT GOVERNS VALUES, NOT KEYS. `worldPhilosophiesValues` keeps its name and
+   * now holds "principles", which reads oddly for about a second and buys
+   * something worth more: not one call site moves, so this change is five
+   * strings in two JSON files and can be reverted by reverting them. A key is
+   * not a name a person meets.
+   *
+   * IT GOVERNS THE CATALOGS, NOT PROSE. Comments and docs may still say
+   * philosophies — several quote founder rulings verbatim, and rewriting a
+   * quotation to match a later decision is how a record stops being one.
+   * Describing is not naming.
    */
   it("gives layer four one name, in both languages", () => {
     const BANNED = {
