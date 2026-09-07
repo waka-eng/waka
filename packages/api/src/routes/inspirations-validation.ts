@@ -40,7 +40,7 @@ export const reflectionInputSchema = z.object({
     .transform((v) => (v && v.length > 0 ? v : undefined)),
   /** A question offered and declined, which differs from never being asked. */
   skipped: z.boolean().optional(),
-});
+}).strict();
 
 /**
  * Capture payload.
@@ -114,7 +114,13 @@ export const createInspirationSchema = z.object({
     .array(reflectionInputSchema)
     .max(MAX_REFLECTIONS_PER_INSPIRATION, "Too many reflections for one capture")
     .optional(),
-});
+})
+  /* STRICT, BECAUSE AN IGNORED FIELD IS A LIE THAT PARSES. `profile` in this
+     body was silently dropped twice in live use — the capture landed in the
+     session's own stack while the caller believed it had targeted another —
+     because the real parameter is the `?profile=` query. An unknown key is
+     now a 400 that names itself. */
+  .strict();
 
 export type CreateInspirationInput = z.infer<typeof createInspirationSchema>;
 
@@ -150,6 +156,7 @@ export const updateInspirationSchema = z
       })
       .optional(),
   })
+  .strict()
   // A payload naming no editable field would silently bump `updated_at` for a
   // no-op, which misleads anything sorting by it.
   .refine(

@@ -84,7 +84,9 @@ function authMiddleware(session: AuthenticatedSession) {
  * in play, so one line meant "what the spy recorded" and the next meant "the
  * inspiration".
  */
-function fakeDatabase(profileRows: Array<{ id: string; accountId: string }> = []) {
+function fakeDatabase(
+  profileRows: Array<{ id: string; accountId: string; type?: "human" | "agent" }> = [],
+) {
   const writtenRows: Array<Record<string, unknown>> = [];
 
   const selectChain: any = {
@@ -153,6 +155,18 @@ describe("visibilityForCapture", () => {
     expect(visibilityForCapture(session, humanProfileId, undefined)).toBeUndefined();
   });
 
+  it("a keeper key's own capture is the person's — the choice is honored", () => {
+    /* The keeper key writes AS the person, scoped to keep-and-recall; a
+       visibility on its own capture is the person's own choice riding their
+       own credential, so it opens rooms exactly as a browser capture would.
+       Pinned so nobody later "hardens" this into dropping the field. */
+    const keeper: AuthenticatedSession = {
+      ...sessionFor(humanProfileId, "human"),
+      keyScoped: true,
+    };
+    expect(visibilityForCapture(keeper, humanProfileId, "public")).toBe("public");
+  });
+
   it("refuses to publish on behalf of another profile", () => {
     // The agent holds "capture" on the human profile and legitimately writes
     // here. Publishing is a different permission wearing the same request.
@@ -185,7 +199,11 @@ describe("sourceForCapture", () => {
 });
 
 describe("POST /api/inspirations", () => {
-  it("writes no visibility column when an agent captures into the human profile", async () => {
+  /* The 2026-08-29 ruling: what an agent generates stays wholly in its own
+     stack. The capture that used to relay into the human is refused at the
+     door, and refused means NOTHING WRITTEN — a 403 that still inserted
+     would be the ruling in name only. */
+  it("refuses an agent capturing into the human profile, writing nothing", async () => {
     const { db, writtenRows } = fakeDatabase([{ id: humanProfileId, accountId }]);
     const app = appFor(sessionFor(agentProfileId, "agent"), db);
 
@@ -198,9 +216,47 @@ describe("POST /api/inspirations", () => {
       },
     );
 
+    expect(response.status).toBe(403);
+    expect(writtenRows).toHaveLength(0);
+  });
+
+  /* `profile` travels as a QUERY parameter; in the body it used to parse
+     fine and mean nothing, so the capture landed in the session's own stack
+     while the caller believed it had targeted another. Twice, in live use.
+     Strict body schemas turn that lie into a 400 that names the key. */
+  it("refuses a body that smuggles `profile`, writing nothing", async () => {
+    const { db, writtenRows } = fakeDatabase();
+    const app = appFor(sessionFor(humanProfileId, "human"), db);
+
+    const response = await app.request("/api/inspirations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: "meant for the agent", profile: agentProfileId }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(JSON.stringify(await response.json())).toContain("profile");
+    expect(writtenRows).toHaveLength(0);
+  });
+
+  it("writes no visibility column when the HUMAN captures into an agent profile", async () => {
+    const { db, writtenRows } = fakeDatabase([
+      { id: agentProfileId, accountId, type: "agent" },
+    ]);
+    const app = appFor(sessionFor(humanProfileId, "human"), db);
+
+    const response = await app.request(
+      `/api/inspirations?profile=${agentProfileId}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text: "seeded into the agent", visibility: "public" }),
+      },
+    );
+
     expect(response.status).toBe(201);
     expect(writtenRows).toHaveLength(1);
-    expect(writtenRows[0]!.profileId).toBe(humanProfileId);
+    expect(writtenRows[0]!.profileId).toBe(agentProfileId);
     // The key must be ABSENT, not "private": the column default is the single
     // place that decides what unset means.
     expect(

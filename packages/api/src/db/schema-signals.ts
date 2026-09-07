@@ -27,6 +27,7 @@ import {
   integer,
   pgEnum,
   pgTable,
+  real,
   text,
   timestamp,
   unique,
@@ -276,6 +277,67 @@ export const contradictionResolutionEnum = pgEnum(
  * (normalized by the writer in lib/contested-pairs.ts), so "A contradicts
  * B" and "B contradicts A" cannot drift into two rows.
  */
+/**
+ * THE GARDENER'S FINDINGS — two standing signals the judge says name ONE
+ * pattern. A row is a PROPOSAL: the merge itself is the owner's act (the
+ * world never moves unless the user moved it, and a merge moves their
+ * memory), resolved as `merged` (evidence unions under the survivor named
+ * in `mergedIntoSignalId`, the other retires) or `kept_apart` (a standing
+ * answer the gardener respects forever — the pair is never proposed again).
+ *
+ * Undirected like the contradictions beside it: stored once with
+ * `aSignalId < bSignalId`, so one pair cannot drift into two rows.
+ */
+export const duplicateResolutionEnum = pgEnum("duplicate_resolution", [
+  "merged",
+  "kept_apart",
+]);
+
+export const signalDuplicates = pgTable(
+  "signal_duplicates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+
+    profileId: uuid("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+
+    aSignalId: uuid("a_signal_id").notNull(),
+    bSignalId: uuid("b_signal_id").notNull(),
+
+    /** the cosine that made the pair suspect, for the record */
+    similarity: real("similarity").notNull(),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    resolvedBy: duplicateResolutionEnum("resolved_by"),
+    /** the survivor, when resolved as merged — the provenance of the merge */
+    mergedIntoSignalId: uuid("merged_into_signal_id"),
+  },
+  (table) => ({
+    pairUnique: uniqueIndex("signal_duplicates_pair_unique_idx").on(
+      table.aSignalId,
+      table.bSignalId,
+    ),
+    profileIdx: index("signal_duplicates_profile_idx").on(table.profileId),
+    aIdx: index("signal_duplicates_a_idx").on(table.aSignalId),
+    bIdx: index("signal_duplicates_b_idx").on(table.bSignalId),
+    aFk: foreignKey({
+      columns: [table.profileId, table.aSignalId],
+      foreignColumns: [signals.profileId, signals.id],
+      name: "signal_duplicates_a_fk",
+    }).onDelete("cascade"),
+    bFk: foreignKey({
+      columns: [table.profileId, table.bSignalId],
+      foreignColumns: [signals.profileId, signals.id],
+      name: "signal_duplicates_b_fk",
+    }).onDelete("cascade"),
+  }),
+);
+
+export type SignalDuplicate = typeof signalDuplicates.$inferSelect;
+
 export const signalContradictions = pgTable(
   "signal_contradictions",
   {

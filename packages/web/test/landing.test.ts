@@ -50,6 +50,7 @@ import { fetchCurrentViewer } from "../src/lib/api";
 import type { ApiViewer } from "../src/lib/api";
 import { AuthProvider } from "../src/lib/auth-context";
 import { frontDoorFor } from "../src/lib/front-door";
+import { t } from "../src/lib/locales";
 import LandingPage from "../src/pages/Landing";
 import LoginPage from "../src/pages/Login";
 
@@ -282,6 +283,46 @@ describe("the landing page", () => {
     );
     expect(plain.length).toBeGreaterThanOrEqual(1);
     expect(plain.some((a) => (a.textContent ?? "").includes("continue"))).toBe(true);
+  });
+
+  it("speaks the language the stranger's machine speaks", async () => {
+    /* THE DEFECT THIS PINS, and it is the one no gate would have caught.
+       This page shipped with forty English sentences written straight into
+       JSX, on the argument that English was the product's only language. The
+       founder reversed that on 2026-08-31 and the same work moved every
+       sentence in the world into the catalogue — leaving this page as the
+       last surface writing English into markup.
+
+       `copy.test.ts` passed it (it checks JSX text for canon words and the
+       catalogue for dead keys, and neither is this), so what it cost was a
+       person: `readStoredLocale` falls back to the BROWSER's language, so
+       somebody arriving from a Korean machine met Korean chrome on every
+       other surface and an entirely English page explaining the product. The
+       one screen whose whole job is to be understood by a stranger was the
+       one screen that could not speak to them.
+
+       Hangul rather than an exact string, deliberately: the claim is that
+       this page reaches the catalogue at all, and pinning a sentence would
+       make the case fail on a reworded translation instead of on a
+       regression. */
+    window.localStorage.setItem("waka.ui.locale", "ko-KR");
+    const container = await renderFront("/");
+    const text = container.textContent ?? "";
+
+    expect(/[가-힣]/.test(text)).toBe(true);
+    expect(text).not.toContain("Keep what moves you.");
+    /* every section, not just the hero — the first pass at this moved the
+       headline and left the four layers in English */
+    for (const key of [
+      "landingAscentTitle",
+      "landingKeepBody",
+      "landingLawsTitle",
+      "landingAgentsTitle",
+      "landingRoomsBody",
+      "landingCloseBody",
+    ] as const) {
+      expect(text).toContain(t("ko-KR", key));
+    }
   });
 
   it("seeds the door's memory with nothing — it is a page, not a session", async () => {

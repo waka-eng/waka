@@ -15,6 +15,9 @@
  *   principles.ts                principles.ts    /api/principles     (layer 4)
  *   top-of-mind.ts               top-of-mind.ts   /api/top-of-mind    (layer 3)
  *   groups.ts                    groups.ts        /api/groups
+ *   keeper-keys.ts               keeper-keys.ts   /api/keeper-keys
+ *   agent-grants.ts              agent-grants.ts  /api/agent-grants
+ *   consultations.ts             consultations.ts /api/consultations
  *   feedback.ts                  feedback.ts      /api/feedback
  *   public-profiles.ts           public-profiles.ts  /api/public/profiles
  *   http.ts                      —  the fetch wrapper they all share
@@ -50,6 +53,10 @@ export * from "./principles";
 export * from "./top-of-mind";
 export * from "./groups";
 export * from "./agents";
+export * from "./keeper-keys";
+export * from "./agent-grants";
+export * from "./consultations";
+export * from "./signal-duplicates";
 export * from "./feedback";
 export * from "./public-profiles";
 export * from "./reading";

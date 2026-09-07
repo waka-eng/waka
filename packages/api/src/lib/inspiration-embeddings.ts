@@ -186,9 +186,15 @@ export function validateEmbeddingVector(
   return embedding;
 }
 
+/** The two halves of the asymmetric pairing gemini-embedding-001 was
+    calibrated for: stored memories are DOCUMENTs, a live question is a
+    QUERY. Every stored vector in the system is a document; only recall's
+    incoming question uses the other half. */
+export type EmbeddingTaskType = "RETRIEVAL_DOCUMENT" | "RETRIEVAL_QUERY";
+
 export interface GeminiEmbeddingClient {
   readonly model: string;
-  embed(input: string): Promise<number[]>;
+  embed(input: string, taskType?: EmbeddingTaskType): Promise<number[]>;
 }
 
 export class GeminiEmbeddingHttpClient implements GeminiEmbeddingClient {
@@ -198,7 +204,10 @@ export class GeminiEmbeddingHttpClient implements GeminiEmbeddingClient {
     this.model = model;
   }
 
-  async embed(input: string): Promise<number[]> {
+  async embed(
+    input: string,
+    taskType: EmbeddingTaskType = "RETRIEVAL_DOCUMENT",
+  ): Promise<number[]> {
     const apiKey = getGeminiApiKey();
     const response = await fetchModelWithTimeout(fetch, buildEmbedContentUrl(this.model), {
       method: "POST",
@@ -206,7 +215,7 @@ export class GeminiEmbeddingHttpClient implements GeminiEmbeddingClient {
       body: JSON.stringify({
         model: `models/${this.model}`,
         content: { parts: [{ text: input }] },
-        taskType: "RETRIEVAL_DOCUMENT",
+        taskType,
         outputDimensionality: GEMINI_EMBEDDING_DIMENSIONS,
       }),
     });

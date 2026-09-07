@@ -67,6 +67,7 @@ import {
   createSessionRow,
   hashSessionToken,
 } from "../lib/session.js";
+import { validationDetails } from "../lib/validation.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -596,7 +597,7 @@ cliAuthRoutes.post("/exchange", async (c) => {
     return c.json(
       {
         error: "Invalid exchange payload",
-        details: parsed.error.flatten().fieldErrors,
+        details: validationDetails(parsed.error),
       },
       400,
     );

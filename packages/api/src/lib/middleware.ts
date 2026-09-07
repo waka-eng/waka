@@ -18,6 +18,7 @@ import type { Context, MiddlewareHandler } from "hono";
 import { getCookie } from "hono/cookie";
 
 import { looksLikeAgentKey, lookupAgentKeySession } from "./agent-key-auth.js";
+import { looksLikeKeeperKey, lookupKeeperKeySession } from "./keeper-key-auth.js";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "./auth.js";
 import { type AuthenticatedSession, lookupSession } from "./session.js";
 import { hasLiveSiblingGrant } from "./sibling-grants.js";
@@ -60,6 +61,32 @@ async function resolveSessionFromToken(token: string): Promise<AuthenticatedSess
   return lookupSession(token);
 }
 
+/**
+ * WHAT A KEEPER KEY MAY ASK FOR AT ALL — a positive list, enforced at the
+ * one place every authed request passes, rather than a refusal remembered
+ * in each route. The matrix still guards the same session underneath (a
+ * `?profile=` toward anyone else is denied there), but the matrix's own
+ * self-profile short-circuits live in the route resolvers, so a chokepoint
+ * is what makes "keep and recall, nothing else" a fact rather than a
+ * convention. Exported pure, so the list is a unit test away.
+ */
+export function keeperKeyMayPass(method: string, path: string): boolean {
+  if (method === "POST") return path === "/api/inspirations";
+  if (method !== "GET") return false;
+  return [
+    "/api/inspirations",
+    "/api/signals",
+    "/api/recall",
+    "/api/top-of-mind",
+    "/api/principles",
+    "/api/principles.md",
+    "/api/weather",
+    "/api/weather.md",
+    "/api/experiences",
+    "/api/graph",
+  ].some((allowed) => path === allowed || path.startsWith(`${allowed}/`));
+}
+
 export const requireAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
   const read = readToken(c);
   if (!read) {
@@ -77,9 +104,19 @@ export const requireAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
     ? read.source === "header"
       ? await lookupAgentKeySession(read.token)
       : null
-    : await resolveSessionFromToken(read.token);
+    : looksLikeKeeperKey(read.token)
+      ? read.source === "header"
+        ? await lookupKeeperKeySession(read.token)
+        : null
+      : await resolveSessionFromToken(read.token);
   if (!session) {
     return c.json({ error: "Authentication required" }, 401);
+  }
+  if (session.keyScoped && !keeperKeyMayPass(c.req.method, c.req.path)) {
+    return c.json(
+      { error: "Beyond this key's scope — a keeper key keeps and recalls; the rest needs you at a browser" },
+      403,
+    );
   }
   c.set("session", session);
   c.set("sessionToken", read.token);
@@ -89,9 +126,9 @@ export const requireAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
 /**
  * THIS IS A PERSON'S DECISION, NOT AN AGENT'S.
  *
- * `docs/data-model.md` grants an agent-bound session read + capture on the
- * human profile and full access only to its own — never the power to act on
- * the ACCOUNT. Every owner surface honours that (profiles.ts, sessions.ts,
+ * `docs/data-model.md` grants an agent-bound session read on the human
+ * profile and full access only to its own (2026-08-29 ruling) — never the
+ * power to act on the ACCOUNT. Every owner surface honours that (profiles.ts, sessions.ts,
  * groups.ts) except the one that cannot be undone: `DELETE /api/auth/me` was
  * mounted on `requireAuth` alone and never read `session.profile.type`, so a
  * credential minted through the documented CLI/MCP loopback login — bound to
@@ -107,7 +144,10 @@ export const requireAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
  */
 export const humanSessionsOnly: MiddlewareHandler<AuthEnv> = async (c, next) => {
   const session = c.get("session");
-  if (session.profile.type !== "human") {
+  /* A keeper key IS the human, and still may not decide for the account: a
+     standing credential in a config file on disk does not get to delete the
+     account, mint keys, or open grants. Those need the person at a browser. */
+  if (session.profile.type !== "human" || session.keyScoped) {
     return c.json(
       { error: "This is the account holder's decision and cannot be made by an agent session" },
       403,
@@ -124,7 +164,11 @@ export const optionalAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
       ? read.source === "header"
         ? await lookupAgentKeySession(read.token)
         : null
-      : await resolveSessionFromToken(read.token);
+      : looksLikeKeeperKey(read.token)
+        ? read.source === "header"
+          ? await lookupKeeperKeySession(read.token)
+          : null
+        : await resolveSessionFromToken(read.token);
     if (session) {
       c.set("session", session);
       c.set("sessionToken", read.token);
@@ -178,15 +222,21 @@ export type ProfileAccessVerdict = "allowed" | "denied" | "sibling_grant_require
  * - A session acting as its own profile may do anything to it.
  * - A **human**-profile session is the account's admin: full access to every
  *   profile the account owns, including its agents' memories.
- * - An **agent**-profile session may read and capture into the account's
- *   human profile — that is the conditioning-and-relaying case — but may
- *   never curate, edit, or delete the human's memory.
- * - An **agent** session reaching for a SIBLING agent's memory needs an
+ * - An **agent**-profile session may READ the account's human profile — the
+ *   conditioning case: an agent acting for the person reads their top of
+ *   mind and principles. It may not write anything there, captures
+ *   included. What an agent generates stays wholly in the agent's own
+ *   stack, so nothing an agent saves can ever move the human's signals or
+ *   top of mind (founder ruling, 2026-08-29, signed in docs/data-model.md's
+ *   decision log — it retires the 2026-08-15 read+capture default; the
+ *   relaying case is served by the human keeping the memory themselves).
+ * - An **agent** session READING a SIBLING agent's memory needs an
  *   explicit, human-granted, revocable grant — the matrix answers
  *   `sibling_grant_required` and `profileAccessError` reads the live grant
- *   rows. The open default retired with `goals/no-quiet-corners.md`
- *   Phase 6 (the flip is founder-ruled, 2026-08-23, signed in
- *   docs/data-model.md's decision log): no flag, no dark machinery.
+ *   rows. Grants open reading only: capture across agents is denied under
+ *   the same ruling, so no grant can mix one agent's generated memory into
+ *   another's. The open default retired with `goals/no-quiet-corners.md`
+ *   Phase 6 (founder-ruled 2026-08-23): no flag, no dark machinery.
  * - Nothing reaches across accounts, ever.
  */
 export function resolveProfileAccess(
@@ -195,10 +245,20 @@ export function resolveProfileAccess(
   operation: ProfileOperation,
 ): ProfileAccessVerdict {
   if (target.accountId !== session.profile.accountId) return "denied";
+  /* A keeper key (2026-08-29): the person's standing MCP credential is
+     deliberately LESS than the person — read and capture on its own
+     profile, nothing anywhere else. Checked before the human-admin rule,
+     which must never apply to a key sitting in a config file. */
+  if (session.keyScoped) {
+    return target.id === session.profile.id && operation !== "write"
+      ? "allowed"
+      : "denied";
+  }
   if (target.id === session.profile.id) return "allowed";
   if (session.profile.type === "human") return "allowed";
-  // Agent session, some other profile in the same account.
-  if (operation === "write") return "denied";
+  // Agent session, some other profile in the same account: reading is the
+  // only verb that can cross, and toward a sibling only through a grant.
+  if (operation !== "read") return "denied";
   if (target.type === "human") return "allowed";
   return "sibling_grant_required";
 }

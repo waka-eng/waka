@@ -11,10 +11,13 @@
  * shared signals and grow an artifact of their own.
  */
 
+import { createRecallRoutes } from "./routes/recall.js";
+import { createSignalDuplicatesRoutes } from "./routes/signal-duplicates.js";
 import { Hono } from "hono";
 import { handle } from "hono/aws-lambda";
 
 import { adminBackgroundJobsRoutes } from "./routes/admin-background-jobs.js";
+import { createAdminLoopHealthRoute } from "./routes/admin-loop-health.js";
 import { attachmentsRoutes } from "./routes/attachments.js";
 import { authRoutes } from "./routes/auth.js";
 import { feedbackRoutes } from "./routes/feedback.js";
@@ -24,7 +27,9 @@ import { inspirationsRoutes } from "./routes/inspirations.js";
 import { profilesRoutes } from "./routes/profiles.js";
 import { principlesMarkdownRoutes, principlesRoutes } from "./routes/principles.js";
 import { createAgentGrantRoutes } from "./routes/agent-grants.js";
+import { createConsultationRoutes } from "./routes/consultations.js";
 import { agentKeyRoutes } from "./routes/agent-keys.js";
+import { keeperKeyRoutes } from "./routes/keeper-keys.js";
 import { experienceRoutes } from "./routes/experiences.js";
 import { graphRoutes } from "./routes/graph.js";
 import { createExportRoute } from "./routes/export.js";
@@ -66,6 +71,7 @@ app.route("/api/health", healthRoutes);
 // Signup, login, session, profile preferences, and the CLI loopback flow.
 app.route("/api/auth", authRoutes);
 app.route("/api/agent-keys", agentKeyRoutes);
+app.route("/api/keeper-keys", keeperKeyRoutes);
 app.route("/api/experiences", experienceRoutes);
 app.route("/api/graph", graphRoutes);
 
@@ -88,6 +94,7 @@ app.route("/api/export", createExportRoute());
 // The hand on the sibling door: explicit, human-granted, revocable
 // agent-to-agent read grants. The open default retired with this route.
 app.route("/api/agent-grants", createAgentGrantRoutes());
+app.route("/api/consultations", createConsultationRoutes());
 
 // Deliberately unauthenticated: returns only the owner-approved surface.
 app.route("/api/public/profiles", publicProfileRoutes);
@@ -96,6 +103,7 @@ app.route("/api/public/profiles", publicProfileRoutes);
 // gate, requireAuth, and admin allowlist, so the namespace stays hidden by
 // default while still returning 401 for anonymous callers when enabled.
 app.route("/api/admin/background-jobs", adminBackgroundJobsRoutes);
+app.route("/api/admin/loop-health", createAdminLoopHealthRoute());
 
 // Layer 1 — capture, edit, delete, and search the raw archive.
 app.route("/api/inspirations", inspirationsRoutes);
@@ -106,6 +114,8 @@ app.route("/api/attachments", attachmentsRoutes);
 
 // Layer 2 — the evidence-backed patterns WAKA derives, and their shares.
 app.route("/api/signals", signalsRoutes);
+app.route("/api/recall", createRecallRoutes());
+app.route("/api/signal-duplicates", createSignalDuplicatesRoutes());
 
 // Layer 3 — the one live artifact per profile, and its version chain.
 app.route("/api/top-of-mind", topOfMindRoutes);

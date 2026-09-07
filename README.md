@@ -28,6 +28,7 @@ filter over yours.
 | --- | --- |
 | [`docs/architecture.md`](docs/architecture.md) | **Where things live** — the three layers as the three sections of the world, one column per mind, and the four seams that carry the coupling. Read it before `Home.tsx`; that file assumes this map. |
 | [`docs/codebase.md`](docs/codebase.md) | **How the codebase is organised, and the plan for making it easier to build on.** Read it before a change that spans more than one file. |
+| [`docs/goals/README.md`](docs/goals/README.md) | **What is being built, and what already was.** 28 goal documents sorted by status — start here rather than in the directory, where finished work and work in flight look alike. |
 
 ## Naming
 
@@ -89,7 +90,7 @@ inspirations, and no refusal is ever shown.
 | Frontend | Vite + React 18 + React Router (SST `StaticSite`) |
 | API | Hono on an AWS Lambda Function URL (SST `Function`) |
 | Async work | Postgres `background_jobs`, drained by a cron and an in-process tick |
-| Generation | Gemini — extraction, embeddings, synthesis, image description |
+| Generation | OpenRouter (DeepSeek V4 Flash, pinned) — extraction, judges, synthesis; Gemini — embeddings, image description, and the fallback road |
 | Storage | S3, presigned PUT only (SST `Bucket`) |
 | Database | Neon Postgres via Drizzle ORM (not provisioned by SST) |
 | Auth | Email + password, Google OAuth, and a loopback flow for CLI/MCP clients |
@@ -105,21 +106,42 @@ single surface), `packages/admin` (a small, undeployed queue inspector).
 
 - **Node** 20+ and **pnpm** 9+ (`corepack enable && corepack prepare pnpm@9.12.0 --activate`)
 - **Postgres**. Local is the default for development; `.env.local` points at it.
-- A **Gemini API key** from <https://aistudio.google.com/app/apikey>.
+- A **Gemini API key** from <https://aistudio.google.com/app/apikey>
+  (embeddings and image description always run here).
+- An **OpenRouter API key** from <https://openrouter.ai/keys> — the
+  generation road; without it everything falls back to Gemini.
 - For deploys only: an **AWS account** (region `us-west-2`, matching
   `sst.config.ts`) and a **Google OAuth** client — see
   [`docs/google-oauth-setup.md`](docs/google-oauth-setup.md).
 
 ### Environment
 
-Development reads `.env.local`. The variables that matter:
+Development reads `.env.local`. Start it from the template:
+
+```bash
+cp .env.example .env.local
+```
+
+That one file is what `pnpm dev:local` reads, and what `pnpm demo:seed` reads
+first. `pnpm dev:local` only *warns* when it is missing and starts anyway —
+which is right for CI, where the variables are exported inline, and is why a
+missing file shows up later as a database error rather than as a missing file.
+
+> `drizzle-kit` reads `.env.local` too, and prefers it — `drizzle.config.ts`
+> loads it *over* `.env` unless you chose a URL deliberately, so
+> `pnpm db:migrate` and `pnpm db:studio` work from the one file as well. A
+> repo-root `.env` is only for `pnpm sst secret set` and other one-off
+> operator commands; local development needs nothing in it.
+
+The variables that matter:
 
 | Variable | Used by | Notes |
 | --- | --- | --- |
 | `DB_CONNECTION_URL` | API, worker, `drizzle-kit` | `DATABASE_URL` is accepted as a fallback name. |
 | `AUTH_SECRET`, `JWT_SECRET` | session signing | `openssl rand -base64 48` |
 | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | `/api/auth/google` | Redirect URI must match the running API. |
-| `GEMINI_API_KEY` | generation | Never reaches the browser. |
+| `GEMINI_API_KEY` | embeddings, vision, fallback generation | Never reaches the browser. |
+| `OPENROUTER_API_KEY` | generation (DeepSeek V4 Flash) | Never reaches the browser. |
 | `ATTACHMENTS_BUCKET`, `ATTACHMENTS_REGION` | uploads | Only needed for S3-backed attachments. |
 | `WAKA_ENRICHMENT_ALLOWED_HOSTS` | enrichment | Empty by default. See "Enrichment and private addresses". |
 
@@ -127,6 +149,40 @@ Development reads `.env.local`. The variables that matter:
 > one with `pnpm sst secret set <Name> "$VALUE"` — `GoogleClientId`,
 > `GoogleClientSecret`, `SessionSecret`, `JwtSecret`, `DbConnectionUrl`,
 > `GeminiApiKey`.
+
+### A database
+
+Any Postgres 16 will do — nothing here needs an extension. Embeddings are
+`jsonb` and cosine similarity is computed in application code, which
+`packages/api/src/db/schema-embeddings.ts` explains and no migration
+contradicts. There is a compose file so you do not have to think about it:
+
+```bash
+docker compose up -d --wait
+```
+
+`--wait` matters on a cold start: without it the command returns while initdb
+is still running, and the next thing you type is refused.
+
+The URL it serves is already the default in `.env.example`, so a
+`cp .env.example .env.local` needs no edit:
+
+```
+DB_CONNECTION_URL=postgres://waka:waka@127.0.0.1:5432/waka
+```
+
+**If you want to run the full API suite** (`pnpm --filter @waka/api test`,
+the database-backed one CI gates on), add its database once:
+
+```bash
+psql postgres://waka:waka@127.0.0.1:5432/waka -c 'CREATE DATABASE waka_test;'
+```
+
+That suite refuses any target whose name does not contain `test`
+(`packages/api/test/setup.ts`) — a guard against pointing it at a database
+someone cares about, since it migrates and truncates what it is given. Point
+`DB_CONNECTION_URL` at `.../waka_test` for that run only; `pnpm test` and
+everything above need none of this.
 
 ### Install and migrate
 
@@ -163,11 +219,18 @@ and never prints secrets.
 ## Verifying
 
 ```bash
-pnpm --filter @waka/api typecheck
+pnpm test        # all three packages: typecheck, unit tests, web build
+```
+
+Everything it runs works on a bare checkout with no database. The pieces, when
+you want one of them on its own:
+
+```bash
+pnpm typecheck                        # all three packages
 pnpm --filter @waka/api test:unit     # no database, ~1s
-pnpm --filter @waka/web typecheck && pnpm --filter @waka/web test && pnpm --filter @waka/web build
-pnpm typecheck:admin
-pnpm db:check
+pnpm --filter @waka/web test
+pnpm --filter @waka/web build
+pnpm db:check                         # migrations; needs DB_CONNECTION_URL
 ```
 
 `test:unit` globs every test file, so a new one runs without being registered

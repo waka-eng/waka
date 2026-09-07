@@ -262,6 +262,18 @@ async function openTab(container: HTMLDivElement, label: string): Promise<void> 
   });
 }
 
+/** Connections and the read record are folded at the bottom (founder,
+    2026-08-29); reaching them is one press, and this is that press. */
+async function openActivityFold(container: HTMLDivElement): Promise<void> {
+  const door = Array.from(
+    container.querySelectorAll<HTMLButtonElement>(".profile-disclose button"),
+  ).find((button) => button.textContent?.includes("connections"));
+  if (!door) throw new Error("no connections fold to open");
+  await act(async () => {
+    door.click();
+  });
+}
+
 function memoryRows(container: HTMLDivElement): HTMLLIElement[] {
   return Array.from(container.querySelectorAll<HTMLLIElement>(".profile-memory-row"));
 }
@@ -369,6 +381,7 @@ describe("ProfilePage connections", () => {
   it("lists every connection, naming the one you are using", async () => {
     const container = await renderProfilePage();
     await openTab(container, "Memories & connections");
+    await openActivityFold(container);
     const rows = connectionRows(container);
 
     expect(rows).toHaveLength(3);
@@ -381,6 +394,7 @@ describe("ProfilePage connections", () => {
   it("gives an unlabelled connection a readable name", async () => {
     const container = await renderProfilePage();
     await openTab(container, "Memories & connections");
+    await openActivityFold(container);
     expect(connectionRows(container)[2]?.textContent).toContain("Unnamed device");
   });
 
@@ -388,6 +402,7 @@ describe("ProfilePage connections", () => {
   it("never renders a token", async () => {
     const container = await renderProfilePage();
     await openTab(container, "Memories & connections");
+    await openActivityFold(container);
     const panel = container.querySelector("#profile-connections-title")?.closest("section");
     expect(panel?.textContent).not.toMatch(/token|eyJ/i);
   });
@@ -395,6 +410,7 @@ describe("ProfilePage connections", () => {
   it("asks before ending a connection, and does nothing when declined", async () => {
     const container = await renderProfilePage();
     await openTab(container, "Memories & connections");
+    await openActivityFold(container);
     const end = connectionRows(container)[1]?.querySelector("button");
 
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
@@ -419,6 +435,7 @@ describe("ProfilePage connections", () => {
   it("warns differently before ending the current device", async () => {
     const container = await renderProfilePage();
     await openTab(container, "Memories & connections");
+    await openActivityFold(container);
     const end = connectionRows(container)[0]?.querySelector("button");
 
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
@@ -454,6 +471,7 @@ describe("ProfilePage rooms", () => {
     expect([shown(container, "you"), shown(container, "access")]).toEqual([true, false]);
 
     await openTab(container, "Memories & connections");
+    await openActivityFold(container);
     expect([shown(container, "you"), shown(container, "access")]).toEqual([false, true]);
   });
 
@@ -479,6 +497,7 @@ describe("ProfilePage rooms", () => {
     expect(danger()?.hasAttribute("hidden")).toBe(false);
 
     await openTab(container, "Memories & connections");
+    await openActivityFold(container);
     expect(danger()?.hasAttribute("hidden")).toBe(true);
   });
 
@@ -490,6 +509,7 @@ describe("ProfilePage rooms", () => {
 
     expect(pill()).toBe("translateX(0%)");
     await openTab(container, "Memories & connections");
+    await openActivityFold(container);
     expect(pill()).toBe("translateX(100%)");
   });
 

@@ -36,13 +36,25 @@
  * because of. If a claim here ever stops being true, this page is lying to
  * strangers, which is the worst place in a product to keep a stale sentence.
  *
- * THE COPY IS LITERAL JSX, NOT MESSAGE KEYS, and that is the same choice the
- * world's own surfaces make (`AntechamberPanel` and the panels beside it write
- * their sentences inline). `lib/i18n` is the CHROME's catalogue — the door,
- * the account screen — and English is the product's only language by founder
- * ruling. Forty marketing keys in it would be forty keys pretending a
- * translation is coming. `copy.test.ts` reads JSX text nodes directly, so the
- * canon-vocabulary gate covers these sentences either way.
+ * THE COPY LIVES IN THE CATALOGUE, and it did not when this page was written.
+ * The argument then was that the world's own surfaces wrote their sentences
+ * inline and English was the product's only language, so forty marketing keys
+ * would be forty keys pretending a translation was coming.
+ *
+ * Both halves of that stopped being true on 2026-08-31, when the founder
+ * reversed the English-only ruling: Korean came back, and the same work moved
+ * every sentence in the world into `lib/i18n` (`worldTheAntechamber`,
+ * `worldNothingRefused`, and four hundred more). This page was the last
+ * surface writing English into JSX.
+ *
+ * That is not a style point, and no gate would have caught it —
+ * `copy.test.ts` checks JSX text for canon words and the catalogue for dead
+ * keys, and this page passed both. It is a defect a person meets:
+ * `readStoredLocale` falls back to the BROWSER's language, so somebody
+ * arriving from a Korean machine got Korean chrome on every other surface and
+ * an entirely English page explaining what the product is. The one screen
+ * whose whole job is to be understood by a stranger was the one screen that
+ * could not speak to them.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -50,6 +62,7 @@ import { Link } from "react-router-dom";
 
 import { Companion, LOOKING_AHEAD } from "../components/Companion";
 import type { CompanionGaze } from "../components/Companion";
+import { readStoredLocale, t } from "../lib/locales";
 
 import "../styles/landing.css";
 
@@ -128,7 +141,7 @@ function Rung({
   label,
   title,
   example,
-  children,
+  body,
 }: {
   light: number;
   label: string;
@@ -142,7 +155,7 @@ function Rung({
    * the words that document uses.
    */
   example: string;
-  children: React.ReactNode;
+  body: string;
 }): JSX.Element {
   return (
     <li className="lp-rung" style={{ ["--rung-light" as string]: String(light) }}>
@@ -150,111 +163,97 @@ function Rung({
       <div className="lp-rung-said">
         <p className="lp-label">{label}</p>
         <h3 className="lp-rung-title">{title}</h3>
-        <p className="lp-prose">{children}</p>
+        <p className="lp-prose">{body}</p>
         <p className="lp-rung-eg">{example}</p>
       </div>
     </li>
   );
 }
 
-function Law({ title, children }: { title: string; children: React.ReactNode }): JSX.Element {
+function Law({ title, body }: { title: string; body: string }): JSX.Element {
   return (
     <li className="lp-law">
       <h3 className="lp-law-title">{title}</h3>
-      <p className="lp-prose">{children}</p>
+      <p className="lp-prose">{body}</p>
     </li>
   );
 }
 
 export default function LandingPage(): JSX.Element {
+  /* Read once, at render. A stranger has chosen nothing yet, so
+     `readStoredLocale` falls back to the browser's own language — which is
+     exactly right here: this page's whole job is to be understood by somebody
+     who has never told us anything about themselves. */
+  const locale = readStoredLocale();
   return (
     <main className="lp">
       <header className="lp-top">
-        <p className="lp-label lp-mark">WAKA</p>
+        <p className="lp-label lp-mark">{t(locale, "loginEyebrow")}</p>
         {/* The returning person's way past all of this, in the corner every
-            product puts it in. `continue` is the door's own word for it. */}
+            product puts it in — and it is the door's own word for it, read
+            from the door's own key, so the two can never drift apart. */}
         <Link className="lp-quiet-verb" to="/login">
-          continue
+          {t(locale, "loginTab")}
         </Link>
       </header>
 
       <section className="lp-hero">
         <WatchfulCompanion scale={0.72} />
-        <h1 className="lp-headline">Keep what moves you.</h1>
-        <p className="lp-lede">
-          WAKA reads what you keep, names the patterns underneath, and distils
-          the ones that last into how you actually choose.
-        </p>
+        <h1 className="lp-headline">{t(locale, "landingHeadline")}</h1>
+        <p className="lp-lede">{t(locale, "landingLede")}</p>
         <div className="lp-acts">
           {/* `?begin` opens the door on its `begin` side. A query rather than
               router state so the link survives being copied, shared and
               bookmarked — which is the whole job of a link on this page. */}
           <Link className="lp-act" to="/login?begin">
-            begin
+            {t(locale, "signupTab")}
           </Link>
           {/* A fact about the product, not a claim about the business. The
               first draft of this line said "free while it is being built",
               which nothing in this repository knows to be true — an invented
               price is the one kind of sentence a landing page must never
               carry, because it is the one a stranger would act on. */}
-          <span className="lp-act-aside">private by default</span>
+          <span className="lp-act-aside">{t(locale, "landingAsidePrivate")}</span>
         </div>
       </section>
 
       {/* THE ASCENT — `docs/data-model.md`'s four layers, and the numbers are
           `docs/generation.md`'s, which CI pins against the implementation. */}
       <section className="lp-section lp-ascent" aria-labelledby="lp-ascent-title">
-        <p className="lp-label">how it works</p>
+        <p className="lp-label">{t(locale, "landingAscentLabel")}</p>
         <h2 id="lp-ascent-title" className="lp-section-title">
-          Four layers, and you only ever touch the first.
+          {t(locale, "landingAscentTitle")}
         </h2>
-        <p className="lp-prose lp-wide">
-          One thought, all the way up: the line you typed, and the three things
-          WAKA made of it.
-        </p>
+        <p className="lp-prose lp-wide">{t(locale, "landingAscentLede")}</p>
         <ol className="lp-rungs">
           <Rung
             light={0.22}
-            label="you keep"
-            title="A memory"
-            example="“Turned down the platform-team offer. I keep choosing depth over breadth.”"
-          >
-            A line, a link, a photograph — whatever moved you, in whatever
-            words you had at the time. It stays yours: private by default,
-            editable, and deletable.
-          </Rung>
+            label={t(locale, "landingKeepLabel")}
+            title={t(locale, "landingKeepTitle")}
+            body={t(locale, "landingKeepBody")}
+            example={t(locale, "landingKeepExample")}
+          />
           <Rung
             light={0.48}
-            label="waka reads"
-            title="A pattern"
-            example="“You keep choosing depth over breadth.” — standing on this memory, the blog you abandoned, and the piano you quit."
-          >
-            WAKA reads across everything you have kept, including the save from
-            months ago you had forgotten, and proposes what it sees. One
-            mention is a thought. Three is a pattern — and only then does it
-            say so out loud.
-          </Rung>
+            label={t(locale, "landingPatternLabel")}
+            title={t(locale, "landingPatternTitle")}
+            body={t(locale, "landingPatternBody")}
+            example={t(locale, "landingPatternExample")}
+          />
           <Rung
             light={0.74}
-            label="it synthesises"
-            title="Your top of mind"
-            example="“You are protecting depth at a cost you have not named yet.”"
-          >
-            The strongest patterns become one artifact: what matters now, what
-            you believe, and what is still in question. It is rewritten whole
-            each time and kept as a version, so nothing is ever quietly edited
-            underneath you.
-          </Rung>
+            label={t(locale, "landingTopOfMindLabel")}
+            title={t(locale, "landingTopOfMindTitle")}
+            body={t(locale, "landingTopOfMindBody")}
+            example={t(locale, "landingTopOfMindExample")}
+          />
           <Rung
             light={1}
-            label="what survives"
-            title="A principle"
-            example="“Go deeper before you go wider.” — and every agent you work with can read it."
-          >
-            What is still standing after forty-five days and five readings
-            stops being a mood. Strip the situation out of it and what is left
-            is a directive — how you choose, rather than what you chose.
-          </Rung>
+            label={t(locale, "landingPrincipleLabel")}
+            title={t(locale, "landingPrincipleTitle")}
+            body={t(locale, "landingPrincipleBody")}
+            example={t(locale, "landingPrincipleExample")}
+          />
         </ol>
       </section>
 
@@ -263,31 +262,27 @@ export default function LandingPage(): JSX.Element {
           crossing and contested pairs (`data-model.md`, the 2026-08-23
           rulings), and citation validation (`generation.md` §4). */}
       <section className="lp-section" aria-labelledby="lp-laws-title">
-        <p className="lp-label">the rules it keeps</p>
+        <p className="lp-label">{t(locale, "landingLawsLabel")}</p>
         <h2 id="lp-laws-title" className="lp-section-title">
-          A memory is only worth having if you can trust how it behaves.
+          {t(locale, "landingLawsTitle")}
         </h2>
         <ul className="lp-laws">
-          <Law title="Fading never deletes.">
-            A pattern you stop feeding sinks on its own, quietly, without
-            anybody dismissing it. It is never removed — and it surfaces again
-            the moment you come back to it.
-          </Law>
-          <Law title="Nothing crosses without you.">
-            Everything is private until you say otherwise, one memory at a
-            time. And the evidence — the exact words underneath a pattern —
-            never crosses to another person at all, whatever else you share.
-          </Law>
-          <Law title="It never settles an argument about you.">
-            When WAKA ends up holding two opposing beliefs about you, both
-            stand, marked, until you rule on them. No weight of evidence gets
-            to decide which version of you is right.
-          </Law>
-          <Law title="Every claim cites your own words.">
-            A reading that cites nothing is a horoscope. Every line WAKA writes
-            about you is checked, in code, against the memories it rests on —
-            and you can always walk back down to them.
-          </Law>
+          <Law
+            title={t(locale, "landingLawFadingTitle")}
+            body={t(locale, "landingLawFadingBody")}
+          />
+          <Law
+            title={t(locale, "landingLawCrossingTitle")}
+            body={t(locale, "landingLawCrossingBody")}
+          />
+          <Law
+            title={t(locale, "landingLawArgumentTitle")}
+            body={t(locale, "landingLawArgumentBody")}
+          />
+          <Law
+            title={t(locale, "landingLawCitesTitle")}
+            body={t(locale, "landingLawCitesBody")}
+          />
         </ul>
       </section>
 
@@ -295,55 +290,36 @@ export default function LandingPage(): JSX.Element {
           the human profile, never edit. `principles.md` / the canonical
           machine rendering: one deterministic document, byte-identical. */}
       <section className="lp-section" aria-labelledby="lp-agents-title">
-        <p className="lp-label">and your agents</p>
+        <p className="lp-label">{t(locale, "landingAgentsLabel")}</p>
         <h2 id="lp-agents-title" className="lp-section-title">
-          The tools deciding on your behalf can finally know how you decide.
+          {t(locale, "landingAgentsTitle")}
         </h2>
-        <p className="lp-prose lp-wide">
-          An agent working alongside you gets a memory of its own — its
-          observations, its lessons, its own four layers — plus permission to
-          read yours and add to it. It can never rewrite what you kept.
-        </p>
-        <p className="lp-prose lp-wide">
-          And it can read your principles: one plain document, served the same
-          way to every tool, so an assistant choosing something for you can
-          name the principle it leaned on. Your answer to a question you have
-          answered a hundred times stops being something you have to type
-          again.
-        </p>
+        <p className="lp-prose lp-wide">{t(locale, "landingAgentsBodyOwn")}</p>
+        <p className="lp-prose lp-wide">{t(locale, "landingAgentsBodyRead")}</p>
       </section>
 
       {/* The 2026-08-24 ruling: a room distils its own signals from pooled
           public memories, and needs two distinct members' memories under a
           statement before it may wear the room's name. */}
       <section className="lp-section" aria-labelledby="lp-rooms-title">
-        <p className="lp-label">together</p>
+        <p className="lp-label">{t(locale, "landingRoomsLabel")}</p>
         <h2 id="lp-rooms-title" className="lp-section-title">
-          A room remembers what a team keeps coming back to.
+          {t(locale, "landingRoomsTitle")}
         </h2>
-        <p className="lp-prose lp-wide">
-          Put a memory out loud and it joins the ground of the rooms you are
-          in, where the same pipeline runs over what everybody made public. A
-          room only speaks a pattern once two different people's memories stand
-          under it — so everything it says about itself is genuinely
-          collective, and never one person's view wearing the room's name.
-        </p>
+        <p className="lp-prose lp-wide">{t(locale, "landingRoomsBody")}</p>
       </section>
 
       <section className="lp-section lp-close" aria-labelledby="lp-close-title">
         <h2 id="lp-close-title" className="lp-section-title lp-close-title">
-          Begin your archive.
+          {t(locale, "loginBegin")}
         </h2>
-        <p className="lp-prose lp-wide">
-          Nothing is there yet. Keep the first thing that moves you, and come
-          back when something else does.
-        </p>
+        <p className="lp-prose lp-wide">{t(locale, "landingCloseBody")}</p>
         <div className="lp-acts">
           <Link className="lp-act" to="/login?begin">
-            begin
+            {t(locale, "signupTab")}
           </Link>
           <Link className="lp-quiet-verb" to="/login">
-            or continue where you left off
+            {t(locale, "landingCloseContinue")}
           </Link>
         </div>
       </section>

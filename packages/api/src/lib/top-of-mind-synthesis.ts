@@ -30,6 +30,7 @@
 import { and, asc, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 
 import {
+  signalEmbeddings,
   groupMembers,
   groups,
   groupTopOfMindProposals,
@@ -43,7 +44,9 @@ import {
   type TopOfMindEntryType,
   type TopOfMindRevisionReason,
   feedback,
+  signalContradictions,
 } from "../db/index.js";
+import { cosineSimilarity } from "../scoring/vector.js";
 import { getDb } from "./db.js";
 import { computeSignalConfidence } from "./signal-derivation.js";
 import { GROUP_SIGNAL_MIN_VOICES } from "./signal-derivation-thresholds.js";
@@ -84,6 +87,19 @@ export const SELECTION_COMEBACK_WEIGHT = 0.15;
  */
 export const SELECTION_DISPUTED_MULTIPLIER = 0.4;
 
+/**
+ * NO TWO VOICES ON THE BOARD SAYING ONE THING. Selection is score-ranked, and
+ * a dominant theme can spend every slot restating itself — twelve sentences
+ * about work is not a top of MIND. At or above this cosine, two candidates
+ * are close enough that the judge band would already be asking whether they
+ * are the same pattern (0.70–0.86, docs/generation.md §4), so the stronger
+ * one holds the slot and the other waits in reserve — and comes back in
+ * whenever slots are left over, so nothing is ever excluded outright.
+ * Deliberately conservative: genuinely different signals about one theme
+ * (0.5–0.7 apart) are untouched until the funnel earns a lower bar.
+ */
+export const SELECTION_DIVERSITY_MAX_COSINE = 0.8;
+
 /** Evidence count at which the support term saturates. */
 export const SELECTION_EVIDENCE_SATURATION = 6;
 /** Half-life of the recency term, in days. */
@@ -99,6 +115,56 @@ export const SELECTION_RECENCY_HALF_LIFE_DAYS = 30;
 export const COMEBACK_MIN_DORMANT_DAYS = 21;
 export const COMEBACK_SATURATION_DAYS = 90;
 export const COMEBACK_MAX_RETURN_AGE_DAYS = 14;
+
+/**
+ * THE FLOOR: the top of mind shifts at most once a day.
+ *
+ * The founder's intended behavior (2026-08-31): inspirations shape the
+ * artifact naturally, but the artifact holds still — a board that rewrites
+ * itself three times over one active morning (observed live, 2026-08-30:
+ * versions 1→3 in ninety seconds) is a ticker, not a top of mind. The floor
+ * is queue arithmetic, never model behavior: a `signals_changed` refresh
+ * that arrives while the latest CONTENT version (reason ≠ no_change) is
+ * younger than this many hours is HELD — its row sleeps until the floor
+ * opens, further enqueues collapse into it, and the signals keep accruing
+ * underneath so the one shift that lands reads everything.
+ *
+ * `manual` refreshes never wait: the person's own "Read it again" and a
+ * language change are the user moving the world, and the machine holds a
+ * day while the person never does. A profile with no content version yet
+ * has nothing to hold stable — the cold start is exempt.
+ */
+export const TOP_OF_MIND_MIN_SHIFT_HOURS = 24;
+
+const SHIFT_FLOOR_MS = TOP_OF_MIND_MIN_SHIFT_HOURS * 60 * 60 * 1000;
+
+export type ShiftFloorVerdict = { held: false } | { held: true; heldUntil: Date };
+
+/** Pure: the rule alone, so the boundary can be tested without a database. */
+export function assessShiftFloor(
+  lastContentShiftAt: Date | null,
+  now: Date,
+): ShiftFloorVerdict {
+  if (lastContentShiftAt === null) return { held: false };
+  const opensAt = lastContentShiftAt.getTime() + SHIFT_FLOOR_MS;
+  if (now.getTime() >= opensAt) return { held: false };
+  return { held: true, heldUntil: new Date(opensAt) };
+}
+
+/**
+ * Thrown by the refresh when the floor holds. The drain catches it and puts
+ * the job back to sleep (pending, run_after = heldUntil, attempts untouched)
+ * — a hold, not a failure, exactly as the model budget defers.
+ */
+export class ShiftFloorHeldError extends Error {
+  readonly heldUntil: Date;
+
+  constructor(heldUntil: Date) {
+    super(`top-of-mind shift floor holds until ${heldUntil.toISOString()}`);
+    this.name = "ShiftFloorHeldError";
+    this.heldUntil = heldUntil;
+  }
+}
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -136,6 +202,53 @@ interface SelectedSignal {
   evidenceCount: number;
   lastEvidenceAt: Date | null;
   score: number;
+  /** the pattern's life in time, worded — see describeTimeShape */
+  timeShape: string | null;
+  /** open contested pairs whose other side is ALSO in this selection —
+      the only ids the model may cite, so a one-sided mark never exists */
+  contestedWithIds?: string[];
+}
+
+const TIME_SHAPE_MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * A pattern's life in time, said in words the synthesis can use — because
+ * "top of MIND" is a claim about now, and the model was reading a bare
+ * ISO timestamp per signal and could not tell a pattern that has held for a
+ * year from one that appeared on Tuesday, or a comeback from a steady hum.
+ * Deterministic arithmetic over the evidence dates; English tokens on
+ * purpose (this is prompt-internal metadata — the Locale line governs what
+ * the ARTIFACT speaks).
+ */
+export function describeTimeShape(evidenceAt: Date[], now: Date): string | null {
+  if (evidenceAt.length === 0) return null;
+  const times = evidenceAt.map((d) => d.getTime()).sort((a, b) => a - b);
+  const first = times[0]!;
+  const last = times[times.length - 1]!;
+  const ageDays = Math.max(0, (now.getTime() - first) / TIME_SHAPE_MS_PER_DAY);
+  const quietDays = Math.max(0, (now.getTime() - last) / TIME_SHAPE_MS_PER_DAY);
+
+  const span = (days: number): string => {
+    const unit = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+    if (days < 14) return unit(Math.max(1, Math.round(days)), "day");
+    if (days < 60) return unit(Math.max(1, Math.round(days / 7)), "week");
+    if (days < 400) return unit(Math.max(1, Math.round(days / 30)), "month");
+    return "over a year";
+  };
+
+  if (ageDays < 7) return "new this week";
+
+  /* a return: the latest evidence is fresh, and the gap it ended was long —
+     the same dormancy bar the selection's comeback bonus uses */
+  if (times.length >= 2 && quietDays <= COMEBACK_MAX_RETURN_AGE_DAYS) {
+    const previous = times[times.length - 2]!;
+    const gapDays = (last - previous) / TIME_SHAPE_MS_PER_DAY;
+    if (gapDays >= COMEBACK_MIN_DORMANT_DAYS) {
+      return `returning after ${span(gapDays)} quiet`;
+    }
+  }
+
+  return `held for ${span(ageDays)}; last fed ${span(quietDays)} ago`;
 }
 
 export interface CarriedEntry {
@@ -320,7 +433,9 @@ async function selectSignals(
       // it would keep a signal that went quiet months ago scoring as if it
       // were still current. Time only passes for this signal if it passes
       // here, at read.
-      const confidence = computeSignalConfidence(evidence, now);
+      const confidence = computeSignalConfidence(evidence, now, {
+        affirmed: latestVerdict.get(row.id) === "true",
+      });
       return {
         id: row.id,
         statement: row.statement,
@@ -348,20 +463,154 @@ async function selectSignals(
       return a.id < b.id ? -1 : 1;
     });
 
-  const strip = (s: (typeof scored)[number]): SelectedSignal => ({
-    id: s.id,
-    statement: s.statement,
-    confidence: s.confidence,
-    evidenceCount: s.evidenceCount,
-    lastEvidenceAt: s.lastEvidenceAt,
-    score: s.score,
-  });
+  /* Open contested pairs, so the selection can keep both voices of a
+     dispute together (goal: contested-speaks, 2026-08-31). Ordered for
+     determinism — the pull below follows this order when one signal
+     stands in several pairs. */
+  const openPairs = await db
+    .select({
+      aSignalId: signalContradictions.aSignalId,
+      bSignalId: signalContradictions.bSignalId,
+    })
+    .from(signalContradictions)
+    .where(
+      and(
+        eq(signalContradictions.profileId, profileId),
+        isNull(signalContradictions.resolvedAt),
+      ),
+    )
+    .orderBy(asc(signalContradictions.createdAt), asc(signalContradictions.aSignalId));
+  const opposing = new Map<string, string[]>();
+  for (const pair of openPairs) {
+    opposing.set(pair.aSignalId, [...(opposing.get(pair.aSignalId) ?? []), pair.bSignalId]);
+    opposing.set(pair.bSignalId, [...(opposing.get(pair.bSignalId) ?? []), pair.aSignalId]);
+  }
+
+  const strip = (s: (typeof scored)[number], speaking: ReadonlySet<string>): SelectedSignal => {
+    const contestedWithIds = (opposing.get(s.id) ?? []).filter((other) => speaking.has(other));
+    return {
+      id: s.id,
+      statement: s.statement,
+      confidence: s.confidence,
+      evidenceCount: s.evidenceCount,
+      lastEvidenceAt: s.lastEvidenceAt,
+      score: s.score,
+      timeShape: describeTimeShape(
+        (evidenceBySignal.get(s.id) ?? []).map((item) => item.createdAt),
+        now,
+      ),
+      ...(contestedWithIds.length > 0 ? { contestedWithIds } : {}),
+    };
+  };
+
+  /* the board's twelve slots are worth one bounded read of the candidate
+     vectors — jsonb rows, cosine in process, no model anywhere */
+  const embeddingRows = await db
+    .select({ signalId: signalEmbeddings.signalId, embedding: signalEmbeddings.embedding })
+    .from(signalEmbeddings)
+    .where(
+      inArray(
+        signalEmbeddings.signalId,
+        scored.map((s) => s.id),
+      ),
+    );
+  const embeddingById = new Map<string, number[]>();
+  for (const row of embeddingRows) {
+    if (!embeddingById.has(row.signalId)) embeddingById.set(row.signalId, row.embedding);
+  }
 
   const chosen = chooseSelection(
-    scored.filter((s) => s.status === "active"),
-    scored.filter((s) => s.status === "emerging"),
+    diversifyRanked(
+      scored.filter((s) => s.status === "active"),
+      embeddingById,
+      SELECTION_DIVERSITY_MAX_COSINE,
+    ),
+    diversifyRanked(
+      scored.filter((s) => s.status === "emerging"),
+      embeddingById,
+      SELECTION_DIVERSITY_MAX_COSINE,
+    ),
   );
-  return { signals: chosen.signals.map(strip), provisional: chosen.provisional };
+
+  const finalList = keepContestedTogether(
+    chosen.signals,
+    new Map(scored.map((s) => [s.id, s])),
+    opposing,
+  );
+  const inList = new Set(finalList.map((s) => s.id));
+
+  return { signals: finalList.map((s) => strip(s, inList)), provisional: chosen.provisional };
+}
+
+/**
+ * A TENSION NEEDS BOTH VOICES. When a chosen signal stands in an open
+ * contested pair whose other side is standing (in `standing`) but was not
+ * chosen, the partner is pulled in behind it — the list may exceed the
+ * twelve slots by the pulled few, which is the honest trade: delivering one
+ * side of a dispute as if it were alone is the machine quietly arbitrating,
+ * and the machine never arbitrates. A partner that is not standing at all
+ * (retired, unsupported) cannot speak, and its pair stays dormant for this
+ * pass. Deliberately not transitive: a pulled partner's OWN other pairs are
+ * not chased — the walk covers what the chosen set stands in, and stops.
+ */
+export function keepContestedTogether<T extends { id: string }>(
+  chosen: readonly T[],
+  standing: ReadonlyMap<string, T>,
+  opposing: ReadonlyMap<string, readonly string[]>,
+): T[] {
+  const finalList = [...chosen];
+  const inList = new Set(finalList.map((s) => s.id));
+  for (const signal of chosen) {
+    for (const other of opposing.get(signal.id) ?? []) {
+      if (inList.has(other)) continue;
+      const partner = standing.get(other);
+      if (partner) {
+        finalList.push(partner);
+        inList.add(other);
+      }
+    }
+  }
+  return finalList;
+}
+
+/**
+ * Greedy diversity over a ranked list: walk strongest-first, hold back any
+ * candidate whose embedding sits at or above `maxCosine` to one already
+ * accepted, then append the held-back in their own order — so the reorder
+ * only ever matters when the limit truncates, and a signal without an
+ * embedding (dropped on edit, or the write raced) is never held back.
+ * Deterministic by construction: same rows, same order, every run.
+ */
+export function diversifyRanked<T extends { id: string }>(
+  ranked: T[],
+  embeddingById: Map<string, number[]>,
+  maxCosine: number,
+): T[] {
+  const accepted: T[] = [];
+  const acceptedVectors: number[][] = [];
+  const reserve: T[] = [];
+  for (const candidate of ranked) {
+    const vector = embeddingById.get(candidate.id) ?? null;
+    let nearAccepted = false;
+    if (vector !== null) {
+      for (const held of acceptedVectors) {
+        /* cosineSimilarity answers null for degenerate vectors — mismatched
+           dimensions, a zero norm — and null is "not near", never a skip */
+        const similarity = cosineSimilarity(vector, held);
+        if (similarity !== null && similarity >= maxCosine) {
+          nearAccepted = true;
+          break;
+        }
+      }
+    }
+    if (nearAccepted) {
+      reserve.push(candidate);
+      continue;
+    }
+    accepted.push(candidate);
+    if (vector !== null) acceptedVectors.push(vector);
+  }
+  return [...accepted, ...reserve];
 }
 
 /**
@@ -768,6 +1017,27 @@ export async function refreshTopOfMindForProfile(
   const now = deps.now ?? new Date();
   const provider = deps.modelProvider ?? (await getDefaultModelProvider());
 
+  /* THE FLOOR, before any other work. Only the automatic path waits: a
+     `manual` refresh is the person (their own "Read it again", a language
+     change) and never holds. The last CONTENT shift is the newest version
+     whose reason is not the honest no_change — no_change rows record that a
+     read happened, not that the board moved, so they are invisible here. */
+  if (input.reason === "signals_changed") {
+    const [lastShift] = await db
+      .select({ createdAt: topOfMinds.createdAt })
+      .from(topOfMinds)
+      .where(
+        and(
+          eq(topOfMinds.profileId, input.profileId),
+          ne(topOfMinds.reason, "no_change"),
+        ),
+      )
+      .orderBy(desc(topOfMinds.createdAt))
+      .limit(1);
+    const verdict = assessShiftFloor(lastShift?.createdAt ?? null, now);
+    if (verdict.held) throw new ShiftFloorHeldError(verdict.heldUntil);
+  }
+
   const [profileRows, selection, liveBefore] = await Promise.all([
     db
       .select({ preferredLocale: profiles.preferredLocale })
@@ -817,6 +1087,8 @@ export async function refreshTopOfMindForProfile(
         confidence: signal.confidence,
         evidenceCount: signal.evidenceCount,
         lastEvidenceAt: signal.lastEvidenceAt,
+        timeShape: signal.timeShape ?? undefined,
+        contestedWithIds: signal.contestedWithIds,
       })),
       lockedEntries: lockedBefore.map((entry, index) => ({
         id: `${liveBefore?.id ?? "pending"}:${index}`,
@@ -1189,6 +1461,8 @@ async function loadGroupSharedSignals(
         {
           id: row.id,
           statement: row.statement,
+          /* no affirmed term on the group path: room statements answer to
+             member stances, not to a single owner's verdict */
           confidence: computeSignalConfidence(evidence, now),
           evidenceCount: evidence.length,
           lastEvidenceAt: row.lastEvidenceAt,

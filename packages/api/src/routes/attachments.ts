@@ -53,6 +53,7 @@ import {
 import { getDb } from "../lib/db.js";
 import { type AuthEnv, profileAccessError, requireAuth, asAccountProfile } from "../lib/middleware.js";
 import { enqueueEnrichAttachment } from "../lib/queue.js";
+import { validationDetails } from "../lib/validation.js";
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -100,7 +101,7 @@ const presignRequestSchema = z.object({
     .int("size must be an integer number of bytes")
     .min(1, "size must be > 0")
     .max(MAX_UPLOAD_BYTES, `size exceeds the ${MAX_UPLOAD_BYTES}-byte cap`),
-});
+}).strict();
 
 export type PresignRequest = z.infer<typeof presignRequestSchema>;
 
@@ -123,7 +124,7 @@ const finalizeLinkSchema = z.object({
     .min(1, "url is required")
     .max(2048, "url is too long")
     .url("url must be a valid URL"),
-});
+}).strict();
 
 /**
  * An image that already lives somewhere — pasted from the web rather than
@@ -146,7 +147,11 @@ const finalizeRemoteImageSchema = z.object({
     .max(255, "contentType is too long")
     .optional()
     .transform((v) => (v && v.length > 0 ? v : undefined)),
-});
+})
+  /* Strict does real routing work here: these schemas are tried in order,
+     and before it, a payload carrying BOTH `url` and `key` parsed as a
+     remote image with the key silently dropped. */
+  .strict();
 
 const finalizeS3Schema = z.object({
   ...baseFinalizeFields,
@@ -164,7 +169,7 @@ const finalizeS3Schema = z.object({
     .min(0, "size must be >= 0")
     .max(MAX_UPLOAD_BYTES, `size exceeds the ${MAX_UPLOAD_BYTES}-byte cap`)
     .optional(),
-});
+}).strict();
 
 /**
  * Ordered rather than discriminated: `image` arrives two ways, carrying a
@@ -262,6 +267,15 @@ function keyPrefixForProfile(profileId: string): string {
  * (different prefix); one profile uploading twice cannot collide (random
  * suffix). The key is not derived from the filename, so a hostile filename
  * cannot influence storage layout.
+ */
+/**
+ * The prefix names the UPLOADER, not necessarily the final owner: a human
+ * presigns under their own prefix and may finalize onto an agent's
+ * inspiration (a capture the matrix allows), so key locality and row
+ * ownership can diverge. Deliberately benign: every deletion path — account
+ * erasure and inspiration scrubbing alike — walks the ROWS' stored s3Key,
+ * never the prefix, so no object outlives its row whatever prefix it wears.
+ * The prefix stays because "who uploaded this" is provenance worth keeping.
  */
 function buildKey(profileId: string, filename: string): string {
   const ts = Date.now();
@@ -428,11 +442,26 @@ function initialEnrichmentStatus(type: Attachment["type"]): AttachmentEnrichment
  */
 const PRESIGN_TTL_SECONDS = 5 * 60;
 
-export const attachmentsRoutes = new Hono<AuthEnv>();
+export interface AttachmentRouteDependencies {
+  getDatabase?: typeof getDb;
+  authMiddleware?: typeof requireAuth;
+}
+
+/**
+ * The factory every other router already is. Attachments was the one
+ * straggler built as a bare module-level Hono, which is exactly why it was
+ * also the one profile-scoped surface with no boundary coverage: the
+ * injected-session seam the contract suite drives did not exist here.
+ */
+export function createAttachmentRoutes(
+  deps: AttachmentRouteDependencies = {},
+): Hono<AuthEnv> {
+  const getDatabase = deps.getDatabase ?? getDb;
+  const attachmentsRoutes = new Hono<AuthEnv>();
 
 // Mounted at the router level so an unauthenticated handler cannot be shipped
 // into this namespace by accident.
-attachmentsRoutes.use("*", requireAuth);
+attachmentsRoutes.use("*", deps.authMiddleware ?? requireAuth);
 
 /**
  * POST /api/attachments — finalize an upload, or record a link.
@@ -471,14 +500,14 @@ attachmentsRoutes.post("/", async (c) => {
     return c.json(
       {
         error: "Invalid attachment payload",
-        details: parsed.error.flatten().fieldErrors,
+        details: validationDetails(parsed.error),
       },
       400,
     );
   }
 
   const session = c.get("session");
-  const db = getDb();
+  const db = getDatabase();
 
   // The parent's owning profile decides both authorization and the row's
   // tenant: an attachment always belongs to the same profile as the
@@ -618,7 +647,7 @@ attachmentsRoutes.post("/presign", async (c) => {
     return c.json(
       {
         error: "Invalid presign payload",
-        details: parsed.error.flatten().fieldErrors,
+        details: validationDetails(parsed.error),
       },
       400,
     );
@@ -679,3 +708,8 @@ attachmentsRoutes.post("/presign", async (c) => {
     200,
   );
 });
+
+  return attachmentsRoutes;
+}
+
+export const attachmentsRoutes = createAttachmentRoutes();

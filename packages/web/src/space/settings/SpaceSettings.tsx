@@ -20,6 +20,10 @@
  */
 import { Link } from "react-router-dom";
 
+import { useOptionalAuth } from "../../lib/auth-context";
+import { normalizeSupportedLocale, t } from "../../lib/locales";
+import type { MessageKey } from "../../lib/locales";
+
 import type { ApiAgentKey, ApiGroupMember, ApiGroupSummary, ApiMintedKey } from "../../lib/api";
 import type { Space } from "../../space-kinds";
 
@@ -142,6 +146,8 @@ export function SpaceSettings({
 }: SpaceSettingsProps): JSX.Element {
   const auth = { profile: { id: viewerProfileId } };
   const setSettingsFor = (_: string | null) => onClose();
+  const locale = normalizeSupportedLocale(useOptionalAuth()?.profile?.preferredLocale);
+  const say = (key: MessageKey) => t(locale, key);
   /**
    * PROSE BESIDE THE VERB THAT REFUSED — the shape the memory panel's delete
    * already proved reads. `role="status"` because it appears after a press
@@ -156,13 +162,22 @@ export function SpaceSettings({
     ) : null;
 
   return (
-<div className="jar-settings" data-jar-chrome="1" role="dialog" aria-label="Space settings">
+<div
+  className="jar-settings jar-settings--at-left"
+  data-jar-chrome="1"
+  role="dialog"
+  aria-label={say("worldSpaceSettingsAria")}
+>
   <div className="jar-settings-head">
     <span className="jar-label">
-      {atWall.kind === "group" ? "This room" : atWall.kind === "agent" ? "This agent" : "You"}
+      {atWall.kind === "group"
+        ? say("worldThisRoom")
+        : atWall.kind === "agent"
+          ? say("worldThisAgent")
+          : say("worldYou")}
     </span>
     <button type="button" className="jar-settings-x" onClick={() => setSettingsFor(null)}>
-      close
+      {say("worldClose")}
     </button>
   </div>
 
@@ -191,11 +206,11 @@ export function SpaceSettings({
               />
               <p className="jar-ask">
                 <button type="submit" disabled={renaming.busy}>
-                  {renaming.busy ? "…" : "rename it"}
+                  {renaming.busy ? "…" : say("worldRenameIt")}
                 </button>
                 <span aria-hidden="true"> · </span>
                 <button type="button" onClick={() => setRenaming(null)}>
-                  keep the old name
+                  {say("worldKeepOldName")}
                 </button>
               </p>
               {troubleAt("rename")}
@@ -215,7 +230,7 @@ export function SpaceSettings({
                     })
                   }
                 >
-                  rename
+                  {say("worldRename")}
                 </button>
               ) : null}
             </p>
@@ -228,17 +243,17 @@ export function SpaceSettings({
               <li key={m.profileId} className="jar-settings-member">
                 <span>{m.name}</span>
                 {m.role === "owner" ? (
-                  <span className="jar-share-hint">made it</span>
+                  <span className="jar-share-hint">{say("worldMadeIt")}</span>
                 ) : null}
                 {iOwnIt && m.profileId !== auth?.profile?.id ? (
                   removing === m.profileId ? (
                     <span className="jar-ask">
                       <button type="button" onClick={() => removeMember(gid, m.profileId)}>
-                        take them out
+                        {say("worldTakeThemOut")}
                       </button>
                       <span aria-hidden="true"> · </span>
                       <button type="button" onClick={() => setRemoving(null)}>
-                        keep them
+                        {say("worldKeepThem")}
                       </button>
                     </span>
                   ) : trouble?.verb === "remove" ? (
@@ -253,7 +268,7 @@ export function SpaceSettings({
                           setRemoving(m.profileId);
                         }}
                       >
-                        remove
+                        {say("worldRemoveLower")}
                       </button>
                     </>
                   ) : (
@@ -262,7 +277,7 @@ export function SpaceSettings({
                       className="jar-settings-verb"
                       onClick={() => setRemoving(m.profileId)}
                     >
-                      remove
+                      {say("worldRemoveLower")}
                     </button>
                   )
                 ) : null}
@@ -278,7 +293,7 @@ export function SpaceSettings({
                 if (g) copyInvite(g);
               }}
             >
-              {copied === gid ? "link copied" : "copy the invite link"}
+              {copied === gid ? say("worldLinkCopied") : say("worldCopyInviteLink")}
             </button>
           </p>
 
@@ -291,11 +306,11 @@ export function SpaceSettings({
             {leaving === gid ? (
               <>
                 <button type="button" onClick={() => leaveThisGroup(gid)}>
-                  leave — your statements come down
+                  {say("worldLeaveStatementsDown")}
                 </button>
                 <span aria-hidden="true"> · </span>
                 <button type="button" onClick={() => setLeaving(null)}>
-                  stay
+                  {say("worldStay")}
                 </button>
               </>
             ) : (
@@ -308,7 +323,7 @@ export function SpaceSettings({
                     setLeaving(gid);
                   }}
                 >
-                  leave this room
+                  {say("worldLeaveThisRoom")}
                 </button>
               </>
             )}
@@ -323,11 +338,11 @@ export function SpaceSettings({
                     className="jar-settings-danger"
                     onClick={() => closeThisGroup(gid)}
                   >
-                    close it for everyone — what the room decided goes too
+                    {say("worldCloseForEveryone")}
                   </button>
                   <span aria-hidden="true"> · </span>
                   <button type="button" onClick={() => setClosing(null)}>
-                    keep it
+                    {say("worldKeepIt")}
                   </button>
                 </>
               ) : (
@@ -341,7 +356,7 @@ export function SpaceSettings({
                     setClosing(gid);
                   }}
                 >
-                  close this room
+                  {say("worldCloseThisRoom")}
                 </button>
                 </>
               )}
@@ -361,8 +376,8 @@ export function SpaceSettings({
       <p className="jar-settings-name">{atWall.name}</p>
       <p className="jar-settings-note">
         {atWall.kind === "agent"
-          ? "Its memory is its own — what it keeps here is not mixed into yours."
-          : "Everything you keep, and what WAKA has read out of it."}
+          ? say("worldAgentMemoryNote")
+          : say("worldSelfMemoryNote")}
       </p>
       {/* ═══ WHAT CAN SPEAK AS THIS AGENT ═══
           Only on an agent's wall: your own wall has no keys, and a room's
@@ -371,33 +386,31 @@ export function SpaceSettings({
           about its past, and this sheet says what IS. */}
       {atWall.kind === "agent" ? (
         <>
-          <p className="jar-settings-sub jar-label">what can speak as it</p>
+          <p className="jar-settings-sub jar-label">{say("worldWhatCanSpeakAsIt")}</p>
           {(() => {
             const live = agentKeys.filter(
               (k) => k.profileId === atWall.id && k.revokedAt === null,
             );
             if (live.length === 0) {
               return (
-                <p className="jar-settings-note">
-                  Nothing yet. A key lets this agent keep things here on its own.
-                </p>
+                <p className="jar-settings-note">{say("worldNoKeysYet")}</p>
               );
             }
             return live.map((k) => (
               <p key={k.id} className="jar-settings-key">
                 <span className="jar-settings-key-name">
-                  {k.label ?? "a key"} · {k.prefix}…
+                  {k.label ?? say("worldAKey")} · {k.prefix}…
                 </span>
                 {/* THE TWO-STEP, the same shape as the four above it: a
                     destructive word is never beside its own yes. */}
                 {revoking === k.id ? (
                   <span className="jar-ask">
                     <button type="button" disabled={keysBusy} onClick={() => revokeKey(k.id)}>
-                      {keysBusy ? "revoking…" : "yes, revoke it"}
+                      {keysBusy ? say("worldRevoking") : say("worldYesRevokeIt")}
                     </button>
                     <span aria-hidden="true"> · </span>
                     <button type="button" onClick={() => setRevoking(null)}>
-                      keep it
+                      {say("worldKeepIt")}
                     </button>
                   </span>
                 ) : (
@@ -406,7 +419,7 @@ export function SpaceSettings({
                     className="jar-settings-verb"
                     onClick={() => setRevoking(k.id)}
                   >
-                    revoke
+                    {say("worldRevokeLower")}
                   </button>
                 )}
               </p>
@@ -420,17 +433,15 @@ export function SpaceSettings({
               close it rather than an apology afterwards. */}
           {minted && minted.profileId === atWall.id ? (
             <p className="jar-settings-minted">
-              <span className="jar-settings-sub jar-label">copy it now</span>
+              <span className="jar-settings-sub jar-label">{say("worldCopyItNow")}</span>
               <code className="jar-settings-secret">{minted.secret}</code>
-              <span className="jar-settings-note">
-                This is the only time it is shown. Close this and it is gone for good.
-              </span>
+              <span className="jar-settings-note">{say("worldShownOnce")}</span>
               <button
                 type="button"
                 className="jar-settings-verb"
                 onClick={() => setMinted(null)}
               >
-                I have it
+                {say("worldIHaveIt")}
               </button>
             </p>
           ) : (
@@ -441,7 +452,7 @@ export function SpaceSettings({
                 disabled={keysBusy}
                 onClick={() => issueKey(atWall.id)}
               >
-                {keysBusy ? "issuing…" : "issue a key"}
+                {keysBusy ? say("worldIssuing") : say("worldIssueAKey")}
               </button>
             </p>
           )}
@@ -450,7 +461,7 @@ export function SpaceSettings({
 
       <p className="jar-ask">
         <Link className="jar-settings-verb" to="/profile">
-          open your account
+          {say("worldOpenYourAccount")}
         </Link>
       </p>
     </>

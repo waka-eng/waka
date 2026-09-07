@@ -175,6 +175,12 @@ export interface Ball {
    * the lens reads, and the lens FADES rather than removes.
    */
   origin: "agent" | "human";
+  /** The x-origin of the COLUMN this ball's wall lives in (col × view width).
+      Homes and peeks are laid in column-local coords and offset by this, so
+      every wall's ground stands in front of its own camera — it was zero for
+      every wall, which put every ground except yours one screen to the right
+      of the camera that came to see it. */
+  colX: number;
   /** Which agent kept it, where one did. */
   agentId?: string;
   /* set only on a wall that holds more than one person's memories */
@@ -258,6 +264,15 @@ export interface SignalSeed {
   quote: string | null;
   /** The statements that rest on this memory, in the server's words. */
   terms: string[];
+  /**
+   * WHO CHOSE TO KEEP THIS, on the self wall too. The agent walls always
+   * carried it; the self wall hard-coded "human", which painted the
+   * pre-ruling rows an agent relayed here as if the person had kept them
+   * (agent→human capture retired 2026-08-29 — new rows cannot be agent-kept,
+   * but history stays and must not be repainted). Optional: absent means
+   * human, which is what a ball born from the mouth is.
+   */
+  origin?: "agent" | "human";
 }
 
 /**
@@ -384,6 +399,8 @@ export function seedOf(
     reflectionCount: c.reflectionCount,
     textPreview: c.preview,
     kind: c.kind,
+    /* the canon's own distinction, same translation the group ground uses */
+    origin: c.source === "agent" ? "agent" : "human",
     ...skyOf(c.id, citations, signalById, posterSignalIds, principleSignalIds),
   };
 }
@@ -433,6 +450,7 @@ export function makeBall(s: SignalSeed, agentId = ""): Ball {
     arrive: 1,
     entryH: 0,
     active: true,
+    colX: 0,
     leaving: false,
     gone: 0,
     spawnAt: -1,
@@ -451,7 +469,7 @@ export function makeBall(s: SignalSeed, agentId = ""): Ball {
     press: 0,
     img: null,
     imgUrl: null,
-    origin: "human",
+    origin: s.origin ?? "human",
     lens: 0,
   };
   /* the drift it would have with room to spare; assignHomes scales it down
@@ -542,6 +560,7 @@ export function makeAgentBall(s: ApiAgentSignal): Ball {
     arrive: 1,
     entryH: 0,
     active: true,
+    colX: 0,
     leaving: false,
     gone: 0,
     spawnAt: -1,

@@ -108,14 +108,29 @@ export interface TopOfMindSynthesisSignal {
    * cross-member reading is the whole point. Never set on personal passes.
    */
   ownerName?: string;
+  /**
+   * Open contested pairs: ids of signals IN THIS SAME LIST that this one
+   * pulls against, per the owner's unarbitrated record. Selection guarantees
+   * both voices are present before either is marked, so every id here is
+   * citable. Personal passes only — contested pairs are one person's.
+   */
+  contestedWithIds?: string[];
+  /**
+   * The pattern's life in time, worded — "held for 4 months; last fed 2
+   * weeks ago", "returning after 5 weeks quiet", "new this week". Personal
+   * passes set it; the prompt renders it so the synthesis can tell an
+   * anchor from an arrival. English tokens by design: prompt-internal
+   * metadata, while the Locale line governs what the artifact speaks.
+   */
+  timeShape?: string;
 }
 
 /**
  * An entry the human has edited. It is sent so the model can build around it
  * — and it must come back byte-identical. The caller enforces that rather
  * than trusting it; see `countLockViolations` in
- * `lib/top-of-mind-validation.ts` for the check, and `assembleEntries` in
- * `lib/top-of-mind-versioning.ts` for the copy that makes it true regardless.
+ * `lib/top-of-mind-synthesis.ts` for the check, and `assembleEntries` in the
+ * same file for the copy that makes it true regardless.
  */
 export interface TopOfMindLockedEntry {
   id: string;
@@ -313,6 +328,41 @@ export class DeclarationNotConsideredError extends Error {
   }
 }
 
+/**
+ * THE MODEL NEVER ANSWERED USABLY — a transport failure, a truncated body,
+ * a malformed envelope. This is a different fact from "the model answered:
+ * nothing here", and for a long time the two were recorded identically:
+ * extraction mapped it to zero candidates (the capture was marked derived
+ * and never read again — silent, permanent loss of what the person kept),
+ * and the judges mapped it to "independent" (a bad provider hour minted
+ * duplicate signals that nothing ever revisits). Observed live 2026-08-30,
+ * when a routed backend spent minutes reasoning and returned JSON cut off
+ * mid-key: a whole batch of captures recorded as having nothing to teach.
+ *
+ * Thrown instead, it fails the JOB ATTEMPT — the queue already retries up
+ * to max_attempts and parks the row as `failed`, visible and re-runnable,
+ * which is the honest ending. Derivation is safe to retry by construction:
+ * evidence is unique per (signal, inspiration) and re-extracted statements
+ * land in the dedupe band of anything already minted.
+ */
+/**
+ * THE MODEL DECLINED — a considered refusal (a safety block, a content
+ * filter), which is terminal: retrying the same material cannot help, so
+ * callers keep their safe postures for it (extraction: nothing here;
+ * judges: independent). Distinct from `null`, which means the road failed
+ * and the attempt should be retried. The transport is the only layer that
+ * can tell the two apart, so it says which one happened.
+ */
+export const MODEL_DECLINED: unique symbol = Symbol("the model declined to answer");
+
+export class ModelDidNotAnswerError extends Error {
+  constructor(task: string, cause?: unknown) {
+    super(`the model did not answer usably: ${task}`);
+    this.name = "ModelDidNotAnswerError";
+    this.cause = cause;
+  }
+}
+
 export interface ModelProvider {
   readonly name: string;
   extractSignalCandidates(
@@ -336,8 +386,21 @@ let defaultProvider: ModelProvider | null = null;
  */
 export async function getDefaultModelProvider(): Promise<ModelProvider> {
   if (!defaultProvider) {
-    const { createGeminiModelProvider } = await import("./gemini-model-provider.js");
-    defaultProvider = createGeminiModelProvider();
+    /* OpenRouter when its key is present (founder ruling, 2026-08-30:
+       deepseek-v4-flash everywhere); Gemini otherwise, so an environment
+       without the new key — CI before the secret lands, a fresh checkout —
+       keeps generating instead of failing. Rollback anywhere is deleting
+       one env var. Embeddings are untouched by this switch: they are pinned
+       to Gemini regardless of which road generation takes. */
+    if (process.env.OPENROUTER_API_KEY?.trim()) {
+      const { createOpenRouterModelProvider } = await import(
+        "./openrouter-model-provider.js"
+      );
+      defaultProvider = createOpenRouterModelProvider();
+    } else {
+      const { createGeminiModelProvider } = await import("./gemini-model-provider.js");
+      defaultProvider = createGeminiModelProvider();
+    }
   }
   return defaultProvider;
 }

@@ -58,6 +58,7 @@ import {
   refreshPrinciplesForProfile,
 } from "../lib/principle-generation.js";
 import { normalizeSupportedLocale } from "../lib/locales.js";
+import { validationDetails } from "../lib/validation.js";
 import { loadProfileTarget, resolveProfileScope } from "./signals.js";
 
 type WakaDb = ReturnType<typeof getDb>;
@@ -267,7 +268,7 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
     const parsed = declareSchema.safeParse(rawBody);
     if (!parsed.success) {
       return c.json(
-        { error: "Invalid declaration", details: parsed.error.flatten().fieldErrors },
+        { error: "Invalid declaration", details: validationDetails(parsed.error) },
         400,
       );
     }
@@ -366,7 +367,7 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
     const rawBody = await c.req.json().catch(() => null);
     const parsed = editSchema.safeParse(rawBody);
     if (!parsed.success) {
-      return c.json({ error: "Invalid edit", details: parsed.error.flatten().fieldErrors }, 400);
+      return c.json({ error: "Invalid edit", details: validationDetails(parsed.error) }, 400);
     }
 
     const db = getDatabase();
@@ -517,7 +518,7 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
     const rawBody = await c.req.json().catch(() => null);
     const parsed = reorderSchema.safeParse(rawBody);
     if (!parsed.success) {
-      return c.json({ error: "Invalid order", details: parsed.error.flatten().fieldErrors }, 400);
+      return c.json({ error: "Invalid order", details: validationDetails(parsed.error) }, 400);
     }
 
     const db = getDatabase();

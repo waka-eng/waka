@@ -88,7 +88,13 @@ import type { LoginFieldErrors, SignupFieldErrors } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { forgetAtDoor, readDoorMemory } from "../lib/door-memory";
 import type { DoorMemory } from "../lib/door-memory";
-import { formatMessage, readStoredLocale, t } from "../lib/locales";
+import {
+  formatMessage,
+  readStoredLocale,
+  supportedLocales,
+  t,
+  writeStoredLocale,
+} from "../lib/locales";
 import type { SupportedLocale } from "../lib/locales";
 import { resolveRedirect } from "../lib/sign-in-destination";
 import { whenShort } from "../lib/when";
@@ -237,11 +243,15 @@ interface SignupFormProps {
    * and it must not require a companion to exist.
    */
   onLookAt?: (look: DoorLook) => void;
+  /** the page around the form follows the choice — picking 한국어 must flip
+      the whole surface, not just the fields inside the border */
+  onLocaleChange?: (locale: SupportedLocale) => void;
 }
 
 export function SignupForm({
   locale: shellLocale = readStoredLocale(),
   onLookAt = () => undefined,
+  onLocaleChange,
 }: SignupFormProps = {}): JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
@@ -456,10 +466,37 @@ export function SignupForm({
       </label>
 
 
-      {/* The language field left with the second language (founder ruling,
-          2026-08-22: the product speaks English only). preferredLocale still
-          travels in the payload at its default — the account keeps the
-          column, the person just has nothing to choose. */}
+      {/* The language field is BACK (founder, 2026-08-31, reversing
+          2026-08-22): the choice drives what language the memory itself is
+          written in — signals, the top of mind, principles — so it belongs
+          at the door, before the first keep. */}
+      <label className="field">
+        <span className="field-label">{t(locale, "profileLanguageLabel")}</span>
+        <select
+          className="field-input"
+          name="preferredLocale"
+          disabled={submitting}
+          value={values.preferredLocale}
+          onChange={(e) => {
+            const next = e.target.value as SupportedLocale;
+            handleChange("preferredLocale", next);
+            onLocaleChange?.(next);
+          }}
+        >
+          {supportedLocales.map((l) => (
+            <option key={l.code} value={l.code}>
+              {l.nativeLabel}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {/* THE LIGHT DOES NOT READ THE LANGUAGE FIELD, and that is deliberate
+          rather than an oversight of the merge that brought the two together:
+          a `<select>` always holds a value, so it is never one of the things
+          that can still be missing. `ready` names exactly what the pre-flight
+          below refuses on, or the doorway would be lying about what the press
+          will do. */}
       <Doorway
         ready={ready}
         submitting={submitting}
@@ -771,7 +808,7 @@ export default function LoginPage(): JSX.Element {
   );
   const loginTabRef = useRef<HTMLButtonElement>(null);
   const signupTabRef = useRef<HTMLButtonElement>(null);
-  const [locale] = useState<SupportedLocale>(() => readStoredLocale());
+  const [locale, setLocale] = useState<SupportedLocale>(() => readStoredLocale());
   const navigate = useNavigate();
   /* Why the door is standing here, when the reason is "we could not ask" —
      see `AuthContextValue.serverUnreachable`. It never decides access. */
@@ -845,7 +882,7 @@ export default function LoginPage(): JSX.Element {
   /* `whenShort` answers "" for a date it cannot read, and a memory written by
      an older version may have no date at all. Either way the line is dropped
      rather than rendered half-written: "last here" on its own says nothing. */
-  const lastHere = greeted ? whenShort(greeted.at) : "";
+  const lastHere = greeted ? whenShort(greeted.at, locale) : "";
 
   const activateLoginTab = (): void => {
     setMode("login");
@@ -1023,7 +1060,16 @@ export default function LoginPage(): JSX.Element {
               remembered={remembered}
             />
           ) : (
-            <SignupForm locale={locale} onLookAt={setLook} />
+            <SignupForm
+              locale={locale}
+              onLookAt={setLook}
+              onLocaleChange={(next) => {
+                setLocale(next);
+                /* remembered, so the sign-in tab and the next visit speak it
+                   too — the account's own setting takes over after signup */
+                writeStoredLocale(next);
+              }}
+            />
           )}
         </div>
 

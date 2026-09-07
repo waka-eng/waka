@@ -94,6 +94,23 @@ if (envFile) {
   Object.assign(process.env, explicitEnvironment);
 }
 
+/**
+ * HERMETIC BY DEFAULT: the layering above pulls the developer's real model
+ * keys out of `.env.local`, and the live benches (judge, extraction,
+ * pipeline) key off nothing but the keys' presence — so a plain
+ * `pnpm test` was quietly running live evals and spending real model calls
+ * on every full-suite run, for as long as the keys have been in that file.
+ * Discovered 2026-08-31 when a bad provider day made the silent spend
+ * visible as three bench failures inside a "hermetic" run.
+ *
+ * The benches are real and wanted — under the `eval:*` scripts and CI's
+ * credentialed step, which set this flag. Everything else runs modelless.
+ */
+if (process.env.WAKA_RUN_LIVE_EVALS !== "1") {
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.OPENROUTER_API_KEY;
+}
+
 // ---------------------------------------------------------------------------
 // 2. Tripwire — fail loudly when required secrets are missing.
 // ---------------------------------------------------------------------------

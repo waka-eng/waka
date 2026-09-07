@@ -10,6 +10,7 @@
  * never had a reason to know that the only thing producing one today is the
  * one under `lib/fixture/`, and after the swap it still will not.
  */
+import { t, type SupportedLocale } from "../lib/locales";
 import type { AgentBundle, ApiAgentDirectionReading } from "../lib/agent-contract";
 import { monthTag } from "../lib/words";
 import { formingWords, type WallChrome } from "../space/top-of-mind/board";
@@ -28,7 +29,12 @@ import { formingWords, type WallChrome } from "../space/top-of-mind/board";
  * product could ship: it would teach the reader that the poster is generated
  * copy, and destroy the credibility of every wall they read afterwards.
  */
-export function deriveAgentChrome(a: AgentBundle, T: number, nowMs: number): WallChrome {
+export function deriveAgentChrome(
+  a: AgentBundle,
+  T: number,
+  nowMs: number,
+  locale: SupportedLocale = "en-US",
+): WallChrome {
   const at = (t: number): ApiAgentDirectionReading | null => {
     let best: ApiAgentDirectionReading | null = null;
     for (const h of a.direction.history) {
@@ -48,12 +54,12 @@ export function deriveAgentChrome(a: AgentBundle, T: number, nowMs: number): Wal
     text: held?.ambition ?? null,
     awayFrom: held?.awayFrom ?? null,
     /* An agent that has not worked yet says so, in its own voice, once. */
-    formingAlt: held ? null : "I haven’t formed anything yet",
+    formingAlt: held ? null : t(locale, "worldAgentFormingAlt"),
     asOf:
       held && heldNow && held.ambition !== heldNow.ambition && nowMs - T > 60_000
-        ? monthTag(T)
+        ? monthTag(T, locale)
         : null,
-    forming: formingWords(T, null, notes),
+    forming: formingWords(T, null, notes, locale),
     empty,
     prevText: null,
   };

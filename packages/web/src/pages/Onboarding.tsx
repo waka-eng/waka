@@ -1,16 +1,18 @@
 /**
- * THE NAME-ASK — the first minute of the product, and the only thing it wants.
+ * THE NAME-ASK — the first minute of the product, and the two things it wants.
  *
- * This was a settings card: "Set up your archive. Choose the name and language
- * WAKA should use with you." Two of those words were already false — the
- * language field left with the second language (founder ruling, 2026-08-22)
- * and the sentence kept promising a choice that was no longer on the screen —
- * and the third, "set up", is what you do to a router.
+ * This was a settings card: "Set up your archive." — and "set up" is what you
+ * do to a router. What is actually happening here is the oldest scene in
+ * games: somebody asks your name before you start. So the screen asks it, in
+ * the world's own dark, with the being that is about to be your companion
+ * standing there, and nothing else on it.
  *
- * What is actually happening here is the oldest scene in games: somebody asks
- * your name before you start. So the screen asks it, in the world's own dark,
- * with the being that is about to be your companion standing there, and
- * nothing else on it. One question, one field, one way through.
+ * THE SECOND FIELD CAME BACK WITH THE SECOND LANGUAGE. This file briefly asked
+ * one question, during the year the product spoke only English (founder,
+ * 2026-08-22). That reversed on 2026-08-31, and the language choice is not
+ * chrome: it decides what language the MEMORY is written in. The door carries
+ * it on its `begin` side — and the note beside the field below says why this
+ * screen has to carry it too, for the people who never pass that side.
  *
  * NO STEP COUNTER, and that is a rule rather than an omission: `states render,
  * numerals never`. "Step 1 of 2" is a number standing in for a feeling, and
@@ -32,6 +34,7 @@ import { useAuth } from "../lib/auth-context";
 import {
   normalizeSupportedLocale,
   readStoredLocale,
+  supportedLocales,
   t,
   writeStoredLocale,
 } from "../lib/locales";
@@ -52,7 +55,7 @@ export default function OnboardingPage(): JSX.Element {
   const location = useLocation();
   const state = location.state as { from?: unknown } | null;
   const [name, setName] = useState(profile?.name ?? "");
-  const [preferredLocale] = useState<SupportedLocale>(() =>
+  const [preferredLocale, setPreferredLocale] = useState<SupportedLocale>(() =>
     normalizeSupportedLocale(profile?.preferredLocale ?? readStoredLocale()),
   );
   const [error, setError] = useState<string | null>(null);
@@ -120,8 +123,43 @@ export default function OnboardingPage(): JSX.Element {
               onChange={(event) => setName(event.currentTarget.value)}
             />
           </label>
-          {/* The language field left with the second language (founder
-              ruling, 2026-08-22: the product speaks English only). */}
+          {/* THE LANGUAGE FIELD IS HERE BECAUSE OF WHO NEVER SEES THE DOOR'S.
+              The founder's 2026-08-31 ruling put the choice "at the door,
+              before the first keep", because it decides what language the
+              MEMORY is written in — the signals, the reading, the principles —
+              and not merely which words the chrome uses. The door carries it
+              on its `begin` side.
+
+              A person who signs up with Google never passes that side. They
+              leave for Google from the sign-in half and come back with a
+              session already made, and this screen is the only thing standing
+              between them and their first keep. Without this field they would
+              be silently assigned the default and find out when their own
+              memory came back in the wrong language.
+
+              So the ruling's own words decide it: this IS the door, for them.
+              The chrome follows the choice immediately, the way it does at the
+              door, so the button underneath changes language as it is made. */}
+          <label className="field">
+            <span className="field-label">{t(locale, "profileLanguageLabel")}</span>
+            <select
+              className="field-input"
+              name="preferredLocale"
+              disabled={submitting}
+              value={preferredLocale}
+              onChange={(event) => {
+                const next = event.currentTarget.value as SupportedLocale;
+                setPreferredLocale(next);
+                writeStoredLocale(next);
+              }}
+            >
+              {supportedLocales.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.nativeLabel}
+                </option>
+              ))}
+            </select>
+          </label>
           {/* `btn-doorway` for the same reason `/login`'s submit wears it: this
               is a threshold, not a settings save, and it is the only thing on
               the screen to press. It lights when the question has an answer —

@@ -256,17 +256,26 @@ support = min(1, n / 6)                 n = evidence count; 6 = CONFIDENCE_SATUR
 spread  = min(1, span_days / 30)        span = newest − oldest evidence; 30 = CONFIDENCE_SATURATION_SPREAD_DAYS
 recency = 2^(−quiet_days / 45)          quiet = days since newest; 45 = CONFIDENCE_RECENCY_HALF_LIFE_DAYS
 
-confidence = round( 55·support + 30·spread + 15·recency + diversity )
+confidence = round( 55·support + 30·spread + 15·recency + diversity + affirmed )
              where diversity = CONFIDENCE_SOURCE_DIVERSITY_BONUS (8)
              when evidence spans app AND agent capture, else 0
+             and affirmed = CONFIDENCE_AFFIRMED_BONUS (8)
+             when the owner's LATEST verdict on the signal is "true", else 0
              — clamped to 0..100
 ```
 
 The weights are `CONFIDENCE_SUPPORT_WEIGHT` (55),
 `CONFIDENCE_SPREAD_WEIGHT` (30), `CONFIDENCE_RECENCY_WEIGHT` (15) — summing
-to 100 **[checked]**. Diversity is a *bonus*, not a fourth weight: most
-profiles are app-only, and a weight would cap every solo human below 100
-forever. Corroboration adds; its absence must not subtract.
+to 100 **[checked]**. Diversity and affirmation are *bonuses*, not
+weights: most profiles are app-only and most signals are unanswered, and a
+weight would cap them below 100 forever. Corroboration adds; its absence
+must not subtract. The affirmed bonus is the owner's own "yes, this is me"
+(latest verdict wins, the same read selection makes) — an answer weighing on
+the number the world lights by, not only on selection. "not_true" is
+deliberately NOT mirrored here: disputed already moves selection through
+`SELECTION_DISPUTED_MULTIPLIER`, and cutting confidence too would count one
+answer twice. Room statements take no affirmed term — they answer to member
+stances, not to a single owner's verdict.
 
 **Worked example.** Four pieces of evidence spanning 20 days, the newest 10
 days ago, all typed by the person:
@@ -326,6 +335,19 @@ queue where the per-account budget can see it. In between, the signal is
 simply not a match target; a similar capture mints a visible near-duplicate.
 The recoverable mistake, again.
 
+### Asking the memory (`GET /api/recall?q=…`)
+
+The one door that turns the memory from something a mind receives into
+something it can ask. The question embeds as a `RETRIEVAL_QUERY` — the
+other half of the asymmetric pairing every stored vector was written in —
+and cosine runs in process over the standing signals' vectors: at or above
+`RECALL_MIN_COSINE`, strongest first, at most `RECALL_LIMIT`, each match a
+signal with live confidence. Never raw captures: recall answers "what do
+they think", and the capture behind a thought stays behind its own doors.
+Access is the read matrix unchanged, and every serve writes the same
+`signals` consultation row a list-read writes — a question about someone's
+mind is a read of it.
+
 ### Is there a maximum number of signals?
 
 **No hard cap — by design.** A memory that refused to learn a 501st pattern
@@ -346,10 +368,11 @@ only where the arithmetic runs.
 The pass lives in `packages/api/src/lib/top-of-mind-synthesis.ts` and runs
 four stages in order: **select** which signals may be considered, read the
 **live artifact** as it stands, **synthesize** the whole next artifact in one
-model call, then **validate and version** what came back. (The ranking
-arithmetic is also pinned from `packages/api/src/lib/top-of-mind-selection.ts`
-— a stage-module mirror of the same constants and functions; folding the two
-copies into one is tracked work, and the drift lock holds both.)
+model call, then **validate and version** what came back. All four stages,
+and every Layer 3 constant in the tables below, are in that one file. A
+`top-of-mind-selection.ts` once mirrored the ranking stage constant for
+constant and function for function; nothing imported it but the drift lock,
+so the lock was holding the copy rather than the code, and it is deleted.
 
 Selection and validation are one guarantee in two halves: selection filters
 candidates to this profile's signals, and validation checks the model's
@@ -364,9 +387,25 @@ citations against exactly that set. Neither is any use without the other.
 | An inspiration is deleted | Always (its cascade may have retired signals) |
 | Feedback is given | Always (a verdict changes what synthesis should weigh) |
 | `POST /api/top-of-mind/refresh` | Manual, debounced |
+| The profile's language changes | Always (`PATCH /api/auth/me/preferences`) — the artifact must re-speak in the new language, not wait for an unrelated refresh |
 
 Refreshes are debounced to one pending pass per profile, with the same
 trailing-edge `rerun_requested` semantics as derivation.
+
+**And the board shifts at most once a day.** An automatic
+(`signals_changed`) refresh that arrives while the latest CONTENT version —
+reason ≠ `no_change`; the honest no-change rows record that a read
+happened, not that the board moved — is younger than
+`TOP_OF_MIND_MIN_SHIFT_HOURS` is **held**: its row sleeps until the floor
+opens (`run_after = lastShift + 24h`), further enqueues collapse into it,
+and signals keep accruing underneath so the one shift that lands reads
+everything. A hold is not a failure — no error, no attempt spent. The
+sleeping row runs on the next wake after the floor opens (any keep wakes
+the worker; an absent profile's shift lands with the daily sweep). Two
+exemptions, both deliberate: `manual` refreshes — the person's own "Read it
+again", a language change — never wait, and a profile with no content
+version yet has nothing to hold stable. The machine holds a day; the person
+never does.
 
 ### 2. Selection: deterministic, scored, bounded
 
@@ -417,11 +456,43 @@ active-only, so an established profile is never diluted with
 single-observation noise. The rule is the pure function `chooseSelection`
 **[checked]**.
 
+**No two voices on the board saying one thing.** After scoring, the ranked
+list takes one greedy diversity pass (`diversifyRanked`): a candidate whose
+embedding sits at or above `SELECTION_DIVERSITY_MAX_COSINE` to an
+already-accepted one yields its slot and moves to the reserve, and the
+reserve returns whenever slots are left over — so the reorder only ever
+matters when the twelve-slot limit truncates, and nothing is excluded
+outright. The bar sits inside the judge band on purpose: at 0.8 the pair is
+close enough that derivation would already be asking whether they are the
+same pattern, while genuinely different signals about one theme are
+untouched. Deterministic, cosine in process over the stored vectors, no
+model anywhere.
+
+**A tension needs both voices.** When a chosen signal stands in an open
+contested pair (the judge answered `opposed` and the owner has not
+arbitrated), its partner is pulled into the selection behind it — the list
+may exceed the twelve slots by the pulled few, because delivering one side
+of a dispute as if it were alone would be the machine quietly arbitrating,
+and the machine never arbitrates. A partner that is no longer standing
+(retired, unsupported) cannot speak, and the pair stays dormant for that
+pass. Each side is then marked `contested with:` the other's id — only ever
+an id in the same delivered list, so the mark is always citable. The prompt
+tells the synthesis what the mark means: live tension material, written as
+a `tension` citing both ids when it matters now, and never one side alone
+asserted as a settled pattern or belief while the dispute stands.
+
 ### 3. Synthesis: one call, the whole artifact
 
-`synthesizeTopOfMind` receives the selected signals, the current live
-entries, every **locked** entry, recent feedback (newest first, with the
-person's own correction text), and the provisional flag. It returns the
+`synthesizeTopOfMind` receives the selected signals — each carrying its
+**time shape**, the pattern's life worded deterministically from the
+evidence dates ("held for 4 months; last fed 2 weeks ago", "returning
+after 5 weeks quiet", "new this week"), so the model can tell an anchor
+from an arrival and name a comeback as one — the current live entries,
+every **locked** entry, recent feedback (newest first, with the
+person's own correction text), and the provisional flag. The prompt
+forbids narrating the metadata itself: time chooses what leads and how
+firmly each thing is said, and never appears as dates or counts in the
+artifact. It returns the
 **entire artifact** — at most `MAX_TOP_OF_MIND_ENTRIES` (7) entries, each
 typed (`pattern`, `tension`, `question`, `hypothesis`, `action`), each
 citing signal ids — or an explicit `noChange`.
@@ -430,6 +501,17 @@ Whole-artifact on purpose: a model asked to patch entries reasons about
 diffs it cannot see, and every incremental variant of this call drifted into
 appending. Temperature 0, schema-constrained, everything user-originated
 fenced as data.
+
+**The language of the artifact.** Every entry is written in the profile's
+`preferred_locale` (`en-US` or `ko-KR` — the person chooses at signup and can
+change it on their profile). The locale line in the prompt is authoritative:
+it governs even entries carried forward from the current artifact, so
+flipping the setting re-speaks the whole top of mind in the new language on
+the next refresh. Locked entries are the one exception — the person's own
+words are reproduced exactly, whatever language they wrote them in. Signal
+statements deliberately do NOT follow the setting: extraction writes them in
+the language the capture itself was written in, because a signal quotes the
+person's own vocabulary back to them.
 
 ### 4. What code enforces after the model answers
 
@@ -505,6 +587,66 @@ A group's artifact runs the same pipeline with three deliberate differences
 Triggers: a member requesting a reread, membership changes, and proposal
 acceptance — all enqueue the same `refresh_group_top_of_mind` job. The room
 speaks in its creator's preferred locale until groups carry their own.
+
+---
+
+## The gardener: the standing set, revisited
+
+Matching happens at candidate time and never again — so two standing
+signals that name one pattern (minted on different days as the wording
+drifted, or minted as siblings while the judge was unreachable) would
+coexist forever, splitting their evidence. Once a week per profile
+(enqueued nightly beside the principles cron, keyed per ISO week), the
+gardener looks:
+
+- **Scan**: pairwise cosine in process over the stored vectors of up to
+  `GARDENER_SCAN_LIMIT` most-recently-evidenced active and emerging
+  signals. Suspects are pairs at or above `GARDENER_SUSPECT_MIN_COSINE` —
+  the attach threshold itself, so only pairs derivation would already call
+  the same pattern.
+- **Judge**: at most `GARDENER_MAX_JUDGED_PAIRS` per pass, strongest
+  first, with the same austere judge derivation uses. Pairs already on the
+  record — a proposal in any state, or a contradiction — are never asked
+  about again.
+- **Record, never act**: `same` writes an unresolved `signal_duplicates`
+  row — a PROPOSAL; `opposed` writes the same contradiction row a
+  capture-time opposition writes; `independent` writes nothing.
+
+**The merge is the owner's act** (`POST /api/signal-duplicates/:id/resolve`,
+human sessions only — the world never moves unless the user moved it, and a
+merge moves their memory):
+
+- `merge` — the survivor is the locked side if exactly one side is locked
+  (the person's own words always win), otherwise the elder. The survivor
+  gains an evidence link for every inspiration the other side witnessed
+  that it lacked; the other side **retires** keeping its statement, its
+  history, and its own evidence links — retirement is provenance, never a
+  half-delete — and the proposal records the survivor in
+  `merged_into_signal_id`. Top-of-mind and principle citations repoint.
+  The survivor's confidence recomputes from its widened evidence.
+- `keep_apart` — a standing answer the gardener respects forever.
+
+---
+
+## When the model fails
+
+Two absences, told apart at the transport and never conflated again
+(2026-08-31; before this, both were recorded as the safe verdict — a failed
+extraction became "this capture teaches nothing" forever, and a failed judge
+minted a duplicate signal):
+
+- **The model declined** — a safety block, a content filter. Terminal:
+  retrying the same material would be refused again, so callers keep their
+  safe postures (extraction: no candidates; the judges: independent).
+- **The road failed** — timeout, truncation, malformed envelope. The task
+  throws, the job attempt fails, and the queue retries up to its
+  `max_attempts`; an exhausted job parks as `failed`, visible and
+  re-runnable. Derivation is safe to retry by construction: evidence is
+  unique per (signal, inspiration), and a re-extracted statement lands in
+  the dedupe band of anything the earlier attempt already minted.
+
+Whole-artifact synthesis and declaration routing throw on **both** absences
+— an artifact must never record a decision the model did not make.
 
 ---
 
@@ -628,6 +770,9 @@ The authoritative values. Machine-checked against code — see
 | `SIGNAL_SUPPRESSION_MIN_COSINE` | 0.86 | At or above a dismissed signal's vector: refuse the candidate, on the record |
 | `SIGNAL_BATCH_DEDUPE_MIN_COSINE` | 0.94 | Within one extraction batch, collapse near-identical candidates |
 | `SIGNAL_PROMOTION_MIN_EVIDENCE` | 3 | Evidence count where emerging becomes active |
+| `GARDENER_SUSPECT_MIN_COSINE` | 0.86 | Two STANDING signals this close are worth a judge's minute |
+| `GARDENER_SCAN_LIMIT` | 300 | Most-recently-evidenced signals one garden pass reads |
+| `GARDENER_MAX_JUDGED_PAIRS` | 8 | Judge calls one pass may spend; the rest wait a week |
 | `GROUP_SIGNAL_MIN_VOICES` | 2 | Distinct members' memories a room signal needs before it is served |
 | `GROUP_JOIN_BACKFILL_LIMIT` | 100 | Existing public memories a room is asked to read when a member arrives |
 | `CONFIDENCE_SUPPORT_WEIGHT` | 55 | Confidence: weight of evidence count |
@@ -637,17 +782,21 @@ The authoritative values. Machine-checked against code — see
 | `CONFIDENCE_SATURATION_SPREAD_DAYS` | 30 | Spread saturates at this many days |
 | `CONFIDENCE_RECENCY_HALF_LIFE_DAYS` | 45 | Recency half-life |
 | `CONFIDENCE_SOURCE_DIVERSITY_BONUS` | 8 | Added when app and agent evidence corroborate |
+| `CONFIDENCE_AFFIRMED_BONUS` | 8 | Added when the owner's latest verdict on the signal is "true" |
 | `MATCH_CANDIDATE_SCAN_LIMIT` | 500 | Most-recently-evidenced signals scanned per match |
 | `RELATED_INSPIRATION_SCAN_LIMIT` | 500 | Most recent capture vectors scanned for relatedness |
 | `RELATED_INSPIRATION_MIN_COSINE` | 0.6 | Floor below which an earlier capture is not offered as context |
 | `RELATED_INSPIRATION_CONTEXT_LIMIT` | 5 | Related captures the extractor is shown, strongest first |
+| `RECALL_MIN_COSINE` | 0.6 | Recall's floor — the relatedness floor derivation already trusts |
+| `RECALL_LIMIT` | 8 | Most matches one recall serves; an answer, not a dump |
 
-### Layer 3 — synthesis (`packages/api/src/lib/top-of-mind-selection.ts`)
+### Layer 3 — synthesis (`packages/api/src/lib/top-of-mind-synthesis.ts`)
 
 | Constant | Value | One line |
 |---|---|---|
 | `TOP_OF_MIND_SIGNAL_LIMIT` | 12 | Signals synthesis may consider |
 | `TOP_OF_MIND_MIN_SIGNALS` | 3 | Cold-start floor; below it, emerging signals backfill |
+| `TOP_OF_MIND_MIN_SHIFT_HOURS` | 24 | The board shifts at most once a day; an early automatic refresh sleeps until the floor opens |
 | `GROUP_DRAFT_MIN_AFFIRMED` | 3 | A room's first draft waits for this many shared statements affirmed by someone other than their owner |
 | `GROUP_DRAFT_SMALL_MAX_MEMBERS` | 3 | A room this size or smaller is held to the small-room bar instead |
 | `GROUP_DRAFT_MIN_AFFIRMED_SMALL` | 2 | The small room's bar. Two, never one — one person agreeing once is not a room agreeing |
@@ -656,6 +805,7 @@ The authoritative values. Machine-checked against code — see
 | `SELECTION_RECENCY_WEIGHT` | 0.2 | Selection: recency term |
 | `SELECTION_COMEBACK_WEIGHT` | 0.15 | Selection: comeback term |
 | `SELECTION_DISPUTED_MULTIPLIER` | 0.4 | Damping when the latest verdict is not_true |
+| `SELECTION_DIVERSITY_MAX_COSINE` | 0.8 | Ranked near-duplicates yield their slot; they return whenever slots are left |
 | `SELECTION_EVIDENCE_SATURATION` | 6 | Support saturates at this evidence count |
 | `SELECTION_RECENCY_HALF_LIFE_DAYS` | 30 | Selection recency half-life |
 | `COMEBACK_MIN_DORMANT_DAYS` | 21 | Minimum gap for a return to count |
@@ -672,11 +822,19 @@ The authoritative values. Machine-checked against code — see
 | `PRINCIPLE_MAX_STATEMENT_LENGTH` | 200 | A principle is a directive, not an essay |
 | `PRINCIPLE_MAX_CANDIDATES_PER_RUN` | 3 | Candidates one nightly distillation may propose |
 
-### Model calls (`packages/api/src/queue/gemini.ts`, `packages/api/src/lib/inspiration-embeddings.ts`)
+### Model calls (`packages/api/src/queue/gemini.ts`, `packages/api/src/lib/openrouter-http.ts`, `packages/api/src/lib/inspiration-embeddings.ts`)
+
+One prompt, two roads: every generation task runs through OpenRouter on the
+pinned DeepSeek snapshot when `OPENROUTER_API_KEY` is present, and falls back
+to Gemini without it. Embeddings never switch roads — the stored vectors and
+every cosine threshold above live in `gemini-embedding-001`'s space.
 
 | Constant | Value | One line |
 |---|---|---|
-| `GEMINI_GENERATION_MODEL` | gemini-3.1-flash-lite | Extraction, judge, synthesis, vision |
+| `OPENROUTER_GENERATION_MODEL` | deepseek/deepseek-v4-flash-0731 | Extraction, judges, synthesis, routing — the default road |
+| `OPENROUTER_MAX_OUTPUT_TOKENS` | 8192 | Bound on every answer — a small JSON artifact, never an essay; with reasoning declined, a truncated verdict cannot masquerade as "nothing here" |
+| `OPENROUTER_CHAT_URL` | https://openrouter.ai/api/v1/chat/completions | The second road's endpoint |
+| `GEMINI_GENERATION_MODEL` | gemini-3.1-flash-lite | Vision, and the whole road when no OpenRouter key is set |
 | `GEMINI_EMBEDDING_MODEL` | gemini-embedding-001 | All vectors |
 | `GEMINI_EMBEDDING_DIMENSIONS` | 768 | Vector width |
 | `MAX_GEMINI_EMBEDDING_VALUES` | 4096 | Sanity ceiling on values accepted back per vector |

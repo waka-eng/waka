@@ -81,6 +81,15 @@ export const SIGNAL_SUPPRESSION_MIN_COSINE = 0.86;
  */
 export const SIGNAL_BATCH_DEDUPE_MIN_COSINE = 0.94;
 
+/** The gardener's suspect bar: at or above the attach threshold, two
+    STANDING signals are close enough that derivation would have attached
+    one to the other — exactly the pairs worth a judge's minute. */
+export const GARDENER_SUSPECT_MIN_COSINE = 0.86;
+/** Most-recently-evidenced signals one garden pass reads. */
+export const GARDENER_SCAN_LIMIT = 300;
+/** Judge calls one pass may spend — the rest of the suspects wait a week. */
+export const GARDENER_MAX_JUDGED_PAIRS = 8;
+
 /** Evidence count at which an `emerging` signal becomes `active`. */
 export const SIGNAL_PROMOTION_MIN_EVIDENCE = 3;
 
@@ -129,6 +138,17 @@ export const CONFIDENCE_SATURATION_SPREAD_DAYS = 30;
 
 /** Half-life of the recency term: how fast a quiet signal reads as quiet. */
 export const CONFIDENCE_RECENCY_HALF_LIFE_DAYS = 45;
+
+/**
+ * Added when the owner's LATEST standing verdict on the signal is "true" —
+ * a person saying "yes, this is me" is corroboration of the strongest kind,
+ * and until 2026-08-31 it changed selection context only, never the number
+ * the world lights by. A bonus like the diversity bonus, not a weight:
+ * unanswered must not subtract, and disputed is deliberately NOT mirrored
+ * here — "not_true" already moves selection through its own multiplier, and
+ * cutting confidence too would count one answer twice.
+ */
+export const CONFIDENCE_AFFIRMED_BONUS = 8;
 
 /** Weights of the three confidence terms; they sum to 100. */
 export const CONFIDENCE_SUPPORT_WEIGHT = 55;
@@ -197,3 +217,10 @@ export const RELATED_INSPIRATION_MIN_COSINE = 0.6;
  * stays the loudest thing in the prompt.
  */
 export const RELATED_INSPIRATION_CONTEXT_LIMIT = 5;
+
+/** Recall's floor — the same relatedness floor derivation trusts (0.6 in
+    the pinned embedding space): below it, a match is a coincidence of
+    vocabulary, not a thought the person holds. */
+export const RECALL_MIN_COSINE = 0.6;
+/** Most matches one recall serves — an answer, not a dump. */
+export const RECALL_LIMIT = 8;

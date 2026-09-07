@@ -44,7 +44,7 @@ Seven assets the field would not guess a consumer memory app holds, each
 verified in code:
 
 1. **The lock is structural, not prompted.** `assembleEntries`
-   (`packages/api/src/lib/top-of-mind-versioning.ts`) rebuilds every new
+   (`packages/api/src/lib/top-of-mind-synthesis.ts`) rebuilds every new
    top-of-mind version by copying human-touched entries out of the
    *previous version's database rows* — the model's output is only ever
    additive around them — and silently discards any model entry

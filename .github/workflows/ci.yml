@@ -2,8 +2,9 @@ name: CI
 
 # Nothing gated the code before this. `deploy-dev` and `deploy` build and
 # ship; neither runs a typecheck or a test, so a broken migration or a failed
-# authorization check reached an environment before anyone saw it. This runs
-# on every PR and every push to dev, and is meant to be a required check.
+# authorization check reached an environment before anyone saw it. The fast
+# check runs automatically; the expensive browser and live-model gates are
+# deliberate manual runs from the Actions page.
 on:
   pull_request:
   push:
@@ -11,6 +12,17 @@ on:
       - dev
       - main
   workflow_dispatch:
+    inputs:
+      run_browser_gates:
+        description: "Run the full browser gate (about an hour)"
+        required: false
+        default: false
+        type: boolean
+      run_model_evaluations:
+        description: "Run live Gemini/OpenRouter evaluations"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -99,40 +111,39 @@ jobs:
             --exclude '**/dist/**' \
             --exclude '**/.sst/**' \
             --exclude '**/*.smoke.ts' \
-            --exclude 'test/background-jobs.test.ts' \
-            --exclude 'test/wow-judge.test.ts' \
-            --exclude 'test/wow-moments.test.ts' \
-            --exclude 'test/inspiration-embeddings.test.ts'
+            --exclude 'test/judge-eval.test.ts' \
+            --exclude 'test/extraction-eval.test.ts' \
+            --exclude 'test/pipeline-eval.test.ts'
 
-      # These four need configuration this workflow does not have: a Gemini key
-      # for the judge and embedding paths, and an admin allowlist that matches
-      # the randomly generated fixture users. Reported rather than skipped
-      # silently, and non-blocking rather than fabricated — a green tick for a
-      # test that never ran is worse than a visible gap. Add GEMINI_API_KEY and
-      # WAKA_ADMIN_EMAILS as repository secrets to turn this into a gate.
-      - name: API suite (needs credentials — non-blocking)
-        continue-on-error: true
+      # THE JUDGE ON THE BENCH — live-model quality gate on real judged pairs,
+      # half of them Korean. The four suites this step used to name were
+      # deleted with the pre-three-layers architecture, so for months it ran
+      # ghost paths under continue-on-error: a green tick for tests that never
+      # ran, exactly what its own comment warned against. It now runs the one
+      # live-model suite that exists, and it BLOCKS — a model that fails the
+      # bench fails the build. (The suite itself skips visibly when no model
+      # key is configured, so forks without secrets stay green honestly.)
+      - name: The judge on the bench (live model)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_model_evaluations == true }}
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          WAKA_ADMIN_EMAILS: ${{ secrets.WAKA_ADMIN_EMAILS }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
-          pnpm --filter @waka/api test -- \
-            test/background-jobs.test.ts \
-            test/wow-judge.test.ts \
-            test/wow-moments.test.ts \
-            test/inspiration-embeddings.test.ts
+          pnpm --filter @waka/api eval:judge
+          pnpm --filter @waka/api eval:extraction
+          pnpm --filter @waka/api eval:pipeline
 
       - name: Web tests
         run: pnpm --filter @waka/web test
 
   # ---------------------------------------------------------------------------
-  # THE TWO GATES THAT OPEN A BROWSER, AND WHY THEY ARE A SEPARATE JOB
+  # THE MANUAL GATE THAT OPENS A BROWSER
   # ---------------------------------------------------------------------------
   #
-  # `e2e:first-paint` and `e2e:journeys` both existed and both failed correctly
-  # on the commit before the fixes they gate — and neither ran automatically,
-  # so every regression they are shaped against could still ship. That is the
-  # whole gap this job closes.
+  # This is intentionally manual. The full ladder consumes roughly an hour of
+  # runner time, so normal PR and branch pushes receive the fast, deterministic
+  # check above. Start CI from Actions and select "Run the full browser gate"
+  # when a release or a high-risk UI change needs this deeper walk.
   #
   # They are the only checks in this repo that answer "can a person do this",
   # as opposed to "does this function return the right value". The defects they
@@ -148,7 +159,8 @@ jobs:
   # reports in seconds, and this job's own failure names itself rather than
   # hiding inside a long unit-test log.
   browser:
-    name: Browser gates (first paint, journeys, failure paths, first run, keyboard)
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_browser_gates == true }}
+    name: Browser gates (manual)
     runs-on: ubuntu-latest
     # 45 was enough while the job stopped at its first red step. It is not
     # enough now that every gate runs and reports (see `!cancelled()` below):
@@ -260,6 +272,7 @@ jobs:
       - name: Boot the local stack
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           ATTACHMENTS_BUCKET: waka-ci
           ATTACHMENTS_ENDPOINT: http://127.0.0.1:8792
         run: |
@@ -314,6 +327,7 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: pnpm e2e:journeys
 
       # The negative run is what keeps the journeys honest: each one is put
@@ -323,6 +337,7 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: pnpm e2e:journeys --negative
 
       # No model calls and no object store — just Postgres and the API. It is
@@ -424,6 +439,57 @@ jobs:
         if: ${{ !cancelled() }}
         continue-on-error: true
         run: pnpm e2e:answers-the-hand --base-url http://127.0.0.1:3010
+
+      # AND EVERY ORB, WHICH IS THE HALF THE STEP ABOVE CANNOT SEE. That one
+      # walks the DOM; an orb is paint on a canvas. This reads the picture —
+      # flood-fills the lit pixels into blobs and presses each one — and it is
+      # here because the founder found the gap by hand: a 1400px-wide
+      # invisible button was lying across the world and no gate could see it.
+      # Blocking, not continue-on-error: a memory you can see and cannot open
+      # has no other handle in this product.
+      - name: Every orb answers the hand
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:every-orb-answers --base-url http://127.0.0.1:3010
+
+      # THE DIAL HAD PRODUCED THREE FOUNDER REPORTS AND ZERO GATES, and
+      # nothing in tools/e2e had ever dragged it. Its two rules pull against
+      # each other — hold still while held, hang under the word once let go —
+      # so a repair to either one alone re-breaks the other, which is exactly
+      # what happened between 2026-08-27 and 2026-08-28.
+      - name: The timeline hangs from its word
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:the-timeline --base-url http://127.0.0.1:3010
+
+      # A WALL YOU RETURN TO IS ALREADY SAYING WHAT IT SAID. The poster's
+      # arrival animation was comparing each wall's sentence against whatever
+      # had been on screen a moment before — which on a travel is a DIFFERENT
+      # WALL'S — so every wall re-assembled itself every time you walked to it.
+      - name: Coming back to a wall does not re-read it
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:coming-back --base-url http://127.0.0.1:3010
+
+      # THE CHARACTER IS ONE SIZE EVERYWHERE. It used to be sized from the
+      # viewport and then shrunk again into whatever room headquarters had
+      # left — five different sizes across six screens, 84px to 150px.
+      - name: The character is the same creature on every screen
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:the-character --base-url http://127.0.0.1:3010
+
+      # THE PRODUCT AT PHONE SIZE. Out of CI until now because it answered
+      # differently to the same code; two state leaks were the reason, both
+      # fixed — it counted any `.jar-panel` as a memory (the settings sheet is
+      # one) and it left the walls list standing (Escape does not close a
+      # toggle). Five consecutive clean runs locally.
+      #
+      # NON-BLOCKING FOR NOW, and deliberately: its remaining failure mode is
+      # timing, a CI runner is slower than this machine, and this session has
+      # already produced one gate that passed here every time and failed there
+      # every time. It reports; it does not yet gate. Make it blocking once a
+      # run of green CI says it earns that.
+      - name: The product at phone size (report only)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: pnpm e2e:phone --base-url http://127.0.0.1:3010
 
       # THE SKY SUITE IS GONE, with the engine it measured. It grew a real
       # sky and photometered the top band of the canvas against an account

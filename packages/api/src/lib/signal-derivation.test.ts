@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyMatch,
   computeSignalConfidence,
+  CONFIDENCE_AFFIRMED_BONUS,
   CONFIDENCE_SOURCE_DIVERSITY_BONUS,
   resolveRelatedEvidence,
   SIGNAL_MATCH_MIN_COSINE,
@@ -103,6 +104,22 @@ describe("computeSignalConfidence", () => {
     const maxed = computeSignalConfidence(
       Array.from({ length: 10 }, (_, i) => evidence(i * 4, i % 2 ? "agent" : "app")),
       NOW,
+    );
+    expect(maxed).toBeLessThanOrEqual(100);
+  });
+
+  /** "An answer weighs": the owner's standing "yes, this is me" adds — and
+      only adds. Unanswered subtracts nothing, and the clamp still holds. */
+  it("credits the owner's affirmation, exactly one bonus", () => {
+    const rows = [evidence(10), evidence(0)];
+    const unanswered = computeSignalConfidence(rows, NOW);
+    const affirmed = computeSignalConfidence(rows, NOW, { affirmed: true });
+    expect(affirmed - unanswered).toBe(CONFIDENCE_AFFIRMED_BONUS);
+
+    const maxed = computeSignalConfidence(
+      Array.from({ length: 10 }, (_, i) => evidence(i * 4, i % 2 ? "agent" : "app")),
+      NOW,
+      { affirmed: true },
     );
     expect(maxed).toBeLessThanOrEqual(100);
   });

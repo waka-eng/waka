@@ -24,6 +24,7 @@
  * is `--jar-atmos`'s value.
  */
 
+import { readStoredLocale, t } from "../lib/locales";
 import { Companion } from "./Companion";
 
 const ground = "#06080d";
@@ -59,7 +60,7 @@ export function LoadingHome(): JSX.Element {
           color: "rgba(214,222,234,0.45)",
         }}
       >
-        loading
+        {t(readStoredLocale(), "loading")}
       </div>
     </div>
   );

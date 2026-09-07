@@ -80,3 +80,60 @@ describe("the group synthesis request", () => {
     );
   });
 });
+
+/**
+ * The Korean closing word. The opening Locale line alone lost to "keep
+ * existing entries stable" (observed live, 2026-08-31: carried-forward
+ * entries stayed English after the person chose Korean), so a ko-KR
+ * synthesis ends on the language instruction — the last thing read wins.
+ * English gets no closing word: the personal prompt stays byte-stable.
+ */
+describe("the Korean closing word", () => {
+  it("ends a ko-KR prompt on the Korean final check", () => {
+    const prompt = buildTopOfMindSynthesisRequest({
+      ...baseInput(),
+      preferredLocale: "ko-KR",
+    }).contents[0]!.parts[0]!.text!;
+    expect(prompt.endsWith("마지막 점검: 모든 문장은 번역투 없는 자연스러운 한국어로 쓰세요.")).toBe(true);
+    expect(prompt).toMatch(/locked entries alone stay exactly as written/);
+  });
+
+  it("gives English no closing word at all", () => {
+    const prompt = buildTopOfMindSynthesisRequest(baseInput()).contents[0]!.parts[0]!
+      .text!;
+    expect(prompt).not.toContain("마지막 점검");
+    expect(prompt).not.toContain("Final check");
+  });
+});
+
+
+/**
+ * The contested mark. Selection only ever marks ids present in the same
+ * delivered list, and the prompt must (a) show the mark beside the signal
+ * it belongs to and (b) tell the synthesis what it means — tension-only,
+ * never one side asserted as settled. Absent the mark, no line renders.
+ */
+describe("the contested mark", () => {
+  it("renders `contested with:` beside the marked signal only", () => {
+    const input = baseInput();
+    input.signals = [
+      { ...input.signals[0]!, id: "s1", contestedWithIds: ["s2"] },
+      { ...input.signals[0]!, id: "s2", statement: "Weeknights need no plan at all.", contestedWithIds: ["s1"] },
+      { ...input.signals[0]!, id: "s3", statement: "Walks untangle problems." },
+    ];
+    const prompt = buildTopOfMindSynthesisRequest(input).contents[0]!.parts[0]!.text!;
+    expect(prompt).toContain("id: s1");
+    expect(prompt).toContain("contested with: s2");
+    expect(prompt).toContain("contested with: s1");
+    expect(prompt.split("contested with:")).toHaveLength(3);
+  });
+
+  it("teaches the mark in the personal instruction: tension-only, owner arbitrates", () => {
+    expect(TOP_OF_MIND_SYNTHESIS_SYSTEM_INSTRUCTION).toMatch(/contested with:/);
+    expect(TOP_OF_MIND_SYNTHESIS_SYSTEM_INSTRUCTION).toMatch(/write it as a tension citing both ids/);
+    expect(TOP_OF_MIND_SYNTHESIS_SYSTEM_INSTRUCTION).toMatch(
+      /Never assert either side alone as a settled\s+pattern or belief/,
+    );
+    expect(TOP_OF_MIND_SYNTHESIS_SYSTEM_INSTRUCTION).toMatch(/the person arbitrates disputes,\s+never you/);
+  });
+});

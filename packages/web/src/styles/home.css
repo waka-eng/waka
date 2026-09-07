@@ -644,7 +644,7 @@
   left: 50%;
   top: var(--jar-sky-top, -58vh);
   transform: translate(-50%, -50%);
-  width: min(520px, calc(100vw - 56px));
+  width: min(580px, calc(100vw - 56px));
   text-align: center;
   pointer-events: none;
 }
@@ -657,6 +657,97 @@
   letter-spacing: 0.012em;
   text-wrap: balance;
   color: var(--jar-ink);
+}
+/* A held value in the sky: the lead's own voice, stacked with air between
+   sentences. Rank is the order and nothing else — no numerals, ever. The
+   sky is the layer's one home, so the hands live here too: the statement
+   is a button whose press opens the same quiet verb row the wall used to
+   hold, and the room takes pointer events only when it has hands to offer. */
+.jar-values-room--live {
+  pointer-events: auto;
+}
+/* The layer names itself over the set — the board's TOP OF MIND ruling,
+   applied standing in the sky, where the signpost that names the place is
+   hidden. */
+.jar-values-eyebrow {
+  margin: 0 0 var(--sp-24);
+  color: var(--jar-faint);
+}
+.jar-values-held {
+  margin: 0;
+}
+.jar-values-held + .jar-values-held {
+  margin-top: var(--sp-22);
+}
+/* RANK AS PRESENCE: the top value leads, one quiet step larger and fully
+   lit. Never a numeral — size and light are the world's own channels for
+   "this wins when two conflict". */
+.jar-values-held--first .jar-values-value {
+  font-size: clamp(22px, 2.4vw, 29px);
+  text-shadow: 0 0 14px var(--jar-scroll);
+}
+/* The roots under a value, standing in the sky: centered like everything
+   here, no ledger indent. */
+.jar-values-room .jar-was-roots {
+  margin: var(--sp-8) 0 0;
+}
+/* A value's state — aspirational, written by hand — is a whisper under the
+   sentence, never a rival to it: the statement is the thing, the state is
+   the smallest true note about it. The voice comes from the label register
+   (the span wears `jar-label`); this only places and dims it. */
+.jar-values-room .jar-poster-away {
+  display: block;
+  margin-top: var(--sp-2);
+  color: var(--jar-faint);
+  text-shadow: none;
+}
+/* Declaring one of your own belongs to the SET, not to whichever value
+   happens to stand last — the extra air says so. */
+.jar-values-declare {
+  margin-top: var(--sp-28);
+}
+/* A contested value is a light that cannot settle — the same waver the
+   grounds carry (#307), one layer up, and the same stillness under
+   reduced motion: half-settled ink, state shown, motion home. */
+.jar-values-value--contested {
+  animation: jar-contested-pull 6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .jar-values-value--contested {
+    animation: none;
+    color: var(--jar-muted);
+    text-shadow: 0 0 12px var(--jar-scroll);
+  }
+}
+.jar-values-value {
+  appearance: none;
+  -webkit-appearance: none;
+  display: block;
+  width: 100%;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  text-align: center;
+  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-weight: 300;
+  font-size: clamp(19px, 2vw, 25px);
+  line-height: 1.34;
+  letter-spacing: 0.012em;
+  text-wrap: balance;
+  color: var(--jar-ink);
+}
+.jar-values-value:focus-visible {
+  outline: none;
+  text-shadow: 0 0 12px var(--jar-scroll);
+}
+/* THE SIGNPOST CARRIES THE SKY'S STATE: lit words mean the sky above holds
+   your values; dim means still forming. Same recipe as every answered
+   light in this world. */
+.jar-values--held .jar-values-words {
+  color: var(--jar-ink);
+  text-shadow: 0 0 12px var(--jar-scroll);
 }
 .jar-values-sub {
   margin: var(--sp-14) 0 0;
@@ -1174,9 +1265,25 @@
    a jump, which is exactly what it was. Both are blocks at the same leading
    now, so the press changes what the words ARE and nothing about where they
    sit. */
+/* A WORD IS NOT A TARGET — BUT NEITHER IS A WHOLE ROW.
+   This was `display: block; width: 100%`, so the one act this product exists
+   for owned a box 1390px wide at 1440 while its ink is a centred label about
+   a seventh of that. Everything inside `.jar-hq` that takes the pointer also
+   REFUSES the world's tap — `onUp` will not call `tap()` when the press
+   landed on chrome — so every orb whose pixels fell in that band could not be
+   selected at all. Measured, not guessed: a grid of `elementFromPoint` over
+   the whole viewport found 67 lit canvas pixels a press could never take, and
+   every one of them was inside this button's row (founder, 2026-08-28: "some
+   inspiration balls are not clickable").
+   The founder's own rule for the small controls is the right one here too —
+   "a word is not a target: small controls carry a finger-sized hit area with
+   the ink unmoved" — so this takes the same `::after` halo the ways and the
+   signposts carry, and stops taking the rest of the line. The slot centres
+   its contents already, so nothing moves. */
 .jar-mouth-rest {
-  display: block;
-  width: 100%;
+  display: inline-block;
+  width: auto;
+  position: relative;
   appearance: none;
   -webkit-appearance: none;
   border: 0;
@@ -1272,6 +1379,13 @@
 }
 .jar-mouth-rest {
   text-decoration: none;
+}
+/* the finger's width around the words, and no further: the same inset the
+   ways and the signposts use, so one rule describes every small control */
+.jar-mouth-rest::after {
+  content: "";
+  position: absolute;
+  inset: -11px -12px;
 }
 
 /* ================= the drawer =================
@@ -2207,7 +2321,33 @@
   font-family: inherit;
   user-select: text;
   -webkit-user-select: text;
-  will-change: opacity, transform;
+  /* `will-change: opacity, transform` STOOD HERE, and it stood here for the
+     panel's whole life rather than for the fifth of a second it animates.
+
+     The founder, 2026-08-28: "scroll shouldnt form that empty space in the
+     modal. keep the entire modal colored at all times."
+
+     I could not reproduce it, and I tried hard: their viewport, their device
+     pixel ratio, the reading face and the edit face, scrolled to the bottom,
+     reading the ACTUAL PAINTED PIXELS out of a screenshot rather than asking
+     `elementFromPoint` which element is on top. The ground came back
+     rgb(11, 14, 20) continuously from the panel's top edge to its bottom edge
+     every time.
+
+     Which is itself the clue. A defect that a headless engine cannot produce
+     and a real machine shows is a COMPOSITING defect, and this declaration is
+     what made one possible: `will-change` promotes the panel to its own GPU
+     layer permanently, and that layer is a scroll container (`overflow-y`)
+     with a rounded clip (`border-radius: 18px`) and a permanent transform
+     from the centring. A promoted, rounded, scrolling layer is the exact
+     shape that leaves unpainted regions during a scroll on some drivers —
+     and nowhere else.
+
+     It is also simply wrong as written. `will-change` is a hint to prepare
+     for an imminent change, not a property; holding a layer for an element
+     that is static 99% of the time is the documented misuse. The panel
+     animates only under `--in` and `--out`, which last 0.2s and 0.18s, so
+     that is where the hint belongs and where it now is. */
   /* an unobtrusive scrollbar: present when needed, never furniture */
   scrollbar-width: thin;
   scrollbar-color: var(--jar-scroll) transparent;
@@ -2226,6 +2366,8 @@
    in hand when it mounts, so this is the only latency between tap and read. */
 .jar-panel--in {
   animation: jar-panel-in 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+  /* the hint lives with the change it is hinting at, and expires with it */
+  will-change: opacity, transform;
 }
 
 /* ═══════════════ ONE SURFACE, AND EVERY MODAL WEARS IT ═══════════════
@@ -2278,7 +2420,61 @@
 
 .jar-panel--out {
   animation: jar-panel-out 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: opacity, transform;
   pointer-events: none;
+}
+
+/* ═══════════ THE TWO SHEETS THAT HANG OFF THE BUTTON THAT OPENED THEM ═══════
+   Founder, 2026-08-28: "when clicking on the top left and top right button,
+   those cards should just appear right below the button rather than in the
+   center."
+
+   THIS NARROWS AN EARLIER RULING RATHER THAN OVERTURNING IT. On 2026-08-25,
+   pointing at a memory's card: "all modals must be centered and have same
+   style as this one." The STYLE half stands untouched — these two still wear
+   `.jar-modal-surface`, the same ground, radius, padding and hairline as
+   every other modal, and that is the part that was actually four different
+   answers. What changes is placement, for the two sheets that belong to a
+   control rather than to the world.
+
+   And it is the right distinction. A memory's card is about a thing you
+   picked out of the field, so the middle is where your eyes already are. The
+   wall's settings and your account are about the BUTTON — they are that
+   button's contents, and a menu that opens across the room from its own
+   handle makes you re-find the thread every time.
+
+   It also removes a collision `e2e:phone` kept finding and I kept reading as
+   flake: at 390px the centred settings sheet lands on top of the centred
+   memory card, so the walk measured a memory's controls as "covered" by
+   `.jar-settings-head` — true, and only true because both wanted the middle.
+
+   THE TRANSFORM SLOT IS SPOKEN FOR, so these cannot simply drop it. The
+   entrance animates `--jar-panel-rise` as a custom property and the shared
+   block spends `transform` on the centring; an anchored sheet keeps the rise
+   and gives up only the centring.
+
+   Written after the shared block on purpose — same specificity, later wins,
+   which is the rule this file has been bitten by three times. */
+.jar-settings--at-left,
+.jar-settings--at-right {
+  /* clear of the chrome row, which ends at 40px, by the same 8 the buttons
+     themselves keep from the left edge */
+  top: calc(48px + env(safe-area-inset-top));
+  transform: translateY(var(--jar-panel-rise));
+  /* on a narrow screen it stays inside the glass rather than hanging off the
+     side it is anchored to */
+  max-width: calc(100vw - 16px);
+}
+.jar-settings--at-left {
+  left: 8px;
+  right: auto;
+}
+.jar-settings--at-right {
+  /* 8, measured off the account pill itself: it sits x 1300..1432 in a 1440
+     frame, so its inset from the right edge is 8 and not the 10 the four
+     signposts keep. Aligned to the button, not to a rule about edges. */
+  right: 8px;
+  left: auto;
 }
 /* THE HEAD: date left, who-may-see right, centred against each other.
    It was not a row at all — the date was a block padded 56px/120px to dodge
@@ -2940,8 +3136,90 @@
    width. */
 @media (max-width: 560px) {
   .jar-values {
-    /* clear of the chrome row, which ends at 40px */
-    top: calc(48px + env(safe-area-inset-top));
+    /* 16px clear of the chrome row, which ends at 40px — the same inset the
+       four signposts keep from whatever edge each is nearest. It was 8, which
+       is not an inset, it is a near miss: the signpost read as attached to the
+       chrome above it rather than as its own thing. */
+    top: calc(56px + env(safe-area-inset-top));
+    /* AND IT STANDS AT THE COLUMN'S EDGE, NOT THE SCREEN'S MIDDLE.
+       Founder, 2026-08-28, over two screenshots of a phone: "so ugly".
+
+       Measured at 390px: the claim is set LEFT from x 20, and this signpost
+       was CENTRED at 195 — their left edges 77px apart. On a desktop that
+       reads as deliberate, because the claim sits in a 680px column inside a
+       1440px frame and a centred label agrees with the column's own centre.
+       On a phone the claim is the full width, so a centred label stops
+       agreeing with anything: two alignment systems stacked, and on a wall
+       with nothing on it yet the label floats over one short italic line
+       hanging at the far edge.
+
+       It already steps out of the top row on a phone. Stepping to the
+       column's edge as well is the same adaptation finished: signpost, then
+       claim, one left edge, one column. 20px is `.jar-hq-inner`'s own side
+       padding, read off the same number rather than restated.
+
+       The 12px of side padding this button carries is subtracted, so its
+       WORDS line up with the claim's first letter — not its box. Nobody sees
+       a box. */
+    left: 8px;
+    transform: none;
+  }
+  /* AND THE COLUMN MAKES ROOM FOR THE SIGNPOST THAT STEPPED INTO IT.
+     `.jar-hq-inner` pads 72px from the top, and that number was set for a
+     desktop, where `.jar-values` floats at 10px — far above the column, with
+     41px of air between its bottom and the first line of the claim.
+
+     On a phone the signpost steps DOWN to clear the chrome row and lands
+     INSIDE that 72px. Measured on a 390x844 screen: the chrome ends at 40,
+     the signpost ran 48..69, and the claim began at 72. Three pixels. The
+     whole top of the product was one packed block — chrome, signpost, claim —
+     while 183px of nothing sat below the mouth (founder, 2026-08-28: "overall
+     balancing feels kinda off.. some places are more crowded than others.
+     which is exacerbated on mobile").
+
+     118 = the signpost's new bottom (77) plus the 41px of air the desktop
+     already gives between it and the claim. Not a new number: the phone gets
+     the relationship the desktop always had. */
+  .jar-hq-inner {
+    padding-top: calc(118px + env(safe-area-inset-top));
+  }
+  /* AND THE CLAIM KEEPS MOST OF ITS MEASURE WHEN THE COLUMN NARROWS.
+     Founder, 2026-08-28: "fix the type size on mobile."
+
+     THE TYPE STOPPED RESPONDING BEFORE THE COLUMN DID, and that is the
+     defect. `clamp(23px, 2.5vw, 34px)` reaches its floor at a 920px viewport,
+     so from there down the type is a flat 23px. The COLUMN goes on shrinking
+     to 640 and then, below a 680px viewport, all the way down with the
+     screen. Type held still against a narrowing column is a measure falling
+     away, and it falls on exactly the widths people hold.
+
+     Measured as CHARACTERS THAT FIT — the column over the font's real
+     advance, not the sentence's length over its line count, which is a coarse
+     proxy that moves in whole lines and flattered this by five characters
+     when I first took it:
+
+       viewport   type     column   fits
+           1440   34px        640   38     <- what the desktop sets at
+            768   23px        640   56
+            390   23px        350   30     <- before
+            390   21.5px      350   33     <- after
+            360   19.8px      320   33
+
+     AND IT DOES NOT REACH 38, WHICH IS THE HONEST PART. Matching the
+     desktop's measure exactly needs 18.5px in a 350px column. Body text is
+     15px, so the wall's claim would sit 1.23x the size of a memory's own
+     text and stop reading as the wall's claim at all — on the desktop it is
+     2.27x. A 350px column cannot hold both relationships, and this is the
+     trade taken deliberately: 1.43x body, and 33 of the desktop's 38
+     characters instead of 30.
+
+     23 is the ceiling, so it is today's size rather than a new one, and
+     nothing between 418px and 560px moves — the measure was never the
+     problem there. The floor is 18 for the 320px screens still in use, whose
+     column is 280.
+  */
+  .jar-poster {
+    font-size: clamp(18px, 5.5vw, 23px);
   }
 }
 
@@ -3099,6 +3377,33 @@
 .jar-ground--answered {
   color: var(--jar-ink);
   text-shadow: 0 0 12px var(--jar-scroll);
+}
+/* AN UNARBITRATED DISPUTE IS A LIGHT THAT CANNOT SETTLE. The row breathes
+   between the answered ink and the dim — the two statements pulling — and
+   holds still only when the owner's verdict resolves the pair. Slow on
+   purpose: motion explains the state, it does not wave for attention. */
+.jar-ground--contested {
+  color: var(--jar-ink);
+  animation: jar-contested-pull 6s ease-in-out infinite;
+}
+@keyframes jar-contested-pull {
+  0%,
+  100% {
+    color: var(--jar-ink);
+    text-shadow: 0 0 12px var(--jar-scroll);
+  }
+  50% {
+    color: var(--jar-muted);
+    text-shadow: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .jar-ground--contested {
+    /* the state still shows; only the motion stays home — half-settled ink */
+    animation: none;
+    color: var(--jar-muted);
+    text-shadow: 0 0 12px var(--jar-scroll);
+  }
 }
 
 /* THE WORDS THAT DID THE READING. <mark> is the correct element — this is

@@ -582,6 +582,56 @@ a:focus-visible {
   padding: 0;
 }
 
+/* ---------- the tab reads as rooms, not one body of text ----------
+   Founder, 2026-08-29: every section ran into the next — same size, same
+   ink, no boundary — "very hard to read and follow". A hairline and a
+   breath of space above each section (and each folded door's line) is the
+   world's own way of saying "a new thing starts here": light, not weight. */
+.profile-room > .profile-memories-panel,
+.profile-room > .profile-disclose {
+  border-top: 1px solid var(--line);
+  margin-top: var(--sp-22);
+  padding-top: var(--sp-18);
+}
+.profile-room > .profile-memories-panel:first-child {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+/* ---------- the minted key ----------
+   A keeper key's secret exists on screen exactly once (Profile.tsx). The box
+   is the account screen's translation of the wall sheet's
+   `.jar-settings-minted`: quiet, bordered, every child its own line so
+   "I have it" reads as the thing you press, not the end of the sentence.
+   The secret itself is selectable in one gesture and wraps rather than
+   scrolls — a credential you have to scroll to copy is a credential you
+   copy half of. */
+.profile-minted {
+  display: block;
+  margin: var(--sp-12) 0 0;
+  padding: var(--sp-12);
+  border: 1px solid var(--line);
+  border-radius: var(--sp-12);
+}
+.profile-minted > * {
+  display: block;
+}
+.profile-minted .profile-memory-action {
+  margin-top: var(--sp-10);
+}
+.profile-secret {
+  display: block;
+  margin: var(--sp-8) 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--t-fine);
+  line-height: 1.5;
+  color: var(--ink);
+  word-break: break-all;
+  user-select: all;
+  -webkit-user-select: all;
+}
+
 /* ---------- toggles ----------
    These rendered as two bare checkboxes with invisible labels: the row is a
    flex container whose text was inheriting a colour meant for a dark-on-light

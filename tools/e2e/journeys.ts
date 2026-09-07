@@ -185,7 +185,7 @@ async function keepInWorld(page: Page, base: string, text: string): Promise<numb
   }
   await page.locator(".jar-mouth-rest").first().click();
   await page.waitForTimeout(700);
-  await page.fill('textarea[aria-label="capture inspiration"]', text);
+  await page.fill('textarea[aria-label="Capture inspiration"]', text);
   await page.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click();
   /* WHAT THE WORLD SAID, READ WHILE IT IS SAYING IT. The character's voice
      clears itself after four seconds, so a caller that waits for the keep to
@@ -441,7 +441,7 @@ const JOURNEYS: Journey[] = [
            for thirty seconds and reports the journey broken. Kept as the label
            rather than the class BECAUSE the accessible name is the claim: a
            person using a screen reader has to be told what this field is. */
-        'textarea[aria-label="capture inspiration"]',
+        'textarea[aria-label="Capture inspiration"]',
         `a lift button that dims once it has heard you ${uniq()}`,
       );
       await page.keyboard.press("Enter");
@@ -572,7 +572,7 @@ const JOURNEYS: Journey[] = [
          two-field form; it answers the question the world asked. */
       await page.locator(".jar-mouth-rest").first().click();
       await page.waitForTimeout(700);
-      await page.fill('textarea[aria-label="capture inspiration"]', phrase);
+      await page.fill('textarea[aria-label="Capture inspiration"]', phrase);
       await page.locator(".jar-mouth-where button", { hasText: /^reflect$/ }).first().click();
       await page.waitForTimeout(5_000);
 
@@ -682,6 +682,183 @@ const JOURNEYS: Journey[] = [
         return el?.value ?? "";
       });
       return { ok: value === renamed, detail: `readBack=${JSON.stringify(value)}` };
+    },
+  },
+
+  {
+    id: "keeper-key",
+    name: "a keeper key is minted once, shown once, and revocable",
+    breaks: (ctx) => breakRoute(ctx, (p, m) => p === "/api/keeper-keys" && m === "POST"),
+    run: async (page, base) => {
+      await signUp(page, base);
+      await goSurface(page, base, "/profile");
+      await page.click('button[role=tab]:has-text("Memories & connections")');
+      await page.waitForTimeout(600);
+
+      await page.fill('input[placeholder="what machine is this for"]', "journey laptop");
+      await page.click('button:has-text("mint a key")');
+      await page.waitForTimeout(2_500);
+
+      // The secret's one appearance: a waka_keeper_ credential on screen,
+      // beside the words that say it will never be shown again.
+      const secret = await page.evaluate(
+        () => document.querySelector(".profile-secret")?.textContent ?? "",
+      );
+      if (!secret.startsWith("waka_keeper_")) {
+        return { ok: false, detail: `no minted secret on screen (${JSON.stringify(secret.slice(0, 24))})` };
+      }
+      await page.click('button:has-text("I have it")');
+      await page.waitForTimeout(600);
+      const secretGone =
+        (await page.evaluate(() => document.querySelectorAll(".profile-secret").length)) === 0;
+      const rowShows = await page
+        .locator(".profile-row-title", { hasText: "journey laptop" })
+        .isVisible();
+
+      // Revocation asks its question through window.confirm; answer yes.
+      page.once("dialog", (dialog) => void dialog.accept());
+      await page.click('li:has-text("journey laptop") button:has-text("revoke")');
+      await page.waitForTimeout(2_500);
+      const rowGone =
+        (await page.locator(".profile-row-title", { hasText: "journey laptop" }).count()) === 0;
+
+      return {
+        ok: secretGone && rowShows && rowGone,
+        detail: `secret=${secret.slice(0, 16)}… shownOnce=${secretGone} listed=${rowShows} revoked=${rowGone}`,
+      };
+    },
+  },
+
+  {
+    id: "agent-grants",
+    name: "the sibling door opens by the owner's hand, and closes by it",
+    breaks: (ctx) => breakRoute(ctx, (p, m) => p === "/api/agent-grants" && m === "POST"),
+    run: async (page, base) => {
+      await signUp(page, base);
+      await goSurface(page, base, "/profile");
+      await page.click('button[role=tab]:has-text("Memories & connections")');
+      await page.waitForTimeout(600);
+      // The audit surfaces are folded by default; the journey opens the door.
+      await page.click('.profile-disclose button:has-text("grants")');
+      await page.waitForTimeout(400);
+
+      // Two agents, made through the same screen that will pair them. Each
+      // creation now hands over the machine key — the box must show a real
+      // agent secret, and pressing "I have it" returns the create row.
+      for (const name of ["Scout", "Courier"]) {
+        await page.fill('input[placeholder="Add an agent memory"]', name);
+        await page.click('button:has-text("Add memory")');
+        await page.waitForTimeout(1_500);
+        const secret = await page.evaluate(
+          () => document.querySelector(".profile-minted .profile-secret")?.textContent ?? "",
+        );
+        if (!secret.startsWith("waka_agent_")) {
+          return { ok: false, detail: `no machine key handed over for ${name}` };
+        }
+        await page.click('.profile-minted button:has-text("I have it")');
+        await page.waitForTimeout(400);
+      }
+
+      const pick = async (label: string, name: string) =>
+        page.selectOption(`select[aria-label="${label}"]`, { label: name });
+      await pick("which agent", "Scout");
+      await pick("may read which", "Courier");
+      await page.click('button:has-text("grant")');
+      await page.waitForTimeout(2_000);
+
+      const rowShows = await page
+        .locator(".profile-row-title", { hasText: "Scout reads Courier" })
+        .isVisible();
+      if (!rowShows) return { ok: false, detail: "the grant row never appeared" };
+
+      await page.click('li:has-text("Scout reads Courier") button:has-text("revoke")');
+      await page.waitForTimeout(2_000);
+      const rowGone =
+        (await page.locator(".profile-row-title", { hasText: "Scout reads Courier" }).count()) ===
+        0;
+
+      return { ok: rowGone, detail: `granted=true revoked=${rowGone}` };
+    },
+  },
+
+  {
+    id: "agent-ground",
+    name: "an agent's ground holds its own keeps, on camera",
+    breaks: (ctx) =>
+      breakRoute(ctx, (p, m) => p === "/api/inspirations" && m === "GET"),
+    run: async (page, base) => {
+      /* The 2026-08-30 family in one walk: the count, the reach, and the
+         PIXELS must agree. The count said six while the ground stood one
+         screen to the right of its camera for as long as the walls have
+         existed — data-level assertions all passed; only light would have
+         caught it. */
+      await signUp(page, base);
+      await goSurface(page, base, "/profile");
+      await page.click('button[role=tab]:has-text("Memories & connections")');
+      await page.fill('input[placeholder="Add an agent memory"]', "GroundScout");
+      await page.click('button:has-text("Add memory")');
+      await page.waitForTimeout(1_500);
+      const key = await page.evaluate(
+        () => document.querySelector(".profile-minted .profile-secret")?.textContent ?? "",
+      );
+      if (!key.startsWith("waka_agent_")) {
+        return { ok: false, detail: "creation handed over no machine key" };
+      }
+      await page.click('.profile-minted button:has-text("I have it")');
+
+      const texts = [
+        "Ground keep one, by the machine.",
+        "Ground keep two, by the machine.",
+        "Ground keep three, by the machine.",
+      ];
+      for (const text of texts) {
+        const res = await fetch(`${base}/api/inspirations`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        if (res.status !== 201) return { ok: false, detail: `keep via key → ${res.status}` };
+      }
+
+      await goSurface(page, base, "/");
+      await page.waitForTimeout(6_000);
+      await page.keyboard.press("ArrowLeft");
+      await page.waitForTimeout(9_000);
+
+      const foot = await page.evaluate(
+        () => document.querySelector(".jar-saved-count")?.textContent ?? "",
+      );
+      if (!foot.startsWith("3")) return { ok: false, detail: `foot says ${JSON.stringify(foot)}` };
+
+      await page.click(".jar-saved");
+      await page.waitForTimeout(6_000);
+
+      const reach = await page.evaluate(() =>
+        [...document.querySelectorAll(".jar-reach [role=option]")].map(
+          (o) => o.textContent ?? "",
+        ),
+      );
+      const allListed = texts.every((t) => reach.some((r) => r.includes(t.slice(0, 20))));
+      if (!allListed) return { ok: false, detail: `reach holds ${reach.length}, not the three` };
+
+      /* and the light: the ground's canvas must actually paint them. A wall
+         whose data is perfect and whose camera looks elsewhere fails HERE. */
+      const lit = await page.evaluate(() => {
+        const c = document.querySelector("canvas");
+        if (!c) return -1;
+        const g = c.getContext("2d");
+        if (!g) return -1;
+        const img = g.getImageData(0, 0, c.width, c.height).data;
+        let n = 0;
+        for (let i = 0; i < img.length; i += 40) {
+          if (img[i]! + img[i + 1]! + img[i + 2]! > 150) n++;
+        }
+        return n;
+      });
+      return {
+        ok: lit > 200,
+        detail: `foot=3 reach=${reach.length} litSamples=${lit}`,
+      };
     },
   },
 
@@ -1678,7 +1855,7 @@ const JOURNEYS: Journey[] = [
 
   {
     id: "english",
-    name: "the product speaks English, in words rather than in keys",
+    name: "the product speaks the chosen language, in words rather than in keys",
     /* THIS JOURNEY USED TO BE ITS OWN OPPOSITE, and the swap is a ruling, not
        a refactor. It was `locale`: pick Korean on `/profile`, sign in on a
        clean browser, and prove the choice reached the server rather than only
@@ -1738,11 +1915,14 @@ const JOURNEYS: Journey[] = [
       await signUp(page, base);
 
       const problems: string[] = [];
+      /* THE RULING REVERSED (founder, 2026-08-31): the person chooses English
+         or Korean, so the picker's ABSENCE is now the failure — the exact
+         inversion of the guard that held the 2026-08-24 ruling. */
       await goSurface(page, base, "/profile");
-      if ((await page.locator("select.field-input").count()) > 0) {
+      if ((await page.locator('select[name="preferredLocale"]').count()) === 0) {
         problems.push(
-          "a language picker is back on /profile — the product is English only " +
-            "(founder, 2026-08-24)",
+          "the language picker is missing from /profile — the person chooses " +
+            "their language (founder, 2026-08-31)",
         );
       }
 
@@ -1787,7 +1967,9 @@ const JOURNEYS: Journey[] = [
         problems.push(`rendered almost nothing: ${silent.join(", ")}`);
       }
       if (foreign.length > 0) {
-        problems.push(`a second language is on screen: ${foreign.join(", ")}`);
+        problems.push(
+          `Korean on screen for an English account: ${foreign.join(", ")}`,
+        );
       }
       if (rawIcu.length > 0) problems.push(`unformatted ICU on screen: ${rawIcu.join(", ")}`);
       if (bareKeys.length > 0) {
@@ -1796,12 +1978,25 @@ const JOURNEYS: Journey[] = [
         );
       }
 
+      /* THE POSITIVE HALF OF THE REVERSAL: flip the account to Korean on the
+         picker and the chrome must actually speak it — a picker wired to
+         nothing is the advisory-button lie in a dropdown. Same defect checks
+         hold in the other language. */
+      await goSurface(page, base, "/profile");
+      await page.selectOption('select[name="preferredLocale"]', "ko-KR");
+      await page.waitForTimeout(800);
+      const koText = await translatableText(page);
+      if (!otherScript.test(koText)) {
+        problems.push("chose Korean and /profile still speaks only English");
+      }
+      if (/\{\s*\w+\s*,/.test(koText)) problems.push("unformatted ICU on the Korean screen");
+
       return {
         ok: problems.length === 0,
         detail:
           problems.length === 0
-            ? `English on ${surfaces.length} surfaces, no second language offered or shown, ` +
-              "no raw ICU, no bare keys"
+            ? `English on ${surfaces.length} surfaces for an English account, the picker ` +
+              "stands on /profile, choosing Korean re-speaks the chrome, no raw ICU, no bare keys"
             : problems.join("; "),
       };
     },

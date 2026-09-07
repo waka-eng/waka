@@ -49,6 +49,7 @@ import {
   updateAuthProfile,
 } from "../src/lib/api";
 import type { ApiViewer } from "../src/lib/api";
+import { t } from "../src/lib/locales";
 import {
   AuthProvider,
   useAuth,
@@ -312,9 +313,10 @@ describe("auth boundary", () => {
     expect(document.activeElement).toBe(container.querySelector("#login-tab-login"));
   });
 
-  it("offers no language selector and speaks English on the signup shell", async () => {
-    // The pre-submit language selector left with the second language
-    // (founder ruling, 2026-08-22: the product speaks English only).
+  it("offers the language choice at the door — English and Korean", async () => {
+    // The pre-submit selector is BACK (founder, 2026-08-31, reversing
+    // 2026-08-22): the choice drives what language the memory itself is
+    // written in, so it belongs before the first keep.
     vi.mocked(fetchCurrentViewer).mockResolvedValue(null);
 
     const container = await renderAuthRoutes({ initialPath: "/login" });
@@ -327,10 +329,16 @@ describe("auth boundary", () => {
 
     expect(container.textContent).toContain("Begin your archive.");
     expect(container.textContent).toContain("Continue with Google");
-    expect(container.querySelector("select.field-input")).toBeNull();
+    const selector = container.querySelector<HTMLSelectElement>(
+      'select[name="preferredLocale"]',
+    );
+    expect(selector).not.toBeNull();
+    expect(Array.from(selector!.options).map((o) => o.value)).toEqual(["en-US", "ko-KR"]);
+    expect(selector!.value).toBe("en-US");
+    expect(container.textContent).toContain("한국어");
   });
 
-  it("renders the standalone SignupForm without a language field", async () => {
+  it("renders the standalone SignupForm with the language field", async () => {
     vi.mocked(fetchCurrentViewer).mockResolvedValue(null);
 
     const container = await renderAuthRoutes({
@@ -338,11 +346,17 @@ describe("auth boundary", () => {
       loginElement: createElement(SignupForm),
     });
 
-    expect(container.querySelector("select.field-input")).toBeNull();
+    expect(container.querySelector('select[name="preferredLocale"]')).not.toBeNull();
     /* Rendered with no props at all, which is the point of the case: the form
        has to stand on its own, without the door's companion to report a gaze
-       to. `onLookAt` defaults to a no-op for exactly this. */
-    expect(container.querySelector(".btn-doorway")?.textContent).toBe("begin");
+       to, and without the page around it to follow a language change.
+       `onLookAt` defaults to a no-op and `onLocaleChange` is optional for
+       exactly this. The submit is read off `.btn-doorway` rather than by its
+       words, so the door's verb can be reworded without silently unpinning
+       the one assertion that says the form still has a way out. */
+    expect(container.querySelector(".btn-doorway")?.textContent).toBe(
+      t("en-US", "loginCreateAccount"),
+    );
   });
 
   it("clears the cache and routes home visitors to login when /auth/me returns nobody", async () => {

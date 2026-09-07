@@ -12,10 +12,14 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "nightly": "tsx src/nightly-local.ts",
     "test": "node scripts/check-vocabulary.mjs && vitest run",
     "test:unit": "node scripts/check-vocabulary.mjs && vitest run --config vitest.unit.config.ts",
+    "eval:judge": "WAKA_RUN_LIVE_EVALS=1 vitest run test/judge-eval.test.ts",
     "test:watch": "vitest",
-    "vocabulary": "node scripts/check-vocabulary.mjs"
+    "vocabulary": "node scripts/check-vocabulary.mjs",
+    "eval:extraction": "WAKA_RUN_LIVE_EVALS=1 vitest run test/extraction-eval.test.ts",
+    "eval:pipeline": "WAKA_RUN_LIVE_EVALS=1 vitest run test/pipeline-eval.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-lambda": "^3.1111.0",
@@ -26,7 +30,6 @@
     "drizzle-orm": "^0.45.2",
     "hono": "^4.13.0",
     "postgres": "^3.4.5",
-    "yaml": "^2.9.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

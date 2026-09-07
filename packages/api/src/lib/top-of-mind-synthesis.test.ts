@@ -11,6 +11,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  assessShiftFloor,
+  TOP_OF_MIND_MIN_SHIFT_HOURS,
+  describeTimeShape,
+  diversifyRanked,
+  SELECTION_DIVERSITY_MAX_COSINE,
   applyGroupProposals,
   assembleEntries,
   chooseSelection,
@@ -365,5 +370,104 @@ describe("applying accepted group proposals", () => {
     );
     expect(applied).toBe(0);
     expect(input[0]!.lockedAt).toBeNull();
+  });
+});
+
+
+describe("describeTimeShape — a pattern's life, worded for the synthesis", () => {
+  const NOW = new Date("2026-08-31T12:00:00Z");
+  const daysAgo = (n: number) => new Date(NOW.getTime() - n * 24 * 60 * 60 * 1000);
+
+  it("no evidence is no shape", () => {
+    expect(describeTimeShape([], NOW)).toBeNull();
+  });
+
+  it("names the arrival", () => {
+    expect(describeTimeShape([daysAgo(2)], NOW)).toBe("new this week");
+  });
+
+  it("names the return — the gap, not the age, is the story", () => {
+    const shape = describeTimeShape([daysAgo(120), daysAgo(80), daysAgo(3)], NOW);
+    expect(shape).toBe("returning after 3 months quiet");
+  });
+
+  it("a short gap is a steady hum, not a comeback", () => {
+    const shape = describeTimeShape([daysAgo(60), daysAgo(10), daysAgo(3)], NOW);
+    expect(shape).toBe("held for 2 months; last fed 3 days ago");
+    expect(
+      describeTimeShape([daysAgo(30), daysAgo(15), daysAgo(1)], NOW),
+      "singular units stay singular",
+    ).toBe("held for 4 weeks; last fed 1 day ago");
+  });
+
+  it("a long-held pattern anchors in months and years", () => {
+    const shape = describeTimeShape([daysAgo(500), daysAgo(400), daysAgo(30)], NOW);
+    expect(shape).toBe("held for over a year; last fed 4 weeks ago");
+  });
+});
+
+describe("diversifyRanked — no two voices on the board saying one thing", () => {
+  /* orthogonal-ish toy vectors: A≈B (cos ~0.98), C far from both */
+  const A = [1, 0.1, 0];
+  const B = [1, 0.15, 0];
+  const C = [0, 0, 1];
+  const vectors = new Map<string, number[]>([
+    ["a", A],
+    ["b", B],
+    ["c", C],
+  ]);
+  const ranked = [{ id: "a" }, { id: "b" }, { id: "c" }];
+
+  it("holds a near-duplicate back so a distinct voice rises", () => {
+    const out = diversifyRanked(ranked, vectors, SELECTION_DIVERSITY_MAX_COSINE);
+    expect(out.map((s) => s.id)).toEqual(["a", "c", "b"]);
+  });
+
+  it("the reserve returns whenever there is room — nothing is excluded outright", () => {
+    const out = diversifyRanked(ranked, vectors, SELECTION_DIVERSITY_MAX_COSINE);
+    /* all three survive; only the ORDER moved, so a limit of three still
+       seats everyone and only a limit of two feels the reorder */
+    expect(out).toHaveLength(3);
+    expect(out.slice(0, 2).map((s) => s.id)).toEqual(["a", "c"]);
+  });
+
+  it("a signal without an embedding is never held back", () => {
+    const out = diversifyRanked(
+      [{ id: "a" }, { id: "ghost" }, { id: "b" }],
+      vectors,
+      SELECTION_DIVERSITY_MAX_COSINE,
+    );
+    expect(out.map((s) => s.id)).toEqual(["a", "ghost", "b"]);
+  });
+
+  it("is deterministic over identical input", () => {
+    const once = diversifyRanked(ranked, vectors, SELECTION_DIVERSITY_MAX_COSINE);
+    const twice = diversifyRanked(ranked, vectors, SELECTION_DIVERSITY_MAX_COSINE);
+    expect(once).toEqual(twice);
+  });
+});
+
+
+describe("assessShiftFloor — the board shifts at most once a day", () => {
+  const NOW = new Date("2026-08-31T12:00:00Z");
+  const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 60 * 60 * 1000);
+
+  it("the cold start is exempt: nothing to hold stable", () => {
+    expect(assessShiftFloor(null, NOW)).toEqual({ held: false });
+  });
+
+  it("holds inside the floor, to the exact moment it opens", () => {
+    const verdict = assessShiftFloor(hoursAgo(23.9), NOW);
+    expect(verdict.held).toBe(true);
+    if (verdict.held) {
+      expect(verdict.heldUntil.getTime()).toBe(
+        hoursAgo(23.9).getTime() + TOP_OF_MIND_MIN_SHIFT_HOURS * 60 * 60 * 1000,
+      );
+    }
+  });
+
+  it("passes once the floor has opened", () => {
+    expect(assessShiftFloor(hoursAgo(24.1), NOW)).toEqual({ held: false });
+    expect(assessShiftFloor(hoursAgo(24), NOW)).toEqual({ held: false });
   });
 });

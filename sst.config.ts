@@ -120,6 +120,10 @@ export default $config({
     /** Gemini API key for the classifier queue worker. */
     const geminiApiKey = new sst.Secret("GeminiApiKey");
 
+    /** OpenRouter key — generation's second road (deepseek-v4-flash by
+        default; embeddings stay on Gemini regardless). */
+    const openRouterApiKey = new sst.Secret("OpenRouterApiKey");
+
     // -----------------------------------------------------------------------
     // Storage
     // -----------------------------------------------------------------------
@@ -222,6 +226,7 @@ export default $config({
       JWT_SECRET: jwtSecret.value,
       DB_CONNECTION_URL: dbConnectionUrl.value,
       GEMINI_API_KEY: geminiApiKey.value,
+      OPENROUTER_API_KEY: openRouterApiKey.value,
       ATTACHMENTS_BUCKET: attachmentsBucket.name,
       ATTACHMENTS_REGION: AWS_REGION,
       WAKA_VAULT_BUCKET: vaultBucket.name,

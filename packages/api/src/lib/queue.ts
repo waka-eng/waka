@@ -150,10 +150,13 @@ import {
   deriveSignalsForInspiration,
   reembedSignal,
 } from "./signal-derivation.js";
+import { isSupportedLocale } from "./locales.js";
 import { refreshPrinciplesForProfile } from "./principle-generation.js";
+import { tendSignalGarden } from "./signal-gardener.js";
 import {
   refreshTopOfMindForGroup,
   refreshTopOfMindForProfile,
+  ShiftFloorHeldError,
 } from "./top-of-mind-synthesis.js";
 
 const DEFAULT_MAX_ATTEMPTS = 3;
@@ -211,6 +214,12 @@ export interface DrainBackgroundJobsResult {
    * with a `run_after` naming the moment the window frees a slot.
    */
   deferred: number;
+  /**
+   * Jobs put back to sleep by a shift floor — the top of mind moves at most
+   * once a day, and a refresh that arrived early sleeps until the floor
+   * opens. Held, never failed: the attempt is handed back.
+   */
+  held: number;
 }
 
 /**
@@ -271,6 +280,9 @@ export interface BackgroundJobStore {
     exhausted: boolean,
     now: Date,
   ): Promise<void>;
+  /** Put a claimed job back to sleep until `until` — a hold, not a failure:
+      the claim's attempt is handed back and no error is recorded. */
+  holdJob(job: BackgroundJob, until: Date): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -310,7 +322,8 @@ async function enqueueKeyedJob(input: {
     | "derive_signals"
     | "refresh_group_top_of_mind"
     | "refresh_principles"
-    | "reembed_signal";
+    | "reembed_signal"
+    | "tend_signal_garden";
   payload:
     | EnrichAttachmentPayload
     | DeriveSignalsPayload
@@ -387,6 +400,23 @@ export async function enqueueRefreshPrinciples(
  * Keyed on the attachment: an attachment is enriched once, and a second
  * enqueue for the same one is the same work.
  */
+/**
+ * The weekly garden pass for one profile — enqueued nightly beside the
+ * principles cron, keyed per ISO week so six of the seven enqueues collapse
+ * into the row already there.
+ */
+export async function enqueueTendSignalGarden(
+  profileId: string,
+  weekKey: string,
+): Promise<EnqueueResult> {
+  return enqueueKeyedJob({
+    profileId,
+    type: "tend_signal_garden",
+    payload: { profileId },
+    idempotencyKey: `tend_signal_garden:${profileId}:${weekKey}`,
+  });
+}
+
 export async function enqueueEnrichAttachment(
   profileId: string,
   attachmentId: string,
@@ -644,6 +674,7 @@ export async function drainBackgroundJobs(
   const clock = () => options.now ?? new Date();
   const result: DrainBackgroundJobsResult = {
     claimed: 0,
+    held: 0,
     succeeded: 0,
     retried: 0,
     failed: 0,
@@ -713,6 +744,16 @@ export async function drainBackgroundJobs(
       await store.markSucceeded(job.id);
       result.succeeded += 1;
     } catch (err) {
+      if (err instanceof ShiftFloorHeldError) {
+        await store.holdJob(job, err.heldUntil);
+        result.held += 1;
+        console.log("[background-jobs] shift floor holds; refresh sleeps", {
+          jobId: job.id,
+          profileId: job.profileId,
+          heldUntil: err.heldUntil.toISOString(),
+        });
+        continue;
+      }
       const exhausted = job.attempts >= job.maxAttempts;
       await store.markFailedOrPending(job, err, exhausted, clock());
       if (exhausted) result.failed += 1;
@@ -849,6 +890,26 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<void> {
       // so an id that arrived in a payload can never reach another tenant's
       // signal even if a payload were ever forged.
       await reembedSignal({ profileId: job.profileId, signalId: payload.signalId });
+      return;
+    }
+
+    case "tend_signal_garden": {
+      const [profileRow] = await getDb()
+        .select({ preferredLocale: profiles.preferredLocale })
+        .from(profiles)
+        .where(eq(profiles.id, job.profileId))
+        .limit(1);
+      const summary = await tendSignalGarden(getDb(), {
+        profileId: job.profileId,
+        preferredLocale: isSupportedLocale(profileRow?.preferredLocale)
+          ? profileRow.preferredLocale
+          : "en-US",
+      });
+      console.log("[background-jobs] tended the signal garden", {
+        jobId: job.id,
+        profileId: job.profileId,
+        ...summary,
+      });
       return;
     }
 
@@ -1190,6 +1251,25 @@ async function markJobSucceeded(jobId: string): Promise<void> {
   `);
 }
 
+/**
+ * A hold is not a failure: status returns to pending, `run_after` names the
+ * moment the floor opens, the claim's attempt is handed back (a job held
+ * for days must not exhaust itself into `failed` without ever failing), and
+ * `last_error` stays clean — there is no error to record.
+ */
+async function holdBackgroundJob(job: BackgroundJob, until: Date): Promise<void> {
+  await getDb().execute(sql`
+    UPDATE background_jobs
+    SET status = 'pending'::background_job_status,
+        locked_at = NULL,
+        started_at = NULL,
+        attempts = GREATEST(attempts - 1, 0),
+        run_after = ${until.toISOString()}::timestamptz,
+        updated_at = now()
+    WHERE id = ${job.id}::uuid
+  `);
+}
+
 async function markJobFailedOrPending(
   job: BackgroundJob,
   err: unknown,
@@ -1226,6 +1306,7 @@ export const postgresBackgroundJobStore: BackgroundJobStore = {
   deferAccountBacklog: deferAccountBacklogForBudget,
   markSucceeded: markJobSucceeded,
   markFailedOrPending: markJobFailedOrPending,
+  holdJob: holdBackgroundJob,
 };
 
 export function summarizeBackgroundJob(job: BackgroundJob): BackgroundJobSummary {

@@ -181,6 +181,15 @@ class InMemoryBackgroundJobStore implements BackgroundJobStore {
     if (row) row.status = "succeeded";
   }
 
+  async holdJob(job: BackgroundJob, until: Date) {
+    const row = this.rows.find((r) => r.id === job.id);
+    if (row) {
+      row.status = "pending";
+      row.attempts = Math.max(0, row.attempts - 1);
+      row.runAfter = until;
+    }
+  }
+
   async markFailedOrPending(job: BackgroundJob, _err: unknown, exhausted: boolean) {
     const row = this.rows.find((candidate) => candidate.id === job.id);
     if (row) row.status = exhausted ? "failed" : "pending";
