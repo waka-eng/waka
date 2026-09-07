@@ -1,6 +1,6 @@
 # Plain words — revising WAKA's vocabulary to be understood on first contact
 
-**Status: proposal, awaiting the founder's word choices.** Written 2026-08-28 on
+**Status: proposal, awaiting the founder's word choices. Re-verified against `dev` 2026-09-07 — see [the addendum](2026-09-07-plain-words-addendum.md) for what moved (Korean shipped; copy moved into the i18n catalog; `index.html` is already deleted; layer 4 gained a second name).** Written 2026-08-28 on
 the founder's ask: the names are too abstract and dreamy; revisit the glossary
 and the terms used across the product so they are intuitive. Nothing here is
 applied. The word choices at the end are the founder's; everything else is
