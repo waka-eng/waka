@@ -3087,28 +3087,33 @@
        is not an inset, it is a near miss: the signpost read as attached to the
        chrome above it rather than as its own thing. */
     top: calc(56px + env(safe-area-inset-top));
-    /* AND IT STANDS AT THE COLUMN'S EDGE, NOT THE SCREEN'S MIDDLE.
-       Founder, 2026-08-28, over two screenshots of a phone: "so ugly".
+    /* AND IT IS CENTRED, LIKE THE COUNT IT IS THE OTHER HALF OF.
+       Founder, 2026-09-08: "philosophies and value is not centered."
 
-       Measured at 390px: the claim is set LEFT from x 20, and this signpost
-       was CENTRED at 195 — their left edges 77px apart. On a desktop that
-       reads as deliberate, because the claim sits in a 680px column inside a
-       1440px frame and a centred label agrees with the column's own centre.
-       On a phone the claim is the full width, so a centred label stops
-       agreeing with anything: two alignment systems stacked, and on a wall
-       with nothing on it yet the label floats over one short italic line
-       hanging at the far edge.
+       WHAT WAS HERE BEFORE, AND WHY IT WENT. On 2026-08-28 the same founder
+       said "so ugly" over two phone screenshots, and this rule answered by
+       pinning the signpost to the column's left edge at x 8 so its words
+       lined up with the claim's first letter. The reasoning was that a
+       centred label over a full-width claim is two alignment systems
+       stacked. That reasoning was measured on a wall with NOTHING on it —
+       one short italic line hanging at the far edge — and it does not
+       survive a wall that has a claim on it: with three full lines of poster
+       under it, the signpost stopped reading as the claim's label and
+       started reading as the only thing on the top half of the screen that
+       had slipped.
 
-       It already steps out of the top row on a phone. Stepping to the
-       column's edge as well is the same adaptation finished: signpost, then
-       claim, one left edge, one column. 20px is `.jar-hq-inner`'s own side
-       padding, read off the same number rather than restated.
+       The pair is the argument. `.jar-values` and `.jar-saved` are one axis
+       — the way up and the count, top and bottom — and the block at 2966
+       already treats them as one thing. The count is centred at every width.
+       Left-aligning only the top of that pair is the asymmetry the founder's
+       eye caught, and centring is what makes them a pair again.
 
-       The 12px of side padding this button carries is subtracted, so its
-       WORDS line up with the claim's first letter — not its box. Nobody sees
-       a box. */
-    left: 8px;
-    transform: none;
+       WHAT IS KEPT. The step DOWN to its own line, which is what actually
+       fixed the defect the phone walk found in August: at 390px the four
+       controls along the top edge cannot share a line, and a centred
+       signpost up there intercepted the pointer for `.jar-when`. That was
+       never solved by moving left — it was solved by `top` above. `e2e:phone`
+       hit-tests every control's own centre and is the proof. */
   }
   /* AND THE COLUMN MAKES ROOM FOR THE SIGNPOST THAT STEPPED INTO IT.
      `.jar-hq-inner` pads 72px from the top, and that number was set for a
@@ -3477,8 +3482,33 @@
 /* WHOSE GROUND — a choice, where a colour key used to be.
    Same corner, same quiet register: what changed is that these rows now DO
    something, so unlike the key they take pointer events and one of them is
-   always lit as the ground you are standing in. */
-.jar-ground {
+   always lit as the ground you are standing in.
+
+   IT IS `.jar-grounds`, PLURAL, AND THE PLURAL IS LOAD-BEARING.
+   This block was called `.jar-ground` — the same name the poster's evidence
+   sentence carries 230 lines above (`A GROUND THE POSTER STANDS ON`). Two
+   different components, one class, and the whole file is one cascade: this
+   block is later, so it won, and it won for BOTH. Every time somebody pressed
+   the claim on their own wall, the memory it stands on was handed
+   `position: absolute`, `left: 18px`, `bottom: 46px`, `display: flex` and —
+   through the label register in `system.css`, which also named `.jar-ground`
+   — SET IN CAPITALS. A quotation, uppercased and thrown out of its own
+   container into the bottom-left corner of whatever happened to be the
+   nearest positioned ancestor.
+
+   Reported by the founder on 2026-09-08 from a phone: "when clicking on the
+   text that was formed, this weird thing appears at the bottom. It doesn't
+   happen in desktop." It happened on the desktop too — measured at 1100x780,
+   the sentence landed at x18 spanning the full 1100px — but at that width it
+   lands beside the column and reads as a stray line. On a 393px phone the
+   column is only 270px tall, so `bottom: 46px` puts it straight through the
+   claim's own last line. Same defect, two legibilities.
+
+   The lesson is not "check the cascade". It is that a class name is a NAME:
+   two things cannot share one and stay two things. `css-one-class-one-thing`
+   in `e2e:dead-css` now fails the build if any bare class is declared by two
+   top-level blocks that both set layout. */
+.jar-grounds {
   position: absolute;
   /* it arrives with the ground rather than appearing: the same fade the rest
      of the chrome uses, so nothing in this world ever pops into existence */
@@ -3491,7 +3521,7 @@
   align-items: flex-start;
   gap: var(--sp-2);
 }
-.jar-ground-row {
+.jar-grounds-row {
   display: flex;
   align-items: center;
   gap: var(--sp-8);
@@ -3519,19 +3549,19 @@
 }
 /* JUST ARRIVED: every ground lit, for as long as an arrival lasts. Dropping
    the class is the whole settle — the transition above is already the curve. */
-.jar-ground--lit .jar-ground-row {
+.jar-grounds--lit .jar-grounds-row {
   opacity: 1;
 }
-.jar-ground-row:hover,
-.jar-ground-row:focus-visible {
+.jar-grounds-row:hover,
+.jar-grounds-row:focus-visible {
   opacity: 0.8;
 }
-.jar-ground-row--here {
+.jar-grounds-row--here {
   opacity: 1;
 }
 /* the swatch is the orb, small: same circle, same soft edge, so the name and
    the ground it switches to are visibly the same material */
-.jar-ground-dot {
+.jar-grounds-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
@@ -3543,7 +3573,7 @@
    The name has to be made of the same stuff as the ground it opens, so an
    agent's swatch loses its curve exactly as its orbs do — a stepped square
    rather than a disc, at the same size and the same hue. */
-.jar-ground-dot--agent {
+.jar-grounds-dot--agent {
   border-radius: 0;
   width: 6px;
   height: 6px;

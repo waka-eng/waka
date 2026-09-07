@@ -90,6 +90,7 @@ import {
   type Palette,
 } from "../canvas/palette";
 import { useMeasured } from "../canvas/measured";
+import { renderScale } from "../canvas/scale";
 import { BODY_TIERS, bodyPath } from "../character/raster";
 import { GroupPanel } from "../space-kinds/GroupPanel";
 import { SpaceSettings, type GroupTrouble } from "../space/settings/SpaceSettings";
@@ -3405,7 +3406,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const canvasEl = measured.canvas.current;
     const ctx2d = canvasEl ? canvasEl.getContext("2d") : null;
     if (!ctx2d) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = renderScale(window.innerWidth, window.innerHeight);
     const pal = buildPalette(root, dpr, ctx2d);
     paletteRef.current = pal;
     /* the film is laid on the DOM layer once, here — never per frame */
@@ -3431,7 +3432,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     loadSpritesRef.current = () => {
       const bag = ballsRef.current;
       if (!bag || urlById.size === 0) return;
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = renderScale(window.innerWidth, window.innerHeight);
       for (const b of bag.list) {
         const url = urlById.get(b.id);
         if (!url || b.imgUrl === url) continue;
@@ -5455,7 +5456,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       const trueH = rect.height >= 2 ? rect.height : window.innerHeight;
       view.w = Math.max(trueW, 1);
       view.h = Math.max(trueH, 1);
-      const nextDpr = Math.min(window.devicePixelRatio || 1, 2);
+      const nextDpr = renderScale(view.w, view.h);
       /*
        * ONLY WHEN THE SIZE ACTUALLY CHANGED.
        *
@@ -14117,7 +14118,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           and whose ground is under you is not the question. */}
       {grounds.length > 0 && phase === "ready" ? (
         <div
-          className={groundsLit ? "jar-ground jar-ground--lit" : "jar-ground"}
+          className={groundsLit ? "jar-grounds jar-grounds--lit" : "jar-grounds"}
           data-jar-chrome="1"
           role="radiogroup"
           aria-label={say("worldWhoseGround")}
@@ -14130,11 +14131,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 type="button"
                 role="radio"
                 aria-checked={here}
-                className={here ? "jar-ground-row jar-ground-row--here" : "jar-ground-row"}
+                className={here ? "jar-grounds-row jar-grounds-row--here" : "jar-grounds-row"}
                 onClick={() => standIn(m.mine ? null : m.id)}
               >
                 <i
-                  className={m.agent ? "jar-ground-dot jar-ground-dot--agent" : "jar-ground-dot"}
+                  className={m.agent ? "jar-grounds-dot jar-grounds-dot--agent" : "jar-grounds-dot"}
                   style={m.hue >= 0 ? { background: hueCss(m.hue) } : undefined}
                   aria-hidden="true"
                 />

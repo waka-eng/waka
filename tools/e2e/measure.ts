@@ -1167,59 +1167,72 @@ const CASES: Case[] = [
   },
 
   {
-    id: "one-left-edge-on-a-phone",
-    name: "on a phone the signpost and the claim share one left edge",
-    needs: ["jar-values", "jar-poster", "jar-hq-inner"],
-    /* put the signpost back in the middle of the screen, which is where it was */
+    id: "one-axis-on-a-phone",
+    name: "on a phone the way up and the count share one centre",
+    needs: ["jar-values", "jar-saved", "jar-hq-inner"],
+    /* pin the signpost back to the column's left edge, which is where it was
+       between 2026-08-28 and 2026-09-08 */
     sabotage:
-      "@media (max-width: 560px) { .jar-values { left: 50% !important;" +
-      " transform: translateX(-50%) !important; } }",
+      "@media (max-width: 560px) { .jar-values { left: 8px !important;" +
+      " transform: none !important; } }",
     run: async (page) => {
-      /* THE FOUNDER, over two screenshots of a phone: "so ugly" (2026-08-28).
-         Measured at 390px: the claim is set LEFT from x 20 and the signpost
-         above it was CENTRED at 195 — two alignment systems stacked. On a
-         desktop that reads as deliberate, because the claim sits in a 680px
-         column inside a 1440px frame and a centred label agrees with the
-         column's own centre. On a phone the claim IS the full width, so a
-         centred label agrees with nothing, and on a wall with nothing on it
-         yet the label floats over one short italic line at the far edge.
+      /* THE FOUNDER, on a phone: "philosophies and value is not centered"
+         (2026-09-08).
+
+         THIS CASE HELD THE OPPOSITE RULING FOR ELEVEN DAYS, and the reversal
+         is written down rather than quietly swapped. On 2026-08-28, over two
+         screenshots of an EMPTY wall, the same founder said "so ugly" of a
+         centred signpost floating above one short italic line at the far
+         edge, and the answer was to line its words up with the claim's first
+         letter. On a wall that has a claim on it — three full lines of poster
+         directly under the signpost — that alignment stopped reading as a
+         label on the claim and started reading as the one piece of chrome on
+         the top half of the screen that had slipped off centre.
+
+         SO THE RULE IS THE PAIR, WHICH IS THE THING THE OLD ONE MISSED.
+         `.jar-values` and `.jar-saved` are one vertical axis — the way up and
+         the count, top and bottom of the same screen — and `home.css` already
+         sizes them as one thing. The count is centred at every width there has
+         ever been. Left-aligning only the top of that pair is the asymmetry
+         the founder's eye caught, so what is measured here is not "is it in
+         the middle" but "do the two ends of the axis agree", which is a claim
+         about the design rather than about a number.
 
          THE CASE RESIZES ITSELF, because the rule it measures lives behind
-         `max-width: 560px` and every other case here runs at 900. The
-         harness hands each case its own page, so this costs nothing but the
-         reflow.
+         `max-width: 560px` and every other case here runs at 900. The harness
+         hands each case its own page, so this costs nothing but the reflow.
 
-         AND IT COMPARES INK, NOT BOXES. The signpost is a button carrying
-         12px of side padding, so its BOX has to stand 12px further left than
-         the claim for their WORDS to line up. A case that compared boxes
-         would demand the wrong number and, worse, would be satisfied by a
-         signpost whose letters were visibly out. */
+         AND IT COMPARES CENTRES, NOT EDGES. Both are buttons carrying their
+         own side padding and their words are different lengths, so their left
+         edges have no reason to agree and their centres have every reason
+         to. */
       await page.setViewportSize({ width: 390, height: 844 });
       await page.waitForTimeout(200);
       const read = `(() => {
-        const e = document.querySelector(".jar-values");
-        const p = document.querySelector(".jar-poster");
-        if (!e || !p) return null;
-        const rg = document.createRange();
-        rg.selectNodeContents(e);
-        const ink = rg.getBoundingClientRect();
+        const up = document.querySelector(".jar-values");
+        const count = document.querySelector(".jar-saved");
+        if (!up || !count) return null;
+        const u = up.getBoundingClientRect();
+        const c = count.getBoundingClientRect();
         return JSON.stringify({
-          ink: Math.round(ink.left),
-          box: Math.round(e.getBoundingClientRect().left),
-          claim: Math.round(p.getBoundingClientRect().left),
+          up: Math.round((u.left + u.right) / 2),
+          count: Math.round((c.left + c.right) / 2),
+          screen: Math.round(window.innerWidth / 2),
         });
       })()`;
       const raw = (await page.evaluate(read)) as string | null;
-      if (!raw) return { ok: false, detail: "no signpost or no claim on the fixture" };
-      const m = JSON.parse(raw) as { ink: number; box: number; claim: number };
-      const off = m.ink - m.claim;
+      if (!raw) return { ok: false, detail: "no signpost or no count on the fixture" };
+      const m = JSON.parse(raw) as { up: number; count: number; screen: number };
+      const offPair = m.up - m.count;
+      const offScreen = m.up - m.screen;
+      const ok = near(offPair, 0, 1) && near(offScreen, 0, 1);
       return {
-        ok: near(off, 0, 1),
-        detail: near(off, 0, 1)
-          ? `both start at x ${m.claim} — the signpost's box stands at ${m.box}, ` +
-            `its own padding wide of it, so the letters line up`
-          : `the signpost's words start at x ${m.ink} and the claim's first letter at ` +
-            `x ${m.claim} — ${r1(off)}px apart, two left edges`,
+        ok,
+        detail: ok
+          ? `both stand at x ${m.up}, which is the screen's own middle — one axis`
+          : `the way up is centred at x ${m.up}, the count at x ${m.count} ` +
+            `(${r1(offPair)}px apart) and the screen's middle is x ${m.screen} ` +
+            `(${r1(offScreen)}px off)`,
       };
     },
   },

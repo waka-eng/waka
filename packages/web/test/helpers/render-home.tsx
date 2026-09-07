@@ -497,7 +497,7 @@ export async function mountWorld(facts: WorldFacts): Promise<MountedWorld> {
       await step(60); /* the camera snaps to a rest point, then the pour lands */
     },
     async standIn(name) {
-      await clickByText(".jar-ground-row", name);
+      await clickByText(".jar-grounds-row", name);
       await step(60);
     },
     unmount() {
