@@ -16,11 +16,54 @@
  * pretend to be one.
  */
 
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
-import { CEILING, MAX_SCALE, dprOf } from "../src/canvas/scale";
+import { CEILING, FLOOR, MAX_SCALE, dprOf } from "../src/canvas/scale";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const SRC = resolve(HERE, "../src");
 
 describe("render scale", () => {
+  /**
+   * THE ARITHMETIC IS NOT THE GATE — the call sites are.
+   *
+   * Everything else in this file exercises the pure helper, which means all of
+   * it stays green if somebody writes `Math.min(window.devicePixelRatio, 2)`
+   * back into `Home.tsx` tomorrow. That is precisely the defect this change
+   * exists to remove, so the rule is stated where it can be broken: the
+   * device's own ratio is read in ONE file, and the world's three canvas
+   * sites go through it.
+   */
+  it("reads devicePixelRatio in one place, and the world goes through it", () => {
+    const offenders: string[] = [];
+    const walk = (dir: string): string[] => {
+      const { readdirSync, statSync } = require("node:fs") as typeof import("node:fs");
+      const out: string[] = [];
+      for (const name of readdirSync(dir)) {
+        const full = resolve(dir, name);
+        if (statSync(full).isDirectory()) out.push(...walk(full));
+        else if (/\.tsx?$/.test(name)) out.push(full);
+      }
+      return out;
+    };
+    for (const file of walk(SRC)) {
+      if (file.endsWith(`canvas${"/"}scale.ts`)) continue;
+      const text = readFileSync(file, "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, " ")
+        .replace(/\/\/[^\n]*/g, " ");
+      if (/devicePixelRatio/.test(text)) offenders.push(file.slice(SRC.length + 1));
+    }
+    expect(offenders, `devicePixelRatio belongs to canvas/scale.ts: ${offenders.join(", ")}`).toEqual(
+      [],
+    );
+    const home = readFileSync(resolve(SRC, "pages/Home.tsx"), "utf8");
+    expect(home.match(/renderScale\(/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
+  });
+
   it("gives a phone its own three, which is the bug that was reported", () => {
     expect(dprOf(393, 852, 3)).toBe(3);
     /* and the backing store that follows from it is smaller than what a
@@ -53,13 +96,52 @@ describe("render scale", () => {
     expect(dprOf(393, 852, Number.POSITIVE_INFINITY)).toBe(1);
   });
 
+  /**
+   * THE PROPERTY THAT MAKES THIS FILE SAFE, and the one the first version
+   * shipped without.
+   *
+   * `CEILING` on its own made a DPR-2 window softer as soon as its CSS area
+   * passed ~4Mpx: a Pro Display XDR at its default 3008x1692 went 2.000 ->
+   * 1.773, an 8K desktop 2.000 -> 1.389. That is the founder's phone defect
+   * relocated to a desk. Caught in review, not by a test — so it gets a test,
+   * and the test is a property over a table of real displays rather than one
+   * more example.
+   */
+  it("is never softer than the rule it replaced, on any surface", () => {
+    const SURFACES: Array<[string, number, number, number]> = [
+      ["MacBook Air 13", 1440, 900, 2],
+      ["MacBook Pro 14", 1512, 982, 2],
+      ["iMac 5K, default", 2560, 1440, 2],
+      ["Studio Display, More Space", 3200, 1800, 2],
+      ["Pro Display XDR, default", 3008, 1692, 2],
+      ["8K desktop", 3840, 2160, 2],
+      ["a low-dpi laptop", 1440, 900, 1],
+      ["the phone that reported it", 393, 852, 3],
+      ["a tablet", 768, 1024, 2],
+    ];
+    for (const [name, w, h, dpr] of SURFACES) {
+      const was = Math.min(dpr, FLOOR);
+      expect(dprOf(w, h, dpr), `${name} got softer`).toBeGreaterThanOrEqual(was);
+      expect(dprOf(w, h, dpr), `${name} exceeds its own screen`).toBeLessThanOrEqual(dpr);
+    }
+  });
+
+  it("bounds growth, and only growth", () => {
+    /* the ceiling still bites where it is meant to — above FLOOR, on a
+       surface asking for more than it can hold */
+    expect(dprOf(4000, 3000, 3)).toBeLessThan(MAX_SCALE);
+    expect(dprOf(4000, 3000, 3)).toBe(FLOOR);
+    /* and it can never bite BELOW the floor, however absurd the surface */
+    expect(dprOf(40000, 30000, 3)).toBe(FLOOR);
+    expect(CEILING).toBeGreaterThan(2560 * 1440 * 2 * 2 / 1_000_000);
+  });
+
   it("steps down rather than allocating a surface nothing can hold", () => {
     /* a hypothetical 4000x3000 window at 3 would ask for 108 megapixels */
     const huge = dprOf(4000, 3000, 3);
     expect(huge).toBeLessThan(MAX_SCALE);
-    expect(4000 * 3000 * huge * huge).toBeLessThanOrEqual(CEILING * 1_000_000 + 1);
-    /* and it never goes below CSS resolution, which would be a bug wearing a
-       budget's clothes */
-    expect(dprOf(40000, 30000, 3)).toBe(1);
+    /* and it never goes below the rule it replaced, which is a stronger
+       promise than "never below CSS resolution" and the one that matters */
+    expect(dprOf(40000, 30000, 3)).toBe(FLOOR);
   });
 });

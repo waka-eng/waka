@@ -5756,6 +5756,16 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
          character is would be to measure its glow, and its glow is clipped by
          a narrow viewport and merges with whatever is lit beside it. */
       root!.style.setProperty("--jar-char", `${Math.round(companion.size)}px`);
+      /* AND WHERE ITS MIDDLE IS, so chrome that stands BESIDE the character
+         can stand beside the character rather than beside a guess at it.
+         `.jar-way` — the neighbouring wall's name at each edge — was placed at
+         47% of the viewport height, a proportion that happens to land near the
+         creature on a tall window and does not on a short one. At 360x640 with
+         a claim open, the column reaches y=304 and 47% is y=301: the rail
+         printed straight through `written by hand`. The companion's own clamp
+         already keeps it below the column, so a rail that hangs off the
+         companion inherits that clearance instead of re-deriving it. */
+      root!.style.setProperty("--jar-char-mid", `${Math.round(companion.y)}px`);
       /* the columns' DOM measures itself off these — one write per resize */
       root!.style.setProperty("--jar-vw", `${Math.round(view.w)}px`);
       root!.style.setProperty("--jar-vh", `${Math.round(view.h)}px`);

@@ -1249,7 +1249,21 @@
   padding: 0;
   background: none;
   font-family: inherit;
-  top: calc(var(--jar-vh, 100vh) * 0.47);
+  /* 47% of the viewport, OR just under the character — whichever is lower.
+     The proportion is the desktop's own placement and is untouched by the
+     second term there (a 780px-tall window puts the character's top at 330
+     against 47% = 366). It bites only where a tall claim has pushed the
+     creature down: at 360x640 with the claim open the column reaches 304 and
+     the bare proportion lands at 301, so the neighbour's name printed through
+     `written by hand`. `--jar-char-mid` is published by the same pass that
+     places the companion, and the companion's clamp already keeps it clear of
+     the column — so hanging the rail off it inherits that clearance rather
+     than guessing at it again. The fallback of 0px makes the second term
+     negative, so before the first frame the proportion simply wins. */
+  top: max(
+    calc(var(--jar-vh, 100vh) * 0.47),
+    calc(var(--jar-char-mid, 0px) - var(--jar-char, 120px) / 2 + 24px)
+  );
   max-width: 22ch;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3486,7 +3500,8 @@
 
    IT IS `.jar-grounds`, PLURAL, AND THE PLURAL IS LOAD-BEARING.
    This block was called `.jar-ground` — the same name the poster's evidence
-   sentence carries 230 lines above (`A GROUND THE POSTER STANDS ON`). Two
+   sentence carries 255 lines above under `A GROUND THE POSTER STANDS ON`
+   (230 at the moment of the rename; this note has grown since). Two
    different components, one class, and the whole file is one cascade: this
    block is later, so it won, and it won for BOTH. Every time somebody pressed
    the claim on their own wall, the memory it stands on was handed
@@ -3505,9 +3520,11 @@
    claim's own last line. Same defect, two legibilities.
 
    The lesson is not "check the cascade". It is that a class name is a NAME:
-   two things cannot share one and stay two things. `css-one-class-one-thing`
-   in `e2e:dead-css` now fails the build if any bare class is declared by two
-   top-level blocks that both set layout. */
+   two things cannot share one and stay two things.
+   `packages/web/test/one-class-one-thing.test.ts` now fails the build — in
+   `pnpm test`, on every run — when two unconditional blocks in one cascade
+   layer name the same bare class and disagree about the value of a layout
+   property they both set. */
 .jar-grounds {
   position: absolute;
   /* it arrives with the ground rather than appearing: the same fade the rest

@@ -266,7 +266,8 @@ a:focus-visible {
    bare `.field` and, being later in the same layer at the same specificity,
    wins. This block used to say `margin-bottom: var(--sp-22)` and that
    declaration had never once decided anything — 26 is the number every field
-   in the product actually keeps. Found by `one-class-one-thing.test.ts`. */
+   but the last one keeps, and the last keeps 8 (`body .field:last-of-type`,
+   further down this file). Found by `one-class-one-thing.test.ts`. */
 .field {
   display: flex;
   flex-direction: column;

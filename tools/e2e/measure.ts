@@ -1169,7 +1169,7 @@ const CASES: Case[] = [
   {
     id: "one-axis-on-a-phone",
     name: "on a phone the way up and the count share one centre",
-    needs: ["jar-values", "jar-saved", "jar-hq-inner"],
+    needs: ["jar-values", "jar-saved"],
     /* pin the signpost back to the column's left edge, which is where it was
        between 2026-08-28 and 2026-09-08 */
     sabotage:

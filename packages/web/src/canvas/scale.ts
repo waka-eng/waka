@@ -21,9 +21,10 @@
  * bare DPR cap does not bound those — the viewport does. Under the old rule a
  * 1440x900 laptop at DPR 2 was already drawing 5.2 megapixels a frame and had
  * been for the product's whole life. The phone the founder was holding was
- * capped at 3.0. The cap was not protecting the phone from doing too much
- * work; it was stopping the phone from doing a third as much work as a laptop
- * does, and charging it the blur for the privilege.
+ * held to 1.3 — a quarter of the laptop's work — though its own ratio asks
+ * for only 3.0. The cap was not protecting the phone from doing too much
+ * work; it was stopping it from doing a quarter as much as a laptop does, and
+ * charging it the blur for the privilege.
  *
  * SO THE RULE IS THE DEVICE'S OWN SCALE, WITH A CEILING ON PIXELS.
  *
@@ -32,11 +33,16 @@
  *   - Never above 3. Above that the returns are invisible and the fill is not:
  *     3 is where every shipping phone tops out, and a device claiming 4 is
  *     asking for 78% more fill than 3 to place detail below the eye's floor.
- *   - And never past `CEILING` megapixels, whatever the ratio. This is the
- *     bound the old rule was reaching for and missed. It is set ABOVE what a
- *     5K desktop at DPR 2 already draws (14.7Mpx), so no surface that renders
- *     sharp today is made softer by this file — the ceiling only catches
- *     surfaces nothing has ever rendered, where a step down beats a stall.
+ *   - And never past `CEILING` megapixels — EXCEPT that the ceiling may never
+ *     lower a surface below the scale the old rule already gave it. That
+ *     exception is the whole correctness of this file and it was missing from
+ *     the first version, which is worth writing down: `CEILING` alone made a
+ *     DPR-2 window softer as soon as it grew past ~4Mpx of CSS area, so a Pro
+ *     Display XDR at its default 3008x1692 went from 2.000 to 1.773 and an 8K
+ *     desktop to 1.389. That is the founder's phone defect relocated to a
+ *     desk — the same blur, bought with the same reasoning. The floor of
+ *     `min(dpr, 2)` makes the guarantee real: this file can only ever hand
+ *     back a scale greater than or equal to what shipped before it.
  *
  * `dprOf` takes the ratio as an argument rather than reading `window` so the
  * arithmetic can be tested without a browser; `renderScale` is the one every
@@ -47,15 +53,24 @@
 export const MAX_SCALE = 3;
 
 /**
- * The most backing-store pixels one canvas may hold, in megapixels.
+ * The most backing-store pixels one canvas may hold, in megapixels — a
+ * ceiling on GROWTH, never a reason to shrink below what already shipped.
  *
- * 16 is chosen against what already ships, not against a benchmark: a 2560x1440
- * display at DPR 2 draws 14.7Mpx today and always has. A ceiling below that
- * would make a real desktop blurrier to fix a phone, which is a trade nobody
- * asked for. Above 16 the surface is larger than any display this product has
- * been opened on, and stepping down is the kinder failure.
+ * 16 sits above a 5K desktop at DPR 2 (14.7Mpx) and below a 6K one (20.4Mpx),
+ * so on its own it WOULD step a 6K window down. `FLOOR` is what stops that:
+ * the ceiling only ever bounds the extra scale this file is willing to hand
+ * out, and the old rule's answer is the worst any surface can be given.
  */
 export const CEILING = 16;
+
+/**
+ * The scale this file may never go below — the rule it replaced.
+ *
+ * Every surface that renders sharp today does so at `min(dpr, 2)`. Making any
+ * of them softer would be a regression dressed as a budget, so the ceiling is
+ * clamped up to this before it is applied.
+ */
+export const FLOOR = 2;
 
 /**
  * The scale to draw a `w`x`h` CSS-pixel surface at, given a device ratio.
@@ -69,10 +84,11 @@ export function dprOf(w: number, h: number, dpr: number): number {
   const area = Math.max(w, 1) * Math.max(h, 1);
   /* the largest scale whose backing store still fits under the ceiling */
   const fits = Math.sqrt((CEILING * 1_000_000) / area);
-  /* never below 1: a world drawn at less than CSS resolution is a bug, not a
-     budget, and every viewport this product opens in is far inside the
-     ceiling anyway */
-  return Math.max(1, Math.min(asked, fits));
+  /* THE CEILING MAY BOUND GROWTH AND NOTHING ELSE. Clamped up to FLOOR, so a
+     surface the old rule drew at 2 is never handed less than 2 — see the
+     header. Then never below 1: a world drawn under CSS resolution is a bug,
+     not a budget. */
+  return Math.max(1, Math.min(asked, Math.max(FLOOR, fits)));
 }
 
 /** The scale for the window the product is actually running in. */

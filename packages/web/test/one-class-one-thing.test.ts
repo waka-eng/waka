@@ -27,16 +27,19 @@
  * `e2e:measure` reads computed styles and got exactly what the CSS said.
  * `e2e:dead-css` asks which rules are alive: both were, gloriously.
  * `nothing-invisible-takes-a-press` asks whether controls can be pressed: it
- * could. `e2e:phone` measures overlap between CONTROLS, and the thing landing
- * on top of the claim is a paragraph. Nothing was broken in the sense any of
- * them can express. The defect is upstream of all of them: two components
+ * could. `e2e:phone` hit-tests every control's own centre and WOULD have
+ * caught it — both the evidence sentence and the claim are buttons — but the
+ * evidence only exists once the claim has been pressed, and that walk never
+ * presses it. Nothing was broken in the sense any of them can express. The defect is upstream of all of them: two components
  * were given one name, and after that the cascade behaved perfectly.
  *
  * ── WHAT THIS ASKS ─────────────────────────────────────────────────────────
  *
- * Of every bare single-class selector (`.foo`, alone, no compound, no
- * combinator, no pseudo) declared in an UNCONDITIONAL block: is it declared
- * that way in more than one place, with both blocks setting LAYOUT?
+ * Of every bare single-class selector (`.foo` — no compound, no combinator,
+ * no pseudo) named by an UNCONDITIONAL block: do two such blocks in the same
+ * cascade layer DISAGREE about the value of a layout property they both set?
+ * A disagreement means one of them is dead, silently, and a dead layout
+ * declaration is either a bug or a lie.
  *
  * Three narrowings, each one deliberate, because a gate that cries wolf is
  * deleted by the third person who meets it:
@@ -74,12 +77,16 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const STYLES = resolve(HERE, "../src/styles");
 
 /**
- * The sheets that dress the world. `surface.css` is exempt for the same
- * reason `type-scale.test.ts` exempts it — it is the flat screens' sheet and
- * `one-product-one-system.md` Phase 6 deletes it. If the flat screens are
- * ever kept instead, this exemption becomes a bug.
+ * Every sheet in `src/styles` that carries class rules. `layers.css` is in the
+ * list because an unlayered rule in it would outrank every layer; it holds
+ * only the layer order and one compound selector today, so it contributes
+ * nothing — which is the point of asking rather than assuming.
+ *
+ * (An earlier draft of this note exempted `surface.css`, copied from
+ * `type-scale.test.ts`. That file was deleted on 2026-08-26 — the exemption
+ * described a file that is not there, in a list it was not in.)
  */
-const GOVERNED = ["home.css", "chrome.css", "global.css", "system.css"] as const;
+const GOVERNED = ["home.css", "chrome.css", "global.css", "system.css", "layers.css"] as const;
 
 /**
  * Properties that decide where a box is and how big it is.
@@ -155,9 +162,31 @@ function blocksIn(file: string): Block[] {
   let head = "";
   let line = 1;
   let headLine = 1;
+  let quote = "";
   for (let i = 0; i < css.length; i += 1) {
     const ch = css[i]!;
     if (ch === "\n") line += 1;
+    /* STRINGS ARE NOT STRUCTURE. `content: "}"` closed a block early and
+       `content: "{"` swallowed the rule after it — one hid a real collision,
+       the other invented one. */
+    if (quote) {
+      if (ch === "\\") i += 1;
+      else if (ch === quote) quote = "";
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      head += ch;
+      continue;
+    }
+    /* A STATEMENT AT-RULE ENDS AT ITS SEMICOLON. `@layer a, b;` and
+       `@import url(x);` have no block, so an accumulating `head` ran on and
+       read the NEXT rule's brace as the at-rule's own — deleting that rule
+       from the gate's view entirely. */
+    if (ch === ";") {
+      head = "";
+      continue;
+    }
     if (ch === "{") {
       const selector = head.trim();
       head = "";
@@ -169,9 +198,17 @@ function blocksIn(file: string): Block[] {
       let depth = 1;
       let body = "";
       let j = i + 1;
+      let bq = "";
       for (; j < css.length && depth > 0; j += 1) {
         const c = css[j]!;
         if (c === "\n") line += 1;
+        if (bq) {
+          if (c === "\\") { body += c + (css[j + 1] ?? ""); j += 1; continue; }
+          if (c === bq) bq = "";
+          body += c;
+          continue;
+        }
+        if (c === '"' || c === "'") { bq = c; body += c; continue; }
         if (c === "{") depth += 1;
         else if (c === "}") depth -= 1;
         if (depth > 0) body += c;
@@ -228,14 +265,40 @@ function blocksIn(file: string): Block[] {
  * concatenates two files — the precise hazard `layers.css` was written to
  * end, still live inside a single layer.
  *
- * It is not fixed here because it belongs to the public profile page, one of
- * the flat screens `one-product-one-system.md` Phase 6 deletes, and merging
- * two grid definitions blind would restyle a page this change has no business
- * touching. When that screen goes, this entry goes with it. Nothing may be
- * added to this list to make a build pass: a new collision is a new bug.
+ * It is not fixed here because merging two grid definitions blind would
+ * restyle the public profile page, which this change has no business
+ * touching. (An earlier draft said Phase 6 of `one-product-one-system.md`
+ * deletes that page and the entry would go with it — it does not; that phase
+ * lists `Surface.tsx`, `surface.css`, the agent and graph screens and the
+ * flat routes, and `PublicProfile.tsx` is a live route in `main.tsx`.) The
+ * condition that retires this entry is someone harmonising those three grid
+ * properties on purpose. Nothing may be added to this list to make a build
+ * pass: a new collision is a new bug.
  */
 const INHERITED = new Set([".nc-stage--top-of-mind-wall"]);
 
+/** A ratchet, and it only turns down. Nothing may be added to make a build pass. */
+const INHERITED_CEILING = 1;
+
+/**
+ * THE LIMIT THIS GATE KNOWS IT HAS, written down rather than discovered.
+ *
+ * `solo` below is the rule's ARITY: a block counts only if its whole selector
+ * list is this one class. So a hostile or careless author can hide a class
+ * from this gate by adding any second selector to the comma list.
+ *
+ * That hole is deliberate, and it was measured before being accepted. Judging
+ * per-PART instead flags seven pairs in the tree today, and every one of them
+ * is the legitimate idiom this codebase is built on: a shared rule naming
+ * four signposts at once (`home.css:622`, `position: relative`), then each
+ * signpost's own block setting `position: absolute` over it. Those overrides
+ * are intended — the group's declaration being dead for those four is how the
+ * cascade is being used, not a defect. A gate that reports them is a gate
+ * somebody deletes, and then the real collision has nothing watching it.
+ *
+ * So: this catches the accident, which is what happened, and not the evasion,
+ * which has not.
+ */
 /** `.foo` and nothing else — no compound, no combinator, no pseudo, no state. */
 const BARE_CLASS = /^\.[a-zA-Z][\w-]*$/;
 
@@ -258,9 +321,15 @@ describe("one class, one thing", () => {
         for (let b = a + 1; b < blocks.length; b += 1) {
           const one = blocks[a]!;
           const two = blocks[b]!;
-          /* a redress across cascade layers is the documented way chrome.css
-             dresses global.css — it is one component in two voices */
-          if (one.layer !== two.layer) continue;
+          /* A redress across cascade layers is the documented way chrome.css
+             dresses global.css — one component in two voices, not a clash.
+             AN UNLAYERED RULE IS NOT THAT. It outranks every layer at any
+             specificity (`layers.css` relies on exactly that), so it is the
+             most dangerous neighbour to have, not an exempt one — and
+             home.css already carries 18 unlayered blocks, one missing indent
+             away from being this bug again. */
+          const bothLayered = one.layer !== "" && two.layer !== "";
+          if (bothLayered && one.layer !== two.layer) continue;
           if (INHERITED.has(name)) continue;
           const fought = [...one.laid.entries()]
             .filter(([prop, value]) => two.laid.has(prop) && two.laid.get(prop) !== value)
@@ -309,6 +378,9 @@ describe("one class, one thing", () => {
         else seen.set(block.selector, [`${file}:${block.line}`]);
       }
     }
+    expect(INHERITED.size, "the inherited list may only shrink").toBeLessThanOrEqual(
+      INHERITED_CEILING,
+    );
     for (const name of INHERITED) {
       expect(seen.get(name)?.length ?? 0, `${name} is no longer declared twice`).toBeGreaterThan(1);
     }
