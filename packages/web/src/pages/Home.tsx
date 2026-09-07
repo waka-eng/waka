@@ -60,7 +60,6 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { createPortal } from "react-dom";
@@ -91,6 +90,7 @@ import {
   type Palette,
 } from "../canvas/palette";
 import { useMeasured } from "../canvas/measured";
+import { renderScale } from "../canvas/scale";
 import { BODY_TIERS, bodyPath } from "../character/raster";
 import { GroupPanel } from "../space-kinds/GroupPanel";
 import { SpaceSettings, type GroupTrouble } from "../space/settings/SpaceSettings";
@@ -146,6 +146,8 @@ import {
   dateStamp,
   citedWords,
   dateWords,
+  dialMonth,
+  dialYear,
   monthTag,
 } from "../lib/words";
 import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
@@ -437,22 +439,27 @@ const EASE_BAND = 2.6e-5;
  * is actually blending.
  */
 const EASE_VEL = 4.89e-14;
-/** The companion's turn: with the dial, and with a travel. */
-const EASE_YAW_SCRUB = 1.6e-6;
+/** The companion's turn, with a travel. */
 const EASE_YAW_TRAVEL = 2.6e-5;
 /** A scrubbed-away bubble fades out in place over this long. It never flies. */
 const FADE_MS = 260;
 /** A reflected-on memory climbs back to its new aliveness over this long. */
 const RELIGHT_MS = 900;
-/**
- * How far the companion turns across the WHOLE dial: two full turns. It is a
- * TURNAROUND about its own vertical axis — wind time back and you see its
- * back — and the yaw follows the dial's position, never a timer. Winding back
- * a month turns it a month's worth, and holding still holds the angle.
- */
-const SPIN_TURNS = 2;
-/** Let go and it eases back to front-facing, the short way round. */
+/* THE COMPANION NO LONGER TURNS WITH TIME. It turned twice about its own
+   axis across the whole rail, following the position of a finger — a motion
+   that can only exist while a hand is dragging something. The dial is a list
+   of dates now: a press lands on ONE moment instead of sweeping through a
+   thousand, so there is no position to follow and nothing left for the spin
+   to explain. The travel turn stays, because that one answers a journey the
+   person is watching happen. */
+/** A travel's turn eases back to front-facing, the short way round. */
 const UNWIND_MS = 650;
+/**
+ * How many dates the dial will list before it rolls up a grain — days to
+ * months, months to years. Ten is what fits under the word without the list
+ * becoming a thing you scroll, which would be the hunt all over again.
+ */
+const DIAL_STOPS = 10;
 /**
  * THE GATHER BEFORE A REACTION.
  *
@@ -1038,14 +1045,15 @@ interface SimApi {
    * a wall that has one owner.
    */
   standIn: (ownerProfileId: string | null) => void;
-  scrubTo: (T: number, pos: number) => void;
+  /** Wind this wall to a moment. The dial's dates are the only callers. */
+  windTo: (T: number) => void;
   select: (id: string) => void;
   release: () => void;
   wake: () => void;
   /**
    * Re-hang the timeline under the word it belongs to. Called when the READING
-   * changes — the rail's anchor is the word's centre, and the word is rewritten
-   * by a scrub, which no resize follows.
+   * changes — the dates hang from the word's left edge, and the word is
+   * rewritten by pressing a date, which no resize follows.
    */
   hangRail: () => void;
   /** The companion glows for a beat — a tap was heard. */
@@ -1542,7 +1550,6 @@ function HomeExperience(): JSX.Element {
    */
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [scrubbing, setScrubbing] = useState(false);
   /* parked at now? then the date label and the return button say nothing */
   const [atNow, setAtNow] = useState(true);
   /**
@@ -1557,9 +1564,10 @@ function HomeExperience(): JSX.Element {
    * a rail that is invisible unless you are touching it.
    *
    * A word can carry that fact. `null` is now; anything else is the millisecond
-   * the wall is wound to, written on scrub-end rather than on every pointer
-   * move — the readout that rides the handle already answers mid-scrub, and a
-   * number in state per frame is a re-render per frame.
+   * the wall is wound to, written once — when a date in the list is pressed.
+   * It was written on scrub-end, because a number in state per pointer-move
+   * is a re-render per pointer-move; a list has no such problem, and the
+   * mid-scrub readout that existed to cover the gap is gone with the drag.
    */
   const [parkedAt, setParkedAt] = useState<number | null>(null);
   const parkedRef = useRef<number | null>(null);
@@ -2011,15 +2019,11 @@ function HomeExperience(): JSX.Element {
   /* what actually went wrong, when it did — shown, not swallowed */
   const [failReason, setFailReason] = useState<string | null>(null);
   const dialRef = useRef<HTMLDivElement>(null);
-  const dialTrackRef = useRef<HTMLDivElement>(null);
-  const dialHandleRef = useRef<HTMLDivElement>(null);
-  const dialDateRef = useRef<HTMLSpanElement>(null);
 
   /** The dial's current time. Continuous → lives in a ref, never in state. */
   const TRef = useRef(Date.now());
   const selectedIdRef = useRef<string | null>(null);
   selectedIdRef.current = selectedId;
-  const scrubbingRef = useRef(false);
   const ballsRef = useRef<{ list: Ball[]; byId: Map<string, Ball> } | null>(null);
   const paletteRef = useRef<Palette | null>(null);
   const simApiRef = useRef<SimApi | null>(null);
@@ -2188,9 +2192,14 @@ function HomeExperience(): JSX.Element {
   const [minted, setMinted] = useState<ApiMintedKey | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
   const [keysBusy, setKeysBusy] = useState(false);
+  /* THE DATES ARE OPENED BY A PRESS, AND ONLY BY A PRESS (founder,
+     2026-08-30: "when clicking on now, just show the major dates"). A
+     `timeNear` stood beside this and opened the rail on hover — right for a
+     hairline you reach toward, wrong for a menu you have to travel to,
+     because the pointer must leave the word to reach the list and the list
+     would go with it. One state, one way in, and it works the same on a
+     phone. */
   const [timeOpen, setTimeOpen] = useState(false);
-  /* the pointer is on the word; the rail is a hover away and this is the hover */
-  const [timeNear, setTimeNear] = useState(false);
 
   /**
    * THE RAIL GOES AWAY WHEN YOU LOOK AWAY (founder, 2026-08-27: "timeline line
@@ -3257,89 +3266,138 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     return m;
   }, [inspirations, sweepDone]);
 
-  /** The rail's month labels for whatever span it is currently covering. */
-  const monthMajors = useCallback((start: number, end: number, span: number) => {
-    const majors: Array<{ pct: number; label: string }> = [];
-    const cursor = new Date(start);
-    cursor.setDate(1);
-    cursor.setHours(0, 0, 0, 0);
-    cursor.setMonth(cursor.getMonth() + 1);
-    while (cursor.getTime() <= end) {
-      majors.push({
-        pct: (cursor.getTime() - start) / span,
-        label:
-          localeRef.current === "ko-KR"
-            ? `${cursor.getMonth() + 1}월`
-            : cursor.toLocaleDateString("en-US", { month: "short" }),
-      });
-      cursor.setMonth(cursor.getMonth() + 1);
-    }
-    return majors;
+  /**
+   * THE DATES YOU CAN ACTUALLY GO TO (founder, 2026-08-30: "instead of this
+   * draggable line, when clicking on now, just show the major dates to make
+   * them clickable").
+   *
+   * The rail asked a person to HUNT. Find a hairline, hold it, drag, read a
+   * date that appears under your own finger, let go, and find out whether
+   * that was the moment you meant. Every step of that was approximate, and
+   * the instrument was hard to hold besides — "hard to drag", "moves around",
+   * "not right under the word" are three separate reports about one gesture.
+   *
+   * A wall does not change continuously. It changes on the days something was
+   * kept, a door moved, or a version was written, and every position between
+   * two of those shows the identical wall. So the stops ARE those moments:
+   * what the rail spent its whole length offering was mostly the same answer
+   * at a thousand different heights.
+   *
+   * ROLLED UP UNTIL THE LIST IS STILL A LIST. A year of keeping is hundreds
+   * of days, and hundreds of rows is the hunt again in a menu's clothes. So:
+   * the days, if the days fit; else the months that HOLD something; else the
+   * years. The finest grain readable at a glance — and never an empty month,
+   * which is the other thing the rail's tick marks got wrong, since they
+   * marked the calendar rather than the archive.
+   *
+   * Each stop lands at the END of its day, month or year, because winding to
+   * a moment shows what the wall held UP TO it: "Aug 12" must include the
+   * twelfth. Newest first, so the list reads down into the past — the
+   * direction the rail hung, and the direction an archive is drawn in.
+   */
+  const dialStops = useCallback((moments: readonly number[], end: number) => {
+    const roll = (
+      key: (d: Date) => string,
+      last: (d: Date) => number,
+      label: (ms: number) => string,
+    ) => {
+      const seen = new Map<string, number>();
+      for (const ms of moments) {
+        const d = new Date(ms);
+        const k = key(d);
+        if (!seen.has(k)) seen.set(k, Math.min(last(d), end));
+      }
+      return Array.from(seen.values())
+        .sort((a, b) => b - a)
+        /* `now` is the first row and already means the end of today, so a
+           stop within half a day of it is the same destination said twice */
+        .filter((at) => end - at >= DAY_MS / 2)
+        .map((at) => ({ at, label: label(at) }));
+    };
+    const lastMs = (y: number, m: number, day: number) =>
+      new Date(y, m, day, 23, 59, 59, 999).getTime();
+    const days = roll(
+      (d) => `${d.getFullYear()}.${d.getMonth()}.${d.getDate()}`,
+      (d) => lastMs(d.getFullYear(), d.getMonth(), d.getDate()),
+      (ms) => dateWords(ms, end, localeRef.current),
+    );
+    if (days.length <= DIAL_STOPS) return days;
+    const months = roll(
+      (d) => `${d.getFullYear()}.${d.getMonth()}`,
+      /* day 0 of the next month is the last day of this one */
+      (d) => lastMs(d.getFullYear(), d.getMonth() + 1, 0),
+      /* THE WORDS ARE `words.ts`'S, NOT THIS FILE'S. It carried a
+         `toLocaleDateString("en-US")` and its own year rule, which was
+         correct while the product spoke one language and silently wrong the
+         moment it spoke two — a Korean wall labelling its rows in English.
+         `dialMonth` keeps the rule and knows both hands. */
+      (ms) => dialMonth(ms, end, localeRef.current),
+    );
+    if (months.length <= DIAL_STOPS) return months;
+    return roll(
+      (d) => `${d.getFullYear()}`,
+      (d) => lastMs(d.getFullYear(), 11, 31),
+      (ms) => dialYear(ms, localeRef.current),
+    );
   }, []);
 
   const dial = useMemo(() => {
-    /* A ROOM'S RAIL IS THE ROOM'S OWN LIFE, NOT YOURS.
-       The dial winds the wall you are standing on, and standing in a room it
-       has to span that room's history — the day it opened to the present —
-       rather than the day YOU first kept something. Your archive can predate
-       a room by years, and a rail whose whole left half is a room that did
-       not exist is a rail that lies about where its own marks are. */
+    /* EVERY WALL'S DATES ARE THAT WALL'S OWN LIFE, NOT YOURS.
+       The dial winds the wall you are standing on, so the moments it offers
+       are that wall's. A ROOM's are the days its door moved and its readings
+       were written. AN AGENT's are the days it kept something — the ruling
+       from #283, kept here verbatim because it is right and this rewrite
+       would have silently dropped it: "standing on Scout's wall the rail
+       spanned YOUR years — and the scrub (scene-scoped since
+       one-wall-one-scene) wound Scout's ground against a stranger's
+       timeline. The wall's rail is the wall's memories, exactly as a room's
+       is the room's." Their fix was about WHOSE moments; this change is about
+       how they are offered, and the two are the same wall seen from two
+       sides. Null until the bundle lands, like everything else behind the
+       wake. */
+    /* now — and `now` moves when something is kept now (see clockMs) */
+    const end = clockMs;
+    const moments: number[] = [];
     if (atWall.kind === "group") {
       const timeline = groupTimelineRef.current.get(atWall.id);
       if (!timeline) return null;
-      let first = Infinity;
       for (const mark of timeline.doorMarks) {
         const ms = Date.parse(mark.occurredAt);
-        if (Number.isFinite(ms) && ms > 0 && ms < first) first = ms;
+        if (Number.isFinite(ms) && ms > 0) moments.push(ms);
       }
       for (const version of timeline.versions) {
         const ms = Date.parse(version.createdAt);
-        if (Number.isFinite(ms) && ms > 0 && ms < first) first = ms;
+        if (Number.isFinite(ms) && ms > 0) moments.push(ms);
       }
-      /* A room with no marks and no versions has no history to scrub, and an
-         empty rail under your finger is worse than no rail. */
-      if (!Number.isFinite(first)) return null;
-      const start = first - 3 * DAY_MS;
-      const end = clockMs;
-      const span = Math.max(end - start, DAY_MS);
-      return { start, end, span, majors: monthMajors(start, end, span), onGroup: atWall.id };
-    }
-    if (atWall.kind === "agent") {
-      /* AN AGENT'S RAIL IS THE AGENT'S OWN LIFE. This fell through to the
-         viewer's archive below, so standing on Scout's wall the rail spanned
-         YOUR years — and the scrub (scene-scoped since one-wall-one-scene)
-         wound Scout's ground against a stranger's timeline. The wall's rail
-         is the wall's memories, exactly as a room's is the room's. Null
-         until the bundle lands, like everything else behind the wake. */
+    } else if (atWall.kind === "agent") {
       const a = (agents ?? []).find((x) => x.agent.id === atWall.id);
       const caps = a?.inspirations ?? [];
       if (caps.length === 0) return null;
-      let first = Infinity;
+      /* the agent's captures arrive as ISO strings rather than the millis the
+         viewer's own carry, so they are parsed rather than read */
       for (const cap of caps) {
         const ms = Date.parse(cap.capturedAt);
-        if (Number.isFinite(ms) && ms > 0 && ms < first) first = ms;
+        if (Number.isFinite(ms) && ms > 0) moments.push(ms);
       }
-      if (!Number.isFinite(first)) return null;
-      const start = first - 3 * DAY_MS;
-      const end = clockMs;
-      const span = Math.max(end - start, DAY_MS);
-      return { start, end, span, majors: monthMajors(start, end, span), onGroup: null };
+    } else {
+      if (!inspirations || inspirations.length === 0) return null;
+      for (const s of inspirations) {
+        if (Number.isFinite(s.capturedMs) && s.capturedMs > 0) moments.push(s.capturedMs);
+      }
     }
-    if (!inspirations || inspirations.length === 0) return null;
-    let earliest = Infinity;
-    for (const s of inspirations) {
-      const ms = s.capturedMs;
-      if (Number.isFinite(ms) && ms > 0 && ms < earliest) earliest = ms;
-    }
-    if (!Number.isFinite(earliest)) return null;
-    const start = earliest - 3 * DAY_MS;
-    /* now — and `now` moves when something is kept now (see clockMs) */
-    const end = clockMs;
-    const span = Math.max(end - start, DAY_MS);
-    return { start, end, span, majors: monthMajors(start, end, span), onGroup: null };
+    const stops = dialStops(moments, end);
+    /* NOTHING TO WIND BACK TO IS NOT AN EMPTY LIST, IT IS NO INSTRUMENT.
+       A wall whose whole life is today would drop a menu holding one row
+       reading `now` — a control offering you the place you are already
+       standing. The word goes with it, which is right: it was only ever the
+       handle on a thing there is none of here. */
+    if (stops.length === 0) return null;
+    return { end, stops };
     /* `groupPastTick` is the timeline ref's change signal: the room's history
-       lands a request after arrival, and the rail must re-span when it does. */
-  }, [inspirations, agents, clockMs, atWall, groupPastTick]);
+       lands a request after arrival, and the dates must re-read when it does.
+       `agents` is here for the same reason on an agent's wall: its bundle
+       lands after arrival too. */
+  }, [inspirations, agents, clockMs, atWall, groupPastTick, dialStops]);
 
   /* ------------- palette: resolve vars once, re-raster sprites ------------- */
   useEffect(() => {
@@ -3348,7 +3406,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const canvasEl = measured.canvas.current;
     const ctx2d = canvasEl ? canvasEl.getContext("2d") : null;
     if (!ctx2d) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = renderScale(window.innerWidth, window.innerHeight);
     const pal = buildPalette(root, dpr, ctx2d);
     paletteRef.current = pal;
     /* the film is laid on the DOM layer once, here — never per frame */
@@ -3374,7 +3432,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     loadSpritesRef.current = () => {
       const bag = ballsRef.current;
       if (!bag || urlById.size === 0) return;
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = renderScale(window.innerWidth, window.innerHeight);
       for (const b of bag.list) {
         const url = urlById.get(b.id);
         if (!url || b.imgUrl === url) continue;
@@ -3630,9 +3688,19 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * that went blank the moment you stepped off it would be a thing popping
    * out of existence.
    *
-   * Rooms come from the ref the fetch fills; `wokenGroups` is in the deps
-   * precisely so that this re-derives on the render where a room wakes, and
-   * the read is therefore never stale.
+   * Rooms come from the ref the fetch fills. `groupFieldTick` is in the deps
+   * because that is the state the FETCH bumps, and `wokenGroups` because that
+   * is the state ARRIVAL bumps — both, so the read is never stale from either
+   * direction.
+   *
+   * `groupFieldTick` was missing, and that was half of a defect the founder
+   * reported twice: "dont make the text be there and reload when character
+   * goes to the room. keep it rendered and dont rerender when character
+   * arrives." The fetch filled `groupChromeRef` and bumped its tick, but this
+   * map did not listen to that tick, so a room's words could not be read out
+   * of the ref until arrival happened to re-derive it. The sentence therefore
+   * could not exist before the character got there, however early the fetch
+   * had landed.
    */
   const wallChromeNow = useMemo(() => {
     const nowMs = dial ? dial.end : Date.now();
@@ -3658,7 +3726,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       }
     }
     return m;
-  }, [walls, agents, wokenGroups, dial, adopted, notes, proposal, emerging, topOfMind, inspirations]);
+  }, [walls, agents, wokenGroups, groupFieldTick, dial, adopted, notes, proposal, emerging, topOfMind, inspirations]);
 
   /**
    * WHAT EACH WALL'S CLAIM RESTS ON.
@@ -3848,13 +3916,42 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        cross-wall state has no container to exist in. The key is the wall id;
        the self wall's is the empty string, as everywhere. */
     const scenes = new Map<string, Ball[]>();
+    const sceneKeyOf = (b: Ball): string => b.agentId ?? "";
     for (const b of list) {
-      const key = b.agentId ?? "";
+      const key = sceneKeyOf(b);
       const bag = scenes.get(key);
       if (bag) bag.push(b);
       else scenes.set(key, [b]);
     }
     const sceneBalls = (wallId: string): Ball[] => scenes.get(wallId) ?? [];
+    /**
+     * THE SCENE IS AN INDEX OVER `list`, SO IT MOVES WHEN `list` MOVES.
+     *
+     * It is built once from the whole list, and `list` is then mutated in
+     * exactly two places at runtime: `born` pushes a newborn, `dropBall`
+     * splices a retracted one. Both have to say so here, or the index and
+     * the world disagree about what is standing on this wall.
+     *
+     * Measured when they did not: a brand-new account kept its first
+     * memory, the door said "1 inspiration" — and the ground stayed dark
+     * until the page was reloaded. `assignHomes` places `presentBalls()`,
+     * which reads the scene, so a newborn missing from it was given no
+     * home at all and fell to one that had never been solved. Reloading
+     * rebuilt the list, which rebuilt the scene, which is why the memory
+     * was always really there and only ever invisible.
+     */
+    const sceneAdd = (b: Ball): void => {
+      const key = sceneKeyOf(b);
+      const bag = scenes.get(key);
+      if (!bag) scenes.set(key, [b]);
+      else if (!bag.includes(b)) bag.push(b);
+    };
+    const sceneRemove = (b: Ball): void => {
+      const bag = scenes.get(sceneKeyOf(b));
+      if (!bag) return;
+      const i = bag.indexOf(b);
+      if (i >= 0) bag.splice(i, 1);
+    };
 
     /**
      * THE DIAL'S NOW IS NEVER BEHIND THE NEWEST MEMORY. THIS IS NOT A GUARD;
@@ -3931,9 +4028,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       layout: computeLayout(1, 1, DIAL_H),
       /* the dial's real strip, read off the dial itself every measure */
       dialH: DIAL_H,
-      /* where the rail's left edge stands, written only when the word it
-         hangs under moves — 0 until first measured */
-      dialLeft: 0,
       /* first sizing has happened: before this, orbs start on their homes
          rather than pouring, and a resize must not re-anchor a held camera */
       primed: false,
@@ -4721,6 +4815,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       if (held.ball === b) held.ball = null;
       list.splice(i, 1);
       byId.delete(b.id);
+      sceneRemove(b);
       /* the depth order is an index permutation over `list`: it has to be
          rebuilt, not spliced, or every index past `i` points one ball over */
       order.length = list.length;
@@ -5297,57 +5392,45 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     }
 
     /**
-     * THE RAIL HANGS FROM ITS WORD, MEASURED (founder, 2026-08-27: "should
-     * align with the text NOW"). Its left inset was a guess in CSS, and the
-     * word it hangs under sits after the wall chip, whose width is the wall's
-     * NAME — so no constant can be under it on every wall. The track's centre
-     * takes the word's centre, the way the reserve takes the count's own box:
-     * chrome states its place, nothing guesses at it.
+     * THE DATES HANG FROM THEIR WORD, MEASURED (founder, 2026-08-27: "should
+     * align with the text NOW"). The left inset was a guess in CSS, and the
+     * word this hangs under sits after the wall chip, whose width is the
+     * wall's NAME — so no constant can be under it on every wall. It takes
+     * the word's own box, the way the reserve takes the count's: chrome
+     * states its place, nothing guesses at it.
      *
      * IT IS ITS OWN FUNCTION BECAUSE IT HAS TWO CALLERS, AND THE SECOND ONE
      * IS THE WHOLE FIX. It lived inline in `measure()`, and `measure()` runs
      * on a resize — so the anchor was recomputed when the WINDOW changed and
-     * never when the WORD did. The word changes without the window: let go of
-     * a scrub and "now" becomes "Aug 27", 49px becomes 65, and its centre
-     * moves 8px right while the rail stays exactly where it was. Nothing was
-     * ever going to put it back, because nothing resized.
+     * never when the WORD did. The word changes without the window: press a
+     * date and "now" becomes "Aug 27". Nothing was ever going to put the
+     * anchor back, because nothing resized.
+     *
+     * ITS LEFT EDGE NOW, NOT ITS CENTRE — and that retires a rule and a bug
+     * with it. A hairline is centred under a word; a LIST is a column of
+     * left-aligned words, and a column centred on a word's centre reads as
+     * something that slipped. Centring also had to read the instrument's OWN
+     * width, so the anchor moved whenever the widest date changed and had no
+     * answer at all while the box was empty — and it needed a frozen-anchor
+     * rule to stop the line wandering under a dragging hand (founder video,
+     * 2026-08-27: "line is not only hard to drag, but moves around"), which
+     * then froze against a word that had already changed ("why is timeline
+     * not right under the word 'now'", 2026-08-28). An edge has none of that:
+     * it is one number, read from the word, true whatever is hanging off it.
      */
     function hangRail() {
       const whenEl = document.querySelector(".jar-when");
       const railEl = dialRef.current;
-      /* ONLY WHILE IT IS NOT BEING HELD. The word this hangs from is the
-         reading — a scrub rewrites it ("now" -> "Aug 12"), the box widens,
-         its centre moves, and a rail that keeps chasing its own label
-         WANDERS UNDER THE HAND (founder video, 2026-08-27: "line is not
-         only hard to drag, but moves around"). So while the rail is HELD
-         the anchor is frozen where it was when you reached for it.
-
-         `--open` WAS IN THIS CONDITION TOO, AND THAT WAS THE BUG.
-         Reported 2026-08-28: "why is timeline not right under the word
-         'now'". Measured, on a 1440px wall: at rest the word reads NOW at
-         w49, centre 125, and the track's centre is 125 — dead on. Let go of
-         a scrub and the word becomes AUG 27 at w65, centre 133, while the
-         rail stays at 125. Eight pixels out, and it stays out, because the
-         pointer is still over the rail after a drag — that is where a hand
-         necessarily is — so `--open` held the anchor frozen against a word
-         that had already changed underneath it.
-
-         Hovering is not dragging. The word does not move when you merely
-         reach for the rail: it is rewritten by `onDialUp`, on release. So
-         `--live` alone is what has to freeze the anchor, and the moment the
-         hand lets go the line re-hangs from the reading it now belongs to.
-         That motion is the world answering something the person did, which
-         is the only reason anything here is allowed to move. */
-      if (whenEl && railEl && !railEl.classList.contains("jar-dial--live")) {
+      if (whenEl && railEl) {
         const wb = whenEl.getBoundingClientRect();
         if (wb.width > 0) {
-          /* half the rail's own width, read rather than restated, so a
-             wider grab area cannot silently un-centre the line */
-          const left = Math.round(wb.left + wb.width / 2 - railEl.offsetWidth / 2);
-          if (view.dialLeft !== left) {
-            view.dialLeft = left;
-            railEl.style.left = `${left}px`;
-          }
+          /* AGAINST THE ELEMENT, NOT A REMEMBERED NUMBER. The dates are
+             mounted only while they are open, so every opening is a NEW box
+             carrying no inline left at all — and a cache of the last value
+             would look at an unchanged number and decline to write it,
+             leaving the fresh list at whatever the stylesheet guessed. */
+          const px = `${Math.round(wb.left)}px`;
+          if (railEl.style.left !== px) railEl.style.left = px;
         }
       }
     }
@@ -5373,7 +5456,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       const trueH = rect.height >= 2 ? rect.height : window.innerHeight;
       view.w = Math.max(trueW, 1);
       view.h = Math.max(trueH, 1);
-      const nextDpr = Math.min(window.devicePixelRatio || 1, 2);
+      const nextDpr = renderScale(view.w, view.h);
       /*
        * ONLY WHEN THE SIZE ACTUALLY CHANGED.
        *
@@ -6048,7 +6131,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      * in a row, and restate a state the light has already rendered.
      */
     function sayLine(): string {
-      if (scrubbingRef.current)
+      /* PARKED, NOT SCRUBBING. This read `scrubbingRef` — true only while a
+         finger was on the rail — so the line existed for the duration of a
+         gesture and never once after it. The rail is gone; being wound back
+         is a STATE you sit in, and it is the state in which this sentence is
+         the only true thing the companion has to say. The sentence itself is
+         the message catalogue's, in whichever hand the wall is written in. */
+      if (parkedRef.current !== null)
         return formatMessage(localeRef.current, "worldAsItWasIn", {
           month: monthTag(TRef.current, localeRef.current),
         });
@@ -7194,18 +7283,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         }
       });
 
-      /* The dial winds the companion around. While a finger owns the dial the
-         yaw chases the scrub POSITION — weighted, never rigid. On release it
-         unwinds the short way round, so it always comes to rest facing
-         forward however many turns it was wound. */
+      /* A JOURNEY turns the companion, and nothing else does now. Winding
+         time turned it too — the yaw chased a finger's position down the
+         rail. There is no rail and no finger on it: a pressed date is one
+         moment, not a motion to follow. It unwinds the short way round, so it
+         always comes to rest facing forward however far it was turned. */
       if (view.reduced) {
         companion.yaw = 0;
         companion.yawTarget = 0;
         companion.unwindAt = 0;
-      } else if (scrubbingRef.current) {
-        companion.unwindAt = 0;
-        companion.yaw = lerp(companion.yaw, companion.yawTarget, kd(EASE_YAW_SCRUB, dt));
-        easing = true;
       } else if (trip.yaw) {
         /* the traveler's turnaround: the same planet turn, held at a quarter
            toward the edge for the whole slide — profile view, facing where
@@ -7478,7 +7564,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         !pour.done ||
         trip.active ||
         cam.xBack ||
-        scrubbingRef.current ||
         selActive ||
         gesture.down ||
         easing ||
@@ -7649,16 +7734,19 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const isChrome = (t: EventTarget | null) =>
       t instanceof Element && t.closest("[data-jar-chrome]") !== null;
     /* Only GENUINELY interactive elements own their presses — buttons,
-       links, fields, the dial's track, and the reading panel, where text
-       selection matters more than dragging. Everything else, text included,
-       must feed the same camera machinery as bare ground: the ambition's
-       words, the whispers and the room titles are the page, and the page
-       drags. */
+       links, fields, and the reading panel, where text selection matters more
+       than dragging. Everything else, text included, must feed the same camera
+       machinery as bare ground: the ambition's words, the whispers and the
+       room titles are the page, and the page drags.
+
+       `.jar-dial-track` was named here and is gone with the drag. It had to be
+       listed because it was the one interactive thing on this page that was
+       not a button — which is also why it could quietly take a press meant
+       for something behind it. The dates are buttons, and buttons were
+       already covered by the first word in this list. */
     const isInteractive = (t: EventTarget | null) =>
       t instanceof Element &&
-      t.closest(
-        "button, a, textarea, input, select, .jar-dial-track, .jar-panel, [data-jar-interactive]",
-      ) !== null;
+      t.closest("button, a, textarea, input, select, .jar-panel, [data-jar-interactive]") !== null;
 
     /** Hand the world back: the capture and the identity always go together. */
     const releaseOwner = (id: number) => {
@@ -8327,13 +8415,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         electPeek(here);
         wake();
       },
-      scrubTo: (T: number, pos: number) => {
+      windTo: (T: number) => {
         if (trip.active) return; /* the dial is the personal jar's alone */
         TRef.current = T;
-        /* the dial's position IS the companion's yaw: today (the right-hand
-           end) is front-facing, and winding back turns it away from you */
-        companion.yawTarget = view.reduced ? 0 : (pos - 1) * TAU * SPIN_TURNS;
-        companion.unwindAt = 0;
         if (selectedIdRef.current) release();
         pour.scrubDirty = true;
         wake();
@@ -8622,19 +8706,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         list.push(b);
         byId.set(b.id, b);
         order.push(list.length - 1);
-        /* AND INTO ITS SCENE, or it is nowhere. One-wall-one-scene made the
-           scene the source for everything that decides whose ground is on —
-           `assignHomes` reads `presentBalls()` reads `sceneBalls()` — so a
-           newborn left out of its bag gets no home and is never drawn: the
-           person's very first keep answered with nothing until a reload
-           rebuilt the bags from the fetch (`journeys:first-keep`, red from
-           the day the scenes landed; same key rule as the rebuild's). */
-        {
-          const sceneKey = b.agentId ?? "";
-          const bag = scenes.get(sceneKey);
-          if (bag) bag.push(b);
-          else scenes.set(sceneKey, [b]);
-        }
+        /* AND INTO ITS SCENE, or it is nowhere — #289 and this branch found
+           the same bug the same night. `sceneAdd` is that fix with its mirror
+           attached: `dropBall` had the omission facing the other way, and a
+           retracted keep went on holding a place on the ground. See the
+           helper for the measurement. */
+        sceneAdd(b);
         /* everyone eases to a new home; nobody leaves the screen, which is
            what assignHomes guarantees by construction */
         assignHomes();
@@ -9110,105 +9187,57 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     else simApiRef.current?.wake();
   }, [sky]);
 
-  /* ---------------- dial scrubbing (writes refs, not state) ---------------- */
+  /* ---------------- winding this wall to a date ---------------- */
 
-  const scrubClient = useCallback(
-    /**
-     * TIME COMES BACK TO THE BOTTOM EDGE, AND IT IS ALWAYS THERE.
-     *
-     * It was moved to a vertical rail on the right to keep two meanings off
-     * one axis: sideways is WHOSE mind, up and down is WHEN. The rail was
-     * legible and nobody used it — a hairline in the margin, mounted only
-     * while you were down in the field, so the history of a wall was a thing
-     * you had to descend to and then find.
-     *
-     * A timeline is a horizontal instrument. It is one again, laid just above
-     * the axis of walls rather than across it: two bands, stacked, each
-     * labelled by what it holds — names below, months above. The ambiguity
-     * the rail was built to avoid was between two things sharing ONE band,
-     * and they no longer do.
-     *
-     * VERTICAL AGAIN, AND HANGING FROM THE WORD (founder, 2026-08-27: "move
-     * timeline slider vertically under this instead", pointing at `now`).
-     *
-     * It read clientY against the track's height, then clientX against its
-     * width when the rail moved to the bottom edge, and now clientY again —
-     * because the instrument has gone back to the word that summons it. That
-     * is not a circle: what moved each time was WHERE TIME LIVES on the page,
-     * and the rail has always simply run along whichever edge that was.
-     *
-     * NOW IS AT THE TOP, under the word that says `now`, and the rail runs
-     * down into the past. So `p` counts DOWN from the present rather than up
-     * from the beginning — a person pulls the handle down to go back, which is
-     * the direction the archive itself is drawn in.
-     */
-    (clientY: number) => {
-      const track = dialTrackRef.current;
-      if (!track || !dial) return;
-      const rect = track.getBoundingClientRect();
-      const p = clamp((clientY - rect.top) / Math.max(rect.height, 1), 0, 1);
-      const T = dial.end - p * dial.span;
-      const pct = `${(p * 100).toFixed(2)}%`;
-      const handle = dialHandleRef.current;
-      if (handle) handle.style.top = pct;
+  /**
+   * ONE PRESS, ONE MOMENT (founder, 2026-08-30: "instead of this draggable
+   * line, when clicking on now, just show the major dates to make them
+   * clickable").
+   *
+   * This is everything `scrubClient` did on every pointer-move, minus the
+   * geometry — and the geometry was the whole of the trouble. A rail had to
+   * read a clientY against a track's measured box to guess which millisecond
+   * a finger meant; a date already says which one it means, so there is
+   * nothing to read, nothing to freeze against a moving anchor, and no
+   * mid-gesture readout to keep in sync with a handle.
+   *
+   * `parkedAt` is written HERE rather than on a release, because a press is
+   * both the start and the end of this gesture. The list closes with it: the
+   * question it was opened to answer has been answered.
+   */
+  const windTo = useCallback(
+    (T: number) => {
+      if (!dial) return;
+      /* landing on today IS being at now — half a day of slack, so the last
+         stop before the present cannot leave the word reading a date while
+         the wall shows everything */
       const isNow = dial.end - T < DAY_MS / 2;
       setAtNow(isNow);
       parkedRef.current = isNow ? null : T;
-      /* The date rides ALONGSIDE the handle rather than inside it: the handle
-         scales up while the dial is live, and a label inheriting that scale
-         is how the date came to be printed at poster size. */
-      const date = dialDateRef.current;
-      if (date) {
-        date.style.top = pct;
-        /* SPOKEN, like every other date on this surface. This printed "Jun 25"
-           — digits, in reading text — and it only appears mid-scrub, which is
-           why a walk of the resting page never caught it. It shares the
-           panel's formatter now, so there is one place a date can be wrong. */
-        date.textContent = dateWords(T, dial.end, localeRef.current);
-      }
-      /* the normalised position travels WITH the time: the companion's spin is
-         direct manipulation of the dial, so it reads the same number the
-         handle does rather than deriving one in the draw pass */
-      simApiRef.current?.scrubTo(T, p);
+      setParkedAt(isNow ? null : T);
+      setTimeOpen(false);
+      simApiRef.current?.windTo(T);
       applyChromeRef.current(T);
     },
     [dial],
   );
-
-  const onDialDown = useCallback(
-    (e: ReactPointerEvent<HTMLDivElement>) => {
-      e.currentTarget.setPointerCapture(e.pointerId);
-      scrubbingRef.current = true;
-      setScrubbing(true);
-      scrubClient(e.clientY);
-    },
-    [scrubClient],
-  );
-  const onDialMove = useCallback(
-    (e: ReactPointerEvent<HTMLDivElement>) => {
-      if (scrubbingRef.current) scrubClient(e.clientY);
-    },
-    [scrubClient],
-  );
-  const onDialUp = useCallback(() => {
-    scrubbingRef.current = false;
-    setScrubbing(false);
-    /* the word in the corner takes the scrub's last reading and holds it */
-    setParkedAt(parkedRef.current);
-    simApiRef.current?.wake();
-  }, []);
   /* AND THE LOOP IS WOKEN AGAIN ONCE THE NEW WORD IS ON SCREEN.
-     `onDialUp` wakes it too, but it wakes it BEFORE this render commits, so
-     that frame measures the word the scrub replaced. The rail hangs from the
-     word's centre and the word has just changed width, so the measurement has
-     to happen on the far side of the commit — which is exactly what an effect
-     on the reading is. Without it the anchor is correct only if the loop
-     happens to still be running when React gets round to the DOM, and the
-     world is deliberately built to stop running the moment nothing is
-     happening. */
-  useEffect(() => {
+     `windTo` wakes the loop through the sim, but it wakes it BEFORE this
+     render commits, so that frame measures the word the press replaced. The
+     dates hang from the word and the word has just changed width, so the
+     measurement has to happen on the far side of the commit — which is
+     exactly what an effect on the reading is. Without it the anchor is
+     correct only if the loop happens to still be running when React gets
+     round to the DOM, and the world is deliberately built to stop running the
+     moment nothing is happening. */
+  /* BEFORE PAINT, NOT AFTER IT. The dates mount when they open, and a plain
+     effect would show them one frame at the stylesheet's guess and then jump
+     them under the word — the world moving without anybody moving it. A
+     layout effect measures and writes inside the same commit, so the list has
+     never been anywhere but where it belongs. */
+  useLayoutEffect(() => {
     simApiRef.current?.hangRail();
-  }, [parkedAt]);
+  }, [parkedAt, timeOpen]);
 
 
   /* ---------------- the reading panel ----------------
@@ -10101,6 +10130,29 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     setMouthOpen(false);
     setMouthNote("");
     /**
+     * THE ORB IS THE RECEIPT — AND ON A WALL THAT IS NOT YOURS THERE IS NO
+     * ORB, SO THERE IS NO RECEIPT.
+     *
+     * A keep is always YOURS: it goes to your own archive wherever you happen
+     * to be standing when you write it. On your own wall that is invisible
+     * and right, because the memory drops into the ground in front of you and
+     * the drop is the acknowledgement. Standing in a room or on an agent's
+     * wall, the ground belongs to someone else, so nothing drops — and
+     * measured on this build, nothing else happened either: no orb, no line,
+     * no count (the archive door is not on a room's wall at all). The mouth
+     * simply emptied. A person who cannot tell whether it took writes it
+     * again.
+     *
+     * The world already owns the words for this. The founder ruled it for
+     * `save and reflect` on 2026-08-25 — the case where a keep happens and
+     * the orb is not what you are looking at: "make clear it was saved —
+     * character brightens with the word saved shown in the place of capture
+     * inspiration". Same shape, same slot, and it says WHERE as well as THAT,
+     * because "saved" alone would send somebody hunting this wall for an orb
+     * that was never going to be here.
+     */
+    if (atWallRef.current.kind !== "self") setCharSay("saved to your own wall");
+    /**
      * WITH NOTHING BEHIND THE WORLD, THE KEEP IS NOT ASKED FOR.
      *
      * The orb is born, the ground re-fits around it and the gesture is
@@ -10233,6 +10285,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         simApiRef.current?.unborn(seed.id);
         setDraft(text);
         setMouthOpen(true);
+        /* and the world stops saying it was saved, because it was not */
+        setCharSay("");
         setMouthNote(whyFailed(err, say("worldKeepFailed")));
         /* and in a build with the internals on, the whole error, once */
         if (showsDebug()) console.error("[waka] keep failed:", err);
@@ -11983,11 +12037,50 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             /* the wall you are standing on is the one the dial winds; every
                other wall shows what it holds NOW */
             const c = here ? chrome : wallChromeNow.get(key) ?? null;
+            /*
+             * A ROOM'S WORDS APPEAR WHEN THEY ARE KNOWN, NOT WHEN YOU ARRIVE.
+             *
+             * The room's half read `wokenGroups.has(w.id)`, and the only thing
+             * that ever adds to that set runs on ARRIVAL. So a room's whole
+             * headquarters — eyebrow, claim, forming line — could not exist
+             * until the character got there, and then appeared. Founder,
+             * twice: "if new content, then have it ready before i get there"
+             * (2026-08-27) and "dont make the text be there and reload when
+             * character goes to the room. keep it rendered and dont rerender
+             * when character arrives" (2026-08-30) — the second time prefaced
+             * with "i think i already asked u to fix this", and they had. The
+             * first fix answered which words ANIMATE on a return; this is
+             * whether the block is there at all while you walk.
+             *
+             * It is the same ruling already made for the two things beside it.
+             * The sky's sentence stands in the wall's own column so travelling
+             * up only brings it into frame; a room's company pre-exists arrival
+             * for the same reason. The world never materialises because you
+             * looked at it. The room's claim was the last thing still doing so.
+             *
+             * `c` is that wall's chrome — `wallChromeNow` for any wall you are
+             * not standing on, filled from the ref the room's fetch writes, and
+             * that fetch starts the moment travel toward the room begins. So
+             * the words are usually there well before the character is, which
+             * is exactly what was asked for. Until they are, there is nothing
+             * to draw, which is honest: the room has not said anything yet.
+             *
+             * AND AN AGENT WAITS FOR ITS BUNDLE — #281's ruling, kept whole.
+             * Memory is fetched per wall now, so an agent's wall genuinely has
+             * nothing to draw until its bundle lands, and that is a different
+             * question from the room's. This line carries both: self is always
+             * ready, a room is ready when its words are KNOWN, an agent when
+             * its memory has arrived. An earlier draft of this merge said
+             * `w.kind !== "group"` and would have called every agent ready
+             * before it had anything — my rewrite silently undoing theirs.
+             *
+             * THE GROUND IS NOT THIS. It still pours on arrival, and should:
+             * a ground filling as you get there is the world answering a move
+             * you made. A sentence appearing because you looked is not.
+             */
             const ready =
               w.kind === "self" ||
-              (w.kind === "group"
-                ? wokenGroups.has(w.id)
-                : (agents ?? []).some((a) => a.agent.id === w.id));
+              (w.kind === "group" ? c !== null : (agents ?? []).some((a) => a.agent.id === w.id));
             return (
               <div
                 key={key}
@@ -13948,10 +14041,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               aria-expanded={timeOpen}
               aria-label={say("worldWindBack")}
               onClick={() => setTimeOpen((v) => !v)}
-              onPointerEnter={() => setTimeNear(true)}
-              onPointerLeave={() => setTimeNear(false)}
-              onFocus={() => setTimeNear(true)}
-              onBlur={() => setTimeNear(false)}
             >
               {parkedAt === null ? say("worldNow") : dateWords(parkedAt, dial.end, locale)}
             </button>
@@ -14029,7 +14118,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           and whose ground is under you is not the question. */}
       {grounds.length > 0 && phase === "ready" ? (
         <div
-          className={groundsLit ? "jar-ground jar-ground--lit" : "jar-ground"}
+          className={groundsLit ? "jar-grounds jar-grounds--lit" : "jar-grounds"}
           data-jar-chrome="1"
           role="radiogroup"
           aria-label={say("worldWhoseGround")}
@@ -14042,11 +14131,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 type="button"
                 role="radio"
                 aria-checked={here}
-                className={here ? "jar-ground-row jar-ground-row--here" : "jar-ground-row"}
+                className={here ? "jar-grounds-row jar-grounds-row--here" : "jar-grounds-row"}
                 onClick={() => standIn(m.mine ? null : m.id)}
               >
                 <i
-                  className={m.agent ? "jar-ground-dot jar-ground-dot--agent" : "jar-ground-dot"}
+                  className={m.agent ? "jar-grounds-dot jar-grounds-dot--agent" : "jar-grounds-dot"}
                   style={m.hue >= 0 ? { background: hueCss(m.hue) } : undefined}
                   aria-hidden="true"
                 />
@@ -14057,49 +14146,53 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         </div>
       ) : null}
 
-      {dial && phase === "ready" ? (
+      {dial && phase === "ready" && timeOpen ? (
         <div
           ref={dialRef}
-          className={`jar-dial${scrubbing ? " jar-dial--live" : ""}${
-            dialAway ? " jar-dial--away" : ""
-          }${timeOpen || timeNear || scrubbing ? " jar-dial--open" : ""}`}
+          className={`jar-dial${dialAway ? " jar-dial--away" : ""}`}
           data-jar-chrome="1"
         >
-          {/* NO LABEL IN HERE ANY MORE. The word that summons this instrument
-              is `.jar-when`, up in the top-left beside the name of the wall —
-              see the comment there for why time stopped being a fifth thing
-              at the bottom edge. What is left is the instrument itself, and
-              at rest it is nothing at all. */}
-          <div
-            ref={dialTrackRef}
-            className="jar-dial-track"
-            onPointerDown={onDialDown}
-            onPointerMove={onDialMove}
-            onPointerUp={onDialUp}
-            onPointerCancel={onDialUp}
-          >
-            {dial.majors.map((m) => (
-              <span
-                key={m.pct}
-                className="jar-month jar-label"
-                /* `m.pct` runs 0 at the oldest to 1 at now, which is the
-                   archive's own order; the rail hangs the other way up, with
-                   now at the top under the word. Flipped here rather than at
-                   the source, because the source is the archive and it is not
-                   wrong. */
-                style={{ top: `${((1 - m.pct) * 100).toFixed(2)}%` }}
+          {/* THE DATES, AND NOTHING TO DRAG (founder, 2026-08-30: "instead
+              of this draggable line, when clicking on now, just show the
+              major dates to make them clickable").
+
+              What stood here was `.jar-dial-track`: a 44px-wide invisible
+              strip running nearly half the height of the screen, mounted and
+              live to every press whether or not the instrument was showing.
+              It swallowed presses meant for the walls list behind it —
+              measured at x 110..140, y 50..420, and it took two attempts to
+              reach ADD NEW through it. That is the jar's mouth bug again,
+              the same shape: a control with no ink and a full-height box.
+
+              MOUNTED ONLY WHILE IT IS OPEN, which is the fix and not merely
+              tidiness. A list that does not exist cannot be in front of
+              anything, so there is no rest state left in which this can take
+              a press that was meant for the world. */}
+          <div className="jar-dial-list" role="group" aria-label="wind this wall back to a date">
+            {/* THE WAY BACK IS THE FIRST ROW. The rail had none: returning to
+                the present meant landing a drag within half a day of the top
+                of a line you could not see. */}
+            <button
+              type="button"
+              className={`jar-dial-stop jar-label${parkedAt === null ? " jar-dial-stop--here" : ""}`}
+              aria-current={parkedAt === null}
+              onClick={() => windTo(dial.end)}
+            >
+              now
+            </button>
+            {dial.stops.map((stop) => (
+              <button
+                key={stop.at}
+                type="button"
+                className={`jar-dial-stop jar-label${
+                  parkedAt === stop.at ? " jar-dial-stop--here" : ""
+                }`}
+                aria-current={parkedAt === stop.at}
+                onClick={() => windTo(stop.at)}
               >
-                {m.label}
-              </span>
+                {stop.label}
+              </button>
             ))}
-            {/* the date exists only while a finger is on the dial: it answers
-                the scrub and then goes, and there is no second affordance for
-                returning to now — that is the right-hand end of the rail */}
-            <span
-              ref={dialDateRef}
-              className={`jar-dial-date jar-label${scrubbing ? " jar-dial-date--on" : ""}`}
-            />
-            <div ref={dialHandleRef} className="jar-dial-handle" />
           </div>
         </div>
       ) : null}

@@ -67,6 +67,7 @@ import {
   VIEWER_ID,
   type MountedWorld,
 } from "./helpers/render-home";
+import { dateWords } from "../src/lib/words";
 
 const DAY = 86_400_000;
 const VIEW_W = 1280;
@@ -213,10 +214,8 @@ vi.mock("../src/lib/auth-context", async (importOriginal) => {
 });
 
 let layout: MountedWorld;
-/** the rail's two ends in the room, in the page's own clock */
-let railStart = 0;
+/** now, in the page's own frozen clock — every date is spelled against it */
 let railEnd = 0;
-let railAt = 1;
 
 beforeAll(() => {
   installCanvasStub();
@@ -228,10 +227,7 @@ beforeEach(async () => {
   ago = (days: number) => Date.now() - days * DAY;
   await layout.travelTo(new RegExp(GROUP_NAME, "i"));
   await layout.toField();
-  /* the room's rail: three days before its first mark, to now */
-  railStart = ago(DOOR_DAYS[0]) - 3 * DAY;
   railEnd = Date.now();
-  railAt = 1;
 });
 
 afterEach(() => {
@@ -244,7 +240,32 @@ function one(selector: string): HTMLElement {
   return el;
 }
 
-const railPos = (t: number) => (t - railStart) / (railEnd - railStart);
+/**
+ * The last instant of the day a moment falls on — where every date in the
+ * list lands, because winding to a day shows what the room held UP TO it.
+ * Computed here from the fixture's own moments, never read off the page.
+ */
+const dayOf = (ms: number) => {
+  const d = new Date(ms);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).getTime();
+};
+
+/** the dates the room is offering, in the order it offers them */
+const rows = () => Array.from(layout.container.querySelectorAll<HTMLElement>(".jar-dial-stop"));
+
+/** press the word that says `now` — the only way the dates open */
+async function openDates(): Promise<void> {
+  if (rows().length > 0) return;
+  await act(async () => {
+    one(".jar-when").click();
+  });
+  if (rows().length === 0) {
+    throw new Error(
+      "pressing the word opened nothing in the room. Every case below would " +
+        "otherwise fail as though the room's dial were broken.",
+    );
+  }
+}
 
 /** The poster of the wall being stood on — the room's. */
 function posterText(): string {
@@ -259,32 +280,28 @@ function posterText(): string {
 }
 
 /**
- * Wind the rail, and prove it moved before anything else is asked — the same
+ * Wind the room, and prove it moved before anything else is asked — the same
  * rule `home-dial` states at length, for the same reason: this project has
  * shipped a test that passed because its gesture silently did nothing and it
  * then re-measured the state it started in.
+ *
+ * The gesture is the whole gesture: press the word, press a date. The row is
+ * found by the words on it, computed here from the fixture, so a list in the
+ * wrong order fails by name rather than by winding somewhere else quietly.
  */
-async function windTo(pos: number): Promise<void> {
-  const rail = one(".jar-dial-track");
-  /* VERTICAL, AND NOW IS AT THE TOP (founder, 2026-08-27). `pos` still means
-     what it always meant — where along the ARCHIVE, 0 at the oldest and 1 at
-     today — because that is the fact each test below is about. The rail is
-     what turned over, so the flip lives here, in the one place that speaks to
-     it, rather than in a dozen assertions about time. */
-  const from = (1 - railAt) * VIEW_H;
-  const to = (1 - pos) * VIEW_H;
-  const at = (kind: string, y: number) =>
-    new PointerEvent(kind, { bubbles: true, cancelable: true, clientY: y, pointerId: 1 });
+async function windToDay(at: number): Promise<void> {
+  await openDates();
+  const label = dateWords(at, railEnd);
+  const row = rows().find((r) => (r.textContent ?? "").trim() === label);
+  if (!row) {
+    throw new Error(
+      `the room does not offer ${JSON.stringify(label)}. It offers ` +
+        `${JSON.stringify(rows().map((r) => (r.textContent ?? "").trim()))}.`,
+    );
+  }
   await act(async () => {
-    rail.dispatchEvent(at("pointerdown", from));
+    row.click();
   });
-  await act(async () => {
-    rail.dispatchEvent(at("pointermove", to));
-  });
-  await act(async () => {
-    rail.dispatchEvent(at("pointerup", to));
-  });
-  railAt = pos;
   /* the past board arrives a request later than the wind, so the frames here
      have to outlast a resolved promise as well as the fade */
   await layout.step(40);
@@ -293,105 +310,121 @@ async function windTo(pos: number): Promise<void> {
   });
   await layout.step(10);
 
-  /* the handle is placed from the TOP, and the top is now */
-  const asked = (1 - pos) * 100;
-  const landed = Number.parseFloat(one(".jar-dial-handle").style.top);
-  if (!Number.isFinite(landed) || Math.abs(landed - asked) > 0.5) {
+  const said = (one(".jar-when").textContent ?? "").trim();
+  if (said !== label) {
     throw new Error(
-      `the room's dial did not move to where the pointer asked: wanted ` +
-        `${asked.toFixed(2)}% along the rail, handle sits at ` +
-        `"${one(".jar-dial-handle").style.left || "(nowhere)"}".`,
+      `the room did not wind to the date that was pressed: pressed ` +
+        `${JSON.stringify(label)}, the word now reads ${JSON.stringify(said)}.`,
     );
   }
 }
 
+/** back to the present, by the row that says so */
+async function windToNow(): Promise<void> {
+  await openDates();
+  const row = rows().find((r) => (r.textContent ?? "").trim() === "now");
+  if (!row) throw new Error("the room offers no way back to now");
+  await act(async () => {
+    row.click();
+  });
+  await layout.step(40);
+  await act(async () => {
+    await Promise.resolve();
+  });
+  await layout.step(10);
+}
+
 describe("the dial in a room", () => {
   it("is there at all — a room's board is one chain, and one chain can be wound", async () => {
-    const dial = one(".jar-dial");
-    expect(
-      dial.className.includes("jar-dial--away"),
-      "the dial faded out over the room: `hasDial` still refuses a group",
-    ).toBe(false);
+    /* The word is what carries the instrument now, and it is gated on
+       `dialAway` — the flag `hasDial` sets for a wall with no history to
+       wind. A room that refused the dial would have no word to press. */
+    const word = layout.container.querySelector(".jar-when");
+    expect(word, "there is no `now` to press over the room: `hasDial` refuses a group").not.toBe(
+      null,
+    );
+    await openDates();
+    expect(rows().length, "the room offers no dates to wind to").toBeGreaterThan(1);
   });
 
-  it("spans the room's life rather than the viewer's archive", async () => {
-    /* The viewer's oldest memory is two hundred days old and the room's
-       history begins a hundred days ago. Wind to the very start of the rail
-       and ask what day it landed on: a rail spanning the ROOM answers with
-       the room's opening, and one still spanning the archive answers with
-       something twice as old.
+  it("offers the room's own days rather than the viewer's archive", async () => {
+    /**
+     * The viewer's oldest memory is two hundred days old and the room's
+     * history begins a hundred days ago. A list built from YOUR archive would
+     * offer days this room did not exist on — and it would look perfectly
+     * fine, print real dates, and wind to months the room was never in.
+     *
+     * Both halves are stated. That the room's own four days are all there
+     * catches a list that lost the door's marks or the superseded version;
+     * that there are exactly four catches one that added your days to them.
+     */
+    await openDates();
+    const said = rows().map((r) => (r.textContent ?? "").trim());
+    expect(said[0], "the first row is the way back to the present").toBe("now");
 
-       THIS USED TO COUNT THE DOOR'S MARKS. The marks were 1px ticks on the
-       rail for who joined and who left, and they were removed on 2026-08-25
-       — the founder asked four times, having read them as a stray `||`
-       rather than as events. Counting them was never the claim anyway; it
-       was a way of reading the rail's span off the DOM, and it took the
-       whole test down with the feature. The date the dial reports is the
-       same reading, taken from the thing the test is actually about. */
-    await windTo(0);
-    /* The dial prints a day and a month and no year — it is a label, not a
-       timestamp — so the year has to be supplied to read it back. This rail
-       spans about a hundred days, well inside one year, so today's is right;
-       a rail that ever spans a new year would need the label to carry one. */
-    const shown = one(".jar-dial-date").textContent ?? "";
-    const days = Math.round(
-      (Date.now() - Date.parse(`${shown.trim()} ${new Date().getFullYear()}`)) / DAY,
-    );
+    const want = Array.from(new Set([...DOOR_DAYS, V1_DAYS, V2_DAYS].map((d) => dayOf(ago(d)))))
+      .sort((a, b) => b - a)
+      .map((ms) => dateWords(ms, railEnd));
     expect(
-      Number.isFinite(days) ? days : NaN,
-      `wound to the far left, the dial says "${shown}". A rail spanning this ` +
-        `room starts about ${Math.round((Date.now() - railStart) / DAY)} days ` +
-        `back; one still spanning the viewer's archive would start about 200.`,
-    ).toBeLessThan(150);
+      said.slice(1),
+      "the days offered in a room are the room's own: the days its door moved " +
+        "and its board was written, newest first",
+    ).toEqual(want);
+
+    for (const d of OWN_DAYS) {
+      expect(
+        said,
+        `the room offers ${dateWords(dayOf(ago(d)), railEnd)}, which is a day in ` +
+          "YOUR archive and not in this room's life",
+      ).not.toContain(dateWords(dayOf(ago(d)), railEnd));
+    }
   });
 
   it("shows the sentence the room actually had up, not today's", async () => {
     expect(posterText(), "the room should open at what it reads now").toContain(NOW_TEXT);
 
-    /* Halfway between the first board going up and the second superseding it:
-       one moment where the answer is unambiguous. */
-    await windTo(railPos((ago(V1_DAYS) + ago(V2_DAYS)) / 2));
+    /* The day the first board went up. The second supersedes it eighty days
+       later, so the end of this day is one moment where the answer is
+       unambiguous. */
+    await windToDay(dayOf(ago(V1_DAYS)));
 
     const then = posterText();
     expect(
       then,
-      "wound back between the two versions, the room still shows today's sentence — " +
-        "the dial moved and the board did not follow it",
+      "wound back to the day of the first board, the room still shows today's " +
+        "sentence — the dial moved and the board did not follow it",
     ).not.toContain(NOW_TEXT);
     expect(then, "and it should be the version that was actually up").toContain(THEN_TEXT);
   });
 
   it("says the room had nothing up before it had anything up", async () => {
-    /* Wound back past the first version — but not past the room's own start —
-       the honest answer is a blank wall, and a blank wall is a `formingAlt`
-       line rather than a poster: there is no sentence to set. Falling back to
-       the live board would print today's sentence over a month that never had
+    /* The day the door first moved — ten days before the first board. The
+       honest answer is a blank wall, and a blank wall is a `formingAlt` line
+       rather than a poster: there is no sentence to set. Falling back to the
+       live board would print today's sentence over a month that never had
        one, which is the single thing a history must not do.
 
        Read off the whole surface rather than off one element, because the
        claim is an ABSENCE and the honest way to state it is that neither of
        the room's two sentences is anywhere on screen. Both belong to this
        room alone, so no other wall can supply them. */
-    await windTo(railPos((ago(DOOR_DAYS[0]) + ago(V1_DAYS)) / 2));
+    await windToDay(dayOf(ago(DOOR_DAYS[0])));
     const surface = layout.container.textContent ?? "";
-    expect(
-      surface,
-      "a room before its first board must not show its latest one",
-    ).not.toContain(NOW_TEXT);
+    expect(surface, "a room before its first board must not show its latest one").not.toContain(
+      NOW_TEXT,
+    );
     expect(surface, "nor the one that had not been written yet").not.toContain(THEN_TEXT);
-    expect(
-      surface,
-      "and it should say so rather than showing an unexplained blank",
-    ).toContain("Nothing read together yet");
+    expect(surface, "and it should say so rather than showing an unexplained blank").toContain(
+      "Nothing read together yet",
+    );
   });
 
   it("comes back to now, and back to what the room reads now", async () => {
-    await windTo(railPos((ago(V1_DAYS) + ago(V2_DAYS)) / 2));
+    await windToDay(dayOf(ago(V1_DAYS)));
     expect(posterText()).toContain(THEN_TEXT);
-    await windTo(1);
-    expect(
-      posterText(),
-      "the rail's bottom end is now, and now is the live board",
-    ).toContain(NOW_TEXT);
+    await windToNow();
+    expect(posterText(), "the top of the list is now, and now is the live board").toContain(
+      NOW_TEXT,
+    );
   });
 });

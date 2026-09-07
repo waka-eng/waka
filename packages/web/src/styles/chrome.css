@@ -261,12 +261,16 @@ a:focus-visible {
   text-transform: none;
   letter-spacing: 0;
 }
-/* a field's hint belongs to the field above it, not to the label below */
+/* a field's hint belongs to the field above it, not to the label below.
+   Its margin is NOT set here: `THE RHYTHM` further down this file re-declares
+   bare `.field` and, being later in the same layer at the same specificity,
+   wins. This block used to say `margin-bottom: var(--sp-22)` and that
+   declaration had never once decided anything — 26 is the number every field
+   in the product actually keeps. Found by `one-class-one-thing.test.ts`. */
 .field {
   display: flex;
   flex-direction: column;
   gap: var(--sp-6);
-  margin-bottom: var(--sp-22);
 }
 
 /* Messages speak in the world's voice: prose, quiet, and no colour carrying

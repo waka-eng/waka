@@ -188,10 +188,24 @@
 .jar-hq-inner {
   max-width: 680px;
   margin: 0 auto;
+  /* THE COLUMN IS A CONTAINER, SO THE CLAIM CAN BE SET AGAINST IT. See
+     `.jar-poster`'s size for why. Inline-size only: the column's width comes
+     from the layer above it, never from its contents, so containing that axis
+     costs nothing and the height stays free. */
+  container-type: inline-size;
   /* 72, up from 56 (founder, 2026-08-27: "add a bit more spacing between
      philosophies and values button and the top of mind text") — the way up
-     and the sentence are different instruments and need the air to say so */
-  padding: calc(72px + env(safe-area-inset-top)) 20px 0;
+     and the sentence are different instruments and need the air to say so.
+     AND IT IS THE FIRST THING TO GIVE WAY ON A SHORT WINDOW. The character is
+     a constant by ruling; the claim gives way second (see `.jar-poster`); the
+     AIR above the claim gives way first, because it is the only thing here
+     that costs nothing to lose. 48 is the floor and it is measured: the way
+     up ends at y 31, and 16 is the inset the four signposts keep, so 48 is
+     the nearest step on the spacing grid that still clears it with the air
+     every other signpost is given. 10.6vh reaches the full 72 at a 679px
+     viewport — the same 680 the column caps at and the same 680 the claim's
+     own height cap lands on, so all three stop growing together. */
+  padding: calc(clamp(48px, 10.6vh, 72px) + env(safe-area-inset-top)) 20px 0;
 }
 /* ═══ THE LAYER TAKES NO POINTER; ITS CONTROLS TAKE IT BACK, ALL OF THEM ═══
    `.jar-hq` is `pointer-events: none` so the world underneath stays draggable
@@ -252,7 +266,65 @@
   /* 300, never heavier: in a geometric the elegance is in the thin even stroke
      and the air around it, and weight is what killed the last attempt. */
   font-weight: 300;
-  font-size: clamp(23px, 2.5vw, 34px);
+  /* ONE CURVE, AND IT TRACKS THE COLUMN RATHER THAN THE WINDOW (founder,
+     2026-08-30, on a tablet: "overall balancing feels kinda off").
+
+     MEASURE IS THE THING A READER FEELS, and measure is column ÷ character
+     advance. This read `clamp(23px, 2.5vw, 34px)` — the window's width — while
+     the column has been capped at 680px since long before. So everywhere
+     between the phone band and about 1360px the column had stopped growing
+     and the type had not stopped shrinking, and the line got longer and
+     longer as the screen got smaller. Measured: 38 characters a line on a
+     1440px desktop against 56 on a 768px tablet, which is not a smaller
+     version of the same page — it is a different reading experience arrived
+     at by accident.
+
+     `cqi` is one percent of the column's own width, so this is the same
+     sentence set to the same measure at every width the column can take.
+
+     5.3125 IS 34 ÷ 640, AND IT IS WRITTEN OUT RATHER THAN ROUNDED. The column
+     caps at 680 with 20px of padding each side, so its content box caps at
+     640 — and 5.3125cqi of 640 is exactly the 34px the desktop already had.
+     A round 5 would have quietly taken the desktop down to 32px, which is a
+     change nobody asked for arriving inside a fix for something else. The
+     34px ceiling is then never the binding term; it is kept as the guard for
+     the day somebody raises the cap.
+
+     THE PHONE BAND STAYS, and that is deliberate. Under 560px the column is
+     narrow enough that matching this measure needs type at 1.24x the size of
+     a memory's own body text, and a claim that close to body text stops
+     reading as the wall's claim — the trade was measured and taken on
+     2026-08-28, and a fix for tablets is not the place to overturn it. Its
+     ceiling is 28px — this curve gives 27.68 at 561, so the two meet within a
+     third of a pixel rather than stepping.
+
+     Measured, characters that fit: 42 at 1440, 42 at 768, 42 at 600, 42 at
+     560, and the phone's own curve below that. One page, one measure.
+
+     AND A SECOND CAP, FOR THE OTHER AXIS. Sizing by the column alone made a
+     SHORT window worse: at 1024 the claim went from 25.6px to 34px, which is
+     right for measure and wrong for a 380px-tall screen — it took the block
+     from two lines to three and pushed it 34px further into the character.
+     Found by measuring it rather than by anybody reporting it, and it was
+     mine: the character is a constant by ruling ("character shouldnt be
+     responsive to screensize"), so when the slot runs out the body has
+     nowhere to go and the overlap is real.
+
+     `5vh` is the claim's share of a short window, and it reaches 34px at a
+     680px viewport — the same 680 the column caps at. So the sentence is:
+     the claim never exceeds 5.3125% of its column's width or 5% of the
+     window's height, and both reach 34px at 680. Above that nothing changes;
+     below it the claim gives way, which is what the character's own comment
+     says text is for.
+
+     Measured against the curve this replaced, as the claim's block reaching
+     INTO the character (negative is clear of it):
+
+       1440x900   -183  ->  -183      1024x460    +11  ->    -4
+       1280x720   -101  ->   -93      1024x380    +51  ->   +36
+       1024x560    -53  ->   -23       900x380    +48  ->   +36
+                                       768x420    +28  ->   +16 */
+  font-size: clamp(23px, min(5.3125cqi, 5vh), 34px);
   letter-spacing: 0.012em;
   line-height: 1.32;
   text-wrap: balance;
@@ -1926,238 +1998,84 @@
    middle is the founder's own ruling for panels, and a comment describing a
    layout the product does not have is worse than no comment. */
 
-/* ---------- time dial: a horizontal band above the axis of walls ----------
-   IT WENT TO THE RIGHT MARGIN TO KEEP TWO MEANINGS OFF ONE AXIS, AND NOBODY
-   USED IT. The reasoning was sound — the bottom edge is the map of WHOSE mind
-   you are in, and laying WHEN across the same band makes a sideways drag
-   ambiguous — but the cure cost more than the disease: a hairline rail in the
-   margin, mounted only while you were down in the field, so a wall's history
-   was something you had to descend to and then hunt for.
+/* ═══════════ TIME: THE DATES THEMSELVES, HUNG FROM THE WORD ═══════════
+   Founder, 2026-08-30: "instead of this draggable line, when clicking on now,
+   just show the major dates to make them clickable."
 
-   A timeline is a horizontal instrument. It is one again, and the ambiguity
-   is answered by STACKING rather than by rotating: two bands, one above the
-   other, each holding exactly one meaning. Months and a scrub handle here;
-   names of walls below. They never overlap and neither is ever mistaken for
-   the other, because the thing that told them apart was never the axis — it
-   was what is written on them.
+   FOUR PLACEMENTS AND ONE GESTURE, AND THE GESTURE WAS THE PROBLEM. This was
+   a hairline in the right margin, then a band along the bottom edge, then a
+   vertical rail under the word — each move fixing where time LIVED, none of
+   them touching what you had to do once you got there: find an invisible
+   line, hold it, drag, read a date that appears under your own finger, let go,
+   and discover whether that was the moment you meant. "Hard to drag", "moves
+   around", "not right under the word" are three separate reports about one
+   gesture, and this is the fourth.
 
-   And it is present at every height now. Winding time rewrites the poster,
-   so it means something at headquarters; the only reason to hide it is a wall
-   with no history to wind, which is data, not altitude. */
+   A wall does not change continuously, so it never needed a continuous
+   control. It changes on the days something was kept, so those days are the
+   whole instrument now — a short list of them, and `now` at the top.
+
+   AND IT WEARS THE HOUSE SURFACE, HUNG FROM ITS OWN BUTTON. It is the third
+   of "the two sheets that hang off the button that opened them" (see that
+   block below, and the founder's ruling it narrows): a menu belonging to a
+   control rather than to the world, so it opens under its control. Joining
+   that group rather than inventing a ground is the whole point of the group
+   — the rail had a bespoke scrim once, and the founder saw the stack of bands
+   before anything else: "this is so many layers and ugly".
+
+   The `left` here is only what stands before the world has measured; the real
+   one is written per frame by `hangRail`, from the left edge of `.jar-when`,
+   because that word sits after the wall chip and no constant can be under it
+   on every wall. Placement is written AFTER the shared centring block, same
+   specificity, later wins — the rule this file has been bitten by three
+   times. */
 .jar-dial {
   position: absolute;
   z-index: 5;
-  /* UNDER THE WORD THAT SUMMONS IT (founder, 2026-08-27: "move timeline
-     slider vertically under this instead", pointing at `now`).
-
-     It was a full-width hairline along the very bottom edge, and the reason
-     given for that was sound: the top of the page is crossed by the chips and
-     the poster's block, so no full-width horizontal line can live up there
-     without cutting through the wall's own words at some sentence length.
-
-     A VERTICAL rail has no such problem, because it never crosses them. It
-     hangs from `.jar-when` in the top-left — the word that says `now` or the
-     day you are parked at — so the instrument is attached to its own name
-     instead of living at the opposite corner of the screen from it. Time
-     stops being a band under everything and becomes a thing you pull down
-     beside the wall you are reading.
-
-     `top` clears the chip row the word sits in; `left` lines the rail up with
-     the word's own text rather than the row's padding edge. */
-  top: calc(var(--sp-24) * 2);
-  /* `left` is written by the world per frame, centred under `.jar-when` —
-     the word's x depends on the wall chip's name, so no constant can be
-     under it on every wall (founder, 2026-08-27: "should align with the
-     text NOW"). This is the resting place before the first measure. */
-  left: var(--sp-24);
-  bottom: auto;
-  right: auto;
-  display: flex;
-  align-items: stretch;
-  /* the rail's own length: enough to scrub with, short of the ground below */
-  height: min(46vh, 380px);
-  padding: 0;
-  /* NO SCRIM AT ALL, AND THAT IS THE FIX. It was a gradient to `--jar-deep`,
-     written as "a scrim, not a band … without ever showing an edge" — and at
-     the very bottom of the screen it showed one, a hard horizontal seam across
-     the full width where its opaque end met the field. The founder saw the
-     stack of bands before anything else: "this is so many layers and ugly".
-
-     It needed a ground when it was a rail in the right margin with the field
-     drifting behind it. Down here it sits below everything, on ground that is
-     already the darkest thing on the page, and a hairline over black needs
-     nothing under it. One band fewer. */
-  /* At rest the timeline is present but quiet — a hairline, a small dot, and
-     dim months. It comes to full strength on approach or while scrubbing, so
-     it is never lost and never competing with the field. */
-  /* NO FADE ON THE BAND ITSELF. It rested at 0.42 and came up on approach —
-     but element opacity multiplies into every child, so the handle could
-     never be whiter than the band around it however it was styled. The parts
-     that should rest quiet (the months) carry their own fade below; the
-     hairline already does; the handle and the door-marks are FACTS — where
-     you are in time, when the room changed — and facts do not wait for the
-     pointer. */
-}
-/* ---------- the rail arrives when you reach for it ----------
-   Founder, 2026-08-25: "I don't want the line to always be there. Can we have
-   a button called timeline and when user hovers on it, the line and the
-   draggable circle only show then?"
-
-   A hairline drawn the full width of the screen with a lit handle on it, at
-   rest, on every wall, is an instrument left switched on in a room where
-   nobody is winding anything.
-
-   SO THE WORD RESTS AND THE INSTRUMENT ARRIVES — and the word is `.jar-when`,
-   up in the top-left beside the name of the wall, not a label lying over this
-   rail. That is what finally made the rest state REACHABLE. While the word
-   said `timeline` — a name for the instrument — the only way to show you had
-   wound back was to keep the whole instrument lit, so `--live` was set on
-   `!atNow` and one drag drew the hairline across the screen for the rest of
-   the session. Nothing put it away again except a scrub landing within half a
-   day of the present, on a rail you cannot see unless you are touching it.
-   That is the line the founder asked four times to remove, held up by the one
-   rule meant to make it meaningful. Now the word says `now`, or the day you
-   are parked at, the fact is carried in type, and `--live` means only "a
-   finger is on it".
-
-   THREE WAYS IN, and the third is the one that keeps it honest on a phone.
-   Reaching for the word is what was asked for and is right on a pointer;
-   focusing it carries a keyboard; pressing it is the touch answer, because a
-   hover-only control does not exist on a phone and this stylesheet has
-   shipped three of those already. All three arrive as `--open`, set by the
-   word rather than by a selector on this element — the rail and the word are
-   no longer in the same box, and that is the point. */
-.jar-dial-track::before,
-.jar-month,
-.jar-dial-handle {
-  opacity: 0;
-}
-.jar-dial:hover .jar-dial-track::before,
-.jar-dial:focus-within .jar-dial-track::before,
-.jar-dial--open .jar-dial-track::before,
-.jar-dial--live .jar-dial-track::before {
-  /* ONE STRENGTH FOR ALL FOUR WAYS IN. This said 0.5 while a second copy of
-     the hover half said 0.9 a hundred lines down — same selector, same
-     property, later winning — so reaching with the pointer lit the rail
-     brighter than pressing the word did, for no reason anyone chose. */
-  opacity: 0.9;
-}
-.jar-dial:hover .jar-dial-handle,
-.jar-dial:focus-within .jar-dial-handle,
-.jar-dial--open .jar-dial-handle,
-.jar-dial--live .jar-dial-handle {
-  opacity: 1;
-}
-.jar-month {
-  transition: opacity 0.28s ease;
-}
-.jar-dial:hover .jar-month,
-.jar-dial:focus-within .jar-month,
-.jar-dial--open .jar-month,
-.jar-dial--live .jar-month {
-  /* the months were the quietest part of a rail that was always up; now the
-     rail itself waits, they come back at the strength they were designed at */
-  opacity: 0.45;
 }
 /* nothing to wind on this wall */
 .jar-dial--away {
   opacity: 0;
   pointer-events: none;
 }
-.jar-dial-track {
-  position: relative;
-  flex: 1;
-  /* the grabbable width of a vertical rail, where `height: 30px` was its
-     grabbable height when it lay along the bottom. 44, up from 30 (founder,
-     2026-08-27: "hard to drag") — the hairline is one pixel but the hand
-     asks for a finger's width, and the loop centres the line from the
-     rail's measured width so the grab can grow without un-centring it. */
-  width: 44px;
-  touch-action: none;
-  cursor: ns-resize;
+.jar-dial-list {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  /* a menu's rows sit close: the gap between two dates is not a paragraph
+     break, and air here is what made the first draft read as four cards */
+  gap: var(--sp-4);
 }
-.jar-dial-track::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 1px;
-  margin-left: -0.5px;
-  border-radius: 999px;
-  /* THE PAST END DISSOLVES (founder, 2026-08-27: "make end of the line faded
-     so it naturally fades with background"). The rail hangs from now and
-     reaches into the past, and the past has no edge — a hard stop said the
-     history ends HERE, which is a claim the dial cannot make. Full ink for
-     most of the run so the eye still has a line to follow, then the last
-     stretch breathes out into the dark. */
-  background: linear-gradient(to bottom, var(--jar-faint) 72%, transparent);
-  /* NO OPACITY HERE. This rule gives the hairline its shape and colour;
-     whether it is SHOWN is decided above, by the rest state and the three
-     ways in. It carried `opacity: 0.5` until 2026-08-25 — the same selector
-     deciding the same property twice in one file, later winning — so the rail
-     the founder asked to hide was visible at rest anyway, and the first
-     screenshot of the finished work showed it. One property, one place. */
-  transition: opacity 0.28s ease;
-}
-/* the months read along the rail, set below it so the hairline stays the
-   thing your eye tracks */
-.jar-month {
-  position: absolute;
-  left: 50%;
-  margin-left: var(--sp-12);
+/* ONE ROW, ONE MOMENT. `all: unset` is how this file writes a button that is
+   really a word — the same start `.jar-mouth-step` and the ground rows make,
+   so nothing inherits a user-agent border, background or font. */
+.jar-dial-stop {
+  all: unset;
+  cursor: pointer;
+  /* THE ROW IS THE TARGET, NOT THE GLYPH. A date in the label register is ten
+     pixels of type and six characters wide, and the whole reason this replaced
+     a rail is that the rail was hard to hit ("hard to drag", "moves around").
+     Shipping a menu whose rows are twenty pixels tall would be the same defect
+     with a different shape. Twenty-eight clears the 24px a pointer target is
+     asked for and gives the column a rhythm besides. */
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 var(--sp-8);
+  margin: 0 calc(var(--sp-8) * -1);
+  border-radius: 8px;
   white-space: nowrap;
-  transform: translateY(-50%);
-  pointer-events: none;
+  color: var(--jar-muted);
+  transition: color 0.18s ease, background-color 0.18s ease;
 }
-/* THE DOOR'S MARK ON THE RAIL — the one thing a room's history turns on.
-   A short notch ACROSS the track, at full ink, so it reads as a HINGE rather
-   than as another month label: months are words beside the rail, this is a
-   notch in it. Arrivals and departures wear the same mark on purpose — the
-   fact is "the room changed who it is", and light is not spent sorting people
-   into good news and bad. Which of the two it was is what the name says. */
-/* THE HANDLE IS WHITE AND WHOLLY THERE (founder, 2026-08-25: "make this
-   circle just white and full opacity"). It was faint at rest and only came up
-   under the pointer — but it is WHERE YOU ARE IN TIME, a fact and not an
-   affordance being teased, and the dial around it already does the
-   quiet-at-rest work. No accent, no glow; it still grows under the hand. */
-.jar-dial-handle {
-  position: absolute;
-  left: 50%;
-  top: 0;
-  width: 8px;
-  height: 8px;
-  margin: calc(var(--sp-4) * -1) 0 0 calc(var(--sp-4) * -1);
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: none;
-  pointer-events: none;
-  /* the handle fades on the same clock as the hairline it rides — it
-     snapped in and out while the rail took 0.28s, which read as two
-     instruments rather than one arriving */
-  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.28s ease;
+.jar-dial-stop:hover {
+  color: var(--jar-ink);
+  background: var(--jar-panel-edge);
 }
-.jar-dial:hover .jar-dial-handle,
-.jar-dial--live .jar-dial-handle {
-  transform: scale(1.9);
-}
-/* The scrubbed date. A SIBLING of the handle, not a child: the handle scales
-   up while the dial is live, and a label inheriting that scale is how this
-   came to be printed at poster size. It sits just above the handle, and it
-   exists only while a finger is actually scrubbing. */
-.jar-dial-date {
-  position: absolute;
-  left: calc(50% + var(--sp-16));
-  transform: translateY(-50%);
-  text-align: left;
-  white-space: nowrap;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-.jar-dial-date--on {
-  opacity: 1;
+/* WHERE YOU ALREADY ARE, in the one channel this world has. It is lit, and
+   nothing else says it — no tick, no dot, no second colour. */
+.jar-dial-stop--here {
+  color: var(--jar-ink);
 }
 
 /* WHERE THIS MEMORY MAY BE SEEN — a state at the top right, not a verb in
@@ -2399,6 +2317,7 @@
 .jar-panel,
 .jar-seek,
 .jar-settings,
+.jar-dial,
 .jar-prov-room {
   /* dead centre, and the rise is a variable because the transform slot is
      spoken for by the centring — see `jar-panel-in` */
@@ -2475,6 +2394,24 @@
      signposts keep. Aligned to the button, not to a rule about edges. */
   right: 8px;
   left: auto;
+}
+/* AND THE THIRD SHEET IS THE DATES. Same case exactly: it belongs to the word
+   that says `now`, not to the world, so it opens under that word. The `left`
+   is a placeholder — `hangRail` writes the real one inline, from the word's
+   own box, because the word sits after the wall chip and moves with the
+   wall's name. `top` is the anchored sheets' own, so all three clear the
+   chrome row on the same line rather than on three guesses. */
+.jar-dial {
+  top: calc(48px + env(safe-area-inset-top));
+  left: var(--sp-24);
+  right: auto;
+  transform: translateY(var(--jar-panel-rise));
+  max-width: calc(100vw - 16px);
+  /* a long archive rolls up to months and then to years, so this is a
+     catastrophe stop rather than an expected state — but a menu that runs off
+     the bottom of a phone is not a menu */
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
 }
 /* THE HEAD: date left, who-may-see right, centred against each other.
    It was not a row at all — the date was a block padded 56px/120px to dodge
@@ -2729,7 +2666,6 @@
     opacity: 1;
   }
   .jar-back,
-  .jar-dial-handle,
   .jar-forming-line,
   .jar-way,
   .jar-mouth-rest,
@@ -3032,6 +2968,16 @@
     padding-top: var(--sp-8);
     padding-bottom: var(--sp-8);
   }
+  /* AND THE SKY'S OWN VERB, 15px -> 31px. `declare one` arrived with the
+     sky's honesty pass (#305 range, 2026-09-01) and came in at 70x15 — under
+     the 24 this block holds everything to, on the world, the mouth open and
+     a memory open, at all three viewports. It is not an exception to the rule
+     above; it is a control the rule had not been extended to yet, which is
+     what "brought to it where it falls short" means. Found by `e2e:phone`. */
+  .jar-values-declare button {
+    padding-top: var(--sp-8);
+    padding-bottom: var(--sp-8);
+  }
   /* the chrome pills sit at 25-26px and already clear 24; `.jar-here-more` is
      the one under it on the short axis, at 42px wide */
   .jar-here-more {
@@ -3141,28 +3087,33 @@
        is not an inset, it is a near miss: the signpost read as attached to the
        chrome above it rather than as its own thing. */
     top: calc(56px + env(safe-area-inset-top));
-    /* AND IT STANDS AT THE COLUMN'S EDGE, NOT THE SCREEN'S MIDDLE.
-       Founder, 2026-08-28, over two screenshots of a phone: "so ugly".
+    /* AND IT IS CENTRED, LIKE THE COUNT IT IS THE OTHER HALF OF.
+       Founder, 2026-09-08: "philosophies and value is not centered."
 
-       Measured at 390px: the claim is set LEFT from x 20, and this signpost
-       was CENTRED at 195 — their left edges 77px apart. On a desktop that
-       reads as deliberate, because the claim sits in a 680px column inside a
-       1440px frame and a centred label agrees with the column's own centre.
-       On a phone the claim is the full width, so a centred label stops
-       agreeing with anything: two alignment systems stacked, and on a wall
-       with nothing on it yet the label floats over one short italic line
-       hanging at the far edge.
+       WHAT WAS HERE BEFORE, AND WHY IT WENT. On 2026-08-28 the same founder
+       said "so ugly" over two phone screenshots, and this rule answered by
+       pinning the signpost to the column's left edge at x 8 so its words
+       lined up with the claim's first letter. The reasoning was that a
+       centred label over a full-width claim is two alignment systems
+       stacked. That reasoning was measured on a wall with NOTHING on it —
+       one short italic line hanging at the far edge — and it does not
+       survive a wall that has a claim on it: with three full lines of poster
+       under it, the signpost stopped reading as the claim's label and
+       started reading as the only thing on the top half of the screen that
+       had slipped.
 
-       It already steps out of the top row on a phone. Stepping to the
-       column's edge as well is the same adaptation finished: signpost, then
-       claim, one left edge, one column. 20px is `.jar-hq-inner`'s own side
-       padding, read off the same number rather than restated.
+       The pair is the argument. `.jar-values` and `.jar-saved` are one axis
+       — the way up and the count, top and bottom — and the block at 2966
+       already treats them as one thing. The count is centred at every width.
+       Left-aligning only the top of that pair is the asymmetry the founder's
+       eye caught, and centring is what makes them a pair again.
 
-       The 12px of side padding this button carries is subtracted, so its
-       WORDS line up with the claim's first letter — not its box. Nobody sees
-       a box. */
-    left: 8px;
-    transform: none;
+       WHAT IS KEPT. The step DOWN to its own line, which is what actually
+       fixed the defect the phone walk found in August: at 390px the four
+       controls along the top edge cannot share a line, and a centred
+       signpost up there intercepted the pointer for `.jar-when`. That was
+       never solved by moving left — it was solved by `top` above. `e2e:phone`
+       hit-tests every control's own centre and is the proof. */
   }
   /* AND THE COLUMN MAKES ROOM FOR THE SIGNPOST THAT STEPPED INTO IT.
      `.jar-hq-inner` pads 72px from the top, and that number was set for a
@@ -3183,43 +3134,61 @@
   .jar-hq-inner {
     padding-top: calc(118px + env(safe-area-inset-top));
   }
-  /* AND THE CLAIM KEEPS MOST OF ITS MEASURE WHEN THE COLUMN NARROWS.
-     Founder, 2026-08-28: "fix the type size on mobile."
+  /* THE CLAIM'S SIZE LEFT THIS BLOCK, and the sentence it left behind is
+     worth keeping because it is half of one finding.
 
-     THE TYPE STOPPED RESPONDING BEFORE THE COLUMN DID, and that is the
-     defect. `clamp(23px, 2.5vw, 34px)` reaches its floor at a 920px viewport,
-     so from there down the type is a flat 23px. The COLUMN goes on shrinking
-     to 640 and then, below a 680px viewport, all the way down with the
-     screen. Type held still against a narrowing column is a measure falling
-     away, and it falls on exactly the widths people hold.
+     Founder, 2026-08-28: "fix the type size on mobile." THE TYPE STOPPED
+     RESPONDING BEFORE THE COLUMN DID — `clamp(23px, 2.5vw, 34px)` reached
+     its floor at a 920px viewport while the column went on shrinking, so the
+     measure fell away on exactly the widths people hold. The answer here was
+     a second curve under 560px.
 
-     Measured as CHARACTERS THAT FIT — the column over the font's real
-     advance, not the sentence's length over its line count, which is a coarse
-     proxy that moves in whole lines and flattered this by five characters
-     when I first took it:
+     Founder, 2026-08-30, on a tablet: "overall balancing feels kinda off."
+     THE SAME DEFECT FROM THE OTHER END, and the phone band could not see it:
+     between 560 and about 1360 the column had ALREADY stopped growing at its
+     680 cap while the type went on shrinking with the window, so the line got
+     longer as the screen got smaller. Measured then: 38 characters at 1440
+     against 56 at 768.
+
+     Two bands could not fix a curve set against the wrong thing, and the
+     answer was to change what the default curve is set against rather than to
+     add a third: `.jar-poster` is sized in `cqi` now — one percent of its own
+     column — so measure is constant wherever the column is.
+
+     THIS RULE SURVIVES THAT, on its own evidence. Below 560 the column is
+     narrow enough that holding the desktop's measure needs 18.6px against
+     15px body text — 1.24x, where the desktop is 2.27x — and a claim that
+     close to body text stops reading as the wall's claim. The trade was
+     measured and taken here: 1.43x, and 33 of the desktop's characters
+     instead of 38. A fix for tablets is not the place to overturn it.
+
+     Measured in a real engine over one sentence, so the counts are comparable
+     down the column and NOT comparable with the older table above it, which
+     used a different string:
 
        viewport   type     column   fits
-           1440   34px        640   38     <- what the desktop sets at
-            768   23px        640   56
-            390   23px        350   30     <- before
-            390   21.5px      350   33     <- after
-            360   19.8px      320   33
-
-     AND IT DOES NOT REACH 38, WHICH IS THE HONEST PART. Matching the
-     desktop's measure exactly needs 18.5px in a 350px column. Body text is
-     15px, so the wall's claim would sit 1.23x the size of a memory's own
-     text and stop reading as the wall's claim at all — on the desktop it is
-     2.27x. A 350px column cannot hold both relationships, and this is the
-     trade taken deliberately: 1.43x body, and 33 of the desktop's 38
-     characters instead of 30.
-
-     23 is the ceiling, so it is today's size rather than a new one, and
-     nothing between 418px and 560px moves — the measure was never the
-     problem there. The floor is 18 for the 320px screens still in use, whose
-     column is 280.
+           1440   34px        640   42
+            768   34px        640   42     <- was 23px and 56, the tablet report
+            600   29.8px      560   42
+            560   28px        520   41     <- this rule's ceiling, a third of
+                                              a pixel off what the curve above
+                                              gives at 561, so the two meet
+            430   23.7px      390   37
+            390   21.5px      350   36     <- the 2026-08-28 trade, untouched
+            360   19.8px      320   36
+            320   18px        280   35
   */
   .jar-poster {
-    font-size: clamp(18px, 5.5vw, 23px);
+    /* 28 IS WHERE THE TWO CURVES JOIN, ROUNDED TO A WHOLE PIXEL. The curve
+       above gives 27.68px at 561, and 27.68 is what this ceiling wanted to
+       be — but `type-scale.test.ts` refuses a fractional size, and it is
+       right to: "there is no reading of the scale in which 13.5px is a
+       deliberate step — it is a call-site nudge, and seven of them had
+       shipped by the time anyone counted." A third of a pixel is not a step
+       anybody sees, and the rule that caught this is worth more than the
+       third of a pixel. Everything below about 509px is still the 5.5vw the
+       founder saw and approved. */
+    font-size: clamp(18px, 5.5vw, 28px);
   }
 }
 
@@ -3513,8 +3482,33 @@
 /* WHOSE GROUND — a choice, where a colour key used to be.
    Same corner, same quiet register: what changed is that these rows now DO
    something, so unlike the key they take pointer events and one of them is
-   always lit as the ground you are standing in. */
-.jar-ground {
+   always lit as the ground you are standing in.
+
+   IT IS `.jar-grounds`, PLURAL, AND THE PLURAL IS LOAD-BEARING.
+   This block was called `.jar-ground` — the same name the poster's evidence
+   sentence carries 230 lines above (`A GROUND THE POSTER STANDS ON`). Two
+   different components, one class, and the whole file is one cascade: this
+   block is later, so it won, and it won for BOTH. Every time somebody pressed
+   the claim on their own wall, the memory it stands on was handed
+   `position: absolute`, `left: 18px`, `bottom: 46px`, `display: flex` and —
+   through the label register in `system.css`, which also named `.jar-ground`
+   — SET IN CAPITALS. A quotation, uppercased and thrown out of its own
+   container into the bottom-left corner of whatever happened to be the
+   nearest positioned ancestor.
+
+   Reported by the founder on 2026-09-08 from a phone: "when clicking on the
+   text that was formed, this weird thing appears at the bottom. It doesn't
+   happen in desktop." It happened on the desktop too — measured at 1100x780,
+   the sentence landed at x18 spanning the full 1100px — but at that width it
+   lands beside the column and reads as a stray line. On a 393px phone the
+   column is only 270px tall, so `bottom: 46px` puts it straight through the
+   claim's own last line. Same defect, two legibilities.
+
+   The lesson is not "check the cascade". It is that a class name is a NAME:
+   two things cannot share one and stay two things. `css-one-class-one-thing`
+   in `e2e:dead-css` now fails the build if any bare class is declared by two
+   top-level blocks that both set layout. */
+.jar-grounds {
   position: absolute;
   /* it arrives with the ground rather than appearing: the same fade the rest
      of the chrome uses, so nothing in this world ever pops into existence */
@@ -3527,7 +3521,7 @@
   align-items: flex-start;
   gap: var(--sp-2);
 }
-.jar-ground-row {
+.jar-grounds-row {
   display: flex;
   align-items: center;
   gap: var(--sp-8);
@@ -3555,19 +3549,19 @@
 }
 /* JUST ARRIVED: every ground lit, for as long as an arrival lasts. Dropping
    the class is the whole settle — the transition above is already the curve. */
-.jar-ground--lit .jar-ground-row {
+.jar-grounds--lit .jar-grounds-row {
   opacity: 1;
 }
-.jar-ground-row:hover,
-.jar-ground-row:focus-visible {
+.jar-grounds-row:hover,
+.jar-grounds-row:focus-visible {
   opacity: 0.8;
 }
-.jar-ground-row--here {
+.jar-grounds-row--here {
   opacity: 1;
 }
 /* the swatch is the orb, small: same circle, same soft edge, so the name and
    the ground it switches to are visibly the same material */
-.jar-ground-dot {
+.jar-grounds-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
@@ -3579,7 +3573,7 @@
    The name has to be made of the same stuff as the ground it opens, so an
    agent's swatch loses its curve exactly as its orbs do — a stepped square
    rather than a disc, at the same size and the same hue. */
-.jar-ground-dot--agent {
+.jar-grounds-dot--agent {
   border-radius: 0;
   width: 6px;
   height: 6px;

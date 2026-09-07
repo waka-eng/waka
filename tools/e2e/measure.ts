@@ -61,11 +61,12 @@
  *
  * Flags: `--negative`, `--only <id>`.
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Browser, type Page } from "playwright";
+import ts from "typescript";
 import { launchChromium } from "./browser";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, "../..");
@@ -155,6 +156,17 @@ const FIXTURE = `<!doctype html>
 <link rel="stylesheet" href="/home.css">
 <link rel="stylesheet" href="/chrome.css">
 <style>
+  /* THE PRODUCT'S BOX MODEL, WHICH IS ONE DECLARATION AND WAS MISSING.
+     global.css sets border-box on every element and this fixture does not
+     serve that sheet, so .jar-hq-inner capped its CONTENT at 680 here while
+     the product caps its BORDER BOX at 680 and gives the column 640. The
+     headline case reads the column now (the claim is sized in cqi), and it
+     was reading a column 40px wider than any that exists. It still passed,
+     because the clamp's ceiling happened to swallow the difference — which is
+     a case passing for a reason nobody chose. Not the whole sheet: this one
+     rule is what the fixture's geometry depends on, and pulling in the rest
+     would change what every other case here is standing on. */
+  *, *::before, *::after { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: #0a0d14; }
   .jar { position: fixed; inset: 0; }
   /* the world writes these two as inline \`left\` from the wall's column */
@@ -167,6 +179,23 @@ const FIXTURE = `<!doctype html>
      read mid-animation. */
   .jar-panel, .jar-seek, .jar-settings, .jar-prov-room { animation: none !important; }
 </style>
+<script>
+  /* THE ONE THING THE WORLD WRITES INLINE, WRITTEN THE SAME WAY HERE.
+     hangRail sets the dates left edge from the left edge of the word that
+     says now, because that word sits after the wall chip and moves with the
+     wall's name — no constant in a stylesheet can be under it on every wall.
+     A fixture that left the stylesheet's placeholder in place would be asking
+     whether the sheet hangs off its button and answering about a guess.
+     This is the product's line, not an approximation of it.
+     (No backticks in here: this whole fixture is a template literal, and one
+     stray backtick in a comment ends it mid-sentence. That has cost this
+     project two gates already.) */
+  addEventListener("DOMContentLoaded", () => {
+    const w = document.querySelector(".jar-when");
+    const d = document.querySelector(".jar-dial");
+    if (w && d) d.style.left = Math.round(w.getBoundingClientRect().left) + "px";
+  });
+</script>
 <div class="jar" style="--jar-vh:100vh;--jar-vw:100vw">
   <!-- THE HEADLINE, and it is an <h1> because the world's is. That is the
        whole point of it being here: a bare \`h1\` selector in another sheet
@@ -203,7 +232,15 @@ const FIXTURE = `<!doctype html>
     </div>
     <button class="jar-account jar-back jar-label">Your account</button>
   </div>
-  <div class="jar-dial jar-dial--open"><div class="jar-dial-track"><span class="jar-month jar-label" style="left:50%">aug</span><div class="jar-dial-handle"></div></div></div>
+  <!-- THE DATES, which are only ever on screen while they are open — so the
+       fixture holds them open, the way it holds every other sheet open. -->
+  <div class="jar-dial" data-jar-chrome="1">
+    <div class="jar-dial-list">
+      <button class="jar-dial-stop jar-label jar-dial-stop--here">now</button>
+      <button class="jar-dial-stop jar-label">Aug 12</button>
+      <button class="jar-dial-stop jar-label">Jul 26</button>
+    </div>
+  </div>
 
   <div class="jar-mouth-slot">
     <p class="jar-ask jar-ask--row jar-mouth-where jar-mouth-where--armed">
@@ -363,6 +400,124 @@ const CASES: Case[] = [
   },
 
   {
+    id: "no-backtick-inside-a-probe",
+    name: "no gate has a comment that ends the string it is written inside",
+    needs: [],
+    /* A source check: there is no stylesheet to sabotage, and what it guards
+       is a file whose probe has been silently rewritten — which the harness
+       reports as a harness error, or worse does not report at all. */
+    sabotage: "",
+    run: async () => {
+      /**
+       * FOUR GATES HAVE BEEN KILLED BY THE SAME CHARACTER, and a warning in a
+       * comment did not stop the fifth.
+       *
+       * These walks read the page through long `page.evaluate` strings, which
+       * are template literals — and this repo quotes identifiers in backticks,
+       * because that is how every other comment here reads. One of those
+       * inside a template literal ENDS THE LITERAL mid-sentence, and what
+       * follows is parsed as code. `orbs.ts` took two gates down that way;
+       * `the-timeline.ts` and this file each took one, on 2026-08-30, after a
+       * header warning about exactly this had already been written.
+       *
+       * PARSING IS NOT ENOUGH, and the first version of this case only
+       * parsed. A quoted identifier is a PAIR of backticks: the first ends
+       * the literal and the second opens a new one, so the file very often
+       * re-synchronises into something that still compiles — and then the
+       * probe silently carries different text than it reads. Two of the four
+       * incidents failed at parse; one failed at runtime with
+       * `label is not defined`; the fourth would have run and lied. A check
+       * that catches half of them and is named for all of them is decoration
+       * of the kind these gates exist not to be.
+       *
+       * So this is lexical and exact: it walks the file tracking whether it
+       * is in code, a string, or a template, and reports any comment opened
+       * INSIDE a template that the template's own end arrives before closing.
+       * That is the trap itself rather than one of its symptoms, and it does
+       * not care whether the wreckage happens to compile.
+       */
+      const dir = resolve(dirname(fileURLToPath(import.meta.url)));
+      const files = readdirSync(dir).filter((f) => f.endsWith(".ts"));
+      const found: string[] = [];
+
+      for (const f of files) {
+        const src = readFileSync(join(dir, f), "utf8");
+        /* frames: a template, or the code inside one of its ${ } holes */
+        /* BLOCK COMMENTS ONLY, and that is a correction rather than a
+           narrowing. There are no comments at all inside a template's raw
+           text — it is a string — so this is looking for the SHAPE a person
+           writes when they mean one. Slash-star is that shape and nothing
+           else is: the first version also watched for two slashes and
+           reported three walks for the ones in an http:// URL, which is a
+           gate calling an address a defect. All four real incidents were
+           block comments. */
+        const frames: Array<{ tmpl: boolean; open: number; kind: "" | "block" }> = [];
+        let mode: "code" | "block" | "line" | "sq" | "dq" | "tmpl" = "code";
+        let line = 1;
+        const top = () => frames[frames.length - 1];
+        for (let i = 0; i < src.length; i += 1) {
+          const c = src[i]!;
+          const d = src[i + 1];
+          if (c === "\n") {
+            line += 1;
+            if (mode === "line") mode = "code";
+            continue;
+          }
+          if (mode === "block") {
+            if (c === "*" && d === "/") { mode = "code"; i += 1; }
+            continue;
+          }
+          if (mode === "line") continue;
+          if (mode === "sq" || mode === "dq") {
+            if (c === "\\") i += 1;
+            else if ((mode === "sq" && c === "'") || (mode === "dq" && c === '"')) mode = "code";
+            continue;
+          }
+          if (mode === "tmpl") {
+            const t = top()!;
+            if (c === "\\") { i += 1; continue; }
+            /* the shape of a comment, opened inside the template's own text */
+            if (t.kind === "" && c === "/" && d === "*") {
+              t.kind = "block";
+              t.open = line;
+              i += 1;
+              continue;
+            }
+            if (t.kind === "block" && c === "*" && d === "/") { t.kind = ""; i += 1; continue; }
+            if (c === "$" && d === "{") { frames.push({ tmpl: false, open: line, kind: "" }); mode = "code"; i += 1; continue; }
+            if (c === "\u0060") {
+              if (t.kind !== "") {
+                found.push(
+                  `${f}:${t.open} — a comment inside a template literal is ended by a backtick ` +
+                    `on line ${line}; everything after it is no longer that string`,
+                );
+              }
+              frames.pop();
+              mode = "code";
+            }
+            continue;
+          }
+          /* mode === "code" */
+          if (c === "/" && d === "*") { mode = "block"; i += 1; continue; }
+          if (c === "/" && d === "/") { mode = "line"; i += 1; continue; }
+          if (c === "'") { mode = "sq"; continue; }
+          if (c === '"') { mode = "dq"; continue; }
+          if (c === "\u0060") { frames.push({ tmpl: true, open: line, kind: "" }); mode = "tmpl"; continue; }
+          if (c === "}" && frames.length > 0 && !top()!.tmpl) { frames.pop(); mode = "tmpl"; continue; }
+        }
+      }
+
+      return {
+        ok: found.length === 0,
+        detail:
+          found.length === 0
+            ? `${files.length} walks in tools/e2e, no comment ends the probe it is written inside`
+            : found.join("\n    "),
+      };
+    },
+  },
+
+  {
     id: "no-duplicate-declarations",
     name: "no rule decides one property twice",
     needs: [],
@@ -428,7 +583,7 @@ const CASES: Case[] = [
   {
     id: "signposts-one-inset",
     name: "every signpost keeps the same air from the edge it is nearest",
-    needs: ["jar-values", "jar-way", "jar-saved", "jar-dial", "jar-when"],
+    needs: ["jar-values", "jar-way", "jar-saved"],
     sabotage: ".jar-values { top: 40px; }",
     run: async (page) => {
       const b = (await page.evaluate(BOXES)) as Boxes;
@@ -441,14 +596,14 @@ const CASES: Case[] = [
          the count its own inset: it kept 10px from the RAIL while the rail
          kept 6px from the screen, so the sign a person reads most sat
          furthest from an edge of the four. */
-      /* THE RAIL HANGS FROM ITS OWN WORD NOW (founder, 2026-08-27: "move
-         timeline slider vertically under this instead"). It was the lower of
-         two bands along the bottom and the gap measured here was the air
-         between it and the count. It is vertical and up in the top-left, so
-         the air that matters is between the WORD that summons it and the rail
-         that answers — the same inset, between the same two things, in the
-         place they now both live. */
-      const railGap = box("dial").top - box("nowWord").bottom;
+      /* THE DATES ARE NOT MEASURED HERE ANY MORE, and that is a claim moving
+         house rather than a claim being dropped. This case is about the four
+         SIGNPOSTS and the one air they all keep from the edge they are
+         nearest. The rail's gap was grafted on when the instrument moved up
+         here from the bottom band; the instrument is now the third of the
+         sheets that hang off the button that opened them, so how it stands
+         under `.jar-when` is asked by `every-modal-is-one-modal`, beside the
+         same question about the other two. One question, one place. */
       const got = {
         top: box("values").top,
         left: box("wayL").left,
@@ -461,7 +616,6 @@ const CASES: Case[] = [
            gone to hang under its own word, and the count is the only thing
            down here. */
         bottom: b.vh - box("saved").bottom,
-        "the rail under its word": railGap,
       };
       const wrong = Object.entries(got).filter(([, v]) => !near(v, INSET, 1));
       return {
@@ -506,49 +660,63 @@ const CASES: Case[] = [
   },
 
   {
-    id: "the-rail-rests-hidden",
-    name: "the timeline waits to be asked, and arrives when it is",
-    needs: ["jar-when", "jar-dial", "jar-dial-track", "jar-month"],
-    sabotage: ".jar-dial-track::before, .jar-dial-handle { opacity: 1 !important; }",
+    id: "a-date-is-worth-pressing",
+    name: "every date is a real target, and the one you are on is the lit one",
+    needs: ["jar-dial", "jar-dial-list", "jar-dial-stop"],
+    sabotage:
+      ".jar-dial-stop { min-height: 0 !important; padding: 0 !important; }" +
+      " .jar-dial-stop--here { color: inherit !important; }",
     run: async (page) => {
-      /* THE CASE THAT WOULD HAVE CAUGHT IT. The founder asked for the line
-         not to always be there; it was hidden by one rule and shown again by
-         another with the same selector, so it never went away and the first
-         screenshot of the finished work had it in frame. Read at rest and
-         read again opened — a reveal that cannot be seen to CHANGE proves
-         nothing. */
+      /**
+       * THE DEFECT THIS REPLACES A RAIL TO AVOID. The rail was reported hard
+       * to hit three separate times — "hard to drag", "moves around", "not
+       * right under the word" — and the answer to all three was to stop
+       * asking for a drag at all. A menu whose rows are twenty pixels of
+       * ten-pixel type would be the identical defect wearing a list's
+       * clothes, so the row's own box is measured rather than assumed.
+       *
+       * AND WHERE YOU ARE STANDING IS SAID IN LIGHT. It is the founder's
+       * first law and the reason the rail could be retired at all: the word
+       * carries the fact, the lit row carries it inside the list, and nothing
+       * anywhere draws a tick or a dot to say it twice.
+       */
       const read = `(() => {
-        const o = (s, pe) => { const e = document.querySelector(s); return e ? Number(getComputedStyle(e, pe || null).opacity) : -1; };
-        return { name: o(".jar-when"), handle: o(".jar-dial-handle"), rail: o(".jar-dial-track", "::before") };
+        /* ALPHA IS THE CHANNEL HERE, NOT HUE. Every quiet thing on this surface
+           is the same ink at a lower alpha, so a luminance that read only the
+           three colour stops answered 0.0 for a lit row against a muted one —
+           found by this case failing against correct CSS, which is the gate
+           being wrong rather than the product. */
+        const lum = (c) => { const p = c.match(/[\\d.]+/g).map(Number); const a = p.length > 3 ? p[3] : 1; return (0.2126*p[0] + 0.7152*p[1] + 0.0722*p[2]) * a; };
+        const rows = [...document.querySelectorAll(".jar-dial-stop")];
+        const box = rows.map((e) => { const b = e.getBoundingClientRect(); return { h: b.height, w: b.width, top: b.top }; });
+        const here = document.querySelector(".jar-dial-stop--here");
+        const rest = rows.filter((e) => e !== here);
+        return {
+          count: rows.length,
+          shortest: box.length ? Math.min(...box.map((b) => b.h)) : -1,
+          narrowest: box.length ? Math.min(...box.map((b) => b.w)) : -1,
+          /* a column, not a heap: every row strictly below the one before it */
+          stacked: box.every((b, i) => i === 0 || b.top >= box[i - 1].top + box[i - 1].h - 0.5),
+          hereLum: here ? lum(getComputedStyle(here).color) : -1,
+          restLum: rest.length ? Math.max(...rest.map((e) => lum(getComputedStyle(e).color))) : -1,
+        };
       })()`;
-      /* WAIT OUT THE FADE BEFORE READING. The first version of this case read
-         on the next frame and caught the rail mid-transition at 0.5, then
-         blamed the stylesheet for a bug that was in the gate. These parts
-         cross over 0.28s; 400ms is past the end of that with room to spare. */
-      await page.evaluate(`document.querySelector(".jar-dial").classList.remove("jar-dial--open")`);
-      await page.waitForTimeout(400);
-      const rest = (await page.evaluate(read)) as Record<string, number>;
-      await page.evaluate(`document.querySelector(".jar-dial").classList.add("jar-dial--open")`);
-      await page.waitForTimeout(400);
-      const open = (await page.evaluate(read)) as Record<string, number>;
-      /* THE WORD DOES NOT FADE ANY MORE, and that is the change. It used to
-         lie over the middle of the rail and step aside as the hairline
-         arrived. It now sits in the top-left saying WHEN you are, which is a
-         fact rather than a label — so it is legible in both states, and a
-         reading where it went dark would mean the readout had been turned
-         back into a signpost. */
-      const hidden = rest.rail! < 0.02 && rest.handle! < 0.02 && rest.name! > 0.5;
-      const shown = open.rail! > 0.2 && open.handle! > 0.5 && open.name! > 0.5;
+      const m = (await page.evaluate(read)) as Record<string, number | boolean>;
+      const count = m.count as number;
+      const shortest = m.shortest as number;
+      const lit = (m.hereLum as number) - (m.restLum as number);
+      const faults: string[] = [];
+      if (count < 2) faults.push(`only ${count} row(s) in the fixture`);
+      if (shortest < 24) faults.push(`the shortest row is ${r1(shortest)}px tall, under the 24 a pointer is owed`);
+      if ((m.narrowest as number) < 40) faults.push(`the narrowest row is ${r1(m.narrowest as number)}px wide`);
+      if (!m.stacked) faults.push("the rows overlap rather than stacking");
+      if (lit < 8) faults.push(`the row you are standing on is not lit — ${r1(lit)} points of luminance over the rest`);
       return {
-        ok: hidden && shown,
+        ok: faults.length === 0,
         detail:
-          hidden && shown
-            ? `at rest the word reads at ${rest.name} over rail ${rest.rail} and handle ${rest.handle}; asked, rail ${open.rail} and handle ${open.handle}, the word still at ${open.name}`
-            : !hidden
-              ? `the rail does not rest hidden — rail ${rest.rail}, handle ${rest.handle}, with the word at ${rest.name}`
-              : open.name! <= 0.5
-                ? `the word went dark when the rail arrived — it is the readout, it stays`
-                : `asked for, it did not arrive — rail ${open.rail}, handle ${open.handle}`,
+          faults.length === 0
+            ? `${count} dates, none shorter than ${r1(shortest)}px, the one you are on lit ${r1(lit)} points over the rest`
+            : faults.join("; "),
       };
     },
   },
@@ -599,7 +767,7 @@ const CASES: Case[] = [
   {
     id: "every-modal-is-one-modal",
     name: "every modal wears one surface, and each is placed where it belongs",
-    needs: ["jar-panel", "jar-seek", "jar-settings", "jar-prov-room"],
+    needs: ["jar-panel", "jar-seek", "jar-settings", "jar-prov-room", "jar-dial"],
     /* one of the four given its old surface back — the exact drift this
        case exists to notice */
     sabotage:
@@ -608,7 +776,10 @@ const CASES: Case[] = [
       /* and the second half of the ruling: an anchored sheet sent back to the
          middle, which is what this case used to REQUIRE */
       " .jar-settings--at-left { left: 50% !important; top: 50% !important;" +
-      " transform: translate(-50%, -50%) !important; }",
+      " transform: translate(-50%, -50%) !important; }" +
+      /* and the dates given a ground of their own, which is how the rail's
+         bespoke scrim got there in the first place */
+      " .jar-dial { background: #0a0d14 !important; box-shadow: none !important; }",
     run: async (page) => {
       /* THE FOUNDER'S RULING, 2026-08-25, pointing at a memory's card: "all
          modals must be centered and have same style as this one." There were
@@ -640,14 +811,15 @@ const CASES: Case[] = [
         return { card: one(".jar-panel"), seek: one(".jar-seek"),
                  settings: one(".jar-settings"), prov: one(".jar-prov-room"),
                  atLeft: anchored(".jar-settings--at-left", ".jar-here", "left"),
-                 atRight: anchored(".jar-settings--at-right", ".jar-account", "right") };
+                 atRight: anchored(".jar-settings--at-right", ".jar-account", "right"),
+                 dates: anchored(".jar-dial", ".jar-when", "left") };
       })()`;
       type M = { skin: string; offX: number; offY: number; below?: number; edge?: number };
       const m = (await page.evaluate(read)) as Record<string, M | null>;
       const missing = Object.entries(m).filter(([, v]) => !v).map(([k]) => k);
       if (missing.length) return { ok: false, detail: `not in the fixture at all: ${missing.join(", ")}` };
       const card = m.card as M;
-      const others = ["seek", "settings", "prov", "atLeft", "atRight"] as const;
+      const others = ["seek", "settings", "prov", "atLeft", "atRight", "dates"] as const;
 
       /* AND THE PLACEMENT RULING NARROWED, 2026-08-28: "when clicking on the
          top left and top right button, those cards should just appear right
@@ -671,7 +843,14 @@ const CASES: Case[] = [
               .join("; "),
         };
       }
-      const adrift = (["atLeft", "atRight"] as const).filter((k) => {
+      /* AND THE THIRD SHEET IS THE DATES (founder, 2026-08-30: "instead of
+         this draggable line, when clicking on now, just show the major dates
+         to make them clickable"). It belongs to the word that says `now`, so
+         it is the same case as the other two: a menu that opened across the
+         room from its own handle would make you re-find the thread every
+         time. Its left edge is written inline by the world, from the word's
+         own box — see the fixture's script, which is the product's line. */
+      const adrift = (["atLeft", "atRight", "dates"] as const).filter((k) => {
         const v = m[k] as M;
         return !(v.below! > 0 && v.below! < 24 && near(v.edge!, 0, 2));
       });
@@ -690,8 +869,9 @@ const CASES: Case[] = [
         ok: different.length === 0,
         detail:
           different.length === 0
-            ? `four centred, two hanging off their own button (${r1((m.atLeft as M).below!)}px and ` +
-              `${r1((m.atRight as M).below!)}px below it), all wearing one surface — ${card.skin}`
+            ? `four centred, three hanging off their own button (${r1((m.atLeft as M).below!)}px, ` +
+              `${r1((m.atRight as M).below!)}px and ${r1((m.dates as M).below!)}px below it), ` +
+              `all wearing one surface — ${card.skin}`
             : different
                 .map((k) => `${k} is a different object from the card:\n      card ${card.skin}\n      ${k.padEnd(4)} ${(m[k] as M).skin}`)
                 .join("\n    "),
@@ -878,13 +1058,69 @@ const CASES: Case[] = [
         return hit ? hit[1]!.trim() : null;
       };
 
-      /* `clamp(a, b vw, c)` resolved at the fixture's own width, because that
-         is the only way to compare a fluid declaration with a rendered pixel */
+      /* `clamp(a, b <unit>, c)` resolved against whatever that unit measures,
+         because that is the only way to compare a fluid declaration with a
+         rendered pixel.
+
+         `cqi` IS ONE PERCENT OF THE COLUMN, NOT OF THE WINDOW, and the whole
+         point of the 2026-08-30 change is that those two stopped agreeing:
+         the column caps at 680 while the window goes on growing, so a case
+         that resolved `cqi` against the viewport would have declared the
+         product wrong at every width above the cap. The column's own content
+         box is measured here rather than restated — 640 is a number this
+         stylesheet is free to change. */
       const size = want("font-size");
-      const clamp = size?.match(/clamp\(\s*([\d.]+)px\s*,\s*([\d.]+)vw\s*,\s*([\d.]+)px\s*\)/);
-      const width = page.viewportSize()?.width ?? 900;
+      const view = page.viewportSize() ?? { width: 900, height: 640 };
+      const column = (await page.evaluate(`(() => {
+        const c = document.querySelector(".jar-hq-inner");
+        if (!c) return 0;
+        const s = getComputedStyle(c);
+        return c.getBoundingClientRect().width - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight);
+      })()`)) as number;
+      /* one percent of whatever each unit measures */
+      const per: Record<string, number> = {
+        vw: view.width / 100,
+        vh: view.height / 100,
+        cqi: column / 100,
+      };
+      /**
+       * THE MIDDLE TERM IS A `min()` NOW, AND THE FIRST VERSION OF THIS JUST
+       * STOPPED CHECKING.
+       *
+       * It matched `clamp(a px, b <unit>, c px)` and nothing else. When the
+       * claim gained a second cap — `min(5.3125cqi, 5vh)`, one for the column
+       * and one for a short window — the pattern missed, `expected` fell to
+       * null, and the size comparison below was skipped in silence. The case
+       * went on passing while checking three properties instead of four,
+       * which is the exact way a gate becomes decoration: not by being
+       * deleted, by quietly narrowing.
+       *
+       * So an unparseable font-size is a FAILURE here rather than a skip. If
+       * this file cannot read what `home.css` declares, it cannot claim the
+       * product agrees with it.
+       */
+      const fluid = (term: string): number | null => {
+        const one = term.trim().match(/^([\d.]+)(vw|vh|cqi)$/);
+        if (one) return Number(one[1]) * per[one[2]!]!;
+        const least = term.trim().match(/^min\(([^)]+)\)$/);
+        if (!least) return null;
+        const parts = least[1]!.split(",").map((t) => fluid(t));
+        if (parts.some((v) => v === null)) return null;
+        return Math.min(...(parts as number[]));
+      };
+      const clamp = size?.match(/^clamp\(\s*([\d.]+)px\s*,(.+),\s*([\d.]+)px\s*\)$/s);
+      const middle = clamp ? fluid(clamp[2]!) : null;
+      if (size && middle === null) {
+        return {
+          ok: false,
+          detail:
+            `\`home.css\` declares \`font-size: ${size}\` and this case cannot read it, so it ` +
+            "cannot say whether the product agrees. Teach the parser the new shape rather than " +
+            "leaving a check that quietly passes on three properties instead of four.",
+        };
+      }
       const expected = clamp
-        ? Math.min(Math.max(Number(clamp[1]), (Number(clamp[2]) / 100) * width), Number(clamp[3]))
+        ? Math.min(Math.max(Number(clamp[1]), middle!), Number(clamp[3]))
         : null;
 
       const got = (await page.evaluate(() => {
@@ -902,7 +1138,10 @@ const CASES: Case[] = [
 
       const wrong: string[] = [];
       if (expected !== null && Math.abs(got.size - expected) > 0.5) {
-        wrong.push(`size ${got.size}px, and \`home.css\` asks for ${expected}px at ${width}px wide`);
+        wrong.push(
+          `size ${got.size}px, and \`home.css\` asks for ${Math.round(expected * 100) / 100}px ` +
+            `in a ${view.width}x${view.height} frame on a ${Math.round(column)}px column`,
+        );
       }
       const weight = want("font-weight");
       if (weight && got.weight !== weight) wrong.push(`weight ${got.weight}, declared ${weight}`);
@@ -921,95 +1160,128 @@ const CASES: Case[] = [
           wrong.length === 0
             ? `${got.size}px ${got.weight} ${got.family} at ${got.tracking} — every one of them `
               + "`home.css`'s own"
+              + (clamp ? `, the size solved against a ${Math.round(column)}px column in a ${view.width}x${view.height} frame` : "")
             : wrong.join("; "),
       };
     },
   },
 
   {
-    id: "one-left-edge-on-a-phone",
-    name: "on a phone the signpost and the claim share one left edge",
-    needs: ["jar-values", "jar-poster", "jar-hq-inner"],
-    /* put the signpost back in the middle of the screen, which is where it was */
+    id: "one-axis-on-a-phone",
+    name: "on a phone the way up and the count share one centre",
+    needs: ["jar-values", "jar-saved", "jar-hq-inner"],
+    /* pin the signpost back to the column's left edge, which is where it was
+       between 2026-08-28 and 2026-09-08 */
     sabotage:
-      "@media (max-width: 560px) { .jar-values { left: 50% !important;" +
-      " transform: translateX(-50%) !important; } }",
+      "@media (max-width: 560px) { .jar-values { left: 8px !important;" +
+      " transform: none !important; } }",
     run: async (page) => {
-      /* THE FOUNDER, over two screenshots of a phone: "so ugly" (2026-08-28).
-         Measured at 390px: the claim is set LEFT from x 20 and the signpost
-         above it was CENTRED at 195 — two alignment systems stacked. On a
-         desktop that reads as deliberate, because the claim sits in a 680px
-         column inside a 1440px frame and a centred label agrees with the
-         column's own centre. On a phone the claim IS the full width, so a
-         centred label agrees with nothing, and on a wall with nothing on it
-         yet the label floats over one short italic line at the far edge.
+      /* THE FOUNDER, on a phone: "philosophies and value is not centered"
+         (2026-09-08).
+
+         THIS CASE HELD THE OPPOSITE RULING FOR ELEVEN DAYS, and the reversal
+         is written down rather than quietly swapped. On 2026-08-28, over two
+         screenshots of an EMPTY wall, the same founder said "so ugly" of a
+         centred signpost floating above one short italic line at the far
+         edge, and the answer was to line its words up with the claim's first
+         letter. On a wall that has a claim on it — three full lines of poster
+         directly under the signpost — that alignment stopped reading as a
+         label on the claim and started reading as the one piece of chrome on
+         the top half of the screen that had slipped off centre.
+
+         SO THE RULE IS THE PAIR, WHICH IS THE THING THE OLD ONE MISSED.
+         `.jar-values` and `.jar-saved` are one vertical axis — the way up and
+         the count, top and bottom of the same screen — and `home.css` already
+         sizes them as one thing. The count is centred at every width there has
+         ever been. Left-aligning only the top of that pair is the asymmetry
+         the founder's eye caught, so what is measured here is not "is it in
+         the middle" but "do the two ends of the axis agree", which is a claim
+         about the design rather than about a number.
 
          THE CASE RESIZES ITSELF, because the rule it measures lives behind
-         `max-width: 560px` and every other case here runs at 900. The
-         harness hands each case its own page, so this costs nothing but the
-         reflow.
+         `max-width: 560px` and every other case here runs at 900. The harness
+         hands each case its own page, so this costs nothing but the reflow.
 
-         AND IT COMPARES INK, NOT BOXES. The signpost is a button carrying
-         12px of side padding, so its BOX has to stand 12px further left than
-         the claim for their WORDS to line up. A case that compared boxes
-         would demand the wrong number and, worse, would be satisfied by a
-         signpost whose letters were visibly out. */
+         AND IT COMPARES CENTRES, NOT EDGES. Both are buttons carrying their
+         own side padding and their words are different lengths, so their left
+         edges have no reason to agree and their centres have every reason
+         to. */
       await page.setViewportSize({ width: 390, height: 844 });
       await page.waitForTimeout(200);
       const read = `(() => {
-        const e = document.querySelector(".jar-values");
-        const p = document.querySelector(".jar-poster");
-        if (!e || !p) return null;
-        const rg = document.createRange();
-        rg.selectNodeContents(e);
-        const ink = rg.getBoundingClientRect();
+        const up = document.querySelector(".jar-values");
+        const count = document.querySelector(".jar-saved");
+        if (!up || !count) return null;
+        const u = up.getBoundingClientRect();
+        const c = count.getBoundingClientRect();
         return JSON.stringify({
-          ink: Math.round(ink.left),
-          box: Math.round(e.getBoundingClientRect().left),
-          claim: Math.round(p.getBoundingClientRect().left),
+          up: Math.round((u.left + u.right) / 2),
+          count: Math.round((c.left + c.right) / 2),
+          screen: Math.round(window.innerWidth / 2),
         });
       })()`;
       const raw = (await page.evaluate(read)) as string | null;
-      if (!raw) return { ok: false, detail: "no signpost or no claim on the fixture" };
-      const m = JSON.parse(raw) as { ink: number; box: number; claim: number };
-      const off = m.ink - m.claim;
+      if (!raw) return { ok: false, detail: "no signpost or no count on the fixture" };
+      const m = JSON.parse(raw) as { up: number; count: number; screen: number };
+      const offPair = m.up - m.count;
+      const offScreen = m.up - m.screen;
+      const ok = near(offPair, 0, 1) && near(offScreen, 0, 1);
       return {
-        ok: near(off, 0, 1),
-        detail: near(off, 0, 1)
-          ? `both start at x ${m.claim} — the signpost's box stands at ${m.box}, ` +
-            `its own padding wide of it, so the letters line up`
-          : `the signpost's words start at x ${m.ink} and the claim's first letter at ` +
-            `x ${m.claim} — ${r1(off)}px apart, two left edges`,
+        ok,
+        detail: ok
+          ? `both stand at x ${m.up}, which is the screen's own middle — one axis`
+          : `the way up is centred at x ${m.up}, the count at x ${m.count} ` +
+            `(${r1(offPair)}px apart) and the screen's middle is x ${m.screen} ` +
+            `(${r1(offScreen)}px off)`,
       };
     },
   },
 
   {
     id: "the-claim-keeps-its-measure",
-    name: "the claim does not lose its measure when the column narrows",
+    name: "the claim reads the same width of line wherever the column is the same",
     needs: ["jar-poster", "jar-hq-inner"],
-    /* the type pinned back at its old flat floor, which is the defect */
-    sabotage: "@media (max-width: 560px) { .jar-poster { font-size: 23px !important; } }",
+    /* the old curve put back: type set against the WINDOW while the column
+       caps at 680, which is the defect in one declaration */
+    sabotage:
+      ".jar-poster { font-size: clamp(23px, 2.5vw, 34px) !important; }" +
+      " @media (max-width: 560px) { .jar-poster { font-size: clamp(18px, 5.5vw, 23px) !important; } }",
     run: async (page) => {
-      /* MEASURED AS CHARACTERS THAT FIT, not as the sentence's length over its
-         line count. The second is a coarse proxy — it moves in whole lines, so
-         two very different settings that happen to take the same number of
-         lines read identical, and it flattered this by five characters when I
-         first took it. The column over the font's real advance is exact, and
-         says nothing about whatever sentence the wall is holding today.
-
-         `clamp(23px, 2.5vw, 34px)` hits its floor at a 920px viewport while the
-         column keeps shrinking below 680, so the type stopped responding before
-         the column did and the measure fell away on exactly the widths people
-         hold in their hand.
-
-         IT DOES NOT REACH THE DESKTOP'S NUMBER AND IS NOT MEANT TO. Matching it
-         exactly needs 18.5px in a 350px column, which would put the wall's
-         claim at 1.23x body text and stop it reading as the claim; on a desktop
-         it is 2.27x. See `home.css` for that trade written out. */
+      /**
+       * MEASURE IS WHAT A READER FEELS, and measure is the column divided by
+       * the font's real advance — not the sentence's length over its line
+       * count, which moves in whole lines and flattered this by five
+       * characters when I first took it.
+       *
+       * THE CLAIM THIS MAKES CHANGED ON 2026-08-30, because the defect it was
+       * shaped against turned out to be half of a bigger one.
+       *
+       * It used to ask only whether a PHONE kept most of the desktop's
+       * measure. That question could not see the founder's tablet report
+       * ("overall balancing feels kinda off"): between 560px and about
+       * 1360px the column has ALREADY stopped growing at its 680 cap while
+       * type set in `vw` goes on shrinking with the window, so the line gets
+       * longer as the screen gets smaller — 38 characters at 1440 against 56
+       * at 768. Both widths are desktops as far as the old case was
+       * concerned, so it reported clean.
+       *
+       * So the first half is now the sharper question: AT TWO WIDTHS WHERE
+       * THE COLUMN IS IDENTICAL, THE MEASURE MUST BE IDENTICAL. That is not a
+       * threshold anybody has to choose — it is the same column, so it is the
+       * same answer, and a curve set against the wrong thing fails it by a
+       * mile rather than by a percentage point.
+       *
+       * The phone claim is kept as the second half, because the phone is
+       * where the column really does narrow and something really is given up.
+       * IT DOES NOT REACH THE DESKTOP'S NUMBER AND IS NOT MEANT TO: matching
+       * it exactly needs 18.6px in a 350px column, which puts the wall's claim
+       * at 1.24x body text and stops it reading as the claim; on a desktop it
+       * is 2.27x. See `home.css` for that trade written out.
+       */
       const read = `(() => {
         const p = document.querySelector(".jar-poster");
-        if (!p) return null;
+        const col = document.querySelector(".jar-hq-inner");
+        if (!p || !col) return null;
         const cs = getComputedStyle(p);
         const probe = document.createElement("span");
         probe.textContent = "abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz";
@@ -1022,31 +1294,53 @@ const CASES: Case[] = [
         probe.remove();
         return JSON.stringify({
           size: Math.round(parseFloat(cs.fontSize) * 10) / 10,
+          column: Math.round(p.getBoundingClientRect().width),
           fits: Math.round(p.getBoundingClientRect().width / per),
         });
       })()`;
-      await page.setViewportSize({ width: 1440, height: 900 });
-      await page.waitForTimeout(200);
-      const deskRaw = (await page.evaluate(read)) as string | null;
-      await page.setViewportSize({ width: 390, height: 844 });
-      await page.waitForTimeout(200);
-      const phoneRaw = (await page.evaluate(read)) as string | null;
-      if (!deskRaw || !phoneRaw) return { ok: false, detail: "no claim on the fixture to measure" };
-      const desk = JSON.parse(deskRaw) as { size: number; fits: number };
-      const phone = JSON.parse(phoneRaw) as { size: number; fits: number };
-      const lost = Math.round(((desk.fits - phone.fits) / desk.fits) * 100);
-      /* A PHONE KEEPS AT LEAST FOUR FIFTHS OF THE DESKTOP'S MEASURE, and the
-         number is chosen from both sides: the flat 23px floor this replaces
-         loses a quarter and must fail; scaling with the column loses 18% and
-         must pass. 18 as the line was the first try and sat exactly on the
-         measured value — a threshold with no room on the passing side is one
-         font-metric change away from failing for nothing. */
+      type Shot = { size: number; column: number; fits: number };
+      const at = async (w: number, h: number): Promise<Shot | null> => {
+        await page.setViewportSize({ width: w, height: h });
+        await page.waitForTimeout(200);
+        const raw = (await page.evaluate(read)) as string | null;
+        return raw ? (JSON.parse(raw) as Shot) : null;
+      };
+      const wide = await at(1440, 900);
+      const tablet = await at(768, 1024);
+      const phone = await at(390, 844);
+      if (!wide || !tablet || !phone) return { ok: false, detail: "no claim on the fixture to measure" };
+
+      const faults: string[] = [];
+      /* the premise: these two widths must be the same column, or the case is
+         asking a question about something else and should say so */
+      if (Math.abs(wide.column - tablet.column) > 1) {
+        faults.push(
+          `the column is ${wide.column} at 1440 and ${tablet.column} at 768 — this case ` +
+            "compares two widths on the assumption the column caps between them, and it no longer does",
+        );
+      } else if (Math.abs(wide.fits - tablet.fits) > 1) {
+        faults.push(
+          `the same ${wide.column}px column reads ${wide.fits} characters at 1440 and ` +
+            `${tablet.fits} at 768 — the type is set against the window while the column is capped, ` +
+            `so the line gets LONGER as the screen gets smaller (${wide.size}px against ${tablet.size}px)`,
+        );
+      }
+      /* A PHONE KEEPS AT LEAST FOUR FIFTHS OF THE DESKTOP'S MEASURE. */
+      const lost = Math.round(((wide.fits - phone.fits) / wide.fits) * 100);
+      if (lost > 20) {
+        faults.push(
+          `a phone at ${phone.size}px fits ${phone.fits} characters against the desktop's ` +
+            `${wide.fits} — ${lost}% given up, more than the fifth allowed`,
+        );
+      }
       return {
-        ok: lost <= 20,
+        ok: faults.length === 0,
         detail:
-          `desktop ${desk.size}px fits ${desk.fits} characters, a phone at ${phone.size}px fits ` +
-          `${phone.fits} — ${lost}% of the desktop's measure given up ` +
-          `${lost <= 20 ? "(within the fifth allowed)" : "*** MORE THAN A FIFTH ***"}`,
+          faults.length === 0
+            ? `${wide.fits} characters at 1440 and ${tablet.fits} at 768 on one ${wide.column}px ` +
+              `column (${wide.size}px both), and a phone at ${phone.size}px keeps ${phone.fits} — ` +
+              `${lost}% given up where the column really does narrow`
+            : faults.join("; "),
       };
     },
   },
