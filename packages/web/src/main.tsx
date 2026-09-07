@@ -100,7 +100,7 @@ const LandingPage = lazy(() => import("./pages/Landing"));
  * production build entirely, so this cannot open a real deployment: there,
  * RequireAuth is the only path and a signed-out visitor still gets the door.
  */
-function ProtectedHome() {
+function ProtectedHome({ offersLanding = false }: { offersLanding?: boolean }) {
   /* The boundary sits OUTSIDE the Suspense on purpose. `fallback` answers
      "not yet"; only a boundary answers "never", and until one existed a
      rejected lazy import left `fallback={null}` on screen permanently — the
@@ -147,11 +147,25 @@ function ProtectedHome() {
     );
   }
 
+  /* ONLY `/` ANSWERS THREE WAYS, and this is the parameter that says so.
+     `/w/:wall` renders this same component (it arrived on dev 2026-08-31, in
+     the commit that made a reload land where you stood), and git merged the
+     two edits without a murmur because they touch different lines — leaving a
+     deep link into somebody's archive answering an anonymous visitor with a
+     marketing page. `lib/front-door.ts` already holds the rule this violates:
+     "a deep link into somebody's archive should ask for a password, not sell
+     them anything." So a named wall keeps `RequireAuth`'s contract, which is
+     the door with the destination preserved, and only the root may sell. */
   /* Which of the three, and why: `components/FrontDoor.tsx` asks the question
      and `lib/front-door.ts` answers it. Both are here rather than inline so a
      test can execute the route as well as the rule. */
   return (
-    <FrontDoor home={home} landing={landing} door={<Navigate to="/login" replace />} />
+    <FrontDoor
+      home={home}
+      landing={landing}
+      offersLanding={offersLanding}
+      door={<Navigate to="/login" replace />}
+    />
   );
 }
 
@@ -212,7 +226,7 @@ ReactDOM.createRoot(root).render(
               - authenticated    → render the underlying page.
           */}
           {/* Home is the layout. */}
-          <Route path="/" element={<ProtectedHome />} />
+          <Route path="/" element={<ProtectedHome offersLanding />} />
           {/* the same world, opened standing at a named wall — reload lands
               where you stood. Two segments, so the public-handle route
               (`/:handle`) never swallows it. */}

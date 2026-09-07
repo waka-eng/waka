@@ -41,10 +41,10 @@
   "oauthUpsertFailed": "계정을 마무리하다가 문제가 생겼어요. 다시 시도해 주세요.",
   "oauthFallback": "Google 로그인이 끝까지 가지 못했어요. 다시 시도해 주세요.",
   "loginOr": "또는",
-  "onboardingEyebrow": "WAKA에 오신 것을 환영해요",
-  "onboardingTitle": "나의 기록을 준비하세요.",
-  "onboardingSubtitle": "WAKA가 나를 부를 이름과 언어를 골라 주세요.",
-  "onboardingContinue": "계속",
+  "onboardingEyebrow": "WAKA",
+  "onboardingTitle": "어떻게 불러드릴까요?",
+  "onboardingSubtitle": "말을 걸 때 쓸 이름이에요. 언제든 바꿀 수 있어요.",
+  "onboardingContinue": "들어가기",
   "profileEyebrow": "내 계정",
   "profileTitle": "프로필",
   "profileNickname": "표시 이름",
@@ -417,5 +417,10 @@
   "worldYesMerge": "네, 합칠게요",
   "worldKeepApart": "따로 두기",
   "worldContested": "서로 어긋나는 패턴이에요 — 어느 쪽인지 답해 주면 정리돼요",
-  "worldValueContested": "서로 어긋남"
+  "worldValueContested": "서로 어긋남",
+  "loginWelcomeNamed": "{name}님, 다시 오셨네요.",
+  "loginTabContinueAria": "로그인 — 이미 있는 기록으로 돌아갑니다",
+  "loginTabBeginAria": "계정 만들기 — 새 기록을 시작합니다",
+  "loginLastHere": "마지막 방문 {when}",
+  "loginNotYou": "{name} 님이 아닌가요?"
 }

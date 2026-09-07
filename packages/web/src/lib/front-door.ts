@@ -44,6 +44,18 @@ export type FrontDoor = "home" | "door" | "landing";
 export interface FrontDoorFacts {
   /** the server confirmed a session */
   authenticated: boolean;
+  /**
+   * WHETHER THIS ADDRESS MAY SELL. Only `/` may. `/w/:wall` renders the same
+   * component and arrived after this rule was written, so nothing complained
+   * when the two met — a deep link into somebody's archive would have
+   * answered an anonymous visitor with a marketing page. The rule below
+   * already said why that is wrong in prose; this is the same sentence as a
+   * parameter, so a test can execute it.
+   *
+   * Defaulted false: a new address is a deep link until somebody says
+   * otherwise, which is the safe direction for this to be wrong in.
+   */
+  offersLanding?: boolean;
   /** the door holds a record of somebody who has signed in on this machine */
   remembered: boolean;
   /** the client never got an answer, which is not the same as "signed out" */
@@ -54,8 +66,9 @@ export function frontDoorFor({
   authenticated,
   remembered,
   serverUnreachable,
+  offersLanding = false,
 }: FrontDoorFacts): FrontDoor {
   if (authenticated) return "home";
   if (remembered || serverUnreachable) return "door";
-  return "landing";
+  return offersLanding ? "landing" : "door";
 }

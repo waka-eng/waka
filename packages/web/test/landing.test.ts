@@ -159,6 +159,8 @@ describe("who `/` is answering", () => {
         authenticated: false,
         remembered: false,
         serverUnreachable: false,
+        /* this case is `/`, and only `/` may sell */
+        offersLanding: true,
       }),
     ).toBe("landing");
   });
@@ -278,6 +280,42 @@ describe("the landing page", () => {
     expect(container.textContent).toContain("Begin your archive.");
   });
 
+  it("only the root may sell — every other address asks for a password", () => {
+    /* `/w/:wall` renders the same component as `/`, and it arrived on dev
+       after this rule was written, so git merged the two edits in silence.
+       Without this parameter a deep link into somebody's archive answers an
+       anonymous visitor with a marketing page.
+
+       Executed rather than reasoned about, which is why the rule takes the
+       fact instead of `main.tsx` branching on it: the entry point calls
+       `createRoot` at module scope, so no test can import it. */
+    for (const remembered of [true, false]) {
+      for (const serverUnreachable of [true, false]) {
+        expect(
+          frontDoorFor({
+            authenticated: false,
+            remembered,
+            serverUnreachable,
+            offersLanding: false,
+          }),
+        ).toBe("door");
+      }
+    }
+    /* and the root still answers all three ways */
+    expect(
+      frontDoorFor({
+        authenticated: false,
+        remembered: false,
+        serverUnreachable: false,
+        offersLanding: true,
+      }),
+    ).toBe("landing");
+    /* the default is the safe direction: absent the fact, it is a deep link */
+    expect(
+      frontDoorFor({ authenticated: false, remembered: false, serverUnreachable: false }),
+    ).toBe("door");
+  });
+
   it("still opens on the sign-in side for anyone who arrives plainly", async () => {
     const container = await renderFront("/login");
     expect(
@@ -324,6 +362,8 @@ async function renderAt(): Promise<HTMLDivElement> {
           AuthProvider,
           null,
           createElement(FrontDoor, {
+            /* these cases mount the component as the ROOT route renders it */
+            offersLanding: true,
             home: createElement("main", null, "THE WORLD"),
             door: createElement("main", null, "THE DOOR"),
             landing: createElement("main", null, "THE LANDING PAGE"),

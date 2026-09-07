@@ -810,7 +810,6 @@ export default function LoginPage(): JSX.Element {
   const loginTabRef = useRef<HTMLButtonElement>(null);
   const signupTabRef = useRef<HTMLButtonElement>(null);
   const [locale, setLocale] = useState<SupportedLocale>(() => readStoredLocale());
-  const location = useLocation();
   const navigate = useNavigate();
   /* Why the door is standing here, when the reason is "we could not ask" —
      see `AuthContextValue.serverUnreachable`. It never decides access. */

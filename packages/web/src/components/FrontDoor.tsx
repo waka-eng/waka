@@ -39,9 +39,11 @@ export interface FrontDoorProps {
   door: ReactNode;
   /** the page that says what WAKA is, for everybody else */
   landing: ReactNode;
+  /** only `/` may sell; every other address is a deep link — see the rule */
+  offersLanding?: boolean;
 }
 
-export function FrontDoor({ home, door, landing }: FrontDoorProps): JSX.Element {
+export function FrontDoor({ home, door, landing, offersLanding = false }: FrontDoorProps): JSX.Element {
   /* Why this asks the context directly instead of leaning on `RequireAuth`:
      the guard's contract is "send anonymous visitors to the door", and that
      stays exactly right for every OTHER address — a deep link into somebody's
@@ -66,6 +68,7 @@ export function FrontDoor({ home, door, landing }: FrontDoorProps): JSX.Element 
          should not meet their own name again. */
       remembered: readDoorMemory() !== null,
       serverUnreachable,
+      offersLanding,
     })
   ) {
     case "home":
