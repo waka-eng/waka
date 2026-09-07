@@ -1,12 +1,18 @@
 /**
- * ONE LANGUAGE, THE SAME SENTENCES, AND NO GAPS IN THEM.
+ * TWO LANGUAGES, THE SAME SENTENCES, AND NO GAPS IN THEM.
  *
- * English is the product's only language — a founder ruling (2026-08-22)
- * retired the Korean catalog. The machinery is still locale-shaped so a
- * future language is an entry, not an unpicking, and this suite keeps the
- * two failure modes that survive the ruling visible: a legacy "ko-KR"
- * preference must normalize to the default rather than crash or leak, and
- * the catalog must never ship a blank or missing line.
+ * This header used to say English was the product's only language, citing a
+ * founder ruling of 2026-08-22 that retired the Korean catalog. THAT RULING
+ * WAS REVERSED on 2026-08-31, and Korean now drives what the memory itself is
+ * written in rather than only the chrome — `ko-KR.json` sits at full key
+ * parity with `en-US.json`. A test header that describes a retired catalog as
+ * retired, while the suite below tests it as live, is the kind of false claim
+ * this repo treats as a defect; corrected here because this file's own
+ * subject is the thing that changed.
+ *
+ * The failure modes it keeps visible: an unsupported preference must
+ * normalize to the default rather than crash or leak, the catalog must never
+ * ship a blank or missing line, and no concept may wear two names.
  *
  * WHAT THIS MOCKS, AND WHY (gate G6): nothing, and there is nothing under it
  * to mock. `lib/locales` is a message catalog and the pure functions that
@@ -41,6 +47,43 @@ describe("i18n catalog", () => {
     // catalog for ko-KR is an explicit alias of English until translated.
     expect(supportedLocaleValues).toEqual(["en-US", "ko-KR"]);
     expect(DEFAULT_LOCALE).toBe("en-US");
+  });
+
+  /**
+   * ONE CONCEPT, ONE USER-FACING NAME — layer four, in both languages.
+   *
+   * Measured on `dev` at b9c4cd9: the sky's signpost said "philosophies &
+   * values" (`worldPhilosophiesValues`) and its lead line said "Your
+   * philosophies and values will form here", while the verbs INSIDE that same
+   * sky said "this principle in your own words" and "a principle of your
+   * own", and the profile, the aria labels, the schema, the routes and the
+   * MCP door all said principles. One object, two names, two feet apart on
+   * one screen. Korean carried the split intact: 철학과 가치 against 원칙.
+   *
+   * `principles` won because it is what everything that is not a label
+   * already says — the canon, the API, the docs — and because it is one word
+   * that translates to one word. "Philosophies & values" is a good subtitle
+   * and a poor name, and a name is what a signpost is.
+   *
+   * The rule is deliberately narrow: it governs the catalogs, which is where
+   * a user-facing name lives. Prose elsewhere may still describe the sky as
+   * holding a person's philosophy — describing is not naming.
+   */
+  it("gives layer four one name, in both languages", () => {
+    const BANNED = {
+      "en-US": { word: /philosoph/i, say: "principles" },
+      "ko-KR": { word: /철학/, say: "원칙" },
+    } as const;
+    const offenders: string[] = [];
+    for (const locale of supportedLocaleValues) {
+      const { word, say } = BANNED[locale];
+      for (const [key, value] of Object.entries(messageCatalogs[locale])) {
+        if (typeof value === "string" && word.test(value)) {
+          offenders.push(`${locale} ${key}: "${value.slice(0, 60)}" — say ${say}`);
+        }
+      }
+    }
+    expect(offenders, offenders.join("\n")).toEqual([]);
   });
 
   it("does not ship undefined or blank catalog values", () => {
