@@ -1,6 +1,6 @@
 # Goal: lighting a room
 
-Status: blocked at phase 3 — phases 1–2 passed 2026-08-28; phase 3's gate needs a working GEMINI_API_KEY (see Log)
+Status: blocked at phase 3 — phases 1–2 passed 2026-08-28, brought current onto dev 2026-09-07; phase 3's gate needs a working GEMINI_API_KEY (see Log)
 Branch: `goal/lighting-a-room`
 Depends on: nothing structural. Touches the join consent sheet
 (`a-room-you-can-trust` made joining an asked question; this goal keeps that
@@ -298,3 +298,49 @@ Phases 4 and 5 do not need a key — their gates are the join walk and the cold
 link walk, both layer 1 — but they sit behind Phase 3 in the plan, and the
 `--phase N` flag that would skip a gate is the caller's to give, not the
 runner's to assume.
+
+**2026-09-07 — brought current onto `dev` (39 commits later). Both gates
+re-measured: Phase 1 4/4, Phase 2 3/3, suite 242/242.**
+
+The work was ten days old and the question was whether it still meant
+anything. It does — nobody had done it, and `"Forming — nothing read together
+yet"` was still the one line a dark room said on `dev`. But one thing had gone
+stale, and it was the interesting kind:
+
+**The English-only ruling was reversed while this sat on a branch.** The room's
+whole voice moved behind the catalogue (`say()` / `t(locale, …)`, messages in
+`en-US.json` and `ko-KR.json`), and `deriveGroupChrome` gained `locale` as its
+fourth parameter — exactly where this goal had put `waiting`. So the five
+sentences Phases 1–2 added were, by the time they were read again, the only
+untranslated copy on that surface. Four untranslated sentences beside a
+translated one is not a smaller kind of bilingual; it is a room that changes
+language mid-thought.
+
+Resolved by moving with the repo rather than around it:
+
+- `locale` keeps the fourth position every existing caller passes it in;
+  `waiting` becomes an optional fifth. A caller that cannot say what a room is
+  waiting for now gets the old single sentence rather than a wrong stage — not
+  knowing is a different thing from knowing there is nobody here.
+- `groupStageWords(locale, stage)` reads the catalogue. Five new keys in both
+  languages: the four stages and the make-form line.
+- The Korean was written to the house register, then corrected twice against
+  it: `땅` is this catalogue's word for a room's ground (not `바닥`), and the
+  first draft of the *unanswered* line used the 당신-calque that `#300`
+  retired — it was the only `당신` left in the file. A counted phrase
+  (`두 사람 이상`) was also rejected: the numerals law is about what a surface
+  reports, and Korean arithmetic is still arithmetic.
+- A new case pins exactly this staleness: every stage must answer in every
+  supported locale. A missing key returns its own name, so the failure it
+  catches is a room saying `worldGroupStageBare` at a person.
+
+Two incidental gains from the rebase, neither this goal's doing: a room you are
+carried to now gets a shareable `/w/<slug>` address (`#283`), and that same
+commit documents a latent bug this goal's travel effect shares — an optional
+call on a possibly-null sim ref is "a travel that silently never was". Ours
+fires after a human act, so the sim is long mounted and the gate has proved it
+green four times; it is recorded here rather than fixed, because a fix with no
+failing measurement behind it is a guess.
+
+Phase 3 is unchanged and still halted: its gate needs a lit wall, and a lit
+wall needs a working model key.
