@@ -2230,13 +2230,27 @@ function HomeExperience(): JSX.Element {
   const [minted, setMinted] = useState<ApiMintedKey | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
   const [keysBusy, setKeysBusy] = useState(false);
-  /* THE DATES ARE OPENED BY A PRESS, AND ONLY BY A PRESS (founder,
-     2026-08-30: "when clicking on now, just show the major dates"). A
-     `timeNear` stood beside this and opened the rail on hover — right for a
-     hairline you reach toward, wrong for a menu you have to travel to,
-     because the pointer must leave the word to reach the list and the list
-     would go with it. One state, one way in, and it works the same on a
-     phone. */
+  /**
+   * THE DATES OPEN UNDER A PRESS, AND UNDER A HOVER.
+   *
+   * Founder, 2026-08-30: "when clicking on now, just show the major dates" —
+   * and a `timeNear` that had opened the rail on hover came out with the
+   * slider, because it also CLOSED on leaving the word. That is right for a
+   * hairline you reach toward and wrong for a menu you have to travel to: the
+   * pointer must leave the word to reach the list, and the list went with it.
+   *
+   * Founder, 2026-09-08: "when I hover on now, the text list should appear."
+   * Both are satisfied by keeping the half that was wrong out of it. Hovering
+   * OPENS; nothing closes on leaving. The ways out are unchanged and there
+   * are three — press the word again, press anywhere that is not the rail, or
+   * pick a date — so the list can never be stranded out of reach, which was
+   * the whole objection in 2026-08-30.
+   *
+   * ONE STATE STILL, and the hover is gated on a mouse. A tap fires
+   * `pointerenter` too, so an ungated hover would open the list on
+   * `pointerdown` and the click that follows would toggle it straight shut —
+   * the word would stop working on a phone entirely.
+   */
   const [timeOpen, setTimeOpen] = useState(false);
 
   /**
@@ -13984,6 +13998,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               aria-expanded={timeOpen}
               aria-label={say("worldWindBack")}
               onClick={() => setTimeOpen((v) => !v)}
+              /* a mouse arriving on the word is a reach for the list; a
+                 finger arriving is the start of the press, and the press
+                 already has an answer */
+              onPointerEnter={(e) => {
+                if (e.pointerType === "mouse") setTimeOpen(true);
+              }}
             >
               {parkedAt === null ? say("worldNow") : dateWords(parkedAt, dial.end, locale)}
             </button>
