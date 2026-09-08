@@ -124,9 +124,22 @@
  * looping animation — motion that explains nothing, running while nobody is
  * there. And it samples the ground WITHOUT WAITING FOR THE SETTLE, while the
  * balls are still easing to their homes after arrival, which is the product's
- * own physics genuinely moving the world. Both must be caught. The second is
- * what keeps the footprint rule honest: a bound nothing can exceed is not a
- * bound.
+ * own physics genuinely moving the world. The second is what keeps the
+ * footprint rule honest: a bound nothing can exceed is not a bound.
+ *
+ * ON A PLAIN BUILD ONLY THE FIRST OF THE TWO IS LIVE, and saying "both must be
+ * caught" without that qualifier was this file overstating its own reach —
+ * the same sin its positive half is careful not to commit. Where `__waka` is
+ * absent the ground is unread, so the unsettled sampling has nothing to
+ * measure and the drifting chrome is the whole of the negative proof. The run
+ * prints NO SIGHT OF THE GROUND either way, so which of the two caught it is
+ * on the transcript rather than left to be assumed.
+ *
+ * AND CATCHING IT IS NOT ENOUGH ON ITS OWN. The verdict was `!ok`, so a run
+ * that missed the drift and failed its own blindness control instead would
+ * have reported the drift as found. The two are separated (`sawDrift`,
+ * `blind`): the sabotage must be caught, and the instrument must still prove
+ * its eyes while catching it.
  */
 import { type Browser, type Page } from "playwright";
 

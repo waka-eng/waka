@@ -290,19 +290,29 @@ interface Scope {
   judged: number;
   movedOn: number;
   exempt: number;
+  /** which exemptions were actually met here, by needle */
+  met: string[];
   /** Unpainted, but what is behind it is its own surface — see the header. */
   ownGround: number;
 }
 
 async function sweep(page: Page, surface: string): Promise<{ found: Finding[]; scope: Scope }> {
   const all = await candidates(page);
-  const scope: Scope = { candidates: all.length, judged: 0, movedOn: 0, exempt: 0, ownGround: 0 };
+  const scope: Scope = {
+    candidates: all.length,
+    judged: 0,
+    movedOn: 0,
+    exempt: 0,
+    met: [],
+    ownGround: 0,
+  };
   const found: Finding[] = [];
 
   for (const c of all) {
     const excused = EXEMPT.find((e) => c.cls.includes(e.needle));
     if (excused) {
       scope.exempt += 1;
+      if (!scope.met.includes(excused.needle)) scope.met.push(excused.needle);
       continue;
     }
 
@@ -566,14 +576,18 @@ async function main(): Promise<number> {
   /* AN EXEMPTION NOBODY MEETS IS AN EXEMPTION NOBODY CAN AUDIT — the state
      `jar-scrim` sat in for as long as it existed. This is not fatal to the
      walk (a surface may legitimately not be reached on one run), but it is
-     never silent. */
+     never silent.
+
+     ASKED PER NEEDLE, which the first cut of this check got wrong: it asked
+     whether ANY exemption had been met anywhere, so with two entries a live
+     one would have masked a dead one — the same defect it was written to
+     catch, one level up. Each needle answers for itself. */
   for (const e of EXEMPT) {
-    if (!scopes.some((s) => s.scope.exempt > 0)) {
+    if (!scopes.some((s) => s.scope.met.includes(e.needle))) {
       console.log(
         `  NOTE: nothing on any surface matched the exemption "${e.needle}". ` +
           "Either a surface went unwalked, or the exemption has outlived the thing it excused.",
       );
-      break;
     }
   }
   console.log("  what each surface offered, and how much of it could be judged:");
