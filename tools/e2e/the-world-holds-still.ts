@@ -17,8 +17,8 @@
  *
  * ── WHAT IT ASKS ────────────────────────────────────────────────────────────
  *
- * Settle the world, then touch nothing for ten seconds and photograph it four
- * times. Between any two samples:
+ * Settle the world, then touch nothing for nine seconds and photograph it
+ * four times — at rest, and at +3s, +6s and +9s. Between any two samples:
  *
  * THE CHROME. No element appears, no element leaves, and no element's box
  * moves. Read from the DOM rather than from pixels deliberately: a creature
@@ -229,6 +229,17 @@ function drift(a: string[], b: string[]): { came: string[]; went: string[] } {
 interface Result {
   ok: boolean;
   lines: string[];
+  /**
+   * WHY IT FAILED, because `--negative` used to accept any answer but yes.
+   *
+   * The verdict there was `!ok`, so a run where the drift went unseen and the
+   * BLINDNESS control failed instead would have printed "the drift was found"
+   * — a negative gate passing on the evidence that it cannot see. The halves
+   * are separated now: the sabotage must be caught, and the instrument must
+   * still prove its own eyes while catching it.
+   */
+  sawDrift: boolean;
+  blind: boolean;
 }
 
 async function walk(browser: Browser, base: string, negative: boolean): Promise<Result> {
@@ -251,6 +262,8 @@ async function walk(browser: Browser, base: string, negative: boolean): Promise<
   const page = await ctx.newPage();
   const lines: string[] = [];
   let ok = true;
+  let sawDrift = false;
+  let blind = false;
 
   await page.goto(`${base}/login`, { waitUntil: "domcontentloaded" });
   await page.click("#login-tab-signup");
@@ -310,6 +323,7 @@ async function walk(browser: Browser, base: string, negative: boolean): Promise<
       lines.push(`  +${i * (GAP_MS / 1_000)}s  still`);
     } else {
       ok = false;
+      sawDrift = true;
       lines.push(`  +${i * (GAP_MS / 1_000)}s  THE WORLD MOVED, and nobody moved it`);
       for (const x of c.went.slice(0, 4)) lines.push(`      chrome was: ${x}`);
       for (const x of c.came.slice(0, 4)) lines.push(`      chrome now: ${x}`);
@@ -343,6 +357,7 @@ async function walk(browser: Browser, base: string, negative: boolean): Promise<
       lines.push("  no ball stayed lit across the window, so its travel was not measured");
     } else if (worst > FOOTPRINT) {
       ok = false;
+      sawDrift = true;
       lines.push(
         `  A BALL WENT SOMEWHERE. ${worstId} covered ${worst}px across the quiet window, ` +
           `past the ${FOOTPRINT}px of its own footprint — that is travel, not breathing`,
@@ -358,7 +373,22 @@ async function walk(browser: Browser, base: string, negative: boolean): Promise<
   /* ── AND NOW MOVE IT ON PURPOSE ─────────────────────────────────────────
      Everything above fails safe toward "nothing changed", so a run that
      never sees a change has proved nothing. */
-  await page.locator(".jar-here-more").first().click();
+  const more = page.locator(".jar-here-more");
+  if ((await more.count()) === 0) {
+    /* WITHOUT THE CONTROL THERE IS NO VERDICT. `nothing-invisible` guards the
+       same locator and this did not, so an absent walls list ended the walk
+       in a stack trace rather than an answer — and a harness error reads as
+       infrastructure when what it means is "this run proved nothing". */
+    ok = false;
+    blind = true;
+    lines.push(
+      "  THE CONTROL IS MISSING. `.jar-here-more` is not on screen, so the world " +
+        "could not be moved on purpose and the stillness above is unproven.",
+    );
+    await ctx.close();
+    return { ok, lines, sawDrift, blind };
+  }
+  await more.first().click();
   await page.waitForTimeout(1_500);
   const opened = await frame(page);
   const cc = drift(prev.chrome, opened.chrome);
@@ -369,6 +399,7 @@ async function walk(browser: Browser, base: string, negative: boolean): Promise<
     );
   } else {
     ok = false;
+    blind = true;
     lines.push(
       "  THE INSTRUMENT IS BLIND. The walls list was opened and the sampler reported " +
         "nothing new on screen — so the stillness above is not evidence of anything.",
@@ -397,6 +428,7 @@ async function walk(browser: Browser, base: string, negative: boolean): Promise<
       );
     } else {
       ok = false;
+      blind = true;
       lines.push(
         "  THE GROUND HALF IS BLIND. A memory was kept and the loop reported no new ball — " +
           "so the ground's stillness above is not evidence of anything.",
@@ -405,7 +437,7 @@ async function walk(browser: Browser, base: string, negative: boolean): Promise<
   }
 
   await ctx.close();
-  return { ok, lines };
+  return { ok, lines, sawDrift, blind };
 }
 
 async function main(): Promise<number> {
@@ -432,11 +464,14 @@ async function main(): Promise<number> {
   console.log("");
 
   if (negative) {
-    const caught = !res.ok;
+    const caught = res.sawDrift && !res.blind;
     console.log(
       caught
-        ? "[holds-still] PASS — the drift was found"
-        : "[holds-still] FAIL — chrome was drifting and the walk called the world still",
+        ? "[holds-still] PASS — the drift was found, and the instrument proved its eyes " +
+          "while finding it"
+        : res.blind
+          ? "[holds-still] FAIL — the instrument went blind, so catching a drift proves nothing"
+          : "[holds-still] FAIL — chrome was drifting and the walk called the world still",
     );
     return caught ? 0 : 1;
   }

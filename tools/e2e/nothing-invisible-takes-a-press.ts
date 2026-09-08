@@ -121,10 +121,18 @@ const MIN_SIDE = 24;
  * attribute; a substring, because the class list carries state modifiers.
  */
 const EXEMPT: Array<{ needle: string; why: string }> = [
-  {
-    needle: "jar-scrim",
-    why: "the dark behind a sheet: pressing it dismisses the sheet, which is a real gesture on a thing that is deliberately not drawn",
-  },
+  /* EMPTY, AND THAT IS THE HONEST STATE OF IT.
+     It shipped holding one entry — `jar-scrim`, "the dark behind a sheet:
+     pressing it dismisses the sheet, which is a real gesture on a thing that
+     is deliberately not drawn". A good argument for a class the product does
+     not have: `jar-scrim` appears nowhere in `packages/web/src`, and every
+     run duly reported "0 exempt by decision", which is the tell nobody read.
+     An exemption for something that is not there is worse than one with no
+     reason beside it — it reads as a considered decision and cannot be
+     audited. The argument is kept here because it is the right one the day a
+     scrim comes back: the gate will find it, and this is the shape of the
+     entry to write. Nothing may be added without the reason, and the check
+     below refuses an entry that matches nothing. */
 ];
 
 interface Candidate {
@@ -157,6 +165,18 @@ const uniq = (): string => `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
  */
 async function candidates(page: Page): Promise<Candidate[]> {
   return (await page.evaluate((minSide: number) => {
+    /* LAST SWEEP'S MARKS COME OFF FIRST. Four surfaces are swept on one
+       document, and the counter restarts at 1 each time — so an element that
+       was a candidate before and is not one now would keep `inv3` while a
+       different element was handed `inv3` too, and `querySelector` would hand
+       `hide()` whichever came first in document order. Never observed on the
+       sequence this walk actually runs (the candidate set only grows: 19, 20,
+       27, 27), which is exactly why it is worth closing — the next surface
+       added is what makes the set shrink. */
+    for (const stale of Array.from(document.querySelectorAll("[data-inv-probe],[data-inv-chain]"))) {
+      stale.removeAttribute("data-inv-probe");
+      stale.removeAttribute("data-inv-chain");
+    }
     const out: Array<{
       mark: string;
       tag: string;
@@ -219,10 +239,13 @@ async function boxShot(
   page: Page,
   box: { x: number; y: number; w: number; h: number },
 ): Promise<string> {
+  /* clipped to the glass, read from the page rather than restated: a second
+     copy of the viewport here silently mis-crops the day it changes */
+  const glass = page.viewportSize() ?? { width: 1280, height: 900 };
   const x = Math.max(0, box.x);
   const y = Math.max(0, box.y);
-  const width = Math.min(box.x + box.w, 1280) - x;
-  const height = Math.min(box.y + box.h, 900) - y;
+  const width = Math.min(box.x + box.w, glass.width) - x;
+  const height = Math.min(box.y + box.h, glass.height) - y;
   if (width < 1 || height < 1) return "";
   const shot = await page.screenshot({ clip: { x, y, width, height }, animations: "disabled" });
   return shot.toString("base64");
@@ -540,6 +563,19 @@ async function main(): Promise<number> {
   /* WHAT WAS ACTUALLY ASKED, PRINTED WHETHER OR NOT ANYTHING WAS FOUND. A
      sweep that judged four boxes and a sweep that judged forty look identical
      from their verdict alone, and only one of them means anything. */
+  /* AN EXEMPTION NOBODY MEETS IS AN EXEMPTION NOBODY CAN AUDIT — the state
+     `jar-scrim` sat in for as long as it existed. This is not fatal to the
+     walk (a surface may legitimately not be reached on one run), but it is
+     never silent. */
+  for (const e of EXEMPT) {
+    if (!scopes.some((s) => s.scope.exempt > 0)) {
+      console.log(
+        `  NOTE: nothing on any surface matched the exemption "${e.needle}". ` +
+          "Either a surface went unwalked, or the exemption has outlived the thing it excused.",
+      );
+      break;
+    }
+  }
   console.log("  what each surface offered, and how much of it could be judged:");
   for (const { surface, scope } of scopes) {
     console.log(
@@ -551,10 +587,19 @@ async function main(): Promise<number> {
   }
   console.log("");
 
-  if (found.length === 0) {
+  /* THE STRIP ITSELF, NOT MERELY SOMETHING. The verdict used to read
+     `found.length > 0`, and printed "the strip among them" on the strength of
+     it — so a run where the sabotage never mounted and some unrelated box was
+     reported would have passed while claiming a thing it had not checked.
+     That is the failure this whole file is written against, in the file
+     itself. */
+  const strip = found.filter((f) => f.what.includes("e2e-sabotage"));
+
+  if (found.length === 0 || (negative && strip.length === 0)) {
     console.log(
       negative
-        ? "[nothing-invisible] FAIL — the strip was put back and the walk did not find it"
+        ? "[nothing-invisible] FAIL — the strip was put back and the walk did not find it" +
+          (found.length === 0 ? "" : ` (it found ${found.length} other box(es), which is not the same)`)
         : "[nothing-invisible] PASS — nothing takes a press without drawing something",
     );
     return negative ? 1 : 0;
@@ -563,13 +608,16 @@ async function main(): Promise<number> {
   for (const f of found) {
     console.log(`  ${f.surface}`);
     console.log(`    ${f.what}`);
-    console.log(`      ${f.box}, drawing nothing, and it takes the press meant for ` +
-        `${f.behind.join(", ")}`);
+    console.log(
+      `      ${f.box}, winning the hit test at ${f.points} point(s) inside itself, ` +
+        `drawing nothing, and taking the press meant for ${f.behind.join(", ")}`,
+    );
   }
   console.log("");
   console.log(
     negative
-      ? `[nothing-invisible] PASS — ${found.length} found, the strip among them`
+      ? `[nothing-invisible] PASS — ${found.length} found, and ${strip.length} of them ` +
+        `IS the strip put back`
       : `[nothing-invisible] FAIL — ${found.length} box(es) take a press and draw nothing`,
   );
   return negative ? 0 : 1;
