@@ -447,6 +447,41 @@ describe("how the list opens", () => {
     expect(rows().length, "the list went with the pointer").toBe(open);
   });
 
+  it("keeps the list up when the word is pressed after the hover", async () => {
+    /* THE REGRESSION THIS CASE EXISTS FOR. The first cut opened on hover and
+       left the press a plain toggle, so the most ordinary gesture there is —
+       move onto the word, then click the thing you are looking at — opened
+       the list and shut it again in one motion. Found by pressing it the way
+       Playwright does: `click()` moves the pointer first, so four walks that
+       reach the dates through this word (`the-timeline`, `first-sixty`,
+       `nothing-invisible`) were photographing a surface that was not there.
+       A person who hovers and then presses means "yes, this one". */
+    await act(async () => {
+      arrive("mouse");
+    });
+    const open = rows().length;
+    expect(open, "the hover opened nothing, so this case proves nothing").toBeGreaterThan(0);
+    await act(async () => {
+      one(".jar-when").click();
+    });
+    expect(rows().length, "the press after the hover shut the list").toBe(open);
+  });
+
+  it("still closes on the press after that, so the word is a way out", async () => {
+    /* and the memory is spent, not permanent: the second press is the exit
+       the 2026-08-30 note promised and this must not quietly remove */
+    await act(async () => {
+      arrive("mouse");
+    });
+    await act(async () => {
+      one(".jar-when").click();
+    });
+    await act(async () => {
+      one(".jar-when").click();
+    });
+    expect(rows().length, "the word stopped being a way out of its own list").toBe(0);
+  });
+
   it("does not open under a finger, because the press already answers", async () => {
     await act(async () => {
       arrive("touch");

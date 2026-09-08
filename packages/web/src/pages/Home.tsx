@@ -2250,8 +2250,26 @@ function HomeExperience(): JSX.Element {
    * `pointerenter` too, so an ungated hover would open the list on
    * `pointerdown` and the click that follows would toggle it straight shut —
    * the word would stop working on a phone entirely.
+   *
+   * AND THE PRESS AFTER THE HOVER KEEPS IT OPEN, which the first cut of this
+   * got wrong. A mouse arriving opens the list, and then the most natural
+   * thing anybody does — click the word you are already looking at — toggled
+   * it straight back shut. Found by pressing it the way Playwright does:
+   * `click()` moves the pointer first, so `.jar-when` opened on the move and
+   * closed on the press, and four walks that reach the dates through that
+   * word (`the-timeline`, `first-sixty`, `nothing-invisible`) were left
+   * photographing a surface that was not there. A person hovering and then
+   * pressing means "yes, this one", never "take it away".
+   *
+   * So the press toggles from the state the word was in BEFORE the pointer
+   * arrived: `timeHovered` remembers that the hover is what opened it, the
+   * first press spends that memory and leaves the list up, and the next press
+   * closes it. Every way out survives — press the word again, press anywhere
+   * that is not the rail, or pick a date.
    */
   const [timeOpen, setTimeOpen] = useState(false);
+  /** whether the hover, rather than a press, is what put the list up */
+  const timeHovered = useRef(false);
 
   /**
    * THE RAIL GOES AWAY WHEN YOU LOOK AWAY (founder, 2026-08-27: "timeline line
@@ -13997,12 +14015,29 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               className={`jar-when jar-label${parkedAt === null ? "" : " jar-when--away"}`}
               aria-expanded={timeOpen}
               aria-label={say("worldWindBack")}
-              onClick={() => setTimeOpen((v) => !v)}
+              onClick={() => {
+                /* the press that follows the hover confirms it; the one after
+                   that is the way out */
+                if (timeHovered.current) {
+                  timeHovered.current = false;
+                  setTimeOpen(true);
+                  return;
+                }
+                setTimeOpen((v) => !v);
+              }}
               /* a mouse arriving on the word is a reach for the list; a
                  finger arriving is the start of the press, and the press
                  already has an answer */
               onPointerEnter={(e) => {
-                if (e.pointerType === "mouse") setTimeOpen(true);
+                if (e.pointerType !== "mouse") return;
+                timeHovered.current = !timeOpen;
+                setTimeOpen(true);
+              }}
+              onPointerLeave={() => {
+                /* the list stays up, but the memory of HOW it went up does
+                   not: a pointer that has left and come back is a new reach,
+                   and the press after it is a fresh answer */
+                timeHovered.current = false;
               }}
             >
               {parkedAt === null ? say("worldNow") : dateWords(parkedAt, dial.end, locale)}
