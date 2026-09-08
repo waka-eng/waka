@@ -97,7 +97,12 @@ import { SpaceSettings, type GroupTrouble } from "../space/settings/SpaceSetting
 import { whyFailed as sayWhyFailed, whyOf } from "../lib/why-failed";
 import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
 import { agentBeing, OWNER_BEING, unit, type Being } from "../character/body";
-import { groupCompanyPlaces, type CompanyPlace } from "../space/group-company";
+import {
+  groupCompanyPlaces,
+  noticeLight,
+  NOTICE_MS,
+  type CompanyPlace,
+} from "../space/group-company";
 import { groundCount } from "../space/ground-count";
 import { pourSignature } from "../space/pour-signature";
 import { posterWords } from "../space/top-of-mind/poster";
@@ -4215,10 +4220,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     /** The member being noticed, and until when — a beat, not a state: light
         that stayed would be a selection nobody made. */
     const companyNear = { id: "", until: 0 };
-    /** How long a notice lasts. Named because the draw pass works back from
-        `until` to find when the noticing started, and a second copy of this
-        number in two places is how a beat drifts out of time with itself. */
-    const COMPANY_NOTICE_MS = 1900;
     /** each member's form, derived once from their id and then held */
     const memberBeings = new Map<string, Being>();
     const beingOf = (id: string): Being => {
@@ -6585,20 +6586,24 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               y: seatY,
               r: companion.size * 0.32,
             });
-            /* NOTICED — and it answers in its own time. The delay is the
-               member's own (`notice`), so a room of seven turns to you
-               raggedly instead of snapping round in unison, which is the
-               difference between people and a chorus line. */
-            const sinceSeen =
+            /* NOTICED — the body answers in its own time, the NAME answers
+               at once. The body's delay is the member's own (`notice`), so a
+               room of seven turns to you raggedly instead of snapping round
+               in unison, which is the difference between people and a chorus
+               line; the name is the answer to the question the gesture asked
+               and waits for nobody (founder, 2026-09-08). Both halves are
+               computed in `noticeLight`, where the arithmetic can be tested
+               without frames to run. */
+            const since =
               companyNear.id === seat.profileId
-                ? (performance.now() - (companyNear.until - COMPANY_NOTICE_MS)) / 1000 -
-                  seat.notice
+                ? (performance.now() - (companyNear.until - NOTICE_MS)) / 1000
                 : -1;
-            const lit =
-              companyNear.id === seat.profileId && sinceSeen > 0
-                ? clamp((companyNear.until - performance.now()) / 900, 0, 1) *
-                  clamp(sinceSeen / 0.18, 0, 1)
-                : 0;
+            const answer = noticeLight(
+              since,
+              seat.notice,
+              companyNear.until - performance.now(),
+            );
+            const lit = answer.body;
             ctx!.save();
             /* ANCHORED TO THE ROOM, NOT TO YOU. `charSX` is the companion's
                screen-anchored x — the world slides under it, which is what
@@ -6690,9 +6695,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             /* and the name, above them, for as long as the light lasts. It is
                the only place a member's name is written in the world, so it
                is written in the label register the rest of the chrome uses. */
-            if (lit > 0.01 && named?.name) {
+            if (answer.name > 0.01 && named?.name) {
               ctx!.save();
-              ctx!.globalAlpha = lit;
+              ctx!.globalAlpha = answer.name;
               ctx!.fillStyle = "#d6deea";
               ctx!.font = '500 11px Pretendard, -apple-system, "Segoe UI", sans-serif';
               ctx!.textAlign = "center";
@@ -7646,7 +7651,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     function noticeMember(id: string) {
       if (companyNear.id === id && companyNear.until > performance.now() + 500) return;
       companyNear.id = id;
-      companyNear.until = performance.now() + COMPANY_NOTICE_MS;
+      companyNear.until = performance.now() + NOTICE_MS;
       wake();
     }
 

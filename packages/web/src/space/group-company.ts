@@ -139,3 +139,59 @@ export function groupCompanyPlaces(
     };
   });
 }
+
+/** How long a notice lasts, in milliseconds, before the member lets go. */
+export const NOTICE_MS = 1900;
+
+/**
+ * HOW BRIGHT A NOTICED MEMBER IS, AND HOW BRIGHT ITS NAME IS — which are two
+ * answers, not one.
+ *
+ * Founder, 2026-08-27, asking for this: "hovering/clicking on characters in
+ * the background should show the name of the person above the character
+ * temporarily and character should also brighten up temporarily." Built as
+ * one value, so the name inherited the body's `notice` — the per-member delay
+ * that keeps a room from turning to you in unison.
+ *
+ * Founder, 2026-09-08: "when in a room when I click on one of the agents
+ * behind me, it takes a few seconds for the name to appear. It should show
+ * immediately upon hover or click." MEASURED from the arithmetic that stood
+ * here: the delay was `notice` (0 to 0.75s, drawn from the member's id) plus
+ * a 0.18s ramp, so between nothing and 0.93 seconds depending on WHICH member
+ * you pointed at — the same gesture answering at a different speed each time,
+ * which is worse than a slow answer that is always slow.
+ *
+ * So the two are separated. The BODY keeps the raggedness, because that is
+ * the research finding it was built from and it costs nothing: a room turning
+ * toward you one by one is people rather than a chorus line. The NAME is not
+ * a reaction, it is the ANSWER to the question the gesture asked, and an
+ * answer waits for nobody: it comes up over `NAME_RISE` seconds from the
+ * instant of the notice, on every member equally.
+ *
+ * Pure arithmetic, taking its clock as arguments rather than reading
+ * `performance.now()`, so the timing can be held by a test without a browser
+ * to run frames in — the same reason `canvas/scale.ts` takes a ratio.
+ */
+export const NAME_RISE = 0.1;
+export const BODY_RISE = 0.18;
+
+const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+export function noticeLight(
+  /** seconds since the notice began; negative if this member is not the one */
+  since: number,
+  /** the member's own delay before it answers, in seconds */
+  notice: number,
+  /** milliseconds left before the notice lets go */
+  msLeft: number,
+): { body: number; name: number } {
+  if (since < 0) return { body: 0, name: 0 };
+  /* the shared fade-out: both let go together, so a member does not stand
+     lit under a name that has already gone */
+  const holding = clamp01(msLeft / 900);
+  const turned = since - notice;
+  return {
+    body: turned > 0 ? holding * clamp01(turned / BODY_RISE) : 0,
+    name: holding * clamp01(since / NAME_RISE),
+  };
+}
