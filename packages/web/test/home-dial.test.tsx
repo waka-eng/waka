@@ -45,16 +45,27 @@
  *
  * `home-field.test.tsx` gives the long version of all four.
  *
+ * THE INSTRUMENT IS A LIST OF DATES, NOT A RAIL (founder, 2026-08-30:
+ * "instead of this draggable line, when clicking on now, just show the major
+ * dates to make them clickable").
+ *
+ * Every claim above survived the change unaltered, which is the point of
+ * writing them as counts: they are about WHAT EXISTS at a moment, and none of
+ * them ever cared how a finger named that moment. What changed is the gesture
+ * — press the word, press a date — and it changed in exactly one place below,
+ * `windTo`, rather than in a dozen assertions about time.
+ *
+ * ONE CLAIM IS GENUINELY NEW, because the list can make it and the rail could
+ * not: every date offered is a day with something standing on it. A rail
+ * offered its whole length, and most of that length was the same wall shown
+ * again at a different height — including a stretch at the far end where the
+ * ground was simply empty.
+ *
  * WHAT THIS FILE DELIBERATELY DOES NOT CLAIM.
  *
- * The canvas stub draws nothing (see canvas-stub.ts), so the fade itself, the
- * handle's glow and the companion's turn are all invisible here and no
- * assertion below mentions them. In particular the companion's yaw — which
- * `scrubTo` drives from the dial's position, and which is the whole of what
- * the second argument to `scrubTo` is for — lives only in the loop's own
- * state and is only ever read by the draw pass. There is no honest way to
- * observe it from here, so it is not covered rather than covered by a claim
- * about a pixel that was never painted.
+ * The canvas stub draws nothing (see canvas-stub.ts), so the fade itself and
+ * the field closing over the gap are invisible here and no assertion below
+ * mentions them. The counts are read from the loop's own audit.
  */
 import { act } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -88,7 +99,11 @@ const VIEW_H = 900;
  * printed date a whole day out. An odd gap puts every target at midday, hours
  * from the nearest boundary.
  */
-const KEPT_DAYS = [4, 21, 40, 61, 80, 101];
+/* AND ONE KEPT TODAY, which the list must NOT print as a date: the first row
+   already says `now`, and a day offered twice under two names is a menu that
+   cannot be read. The rail had no such hazard — a position is a position —
+   so it is new with the list and it needs a case of its own below. */
+const KEPT_DAYS = [0, 4, 21, 40, 61, 80, 101];
 
 const FACTS = {
   inspirations: KEPT_DAYS.map((daysAgo, i) => ({
@@ -133,11 +148,13 @@ vi.mock("../src/lib/auth-context", async (importOriginal) => {
 let layout: MountedWorld;
 /** every memory's moment, straight from the fixture — never from the page */
 let keptMs: number[] = [];
-/** the rail's two ends, in the page's own frozen clock */
-let railStart = 0;
+/**
+ * NOW, in the page's own frozen clock. Every date the list prints is spelled
+ * against this — `dateWords` drops the year when it matches the year of the
+ * moment it is read at — so a test spelling its expectations against a
+ * different `now` would disagree with a correct list every New Year.
+ */
 let railEnd = 0;
-/** where the finger last left the rail, so each wind is a drag from there */
-let railAt = 1;
 
 beforeAll(() => {
   installCanvasStub();
@@ -153,17 +170,14 @@ beforeEach(async () => {
   keptMs = (await dataMockFrom(FACTS).loadInspirations()).inspirations
     .map((row) => row.capturedMs)
     .sort((a, b) => a - b);
-  /* The rail runs from three days before your earliest memory to now. Both
-     numbers are the page's, and both are restated here rather than read from
-     it: a test that asked the dial where its own ends were could not tell a
+  /* The page's own clock, restated here rather than read from the page: a
+     test that asked the dial what time it thought it was could not tell a
      correct dial from one that had agreed with itself about being wrong.
      `Date.now` is the frozen clock the harness installed, a second or so past
-     the moment the page took as the rail's bottom end — a second against a
-     span of a hundred days, and every target below sits half a day clear of
-     the nearest boundary. */
-  railStart = keptMs[0] - 3 * DAY;
+     the moment the page takes as the present — a second against a span of a
+     hundred days, and every day this fixture holds is whole days clear of
+     its neighbours. */
   railEnd = Date.now();
-  railAt = 1;
 });
 
 afterEach(() => {
@@ -173,11 +187,32 @@ afterEach(() => {
 /** how many of the fixture's memories had been kept by `t` */
 const stood = (t: number) => keptMs.filter((ms) => ms <= t).length;
 
-/** where on the rail a moment sits, 0 at the top and 1 at the bottom */
-const railPos = (t: number) => (t - railStart) / (railEnd - railStart);
+/**
+ * The last instant of the day a moment falls on — which is where every stop
+ * in the list lands, because winding to a day shows what the wall held UP TO
+ * it. Computed here from the fixture's own moments, never read off the page.
+ */
+const endOfDayOf = (ms: number) => {
+  const d = new Date(ms);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).getTime();
+};
 
-/** midway between two of the memories, where the answer is unambiguous */
-const between = (older: number, newer: number) => (keptMs[older] + keptMs[newer]) / 2;
+/**
+ * The days the list should print, newest first: every day this wall changed
+ * that is far enough back for the word to be able to NAME it. Computed from
+ * the fixture, never read from the page.
+ *
+ * Half a day is not a number picked here — it is the threshold the winder
+ * itself uses to decide that a moment means the present. A row nearer than
+ * that would be a second way of saying `now`, and pressing it would leave the
+ * word reading `now` rather than the row's own words. That consequence is
+ * asserted directly by the case that presses every row, so this filter is a
+ * statement about the same fact rather than a copy of an implementation.
+ */
+const pastDays = () =>
+  Array.from(new Set(keptMs.map(endOfDayOf)))
+    .filter((ms) => railEnd - ms >= DAY / 2)
+    .sort((a, b) => b - a);
 
 function one(selector: string): HTMLElement {
   const el = layout.container.querySelector<HTMLElement>(selector);
@@ -185,49 +220,59 @@ function one(selector: string): HTMLElement {
   return el;
 }
 
+/** the dates the page is offering, in the order it offers them */
+const rows = () => Array.from(layout.container.querySelectorAll<HTMLElement>(".jar-dial-stop"));
+
+/** press the word that says `now`, which is the only way the dates open */
+async function openDates(): Promise<void> {
+  if (rows().length > 0) return;
+  await act(async () => {
+    one(".jar-when").click();
+  });
+  if (rows().length === 0) {
+    throw new Error(
+      "pressing the word opened nothing. The dates are mounted from `timeOpen` " +
+        "and that press is the only thing that sets it — every case below would " +
+        "otherwise fail as though the dial were broken.",
+    );
+  }
+}
+
 /**
- * WIND THE RAIL, AND PROVE IT MOVED BEFORE ANYTHING ELSE IS ASKED.
+ * WIND THE WALL, AND PROVE IT MOVED BEFORE ANYTHING ELSE IS ASKED.
  *
  * This project has already shipped a test that passed because the gesture it
  * fired silently did nothing and it then re-measured the state it started in.
- * So the handle's own position is checked against the position the finger
- * asked for, loudly, on every single wind — not once in one case. A dial that
- * ignores the pointer, or one whose rail runs the other way, fails here with
- * a sentence saying so rather than in some later count that reads as a
- * different bug entirely.
+ * So the WORD is checked against the day the press asked for, loudly, on every
+ * single wind — not once in one case. A dial that ignores the press, or one
+ * whose rows are wired to the wrong moments, fails here with a sentence saying
+ * so rather than in some later count that reads as a different bug entirely.
  *
- * The gesture is a genuine drag from wherever the finger last was, because
- * that is the gesture: press the handle, pull it, let go. Pressing and
- * releasing at the target would exercise `onDialDown` alone and leave
- * `onDialMove` — the part that runs for the whole of a real scrub —
- * untouched.
+ * The gesture is the whole gesture: press the word to open the dates, press a
+ * date. Reaching into the page and calling `windTo` directly would exercise
+ * the winding and leave the two presses — which are the only route a person
+ * has — untouched.
+ *
+ * `label` is what the row must SAY, computed by the test from the fixture's
+ * own moments. Finding the row by its words rather than by its index is what
+ * makes "the list is in the wrong order" fail here instead of silently
+ * winding somewhere else and failing as a count.
  */
-async function windTo(pos: number): Promise<void> {
-  const rail = one(".jar-dial-track");
-  /* VERTICAL, AND NOW IS AT THE TOP (founder, 2026-08-27). `pos` still means
-     what it always meant — where along the ARCHIVE, 0 at the oldest and 1 at
-     today — because that is the fact each test below is about. The rail is
-     what turned over, so the flip lives here, in the one place that speaks to
-     it, rather than in a dozen assertions about time. */
-  const from = (1 - railAt) * VIEW_H;
-  const to = (1 - pos) * VIEW_H;
-  /* jsdom has PointerEvent, so this is the event the handler really receives
-     rather than a mouse event wearing its name. The stubbed rect makes the
-     rail the full viewport width, so clientX and position are the same
-     number scaled. */
-  const at = (kind: string, y: number) =>
-    new PointerEvent(kind, { bubbles: true, cancelable: true, clientY: y, pointerId: 1 });
+async function windToDay(at: number): Promise<void> {
+  await openDates();
+  const label = dateWords(at, railEnd);
+  const row = rows().find((r) => (r.textContent ?? "").trim() === label);
+  if (!row) {
+    throw new Error(
+      `the dates do not offer ${JSON.stringify(label)}. They offer ` +
+        `${JSON.stringify(rows().map((r) => (r.textContent ?? "").trim()))}. ` +
+        `Every assertion below this would otherwise pass by re-measuring the ` +
+        `moment the page opened at.`,
+    );
+  }
   await act(async () => {
-    rail.dispatchEvent(at("pointerdown", from));
+    row.click();
   });
-  await act(async () => {
-    rail.dispatchEvent(at("pointermove", to));
-  });
-  await act(async () => {
-    rail.dispatchEvent(at("pointerup", to));
-  });
-  railAt = pos;
-
   /* Long enough for what leaves to finish leaving: a departing memory fades
      over 260ms, about sixteen frames, and the field then eases into the gap.
      Forty frames is that with room to spare — and the count this test reads
@@ -235,17 +280,28 @@ async function windTo(pos: number): Promise<void> {
      exactly like a broken dial. */
   await layout.step(40);
 
-  /* the handle is placed from the TOP, and the top is now */
-  const asked = (1 - pos) * 100;
-  const landed = Number.parseFloat(one(".jar-dial-handle").style.top);
-  if (!Number.isFinite(landed) || Math.abs(landed - asked) > 0.5) {
+  const said = (one(".jar-when").textContent ?? "").trim();
+  if (said !== label) {
     throw new Error(
-      `the dial did not move to where the pointer asked: wanted ${asked.toFixed(2)}% ` +
-        `down the rail, handle sits at "${one(".jar-dial-handle").style.top || "(nowhere)"}". ` +
-        `Every assertion below this would otherwise pass by re-measuring the ` +
-        `moment the page opened at. If the handle landed at the mirror of the ` +
-        `position asked for, the rail is back to front: the left is the past.`,
+      `the wall did not wind to the date that was pressed: pressed ` +
+        `${JSON.stringify(label)}, the word now reads ${JSON.stringify(said)}. ` +
+        'If it still says "now", the press never reached the winder.',
     );
+  }
+}
+
+/** back to the present, by the row that says so */
+async function windToNow(): Promise<void> {
+  await openDates();
+  const row = rows().find((r) => (r.textContent ?? "").trim() === "now");
+  if (!row) throw new Error("the dates offer no way back to now");
+  await act(async () => {
+    row.click();
+  });
+  await layout.step(40);
+  const said = (one(".jar-when").textContent ?? "").trim();
+  if (said !== "now") {
+    throw new Error(`pressing \`now\` left the word reading ${JSON.stringify(said)}`);
   }
 }
 
@@ -271,23 +327,22 @@ describe("winding the dial back", () => {
     await layout.toField();
     expect(layout.audit().present, "the ground opens holding everything kept").toBe(keptMs.length);
 
-    const then = between(2, 3);
-    await windTo(railPos(then));
+    const then = endOfDayOf(keptMs[2]);
+    await windToDay(then);
 
     /* Three of six, and the three is the fixture's own arithmetic. A dial
        that reduced the count by some other amount is as wrong as one that
        reduced it by none. */
-    expect(
-      layout.audit().present,
-      "the ground should hold only what had been kept by then",
-    ).toBe(stood(then));
+    expect(layout.audit().present, "the ground should hold only what had been kept by then").toBe(
+      stood(then),
+    );
     expect(layout.audit().present).toBeLessThan(keptMs.length);
   });
 
   it("leaves a whole ground behind, not a half-erased one", async () => {
     await layout.toField();
-    const then = between(2, 3);
-    await windTo(railPos(then));
+    const then = endOfDayOf(keptMs[2]);
+    await windToDay(then);
 
     /* THE COUNT FIRST, THEN THE INVARIANT ABOUT IT.
        present === active === onScreen is trivially true of a dial that did
@@ -300,29 +355,39 @@ describe("winding the dial back", () => {
 
   it("says which day it has been wound to", async () => {
     await layout.toField();
-    const then = between(1, 2);
-    await windTo(railPos(then));
+    const then = endOfDayOf(keptMs[1]);
+    await windToDay(then);
 
-    /* The rail's one visible statement of WHEN, and the only thing telling a
+    /* The dial's one visible statement of WHEN, and the only thing telling a
        person which day they are looking at. It is checked against the same
        moment the counts above are checked against, so a readout that is fed
-       the wrong time — today's, the rail's end, the argument the other way
+       the wrong time — today's, the list's end, the argument the other way
        round — parts company with the ground it is standing over. The words
        themselves come from the product's own formatter: what is pinned here
        is the wiring, not the spelling of a month. */
-    expect(one(".jar-dial-date").textContent, "the rail's date should name the day wound to").toBe(
+    expect(one(".jar-when").textContent, "the word should name the day wound to").toBe(
       dateWords(then, railEnd),
     );
+  });
+
+  it("puts the dates away once one of them has been pressed", async () => {
+    /* A menu that stays open over the wall after it has been answered is the
+       rail's own defect in a new shape: an instrument left switched on. The
+       question it was opened to ask has been answered. */
+    await layout.toField();
+    await windToDay(endOfDayOf(keptMs[2]));
+    expect(rows().length, "the dates are still standing over the wall").toBe(0);
   });
 });
 
 describe("winding the dial forward again", () => {
   it("brings the memories back, and brings them back switched on", async () => {
     await layout.toField();
-    await windTo(railPos(between(2, 3)));
-    expect(layout.audit().present, "the wind back happened").toBe(stood(between(2, 3)));
+    const then = endOfDayOf(keptMs[2]);
+    await windToDay(then);
+    expect(layout.audit().present, "the wind back happened").toBe(stood(then));
 
-    await windTo(1);
+    await windToNow();
 
     expect(layout.audit().present, "everything kept exists again at now").toBe(keptMs.length);
     /* The half that is easy to lose: what returns has to be poured back in,
@@ -332,56 +397,98 @@ describe("winding the dial forward again", () => {
   });
 });
 
-describe("which end of the rail is which", () => {
+describe("what the list offers", () => {
   /**
-   * BOTH ENDS ARE NAMED, SO BOTH ENDS ARE READ.
+   * THE ROWS ARE THE DAYS THIS WALL CHANGED, AND NOTHING ELSE IS ON THEM.
    *
-   * The counts alone cannot say what this case is called. "Nothing is present
-   * at the top" is true of any top end earlier than your first memory, three
-   * days or three years; "everything is present at the right end" is true of
-   * any right end at or after your NEWEST memory, which in this fixture is four
-   * days before today. A rail that ran to your last save instead of to now
-   * would satisfy every count below and be wrong in the way a person would
-   * notice first — the days since their last save would have vanished from
-   * the world.
+   * The rail could not make this claim. It offered its whole length, and most
+   * of that length was the same wall shown again at a different height — plus
+   * a stretch at the far end, three days long, where the ground was simply
+   * empty, because the rail began before the first thing you ever kept.
    *
-   * So the rail's own date readout is asked at each end and checked against
-   * the moment the test computed for it. Both are far from the neighbour they
-   * could be confused with: the left end says "May third" where the first
-   * memory is May sixth, the right end says "August sixteenth" where the
-   * newest memory is August eleventh. The words come from the product's own formatter — what is
-   * pinned is which moment the rail's ends sit at, not the spelling of a month.
+   * Both halves are asserted, because each alone is satisfiable by a bug:
+   * "every day the fixture holds is offered" passes for a list that also
+   * offers a hundred days that hold nothing, and "every day offered holds
+   * something" passes for a list of one.
    */
-  it("runs from today at the top to before your first memory at the foot", async () => {
+  it("lists the days this wall actually changed, newest first, and no others", async () => {
     await layout.toField();
-    await windTo(0);
+    await openDates();
 
-    /* The rail opens three days before the earliest thing you ever kept, so
-       its left end is a day on which this ground was genuinely empty. This is
-       the one place that cannot use expectGroundIsWhole — nothing present is
-       the correct answer — so wholeness is stated the other way round:
-       nothing present, and nothing left switched on behind it. */
-    const top = layout.audit();
-    expect(top.present, "the left end of the rail is before your first memory").toBe(0);
-    expect(top.drawn.active, "and nothing is left lit after the last one leaves").toBe(0);
-    expect(top.onScreen).toBe(0);
-    /* the exact day, not merely "early enough": three days before the first
-       memory, which is the page's own `earliest - 3 * DAY_MS` */
-    expect(
-      one(".jar-dial-date").textContent,
-      "the left end of the rail should name the day three days before your first memory",
-    ).toBe(dateWords(railStart, railEnd));
+    const said = rows().map((r) => (r.textContent ?? "").trim());
+    expect(said[0], "the first row is the way back to the present").toBe("now");
 
-    await windTo(1);
+    expect(said.slice(1), "the dates offered are this wall's own days, newest first").toEqual(
+      pastDays().map((ms) => dateWords(ms, railEnd)),
+    );
+  });
 
-    expect(layout.audit().present, "the right end of the rail is now").toBe(keptMs.length);
-    /* AND THE RIGHT END IS TODAY, not the day of your last save. This is the
-       assertion the counts cannot make: every memory is present either way. */
-    expect(
-      one(".jar-dial-date").textContent,
-      "the right end of the rail should name today, not the day of your newest memory",
-    ).toBe(dateWords(railEnd, railEnd));
-    expectGroundIsWhole("at the right end of the rail");
+  it("offers nothing it cannot then name — every row is where the word lands", async () => {
+    /**
+     * THE ONE HAZARD A LIST HAS THAT A RAIL DID NOT. A position on a rail is
+     * just a position; a ROW is a promise, and the promise it makes is the
+     * words on it. The newest memory in this fixture was kept close enough to
+     * the present that winding to it IS winding to now — so offering it as a
+     * date would be the same destination under two names, and pressing it
+     * would leave the word reading `now` rather than the row it answered.
+     *
+     * Every row is pressed and the word is read back. `windToDay` and
+     * `windToNow` each throw with their own sentence if the two part company,
+     * so a list that offered a day it could not name fails here by name.
+     */
+    await layout.toField();
+    await openDates();
+    const said = rows().map((r) => (r.textContent ?? "").trim());
+    expect(said.length, "there are rows to press").toBeGreaterThan(1);
+    expect(said.filter((t) => t === "now").length, "the present is offered once").toBe(1);
+    expect(new Set(said).size, "and no row is offered twice").toBe(said.length);
+
+    for (const label of said) {
+      if (label === "now") {
+        await windToNow();
+        continue;
+      }
+      const at = pastDays().find((ms) => dateWords(ms, railEnd) === label);
+      expect(at, `the list offers ${label}, which is not a day this wall changed`).toBeDefined();
+      await windToDay(at as number);
+    }
+  });
+
+  it("never offers a day with nothing standing on it", async () => {
+    await layout.toField();
+    await openDates();
+    const dates = rows()
+      .map((r) => (r.textContent ?? "").trim())
+      .filter((t) => t !== "now");
+    expect(dates.length, "there are dates to check").toBeGreaterThan(0);
+
+    for (const label of dates) {
+      const at = pastDays().find((ms) => dateWords(ms, railEnd) === label);
+      expect(at, `the list offers ${label}, which is not a day this wall changed`).toBeDefined();
+      await windToDay(at as number);
+      expect(
+        layout.audit().present,
+        `${label} is offered but the wall is empty there — a date you can press ` +
+          "and see nothing is the rail's own dead length come back",
+      ).toBeGreaterThan(0);
+      expect(layout.audit().present, `${label} should show what had been kept by then`).toBe(
+        stood(at as number),
+      );
+    }
+  });
+
+  it("means today by `now`, not the day of your newest save", async () => {
+    /**
+     * The assertion the counts cannot make: the newest memory in this fixture
+     * is four days old, so a list whose top row meant "the day of your last
+     * save" would hold every memory and satisfy every count above, while the
+     * four days since would have quietly vanished from the world.
+     */
+    await layout.toField();
+    await windToDay(endOfDayOf(keptMs[0]));
+    await windToNow();
+    expect(one(".jar-when").textContent, "the top of the list is the present itself").toBe("now");
+    expect(layout.audit().present, "and the present holds everything kept").toBe(keptMs.length);
   });
 });
 
@@ -398,18 +505,18 @@ describe("the mouth while the dial is away from now", () => {
     await layout.toField();
     expect(one(".jar-mouth-slot").className, "the mouth is open at now").not.toContain("--away");
 
-    const then = between(2, 3);
-    await windTo(railPos(then));
-    /* the dial really is in the past — the ground says so, not just the
-       handle. A mouth that went quiet over a dial that had not moved would
-       be a different bug wearing this test's green. */
+    const then = endOfDayOf(keptMs[2]);
+    await windToDay(then);
+    /* the dial really is in the past — the ground says so, not just the word.
+       A mouth that went quiet over a dial that had not moved would be a
+       different bug wearing this test's green. */
     expect(layout.audit().present, "the dial is genuinely in the past").toBe(stood(then));
     expect(
       one(".jar-mouth-slot").className,
       "the mouth should be quiet while the dial is in the past",
     ).toContain("--away");
 
-    await windTo(1);
+    await windToNow();
     expect(
       one(".jar-mouth-slot").className,
       "and open again once the dial is back at now",

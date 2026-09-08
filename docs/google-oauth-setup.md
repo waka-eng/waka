@@ -7,10 +7,15 @@ app as runtime secrets bound to the Hono API Lambda.
 > The values currently in `.env`
 > (`AUTH_GOOGLE_ID=211425047387-...apps.googleusercontent.com`,
 > `AUTH_GOOGLE_SECRET=GOCSPX-...`) are real and were created for `https://waka.im`.
-> If you only need a local `sst dev` run, you may reuse them by adding
-> `http://localhost:3001/api/auth/google/callback` to that client's authorized
-> redirect URIs. For any new stage (preview, prod-2, …) provision a fresh
-> client per the steps below.
+> If you only need a local run, you may reuse them by adding the callback for
+> whichever local stack you use to that client's authorized redirect URIs — see
+> the table under "Authorized redirect URIs" below. For any new stage (preview,
+> prod-2, …) provision a fresh client per the steps below.
+
+> **You do not need Google at all to run WAKA locally.** `/login` has a sign-up
+> tab that takes an email and a password and writes straight to your local
+> database. Every walk in `tools/e2e` uses it. Reach for the Console only when
+> the thing you are testing IS the Google flow.
 
 ---
 
@@ -30,17 +35,37 @@ app as runtime secrets bound to the Hono API Lambda.
      served from:
      ```
      http://localhost:5173        # Vite dev server
+     http://localhost:3010        # pnpm dev:local (the usual local stack)
      http://localhost:3001        # Hono Function URL (local SST dev)
      https://<sst-staticsite-url> # printed by `sst dev` once it’s up
      ```
    - **Authorized redirect URIs** — add the exact callback URL the API
      handler will receive `code` on:
      ```
-     http://localhost:3001/api/auth/google/callback
-     https://<sst-function-url>/api/auth/google/callback
+     http://localhost:3010/api/auth/callback/google
+     http://localhost:3001/api/auth/callback/google
+     https://<sst-function-url>/api/auth/callback/google
      ```
-     The path **must** match `getGoogleRedirectUri()` in
-     `packages/api/src/lib/google-oauth.ts`.
+     **`/api/auth/callback/google`, in that order** — the last two segments the
+     other way round from what this document used to say. Both paths are in
+     fact SERVED (`authRoutes.route("/google", …)` gives one and
+     `authRoutes.get("/callback/google", …)` the other, `packages/api/src/routes/auth.ts`),
+     so the old line was not pointing at a dead route — it was pointing at the
+     one the app never ASKS Google for, which fails in exactly the same way and
+     is harder to see. `getGoogleRedirectUri()` sends
+     `/api/auth/callback/google` and only that string can be registered. The
+     shape is deliberate: it follows the historical NextAuth/Auth.js Google
+     provider callback, because the existing client already has it registered.
+
+     **And the port is whatever your stack is serving on.** `getOAuthRedirectOrigin()`
+     reads `PUBLIC_API_URL`, which `scripts/dev-local.sh` sets to
+     `http://localhost:$PORT` — 3010 by default, or whatever `WAKA_LOCAL_PORT`
+     says. The banner `dev:local` prints on start names it. Only the old
+     `sst dev` path uses 3001.
+
+     Both halves **must** match `getGoogleRedirectUri()` in
+     `packages/api/src/lib/google-oauth.ts`. That function is the authority;
+     this list is a copy, and a copy is the thing that goes stale.
 4. Save. Google returns a **Client ID** (`*.apps.googleusercontent.com`)
    and a **Client secret** (`GOCSPX-...`). Copy both — the secret is shown
    exactly once.
@@ -97,8 +122,16 @@ single import works in every environment.
 
 - **`redirect_uri_mismatch`**: the URL Google sees and the URL registered in
   Authorized redirect URIs differ by even one character (trailing slash,
-  http vs https, port). Re-check `getGoogleRedirectUri()` and the Console
-  list.
+  http vs https, port, segment order). Re-check `getGoogleRedirectUri()` and
+  the Console list. The two that have actually bitten:
+  - the **port** — `dev:local` serves 3010, not the 3001 of `sst dev`, and it
+    changes again if `WAKA_LOCAL_PORT` is set;
+  - the **segment order** — the app SENDS `/api/auth/callback/google`. It also
+    serves `/api/auth/google/callback`, so registering that one looks right,
+    answers when visited by hand, and still fails the round-trip.
+
+  If you are only trying to reach the world, sign up with an email and a
+  password at `/login` instead and leave the Console alone.
 - **`origin_mismatch`**: the SPA origin isn't in Authorized JavaScript
   origins. Add `http://localhost:5173` for local Vite.
 - **Secret committed to git**: never. The values in `.env` were already

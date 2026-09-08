@@ -213,7 +213,15 @@ export function paintField(p: FieldPaint) {
 
     ctx!.globalAlpha = a;
     if (b.img) {
-      const spr = rx * 2 * view.dpr > 110 ? b.img.lg : b.img.sm;
+      /* WHICH BAKE TO DRAW, DECIDED IN CSS PIXELS. This read
+         `rx * 2 * view.dpr > 110` — a threshold in DEVICE pixels, tuned when
+         `view.dpr` could not exceed 2. The sprites are baked at 72 and 144
+         CSS px (`Home.tsx`, `mk(72)`/`mk(144)`), so the choice is about how
+         big the orb is ON SCREEN and nothing else; multiplying by the render
+         scale made it drift the moment the scale could reach 3, switching to
+         the large bake at 18 CSS px instead of 27 and handing the compositor
+         a 4x downscale to do. 55 is the old number's CSS half. */
+      const spr = rx * 2 > 55 ? b.img.lg : b.img.sm;
       ctx!.drawImage(spr, b.x - rx * pop, cyv - ry * pop, rx * 2 * pop, ry * 2 * pop);
       if (b.alive < 1) {
         /* the photo desaturating toward slate as its light leaves */

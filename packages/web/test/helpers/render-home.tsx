@@ -49,7 +49,20 @@ export const VIEWER_ID = "profile-viewer";
 /** what the group decided together — the lead entry of its board */
 export const DECIDED = "We ask the owner when the spec and the code disagree.";
 
-const BASE = Date.UTC(2026, 7, 16);
+/**
+ * MIDDAY, NOT MIDNIGHT. Every fixture moment is a whole number of days off
+ * this, so the days themselves are unchanged — what changes is that a moment
+ * now sits INSIDE its day rather than exactly on its edge.
+ *
+ * A fixture dated from midnight cannot tell the start of a day from the end
+ * of one: `capturedMs <= startOfThatDay` and `capturedMs <= endOfThatDay` are
+ * both true, so a dial that wound to the wrong edge of a day showed the
+ * identical set and every count agreed with it. Found by sabotage, not by a
+ * failure — `home-dial.test.tsx` was asked to catch exactly that bug and did
+ * not. Midday also keeps every moment on the same calendar day in every
+ * timezone this suite is likely to run in.
+ */
+const BASE = Date.UTC(2026, 7, 16, 12);
 const at = (daysAgo: number) => BASE - daysAgo * 86_400_000;
 const iso = (daysAgo: number) => new Date(at(daysAgo)).toISOString();
 
@@ -484,7 +497,7 @@ export async function mountWorld(facts: WorldFacts): Promise<MountedWorld> {
       await step(60); /* the camera snaps to a rest point, then the pour lands */
     },
     async standIn(name) {
-      await clickByText(".jar-ground-row", name);
+      await clickByText(".jar-grounds-row", name);
       await step(60);
     },
     unmount() {

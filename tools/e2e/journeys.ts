@@ -473,6 +473,89 @@ const JOURNEYS: Journey[] = [
   },
 
   {
+    id: "keep-from-elsewhere",
+    name: "a memory kept from somebody else's wall says where it went",
+    /* The keep is what this rests on: with the POST failing the archive does
+       not hold it and the world says the failure instead, so both halves go
+       red — which is also what the bug looked like, minus the failure line. */
+    breaks: (ctx) => breakRoute(ctx, (p, m) => p === "/api/inspirations" && m === "POST"),
+    run: async (page, base) => {
+      await signUp(page, base);
+
+      /* SOMEWHERE THAT IS NOT YOUR OWN WALL. A room is the reachable one — an
+         agent's wall needs an agent, a room needs only the person. Made
+         through the world's own door rather than the API, because the wall
+         this journey stands on has to be one the product actually built. */
+      await page.locator(".jar-here-more").first().click();
+      await page.waitForTimeout(800);
+      await page.getByText(/^add new$/i).first().click();
+      await page.waitForTimeout(1_200);
+      await page.locator(".jar-newplace-row", { hasText: /a room/i }).first().click();
+      await page.waitForTimeout(1_200);
+      /* `.jar-roomform` scopes it and `make it` confirms it: the agent form
+         shares the box class and says `give it a wall`. */
+      await page.fill(".jar-roomform .jar-roomform-box", "Studio");
+      await page.locator(".jar-roomform button", { hasText: /^make it$/i }).first().click();
+      await page.waitForTimeout(8_000);
+
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(400);
+      await page.locator(".jar-here-more").first().click();
+      await page.waitForTimeout(900);
+      const studio = page.locator(".jar-hq button", { hasText: /^studio$/i });
+      if ((await studio.count()) === 0) {
+        return { ok: false, detail: "no room was made, so there was nowhere else to stand" };
+      }
+      await studio.last().click();
+      await page.waitForTimeout(4_000);
+
+      const restSlot = (): Promise<string> =>
+        page.evaluate(() => {
+          const el = document.querySelector(".jar-mouth-rest");
+          return el ? (el.textContent ?? "").trim() : "";
+        });
+
+      const resting = await restSlot();
+      if (resting === "") {
+        return { ok: false, detail: "the room's wall offers no mouth, so nothing could be kept" };
+      }
+
+      const phrase = `kept while standing somewhere else ${uniq()}`;
+      await page.locator(".jar-mouth-rest").first().click();
+      await page.waitForTimeout(700);
+      await page.fill('textarea[aria-label="Capture inspiration"]', phrase);
+      /* Enter rather than the `save` button `keepInWorld` presses: the same
+         act, and the one a person writing a sentence actually reaches for. */
+      await page.keyboard.press("Enter");
+
+      /* READ IT WHILE IT IS BEING SAID. The line is a whisper and clears
+         itself after four seconds — the same trap `keepInWorld` documents
+         from the other direction. */
+      await page.waitForTimeout(1_500);
+      const said = await restSlot();
+      const persisted = await archiveHolds(page, phrase);
+
+      /* WHY THIS IS A JOURNEY OF ITS OWN. On your own wall the receipt is the
+         orb: it drops into the ground in front of you and that IS the world
+         saying so. Standing in a room the ground is somebody else's, so no
+         orb drops — and measured on 2026-08-31 nothing else happened either:
+         no orb, no line, and no count, because the archive door is not on a
+         room's wall at all. The memory landed and the mouth just emptied. A
+         person who cannot tell whether it took writes it again.
+
+         So the claim is both halves together, and neither alone is worth
+         much: the world SAID something other than its resting phrase, and the
+         archive actually HOLDS it. */
+      const spoke = said !== "" && said !== resting;
+      return {
+        ok: spoke && persisted,
+        detail: `standing in a room, the mouth read ${JSON.stringify(said)} (at rest: ` +
+          `${JSON.stringify(resting)}); the archive holds it: ${persisted}`,
+      };
+    },
+  },
+
+  {
     id: "seek",
     name: "a memory can be found again by a word from inside it",
     breaks: (ctx) =>

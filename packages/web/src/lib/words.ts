@@ -182,6 +182,38 @@ export function dateWords(ms: number, T: number, locale: WordsLocale = "en-US"):
   return `${month} ${d.getDate()}, ${d.getFullYear()}`;
 }
 /**
+ * A ROW ON THE DIAL, WHEN THE DAYS NO LONGER FIT.
+ *
+ * The dial offers the days something was kept on; past ten of them it rolls
+ * up to the months that hold something, and past ten of those to the years.
+ * Those two coarser rungs need their own label, and it is the same rule
+ * `dateWords` follows one rung down: short enough that it cannot be mistaken
+ * for a count, and carrying the year only when it is not this one — so a row
+ * never wears a year its neighbours in the same list do not.
+ *
+ * `Aug`, `Aug 2025` — `8월`, `2025년 8월` in the other hand. They live here
+ * rather than in the layout for the reason every other word does: one place
+ * where the product's language is decided, and no language literals loose in
+ * a component.
+ */
+export function dialMonth(ms: number, T: number, locale: WordsLocale = "en-US"): string {
+  const d = new Date(ms);
+  const thisYear = d.getFullYear() === new Date(T).getFullYear();
+  if (locale === "ko-KR") {
+    const m = `${d.getMonth() + 1}월`;
+    return thisYear ? m : `${d.getFullYear()}년 ${m}`;
+  }
+  const month = d.toLocaleDateString("en-US", { month: "short" });
+  return thisYear ? month : `${month} ${d.getFullYear()}`;
+}
+
+/** The coarsest rung the dial rolls up to. `2025` — `2025년`. */
+export function dialYear(ms: number, locale: WordsLocale = "en-US"): string {
+  const y = new Date(ms).getFullYear();
+  return locale === "ko-KR" ? `${y}년` : `${y}`;
+}
+
+/**
  * The name a whisper says: the given name alone. The first whitespace-
  * separated part, which is the given name in a Western name and the whole of
  * a Korean one, since those are written without a space.
