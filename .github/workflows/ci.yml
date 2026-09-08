@@ -452,10 +452,14 @@ jobs:
         run: pnpm e2e:every-orb-answers --base-url http://127.0.0.1:3010
 
       # THE DIAL HAD PRODUCED THREE FOUNDER REPORTS AND ZERO GATES, and
-      # nothing in tools/e2e had ever dragged it. Its two rules pull against
-      # each other — hold still while held, hang under the word once let go —
-      # so a repair to either one alone re-breaks the other, which is exactly
-      # what happened between 2026-08-27 and 2026-08-28.
+      # nothing in tools/e2e had ever dragged it. The drag is gone now
+      # (2026-08-30: "instead of this draggable line, when clicking on now,
+      # just show the major dates to make them clickable") and the walk went
+      # with it: it presses the word, presses a date, and checks the wall
+      # actually wound. It backdates the memories it keeps through
+      # DB_CONNECTION_URL — the instrument does not exist on a wall whose
+      # whole life is today, and there is no way through the product to keep
+      # something last month.
       - name: The timeline hangs from its word
         if: ${{ !cancelled() }}
         run: pnpm e2e:the-timeline --base-url http://127.0.0.1:3010
@@ -467,6 +471,50 @@ jobs:
       - name: Coming back to a wall does not re-read it
         if: ${{ !cancelled() }}
         run: pnpm e2e:coming-back --base-url http://127.0.0.1:3010
+
+      # NOTHING INVISIBLE TAKES A PRESS. The same defect has shipped twice —
+      # the jar's mouth, and `.jar-dial-track`: a 44px strip running half the
+      # height of the screen with no ink in it, live to every press, which
+      # swallowed presses meant for the walls list behind it. Both were found
+      # by a person pressing something and watching the wrong thing happen.
+      # `dial-rest.test.ts` refuses that one strip by name; this refuses the
+      # class. It hides each box and looks again, because the only thing that
+      # knows whether something is painted is the engine that paints it.
+      - name: Nothing invisible takes a press
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:nothing-invisible --base-url http://127.0.0.1:3010
+
+      # AND THE SAME WALK AGAINST THE RAIL PUT BACK, because a gate that
+      # cannot fail is decoration. The sabotage rebuilds the shipped SHAPE —
+      # an inkless box laid out in normal flow inside an overlay — and not a
+      # convenient fixed strip: the rail was `position: relative`, and an
+      # earlier cut of this rule required the box itself to be out of flow
+      # and would have sailed straight past the defect it is named for.
+      - name: The rail put back is found
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:nothing-invisible --base-url http://127.0.0.1:3010 --negative
+
+      # THE WORLD NEVER MOVES UNLESS THE USER MOVED IT — the one founder law
+      # with no instrument until now. It has been broken expensively before:
+      # orbs used to ORBIT, the whole ground turning forever with nobody
+      # touching it, and it took a ruling to take out.
+      #
+      # THE GROUND GOES UNWATCHED HERE AND THE RUN SAYS SO. The exact read is
+      # the loop's own ball positions behind VITE_SHOW_INTERNAL, which this
+      # build does not set; the canvas cannot answer instead, because on dim
+      # orbs it cannot tell one that MOVED from one that DIMMED. So what runs
+      # in CI is the chrome half. Closing the rest means a second web build
+      # here or internals on staging — a decision about how the product is
+      # built, left to be taken deliberately rather than smuggled in by a
+      # gate. Verified locally against a build with the flag on: the designed
+      # float travels 5px of the 20 it is allowed.
+      - name: The world holds still when nobody touches it
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:holds-still --base-url http://127.0.0.1:3010
+
+      - name: A world that drifts is found
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:holds-still --base-url http://127.0.0.1:3010 --negative
 
       # THE CHARACTER IS ONE SIZE EVERYWHERE. It used to be sized from the
       # viewport and then shrunk again into whatever room headquarters had
@@ -486,7 +534,14 @@ jobs:
       # already produced one gate that passed here every time and failed there
       # every time. It reports; it does not yet gate. Make it blocking once a
       # run of green CI says it earns that.
-      - name: The product at phone size (report only)
+      #
+      # IT WALKS 768 TOO, since 2026-08-31. Not because a tablet was asked
+      # for: 768 is the seam between the phone band's media query and every
+      # desktop viewport this repo measures at, which is where a rule written
+      # for one side and a rule written for the other meet. The top edge
+      # lying across itself was that class of defect. Clean the day it was
+      # added; the sabotage finds five things there, so it is a live check.
+      - name: The product at hand-held size (report only)
         if: ${{ !cancelled() }}
         continue-on-error: true
         run: pnpm e2e:phone --base-url http://127.0.0.1:3010
@@ -514,7 +569,15 @@ jobs:
 
       # Every act pressed against a 500 on the route it rests on. The question
       # is not whether it failed — `journeys --negative` already asks that —
-      # but whether ANYTHING SAID SO. Seven acts; three used to say nothing.
+      # but whether ANYTHING SAID SO. Nine acts; three used to say nothing.
+      #
+      # The two newest are the verbs that live inside an open CARD — answering
+      # a memory, and changing who may read it. Both write their failure with
+      # `setMouthNote`, and that slot renders inside the MOUTH, which is not
+      # where either act happens. A line written into a slot that is not on
+      # the surface the act happened on is exactly what made keeping from a
+      # room's wall silent. Measured rather than assumed: both speak, under a
+      # 500, a dropped connection and a 401.
       - name: Failure paths (every act must say what went wrong)
         if: ${{ !cancelled() }}
         run: pnpm e2e:when-it-fails
