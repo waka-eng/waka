@@ -1940,9 +1940,45 @@ function HomeExperience(): JSX.Element {
   }, [draft]);
   /* an unfinished sentence found on arrival opens the mouth holding it, rather
      than sitting invisible behind a phrase that says nothing about it */
-  /* where the memory being written is headed; private unless said otherwise,
-     and reset after every keep so a one-off never becomes a standing setting */
-  const [keepPublic, setKeepPublic] = useState(false);
+  /**
+   * WHERE THE MEMORY BEING WRITTEN IS HEADED — and it is where the LAST one
+   * went, not where the first one did.
+   *
+   * Founder, 2026-09-08: "let's say if I captured inspiration and decided
+   * that I wanted to make it public once, then keep the past, keep the last
+   * selection. Don't default to private."
+   *
+   * WHAT THIS REPLACES, AND WHY IT WAS WRONG. The rule was "private unless
+   * said otherwise, and reset after every keep so a one-off never becomes a
+   * standing setting". It reads as caution and behaves as amnesia: a person
+   * who works in the open re-answers the same question on every capture, and
+   * a question re-answered identically forty times is one the product should
+   * have learned. The reset was defending against a public choice LEAKING
+   * into a later private one — but nothing here is silent. The row renders
+   * which of the two stands, on every open, before anything is written; the
+   * state is on screen, so remembering it is not a secret being kept.
+   *
+   * FIRST EVER CAPTURE IS STILL PRIVATE. `false` is what a browser with
+   * nothing stored reads as, so the default only stops applying once the
+   * person has actually said `public` — which is what "keep the last
+   * selection" means. Private mode, or storage that throws, falls back to the
+   * same private default rather than to whatever the tab happened to hold.
+   */
+  const [keepPublic, setKeepPublic] = useState(() => {
+    try {
+      return window.localStorage.getItem("waka.keepPublic") === "1";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      if (keepPublic) window.localStorage.setItem("waka.keepPublic", "1");
+      else window.localStorage.removeItem("waka.keepPublic");
+    } catch {
+      /* private mode: the choice lives as long as the tab does */
+    }
+  }, [keepPublic]);
   const [mouthOpen, setMouthOpen] = useState(() => {
     try {
       return (window.localStorage.getItem("waka.draft") ?? "") !== "";
@@ -10132,7 +10168,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         /* the world already has this orb (`born` above); recording the id
            keeps it out of the pour signature so nothing is rebuilt */
         bornIdsRef.current.add(made.id);
-        setKeepPublic(false);
+        /* AND THE DESTINATION IS NOT RESET. `setKeepPublic(false)` stood here
+           and made every capture start over at private; the founder asked for
+           the last selection to hold (2026-09-08). It survives the keep, and
+           the reload, in `waka.keepPublic` — see the state's own note. */
         simApiRef.current?.identify(seed.id, made.id);
         /* AND IT JOINS THE ARCHIVE, NOT ONLY THE GROUND.
            The orb was born on the canvas and the row was written on the
