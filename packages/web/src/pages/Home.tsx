@@ -1472,9 +1472,6 @@ function HomeExperience(): JSX.Element {
   /** LAYER 3 — the one artifact this profile stands on. Null before the first
       synthesis, which the layout says in words rather than leaving blank. */
   const [topOfMind, setTopOfMind] = useState<TopOfMind | null>(null);
-  /** The background sweep has finished. The only thing that waits for it is
-      imagery, which must appear all at once or not at all. */
-  const [sweepDone, setSweepDone] = useState(false);
   /** pattern id → what it rests on. Filled by the sky's background sweep;
       read by the orbit, which never fetches on tap. */
   const evidenceBySignalRef = useRef<Map<string, Evidence[]>>(new Map());
@@ -3238,9 +3235,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
          when it does. Publishing per arrival would pop pictures into orbs one
          at a time under a reader's eyes, which is the mid-read swap the layout
          forbids everywhere else. */
-      void Promise.all(Array.from({ length: 4 }, () => pump())).then(() => {
-        if (!dead) setSweepDone(true);
-      });
+      void Promise.all(Array.from({ length: 4 }, () => pump()));
     }, 400);
     return () => {
       dead = true;
@@ -3250,21 +3245,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
 
   /* ------------- derived data (changes only when data changes) ------------- */
 
-  /**
-   * A memory's image, by memory id.
-   *
-   * The archive row carries only a summary of what is attached, so the URL
-   * arrives with the DETAIL — which the background sweep is already fetching
-   * for every memory. That is why this reads the sweep's cache rather than a
-   * second endpoint: one request per memory, not two, and an orb gains its
-   * image on the same beat its words arrive rather than in a later flash.
-   */
-  const urlById = useMemo(() => {
-    void inspirations;
-    const m = new Map<string, string>();
-    for (const d of detailsRef.current.values()) if (d.imageUrl) m.set(d.id, d.imageUrl);
-    return m;
-  }, [inspirations, sweepDone]);
 
   /**
    * THE DATES YOU CAN ACTUALLY GO TO (founder, 2026-08-30: "instead of this
@@ -3421,57 +3401,23 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     /* one surface, so this bakes once — and again only on a DPR change */
   }, []);
 
-  /* ------------- image balls (merged by signal id from inspirations) -------------
-     Images load WITHOUT crossOrigin on purpose: third-party OG hosts give no
-     CORS guarantee, and drawing them taints the canvas — which is fine
-     because nothing here ever reads the canvas back (no getImageData, no
-     toDataURL). Dominant-color sampling is therefore forbidden; halo hue
-     comes from the theme hash instead. */
-  const loadSpritesRef = useRef<() => void>(() => undefined);
-  useEffect(() => {
-    loadSpritesRef.current = () => {
-      const bag = ballsRef.current;
-      if (!bag || urlById.size === 0) return;
-      const dpr = renderScale(window.innerWidth, window.innerHeight);
-      for (const b of bag.list) {
-        const url = urlById.get(b.id);
-        if (!url || b.imgUrl === url) continue;
-        b.imgUrl = url;
-        const im = new Image();
-        im.onload = () => {
-          if (ballsRef.current !== bag) return;
-          /* Circle-clip ONCE into offscreen sprites at load (2 sizes) — never
-             per frame. */
-          const mk = (d: number) => {
-            const c = document.createElement("canvas");
-            const px = Math.ceil(d * dpr);
-            c.width = px;
-            c.height = px;
-            const g = c.getContext("2d");
-            if (g) {
-              g.beginPath();
-              g.arc(px / 2, px / 2, px / 2, 0, TAU);
-              g.clip();
-              const scale = Math.max(px / im.width, px / im.height);
-              const w = im.width * scale;
-              const h = im.height * scale;
-              g.drawImage(im, (px - w) / 2, (px - h) / 2, w, h);
-            }
-            return c;
-          };
-          b.img = { sm: mk(72), lg: mk(144) };
-          simApiRef.current?.wake();
-        };
-        /* Instagram may 403 hotlinks: silent degrade to a plain light ball. */
-        im.onerror = () => undefined;
-        im.src = url;
-      }
-    };
-    /* Run now (covers image URLs resolving after the balls exist) — and the
-       sim effect below re-invokes it right after creating a fresh bag, so
-       the two fetches' resolution order no longer matters. */
-    loadSpritesRef.current();
-  }, [urlById, inspirations]);
+  /* NO IMAGE EVER RIDES AN ORB (founder, 2026-09-08, over a screenshot of a
+     ball wearing the LinkedIn mark: "What is this LinkedIn logo? It's weird.
+     Remove it. The balls should never have those logos or anything.").
+
+     What stood here fetched each memory's og:image, circle-clipped it into
+     two offscreen sprites at load, and the field drew the photo INSTEAD of
+     the disc. On a link to a company page that image is the company's logo,
+     so the world quietly filled with other people's brands — and the disc is
+     the one thing in this product that carries meaning: light is aliveness,
+     hue is whose it is, resolution is what kind of mind kept it. A logo
+     overwrites all three with an advertisement.
+
+     Gone with it: `urlById`, the sprite bake, `Ball.img` and `Ball.imgUrl`,
+     and the image branch in `field-paint`. The attachment's image is still
+     fetched and still shown where a picture belongs — inside the memory when
+     you open it. It simply never becomes the memory's body. */
+
 
   /** THE SKY, AS THE FORMING LINE COUNTS IT: the signals still emerging,
       each with the moment it first appeared so the dial can wind past it. */
@@ -3990,9 +3936,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     for (const b of list) TRef.current = Math.max(TRef.current, b.capturedMs);
 
     for (const b of list) colorBall(b, TRef.current);
-    /* Sprites for any image URLs that resolved before this bag existed
-       (inspirations winning the network race must not lose their imagery). */
-    loadSpritesRef.current();
 
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
     /* EITHER SOURCE STILLS IT. The system preference is the standing answer;
@@ -11558,11 +11501,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         name: file.name,
         contentType: file.type || undefined,
       });
-      /* the picture arrives with the next sweep, all at once — never one orb
-         at a time under a reader's eyes */
-      setSweepDone(false);
+      /* the detail is re-read so the OPEN memory shows its new attachment;
+         nothing on the field waits for it any more — an orb is a disc */
       detailsRef.current.delete(inspirationId);
-      void loadDetailRef.current(inspirationId).then(() => setSweepDone(true));
+      void loadDetailRef.current(inspirationId);
     } catch {
       /* the memory is already kept; only the picture failed to land */
     } finally {
