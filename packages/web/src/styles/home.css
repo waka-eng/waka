@@ -1361,14 +1361,27 @@
    the ink unmoved" — so this takes the same `::after` halo the ways and the
    signposts carry, and stops taking the rest of the line. The slot centres
    its contents already, so nothing moves. */
+/* AND IT IS A BLOCK, NOT AN INLINE-BLOCK (founder, 2026-09-08, from a
+   recording: "Capture inspiration moves up and down slightly when I click on
+   it. No matter if it's clicked or not clicked, it should always be in the
+   same position"). An inline-block sits on a line box in the slot, so it
+   carries the slot's own leading above it; the field it is replaced by is a
+   real block and does not. One pixel on a desktop — small, and exactly the
+   kind of small that reads as the page flinching under the hand. `fit-content`
+   with auto margins keeps everything the tap-target ruling above won: the box
+   is still only as wide as its ink, and the slot still centres it. */
 .jar-mouth-rest {
-  display: inline-block;
-  width: auto;
+  display: block;
+  width: fit-content;
   position: relative;
   appearance: none;
   -webkit-appearance: none;
   border: 0;
-  margin: 0;
+  /* auto on the sides, because a shrink-to-fit block is not centred by the
+     slot's `text-align` the way an inline-block was — and `margin: 0` here
+     would silently take it back, which is how the first pass at this landed
+     the phrase against the left edge */
+  margin: 0 auto;
   padding: 0;
   background: none;
   /* font-family only: .jar-label supplies the rest and must not be
@@ -2955,11 +2968,35 @@
    also why `e2e:measure` still reads the same geometry it was written
    against. */
 @media (pointer: coarse) {
-  /* the one act: 19px -> 45px, taken as air around the words rather than as
-     bigger type, so the mouth reads exactly as it was designed to */
+  /* THE ONE ACT: 19px -> 47px, taken as air around the words rather than as
+     bigger type, so the mouth reads exactly as it was designed to. It was a
+     raw 13px each side, landing on 45; `--sp-14` is the grid step beside it,
+     lands on 47, and is two pixels no eye finds — so the exception the
+     spacing gate had to carry goes away and the act still clears its 44.
+
+     AND THE FIELD TAKES THE SAME AIR — which is not decoration, it is the
+     founder's report of 2026-09-08, from a recording: "Capture inspiration
+     moves up and down slightly when I click on it. No matter if it's clicked
+     or not clicked, it should always be in the same position." This padding
+     was on the phrase ALONE, so on a phone the resting words sat thirteen
+     pixels lower inside their own box than the placeholder that replaces
+     them, and every press jumped the sentence up by exactly that. MEASURED at
+     393x852 DPR 3: the ink band moved from device rows 114-134 to 75-95 — 39
+     device pixels, 13 CSS pixels, on a ten-pixel word.
+
+     The phrase is the half that stays put, because its position is written
+     from the companion's own chin; the field comes to IT. The field is
+     border-box and its height is written from its own `scrollHeight`, which
+     counts padding, so the drawer still grows by the line.
+
+     THE FIELD'S HALF IS DECLARED IN `@layer chrome`, NOT HERE. This block is
+     in `product`, and `chrome.css` pads every bare textarea, so the mouth
+     answers that from inside `chrome` with a flat `padding: 0`. A
+     coarse-pointer rule written here loses to it in silence — measured, by
+     writing it here first and reading back a computed `0px`. */
   .jar-mouth-rest {
-    padding-top: 13px;
-    padding-bottom: 13px;
+    padding-top: var(--sp-14);
+    padding-bottom: var(--sp-14);
   }
   /* the verbs under it: 11px -> 44px. The row grows, and on a phone that is
      the right trade — these decide who may read a memory and whether it is
@@ -3811,6 +3848,21 @@
        is set the way the panel sets a memory. */
     text-align: center;
     color: var(--jar-ink);
+  }
+  /* AND ON A COARSE POINTER IT TAKES THE PHRASE'S AIR, so that pressing the
+     phrase changes what the words ARE and nothing about where they sit
+     (founder, 2026-09-08: "it should always be in the same position").
+     Written from inside this layer, not beside the phrase's own rule up in
+     `product`, because the flat `padding: 0` above out-ranks anything that
+     layer can say about this property — the fourth time this file has been
+     caught by that order, and the first time it was caught before shipping.
+     The drawer keeps its own padding: `.jar-mouth-slot--note .jar-mouth-field`
+     is more specific and later, so a full page is unaffected. */
+  @media (pointer: coarse) {
+    .jar-mouth-field {
+      padding-top: var(--sp-14);
+      padding-bottom: var(--sp-14);
+    }
   }
   /* THE WELL — the recessed place you write, and the drawer's whole claim to
      being a drawer. A sheet with text lying on its face is still a surface; a
