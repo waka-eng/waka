@@ -204,7 +204,6 @@ import {
   revokeAgentKey,
   type ApiAgentKey,
   type ApiMintedKey,
-  declarePrinciple,
   deletePrinciple,
   disputePrinciple,
   reorderPrinciples,
@@ -1412,13 +1411,14 @@ function HomeExperience(): JSX.Element {
    * `yes · partly · not true`. A person who has learned that a claim answers
    * back when you press it has already learned this.
    *
-   * `pick` is which principle is open, `pDraft` is the words being typed
-   * (declaring when `pDraft.id` is null, correcting when it is not), and
+   * `pick` is which principle is open, `pDraft` is the words being typed —
+   * always a CORRECTION to a sentence that already exists, since 2026-09-08
+   * when the declare path went (a value is generated, never typed) — and
    * `pGoing` is the two-step on removal — a destructive word is never beside
    * its own yes, the same rule the settings sheet keeps four times over.
    */
   const [pick, setPick] = useState<string | null>(null);
-  const [pDraft, setPDraft] = useState<{ id: string | null; text: string } | null>(null);
+  const [pDraft, setPDraft] = useState<{ id: string; text: string } | null>(null);
   const [pGoing, setPGoing] = useState<string | null>(null);
   /**
    * WHAT A PRINCIPLE GREW FROM — the one edge the world could not draw.
@@ -10940,50 +10940,32 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     setPrinciples(rows);
   }, []);
 
+  /**
+   * CORRECTING ONE — the only writing act left on this band.
+   *
+   * WHAT STOOD BESIDE IT, AND WHY IT IS GONE. Founder, 2026-09-08: "You
+   * cannot declare your own values. This can only be generated. So remove
+   * this option." A second path here took a draft with no id, posted it to
+   * `POST /principles`, and reported which way the server routed it — what
+   * qualified came back a principle, what read as a goal was kept as an
+   * inspiration instead. That path was added on 2026-09-01 so that a person
+   * with no values could give their word first, and it is the same hand that
+   * has now withdrawn it: layer four is EARNED from what you keep, so a
+   * sentence a person can type straight into it is a sentence no evidence
+   * ever had to support. The route still answers on the server; nothing in
+   * the product calls it, and retiring the endpoint is its own decision.
+   */
   const savePrinciple = useCallback(() => {
     const draft = pDraft;
     if (!draft || pBusy) return;
     const text = draft.text.trim();
     if (text === "") return;
     setPBusy(true);
-    /**
-     * DECLARING IS ROUTED, NOT REFUSED — and the world has to say which way it
-     * went. `POST /principles` never rejects: what qualifies comes back as a
-     * principle, and what is really a rule or a goal is KEPT AS AN INSPIRATION
-     * instead (`ApiDeclarationResult`).
-     *
-     * The first version of this ignored the answer, reloaded, and closed. So
-     * typing "I finish what I start." — a goal — returned 201, added nothing
-     * to the band, and said nothing: the person is told their words were
-     * saved by the absence of an error, and shown a list that does not
-     * contain them. Caught by walking it in a browser, which is the only
-     * reason it is not shipping.
-     */
-    const done = () => {
-      setPDraft(null);
-      setPick(null);
-    };
-    if (draft.id) {
-      void updatePrinciple(draft.id, text)
-        .then(() => reloadPrinciples())
-        .then(done)
-        .catch((err) => setCharSay(whyFailed(err, say("worldNotSaved"))))
-        .finally(() => setPBusy(false));
-      return;
-    }
-    void declarePrinciple(text)
-      .then((result) => {
-        if (result.created === "inspiration") {
-          /* Not a failure and not a correction — a different filing, said in
-             the world's own voice rather than left for the person to infer
-             from an unchanged list. */
-          setCharSay(
-            "That reads as something to do rather than something you hold to, so it is kept as a memory.",
-          );
-          done();
-          return undefined;
-        }
-        return reloadPrinciples().then(done);
+    void updatePrinciple(draft.id, text)
+      .then(() => reloadPrinciples())
+      .then(() => {
+        setPDraft(null);
+        setPick(null);
       })
       .catch((err) => setCharSay(whyFailed(err, say("worldNotSaved"))))
       .finally(() => setPBusy(false));
@@ -12326,55 +12308,20 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         </p>
                       </>
                     )}
-                    {/* DECLARING ONE — the only act here not about a
-                        sentence already on screen, so it does not hang off
-                        one, and it does not wait for one either: giving
-                        your word FIRST is what aspirational exists for, so
-                        the empty sky offers it under the forming words
-                        (founder, 2026-09-01 — before this, a person with
-                        no values had no way to declare their first). */}
-                    {w.kind === "self" ? (
-                      pDraft && pDraft.id === null ? (
-                        <p className="jar-values-held">
-                          <textarea
-                            className="jar-ground-edit"
-                            aria-label={say("worldAPrincipleOfYourOwn")}
-                            value={pDraft.text}
-                            rows={2}
-                            autoFocus
-                            placeholder={say("worldWhatYouHoldTo")}
-                            onChange={(e) => setPDraft({ id: null, text: e.target.value })}
-                            onKeyDown={(e) => {
-                              if (e.key === "Escape") {
-                                e.preventDefault();
-                                setPDraft(null);
-                              }
-                            }}
-                          />
-                          <span className="jar-ask">
-                            <button type="button" disabled={pBusy} onClick={savePrinciple}>
-                              {pBusy ? say("worldDeclaring") : say("worldDeclareIt")}
-                            </button>
-                            <span aria-hidden="true"> · </span>
-                            <button type="button" onClick={() => setPDraft(null)}>
-                              {say("worldNotNow")}
-                            </button>
-                          </span>
-                        </p>
-                      ) : (
-                        <p className="jar-ask jar-values-declare">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setPick(null);
-                              setPDraft({ id: null, text: "" });
-                            }}
-                          >
-                            {say("worldDeclareOne")}
-                          </button>
-                        </p>
-                      )
-                    ) : null}
+                    {/* NOTHING IS DECLARED HERE. What stood in this slot was
+                        `declare one`, and under it a two-line draft with
+                        `declare it · not now` — the one act on this band that
+                        was not about a sentence already on screen. Founder,
+                        2026-09-08: "You cannot declare your own values. This
+                        can only be generated. So remove this option." It
+                        reverses their own ruling of 2026-09-01, which put the
+                        verb here so a person with no values could give their
+                        word first, and the reversal is the stronger reading of
+                        the layer: a value is what the evidence turned out to
+                        say about you, so a value you can type is a claim
+                        nothing under it has to earn. The empty state above
+                        now says the whole truth about this band — it fills
+                        when there is enough kept to fill it, and not before. */}
                   </div>
                 ) : null}
                 {ready && c ? (

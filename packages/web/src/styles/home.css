@@ -773,11 +773,6 @@
   color: var(--jar-faint);
   text-shadow: none;
 }
-/* Declaring one of your own belongs to the SET, not to whichever value
-   happens to stand last — the extra air says so. */
-.jar-values-declare {
-  margin-top: var(--sp-28);
-}
 /* A contested value is a light that cannot settle — the same waver the
    grounds carry (#307), one layer up, and the same stillness under
    reduced motion: half-settled ink, state shown, motion home. */
@@ -2979,16 +2974,6 @@
   /* the two signposts on the vertical axis: 21px -> 27px, past WCAG's 24 */
   .jar-values,
   .jar-saved {
-    padding-top: var(--sp-8);
-    padding-bottom: var(--sp-8);
-  }
-  /* AND THE SKY'S OWN VERB, 15px -> 31px. `declare one` arrived with the
-     sky's honesty pass (#305 range, 2026-09-01) and came in at 70x15 — under
-     the 24 this block holds everything to, on the world, the mouth open and
-     a memory open, at all three viewports. It is not an exception to the rule
-     above; it is a control the rule had not been extended to yet, which is
-     what "brought to it where it falls short" means. Found by `e2e:phone`. */
-  .jar-values-declare button {
     padding-top: var(--sp-8);
     padding-bottom: var(--sp-8);
   }

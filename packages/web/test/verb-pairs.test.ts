@@ -110,11 +110,22 @@ const REGISTER: Record<string, string> = {
   refreshTopOfMind: "RULED: regeneration is idempotent; there is no prior state to restore",
   refreshGroupTopOfMind: "RULED: the same, for a room",
 
-  // what you declare
-  declarePrinciple: "deletePrinciple",
-  deletePrinciple: "declarePrinciple",
+  // what the machine concluded you hold to. NOTHING DECLARES ONE (founder,
+  // 2026-09-08: "You cannot declare your own values. This can only be
+  // generated. So remove this option."), so `declarePrinciple` is no longer a
+  // verb the product offers and is not on this register. That makes removal
+  // the one act here with no verb facing it, which is a ruling rather than an
+  // omission: what a principle rests on is its evidence, and the evidence
+  // survives removal untouched, so the way back is the next generation
+  // drawing the same conclusion from the same kept memories. A verb that
+  // re-declared it by hand would be exactly the door that was just closed.
+  deletePrinciple:
+    "RULED: a principle is earned, not written — the way back is the evidence " +
+    "it rested on, which removal does not touch, and the next generation over it",
   updatePrinciple: "RULED: an edit is its own inverse",
-  disputePrinciple: "RULED: a stance on the machine's sentence; it is answered by declaring your own",
+  disputePrinciple:
+    "RULED: a stance on the machine's sentence — answered by what you keep next, " +
+    "since there is no declaring your own",
   reorderPrinciples: "RULED: an ordering is its own inverse — move it back",
 
   // rooms
