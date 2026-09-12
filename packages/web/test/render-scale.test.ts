@@ -60,8 +60,14 @@ describe("render scale", () => {
     expect(offenders, `devicePixelRatio belongs to canvas/scale.ts: ${offenders.join(", ")}`).toEqual(
       [],
     );
+    /* TWO, and it was three until the orbs stopped carrying photographs.
+       The third site baked an attachment's og:image into circle-clipped
+       sprites, and that whole path went out with the LinkedIn logo — so the
+       canvas sites are now the palette bake and the resize. Lowered rather
+       than loosened: the number is the count of places that ask the device
+       how sharp it is, and it should be checked, not waved at. */
     const home = readFileSync(resolve(SRC, "pages/Home.tsx"), "utf8");
-    expect(home.match(/renderScale\(/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
+    expect(home.match(/renderScale\(/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
   });
 
   it("gives a phone its own three, which is the bug that was reported", () => {

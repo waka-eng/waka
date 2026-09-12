@@ -397,6 +397,103 @@ describe("winding the dial forward again", () => {
   });
 });
 
+describe("how the list opens", () => {
+  /**
+   * A MOUSE ARRIVING ON THE WORD IS A REACH FOR THE LIST.
+   *
+   * Founder, 2026-09-08: "when I hover on now, the text list should appear."
+   * This reverses half of 2026-08-30, and only half. A `timeNear` used to
+   * open the rail on hover AND close it on leaving the word — which cannot
+   * work for a menu, because the pointer has to leave the word to reach the
+   * list. So the opening comes back and the closing does not: the ways out
+   * are still a press on the word, a press anywhere else, and picking a day.
+   *
+   * AND IT IS GATED ON A MOUSE, which is the case a phone would otherwise
+   * lose entirely: a tap fires `pointerenter` before it fires `click`, so an
+   * ungated hover would open the list and the press would toggle it straight
+   * shut. Both cases are here because passing one alone is what shipping the
+   * bug looks like.
+   */
+  const arrive = (pointerType: string) => {
+    const word = one(".jar-when");
+    /* React routes `onPointerEnter` through `pointerover` with no
+       `relatedTarget`, so that is the event a hover really is */
+    word.dispatchEvent(
+      new PointerEvent("pointerover", { bubbles: true, pointerType, relatedTarget: null }),
+    );
+  };
+
+  it("opens the days when a mouse arrives on the word", async () => {
+    expect(rows().length, "the list was already open before the hover").toBe(0);
+    await act(async () => {
+      arrive("mouse");
+    });
+    expect(rows().length, "hovering `now` opened nothing").toBeGreaterThan(0);
+  });
+
+  it("leaves the list up when the pointer travels to it", async () => {
+    /* the whole reason the 2026-08-30 hover was removed: the list is not
+       under the word, it is beside it, so a hover that closes on leaving is
+       a list nobody can reach */
+    await act(async () => {
+      arrive("mouse");
+    });
+    const open = rows().length;
+    await act(async () => {
+      one(".jar-when").dispatchEvent(
+        new PointerEvent("pointerout", { bubbles: true, pointerType: "mouse" }),
+      );
+    });
+    expect(rows().length, "the list went with the pointer").toBe(open);
+  });
+
+  it("keeps the list up when the word is pressed after the hover", async () => {
+    /* THE REGRESSION THIS CASE EXISTS FOR. The first cut opened on hover and
+       left the press a plain toggle, so the most ordinary gesture there is —
+       move onto the word, then click the thing you are looking at — opened
+       the list and shut it again in one motion. Found by pressing it the way
+       Playwright does: `click()` moves the pointer first, so four walks that
+       reach the dates through this word (`the-timeline`, `first-sixty`,
+       `nothing-invisible`) were photographing a surface that was not there.
+       A person who hovers and then presses means "yes, this one". */
+    await act(async () => {
+      arrive("mouse");
+    });
+    const open = rows().length;
+    expect(open, "the hover opened nothing, so this case proves nothing").toBeGreaterThan(0);
+    await act(async () => {
+      one(".jar-when").click();
+    });
+    expect(rows().length, "the press after the hover shut the list").toBe(open);
+  });
+
+  it("still closes on the press after that, so the word is a way out", async () => {
+    /* and the memory is spent, not permanent: the second press is the exit
+       the 2026-08-30 note promised and this must not quietly remove */
+    await act(async () => {
+      arrive("mouse");
+    });
+    await act(async () => {
+      one(".jar-when").click();
+    });
+    await act(async () => {
+      one(".jar-when").click();
+    });
+    expect(rows().length, "the word stopped being a way out of its own list").toBe(0);
+  });
+
+  it("does not open under a finger, because the press already answers", async () => {
+    await act(async () => {
+      arrive("touch");
+    });
+    expect(
+      rows().length,
+      "a touch opened the list on `pointerenter`, so the press that follows " +
+        "will toggle it shut and the word will do nothing on a phone",
+    ).toBe(0);
+  });
+});
+
 describe("what the list offers", () => {
   /**
    * THE ROWS ARE THE DAYS THIS WALL CHANGED, AND NOTHING ELSE IS ON THEM.

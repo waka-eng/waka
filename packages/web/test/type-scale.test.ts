@@ -117,9 +117,14 @@ function onTheScale(value: string): boolean {
  * counted here. The point is not shorter CSS — `var(--sp-14)` is longer than
  * `14px`. It is that "off the grid" becomes something a machine can see.
  */
-const SPACE_CEILING = 33;
+const SPACE_CEILING = 32;
 /* 38 -> 33 on 2026-08-26, for the same reason as `CEILING` above: the
-   literals left with the dead rules that carried them. */
+   literals left with the dead rules that carried them.
+   33 -> 32 on 2026-09-08: the mouth's coarse-pointer air was a raw 13px on
+   each side of the resting phrase. Fixing the founder's jump meant saying the
+   same number to the field, which would have been two more literals — so it
+   moved to `--sp-14` instead, which is on the grid, lands the act on 47
+   rather than 45, and clears 44 either way. Two literals gone, none added. */
 
 /** Spacing values, per governed file, as written. */
 function spacingIn(file: string): string[] {

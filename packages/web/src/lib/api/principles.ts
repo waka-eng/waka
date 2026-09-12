@@ -2,9 +2,10 @@
  * Client for `/api/principles` — mirrors `packages/api/src/routes/principles.ts`.
  *
  * Layer 4: the durable statements a person stands behind, resting on the
- * signals that earned them (`principle_signals`). Declaring is routed
- * internally rather than refused — the server decides whether a declaration
- * mints a principle or matches an existing one.
+ * signals that earned them (`principle_signals`). They are GENERATED — the
+ * product has no verb that writes one from nothing (founder, 2026-09-08), so
+ * what this client offers is reading them, correcting the words of one that
+ * exists, disputing it, reordering the set, and removing one.
  *
  * Moved here verbatim from the single-file client this package used to be, so
  * that `lib/api/` is the one place HTTP happens. Nothing about the requests
@@ -40,24 +41,14 @@ export async function fetchPrinciples(): Promise<ApiPrinciple[]> {
   return Array.isArray(body.principles) ? body.principles : [];
 }
 
-/**
- * POST /principles — declare, in your own words.
- *
- * Routed internally, never refused: what qualifies arrives back as a
- * principle; what is really a rule or a goal is kept as an inspiration. The
- * response says only what was created.
- */
-export type ApiDeclarationResult =
-  | { created: "principle"; principle: ApiPrinciple }
-  | { created: "inspiration"; inspirationId: string };
-
-export async function declarePrinciple(statement: string): Promise<ApiDeclarationResult> {
-  return postJson<ApiDeclarationResult>(
-    apiPath("/principles"),
-    { statement },
-    "That could not be saved",
-  );
-}
+/* NO CLIENT FOR `POST /principles`. Founder, 2026-09-08: "You cannot declare
+   your own values. This can only be generated. So remove this option." The
+   route is still there and still routes a statement internally — what
+   qualifies is minted, what reads as a goal is kept as an inspiration — but
+   the product no longer offers a way to reach it, so the wrapper that did is
+   gone rather than left sitting here uncalled. Restoring the act means
+   restoring this function and its caller in `Home.tsx`; the server half needs
+   nothing. */
 
 /** PATCH /principles/:id — edit the statement; locks it. */
 export async function updatePrinciple(

@@ -97,7 +97,12 @@ import { SpaceSettings, type GroupTrouble } from "../space/settings/SpaceSetting
 import { whyFailed as sayWhyFailed, whyOf } from "../lib/why-failed";
 import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
 import { agentBeing, OWNER_BEING, unit, type Being } from "../character/body";
-import { groupCompanyPlaces, type CompanyPlace } from "../space/group-company";
+import {
+  groupCompanyPlaces,
+  noticeLight,
+  NOTICE_MS,
+  type CompanyPlace,
+} from "../space/group-company";
 import { groundCount } from "../space/ground-count";
 import { pourSignature } from "../space/pour-signature";
 import { posterWords } from "../space/top-of-mind/poster";
@@ -204,7 +209,6 @@ import {
   revokeAgentKey,
   type ApiAgentKey,
   type ApiMintedKey,
-  declarePrinciple,
   deletePrinciple,
   disputePrinciple,
   reorderPrinciples,
@@ -1412,13 +1416,14 @@ function HomeExperience(): JSX.Element {
    * `yes · partly · not true`. A person who has learned that a claim answers
    * back when you press it has already learned this.
    *
-   * `pick` is which principle is open, `pDraft` is the words being typed
-   * (declaring when `pDraft.id` is null, correcting when it is not), and
+   * `pick` is which principle is open, `pDraft` is the words being typed —
+   * always a CORRECTION to a sentence that already exists, since 2026-09-08
+   * when the declare path went (a value is generated, never typed) — and
    * `pGoing` is the two-step on removal — a destructive word is never beside
    * its own yes, the same rule the settings sheet keeps four times over.
    */
   const [pick, setPick] = useState<string | null>(null);
-  const [pDraft, setPDraft] = useState<{ id: string | null; text: string } | null>(null);
+  const [pDraft, setPDraft] = useState<{ id: string; text: string } | null>(null);
   const [pGoing, setPGoing] = useState<string | null>(null);
   /**
    * WHAT A PRINCIPLE GREW FROM — the one edge the world could not draw.
@@ -1472,9 +1477,6 @@ function HomeExperience(): JSX.Element {
   /** LAYER 3 — the one artifact this profile stands on. Null before the first
       synthesis, which the layout says in words rather than leaving blank. */
   const [topOfMind, setTopOfMind] = useState<TopOfMind | null>(null);
-  /** The background sweep has finished. The only thing that waits for it is
-      imagery, which must appear all at once or not at all. */
-  const [sweepDone, setSweepDone] = useState(false);
   /** pattern id → what it rests on. Filled by the sky's background sweep;
       read by the orbit, which never fetches on tap. */
   const evidenceBySignalRef = useRef<Map<string, Evidence[]>>(new Map());
@@ -1943,9 +1945,45 @@ function HomeExperience(): JSX.Element {
   }, [draft]);
   /* an unfinished sentence found on arrival opens the mouth holding it, rather
      than sitting invisible behind a phrase that says nothing about it */
-  /* where the memory being written is headed; private unless said otherwise,
-     and reset after every keep so a one-off never becomes a standing setting */
-  const [keepPublic, setKeepPublic] = useState(false);
+  /**
+   * WHERE THE MEMORY BEING WRITTEN IS HEADED — and it is where the LAST one
+   * went, not where the first one did.
+   *
+   * Founder, 2026-09-08: "let's say if I captured inspiration and decided
+   * that I wanted to make it public once, then keep the past, keep the last
+   * selection. Don't default to private."
+   *
+   * WHAT THIS REPLACES, AND WHY IT WAS WRONG. The rule was "private unless
+   * said otherwise, and reset after every keep so a one-off never becomes a
+   * standing setting". It reads as caution and behaves as amnesia: a person
+   * who works in the open re-answers the same question on every capture, and
+   * a question re-answered identically forty times is one the product should
+   * have learned. The reset was defending against a public choice LEAKING
+   * into a later private one — but nothing here is silent. The row renders
+   * which of the two stands, on every open, before anything is written; the
+   * state is on screen, so remembering it is not a secret being kept.
+   *
+   * FIRST EVER CAPTURE IS STILL PRIVATE. `false` is what a browser with
+   * nothing stored reads as, so the default only stops applying once the
+   * person has actually said `public` — which is what "keep the last
+   * selection" means. Private mode, or storage that throws, falls back to the
+   * same private default rather than to whatever the tab happened to hold.
+   */
+  const [keepPublic, setKeepPublic] = useState(() => {
+    try {
+      return window.localStorage.getItem("waka.keepPublic") === "1";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      if (keepPublic) window.localStorage.setItem("waka.keepPublic", "1");
+      else window.localStorage.removeItem("waka.keepPublic");
+    } catch {
+      /* private mode: the choice lives as long as the tab does */
+    }
+  }, [keepPublic]);
   const [mouthOpen, setMouthOpen] = useState(() => {
     try {
       return (window.localStorage.getItem("waka.draft") ?? "") !== "";
@@ -2192,14 +2230,46 @@ function HomeExperience(): JSX.Element {
   const [minted, setMinted] = useState<ApiMintedKey | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
   const [keysBusy, setKeysBusy] = useState(false);
-  /* THE DATES ARE OPENED BY A PRESS, AND ONLY BY A PRESS (founder,
-     2026-08-30: "when clicking on now, just show the major dates"). A
-     `timeNear` stood beside this and opened the rail on hover — right for a
-     hairline you reach toward, wrong for a menu you have to travel to,
-     because the pointer must leave the word to reach the list and the list
-     would go with it. One state, one way in, and it works the same on a
-     phone. */
+  /**
+   * THE DATES OPEN UNDER A PRESS, AND UNDER A HOVER.
+   *
+   * Founder, 2026-08-30: "when clicking on now, just show the major dates" —
+   * and a `timeNear` that had opened the rail on hover came out with the
+   * slider, because it also CLOSED on leaving the word. That is right for a
+   * hairline you reach toward and wrong for a menu you have to travel to: the
+   * pointer must leave the word to reach the list, and the list went with it.
+   *
+   * Founder, 2026-09-08: "when I hover on now, the text list should appear."
+   * Both are satisfied by keeping the half that was wrong out of it. Hovering
+   * OPENS; nothing closes on leaving. The ways out are unchanged and there
+   * are three — press the word again, press anywhere that is not the rail, or
+   * pick a date — so the list can never be stranded out of reach, which was
+   * the whole objection in 2026-08-30.
+   *
+   * ONE STATE STILL, and the hover is gated on a mouse. A tap fires
+   * `pointerenter` too, so an ungated hover would open the list on
+   * `pointerdown` and the click that follows would toggle it straight shut —
+   * the word would stop working on a phone entirely.
+   *
+   * AND THE PRESS AFTER THE HOVER KEEPS IT OPEN, which the first cut of this
+   * got wrong. A mouse arriving opens the list, and then the most natural
+   * thing anybody does — click the word you are already looking at — toggled
+   * it straight back shut. Found by pressing it the way Playwright does:
+   * `click()` moves the pointer first, so `.jar-when` opened on the move and
+   * closed on the press, and four walks that reach the dates through that
+   * word (`the-timeline`, `first-sixty`, `nothing-invisible`) were left
+   * photographing a surface that was not there. A person hovering and then
+   * pressing means "yes, this one", never "take it away".
+   *
+   * So the press toggles from the state the word was in BEFORE the pointer
+   * arrived: `timeHovered` remembers that the hover is what opened it, the
+   * first press spends that memory and leaves the list up, and the next press
+   * closes it. Every way out survives — press the word again, press anywhere
+   * that is not the rail, or pick a date.
+   */
   const [timeOpen, setTimeOpen] = useState(false);
+  /** whether the hover, rather than a press, is what put the list up */
+  const timeHovered = useRef(false);
 
   /**
    * THE RAIL GOES AWAY WHEN YOU LOOK AWAY (founder, 2026-08-27: "timeline line
@@ -3238,9 +3308,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
          when it does. Publishing per arrival would pop pictures into orbs one
          at a time under a reader's eyes, which is the mid-read swap the layout
          forbids everywhere else. */
-      void Promise.all(Array.from({ length: 4 }, () => pump())).then(() => {
-        if (!dead) setSweepDone(true);
-      });
+      void Promise.all(Array.from({ length: 4 }, () => pump()));
     }, 400);
     return () => {
       dead = true;
@@ -3250,21 +3318,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
 
   /* ------------- derived data (changes only when data changes) ------------- */
 
-  /**
-   * A memory's image, by memory id.
-   *
-   * The archive row carries only a summary of what is attached, so the URL
-   * arrives with the DETAIL — which the background sweep is already fetching
-   * for every memory. That is why this reads the sweep's cache rather than a
-   * second endpoint: one request per memory, not two, and an orb gains its
-   * image on the same beat its words arrive rather than in a later flash.
-   */
-  const urlById = useMemo(() => {
-    void inspirations;
-    const m = new Map<string, string>();
-    for (const d of detailsRef.current.values()) if (d.imageUrl) m.set(d.id, d.imageUrl);
-    return m;
-  }, [inspirations, sweepDone]);
 
   /**
    * THE DATES YOU CAN ACTUALLY GO TO (founder, 2026-08-30: "instead of this
@@ -3421,57 +3474,23 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     /* one surface, so this bakes once — and again only on a DPR change */
   }, []);
 
-  /* ------------- image balls (merged by signal id from inspirations) -------------
-     Images load WITHOUT crossOrigin on purpose: third-party OG hosts give no
-     CORS guarantee, and drawing them taints the canvas — which is fine
-     because nothing here ever reads the canvas back (no getImageData, no
-     toDataURL). Dominant-color sampling is therefore forbidden; halo hue
-     comes from the theme hash instead. */
-  const loadSpritesRef = useRef<() => void>(() => undefined);
-  useEffect(() => {
-    loadSpritesRef.current = () => {
-      const bag = ballsRef.current;
-      if (!bag || urlById.size === 0) return;
-      const dpr = renderScale(window.innerWidth, window.innerHeight);
-      for (const b of bag.list) {
-        const url = urlById.get(b.id);
-        if (!url || b.imgUrl === url) continue;
-        b.imgUrl = url;
-        const im = new Image();
-        im.onload = () => {
-          if (ballsRef.current !== bag) return;
-          /* Circle-clip ONCE into offscreen sprites at load (2 sizes) — never
-             per frame. */
-          const mk = (d: number) => {
-            const c = document.createElement("canvas");
-            const px = Math.ceil(d * dpr);
-            c.width = px;
-            c.height = px;
-            const g = c.getContext("2d");
-            if (g) {
-              g.beginPath();
-              g.arc(px / 2, px / 2, px / 2, 0, TAU);
-              g.clip();
-              const scale = Math.max(px / im.width, px / im.height);
-              const w = im.width * scale;
-              const h = im.height * scale;
-              g.drawImage(im, (px - w) / 2, (px - h) / 2, w, h);
-            }
-            return c;
-          };
-          b.img = { sm: mk(72), lg: mk(144) };
-          simApiRef.current?.wake();
-        };
-        /* Instagram may 403 hotlinks: silent degrade to a plain light ball. */
-        im.onerror = () => undefined;
-        im.src = url;
-      }
-    };
-    /* Run now (covers image URLs resolving after the balls exist) — and the
-       sim effect below re-invokes it right after creating a fresh bag, so
-       the two fetches' resolution order no longer matters. */
-    loadSpritesRef.current();
-  }, [urlById, inspirations]);
+  /* NO IMAGE EVER RIDES AN ORB (founder, 2026-09-08, over a screenshot of a
+     ball wearing the LinkedIn mark: "What is this LinkedIn logo? It's weird.
+     Remove it. The balls should never have those logos or anything.").
+
+     What stood here fetched each memory's og:image, circle-clipped it into
+     two offscreen sprites at load, and the field drew the photo INSTEAD of
+     the disc. On a link to a company page that image is the company's logo,
+     so the world quietly filled with other people's brands — and the disc is
+     the one thing in this product that carries meaning: light is aliveness,
+     hue is whose it is, resolution is what kind of mind kept it. A logo
+     overwrites all three with an advertisement.
+
+     Gone with it: `urlById`, the sprite bake, `Ball.img` and `Ball.imgUrl`,
+     and the image branch in `field-paint`. The attachment's image is still
+     fetched and still shown where a picture belongs — inside the memory when
+     you open it. It simply never becomes the memory's body. */
+
 
   /** THE SKY, AS THE FORMING LINE COUNTS IT: the signals still emerging,
       each with the moment it first appeared so the dial can wind past it. */
@@ -3990,9 +4009,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     for (const b of list) TRef.current = Math.max(TRef.current, b.capturedMs);
 
     for (const b of list) colorBall(b, TRef.current);
-    /* Sprites for any image URLs that resolved before this bag existed
-       (inspirations winning the network race must not lose their imagery). */
-    loadSpritesRef.current();
 
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
     /* EITHER SOURCE STILLS IT. The system preference is the standing answer;
@@ -4236,10 +4252,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     /** The member being noticed, and until when — a beat, not a state: light
         that stayed would be a selection nobody made. */
     const companyNear = { id: "", until: 0 };
-    /** How long a notice lasts. Named because the draw pass works back from
-        `until` to find when the noticing started, and a second copy of this
-        number in two places is how a beat drifts out of time with itself. */
-    const COMPANY_NOTICE_MS = 1900;
     /** each member's form, derived once from their id and then held */
     const memberBeings = new Map<string, Being>();
     const beingOf = (id: string): Being => {
@@ -6606,20 +6618,24 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               y: seatY,
               r: companion.size * 0.32,
             });
-            /* NOTICED — and it answers in its own time. The delay is the
-               member's own (`notice`), so a room of seven turns to you
-               raggedly instead of snapping round in unison, which is the
-               difference between people and a chorus line. */
-            const sinceSeen =
+            /* NOTICED — the body answers in its own time, the NAME answers
+               at once. The body's delay is the member's own (`notice`), so a
+               room of seven turns to you raggedly instead of snapping round
+               in unison, which is the difference between people and a chorus
+               line; the name is the answer to the question the gesture asked
+               and waits for nobody (founder, 2026-09-08). Both halves are
+               computed in `noticeLight`, where the arithmetic can be tested
+               without frames to run. */
+            const since =
               companyNear.id === seat.profileId
-                ? (performance.now() - (companyNear.until - COMPANY_NOTICE_MS)) / 1000 -
-                  seat.notice
+                ? (performance.now() - (companyNear.until - NOTICE_MS)) / 1000
                 : -1;
-            const lit =
-              companyNear.id === seat.profileId && sinceSeen > 0
-                ? clamp((companyNear.until - performance.now()) / 900, 0, 1) *
-                  clamp(sinceSeen / 0.18, 0, 1)
-                : 0;
+            const answer = noticeLight(
+              since,
+              seat.notice,
+              companyNear.until - performance.now(),
+            );
+            const lit = answer.body;
             ctx!.save();
             /* ANCHORED TO THE ROOM, NOT TO YOU. `charSX` is the companion's
                screen-anchored x — the world slides under it, which is what
@@ -6711,9 +6727,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             /* and the name, above them, for as long as the light lasts. It is
                the only place a member's name is written in the world, so it
                is written in the label register the rest of the chrome uses. */
-            if (lit > 0.01 && named?.name) {
+            if (answer.name > 0.01 && named?.name) {
               ctx!.save();
-              ctx!.globalAlpha = lit;
+              ctx!.globalAlpha = answer.name;
               ctx!.fillStyle = "#d6deea";
               ctx!.font = '500 11px Pretendard, -apple-system, "Segoe UI", sans-serif';
               ctx!.textAlign = "center";
@@ -7667,7 +7683,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     function noticeMember(id: string) {
       if (companyNear.id === id && companyNear.until > performance.now() + 500) return;
       companyNear.id = id;
-      companyNear.until = performance.now() + COMPANY_NOTICE_MS;
+      companyNear.until = performance.now() + NOTICE_MS;
       wake();
     }
 
@@ -10189,7 +10205,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         /* the world already has this orb (`born` above); recording the id
            keeps it out of the pour signature so nothing is rebuilt */
         bornIdsRef.current.add(made.id);
-        setKeepPublic(false);
+        /* AND THE DESTINATION IS NOT RESET. `setKeepPublic(false)` stood here
+           and made every capture start over at private; the founder asked for
+           the last selection to hold (2026-09-08). It survives the keep, and
+           the reload, in `waka.keepPublic` — see the state's own note. */
         simApiRef.current?.identify(seed.id, made.id);
         /* AND IT JOINS THE ARCHIVE, NOT ONLY THE GROUND.
            The orb was born on the canvas and the row was written on the
@@ -10997,50 +11016,32 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     setPrinciples(rows);
   }, []);
 
+  /**
+   * CORRECTING ONE — the only writing act left on this band.
+   *
+   * WHAT STOOD BESIDE IT, AND WHY IT IS GONE. Founder, 2026-09-08: "You
+   * cannot declare your own values. This can only be generated. So remove
+   * this option." A second path here took a draft with no id, posted it to
+   * `POST /principles`, and reported which way the server routed it — what
+   * qualified came back a principle, what read as a goal was kept as an
+   * inspiration instead. That path was added on 2026-09-01 so that a person
+   * with no values could give their word first, and it is the same hand that
+   * has now withdrawn it: layer four is EARNED from what you keep, so a
+   * sentence a person can type straight into it is a sentence no evidence
+   * ever had to support. The route still answers on the server; nothing in
+   * the product calls it, and retiring the endpoint is its own decision.
+   */
   const savePrinciple = useCallback(() => {
     const draft = pDraft;
     if (!draft || pBusy) return;
     const text = draft.text.trim();
     if (text === "") return;
     setPBusy(true);
-    /**
-     * DECLARING IS ROUTED, NOT REFUSED — and the world has to say which way it
-     * went. `POST /principles` never rejects: what qualifies comes back as a
-     * principle, and what is really a rule or a goal is KEPT AS AN INSPIRATION
-     * instead (`ApiDeclarationResult`).
-     *
-     * The first version of this ignored the answer, reloaded, and closed. So
-     * typing "I finish what I start." — a goal — returned 201, added nothing
-     * to the band, and said nothing: the person is told their words were
-     * saved by the absence of an error, and shown a list that does not
-     * contain them. Caught by walking it in a browser, which is the only
-     * reason it is not shipping.
-     */
-    const done = () => {
-      setPDraft(null);
-      setPick(null);
-    };
-    if (draft.id) {
-      void updatePrinciple(draft.id, text)
-        .then(() => reloadPrinciples())
-        .then(done)
-        .catch((err) => setCharSay(whyFailed(err, say("worldNotSaved"))))
-        .finally(() => setPBusy(false));
-      return;
-    }
-    void declarePrinciple(text)
-      .then((result) => {
-        if (result.created === "inspiration") {
-          /* Not a failure and not a correction — a different filing, said in
-             the world's own voice rather than left for the person to infer
-             from an unchanged list. */
-          setCharSay(
-            "That reads as something to do rather than something you hold to, so it is kept as a memory.",
-          );
-          done();
-          return undefined;
-        }
-        return reloadPrinciples().then(done);
+    void updatePrinciple(draft.id, text)
+      .then(() => reloadPrinciples())
+      .then(() => {
+        setPDraft(null);
+        setPick(null);
       })
       .catch((err) => setCharSay(whyFailed(err, say("worldNotSaved"))))
       .finally(() => setPBusy(false));
@@ -11558,11 +11559,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         name: file.name,
         contentType: file.type || undefined,
       });
-      /* the picture arrives with the next sweep, all at once — never one orb
-         at a time under a reader's eyes */
-      setSweepDone(false);
+      /* the detail is re-read so the OPEN memory shows its new attachment;
+         nothing on the field waits for it any more — an orb is a disc */
       detailsRef.current.delete(inspirationId);
-      void loadDetailRef.current(inspirationId).then(() => setSweepDone(true));
+      void loadDetailRef.current(inspirationId);
     } catch {
       /* the memory is already kept; only the picture failed to land */
     } finally {
@@ -12384,55 +12384,20 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         </p>
                       </>
                     )}
-                    {/* DECLARING ONE — the only act here not about a
-                        sentence already on screen, so it does not hang off
-                        one, and it does not wait for one either: giving
-                        your word FIRST is what aspirational exists for, so
-                        the empty sky offers it under the forming words
-                        (founder, 2026-09-01 — before this, a person with
-                        no values had no way to declare their first). */}
-                    {w.kind === "self" ? (
-                      pDraft && pDraft.id === null ? (
-                        <p className="jar-values-held">
-                          <textarea
-                            className="jar-ground-edit"
-                            aria-label={say("worldAPrincipleOfYourOwn")}
-                            value={pDraft.text}
-                            rows={2}
-                            autoFocus
-                            placeholder={say("worldWhatYouHoldTo")}
-                            onChange={(e) => setPDraft({ id: null, text: e.target.value })}
-                            onKeyDown={(e) => {
-                              if (e.key === "Escape") {
-                                e.preventDefault();
-                                setPDraft(null);
-                              }
-                            }}
-                          />
-                          <span className="jar-ask">
-                            <button type="button" disabled={pBusy} onClick={savePrinciple}>
-                              {pBusy ? say("worldDeclaring") : say("worldDeclareIt")}
-                            </button>
-                            <span aria-hidden="true"> · </span>
-                            <button type="button" onClick={() => setPDraft(null)}>
-                              {say("worldNotNow")}
-                            </button>
-                          </span>
-                        </p>
-                      ) : (
-                        <p className="jar-ask jar-values-declare">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setPick(null);
-                              setPDraft({ id: null, text: "" });
-                            }}
-                          >
-                            {say("worldDeclareOne")}
-                          </button>
-                        </p>
-                      )
-                    ) : null}
+                    {/* NOTHING IS DECLARED HERE. What stood in this slot was
+                        `declare one`, and under it a two-line draft with
+                        `declare it · not now` — the one act on this band that
+                        was not about a sentence already on screen. Founder,
+                        2026-09-08: "You cannot declare your own values. This
+                        can only be generated. So remove this option." It
+                        reverses their own ruling of 2026-09-01, which put the
+                        verb here so a person with no values could give their
+                        word first, and the reversal is the stronger reading of
+                        the layer: a value is what the evidence turned out to
+                        say about you, so a value you can type is a claim
+                        nothing under it has to earn. The empty state above
+                        now says the whole truth about this band — it fills
+                        when there is enough kept to fill it, and not before. */}
                   </div>
                 ) : null}
                 {ready && c ? (
@@ -14050,7 +14015,30 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               className={`jar-when jar-label${parkedAt === null ? "" : " jar-when--away"}`}
               aria-expanded={timeOpen}
               aria-label={say("worldWindBack")}
-              onClick={() => setTimeOpen((v) => !v)}
+              onClick={() => {
+                /* the press that follows the hover confirms it; the one after
+                   that is the way out */
+                if (timeHovered.current) {
+                  timeHovered.current = false;
+                  setTimeOpen(true);
+                  return;
+                }
+                setTimeOpen((v) => !v);
+              }}
+              /* a mouse arriving on the word is a reach for the list; a
+                 finger arriving is the start of the press, and the press
+                 already has an answer */
+              onPointerEnter={(e) => {
+                if (e.pointerType !== "mouse") return;
+                timeHovered.current = !timeOpen;
+                setTimeOpen(true);
+              }}
+              onPointerLeave={() => {
+                /* the list stays up, but the memory of HOW it went up does
+                   not: a pointer that has left and come back is a new reach,
+                   and the press after it is a fresh answer */
+                timeHovered.current = false;
+              }}
             >
               {parkedAt === null ? say("worldNow") : dateWords(parkedAt, dial.end, locale)}
             </button>

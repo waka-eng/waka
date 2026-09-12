@@ -43,8 +43,8 @@
  * picture would keep drawing, and nothing would report it.
  */
 import type { Palette } from "../../canvas/palette";
-import { BLOOM_PEAK, BLOOM_R, bloomAlpha, ORB_PAD, orbsForHue, TIERS } from "../../canvas/sprites";
-import { clamp01, lerp, TAU } from "../../lib/num";
+import { BLOOM_PEAK, BLOOM_R, bloomAlpha, ORB_PAD, orbsForHue } from "../../canvas/sprites";
+import { clamp01, lerp } from "../../lib/num";
 import { sortByDepth, tierOf } from "./field";
 import type { Ball } from "./orb";
 
@@ -115,6 +115,23 @@ export interface FieldPaint {
 
 export function paintField(p: FieldPaint) {
   const { ctx, pal, list, order, cam, view, t, depthSpan, selId, still, mech, grid, panelOpen } = p;
+  /**
+   * A MACHINE'S MEMORY IS COARSE, NOT SOFT — and it was being served soft.
+   *
+   * Founder, 2026-09-08: an agent's orbs "look blurry and pixelated in a
+   * weird way" where the intent (which they endorse) is a visibly coarser
+   * resolution. Both halves of that sentence were true, and the reason is one
+   * flag. `rasterOrbPixel` bakes the coarse disc with `imageSmoothingEnabled
+   * = false` — correct, and it is why the sprite ITSELF has hard four-pixel
+   * blocks. But the frame then draws that sprite at the ball's LIVE radius,
+   * which is never the baked radius, and the frame's context had smoothing
+   * ON. So every block was bilinearly resampled on its way to the screen:
+   * hard steps, soft edges, which is exactly "pixelated in a weird way".
+   *
+   * Tracked rather than assigned per orb because the field draws hundreds of
+   * them and only a handful of the flips are real.
+   */
+  let smoothing = true;
   /* pass 1 — the diffuse blooms. Additive on dusk, so a dense pile glows
      hotter for free; a soft multiply wash on paper. This is what makes
      the orbs feel lit from within rather than filled in. One pass per
@@ -212,26 +229,7 @@ export function paintField(p: FieldPaint) {
     const ey = (ry + ORB_PAD) * pop;
 
     ctx!.globalAlpha = a;
-    if (b.img) {
-      /* WHICH BAKE TO DRAW, DECIDED IN CSS PIXELS. This read
-         `rx * 2 * view.dpr > 110` — a threshold in DEVICE pixels, tuned when
-         `view.dpr` could not exceed 2. The sprites are baked at 72 and 144
-         CSS px (`Home.tsx`, `mk(72)`/`mk(144)`), so the choice is about how
-         big the orb is ON SCREEN and nothing else; multiplying by the render
-         scale made it drift the moment the scale could reach 3, switching to
-         the large bake at 18 CSS px instead of 27 and handing the compositor
-         a 4x downscale to do. 55 is the old number's CSS half. */
-      const spr = rx * 2 > 55 ? b.img.lg : b.img.sm;
-      ctx!.drawImage(spr, b.x - rx * pop, cyv - ry * pop, rx * 2 * pop, ry * 2 * pop);
-      if (b.alive < 1) {
-        /* the photo desaturating toward slate as its light leaves */
-        ctx!.globalAlpha = a * (1 - tierOf(b) / (TIERS - 1)) * 0.7;
-        ctx!.fillStyle = pal.gray;
-        ctx!.beginPath();
-        ctx!.ellipse(b.x, cyv, rx * pop, ry * pop, 0, 0, TAU);
-        ctx!.fill();
-      }
-    } else {
+    {
       /* THE DISC TELLS THE TRUTH, INCLUDING WHILE YOU ARE READING IT.
          This used to pin a selected orb at the top tier, which meant a
          dormant memory rendered as fully alive the moment you tapped it —
@@ -250,7 +248,27 @@ export function paintField(p: FieldPaint) {
       const machine = b.origin === "agent";
       const hue = b.hue ?? -1;
       const sheet = hue < 0 && !machine ? pal.orbs : orbsForHue(pal, hue, machine);
-      ctx!.drawImage(sheet[b.sizeIdx][tier], grid(b.x) - ex, grid(cyv) - ey, ex * 2, ey * 2);
+      if (smoothing === machine) {
+        smoothing = !machine;
+        ctx!.imageSmoothingEnabled = smoothing;
+      }
+      if (machine) {
+        /* AND THE BLOCKS LAND ON DEVICE PIXELS. Nearest-neighbour still
+           smears if the destination edge falls mid-pixel: the sampler has to
+           choose, and the choice differs along the edge, which reads as a
+           ragged block rather than a square one. The transform is
+           `setTransform(dpr, ...)`, so one unit here is `dpr` device pixels
+           and snapping means rounding to `1 / dpr`. Position is already
+           quantized by `grid`; this is the SIZE, which nothing snapped. */
+        const step = 1 / view.dpr;
+        const x0 = Math.round((grid(b.x) - ex) / step) * step;
+        const y0 = Math.round((grid(cyv) - ey) / step) * step;
+        const w = Math.max(Math.round((ex * 2) / step) * step, step);
+        const h = Math.max(Math.round((ey * 2) / step) * step, step);
+        ctx!.drawImage(sheet[b.sizeIdx][tier], x0, y0, w, h);
+      } else {
+        ctx!.drawImage(sheet[b.sizeIdx][tier], grid(b.x) - ex, grid(cyv) - ey, ex * 2, ey * 2);
+      }
     }
     /* NO RING. The frontier was drawn as an open arc outside the disc and
        it read as decoration nobody could name — "what are these outlines
@@ -261,4 +279,9 @@ export function paintField(p: FieldPaint) {
   }
   };
   orbPass(list, order);
+  /* LEAVE THE CONTEXT AS WE FOUND IT. The flag is canvas state, not a
+     per-draw argument: if the last orb painted was a machine's, everything
+     drawn after this pass — glows, the grain, the panels — would inherit
+     nearest-neighbour and go crunchy for reasons nothing near it explains. */
+  if (!smoothing) ctx!.imageSmoothingEnabled = true;
 }

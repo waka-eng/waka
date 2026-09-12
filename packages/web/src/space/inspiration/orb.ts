@@ -148,8 +148,6 @@ export interface Ball {
    * dormant orb comes to look like scenery rather than something touchable.
    */
   press: number;
-  img: { sm: HTMLCanvasElement; lg: HTMLCanvasElement } | null;
-  imgUrl: string | null;
   /* ---- room-orb extras (set only for balls living in a room column) ---- */
   /** Which column this orb lives in. Unset = the personal jar. */
   col?: number;
@@ -467,8 +465,6 @@ export function makeBall(s: SignalSeed, agentId = ""): Ball {
     dim: 0,
     glow: 0,
     press: 0,
-    img: null,
-    imgUrl: null,
     origin: s.origin ?? "human",
     lens: 0,
   };
@@ -577,8 +573,6 @@ export function makeAgentBall(s: ApiAgentSignal): Ball {
     dim: 0,
     glow: 0,
     press: 0,
-    img: null,
-    imgUrl: null,
     origin: s.origin,
     agentId: s.agentId,
     ownerProfileId: s.ownerProfileId,

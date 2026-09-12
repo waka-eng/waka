@@ -60,6 +60,22 @@ Four decisions, made by the owner on 2026-08-18, are load-bearing:
    is visibly `aspirational` until history demonstrates it. WAKA starts
    by trusting your word and, over time, replaces trust with
    demonstration.
+
+   **Amended 2026-09-08 — the declaring half is withdrawn, in the
+   product.** Founder: "You cannot declare your own values. This can
+   only be generated. So remove this option." The reasoning that
+   replaces it: layers one to three are what you kept, what was found
+   in it, and what is current, and layer four is what all of that
+   turned out to say about how you choose. A sentence typed straight
+   into layer four is a conclusion with nothing under it, and once
+   written it is indistinguishable from one a year of evidence earned —
+   which is the exact confusion the `aspirational` mark was invented to
+   prevent, and did not. What stood in the world (`declare one`, and a
+   draft under it) is gone; `POST /principles` still answers, so the
+   honesty marks and the routing described above are still the contract
+   for anything that reaches the API directly. Held shut in the product
+   by `packages/web/test/earned-not-declared.test.ts`, whose header
+   carries the full argument.
 3. **One artifact class.** Values ("frugal mindset"), maxims ("working
    before spending"), and stances share one class — `principles` — with
    a `type` field. One vocabulary word, per the canon discipline.
