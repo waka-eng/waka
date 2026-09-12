@@ -158,9 +158,11 @@ interface Reading {
   verdict: "SPEAKS" | "MURMURS" | "SILENT";
   /** Set when `intact` was given and the thing acted on left the screen. */
   lies: boolean;
+  /** How many times the press reached the route this act rests on. */
+  hits: number;
 }
 
-function read(before: Set<string>, after: Set<string>, lies: boolean): Reading {
+function read(before: Set<string>, after: Set<string>, lies: boolean, hits: number): Reading {
   const appeared = [...after].filter((l) => !before.has(l));
   const vanished = [...before].filter((l) => !after.has(l));
   const verdict =
@@ -169,7 +171,7 @@ function read(before: Set<string>, after: Set<string>, lies: boolean): Reading {
       : appeared.some((l) => NAMES_A_FAILURE.test(l))
         ? "SPEAKS"
         : "MURMURS";
-  return { appeared, vanished, verdict, lies };
+  return { appeared, vanished, verdict, lies, hits };
 }
 
 // ---------------------------------------------------------------------------
@@ -204,12 +206,20 @@ async function breakRoute(
   ctx: BrowserContext,
   match: (pathname: string, method: string) => boolean,
   kind: Kind,
-): Promise<void> {
+): Promise<{ hits: number }> {
+  /* HOW MANY TIMES THE ACT ACTUALLY REACHED THE ROUTE IT RESTS ON.
+     Without this the walk cannot tell "the act failed and the world spoke"
+     from "the act never happened and something else was on screen" — and it
+     would report the second as the first, which is the most convincing wrong
+     answer an audit tool can give. Counted here because this is the only
+     place that knows the request was refused. */
+  const seen = { hits: 0 };
   await ctx.route(
     (url) => url.pathname.startsWith("/api/"),
     async (route: Route) => {
       const url = new URL(route.request().url());
       if (match(url.pathname, route.request().method())) {
+        seen.hits += 1;
         if (kind === "drop") return route.abort("connectionreset");
         if (kind === "401") {
           return route.fulfill({
@@ -227,6 +237,7 @@ async function breakRoute(
       return route.fallback();
     },
   );
+  return seen;
 }
 
 const SIGNUP_PASSWORD = "when-it-fails-local-password-1";
@@ -401,6 +412,63 @@ const ACTS: Act[] = [
     },
   },
   {
+    id: "reflect",
+    name: "answering a memory, and the reflection refuses",
+    /* NOT A CONTROL, DELIBERATELY. It has a written line — `whyFailed(err,
+       "That reflection didn't save. Your words are still here")` — but the
+       line goes to `setMouthNote`, which renders inside the MOUTH, and this
+       act happens inside an open card. A line written into a slot that is
+       not on the surface the act happened on is exactly the shape that made
+       keeping from a room's wall silent, so this walk gets to answer it
+       rather than assume it. */
+    breaks: (p, m) => /^\/api\/inspirations\/[^/]+\/reflections$/.test(p) && m === "POST",
+    reach: async (page, base) => {
+      for (let i = 0; i < 5; i += 1) {
+        await keepOne(page, base, `a memory this walk will answer ${i} ${uniq()}`);
+      }
+      await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(7_000);
+      if (!(await openAMemory(page))) throw new Error("no memory would open in the field");
+      await page.locator(".jar-panel button", { hasText: /^reflect$/ }).first().click({
+        timeout: 8_000,
+      });
+      await page.waitForTimeout(1_200);
+      await page.locator(".jar-reflect-box").first().fill("what it stirred, for the record", {
+        timeout: 8_000,
+      });
+    },
+    press: async (page) => {
+      await page.locator(".jar-reflect button", { hasText: /^Keep$/ }).first().click({
+        timeout: 8_000,
+      });
+      await page.waitForTimeout(2_000);
+    },
+  },
+  {
+    id: "publish",
+    name: "letting a memory reach your rooms, and the change refuses",
+    /* The same question as `reflect`, about the other verb that lives in the
+       card and writes its failure into the mouth's slot. And the stakes are
+       higher here than a lost sentence: this one decides WHO CAN READ
+       something. A person told nothing has been told the change landed. */
+    breaks: (p, m) => /^\/api\/inspirations\/[^/]+$/.test(p) && m === "PATCH",
+    reach: async (page, base) => {
+      for (let i = 0; i < 5; i += 1) {
+        await keepOne(page, base, `a memory this walk will publish ${i} ${uniq()}`);
+      }
+      await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(7_000);
+      if (!(await openAMemory(page))) throw new Error("no memory would open in the field");
+    },
+    press: async (page) => {
+      /* a keep is private unless asked otherwise, so `public` is the change */
+      await page.locator(".jar-panel button", { hasText: /^public$/ }).first().click({
+        timeout: 8_000,
+      });
+      await page.waitForTimeout(2_000);
+    },
+  },
+  {
     id: "make-room",
     name: "making a room, and the server refuses",
     control: true,
@@ -540,7 +608,7 @@ async function walk(browser: Browser, base: string, act: Act, kind: Kind): Promi
        failure and not by having arrived at the surface. */
     const before = await saidOverTime(page);
 
-    await breakRoute(ctx, act.breaks, kind);
+    const refused = await breakRoute(ctx, act.breaks, kind);
     await act.press(page);
 
     /* LONG ENOUGH FOR THE WORLD TO HAVE SAID IT AND NOT YET CLEARED IT. The
@@ -558,7 +626,7 @@ async function walk(browser: Browser, base: string, act: Act, kind: Kind): Promi
     const wanted = act.intact?.()?.toLowerCase();
     const lies =
       wanted !== undefined && ![...after].some((l) => l.toLowerCase().includes(wanted));
-    return read(before, after, lies);
+    return read(before, after, lies, refused.hits);
   } finally {
     await ctx.close();
   }
@@ -597,12 +665,19 @@ async function main(): Promise<void> {
       }
       const mark = error
         ? "NOT WALKED"
-        : reading!.lies
-          ? `${reading!.verdict} + LIES`
-          : reading!.verdict;
+        : reading!.hits === 0
+          ? "NOT PRESSED"
+          : reading!.lies
+            ? `${reading!.verdict} + LIES`
+            : reading!.verdict;
       console.log(`  ${act.id.padEnd(13)} ${mark.padEnd(16)} ${act.name}`);
       if (error) console.log(`                 └─ ${error}`);
-      else {
+      else if (reading!.hits === 0) {
+        console.log(
+          "                 └─ the press never reached the route this act rests on, so " +
+            "whatever the screen said afterwards was about something else",
+        );
+      } else {
         for (const line of reading!.appeared.slice(0, 4)) {
           console.log(`                 └─ said: ${JSON.stringify(line.slice(0, 100))}`);
         }
@@ -630,7 +705,12 @@ async function main(): Promise<void> {
     process.exit(3);
   }
 
-  const walked = results.filter((r) => r.reading !== null);
+  const all = results.filter((r) => r.reading !== null);
+  /* AN ACT THAT NEVER REACHED ITS ROUTE IS NOT A FINDING ABOUT THE PRODUCT.
+     It is this walk failing to press the thing it names, and folding it in
+     with the verdicts would let a broken aim read as a clean audit. */
+  const unpressed = all.filter((r) => r.reading!.hits === 0);
+  const walked = all.filter((r) => r.reading!.hits > 0);
   const silent = walked.filter((r) => r.reading!.verdict === "SILENT");
   const murmur = walked.filter((r) => r.reading!.verdict === "MURMURS");
   const lying = walked.filter((r) => r.reading!.lies);
@@ -639,6 +719,12 @@ async function main(): Promise<void> {
       `${walked.length - silent.length - murmur.length} said what went wrong, ` +
       `${murmur.length} changed without saying, ${silent.length} said nothing.`,
   );
+  if (unpressed.length > 0) {
+    console.log(
+      `                ${unpressed.length} never reached the route they rest on, so they ` +
+        `were not asked at all: ${unpressed.map((r) => r.act.id).join(", ")}`,
+    );
+  }
   if (lying.length > 0) {
     console.log(
       `                ${lying.length} took the thing off screen anyway: ${lying
@@ -646,7 +732,7 @@ async function main(): Promise<void> {
         .join(", ")}`,
     );
   }
-  process.exit(silent.length + murmur.length + lying.length > 0 ? 1 : 0);
+  process.exit(silent.length + murmur.length + lying.length + unpressed.length > 0 ? 1 : 0);
 }
 
 main().catch((err) => {
