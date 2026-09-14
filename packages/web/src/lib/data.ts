@@ -43,7 +43,6 @@ import {
   fetchSignal,
   fetchSignals,
   fetchTopOfMind,
-  type ApiAttachment,
   type ApiAttachmentSummary,
   type ApiInspirationKind,
   type ApiInspirationVisibility,
@@ -112,9 +111,18 @@ export interface InspirationDetail extends Inspiration {
   /** Enrichment is machine-derived and is never printed as the person's
       words — the panel labels it, or does not show it. */
   enrichment: Array<{ attachmentId: string; kind: string | null; text: string }>;
-  /** The one image this memory can show: an attached image, or the preview a
-      linked page declared. Null when it has nothing to show, which is most. */
-  imageUrl: string | null;
+  /* NO PICTURE COMES DOWN WITH A MEMORY, and the absence is the point.
+     `imageUrl` stood here — an attached image, or the preview a linked page
+     declared, which is its `og:image`. It was carried to the client so the
+     field could draw it ON THE ORB, and that is what put a LinkedIn logo in
+     the founder's world: a link to a company page declares the company's
+     logo, and the world filled with other people's brands over the one
+     channel that carries meaning.
+     The drawing went on 2026-09-08 (#318). This is the pipe that fed it,
+     found still connected four days later when the founder asked for the
+     root cause: produced on every memory, read by nothing. A field named
+     `imageUrl` sitting on every row is an invitation to draw it again, so it
+     goes too. Held by `no-picture-reaches-the-field.test.ts`. */
 }
 
 /* ---------------------------------------------------------------- layer 2 */
@@ -432,19 +440,9 @@ export async function loadInspiration(id: string): Promise<InspirationDetail> {
         kind: a.enrichment.kind,
         text: a.enrichment.text as string,
       })),
-    imageUrl: firstImage(row.attachments ?? []),
   };
 }
 
-/** The one image a memory can show: an attached image, or the preview a
-    linked page declared. Null when it has nothing to show, which is most. */
-function firstImage(attachments: ApiAttachment[]): string | null {
-  for (const a of attachments) {
-    const url = a.type === "image" ? a.url : a.enrichment?.link?.previewImageUrl ?? null;
-    if (url) return url;
-  }
-  return null;
-}
 
 /** One signal opened: the same statement, plus what it rests on. */
 export async function loadSignal(id: string): Promise<SignalDetail> {
