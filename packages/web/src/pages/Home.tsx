@@ -10525,7 +10525,37 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   /** A room orb's panel: whisper attribution, cited-by, and — for another
       member's save — no reflect action at all. */
   const panelIsGroup = panelBall !== null && panelBall.col !== undefined;
-  const panelCanReflect = !panelIsGroup || panelBall?.own === true;
+  /**
+   * WHOSE MEMORY THIS IS, and it is not the same question as whether the orb
+   * is a room orb.
+   *
+   * Reported in the meeting of 2026-09-18, in passing: *"이상한게 내가 재규
+   * 영감에 뭘 추가할 수가 있네"* — I can add something to someone else's
+   * inspiration. The law was already written, ten lines from the verbs it
+   * governs: "Only your own: another member's is theirs." It was enforced
+   * through `panelIsGroup` alone, and `panelIsGroup` means `col !== undefined`,
+   * which `orb.ts` defines as "a room orb; unset = the personal jar".
+   *
+   * A member's OWN capture, seen because you stood in their ground on a group
+   * wall, is not a room orb. It is an ordinary ball with an owner, `col` is
+   * unset, so `panelIsGroup` was false and `!panelIsGroup` alone made the
+   * whole verb row true — reflect, edit AND delete, offered on a memory
+   * belonging to somebody else.
+   *
+   * The API refuses all three (`resolveTargetProfile` narrows to the session's
+   * own profile and the reflections insert re-checks the parent's owner), so
+   * nothing was ever written. That makes this a control that invites an act
+   * the server must reject, which on `delete` is not a small thing to offer.
+   *
+   * Absent means the personal jar, where every memory is the viewer's own: the
+   * field only carries an owner on a wall where more than one person's
+   * memories can stand.
+   */
+  const panelOwnedByAnother =
+    panelBall?.ownerProfileId !== undefined &&
+    panelBall.ownerProfileId !== viewerIdRef.current;
+  const panelCanReflect =
+    !panelOwnedByAnother && (!panelIsGroup || panelBall?.own === true);
   const panelHasReflection = panelCanReflect && (panel?.detail
     ? panel.detail.reflections.some((item) => !item.skipped && item.answer)
     : (panelBall?.reflections ?? 0) > 0);
