@@ -101,6 +101,7 @@ import { SpaceSettings, type GroupTrouble } from "../space/settings/SpaceSetting
 import { whyFailed as sayWhyFailed, whyOf } from "../lib/why-failed";
 import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
 import { agentBeing, OWNER_BEING, unit, type Being } from "../character/body";
+import { companionLight } from "../character/tending";
 import {
   groupCompanyPlaces,
   noticeLight,
@@ -1123,6 +1124,17 @@ interface SimApi {
 export interface FieldAudit {
   vh: number;
   vw: number;
+  /** THE COMPANION'S OWN LIGHT, and the one fact it is a function of.
+      Here because the body's light became a readout of the person's rhythm
+      on 2026-09-22 (`character/tending.ts`) and nothing could see it: the
+      tier is quantised to four baked forms, so a pixel reading of the
+      creature cannot tell a floor that stopped holding from a body that is
+      simply lit. This is the state, said plainly, for anything that needs to
+      ask. */
+  companionLit: number;
+  companionTier: number;
+  /** when the ground last gained something at the dial's time, or null */
+  lastKeptMs: number | null;
   /** where the camera was standing when this was counted */
   camY: number;
   /** and where it has to stand for the count to mean anything */
@@ -4411,6 +4423,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       /** Something was captured today: a steady lift, never a pulse. */
       freshLit: 0,
       freshToday: false,
+      /** WHEN THE GROUND LAST GAINED SOMETHING, or null if it never has.
+          The body's own light is a function of this and nothing else — see
+          `character/tending.ts`. Null is a new account, not a silent one. */
+      lastKeptMs: null as number | null,
+      /** The body's light, EASED toward what tending says it should be, the
+          same way `inspNow` eases toward `insp`. It starts full so a mount
+          never fades up out of the dark, and it eases because `bodyLit` also
+          sets nub size and nub colour continuously: keeping something after a
+          fortnight would otherwise pop the creature a third of its range in
+          one frame. The tier it selects is quantised to four, so the easing
+          costs nothing visible and buys the two things that are not. */
+      bodyLitNow: 1,
       y: 0,
       size: 110,
 
@@ -6131,12 +6155,19 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       companion.insp = clamp01(sum / k);
       const dayStart = TRef.current - DAY_MS;
       companion.freshToday = false;
+      /* THE NEWEST MOMENT ON THE GROUND, found in the sweep that was already
+         being walked. It cannot break early the way `freshToday` could: the
+         list is not in time order, so the newest is only known at the end.
+         It follows the dial, deliberately — scrubbing back into a quiet
+         stretch shows the companion as it stood then, which is the same rule
+         `insp` has obeyed since the dial shipped. */
+      let newest: number | null = null;
       for (const b of list) {
-        if (b.active && !b.leaving && b.capturedMs >= dayStart) {
-          companion.freshToday = true;
-          break;
-        }
+        if (!b.active || b.leaving) continue;
+        if (b.capturedMs >= dayStart) companion.freshToday = true;
+        if (newest === null || b.capturedMs > newest) newest = b.capturedMs;
       }
+      companion.lastKeptMs = newest;
       for (const res of residents.values()) residentInsp(res);
     }
 
@@ -6387,16 +6418,40 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        * for this — a string on a wall twitching with network traffic — showed
        * the NETWORK's state. Nobody feels judged by a network.
        *
-       * So the split. `bodyLit` has a floor under it and never reads as
-       * fading: breath, blink, look-arounds and the body's own light are the
-       * creature's, unconditionally. `lit` stays exactly what it was and now
+       * So the split. `bodyLit` had a floor under it and never read as
+       * fading: breath, blink, look-arounds and the body's own light were the
+       * creature's, unconditionally. `lit` stays exactly what it was and
        * governs only its REACH — how far the aura carries, how much comes off
        * it. A quiet archive is a companion sitting close to itself; a live one
-       * throws light across the room. What changed is what it can see, not
-       * whether it is alive.
+       * throws light across the room.
+       *
+       * AMENDED 2026-09-22, ON THE FOUNDER'S INSTRUCTION: "a feature of your
+       * character losing light if you don't save inspirations for a while.
+       * this motivates user to place themselves in environments to get
+       * inspired and stuff and realize they are lacking inspiration in life."
+       *
+       * That answers the objection above rather than overlooking it. The
+       * worry was that the creature grades you; grading is now the point, and
+       * what the old ruling was really protecting — that it must never read
+       * as DEAD — is kept, in two places. Its light is floored at tier 1 of
+       * four, one full step above the form that reads as gone out. And every
+       * channel that says *alive* rather than *tended* is untouched: the bob,
+       * the blink, the look-arounds and the third idle clock all still run on
+       * an empty archive, because motion is the creature's and only light is
+       * the readout.
+       *
+       * AND IT NOW MEASURES THE RIGHT THING. The body read `insp`, the mean
+       * of the brightest eight memories — which conflates how much you have
+       * built with how long since you came back. Two hundred rich memories
+       * and a silent month still scored high. The body now reads one fact,
+       * `nowMs - lastKeptMs`, and the two channels each say one thing: the
+       * BODY is your rhythm, the AURA is what you have built.
+       *
+       * `character/tending.ts` holds the arithmetic and the reasoning for
+       * every constant in it.
        */
       const lit = clamp01(companion.inspNow + companion.flare * 0.5 + companion.freshLit);
-      const bodyLit = clamp01(0.55 + lit * 0.45);
+      const bodyLit = companion.bodyLitNow;
       /* Whose form it is wearing where the camera is right now — the body, the
          silhouette its features clip to, and the halo, all from one place so
          they can never disagree about which being is on screen. */
@@ -7373,6 +7428,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       /* the companion. Its glow eases toward the real signal; its flare
          decays; it blinks; and when it is genuinely inspired, motes rise. */
       companion.inspNow = view.reduced ? companion.insp : lerp(companion.inspNow, companion.insp, 1 - Math.pow(0.02, dt));
+      /* And the body's own light, toward what tending says. `TRef.current`
+         rather than `now`: this is a question about the WORLD's clock, which
+         the dial moves, not about the frame's. */
+      {
+        const want = companionLight(companion.lastKeptMs, TRef.current);
+        companion.bodyLitNow = view.reduced
+          ? want
+          : lerp(companion.bodyLitNow, want, 1 - Math.pow(0.02, dt));
+      }
       /* THE GATHER, AND THE RELEASE AT THE END OF IT. The compression eases IN
          (u·u) so the body sinks rather than snapping down, and the flare it is
          holding fires at the bottom — the fast half of a slow-in, fast-out.
@@ -8937,6 +9001,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        */
       audit: (): FieldAudit => {
         const bandTop = 0;
+        const companionLit = companion.bodyLitNow;
+        const companionTierNow = Math.round(companionLit * (BODY_TIERS - 1));
         /* the MEASURED dial, not the guess: the band the layout actually
            solves against is layout.fieldBottom, which is layoutH − dialH, and
            at rest in the field that is exactly vh − dialH on screen. An audit
@@ -8979,6 +9045,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
              `vh`/`vw` however the state behind them is spelled */
           vh: view.h,
           vw: view.w,
+          companionLit,
+          companionTier: companionTierNow,
+          lastKeptMs: companion.lastKeptMs,
           camY: Math.round(cam.y),
           fieldRest: Math.round(view.layout.maxCam),
           present,

@@ -95,6 +95,7 @@ const MODULES: Record<string, Record<string, unknown>> = {
  */
 const WEB_TUNING = [
   new URL("../../../web/src/lib/aliveness.ts", import.meta.url),
+  new URL("../../../web/src/character/tending.ts", import.meta.url),
 ];
 
 function webTuningExports(): Map<string, string> {

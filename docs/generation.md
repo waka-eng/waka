@@ -929,6 +929,33 @@ Source: `packages/web/src/lib/aliveness.ts`.
 | `FIELD_CARRY_SPAN` | 0.85 | Extra light a fully-carrying memory holds over a barely-cited one |
 | `FIELD_ATTENTION_SPAN` | 0.16 | Extra floor for coming back to a memory, graded by how often |
 | `FIELD_RECENCY_WEIGHT` | 0.25 | The share of the range freshness may spend; the rest belongs to use |
+
+### What the companion shows, and why it is a different number
+
+The field's numbers describe a MEMORY: how alive one thing you kept still is.
+These describe the COMPANION, and they answer a different question — how long
+since you last kept anything at all.
+
+Founder, 2026-09-22: *"a feature of your character losing light if you don't
+save inspirations for a while. this motivates user to place themselves in
+environments to get inspired and stuff and realize they are lacking
+inspiration in life."* This reverses a 2026-08 ruling that floored the body's
+light so it could never fade; `packages/web/src/character/tending.ts` carries
+that ruling in full, what survives of it, and why.
+
+Both times are slower than the field's own 7-day half-life, deliberately: a
+memory fading is a statement about that memory, and the companion dimming is a
+statement about the person, so it should be harder to provoke. Walking the
+edges by bisection gives three states — full to day 4.10, dimmed to day
+12.22, low after that, and never the form that reads as gone out.
+
+Source: `packages/web/src/character/tending.ts`.
+
+| Constant | Value | What it does |
+| --- | --- | --- |
+| `TENDING_GRACE_DAYS` | 2 | Days of silence that cost the companion nothing |
+| `TENDING_HALF_LIFE_DAYS` | 5 | Half-life of its light once the grace is spent |
+| `TENDING_FLOOR` | 0.34 | The dimmest it may go: exactly tier 1 of `BODY_TIERS`, one step above dark |
 | `FIELD_TIER_CEILING` | 1 | Aliveness at or above this draws in the brightest band |
 | `FIELD_TIER_GAMMA` | 0.7 | Bends the banding so the dim half gets the larger share of bands |
 
