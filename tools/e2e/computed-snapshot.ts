@@ -99,7 +99,7 @@ async function main() {
   ]) {
     await p.locator(".jar-mouth-rest").first().click();
     await p.waitForTimeout(700);
-    await p.fill('textarea[aria-label="Capture inspiration"]', text);
+    await p.fill('textarea.jar-mouth-field', text);
     await p.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click();
     await p.waitForTimeout(4500);
   }

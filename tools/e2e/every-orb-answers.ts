@@ -172,7 +172,7 @@ const signUp = async (page: Page, base: string, kept: string[]): Promise<void> =
   for (const t of kept) {
     await page.locator(".jar-mouth-rest").first().click();
     await page.waitForTimeout(450);
-    await page.fill('textarea[aria-label="Capture inspiration"]', t);
+    await page.fill('textarea.jar-mouth-field', t);
     await page.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click();
     await page.waitForTimeout(2_800);
   }

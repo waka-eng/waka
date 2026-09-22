@@ -291,7 +291,7 @@ async function walk(browser: Browser, base: string, negative: boolean): Promise<
   for (const text of ["the ground stays where it was put", "nobody is touching this"]) {
     await page.locator(".jar-mouth-rest").first().click();
     await page.waitForTimeout(700);
-    await page.fill('textarea[aria-label="Capture inspiration"]', `${text} ${uniq()}`);
+    await page.fill('textarea.jar-mouth-field', `${text} ${uniq()}`);
     await page.keyboard.press("Enter");
     await page.waitForTimeout(4_500);
   }
@@ -427,7 +427,7 @@ async function walk(browser: Browser, base: string, negative: boolean): Promise<
   if (opened.ground !== null) {
     await page.locator(".jar-mouth-rest").first().click();
     await page.waitForTimeout(700);
-    await page.fill('textarea[aria-label="Capture inspiration"]', `on purpose ${uniq()}`);
+    await page.fill('textarea.jar-mouth-field', `on purpose ${uniq()}`);
     await page.keyboard.press("Enter");
     await page.waitForTimeout(6_000);
     const after = await frame(page);

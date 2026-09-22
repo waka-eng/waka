@@ -185,7 +185,7 @@ async function keepInWorld(page: Page, base: string, text: string): Promise<numb
   }
   await page.locator(".jar-mouth-rest").first().click();
   await page.waitForTimeout(700);
-  await page.fill('textarea[aria-label="Capture inspiration"]', text);
+  await page.fill('textarea.jar-mouth-field', text);
   await page.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click();
   /* WHAT THE WORLD SAID, READ WHILE IT IS SAYING IT. The character's voice
      clears itself after four seconds, so a caller that waits for the keep to
@@ -433,17 +433,33 @@ const JOURNEYS: Journey[] = [
          be showing. `.jar-mouth-rest` is what the control IS. */
       await page.locator(".jar-mouth-rest").first().click();
       await page.waitForTimeout(900);
-      await page.fill(
-        /* The mouth's own label, which matches its visible placeholder — an
-           accessible name that does not is its own bug. It has read "something
-           worth keeping" and "keep something" before now; a selector naming a
-           label the product no longer has does not fail loudly, it times out
-           for thirty seconds and reports the journey broken. Kept as the label
-           rather than the class BECAUSE the accessible name is the claim: a
-           person using a screen reader has to be told what this field is. */
-        'textarea[aria-label="Capture inspiration"]',
-        `a lift button that dims once it has heard you ${uniq()}`,
-      );
+      /* AND THE FIELD, WHICH USED TO BE THE EXCEPTION — deliberately. It was
+         located by `[aria-label="Capture inspiration"]` because the accessible
+         name is a CLAIM worth making: a person using a screen reader has to be
+         told what this field is, and matching on it meant a wrong name broke
+         the walk. The reasoning was right. The method was not.
+
+         A selector cannot carry that claim. It can only carry it in ONE
+         language — the Korean half of the product would fail this walk for
+         being correct — and when it does fail it fails by timing out for
+         thirty seconds and reporting the journey broken, which says nothing
+         about what is actually wrong. So the claim is made here, out loud, in
+         whatever language the run is in, and the selector is the class. It now
+         asserts MORE than the old selector did: that the name exists, and that
+         the ear and the eye are given the same words. */
+      const mouth = page.locator("textarea.jar-mouth-field").first();
+      const toTheEar = await mouth.getAttribute("aria-label");
+      const toTheEye = await mouth.getAttribute("placeholder");
+      if (!toTheEar || toTheEar.trim() === "") {
+        return { ok: false, detail: "the mouth has no accessible name — a screen reader is told nothing" };
+      }
+      if (toTheEar !== toTheEye) {
+        return {
+          ok: false,
+          detail: `the mouth is called "${toTheEar}" to the ear and "${toTheEye}" to the eye`,
+        };
+      }
+      await mouth.fill(`a lift button that dims once it has heard you ${uniq()}`);
       await page.keyboard.press("Enter");
       await page.waitForTimeout(5_000);
 
@@ -523,7 +539,7 @@ const JOURNEYS: Journey[] = [
       const phrase = `kept while standing somewhere else ${uniq()}`;
       await page.locator(".jar-mouth-rest").first().click();
       await page.waitForTimeout(700);
-      await page.fill('textarea[aria-label="Capture inspiration"]', phrase);
+      await page.fill('textarea.jar-mouth-field', phrase);
       /* Enter rather than the `save` button `keepInWorld` presses: the same
          act, and the one a person writing a sentence actually reaches for. */
       await page.keyboard.press("Enter");
@@ -655,7 +671,7 @@ const JOURNEYS: Journey[] = [
          two-field form; it answers the question the world asked. */
       await page.locator(".jar-mouth-rest").first().click();
       await page.waitForTimeout(700);
-      await page.fill('textarea[aria-label="Capture inspiration"]', phrase);
+      await page.fill('textarea.jar-mouth-field', phrase);
       await page.locator(".jar-mouth-where button", { hasText: /^reflect$/ }).first().click();
       await page.waitForTimeout(5_000);
 

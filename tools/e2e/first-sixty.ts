@@ -276,7 +276,7 @@ async function keepOne(page: Page, base: string, text: string): Promise<void> {
   }
   await page.locator(".jar-mouth-rest").first().click({ timeout: 8_000 });
   await page.waitForTimeout(800);
-  await page.fill('textarea[aria-label="Capture inspiration"]', text);
+  await page.fill('textarea.jar-mouth-field', text);
   await page.locator(".jar-mouth-where button", { hasText: /^save$/ }).first().click({
     timeout: 8_000,
   });
