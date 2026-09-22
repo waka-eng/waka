@@ -31,7 +31,7 @@ export function LoadingHome(): JSX.Element {
     <div
       role="status"
       aria-live="polite"
-      aria-label="loading"
+      aria-label={t(readStoredLocale(), "loading")}
       style={{
         position: "fixed",
         inset: 0,

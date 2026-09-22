@@ -10597,8 +10597,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       {panelNeighbours.prev ? (
         <button
           type="button"
-          aria-label="the inspiration before this one"
-          title="the inspiration before this one"
+          aria-label={say("worldTheInspirationBefore")}
+          title={say("worldTheInspirationBefore")}
           className={caretLit === -1 ? "jar-caret-lit" : undefined}
           onClick={() => stepToMemory(panelNeighbours.prev)}
         >
@@ -10608,8 +10608,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       {panelNeighbours.next ? (
         <button
           type="button"
-          aria-label="the inspiration after this one"
-          title="the inspiration after this one"
+          aria-label={say("worldTheInspirationAfter")}
+          title={say("worldTheInspirationAfter")}
           className={caretLit === 1 ? "jar-caret-lit" : undefined}
           onClick={() => stepToMemory(panelNeighbours.next)}
         >
@@ -14273,7 +14273,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               tidiness. A list that does not exist cannot be in front of
               anything, so there is no rest state left in which this can take
               a press that was meant for the world. */}
-          <div className="jar-dial-list" role="group" aria-label="wind this wall back to a date">
+          <div className="jar-dial-list" role="group" aria-label={say("worldWindBackToADate")}>
             {/* THE WAY BACK IS THE FIRST ROW. The rail had none: returning to
                 the present meant landing a drag within half a day of the top
                 of a line you could not see. */}

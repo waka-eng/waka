@@ -40,6 +40,7 @@ const COPY_EN = {
     start: "Create your WAKA",
     open: "Open WAKA",
     controls: "public profile controls",
+    notePreview: "post-it preview",
 } as const;
 
 const COPY_KO = {
@@ -56,6 +57,7 @@ const COPY_KO = {
     start: "나의 WAKA 시작하기",
     open: "WAKA 열기",
     controls: "공개 프로필 설정",
+    notePreview: "포스트잇 미리보기",
 } as const;
 
 const COPY = {
@@ -175,7 +177,7 @@ export default function PublicProfilePage(): JSX.Element {
                   ["--decay" as string]: String(1 - index * 0.08),
                 }}
               >
-                <div className="nc-note-preview" aria-label="post-it preview">
+                <div className="nc-note-preview" aria-label={copy.notePreview}>
                   <p className="nc-note-body nc-note-body--preview">{entry.body}</p>
                 </div>
               </article>
