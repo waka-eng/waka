@@ -12221,11 +12221,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                same truth #307 gave signals: the record holds
                                a dispute, so the page must not read settled.
                                Rank decides meanwhile; your verbs settle it. */
-                            <span className="jar-poster-away jar-label">
-                              {say("worldValueContested")}
-                              {pr.disputeId ? <button type="button" className="jar-principle-undo" disabled={pBusy}
+                            <span className="jar-principle-verdict">
+                              <span className="jar-label">{say("worldValueContested")}</span>
+                              {pr.disputeId ? <button type="button" className="jar-principle-restore" disabled={pBusy}
                                 onClick={() => disputeThisPrinciple(pr.id, pr.disputeId!)}>
-                                {say("worldPrincipleUndo")}
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                                  <path d="M8 6 4 10l4 4M4 10h10a5 5 0 0 1 0 10" />
+                                </svg>
+                                {say("worldPrincipleKeep")}
                               </button> : null}
                             </span>
                           ) : pr.state === "aspirational" ? (
