@@ -298,7 +298,7 @@ describe("the doc's [checked] structural claims", () => {
     }
   });
 
-  it("keeps generation nightly-only: the cron is the sole enqueuer", () => {
+  it("keeps the generation and evidence integrity functions available", () => {
     // The cadence pin lives in sst-config-env.test.ts; this re-asserts the
     // doc's structural claim that the named pieces exist.
     expect(typeof principleGeneration.refreshPrinciplesForProfile).toBe("function");

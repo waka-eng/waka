@@ -1,0 +1,123 @@
+/** Real SQL proves room history, privacy and queue identity. Only the model is scripted. */
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { Hono } from "hono";
+import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
+import { createGroupForProfile } from "../routes/groups-membership.js";
+import { createGroupsRoutes } from "../routes/groups.js";
+import { loadPrincipleMaterial, refreshPrinciplesForProfile } from "./principle-generation.js";
+import { requestPrincipleRefresh, loadPrincipleStatus } from "./principle-status.js";
+import type { ModelProvider } from "./model-provider.js";
+
+let t: TestDatabase;
+let owner: string;
+let other: string;
+let groupId: string;
+let mindId: string;
+let sequence = 0;
+
+async function person() {
+  const [a] = await t.sql`INSERT INTO accounts(email) VALUES (${`principle-flow-${sequence++}@example.test`}) RETURNING id`;
+  const [p] = await t.sql`INSERT INTO profiles(account_id,type,name) VALUES (${a.id},'human','Test') RETURNING id`;
+  return p.id as string;
+}
+
+async function material(profileId: string, owners: string[], targetGroupId?: string) {
+  const ids: string[] = [];
+  for (let n = 0; n < 3; n++) {
+    const [s] = await t.sql`INSERT INTO signals(profile_id,statement) VALUES (${profileId},${`Pattern ${n}`}) RETURNING id`;
+    for (let i = 0; i < 3; i++) {
+      const author = owners[i % owners.length]!;
+      const [inspirationRow] = await t.sql`INSERT INTO inspirations(profile_id,text,visibility)
+        VALUES (${author},'PRIVATE RAW TEXT MUST NEVER LEAVE','public') RETURNING id`;
+      await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id)
+        VALUES (${profileId},${author},${s.id},${inspirationRow.id})`;
+    }
+    await t.sql`UPDATE signals SET status='active' WHERE id=${s.id}`;
+    ids.push(s.id as string);
+  }
+  const [tom] = targetGroupId
+    ? await t.sql`INSERT INTO top_of_minds(group_id) VALUES (${targetGroupId}) RETURNING id`
+    : await t.sql`INSERT INTO top_of_minds(profile_id) VALUES (${profileId}) RETURNING id`;
+  const [entry] = await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body)
+    VALUES (${tom.id},'pattern','A present focus') RETURNING id`;
+  for (const id of ids) await t.sql`INSERT INTO top_of_mind_entry_signals(entry_id,signal_id) VALUES (${entry.id},${id})`;
+  return ids;
+}
+
+const provider = {
+  distillPrinciples: async (input: { signals: Array<{ id: string }> }) => ({ candidates: [{
+    statement: "Prefer small, reversible experiments.", type: "maxim", citedSignalIds: input.signals.map((s) => s.id),
+  }] }),
+  judgePrincipleRelation: async () => ({ relation: "same" }),
+} as unknown as ModelProvider;
+
+beforeAll(async () => {
+  t = await createTestDatabase();
+  const url = new URL(process.env.DB_CONNECTION_URL!);
+  url.searchParams.set("options", `-c search_path=${t.schemaName}`);
+  process.env.DB_CONNECTION_URL = url.toString();
+  process.env.WAKA_BACKGROUND_JOB_AUTODRAIN = "0";
+  owner = await person(); other = await person();
+  const group = await createGroupForProfile(t.db as never, { profileId: owner, name: "Principle test" });
+  groupId = group.id;
+  await t.sql`INSERT INTO group_members(group_id,profile_id) VALUES (${groupId},${other})`;
+  const [mind] = await t.sql`SELECT id FROM profiles WHERE group_id=${groupId}`;
+  mindId = mind.id as string;
+});
+afterAll(async () => { await t?.cleanup(); });
+
+describe("principles across personal and room profiles", () => {
+  it("creates a personal principle from recent evidence and keeps locked words on a later match", async () => {
+    await material(owner, [owner]);
+    expect((await loadPrincipleMaterial(t.db as never, owner)).eligibility.eligible).toBe(true);
+    const result = await refreshPrinciplesForProfile({ profileId: owner }, { db: t.db as never, modelProvider: provider });
+    expect(result.minted).toBe(1);
+    await t.sql`UPDATE principles SET statement='My own words', locked_at=now() WHERE profile_id=${owner}`;
+    await refreshPrinciplesForProfile({ profileId: owner }, { db: t.db as never, modelProvider: provider });
+    const [row] = await t.sql`SELECT statement FROM principles WHERE profile_id=${owner}`;
+    expect(row.statement).toBe("My own words");
+  });
+
+  it("uses room history, serves only room signal statements and withdraws unsupported room principles", async () => {
+    await material(mindId, [owner, other], groupId);
+    const before = await loadPrincipleMaterial(t.db as never, mindId);
+    expect(before.eligibility.tomAppearances).toBe(1);
+    expect(before.eligibility.eligible).toBe(true);
+    expect((await refreshPrinciplesForProfile({ profileId: mindId }, { db: t.db as never, modelProvider: provider })).minted).toBe(1);
+    const app = new Hono();
+    app.route("/groups", createGroupsRoutes({ getDatabase: () => t.db as never,
+      authMiddleware: async (c, next) => {
+        c.set("session", { sessionId: "test", account: { id: "test", email: "test@example.test" },
+          profile: { id: owner, accountId: "test", type: "human", name: "Test", preferredLocale: "en-US" } });
+        await next();
+      },
+    }));
+    const response = await app.request(`/groups/${groupId}/principles`);
+    expect(response.status).toBe(200);
+    const body = await response.json() as { principles: Array<{ citedSignals: unknown[] }> };
+    expect(body.principles).toHaveLength(1);
+    expect(body.principles[0]!.citedSignals).toHaveLength(3);
+    expect(JSON.stringify(body)).not.toContain("PRIVATE RAW TEXT");
+    await t.sql`UPDATE inspirations SET visibility='private' WHERE profile_id=${other}`;
+    expect((await loadPrincipleMaterial(t.db as never, mindId)).eligibility.eligible).toBe(false);
+    expect(await (await app.request(`/groups/${groupId}/principles`)).json()).toEqual({ principles: [] });
+    await t.sql`UPDATE inspirations SET visibility='public' WHERE profile_id=${other}`;
+  });
+
+  it("deduplicates completed requests and charges room generation to a member account", async () => {
+    await requestPrincipleRefresh(t.db as never, mindId);
+    const [job] = await t.sql`SELECT id,profile_id FROM background_jobs WHERE type='refresh_principles'`;
+    expect([owner, other]).toContain(job.profile_id);
+    await t.sql`UPDATE background_jobs SET status='succeeded' WHERE id=${job.id}`;
+    await requestPrincipleRefresh(t.db as never, mindId);
+    const rows = await t.sql`SELECT status FROM background_jobs WHERE type='refresh_principles'`;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.status).toBe("succeeded");
+    expect((await loadPrincipleStatus(t.db as never, mindId)).phase).toBe("ready");
+    await t.sql`UPDATE background_jobs SET status='failed',attempts=3 WHERE id=${job.id}`;
+    await requestPrincipleRefresh(t.db as never, mindId);
+    expect((await loadPrincipleStatus(t.db as never, mindId)).phase).toBe("failed");
+    await requestPrincipleRefresh(t.db as never, mindId, true);
+    expect((await loadPrincipleStatus(t.db as never, mindId)).phase).toBe("processing");
+  });
+});

@@ -109,6 +109,7 @@ const REGISTER: Record<string, string> = {
     "that means nothing. The exit is dismissTopOfMindEntry.",
   refreshTopOfMind: "RULED: regeneration is idempotent; there is no prior state to restore",
   refreshGroupTopOfMind: "RULED: the same, for a room",
+  requestPrincipleRead: "RULED: requests deduplicated background generation; existing words remain editable or removable",
 
   // what the machine concluded you hold to. NOTHING DECLARES ONE (founder,
   // 2026-09-08: "You cannot declare your own values. This can only be

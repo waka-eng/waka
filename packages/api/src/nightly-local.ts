@@ -9,13 +9,9 @@
  * appeared, however real the material got (observed 2026-09-01: every local
  * layer-4 artifact in existence had been fired by hand).
  *
- * This entry calls THE SAME handler the cron invokes — nothing here
- * enqueues generation itself, so the owner's ruling that the cron handler
- * is the sole enqueuer stays exactly one function wide. Idempotency keys
- * (day for principles, ISO week for the garden) make repeated boots
- * collapse into the rows already there, so running this on every
- * `pnpm dev:local` is safe and, on an ordinary day, free: the cheap gates
- * answer "not yet" with zero model calls.
+ * This entry calls the same recovery handler as the deployed cron. With
+ * --watch it repeats hourly while the local stack stays up. Material keys
+ * for principles and weekly garden keys keep unchanged work bounded.
  *
  * The explicit exit matters: the db pool keeps node alive after the work
  * is done (learned the long way — the first hand-run zombied for fifteen
@@ -35,5 +31,13 @@ loadDotenv({ path: dotenvPath });
 process.env.WAKA_BACKGROUND_JOB_AUTODRAIN = "0";
 
 const { handler } = await import("./principle-refresh.js");
-await handler();
+const watch = process.argv.includes("--watch");
+do {
+  try { await handler(); }
+  catch (error) {
+    console.error("[principle-refresh] local pass failed", error);
+    if (!watch) process.exit(1);
+  }
+  if (watch) await new Promise((resolve) => setTimeout(resolve, 60 * 60 * 1000));
+} while (watch);
 process.exit(0);

@@ -32,6 +32,29 @@ export interface ApiPrinciple {
   createdAt: string;
 }
 
+export interface ApiPrincipleStatus {
+  phase: "waiting" | "pending" | "processing" | "ready" | "failed";
+  eligible: boolean;
+  signalCount: number;
+  topOfMindCount: number;
+}
+
+export async function fetchPrincipleRead(groupId?: string): Promise<{
+  principles: ApiPrinciple[]; status: ApiPrincipleStatus;
+}> {
+  const path = groupId ? `/groups/${encodeURIComponent(groupId)}/principles` : "/principles";
+  const [rows, state] = await Promise.all([
+    getJson<{ principles: ApiPrinciple[] }>(apiPath(path), "Principles could not be loaded"),
+    getJson<{ status: ApiPrincipleStatus }>(apiPath(`${path}/status`), "Principles status could not be loaded"),
+  ]);
+  return { principles: rows.principles, status: state.status };
+}
+
+export async function requestPrincipleRead(groupId?: string, retry = false): Promise<void> {
+  const path = groupId ? `/groups/${encodeURIComponent(groupId)}/principles` : "/principles";
+  await postJson(apiPath(`${path}/refresh${retry ? "?retry=1" : ""}`), {}, "Principles could not be started");
+}
+
 /** GET /principles — the acting profile's ranked set. */
 export async function fetchPrinciples(): Promise<ApiPrinciple[]> {
   const body = await getJson<{ principles: ApiPrinciple[] }>(

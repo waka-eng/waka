@@ -60,6 +60,7 @@ import {
 import { normalizeSupportedLocale } from "../lib/locales.js";
 import { validationDetails } from "../lib/validation.js";
 import { loadProfileTarget, resolveProfileScope } from "./signals.js";
+import { loadPrincipleStatus, requestPrincipleRefresh } from "../lib/principle-status.js";
 
 type WakaDb = ReturnType<typeof getDb>;
 
@@ -111,7 +112,7 @@ export interface PrincipleView {
   createdAt: string;
 }
 
-async function loadPrincipleViews(db: WakaDb, profileId: string): Promise<PrincipleView[]> {
+export async function loadPrincipleViews(db: WakaDb, profileId: string): Promise<PrincipleView[]> {
   const rows = await db
     .select()
     .from(principles)
@@ -193,7 +194,7 @@ export function renderPrinciplesMarkdown(
   }
   lines.push("");
   lines.push(
-    `— ${views.length} principle${views.length === 1 ? "" : "s"} · generated nightly · this rendering ${renderedAt.toISOString().slice(0, 10)}`,
+    `— ${views.length} principle${views.length === 1 ? "" : "s"} · generated from patterns · this rendering ${renderedAt.toISOString().slice(0, 10)}`,
   );
   return lines.join("\n") + "\n";
 }
@@ -244,6 +245,19 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
       surface: "principles",
     });
     return c.json({ principles: views });
+  });
+
+  routes.get("/status", async (c) => {
+    const resolved = await resolveRead(c);
+    if ("error" in resolved) return resolved.error;
+    return c.json({ status: await loadPrincipleStatus(getDatabase(), resolved.profileId) });
+  });
+
+  routes.post("/refresh", async (c) => {
+    // Generation may only be requested for the session's own profile.
+    const profileId = c.get("session").profile.id;
+    const status = await requestPrincipleRefresh(getDatabase(), profileId, c.req.query("retry") === "1");
+    return c.json({ status }, 202);
   });
 
   /**
@@ -616,9 +630,7 @@ export function createPrincipleMarkdownRoute(
       .from(profiles)
       .where(eq(profiles.id, scope.profileId))
       .limit(1);
-    /* principles are a person's or an agent's; a room's mind holds none
-       (rooms do not participate in layer 4 — data-model.md), so a mind here
-       reads as no profile at all */
+    // Room principles are served through group membership, never personal scope.
     if (!profileRaw || profileRaw.type === "group") {
       return c.json({ error: "Profile not found" }, 404);
     }

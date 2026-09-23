@@ -291,7 +291,7 @@ artifacts**.
   *context* (still instructs with every proper noun and number deleted),
   *directive* (prescribes the next choice; a fact about the person is a
   signal), *evidence* (cites ≥3 distinct signals from this profile's own
-  history), *time* (evidence spans ≥45 days and survived ≥5 top-of-mind
+  history), *support* (dated evidence and representation in ≥1 top-of-mind
   versions), *completion* (can never be finished; anything checkable-off
   is a goal). Exact thresholds live in
   [generation.md](generation.md) and are drift-locked once implemented.
@@ -314,10 +314,15 @@ artifacts**.
   are an uncapped set selected by longevity, minted per-candidate with
   merge-on-overlap. Cardinality is the structural difference between
   the layers.
-- **Generated nightly, and only nightly**: one cron at midnight PST is
-  the sole enqueuer of principle generation. State maintenance
-  (disputes, reconciliation after evidence loss) is immediate SQL and
-  does not wait. Owner declarations are instant.
+- **Generated from changed material**: three active, evidenced signals and
+  at least one citing top-of-mind version can support an initial principle.
+  Personal and room top-of-mind jobs request generation; opening the view
+  can queue missed work. Requests are deduplicated by material fingerprint.
+  A nightly cron and hourly local recovery pass cover missed triggers.
+  Rooms own principles through their group profile, with membership-gated
+  reads and citations restricted to currently visible room signals. Room
+  curation is read-only; personal edits keep their existing locking behavior.
+  State maintenance is immediate SQL. No calendar wait is required.
 - **The canonical rendering is machine-facing**: one deterministic
   markdown document (rank-ordered, stable ids, a self-describing
   preamble carrying the consumption contract), served byte-identically

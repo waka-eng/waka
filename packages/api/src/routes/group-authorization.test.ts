@@ -114,6 +114,9 @@ function mount(deps: GroupsRouteDependencies, as: AuthenticatedSession) {
 
 /** Every group-scoped surface, in the form a caller would reach it. */
 const groupScopedRequests: Array<[string, string, RequestInit]> = [
+  ["principles", `/api/groups/${groupId}/principles`, { method: "GET" }],
+  ["principle status", `/api/groups/${groupId}/principles/status`, { method: "GET" }],
+  ["principle refresh", `/api/groups/${groupId}/principles/refresh`, { method: "POST" }],
   ["the roster", `/api/groups/${groupId}/members`, { method: "GET" }],
   ["the wall", `/api/groups/${groupId}/wall`, { method: "GET" }],
   /* the field is the room's layer 1 — the one surface here that returns other

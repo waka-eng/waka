@@ -8,11 +8,9 @@
  * (top-of-mind-shaped): one candidate at a time, judged against the standing
  * set, merged on overlap, marked contested on genuine collision.
  *
- * Cadence is the layer's own: the nightly cron is the SOLE enqueuer of
- * generation (see principle-refresh.ts; a source-scan test pins this), and
- * nearly every run exits at the cheap SQL bar-check below without a single
- * model call. State maintenance — the owner's verdicts, reconciliation after
- * evidence loss — is immediate SQL elsewhere and never waits for midnight.
+ * Material changes request a deduplicated background pass. The nightly cron
+ * recovers missed work. Three evidenced patterns and a citing top-of-mind
+ * version can support an initial principle, without a fixed calendar wait.
  *
  * Canon: docs/data-model.md ("Principle (layer 4)"); mechanics and the
  * qualification tests: docs/generation.md; phases: docs/goals/principles.md.
@@ -35,6 +33,7 @@ import {
 import { getDb } from "./db.js";
 import { normalizeSupportedLocale } from "./locales.js";
 import { writePrincipleStatementChain } from "./statement-chains.js";
+import { loadGroupWall } from "../routes/groups-wall.js";
 import {
   getDefaultModelProvider,
   type ModelProvider,
@@ -52,11 +51,11 @@ type WakaTx = Parameters<Parameters<WakaDb["transaction"]>[0]>[0];
 /** Distinct citing signals a principle must rest on. */
 export const PRINCIPLE_MIN_SIGNALS = 3;
 
-/** First-to-last evidence span, in days, across the citing signals. */
-export const PRINCIPLE_MIN_SPAN_DAYS = 45;
+/** No calendar wait for an initial principle; evidence is still required. */
+export const PRINCIPLE_MIN_SPAN_DAYS = 0;
 
 /** Distinct top-of-mind versions the citing signals were selected into. */
-export const PRINCIPLE_MIN_TOM_APPEARANCES = 5;
+export const PRINCIPLE_MIN_TOM_APPEARANCES = 1;
 
 /** Statement ceiling — a principle is a directive, not an essay. */
 export const PRINCIPLE_MAX_STATEMENT_LENGTH = 200;
@@ -129,6 +128,7 @@ export function computeCitationEligibility(
   return {
     eligible:
       distinctSignals >= bar("SIGNALS") &&
+      citations.every((row) => row.evidenceAt.some((at) => at <= now)) &&
       spanDays >= bar("SPAN") &&
       tomAppearances >= bar("TOM"),
     distinctSignals,
@@ -187,8 +187,8 @@ async function loadCitationEvidence(
   }
 
   // Dated by the CAPTURE that witnesses it, not by when the link was noticed
-  // — same rule as confidence and selection. The 45-day span bar measures the
-  // theme's lifetime in the person's history; a retroactively cited old save
+  // — same rule as confidence and selection. The span describes the
+  // theme's lifetime in the profile's history; a retroactively cited old save
   // must widen it with its own date, not collapse it to the day of noticing.
   const evidenceRows = await db
     .select({ signalId: signalEvidence.signalId, createdAt: inspirations.createdAt })
@@ -199,13 +199,20 @@ async function loadCitationEvidence(
     );
   for (const row of evidenceRows) out.get(row.signalId)?.evidenceAt.push(row.createdAt);
 
+  const [profile] = await db.select({ groupId: profiles.groupId }).from(profiles)
+    .where(eq(profiles.id, profileId)).limit(1);
   const tomRows = await db
     .select({ signalId: topOfMindEntrySignals.signalId, topOfMindId: topOfMindEntries.topOfMindId })
     .from(topOfMindEntrySignals)
     .innerJoin(topOfMindEntries, eq(topOfMindEntries.id, topOfMindEntrySignals.entryId))
     .innerJoin(topOfMinds, eq(topOfMinds.id, topOfMindEntries.topOfMindId))
     .where(
-      and(eq(topOfMinds.profileId, profileId), inArray(topOfMindEntrySignals.signalId, signalIds)),
+      and(
+        profile?.groupId
+          ? eq(topOfMinds.groupId, profile.groupId)
+          : eq(topOfMinds.profileId, profileId),
+        inArray(topOfMindEntrySignals.signalId, signalIds),
+      ),
     );
   for (const row of tomRows) {
     if (row.signalId === null) continue;
@@ -236,6 +243,23 @@ export interface PrincipleGenerationDependencies {
   now?: Date;
 }
 
+/** Room signals must pass the same current-member visibility gate as the wall. */
+export async function loadPrincipleMaterial(db: WakaDb, profileId: string) {
+  const [profile] = await db.select({ groupId: profiles.groupId, preferredLocale: profiles.preferredLocale }).from(profiles)
+    .where(eq(profiles.id, profileId)).limit(1);
+  const visibleIds = profile?.groupId
+    ? new Set((await loadGroupWall(db, profile.groupId)).map((row) => row.signalId))
+    : null;
+  const rows = await db.select({ id: signals.id, statement: signals.statement,
+    lastEvidenceAt: signals.lastEvidenceAt, updatedAt: signals.updatedAt })
+    .from(signals).where(and(eq(signals.profileId, profileId), eq(signals.status, "active")));
+  const activeSignals = rows.filter((row) => !visibleIds || visibleIds.has(row.id));
+  const evidence = await loadCitationEvidence(db, profileId, activeSignals.map((row) => row.id));
+  return { activeSignals, evidence, groupId: profile?.groupId ?? null,
+    preferredLocale: profile?.preferredLocale ?? "en-US",
+    eligibility: computeCitationEligibility([...evidence.values()], new Date()) };
+}
+
 export async function refreshPrinciplesForProfile(
   input: { profileId: string },
   deps: PrincipleGenerationDependencies = {},
@@ -253,21 +277,9 @@ export async function refreshPrinciplesForProfile(
 
   // The cheap gate: active signals with their longevity stats. Nearly every
   // night ends here, with zero model calls.
-  const activeSignals = await db
-    .select({
-      id: signals.id,
-      statement: signals.statement,
-      lastEvidenceAt: signals.lastEvidenceAt,
-    })
-    .from(signals)
-    .where(and(eq(signals.profileId, input.profileId), eq(signals.status, "active")));
+  const { activeSignals, evidence, groupId } = await loadPrincipleMaterial(db, input.profileId);
   if (activeSignals.length < bar("SIGNALS")) return none;
 
-  const evidence = await loadCitationEvidence(
-    db,
-    input.profileId,
-    activeSignals.map((row) => row.id),
-  );
   const overall = computeCitationEligibility([...evidence.values()], now);
   if (!overall.eligible) return none;
 
@@ -287,7 +299,7 @@ export async function refreshPrinciplesForProfile(
   const [liveTom] = await db
     .select({ id: topOfMinds.id })
     .from(topOfMinds)
-    .where(and(eq(topOfMinds.profileId, input.profileId), eq(topOfMinds.status, "live")))
+    .where(and(groupId ? eq(topOfMinds.groupId, groupId) : eq(topOfMinds.profileId, input.profileId), eq(topOfMinds.status, "live")))
     .limit(1);
   const currentEntries = liveTom
     ? await db

@@ -710,8 +710,8 @@ qualifies.
    signal, not a principle.
 3. **Evidence** — cites at least `PRINCIPLE_MIN_SIGNALS` (3) distinct
    signals from this profile's own history; uncited virtue is a horoscope.
-4. **Time** — evidence spanning at least `PRINCIPLE_MIN_SPAN_DAYS` (45)
-   days and selected into at least `PRINCIPLE_MIN_TOM_APPEARANCES` (5)
+4. **Support** — evidence spanning at least `PRINCIPLE_MIN_SPAN_DAYS` (0)
+   days and selected into at least `PRINCIPLE_MIN_TOM_APPEARANCES` (1)
    top-of-mind versions; a two-week obsession is top of mind, not
    character. Both computed over the UNION of the citing signals — the
    theme's lifetime, not any one wording's. **[checked]**
@@ -732,9 +732,13 @@ marked as a pair for owner adjudication). An explicit, owner-reorderable
 **rank** keeps the set decidable even while a conflict stands — the higher
 rank wins operationally.
 
-**Generation is mint-or-match, nightly.** A dedicated cron — the *sole*
-enqueuer, midnight PST (fixed 08:00 UTC), pinned so any second call site
-fails CI — evaluates each active profile: one cheap SQL check for clusters
+**Generation is mint-or-match, when material changes.** A completed personal
+or room top-of-mind pass requests an eligibility check. Opening principles
+can request missing work through a POST; GETs only read. The nightly cron
+(08:00 UTC) and local hourly pass recover missed work. All paths share a
+material fingerprint, so completed inputs are not regenerated on page opens.
+Failed jobs retry only within the worker budget or by an explicit retry.
+Each request evaluates the active profile: one cheap SQL check for clusters
 newly past the bar, and only then model calls (distill at most
 `PRINCIPLE_MAX_CANDIDATES_PER_RUN` (3) candidates; judge each against the
 standing set as `same | independent | conflicting`, conservative toward
@@ -742,7 +746,9 @@ independent — the same recoverable-mistake stance as match-or-mint, one
 level up). Statements are capped at `PRINCIPLE_MAX_STATEMENT_LENGTH` (200)
 characters: a principle is a directive, not an essay. State maintenance
 (contested flips, reconciliation after evidence loss) is immediate SQL and
-does not wait for midnight; generation does.
+does not wait for midnight. Rooms use their own signals and top-of-mind
+versions. Every room signal must still pass the wall's current-member and
+visibility checks; principle reads expose only those signal statements.
 
 **The canonical rendering is machine-facing:** one deterministic markdown
 document (rank-ordered, stable ids, a preamble carrying the consumption
@@ -817,8 +823,8 @@ The authoritative values. Machine-checked against code — see
 | Constant | Value | One line |
 |---|---|---|
 | `PRINCIPLE_MIN_SIGNALS` | 3 | Distinct citing signals a principle must rest on |
-| `PRINCIPLE_MIN_SPAN_DAYS` | 45 | First-to-last evidence span across the citing signals |
-| `PRINCIPLE_MIN_TOM_APPEARANCES` | 5 | Distinct top-of-mind versions the citing signals survived into |
+| `PRINCIPLE_MIN_SPAN_DAYS` | 0 | Initial principles require evidence, without a calendar wait |
+| `PRINCIPLE_MIN_TOM_APPEARANCES` | 1 | Distinct top-of-mind versions citing the signals |
 | `PRINCIPLE_MAX_STATEMENT_LENGTH` | 200 | A principle is a directive, not an essay |
 | `PRINCIPLE_MAX_CANDIDATES_PER_RUN` | 3 | Candidates one nightly distillation may propose |
 

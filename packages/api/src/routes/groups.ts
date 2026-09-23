@@ -45,9 +45,11 @@
  */
 
 import { Hono, type MiddlewareHandler } from "hono";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import {
+  profiles,
   groupProposalKindValues,
   groupProposalStatusValues,
   type RefreshGroupTopOfMindPayload,
@@ -81,6 +83,9 @@ import {
   loadGroupTopOfMind,
 } from "./groups-top-of-mind.js";
 import { loadGroupWall } from "./groups-wall.js";
+import { loadPrincipleViews } from "./principles.js";
+import { loadPrincipleStatus, requestPrincipleRefresh } from "../lib/principle-status.js";
+import { PRINCIPLE_MIN_SIGNALS } from "../lib/principle-generation.js";
 
 const createGroupSchema = z
   .object({ name: z.string().trim().min(1, "Group name is required").max(120) })
@@ -223,6 +228,32 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
   };
 
   // GET /api/groups — the groups the caller belongs to.
+  for (const action of ["list", "status", "refresh"] as const) {
+    const path = `/:groupId/principles${action === "list" ? "" : `/${action}`}`;
+    routes.on(action === "refresh" ? "POST" : "GET", path, async (c) => {
+      const parsed = groupParamsSchema.safeParse(c.req.param());
+      if (!parsed.success) return c.json({ error: "Invalid group id" }, 400);
+      const { groupId } = parsed.data;
+      const db = getDatabase();
+      const membership = await loadMembership(db, { groupId, profileId: c.get("session").profile.id });
+      if (!membership) return c.json({ error: "Group not found" }, 404);
+      const [mind] = await db.select({ id: profiles.id }).from(profiles)
+        .where(and(eq(profiles.groupId, groupId), eq(profiles.type, "group"))).limit(1);
+      if (!mind) return action === "list" ? c.json({ principles: [] })
+        : c.json({ status: { phase: "waiting", eligible: false, signalCount: 0, topOfMindCount: 0 } });
+      if (action === "status") return c.json({ status: await loadPrincipleStatus(db, mind.id) });
+      if (action === "refresh") return c.json({
+        status: await requestPrincipleRefresh(db, mind.id, c.req.query("retry") === "1"),
+      }, 202);
+      const [rows, wall] = await Promise.all([loadPrincipleViews(db, mind.id), loadWall(db, groupId)]);
+      const visible = new Set(wall.map((signal) => signal.signalId));
+      // A withdrawn member's or private evidence must never survive through
+      // a principle's cached citations. Return statements only, never captures.
+      return c.json({ principles: rows.filter((row) => row.citedSignals.length >= PRINCIPLE_MIN_SIGNALS
+        && row.citedSignals.every((signal) => visible.has(signal.id))) });
+    });
+  }
+
   routes.get("/", async (c) => {
     const session = c.get("session");
     const groupList = await listGroups(getDatabase(), session.profile.id);

@@ -63,6 +63,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import { PrincipleRead } from "../components/PrincipleRead";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { hueCss } from "../lib/appearance";
@@ -1402,6 +1403,7 @@ function HomeExperience(): JSX.Element {
    * and the menu existed largely to carry it.
    */
   const [principles, setPrinciples] = useState<ApiPrinciple[]>([]);
+  const [groupPrincipleCounts, setGroupPrincipleCounts] = useState<Record<string, number>>({});
   /**
    * LAYER FOUR BECOMES SOMETHING YOU CAN ANSWER, not only read.
    *
@@ -2767,19 +2769,7 @@ function HomeExperience(): JSX.Element {
        they were saved in. That is the canon's privacy line and it is why a
        room's orbit can say WHO fed an entry but never WHICH memory did. */
     (async () => {
-      /* Layer 4 rides along with the rooms load rather than opening its own
-         effect: both are account-level, both are wanted before the first
-         paint settles, and a second effect would be a second thing to keep
-         in step with sign-out. A failure here is silent on purpose — an
-         empty set and the line simply does not appear, which is the same
-         thing a profile with no principles yet shows. */
-      fetchPrinciples()
-        .then((rows) => {
-          if (!dead && !offlineRef.current) setPrinciples(rows);
-        })
-        .catch(() => {
-          /* no principles is a real state, not an error worth a banner */
-        });
+      // PrincipleRead owns loading and errors separately for the selected wall.
 
       const rows = await fetchGroups();
       if (offlineRef.current) return;
@@ -12118,7 +12108,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 {ready ? (
                   <div
                     className={
-                      w.kind === "self"
+                      w.kind === "self" || w.kind === "group"
                         ? "jar-values-room jar-values-room--live"
                         : "jar-values-room"
                     }
@@ -12137,6 +12127,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         could hold anything). Your own wall's sky only:
                         another wall's keeps the forming words until sharing
                         values is designed on purpose. */}
+                    {w.kind !== "agent" ? <PrincipleRead
+                      key={`${auth?.profile?.id}:${spaceKey(w)}`}
+                      groupId={w.kind === "group" ? w.id : undefined}
+                      active={here && !offlineRef.current}
+                      locale={locale}
+                      onRead={w.kind === "self" ? setPrinciples : (rows) => setGroupPrincipleCounts((counts) =>
+                        counts[w.id] === rows.length ? counts : { ...counts, [w.id]: rows.length })}
+                    /> : null}
                     {w.kind === "self" && principles.length > 0 ? (
                       <>
                         {/* THE LAYER, NOT THE NAME — the same ruling the board
@@ -12370,20 +12368,16 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         </p>
                       ))}
                       </>
-                    ) : (
+                    ) : w.kind === "agent" ? (
                       <>
                         <p className="jar-values-lead">
-                          {w.kind === "self"
-                            ? say("worldValuesLeadSelf")
-                            : formatMessage(locale, "worldValuesLeadOther", { name: w.name })}
+                          {formatMessage(locale, "worldValuesLeadOther", { name: w.name })}
                         </p>
                         <p className="jar-values-sub">
-                          {w.kind === "self"
-                            ? say("worldValuesSubSelf")
-                            : say("worldValuesSubOther")}
+                          {say("worldValuesSubOther")}
                         </p>
                       </>
-                    )}
+                    ) : null}
                     {/* NOTHING IS DECLARED HERE. What stood in this slot was
                         `declare one`, and under it a two-line draft with
                         `declare it · not now` — the one act on this band that
@@ -14293,7 +14287,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
              your own wall's sky can hold anything yet, so it lights only
              there. */
           className={
-            atWall.kind === "self" && principles.length > 0
+            (atWall.kind === "self" ? principles.length > 0 : (groupPrincipleCounts[atWall.id] ?? 0) > 0)
               ? "jar-values jar-values--held"
               : "jar-values"
           }

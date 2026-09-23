@@ -378,7 +378,7 @@ describe("the canonical rendering", () => {
 2. \`p-77a01c2e\` (contested, in tension with p-e83f19aa) — Spend on quality where you will feel it every day.
 3. \`p-c15b8d90\` (aspirational) — Help people whether they deserve it or not.
 
-— 3 principles · generated nightly · this rendering 2026-08-18
+— 3 principles · generated from patterns · this rendering 2026-08-18
 `,
     );
   });
