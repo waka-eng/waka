@@ -74,8 +74,11 @@ try {
   await page.locator(".jar-values").waitFor({ state: "hidden" });
   const groupView = page.locator('.jar-wallcol[data-kind="group"] .jar-values-room');
   await groupView.getByText("Make experiments safe to share together.", { exact: true }).waitFor({ state: "visible" });
+  await page.waitForTimeout(1000); // Let the vertical camera animation finish before opening evidence.
   await groupView.getByText("Patterns behind this", { exact: true }).click();
   await groupView.getByText("Pattern 0: testing small experiments", { exact: true }).waitFor({ state: "visible" });
+  const box = await groupView.boundingBox();
+  if (!box || box.y < 0 || box.y + box.height > 900) throw new Error("Room principles are outside the viewport");
   await page.screenshot({ path: "/tmp/waka-principles-room.png" });
   await page.route("**/principles/status", (route) => route.fulfill({ status: 500, body: "{}" }));
   await page.reload();
