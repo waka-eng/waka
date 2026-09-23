@@ -57,6 +57,15 @@ try {
       await t.sql`INSERT INTO top_of_mind_entry_signals(entry_id,signal_id) VALUES (${entry.id},${id})`;
       await t.sql`INSERT INTO principle_signals(profile_id,principle_id,signal_id) VALUES (${target},${principle.id},${id})`;
     }
+    const more = target === owner
+      ? ["Leave space to change your mind.", "Make something useful before making it bigger."]
+      : ["Let different perspectives shape the next step.", "Keep the work ambitious and the process humane."];
+    for (const [index, statement] of more.entries()) {
+      const [extra] = await t.sql`INSERT INTO principles(profile_id,statement,rank)
+        VALUES (${target},${statement},${index + 2}) RETURNING id`;
+      for (const id of ids) await t.sql`INSERT INTO principle_signals(profile_id,principle_id,signal_id)
+        VALUES (${target},${extra.id},${id})`;
+    }
   }
   const page = await context.newPage();
   await page.goto(base);
@@ -66,6 +75,7 @@ try {
   await page.locator(".jar-values").waitFor({ state: "hidden" });
   const personal = page.locator('.jar-wallcol[data-kind="self"] .jar-values-held');
   await personal.filter({ hasText: "Prefer small, reversible experiments." }).waitFor({ state: "visible" });
+  await page.waitForTimeout(1000); // Capture the settled list, not the camera transition.
   await page.screenshot({ path: "/tmp/waka-principles-personal.png" });
   await page.goto(`${base}/w/principle-room`);
   await page.locator(".jar-values").waitFor({ state: "visible" });
@@ -75,11 +85,16 @@ try {
   const groupView = page.locator('.jar-wallcol[data-kind="group"] .jar-values-room');
   await groupView.getByText("Make experiments safe to share together.", { exact: true }).waitFor({ state: "visible" });
   await page.waitForTimeout(1000); // Let the vertical camera animation finish before opening evidence.
-  await groupView.getByText("Patterns behind this", { exact: true }).click();
-  await groupView.getByText("Pattern 0: testing small experiments", { exact: true }).waitFor({ state: "visible" });
+  if (await groupView.locator(".jar-principles-list > li").count() !== 3) throw new Error("Expected three principle rows");
+  await groupView.getByText("Patterns behind this", { exact: true }).first().click();
+  await groupView.getByText("Pattern 0: testing small experiments", { exact: true }).first().waitFor({ state: "visible" });
   const box = await groupView.boundingBox();
   if (!box || box.y < 0 || box.y + box.height > 900) throw new Error("Room principles are outside the viewport");
   await page.screenshot({ path: "/tmp/waka-principles-room.png" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(1000);
+  await page.screenshot({ path: "/tmp/waka-principles-room-mobile.png" });
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.route("**/principles/status", (route) => route.fulfill({ status: 500, body: "{}" }));
   await page.reload();
   await page.locator(".jar-values").waitFor({ state: "visible" });

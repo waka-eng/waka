@@ -71,7 +71,8 @@ export function PrincipleRead({ groupId, active, locale, onRead }: {
     {!groupId && rows.length === 0 ? <p className="jar-values-lead">{t(locale, "worldValuesLeadSelf")}</p> : null}
     {groupId ? <p className="jar-values-eyebrow jar-label">{t(locale, "worldPhilosophiesValues")}</p> : null}
     {groupId && rows.length > 0 ? <>
-      {rows.map((row, index) => <div key={row.id}>
+      <ul className="jar-principles-list" role="list" aria-label={t(locale, "worldPhilosophiesValues")} data-jar-interactive="1">
+      {[...rows].sort((a, b) => a.rank - b.rank).map((row, index) => <li key={row.id} className="jar-principle-group">
         <p className={index === 0 ? "jar-values-held jar-values-held--first" : "jar-values-held"}>
           <span className="jar-values-value">{row.statement}</span>
         </p>
@@ -80,7 +81,8 @@ export function PrincipleRead({ groupId, active, locale, onRead }: {
           <summary>{t(locale, "worldPrinciplesEvidence")}</summary>
           {row.citedSignals.map((signal) => <p key={signal.id}>{signal.statement}</p>)}
         </details>
-      </div>)}
+      </li>)}
+      </ul>
     </> : null}
     {rows.length === 0 || error || status?.phase === "processing" ?
       <p className="jar-values-sub" role={error ? "alert" : "status"}>

@@ -12148,11 +12148,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         </p>
                     {/* Ranked, and the rank is the order — never a number
                         beside a statement. */}
+                    <ul className="jar-principles-list" role="list" aria-label={say("worldPhilosophiesValues")} data-jar-interactive="1">
                     {[...principles]
                       .sort((a, b) => a.rank - b.rank)
                       .map((pr, i, ranked) => (
-                        <p
+                        <li
                           key={pr.id}
+                          data-expanded={pick === pr.id || pDraft?.id === pr.id || pRoots === pr.id}
                           className={
                             /* RANK AS PRESENCE, NEVER AS A NUMBER. The top
                                value is the one that wins when two conflict,
@@ -12365,8 +12367,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                               )}
                             </span>
                           ) : null}
-                        </p>
+                        </li>
                       ))}
+                    </ul>
                       </>
                     ) : w.kind === "agent" ? (
                       <>

@@ -738,6 +738,93 @@
 .jar-values-room--live {
   pointer-events: auto;
 }
+
+/* A connected list: each principle is one point in the profile's direction.
+   Keep long lists and open evidence inside the sky's available viewport. */
+.jar-principles-list {
+  list-style: none;
+  margin: 0;
+  padding: var(--sp-8) var(--sp-12) var(--sp-12) var(--sp-2);
+  max-height: min(48dvh, 460px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--jar-faint) transparent;
+  text-align: left;
+}
+.jar-principles-list > li {
+  position: relative;
+  margin: 0;
+  padding: var(--sp-20) var(--sp-18) var(--sp-22) var(--sp-40);
+  border-bottom: 1px solid color-mix(in srgb, var(--jar-ink) 10%, transparent);
+  border-radius: 2px 14px 14px 2px;
+  transition: background 180ms ease;
+}
+.jar-principles-list > li + li,
+.jar-principles-list > .jar-values-held + .jar-values-held { margin-top: 0; }
+.jar-principles-list > li::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 31px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--jar-ink);
+  opacity: 0.5;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--jar-ink) 24%, transparent);
+}
+.jar-principles-list > li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 45px;
+  bottom: -18px;
+  width: 1px;
+  background: linear-gradient(var(--jar-faint), transparent);
+  opacity: 0.3;
+  pointer-events: none;
+}
+.jar-principles-list > li:first-child::before { opacity: 0.95; }
+.jar-principles-list > li:hover,
+.jar-principles-list > li:focus-within,
+.jar-principles-list > li[data-expanded="true"] {
+  background: color-mix(in srgb, var(--jar-ink) 4%, transparent);
+}
+.jar-principles-list .jar-values-value,
+.jar-principles-list .jar-values-held--first .jar-values-value {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-size: clamp(19px, 2.1vw, 25px);
+  line-height: 1.4;
+  text-wrap: pretty;
+}
+.jar-principles-list button.jar-values-value { min-height: 44px; }
+.jar-principles-list button:focus-visible,
+.jar-principles-list summary:focus-visible {
+  outline: 1px solid var(--jar-ink);
+  outline-offset: 5px;
+  border-radius: 3px;
+}
+.jar-principles-list .jar-values-sub,
+.jar-principles-list .jar-ask,
+.jar-principles-list .jar-was-roots { text-align: left; }
+.jar-principles-list .jar-values-sub { margin-top: var(--sp-12); }
+.jar-principles-list summary { cursor: pointer; padding: var(--sp-6) 0; }
+.jar-principles-list details[open] p,
+.jar-principles-list .jar-was-root {
+  padding: var(--sp-8) 0 var(--sp-8) var(--sp-12);
+  border-left: 1px solid var(--jar-faint);
+  line-height: 1.5;
+}
+@media (max-width: 600px) {
+  .jar-principles-list > li { padding-right: var(--sp-10); padding-left: var(--sp-30); }
+  .jar-principles-list { max-height: 44dvh; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .jar-principles-list > li { transition: none; }
+}
 /* The layer names itself over the set — the board's TOP OF MIND ruling,
    applied standing in the sky, where the signpost that names the place is
    hidden. */
