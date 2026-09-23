@@ -30,6 +30,7 @@ export interface ApiPrinciple {
   conflictsWithId: string | null;
   citedSignals: Array<{ id: string; statement: string }>;
   createdAt: string;
+  disputeId?: string | null;
 }
 
 export interface ApiPrincipleStatus {
@@ -114,4 +115,9 @@ export async function disputePrinciple(principleId: string): Promise<void> {
     { targetType: "principle", targetId: principleId, value: "not_true" },
     "That dispute could not be recorded",
   );
+}
+
+export async function undoPrincipleDispute(principleId: string, disputeId: string): Promise<void> {
+  await requestVoid(apiPath(`/principles/${encodeURIComponent(principleId)}/disputes/${encodeURIComponent(disputeId)}`),
+    "DELETE", undefined, "That dispute could not be undone");
 }

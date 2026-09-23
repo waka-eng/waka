@@ -212,6 +212,7 @@ import {
   type ApiMintedKey,
   deletePrinciple,
   disputePrinciple,
+  undoPrincipleDispute,
   reorderPrinciples,
   updatePrinciple,
   type ApiPrinciple,
@@ -11038,10 +11039,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   }, [pDraft, pBusy, reloadPrinciples, whyFailed]);
 
   const disputeThisPrinciple = useCallback(
-    (id: string) => {
+    (id: string, disputeId?: string) => {
       if (pBusy) return;
       setPBusy(true);
-      disputePrinciple(id)
+      (disputeId ? undoPrincipleDispute(id, disputeId) : disputePrinciple(id))
         .then(() => reloadPrinciples())
         .then(() => setPick(null))
         .catch((err) => setCharSay(whyFailed(err, say("worldDisputeNotRecorded"))))
@@ -12220,7 +12221,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                same truth #307 gave signals: the record holds
                                a dispute, so the page must not read settled.
                                Rank decides meanwhile; your verbs settle it. */
-                            <span className="jar-poster-away jar-label"> {say("worldValueContested")}</span>
+                            <span className="jar-poster-away jar-label">
+                              {say("worldValueContested")}
+                              {pr.disputeId ? <button type="button" className="jar-principle-undo" disabled={pBusy}
+                                onClick={() => disputeThisPrinciple(pr.id, pr.disputeId!)}>
+                                {say("worldPrincipleUndo")}
+                              </button> : null}
+                            </span>
                           ) : pr.state === "aspirational" ? (
                             /* The one distinction worth carrying up here:
                                declared-but-not-yet-demonstrated is a
@@ -12257,9 +12264,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                             <div className="jar-ask jar-principle-actions">
                               <button
                                 type="button"
+                                className="jar-principle-edit"
+                                aria-label={say("worldPrincipleEdit")}
+                                title={say("worldPrincipleEdit")}
                                 onClick={() => setPDraft({ id: pr.id, text: pr.statement })}
                               >
-                                {say("worldPrincipleEdit")}
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                                  <path d="m15 5 4 4M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15v5Z" />
+                                </svg>
                               </button>
                               {pr.citedSignals.length > 0 ? (
                                 <>
@@ -12338,7 +12350,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                   question is not migrate-or-delete per
                                   screen, it is whether a verb belongs on
                                   that noun in that state. */}
-                              {pr.origin === "minted" ? (
+                              {pr.origin === "minted" ? !pr.disputeId ? (
                                 <>
                                   <span aria-hidden="true"> · </span>
                                   <button
@@ -12349,7 +12361,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                     {say("worldNotMine")}
                                   </button>
                                 </>
-                              ) : (
+                              ) : null : (
                                 <>
                                   <span aria-hidden="true"> · </span>
                                   {pGoing === pr.id ? (

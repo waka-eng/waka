@@ -124,9 +124,8 @@ const REGISTER: Record<string, string> = {
     "RULED: a principle is earned, not written — the way back is the evidence " +
     "it rested on, which removal does not touch, and the next generation over it",
   updatePrinciple: "RULED: an edit is its own inverse",
-  disputePrinciple:
-    "RULED: a stance on the machine's sentence — answered by what you keep next, " +
-    "since there is no declaring your own",
+  disputePrinciple: "undoPrincipleDispute",
+  undoPrincipleDispute: "disputePrinciple",
   reorderPrinciples: "RULED: an ordering is its own inverse — move it back",
 
   // rooms

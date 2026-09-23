@@ -29,12 +29,13 @@
  */
 
 import { recordConsultation } from "../lib/consultations.js";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
 import {
   inspirations,
+  feedback,
   profiles,
   type Principle,
   principles,
@@ -110,6 +111,7 @@ export interface PrincipleView {
   conflictsWithId: string | null;
   citedSignals: Array<{ id: string; statement: string }>;
   createdAt: string;
+  disputeId?: string | null;
 }
 
 export async function loadPrincipleViews(db: WakaDb, profileId: string): Promise<PrincipleView[]> {
@@ -142,6 +144,13 @@ export async function loadPrincipleViews(db: WakaDb, profileId: string): Promise
     else citationsByPrinciple.set(row.principleId, [cited]);
   }
 
+  const verdicts = await db.select({ id: feedback.id, targetId: feedback.targetId, value: feedback.value })
+    .from(feedback).where(and(eq(feedback.profileId, profileId), eq(feedback.targetType, "principle"),
+      inArray(feedback.targetId, rows.map((row) => row.id))))
+    .orderBy(desc(feedback.createdAt), desc(feedback.id));
+  const latest = new Map<string, typeof verdicts[number]>();
+  for (const verdict of verdicts) if (!latest.has(verdict.targetId)) latest.set(verdict.targetId, verdict);
+
   return rows.map((row) => ({
     id: row.id,
     statement: row.statement,
@@ -154,7 +163,29 @@ export async function loadPrincipleViews(db: WakaDb, profileId: string): Promise
     conflictsWithId: row.conflictsWithId,
     citedSignals: citationsByPrinciple.get(row.id) ?? [],
     createdAt: row.createdAt.toISOString(),
+    disputeId: latest.get(row.id)?.value === "not_true" ? latest.get(row.id)!.id : null,
   }));
+}
+
+/** Undo exactly the selected user verdict, preserving model-detected conflicts. */
+export async function undoPrincipleDispute(db: WakaDb, profileId: string, principleId: string, disputeId: string) {
+  return db.transaction(async (tx) => {
+    const [principle] = await tx.select().from(principles)
+      .where(and(eq(principles.id, principleId), eq(principles.profileId, profileId))).for("update").limit(1);
+    if (!principle) return false;
+    const predicate = and(eq(feedback.profileId, profileId), eq(feedback.targetType, "principle"), eq(feedback.targetId, principleId));
+    const [latest] = await tx.select().from(feedback).where(predicate)
+      .orderBy(desc(feedback.createdAt), desc(feedback.id)).limit(1);
+    if (latest?.id !== disputeId || latest.value !== "not_true") return true;
+    await tx.delete(feedback).where(and(predicate, eq(feedback.id, disputeId)));
+    const [previous] = await tx.select().from(feedback).where(predicate)
+      .orderBy(desc(feedback.createdAt), desc(feedback.id)).limit(1);
+    const state = principle.conflictsWithId || previous?.value === "not_true" ? "contested"
+      : principle.origin === "declared" && !principle.heldSince ? "aspirational" : "held";
+    await tx.update(principles).set({ state, updatedAt: new Date() })
+      .where(and(eq(principles.id, principleId), eq(principles.profileId, profileId)));
+    return true;
+  });
 }
 
 /**
@@ -258,6 +289,17 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
     const profileId = c.get("session").profile.id;
     const status = await requestPrincipleRefresh(getDatabase(), profileId, c.req.query("retry") === "1");
     return c.json({ status }, 202);
+  });
+
+  routes.delete("/:principleId/disputes/:disputeId", async (c) => {
+    const params = z.object({ principleId: z.string().uuid(), disputeId: z.string().uuid() }).safeParse(c.req.param());
+    if (!params.success) return c.json({ error: "Invalid dispute" }, 400);
+    const query = scopeQuerySchema.safeParse(c.req.query());
+    if (!query.success) return c.json({ error: "Invalid query" }, 400);
+    const scope = await resolveProfileScope(getDatabase(), c.get("session"), query.data.profile, "write", loadProfile);
+    if (!scope.ok) return c.json(scope.body, scope.status);
+    const undone = await undoPrincipleDispute(getDatabase(), scope.profileId, params.data.principleId, params.data.disputeId);
+    return undone ? c.json({ ok: true }) : c.json({ error: "Principle not found" }, 404);
   });
 
   /**

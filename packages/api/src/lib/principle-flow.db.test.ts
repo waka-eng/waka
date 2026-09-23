@@ -4,6 +4,8 @@ import { Hono } from "hono";
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
 import { createGroupForProfile } from "../routes/groups-membership.js";
 import { createGroupsRoutes } from "../routes/groups.js";
+import { loadPrincipleViews, undoPrincipleDispute } from "../routes/principles.js";
+import { createFeedbackForProfile } from "../routes/feedback.js";
 import { loadPrincipleMaterial, refreshPrinciplesForProfile } from "./principle-generation.js";
 import { requestPrincipleRefresh, loadPrincipleStatus } from "./principle-status.js";
 import type { ModelProvider } from "./model-provider.js";
@@ -102,6 +104,31 @@ describe("principles across personal and room profiles", () => {
     expect((await loadPrincipleMaterial(t.db as never, mindId)).eligibility.eligible).toBe(false);
     expect(await (await app.request(`/groups/${groupId}/principles`)).json()).toEqual({ principles: [] });
     await t.sql`UPDATE inspirations SET visibility='public' WHERE profile_id=${other}`;
+  });
+
+  it("undoes only the owner's selected dispute, without changing locked words or model conflicts", async () => {
+    const [principle] = await t.sql`SELECT id FROM principles WHERE profile_id=${owner} LIMIT 1`;
+    const verdict = await createFeedbackForProfile(t.db as never, {
+      profileId: owner, targetType: "principle", targetId: principle.id, value: "not_true",
+    });
+    expect(verdict).not.toBeNull();
+    expect((await loadPrincipleViews(t.db as never, owner))[0]!.disputeId).toBe(verdict!.id);
+    expect(await undoPrincipleDispute(t.db as never, other, principle.id, verdict!.id)).toBe(false);
+    expect(await undoPrincipleDispute(t.db as never, owner, principle.id, verdict!.id)).toBe(true);
+    let [restored] = await t.sql`SELECT statement,state,locked_at FROM principles WHERE id=${principle.id}`;
+    expect(restored.state).toBe("held");
+    expect(restored.statement).toBe("My own words");
+    expect(restored.locked_at).not.toBeNull();
+    const [conflict] = await t.sql`INSERT INTO principles(profile_id,statement,rank)
+      VALUES (${owner},'A different principle',2) RETURNING id`;
+    await t.sql`UPDATE principles SET state='contested',conflicts_with_id=${conflict.id} WHERE id=${principle.id}`;
+    const second = await createFeedbackForProfile(t.db as never, {
+      profileId: owner, targetType: "principle", targetId: principle.id, value: "not_true",
+    });
+    await undoPrincipleDispute(t.db as never, owner, principle.id, second!.id);
+    [restored] = await t.sql`SELECT state FROM principles WHERE id=${principle.id}`;
+    expect(restored.state).toBe("contested");
+    expect((await loadPrincipleViews(t.db as never, owner)).find((row) => row.id === principle.id)!.disputeId).toBeNull();
   });
 
   it("deduplicates completed requests and charges room generation to a member account", async () => {

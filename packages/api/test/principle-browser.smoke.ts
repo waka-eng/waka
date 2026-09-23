@@ -90,6 +90,11 @@ try {
   if (await firstPrinciple.getByRole("button", { name: "not mine", exact: true }).isVisible()) {
     throw new Error("Escape must close the secondary actions");
   }
+  await firstPrinciple.locator("summary").click();
+  await firstPrinciple.getByRole("button", { name: "not mine", exact: true }).click();
+  await firstPrinciple.getByRole("button", { name: "Undo", exact: true }).waitFor({ state: "visible" });
+  await firstPrinciple.getByRole("button", { name: "Undo", exact: true }).click();
+  await firstPrinciple.getByRole("button", { name: "Undo", exact: true }).waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/waka-principles-personal.png" });
   await page.goto(`${base}/w/principle-room`);
   await page.locator(".jar-values").waitFor({ state: "visible" });

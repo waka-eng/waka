@@ -844,6 +844,20 @@
   min-height: 44px;
 }
 .jar-principle-options-body [aria-hidden="true"] { display: none; }
+.jar-principle-edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+}
+.jar-principle-undo {
+  margin-left: var(--sp-12);
+  min-height: 36px;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  color: var(--jar-ink);
+}
 .jar-principles-list details[open] p,
 .jar-principles-list .jar-was-root {
   padding: var(--sp-8) 0 var(--sp-8) var(--sp-12);
