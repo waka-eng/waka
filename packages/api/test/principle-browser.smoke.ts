@@ -76,6 +76,20 @@ try {
   const personal = page.locator('.jar-wallcol[data-kind="self"] .jar-values-held');
   await personal.filter({ hasText: "Prefer small, reversible experiments." }).waitFor({ state: "visible" });
   await page.waitForTimeout(1000); // Capture the settled list, not the camera transition.
+  const firstPrinciple = personal.filter({ hasText: "Prefer small, reversible experiments." });
+  await firstPrinciple.locator("button.jar-values-value").click();
+  await firstPrinciple.getByRole("button", { name: "Edit wording", exact: true }).waitFor({ state: "visible" });
+  await firstPrinciple.getByRole("button", { name: "Why this fits", exact: true }).click();
+  await firstPrinciple.locator(".jar-was-roots").waitFor({ state: "visible" });
+  if (await firstPrinciple.getByRole("button", { name: "not mine", exact: true }).isVisible()) {
+    throw new Error("Secondary principle actions should be collapsed initially");
+  }
+  await firstPrinciple.locator("summary").click();
+  await firstPrinciple.getByRole("button", { name: "not mine", exact: true }).waitFor({ state: "visible" });
+  await firstPrinciple.locator("summary").press("Escape");
+  if (await firstPrinciple.getByRole("button", { name: "not mine", exact: true }).isVisible()) {
+    throw new Error("Escape must close the secondary actions");
+  }
   await page.screenshot({ path: "/tmp/waka-principles-personal.png" });
   await page.goto(`${base}/w/principle-room`);
   await page.locator(".jar-values").waitFor({ state: "visible" });

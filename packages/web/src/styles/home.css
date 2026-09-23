@@ -812,6 +812,38 @@
 .jar-principles-list .jar-was-roots { text-align: left; }
 .jar-principles-list .jar-values-sub { margin-top: var(--sp-12); }
 .jar-principles-list summary { cursor: pointer; padding: var(--sp-6) 0; }
+.jar-principle-actions {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-8) var(--sp-20);
+}
+.jar-principle-actions > button,
+.jar-principle-options > summary { min-height: 40px; }
+.jar-principle-options {
+  margin-left: auto;
+  text-align: right;
+}
+.jar-principle-options > summary {
+  list-style: none;
+  color: var(--jar-muted);
+}
+.jar-principle-options > summary::-webkit-details-marker { display: none; }
+.jar-principle-options > summary::after { content: " ···"; }
+.jar-principle-options-body {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: var(--sp-8) var(--sp-12);
+  border: 1px solid color-mix(in srgb, var(--jar-ink) 12%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--jar-ink) 4%, transparent);
+}
+.jar-principle-options-body button {
+  text-align: left;
+  min-height: 44px;
+}
+.jar-principle-options-body [aria-hidden="true"] { display: none; }
 .jar-principles-list details[open] p,
 .jar-principles-list .jar-was-root {
   padding: var(--sp-8) 0 var(--sp-8) var(--sp-12);

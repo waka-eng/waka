@@ -12254,16 +12254,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                             </span>
                           ) : null}
                           {pick === pr.id && !pDraft ? (
-                            <span className="jar-ask">
+                            <div className="jar-ask jar-principle-actions">
                               <button
                                 type="button"
                                 onClick={() => setPDraft({ id: pr.id, text: pr.statement })}
                               >
-                                {say("worldSayItInMyWords")}
+                                {say("worldPrincipleEdit")}
                               </button>
                               {pr.citedSignals.length > 0 ? (
                                 <>
-                                  <span aria-hidden="true"> · </span>
                                   <button
                                     type="button"
                                     aria-expanded={pRoots === pr.id}
@@ -12271,10 +12270,19 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                       setPRoots((cur) => (cur === pr.id ? null : pr.id))
                                     }
                                   >
-                                    {say("worldWhatItGrewFrom")}
+                                    {say("worldPrincipleEvidence")}
                                   </button>
                                 </>
                               ) : null}
+                              <details className="jar-principle-options" data-jar-interactive="1"
+                                onKeyDown={(event) => {
+                                  if (event.key === "Escape") {
+                                    event.currentTarget.open = false;
+                                    event.currentTarget.querySelector("summary")?.focus();
+                                  }
+                                }}>
+                                <summary>{say("worldPrincipleOptions")}</summary>
+                                <div className="jar-principle-options-body">
                               {i > 0 ? (
                                 <>
                                   <span aria-hidden="true"> · </span>
@@ -12365,7 +12373,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                   )}
                                 </>
                               )}
-                            </span>
+                                </div>
+                              </details>
+                            </div>
                           ) : null}
                         </li>
                       ))}
