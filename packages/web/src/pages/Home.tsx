@@ -12217,6 +12217,17 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                               {pr.statement}
                             </button>
                           )}
+                          {pDraft?.id !== pr.id ? <button
+                            type="button"
+                            className="jar-principle-edit"
+                            aria-label={say("worldPrincipleEdit")}
+                            title={say("worldPrincipleEdit")}
+                            onClick={() => setPDraft({ id: pr.id, text: pr.statement })}
+                          >
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                              <path d="m15 5 4 4M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15v5Z" />
+                            </svg>
+                          </button> : null}
                           {pr.state === "contested" ? (
                             /* An unarbitrated conflict, one layer up — the
                                same truth #307 gave signals: the record holds
@@ -12260,17 +12271,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                           ) : null}
                           {pick === pr.id && !pDraft ? (
                             <div className="jar-ask jar-principle-actions">
-                              <button
-                                type="button"
-                                className="jar-principle-edit"
-                                aria-label={say("worldPrincipleEdit")}
-                                title={say("worldPrincipleEdit")}
-                                onClick={() => setPDraft({ id: pr.id, text: pr.statement })}
-                              >
-                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-                                  <path d="m15 5 4 4M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15v5Z" />
-                                </svg>
-                              </button>
                               {pr.citedSignals.length > 0 ? (
                                 <>
                                   <button
@@ -12284,18 +12284,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                   </button>
                                 </>
                               ) : null}
-                              <details className="jar-principle-options" data-jar-interactive="1"
-                                onKeyDown={(event) => {
-                                  if (event.key === "Escape") {
-                                    event.currentTarget.open = false;
-                                    event.currentTarget.querySelector("summary")?.focus();
-                                  }
-                                }}>
-                                <summary>{say("worldPrincipleOptions")}</summary>
-                                <div className="jar-principle-options-body">
+                              <div className="jar-principle-secondary">
                               {i > 0 ? (
                                 <>
-                                  <span aria-hidden="true"> · </span>
                                   <button
                                     type="button"
                                     disabled={pBusy}
@@ -12307,7 +12298,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                               ) : null}
                               {i < ranked.length - 1 ? (
                                 <>
-                                  <span aria-hidden="true"> · </span>
                                   <button
                                     type="button"
                                     disabled={pBusy}
@@ -12350,7 +12340,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                   that noun in that state. */}
                               {pr.origin === "minted" ? !pr.disputeId ? (
                                 <>
-                                  <span aria-hidden="true"> · </span>
                                   <button
                                     type="button"
                                     disabled={pBusy}
@@ -12362,7 +12351,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                 </>
                               ) : null : (
                                 <>
-                                  <span aria-hidden="true"> · </span>
                                   {pGoing === pr.id ? (
                                     <>
                                       <button
@@ -12372,7 +12360,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                       >
                                         {pBusy ? say("worldWithdrawing") : say("worldYesWithdrawIt")}
                                       </button>
-                                      <span aria-hidden="true"> · </span>
                                       <button type="button" onClick={() => setPGoing(null)}>
                                         {say("worldKeepIt")}
                                       </button>
@@ -12384,8 +12371,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                   )}
                                 </>
                               )}
-                                </div>
-                              </details>
+                              </div>
                             </div>
                           ) : null}
                         </li>

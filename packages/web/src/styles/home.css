@@ -755,7 +755,7 @@
 .jar-principles-list > li {
   position: relative;
   margin: 0;
-  padding: var(--sp-20) var(--sp-18) var(--sp-22) var(--sp-40);
+  padding: var(--sp-20) var(--sp-56) var(--sp-22) var(--sp-40);
   border-bottom: 1px solid color-mix(in srgb, var(--jar-ink) 10%, transparent);
   border-radius: 2px 14px 14px 2px;
   transition: background 180ms ease;
@@ -814,48 +814,42 @@
 .jar-principles-list summary { cursor: pointer; padding: var(--sp-6) 0; }
 .jar-principle-actions {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   flex-wrap: wrap;
   gap: var(--sp-8) var(--sp-20);
 }
-.jar-principle-actions > button,
-.jar-principle-options > summary { min-height: 40px; }
-.jar-principle-options {
-  margin-left: auto;
-  text-align: right;
-}
-.jar-principle-options > summary {
-  list-style: none;
-  color: var(--jar-muted);
-}
-.jar-principle-options > summary::-webkit-details-marker { display: none; }
-.jar-principle-options > summary::after { content: " ···"; }
-.jar-principle-options-body {
+.jar-principle-actions > button { min-height: 44px; }
+.jar-principle-secondary {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  padding: var(--sp-8) var(--sp-12);
-  border: 1px solid color-mix(in srgb, var(--jar-ink) 12%, transparent);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--jar-ink) 4%, transparent);
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-8) var(--sp-16);
 }
-.jar-principle-options-body button {
-  text-align: left;
+.jar-principle-secondary button {
   min-height: 44px;
 }
-.jar-principle-options-body [aria-hidden="true"] { display: none; }
-.jar-principle-options-body button.jar-principle-disagree {
-  margin-top: var(--sp-6);
-  padding-top: var(--sp-6);
-  border-top: 1px solid color-mix(in srgb, var(--jar-ink) 12%, transparent);
+.jar-principle-secondary button.jar-principle-disagree {
+  padding-left: var(--sp-16);
+  border-left: 1px solid color-mix(in srgb, var(--jar-ink) 18%, transparent);
 }
 .jar-principle-edit {
+  position: absolute;
+  top: var(--sp-12);
+  right: var(--sp-12);
+  appearance: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 44px;
   min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--jar-muted);
+  cursor: pointer;
 }
+.jar-principle-edit:hover,
+.jar-principle-edit:focus-visible { color: var(--jar-ink); }
 .jar-principle-verdict {
   display: flex;
   align-items: center;
@@ -908,8 +902,8 @@
   line-height: 1.5;
 }
 @media (max-width: 600px) {
-  .jar-principles-list > li { padding-right: var(--sp-10); padding-left: var(--sp-30); }
-  .jar-principles-list { max-height: 44dvh; }
+  .jar-principles-list > li { padding-right: var(--sp-56); padding-left: var(--sp-30); }
+  .jar-principles-list { max-height: 60dvh; }
 }
 @media (prefers-reduced-motion: reduce) {
   .jar-principles-list > li { transition: none; }

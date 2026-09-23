@@ -77,22 +77,32 @@ try {
   await personal.filter({ hasText: "Prefer small, reversible experiments." }).waitFor({ state: "visible" });
   await page.waitForTimeout(1000); // Capture the settled list, not the camera transition.
   const firstPrinciple = personal.filter({ hasText: "Prefer small, reversible experiments." });
+  const edit = firstPrinciple.getByRole("button", { name: "Edit wording", exact: true });
+  const rowBox = await firstPrinciple.boundingBox();
+  const editBox = await edit.boundingBox();
+  if (!rowBox || !editBox || editBox.x < rowBox.x + rowBox.width - 70 || editBox.y > rowBox.y + 70) {
+    throw new Error("Edit icon must sit at the top right of its principle");
+  }
+  await edit.click();
+  await firstPrinciple.locator("textarea").waitFor({ state: "visible" });
+  await firstPrinciple.locator("textarea").press("Escape");
   await firstPrinciple.locator("button.jar-values-value").click();
   await firstPrinciple.getByRole("button", { name: "Edit wording", exact: true }).waitFor({ state: "visible" });
   await firstPrinciple.getByRole("button", { name: "Why this fits", exact: true }).click();
   await firstPrinciple.locator(".jar-principle-evidence").waitFor({ state: "visible" });
   await firstPrinciple.getByText("Saved inspiration", { exact: false }).first().waitFor({ state: "visible" });
-  if (await firstPrinciple.getByRole("button", { name: "Doesn’t describe me", exact: true }).isVisible()) {
-    throw new Error("Secondary principle actions should be collapsed initially");
-  }
-  await firstPrinciple.locator("summary").click();
   await firstPrinciple.getByRole("button", { name: "Doesn’t describe me", exact: true }).waitFor({ state: "visible" });
   await firstPrinciple.getByRole("button", { name: "Move down", exact: true }).waitFor({ state: "visible" });
-  await firstPrinciple.locator("summary").press("Escape");
-  if (await firstPrinciple.getByRole("button", { name: "Doesn’t describe me", exact: true }).isVisible()) {
-    throw new Error("Escape must close the secondary actions");
+  await firstPrinciple.getByRole("button", { name: "Why this fits", exact: true }).waitFor({ state: "visible" });
+  await page.screenshot({ path: "/tmp/waka-principles-actions.png" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: "/tmp/waka-principles-actions-mobile.png" });
+  const disagreement = await firstPrinciple.getByRole("button", { name: "Doesn’t describe me", exact: true }).boundingBox();
+  if (!disagreement || disagreement.y < 0 || disagreement.y + disagreement.height > 844) {
+    throw new Error("The visible principle actions must fit the phone viewport");
   }
-  await firstPrinciple.locator("summary").click();
+  await page.setViewportSize({ width: 1280, height: 900 });
   await firstPrinciple.getByRole("button", { name: "Doesn’t describe me", exact: true }).click();
   await firstPrinciple.getByText("You marked this as inaccurate", { exact: true }).waitFor({ state: "visible" });
   await firstPrinciple.getByRole("button", { name: "Keep this", exact: true }).waitFor({ state: "visible" });
