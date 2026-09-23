@@ -154,7 +154,26 @@ try {
   await page.unroute("**/principles/status");
   await groupView.getByRole("button", { name: "Try again" }).click();
   await groupView.getByText("Make experiments safe to share together.", { exact: true }).waitFor({ state: "visible" });
-  console.log("PASS: personal principles, room principles, room citations, visible failure and retry");
+  // A room with only one supported active signal should show what participation
+  // can change, rather than a generic empty placeholder.
+  await t.sql`DELETE FROM principles WHERE profile_id=${mind.id}`;
+  const [signalToKeep] = await t.sql`SELECT id FROM signals WHERE profile_id=${mind.id} ORDER BY id LIMIT 1`;
+  await t.sql`UPDATE signals SET status='emerging' WHERE profile_id=${mind.id} AND id<>${signalToKeep.id}`;
+  await page.reload();
+  await page.locator(".jar-values").waitFor({ state: "visible" });
+  await page.waitForTimeout(1500);
+  await page.locator(".jar-values").press("Enter");
+  await page.locator(".jar-values").waitFor({ state: "hidden" });
+  await groupView.getByText("1/3 shared patterns ready", { exact: true }).waitFor({ state: "visible" });
+  await groupView.getByText("Members can make inspirations public", { exact: false }).waitFor({ state: "visible" });
+  await groupView.getByText("WAKA can suggest a principle", { exact: false }).waitFor({ state: "visible" });
+  if (await groupView.getByRole("progressbar").getAttribute("aria-valuenow") !== "1") {
+    throw new Error("Room principle progress must match visible shared signals");
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: "/tmp/waka-room-principles-empty-mobile.png" });
+  console.log("PASS: personal principles, room principles, room citations, visible failure and retry, room empty progress");
 } finally {
   await browser.close();
   server.close();

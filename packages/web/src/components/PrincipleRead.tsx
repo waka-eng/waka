@@ -68,6 +68,9 @@ export function PrincipleRead({ groupId, active, locale, onRead }: {
     : status.signalCount < 3 ? (groupId ? "worldPrinciplesNeedRoomPatterns" : "worldValuesSubSelf")
     : status.topOfMindCount < 1 ? "worldPrinciplesNeedRead"
     : "worldPrinciplesNoCandidate";
+  const groupEmpty = Boolean(groupId && rows.length === 0 && status && !error &&
+    status.phase !== "processing" && status.phase !== "pending");
+  const groupSignalCount = Math.min(status?.signalCount ?? 0, 3);
   return <>
     {!groupId && rows.length === 0 ? <p className="jar-values-lead">{t(locale, "worldValuesLeadSelf")}</p> : null}
     {groupId ? <p className="jar-values-eyebrow jar-label">{t(locale, "worldPhilosophiesValues")}</p> : null}
@@ -85,7 +88,24 @@ export function PrincipleRead({ groupId, active, locale, onRead }: {
       </li>)}
       </ul>
     </> : null}
-    {rows.length === 0 || error || status?.phase === "processing" ?
+    {groupEmpty && status ? <div className="jar-principles-empty" role="status">
+      <p className="jar-principles-empty-lead">{t(locale, "worldPrinciplesNeedRoomPatterns")}</p>
+      {status.signalCount < 3 ? <>
+        <div className="jar-principles-progress" role="progressbar"
+          aria-label={t(locale, "worldPrinciplesRoomProgress")}
+          aria-valuemin={0} aria-valuemax={3} aria-valuenow={groupSignalCount}>
+          {[0, 1, 2].map((step) => <span key={step} className={step < groupSignalCount ? "ready" : ""} />)}
+        </div>
+        <p className="jar-principles-empty-count">
+          {groupSignalCount}/3 {t(locale, "worldPrinciplesRoomProgress")}
+        </p>
+        <p className="jar-principles-empty-detail">{t(locale, "worldPrinciplesRoomHow")}</p>
+        <p className="jar-principles-empty-detail">{t(locale, "worldPrinciplesRoomNext")}</p>
+      </> : <p className="jar-principles-empty-detail">
+        {t(locale, status.topOfMindCount < 1 ? "worldPrinciplesRoomNeedRead" : "worldPrinciplesRoomNoCandidate")}
+      </p>}
+    </div> : null}
+    {!groupEmpty && (rows.length === 0 || error || status?.phase === "processing") ?
       <p className="jar-values-sub" role={error ? "alert" : "status"}>
         {t(locale, message)}
         {error ? <> <button type="button" onClick={() => setAttempt((value) => value + 1)}>
