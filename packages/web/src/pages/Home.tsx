@@ -12217,7 +12217,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                               {pr.statement}
                             </button>
                           )}
-                          {pDraft?.id !== pr.id ? <button
+                          {pDraft?.id !== pr.id ? <div className="jar-principle-tools">
+                          <button
                             type="button"
                             className="jar-principle-edit"
                             aria-label={say("worldPrincipleEdit")}
@@ -12227,7 +12228,22 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
                               <path d="m15 5 4 4M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15v5Z" />
                             </svg>
-                          </button> : null}
+                          </button>
+                          <button type="button" className="jar-principle-move"
+                            aria-label={say("worldMattersMore")} title={say("worldMattersMore")}
+                            disabled={pBusy || i === 0} onClick={() => movePrinciple(pr.id, -1)}>
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                              <path d="M12 19V5m-6 6 6-6 6 6" />
+                            </svg>
+                          </button>
+                          <button type="button" className="jar-principle-move"
+                            aria-label={say("worldMattersLess")} title={say("worldMattersLess")}
+                            disabled={pBusy || i === ranked.length - 1} onClick={() => movePrinciple(pr.id, 1)}>
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                              <path d="M12 5v14m-6-6 6 6 6-6" />
+                            </svg>
+                          </button>
+                          </div> : null}
                           {pr.state === "contested" ? (
                             /* An unarbitrated conflict, one layer up — the
                                same truth #307 gave signals: the record holds
@@ -12285,28 +12301,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                 </>
                               ) : null}
                               <div className="jar-principle-secondary">
-                              {i > 0 ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    disabled={pBusy}
-                                    onClick={() => movePrinciple(pr.id, -1)}
-                                  >
-                                    {say("worldMattersMore")}
-                                  </button>
-                                </>
-                              ) : null}
-                              {i < ranked.length - 1 ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    disabled={pBusy}
-                                    onClick={() => movePrinciple(pr.id, 1)}
-                                  >
-                                    {say("worldMattersLess")}
-                                  </button>
-                                </>
-                              ) : null}
                               {/* WHOSE SENTENCE IT IS DECIDES WHICH WAY OUT
                                   IT HAS, and until 2026-08-26 both were
                                   offered on every principle regardless.

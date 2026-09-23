@@ -80,9 +80,20 @@ try {
   const edit = firstPrinciple.getByRole("button", { name: "Edit wording", exact: true });
   const rowBox = await firstPrinciple.boundingBox();
   const editBox = await edit.boundingBox();
-  if (!rowBox || !editBox || editBox.x < rowBox.x + rowBox.width - 70 || editBox.y > rowBox.y + 70) {
-    throw new Error("Edit icon must sit at the top right of its principle");
+  const moveUp = firstPrinciple.getByRole("button", { name: "Move up", exact: true });
+  const moveDown = firstPrinciple.getByRole("button", { name: "Move down", exact: true });
+  const upBox = await moveUp.boundingBox();
+  const downBox = await moveDown.boundingBox();
+  if (!rowBox || !editBox || !upBox || !downBox || editBox.x < rowBox.x + rowBox.width - 145 ||
+    editBox.y > rowBox.y + 70 || upBox.x <= editBox.x || downBox.x <= upBox.x ||
+    Math.abs(downBox.y - editBox.y) > 5) {
+    throw new Error("Edit and separate up/down arrows must share the card's top right");
   }
+  if (await moveUp.isEnabled() || !await moveDown.isEnabled()) throw new Error("Top principle must only move down");
+  await moveDown.click();
+  await page.waitForFunction(() => document.querySelectorAll('.jar-principles-list > li')[1]?.textContent?.includes('Prefer small, reversible experiments.'));
+  await moveUp.click();
+  await page.waitForFunction(() => document.querySelectorAll('.jar-principles-list > li')[0]?.textContent?.includes('Prefer small, reversible experiments.'));
   await edit.click();
   await firstPrinciple.locator("textarea").waitFor({ state: "visible" });
   await firstPrinciple.locator("textarea").press("Escape");
@@ -92,13 +103,18 @@ try {
   await firstPrinciple.locator(".jar-principle-evidence").waitFor({ state: "visible" });
   await firstPrinciple.getByText("Saved inspiration", { exact: false }).first().waitFor({ state: "visible" });
   await firstPrinciple.getByRole("button", { name: "Doesn’t describe me", exact: true }).waitFor({ state: "visible" });
-  await firstPrinciple.getByRole("button", { name: "Move down", exact: true }).waitFor({ state: "visible" });
+  await moveDown.waitFor({ state: "visible" });
   await firstPrinciple.getByRole("button", { name: "Why this fits", exact: true }).waitFor({ state: "visible" });
   await page.screenshot({ path: "/tmp/waka-principles-actions.png" });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(500);
   await page.screenshot({ path: "/tmp/waka-principles-actions-mobile.png" });
   const disagreement = await firstPrinciple.getByRole("button", { name: "Doesn’t describe me", exact: true }).boundingBox();
+  const mobileEdit = await edit.boundingBox();
+  const mobileDown = await moveDown.boundingBox();
+  if (!mobileEdit || !mobileDown || mobileDown.x + mobileDown.width > 390 || mobileEdit.y > rowBox.y + 75) {
+    throw new Error("The principle arrows must fit the phone card");
+  }
   if (!disagreement || disagreement.y < 0 || disagreement.y + disagreement.height > 844) {
     throw new Error("The visible principle actions must fit the phone viewport");
   }
