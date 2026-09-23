@@ -1,6 +1,9 @@
 name: Deploy dev
 
 on:
+  push:
+    branches:
+      - dev
   workflow_dispatch:
     inputs:
       release_legacy_alias:
@@ -110,9 +113,8 @@ jobs:
       - name: Clear stale SST development lock
         run: pnpm sst unlock --stage "$SST_STAGE"
 
-      # The development stage is deployed manually, but SST secrets are still
-      # stage-scoped. Mirror production's secret wiring so a newly declared
-      # runtime secret never turns the deploy into a missing-secret failure.
+      # SST secrets are stage-scoped. Keep the development key in step with the
+      # repository secret before automatic and manually started deployments.
       - name: Set development OpenRouter secret
         run: pnpm sst secret set OpenRouterApiKey "$OPENROUTER_API_KEY" --stage "$SST_STAGE"
 
