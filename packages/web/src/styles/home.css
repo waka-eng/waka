@@ -844,6 +844,11 @@
   min-height: 44px;
 }
 .jar-principle-options-body [aria-hidden="true"] { display: none; }
+.jar-principle-options-body button.jar-principle-disagree {
+  margin-top: var(--sp-6);
+  padding-top: var(--sp-6);
+  border-top: 1px solid color-mix(in srgb, var(--jar-ink) 12%, transparent);
+}
 .jar-principle-edit {
   display: inline-flex;
   align-items: center;

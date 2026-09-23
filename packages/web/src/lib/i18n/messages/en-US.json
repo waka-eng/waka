@@ -1,4 +1,5 @@
 {
+  "worldPrincipleDisputed": "You marked this as inaccurate",
   "worldPrincipleSavedExample": "Saved inspiration",
   "worldPrincipleKeep": "Keep this",
   "worldPrincipleEdit": "Edit wording",
@@ -211,9 +212,9 @@
   "worldReadingNow": "Reading…",
   "worldReadItAgain": "Read it again",
   "worldAspirational": "aspirational",
-  "worldMattersMore": "matters more",
-  "worldMattersLess": "matters less",
-  "worldNotMine": "not mine",
+  "worldMattersMore": "Move up",
+  "worldMattersLess": "Move down",
+  "worldNotMine": "Doesn’t describe me",
   "worldWithdrawing": "withdrawing…",
   "worldYesWithdrawIt": "yes, withdraw it",
   "worldKeepIt": "keep it",
@@ -424,5 +425,5 @@
   "worldYesMerge": "yes, merge them",
   "worldKeepApart": "keep them apart",
   "worldContested": "contested — two of your patterns pull against each other; your answer settles it",
-  "worldValueContested": "contested"
+  "worldValueContested": "Conflicting principles"
 }

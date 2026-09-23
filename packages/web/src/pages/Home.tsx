@@ -12223,7 +12223,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                a dispute, so the page must not read settled.
                                Rank decides meanwhile; your verbs settle it. */
                             <span className="jar-principle-verdict">
-                              <span className="jar-label">{say("worldValueContested")}</span>
+                              <span className="jar-label">{say(pr.disputeId ? "worldPrincipleDisputed" : "worldValueContested")}</span>
                               {pr.disputeId ? <button type="button" className="jar-principle-restore" disabled={pBusy}
                                 onClick={() => disputeThisPrinciple(pr.id, pr.disputeId!)}>
                                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
@@ -12355,6 +12355,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                     type="button"
                                     disabled={pBusy}
                                     onClick={() => disputeThisPrinciple(pr.id)}
+                                    className="jar-principle-disagree"
                                   >
                                     {say("worldNotMine")}
                                   </button>

@@ -82,17 +82,19 @@ try {
   await firstPrinciple.getByRole("button", { name: "Why this fits", exact: true }).click();
   await firstPrinciple.locator(".jar-principle-evidence").waitFor({ state: "visible" });
   await firstPrinciple.getByText("Saved inspiration", { exact: false }).first().waitFor({ state: "visible" });
-  if (await firstPrinciple.getByRole("button", { name: "not mine", exact: true }).isVisible()) {
+  if (await firstPrinciple.getByRole("button", { name: "Doesn’t describe me", exact: true }).isVisible()) {
     throw new Error("Secondary principle actions should be collapsed initially");
   }
   await firstPrinciple.locator("summary").click();
-  await firstPrinciple.getByRole("button", { name: "not mine", exact: true }).waitFor({ state: "visible" });
+  await firstPrinciple.getByRole("button", { name: "Doesn’t describe me", exact: true }).waitFor({ state: "visible" });
+  await firstPrinciple.getByRole("button", { name: "Move down", exact: true }).waitFor({ state: "visible" });
   await firstPrinciple.locator("summary").press("Escape");
-  if (await firstPrinciple.getByRole("button", { name: "not mine", exact: true }).isVisible()) {
+  if (await firstPrinciple.getByRole("button", { name: "Doesn’t describe me", exact: true }).isVisible()) {
     throw new Error("Escape must close the secondary actions");
   }
   await firstPrinciple.locator("summary").click();
-  await firstPrinciple.getByRole("button", { name: "not mine", exact: true }).click();
+  await firstPrinciple.getByRole("button", { name: "Doesn’t describe me", exact: true }).click();
+  await firstPrinciple.getByText("You marked this as inaccurate", { exact: true }).waitFor({ state: "visible" });
   await firstPrinciple.getByRole("button", { name: "Keep this", exact: true }).waitFor({ state: "visible" });
   await page.screenshot({ path: "/tmp/waka-principles-restore.png" });
   await firstPrinciple.getByRole("button", { name: "Keep this", exact: true }).click();
