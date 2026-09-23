@@ -64,6 +64,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { PrincipleRead } from "../components/PrincipleRead";
+import { PrincipleEvidence } from "../components/PrincipleEvidence";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { hueCss } from "../lib/appearance";
@@ -12255,13 +12256,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                               IT. Four layers, reachable in hops, with no
                               second picture of the place. */}
                           {pRoots === pr.id && !pDraft ? (
-                            <span className="jar-was-roots">
-                              {pr.citedSignals.map((c) => (
-                                <span key={c.id} className="jar-was-root">
-                                  {c.statement}
-                                </span>
-                              ))}
-                            </span>
+                            <PrincipleEvidence signals={pr.citedSignals} locale={locale} />
                           ) : null}
                           {pick === pr.id && !pDraft ? (
                             <div className="jar-ask jar-principle-actions">

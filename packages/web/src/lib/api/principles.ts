@@ -28,7 +28,7 @@ export interface ApiPrinciple {
   locked: boolean;
   heldSince: string | null;
   conflictsWithId: string | null;
-  citedSignals: Array<{ id: string; statement: string }>;
+  citedSignals: Array<{ id: string; statement: string; examples?: Array<{ text: string; createdAt: string }> }>;
   createdAt: string;
   disputeId?: string | null;
 }

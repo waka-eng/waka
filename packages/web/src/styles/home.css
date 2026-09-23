@@ -880,6 +880,22 @@
   opacity: 0.5;
   cursor: default;
 }
+.jar-principle-evidence { margin-top: var(--sp-16); text-align: left; }
+.jar-principle-reference + .jar-principle-reference { margin-top: var(--sp-20); }
+.jar-principle-reference > p {
+  margin: 0;
+  color: var(--jar-muted);
+  font-size: var(--t-ui);
+  line-height: 1.5;
+}
+.jar-principle-reference blockquote {
+  margin: var(--sp-8) 0 0;
+  padding-left: var(--sp-12);
+  border-left: 1px solid var(--jar-faint);
+  color: var(--jar-ink);
+}
+.jar-principle-reference blockquote p { margin: 0; font-size: var(--t-ui); line-height: 1.5; }
+.jar-principle-reference footer { margin-top: var(--sp-6); font-size: var(--t-label); color: var(--jar-muted); }
 .jar-principles-list details[open] p,
 .jar-principles-list .jar-was-root {
   padding: var(--sp-8) 0 var(--sp-8) var(--sp-12);

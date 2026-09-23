@@ -92,6 +92,7 @@ function makeDb(selects: unknown[][] = []) {
     return result;
   };
   const db: any = {
+    execute: vi.fn(async () => []),
     select: vi.fn(() => {
       const chain: any = {};
       chain.from = vi.fn(() => chain);

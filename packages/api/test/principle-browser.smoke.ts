@@ -80,7 +80,8 @@ try {
   await firstPrinciple.locator("button.jar-values-value").click();
   await firstPrinciple.getByRole("button", { name: "Edit wording", exact: true }).waitFor({ state: "visible" });
   await firstPrinciple.getByRole("button", { name: "Why this fits", exact: true }).click();
-  await firstPrinciple.locator(".jar-was-roots").waitFor({ state: "visible" });
+  await firstPrinciple.locator(".jar-principle-evidence").waitFor({ state: "visible" });
+  await firstPrinciple.getByText("Saved inspiration", { exact: false }).first().waitFor({ state: "visible" });
   if (await firstPrinciple.getByRole("button", { name: "not mine", exact: true }).isVisible()) {
     throw new Error("Secondary principle actions should be collapsed initially");
   }

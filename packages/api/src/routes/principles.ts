@@ -29,7 +29,7 @@
  */
 
 import { recordConsultation } from "../lib/consultations.js";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
@@ -42,6 +42,7 @@ import {
   principleSignals,
   principleTypeValues,
   signals,
+  signalEvidence,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import type { DeclarationRoute } from "../lib/model-provider.js";
@@ -109,7 +110,7 @@ export interface PrincipleView {
   locked: boolean;
   heldSince: string | null;
   conflictsWithId: string | null;
-  citedSignals: Array<{ id: string; statement: string }>;
+  citedSignals: Array<{ id: string; statement: string; examples?: Array<{ text: string; createdAt: string }> }>;
   createdAt: string;
   disputeId?: string | null;
 }
@@ -151,6 +152,31 @@ export async function loadPrincipleViews(db: WakaDb, profileId: string): Promise
   const latest = new Map<string, typeof verdicts[number]>();
   for (const verdict of verdicts) if (!latest.has(verdict.targetId)) latest.set(verdict.targetId, verdict);
 
+  // Personal source excerpts only. Group profiles own no inspirations, and
+  // the owner equality below prevents members' captures leaking through here.
+  const examples = await db.execute(sql<{ signalId: string; text: string; createdAt: string }>`
+    SELECT source.signal_id AS "signalId", source.text, source.created_at AS "createdAt"
+    FROM (
+      SELECT ${signalEvidence.signalId} AS signal_id, left(${inspirations.text}, 240) AS text,
+        ${inspirations.createdAt} AS created_at,
+        row_number() OVER (PARTITION BY ${signalEvidence.signalId} ORDER BY ${inspirations.createdAt} DESC, ${inspirations.id}) AS position
+      FROM ${signalEvidence}
+      JOIN ${inspirations} ON ${inspirations.id} = ${signalEvidence.inspirationId}
+      WHERE ${signalEvidence.profileId} = ${profileId}::uuid
+        AND ${inspirations.profileId} = ${profileId}::uuid
+        AND ${signalEvidence.signalId} IN (
+          SELECT ${principleSignals.signalId} FROM ${principleSignals}
+          WHERE ${principleSignals.profileId} = ${profileId}::uuid
+        )
+    ) AS source WHERE source.position <= 2
+  `);
+  const examplesBySignal = new Map<string, Array<{ text: string; createdAt: string }>>();
+  for (const example of examples as unknown as Array<{ signalId: string; text: string; createdAt: string }>) {
+    const bucket = examplesBySignal.get(example.signalId) ?? [];
+    bucket.push({ text: example.text, createdAt: new Date(example.createdAt).toISOString() });
+    examplesBySignal.set(example.signalId, bucket);
+  }
+
   return rows.map((row) => ({
     id: row.id,
     statement: row.statement,
@@ -161,7 +187,9 @@ export async function loadPrincipleViews(db: WakaDb, profileId: string): Promise
     locked: row.lockedAt !== null,
     heldSince: row.heldSince?.toISOString() ?? null,
     conflictsWithId: row.conflictsWithId,
-    citedSignals: citationsByPrinciple.get(row.id) ?? [],
+    citedSignals: (citationsByPrinciple.get(row.id) ?? []).map((signal) => ({
+      ...signal, examples: examplesBySignal.get(signal.id) ?? [],
+    })),
     createdAt: row.createdAt.toISOString(),
     disputeId: latest.get(row.id)?.value === "not_true" ? latest.get(row.id)!.id : null,
   }));

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchPrincipleRead, requestPrincipleRead, type ApiPrinciple, type ApiPrincipleStatus } from "../lib/api/principles";
 import { t, type SupportedLocale } from "../lib/i18n";
+import { PrincipleEvidence } from "./PrincipleEvidence";
 
 /** Only the selected wall polls. Requests never render another wall's values. */
 export function PrincipleRead({ groupId, active, locale, onRead }: {
@@ -79,7 +80,7 @@ export function PrincipleRead({ groupId, active, locale, onRead }: {
         {row.state === "contested" ? <p className="jar-values-sub">{t(locale, "worldValueContested")}</p> : null}
         <details className="jar-values-sub" data-jar-interactive="1">
           <summary>{t(locale, "worldPrinciplesEvidence")}</summary>
-          {row.citedSignals.map((signal) => <p key={signal.id}>{signal.statement}</p>)}
+          <PrincipleEvidence signals={row.citedSignals} locale={locale} />
         </details>
       </li>)}
       </ul>
