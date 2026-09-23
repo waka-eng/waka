@@ -109,6 +109,7 @@ const REGISTER: Record<string, string> = {
     "that means nothing. The exit is dismissTopOfMindEntry.",
   refreshTopOfMind: "RULED: regeneration is idempotent; there is no prior state to restore",
   refreshGroupTopOfMind: "RULED: the same, for a room",
+  requestPrincipleRead: "RULED: requests deduplicated background generation; existing words remain editable or removable",
 
   // what the machine concluded you hold to. NOTHING DECLARES ONE (founder,
   // 2026-09-08: "You cannot declare your own values. This can only be
@@ -123,9 +124,8 @@ const REGISTER: Record<string, string> = {
     "RULED: a principle is earned, not written — the way back is the evidence " +
     "it rested on, which removal does not touch, and the next generation over it",
   updatePrinciple: "RULED: an edit is its own inverse",
-  disputePrinciple:
-    "RULED: a stance on the machine's sentence — answered by what you keep next, " +
-    "since there is no declaring your own",
+  disputePrinciple: "undoPrincipleDispute",
+  undoPrincipleDispute: "disputePrinciple",
   reorderPrinciples: "RULED: an ordering is its own inverse — move it back",
 
   // rooms

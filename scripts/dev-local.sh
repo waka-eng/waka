@@ -3,6 +3,7 @@ set -euo pipefail
 
 api_pid=""
 watch_pid=""
+nightly_pid=""
 shutting_down=0
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 web_dist_dir="$repo_root/packages/web/dist"
@@ -76,6 +77,10 @@ cleanup() {
 
   if [[ -n "$watch_pid" ]] && kill -0 "$watch_pid" 2>/dev/null; then
     kill "$watch_pid" 2>/dev/null || true
+  fi
+
+  if [[ -n "$nightly_pid" ]] && kill -0 "$nightly_pid" 2>/dev/null; then
+    kill "$nightly_pid" 2>/dev/null || true
   fi
 
   wait 2>/dev/null || true
@@ -193,9 +198,10 @@ api_pid=$!
 if [[ "${WAKA_NO_NIGHTLY:-}" != "1" ]]; then
   (
     sleep 5
-    echo "  Nightly pass: principles + garden (WAKA_NO_NIGHTLY=1 to skip)"
-    pnpm --filter @waka/api nightly 2>&1 | sed 's/^/  [nightly] /'
+    echo "  Principles + garden: hourly recovery pass (WAKA_NO_NIGHTLY=1 to skip)"
+    exec pnpm --filter @waka/api nightly --watch
   ) &
+  nightly_pid=$!
 fi
 
 wait "$api_pid"

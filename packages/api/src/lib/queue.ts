@@ -129,6 +129,7 @@ import { and, asc, eq, sql } from "drizzle-orm";
 
 import {
   type BackgroundJob,
+  groupMembers,
   backgroundJobs,
   type BackgroundJobStatus,
   type DeriveSignalsPayload,
@@ -374,23 +375,42 @@ async function enqueueKeyedJob(input: {
 }
 
 /**
- * Nightly principle generation for one profile.
- *
- * THE CRON IS THE SOLE ENQUEUER in deployed code — the layer's cadence is
- * once per day at midnight PST, and a source-scan test fails CI if another
- * call site appears. Keyed per profile per calendar day, so a cron retry
- * cannot run a profile's generation twice in one night.
+ * Principle generation keyed by eligible material, shared by the pipeline,
+ * the page's missing-work request, and scheduled recovery. Completed keys
+ * stay complete; failed keys require an explicit retry after worker retries.
  */
 export async function enqueueRefreshPrinciples(
   profileId: string,
-  dayKey: string,
+  materialKey: string,
+  retry = false,
 ): Promise<EnqueueResult> {
-  return enqueueKeyedJob({
-    profileId,
-    type: "refresh_principles",
-    payload: { profileId },
-    idempotencyKey: `refresh_principles:${profileId}:${dayKey}`,
-  });
+  const key = `refresh_principles:${profileId}:${materialKey}`;
+  const [target] = await getDb().select({ groupId: profiles.groupId }).from(profiles)
+    .where(eq(profiles.id, profileId)).limit(1);
+  const [member] = target?.groupId ? await getDb().select({ profileId: groupMembers.profileId })
+    .from(groupMembers).where(eq(groupMembers.groupId, target.groupId))
+    .orderBy(asc(groupMembers.profileId)).limit(1) : [];
+  const ownerProfileId = target?.groupId ? member?.profileId : profileId;
+  if (!ownerProfileId) throw new Error("No current member can request room principles");
+  const rows = await getDb().execute(sql<{ id: string }>`
+    INSERT INTO background_jobs (profile_id, type, payload, max_attempts, idempotency_key)
+    VALUES (${ownerProfileId}::uuid, 'refresh_principles', ${JSON.stringify({ profileId })}::jsonb,
+      ${DEFAULT_MAX_ATTEMPTS}, ${key})
+    ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL
+    DO UPDATE SET status = 'pending', attempts = 0, locked_at = NULL,
+      profile_id = EXCLUDED.profile_id,
+      run_after = now(), last_error = NULL, updated_at = now()
+    WHERE background_jobs.status = 'failed' AND ${retry}
+    RETURNING id
+  `);
+  const [changed] = rows as unknown as Array<{ id: string }>;
+  const [existing] = changed ? [changed] : await getDb().select({ id: backgroundJobs.id })
+    .from(backgroundJobs).where(eq(backgroundJobs.idempotencyKey, key)).limit(1);
+  if (!existing) throw new Error("Failed to enqueue principles");
+  // Also wake an existing pending/stale job; claim-time locks bound retries.
+  if (shouldAutoDrainBackgroundJobs()) scheduleBackgroundJobDrain();
+  else await wakeBackgroundWorker();
+  return { jobId: existing.id, created: Boolean(changed) };
 }
 
 /**
@@ -782,7 +802,14 @@ export async function runBackgroundJobWorker(
 export async function processBackgroundJob(job: BackgroundJob): Promise<void> {
   switch (job.type) {
     case "refresh_principles": {
-      const profileId = job.profileId;
+      const profileId = readString(job.payload, "profileId") ?? job.profileId;
+      if (profileId !== job.profileId) {
+        const groupId = await groupIdOfMind(profileId);
+        if (!groupId) return dropPoisonPayload(job);
+        const [member] = await getDb().select({ id: groupMembers.id }).from(groupMembers)
+          .where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.profileId, job.profileId))).limit(1);
+        if (!member) throw new Error("Room principles require a current member");
+      }
       await refreshPrinciplesForProfile({ profileId });
       return;
     }
@@ -867,6 +894,7 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<void> {
         reason: result.reason,
         entryCount: result.entryCount,
       });
+      await (await import("./principle-status.js")).requestPrincipleRefresh(getDb(), job.profileId);
       return;
     }
 
@@ -878,6 +906,9 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<void> {
         groupId: payload.groupId,
         reason: payload.reason,
       });
+      const [mind] = await getDb().select({ id: profiles.id }).from(profiles)
+        .where(and(eq(profiles.groupId, payload.groupId), eq(profiles.type, "group"))).limit(1);
+      if (mind) await (await import("./principle-status.js")).requestPrincipleRefresh(getDb(), mind.id);
       return;
     }
 

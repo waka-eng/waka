@@ -64,25 +64,25 @@ describe("the longevity bar", () => {
     expect(verdict.eligible).toBe(false);
   });
 
-  it("fails on a burst — volume is not time", () => {
+  it("allows supported initial principles without waiting 45 days", () => {
     const set = [
       citation("s1", [5, 4], ["v1", "v2"]),
       citation("s2", [3, 2], ["v3", "v4"]),
       citation("s3", [1, 0], ["v5"]),
     ];
     const verdict = computeCitationEligibility(set, NOW);
-    expect(verdict.spanDays).toBeLessThan(PRINCIPLE_MIN_SPAN_DAYS);
-    expect(verdict.eligible).toBe(false);
+    expect(verdict.spanDays).toBe(5);
+    expect(verdict.eligible).toBe(true);
   });
 
   it("fails without enough top-of-mind survivals", () => {
     const set = [
-      citation("s1", [60, 40], ["v1"]),
-      citation("s2", [30, 20], ["v1", "v2"]),
-      citation("s3", [10, 0], ["v2"]),
+      citation("s1", [60, 40], []),
+      citation("s2", [30, 20], []),
+      citation("s3", [10, 0], []),
     ];
     const verdict = computeCitationEligibility(set, NOW);
-    expect(verdict.tomAppearances).toBe(2);
+    expect(verdict.tomAppearances).toBe(0);
     expect(verdict.eligible).toBe(false);
   });
 
@@ -111,7 +111,7 @@ describe("the longevity bar", () => {
 
   it("keeps the bars ordered sanely, whatever the tuning", () => {
     expect(PRINCIPLE_MIN_SIGNALS).toBeGreaterThan(0);
-    expect(PRINCIPLE_MIN_SPAN_DAYS).toBeGreaterThan(0);
+    expect(PRINCIPLE_MIN_SPAN_DAYS).toBe(0);
     expect(PRINCIPLE_MIN_TOM_APPEARANCES).toBeGreaterThan(0);
   });
 });

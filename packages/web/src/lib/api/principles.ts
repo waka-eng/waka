@@ -28,8 +28,32 @@ export interface ApiPrinciple {
   locked: boolean;
   heldSince: string | null;
   conflictsWithId: string | null;
-  citedSignals: Array<{ id: string; statement: string }>;
+  citedSignals: Array<{ id: string; statement: string; examples?: Array<{ text: string; createdAt: string }> }>;
   createdAt: string;
+  disputeId?: string | null;
+}
+
+export interface ApiPrincipleStatus {
+  phase: "waiting" | "pending" | "processing" | "ready" | "failed";
+  eligible: boolean;
+  signalCount: number;
+  topOfMindCount: number;
+}
+
+export async function fetchPrincipleRead(groupId?: string): Promise<{
+  principles: ApiPrinciple[]; status: ApiPrincipleStatus;
+}> {
+  const path = groupId ? `/groups/${encodeURIComponent(groupId)}/principles` : "/principles";
+  const [rows, state] = await Promise.all([
+    getJson<{ principles: ApiPrinciple[] }>(apiPath(path), "Principles could not be loaded"),
+    getJson<{ status: ApiPrincipleStatus }>(apiPath(`${path}/status`), "Principles status could not be loaded"),
+  ]);
+  return { principles: rows.principles, status: state.status };
+}
+
+export async function requestPrincipleRead(groupId?: string, retry = false): Promise<void> {
+  const path = groupId ? `/groups/${encodeURIComponent(groupId)}/principles` : "/principles";
+  await postJson(apiPath(`${path}/refresh${retry ? "?retry=1" : ""}`), {}, "Principles could not be started");
 }
 
 /** GET /principles — the acting profile's ranked set. */
@@ -91,4 +115,9 @@ export async function disputePrinciple(principleId: string): Promise<void> {
     { targetType: "principle", targetId: principleId, value: "not_true" },
     "That dispute could not be recorded",
   );
+}
+
+export async function undoPrincipleDispute(principleId: string, disputeId: string): Promise<void> {
+  await requestVoid(apiPath(`/principles/${encodeURIComponent(principleId)}/disputes/${encodeURIComponent(disputeId)}`),
+    "DELETE", undefined, "That dispute could not be undone");
 }

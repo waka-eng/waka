@@ -1,12 +1,10 @@
 /**
- * The nightly principle cron — the SOLE enqueuer of principle generation.
+ * Nightly recovery for principle generation and the signal garden.
  *
  * Fires once per day at midnight PST (fixed 08:00 UTC; EventBridge crons do
  * not shift with daylight saving, so summer runs land at 01:00 Pacific —
- * documented, not hidden). The layer's cadence is deliberate: a principle is
- * what months of history show, so there is no moment to catch live, and the
- * owner's decision is that nothing else may trigger generation. A source-scan
- * test pins `enqueueRefreshPrinciples` to this file.
+ * documented, not hidden). Normal material changes also request principles;
+ * the material fingerprint makes this recovery pass free for completed inputs.
  *
  * The handler enqueues one job per profile that could possibly clear the
  * longevity bar (a cheap count — the real bar arithmetic runs inside the
@@ -21,10 +19,10 @@ import { profiles, signals } from "./db/index.js";
 import { getDb } from "./lib/db.js";
 import { PRINCIPLE_MIN_SIGNALS } from "./lib/principle-generation.js";
 import {
-  enqueueRefreshPrinciples,
   enqueueTendSignalGarden,
   runBackgroundJobWorker,
 } from "./lib/queue.js";
+import { requestPrincipleRefresh } from "./lib/principle-status.js";
 
 const MAX_DRAIN_PASSES = 12;
 const DRAIN_LIMIT = 25;
@@ -55,7 +53,7 @@ export async function handler() {
       await enqueueTendSignalGarden(row.profileId, weekKey);
     }
     if (Number(row.actives) < PRINCIPLE_MIN_SIGNALS) continue;
-    await enqueueRefreshPrinciples(row.profileId, dayKey);
+    await requestPrincipleRefresh(db, row.profileId);
     enqueued += 1;
   }
 

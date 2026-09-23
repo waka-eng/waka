@@ -63,6 +63,8 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import { PrincipleRead } from "../components/PrincipleRead";
+import { PrincipleEvidence } from "../components/PrincipleEvidence";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { hueCss } from "../lib/appearance";
@@ -211,6 +213,7 @@ import {
   type ApiMintedKey,
   deletePrinciple,
   disputePrinciple,
+  undoPrincipleDispute,
   reorderPrinciples,
   updatePrinciple,
   type ApiPrinciple,
@@ -1402,6 +1405,7 @@ function HomeExperience(): JSX.Element {
    * and the menu existed largely to carry it.
    */
   const [principles, setPrinciples] = useState<ApiPrinciple[]>([]);
+  const [groupPrincipleCounts, setGroupPrincipleCounts] = useState<Record<string, number>>({});
   /**
    * LAYER FOUR BECOMES SOMETHING YOU CAN ANSWER, not only read.
    *
@@ -2767,19 +2771,7 @@ function HomeExperience(): JSX.Element {
        they were saved in. That is the canon's privacy line and it is why a
        room's orbit can say WHO fed an entry but never WHICH memory did. */
     (async () => {
-      /* Layer 4 rides along with the rooms load rather than opening its own
-         effect: both are account-level, both are wanted before the first
-         paint settles, and a second effect would be a second thing to keep
-         in step with sign-out. A failure here is silent on purpose — an
-         empty set and the line simply does not appear, which is the same
-         thing a profile with no principles yet shows. */
-      fetchPrinciples()
-        .then((rows) => {
-          if (!dead && !offlineRef.current) setPrinciples(rows);
-        })
-        .catch(() => {
-          /* no principles is a real state, not an error worth a banner */
-        });
+      // PrincipleRead owns loading and errors separately for the selected wall.
 
       const rows = await fetchGroups();
       if (offlineRef.current) return;
@@ -11048,10 +11040,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   }, [pDraft, pBusy, reloadPrinciples, whyFailed]);
 
   const disputeThisPrinciple = useCallback(
-    (id: string) => {
+    (id: string, disputeId?: string) => {
       if (pBusy) return;
       setPBusy(true);
-      disputePrinciple(id)
+      (disputeId ? undoPrincipleDispute(id, disputeId) : disputePrinciple(id))
         .then(() => reloadPrinciples())
         .then(() => setPick(null))
         .catch((err) => setCharSay(whyFailed(err, say("worldDisputeNotRecorded"))))
@@ -12118,7 +12110,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 {ready ? (
                   <div
                     className={
-                      w.kind === "self"
+                      w.kind === "self" || w.kind === "group"
                         ? "jar-values-room jar-values-room--live"
                         : "jar-values-room"
                     }
@@ -12137,6 +12129,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         could hold anything). Your own wall's sky only:
                         another wall's keeps the forming words until sharing
                         values is designed on purpose. */}
+                    {w.kind !== "agent" ? <PrincipleRead
+                      key={`${auth?.profile?.id}:${spaceKey(w)}`}
+                      groupId={w.kind === "group" ? w.id : undefined}
+                      active={here && !offlineRef.current}
+                      locale={locale}
+                      onRead={w.kind === "self" ? setPrinciples : (rows) => setGroupPrincipleCounts((counts) =>
+                        counts[w.id] === rows.length ? counts : { ...counts, [w.id]: rows.length })}
+                    /> : null}
                     {w.kind === "self" && principles.length > 0 ? (
                       <>
                         {/* THE LAYER, NOT THE NAME — the same ruling the board
@@ -12150,11 +12150,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         </p>
                     {/* Ranked, and the rank is the order — never a number
                         beside a statement. */}
+                    <ul className="jar-principles-list" role="list" aria-label={say("worldPhilosophiesValues")} data-jar-interactive="1">
                     {[...principles]
                       .sort((a, b) => a.rank - b.rank)
                       .map((pr, i, ranked) => (
-                        <p
+                        <li
                           key={pr.id}
+                          data-expanded={pick === pr.id || pDraft?.id === pr.id || pRoots === pr.id}
                           className={
                             /* RANK AS PRESENCE, NEVER AS A NUMBER. The top
                                value is the one that wins when two conflict,
@@ -12215,12 +12217,48 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                               {pr.statement}
                             </button>
                           )}
+                          {pDraft?.id !== pr.id ? <div className="jar-principle-tools">
+                          <button
+                            type="button"
+                            className="jar-principle-edit"
+                            aria-label={say("worldPrincipleEdit")}
+                            title={say("worldPrincipleEdit")}
+                            onClick={() => setPDraft({ id: pr.id, text: pr.statement })}
+                          >
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                              <path d="m15 5 4 4M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15v5Z" />
+                            </svg>
+                          </button>
+                          <button type="button" className="jar-principle-move"
+                            aria-label={say("worldMattersMore")} title={say("worldMattersMore")}
+                            disabled={pBusy || i === 0} onClick={() => movePrinciple(pr.id, -1)}>
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                              <path d="M12 19V5m-6 6 6-6 6 6" />
+                            </svg>
+                          </button>
+                          <button type="button" className="jar-principle-move"
+                            aria-label={say("worldMattersLess")} title={say("worldMattersLess")}
+                            disabled={pBusy || i === ranked.length - 1} onClick={() => movePrinciple(pr.id, 1)}>
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                              <path d="M12 5v14m-6-6 6 6 6-6" />
+                            </svg>
+                          </button>
+                          </div> : null}
                           {pr.state === "contested" ? (
                             /* An unarbitrated conflict, one layer up — the
                                same truth #307 gave signals: the record holds
                                a dispute, so the page must not read settled.
                                Rank decides meanwhile; your verbs settle it. */
-                            <span className="jar-poster-away jar-label"> {say("worldValueContested")}</span>
+                            <span className="jar-principle-verdict">
+                              <span className="jar-label">{say(pr.disputeId ? "worldPrincipleDisputed" : "worldValueContested")}</span>
+                              {pr.disputeId ? <button type="button" className="jar-principle-restore" disabled={pBusy}
+                                onClick={() => disputeThisPrinciple(pr.id, pr.disputeId!)}>
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                                  <path d="M8 6 4 10l4 4M4 10h10a5 5 0 0 1 0 10" />
+                                </svg>
+                                {say("worldPrincipleKeep")}
+                              </button> : null}
+                            </span>
                           ) : pr.state === "aspirational" ? (
                             /* The one distinction worth carrying up here:
                                declared-but-not-yet-demonstrated is a
@@ -12245,25 +12283,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                               IT. Four layers, reachable in hops, with no
                               second picture of the place. */}
                           {pRoots === pr.id && !pDraft ? (
-                            <span className="jar-was-roots">
-                              {pr.citedSignals.map((c) => (
-                                <span key={c.id} className="jar-was-root">
-                                  {c.statement}
-                                </span>
-                              ))}
-                            </span>
+                            <PrincipleEvidence signals={pr.citedSignals} locale={locale} />
                           ) : null}
                           {pick === pr.id && !pDraft ? (
-                            <span className="jar-ask">
-                              <button
-                                type="button"
-                                onClick={() => setPDraft({ id: pr.id, text: pr.statement })}
-                              >
-                                {say("worldSayItInMyWords")}
-                              </button>
+                            <div className="jar-ask jar-principle-actions">
                               {pr.citedSignals.length > 0 ? (
                                 <>
-                                  <span aria-hidden="true"> · </span>
                                   <button
                                     type="button"
                                     aria-expanded={pRoots === pr.id}
@@ -12271,34 +12296,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                       setPRoots((cur) => (cur === pr.id ? null : pr.id))
                                     }
                                   >
-                                    {say("worldWhatItGrewFrom")}
+                                    {say("worldPrincipleEvidence")}
                                   </button>
                                 </>
                               ) : null}
-                              {i > 0 ? (
-                                <>
-                                  <span aria-hidden="true"> · </span>
-                                  <button
-                                    type="button"
-                                    disabled={pBusy}
-                                    onClick={() => movePrinciple(pr.id, -1)}
-                                  >
-                                    {say("worldMattersMore")}
-                                  </button>
-                                </>
-                              ) : null}
-                              {i < ranked.length - 1 ? (
-                                <>
-                                  <span aria-hidden="true"> · </span>
-                                  <button
-                                    type="button"
-                                    disabled={pBusy}
-                                    onClick={() => movePrinciple(pr.id, 1)}
-                                  >
-                                    {say("worldMattersLess")}
-                                  </button>
-                                </>
-                              ) : null}
+                              <div className="jar-principle-secondary">
                               {/* WHOSE SENTENCE IT IS DECIDES WHICH WAY OUT
                                   IT HAS, and until 2026-08-26 both were
                                   offered on every principle regardless.
@@ -12330,20 +12332,19 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                   question is not migrate-or-delete per
                                   screen, it is whether a verb belongs on
                                   that noun in that state. */}
-                              {pr.origin === "minted" ? (
+                              {pr.origin === "minted" ? !pr.disputeId ? (
                                 <>
-                                  <span aria-hidden="true"> · </span>
                                   <button
                                     type="button"
                                     disabled={pBusy}
                                     onClick={() => disputeThisPrinciple(pr.id)}
+                                    className="jar-principle-disagree"
                                   >
                                     {say("worldNotMine")}
                                   </button>
                                 </>
-                              ) : (
+                              ) : null : (
                                 <>
-                                  <span aria-hidden="true"> · </span>
                                   {pGoing === pr.id ? (
                                     <>
                                       <button
@@ -12353,7 +12354,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                       >
                                         {pBusy ? say("worldWithdrawing") : say("worldYesWithdrawIt")}
                                       </button>
-                                      <span aria-hidden="true"> · </span>
                                       <button type="button" onClick={() => setPGoing(null)}>
                                         {say("worldKeepIt")}
                                       </button>
@@ -12365,25 +12365,23 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                   )}
                                 </>
                               )}
-                            </span>
+                              </div>
+                            </div>
                           ) : null}
-                        </p>
+                        </li>
                       ))}
+                    </ul>
                       </>
-                    ) : (
+                    ) : w.kind === "agent" ? (
                       <>
                         <p className="jar-values-lead">
-                          {w.kind === "self"
-                            ? say("worldValuesLeadSelf")
-                            : formatMessage(locale, "worldValuesLeadOther", { name: w.name })}
+                          {formatMessage(locale, "worldValuesLeadOther", { name: w.name })}
                         </p>
                         <p className="jar-values-sub">
-                          {w.kind === "self"
-                            ? say("worldValuesSubSelf")
-                            : say("worldValuesSubOther")}
+                          {say("worldValuesSubOther")}
                         </p>
                       </>
-                    )}
+                    ) : null}
                     {/* NOTHING IS DECLARED HERE. What stood in this slot was
                         `declare one`, and under it a two-line draft with
                         `declare it · not now` — the one act on this band that
@@ -14293,7 +14291,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
              your own wall's sky can hold anything yet, so it lights only
              there. */
           className={
-            atWall.kind === "self" && principles.length > 0
+            (atWall.kind === "self" ? principles.length > 0 : (groupPrincipleCounts[atWall.id] ?? 0) > 0)
               ? "jar-values jar-values--held"
               : "jar-values"
           }

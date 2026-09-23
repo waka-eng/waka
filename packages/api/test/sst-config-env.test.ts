@@ -140,12 +140,12 @@ describe("SST principle generation cadence", () => {
     );
   });
 
-  it("keeps the cron the sole enqueuer of principle generation", () => {
+  it("keeps principle enqueueing behind the material eligibility service", () => {
     const srcRoot = resolve(__dirname, "../src");
     const offenders: string[] = [];
     const allowed = new Set([
       "lib/queue.ts", // the definition
-      "principle-refresh.ts", // the cron handler
+      "lib/principle-status.ts", // material eligibility and deduplication
     ]);
     const walk = (dir: string): void => {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -165,8 +165,7 @@ describe("SST principle generation cadence", () => {
     walk(srcRoot);
     expect(
       offenders,
-      `enqueueRefreshPrinciples called outside the nightly cron: ${offenders.join(", ")}. ` +
-        "Generation is midnight-only by owner decision; see docs/goals/principles.md.",
+      `Principle enqueue bypasses the material service: ${offenders.join(", ")}.`,
     ).toEqual([]);
   });
 });

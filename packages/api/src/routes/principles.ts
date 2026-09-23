@@ -29,18 +29,20 @@
  */
 
 import { recordConsultation } from "../lib/consultations.js";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
 import {
   inspirations,
+  feedback,
   profiles,
   type Principle,
   principles,
   principleSignals,
   principleTypeValues,
   signals,
+  signalEvidence,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import type { DeclarationRoute } from "../lib/model-provider.js";
@@ -60,6 +62,7 @@ import {
 import { normalizeSupportedLocale } from "../lib/locales.js";
 import { validationDetails } from "../lib/validation.js";
 import { loadProfileTarget, resolveProfileScope } from "./signals.js";
+import { loadPrincipleStatus, requestPrincipleRefresh } from "../lib/principle-status.js";
 
 type WakaDb = ReturnType<typeof getDb>;
 
@@ -107,11 +110,12 @@ export interface PrincipleView {
   locked: boolean;
   heldSince: string | null;
   conflictsWithId: string | null;
-  citedSignals: Array<{ id: string; statement: string }>;
+  citedSignals: Array<{ id: string; statement: string; examples?: Array<{ text: string; createdAt: string }> }>;
   createdAt: string;
+  disputeId?: string | null;
 }
 
-async function loadPrincipleViews(db: WakaDb, profileId: string): Promise<PrincipleView[]> {
+export async function loadPrincipleViews(db: WakaDb, profileId: string): Promise<PrincipleView[]> {
   const rows = await db
     .select()
     .from(principles)
@@ -141,6 +145,38 @@ async function loadPrincipleViews(db: WakaDb, profileId: string): Promise<Princi
     else citationsByPrinciple.set(row.principleId, [cited]);
   }
 
+  const verdicts = await db.select({ id: feedback.id, targetId: feedback.targetId, value: feedback.value })
+    .from(feedback).where(and(eq(feedback.profileId, profileId), eq(feedback.targetType, "principle"),
+      inArray(feedback.targetId, rows.map((row) => row.id))))
+    .orderBy(desc(feedback.createdAt), desc(feedback.id));
+  const latest = new Map<string, typeof verdicts[number]>();
+  for (const verdict of verdicts) if (!latest.has(verdict.targetId)) latest.set(verdict.targetId, verdict);
+
+  // Personal source excerpts only. Group profiles own no inspirations, and
+  // the owner equality below prevents members' captures leaking through here.
+  const examples = await db.execute(sql<{ signalId: string; text: string; createdAt: string }>`
+    SELECT source.signal_id AS "signalId", source.text, source.created_at AS "createdAt"
+    FROM (
+      SELECT ${signalEvidence.signalId} AS signal_id, left(${inspirations.text}, 240) AS text,
+        ${inspirations.createdAt} AS created_at,
+        row_number() OVER (PARTITION BY ${signalEvidence.signalId} ORDER BY ${inspirations.createdAt} DESC, ${inspirations.id}) AS position
+      FROM ${signalEvidence}
+      JOIN ${inspirations} ON ${inspirations.id} = ${signalEvidence.inspirationId}
+      WHERE ${signalEvidence.profileId} = ${profileId}::uuid
+        AND ${inspirations.profileId} = ${profileId}::uuid
+        AND ${signalEvidence.signalId} IN (
+          SELECT ${principleSignals.signalId} FROM ${principleSignals}
+          WHERE ${principleSignals.profileId} = ${profileId}::uuid
+        )
+    ) AS source WHERE source.position <= 2
+  `);
+  const examplesBySignal = new Map<string, Array<{ text: string; createdAt: string }>>();
+  for (const example of examples as unknown as Array<{ signalId: string; text: string; createdAt: string }>) {
+    const bucket = examplesBySignal.get(example.signalId) ?? [];
+    bucket.push({ text: example.text, createdAt: new Date(example.createdAt).toISOString() });
+    examplesBySignal.set(example.signalId, bucket);
+  }
+
   return rows.map((row) => ({
     id: row.id,
     statement: row.statement,
@@ -151,9 +187,33 @@ async function loadPrincipleViews(db: WakaDb, profileId: string): Promise<Princi
     locked: row.lockedAt !== null,
     heldSince: row.heldSince?.toISOString() ?? null,
     conflictsWithId: row.conflictsWithId,
-    citedSignals: citationsByPrinciple.get(row.id) ?? [],
+    citedSignals: (citationsByPrinciple.get(row.id) ?? []).map((signal) => ({
+      ...signal, examples: examplesBySignal.get(signal.id) ?? [],
+    })),
     createdAt: row.createdAt.toISOString(),
+    disputeId: latest.get(row.id)?.value === "not_true" ? latest.get(row.id)!.id : null,
   }));
+}
+
+/** Undo exactly the selected user verdict, preserving model-detected conflicts. */
+export async function undoPrincipleDispute(db: WakaDb, profileId: string, principleId: string, disputeId: string) {
+  return db.transaction(async (tx) => {
+    const [principle] = await tx.select().from(principles)
+      .where(and(eq(principles.id, principleId), eq(principles.profileId, profileId))).for("update").limit(1);
+    if (!principle) return false;
+    const predicate = and(eq(feedback.profileId, profileId), eq(feedback.targetType, "principle"), eq(feedback.targetId, principleId));
+    const [latest] = await tx.select().from(feedback).where(predicate)
+      .orderBy(desc(feedback.createdAt), desc(feedback.id)).limit(1);
+    if (latest?.id !== disputeId || latest.value !== "not_true") return true;
+    await tx.delete(feedback).where(and(predicate, eq(feedback.id, disputeId)));
+    const [previous] = await tx.select().from(feedback).where(predicate)
+      .orderBy(desc(feedback.createdAt), desc(feedback.id)).limit(1);
+    const state = principle.conflictsWithId || previous?.value === "not_true" ? "contested"
+      : principle.origin === "declared" && !principle.heldSince ? "aspirational" : "held";
+    await tx.update(principles).set({ state, updatedAt: new Date() })
+      .where(and(eq(principles.id, principleId), eq(principles.profileId, profileId)));
+    return true;
+  });
 }
 
 /**
@@ -193,7 +253,7 @@ export function renderPrinciplesMarkdown(
   }
   lines.push("");
   lines.push(
-    `— ${views.length} principle${views.length === 1 ? "" : "s"} · generated nightly · this rendering ${renderedAt.toISOString().slice(0, 10)}`,
+    `— ${views.length} principle${views.length === 1 ? "" : "s"} · generated from patterns · this rendering ${renderedAt.toISOString().slice(0, 10)}`,
   );
   return lines.join("\n") + "\n";
 }
@@ -244,6 +304,30 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
       surface: "principles",
     });
     return c.json({ principles: views });
+  });
+
+  routes.get("/status", async (c) => {
+    const resolved = await resolveRead(c);
+    if ("error" in resolved) return resolved.error;
+    return c.json({ status: await loadPrincipleStatus(getDatabase(), resolved.profileId) });
+  });
+
+  routes.post("/refresh", async (c) => {
+    // Generation may only be requested for the session's own profile.
+    const profileId = c.get("session").profile.id;
+    const status = await requestPrincipleRefresh(getDatabase(), profileId, c.req.query("retry") === "1");
+    return c.json({ status }, 202);
+  });
+
+  routes.delete("/:principleId/disputes/:disputeId", async (c) => {
+    const params = z.object({ principleId: z.string().uuid(), disputeId: z.string().uuid() }).safeParse(c.req.param());
+    if (!params.success) return c.json({ error: "Invalid dispute" }, 400);
+    const query = scopeQuerySchema.safeParse(c.req.query());
+    if (!query.success) return c.json({ error: "Invalid query" }, 400);
+    const scope = await resolveProfileScope(getDatabase(), c.get("session"), query.data.profile, "write", loadProfile);
+    if (!scope.ok) return c.json(scope.body, scope.status);
+    const undone = await undoPrincipleDispute(getDatabase(), scope.profileId, params.data.principleId, params.data.disputeId);
+    return undone ? c.json({ ok: true }) : c.json({ error: "Principle not found" }, 404);
   });
 
   /**
@@ -616,9 +700,7 @@ export function createPrincipleMarkdownRoute(
       .from(profiles)
       .where(eq(profiles.id, scope.profileId))
       .limit(1);
-    /* principles are a person's or an agent's; a room's mind holds none
-       (rooms do not participate in layer 4 — data-model.md), so a mind here
-       reads as no profile at all */
+    // Room principles are served through group membership, never personal scope.
     if (!profileRaw || profileRaw.type === "group") {
       return c.json({ error: "Profile not found" }, 404);
     }

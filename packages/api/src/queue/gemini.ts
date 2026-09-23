@@ -1059,8 +1059,10 @@ export async function synthesizeTopOfMind(
 // ---------------------------------------------------------------------------
 
 export const PRINCIPLE_DISTILL_SYSTEM_INSTRUCTION = `
-You distill PRINCIPLES from one person's long-lived patterns. A principle is
-how this person chooses, stripped of context — a directive that would still
+You distill PRINCIPLES from a profile's evidence-backed patterns. A profile
+may be a person, an agent, or a room. For a room, describe its shared principles,
+never imply unanimous agreement. A principle describes how this profile chooses,
+stripped of context — a directive that would still
 instruct after every project name, tool, and number is deleted.
 
 Five tests. Propose a candidate only when ALL hold:
@@ -1070,7 +1072,10 @@ Five tests. Propose a candidate only when ALL hold:
    "You keep choosing..." are the INPUT patterns, not the output.
 3. Evidence: cite the ids of the signals it generalizes — at least three
    DISTINCT signals from the provided list, and only ids from that list.
-4. Durable: the cited signals must span months of evidence, not one burst.
+4. Supported: the cited signals must have capture evidence and collectively
+   appear in at least one top-of-mind version. Months of history are not
+   required for an initial read. Prefer repeated choices across distinct
+   patterns; never invent certainty or permanence from a single event.
 5. Never completes: anything that could be finished or checked off is a goal,
    not a principle. Do not propose it.
 
