@@ -1,4 +1,7 @@
 {
+  "worldPrinciplesRoomChecking": "Checking the room’s principles…",
+  "worldPrinciplesRoomLoadFailed": "We couldn’t load the room’s principles. Please try again.",
+  "worldPrinciplesRoomGenerationFailed": "WAKA couldn’t finish the latest room read. You can try it again.",
   "worldPrincipleDisputed": "You marked this as inaccurate",
   "worldPrincipleSavedExample": "Saved inspiration",
   "worldPrincipleKeep": "Keep this",

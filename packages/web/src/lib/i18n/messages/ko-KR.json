@@ -1,4 +1,7 @@
 {
+  "worldPrinciplesRoomChecking": "방의 원칙을 확인하는 중…",
+  "worldPrinciplesRoomLoadFailed": "방의 원칙을 불러오지 못했어요. 다시 시도해 주세요.",
+  "worldPrinciplesRoomGenerationFailed": "WAKA가 최근 방 읽기를 마치지 못했어요. 다시 시도할 수 있어요.",
   "worldPrincipleDisputed": "정확하지 않다고 표시했어요",
   "worldPrincipleSavedExample": "저장한 영감",
   "worldPrincipleKeep": "다시 받아들이기",

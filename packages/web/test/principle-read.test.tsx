@@ -44,16 +44,34 @@ describe("principle read", () => {
     expect(requestPrincipleRead).not.toHaveBeenCalled();
   });
 
-  it("shows a load failure and retries instead of presenting an empty room", async () => {
+  it("recovers from one failed first read without showing a retry button", async () => {
     vi.mocked(fetchPrincipleRead).mockRejectedValueOnce(new Error("unavailable"))
       .mockResolvedValue({ principles: [principle], status: ready });
     await act(async () => root.render(<PrincipleRead groupId="room-1" active locale="en-US" />));
-    expect(host.querySelector('[role="alert"]')?.textContent).toContain("could not be updated");
-    await act(async () => host.querySelector("button")!.click());
+    expect(host.textContent).toContain("Checking the room’s principles");
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    expect(host.querySelector("button")).toBeNull();
+    await act(async () => vi.advanceTimersByTimeAsync(1_000));
     expect(host.textContent).toContain(principle.statement);
     expect(host.querySelector('[role="alert"]')).toBeNull();
     expect(fetchPrincipleRead).toHaveBeenLastCalledWith("room-1");
     expect(requestPrincipleRead).not.toHaveBeenCalled();
+  });
+
+  it("offers retry only after repeated failures, then recovers", async () => {
+    vi.mocked(fetchPrincipleRead).mockRejectedValueOnce(new Error("temporary"))
+      .mockRejectedValueOnce(new Error("temporary"))
+      .mockRejectedValueOnce(new Error("unavailable"))
+      .mockResolvedValue({ principles: [principle], status: ready });
+    await act(async () => root.render(<PrincipleRead groupId="room-1" active locale="en-US" />));
+    await act(async () => vi.advanceTimersByTimeAsync(1_000));
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    await act(async () => vi.advanceTimersByTimeAsync(2_000));
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain("couldn’t load the room");
+    await act(async () => host.querySelector("button")!.click());
+    expect(host.textContent).toContain(principle.statement);
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    expect(fetchPrincipleRead).toHaveBeenCalledTimes(4);
   });
 
   it("queues missing work once and displays completion without a page reload", async () => {
