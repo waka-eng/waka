@@ -26,6 +26,24 @@ const principle = { id: "room-principle", statement: "Make room for experiments.
   conflictsWithId: null, createdAt: "2026-09-22", citedSignals: [{ id: "room-signal", statement: "Shared experiments recur." }] };
 
 describe("principle read", () => {
+  it("shows room progress and what members can do at each empty stage", async () => {
+    vi.mocked(fetchPrincipleRead)
+      .mockResolvedValueOnce({ principles: [], status: { ...ready, phase: "waiting", eligible: false, signalCount: 1, topOfMindCount: 0 } })
+      .mockResolvedValueOnce({ principles: [], status: { ...ready, phase: "waiting", eligible: false, signalCount: 3, topOfMindCount: 0 } })
+      .mockResolvedValue({ principles: [], status: ready });
+    await act(async () => root.render(<PrincipleRead groupId="room-1" active locale="en-US" />));
+    expect(host.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("1");
+    expect(host.textContent).toContain("1/3 shared patterns ready");
+    expect(host.textContent).toContain("two current members");
+    expect(host.textContent).toContain("WAKA can suggest a principle");
+    await act(async () => vi.advanceTimersByTimeAsync(60_000));
+    expect(host.textContent).toContain("Three shared patterns are ready");
+    expect(host.textContent).toContain("top of mind");
+    await act(async () => vi.advanceTimersByTimeAsync(60_000));
+    expect(host.textContent).toContain("no principle is clear yet");
+    expect(requestPrincipleRead).not.toHaveBeenCalled();
+  });
+
   it("shows a load failure and retries instead of presenting an empty room", async () => {
     vi.mocked(fetchPrincipleRead).mockRejectedValueOnce(new Error("unavailable"))
       .mockResolvedValue({ principles: [principle], status: ready });

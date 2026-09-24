@@ -928,6 +928,42 @@
   margin: 0 0 var(--sp-24);
   color: var(--jar-faint);
 }
+.jar-principles-empty { max-width: 430px; margin: 0 auto; text-align: center; }
+.jar-principles-empty-lead {
+  margin: 0 0 var(--sp-24);
+  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-size: clamp(20px, 2.1vw, 28px);
+  font-weight: 300;
+  line-height: 1.3;
+  color: var(--jar-ink);
+}
+.jar-principles-progress {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-8);
+  max-width: 240px;
+  margin: 0 auto var(--sp-8);
+}
+.jar-principles-progress span {
+  height: 2px;
+  background: color-mix(in srgb, var(--jar-ink) 18%, transparent);
+}
+.jar-principles-progress span.ready {
+  background: var(--jar-ink);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--jar-ink) 28%, transparent);
+}
+.jar-principles-empty-count {
+  margin: 0 0 var(--sp-24);
+  font-size: var(--t-label);
+  color: var(--jar-muted);
+}
+.jar-principles-empty-detail {
+  max-width: 42ch;
+  margin: 0 auto var(--sp-12);
+  font-size: var(--t-ui);
+  line-height: 1.55;
+  color: var(--jar-muted);
+}
 .jar-values-held {
   margin: 0;
 }
