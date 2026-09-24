@@ -144,6 +144,22 @@ try {
   await page.waitForTimeout(1000);
   await page.screenshot({ path: "/tmp/waka-principles-room-mobile.png" });
   await page.setViewportSize({ width: 1280, height: 900 });
+  let failFirstStatus = true;
+  await page.route("**/principles/status", (route) => {
+    if (failFirstStatus) {
+      failFirstStatus = false;
+      return route.fulfill({ status: 500, body: "{}" });
+    }
+    return route.continue();
+  });
+  await page.reload();
+  await page.locator(".jar-values").waitFor({ state: "visible" });
+  await page.waitForTimeout(1500);
+  await page.locator(".jar-values").press("Enter");
+  await page.locator(".jar-values").waitFor({ state: "hidden" });
+  await groupView.getByText("Make experiments safe to share together.", { exact: true }).waitFor({ state: "visible" });
+  if (await groupView.getByRole("alert").count() > 0) throw new Error("Transient first-load error flashed a retry state");
+  await page.unroute("**/principles/status");
   await page.route("**/principles/status", (route) => route.fulfill({ status: 500, body: "{}" }));
   await page.reload();
   await page.locator(".jar-values").waitFor({ state: "visible" });

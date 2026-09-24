@@ -20,6 +20,7 @@ export function PrincipleRead({ groupId, active, locale, onRead }: {
     let disposed = false;
     let running = false;
     let ensured = false;
+    let consecutiveFailures = 0;
     let timer: number | undefined;
     let delay = 60_000;
     const read = async () => {
@@ -33,6 +34,7 @@ export function PrincipleRead({ groupId, active, locale, onRead }: {
         onReadRef.current?.(result.principles);
         setStatus(result.status);
         setFailed(false);
+        consecutiveFailures = 0;
         delay = result.status.phase === "processing" || result.status.phase === "pending" ? 10_000 : 60_000;
         if (!ensured && result.status.eligible &&
           (result.status.phase === "pending" || result.status.phase === "processing" ||
@@ -44,7 +46,9 @@ export function PrincipleRead({ groupId, active, locale, onRead }: {
           if (!disposed) setStatus({ ...result.status, phase: "processing" });
         }
       } catch {
-        if (!disposed) setFailed(true);
+        consecutiveFailures += 1;
+        delay = consecutiveFailures < 3 ? consecutiveFailures * 1_000 : 10_000;
+        if (!disposed && consecutiveFailures >= 3) setFailed(true);
       } finally {
         running = false;
         if (!disposed) timer = window.setTimeout(() => void read(), delay);
@@ -62,8 +66,10 @@ export function PrincipleRead({ groupId, active, locale, onRead }: {
     };
   }, [groupId, active, locale, attempt]);
   const error = failed || status?.phase === "failed";
-  const message = error ? "worldPrinciplesError"
-    : !status ? "worldPrinciplesLoading"
+  const message = error ? groupId
+      ? failed ? "worldPrinciplesRoomLoadFailed" : "worldPrinciplesRoomGenerationFailed"
+      : "worldPrinciplesError"
+    : !status ? groupId ? "worldPrinciplesRoomChecking" : "worldPrinciplesLoading"
     : status.phase === "processing" || status.phase === "pending" ? "worldPrinciplesReading"
     : status.signalCount < 3 ? (groupId ? "worldPrinciplesNeedRoomPatterns" : "worldValuesSubSelf")
     : status.topOfMindCount < 1 ? "worldPrinciplesNeedRead"
@@ -106,7 +112,7 @@ export function PrincipleRead({ groupId, active, locale, onRead }: {
       </p>}
     </div> : null}
     {!groupEmpty && (rows.length === 0 || error || status?.phase === "processing") ?
-      <p className="jar-values-sub" role={error ? "alert" : "status"}>
+      <p className="jar-values-sub" role={error ? "alert" : status?.phase === "processing" ? "status" : undefined}>
         {t(locale, message)}
         {error ? <> <button type="button" onClick={() => setAttempt((value) => value + 1)}>
           {t(locale, "worldPrinciplesRetry")}
