@@ -411,6 +411,18 @@ describe("the dial in a room", () => {
     expect(one(".jar-when-story").textContent).toContain("Bo arrived");
   });
 
+  it("opens the selected date's full account and wording change from the date caption", async () => {
+    await windToDay(dayOf(ago(V2_DAYS)));
+    const detail = one(".jar-when-story button");
+    expect(detail.textContent).toContain("see what changed");
+    await act(async () => detail.click());
+    await act(async () => { await Promise.resolve(); });
+    const moment = one(".jar-group-moment");
+    expect(moment.textContent).toContain("a proposal carried");
+    expect(moment.textContent).toContain(THEN_TEXT);
+    expect(moment.textContent).toContain(NOW_TEXT);
+  });
+
   it("says the room had nothing up before it had anything up", async () => {
     /* The day the door first moved — ten days before the first board. The
        honest answer is a blank wall, and a blank wall is a `formingAlt` line

@@ -83,6 +83,7 @@ function renderPanel(overrides: Partial<GroupPanelProps>): HTMLElement {
     members: new Map(),
     openProposals: new Map(),
     timeline: null,
+    selectedStop: null,
     propose: null,
     setPropose: vi.fn(),
     sendProposal: vi.fn(),
