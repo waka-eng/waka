@@ -252,6 +252,7 @@ const dayOf = (ms: number) => {
 
 /** the dates the room is offering, in the order it offers them */
 const rows = () => Array.from(layout.container.querySelectorAll<HTMLElement>(".jar-dial-stop"));
+const rowDate = (row: HTMLElement) => (row.querySelector(".jar-dial-stop-date")?.textContent ?? "").trim();
 
 /** press the word that says `now` — the only way the dates open */
 async function openDates(): Promise<void> {
@@ -292,11 +293,11 @@ function posterText(): string {
 async function windToDay(at: number): Promise<void> {
   await openDates();
   const label = dateWords(at, railEnd);
-  const row = rows().find((r) => (r.textContent ?? "").trim() === label);
+  const row = rows().find((r) => rowDate(r) === label);
   if (!row) {
     throw new Error(
       `the room does not offer ${JSON.stringify(label)}. It offers ` +
-        `${JSON.stringify(rows().map((r) => (r.textContent ?? "").trim()))}.`,
+        `${JSON.stringify(rows().map(rowDate))}.`,
     );
   }
   await act(async () => {
@@ -322,7 +323,7 @@ async function windToDay(at: number): Promise<void> {
 /** back to the present, by the row that says so */
 async function windToNow(): Promise<void> {
   await openDates();
-  const row = rows().find((r) => (r.textContent ?? "").trim() === "now");
+  const row = rows().find((r) => rowDate(r) === "now");
   if (!row) throw new Error("the room offers no way back to now");
   await act(async () => {
     row.click();
@@ -359,7 +360,7 @@ describe("the dial in a room", () => {
      * that there are exactly four catches one that added your days to them.
      */
     await openDates();
-    const said = rows().map((r) => (r.textContent ?? "").trim());
+    const said = rows().map(rowDate);
     expect(said[0], "the first row is the way back to the present").toBe("now");
 
     const want = Array.from(new Set([...DOOR_DAYS, V1_DAYS, V2_DAYS].map((d) => dayOf(ago(d)))))
@@ -395,6 +396,19 @@ describe("the dial in a room", () => {
         "sentence — the dial moved and the board did not follow it",
     ).not.toContain(NOW_TEXT);
     expect(then, "and it should be the version that was actually up").toContain(THEN_TEXT);
+  });
+
+  it("names the room event on each date and after selecting it", async () => {
+    await openDates();
+    const firstRead = rows().find((row) => rowDate(row) === dateWords(dayOf(ago(V1_DAYS)), railEnd));
+    const arrival = rows().find((row) => rowDate(row) === dateWords(dayOf(ago(DOOR_DAYS[1])), railEnd));
+    expect(firstRead?.querySelector(".jar-dial-stop-story")?.textContent).toContain("room first spoke");
+    expect(arrival?.querySelector(".jar-dial-stop-story")?.textContent).toContain("Bo arrived");
+
+    await windToDay(dayOf(ago(V1_DAYS)));
+    expect(one(".jar-when-story").textContent).toContain("room first spoke");
+    await windToDay(dayOf(ago(DOOR_DAYS[1])));
+    expect(one(".jar-when-story").textContent).toContain("Bo arrived");
   });
 
   it("says the room had nothing up before it had anything up", async () => {

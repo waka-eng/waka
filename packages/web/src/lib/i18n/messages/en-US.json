@@ -388,6 +388,7 @@
   "worldArrived": "{name} arrived",
   "worldLeftRoom": "{name} left",
   "worldWasRemoved": "{name} was removed",
+  "worldRoomHistoryMore": "{count} more",
   "worldProposePlaceholder": "What do you think this room believes?",
   "worldPutItToThem": "put it to them",
   "worldPutSomethingToRoom": "put something to this room",

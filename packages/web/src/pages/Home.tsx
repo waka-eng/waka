@@ -95,6 +95,7 @@ import { useMeasured } from "../canvas/measured";
 import { renderScale } from "../canvas/scale";
 import { BODY_TIERS, bodyPath } from "../character/raster";
 import { GroupPanel } from "../space-kinds/GroupPanel";
+import { eventsAtStop, groupHistoryCaption, groupHistoryEvents, type HistoryGrain } from "../space-kinds/group-history";
 import { SpaceSettings, type GroupTrouble } from "../space/settings/SpaceSettings";
 import { whyFailed as sayWhyFailed, whyOf } from "../lib/why-failed";
 import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
@@ -3342,6 +3343,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    */
   const dialStops = useCallback((moments: readonly number[], end: number) => {
     const roll = (
+      grain: HistoryGrain,
       key: (d: Date) => string,
       last: (d: Date) => number,
       label: (ms: number) => string,
@@ -3357,17 +3359,19 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         /* `now` is the first row and already means the end of today, so a
            stop within half a day of it is the same destination said twice */
         .filter((at) => end - at >= DAY_MS / 2)
-        .map((at) => ({ at, label: label(at) }));
+        .map((at) => ({ at, label: label(at), grain }));
     };
     const lastMs = (y: number, m: number, day: number) =>
       new Date(y, m, day, 23, 59, 59, 999).getTime();
     const days = roll(
+      "day",
       (d) => `${d.getFullYear()}.${d.getMonth()}.${d.getDate()}`,
       (d) => lastMs(d.getFullYear(), d.getMonth(), d.getDate()),
       (ms) => dateWords(ms, end, localeRef.current),
     );
     if (days.length <= DIAL_STOPS) return days;
     const months = roll(
+      "month",
       (d) => `${d.getFullYear()}.${d.getMonth()}`,
       /* day 0 of the next month is the last day of this one */
       (d) => lastMs(d.getFullYear(), d.getMonth() + 1, 0),
@@ -3380,11 +3384,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     );
     if (months.length <= DIAL_STOPS) return months;
     return roll(
+      "year",
       (d) => `${d.getFullYear()}`,
       (d) => lastMs(d.getFullYear(), 11, 31),
       (ms) => dialYear(ms, localeRef.current),
     );
   }, []);
+
+  const groupHistory = useMemo(() => {
+    if (atWall.kind !== "group") return [];
+    const timeline = groupTimelineRef.current.get(atWall.id);
+    return timeline ? groupHistoryEvents(timeline, locale) : [];
+  }, [atWall, groupPastTick, locale]);
 
   const dial = useMemo(() => {
     /* EVERY WALL'S DATES ARE THAT WALL'S OWN LIFE, NOT YOURS.
@@ -3406,14 +3417,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     if (atWall.kind === "group") {
       const timeline = groupTimelineRef.current.get(atWall.id);
       if (!timeline) return null;
-      for (const mark of timeline.doorMarks) {
-        const ms = Date.parse(mark.occurredAt);
-        if (Number.isFinite(ms) && ms > 0) moments.push(ms);
-      }
-      for (const version of timeline.versions) {
-        const ms = Date.parse(version.createdAt);
-        if (Number.isFinite(ms) && ms > 0) moments.push(ms);
-      }
+      for (const event of groupHistory) moments.push(event.at);
     } else if (atWall.kind === "agent") {
       const a = (agents ?? []).find((x) => x.agent.id === atWall.id);
       const caps = a?.inspirations ?? [];
@@ -3442,7 +3446,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        lands a request after arrival, and the dates must re-read when it does.
        `agents` is here for the same reason on an agent's wall: its bundle
        lands after arrival too. */
-  }, [inspirations, agents, clockMs, atWall, groupPastTick, dialStops]);
+  }, [inspirations, agents, clockMs, atWall, groupHistory, dialStops]);
+
+  const selectedGroupHistory = useMemo(() => {
+    if (atWall.kind !== "group" || parkedAt === null || !dial) return null;
+    const stop = dial.stops.find((row) => row.at === parkedAt);
+    return stop ? groupHistoryCaption(eventsAtStop(groupHistory, stop.at, stop.grain), locale) : null;
+  }, [atWall, parkedAt, dial, groupHistory, locale]);
+  const currentGroupHistory = atWall.kind === "group" && dial
+    ? groupHistoryCaption(eventsAtStop(groupHistory, dial.end, "day"), locale, 1) : null;
 
   /* ------------- palette: resolve vars once, re-raster sprites ------------- */
   useEffect(() => {
@@ -5433,7 +5445,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
              carrying no inline left at all — and a cache of the last value
              would look at an unchanged number and decline to write it,
              leaving the fresh list at whatever the stylesheet guessed. */
-          const px = `${Math.round(wb.left)}px`;
+          const menuWidth = railEl.getBoundingClientRect().width || railEl.offsetWidth;
+          const left = menuWidth > 0
+            ? Math.max(8, Math.min(wb.left, window.innerWidth - menuWidth - 8)) : wb.left;
+          const px = `${Math.round(left)}px`;
           if (railEl.style.left !== px) railEl.style.left = px;
         }
       }
@@ -14009,6 +14024,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               parked at — so the fact lives in a word that is always there and
               the rail can be genuinely absent until you reach for it. */}
           {dial && phase === "ready" && !dialAway ? (
+            <span className="jar-when-place">
             <button
               type="button"
               className={`jar-when jar-label${parkedAt === null ? "" : " jar-when--away"}`}
@@ -14041,6 +14057,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             >
               {parkedAt === null ? say("worldNow") : dateWords(parkedAt, dial.end, locale)}
             </button>
+            {selectedGroupHistory ? <span className="jar-when-story" role="status">
+              {selectedGroupHistory}
+            </span> : null}
+            </span>
           ) : null}
         </div>
 
@@ -14175,10 +14195,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               aria-current={parkedAt === null}
               onClick={() => windTo(dial.end)}
             >
-              now
+              <span className="jar-dial-stop-date">{say("worldNow")}</span>
+              {currentGroupHistory ? <span className="jar-dial-stop-story">{currentGroupHistory}</span> : null}
             </button>
-            {dial.stops.map((stop) => (
-              <button
+            {dial.stops.map((stop) => {
+              const caption = atWall.kind === "group"
+                ? groupHistoryCaption(eventsAtStop(groupHistory, stop.at, stop.grain), locale, 1)
+                : null;
+              return <button
                 key={stop.at}
                 type="button"
                 className={`jar-dial-stop jar-label${
@@ -14187,9 +14211,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 aria-current={parkedAt === stop.at}
                 onClick={() => windTo(stop.at)}
               >
-                {stop.label}
-              </button>
-            ))}
+                <span className="jar-dial-stop-date">{stop.label}</span>
+                {caption ? <span className="jar-dial-stop-story">{caption}</span> : null}
+              </button>;
+            })}
           </div>
         </div>
       ) : null}

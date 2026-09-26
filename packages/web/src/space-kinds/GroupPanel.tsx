@@ -21,6 +21,7 @@ import { useOptionalAuth } from "../lib/auth-context";
 import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
 import type { MessageKey } from "../lib/locales";
 import { dateWords, givenName } from "../lib/words";
+import { groupHistoryEvents } from "./group-history";
 import type { Space } from "./index";
 
 export interface GroupPanelProps {
@@ -205,39 +206,7 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
   (timeline.versions.length > 0 || timeline.doorMarks.length > 0) ? (
     <div className="jar-prov" style={{ marginTop: 14 }}>
       <p className="jar-prov-lead jar-label">{say("worldRoomSoFar")}</p>
-      {[
-        ...timeline.versions
-          .filter((v) => v.reason !== "no_change")
-          .map((v) => ({
-            key: `v:${v.id}`,
-            at: Date.parse(v.createdAt) || 0,
-            line:
-              v.reason === "initial"
-                ? say("worldRoomFirstSpoke")
-                : v.reason === "member_proposal"
-                  ? say("worldProposalCarried")
-                  : v.reason === "human_edit"
-                    ? say("worldSentenceReworded")
-                    : say("worldRoomReRead"),
-          })),
-        ...timeline.doorMarks.map((m) => ({
-          key: `d:${m.profileId ?? "departed"}:${m.kind}:${m.occurredAt}`,
-          at: Date.parse(m.occurredAt) || 0,
-          /* a mark whose person has since erased their account keeps its
-             place in the story as "someone" — the name is what erasure
-             removes, the fact that someone was here is the room's */
-          line: formatMessage(
-            locale,
-            m.kind === "joined"
-              ? "worldArrived"
-              : m.kind === "left"
-                ? "worldLeftRoom"
-                : "worldWasRemoved",
-            { name: m.name ? givenName(m.name) : say("worldSomeoneWord") },
-          ),
-        })),
-      ]
-        .sort((a, b) => b.at - a.at)
+      {groupHistoryEvents(timeline, locale)
         .slice(0, 10)
         .map((event) => (
           <p key={event.key} className="jar-was">
