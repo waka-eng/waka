@@ -12134,6 +12134,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       groupId={w.kind === "group" ? w.id : undefined}
                       active={here && !offlineRef.current}
                       locale={locale}
+                      refreshKey={w.kind === "group" ? groupFieldTick : undefined}
                       onRead={w.kind === "self" ? setPrinciples : (rows) => setGroupPrincipleCounts((counts) =>
                         counts[w.id] === rows.length ? counts : { ...counts, [w.id]: rows.length })}
                     /> : null}

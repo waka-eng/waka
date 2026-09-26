@@ -35,13 +35,25 @@ describe("principle read", () => {
     expect(host.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("1");
     expect(host.textContent).toContain("1/3 shared patterns ready");
     expect(host.textContent).toContain("two current members");
-    expect(host.textContent).toContain("WAKA can suggest a principle");
-    await act(async () => vi.advanceTimersByTimeAsync(60_000));
-    expect(host.textContent).toContain("Three shared patterns are ready");
+    expect(host.textContent).toContain("At least one must also appear");
+    await act(async () => vi.advanceTimersByTimeAsync(15_000));
+    expect(host.textContent).toContain("The shared patterns are ready");
     expect(host.textContent).toContain("top of mind");
-    await act(async () => vi.advanceTimersByTimeAsync(60_000));
-    expect(host.textContent).toContain("no principle is clear yet");
+    await act(async () => vi.advanceTimersByTimeAsync(15_000));
+    expect(host.textContent).toContain("No room principle has emerged yet");
+    expect(host.textContent).toContain("read the current patterns");
     expect(requestPrincipleRead).not.toHaveBeenCalled();
+  });
+
+  it("checks immediately when refreshed room material arrives", async () => {
+    vi.mocked(fetchPrincipleRead)
+      .mockResolvedValueOnce({ principles: [], status: { ...ready, phase: "waiting", eligible: false, signalCount: 2, topOfMindCount: 0 } })
+      .mockResolvedValue({ principles: [], status: { ...ready, phase: "waiting", eligible: false, signalCount: 3, topOfMindCount: 0 } });
+    await act(async () => root.render(<PrincipleRead groupId="room-1" active locale="en-US" refreshKey={0} />));
+    expect(host.textContent).toContain("2/3 shared patterns ready");
+    await act(async () => root.render(<PrincipleRead groupId="room-1" active locale="en-US" refreshKey={1} />));
+    expect(host.textContent).toContain("The shared patterns are ready");
+    expect(fetchPrincipleRead).toHaveBeenCalledTimes(2);
   });
 
   it("recovers from one failed first read without showing a retry button", async () => {
@@ -80,10 +92,19 @@ describe("principle read", () => {
       .mockResolvedValue({ principles: [principle], status: ready });
     await act(async () => root.render(<PrincipleRead groupId="room-1" active locale="en-US" />));
     expect(requestPrincipleRead).toHaveBeenCalledTimes(1);
-    expect(host.textContent).toContain("Reading the patterns");
+    expect(host.textContent).toContain("Looking for a room principle");
     await act(async () => vi.advanceTimersByTimeAsync(10_000));
     expect(host.textContent).toContain(principle.statement);
     expect(requestPrincipleRead).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows an ongoing room read without queueing the same work again", async () => {
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: { ...ready, phase: "processing" } });
+    await act(async () => root.render(<PrincipleRead groupId="room-1" active locale="en-US" />));
+    expect(host.textContent).toContain("Looking for a room principle");
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    expect(fetchPrincipleRead).toHaveBeenCalledTimes(2);
+    expect(requestPrincipleRead).not.toHaveBeenCalled();
   });
 
   it("does not fetch an inactive wall", async () => {
