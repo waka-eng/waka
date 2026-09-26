@@ -1996,6 +1996,7 @@ function HomeExperience(): JSX.Element {
       return false;
     }
   });
+  const [newInspirationRequested, setNewInspirationRequested] = useState(false);
   /** The one honest line: it did not keep. Never a modal, never a silence. */
   const [mouthNote, setMouthNote] = useState("");
   /**
@@ -10081,6 +10082,21 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     setMouthOpen(true);
   }, []);
 
+  /** The shortcut returns to the present wall before putting the pen in hand. */
+  const startNewInspiration = useCallback(() => {
+    if (!atNow && dial) windTo(dial.end);
+    simApiRef.current?.toTop();
+    setNewInspirationRequested(true);
+  }, [atNow, dial, windTo]);
+  useEffect(() => {
+    if (!newInspirationRequested || !atNow || inField || inSky) return;
+    setNewInspirationRequested(false);
+    if (mouthOpen) {
+      setMouthNote("");
+      mouthFieldRef.current?.focus();
+    } else openMouth();
+  }, [newInspirationRequested, atNow, inField, inSky, mouthOpen, openMouth]);
+
   /** The way out that keeps the words: the page folds, the draft stays. */
   const saveAsDraft = useCallback(() => {
     setMouthOpen(false);
@@ -13145,6 +13161,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             className={`jar-mouth-slot${atNow ? "" : " jar-mouth-slot--away"}${
               mouthPage ? " jar-mouth-slot--note" : ""
             }`}
+            {...(!atNow || inField || inSky ? { inert: "" } : {})}
             /* THE SHEET KEPT THE CARET, AND NOW THE MARGIN IS A DOOR.
                While this was a drawer, a press on its face was a press on
                the thing you were typing INTO, so it refused the default and
@@ -13186,7 +13203,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 aria-label={say("worldCaptureInspiration")}
                 /* the resting phrase, kept — opening the mouth changes
                    nothing about it (founder, 2026-08-24) */
-                placeholder={say("worldCaptureInspiration")}
+                placeholder={say("worldCapturePrompt")}
                 onChange={(e) => {
                   mouthCaretRef.current = e.target.selectionStart ?? e.target.value.length;
                   setDraft(e.target.value);
@@ -13310,11 +13327,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     that was somehow always selected. It rests at the verbs'
                     own muted tier and lifts under the hand like every other
                     pressable word. */}
-                <button type="button" className="jar-where-verb" onClick={() => keepIt()}>
+                <button type="button" className="jar-where-verb" onClick={() => keepIt()}
+                  aria-label={say("worldSaveInspiration")} title={say("worldSaveInspiration")}>
                   {say("worldSave")}
                 </button>
                 <span aria-hidden="true" className="jar-mouth-dot"> · </span>
-                <button type="button" className="jar-where-off" onClick={() => keepIt(true)}>
+                <button type="button" className="jar-where-off" onClick={() => keepIt(true)}
+                  aria-label={say("worldSaveAndReflect")} title={say("worldSaveAndReflect")}>
                   {say("worldReflect")}
                 </button>
               </p>
@@ -14436,6 +14455,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               : formatMessage(locale, "worldInspirationCount", { count: wallCount })}
           </span>
           <span className="jar-caret" aria-hidden="true" />
+        </button>
+      ) : null}
+
+      {/* The mouth belongs below the companion, but a person can also be in
+          the ground, the sky, or the room's past. From there the same act is
+          one quiet shortcut back to now and into the existing composer. */}
+      {phase === "ready" && (inField || inSky || !atNow || (charSay !== "" && !mouthOpen)) ? (
+        <button type="button" className={`jar-capture-shortcut jar-label${
+          !inField && !inSky && wallCount > 0 ? " jar-capture-shortcut--above-count" : ""
+        }`} data-jar-chrome="1"
+          onClick={startNewInspiration}>
+          <span aria-hidden="true">+</span> {say("worldCaptureInspiration")}
         </button>
       ) : null}
 

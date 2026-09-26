@@ -619,4 +619,27 @@ describe("the mouth while the dial is away from now", () => {
       "and open again once the dial is back at now",
     ).not.toContain("--away");
   });
+
+  it("offers capture in the past, returns to now, and focuses the existing composer", async () => {
+    await windToDay(endOfDayOf(keptMs[2]));
+    expect(one(".jar-mouth-slot").hasAttribute("inert")).toBe(true);
+    const shortcut = one(".jar-capture-shortcut");
+    expect(shortcut.textContent).toContain("Capture inspiration");
+    await act(async () => shortcut.click());
+    await layout.step(40);
+    expect(one(".jar-when").textContent).toBe("now");
+    const field = one(".jar-mouth-field");
+    expect(field.getAttribute("placeholder")).toBe("A thought or link…");
+    expect(document.activeElement).toBe(field);
+  });
+
+  it("offers capture from the ground and brings the pen back into view", async () => {
+    await layout.toField();
+    expect(one(".jar-mouth-slot").hasAttribute("inert")).toBe(true);
+    await act(async () => one(".jar-capture-shortcut").click());
+    await layout.step(80);
+    const field = one(".jar-mouth-field");
+    expect(document.activeElement).toBe(field);
+    expect(one(".jar-mouth-slot").hasAttribute("inert")).toBe(false);
+  });
 });

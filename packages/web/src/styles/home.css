@@ -1218,6 +1218,36 @@
   color: var(--jar-ink);
 }
 
+/* The capture act remains available when its place under the companion has
+   scrolled away or gone quiet in the past. It opens the same mouth, not a
+   second form, and sits just above the ground count when both are present. */
+.jar-capture-shortcut {
+  position: absolute;
+  z-index: 6;
+  left: 50%;
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  min-height: 32px;
+  padding: 5px var(--sp-12);
+  border: 1px solid var(--jar-panel-edge);
+  border-radius: 999px;
+  background: var(--jar-panel);
+  color: var(--jar-ink);
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.jar-capture-shortcut--above-count {
+  bottom: calc(47px + env(safe-area-inset-bottom));
+}
+.jar-capture-shortcut:hover,
+.jar-capture-shortcut:focus-visible {
+  background: var(--jar-panel-edge);
+}
+
 /* ---------- THE REACH ----------
    The ground, addressable without a pointer. It is drawn nowhere on purpose:
    what a person SEES when it takes focus is the orb lighting up out in the
@@ -1726,6 +1756,24 @@
   content: "";
   position: absolute;
   inset: -11px -12px;
+}
+.jar-mouth .jar-mouth-rest {
+  font-size: var(--t-fine);
+  letter-spacing: 0.12em;
+  color: var(--jar-ink);
+  text-decoration: underline;
+  text-decoration-color: var(--jar-muted);
+  text-underline-offset: 5px;
+}
+.jar-mouth .jar-mouth-field::placeholder {
+  font-size: var(--t-fine);
+  letter-spacing: 0.12em;
+  color: var(--jar-muted);
+}
+.jar-mouth-rest:focus-visible {
+  outline: 1px solid var(--jar-ink);
+  outline-offset: 6px;
+  border-radius: 2px;
 }
 
 /* ================= the drawer =================
@@ -3923,6 +3971,10 @@
    unchosen one, and it answers the hand */
 .jar-where-verb {
   color: var(--jar-muted);
+}
+.jar-mouth-where .jar-where-verb {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .jar-where-verb:hover,
 .jar-where-verb:focus-visible {
