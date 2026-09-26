@@ -22,6 +22,8 @@ import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
 import type { MessageKey } from "../lib/locales";
 import { dateWords, givenName } from "../lib/words";
 import { groupHistoryEvents } from "./group-history";
+import type { GroupHistoryStop } from "./group-history";
+import { GroupMoment } from "./GroupMoment";
 import type { Space } from "./index";
 
 export interface GroupPanelProps {
@@ -35,6 +37,8 @@ export interface GroupPanelProps {
   openProposals: Map<string, ApiGroupProposal[]>;
   /** the room's own becoming — version chain and door marks; null until it arrives */
   timeline: ApiGroupTimeline | null;
+  /** The date the viewer wound this room to, if any. */
+  selectedStop: GroupHistoryStop | null;
   /** the draft a member is writing, and whether it is in flight */
   propose: { text: string; busy: boolean } | null;
   setPropose: React.Dispatch<React.SetStateAction<{ text: string; busy: boolean } | null>>;
@@ -58,6 +62,7 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
     members,
     openProposals,
     timeline,
+    selectedStop,
     propose,
     setPropose,
     sendProposal,
@@ -74,7 +79,7 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
   const say = (key: MessageKey) => t(locale, key);
 
   return (
-<div className="jar-roomform" data-jar-chrome="1">
+<div className={`jar-roomform${selectedStop ? " jar-roomform--with-history" : ""}`} data-jar-chrome="1">
   <div className="jar-label" style={{ marginBottom: 14 }}>
     {atWall.name}
   </div>
@@ -97,6 +102,10 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
       {copied === groupPanel ? say("worldLinkCopied") : say("worldCopyInviteLink")}
     </button>
   </p>
+
+  {timeline && selectedStop ? <GroupMoment
+    groupId={groupPanel} timeline={timeline} stop={selectedStop} locale={locale}
+  /> : null}
 
   {/* WHAT IS BEING ASKED OF THIS ROOM. Each one is somebody's sentence
       waiting on the rest of you — read it, say yes or say no, and the

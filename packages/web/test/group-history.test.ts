@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { ApiGroupTimeline } from "../src/lib/api/groups";
-import { eventsAtStop, groupHistoryCaption, groupHistoryEvents } from "../src/space-kinds/group-history";
+import { eventsAtStop, groupHistoryCaption, groupHistoryEvents, groupReadingChangeAtStop } from "../src/space-kinds/group-history";
 
 const at = (month: number, day: number, hour: number) => new Date(2026, month, day, hour).toISOString();
 
@@ -40,5 +40,15 @@ describe("room history captions", () => {
     expect(eventsAtStop(events, september, "year")).toHaveLength(4);
     expect(groupHistoryCaption(eventsAtStop(events, twelfth, "day"), "en-US", 1))
       .toBe("a proposal carried · 1 more");
+  });
+
+  it("finds the readings before and after a selected period, without treating a no-change pass as a turn", () => {
+    const day = (month: number, date: number) => new Date(2026, month, date, 23, 59, 59, 999).getTime();
+    expect(groupReadingChangeAtStop(timeline, { at: day(8, 12), grain: "day", label: "Sep 12" }))
+      .toMatchObject({ before: { id: "same" }, after: { id: "changed" } });
+    expect(groupReadingChangeAtStop(timeline, { at: day(8, 11), grain: "day", label: "Sep 11" }))
+      .toBeNull();
+    expect(groupReadingChangeAtStop(timeline, { at: day(7, 2), grain: "day", label: "Aug 2" }))
+      .toMatchObject({ before: null, after: { id: "first" } });
   });
 });

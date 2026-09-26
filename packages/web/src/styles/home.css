@@ -1335,6 +1335,33 @@
      paint is GPU work per frame that no eye can see */
   pointer-events: auto;
 }
+.jar-roomform--with-history {
+  max-height: min(78vh, 720px);
+  overflow-y: auto;
+}
+.jar-group-moment {
+  margin: var(--sp-18) 0;
+  padding-top: var(--sp-16);
+  border-top: 1px solid var(--jar-panel-edge);
+}
+.jar-group-moment-compare {
+  display: grid;
+  gap: var(--sp-16);
+  margin-top: var(--sp-18);
+}
+.jar-group-moment-compare > div + div {
+  padding-top: var(--sp-14);
+  border-top: 1px solid var(--jar-panel-edge);
+}
+.jar-group-moment-words {
+  list-style: none;
+  margin: var(--sp-8) 0 0;
+  padding: 0;
+  font-size: var(--t-ui);
+  line-height: 1.5;
+  color: var(--jar-ink);
+}
+.jar-group-moment-words li + li { margin-top: var(--sp-8); }
 /* THE READING. Sentences at reading weight, air between them — a page a
    person actually reads, not a settings sheet. The coda sits quieter: it is
    the page speaking about the person's own hand, not another rule. */
@@ -3948,6 +3975,15 @@
   font-size: var(--t-ui);
   line-height: 1.4;
   color: var(--jar-muted);
+}
+.jar-when-story button {
+  all: unset;
+  pointer-events: auto;
+  margin-left: var(--sp-8);
+  cursor: pointer;
+  color: var(--jar-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .jar-when:hover,
 .jar-when:focus-visible {

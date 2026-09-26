@@ -3448,11 +3448,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        lands after arrival too. */
   }, [inspirations, agents, clockMs, atWall, groupHistory, dialStops]);
 
-  const selectedGroupHistory = useMemo(() => {
-    if (atWall.kind !== "group" || parkedAt === null || !dial) return null;
-    const stop = dial.stops.find((row) => row.at === parkedAt);
-    return stop ? groupHistoryCaption(eventsAtStop(groupHistory, stop.at, stop.grain), locale) : null;
-  }, [atWall, parkedAt, dial, groupHistory, locale]);
+  const selectedGroupStop = atWall.kind === "group" && parkedAt !== null
+    ? dial?.stops.find((row) => row.at === parkedAt) ?? null : null;
+  const selectedGroupHistory = selectedGroupStop
+    ? groupHistoryCaption(eventsAtStop(groupHistory, selectedGroupStop.at, selectedGroupStop.grain), locale) : null;
   const currentGroupHistory = atWall.kind === "group" && dial
     ? groupHistoryCaption(eventsAtStop(groupHistory, dial.end, "day"), locale, 1) : null;
 
@@ -14057,8 +14056,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             >
               {parkedAt === null ? say("worldNow") : dateWords(parkedAt, dial.end, locale)}
             </button>
-            {selectedGroupHistory ? <span className="jar-when-story" role="status">
+            {selectedGroupHistory && atWall.kind === "group" ? <span className="jar-when-story" role="status">
               {selectedGroupHistory}
+              <button type="button" onClick={() => setGroupPanel(atWall.id)}>
+                {say("worldRoomHistoryDetails")}
+              </button>
             </span> : null}
             </span>
           ) : null}
@@ -14710,6 +14712,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           space={atWall}
           openProposals={openProposals}
           timeline={groupTimelines.get(groupPanel) ?? null}
+          selectedStop={atWall.kind === "group" && atWall.id === groupPanel ? selectedGroupStop : null}
           propose={propose}
           setPropose={setPropose}
           sendProposal={sendProposal}
