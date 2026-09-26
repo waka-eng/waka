@@ -2300,14 +2300,24 @@
      with a different shape. Twenty-eight clears the 24px a pointer target is
      asked for and gives the column a rhythm besides. */
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
   min-height: 28px;
-  padding: 0 var(--sp-8);
+  padding: var(--sp-4) var(--sp-8);
   margin: 0 calc(var(--sp-8) * -1);
   border-radius: 8px;
   white-space: nowrap;
   color: var(--jar-muted);
   transition: color 0.18s ease, background-color 0.18s ease;
+}
+.jar-dial-stop-story {
+  max-width: min(34ch, calc(100vw - 100px));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: var(--t-ui);
+  line-height: 1.3;
+  color: var(--jar-faint);
 }
 .jar-dial-stop:hover {
   color: var(--jar-ink);
@@ -3923,6 +3933,21 @@
   cursor: pointer;
   white-space: nowrap;
   transition: color 0.2s ease;
+}
+.jar-when-place {
+  position: relative;
+  pointer-events: none;
+}
+.jar-when-story {
+  position: absolute;
+  top: 100%;
+  left: var(--sp-10);
+  width: max-content;
+  max-width: min(42ch, calc(100vw - 32px));
+  pointer-events: none;
+  font-size: var(--t-ui);
+  line-height: 1.4;
+  color: var(--jar-muted);
 }
 .jar-when:hover,
 .jar-when:focus-visible {
