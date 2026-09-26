@@ -4,8 +4,10 @@ import { t, type SupportedLocale } from "../lib/i18n";
 import { PrincipleEvidence } from "./PrincipleEvidence";
 
 /** Only the selected wall polls. Requests never render another wall's values. */
-export function PrincipleRead({ groupId, active, locale, onRead }: {
+export function PrincipleRead({ groupId, active, locale, refreshKey, onRead }: {
   groupId?: string; active: boolean; locale: SupportedLocale;
+  /** Changes when the room's wall or top of mind is fetched again. */
+  refreshKey?: number;
   onRead?: (rows: ApiPrinciple[]) => void;
 }) {
   const [rows, setRows] = useState<ApiPrinciple[]>([]);
@@ -35,9 +37,10 @@ export function PrincipleRead({ groupId, active, locale, onRead }: {
         setStatus(result.status);
         setFailed(false);
         consecutiveFailures = 0;
-        delay = result.status.phase === "processing" || result.status.phase === "pending" ? 10_000 : 60_000;
+        delay = result.status.phase === "processing" || result.status.phase === "pending"
+          ? 10_000 : groupId && result.principles.length === 0 ? 15_000 : 60_000;
         if (!ensured && result.status.eligible &&
-          (result.status.phase === "pending" || result.status.phase === "processing" ||
+          (result.status.phase === "pending" ||
             (result.status.phase === "failed" && attempt > retriedAttempt.current))) {
           const retry = attempt > retriedAttempt.current;
           retriedAttempt.current = attempt;
@@ -64,7 +67,7 @@ export function PrincipleRead({ groupId, active, locale, onRead }: {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onFocus);
     };
-  }, [groupId, active, locale, attempt]);
+  }, [groupId, active, locale, refreshKey, attempt]);
   const error = failed || status?.phase === "failed";
   const message = error ? groupId
       ? failed ? "worldPrinciplesRoomLoadFailed" : "worldPrinciplesRoomGenerationFailed"
@@ -74,9 +77,26 @@ export function PrincipleRead({ groupId, active, locale, onRead }: {
     : status.signalCount < 3 ? (groupId ? "worldPrinciplesNeedRoomPatterns" : "worldValuesSubSelf")
     : status.topOfMindCount < 1 ? "worldPrinciplesNeedRead"
     : "worldPrinciplesNoCandidate";
-  const groupEmpty = Boolean(groupId && rows.length === 0 && status && !error &&
-    status.phase !== "processing" && status.phase !== "pending");
+  const groupEmpty = Boolean(groupId && rows.length === 0 && status && !error);
   const groupSignalCount = Math.min(status?.signalCount ?? 0, 3);
+  const groupStage = !status || status.signalCount < 3 ? "patterns"
+    : status.topOfMindCount < 1 ? "topOfMind"
+    : status.phase === "pending" ? "pending"
+    : status.phase === "processing" ? "processing" : "noCandidate";
+  const groupStageLead = {
+    patterns: "worldPrinciplesNeedRoomPatterns",
+    topOfMind: "worldPrinciplesRoomWaitingForTopOfMind",
+    pending: "worldPrinciplesRoomStarting",
+    processing: "worldPrinciplesRoomReading",
+    noCandidate: "worldPrinciplesRoomNoCandidateLead",
+  } as const;
+  const groupStageDetail = {
+    patterns: "worldPrinciplesRoomNext",
+    topOfMind: "worldPrinciplesRoomNeedRead",
+    pending: "worldPrinciplesRoomReadingDetail",
+    processing: "worldPrinciplesRoomReadingDetail",
+    noCandidate: "worldPrinciplesRoomNoCandidate",
+  } as const;
   return <>
     {!groupId && rows.length === 0 ? <p className="jar-values-lead">{t(locale, "worldValuesLeadSelf")}</p> : null}
     {groupId ? <p className="jar-values-eyebrow jar-label">{t(locale, "worldPhilosophiesValues")}</p> : null}
@@ -95,8 +115,8 @@ export function PrincipleRead({ groupId, active, locale, onRead }: {
       </ul>
     </> : null}
     {groupEmpty && status ? <div className="jar-principles-empty" role="status">
-      <p className="jar-principles-empty-lead">{t(locale, "worldPrinciplesNeedRoomPatterns")}</p>
-      {status.signalCount < 3 ? <>
+      <p className="jar-principles-empty-lead">{t(locale, groupStageLead[groupStage])}</p>
+      {groupStage === "patterns" ? <>
         <div className="jar-principles-progress" role="progressbar"
           aria-label={t(locale, "worldPrinciplesRoomProgress")}
           aria-valuemin={0} aria-valuemax={3} aria-valuenow={groupSignalCount}>
@@ -106,10 +126,8 @@ export function PrincipleRead({ groupId, active, locale, onRead }: {
           {groupSignalCount}/3 {t(locale, "worldPrinciplesRoomProgress")}
         </p>
         <p className="jar-principles-empty-detail">{t(locale, "worldPrinciplesRoomHow")}</p>
-        <p className="jar-principles-empty-detail">{t(locale, "worldPrinciplesRoomNext")}</p>
-      </> : <p className="jar-principles-empty-detail">
-        {t(locale, status.topOfMindCount < 1 ? "worldPrinciplesRoomNeedRead" : "worldPrinciplesRoomNoCandidate")}
-      </p>}
+      </> : null}
+      <p className="jar-principles-empty-detail">{t(locale, groupStageDetail[groupStage])}</p>
     </div> : null}
     {!groupEmpty && (rows.length === 0 || error || status?.phase === "processing") ?
       <p className="jar-values-sub" role={error ? "alert" : status?.phase === "processing" ? "status" : undefined}>
