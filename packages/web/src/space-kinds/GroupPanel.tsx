@@ -14,7 +14,6 @@
 import type {
   ApiGroupMember,
   ApiGroupProposal,
-  ApiGroupSummary,
   ApiGroupTimeline,
 } from "../lib/api";
 import { useOptionalAuth } from "../lib/auth-context";
@@ -31,7 +30,6 @@ export interface GroupPanelProps {
   groupId: string;
   /** the wall you are standing on — the panel names it */
   space: Space;
-  groups: ApiGroupSummary[];
   members: Map<string, ApiGroupMember[]>;
   /** every group's open proposals, keyed by group id */
   openProposals: Map<string, ApiGroupProposal[]>;
@@ -39,18 +37,16 @@ export interface GroupPanelProps {
   timeline: ApiGroupTimeline | null;
   /** The date the viewer wound this room to, if any. */
   selectedStop: GroupHistoryStop | null;
+  proposalState: "loading" | "ready" | "failed";
+  onRetryProposals: () => void;
+  pendingProposalId: string | null;
+  receipt: string | null;
+  trouble: string | null;
   /** the draft a member is writing, and whether it is in flight */
   propose: { text: string; busy: boolean } | null;
   setPropose: React.Dispatch<React.SetStateAction<{ text: string; busy: boolean } | null>>;
   sendProposal: (groupId: string) => void;
   answerProposal: (groupId: string, id: string, yes: boolean) => void;
-  copied: string | null;
-  copyInvite: (group: ApiGroupSummary) => void;
-  /** leaving is armed here and in the settings panel, and disarmed by the
-      page's own request handler — see SpaceSettings for why it lives above */
-  leaving: string | null;
-  setLeaving: (groupId: string | null) => void;
-  leaveThisGroup: (groupId: string) => void;
   onClose: () => void;
 }
 
@@ -58,59 +54,48 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
   const {
     groupId: groupPanel,
     space: atWall,
-    groups,
     members,
     openProposals,
     timeline,
     selectedStop,
+    proposalState,
+    onRetryProposals,
+    pendingProposalId,
+    receipt,
+    trouble,
     propose,
     setPropose,
     sendProposal,
     answerProposal,
-    copied,
-    copyInvite,
-    leaving,
-    setLeaving,
-    leaveThisGroup,
     onClose,
   } = props;
-  const setGroupPanel = (_: string | null) => onClose();
   const locale = normalizeSupportedLocale(useOptionalAuth()?.profile?.preferredLocale);
   const say = (key: MessageKey) => t(locale, key);
 
   return (
-<div className={`jar-roomform${selectedStop ? " jar-roomform--with-history" : ""}`} data-jar-chrome="1">
-  <div className="jar-label" style={{ marginBottom: 14 }}>
-    {atWall.name}
+<div className="jar-roomform jar-roomform--group" data-jar-chrome="1">
+  <div className="jar-group-panel-heading">
+    <p className="jar-label">{selectedStop ? atWall.name : say("worldShapeTogether")}</p>
+    <button type="button" onClick={onClose}>{say("worldClose")}</button>
   </div>
-  <div className="jar-share">
-    {(members.get(groupPanel) ?? []).map((m) => (
-      <span key={m.profileId} className="jar-share-row">
-        {m.name}
-        {m.role === "owner" ? <span className="jar-share-hint">{say("worldMadeIt")}</span> : null}
-      </span>
-    ))}
-  </div>
-  <p className="jar-ask" style={{ marginTop: 14 }}>
-    <button
-      type="button"
-      onClick={() => {
-        const g = groups.find((x) => x.id === groupPanel);
-        if (g) copyInvite(g);
-      }}
-    >
-      {copied === groupPanel ? say("worldLinkCopied") : say("worldCopyInviteLink")}
-    </button>
-  </p>
-
   {timeline && selectedStop ? <GroupMoment
     groupId={groupPanel} timeline={timeline} stop={selectedStop} locale={locale}
   /> : null}
 
+  {!selectedStop ? <>
+    <p className="jar-room-shape-note">{say("worldRoomProposalHow")}</p>
+    {proposalState === "loading" ? <p className="jar-was" role="status">{say("worldRoomProposalsLoading")}</p> : null}
+    {proposalState === "failed" ? <p className="jar-was" role="alert">
+      {say("worldRoomProposalsFailed")}{" "}
+      <button type="button" onClick={onRetryProposals}>{say("worldRoomHistoryRetry")}</button>
+    </p> : null}
+    {receipt ? <p className="jar-was" role="status">{receipt}</p> : null}
+    {trouble ? <p className="jar-settings-warn" role="alert">{trouble}</p> : null}
+
   {/* WHAT IS BEING ASKED OF THIS ROOM. Each one is somebody's sentence
       waiting on the rest of you — read it, say yes or say no, and the
       board moves when the room agrees rather than when you press. */}
-  {(openProposals.get(groupPanel) ?? []).map((p) => (
+  {proposalState === "ready" ? (openProposals.get(groupPanel) ?? []).map((p) => (
     <div key={p.id} className="jar-proposal">
       {/* WHOSE SENTENCE THIS IS. A proposal is somebody asking the room to
           believe a thing — reading it without knowing who is asking is
@@ -169,7 +154,7 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
         <p className="jar-ask">
           <span>{say("worldYouAgreed")}</span>
           <span aria-hidden="true"> · </span>
-          <button type="button" onClick={() => answerProposal(groupPanel, p.id, false)}>
+          <button type="button" disabled={pendingProposalId === p.id} onClick={() => answerProposal(groupPanel, p.id, false)}>
             {say("worldNotUsAfterAll")}
           </button>
         </p>
@@ -177,17 +162,17 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
         <p className="jar-ask">
           <span>{say("worldYouSaidNotUs")}</span>
           <span aria-hidden="true"> · </span>
-          <button type="button" onClick={() => answerProposal(groupPanel, p.id, true)}>
+          <button type="button" disabled={pendingProposalId === p.id} onClick={() => answerProposal(groupPanel, p.id, true)}>
             {say("worldYesUsAfterAll")}
           </button>
         </p>
       ) : (
         <p className="jar-ask">
-          <button type="button" onClick={() => answerProposal(groupPanel, p.id, true)}>
+          <button type="button" disabled={pendingProposalId === p.id} onClick={() => answerProposal(groupPanel, p.id, true)}>
             {say("worldYesThatIsUs")}
           </button>
           <span aria-hidden="true"> · </span>
-          <button type="button" onClick={() => answerProposal(groupPanel, p.id, false)}>
+          <button type="button" disabled={pendingProposalId === p.id} onClick={() => answerProposal(groupPanel, p.id, false)}>
             {say("worldNotUs")}
           </button>
           <span aria-hidden="true"> · </span>
@@ -203,34 +188,12 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
         </p>
       )}
     </div>
-  ))}
-
-  {/* THE ROOM SO FAR. The artifact's chain and the door's marks, told as
-      one story, newest first: every version the room's reading has moved
-      through (the honest no_change passes stay off the surface — a pass
-      where nothing moved is not an event in the room's life), and every
-      arrival and departure, named. Dates arrive as words, reasons as
-      sentences — the timeline keeps the numerals law by construction. */}
-  {timeline &&
-  (timeline.versions.length > 0 || timeline.doorMarks.length > 0) ? (
-    <div className="jar-prov" style={{ marginTop: 14 }}>
-      <p className="jar-prov-lead jar-label">{say("worldRoomSoFar")}</p>
-      {groupHistoryEvents(timeline, locale)
-        .slice(0, 10)
-        .map((event) => (
-          <p key={event.key} className="jar-was">
-            {event.line}
-            {" · "}
-            {dateWords(event.at, Date.now(), locale)}
-          </p>
-        ))}
-    </div>
-  ) : null}
+  )) : null}
 
   {/* PUT SOMETHING TO THEM. A room's board is proposed to and
       affirmed, never edited — one member rewriting what a group
       believes would be editing other people's minds. */}
-  {propose ? (
+  {proposalState !== "ready" ? null : propose ? (
     <div className="jar-reflect" style={{ marginTop: 14 }}>
       <textarea
         className="jar-reflect-box"
@@ -257,29 +220,18 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
       </button>
     </p>
   )}
-
-  <p className="jar-ask jar-ask--after">
-    {leaving === groupPanel ? (
-      <>
-        <button type="button" onClick={() => leaveThisGroup(groupPanel)}>
-          {say("worldLeaveStatementsDown")}
-        </button>
-        <span aria-hidden="true"> · </span>
-        <button type="button" onClick={() => setLeaving(null)}>
-          {say("worldStay")}
-        </button>
-      </>
-    ) : (
-      <button type="button" onClick={() => setLeaving(groupPanel)}>
-        {say("worldLeaveThisRoom")}
-      </button>
-    )}
-  </p>
-  <p className="jar-ask" style={{ marginTop: 10 }}>
-    <button type="button" onClick={() => setGroupPanel(null)}>
-      {say("worldClose")}
-    </button>
-  </p>
+  {proposalState === "ready" && timeline &&
+  (timeline.versions.length > 0 || timeline.doorMarks.length > 0) ? (
+    <div className="jar-prov" style={{ marginTop: 14 }}>
+      <p className="jar-prov-lead jar-label">{say("worldRoomSoFar")}</p>
+      {groupHistoryEvents(timeline, locale).slice(0, 10).map((event) => (
+        <p key={event.key} className="jar-was">
+          {event.line}{" · "}{dateWords(event.at, Date.now(), locale)}
+        </p>
+      ))}
+    </div>
+  ) : null}
+  </> : null}
 </div>
   );
 }

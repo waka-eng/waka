@@ -83,6 +83,20 @@ describe("the gate: a no is an answer in the record, not a kill switch", () => {
     await t.truncateAll();
   });
 
+  it("carries a one-member room when its only member proposes", async () => {
+    const g = await seedGroup(1);
+    const created = await createGroupProposal(t.db as never, {
+      groupId: g.groupId,
+      profileId: g.people[0]!,
+      kind: "add_entry",
+      body: "We keep choosing walks over meetings.",
+    });
+    expect(created.ok && created.proposal.status).toBe("accepted");
+    if (!created.ok) return;
+    expect(created.proposal.viewerStance).toBe("affirmed");
+    expect(await statusOf(created.proposal.id)).toBe("accepted");
+  });
+
   it("keeps a four-person proposal open through one no, and closes it on the second", async () => {
     const g = await seedGroup(4);
     const proposalId = await openProposal(g.groupId, g.people[0]!);

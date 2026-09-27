@@ -336,6 +336,14 @@ async function windToNow(): Promise<void> {
 }
 
 describe("the dial in a room", () => {
+  it("opens the shared-direction action from the room's current reading", async () => {
+    const shape = one(".jar-room-shape");
+    expect(shape.textContent).toContain("shape this together");
+    await act(async () => shape.click());
+    await act(async () => { await Promise.resolve(); });
+    expect(one(".jar-roomform--group").textContent).toContain("put something to this room");
+  });
+
   it("is there at all — a room's board is one chain, and one chain can be wound", async () => {
     /* The word is what carries the instrument now, and it is gated on
        `dialAway` — the flag `hasDial` sets for a wall with no history to
@@ -421,6 +429,7 @@ describe("the dial in a room", () => {
     expect(moment.textContent).toContain("a proposal carried");
     expect(moment.textContent).toContain(THEN_TEXT);
     expect(moment.textContent).toContain(NOW_TEXT);
+    expect(one(".jar-roomform--group").textContent).not.toContain("put something to this room");
   });
 
   it("says the room had nothing up before it had anything up", async () => {
