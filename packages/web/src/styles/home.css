@@ -364,15 +364,15 @@
   border: 0;
   background: none;
   font: inherit;
-  font-size: var(--t-ui);
-  color: var(--jar-muted);
+  font-size: var(--t-note);
+  color: var(--jar-ink);
   text-decoration: underline;
   text-underline-offset: 4px;
   cursor: pointer;
   pointer-events: auto;
 }
 .jar-room-shape:hover,
-.jar-room-shape:focus-visible { color: var(--jar-ink); }
+.jar-room-shape:focus-visible { text-shadow: 0 0 12px var(--jar-ink); }
 
 /* ---------- the forming line ----------
    The ONLY thing under the ambition. The adopted ambition and the candidates
@@ -1408,6 +1408,17 @@
   font-size: var(--t-ui);
   line-height: 1.5;
   color: var(--jar-muted);
+}
+.jar-roomform .jar-room-primary {
+  color: var(--jar-ink);
+  font-size: var(--t-ui);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.jar-roomform .jar-room-primary:disabled {
+  color: var(--jar-faint);
+  text-decoration: none;
+  cursor: default;
 }
 .jar-group-moment {
   margin: var(--sp-18) 0;

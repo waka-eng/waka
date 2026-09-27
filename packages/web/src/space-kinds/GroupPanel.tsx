@@ -204,7 +204,8 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
         onChange={(e) => setPropose({ ...propose, text: e.target.value })}
       />
       <p className="jar-ask">
-        <button type="button" disabled={propose.busy} onClick={() => sendProposal(groupPanel)}>
+        <button type="button" className="jar-room-primary" disabled={propose.busy || propose.text.trim() === ""}
+          onClick={() => sendProposal(groupPanel)}>
           {propose.busy ? "…" : say("worldPutItToThem")}
         </button>
         <span aria-hidden="true"> · </span>
@@ -215,7 +216,7 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
     </div>
   ) : (
     <p className="jar-ask">
-      <button type="button" onClick={() => setPropose({ text: "", busy: false })}>
+      <button type="button" className="jar-room-primary" onClick={() => setPropose({ text: "", busy: false })}>
         {say("worldPutSomethingToRoom")}
       </button>
     </p>
