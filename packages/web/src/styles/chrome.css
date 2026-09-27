@@ -162,13 +162,25 @@ select:focus {
    word you can press; nothing here earns more weight than that — including,
    and especially, the destructive ones. There is no red anywhere in Waka:
    colour temperature means aliveness and is not spent on warnings. */
+.profile-tab,
+.profile-tabs button,
+.login-tab,
+.profile-memory-action,
+.nc-profile-link {
+  --t-label-size: var(--t-fine);
+}
+.btn-destructive {
+  --t-label-size: var(--t-note);
+}
+.btn-google { --t-label-size: var(--t-fine); }
 .btn-primary,
 .btn-destructive,
 button[type="submit"] {
   appearance: none;
   -webkit-appearance: none;
   border: 0;
-  padding: 0;
+  padding: 7px var(--sp-4);
+  min-height: 32px;
   background: none;
   color: var(--w-ink);
   font-family: inherit;
@@ -539,7 +551,8 @@ a:focus-visible {
   appearance: none;
   background: none;
   border: 0;
-  padding: 0;
+  padding: 6px var(--sp-4);
+  min-height: 30px;
   color: var(--w-muted);
   font: inherit;
   font-size: var(--t-ui);
@@ -1001,7 +1014,8 @@ body .profile-disclose button {
   appearance: none;
   background: none;
   border: 0;
-  padding: 0;
+  padding: 7px var(--sp-4);
+  min-height: 32px;
   color: var(--w-muted);
   font: inherit;
   cursor: pointer;
@@ -1227,7 +1241,8 @@ body .profile-disclose-inline {
   appearance: none;
   background: none;
   border: 0;
-  padding: 0;
+  padding: 7px var(--sp-4);
+  min-height: 32px;
   color: var(--w-faint);
   font: inherit;
   font-size: var(--t-note);

@@ -569,7 +569,10 @@ body {
 .btn-destructive,
 .btn-google,
 .nc-profile-link {
-  font-size: var(--t-label);
+  /* The register's voice stays shared; an interactive label can opt into a
+     larger named type step without losing its uppercase/tracking. Metadata
+     keeps the original ten-pixel default. */
+  font-size: var(--t-label-size, var(--t-label));
   letter-spacing: 0.16em;
   font-weight: 500;
   text-transform: uppercase;
