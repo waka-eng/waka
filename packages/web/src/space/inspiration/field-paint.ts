@@ -270,6 +270,26 @@ export function paintField(p: FieldPaint) {
         ctx!.drawImage(sheet[b.sizeIdx][tier], grid(b.x) - ex, grid(cyv) - ey, ex * 2, ey * 2);
       }
     }
+    /* Brightness already says how alive this memory is; it cannot also say
+       whether a person answered a reflection. A small mark stays attached
+       to the orb in a dense field, while the visible ground key names it in
+       plain words. Reflections belong to the person's own ground, not to
+       another member's room-facing memory. */
+    if (b.reflections > 0 && b.col === undefined) {
+      ctx!.save();
+      ctx!.globalAlpha = Math.min(a, 0.95);
+      const markX = grid(b.x) + rx * 0.68;
+      const markY = cyv - ry * 0.68;
+      ctx!.fillStyle = "#0b0e14";
+      ctx!.beginPath();
+      ctx!.arc(markX, markY, 7, 0, Math.PI * 2);
+      ctx!.fill();
+      ctx!.fillStyle = "#f7f1e4";
+      ctx!.beginPath();
+      ctx!.arc(markX, markY, 3.5, 0, Math.PI * 2);
+      ctx!.fill();
+      ctx!.restore();
+    }
     /* NO RING. The frontier was drawn as an open arc outside the disc and
        it read as decoration nobody could name — "what are these outlines
        for" was the whole verdict. The opacity already carries it: a memory

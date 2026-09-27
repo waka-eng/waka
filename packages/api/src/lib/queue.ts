@@ -125,7 +125,7 @@
  * Splitting the guard from the claim is the one move that must not be made.
  */
 
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm";
 
 import {
   type BackgroundJob,
@@ -134,12 +134,16 @@ import {
   type BackgroundJobStatus,
   type DeriveSignalsPayload,
   type EnrichAttachmentPayload,
+  type GenerateReflectionQuestionPayload,
   type ReembedSignalPayload,
   type RefreshGroupTopOfMindPayload,
   type RefreshTopOfMindPayload,
   profiles,
+  inspirations,
+  reflections,
 } from "../db/index.js";
 import { getDb } from "./db.js";
+import { getDefaultModelProvider } from "./model-provider.js";
 import {
   type AccountModelUsage,
   assessModelBudget,
@@ -324,13 +328,15 @@ async function enqueueKeyedJob(input: {
     | "refresh_group_top_of_mind"
     | "refresh_principles"
     | "reembed_signal"
-    | "tend_signal_garden";
+    | "tend_signal_garden"
+    | "generate_reflection_question";
   payload:
     | EnrichAttachmentPayload
     | DeriveSignalsPayload
     | RefreshGroupTopOfMindPayload
     | { profileId: string }
-    | ReembedSignalPayload;
+    | ReembedSignalPayload
+    | GenerateReflectionQuestionPayload;
   idempotencyKey: string;
 }): Promise<EnqueueResult> {
   const rows = await getDb().execute(sql<{ id: string }>`
@@ -541,6 +547,24 @@ export async function enqueueGroupTopOfMindRefresh(
     type: "refresh_group_top_of_mind",
     payload: { groupId, reason },
     idempotencyKey: `refresh_group_top_of_mind:${groupId}`,
+  });
+}
+
+/** One generated follow-up per saved answer, even across repeated opens. */
+export function reflectionQuestionJobKey(profileId: string, inspirationId: string, afterReflectionId: string): string {
+  return `generate_reflection_question:${profileId}:${inspirationId}:${afterReflectionId}`;
+}
+
+export async function enqueueReflectionQuestion(
+  profileId: string,
+  inspirationId: string,
+  afterReflectionId: string,
+): Promise<EnqueueResult> {
+  return enqueueKeyedJob({
+    profileId,
+    type: "generate_reflection_question",
+    payload: { inspirationId, afterReflectionId },
+    idempotencyKey: reflectionQuestionJobKey(profileId, inspirationId, afterReflectionId),
   });
 }
 
@@ -801,6 +825,34 @@ export async function runBackgroundJobWorker(
 
 export async function processBackgroundJob(job: BackgroundJob): Promise<void> {
   switch (job.type) {
+    case "generate_reflection_question": {
+      const payload = parseGenerateReflectionQuestionPayload(job.payload);
+      if (!payload) return dropPoisonPayload(job);
+      const db = getDb();
+      const [parent, profile, recent] = await Promise.all([
+        db.select({ text: inspirations.text }).from(inspirations)
+          .where(and(eq(inspirations.id, payload.inspirationId), eq(inspirations.profileId, job.profileId))).limit(1),
+        db.select({ preferredLocale: profiles.preferredLocale }).from(profiles)
+          .where(eq(profiles.id, job.profileId)).limit(1),
+        db.select({ id: reflections.id, question: reflections.question, answer: reflections.answer })
+          .from(reflections).where(and(eq(reflections.inspirationId, payload.inspirationId),
+            eq(reflections.profileId, job.profileId), eq(reflections.skipped, false), isNotNull(reflections.answer)))
+          .orderBy(desc(reflections.createdAt), desc(reflections.id)).limit(6),
+      ]);
+      if (!parent[0] || recent[0]?.id !== payload.afterReflectionId) return dropPoisonPayload(job);
+      const provider = await getDefaultModelProvider();
+      const result = await provider.askReflectionQuestion({
+        preferredLocale: isSupportedLocale(profile[0]?.preferredLocale) ? profile[0].preferredLocale : "en-US",
+        inspirationText: parent[0].text,
+        reflections: recent.reverse().map((row) => ({ question: row.question, answer: row.answer ?? "" })),
+      });
+      const [updated] = await db.update(backgroundJobs)
+        .set({ payload: { ...payload, question: result.question } })
+        .where(and(eq(backgroundJobs.id, job.id), eq(backgroundJobs.profileId, job.profileId)))
+        .returning({ id: backgroundJobs.id });
+      if (!updated) throw new Error("Reflection question job could not keep its answer");
+      return;
+    }
     case "refresh_principles": {
       const profileId = readString(job.payload, "profileId") ?? job.profileId;
       if (profileId !== job.profileId) {
@@ -978,6 +1030,13 @@ function parseEnrichAttachmentPayload(payload: unknown): EnrichAttachmentPayload
   const inspirationId = readString(payload, "inspirationId");
   if (!attachmentId || !inspirationId) return null;
   return { attachmentId, inspirationId };
+}
+
+function parseGenerateReflectionQuestionPayload(payload: unknown): GenerateReflectionQuestionPayload | null {
+  const inspirationId = readString(payload, "inspirationId");
+  const afterReflectionId = readString(payload, "afterReflectionId");
+  if (!inspirationId || !afterReflectionId) return null;
+  return { inspirationId, afterReflectionId };
 }
 
 /**

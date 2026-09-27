@@ -59,6 +59,7 @@ export interface ApiInspirationSummary {
   createdAt: string;
   updatedAt: string;
   attachmentSummary: ApiAttachmentSummary[];
+  /** Completed answers; offered-but-skipped questions do not mark this reflected. */
   reflectionCount: number;
 }
 
@@ -255,6 +256,32 @@ export async function createReflection(
     "Failed to save reflection",
   );
   return body.reflection;
+}
+
+export interface ApiReflectionQuestionStatus {
+  phase: "idle" | "processing" | "ready" | "failed";
+  question?: string;
+}
+
+/** Queue one metered follow-up grounded in the latest saved answer. */
+export async function requestReflectionQuestion(
+  inspirationId: string, afterReflectionId: string, retry = false,
+): Promise<ApiReflectionQuestionStatus> {
+  return postJson<ApiReflectionQuestionStatus>(
+    apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/reflection-question`),
+    { afterReflectionId, ...(retry ? { retry: true } : {}) },
+    "Could not start a follow-up question",
+  );
+}
+
+export async function fetchReflectionQuestionStatus(
+  inspirationId: string, afterReflectionId: string,
+): Promise<ApiReflectionQuestionStatus> {
+  return getJson<ApiReflectionQuestionStatus>(
+    apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/reflection-question/status` +
+      `?afterReflectionId=${encodeURIComponent(afterReflectionId)}`),
+    "Could not load the follow-up question",
+  );
 }
 
 

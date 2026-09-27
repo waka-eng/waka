@@ -24,12 +24,14 @@ import {
   buildDeclarationRouteRequest,
   buildPrincipleDistillRequest,
   buildPrincipleRelationRequest,
+  buildReflectionQuestionRequest,
   buildSignalExtractionRequest,
   buildSignalMatchJudgementRequest,
   buildTopOfMindSynthesisRequest,
   parseDeclarationRoute,
   parseDistilledPrinciples,
   parsePrincipleRelation,
+  parseReflectionQuestion,
   parseSignalCandidates,
   parseSignalMatchJudgement,
   parseTopOfMindSynthesis,
@@ -143,6 +145,16 @@ async function ask(
 export function createOpenRouterModelProvider(): ModelProvider {
   return {
     name: "openrouter",
+    async askReflectionQuestion(input) {
+      const payload = await ask(
+        () => buildReflectionQuestionRequest(input),
+        "reflection follow-up",
+        "WAKA_MODEL_REFLECT",
+        "reflection_question",
+      );
+      if (payload === null || payload === MODEL_DECLINED) throw new ModelDidNotAnswerError("reflection follow-up");
+      return parseReflectionQuestion(payload, input);
+    },
     async extractSignalCandidates(input) {
       const hasMaterial =
         input.inspiration.text.trim().length > 0 ||

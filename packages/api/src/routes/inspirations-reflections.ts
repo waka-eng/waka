@@ -13,12 +13,14 @@
  * session does not hold over its human's profile.
  */
 
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull } from "drizzle-orm";
 import { Hono } from "hono";
+import { z } from "zod";
 
-import { inspirations, reflections } from "../db/index.js";
+import { backgroundJobs, inspirations, reflections } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import type { AuthEnv } from "../lib/middleware.js";
+import { enqueueReflectionQuestion, reflectionQuestionJobKey } from "../lib/queue.js";
 import { validationDetails } from "../lib/validation.js";
 import { requestSignalDerivation } from "./inspirations-derivation.js";
 import {
@@ -35,7 +37,82 @@ import {
 export function registerReflectionRoutes(
   routes: Hono<AuthEnv>,
   getDatabase: typeof getDb,
+  enqueueQuestion: typeof enqueueReflectionQuestion = enqueueReflectionQuestion,
 ): void {
+  const followUpRequestSchema = z.object({ afterReflectionId: uuidSchema, retry: z.boolean().optional() }).strict();
+
+  const loadLatestAnswer = async (db: ReturnType<typeof getDb>, profileId: string, inspirationId: string) => {
+    const [parent, latest] = await Promise.all([
+      db.select({ id: inspirations.id }).from(inspirations)
+        .where(and(eq(inspirations.id, inspirationId), eq(inspirations.profileId, profileId))).limit(1),
+      db.select({ id: reflections.id }).from(reflections)
+        .where(and(eq(reflections.inspirationId, inspirationId), eq(reflections.profileId, profileId),
+          eq(reflections.skipped, false), isNotNull(reflections.answer)))
+        .orderBy(desc(reflections.createdAt), desc(reflections.id)).limit(1),
+    ]);
+    return { exists: Boolean(parent[0]), latestId: latest[0]?.id ?? null };
+  };
+
+  const readQuestionJob = async (db: ReturnType<typeof getDb>, profileId: string, inspirationId: string,
+    afterReflectionId: string) => {
+    const [job] = await db.select({ status: backgroundJobs.status, payload: backgroundJobs.payload })
+      .from(backgroundJobs)
+      .where(and(eq(backgroundJobs.profileId, profileId),
+        eq(backgroundJobs.idempotencyKey, reflectionQuestionJobKey(profileId, inspirationId, afterReflectionId))))
+      .limit(1);
+    const question = job?.payload && typeof job.payload === "object" && "question" in job.payload &&
+      typeof job.payload.question === "string" ? job.payload.question : null;
+    return !job ? { phase: "idle" as const }
+      : job.status === "succeeded" && question ? { phase: "ready" as const, question }
+      : job.status === "failed" || job.status === "succeeded" ? { phase: "failed" as const }
+      : { phase: "processing" as const };
+  };
+
+  /** Only enqueue here; the worker holds the model budget and the answer. */
+  routes.post("/:id/reflection-question", async (c) => {
+    const idCheck = uuidSchema.safeParse(c.req.param("id"));
+    if (!idCheck.success) return c.json({ error: "Invalid inspiration id" }, 400);
+    let rawBody: unknown;
+    try { rawBody = await c.req.json(); }
+    catch { return c.json({ error: "Request body must be valid JSON" }, 400); }
+    const body = followUpRequestSchema.safeParse(rawBody);
+    if (!body.success) return c.json({ error: "A saved reflection is required" }, 400);
+    const query = profileQuerySchema.safeParse(c.req.query());
+    if (!query.success) return c.json({ error: "Invalid query" }, 400);
+
+    const session = c.get("session");
+    const db = getDatabase();
+    const target = await resolveTargetProfile(db, session, query.data.profile, "write");
+    if (!target.ok) return c.json(target.body, target.status);
+    const material = await loadLatestAnswer(db, target.profileId, idCheck.data);
+    if (!material.exists) return c.json({ error: "Inspiration not found" }, 404);
+    if (material.latestId !== body.data.afterReflectionId) {
+      return c.json({ error: "That is not the latest saved reflection" }, 409);
+    }
+    const current = await readQuestionJob(db, target.profileId, idCheck.data, body.data.afterReflectionId);
+    if (current.phase === "ready" || current.phase === "processing" ||
+      (current.phase === "failed" && !body.data.retry)) {
+      return c.json(current, current.phase === "processing" ? 202 : 200);
+    }
+    await enqueueQuestion(target.profileId, idCheck.data, body.data.afterReflectionId);
+    return c.json({ phase: "processing" as const }, 202);
+  });
+
+  routes.get("/:id/reflection-question/status", async (c) => {
+    const idCheck = uuidSchema.safeParse(c.req.param("id"));
+    const afterCheck = uuidSchema.safeParse(c.req.query("afterReflectionId"));
+    if (!idCheck.success || !afterCheck.success) return c.json({ error: "Invalid reflection question request" }, 400);
+    const query = profileQuerySchema.safeParse({ profile: c.req.query("profile") });
+    if (!query.success) return c.json({ error: "Invalid query" }, 400);
+    const db = getDatabase();
+    const target = await resolveTargetProfile(db, c.get("session"), query.data.profile, "write");
+    if (!target.ok) return c.json(target.body, target.status);
+    const material = await loadLatestAnswer(db, target.profileId, idCheck.data);
+    if (!material.exists) return c.json({ error: "Inspiration not found" }, 404);
+    if (material.latestId !== afterCheck.data) return c.json({ error: "That is not the latest saved reflection" }, 409);
+    return c.json(await readQuestionJob(db, target.profileId, idCheck.data, afterCheck.data), 200);
+  });
+
   /**
    * POST /api/inspirations/:id/reflections
    *
@@ -205,6 +282,14 @@ export function registerReflectionRoutes(
       .returning({ id: reflections.id });
 
     if (!deleted) return c.json({ error: "Reflection not found" }, 404);
+
+    /* The answer was part of the inspiration's derivation context. Removing
+       it must ask the same pipeline to reconsider what still stands. */
+    await requestSignalDerivation({
+      profileId: target.profileId,
+      inspirationId: idCheck.data,
+      reason: "edited",
+    });
 
     return c.json({ deleted: true, id: deleted.id }, 200);
   });

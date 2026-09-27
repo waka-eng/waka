@@ -10,7 +10,7 @@
  * tenant predicate itself.
  */
 
-import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 
 import { attachments, experiences, inspirations, reflections } from "../db/index.js";
@@ -246,6 +246,8 @@ export function registerRecallRoutes(
                 and(
                   eq(reflections.profileId, target.profileId),
                   inArray(reflections.inspirationId, ids),
+                  eq(reflections.skipped, false),
+                  isNotNull(reflections.answer),
                 ),
               )
               .groupBy(reflections.inspirationId),

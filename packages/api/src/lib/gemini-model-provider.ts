@@ -8,6 +8,7 @@
  */
 
 import {
+  askReflectionQuestion,
   distillPrinciples,
   extractSignalCandidates,
   judgePrincipleRelation,
@@ -20,6 +21,7 @@ import type { ModelProvider } from "./model-provider.js";
 export function createGeminiModelProvider(): ModelProvider {
   return {
     name: "gemini",
+    askReflectionQuestion,
     extractSignalCandidates,
     judgeSignalMatch,
     synthesizeTopOfMind,

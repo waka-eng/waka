@@ -91,6 +91,7 @@ const REGISTER: Record<string, string> = {
   updateInspiration: "RULED: an edit is its own inverse — edit it again",
   createReflection: "deleteReflection",
   deleteReflection: "createReflection",
+  requestReflectionQuestion: "RULED: asking creates no authored content; a person can leave with Done or remove their saved answer",
   presignAttachment: "RULED: one half of a single upload, not a state a person is left in",
   finalizeAttachment: "RULED: the other half of that upload",
 

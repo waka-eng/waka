@@ -363,8 +363,20 @@ export class ModelDidNotAnswerError extends Error {
   }
 }
 
+/** One follow-up grounded in the inspiration and the person's saved answers. */
+export interface ReflectionQuestionInput {
+  preferredLocale: SupportedLocale;
+  inspirationText: string;
+  reflections: Array<{ question: string; answer: string }>;
+}
+
+export interface ReflectionQuestionResult {
+  question: string;
+}
+
 export interface ModelProvider {
   readonly name: string;
+  askReflectionQuestion(input: ReflectionQuestionInput): Promise<ReflectionQuestionResult>;
   extractSignalCandidates(
     input: SignalCandidateExtractionInput,
   ): Promise<SignalCandidateExtractionResult>;

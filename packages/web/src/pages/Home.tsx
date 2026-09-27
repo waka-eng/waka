@@ -64,6 +64,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { PrincipleRead } from "../components/PrincipleRead";
+import { ReflectionFlow, type ReflectionTurn } from "../components/ReflectionFlow";
 import { PrincipleEvidence } from "../components/PrincipleEvidence";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
@@ -117,7 +118,6 @@ import {
   type Proposal,
   type WallChrome,
   type Provenance,
-  type ReflectState,
 } from "../space/top-of-mind/board";
 import {
   colorBall,
@@ -170,14 +170,13 @@ import {
   createGroup,
   fetchPrinciples,
   createProfile,
-  createReflection,
-  deleteReflection,
   fetchGroupProposals,
   createGroupProposal,
   fetchGroupMembers,
   fetchGroupTimeline,
   type ApiGroupTimeline,
   type ApiGroupTopOfMind,
+  type ApiReflection,
   leaveGroup,
   removeGroupMember,
   renameGroup,
@@ -1088,8 +1087,8 @@ interface SimApi {
      outright (2026-08-25: "never move from sky to ground"). Provenance is
      answered without moving now: `.jar-prov-room` puts the grounds and the
      whole memory on screen over the world you are standing in. */
-  /** A reflection was kept: this memory's light genuinely comes back up. */
-  relight: (id: string) => void;
+  /** A saved answer was added or taken back; every view of its orb agrees. */
+  reflectionChanged: (inspirationId: string, delta: 1 | -1) => void;
   /**
    * A MEMORY IS BORN AT THE MOUTH.
    *
@@ -1914,9 +1913,6 @@ function HomeExperience(): JSX.Element {
    * person is actively typing is the smallest and worst possible version of
    * breaking that promise.
    */
-  /** The memory that asked to be reflected on as it was kept — see the reset
-      effect beside `reflect`. Null unless "keep it and reflect" was pressed. */
-  const reflectOnOpenRef = useRef<string | null>(null);
   /**
    * THE LONG NOTE IS THE WHOLE PAGE, AND THE WAY OUT IS A DRAFT (founder,
    * 2026-08-27, reversing the 2026-08-25 step-aside drawer). The drawer
@@ -8691,24 +8687,33 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        * on the way is the state change being announced, and the companion
        * answers with a flare.
        */
-      relight: (id: string) => {
-        const b = findBall(id);
-        if (!b) return;
-        const from = b.alive;
-        b.reflections += 1;
-        b.updatedMs = Date.now();
-        colorBall(b, TRef.current);
-        b.aliveFrom = from;
-        b.aliveTo = b.alive;
-        /* it climbs to the new value rather than jumping to it */
-        b.alive = from;
-        b.alivePow = Math.pow(from, 1.4);
-        b.relightAt = view.reduced ? 0 : performance.now();
-        if (view.reduced) {
-          b.alive = b.aliveTo;
-          b.alivePow = Math.pow(b.aliveTo, 1.4);
+      reflectionChanged: (inspirationId: string, delta: 1 | -1) => {
+        const matches = new Set<Ball>();
+        for (const b of list) {
+          if (b.id === inspirationId || b.sigId === inspirationId) matches.add(b);
         }
-        companion.flare = Math.max(companion.flare, 0.9);
+        for (const b of groupBallsRef.current.values()) {
+          if (b.id === inspirationId || b.sigId === inspirationId) matches.add(b);
+        }
+        for (const b of matches) {
+          const from = b.alive;
+          b.reflections = Math.max(0, b.reflections + delta);
+          if (delta > 0) b.updatedMs = Date.now();
+          colorBall(b, TRef.current);
+          b.aliveFrom = from;
+          b.aliveTo = b.alive;
+          if (delta > 0) {
+            /* a saved answer brings the orb back to life in this beat */
+            b.alive = from;
+            b.alivePow = Math.pow(from, 1.4);
+            b.relightAt = view.reduced ? 0 : performance.now();
+            if (view.reduced) {
+              b.alive = b.aliveTo;
+              b.alivePow = Math.pow(b.aliveTo, 1.4);
+            }
+          } else b.relightAt = 0;
+        }
+        if (delta > 0 && matches.size > 0) companion.flare = Math.max(companion.flare, 0.9);
         wake();
       },
       /**
@@ -9850,8 +9855,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     return (inspirations ?? [])
       .slice()
       .sort((x, y) => y.capturedMs - x.capturedMs)
-      .map((m) => ({ id: m.id, label: clean(m.preview) }));
-  }, [atWall, agents, inspirations, groupFieldTick]);
+      .map((m) => ({ id: m.id, label: `${clean(m.preview)}${m.reflectionCount > 0 ? `, ${say("worldReflected")}` : ""}` }));
+  }, [atWall, agents, inspirations, groupFieldTick, locale, say]);
 
   /**
    * Where the reach is standing. Null until a key is pressed or an orb is
@@ -10330,7 +10335,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
              reflection is a row against the SERVER's id, and the seed's is a
              local one minted before the keep left. */
           setReflectOn({ id: made.id, text });
-          setReflect({ step: "open", question: say("worldStirQuestion"), answer: "" });
         }
       })
       .catch((err: unknown) => {
@@ -10453,6 +10457,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       member's save — no reflect action at all. */
   const panelIsGroup = panelBall !== null && panelBall.col !== undefined;
   const panelCanReflect = !panelIsGroup || panelBall?.own === true;
+  const panelHasReflection = panelCanReflect && (panel?.detail
+    ? panel.detail.reflections.some((item) => !item.skipped && item.answer)
+    : (panelBall?.reflections ?? 0) > 0);
   /* WHETHER ANYTHING WAS READ OUT OF THIS MEMORY. `roots` is the count of
      signals standing on it — the same number the field grades its light by —
      so the question "does deleting this cost anything a person cannot see"
@@ -10683,11 +10690,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      memory is how a second beat never happens: the API takes a question and
      an answer against the saved signal's own id, so the whole loop fits
      inside the card. */
-  const [reflect, setReflect] = useState<ReflectState>({ step: "rest", question: "", answer: "" });
+  const [reflectOpen, setReflectOpen] = useState(false);
   /**
    * THE MEMORY A STANDALONE REFLECTION IS ABOUT.
    *
-   * `reflect` alone is bound to whatever card is open, which is right for the
+   * A card reflection is bound to whatever card is open, which is right for the
    * card's own verb. Reflecting from the MOUTH has no card: you kept
    * something and were asked about it, and dragging the whole reading panel
    * open to hold one question puts a memory's words, its verbs, its date and
@@ -10696,25 +10703,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    */
   const [reflectOn, setReflectOn] = useState<{ id: string; text: string } | null>(null);
 
-  /**
-   * A new memory is a new reflection: nothing carries over.
-   *
-   * ...unless the memory arrived BY WAY OF "keep it and reflect", which asks
-   * for the question in the same breath as the keep. That path sets the
-   * reflection before the panel exists — there is nothing to open it on until
-   * the orb is identified — so without this the reset ran a moment later and
-   * swallowed it, and the founder's one gesture landed them in front of a
-   * closed panel with a "reflect on this" button they had already pressed.
-   * The ref names WHICH memory asked, so a panel opened on any other one
-   * still rests.
-   */
   useEffect(() => {
-    if (panelId !== null && reflectOnOpenRef.current === panelId) {
-      reflectOnOpenRef.current = null;
-      setReflect({ step: "open", question: say("worldStirQuestion"), answer: "" });
-      return;
-    }
-    setReflect({ step: "rest", question: "", answer: "" });
+    setReflectOpen(false);
   }, [panelId]);
 
   /**
@@ -12058,42 +12048,37 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     if (!panelId || !panelBall) return;
     /* another member's save is theirs to reflect on, not the viewer's */
     if (panelBall.col !== undefined && !panelBall.own) return;
-    /* ONE QUESTION, AND IT IS NOT GENERATED.
-       The canon keeps stored reflections — they are layer-1 detail, the
-       person's own words, and input to extraction — but parks the question
-       GENERATOR. So the layout asks the plainest question there is, opens
-       immediately, and spends no round trip on it. There is no "asking" beat
-       to sit through and nothing to fail. */
-    setReflect({ step: "open", question: say("worldStirQuestion"), answer: "" });
+    setReflectOpen(true);
   }, [panelId, panelBall]);
 
-  const keepReflection = useCallback(() => {
-    /* the sheet's own memory when the mouth asked, the open card's otherwise */
-    const onId = reflectOn?.id ?? (panelBall?.sigId ?? panelId);
-    if (!onId || reflect.step !== "open" || reflect.answer.trim() === "") return;
-    const answer = reflect.answer.trim();
-    setReflect((r) => ({ ...r, step: "keeping" }));
-    /* a room orb reflects against its real signal id; the relight below
-       still addresses the namespaced ball on screen */
-    createReflection(onId, { question: reflect.question, answer })
-      .then((made) => {
-        setReflect((r) => ({ ...r, step: "kept", lastId: made.id }));
-        /* THE PAYOFF: the memory comes back to life in front of you. A saved
-           reflection is a real state change — one more answered reflection,
-           touched just now — so the orb's aliveness genuinely rises and the
-           light shows it. Fading → touch → reflect → re-lit, made visible. */
-        if (panelId) simApiRef.current?.relight(panelId);
-        simApiRef.current?.acknowledge("answered");
-      })
-      .catch((err: unknown) => {
-        /* THE ANSWER IS NEVER THROWN AWAY. It goes back to `open` with the
-           words still in the box — and now it says why, instead of looking
-           like the button simply did nothing. */
-        setReflect((r) => ({ ...r, step: "open" }));
-        setMouthNote(whyFailed(err, say("worldReflectionNotSaved")));
-        if (showsDebug()) console.error("[waka] reflection failed:", err);
-      });
-  }, [panelId, reflect, panelBall, reflectOn, whyFailed]);
+  const reflectionSaved = useCallback((made: ApiReflection) => {
+    const owner = made.inspirationId;
+    const cached = detailsRef.current.get(owner);
+    if (cached) detailsRef.current.set(owner, {
+      ...cached,
+      reflectionCount: cached.reflectionCount + 1,
+      reflections: [...cached.reflections, { id: made.id, question: made.question,
+        answer: made.answer, skipped: made.skipped, createdMs: Date.parse(made.createdAt) }],
+    });
+    setPanel((cur) => cur?.detail?.id === owner ? { ...cur, detail: detailsRef.current.get(owner) ?? cur.detail } : cur);
+    setInspirations((cur) => cur?.map((item) => item.id === owner
+      ? { ...item, reflectionCount: item.reflectionCount + 1 } : item) ?? null);
+    simApiRef.current?.reflectionChanged(owner, 1);
+    simApiRef.current?.acknowledge("answered");
+  }, []);
+
+  const reflectionRemoved = useCallback((id: string, owner: string) => {
+    const cached = detailsRef.current.get(owner);
+    if (cached) detailsRef.current.set(owner, {
+      ...cached,
+      reflectionCount: Math.max(0, cached.reflectionCount - 1),
+      reflections: cached.reflections.filter((item) => item.id !== id),
+    });
+    setPanel((cur) => cur?.detail?.id === owner ? { ...cur, detail: detailsRef.current.get(owner) ?? cur.detail } : cur);
+    setInspirations((cur) => cur?.map((item) => item.id === owner
+      ? { ...item, reflectionCount: Math.max(0, item.reflectionCount - 1) } : item) ?? null);
+    simApiRef.current?.reflectionChanged(owner, -1);
+  }, []);
 
   /* The passages worth marking inside the text: the words a PATTERN carried
      out of this memory, and only those. The second tier used to be the
@@ -13526,6 +13511,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   one fact twice, and the relative half goes stale while the
                   card stays open (founder, 2026-08-27) */}
               {dateStamp(panelBall.capturedMs, locale)}
+              {panelHasReflection ? <span className="jar-panel-reflected"> · {say("worldReflected")}</span> : null}
             </span>
           )}
           {!panelIsGroup ? (
@@ -13684,56 +13670,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               apparatus: it made a person ask what each list was instead of
               reading what they saved. */}
 
-          {reflect.step === "asking" ? (
-            <span className="jar-panel-act jar-label jar-panel-act--waiting">{say("worldFindingQuestion")}</span>
-          ) : null}
-          {reflect.step === "open" || reflect.step === "keeping" ? (
-            /* one appearance: the question and the box arrive together, whole */
-            <div className="jar-reflect">
-              <p className="jar-reflect-q">{reflect.question}</p>
-              <textarea
-                className="jar-reflect-box"
-                value={reflect.answer}
-                rows={4}
-                autoFocus
-                placeholder={say("worldInYourOwnWords")}
-                onChange={(e) => setReflect((r) => ({ ...r, answer: e.target.value }))}
-              />
-              <button
-                type="button"
-                className="jar-panel-act jar-label"
-                disabled={reflect.step === "keeping" || reflect.answer.trim() === ""}
-                onClick={keepReflection}
-              >
-                {say("worldKeepCap")}
-              </button>
-            </div>
-          ) : null}
-          {/* KEPT — AND TAKEABLE BACK. Writing was possible and unwriting was
-              not, which made every reflection a one-way door on words you had
-              just typed. A reflection is layer-1 detail and feeds extraction,
-              so removing one re-derives what stood on it. */}
-          {reflect.step === "kept" ? (
-            <p className="jar-ask jar-ask--after">
-              <span>{say("worldKeptWord")}</span>
-              {reflect.lastId ? (
-                <>
-                  <span aria-hidden="true"> · </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const rid = reflect.lastId as string;
-                      const owner = panelBall?.sigId ?? panelId;
-                      setReflect({ step: "rest", question: "", answer: "" });
-                      if (owner && !offlineRef.current)
-                        deleteReflection(owner, rid).catch(() => undefined);
-                    }}
-                  >
-                    {say("worldTakeItBack")}
-                  </button>
-                </>
-              ) : null}
-            </p>
+          {reflectOpen && panelCanReflect && (panelBall?.sigId ?? panelId) ? (
+            <ReflectionFlow
+              key={panelBall?.sigId ?? panelId}
+              inspirationId={(panelBall?.sigId ?? panelId) as string}
+              initialTurns={(panel.detail?.reflections ?? [])
+                .filter((item) => !item.skipped && item.answer)
+                .map((item): ReflectionTurn => ({ id: item.id, question: item.question, answer: item.answer as string }))}
+              locale={locale}
+              onSaved={reflectionSaved}
+              onRemoved={(id) => reflectionRemoved(id, (panelBall?.sigId ?? panelId) as string)}
+              onDone={() => setReflectOpen(false)}
+            />
           ) : null}
 
           {/* FORGET IT — and the law it does not break.
@@ -13886,14 +13834,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             </div>
           ) : null}
           {panelCanReflect &&
-          reflect.step === "rest" &&
+          !reflectOpen &&
           !editing.open &&
           !(forget.step === "asking" && forget.id === panelId) &&
           !unpublishAsk ? (
-            <p className="jar-ask jar-ask--after jar-panel-foot">
+            <p className={`jar-ask jar-ask--after jar-panel-foot${panelHasReflection ? " jar-panel-foot--reflected" : ""}`}>
               <span className="jar-panel-foot-l">
-              <button type="button" onClick={askToReflect}>
-                {say("worldReflect")}
+              <button type="button" className={panelHasReflection ? "jar-panel-reflection-link" : undefined} onClick={askToReflect}>
+                {panelHasReflection ? say("worldReadReflection") : say("worldReflect")}
               </button>
               </span>
               <span className="jar-panel-foot-c">{panelStepCarets}</span>
@@ -14526,6 +14474,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           ))}
         </div>
       ) : null}
+      {phase === "ready" && inField && atWall.kind === "self" &&
+        inspirations?.some((item) => item.reflectionCount > 0) ? (
+          <div className="jar-reflection-key jar-label" data-jar-chrome="1">
+            <span className="jar-reflection-key-dot" aria-hidden="true" />
+            {say("worldReflected")}
+          </div>
+        ) : null}
       {/* the sky's sentence used to mount here, on arrival; it stands in each
           wall's own column now — see the block inside `.jar-wallcol` */}
 
@@ -14673,7 +14628,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           moment that owns the screen — the same one the seek line and the
           delete ask wear. It says what was kept, asks, takes the answer, and
           goes. */}
-      {reflectOn && reflect.step !== "rest" ? (
+      {reflectOn ? (
         <div
           className="jar-seek jar-reflect-room"
           data-jar-chrome="1"
@@ -14684,70 +14639,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           {/* what it was, in one line: enough to know which memory this is
               about, never the whole thing back */}
           <p className="jar-reflect-on">{reflectOn.text}</p>
-          {reflect.step === "kept" ? (
-            <>
-              <p className="jar-reflect-q">{say("worldKeptDot")}</p>
-              <p className="jar-ask jar-ask--row">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const rid = reflect.lastId;
-                    const owner = reflectOn.id;
-                    setReflect({ step: "rest", question: "", answer: "" });
-                    setReflectOn(null);
-                    if (rid && !offlineRef.current)
-                      deleteReflection(owner, rid).catch(() => undefined);
-                  }}
-                >
-                  {say("worldTakeItBack")}
-                </button>
-                <span aria-hidden="true"> · </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setReflect({ step: "rest", question: "", answer: "" });
-                    setReflectOn(null);
-                  }}
-                >
-                  {say("worldDone")}
-                </button>
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="jar-reflect-q">{reflect.question}</p>
-              <textarea
-                className="jar-reflect-box"
-                value={reflect.answer}
-                rows={4}
-                autoFocus
-                placeholder={say("worldInYourOwnWords")}
-                onChange={(e) => setReflect((r) => ({ ...r, answer: e.target.value }))}
-              />
-              <p className="jar-ask jar-ask--row">
-                <button
-                  type="button"
-                  disabled={reflect.step === "keeping" || reflect.answer.trim() === ""}
-                  onClick={keepReflection}
-                >
-                  {reflect.step === "keeping" ? say("worldKeeping") : say("worldKeepLower")}
-                </button>
-                <span aria-hidden="true"> · </span>
-                {/* NOT NOW IS NOT A LOSS. The memory is already kept — that
-                    is the whole point of the beat before this one — so
-                    leaving the question costs nothing and says so. */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setReflect({ step: "rest", question: "", answer: "" });
-                    setReflectOn(null);
-                  }}
-                >
-                  {say("worldNotNow")}
-                </button>
-              </p>
-            </>
-          )}
+          <ReflectionFlow
+            key={reflectOn.id}
+            inspirationId={reflectOn.id}
+            initialTurns={[]}
+            locale={locale}
+            onSaved={reflectionSaved}
+            onRemoved={(id) => reflectionRemoved(id, reflectOn.id)}
+            onDone={() => setReflectOn(null)}
+          />
         </div>
       ) : null}
 

@@ -93,8 +93,7 @@ export interface Inspiration {
   capturedMs: number;
   updatedMs: number;
   attachments: ApiAttachmentSummary[];
-  /** The second beat, counted. Answered and skipped are not distinguished
-      by the archive endpoint; the detail carries the difference. */
+  /** Saved answers attached to this inspiration; skipped prompts do not mark it reflected. */
   reflectionCount: number;
 }
 
@@ -425,7 +424,7 @@ export async function loadInspiration(id: string): Promise<InspirationDetail> {
       type: a.type,
       label: a.name ?? a.url,
     })),
-    reflectionCount: (row.reflections ?? []).length,
+    reflectionCount: (row.reflections ?? []).filter((r) => !r.skipped && r.answer).length,
     reflections: (row.reflections ?? []).map((r) => ({
       id: r.id,
       question: r.question,

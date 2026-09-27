@@ -303,7 +303,7 @@ const FIXTURE = `<!doctype html>
   <div class="jar-seek jar-reflect-room" data-jar-chrome="1" role="dialog">
     <p class="jar-prov-lead jar-label">saved</p>
     <p class="jar-reflect-on">the mouth's foot is one row now</p>
-    <p class="jar-reflect-q">What did this stir in you?</p>
+    <p class="jar-reflect-q">What made you want to keep this?</p>
     <textarea class="jar-reflect-box" rows="3" placeholder="In your own words"></textarea>
     <p class="jar-ask jar-ask--row" id="reflect-foot">
       <button type="button">keep</button>

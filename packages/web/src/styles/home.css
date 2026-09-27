@@ -1140,6 +1140,14 @@
    one is written. */
 .jar-seek.jar-reflect-room {
   width: min(460px, calc(100vw - 40px));
+  box-sizing: border-box;
+  max-height: min(80vh, 880px);
+  max-height: min(80dvh, 880px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  scrollbar-width: thin;
+  scrollbar-color: var(--jar-scroll) transparent;
   text-align: left;
 }
 /* which memory this is about, in one line and never the whole thing */
@@ -2524,6 +2532,13 @@
   align-items: center;
   gap: var(--sp-12);
 }
+.jar-panel-foot--reflected { opacity: 1; }
+.jar-panel-foot--reflected .jar-panel-foot-c,
+.jar-panel-foot--reflected .jar-panel-foot-r { opacity: 0.55; }
+.jar-panel-foot button.jar-panel-reflection-link {
+  color: var(--jar-ink);
+  font-size: var(--t-note);
+}
 .jar-panel-foot-l {
   justify-self: start;
 }
@@ -2840,6 +2855,30 @@
   /* nothing to dodge: the grid holds the other half off */
   padding: 0;
 }
+.jar-panel-reflected {
+  color: var(--jar-ink);
+  font-size: var(--t-fine);
+  white-space: nowrap;
+}
+.jar-reflection-key {
+  position: absolute;
+  z-index: 3;
+  top: calc(60px + env(safe-area-inset-top));
+  left: var(--sp-24);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-8);
+  color: var(--jar-muted);
+  font-size: var(--t-fine);
+  pointer-events: none;
+}
+.jar-reflection-key-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--jar-body-lit);
+  box-shadow: 0 0 0 3px var(--jar-panel);
+}
 /* AND WHAT DELETING CANNOT UNDO. Quiet, because it is a fact rather than an
    alarm — but present before the act, not after it. */
 .jar-panel-warn {
@@ -2973,6 +3012,134 @@
   outline: none;
   user-select: text;
   -webkit-user-select: text;
+}
+.jar-reflection-flow {
+  margin-top: var(--sp-16);
+}
+.jar-reflection-previous {
+  margin-bottom: var(--sp-18);
+  padding: var(--sp-12) var(--sp-14);
+  border-left: 1px solid color-mix(in srgb, var(--jar-ink) 25%, transparent);
+  background: color-mix(in srgb, var(--jar-row) 48%, transparent);
+  border-radius: 0 10px 10px 0;
+}
+.jar-reflection-previous .jar-label,
+.jar-reflection-current .jar-label {
+  display: block;
+  margin: 0 0 var(--sp-8);
+  color: var(--jar-muted);
+  letter-spacing: 0.12em;
+}
+.jar-reflection-previous p:not(.jar-label) {
+  margin: 0;
+  color: var(--jar-ink);
+  font-size: var(--t-note);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.jar-reflection-previous p.jar-reflection-previous-question {
+  color: var(--jar-muted);
+  margin-bottom: var(--sp-6);
+}
+.jar-reflection-previous button,
+.jar-reflection-turn button {
+  border: 0;
+  background: none;
+  color: var(--jar-muted);
+  font: inherit;
+  font-size: var(--t-note);
+  cursor: pointer;
+  min-height: 32px;
+  padding: var(--sp-6) 0;
+}
+.jar-reflection-turns {
+  margin-bottom: var(--sp-16);
+  color: var(--jar-muted);
+  font-size: var(--t-note);
+}
+.jar-reflection-turns summary {
+  cursor: pointer;
+  min-height: 32px;
+}
+.jar-reflection-turn {
+  padding: var(--sp-12) 0;
+  border-top: 1px solid var(--jar-panel-edge);
+}
+.jar-reflection-turn p:not(.jar-reflect-q) {
+  margin: 0;
+  font-size: var(--t-note);
+  line-height: 1.5;
+  color: var(--jar-ink);
+}
+.jar-reflection-current .jar-reflect-q {
+  font-size: var(--t-lead);
+  line-height: 1.4;
+  margin-bottom: var(--sp-14);
+}
+.jar-reflection-hint {
+  margin: var(--sp-10) 0 var(--sp-18);
+  color: var(--jar-muted);
+  font-size: var(--t-note);
+  line-height: 1.45;
+}
+.jar-reflection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8) var(--sp-14);
+  margin-top: var(--sp-18);
+}
+.jar-reflection-actions button,
+.jar-reflection-wait button {
+  appearance: none;
+  min-height: 42px;
+  padding: var(--sp-8) var(--sp-14);
+  border-radius: 999px;
+  font: inherit;
+  font-size: var(--t-note);
+  cursor: pointer;
+}
+.jar-reflection-primary {
+  border: 1px solid color-mix(in srgb, var(--jar-ink) 42%, transparent);
+  background: color-mix(in srgb, var(--jar-ink) 12%, transparent);
+  color: var(--jar-ink);
+}
+.jar-reflection-secondary {
+  border: 1px solid transparent;
+  background: none;
+  color: var(--jar-muted);
+}
+.jar-reflection-actions button:hover:not(:disabled),
+.jar-reflection-wait button:hover { color: var(--jar-ink); border-color: color-mix(in srgb, var(--jar-ink) 25%, transparent); }
+.jar-reflection-actions button:disabled { opacity: 0.4; cursor: default; }
+.jar-reflection-status,
+.jar-reflection-wait p { color: var(--jar-muted); font-size: var(--t-note); line-height: 1.5; }
+.jar-reflection-wait-line {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-10);
+}
+.jar-reflection-typing {
+  display: inline-flex;
+  gap: var(--sp-4);
+  align-items: center;
+}
+.jar-reflection-typing span {
+  display: block;
+  width: var(--sp-4);
+  height: var(--sp-4);
+  border-radius: 50%;
+  background: var(--jar-ink);
+  animation: jar-reflection-compose 1.2s ease-in-out infinite;
+}
+.jar-reflection-typing span:nth-child(2) { animation-delay: 0.16s; }
+.jar-reflection-typing span:nth-child(3) { animation-delay: 0.32s; }
+@keyframes jar-reflection-compose {
+  0%, 60%, 100% { opacity: 0.28; transform: translateY(0); }
+  30% { opacity: 0.9; transform: translateY(-3px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .jar-reflection-typing span { animation: none; opacity: 0.6; }
 }
 
 

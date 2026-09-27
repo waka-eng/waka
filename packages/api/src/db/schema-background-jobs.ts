@@ -44,6 +44,7 @@ export const backgroundJobTypeValues = [
   "refresh_principles",
   "reembed_signal",
   "tend_signal_garden",
+  "generate_reflection_question",
 ] as const;
 export type BackgroundJobType = (typeof backgroundJobTypeValues)[number];
 export const backgroundJobTypeEnum = pgEnum("background_job_type", backgroundJobTypeValues);
@@ -105,13 +106,21 @@ export interface ReembedSignalPayload {
   signalId: string;
 }
 
+/** The answer that grounded this ask; the result is added to this payload by the worker. */
+export interface GenerateReflectionQuestionPayload {
+  inspirationId: string;
+  afterReflectionId: string;
+  question?: string;
+}
+
 export type BackgroundJobPayload =
   | EnrichAttachmentPayload
   | DeriveSignalsPayload
   | RefreshTopOfMindPayload
   | RefreshGroupTopOfMindPayload
   | RefreshPrinciplesPayload
-  | ReembedSignalPayload;
+  | ReembedSignalPayload
+  | GenerateReflectionQuestionPayload;
 
 export const backgroundJobs = pgTable(
   "background_jobs",
