@@ -138,6 +138,12 @@ describe("the approval surface", () => {
     expect(onRetryProposals).toHaveBeenCalledTimes(1);
   });
 
+  it("does not offer an empty room proposal as a live submit action", () => {
+    const el = renderPanel({ propose: { text: "", busy: false } });
+    const submit = [...el.querySelectorAll("button")].find((button) => button.textContent === "put it to them");
+    expect(submit?.disabled).toBe(true);
+  });
+
   it("signs the proposal, lights the whole four-person room in three states, and prints no numeral", () => {
     const el = renderPanel({
       members: new Map([
