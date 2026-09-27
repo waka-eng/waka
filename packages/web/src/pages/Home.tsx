@@ -2311,10 +2311,10 @@ function HomeExperience(): JSX.Element {
    * resolved: a room never renders half-poured. Cached for the session; a
    * failure clears itself so the next travel toward it tries again.
    */
-  const loadGroup = useCallback((groupId: string) => {
+  const loadGroup = useCallback((groupId: string): Promise<boolean> => {
     const cache = groupCacheRef.current;
     const got = cache.get(groupId);
-    if (got && got.status !== "failed") return;
+    if (got && got.status !== "failed") return Promise.resolve(got.status === "ready");
     cache.set(groupId, { status: "pending", data: null });
     setFailedGroups((prev) => {
       if (!prev.has(groupId)) return prev;
@@ -2322,7 +2322,7 @@ function HomeExperience(): JSX.Element {
       next.delete(groupId);
       return next;
     });
-    Promise.all([
+    return Promise.all([
       fetchGroupTopOfMind(groupId),
       fetchGroupWall(groupId).catch(() => [] as ApiGroupWallSignal[]),
       fetchGroupProposals(groupId).catch(() => [] as ApiGroupProposal[]),
@@ -2352,11 +2352,13 @@ function HomeExperience(): JSX.Element {
         );
         cache.set(groupId, { status: "ready", data: { evidence, top } });
         simApiRef.current?.wake();
+        return true;
       })
       .catch(() => {
         cache.set(groupId, { status: "failed", data: null });
         setFailedGroups((prev) => new Set(prev).add(groupId));
         simApiRef.current?.wake();
+        return false;
       });
   }, []);
   const loadGroupRef = useRef(loadGroup);
@@ -11392,15 +11394,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           : Date.parse(version.createdAt) >= acceptedVersion.acceptedAt);
         if (arrived) {
           groupCacheRef.current.delete(acceptedVersion.groupId);
-          loadGroupRef.current(acceptedVersion.groupId);
-          fetchGroupTimeline(acceptedVersion.groupId).then((timeline) => {
-            groupTimelineRef.current.set(acceptedVersion.groupId, timeline);
-            setGroupPastTick((value) => value + 1);
-            setGroupTimelines((prev) => new Map(prev).set(acceptedVersion.groupId, timeline));
-          }).catch(() => undefined);
-          setProposalReceipt({ groupId: acceptedVersion.groupId, text: say("worldRoomVersionArrived") });
-          setAcceptedVersion(null);
-          return;
+          const loaded = await loadGroupRef.current(acceptedVersion.groupId);
+          if (disposed) return;
+          if (loaded) {
+            fetchGroupTimeline(acceptedVersion.groupId).then((timeline) => {
+              groupTimelineRef.current.set(acceptedVersion.groupId, timeline);
+              setGroupPastTick((value) => value + 1);
+              setGroupTimelines((prev) => new Map(prev).set(acceptedVersion.groupId, timeline));
+            }).catch(() => undefined);
+            setProposalReceipt({ groupId: acceptedVersion.groupId, text: say("worldRoomVersionArrived") });
+            setAcceptedVersion(null);
+            return;
+          }
         }
       } catch { /* the accepted proposal remains; another read can recover */ }
       if (disposed) return;
@@ -11431,13 +11436,16 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           ?? groupTimelineRef.current.get(groupPanel)?.versions[0]?.version ?? null;
         if (knownVersion !== null && top.topOfMind && top.topOfMind.version > knownVersion) {
           groupCacheRef.current.delete(groupPanel);
-          loadGroupRef.current(groupPanel);
-          fetchGroupTimeline(groupPanel).then((timeline) => {
-            groupTimelineRef.current.set(groupPanel, timeline);
-            setGroupPastTick((value) => value + 1);
-            setGroupTimelines((prev) => new Map(prev).set(groupPanel, timeline));
-          }).catch(() => undefined);
-          setProposalReceipt({ groupId: groupPanel, text: say("worldRoomVersionArrived") });
+          const loaded = await loadGroupRef.current(groupPanel);
+          if (disposed) return;
+          if (loaded) {
+            fetchGroupTimeline(groupPanel).then((timeline) => {
+              groupTimelineRef.current.set(groupPanel, timeline);
+              setGroupPastTick((value) => value + 1);
+              setGroupTimelines((prev) => new Map(prev).set(groupPanel, timeline));
+            }).catch(() => undefined);
+            setProposalReceipt({ groupId: groupPanel, text: say("worldRoomVersionArrived") });
+          }
         }
       } catch { /* last known reading stays in place */ }
       if (!disposed) timer = window.setTimeout(() => void refresh(), 10_000);

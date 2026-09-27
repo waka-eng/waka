@@ -27,7 +27,8 @@ const FACTS = {
     { id: "theirs-1", ownerProfileId: "profile-other", ownerName: "Bo", daysAgo: 7 },
   ] }],
 };
-const server = vi.hoisted(() => ({ version: 1, proposals: [] as ApiGroupProposal[], failNextAffirm: false, solo: false }));
+const server = vi.hoisted(() => ({ version: 1, proposals: [] as ApiGroupProposal[], failNextAffirm: false,
+  solo: false, newVersionReads: 0, reloadGate: null as Promise<void> | null }));
 const iso = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
 const proposal = (id: string, body: string, by: string): ApiGroupProposal => ({
   id, kind: "add_entry", status: "open", entryId: null, body, rationale: null,
@@ -45,7 +46,13 @@ vi.mock("../src/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/lib/api")>();
   return {
     ...actual, ...apiMockFrom(FACTS),
-    fetchGroupTopOfMind: async (_groupId: string, version?: number) => top(version ?? server.version),
+    fetchGroupTopOfMind: async (_groupId: string, version?: number) => {
+      if (server.version === 2 && version === undefined) {
+        server.newVersionReads += 1;
+        if (server.newVersionReads >= 2 && server.reloadGate) await server.reloadGate;
+      }
+      return top(version ?? server.version);
+    },
     fetchGroupTimeline: async () => ({
       versions: server.version === 2 ? [
         { id: "v2", version: 2, status: "live", reason: "member_proposal", entryCount: 1, createdAt: iso(0) },
@@ -96,6 +103,7 @@ beforeAll(() => {
 });
 beforeEach(async () => {
   server.version = 1; server.proposals = []; server.failNextAffirm = false; server.solo = false;
+  server.newVersionReads = 0; server.reloadGate = null;
   layout = await mountWorld(FACTS);
   await layout.travelTo(new RegExp(ROOM_NAME, "i"));
 });
@@ -143,6 +151,26 @@ it("keeps an accepted answer visible until the next version reaches the room", a
   });
   expect(find(".jar-roomform--group").textContent).toContain("next reading is taking shape");
   await act(async () => vi.advanceTimersByTimeAsync(2_000));
+  vi.useRealTimers();
+  await layout.step(40);
+  expect(find(".jar-roomform--group").textContent).toContain("new reading is here");
+  expect(find('h1.jar-poster[data-jar-chrome="1"]').textContent).toContain(AFTER);
+});
+
+it("does not claim the new reading has arrived before its wall finishes loading", async () => {
+  server.proposals = [proposal("question-1", "We share what we learn.", "Bo")];
+  let release!: () => void;
+  server.reloadGate = new Promise<void>((resolve) => { release = resolve; });
+  await open();
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  await act(async () => {
+    [...layout.container.querySelectorAll<HTMLElement>(".jar-roomform--group button")]
+      .find((button) => button.textContent === "yes, that is us")!.click();
+  });
+  await act(async () => vi.advanceTimersByTimeAsync(2_000));
+  expect(find(".jar-roomform--group").textContent).toContain("next reading is taking shape");
+  expect(find('h1.jar-poster[data-jar-chrome="1"]').textContent).toContain(BEFORE);
+  await act(async () => release());
   vi.useRealTimers();
   await layout.step(40);
   expect(find(".jar-roomform--group").textContent).toContain("new reading is here");
