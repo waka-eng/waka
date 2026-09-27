@@ -2342,7 +2342,6 @@ function HomeExperience(): JSX.Element {
         /* the same remainder the personal field keeps, per room: what its
            ground holds beyond what the ceiling let through */
         groupBeyondRef.current.set(groupId, Math.max(0, ground.total - ground.field.length));
-        setGroupFieldTick((n) => n + 1);
         const evidence = groupWallOrbs(wall, top);
         const open = proposals.find((p) => p.status === "open");
         const openMs = open ? Date.parse(open.createdAt) || 0 : null;
@@ -2351,6 +2350,7 @@ function HomeExperience(): JSX.Element {
           deriveGroupChrome(top, openMs, evidence, localeRef.current),
         );
         cache.set(groupId, { status: "ready", data: { evidence, top } });
+        setGroupFieldTick((n) => n + 1);
         simApiRef.current?.wake();
         return true;
       })
@@ -3668,7 +3668,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        map, so depending on it is what makes the poster appear on arrival
        rather than at whatever unrelated render happens next. `wallChromeNow`
        already depends on it for the same reason. */
-    [dial, adopted, notes, proposal, atWall, agents, emerging, topOfMind, inspirations, wokenGroups],
+    [dial, adopted, notes, proposal, atWall, agents, emerging, topOfMind, inspirations, wokenGroups, groupFieldTick],
   );
   /* AND THE WALL REMEMBERS WHAT IT SAID, once it is on screen saying it.
      After the commit, not inside the updater: the sentence has to be recorded
@@ -11397,6 +11397,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           const loaded = await loadGroupRef.current(acceptedVersion.groupId);
           if (disposed) return;
           if (loaded) {
+            applyChromeRef.current(TRef.current);
             fetchGroupTimeline(acceptedVersion.groupId).then((timeline) => {
               groupTimelineRef.current.set(acceptedVersion.groupId, timeline);
               setGroupPastTick((value) => value + 1);
@@ -11439,6 +11440,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           const loaded = await loadGroupRef.current(groupPanel);
           if (disposed) return;
           if (loaded) {
+            applyChromeRef.current(TRef.current);
             fetchGroupTimeline(groupPanel).then((timeline) => {
               groupTimelineRef.current.set(groupPanel, timeline);
               setGroupPastTick((value) => value + 1);

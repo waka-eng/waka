@@ -28,7 +28,8 @@ const FACTS = {
   ] }],
 };
 const server = vi.hoisted(() => ({ version: 1, proposals: [] as ApiGroupProposal[], failNextAffirm: false,
-  solo: false, newVersionReads: 0, reloadGate: null as Promise<void> | null }));
+  solo: false, newVersionReads: 0, reloadGate: null as Promise<void> | null,
+  timelineGate: null as Promise<void> | null }));
 const iso = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
 const proposal = (id: string, body: string, by: string): ApiGroupProposal => ({
   id, kind: "add_entry", status: "open", entryId: null, body, rationale: null,
@@ -53,13 +54,16 @@ vi.mock("../src/lib/api", async (importOriginal) => {
       }
       return top(version ?? server.version);
     },
-    fetchGroupTimeline: async () => ({
+    fetchGroupTimeline: async () => {
+      if (server.version === 2 && server.timelineGate) await server.timelineGate;
+      return ({
       versions: server.version === 2 ? [
         { id: "v2", version: 2, status: "live", reason: "member_proposal", entryCount: 1, createdAt: iso(0) },
         { id: "v1", version: 1, status: "superseded", reason: "initial", entryCount: 1, createdAt: iso(1) },
       ] : [{ id: "v1", version: 1, status: "live", reason: "initial", entryCount: 1, createdAt: iso(1) }],
       doorMarks: [],
-    }),
+      });
+    },
     fetchGroupProposals: async () => server.proposals,
     createGroupProposal: async (_groupId: string, input: { body: string }) => {
       const made = { ...proposal("new-question", input.body, "You"),
@@ -103,7 +107,7 @@ beforeAll(() => {
 });
 beforeEach(async () => {
   server.version = 1; server.proposals = []; server.failNextAffirm = false; server.solo = false;
-  server.newVersionReads = 0; server.reloadGate = null;
+  server.newVersionReads = 0; server.reloadGate = null; server.timelineGate = null;
   layout = await mountWorld(FACTS);
   await layout.travelTo(new RegExp(ROOM_NAME, "i"));
 });
@@ -160,7 +164,9 @@ it("keeps an accepted answer visible until the next version reaches the room", a
 it("does not claim the new reading has arrived before its wall finishes loading", async () => {
   server.proposals = [proposal("question-1", "We share what we learn.", "Bo")];
   let release!: () => void;
+  let releaseTimeline!: () => void;
   server.reloadGate = new Promise<void>((resolve) => { release = resolve; });
+  server.timelineGate = new Promise<void>((resolve) => { releaseTimeline = resolve; });
   await open();
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   await act(async () => {
@@ -175,6 +181,7 @@ it("does not claim the new reading has arrived before its wall finishes loading"
   await layout.step(40);
   expect(find(".jar-roomform--group").textContent).toContain("new reading is here");
   expect(find('h1.jar-poster[data-jar-chrome="1"]').textContent).toContain(AFTER);
+  await act(async () => releaseTimeline());
 });
 
 it("follows an immediately carried proposal into its new version", async () => {
