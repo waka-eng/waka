@@ -15,12 +15,12 @@
  * network, no Home.
  *
  * WHAT THIS MOCKS, AND WHY (gate G6). The panel's callback props
- * (`setPropose`, `answerProposal`, `copyInvite`, `leaveThisGroup`,
- * `sendProposal`, `setLeaving`, `onClose`) are vi.fn spies: each is a verb
+ * (`setPropose`, `answerProposal`, `sendProposal`, `onRetryProposals`,
+ * `onClose`) are vi.fn spies: each is a verb
  * the PAGE owns — network calls and page state live in Home, and this suite
  * is about what the panel SHOWS and which verb it fires, not about what the
  * page then does with it (Home's own suites cover that side of the seam).
- * The data props (`members`, `openProposals`, `groups`) are fixture values
+ * The data props (`members`, `openProposals`) are fixture values
  * in the exact shape the API client returns, replacing the network read for
  * the same reason. Nothing else is replaced: the component under test is the
  * real one, rendered by the real React into a real (jsdom) document.
@@ -29,7 +29,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { ApiGroupMember, ApiGroupProposal, ApiGroupSummary } from "../src/lib/api";
+import type { ApiGroupMember, ApiGroupProposal } from "../src/lib/api";
 import { GroupPanel, type GroupPanelProps } from "../src/space-kinds/GroupPanel";
 import type { Space } from "../src/space-kinds";
 
@@ -79,20 +79,19 @@ function renderPanel(overrides: Partial<GroupPanelProps>): HTMLElement {
   const props: GroupPanelProps = {
     groupId: GROUP_ID,
     space: { kind: "group", id: GROUP_ID, name: "the reading circle", col: 1 } as unknown as Space,
-    groups: [{ id: GROUP_ID, name: "the reading circle", joinCode: "CODE", role: "member" } as unknown as ApiGroupSummary],
     members: new Map(),
     openProposals: new Map(),
     timeline: null,
     selectedStop: null,
+    proposalState: "ready",
+    onRetryProposals: vi.fn(),
+    pendingProposalId: null,
+    receipt: null,
+    trouble: null,
     propose: null,
     setPropose: vi.fn(),
     sendProposal: vi.fn(),
     answerProposal: vi.fn(),
-    copied: null,
-    copyInvite: vi.fn(),
-    leaving: null,
-    setLeaving: vi.fn(),
-    leaveThisGroup: vi.fn(),
     onClose: vi.fn(),
     ...overrides,
   };
@@ -116,6 +115,29 @@ const CY = { profileId: "00000000-0000-4000-8000-000000000003", name: "Cy Park" 
 const DEE = { profileId: "00000000-0000-4000-8000-000000000004", name: "Dee Song" };
 
 describe("the approval surface", () => {
+  it("keeps the current room's proposal action ahead of history and separate from settings", () => {
+    const el = renderPanel({});
+    expect(el.textContent).toContain("shape this together");
+    expect(el.textContent).toContain("put something to this room");
+    expect(el.textContent).not.toContain("copy the invite link");
+    expect(el.textContent).not.toContain("leave this room");
+  });
+
+  it("does not offer a new proposal while the room's questions are still loading", () => {
+    const el = renderPanel({ proposalState: "loading" });
+    expect(el.textContent).toContain("Checking what the room is considering");
+    expect(el.textContent).not.toContain("put something to this room");
+  });
+
+  it("shows a failed proposal read with a working retry", () => {
+    const onRetryProposals = vi.fn();
+    const el = renderPanel({ proposalState: "failed", onRetryProposals });
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain("could not be loaded");
+    const retry = [...el.querySelectorAll("button")].find((button) => button.textContent === "Try again");
+    act(() => retry?.click());
+    expect(onRetryProposals).toHaveBeenCalledTimes(1);
+  });
+
   it("signs the proposal, lights the whole four-person room in three states, and prints no numeral", () => {
     const el = renderPanel({
       members: new Map([

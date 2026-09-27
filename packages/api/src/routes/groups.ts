@@ -715,6 +715,9 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
         ? c.json({ error: "That entry is not part of this group's top of mind" }, 404)
         : c.json({ error: "A proposal must match the shape of its kind" }, 400);
     }
+    if (result.proposal.status === "accepted") {
+      await requestRefresh(groupId, session.profile.id, "proposal_accepted");
+    }
     return c.json({ proposal: result.proposal }, 201);
   });
 

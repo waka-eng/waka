@@ -282,18 +282,16 @@ export async function createGroupProposal(
     .returning({ id: groupTopOfMindProposals.id });
   if (!created) return { ok: false, reason: "invalid" };
 
-  await db
-    .insert(groupTopOfMindAffirmations)
-    .values({ proposalId: created.id, profileId: input.profileId })
-    .onConflictDoNothing();
-
-  const view = await loadProposalView(db, {
-    proposalId: created.id,
+  /* Proposing is the author's affirmation. Run it through the same majority
+     decision as every later answer: in a room of one it carries immediately,
+     while a larger room keeps the question open for the others. */
+  const firstAnswer = await affirmGroupProposal(db, {
     groupId: input.groupId,
-    viewerProfileId: input.profileId,
+    proposalId: created.id,
+    profileId: input.profileId,
   });
-  if (!view) return { ok: false, reason: "invalid" };
-  return { ok: true, proposal: view };
+  if (!firstAnswer.ok) return { ok: false, reason: "invalid" };
+  return { ok: true, proposal: firstAnswer.proposal };
 }
 
 /**

@@ -524,7 +524,8 @@ describe("group co-editing", () => {
       ok: true as const,
       proposal: proposalView,
     }));
-    const app = mountWith({ createProposal });
+    const enqueueRefresh = vi.fn(async () => ({ jobId: "job-2", alreadyQueued: false }));
+    const app = mountWith({ createProposal, enqueueRefresh });
 
     const response = await app.request(`/api/groups/${groupId}/proposals`, {
       method: "POST",
@@ -550,6 +551,26 @@ describe("group co-editing", () => {
       },
     );
     await expect(response.json()).resolves.toEqual({ proposal: proposalView });
+    expect(enqueueRefresh).not.toHaveBeenCalled();
+  });
+
+  it("queues the next room reading when the author's proposal carries immediately", async () => {
+    const carried = { ...proposalView, status: "accepted" as const };
+    const enqueueRefresh = vi.fn(async () => ({ jobId: "job-solo", alreadyQueued: false }));
+    const app = mountWith({
+      createProposal: vi.fn(async () => ({ ok: true as const, proposal: carried })),
+      enqueueRefresh,
+    });
+    const response = await app.request(`/api/groups/${groupId}/proposals`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "add_entry", body: "Make room for experiments." }),
+    });
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toEqual({ proposal: carried });
+    expect(enqueueRefresh).toHaveBeenCalledWith(
+      {}, { groupId, requestedByProfileId: profileId, reason: "proposal_accepted" },
+    );
   });
 
   it("refuses a proposal aimed at an entry that is not this group's", async () => {
@@ -755,4 +776,3 @@ describe("a room's field", () => {
     expect(body.total).toBe(1);
   });
 });
-

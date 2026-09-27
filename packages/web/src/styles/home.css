@@ -356,6 +356,23 @@
   margin: var(--sp-12) 0 0;
   animation: jar-arrive 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
+.jar-room-shape {
+  display: block;
+  width: fit-content;
+  margin: var(--sp-16) auto 0;
+  padding: var(--sp-4) var(--sp-8);
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--t-ui);
+  color: var(--jar-muted);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.jar-room-shape:hover,
+.jar-room-shape:focus-visible { color: var(--jar-ink); }
 
 /* ---------- the forming line ----------
    The ONLY thing under the ambition. The adopted ambition and the candidates
@@ -1365,9 +1382,32 @@
      paint is GPU work per frame that no eye can see */
   pointer-events: auto;
 }
-.jar-roomform--with-history {
+.jar-roomform--group {
   max-height: min(78vh, 720px);
   overflow-y: auto;
+}
+.jar-group-panel-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-16);
+}
+.jar-group-panel-heading p { margin: 0; }
+.jar-group-panel-heading button {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--jar-muted);
+  cursor: pointer;
+}
+.jar-group-panel-heading button:hover,
+.jar-group-panel-heading button:focus-visible { color: var(--jar-ink); }
+.jar-room-shape-note {
+  margin: var(--sp-14) 0;
+  max-width: 38ch;
+  font-size: var(--t-ui);
+  line-height: 1.5;
+  color: var(--jar-muted);
 }
 .jar-group-moment {
   margin: var(--sp-18) 0;

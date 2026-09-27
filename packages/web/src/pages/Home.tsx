@@ -2311,10 +2311,10 @@ function HomeExperience(): JSX.Element {
    * resolved: a room never renders half-poured. Cached for the session; a
    * failure clears itself so the next travel toward it tries again.
    */
-  const loadGroup = useCallback((groupId: string) => {
+  const loadGroup = useCallback((groupId: string): Promise<boolean> => {
     const cache = groupCacheRef.current;
     const got = cache.get(groupId);
-    if (got && got.status !== "failed") return;
+    if (got && got.status !== "failed") return Promise.resolve(got.status === "ready");
     cache.set(groupId, { status: "pending", data: null });
     setFailedGroups((prev) => {
       if (!prev.has(groupId)) return prev;
@@ -2322,7 +2322,7 @@ function HomeExperience(): JSX.Element {
       next.delete(groupId);
       return next;
     });
-    Promise.all([
+    return Promise.all([
       fetchGroupTopOfMind(groupId),
       fetchGroupWall(groupId).catch(() => [] as ApiGroupWallSignal[]),
       fetchGroupProposals(groupId).catch(() => [] as ApiGroupProposal[]),
@@ -2342,7 +2342,6 @@ function HomeExperience(): JSX.Element {
         /* the same remainder the personal field keeps, per room: what its
            ground holds beyond what the ceiling let through */
         groupBeyondRef.current.set(groupId, Math.max(0, ground.total - ground.field.length));
-        setGroupFieldTick((n) => n + 1);
         const evidence = groupWallOrbs(wall, top);
         const open = proposals.find((p) => p.status === "open");
         const openMs = open ? Date.parse(open.createdAt) || 0 : null;
@@ -2351,12 +2350,15 @@ function HomeExperience(): JSX.Element {
           deriveGroupChrome(top, openMs, evidence, localeRef.current),
         );
         cache.set(groupId, { status: "ready", data: { evidence, top } });
+        setGroupFieldTick((n) => n + 1);
         simApiRef.current?.wake();
+        return true;
       })
       .catch(() => {
         cache.set(groupId, { status: "failed", data: null });
         setFailedGroups((prev) => new Set(prev).add(groupId));
         simApiRef.current?.wake();
+        return false;
       });
   }, []);
   const loadGroupRef = useRef(loadGroup);
@@ -3666,7 +3668,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        map, so depending on it is what makes the poster appear on arrival
        rather than at whatever unrelated render happens next. `wallChromeNow`
        already depends on it for the same reason. */
-    [dial, adopted, notes, proposal, atWall, agents, emerging, topOfMind, inspirations, wokenGroups],
+    [dial, adopted, notes, proposal, atWall, agents, emerging, topOfMind, inspirations, wokenGroups, groupFieldTick],
   );
   /* AND THE WALL REMEMBERS WHAT IT SAID, once it is on screen saying it.
      After the commit, not inside the updater: the sentence has to be recorded
@@ -11282,24 +11284,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * room agrees.
    */
   const [propose, setPropose] = useState<{ text: string; busy: boolean } | null>(null);
-  const sendProposal = useCallback(
-    (groupId: string) => {
-      if (!propose || propose.busy) return;
-      const body = propose.text.trim();
-      if (body === "") return;
-      setPropose({ ...propose, busy: true });
-      createGroupProposal(groupId, { kind: "add_entry", body })
-        .then(() => {
-          setPropose(null);
-          /* the room's forming line will report that something is on its way;
-             nothing is claimed as agreed until the room says so */
-          groupCacheRef.current.delete(groupId);
-        })
-        .catch(() => setPropose((p) => (p ? { ...p, busy: false } : p)));
-    },
-    [propose],
-  );
-
   /**
    * WHAT THE ROOM IS BEING ASKED, AND YOUR ANSWER TO IT.
    *
@@ -11312,39 +11296,165 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   const [openProposals, setOpenProposals] = useState<Map<string, ApiGroupProposal[]>>(
     () => new Map(),
   );
+  const [proposalRead, setProposalRead] = useState<{ groupId: string; phase: "loading" | "ready" | "failed" } | null>(null);
+  const [proposalReceipt, setProposalReceipt] = useState<{ groupId: string; text: string } | null>(null);
+  const [proposalTrouble, setProposalTrouble] = useState<{ groupId: string; text: string } | null>(null);
+  const [pendingProposalId, setPendingProposalId] = useState<string | null>(null);
+  const [acceptedVersion, setAcceptedVersion] = useState<{
+    groupId: string; previousVersion: number | null; acceptedAt: number;
+  } | null>(null);
+  const proposalReadSequence = useRef(0);
+  const loadOpenProposals = useCallback((groupId: string, silent = false) => {
+    const sequence = ++proposalReadSequence.current;
+    if (!silent) setProposalRead({ groupId, phase: "loading" });
+    fetchGroupProposals(groupId)
+      .then((rows) => {
+        if (sequence !== proposalReadSequence.current) return;
+        setOpenProposals((prev) => new Map(prev).set(groupId, rows.filter((row) => row.status === "open")));
+        setProposalRead({ groupId, phase: "ready" });
+      })
+      .catch(() => {
+        if (!silent && sequence === proposalReadSequence.current) setProposalRead({ groupId, phase: "failed" });
+      });
+  }, []);
+  const placeProposal = useCallback((groupId: string, proposal: ApiGroupProposal) => {
+    setOpenProposals((prev) => {
+      const next = (prev.get(groupId) ?? []).filter((row) => row.id !== proposal.id);
+      if (proposal.status === "open") next.unshift(proposal);
+      return new Map(prev).set(groupId, next);
+    });
+  }, []);
+  const watchAcceptedVersion = useCallback((groupId: string) => {
+    const cachedVersion = groupCacheRef.current.get(groupId)?.data?.top?.topOfMind?.version;
+    const timelineVersion = groupTimelines.get(groupId)?.versions[0]?.version;
+    groupCacheRef.current.delete(groupId);
+    setAcceptedVersion({ groupId, previousVersion: cachedVersion ?? timelineVersion ?? null, acceptedAt: Date.now() });
+    setProposalReceipt({ groupId, text: say("worldRoomProposalAccepted") });
+  }, [groupTimelines, locale]);
   useEffect(() => {
     if (atWall.kind !== "group") return;
-    let dead = false;
-    fetchGroupProposals(atWall.id)
-      .then((rows) => {
-        if (!dead)
-          setOpenProposals((prev) =>
-            new Map(prev).set(
-              atWall.id,
-              rows.filter((p) => p.status === "open"),
-            ),
-          );
-      })
-      .catch(() => undefined);
-    return () => {
-      dead = true;
-    };
-  }, [atWall]);
+    loadOpenProposals(atWall.id);
+  }, [atWall, groupPanel, loadOpenProposals]);
 
-  const answerProposal = useCallback((groupId: string, id: string, yes: boolean) => {
-    setOpenProposals((prev) =>
-      new Map(prev).set(groupId, (prev.get(groupId) ?? []).filter((p) => p.id !== id)),
-    );
-    const call = yes ? affirmGroupProposal(groupId, id) : declineGroupProposal(groupId, id);
-    call
-      .then(() => {
-        /* the room's own board may have moved; it is refetched rather than
-           guessed, because what a group believes is not ours to assume */
-        groupCacheRef.current.delete(groupId);
-        simApiRef.current?.wake();
+  const sendProposal = useCallback((groupId: string) => {
+    if (!propose || propose.busy) return;
+    const body = propose.text.trim();
+    if (body === "") return;
+    setProposalTrouble(null);
+    setPropose({ ...propose, busy: true });
+    createGroupProposal(groupId, { kind: "add_entry", body })
+      .then((proposal) => {
+        placeProposal(groupId, proposal);
+        setProposalRead({ groupId, phase: "ready" });
+        if (proposal.status === "accepted") watchAcceptedVersion(groupId);
+        else setProposalReceipt({ groupId, text: say("worldRoomProposalWaiting") });
+        setPropose(null);
       })
-      .catch(() => undefined);
-  }, []);
+      .catch((err: unknown) => {
+        setProposalTrouble({ groupId, text: whyFailed(err, say("worldRoomProposalActionFailed")) });
+        setPropose((current) => current ? { ...current, busy: false } : current);
+      });
+  }, [propose, placeProposal, watchAcceptedVersion, whyFailed, locale]);
+
+  const answerProposal = useCallback(async (groupId: string, id: string, yes: boolean) => {
+    if (pendingProposalId === id) return;
+    setPendingProposalId(id);
+    setProposalTrouble(null);
+    try {
+      let proposal: ApiGroupProposal;
+      let accepted = false;
+      if (yes) {
+        const result = await affirmGroupProposal(groupId, id);
+        proposal = result.proposal;
+        accepted = result.accepted;
+      } else proposal = await declineGroupProposal(groupId, id);
+      placeProposal(groupId, proposal);
+      if (accepted) watchAcceptedVersion(groupId);
+      else setProposalReceipt({ groupId, text: say("worldRoomAnswerSaved") });
+    } catch (err) {
+      setProposalTrouble({ groupId, text: whyFailed(err, say("worldRoomProposalActionFailed")) });
+    } finally {
+      setPendingProposalId(null);
+    }
+  }, [pendingProposalId, placeProposal, watchAcceptedVersion, whyFailed, locale]);
+
+  useEffect(() => {
+    if (!acceptedVersion) return;
+    let disposed = false;
+    let timer: number | undefined;
+    let checks = 0;
+    const check = async () => {
+      checks += 1;
+      try {
+        const top = await fetchGroupTopOfMind(acceptedVersion.groupId);
+        if (disposed) return;
+        const version = top.topOfMind;
+        const arrived = version && (acceptedVersion.previousVersion !== null
+          ? version.version > acceptedVersion.previousVersion
+          : Date.parse(version.createdAt) >= acceptedVersion.acceptedAt);
+        if (arrived) {
+          groupCacheRef.current.delete(acceptedVersion.groupId);
+          const loaded = await loadGroupRef.current(acceptedVersion.groupId);
+          if (disposed) return;
+          if (loaded) {
+            applyChromeRef.current(TRef.current);
+            fetchGroupTimeline(acceptedVersion.groupId).then((timeline) => {
+              groupTimelineRef.current.set(acceptedVersion.groupId, timeline);
+              setGroupPastTick((value) => value + 1);
+              setGroupTimelines((prev) => new Map(prev).set(acceptedVersion.groupId, timeline));
+            }).catch(() => undefined);
+            setProposalReceipt({ groupId: acceptedVersion.groupId, text: say("worldRoomVersionArrived") });
+            setAcceptedVersion(null);
+            return;
+          }
+        }
+      } catch { /* the accepted proposal remains; another read can recover */ }
+      if (disposed) return;
+      if (checks < 24) timer = window.setTimeout(() => void check(), 5_000);
+      else {
+        setProposalReceipt({ groupId: acceptedVersion.groupId, text: say("worldRoomVersionDelayed") });
+        setAcceptedVersion(null);
+      }
+    };
+    timer = window.setTimeout(() => void check(), 2_000);
+    return () => { disposed = true; window.clearTimeout(timer); };
+  }, [acceptedVersion, locale]);
+
+  /* While the room's question is open on screen, other members' answers can
+     arrive without this viewer moving. Refresh the answers quietly and bring
+     a newly written version into the same wall; the panel does not flash back
+     through loading on every check. */
+  useEffect(() => {
+    if (!groupPanel || atWall.kind !== "group" || atWall.id !== groupPanel || selectedGroupStop) return;
+    let disposed = false;
+    let timer: number | undefined;
+    const refresh = async () => {
+      loadOpenProposals(groupPanel, true);
+      try {
+        const top = await fetchGroupTopOfMind(groupPanel);
+        if (disposed) return;
+        const knownVersion = groupCacheRef.current.get(groupPanel)?.data?.top?.topOfMind?.version
+          ?? groupTimelineRef.current.get(groupPanel)?.versions[0]?.version ?? null;
+        if (knownVersion !== null && top.topOfMind && top.topOfMind.version > knownVersion) {
+          groupCacheRef.current.delete(groupPanel);
+          const loaded = await loadGroupRef.current(groupPanel);
+          if (disposed) return;
+          if (loaded) {
+            applyChromeRef.current(TRef.current);
+            fetchGroupTimeline(groupPanel).then((timeline) => {
+              groupTimelineRef.current.set(groupPanel, timeline);
+              setGroupPastTick((value) => value + 1);
+              setGroupTimelines((prev) => new Map(prev).set(groupPanel, timeline));
+            }).catch(() => undefined);
+            setProposalReceipt({ groupId: groupPanel, text: say("worldRoomVersionArrived") });
+          }
+        }
+      } catch { /* last known reading stays in place */ }
+      if (!disposed) timer = window.setTimeout(() => void refresh(), 10_000);
+    };
+    timer = window.setTimeout(() => void refresh(), 10_000);
+    return () => { disposed = true; window.clearTimeout(timer); };
+  }, [groupPanel, atWall, selectedGroupStop?.at, loadOpenProposals, locale]);
 
   /** Leaving is destructive and irreversible, so it asks once, in words. */
   const [leaving, setLeaving] = useState<string | null>(null);
@@ -12515,6 +12625,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         {formatMessage(locale, "worldAsOf", { month: c.asOf })}
                       </div>
                     ) : null}
+                    {here && w.kind === "group" && atNow ? <button
+                      type="button"
+                      className="jar-room-shape"
+                      data-jar-chrome="1"
+                      onClick={() => setGroupPanel(w.id)}
+                    >
+                      {((openProposals.get(w.id) ?? []).some((item) => item.viewerStance === null))
+                        ? say("worldRoomNeedsAnswer") : say("worldShapeTogether")}
+                    </button> : null}
                     {/* WHAT IT RESTS ON. The same chain the sky shows under a
                         pattern, one layer up: the memories this sentence was
                         built from, each with the span that carried it at full
@@ -14738,21 +14857,20 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       {groupPanel && atWall.kind === "group" && atWall.id === groupPanel ? (
         <GroupPanel
           groupId={groupPanel}
-          groups={groups}
           members={members}
           space={atWall}
           openProposals={openProposals}
           timeline={groupTimelines.get(groupPanel) ?? null}
           selectedStop={atWall.kind === "group" && atWall.id === groupPanel ? selectedGroupStop : null}
+          proposalState={proposalRead?.groupId === groupPanel ? proposalRead.phase : "loading"}
+          onRetryProposals={() => loadOpenProposals(groupPanel)}
+          pendingProposalId={pendingProposalId}
+          receipt={proposalReceipt?.groupId === groupPanel ? proposalReceipt.text : null}
+          trouble={proposalTrouble?.groupId === groupPanel ? proposalTrouble.text : null}
           propose={propose}
           setPropose={setPropose}
           sendProposal={sendProposal}
           answerProposal={answerProposal}
-          copied={copied}
-          copyInvite={copyInvite}
-          leaving={leaving}
-          setLeaving={setLeaving}
-          leaveThisGroup={leaveThisGroup}
           onClose={() => setGroupPanel(null)}
         />
       ) : null}
