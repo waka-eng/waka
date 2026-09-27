@@ -376,7 +376,7 @@ describe("the label register is declared once", () => {
     const rule = css.match(/@layer register\s*\{([\s\S]*)\}\s*$/);
     expect(rule, "there is no `register` layer in system.css").not.toBeNull();
     const body = rule![1]!;
-    expect(body).toContain("font-size: var(--t-label)");
+    expect(body).toContain("font-size: var(--t-label-size, var(--t-label))");
     expect(body).toContain("letter-spacing: 0.16em");
     expect(body).toContain("font-weight: 500");
   });

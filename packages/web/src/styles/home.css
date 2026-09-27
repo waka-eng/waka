@@ -154,6 +154,31 @@
   color: var(--jar-muted);
 }
 
+/* The label register is a VOICE, not a rule that every action is ten pixels.
+   Important controls keep its casing and spacing, but opt into readable type
+   steps. Non-interactive eyebrows still use the ten-pixel default. */
+.jar-way,
+.jar-saved,
+.jar-values,
+.jar-when,
+.jar-here,
+.jar-account,
+.jar-here-row,
+.jar-dial-stop {
+  --t-label-size: var(--t-fine);
+}
+.jar-mouth-where,
+.jar-mouth-step,
+.jar-panel-vis,
+.jar-grounds,
+.jar-capture-shortcut {
+  --t-label-size: var(--t-ui);
+}
+.jar-mouth-rest,
+.jar-mouth-field {
+  --t-label-size: var(--t-note);
+}
+
 /* ---------- the volume: a quiet gradient the camera descends through ---------- */
 .jar-atmos {
   position: absolute;
@@ -359,8 +384,9 @@
 .jar-room-shape {
   display: block;
   width: fit-content;
-  margin: var(--sp-16) auto 0;
-  padding: var(--sp-4) var(--sp-8);
+  margin: var(--sp-8) auto 0;
+  padding: var(--sp-8);
+  min-height: 36px;
   border: 0;
   background: none;
   font: inherit;
@@ -606,9 +632,8 @@
 .jar-way {
   opacity: 1;
   color: var(--jar-muted);
-  /* The label register, unmodified — the same voice as the way up and the
-     count of what you have kept. Three signposts at three sizes read as
-     three unrelated things; one size makes them one kind of thing. */
+  /* The same larger control step as the way up and the saved count; their
+     shared label voice survives without making each door ten pixels tall. */
   font-size: var(--t-label);
   letter-spacing: 0.16em;
 }
@@ -684,6 +709,7 @@
   border: 0;
   margin: 0;
   padding: 5px var(--sp-12);
+  min-height: 32px;
   background: none;
   font-family: inherit;
   /* THE SAME INK AS A WAY OUT (founder, 2026-08-25: "same font and opacity
@@ -1218,6 +1244,7 @@
   border: 0;
   margin: 0;
   padding: 5px var(--sp-12);
+  min-height: 32px;
   background: none;
   font-family: inherit;
   /* and the same ink as the rest of the family. This rule declared `color`
@@ -1411,9 +1438,14 @@
 }
 .jar-roomform .jar-room-primary {
   color: var(--jar-ink);
-  font-size: var(--t-ui);
+  font-size: var(--t-note);
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+.jar-roomform--group .jar-ask button {
+  min-height: 32px;
+  padding: 6px var(--sp-4);
+  font-size: var(--t-note);
 }
 .jar-roomform .jar-room-primary:disabled {
   color: var(--jar-faint);
@@ -1602,6 +1634,9 @@
 /* placed by its wall's column, so the inline `left` is its RIGHT edge */
 .jar-way--r {
   transform: translateX(-100%);
+}
+@media (max-width: 600px) {
+  .jar-way { max-width: 28vw; }
 }
 
 /* ---------- THE MOUTH: where a memory is said ----------
@@ -1809,7 +1844,6 @@
   inset: -11px -12px;
 }
 .jar-mouth .jar-mouth-rest {
-  font-size: var(--t-fine);
   letter-spacing: 0.12em;
   color: var(--jar-ink);
   text-decoration: underline;
@@ -1817,7 +1851,6 @@
   text-underline-offset: 5px;
 }
 .jar-mouth .jar-mouth-field::placeholder {
-  font-size: var(--t-fine);
   letter-spacing: 0.12em;
   color: var(--jar-muted);
 }
@@ -1948,11 +1981,8 @@
    jumping when the choice appears; inert while invisible, so the empty mouth
    still offers no control. */
 .jar-mouth-where {
-  /* THE LABEL REGISTER, LIKE EVERY OTHER ROW OF VERBS (founder, 2026-08-25:
-     "in here, make private/public the same font as well"). It wore
-     `.jar-ask`'s 13px prose, so the drawer's foot spoke at sentence size
-     while the card's foot and the four signposts spoke at label size — the
-     same four words, two registers, depending on which surface you were on. */
+  /* The same uppercase label voice as the card's privacy choice, now at the
+     readable control step: these are decisions, not metadata. */
   gap: 5px;
   opacity: 0;
   pointer-events: none;
@@ -1963,7 +1993,10 @@
   letter-spacing: inherit;
   text-transform: inherit;
   font-weight: 500;
+  min-height: 30px;
+  padding: 5px var(--sp-4);
 }
+.jar-mouth-where .jar-where-off { color: var(--jar-muted); }
 .jar-mouth-where--armed {
   opacity: 1;
   pointer-events: auto;
@@ -2076,6 +2109,7 @@
      of all the buttons by just a tiny bit") — 20 overshot into a lozenge;
      16 still holds the word without fitting it. */
   padding: 7px var(--sp-16);
+  min-height: 32px;
   border-radius: 999px;
   background: var(--jar-card);
   transition:
@@ -2546,12 +2580,8 @@
   /* in the row now, not floated over it */
   margin: 0;
   justify-content: flex-end;
-  /* THE SAME REGISTER AS THE DATE ACROSS FROM IT (founder, 2026-08-25: "make
-     it private/public and make same font and size as" — pointing at
-     `YESTERDAY · AUG 24`). It wore `.jar-ask`, the quiet verb row's 13px
-     prose, so the head's two ends were a meta label on the left and two
-     sentence-sized words on the right, which is why the row read as
-     lopsided even once it was centred. */
+  /* Still in the shared label voice, but larger than the passive date:
+     private/public are controls that must be readable before they are used. */
   gap: 5px;
 }
 .jar-panel-vis button {
@@ -2559,6 +2589,8 @@
   letter-spacing: inherit;
   text-transform: inherit;
   font-weight: 500;
+  min-height: 30px;
+  padding: 5px var(--sp-4);
 }
 .jar-panel-vis--busy {
   opacity: 0.5;
@@ -3924,21 +3956,17 @@
   border: 0;
   background: none;
   padding: var(--sp-4) var(--sp-6);
+  min-height: 28px;
   margin: 0 0 0 -var(--sp-6);
   font: inherit;
   letter-spacing: inherit;
   text-transform: inherit;
   cursor: pointer;
   border-radius: 5px;
-  color: var(--jar-faint);
-  /* light is the only channel: the ground you are NOT in is dimmer, and that
-     is the whole difference — no underline, no chip, no marker.
-     0.4 was below the floor of its own job. At ten pixels, uppercase, on this
-     ground, it read as texture rather than as four other people — and this is
-     the ONLY thing on screen saying a room is shared, because the field pours
-     one member at a time by design. Still clearly the dim end of the channel
-     against the lit row at 1. */
-  opacity: 0.62;
+  color: var(--jar-muted);
+  /* Light still marks whose ground is selected. Other members must remain
+     legible too: this is the only persistent sign that the room is shared. */
+  opacity: 0.82;
   transition: opacity 0.28s ease, background-color 0.2s ease;
 }
 /* JUST ARRIVED: every ground lit, for as long as an arrival lasts. Dropping
@@ -3948,10 +3976,11 @@
 }
 .jar-grounds-row:hover,
 .jar-grounds-row:focus-visible {
-  opacity: 0.8;
+  opacity: 1;
 }
 .jar-grounds-row--here {
   opacity: 1;
+  color: var(--jar-ink);
 }
 /* the swatch is the orb, small: same circle, same soft edge, so the name and
    the ground it switches to are visibly the same material */
@@ -4057,6 +4086,7 @@
   border: 0;
   margin: 0;
   padding: 7px var(--sp-10);
+  min-height: 32px;
   background: none;
   font-family: inherit;
   color: var(--jar-faint);
@@ -4138,6 +4168,7 @@
   border: 0;
   background: none;
   padding: 7px var(--sp-12);
+  min-height: 32px;
   border-radius: 9px;
   text-align: left;
   white-space: nowrap;
