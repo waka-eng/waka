@@ -19,7 +19,8 @@
     "test:watch": "vitest",
     "vocabulary": "node scripts/check-vocabulary.mjs",
     "eval:extraction": "WAKA_RUN_LIVE_EVALS=1 vitest run test/extraction-eval.test.ts",
-    "eval:pipeline": "WAKA_RUN_LIVE_EVALS=1 vitest run test/pipeline-eval.test.ts"
+    "eval:pipeline": "WAKA_RUN_LIVE_EVALS=1 vitest run test/pipeline-eval.test.ts",
+    "eval:self-likeness": "WAKA_RUN_LIVE_EVALS=1 vitest run test/self-likeness-eval.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-lambda": "^3.1111.0",
