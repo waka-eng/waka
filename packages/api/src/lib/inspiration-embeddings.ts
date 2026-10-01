@@ -290,12 +290,14 @@ async function loadProfileScopedInspiration(
   db: WakaDb,
   profileId: string,
   inspirationId: string,
+  lock = false,
 ): Promise<Inspiration | null> {
-  const rows = await db
+  const query = db
     .select()
     .from(inspirations)
     .where(and(eq(inspirations.id, inspirationId), eq(inspirations.profileId, profileId)))
     .limit(1);
+  const rows = await (lock ? query.for("update") : query);
 
   return rows[0] ?? null;
 }
@@ -327,8 +329,9 @@ async function loadProfileScopedReflections(
   db: WakaDb,
   profileId: string,
   inspirationId: string,
+  lock = false,
 ): Promise<CanonicalReflectionInput[]> {
-  return db
+  const query = db
     .select({
       question: reflections.question,
       answer: reflections.answer,
@@ -343,14 +346,16 @@ async function loadProfileScopedReflections(
       ),
     )
     .orderBy(asc(reflections.createdAt), asc(reflections.id));
+  return lock ? query.for("share") : query;
 }
 
 async function loadProfileScopedAttachments(
   db: WakaDb,
   profileId: string,
   inspirationId: string,
+  lock = false,
 ): Promise<CanonicalAttachmentInput[]> {
-  return db
+  const query = db
     .select({
       type: attachments.type,
       enrichmentText: attachments.enrichmentText,
@@ -363,6 +368,7 @@ async function loadProfileScopedAttachments(
       ),
     )
     .orderBy(asc(attachments.createdAt), asc(attachments.id));
+  return lock ? query.for("share") : query;
 }
 
 async function buildCanonicalInputForInspiration(
@@ -370,10 +376,11 @@ async function buildCanonicalInputForInspiration(
   profileId: string,
   inspiration: Inspiration,
   inputScope: InspirationEmbeddingScope,
+  lock = false,
 ): Promise<string> {
   const [reflectionRows, attachmentRows] = await Promise.all([
-    inputScope === "personal" ? loadProfileScopedReflections(db, profileId, inspiration.id) : [],
-    loadProfileScopedAttachments(db, profileId, inspiration.id),
+    inputScope === "personal" ? loadProfileScopedReflections(db, profileId, inspiration.id, lock) : [],
+    loadProfileScopedAttachments(db, profileId, inspiration.id, lock),
   ]);
   return buildCanonicalInspirationEmbeddingInput({
     text: inspiration.text,
@@ -410,7 +417,7 @@ async function sourceMatchesSnapshot(
 ): Promise<boolean> {
   if (!source) return false;
   if (inputScope === "public" && source.visibility !== "public") return false;
-  const currentInput = await buildCanonicalInputForInspiration(db, profileId, source, inputScope);
+  const currentInput = await buildCanonicalInputForInspiration(db, profileId, source, inputScope, true);
   return hashEmbeddingInput(currentInput) === snapshot.inputHash;
 }
 
@@ -480,6 +487,7 @@ export async function ensureInspirationEmbedding(
       tx,
       params.profileId,
       params.inspirationId,
+      true,
     );
     if (
       !(await sourceMatchesSnapshot(tx, params.profileId, freshSource, { inputHash }, inputScope))

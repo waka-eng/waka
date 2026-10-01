@@ -221,6 +221,19 @@ agent's relayed excerpt, an agent's own observation.
   it with completion; a pending rerun exposes no completed receipt. Status
   reads are profile-scoped. This job receipt does not replace the source
   revision/provenance contract needed for downstream evidence reconciliation.
+- **Evidence material identity** records the scope, policy and content hashes
+  of the source IDs a derivation read, without retaining source text snapshots.
+  `signal_evidence.material` is that immutable description; null marks legacy
+  lineage, not a newly verified source. A quoted answer also names
+  `quote_reflection_id` (constrained to the same owner and inspiration) and
+  `quote_source_hash`. A quote must occur in one actual source, never across
+  concatenated answers. Source changes are checked under locks after model
+  decisions and before writes. Changing/deleting a source removes copied
+  quotes and generated reasons; it does not itself assert that the broader
+  claim is false. Explicit support assessment remains a separate operation.
+  Deleted reflection content is not retained in generated follow-up job
+  payloads. Human-authored signal/entry/principle wording is not erased by
+  this source-copy cleanup.
 
 ## Experience (layer-1 grouping)
 

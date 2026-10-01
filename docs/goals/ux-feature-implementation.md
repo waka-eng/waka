@@ -1,6 +1,6 @@
 # Goal: implement the experience review
 
-Status: in flight — A/B, C input/output/cache and E1 manual-refresh fixes locally checked; D/E2 and later delivery slices remain open. Deployment-target verification, historical repair and full release verification remain open.
+Status: in flight — A/B, C input/output/cache, D1 source provenance and E1 manual-refresh fixes locally checked; D2/D3, E2 and later delivery slices remain open. Deployment-target verification, historical repair and full release verification remain open.
 Created: 2026-10-01, on the owner's instruction to implement the full plan.
 Branch: `codex/ux-feature-implementation`.
 Baseline: `33e65a7` on `dev`.
@@ -28,7 +28,7 @@ experiments or revive superseded room goals.
 | A | F5/F6/F10: input, overlay scrolling/focus, readable active controls | Reproduce slash/wheel defects; verify typing, caret, Escape/Tab, wheel/touch and contrast in actual affected flows; web checks | Implemented; 5 original failures now pass, 325 web tests pass. Desktop fixture verified. Mobile touch/200% zoom and deployed verification remain open. |
 | B | F3/F4: edited principle preservation, truthful support, account-scoped drafts/preferences and cancellation | Isolated SQL preservation tests and two-account browser/state tests; API/web checks | B1: 6 SQL / 653 unit tests pass after 3 reproduced failures. B2: 4 failures reproduced, then two-account draft and stale-response checks pass; full web suite 331/331. Deployed/account-switch browser verification remains open. |
 | C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | C1/C2/C3 code locally verified (51 SQL cases; full web 349/349). Read-only inventory completed across 5 rooms in the DB referenced by the local env files; hosted-stage mapping is not verified. Historical repair, deployment coordination and deployed verification remain pending. |
-| D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | Pending |
+| D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | D1 source identity/quote retention and stale derivation checks locally verified (16 source SQL cases; web 366/366). Explicit semantic support reconciliation, full downstream fencing, durable handoff and historical repair remain open. |
 | E1 | F7/F8: authoritative poster and truthful manual refresh | Queue acceptance, changed/unchanged completion, failure and fresh displayed version verified | Implemented with job receipts, resumable profile-scoped polling, held-job manual upgrade and authoritative headline. Local checks pass (8 receipt SQL tests, 10 hook tests, full web 362/362); deployed verification remains open. |
 | E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | Pending |
 | F | F11/F12: visible search and durable navigation | Results beyond initial archive, failure/no-match separation, stable IDs, deep links, Back/Forward and rename verified | Pending |
@@ -276,3 +276,31 @@ Keep code, deployment, historical repair, and user validation evidence distinct.
   in that broader workflow; the current resume path starts only after a receipt
   is known. Lease-fenced job settlement is not full artifact/source fencing.
   Keep those requirements open rather than treating E1 as the whole loop.
+- 2026-10-01, D1: four baseline defects reproduced: deleted reflection quotes
+  and reasons survived; an edited inspiration retained the first quote; source
+  edits and reflection deletion during personal extraction committed stale
+  results. Migration 0035 records content-addressed source IDs/hashes without
+  raw snapshots, constrains exact reflection citations to their owner/parent,
+  and forbids private-answer quotes on group evidence. Source mutation triggers
+  remove copied quotes/reasons, affected vector caches and stale question-job
+  payloads. Match judgments finish before the locked source/statement check
+  and evidence writes; an empty extraction also checks its source. Reruns
+  update quotes without adding witnesses. No bounded omission withdraws a link.
+- D1 readers suppress untraceable legacy quotes/reasons. Personal evidence
+  identifies a quoted reflection and opens its answer, rather than treating
+  it as text from the parent inspiration. Local deletion invalidates late
+  evidence/question responses and copied spans while preserving unsaved drafts.
+  This is exact citation tracking, NOT a semantic assessment of the claim.
+- D1 verification: 73/73 SQL cases across source provenance and eight related
+  room/curation/principle suites passed; one additional answer-edit regression
+  then passed with the full source suite (16/16), giving 74 distinct SQL cases.
+  API unit suite 655 passed / 3 paid-live benches skipped; web 366/366 across
+  60 suites. API/web/admin typechecks, web build, migration and diff checks
+  pass. All SQL used explicit loopback `waka_agent_test` isolated schemas.
+  No live model calls, hosted migrations/repair, push or deployment.
+- D2/D3 remain required: explicitly assess previously linked claims against
+  current material (supported/unsupported/unresolved), recover mistaken
+  withdrawal without rewriting human words, fence all downstream artifacts
+  and statement changes, and durably schedule every source mutation. Full
+  retention across historical derivatives and cross-device personal caches
+  is not established by D1. D/E2 and the complete release gates stay open.

@@ -39,14 +39,12 @@
  * `signal-derivation-thresholds.ts` for the failure it produced.
  */
 
-import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 
 import {
-  attachments,
   inspirationEmbeddings,
   inspirations,
   profiles,
-  reflections,
   signals,
 } from "../db/index.js";
 import { cosineSimilarity } from "../scoring/vector.js";
@@ -58,11 +56,11 @@ import {
 import { normalizeSupportedLocale } from "./locales.js";
 import {
   assertGroupInputCurrent,
-  loadGroupInputAttachments,
   loadGroupInputMembership,
   GROUP_INPUT_POLICY,
   GroupInputUnavailableError,
 } from "./group-inputs.js";
+import { assertMaterialCurrent, loadInspirationMaterial, relatedMaterialIdentity, resolveMaterialQuote } from "./inspiration-material.js";
 import {
   getDefaultModelProvider,
   type ModelProvider,
@@ -90,6 +88,7 @@ export * from "./signal-lifecycle.js";
 export * from "./signal-match-or-mint.js";
 
 type WakaDb = ReturnType<typeof getDb>;
+type WakaTx = Parameters<Parameters<WakaDb["transaction"]>[0]>[0];
 
 // Bounds on what one candidate may carry into the database. Unexported on
 // purpose: `signal-derivation-thresholds.ts` is machine-checked against
@@ -157,13 +156,13 @@ export async function deriveSignalsForInspiration(
   const provider = deps.modelProvider ?? (await getDefaultModelProvider());
   const embeddingClient = deps.embeddingClient ?? new GeminiEmbeddingHttpClient();
 
-  const [inspiration] = await db
+  const [inspirationRow] = await db
     .select()
     .from(inspirations)
     .where(eq(inspirations.id, input.inspirationId))
     .limit(1);
 
-  if (!inspiration) {
+  if (!inspirationRow) {
     return {
       status: "missing_inspiration",
       inspirationId: input.inspirationId,
@@ -181,13 +180,13 @@ export async function deriveSignalsForInspiration(
      match targets, the advisory lock, the mint. The one deliberate
      exception is the capture's own layer-1 embedding, which stays with the
      memory's owner wherever the pass is landing. */
-  const profileId = input.deriveIntoProfileId ?? inspiration.profileId;
+  const profileId = input.deriveIntoProfileId ?? inspirationRow.profileId;
   const isGroup = input.deriveIntoProfileId !== undefined;
   const emptyResult = (status: SignalDerivationResult["status"]): SignalDerivationResult => ({
-    status, inspirationId: inspiration.id, profileId, candidateCount: 0,
+    status, inspirationId: inspirationRow.id, profileId, candidateCount: 0,
     matchedSignalIds: [], mintedSignalIds: [], promotedSignalIds: [],
   });
-  const membership = isGroup ? await loadGroupInputMembership(db, inspiration.profileId, profileId) : null;
+  const membership = isGroup ? await loadGroupInputMembership(db, inspirationRow.profileId, profileId) : null;
   if (isGroup && !membership) return emptyResult("not_authorized");
 
   /**
@@ -205,7 +204,7 @@ export async function deriveSignalsForInspiration(
    * visibility, and `deriveIntoProfileId` is exactly the flag for "this pass
    * is landing somewhere other than the keeper's own stack".
    */
-  if (input.deriveIntoProfileId && inspiration.visibility !== "public") {
+  if (input.deriveIntoProfileId && inspirationRow.visibility !== "public") {
     return {
       status: "not_public",
       inspirationId: input.inspirationId,
@@ -217,41 +216,19 @@ export async function deriveSignalsForInspiration(
     };
   }
 
-  const [profileRows, reflectionRows, attachmentRows, existingStatements] = await Promise.all([
+  const material = await loadInspirationMaterial(db, inspirationRow.profileId, inspirationRow.id, isGroup ? "public" : "personal");
+  if (!material) return emptyResult("missing_inspiration");
+  const inspiration = material.inspiration;
+  if (isGroup && inspiration.visibility !== "public") return emptyResult("not_public");
+  const reflectionRows = material.reflectionRows;
+  const attachmentRows = material.attachmentRows.filter((row) => row.status === "ready" && row.text !== null)
+    .map(({ id, kind, text, hostname, name }) => ({ id, kind, text, hostname, name }));
+  const [profileRows, existingStatements] = await Promise.all([
     db
       .select({ preferredLocale: profiles.preferredLocale })
       .from(profiles)
       .where(eq(profiles.id, profileId))
       .limit(1),
-    isGroup ? [] : db
-      .select({
-        question: reflections.question,
-        answer: reflections.answer,
-      })
-      .from(reflections)
-      .where(
-        and(
-          eq(reflections.inspirationId, inspiration.id),
-          eq(reflections.skipped, false),
-          isNotNull(reflections.answer),
-        ),
-      ),
-    isGroup ? loadGroupInputAttachments(db, inspiration.profileId, inspiration.id) : db
-      .select({
-        id: attachments.id,
-        kind: attachments.enrichmentKind,
-        text: attachments.enrichmentText,
-        hostname: attachments.hostname,
-        name: attachments.name,
-      })
-      .from(attachments)
-      .where(
-        and(
-          eq(attachments.inspirationId, inspiration.id),
-          eq(attachments.enrichmentStatus, "ready"),
-          isNotNull(attachments.enrichmentText),
-        ),
-      ),
     db
       .select({ id: signals.id, statement: signals.statement })
       .from(signals)
@@ -285,11 +262,11 @@ export async function deriveSignalsForInspiration(
     db,
     client: embeddingClient,
   });
-  if (isGroup && inspirationEmbedding.status === "stale_source") {
-    throw new Error("Room material changed during embedding");
+  if (inspirationEmbedding.status === "stale_source") {
+    throw new Error("Source material changed during embedding");
   }
   if (isGroup && inspirationEmbedding.status === "not_public") return emptyResult("not_public");
-  if (isGroup && inspirationEmbedding.status === "missing_inspiration") return emptyResult("missing_inspiration");
+  if (inspirationEmbedding.status === "missing_inspiration") return emptyResult("missing_inspiration");
   const relatedInspirations = inspirationEmbedding.embedding
     ? await findRelatedInspirations(db, {
         /* recurrence is retrieved over the KEEPER's earlier captures on every
@@ -348,50 +325,35 @@ export async function deriveSignalsForInspiration(
     run it. See `salience.ts`; both orderings are wrong in the direction of
     attributing invented text to a person, which is why neither is inline.
   */
-  const enrichmentText =
-    attachmentRows
-      .flatMap((row) => (row.text ? [row.text] : []))
-      .join("\n\n") || null;
-
-  /* THE PERSON'S OWN WORDS include their reflection answers, not just the
-     capture: `quoteForEvidence` keeps own-words spans only (the enrichment
-     refusal is the rule's point), and a reflection is the person answering
-     in their own voice — refusing a verbatim span of it would refuse the
-     person themselves. Composed onto the own-words rule, not around it. */
-  const ownText = [inspiration.text, ...reflectionRows.map((row) => row.answer ?? "")]
-    .filter((piece) => piece.length > 0)
-    .join("\n\n");
-
   const statements = extraction.statements
     .map((candidate) => ({
       statement: clip(candidate.statement, MAX_STATEMENT_LENGTH),
       reason: candidate.reason ? clip(candidate.reason, MAX_REASON_LENGTH) : null,
-      quote: quoteForEvidence(
-        candidate.quote,
-        { text: ownText, enrichment: enrichmentText },
-        MAX_QUOTE_LENGTH,
-      ),
-      relatedEvidence: resolveRelatedEvidence(candidate, relatedInspirations, MAX_QUOTE_LENGTH),
-    }))
-    .map((candidate) => ({
-      ...candidate,
-      /* `quoteForEvidence` keeps only the person's OWN words (dev, PR #266
-         tightened this — an enrichment span is never quoted as evidence any
-         more), so a surviving quote's source is exactly one thing */
-      quoteSource: (candidate.quote ? "own" : null) as "own" | "enrichment" | null,
+      ...resolveMaterialQuote(candidate.quote, material, MAX_QUOTE_LENGTH),
+      relatedEvidence: resolveRelatedEvidence(candidate, relatedInspirations, MAX_QUOTE_LENGTH).map((row) => {
+        const source = relatedInspirations.find((offered) => offered.id === row.inspirationId)!;
+        const identity = relatedMaterialIdentity(source, material.identity.scope);
+        return { ...row, material: identity, quoteSourceHash: identity.sources[0]!.hash };
+      }),
     }))
     .filter((candidate) => candidate.statement.length > 0);
 
+  const validateSources = async (tx: WakaTx) => {
+    if (isGroup && membership) await assertGroupInputCurrent(tx, {
+      mindProfileId: profileId, membershipId: membership.id, inspiration,
+      attachments: attachmentRows, related: relatedInspirations,
+    });
+    await assertMaterialCurrent(tx, material, relatedInspirations);
+  };
+
   if (statements.length === 0) {
-    return {
-      status: "no_candidates",
-      inspirationId: inspiration.id,
-      profileId,
-      candidateCount: 0,
-      matchedSignalIds: [],
-      mintedSignalIds: [],
-      promotedSignalIds: [],
-    };
+    try {
+      await db.transaction(async (tx) => { await acquireSignalDerivationLock(tx, profileId); await validateSources(tx); });
+      return emptyResult("no_candidates");
+    } catch (error) {
+      if (error instanceof GroupInputUnavailableError) return emptyResult(error.status);
+      throw error;
+    }
   }
 
   const embedded: ResolvedCandidate[] = [];
@@ -420,10 +382,8 @@ export async function deriveSignalsForInspiration(
         provider,
         preferredLocale: normalizeSupportedLocale(profileRows[0]?.preferredLocale),
         now,
-      });
-      if (isGroup && membership) await assertGroupInputCurrent(tx, {
-        mindProfileId: profileId, membershipId: membership.id, inspiration,
-        attachments: attachmentRows, related: relatedInspirations,
+        material: material.identity,
+        beforeWrites: () => validateSources(tx),
       });
       return applied;
     });

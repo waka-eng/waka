@@ -63,6 +63,7 @@ async function derive(
   return t.db.transaction(async (tx) => {
     await acquireSignalDerivationLock(tx as never, profileId);
     const result = await applyCandidates(tx as never, {
+      beforeWrites: async () => {}, // synthetic candidates isolate contradiction handling
       profileId,
       evidenceOwnerProfileId: profileId,
       inspirationId: insp.id as string,

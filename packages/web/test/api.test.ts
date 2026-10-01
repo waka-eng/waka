@@ -46,6 +46,7 @@ import {
   type ApiTopOfMind,
   type ApiViewer,
 } from "../src/lib/api";
+import { loadSignal } from "../src/lib/data";
 
 const viewer: ApiViewer = {
   account: {
@@ -138,6 +139,15 @@ const signal: ApiSignal = {
   sharedGroupIds: [],
   createdAt: "2026-05-20T00:00:00.000Z",
 };
+
+it("carries an exact reflection reference through the client and data adapter", async () => {
+  stubFetch(Response.json({ signal: { ...signal, evidence: [{ inspirationId: "inspiration-1", preview: "Original note",
+    quote: "A reflected answer", quoteSource: "own", quoteReflectionId: "reflection-1", reason: null,
+    createdAt: "2026-05-30T20:00:00.000Z" }] } }));
+  const result = await loadSignal(signal.id);
+  expect(result.evidence[0]?.quoteReflectionId).toBe("reflection-1");
+  expect(result.evidence[0]?.quote).toBe("A reflected answer");
+});
 
 const signalDetail: ApiSignalDetail = {
   ...signal,

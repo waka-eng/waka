@@ -360,6 +360,8 @@
   "worldReflectionRemoveFailed": "되새김을 되돌리지 못했어요.",
   "worldReflected": "되새김 있음",
   "worldReadReflection": "되새김 읽기",
+  "worldFromReflection": "내 되새김에서",
+  "worldReflectionUnavailable": "이 되새김은 더 이상 볼 수 없어요.",
   "worldKeepFailed": "간직되지 않았어요. 말은 아직 여기 있어요",
   "worldRoomNotMade": "방을 만들지 못했어요. 다른 이름으로 해 보세요.",
   "worldNoRoomAnswered": "그 링크에 답한 방이 없어요. 링크를 확인해 주세요.",

@@ -360,6 +360,8 @@
   "worldReflectionRemoveFailed": "That reflection could not be taken back.",
   "worldReflected": "reflected",
   "worldReadReflection": "read reflection",
+  "worldFromReflection": "from your reflection",
+  "worldReflectionUnavailable": "That reflection is no longer available.",
   "worldKeepFailed": "That didn’t keep. The words are still here",
   "worldRoomNotMade": "That room could not be made. Try another name.",
   "worldNoRoomAnswered": "No room answered to that. Check the link.",

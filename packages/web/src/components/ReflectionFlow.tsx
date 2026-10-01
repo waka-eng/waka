@@ -129,12 +129,11 @@ export function ReflectionFlow({ inspirationId, draftKey = null, initialTurns, l
       const remaining = turns.filter((turn) => turn.id !== id);
       setTurns(remaining);
       onRemoved(id);
-      if (id === latestId) {
-        requestSequence.current += 1;
-        setAnswer("");
-        setQuestion(remaining.length > 0 ? "" : t(locale, "worldFirstReflectionQuestion"));
-        setPhase(remaining.length > 0 ? "saved" : "answering");
-      }
+      // Any removed answer may have informed the follow-up. Invalidate that
+      // generated question, but preserve words the person is still drafting.
+      requestSequence.current += 1;
+      setQuestion(remaining.length > 0 ? "" : t(locale, "worldFirstReflectionQuestion"));
+      setPhase(remaining.length > 0 ? "saved" : "answering");
     } catch { setError(t(locale, "worldReflectionRemoveFailed")); }
     finally { setRemovingId(null); }
   };

@@ -18,6 +18,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -43,6 +44,7 @@ export const reflections = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
+    sourceIdentityUnique: unique("reflections_source_identity_unique").on(table.profileId, table.inspirationId, table.id),
     inspirationIdx: index("reflections_inspiration_idx").on(table.inspirationId),
     // A reflection cannot attach to another profile's inspiration.
     inspirationFk: foreignKey({

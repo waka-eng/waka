@@ -61,6 +61,7 @@ export interface ApiSignalEvidence {
    * unverified rather than light up as the person's words.
    */
   quoteSource: "own" | "enrichment" | null;
+  quoteReflectionId?: string | null;
   reason: string | null;
   createdAt: string;
 }
@@ -156,6 +157,5 @@ export async function restoreSignal(id: string): Promise<ApiSignal> {
   );
   return body.signal;
 }
-
 
 

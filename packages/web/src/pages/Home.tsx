@@ -1496,6 +1496,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   /** pattern id → what it rests on. Filled by the sky's background sweep;
       read by the orbit, which never fetches on tap. */
   const evidenceBySignalRef = useRef<Map<string, Evidence[]>>(new Map());
+  const skyReadSequence = useRef(0);
+  useEffect(() => () => { skyReadSequence.current += 1; }, []);
 
   /**
    * READING THE SKY — the one owner, so it can happen more than once.
@@ -1512,32 +1514,36 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * mount concern and must not re-run — while this body is re-created on every
    * render like any closure. The ref is the seam between the two.
    *
-   * There is no `dead` flag here on purpose. React 18 makes a setState on an
-   * unmounted component a no-op, and the alternative — threading a cancel
-   * token through both callers — buys nothing this does not already have.
+   * A sequence owns each sweep. New reads, source retractions and unmounts
+   * invalidate old responses so an earlier quote cannot return after deletion.
    */
   const readSkyRef = useRef<() => Promise<void>>(async () => {});
   readSkyRef.current = async () => {
+    const sequence = ++skyReadSequence.current;
+    const current = () => sequence === skyReadSequence.current && !offlineRef.current;
     const rows = await loadSignals();
-    if (offlineRef.current) return;
+    if (!current()) return;
     setSignals(rows);
     const index = new Map<string, Evidence[]>();
+    const bySignal = new Map<string, Evidence[]>();
     for (const p of rows) {
-      if (offlineRef.current) return;
+      if (!current()) return;
       if (p.evidenceCount === 0) continue;
       try {
         const full = await loadSignal(p.id);
+        if (!current()) return;
         for (const e of full.evidence) {
           const have = index.get(e.inspirationId);
           if (have) have.push(e);
           else index.set(e.inspirationId, [e]);
         }
-        evidenceBySignalRef.current.set(p.id, full.evidence);
+        bySignal.set(p.id, full.evidence);
       } catch {
         /* this signal draws no orbit; the statement still stands */
       }
     }
-    if (offlineRef.current) return;
+    if (!current()) return;
+    evidenceBySignalRef.current = bySignal;
     setCitations(index);
     /* AND NOW THE PEEK ROW CAN BE BUILT. The board's statement cites signals;
        those signals cite memories; the row beneath the poster is those
@@ -9736,6 +9742,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const full = e.preview ?? "";
     const q = (e.quote ?? "").trim();
     if (!q || e.quoteSource === null) return <>{full}</>;
+    if (e.quoteReflectionId) return <>
+      <span className="jar-label">{say("worldFromReflection")} · </span>
+      <mark className="jar-prov-lit">{q}</mark>
+    </>;
     const lit =
       e.quoteSource === "enrichment" ? "jar-prov-lit jar-prov-lit--page" : "jar-prov-lit";
     const said =
@@ -9771,10 +9781,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       return undefined;
     }
     let dead = false;
+    const reflectionId = prov?.rows.find((row) => row.inspirationId === provPick)?.quoteReflectionId;
     setProvFull(null);
     loadInspiration(provPick)
       .then((full) => {
-        if (!dead) setProvFull({ id: provPick, text: full.text });
+        if (!dead) setProvFull({ id: provPick, text: reflectionId
+          ? full.reflections.find((row) => row.id === reflectionId)?.answer ?? say("worldReflectionUnavailable")
+          : full.text });
       })
       .catch(() => {
         /* the left pane still holds the span that was read, which is the
@@ -9785,7 +9798,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     return () => {
       dead = true;
     };
-  }, [provPick]);
+  }, [provPick, prov?.rows, say]);
 
   const panelId = panel ? panel.id : null;
 
@@ -12135,6 +12148,23 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   }, []);
 
   const reflectionRemoved = useCallback((id: string, owner: string) => {
+    skyReadSequence.current += 1;
+    const withoutDeletedCopy = (row: Evidence): Evidence => row.inspirationId !== owner ? row : {
+      ...row, reason: null,
+      ...(row.quoteReflectionId === id || !row.quoteReflectionId
+        ? { quote: null, quoteSource: null, quoteReflectionId: null } : {}),
+    };
+    for (const [signalId, rows] of evidenceBySignalRef.current) evidenceBySignalRef.current.set(signalId, rows.map(withoutDeletedCopy));
+    setCitations((rows) => new Map([...rows].map(([key, evidence]) => [key, evidence.map(withoutDeletedCopy)])));
+    setProv((current) => current ? { ...current, rows: current.rows.map(withoutDeletedCopy) } : null);
+    setProvFull((current) => current?.id === owner ? null : current);
+    setProvenance((current) => {
+      if (!current.has(owner)) return current;
+      const next = new Map(current); next.set(owner, null); return next;
+    });
+    for (const item of ballsRef.current?.list ?? []) {
+      if ((item.sigId ?? item.id) === owner) item.quote = null;
+    }
     const cached = detailsRef.current.get(owner);
     if (cached) detailsRef.current.set(owner, {
       ...cached,
@@ -12145,6 +12175,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     setInspirations((cur) => cur?.map((item) => item.id === owner
       ? { ...item, reflectionCount: Math.max(0, item.reflectionCount - 1) } : item) ?? null);
     simApiRef.current?.reflectionChanged(owner, -1);
+    void readSkyRef.current().catch(() => undefined);
   }, []);
 
   /* The passages worth marking inside the text: the words a PATTERN carried
@@ -12156,7 +12187,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const out: Array<{ text: string; tier: "source" | "spark" }> = [];
     if (panelBall?.quote) out.push({ text: panelBall.quote, tier: "source" });
     return out;
-  }, [panelBall]);
+  }, [panelBall, citations]);
 
   /**
    * A LONG MEMORY OPENS AT THE PART THAT MATTERED.

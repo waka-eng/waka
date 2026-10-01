@@ -9,7 +9,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ReflectionFlow } from "../src/components/ReflectionFlow";
 import { profileStorageKey } from "../src/lib/profile-storage";
-import { createReflection, requestReflectionQuestion, fetchReflectionQuestionStatus } from "../src/lib/api";
+import { createReflection, deleteReflection, requestReflectionQuestion, fetchReflectionQuestionStatus, type ApiReflectionQuestionStatus } from "../src/lib/api";
 
 vi.mock("../src/lib/api", async (importOriginal) => ({
   ...await importOriginal<typeof import("../src/lib/api")>(),
@@ -53,6 +53,38 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 
 describe("reflection conversation", () => {
+  it("discards a pending follow-up when an earlier answer is removed", async () => {
+    let finish!: (status: ApiReflectionQuestionStatus) => void;
+    vi.mocked(requestReflectionQuestion).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    vi.mocked(deleteReflection).mockResolvedValue(undefined);
+    await act(async () => root.render(<ReflectionFlow inspirationId="inspiration-1" initialTurns={[
+      { id: "earlier", question: "First question", answer: "PRIVATE_SENTINEL earlier answer" },
+      { id: "latest", question: "Second question", answer: "A remaining thought" },
+    ]} locale="en-US" onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
+    await act(async () => button("ask another question →").click());
+    await act(async () => host.querySelector<HTMLElement>(".jar-reflection-turns summary")!.click());
+    await act(async () => host.querySelector<HTMLButtonElement>(".jar-reflection-turn button")!.click());
+    await act(async () => finish({ phase: "ready", question: "PRIVATE_SENTINEL stale follow-up" }));
+    expect(host.textContent).not.toContain("PRIVATE_SENTINEL");
+    expect(host.textContent).toContain("A remaining thought");
+    expect(onRemoved).toHaveBeenCalledWith("earlier");
+    expect(host.querySelector("textarea")).toBeNull();
+  });
+
+  it("keeps the person's unsaved draft while discarding a question based on deleted context", async () => {
+    const draftKey = profileStorageKey({ accountId: "a", profileId: "p" }, "reflectionDraft:inspiration-1");
+    vi.mocked(requestReflectionQuestion).mockResolvedValue({ phase: "ready", question: "PRIVATE_SENTINEL generated question" });
+    vi.mocked(deleteReflection).mockResolvedValue(undefined);
+    await act(async () => root.render(<ReflectionFlow inspirationId="inspiration-1" draftKey={draftKey} initialTurns={[
+      { id: "latest", question: "A question", answer: "An earlier saved answer" },
+    ]} locale="en-US" onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
+    await act(async () => button("ask another question →").click());
+    await writeAnswer("My unfinished words should stay.");
+    await act(async () => button("take it back").click());
+    expect(host.textContent).not.toContain("PRIVATE_SENTINEL");
+    expect(host.querySelector("textarea")!.value).toBe("My unfinished words should stay.");
+    expect(localStorage.getItem(draftKey!)).toContain("My unfinished words should stay.");
+  });
   it("keeps unfinished answers with their account and leaves unscoped drafts unclaimed", async () => {
     const keyA = profileStorageKey({ accountId: "account-a", profileId: "profile-a" }, "reflectionDraft:inspiration-1");
     const keyB = profileStorageKey({ accountId: "account-b", profileId: "profile-b" }, "reflectionDraft:inspiration-1");

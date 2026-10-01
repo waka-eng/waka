@@ -56,6 +56,7 @@ async function derive(
   return t.db.transaction(async (tx) => {
     await acquireSignalDerivationLock(tx as never, profileId);
     const result = await applyCandidates(tx as never, {
+      beforeWrites: async () => {}, // source revision behavior has its own real-pipeline suite
       profileId,
       evidenceOwnerProfileId: profileId,
       inspirationId: insp.id as string,

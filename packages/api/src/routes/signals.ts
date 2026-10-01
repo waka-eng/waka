@@ -21,7 +21,7 @@
  */
 
 import { recordConsultation } from "../lib/consultations.js";
-import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 
 import { buildLikePattern } from "./inspirations-recall.js";
 import { Hono, type MiddlewareHandler } from "hono";
@@ -29,9 +29,11 @@ import { z } from "zod";
 
 import {
   experiences,
+  attachments,
   feedback,
   inspirations,
   profiles,
+  reflections,
   signalEvidence,
   signalShares,
   signalContradictions,
@@ -40,6 +42,7 @@ import {
   type SignalStatus,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
+import { quoteForEvidence } from "../lib/salience.js";
 import {
   profileAccessError,
   requireAuth,
@@ -163,6 +166,8 @@ export interface SignalEvidenceItem {
       quote, or when the quote predates span verification — a consumer must
       treat a null-source quote as unverified. */
   quoteSource: "own" | "enrichment" | null;
+  /** Present only when the quoted words come from this saved reflection. */
+  quoteReflectionId?: string | null;
   createdAt: string;
 }
 
@@ -441,6 +446,8 @@ export async function getProfileSignal(
       reason: signalEvidence.reason,
       quote: signalEvidence.quote,
       quoteSource: signalEvidence.quoteSource,
+      quoteReflectionId: signalEvidence.quoteReflectionId,
+      material: signalEvidence.material,
       /* dated by the CAPTURE that witnesses it (dev, PR #266): evidence is
          as old as the memory, not as the pass that noticed it */
       createdAt: inspirations.createdAt,
@@ -451,16 +458,33 @@ export async function getProfileSignal(
     .where(eq(signalEvidence.signalId, input.signalId))
     .orderBy(desc(inspirations.createdAt));
 
+  const reflectionIds = evidenceRows.flatMap((row) => row.quoteReflectionId ? [row.quoteReflectionId] : []);
+  const quotedAnswers = reflectionIds.length ? await db.select({ id: reflections.id, answer: reflections.answer })
+    .from(reflections).where(and(eq(reflections.profileId, input.profileId), inArray(reflections.id, reflectionIds),
+      eq(reflections.skipped, false), isNotNull(reflections.answer))) : [];
+  const answersById = new Map(quotedAnswers.map((row) => [row.id, row.answer ?? ""]));
+  const enrichedIds = evidenceRows.filter((row) => row.quoteSource === "enrichment").map((row) => row.inspirationId);
+  const enriched = enrichedIds.length ? await db.select({ inspirationId: attachments.inspirationId, text: attachments.enrichmentText })
+    .from(attachments).where(and(eq(attachments.profileId, input.profileId), inArray(attachments.inspirationId, enrichedIds),
+      eq(attachments.enrichmentStatus, "ready"), isNotNull(attachments.enrichmentText))) : [];
+
   return {
     ...summary,
-    evidence: evidenceRows.map((evidence) => ({
-      inspirationId: evidence.inspirationId,
-      preview: truncatePreview(evidence.text),
-      reason: evidence.reason,
-      quote: evidence.quote,
-      quoteSource: evidence.quoteSource,
-      createdAt: evidence.createdAt.toISOString(),
-    })),
+    evidence: evidenceRows.map((evidence) => {
+      const sources = evidence.quoteSource === "enrichment"
+        ? enriched.filter((row) => row.inspirationId === evidence.inspirationId).map((row) => row.text ?? "")
+        : evidence.quoteReflectionId ? [answersById.get(evidence.quoteReflectionId) ?? ""] : [evidence.text];
+      const quote = sources.map((text) => quoteForEvidence(evidence.quote, { text, enrichment: null }, 500)).find(Boolean) ?? null;
+      return {
+        inspirationId: evidence.inspirationId,
+        preview: truncatePreview(evidence.text),
+        reason: evidence.material ? evidence.reason : null,
+        quote,
+        quoteSource: quote ? evidence.quoteSource : null,
+        quoteReflectionId: quote ? evidence.quoteReflectionId : null,
+        createdAt: evidence.createdAt.toISOString(),
+      };
+    }),
   };
 }
 

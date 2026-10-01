@@ -61,6 +61,7 @@ async function derive(
   return t.db.transaction(async (tx) => {
     await acquireSignalDerivationLock(tx as never, profileId);
     const result = await applyCandidates(tx as never, {
+      beforeWrites: async () => {}, // synthetic candidates; this suite tests locking, not source reads
       profileId,
       evidenceOwnerProfileId: profileId,
       inspirationId,

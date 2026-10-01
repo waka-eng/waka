@@ -15,9 +15,9 @@
  * the band between the two bars, distance alone genuinely cannot tell one
  * pattern reworded from two patterns sharing a vocabulary, so the single
  * nearest candidate gets one bounded judge call. It can only move a decision
- * within the band, it is never asked above or below it, and any failure of it
- * falls through to minting. Nothing about which signals exist rests on the
- * model being available.
+ * within the band and is never asked above or below it. A failure propagates
+ * for retry rather than inventing an independent pattern. All judgments are
+ * prepared before source locks and evidence writes.
  *
  * The lock rule is enforced downstream of the match: a signal whose `lockedAt`
  * is set never has its statement rewritten here, no matter how the candidate
@@ -31,7 +31,7 @@
  * (goals/the-legible-loop.md Phase 3).
  */
 
-import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 
 import {
   inspirations,
@@ -61,6 +61,7 @@ import { recordContradiction } from "./contested-pairs.js";
 import { writeSignalEmbedding } from "./signal-embeddings.js";
 import { refreshSignalLifecycle } from "./signal-lifecycle.js";
 import { writeSignalStatementChain } from "./statement-chains.js";
+import type { InspirationMaterialIdentity } from "./inspiration-material.js";
 
 type WakaDb = ReturnType<typeof getDb>;
 type WakaTx = Parameters<Parameters<WakaDb["transaction"]>[0]>[0];
@@ -93,6 +94,8 @@ export interface ResolvedCandidate {
   quote: string | null;
   /** Whose words the verified quote is; null when quote is null. */
   quoteSource: "own" | "enrichment" | null;
+  quoteReflectionId?: string | null;
+  quoteSourceHash?: string | null;
   embedding: number[];
   /**
    * Earlier captures of the same profile that co-witness this pattern —
@@ -102,7 +105,7 @@ export interface ResolvedCandidate {
    * whatever signal this candidate lands on, dated by their own capture
    * dates via the lifecycle read.
    */
-  relatedEvidence: Array<{ inspirationId: string; quote: string }>;
+  relatedEvidence: Array<{ inspirationId: string; quote: string; material?: InspirationMaterialIdentity; quoteSourceHash?: string }>;
 }
 
 interface ApplyCandidatesInput {
@@ -124,6 +127,35 @@ interface ApplyCandidatesInput {
   provider: ModelProvider;
   preferredLocale: ReturnType<typeof normalizeSupportedLocale>;
   now: Date;
+  material?: InspirationMaterialIdentity;
+  /** Complete source/permission validation after model calls, before writes. */
+  beforeWrites: () => Promise<void>;
+}
+
+/** Plan every model decision before touching evidence. Virtual targets mirror
+ * same-batch mint/restatement, so the write pass needs no network under source locks. */
+async function prepareJudgements(input: ApplyCandidatesInput, targets: MatchTarget[], anchors: SuppressionAnchor[]) {
+  const projected = targets.map((row) => ({ ...row }));
+  const judgements = new Map<number, { statement: string; relation: "same" | "independent" | "opposed" }>();
+  for (const [index, candidate] of input.candidates.entries()) {
+    if (findSuppressionAnchor(candidate.embedding, anchors)) continue;
+    const nearest = findBestMatch(candidate.embedding, projected);
+    let decision = classifyMatch(nearest?.similarity ?? null);
+    if (decision === "judge" && nearest) {
+      const judged = await input.provider.judgeSignalMatch({ preferredLocale: input.preferredLocale,
+        candidateStatement: candidate.statement, existingStatement: nearest.target.statement });
+      judgements.set(index, { statement: nearest.target.statement, relation: judged.relation });
+      decision = judged.relation === "same" ? "attach" : "mint";
+    }
+    if (decision === "attach" && nearest) {
+      if (!nearest.target.locked && nearest.target.status === "emerging") {
+        nearest.target.statement = candidate.statement;
+        nearest.target.embedding = candidate.embedding;
+      }
+    } else projected.push({ id: `candidate:${index}`, statement: candidate.statement,
+      status: "emerging", locked: false, embedding: candidate.embedding });
+  }
+  return judgements;
 }
 
 export async function applyCandidates(
@@ -132,12 +164,24 @@ export async function applyCandidates(
 ): Promise<Pick<SignalDerivationResult, "matchedSignalIds" | "mintedSignalIds" | "promotedSignalIds">> {
   const targets = await loadMatchTargets(tx, input.profileId, input.embeddingModel, input.inputPolicy);
   const anchors = await loadSuppressionAnchors(tx, input.profileId, input.embeddingModel, input.inputPolicy);
+  const prior = JSON.stringify({ targets, anchors });
+  const judgements = await prepareJudgements(input, targets, anchors);
+  await input.beforeWrites();
+  const ids = [...new Set([...targets, ...anchors].map((row) => row.id))].sort();
+  if (ids.length) await tx.select({ id: signals.id }).from(signals)
+    .where(and(eq(signals.profileId, input.profileId), inArray(signals.id, ids)))
+    .orderBy(asc(signals.id)).for("share");
+  const currentTargets = await loadMatchTargets(tx, input.profileId, input.embeddingModel, input.inputPolicy);
+  const currentAnchors = await loadSuppressionAnchors(tx, input.profileId, input.embeddingModel, input.inputPolicy);
+  if (JSON.stringify({ targets: currentTargets, anchors: currentAnchors }) !== prior) {
+    throw new Error("Signal inputs changed during judgement; retry current statements");
+  }
 
   const matchedSignalIds: string[] = [];
   const mintedSignalIds: string[] = [];
   const touched = new Set<string>();
 
-  for (const candidate of input.candidates) {
+  for (const [candidateIndex, candidate] of input.candidates.entries()) {
     // The ground refuses first, before the match is even looked at. A
     // dismissed signal is a pattern its owner threw out; a candidate this
     // close to one IS that pattern, and letting the match see it would
@@ -166,22 +210,12 @@ export async function applyCandidates(
     let opposesSignalId: string | null = null;
 
     if (decision === "judge" && nearest) {
-      // One bounded model call, held under the per-profile derivation lock.
-      // Serializing a ~second of judgement is the price of the lock's whole
-      // point: two concurrent captures must not each mint the same pattern.
-      //
-      // A judge failure PROPAGATES and fails the job attempt (it used to
-      // fall through to minting as `independent` — which called the
-      // duplicate "the recoverable mistake" while nothing ever revisited
-      // it: a bad provider hour minted siblings that split their evidence
-      // forever). The queue retries the attempt; evidence uniqueness and
-      // the dedupe band make the rerun safe. A phantom opposition is still
-      // impossible: no verdict is invented on any path.
-      const judged = await input.provider.judgeSignalMatch({
-        preferredLocale: input.preferredLocale,
-        candidateStatement: candidate.statement,
-        existingStatement: nearest.target.statement,
-      });
+      // Reuse the pre-write verdict only for the exact planned statement.
+      // No provider call runs while source rows are locked. Provider failures
+      // already aborted preparation; they never become invented opposition
+      // or an independent pattern here.
+      const judged = judgements.get(candidateIndex);
+      if (!judged || judged.statement !== nearest.target.statement) throw new Error("Signal judgement plan changed");
       decision = judged.relation === "same" ? "attach" : "mint";
       if (judged.relation === "opposed") opposesSignalId = nearest.target.id;
     }
@@ -197,6 +231,9 @@ export async function applyCandidates(
         reason: candidate.reason,
         quote: candidate.quote,
         quoteSource: candidate.quoteSource,
+        quoteReflectionId: candidate.quoteReflectionId ?? null,
+        quoteSourceHash: candidate.quoteSourceHash ?? null,
+        material: input.material ?? null,
       });
       await attachRelatedEvidence(
         tx,
@@ -295,6 +332,9 @@ export async function applyCandidates(
       reason: candidate.reason,
       quote: candidate.quote,
       quoteSource: candidate.quoteSource,
+      quoteReflectionId: candidate.quoteReflectionId ?? null,
+      quoteSourceHash: candidate.quoteSourceHash ?? null,
+      material: input.material ?? null,
     });
     await attachRelatedEvidence(
       tx,
@@ -357,7 +397,7 @@ async function loadMatchTargets(
         eq(signalEmbeddings.model, embeddingModel),
       ),
     )
-    .orderBy(desc(signals.lastEvidenceAt))
+    .orderBy(desc(signals.lastEvidenceAt), asc(signals.id))
     .limit(MATCH_CANDIDATE_SCAN_LIMIT);
 
   return rows.map((row) => ({
@@ -419,7 +459,7 @@ async function loadSuppressionAnchors(
         eq(signalEmbeddings.model, embeddingModel),
       ),
     )
-    .orderBy(desc(signals.dismissedAt))
+    .orderBy(desc(signals.dismissedAt), asc(signals.id))
     .limit(MATCH_CANDIDATE_SCAN_LIMIT);
 }
 
@@ -449,12 +489,14 @@ async function attachEvidence(
     reason: string | null;
     quote: string | null;
     quoteSource: "own" | "enrichment" | null;
+    quoteReflectionId?: string | null;
+    quoteSourceHash?: string | null;
+    material?: InspirationMaterialIdentity | null;
   },
 ): Promise<void> {
   // Re-derivation after an edit revisits captures this signal already cites.
-  // The unique index is what keeps a re-run from inflating support; taking
-  // the conflict as a no-op keeps the first reason and quote, which were
-  // written when the capture was closer to its original form.
+  // The unique index keeps a re-run from inflating support. Replace the old
+  // quote and provenance with the material just verified, not the first copy.
   await tx
     .insert(signalEvidence)
     .values({
@@ -465,8 +507,16 @@ async function attachEvidence(
       reason: input.reason,
       quote: input.quote,
       quoteSource: input.quoteSource,
+      quoteReflectionId: input.quoteReflectionId ?? null,
+      quoteSourceHash: input.quoteSourceHash ?? null,
+      material: input.material ?? null,
     })
-    .onConflictDoNothing();
+    .onConflictDoUpdate({
+      target: [signalEvidence.signalId, signalEvidence.inspirationId],
+      set: { reason: input.reason, quote: input.quote, quoteSource: input.quoteSource,
+        quoteReflectionId: input.quoteReflectionId ?? null, quoteSourceHash: input.quoteSourceHash ?? null,
+        material: input.material ?? null },
+    });
 }
 
 /**
@@ -474,10 +524,11 @@ async function attachEvidence(
  * upstream (offered ids only, verified quotes), and re-checked here against
  * the database inside the transaction: a cited capture deleted between
  * retrieval and this write is silently skipped rather than aborting the
- * whole pass on its foreign key. Reason stays null — the quote IS the
+ * whole pass on its foreign key. Production callers also validate the source
+ * snapshot before this stage. Reason stays null — the quote IS the
  * grounding, and a reason describing the current capture would be attributed
- * to the wrong one. The unique (signal, inspiration) index makes re-runs and
- * already-evidencing captures a no-op, as everywhere else.
+ * to the wrong one. The unique (signal, inspiration) index updates the current
+ * quote without manufacturing another witness.
  */
 async function attachRelatedEvidence(
   tx: WakaTx,
@@ -510,6 +561,8 @@ async function attachRelatedEvidence(
       ownerProfileId: input.ownerProfileId,
       signalId: input.signalId,
       inspirationId: row.inspirationId,
+      material: row.material ?? null,
+      quoteSourceHash: row.quoteSourceHash ?? null,
       reason: null,
       quote: row.quote,
       /* `resolveRelatedEvidence` verifies against the capture's own text with

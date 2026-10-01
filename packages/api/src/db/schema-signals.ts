@@ -19,11 +19,13 @@
  * unsupported, rather than being retired.
  */
 
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   doublePrecision,
+  check,
   foreignKey,
   index,
+  jsonb,
   integer,
   pgEnum,
   pgTable,
@@ -38,6 +40,7 @@ import {
 import { groups } from "./schema-groups";
 import { inspirations } from "./schema-inspirations";
 import { profiles } from "./schema-profiles";
+import type { InspirationMaterialIdentity } from "../lib/inspiration-material";
 
 /**
  * emerging  — minted, below the evidence bar; not yet eligible for the top of mind.
@@ -178,6 +181,13 @@ export const signalEvidence = pgTable(
      * Null when there is no quote — or when the quote predates verification.
      */
     quoteSource: evidenceQuoteSourceEnum("quote_source"),
+    /** Exact answer and revision quoted; null for capture text or legacy rows. */
+    quoteReflectionId: uuid("quote_reflection_id"),
+    quoteSourceHash: text("quote_source_hash"),
+    /** IDs and hashes only, never retained copies of deleted source text. */
+    material: jsonb("material").$type<InspirationMaterialIdentity>(),
+    // The three-column reflection FK lives in migration 0035: ON DELETE
+    // SET NULL (quote_reflection_id) must not clear the owning parent columns.
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -189,6 +199,9 @@ export const signalEvidence = pgTable(
       table.inspirationId,
     ),
     signalIdx: index("signal_evidence_signal_idx").on(table.signalId),
+    privateQuoteCheck: check("signal_evidence_private_quote_check", sql`${table.quoteReflectionId} IS NULL OR
+      (${table.profileId} = ${table.ownerProfileId} AND ${table.quote} IS NOT NULL
+       AND (${table.quoteSource} = 'own') IS TRUE AND ${table.quoteSourceHash} IS NOT NULL)`),
     inspirationIdx: index("signal_evidence_inspiration_idx").on(table.inspirationId),
     // Both parents must belong to the same profile as the evidence row.
     signalFk: foreignKey({
