@@ -16,6 +16,7 @@ const signalId = "00000000-0000-4000-8000-000000000101";
 function fakeProvider(): ModelProvider {
   return {
     name: "test-provider",
+    assessSignalSupport: vi.fn(async () => ({ assessments: [] })),
     askReflectionQuestion: vi.fn(async () => ({ question: "What did that change about your next step?" })),
     judgeSignalMatch: vi.fn(async () => ({ relation: "independent" as const })),
     distillPrinciples: vi.fn(async () => ({ candidates: [] })),

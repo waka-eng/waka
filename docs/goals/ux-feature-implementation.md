@@ -28,7 +28,7 @@ experiments or revive superseded room goals.
 | A | F5/F6/F10: input, overlay scrolling/focus, readable active controls | Reproduce slash/wheel defects; verify typing, caret, Escape/Tab, wheel/touch and contrast in actual affected flows; web checks | Implemented; 5 original failures now pass, 325 web tests pass. Desktop fixture verified. Mobile touch/200% zoom and deployed verification remain open. |
 | B | F3/F4: edited principle preservation, truthful support, account-scoped drafts/preferences and cancellation | Isolated SQL preservation tests and two-account browser/state tests; API/web checks | B1: 6 SQL / 653 unit tests pass after 3 reproduced failures. B2: 4 failures reproduced, then two-account draft and stale-response checks pass; full web suite 331/331. Deployed/account-switch browser verification remains open. |
 | C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | C1/C2/C3 code locally verified (51 SQL cases; full web 349/349). Read-only inventory completed across 5 rooms in the DB referenced by the local env files; hosted-stage mapping is not verified. Historical repair, deployment coordination and deployed verification remain pending. |
-| D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | D1 source identity/quote retention and stale derivation checks locally verified (16 source SQL cases; web 366/366). Explicit semantic support reconciliation, full downstream fencing, durable handoff and historical repair remain open. |
+| D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | D1 source identity/quote retention and stale derivation checks locally verified (16 source SQL cases; web 366/366). D2a read-only explicit support assessment verified (16 unit / 9 SQL cases); automatic withdrawal/restoration, full downstream fencing, durable handoff and historical repair remain open. |
 | E1 | F7/F8: authoritative poster and truthful manual refresh | Queue acceptance, changed/unchanged completion, failure and fresh displayed version verified | Implemented with job receipts, resumable profile-scoped polling, held-job manual upgrade and authoritative headline. Local checks pass (8 receipt SQL tests, 10 hook tests, full web 362/362); deployed verification remains open. |
 | E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | Pending |
 | F | F11/F12: visible search and durable navigation | Results beyond initial archive, failure/no-match separation, stable IDs, deep links, Back/Forward and rename verified | Pending |
@@ -304,3 +304,34 @@ Keep code, deployment, historical repair, and user validation evidence distinct.
   and statement changes, and durably schedule every source mutation. Full
   retention across historical derivatives and cross-device personal caches
   is not established by D1. D/E2 and the complete release gates stay open.
+- 2026-10-01, D2a: added explicit per-claim assessment on both provider roads,
+  separate from bounded extraction. The shadow reviewer supplies only the
+  current source's allowed material, not related inspirations or old generated
+  explanations. It returns IDs/hashes and supported/unsupported/unresolved
+  verdicts. Missing or duplicate verdicts, unknown sources, provider failure,
+  incomplete attachments, oversized input and exhausted call budgets cannot
+  become negative evidence. Source/statement/membership changes invalidate
+  the report. Legacy unverified group claims never enter its model context.
+- D2a is intentionally a read-only comparison stage required by the rollout
+  plan, not a live support writer. `pnpm review:signal-support --help` describes
+  the explicit owner/inspiration/group-mind IDs and required 0–10 provider-call
+  budget. It loads no dotenv files, opens a database-enforced read-only
+  connection and has no mutation flag. Zero budget makes no provider calls;
+  agree the cost bound before running a positive budget. No historical
+  assessment or live provider call was run during this implementation.
+- D2a verification: 16/16 deterministic provider/review unit cases and 9/9
+  real SQL cases pass. The latter check no mutation of locked words/evidence,
+  re-assessment of a mistaken negative proposal, deleted-source exclusion,
+  source/statement/membership races, group privacy and database-enforced
+  read-only operation. The related source/room regression run passed 40/40
+  before the additional read-only case (41 distinct SQL cases in total).
+  Full API unit suite 671 passed / 3 paid-live benches skipped. API and CLI
+  typechecks, CLI help smoke check and diff check pass. The orphan gate first
+  found the unregistered CLI; the command now has a real workspace tool entry
+  point, without changing the gate or adding an unused-code allowance.
+- Next D work remains semantic mutation, not more shadow reporting: represent
+  reversible support withdrawal, use reviewed explicit outcomes to reconcile
+  standing atomically, and verify restoration of a mistaken withdrawal while
+  protecting edited words. Then complete durable source-to-reading handoff
+  and all downstream revision fences. No public state or threshold was added
+  or changed; this checkpoint does not meet D's full acceptance gate.

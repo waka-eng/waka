@@ -234,6 +234,17 @@ agent's relayed excerpt, an agent's own observation.
   Deleted reflection content is not retained in generated follow-up job
   payloads. Human-authored signal/entry/principle wording is not erased by
   this source-copy cleanup.
+- **Support review is distinct from extraction.** A read-only review asks
+  explicitly about each existing signal/inspiration link against that
+  inspiration's complete current allowed material. `supported`, `unsupported`
+  and `unresolved` are internal assessment outcomes, not public product states.
+  Missing/duplicate/invalid verdicts, unavailable providers, incomplete source
+  material and budget limits cannot authorize withdrawal. Related inspirations
+  cannot supply evidence for the source being checked. Reports retain hashes,
+  IDs and verdicts, not answer copies or generated explanations. Stale reports
+  resolve nothing and no report alone authorizes a write. Automatic support
+  mutation is not yet enabled; it additionally requires commit-time validation,
+  reversible support history and atomic downstream reconciliation.
 
 ## Experience (layer-1 grouping)
 

@@ -9,6 +9,7 @@
 
 import {
   askReflectionQuestion,
+  assessSignalSupport,
   distillPrinciples,
   extractSignalCandidates,
   judgePrincipleRelation,
@@ -22,6 +23,7 @@ export function createGeminiModelProvider(): ModelProvider {
   return {
     name: "gemini",
     askReflectionQuestion,
+    assessSignalSupport,
     extractSignalCandidates,
     judgeSignalMatch,
     synthesizeTopOfMind,

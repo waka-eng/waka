@@ -24,6 +24,7 @@
     "db:studio": "drizzle-kit studio",
     "db:check": "drizzle-kit check",
     "report:group-input-impact": "tsx tools/ops/report-group-input-impact.ts",
+    "review:signal-support": "tsx tools/ops/review-signal-support.ts",
     "demo:seed": "tsx tools/seed-demo.ts",
     "demo:world": "tsx tools/demo/seed.ts",
     "e2e:nothing-invisible": "tsx tools/e2e/nothing-invisible-takes-a-press.ts",

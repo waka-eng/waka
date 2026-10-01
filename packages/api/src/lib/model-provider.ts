@@ -93,6 +93,22 @@ export interface SignalCandidateExtractionResult {
   statements: SignalCandidate[];
 }
 
+/** A separate, exhaustive question about existing links, not new discovery.
+ * Only current material from one inspiration is supplied; related memories
+ * cannot lend this inspiration support it does not have. */
+export interface SignalSupportAssessmentInput {
+  sources: Array<{ id: string; kind: "inspiration" | "reflection" | "attachment"; text: string }>;
+  claims: Array<{ signalId: string; statement: string }>;
+}
+
+export interface SignalSupportAssessmentResult {
+  assessments: Array<{
+    signalId: string;
+    verdict: "supported" | "unsupported" | "unresolved";
+    sourceIds: string[];
+  }>;
+}
+
 // ---------------------------------------------------------------------------
 // Layer 3 — whole-artifact synthesis
 // ---------------------------------------------------------------------------
@@ -380,6 +396,7 @@ export interface ModelProvider {
   extractSignalCandidates(
     input: SignalCandidateExtractionInput,
   ): Promise<SignalCandidateExtractionResult>;
+  assessSignalSupport(input: SignalSupportAssessmentInput): Promise<SignalSupportAssessmentResult>;
   judgeSignalMatch(input: SignalMatchJudgementInput): Promise<SignalMatchJudgement>;
   distillPrinciples(input: DistillPrinciplesInput): Promise<DistillPrinciplesResult>;
   judgePrincipleRelation(input: PrincipleRelationInput): Promise<PrincipleRelation>;

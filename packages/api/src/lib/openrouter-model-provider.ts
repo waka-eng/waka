@@ -26,6 +26,7 @@ import {
   buildPrincipleRelationRequest,
   buildReflectionQuestionRequest,
   buildSignalExtractionRequest,
+  buildSignalSupportRequest,
   buildSignalMatchJudgementRequest,
   buildTopOfMindSynthesisRequest,
   parseDeclarationRoute,
@@ -33,6 +34,7 @@ import {
   parsePrincipleRelation,
   parseReflectionQuestion,
   parseSignalCandidates,
+  parseSignalSupport,
   parseSignalMatchJudgement,
   parseTopOfMindSynthesis,
 } from "../queue/gemini.js";
@@ -181,6 +183,16 @@ export function createOpenRouterModelProvider(): ModelProvider {
       if (payload === MODEL_DECLINED) return { relation: "independent" };
       if (payload === null) throw new ModelDidNotAnswerError("signal match judgement");
       return parseSignalMatchJudgement(payload);
+    },
+    async assessSignalSupport(input) {
+      const payload = await ask(
+        () => buildSignalSupportRequest(input),
+        "signal support assessment",
+        "WAKA_MODEL_SUPPORT",
+        "signal_support",
+      );
+      if (payload === null || payload === MODEL_DECLINED) throw new ModelDidNotAnswerError("signal support assessment");
+      return parseSignalSupport(payload);
     },
     async synthesizeTopOfMind(input) {
       const payload = await ask(
