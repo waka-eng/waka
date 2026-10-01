@@ -142,6 +142,7 @@ import {
   profiles,
   inspirations,
   reflections,
+  generationRevisions,
 } from "../db/index.js";
 import { getDb } from "./db.js";
 import { getDefaultModelProvider } from "./model-provider.js";
@@ -847,14 +848,35 @@ export async function runBackgroundJobWorker(
 
 /** Settlement fencing alone is too late: a reclaimed worker must not write
  * an artifact first and only discover its lost claim when marking success. */
-async function assertBackgroundJobOwnership(tx: Pick<ReturnType<typeof getDb>, "select">, job: BackgroundJob) {
+async function assertBackgroundJobOwnership(tx: Pick<ReturnType<typeof getDb>, "select">, job: BackgroundJob, noWait = false) {
   const lockedAt = coerceNullableDate(job.lockedAt);
   if (!lockedAt) throw new Error("Background job ownership changed before commit");
   const [owned] = await tx.select({ id: backgroundJobs.id }).from(backgroundJobs)
     .where(and(eq(backgroundJobs.id, job.id), eq(backgroundJobs.profileId, job.profileId),
       eq(backgroundJobs.type, job.type), eq(backgroundJobs.status, "running"),
-      eq(backgroundJobs.lockedAt, lockedAt), eq(backgroundJobs.attempts, job.attempts))).for("update");
+      eq(backgroundJobs.lockedAt, lockedAt), eq(backgroundJobs.attempts, job.attempts))).for("update", noWait ? { noWait: true } : {});
   if (!owned) throw new Error("Background job ownership changed before commit");
+}
+
+/** Only the context the question actually consumes. Unrelated signal/reading
+ * work must not spend another model call by invalidating a good follow-up. */
+async function loadReflectionQuestionContext(db: Pick<ReturnType<typeof getDb>, "select">, profileId: string, inspirationId: string) {
+  const [parent, profile, recent] = await Promise.all([
+    db.select({ text: inspirations.text }).from(inspirations)
+      .where(and(eq(inspirations.id, inspirationId), eq(inspirations.profileId, profileId))).limit(1),
+    db.select({ preferredLocale: profiles.preferredLocale }).from(profiles)
+      .where(eq(profiles.id, profileId)).limit(1),
+    db.select({ id: reflections.id, question: reflections.question, answer: reflections.answer })
+      .from(reflections).where(and(eq(reflections.inspirationId, inspirationId),
+        eq(reflections.profileId, profileId), eq(reflections.skipped, false), isNotNull(reflections.answer)))
+      .orderBy(desc(reflections.createdAt), desc(reflections.id)).limit(6),
+  ]);
+  if (!parent[0] || !profile[0]) return null;
+  return { latestId: recent[0]?.id, input: {
+    preferredLocale: isSupportedLocale(profile[0].preferredLocale) ? profile[0].preferredLocale : "en-US" as const,
+    inspirationText: parent[0].text,
+    reflections: [...recent].reverse().map((row) => ({ question: row.question, answer: row.answer ?? "" })),
+  } };
 }
 
 export async function processBackgroundJob(job: BackgroundJob): Promise<BackgroundJobResult | void> {
@@ -863,28 +885,25 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
       const payload = parseGenerateReflectionQuestionPayload(job.payload);
       if (!payload) return dropPoisonPayload(job);
       const db = getDb();
-      const [parent, profile, recent] = await Promise.all([
-        db.select({ text: inspirations.text }).from(inspirations)
-          .where(and(eq(inspirations.id, payload.inspirationId), eq(inspirations.profileId, job.profileId))).limit(1),
-        db.select({ preferredLocale: profiles.preferredLocale }).from(profiles)
-          .where(eq(profiles.id, job.profileId)).limit(1),
-        db.select({ id: reflections.id, question: reflections.question, answer: reflections.answer })
-          .from(reflections).where(and(eq(reflections.inspirationId, payload.inspirationId),
-            eq(reflections.profileId, job.profileId), eq(reflections.skipped, false), isNotNull(reflections.answer)))
-          .orderBy(desc(reflections.createdAt), desc(reflections.id)).limit(6),
-      ]);
-      if (!parent[0] || recent[0]?.id !== payload.afterReflectionId) return dropPoisonPayload(job);
+      const context = await loadReflectionQuestionContext(db, job.profileId, payload.inspirationId);
+      if (!context || context.latestId !== payload.afterReflectionId) return dropPoisonPayload(job);
       const provider = await getDefaultModelProvider();
-      const result = await provider.askReflectionQuestion({
-        preferredLocale: isSupportedLocale(profile[0]?.preferredLocale) ? profile[0].preferredLocale : "en-US",
-        inspirationText: parent[0].text,
-        reflections: recent.reverse().map((row) => ({ question: row.question, answer: row.answer ?? "" })),
+      const result = await provider.askReflectionQuestion(context.input);
+      await db.transaction(async (tx) => {
+        // Source/answer/locale mutation triggers take this same row before
+        // committing. Re-read after the lock under READ COMMITTED, so the
+        // question is tied to one current context without locking across AI.
+        const [owner] = await tx.select({ id: generationRevisions.profileId }).from(generationRevisions)
+          .where(eq(generationRevisions.profileId, job.profileId)).for("update");
+        if (!owner || JSON.stringify(await loadReflectionQuestionContext(tx, job.profileId, payload.inspirationId)) !== JSON.stringify(context)) {
+          throw new Error("Reflection question inputs changed before commit");
+        }
+        // Source edits can already hold the job row while redacting its old
+        // payload. Do not wait back on that human transaction and deadlock it.
+        await assertBackgroundJobOwnership(tx, job, true);
+        await tx.update(backgroundJobs).set({ payload: { ...payload, question: result.question } })
+          .where(and(eq(backgroundJobs.id, job.id), eq(backgroundJobs.profileId, job.profileId)));
       });
-      const [updated] = await db.update(backgroundJobs)
-        .set({ payload: { ...payload, question: result.question } })
-        .where(and(eq(backgroundJobs.id, job.id), eq(backgroundJobs.profileId, job.profileId)))
-        .returning({ id: backgroundJobs.id });
-      if (!updated) throw new Error("Reflection question job could not keep its answer");
       return;
     }
     case "refresh_principles": {

@@ -1,6 +1,6 @@
 # Goal: implement the experience review
 
-Status: in flight — A/B, C input/output/cache, D1–D3c support/source handoffs, commit fences and personal reading recovery, plus E1 manual refresh locally checked; pending/statement support, legacy context, E2 and later delivery slices remain open. Deployment-target verification, historical repair and full release verification remain open.
+Status: in flight — A/B, C input/output/cache, D1–D3c support/source handoffs and reading recovery, D3d1 follow-up question fences, plus E1 manual refresh locally checked; pending/statement support, remaining lower-layer fences, legacy context, E2 and later slices remain open. Deployment-target verification, historical repair and full release verification remain open.
 Created: 2026-10-01, on the owner's instruction to implement the full plan.
 Branch: `codex/ux-feature-implementation`.
 Baseline: `33e65a7` on `dev`.
@@ -534,3 +534,28 @@ Keep code, deployment, historical repair, and user validation evidence distinct.
   source-to-artifact receipts, ambiguous-save reconciliation and the full visible
   journey. Entry mutation ordering/failure receipts and draft recovery also need
   work; snapshot guards do not claim to solve them. Full A–J/L1–L3 gates remain.
+- 2026-10-01, D3d1 baseline: 3/7 reflection-question cases failed. A reclaimed
+  worker overwrote its replacement's question, and locale/new-answer changes
+  during the provider call still persisted stale questions. Source edit, answer
+  edit and parent deletion already removed the job via redaction; those passing
+  cases were retained rather than counted as new fixes.
+- Question writes now reload the exact consumed context while holding the
+  profile generation-revision row, then verify and lock the worker claim before
+  storing the answer in the same transaction. Context comparison does not treat
+  unrelated reading completion as a reason to buy another question call. Claim
+  locking is non-waiting here: source redaction may hold that job row before its
+  mutation reaches the revision trigger, so waiting back on it would deadlock
+  the human write. The question retries instead. No new public state or table.
+- D3d1 verification: 9/9 question SQL cases pass, including a real second-
+  connection row lock (55P03 on the question writer; human source edit commits)
+  and unchanged context despite an unrelated reading revision. With source
+  material, durable save, reading-lease and queue regressions: 54/54 SQL cases
+  across five suites. API typecheck and 671 unit tests pass / 3 paid-live benches
+  skipped. Tests used only explicit local `waka_agent_test` disposable schemas
+  and injected providers. No live model calls, hosted writes, push or deploy.
+- D3d remains incomplete: embedding, derivation, enrichment and gardening writes
+  must also reject reclaimed/stale work. In particular, statement re-embedding
+  still writes after a provider call without checking current wording, and its
+  failure path can delete a newer vector. These are the next lower-layer cases,
+  not resolved by the question or reading guards. D/E2 and later release gates
+  retain their full scope.

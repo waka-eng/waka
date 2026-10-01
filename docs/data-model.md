@@ -186,6 +186,13 @@ agent's relayed excerpt, an agent's own observation.
   input to personal extraction. Guided follow-up questions use saved answers
   as context. Answers remain personal even when their parent inspiration is
   public: publishing a capture does not publish its reflections.
+  Generated follow-up questions also belong to that personal context. Before
+  saving one, the worker locks the profile's generation-revision row, reloads
+  its exact consumed capture/recent-answer/locale context, and verifies its job
+  claim in the same transaction. Changed context or a reclaimed claim cannot
+  publish the old question. Unrelated reading/signal changes do not invalidate
+  an unchanged question context or spend another model call. Source redaction
+  holding the question job wins; generation retries without deadlocking it.
 - **Embedding input scope** separates `personal` material (including answers)
   from `public` material (capture and attachment context, never answers).
   `inspiration_embeddings.input_scope` is part of the vector's identity with
