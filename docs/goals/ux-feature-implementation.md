@@ -78,6 +78,9 @@ Keep code, deployment, historical repair, and user validation evidence distinct.
   position unchanged. Computed active dialog text now yields 5.47:1 contrast
   on its actual panel background. No live model calls. Mobile touch/200% zoom
   and deployment are not claimed by these checks.
+- 2026-10-01, A follow-up: native modified-Tab remains owned by browser tab
+  navigation; dialog focus cycling applies to unmodified Tab/Shift+Tab only.
+  Dialog regression suite 4/4 passed.
 - 2026-10-01, B1: reproduced deletion of edited held and contested principles
   against isolated schemas in local `waka_agent_test` (2/2 SQL failures) and
   the pure decision rule (1/1 failure). Added `unsupported_at` migration 0031,

@@ -27,6 +27,14 @@ async function mount(onClose = vi.fn()) {
 }
 
 describe("dialog input ownership", () => {
+  it("leaves modified Tab to browser tab navigation", async () => {
+    await mount();
+    const last = [...host.querySelectorAll("button")].at(-1)!;
+    last.focus();
+    const key = new KeyboardEvent("keydown", { key: "Tab", ctrlKey: true, bubbles: true, cancelable: true });
+    await act(async () => last.dispatchEvent(key));
+    expect(key.defaultPrevented).toBe(false);
+  });
   it("focuses inside and cycles Tab in both directions, skipping disabled controls", async () => {
     await mount();
     const first = host.querySelector("textarea")!;

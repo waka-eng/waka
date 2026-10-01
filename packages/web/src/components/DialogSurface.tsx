@@ -46,7 +46,8 @@ export const DialogSurface = forwardRef<HTMLDivElement, DialogSurfaceProps>(func
     aria-hidden={active ? undefined : true} tabIndex={-1} data-jar-surface="1"
     onKeyDown={(event) => {
       onKeyDown?.(event);
-      if (!active || event.defaultPrevented || event.nativeEvent.isComposing) return;
+      if (!active || event.defaultPrevented || event.nativeEvent.isComposing ||
+        event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
