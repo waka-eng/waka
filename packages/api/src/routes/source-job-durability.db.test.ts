@@ -44,6 +44,23 @@ async function withQueueUnavailable(run: () => Promise<void>) {
 }
 
 describe('source writes and their durable learning request', () => {
+  it('returns a receipt for the exact capture/answer revision committed by each save', async () => {
+    const f = await fixture();
+    const create = await f.app.request('/api/inspirations', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'A new capture', reflections: [{ question: 'Why?', answer: 'First answer' }, { question: 'What else?', answer: 'Second answer' }] }) });
+    expect(create.status).toBe(201);
+    const saved = await create.json() as { inspiration: { id: string }; processing: { id: string; jobId: string; materialRevision: string; requestVersion: string } };
+    expect(saved.processing).toMatchObject({ materialRevision: '3', requestVersion: '1' });
+    const edit = await f.app.request(`/api/inspirations/${saved.inspiration.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: 'A revised capture' }) });
+    expect(edit.status).toBe(200);
+    expect(await edit.json()).toMatchObject({ processing: { jobId: saved.processing.jobId, materialRevision: '4', requestVersion: '2' } });
+    const answer = await f.app.request(`/api/inspirations/${saved.inspiration.id}/reflections`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ question: 'What now?', answer: 'A third answer' }) });
+    expect(answer.status).toBe(201);
+    expect(await answer.json()).toMatchObject({ processing: { jobId: saved.processing.jobId, materialRevision: '5', requestVersion: '3' } });
+    const receipts = await t.sql`SELECT material_revision::text, derived_at, completed_at FROM inspiration_processing WHERE inspiration_id = ${saved.inspiration.id} ORDER BY material_revision`;
+    expect(receipts).toEqual(['3', '4', '5'].map((material_revision) => ({ material_revision, derived_at: null, completed_at: null })));
+  });
+
   it.each(['create', 'edit', 'answer', 'remove_answer', 'remove_source'] as const)('%s cannot commit without its job', async (action) => {
     const f = await fixture();
     await withQueueUnavailable(async () => {

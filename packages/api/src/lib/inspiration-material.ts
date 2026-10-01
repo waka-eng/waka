@@ -4,12 +4,15 @@ import { getDb } from "./db.js";
 import { hashEmbeddingInput } from "./inspiration-embeddings.js";
 import { quoteForEvidence } from "./salience.js";
 import type { RelatedInspirationContext } from "./model-provider.js";
+import { readInspirationRevision } from "./inspiration-processing.js";
 
 type Db = Pick<ReturnType<typeof getDb>, "select">;
 export interface InspirationMaterialIdentity {
   scope: InspirationEmbeddingScope;
   policy: "inspiration-material-v1" | "inspiration-text-v1";
   hash: string;
+  /** Missing only on legacy/related-text identities, never guessed from age. */
+  revision?: string;
   sources: Array<{ kind: "inspiration" | "reflection" | "attachment"; id: string; hash: string }>;
 }
 const hash = (value: unknown) => hashEmbeddingInput(JSON.stringify(value));
@@ -23,10 +26,12 @@ export function relatedMaterialIdentity(source: RelatedInspirationContext, scope
 
 /** Exact source material, ordered consistently. Lock mode is for the final commit check only. */
 export async function loadInspirationMaterial(db: Db, profileId: string, inspirationId: string, scope: InspirationEmbeddingScope, lock = false) {
+  const revision = await readInspirationRevision(db, profileId, inspirationId, scope);
   const parentQuery = db.select().from(inspirations)
     .where(and(eq(inspirations.profileId, profileId), eq(inspirations.id, inspirationId))).limit(1);
   const [inspiration] = await (lock ? parentQuery.for("update") : parentQuery);
   if (!inspiration) return null;
+  if (revision === null) throw new Error("Source material revision is missing");
   const reflectionQuery = db.select({ id: reflections.id, question: reflections.question, answer: reflections.answer, skipped: reflections.skipped })
     .from(reflections).where(and(eq(reflections.profileId, profileId), eq(reflections.inspirationId, inspirationId)))
     .orderBy(asc(reflections.createdAt), asc(reflections.id));
@@ -46,7 +51,9 @@ export async function loadInspirationMaterial(db: Db, profileId: string, inspira
     ...reflectionRows.map((row) => ({ kind: "reflection" as const, id: row.id, hash: hash(row) })),
     ...attachmentRows.map((row) => ({ kind: "attachment" as const, id: row.id, hash: hash(row) })),
   ];
-  return { inspiration, reflectionRows, attachmentRows, identity: identity(scope, "inspiration-material-v1", sources) };
+  if (await readInspirationRevision(db, profileId, inspirationId, scope) !== revision) throw new Error("Source material changed while loading");
+  return { inspiration, reflectionRows, attachmentRows,
+    identity: { ...identity(scope, "inspiration-material-v1", sources), revision: revision.toString() } };
 }
 export type InspirationMaterial = NonNullable<Awaited<ReturnType<typeof loadInspirationMaterial>>>;
 
@@ -71,7 +78,8 @@ export async function assertMaterialCurrent(db: Db, snapshot: InspirationMateria
   for (const id of ids) await db.select({ id: inspirations.id }).from(inspirations)
     .where(and(eq(inspirations.profileId, snapshot.inspiration.profileId), eq(inspirations.id, id))).for("update");
   const current = await loadInspirationMaterial(db, snapshot.inspiration.profileId, snapshot.inspiration.id, snapshot.identity.scope, true);
-  if (!current || current.identity.hash !== snapshot.identity.hash) throw new Error("Source material changed; retry current inputs");
+  if (!current || current.identity.hash !== snapshot.identity.hash ||
+    (snapshot.identity.revision !== undefined && current.identity.revision !== snapshot.identity.revision)) throw new Error("Source material changed; retry current inputs");
   for (const source of related) {
     const [row] = await db.select({ id: inspirations.id, text: inspirations.text, createdAt: inspirations.createdAt,
       visibility: inspirations.visibility }).from(inspirations)

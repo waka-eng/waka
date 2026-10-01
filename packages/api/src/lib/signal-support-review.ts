@@ -159,6 +159,7 @@ export async function reviewSignalSupport(db: ReturnType<typeof getDb>, input: {
   const currentClaims = await loadClaims();
   const currentMembership = isGroup ? await loadGroupInputMembership(db, input.ownerProfileId, destination) : null;
   const current = currentMaterial?.identity.hash === material.identity.hash &&
+    currentMaterial?.identity.revision === material.identity.revision &&
     JSON.stringify(allClaims) === JSON.stringify(currentClaims) &&
     (!isGroup || currentMembership?.id === membership?.id);
   return {

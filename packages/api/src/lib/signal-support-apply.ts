@@ -20,6 +20,7 @@ const reportSchema = z.object({
   profileId: uuid, ownerProfileId: uuid, membershipId: uuid.nullable(), inspirationId: uuid,
   claimsHash: hash, calls: z.number().int().min(0).max(10), restrictedClaimCount: z.number().int().min(0),
   material: z.object({ scope: z.enum(["personal", "public"]),
+    revision: z.string().regex(/^[1-9]\d*$/).optional(),
     policy: z.literal("inspiration-material-v1"), hash,
     sources: z.array(z.object({ kind: z.enum(["inspiration", "reflection", "attachment"]), id: uuid, hash }).strict()),
   }).strict(),
@@ -58,6 +59,7 @@ export async function applySignalSupportReview(db: WakaDb, reportInput: unknown,
     if (!isGroup && report.membershipId !== null) throw new Error("Unexpected support review membership");
     const material = await loadInspirationMaterial(tx, report.ownerProfileId, report.inspirationId, report.material.scope, true);
     if (!material || material.identity.hash !== report.material.hash ||
+      (report.material.revision !== undefined && material.identity.revision !== report.material.revision) ||
       (isGroup && material.inspiration.visibility !== "public")) throw new Error("Support review material changed");
 
     const beforeLocks = await loadSupportClaims(tx, report.profileId, report.ownerProfileId, report.inspirationId);

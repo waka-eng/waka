@@ -49,6 +49,20 @@ function provider(verdict: "supported" | "unsupported" | "unresolved") {
 }
 
 describe("read-only evidence support assessment", () => {
+  it("invalidates changed-and-restored material even when its content hash returns to the same value", async () => {
+    const f = await fixture();
+    const model = provider("supported");
+    const original = model.assessSignalSupport.getMockImplementation()!;
+    model.assessSignalSupport.mockImplementation(async (input) => {
+      await t.sql`UPDATE inspirations SET text = 'Temporary edit' WHERE id = ${f.inspirationId}`;
+      await t.sql`UPDATE inspirations SET text = 'I enjoy a quiet morning' WHERE id = ${f.inspirationId}`;
+      return original(input);
+    });
+    const report = await reviewSignalSupport(t.db as never, { ...f, provider: model, maxCalls: 1 });
+    expect(report.status).toBe('stale');
+    expect(report.items[0]).toMatchObject({ verdict: 'unresolved', issue: 'inputs_changed' });
+  });
+
   it("runs on a connection where Postgres itself refuses writes", async () => {
     const f = await fixture();
     const readOnly = postgres(process.env.DB_CONNECTION_URL!, { max: 1, prepare: false,

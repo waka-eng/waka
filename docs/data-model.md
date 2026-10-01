@@ -198,6 +198,21 @@ agent's relayed excerpt, an agent's own observation.
   `inspiration_embeddings.input_scope` is part of the vector's identity with
   inspiration and model. Both scopes belong to the capture's owner. Room
   retrieval must never use a personal vector, including legacy vectors.
+- **Inspiration material revisions** distinguish changes to one source from
+  changes to a profile or an artifact. `inspiration_revisions` holds personal
+  and public counters for that inspiration, advanced transactionally by source
+  mutations. Capture and attachment material advance both; usable private
+  answers advance only personal material. No-op/timing-only writes do not move
+  them. Counters begin at the rollout baseline, not a reconstructed history;
+  they contain no source snapshots and imply no completed processing.
+- **Inspiration processing** binds source material to a destination profile.
+  Each `inspiration_processing` receipt binds one numbered request to its source
+  material revision, with the source owner's tenant-bearing FK. Derivation and
+  completion are recorded separately on that receipt; latest derived/completed
+  revisions can be read from those facts, never inferred from queued work.
+  Reprocessing unchanged material creates another receipt, not inherited success.
+  Numbered reading requests and an artifact result explain the next stage.
+  Source deletion removes this metadata too; no private text is copied into it.
 - **Signal input policy** records the derivation contract, not user approval.
   `signals.input_policy = group-public-v1` means the room signal was minted
   using the public projection, authorized current membership, and only

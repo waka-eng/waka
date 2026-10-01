@@ -148,6 +148,7 @@ import {
 } from "../db/index.js";
 import { getDb } from "./db.js";
 import { getDefaultModelProvider } from "./model-provider.js";
+import { InspirationProcessingUnavailableError, recordInspirationProcessingRequest, type InspirationProcessingReceipt } from "./inspiration-processing.js";
 import {
   type AccountModelUsage,
   assessModelBudget,
@@ -483,17 +484,31 @@ export async function enqueueDeriveSignals(
       pass over one capture would collapse into whichever enqueued first */
   deriveIntoProfileId?: string,
   transaction?: Pick<ReturnType<typeof getDb>, "execute">,
-): Promise<EnqueueResult> {
-  return enqueueKeyedJob({
-    profileId,
-    type: "derive_signals",
-    payload: deriveIntoProfileId
-      ? { inspirationId, reason, deriveIntoProfileId }
-      : { inspirationId, reason },
-    idempotencyKey: deriveIntoProfileId
-      ? `derive_signals:${inspirationId}:${deriveIntoProfileId}`
-      : `derive_signals:${inspirationId}`,
-  }, transaction);
+): Promise<EnqueueResult & { receipt: InspirationProcessingReceipt }> {
+  const persist = async (tx: Pick<ReturnType<typeof getDb>, "execute">) => {
+    // Source deletion locks its parent before cancelling jobs. Take the same
+    // order before binding a new receipt, including standalone room backfills.
+    const source = await tx.execute(sql`SELECT id FROM inspirations WHERE id = ${inspirationId}::uuid
+      AND profile_id = ${profileId}::uuid FOR KEY SHARE`);
+    if (!source.length) throw new InspirationProcessingUnavailableError();
+    const job = await enqueueKeyedJob({
+      profileId,
+      type: "derive_signals",
+      payload: deriveIntoProfileId
+        ? { inspirationId, reason, deriveIntoProfileId }
+        : { inspirationId, reason },
+      idempotencyKey: deriveIntoProfileId
+        ? `derive_signals:${inspirationId}:${deriveIntoProfileId}`
+        : `derive_signals:${inspirationId}`,
+    }, tx);
+    const receipt = await recordInspirationProcessingRequest(tx, { ownerProfileId: profileId, inspirationId,
+      profileId: deriveIntoProfileId ?? profileId, job });
+    return { ...job, receipt };
+  };
+  if (transaction) return persist(transaction);
+  const result = await getDb().transaction(persist);
+  await wakeCommittedBackgroundJobs();
+  return result;
 }
 
 /**

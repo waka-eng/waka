@@ -181,16 +181,17 @@ export function registerReflectionRoutes(
         skipped: parsed.data.skipped ?? false,
       })
       .returning(reflectionSelection);
-      if (row) await requestSignalDerivation({ profileId: target.profileId, inspirationId: parent.id,
+      if (!row) return undefined;
+      const processing = await requestSignalDerivation({ profileId: target.profileId, inspirationId: parent.id,
         reason: "edited", changedSource: "reflection" }, tx);
-      return row;
+      return { ...row, processing: processing.receipt };
     });
 
     if (!inserted) return c.json({ error: "Failed to create reflection" }, 500);
 
     await wakeCommittedBackgroundJobs();
 
-    return c.json({ reflection: serializeReflection(inserted) }, 201);
+    return c.json({ reflection: serializeReflection(inserted), processing: inserted.processing }, 201);
   });
 
   /**

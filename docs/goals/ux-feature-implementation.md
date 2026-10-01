@@ -1,6 +1,6 @@
 # Goal: implement the experience review
 
-Status: in flight — A/B, C input/output/cache, D1–D3d3 source/support/worker fences, E1 refresh and E2a numbered job receipts locally checked; material-to-artifact binding, pending/statement support, legacy context, capture/reflection status and later slices remain open. Deployment-target verification, historical repair and full release verification remain open.
+Status: in flight — A/B, C input/output/cache, D1–D3d3 source/support/worker fences, E1 refresh and E2a–E2b numbered source/request receipts locally checked; worker-to-artifact completion, pending/statement support, legacy context, capture/reflection status and later slices remain open. Deployment-target verification, historical repair and full release verification remain open.
 Created: 2026-10-01, on the owner's instruction to implement the full plan.
 Branch: `codex/ux-feature-implementation`.
 Baseline: `33e65a7` on `dev`.
@@ -30,7 +30,7 @@ experiments or revive superseded room goals.
 | C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | C1/C2/C3 code locally verified (51 SQL cases; full web 349/349). Read-only inventory completed across 5 rooms in the DB referenced by the local env files; hosted-stage mapping is not verified. Historical repair, deployment coordination and deployed verification remain pending. |
 | D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | D1–D3d3 provenance, automatic support checks, durable source handoffs, worker data-write fences and personal reading recovery locally verified. D3d3: 161 targeted SQL / 671 unit / 374 web. Pending/statement support, legacy personal context, complete downstream receipts, live semantic quality and historical repair remain open. |
 | E1 | F7/F8: authoritative poster and truthful manual refresh | Queue acceptance, changed/unchanged completion, failure and fresh displayed version verified | Implemented with job receipts, resumable profile-scoped polling, held-job manual upgrade and authoritative headline. Local checks pass (8 receipt SQL tests, 10 hook tests, full web 362/362); deployed verification remains open. |
-| E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | E2a queue request versions and version-aware manual receipts locally verified. Exact source-material revision binding, per-destination completion, ambiguous-save reconciliation and capture/reflection status UI remain pending. |
+| E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | E2a–E2b queue versions, scoped material counters and atomic source/request bindings locally verified. Per-destination completion/artifact binding, ambiguous-save reconciliation and capture/reflection status UI remain pending. |
 | F | F11/F12: visible search and durable navigation | Results beyond initial archive, failure/no-match separation, stable IDs, deep links, Back/Forward and rename verified | Pending |
 | G | F13: capture attachments and recoverable failure | Paste/drop/select preview; saved text survives failure; retry attaches once; sharing destination clear | Pending |
 | H | F18: progressive initial load and bounded prefetch | Small/large archive baseline vs result, first useful view and card/search/deep-link integrity | Pending |
@@ -89,9 +89,9 @@ copies of private text:
   so an ambiguous POST does not duplicate inspirations or answers.
 
 The first implementation increment numbers requests and makes manual-refresh
-receipts version-aware. Source revision storage, per-destination progress,
-downstream artifact binding and the capture/reflection UI remain required; this
-increment must not be presented as completion of D or E2.
+receipts version-aware. E2b adds material counters and per-request destination
+bindings. Downstream completion/artifact binding and the capture/reflection UI
+remain required; these increments are not completion of D or E2.
 
 ## Log
 
@@ -698,3 +698,59 @@ increment must not be presented as completion of D or E2.
   operational retry route also still needs worker wake-up/recovery verification.
   Deploy only after verifying stage targets and coordinating old workers; an
   unaware old writer cannot certify numbered completion. Full A–J/L1–L3 remains.
+- 2026-10-01, E2b baseline: 3/3 source receipt cases failed because saved work
+  had neither a material counter nor a binding to its numbered queue request.
+  A further reproduced assessment race treated changed-and-restored material
+  as current because its content hash matched again. The new revision fence
+  reports that in-flight review stale without treating it as negative evidence.
+- Migration 0041 adds metadata-only personal/public source counters and
+  `inspiration_processing` receipts. Counter triggers cover actual capture,
+  included-answer and attachment changes; skipped/unanswered prompts and
+  timing-only updates do not move them. Private answers never advance public
+  material. Legacy sources start at baseline one with NO invented processing
+  records. Source deletion cascades through the new metadata; no raw snapshots
+  are copied. Material readers verify the counter around their reads, and final
+  source/review checks reject a changed revision even when its hash returns.
+- Each numbered derivation request gets its own immutable material/destination
+  binding. Reprocessing identical material does not inherit an earlier receipt's
+  completion. Binding verifies source owner, destination, current visibility,
+  human membership, job ownership/type/payload and request version. Queue row
+  and receipt commit together, including standalone backfills. Capture, edit
+  and answer-save responses now carry the exact personal processing receipt;
+  current client wrappers do not yet surface it as processing-complete.
+- Enqueue locks the source before the job, matching deletion's order. A real
+  two-connection test observes the enqueuer waiting, then source deletion and
+  job cancellation completing without a deadlock. Backfill skips sources closed
+  or deleted after its list read. Savepoint-protected room fan-out rolls back
+  only a now-unavailable destination, preserving the personal save; actual
+  queue failures still roll the save back. That savepoint test injects the
+  authorization outcome while using real source/job/receipt SQL; visibility,
+  membership and legacy-agent refusal are separately tested by actual queries.
+- E2b verification: 18/18 source-processing SQL cases pass; source save routes
+  return revisions 3 → 4 → 5 for inline answers, edit and another answer while
+  their one job advances requests 1 → 2 → 3. No receipt is prematurely derived
+  or completed. With nine related suites, 142 distinct SQL cases pass. The
+  upgrade test applies 0041 to a schema staged through 0040 and preserves legacy
+  text without fabricating processing. Tracking is installed before the
+  non-overwriting baseline backfill; the upgrade fixture also inserts a source
+  and answer in that interval and verifies their counter is not reset. The
+  real fresh migrator also passes.
+  API unit 671 passed / 3 paid-live benches skipped; web 377/377. API typecheck,
+  migration/diff checks and 5/5 offline migration-integrity checks pass. The
+  generated 40-table snapshot has zero diff against the current schema. All
+  writes stayed in disposable local schemas/databases; no provider calls,
+  hosted migration/repair, push or deployment occurred.
+- E2c next: set `derived_at` only inside a successful matching source pass;
+  bind changed support/discovery to the exact reading request; record the
+  artifact result in its publication transaction and set `completed_at` only
+  when derivation and that dependency are satisfied for current material.
+  Preserve earlier outstanding read dependencies when a retry discovers no
+  new candidates. A valid no-change pass may settle without another synthesis,
+  but no queued receipt may stand in for it. A reading can finish during
+  extraction after support withdrawal, so retain its result without premature
+  completion and reuse it only if the final derivation adds no further changes.
+  Handle enrichment-in-flight, withdrawn room material and superseded source
+  revisions explicitly. Then add scoped status/retry endpoints, client receipt
+  preservation, one-line capture/reflection progress and ambiguous-save
+  idempotency. None of those completion/UI gates is claimed by E2b; the new
+  receipt completion fields deliberately remain unset until the chain is wired.

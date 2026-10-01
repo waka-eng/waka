@@ -4,8 +4,9 @@ import { and, eq } from "drizzle-orm";
 import { groupMembers, inspirations, profiles, type DeriveSignalsPayload } from "../db/index.js";
 import { getDb } from "./db.js";
 import { enqueueDeriveSignals, enqueueGroupTopOfMindRefresh } from "./queue.js";
+import { InspirationProcessingUnavailableError } from "./inspiration-processing.js";
 
-type SourceTransaction = Pick<ReturnType<typeof getDb>, "select" | "execute">;
+type SourceTransaction = Pick<ReturnType<typeof getDb>, "select" | "execute" | "transaction">;
 
 export async function requestSignalDerivation(input: {
   profileId: string;
@@ -26,12 +27,18 @@ export async function requestSignalDerivation(input: {
         .innerJoin(profiles, and(eq(profiles.groupId, groupMembers.groupId), eq(profiles.type, "group")))
         .where(eq(groupMembers.profileId, input.profileId));
       for (const mind of minds) {
-        const job = source.visibility === "public"
-          ? await enqueueDeriveSignals(input.profileId, input.inspirationId, input.reason, mind.id, transaction)
-          : await enqueueGroupTopOfMindRefresh(input.profileId, mind.groupId, "signals_changed", transaction);
-        groupJobIds.push(job.jobId);
+        try {
+          // A room can disappear or a membership can end after the list read.
+          // Roll back that room's enqueue alone, not the person's saved words.
+          const job = source.visibility === "public"
+            ? await transaction.transaction((tx) => enqueueDeriveSignals(input.profileId, input.inspirationId, input.reason, mind.id, tx))
+            : await enqueueGroupTopOfMindRefresh(input.profileId, mind.groupId, "signals_changed", transaction);
+          groupJobIds.push(job.jobId);
+        } catch (error) {
+          if (!(error instanceof InspirationProcessingUnavailableError)) throw error;
+        }
       }
     }
   }
-  return { jobId: personal.jobId, groupJobIds };
+  return { jobId: personal.jobId, receipt: personal.receipt, groupJobIds };
 }

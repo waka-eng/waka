@@ -227,9 +227,9 @@ export function registerCaptureRoutes(
               .returning(reflectionSelection)
           : [];
 
-        await requestSignalDerivation({ profileId: target.profileId, inspirationId: inserted.id,
+        const processing = await requestSignalDerivation({ profileId: target.profileId, inspirationId: inserted.id,
           reason: "created", changedSource: "inspiration" }, tx);
-        return { inserted, insertedReflections };
+        return { inserted, insertedReflections, processing: processing.receipt };
       });
 
     let persisted: Awaited<ReturnType<typeof persistInspiration>>;
@@ -259,6 +259,7 @@ export function registerCaptureRoutes(
           attachments: [],
           reflections: persisted.insertedReflections,
         }),
+        processing: persisted.processing,
       },
       201,
     );

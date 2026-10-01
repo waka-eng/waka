@@ -203,9 +203,10 @@ export function registerEditingRoutes(
         ),
       )
       .returning(inspirationSelection);
-      if (row) await requestSignalDerivation({ profileId: target.profileId, inspirationId: row.id,
+      if (!row) return undefined;
+      const processing = await requestSignalDerivation({ profileId: target.profileId, inspirationId: row.id,
         reason: "edited", changedSource: "inspiration", previousVisibility: previous.visibility }, tx);
-      return row;
+      return { ...row, processing: processing.receipt };
     });
 
     if (!updated) return c.json({ error: "Inspiration not found" }, 404);
@@ -241,6 +242,7 @@ export function registerEditingRoutes(
           attachments: attachmentRows.map(serializeAttachment),
           reflections: reflectionRows,
         }),
+        processing: updated.processing,
       },
       200,
     );

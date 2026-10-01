@@ -35,6 +35,7 @@ import {
 import { getDb } from "../lib/db.js";
 import { labelMembersByProfileId } from "../lib/member-labels.js";
 import { enqueueDeriveSignals } from "../lib/queue.js";
+import { InspirationProcessingUnavailableError } from "../lib/inspiration-processing.js";
 import { GROUP_JOIN_BACKFILL_LIMIT } from "../lib/signal-derivation-thresholds.js";
 
 type WakaDb = ReturnType<typeof getDb>;
@@ -296,7 +297,13 @@ async function backfillGroundIntoMind(
     .limit(GROUP_JOIN_BACKFILL_LIMIT);
 
   for (const memory of ground) {
-    await enqueue(input.profileId, memory.id, "created", mind.id);
+    try {
+      await enqueue(input.profileId, memory.id, "created", mind.id);
+    } catch (error) {
+      // A capture may close/disappear after the public list was read. That
+      // removes only that capture, not the rest of this member's backfill.
+      if (!(error instanceof InspirationProcessingUnavailableError)) throw error;
+    }
   }
 }
 
