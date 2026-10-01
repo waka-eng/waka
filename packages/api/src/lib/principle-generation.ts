@@ -16,7 +16,7 @@
  * qualification tests: docs/generation.md; phases: docs/goals/principles.md.
  */
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 
 import {
   type Principle,
@@ -151,16 +151,16 @@ export function nextRank(existing: Array<{ rank: number }>): number {
 
 /**
  * What happens to a standing principle whose citations no longer clear the
- * bar. Declared → the owner's words fall back to aspirational (they stand,
- * undemonstrated again). Minted → removed: a machine claim without support
- * has no words worth keeping. Still-eligible rows are untouched.
+ * bar. Declared or edited wording stays, with lost support recorded. Only an
+ * unedited minted claim is removed. A disagreement survives either outcome
+ * for preserved words, and still-eligible rows are untouched.
  */
 export function reconcileAction(
-  row: { origin: "minted" | "declared"; state: "held" | "aspirational" | "contested" },
+  row: { origin: "minted" | "declared"; state: "held" | "aspirational" | "contested"; lockedAt?: Date | null },
   stillEligible: boolean,
 ): "keep" | "demote" | "remove" {
   if (row.state === "aspirational" || stillEligible) return "keep";
-  return row.origin === "declared" ? "demote" : "remove";
+  return row.origin === "declared" || row.lockedAt != null ? "demote" : "remove";
 }
 
 /** Redemption: only an aspirational principle promotes, and only on the bar. */
@@ -384,7 +384,7 @@ export async function refreshPrinciplesForProfile(
     if (matched) {
       const attached = await attachCitations(db, input.profileId, matched.id, candidate.citedSignalIds);
       result.attached += attached;
-      if (matched.state === "aspirational") {
+      if (matched.state === "aspirational" || matched.unsupportedAt !== null) {
         const promoted = await promoteIfDemonstrated(db, input.profileId, matched.id, now);
         if (promoted) result.redeemed += 1;
       }
@@ -483,17 +483,23 @@ export async function promoteIfDemonstrated(
   );
   const verdict = computeCitationEligibility([...evidence.values()], now);
   const [current] = await db
-    .select({ state: principles.state })
+    .select({ state: principles.state, unsupportedAt: principles.unsupportedAt })
     .from(principles)
     .where(eq(principles.id, principleId))
     .limit(1);
-  if (!current || !promoteDecision(current.state, verdict.eligible)) return false;
+  if (!current || !verdict.eligible ||
+    (!promoteDecision(current.state, true) && current.unsupportedAt === null)) return false;
 
-  await db
+  const updated = await db
     .update(principles)
-    .set({ state: "held", heldSince: now, updatedAt: now })
-    .where(and(eq(principles.id, principleId), eq(principles.state, "aspirational")));
-  return true;
+    .set({
+      state: sql`case when ${principles.state} = 'contested' then 'contested'::principle_state else 'held'::principle_state end`,
+      unsupportedAt: null, heldSince: now, updatedAt: now,
+    })
+    .where(and(eq(principles.id, principleId), eq(principles.profileId, profileId),
+      or(eq(principles.state, "aspirational"), isNotNull(principles.unsupportedAt))))
+    .returning({ id: principles.id });
+  return updated.length > 0;
 }
 
 /**
@@ -524,43 +530,41 @@ export async function reconcilePrinciplesAfterSignalLoss(
     );
 
   for (const { principleId } of affected) {
-    const [row] = await db
-      .select()
-      .from(principles)
-      .where(eq(principles.id, principleId))
-      .limit(1);
-    if (!row) continue;
+    await db.transaction(async (tx) => {
+      // Read standing under the row lock: a committed human edit must be
+      // observed before deciding whether automatic deletion is allowed.
+      const [row] = await tx
+        .select()
+        .from(principles)
+        .where(and(eq(principles.id, principleId), eq(principles.profileId, input.profileId)))
+        .for("update")
+        .limit(1);
+      if (!row) return;
 
-    const cited = await db
-      .select({ signalId: principleSignals.signalId })
-      .from(principleSignals)
-      .innerJoin(signals, eq(signals.id, principleSignals.signalId))
-      .where(and(eq(principleSignals.principleId, principleId), eq(signals.status, "active")));
-    const evidence = await loadCitationEvidence(
-      db,
-      input.profileId,
-      cited.map((c) => c.signalId),
-    );
-    const action = reconcileAction(
-      row,
-      computeCitationEligibility([...evidence.values()], now).eligible,
-    );
-    if (action === "keep") continue;
+      const cited = await tx
+        .select({ signalId: principleSignals.signalId })
+        .from(principleSignals)
+        .innerJoin(signals, eq(signals.id, principleSignals.signalId))
+        .where(and(eq(principleSignals.principleId, principleId), eq(signals.status, "active")));
+      const evidence = await loadCitationEvidence(tx, input.profileId, cited.map((c) => c.signalId));
+      const action = reconcileAction(row, computeCitationEligibility([...evidence.values()], now).eligible);
+      if (action === "keep") return;
 
-    if (action === "demote") {
-      await db
-        .update(principles)
-        .set({ state: "aspirational", heldSince: null, conflictsWithId: null, updatedAt: now })
-        .where(eq(principles.id, principleId));
-      demoted.push(principleId);
-    } else {
-      await db
-        .update(principles)
-        .set({ conflictsWithId: null })
-        .where(eq(principles.conflictsWithId, principleId));
-      await db.delete(principles).where(eq(principles.id, principleId));
-      removed.push(principleId);
-    }
+      if (action === "demote") {
+        await tx.update(principles).set({
+          state: row.state === "contested" ? "contested" : "aspirational",
+          heldSince: null,
+          unsupportedAt: row.unsupportedAt ?? now,
+          updatedAt: now,
+        }).where(eq(principles.id, principleId));
+        demoted.push(principleId);
+      } else {
+        await tx.update(principles).set({ conflictsWithId: null })
+          .where(eq(principles.conflictsWithId, principleId));
+        await tx.delete(principles).where(eq(principles.id, principleId));
+        removed.push(principleId);
+      }
+    });
   }
   return { demoted, removed };
 }

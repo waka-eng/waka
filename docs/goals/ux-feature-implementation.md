@@ -26,7 +26,7 @@ experiments or revive superseded room goals.
 | Slice | Requirements | Gate | Current evidence |
 | --- | --- | --- | --- |
 | A | F5/F6/F10: input, overlay scrolling/focus, readable active controls | Reproduce slash/wheel defects; verify typing, caret, Escape/Tab, wheel/touch and contrast in actual affected flows; web checks | Implemented; 5 original failures now pass, 325 web tests pass. Desktop fixture verified. Mobile touch/200% zoom and deployed verification remain open. |
-| B | F3/F4: edited principle preservation, truthful support, account-scoped drafts/preferences and cancellation | Isolated SQL preservation tests and two-account browser/state tests; API/web checks | Pending |
+| B | F3/F4: edited principle preservation, truthful support, account-scoped drafts/preferences and cancellation | Isolated SQL preservation tests and two-account browser/state tests; API/web checks | B1 preservation implemented: baseline 3 failures, then 6 SQL / 653 unit tests pass. B2 storage/cancellation pending. |
 | C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | Pending |
 | D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | Pending |
 | E1 | F7/F8: authoritative poster and truthful manual refresh | Queue acceptance, changed/unchanged completion, failure and fresh displayed version verified | Pending |
@@ -78,3 +78,12 @@ Keep code, deployment, historical repair, and user validation evidence distinct.
   position unchanged. Computed active dialog text now yields 5.47:1 contrast
   on its actual panel background. No live model calls. Mobile touch/200% zoom
   and deployment are not claimed by these checks.
+- 2026-10-01, B1: reproduced deletion of edited held and contested principles
+  against isolated schemas in local `waka_agent_test` (2/2 SQL failures) and
+  the pure decision rule (1/1 failure). Added `unsupported_at` migration 0031,
+  preserved locked wording and disputes under row lock, and exposed withdrawn
+  support in JSON, the human UI and canonical machine rendering. Restored
+  evidence clears unsupported standing without rewriting words or resolving
+  disputes. After fix: 6/6 SQL tests, 653 API unit tests passed (3 live benches
+  skipped), both typechecks passed, 15 targeted web checks passed, migration
+  check passed. No shared database migration or historical repair executed.

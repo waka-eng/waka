@@ -144,6 +144,10 @@ describe("redemption", () => {
 });
 
 describe("reconciliation after evidence loss", () => {
+  it("preserves a generated principle once its owner has edited the wording", () => {
+    const edited = { origin: "minted" as const, state: "held" as const, lockedAt: NOW };
+    expect(reconcileAction(edited, false)).toBe("demote");
+  });
   it("keeps anything still clearing the bar", () => {
     expect(reconcileAction({ origin: "minted", state: "held" }, true)).toBe("keep");
     expect(reconcileAction({ origin: "declared", state: "contested" }, true)).toBe("keep");

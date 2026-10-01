@@ -12370,7 +12370,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                 {say("worldPrincipleKeep")}
                               </button> : null}
                             </span>
-                          ) : pr.state === "aspirational" ? (
+                          ) : pr.state === "aspirational" && !pr.unsupported ? (
                             /* The one distinction worth carrying up here:
                                declared-but-not-yet-demonstrated is a
                                different claim from earned, and the canon
@@ -12382,6 +12382,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                into their own hand. */
                             <span className="jar-poster-away jar-label"> {say("worldWrittenByHand")}</span>
                           ) : null}
+                          {pr.unsupported ? <p className="jar-values-sub">{say("worldPrincipleSupportChanged")}</p> : null}
                           {/* THE VERBS, under the sentence they are about.
                               Order is by consequence: correcting is
                               harmless, moving is reversible, disputing is

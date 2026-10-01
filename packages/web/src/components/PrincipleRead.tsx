@@ -107,6 +107,7 @@ export function PrincipleRead({ groupId, active, locale, refreshKey, onRead }: {
           <span className="jar-values-value">{row.statement}</span>
         </p>
         {row.state === "contested" ? <p className="jar-values-sub">{t(locale, "worldValueContested")}</p> : null}
+        {row.unsupported ? <p className="jar-values-sub">{t(locale, "worldPrincipleSupportChanged")}</p> : null}
         <details className="jar-values-sub" data-jar-interactive="1">
           <summary>{t(locale, "worldPrinciplesEvidence")}</summary>
           <PrincipleEvidence signals={row.citedSignals} locale={locale} />

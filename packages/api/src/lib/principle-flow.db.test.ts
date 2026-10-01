@@ -4,9 +4,9 @@ import { Hono } from "hono";
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
 import { createGroupForProfile } from "../routes/groups-membership.js";
 import { createGroupsRoutes } from "../routes/groups.js";
-import { loadPrincipleViews, undoPrincipleDispute } from "../routes/principles.js";
+import { loadPrincipleViews, renderPrinciplesMarkdown, undoPrincipleDispute } from "../routes/principles.js";
 import { createFeedbackForProfile } from "../routes/feedback.js";
-import { loadPrincipleMaterial, refreshPrinciplesForProfile } from "./principle-generation.js";
+import { loadPrincipleMaterial, promoteIfDemonstrated, refreshPrinciplesForProfile, reconcilePrinciplesAfterSignalLoss } from "./principle-generation.js";
 import { requestPrincipleRefresh, loadPrincipleStatus } from "./principle-status.js";
 import type { ModelProvider } from "./model-provider.js";
 
@@ -69,6 +69,40 @@ beforeAll(async () => {
 afterAll(async () => { await t?.cleanup(); });
 
 describe("principles across personal and room profiles", () => {
+  it.each(["held", "contested"] as const)("keeps edited %s wording after support is lost", async (state) => {
+    const profileId = await person();
+    const signalIds = await material(profileId, [profileId]);
+    const [p] = await t.sql`INSERT INTO principles(profile_id, statement, state, origin, rank, locked_at, held_since)
+      VALUES (${profileId}, 'These are the words I chose.', ${state}, 'minted', 1, now(), now()) RETURNING id`;
+    for (const id of signalIds) await t.sql`INSERT INTO principle_signals(profile_id,principle_id,signal_id)
+      VALUES (${profileId},${p.id},${id})`;
+    await t.sql`UPDATE signals SET status='retired' WHERE id=${signalIds[0]!}`;
+    await reconcilePrinciplesAfterSignalLoss(t.db as never, { profileId, signalIds: [signalIds[0]!] });
+    const rows = await t.sql`SELECT * FROM principles WHERE id=${p.id}`;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.statement).toBe('These are the words I chose.');
+    expect(rows[0]!.locked_at).not.toBeNull();
+    expect(rows[0]!.unsupported_at).not.toBeNull();
+    expect(rows[0]!.state).toBe(state === 'contested' ? 'contested' : 'aspirational');
+    const views = await loadPrincipleViews(t.db as never, profileId);
+    expect(views[0]!.unsupported).toBe(true);
+    expect(renderPrinciplesMarkdown({ name: 'Test', type: 'human' }, views, new Date()))
+      .toContain('Supporting evidence has been withdrawn.');
+    if (state === 'held') {
+      const verdict = await createFeedbackForProfile(t.db as never, {
+        profileId, targetType: 'principle', targetId: p.id, value: 'not_true',
+      });
+      await undoPrincipleDispute(t.db as never, profileId, p.id, verdict!.id);
+      const [afterUndo] = await t.sql`SELECT state FROM principles WHERE id=${p.id}`;
+      expect(afterUndo.state).toBe('aspirational');
+    }
+    await t.sql`UPDATE signals SET status='active' WHERE id=${signalIds[0]!}`;
+    expect(await promoteIfDemonstrated(t.db as never, profileId, p.id, new Date())).toBe(true);
+    const [restored] = await t.sql`SELECT * FROM principles WHERE id=${p.id}`;
+    expect(restored.unsupported_at).toBeNull();
+    expect(restored.statement).toBe('These are the words I chose.');
+    expect(restored.state).toBe(state);
+  });
   it("creates a personal principle from recent evidence and keeps locked words on a later match", async () => {
     await material(owner, [owner]);
     expect((await loadPrincipleMaterial(t.db as never, owner)).eligibility.eligible).toBe(true);

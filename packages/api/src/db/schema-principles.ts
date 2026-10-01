@@ -14,7 +14,9 @@
  *     owner's verdict, or a judged conflict between two principles).
  *   - `origin`: minted (by the nightly generation) or declared (the owner's
  *     own words). Reconciliation after evidence loss reads it: a declared
- *     principle falls back to aspirational; a minted one is removed.
+ *     principle falls back to aspirational; an unedited minted one is removed.
+ * Human-edited wording is preserved at any origin. unsupportedAt records loss
+ * of support separately from a contested stance.
  */
 
 import { relations } from "drizzle-orm";
@@ -84,6 +86,9 @@ export const principles = pgTable(
 
     /** When it became held — "held since" on every surface. */
     heldSince: timestamp("held_since", { withTimezone: true }),
+
+    /** Evidence no longer clears the bar; human-owned words still stand. */
+    unsupportedAt: timestamp("unsupported_at", { withTimezone: true }),
 
     /**
      * The other half of a judged conflict, when state is contested via the

@@ -301,6 +301,14 @@ artifacts**.
   `not_true` verdict, or a judged conflict between two principles,
   marked as a pair). Contested stays visible; rank decides operationally
   until the owner resolves.
+- **Human wording survives evidence loss.** A declared or human-edited
+  principle is never automatically deleted when its support changes, even
+  when it was originally minted. `unsupported_at` records loss of demonstrated
+  support independently of a disagreement. Without a live dispute it reads
+  `aspirational`; an existing `contested` stance stays contested. Both UI and
+  machine rendering disclose withdrawn support while keeping the owner's
+  instruction and wording. When qualifying evidence returns, the unsupported
+  mark clears without resolving a dispute or rewriting the sentence.
 - **Declarations are routed, never refused.** Validation runs
   internally at declaration: what qualifies becomes aspirational; what
   is really a rule or a goal is quietly kept as an inspiration — the

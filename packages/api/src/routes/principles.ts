@@ -108,6 +108,8 @@ export interface PrincipleView {
   origin: "minted" | "declared";
   rank: number;
   locked: boolean;
+  /** Previously demonstrated support was withdrawn; human wording remains. */
+  unsupported?: boolean;
   heldSince: string | null;
   conflictsWithId: string | null;
   citedSignals: Array<{ id: string; statement: string; examples?: Array<{ text: string; createdAt: string }> }>;
@@ -185,6 +187,7 @@ export async function loadPrincipleViews(db: WakaDb, profileId: string): Promise
     origin: row.origin,
     rank: row.rank,
     locked: row.lockedAt !== null,
+    unsupported: row.unsupportedAt != null,
     heldSince: row.heldSince?.toISOString() ?? null,
     conflictsWithId: row.conflictsWithId,
     citedSignals: (citationsByPrinciple.get(row.id) ?? []).map((signal) => ({
@@ -209,7 +212,7 @@ export async function undoPrincipleDispute(db: WakaDb, profileId: string, princi
     const [previous] = await tx.select().from(feedback).where(predicate)
       .orderBy(desc(feedback.createdAt), desc(feedback.id)).limit(1);
     const state = principle.conflictsWithId || previous?.value === "not_true" ? "contested"
-      : principle.origin === "declared" && !principle.heldSince ? "aspirational" : "held";
+      : principle.unsupportedAt !== null || (principle.origin === "declared" && !principle.heldSince) ? "aspirational" : "held";
     await tx.update(principles).set({ state, updatedAt: new Date() })
       .where(and(eq(principles.id, principleId), eq(principles.profileId, profileId)));
     return true;
@@ -250,6 +253,9 @@ export function renderPrinciplesMarkdown(
         ? `contested, in tension with ${shortId(view.conflictsWithId)}`
         : view.state;
     lines.push(`${view.rank}. \`${shortId(view.id)}\` (${marker}) — ${view.statement}`);
+    if (view.unsupported) {
+      lines.push("   Supporting evidence has been withdrawn. Preserve the owner's wording; do not describe it as demonstrated by their history or as rejected by them.");
+    }
   }
   lines.push("");
   lines.push(

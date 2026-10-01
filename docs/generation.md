@@ -732,6 +732,15 @@ marked as a pair for owner adjudication). An explicit, owner-reorderable
 **rank** keeps the set decidable even while a conflict stands — the higher
 rank wins operationally.
 
+Loss of evidence never deletes a human-edited principle, including one that
+was originally minted. `unsupported_at` records the loss independently of
+disagreement: an unopposed preserved row becomes aspirational, while contested
+rows retain their dispute. The JSON, UI, and canonical machine rendering
+disclose withdrawn support. Qualifying evidence can clear that mark and
+restore demonstrated standing without changing the person's words or deciding
+an open dispute. Only unedited machine-owned principles are removed by this
+reconciliation.
+
 **Generation is mint-or-match, when material changes.** A completed personal
 or room top-of-mind pass requests an eligibility check. Opening principles
 can request missing work through a POST; GETs only read. The nightly cron

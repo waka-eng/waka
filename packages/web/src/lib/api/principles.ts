@@ -26,6 +26,7 @@ export interface ApiPrinciple {
   origin: "minted" | "declared";
   rank: number;
   locked: boolean;
+  unsupported?: boolean;
   heldSince: string | null;
   conflictsWithId: string | null;
   citedSignals: Array<{ id: string; statement: string; examples?: Array<{ text: string; createdAt: string }> }>;
