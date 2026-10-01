@@ -16,7 +16,6 @@ import {
   getJson,
   patchJson,
   postJson,
-  requestVoid,
   type ProfileScoped,
 } from "./http";
 
@@ -126,13 +125,31 @@ export async function fetchTopOfMindVersions(): Promise<ApiTopOfMindVersion[]> {
  * Accepted, not done: synthesis runs in the background and the caller polls
  * `fetchTopOfMind` for the version that replaces the current one.
  */
-export async function refreshTopOfMind(): Promise<void> {
-  await requestVoid(
+export interface ApiTopOfMindRefreshResult {
+  kind: "top_of_mind";
+  topOfMindId: string | null;
+  version: number;
+  outcome: "changed" | "unchanged" | "empty";
+}
+
+export interface ApiTopOfMindRefreshStatus {
+  status: "pending" | "running" | "succeeded" | "failed" | "unknown";
+  runAfter: string | null;
+  result: ApiTopOfMindRefreshResult | null;
+}
+
+export async function refreshTopOfMind(): Promise<{ jobId: string }> {
+  const receipt = await postJson<{ jobId: string }>(
     apiPath("/top-of-mind/refresh"),
-    "POST",
     {},
     "Failed to start a new reading",
   );
+  if (!receipt?.jobId) throw new Error("The reading request did not return a receipt");
+  return { jobId: receipt.jobId };
+}
+
+export function fetchTopOfMindRefresh(jobId: string, signal?: AbortSignal): Promise<ApiTopOfMindRefreshStatus> {
+  return getJson(apiPath(`/top-of-mind/refresh/${encodeURIComponent(jobId)}`), "Failed to check your reading", signal);
 }
 
 // ---------------------------------------------------------------------------

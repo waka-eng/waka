@@ -125,6 +125,7 @@ interface Probe {
 }
 
 const READS: Probe[] = [
+  { name: "read a top-of-mind refresh receipt", method: "GET", path: `/api/top-of-mind/refresh/${GHOST}` },
   { name: "recall inspirations", method: "GET", path: "/api/inspirations?limit=5" },
   { name: "open one inspiration", method: "GET", path: `/api/inspirations/${GHOST}` },
   { name: "read its reflections", method: "GET", path: `/api/inspirations/${GHOST}/reflections` },

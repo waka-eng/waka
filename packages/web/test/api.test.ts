@@ -355,14 +355,14 @@ describe("top of mind", () => {
     await expect(fetchTopOfMind()).resolves.toBeNull();
   });
 
-  it("accepts a queued refresh without a body to read", async () => {
-    stubFetch(new Response(null, { status: 202 }));
+  it("keeps the queue receipt rather than treating acceptance as completion", async () => {
+    stubFetch(Response.json({ status: "queued", jobId: "read-job" }, { status: 202 }));
 
-    await expect(refreshTopOfMind()).resolves.toBeUndefined();
+    await expect(refreshTopOfMind()).resolves.toEqual({ jobId: "read-job" });
     expect(fetch).toHaveBeenCalledWith("/api/top-of-mind/refresh", {
       method: "POST",
       credentials: "include",
-      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json" },
       body: "{}",
     });
   });

@@ -73,6 +73,7 @@ import { hueCss } from "../lib/appearance";
 import { useDismissAway } from "../lib/dismiss";
 import { isEditableTarget, isNativeSurface } from "../lib/surface-input";
 import { profileStorageKey, readProfileText, writeProfileText, type ProfileStorageScope } from "../lib/profile-storage";
+import { useTopOfMindRefresh } from "../lib/use-top-of-mind-refresh";
 import { clamp, clamp01, DAY_MS, easeOut, hashStr, kd, lerp, mix32, TAU } from "../lib/num";
 import {
   GRAIN_PX,
@@ -206,7 +207,6 @@ import {
   restoreTopOfMindEntry,
   releaseTopOfMindEntry,
   holdTopOfMindEntry,
-  refreshTopOfMind,
   updateInspiration,
   fetchProfiles,
   type ApiGroupProposal,
@@ -1700,8 +1700,30 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     () => new Map(),
   );
   /** The board's own state: at rest, asked about, or being rewritten. */
-  const [board, setBoard] = useState<{ step: "rest" | "asking" | "working" }>({ step: "rest" });
+  const [board, setBoard] = useState<{ step: "rest" | "asking" }>({ step: "rest" });
   const [boardToast, setBoardToast] = useState<string | null>(null);
+  const readingRefresh = useTopOfMindRefresh({
+    storageKey: profileStorageKey(storageScope, "readingRefresh"),
+    onComplete: async (result, current) => {
+      const tom = await loadTopOfMind();
+      if (!current()) return;
+      if (result.topOfMindId && (!tom || tom.version < result.version ||
+        (tom.version === result.version && tom.id !== result.topOfMindId))) {
+        throw new Error("The completed reading is not available yet");
+      }
+      absorbBoard(tom);
+      setBoard({ step: "rest" });
+      return tom && tom.version > result.version
+        ? tom.entries.length === 0 ? "empty" : tom.reason === "no_change" ? "unchanged" : "changed"
+        : result.outcome;
+    },
+  });
+  const readingMessage: MessageKey | null = ({
+    idle: null, starting: "worldReadRequesting", pending: "worldReadQueued", running: "worldReadingNow",
+    waiting: "worldReadWaiting", delayed: "worldReadDelayed", error: "worldReadCheckFailed",
+    failed: "worldReadFailed", unknown: "worldReadUnknown", changed: "worldReadUpdated",
+    unchanged: "worldReadUnchanged", empty: "worldReadEmpty",
+  } as const)[readingRefresh.phase];
 
   /** The statement the poster is currently showing, as an entry we can act on. */
   const lead = useMemo<Entry | null>(() => {
@@ -1722,30 +1744,10 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * this page is not allowed to invent.
    */
   const rebuildBoard = useCallback(() => {
-    setBoard({ step: "working" });
-    refreshTopOfMind()
-      .then(() => loadTopOfMind())
-      .then((tom) => {
-        setTopOfMind(tom);
-        setNotes(tom?.entries ?? []);
-        setBoard({ step: "rest" });
-        /* the rewrite names what it could not touch: the person's stars.
-           The brief's own copy counted them; the English line keeps the
-           law instead — states render, numerals never — so the toast says
-           THAT the stars held, and the sky shows which. */
-        const anyStars = (tom?.entries ?? []).some((e) => e.locked && !e.dismissed);
-        setBoardToast(
-          anyStars
-            ? "the sky was redrawn — your stars kept their places"
-            : "the sky was redrawn",
-        );
-        window.setTimeout(() => setBoardToast(null), 6000);
-        /* the poster re-arrives word by word, and the words that survived the
-           rewrite stay lit — which is how you see what held */
-        simApiRef.current?.toTop();
-      })
-      .catch(() => setBoard({ step: "rest" }));
-  }, []);
+    setBoard({ step: "rest" });
+    setBoardToast(null);
+    void readingRefresh.start();
+  }, [readingRefresh.start]);
 
   /**
    * HOLD THIS ONE UP — and there is no un-holding, by the canon's design.
@@ -2984,14 +2986,10 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * the screen was unchanged; only watching the screen rather than the network
    * caught it.
    *
-   * ONLY WHEN THE POSTER IS EMPTY. `adopted` is read in exactly one place —
-   * your own wall's chrome — and the comment on the room-ambition bug a few
-   * hundred lines down says why this matters: a poster that repaints seconds
-   * later "while you were reading it" breaks the law that the world never
-   * moves unless you moved it. Filling a blank poster with the answer to what
-   * you just typed is not that; replacing a sentence someone is mid-way
-   * through would be. So entries and artifact always refresh, and the poster
-   * only ever fills, never swaps.
+   * The artifact, actionable entries and displayed lead must agree. Keeping
+   * a boot-time override after replacing the entries made the page act on a
+   * different sentence than the one it showed. Absorption updates all three;
+   * it never moves the camera or replaces an open inspiration/reflection.
    */
   const absorbBoard = useCallback((tom: TopOfMind | null) => {
     setTopOfMind(tom);
@@ -3020,13 +3018,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
        second added the third; only watching the POSTER rather than the
        network or the state found the clock. */
     for (const e of tom?.entries ?? []) TRef.current = Math.max(TRef.current, e.createdMs);
-    setAdopted((cur) => {
-      if (cur) return cur;
-      const lead = tom?.entries.find((e: Entry) => e.pinned) ?? tom?.entries[0];
-      return lead
-        ? { ambition: lead.body, groupName: null, createdMs: lead.createdMs }
-        : cur;
-    });
+    const lead = tom?.entries.find((e: Entry) => e.pinned) ?? tom?.entries[0];
+    setAdopted(lead ? { ambition: lead.body, groupName: null, createdMs: lead.createdMs } : null);
   }, []);
 
   /** A wall's name as an address segment: lowercased, spaces to hyphens,
@@ -13023,14 +13016,26 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         progress keeps them mounted regardless: a control that
                         vanished mid-work would take its own progress report
                         with it. */}
+                    {here && w.kind === "self" && !offline && !lead && readingMessage ? (
+                      <p className="jar-board-acts" role="status" data-jar-chrome="1">
+                        {say(readingMessage)}
+                        {!readingRefresh.busy && (readingRefresh.canResume || ["error", "failed", "unknown"].includes(readingRefresh.phase)) ? (
+                          <button className="jar-board-act jar-label" type="button" onClick={() => void readingRefresh.start()}>
+                            {say(readingRefresh.canResume ? "worldReadCheck" : "worldReadAgain")}
+                          </button>
+                        ) : null}
+                      </p>
+                    ) : null}
                     {here &&
                     w.kind === "self" &&
                     !offline &&
                     lead &&
                     !editing.open &&
-                    (posterAsk || board.step !== "rest") ? (
+                    (posterAsk || board.step !== "rest" || readingMessage !== null) ? (
                       <div className="jar-board-acts" data-jar-chrome="1">
-                        {board.step === "asking" ? (
+                        {readingRefresh.busy ? (
+                          <span className="jar-board-act jar-label" role="status">{say(readingMessage ?? "worldReadingNow")}</span>
+                        ) : board.step === "asking" ? (
                           <>
                             {/* WHAT WILL CHANGE, BEFORE IT CHANGES. Frostpunk's
                                 first game commits and then judges; its second
@@ -13057,21 +13062,19 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                               {say("worldLeaveItCap")}
                             </button>
                           </>
-                        ) : board.step === "working" ? (
-                          <span className="jar-board-act jar-label">{say("worldReadingNow")}</span>
                         ) : (
                           <>
-                            {boardToast ? (
+                            {readingMessage || boardToast ? (
                               <span className="jar-board-warn" role="status">
-                                {boardToast}
+                                {readingMessage ? say(readingMessage) : boardToast}
                               </span>
                             ) : null}
                             <button
                               type="button"
                               className="jar-board-act jar-label"
-                              onClick={() => setBoard({ step: "asking" })}
+                              onClick={() => readingRefresh.canResume ? void readingRefresh.start() : setBoard({ step: "asking" })}
                             >
-                              {say("worldReadItAgain")}
+                              {say(readingRefresh.canResume ? "worldReadCheck" : "worldReadItAgain")}
                             </button>
                             {/* Holding is the person overruling the ordering:
                                 the server keeps feeding the entry but never

@@ -239,6 +239,13 @@
       "when": 1790812800002,
       "tag": "0033_group-output-policy",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1790812800003,
+      "tag": "0034_background-completion-receipts",
+      "breakpoints": true
     }
   ]
 }

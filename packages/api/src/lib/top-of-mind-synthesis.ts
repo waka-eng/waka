@@ -1145,14 +1145,15 @@ export async function refreshTopOfMindForProfile(
     // version forward whole is the honest record of that. Dropping its
     // generated entries here would empty someone's top of mind on a
     // technicality, without a single model call having been made.
-    const nothingReconsidered = selected.length === 0 && previous !== null;
-    const entries = nothingReconsidered
+    // An explicit no-change response may omit entries; it is not a deletion.
+    const preserveCurrent = (selected.length === 0 || modelSaidNoChange) && previous !== null;
+    const entries = preserveCurrent
       ? carryEverything(previous)
       : assembleEntries({ carried: previous?.entries ?? [], generated });
 
     const unchanged =
       previous !== null &&
-      (nothingReconsidered || modelSaidNoChange || isUnchanged(previous.entries, entries));
+      (preserveCurrent || isUnchanged(previous.entries, entries));
     const reason: TopOfMindRevisionReason = previous === null
       ? "initial"
       : unchanged
@@ -1880,15 +1881,15 @@ export async function refreshTopOfMindForGroup(
     const publicCarried = applied.entries.filter((entry) => entry.inputPolicy === GROUP_INPUT_POLICY);
     const withheldEntries = applied.entries.filter((entry) => entry.inputPolicy !== GROUP_INPUT_POLICY);
 
-    const nothingReconsidered = shared.length === 0 && previous !== null;
-    const entries = nothingReconsidered
+    const preserveCurrent = (shared.length === 0 || modelSaidNoChange) && previous !== null;
+    const entries = preserveCurrent
       ? carryCarriedEntries(publicCarried)
       : assembleEntries({ carried: publicCarried, generated });
 
     const unchanged =
       previous !== null &&
       applied.applied === 0 &&
-      (nothingReconsidered || modelSaidNoChange || isUnchanged(previous.entries, entries));
+      (preserveCurrent || isUnchanged(previous.entries, entries));
     const reason: TopOfMindRevisionReason =
       previous === null
         ? "initial"

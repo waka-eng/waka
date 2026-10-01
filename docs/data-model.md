@@ -214,6 +214,13 @@ agent's relayed excerpt, an agent's own observation.
   Restriction metadata crosses the HTTP client intact; failed or expired
   verification removes cached shared content, without deleting server records
   or personal drafts. Superseded reads cannot restore an older snapshot.
+- **Background completion is separate from queue acceptance.** A
+  `background_jobs.result` receipt records a completed top-of-mind artifact
+  ID/version and whether the pass changed content, held its reading, or had
+  nothing to synthesize. It contains no source text. The owning worker writes
+  it with completion; a pending rerun exposes no completed receipt. Status
+  reads are profile-scoped. This job receipt does not replace the source
+  revision/provenance contract needed for downstream evidence reconciliation.
 
 ## Experience (layer-1 grouping)
 

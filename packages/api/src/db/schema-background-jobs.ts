@@ -122,6 +122,14 @@ export type BackgroundJobPayload =
   | ReembedSignalPayload
   | GenerateReflectionQuestionPayload;
 
+/** A result is not available until the final requested pass has completed. */
+export interface BackgroundJobResult {
+  kind: "top_of_mind";
+  topOfMindId: string | null;
+  version: number;
+  outcome: "changed" | "unchanged" | "empty";
+}
+
 export const backgroundJobs = pgTable(
   "background_jobs",
   {
@@ -133,6 +141,7 @@ export const backgroundJobs = pgTable(
 
     type: backgroundJobTypeEnum("type").notNull(),
     payload: jsonb("payload").$type<BackgroundJobPayload>().notNull(),
+    result: jsonb("result").$type<BackgroundJobResult>(),
     status: backgroundJobStatusEnum("status").notNull().default("pending"),
 
     attempts: integer("attempts").notNull().default(0),

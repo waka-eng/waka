@@ -392,6 +392,14 @@ citations against exactly that set. Neither is any use without the other.
 Refreshes are debounced to one pending pass per profile, with the same
 trailing-edge `rerun_requested` semantics as derivation.
 
+Queue acceptance is not completion. The worker stores a metadata-only result
+with its owned claim's final status; a rerun keeps the receipt unavailable
+until the trailing pass finishes. The profile-scoped refresh-status endpoint
+returns the completed top-of-mind ID/version and changed/unchanged/empty
+outcome, never provider errors or source text. Clients fetch that completed
+or a newer live version before reporting success. Worker claim checks fence
+job settlement; source-revision fencing is a separate requirement.
+
 **And the board shifts at most once a day.** An automatic
 (`signals_changed`) refresh that arrives while the latest CONTENT version —
 reason ≠ `no_change`; the honest no-change rows record that a read
@@ -406,6 +414,10 @@ exemptions, both deliberate: `manual` refreshes — the person's own "Read it
 again", a language change — never wait, and a profile with no content
 version yet has nothing to hold stable. The machine holds a day; the person
 never does.
+
+A manual request also upgrades an already-held automatic row and wakes it.
+Automatic requests arriving after a manual pass remain automatic; they do
+not inherit its bypass. All starts still pass the account's model budget.
 
 ### 2. Selection: deterministic, scored, bounded
 
@@ -520,7 +532,7 @@ person's own vocabulary back to them.
 | Every cited signal exists and belongs to this profile | Citations validated against the DB; invented ones dropped; an entry left citing nothing is dropped with it. An artifact that cites nothing is a horoscope. |
 | Locked entries survive **byte-identical** | Copied forward from storage, never from the model's reply — the model is asked to reproduce them and then not trusted to. Violations are counted and logged. |
 | Pins, dismissals, locks survive regeneration | Columns on entries, carried by code; the model never sees or controls them. |
-| "Nothing changed" is a decision, not a silence | A no-move pass writes a version with reason `no_change` — a silent pass and a broken generator look identical from outside. |
+| "Nothing changed" is a decision, not a silence | A no-move pass preserves current entries and writes a version with reason `no_change`, including when the model omits the unchanged entries. A silent pass and a broken generator look identical from outside. |
 | No concurrent writes to one artifact family | Per-owner advisory lock held across read-synthesize-write; entry edits take the same lock. |
 | Order-shuffled citations are not a change | The no-change comparison treats citations as a set. |
 | Rejected content does not return | Entries whose latest verdict is `not_true` may not come back in the same form; corrections outrank model phrasing. |

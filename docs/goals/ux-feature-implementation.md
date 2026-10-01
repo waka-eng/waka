@@ -1,6 +1,6 @@
 # Goal: implement the experience review
 
-Status: in flight — A/B and C input/output/cache fixes locally checked; deployment-target verification and historical repair remain open. Full release verification remains open.
+Status: in flight — A/B, C input/output/cache and E1 manual-refresh fixes locally checked; D/E2 and later delivery slices remain open. Deployment-target verification, historical repair and full release verification remain open.
 Created: 2026-10-01, on the owner's instruction to implement the full plan.
 Branch: `codex/ux-feature-implementation`.
 Baseline: `33e65a7` on `dev`.
@@ -29,7 +29,7 @@ experiments or revive superseded room goals.
 | B | F3/F4: edited principle preservation, truthful support, account-scoped drafts/preferences and cancellation | Isolated SQL preservation tests and two-account browser/state tests; API/web checks | B1: 6 SQL / 653 unit tests pass after 3 reproduced failures. B2: 4 failures reproduced, then two-account draft and stale-response checks pass; full web suite 331/331. Deployed/account-switch browser verification remains open. |
 | C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | C1/C2/C3 code locally verified (51 SQL cases; full web 349/349). Read-only inventory completed across 5 rooms in the DB referenced by the local env files; hosted-stage mapping is not verified. Historical repair, deployment coordination and deployed verification remain pending. |
 | D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | Pending |
-| E1 | F7/F8: authoritative poster and truthful manual refresh | Queue acceptance, changed/unchanged completion, failure and fresh displayed version verified | Pending |
+| E1 | F7/F8: authoritative poster and truthful manual refresh | Queue acceptance, changed/unchanged completion, failure and fresh displayed version verified | Implemented with job receipts, resumable profile-scoped polling, held-job manual upgrade and authoritative headline. Local checks pass (8 receipt SQL tests, 10 hook tests, full web 362/362); deployed verification remains open. |
 | E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | Pending |
 | F | F11/F12: visible search and durable navigation | Results beyond initial archive, failure/no-match separation, stable IDs, deep links, Back/Forward and rename verified | Pending |
 | G | F13: capture attachments and recoverable failure | Paste/drop/select preview; saved text survives failure; retry attaches once; sharing destination clear | Pending |
@@ -238,3 +238,41 @@ Keep code, deployment, historical repair, and user validation evidence distinct.
   verify the actual stage binding before any migration/repair, and do not
   classify the 5-room inventory as covering both deployed stages. No env file,
   secret, workflow, hosted database, or infrastructure was changed.
+- 2026-10-01, E1 baseline: reproduced 2/2 UI failures (queue acceptance
+  claimed a redraw; the boot-time adopted headline survived a completed new
+  board) and 1/1 SQL failure (manual refresh joined an automatic job held until
+  tomorrow without waking it). Completion testing then reproduced another
+  failure: `noChange: true` with an empty entries array wrote an empty board
+  while claiming no change. That path now preserves current words for both
+  personal and room readings.
+- E1 implementation: migration 0034 adds a metadata-only job result (top-of-mind
+  ID/version/outcome), committed with the owning worker's completion. A rerun
+  exposes no premature receipt; old workers cannot settle another claim's
+  job status. GET refresh status is profile-scoped and never returns payloads
+  or provider errors. Manual requests upgrade a held automatic job; subsequent
+  automatic work does not inherit manual cadence bypass. The UI saves only
+  the job ID in account/profile-scoped session storage, resumes status reads,
+  bounds slow status checks, distinguishes queue/running/held/delayed/failed
+  and completed outcomes in one transient line, and applies a fetched matching
+  or newer version before reporting completion. It does not move the camera.
+  Empty completion remains visible even when there is no headline.
+- E1 verification: 8/8 real SQL receipt tests, 4/4 shift-floor tests, 3/3 queue
+  fairness tests, 9/9 room output privacy tests (including no-change carry),
+  and 6/6 route boundary tests pass — 30 SQL tests on isolated local schemas.
+  The boundary suite now probes the status endpoint as well; its authorized
+  attachment fixture still emits its pre-existing isolated-queue warning, so
+  that suite is evidence of access behavior, not of attachment job delivery.
+  10/10 hook tests cover resumability, delayed/held work, transient and terminal
+  failures, bounded hung reads, duplicate starts, and identity changes. The
+  real Home tests cover queued, completed-new and empty results. Full web
+  suite 362/362; API unit suite 655 passed / 3 paid-live benches skipped.
+  API/web/admin typechecks, web build, migration and diff checks pass. No
+  live model calls, shared migrations, external writes, push or deployment.
+- Remaining contract work is unchanged: D must provide exact source revisions,
+  evidence withdrawal and durable downstream handoff; E2 must connect saved
+  captures/reflections to those revisions and their resulting readings. A
+  job receipt is not proof that every newer source edit has propagated. The
+  initial POST's ambiguous delivery still needs request identity/reconciliation
+  in that broader workflow; the current resume path starts only after a receipt
+  is known. Lease-fenced job settlement is not full artifact/source fencing.
+  Keep those requirements open rather than treating E1 as the whole loop.

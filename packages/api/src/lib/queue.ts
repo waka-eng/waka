@@ -129,6 +129,7 @@ import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm";
 
 import {
   type BackgroundJob,
+  type BackgroundJobResult,
   groupMembers,
   backgroundJobs,
   type BackgroundJobStatus,
@@ -199,7 +200,7 @@ export interface EnqueueResult {
 export interface DrainBackgroundJobsOptions {
   limit?: number;
   now?: Date;
-  processor?: (job: BackgroundJob) => Promise<void>;
+  processor?: (job: BackgroundJob) => Promise<BackgroundJobResult | void>;
   /**
    * Where the loop reads and writes its rows. Defaults to Postgres; a test
    * hands it a queue it can hold in memory, which is what makes the budget
@@ -278,7 +279,7 @@ export interface BackgroundJobStore {
   usageForAccount(accountId: string, since: Date): Promise<AccountModelUsage>;
   /** Push this account's due, unstarted work out to `until`. Returns rows moved. */
   deferAccountBacklog(input: DeferAccountBacklogInput): Promise<number>;
-  markSucceeded(jobId: string): Promise<void>;
+  markSucceeded(job: BackgroundJob, result: BackgroundJobResult | null): Promise<boolean>;
   markFailedOrPending(
     job: BackgroundJob,
     err: unknown,
@@ -515,6 +516,14 @@ export async function enqueueTopOfMindRefresh(
       -- reading them; flag a re-run so the artifact reflects the change rather
       -- than staying stale until some unrelated later event.
       rerun_requested = CASE WHEN ${RUNNING_JOB_STATUS} THEN true ELSE background_jobs.rerun_requested END,
+      payload = CASE
+        WHEN ${RUNNING_JOB_STATUS} AND NOT background_jobs.rerun_requested THEN EXCLUDED.payload
+        WHEN EXCLUDED.payload->>'reason' = 'manual' THEN EXCLUDED.payload
+        ELSE background_jobs.payload
+      END,
+      run_after = CASE WHEN EXCLUDED.payload->>'reason' = 'manual'
+        THEN LEAST(background_jobs.run_after, now()) ELSE background_jobs.run_after END,
+      result = NULL,
       updated_at = now()
     RETURNING id, (xmax = 0) AS created
   `);
@@ -784,9 +793,8 @@ export async function drainBackgroundJobs(
     result.claimed += 1;
 
     try {
-      await (options.processor ?? processBackgroundJob)(job);
-      await store.markSucceeded(job.id);
-      result.succeeded += 1;
+      const completion = await (options.processor ?? processBackgroundJob)(job);
+      if (await store.markSucceeded(job, completion ?? null)) result.succeeded += 1;
     } catch (err) {
       if (err instanceof ShiftFloorHeldError) {
         await store.holdJob(job, err.heldUntil);
@@ -823,7 +831,7 @@ export async function runBackgroundJobWorker(
 // The job router
 // ---------------------------------------------------------------------------
 
-export async function processBackgroundJob(job: BackgroundJob): Promise<void> {
+export async function processBackgroundJob(job: BackgroundJob): Promise<BackgroundJobResult | void> {
   switch (job.type) {
     case "generate_reflection_question": {
       const payload = parseGenerateReflectionQuestionPayload(job.payload);
@@ -947,7 +955,11 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<void> {
         entryCount: result.entryCount,
       });
       await (await import("./principle-status.js")).requestPrincipleRefresh(getDb(), job.profileId);
-      return;
+      return {
+        kind: "top_of_mind", topOfMindId: result.topOfMindId, version: result.version,
+        outcome: result.entryCount === 0 ? "empty"
+          : result.reason === "no_change" ? "unchanged" : "changed",
+      };
     }
 
     case "refresh_group_top_of_mind": {
@@ -1284,6 +1296,8 @@ async function claimNextBackgroundJob(now = new Date()): Promise<BackgroundJob |
     SET
       status = 'running'::background_job_status,
       attempts = job.attempts + 1,
+      rerun_requested = false,
+      result = NULL,
       locked_at = ${nowIso}::timestamptz,
       started_at = ${nowIso}::timestamptz,
       updated_at = ${nowIso}::timestamptz
@@ -1304,6 +1318,8 @@ async function claimNextBackgroundJob(now = new Date()): Promise<BackgroundJob |
       job.profile_id AS "profileId",
       job.type,
       job.payload,
+      job.result,
+      job.rerun_requested AS "rerunRequested",
       job.status,
       job.attempts,
       job.max_attempts AS "maxAttempts",
@@ -1320,25 +1336,30 @@ async function claimNextBackgroundJob(now = new Date()): Promise<BackgroundJob |
   return result[0] ?? null;
 }
 
-async function markJobSucceeded(jobId: string): Promise<void> {
+async function markJobSucceeded(job: BackgroundJob, completion: BackgroundJobResult | null): Promise<boolean> {
   // A job flagged mid-run goes back to pending, its flag cleared and its
   // attempts zeroed — the trailing edge the running pass could not see, run
   // exactly once no matter how many requests arrived while it worked. An
   // unflagged job simply succeeds.
-  await getDb().execute(sql`
+  const rows = await getDb().execute(sql`
     UPDATE background_jobs
     SET status = CASE
           WHEN rerun_requested THEN 'pending'::background_job_status
           ELSE 'succeeded'::background_job_status
         END,
+        result = CASE WHEN rerun_requested THEN NULL ELSE ${completion ? JSON.stringify(completion) : null}::jsonb END,
         rerun_requested = false,
         attempts = CASE WHEN rerun_requested THEN 0 ELSE attempts END,
         run_after = CASE WHEN rerun_requested THEN now() ELSE run_after END,
         locked_at = NULL,
         last_error = NULL,
         updated_at = now()
-    WHERE id = ${jobId}::uuid
+    WHERE id = ${job.id}::uuid AND status = 'running'
+      AND locked_at = ${coerceNullableDate(job.lockedAt)?.toISOString() ?? null}::timestamptz
+      AND attempts = ${job.attempts}
+    RETURNING id
   `);
+  return rows.length > 0;
 }
 
 /**
@@ -1354,9 +1375,13 @@ async function holdBackgroundJob(job: BackgroundJob, until: Date): Promise<void>
         locked_at = NULL,
         started_at = NULL,
         attempts = GREATEST(attempts - 1, 0),
-        run_after = ${until.toISOString()}::timestamptz,
+        run_after = CASE WHEN payload->>'reason' = 'manual' THEN now() ELSE ${until.toISOString()}::timestamptz END,
+        result = NULL,
+        rerun_requested = false,
         updated_at = now()
-    WHERE id = ${job.id}::uuid
+    WHERE id = ${job.id}::uuid AND status = 'running'
+      AND locked_at = ${coerceNullableDate(job.lockedAt)?.toISOString() ?? null}::timestamptz
+      AND attempts = ${job.attempts}
   `);
 }
 
@@ -1377,8 +1402,11 @@ async function markJobFailedOrPending(
         locked_at = ${lockedAt}::timestamptz,
         run_after = ${runAfter}::timestamptz,
         last_error = ${sanitizeError(err)},
+        result = NULL,
         updated_at = ${now.toISOString()}::timestamptz
-    WHERE id = ${job.id}::uuid
+    WHERE id = ${job.id}::uuid AND status = 'running'
+      AND locked_at = ${coerceNullableDate(job.lockedAt)?.toISOString() ?? null}::timestamptz
+      AND attempts = ${job.attempts}
   `);
 }
 

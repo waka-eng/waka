@@ -119,6 +119,19 @@ describe("room output privacy", () => {
     expect(await loadPrincipleStatus(t.db as never, f.mind)).toMatchObject({ restricted: true });
   });
 
+  it("preserves a verified room reading when the provider explicitly says no change", async () => {
+    const f = await fixture();
+    const old = await legacyReading(f.groupId, f.ids, false);
+    await t.sql`UPDATE top_of_mind_entries SET body = 'Our current public direction', belief = NULL, prompt = NULL,
+      input_policy = 'group-public-v1' WHERE id = ${old.entryId}`;
+    await refreshTopOfMindForGroup({ groupId: f.groupId, reason: "manual" }, {
+      db: t.db as never, modelProvider: { synthesizeTopOfMind: async () => ({ noChange: true, entries: [] }) } as unknown as ModelProvider,
+    });
+    const view = await loadGroupTopOfMind(t.db as never, f.groupId);
+    expect(view.topOfMind?.reason).toBe("no_change");
+    expect(view.entries.map((entry) => entry.body)).toEqual(["Our current public direction"]);
+  });
+
   it("excludes legacy principles and entries from every new principle prompt", async () => {
     const f = await fixture();
     const old = await legacyReading(f.groupId, f.ids);

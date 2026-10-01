@@ -193,6 +193,21 @@ describe("the shift floor", () => {
     expect(await contentVersions(profileId), "the manual shift landed").toHaveLength(2);
   });
 
+  it("a manual request wakes an already-held automatic job", async () => {
+    const profileId = await seedProfile();
+    signalIds = await seedSignals(profileId);
+    await enqueueTopOfMindRefresh(profileId, "signals_changed");
+    await drain();
+    const automatic = await enqueueTopOfMindRefresh(profileId, "signals_changed");
+    expect((await drain()).held).toBe(1);
+    const manual = await enqueueTopOfMindRefresh(profileId, "manual");
+    expect(manual.jobId).toBe(automatic.jobId);
+    const result = await drain();
+    expect(result.succeeded).toBe(1);
+    expect(result.held).toBe(0);
+    expect(await contentVersions(profileId)).toHaveLength(2);
+  });
+
   it("(iii) an aged floor releases on the next drain", async () => {
     const profileId = await seedProfile();
     signalIds = await seedSignals(profileId);

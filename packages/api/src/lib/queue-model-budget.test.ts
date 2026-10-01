@@ -135,6 +135,7 @@ class InMemoryBackgroundJobStore implements BackgroundJobStore {
       profileId: row.profileId,
       type: "derive_signals",
       payload: { inspirationId: `inspiration-${row.id}`, reason: "created" },
+      result: null,
       status: "running",
       attempts: row.attempts,
       maxAttempts: MAX_ATTEMPTS,
@@ -176,9 +177,10 @@ class InMemoryBackgroundJobStore implements BackgroundJobStore {
     return due.length;
   }
 
-  async markSucceeded(jobId: string): Promise<void> {
-    const row = this.rows.find((candidate) => candidate.id === jobId);
+  async markSucceeded(job: BackgroundJob): Promise<boolean> {
+    const row = this.rows.find((candidate) => candidate.id === job.id);
     if (row) row.status = "succeeded";
+    return row !== undefined;
   }
 
   async holdJob(job: BackgroundJob, until: Date) {

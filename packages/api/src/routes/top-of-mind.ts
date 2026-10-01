@@ -37,6 +37,7 @@ import {
 import { getDb } from "../lib/db.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
 import { enqueueTopOfMindRefresh } from "../lib/queue.js";
+import { loadTopOfMindRefreshStatus } from "../lib/top-of-mind-refresh-status.js";
 import { acquireTopOfMindArtifactLock } from "../lib/top-of-mind-family-lock.js";
 import { validationDetails } from "../lib/validation.js";
 import { loadProfileTarget, resolveProfileScope } from "./signals.js";
@@ -447,6 +448,7 @@ export interface TopOfMindRouteDependencies {
   listVersions?: typeof listTopOfMindVersions;
   updateEntry?: typeof updateLiveEntry;
   requestRefresh?: typeof enqueueTopOfMindRefresh;
+  loadRefreshStatus?: typeof loadTopOfMindRefreshStatus;
   loadProfile?: typeof loadProfileTarget;
   authMiddleware?: MiddlewareHandler<AuthEnv>;
 }
@@ -552,6 +554,18 @@ export function createTopOfMindRoutes(
     // 202: the artifact a caller reads back now is still the current version.
     // The queue collapses concurrent requests into one synthesis.
     return c.json({ status: "queued", jobId }, 202);
+  });
+
+  routes.get("/refresh/:jobId", async (c) => {
+    const jobId = z.string().uuid().safeParse(c.req.param("jobId"));
+    const query = scopeQuerySchema.safeParse(c.req.query());
+    if (!jobId.success || !query.success) return c.json({ error: "Invalid refresh status request" }, 400);
+    const db = getDatabase();
+    const scope = await resolveProfileScope(db, c.get("session"), query.data.profile, "read", loadProfile);
+    if (!scope.ok) return c.json(scope.body, scope.status);
+    const status = await (deps.loadRefreshStatus ?? loadTopOfMindRefreshStatus)(db, scope.profileId, jobId.data);
+    if (!status) return c.json({ error: "Reading request not found" }, 404);
+    return c.json(status);
   });
 
   routes.patch("/entries/:entryId", async (c) => {

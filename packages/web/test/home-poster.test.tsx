@@ -56,6 +56,9 @@
  *
  *   `lib/auth-context` — the session as a stated fact; the page renders a
  *   different world for a signed-out visitor.
+ *   `sessionStorage` — reset between refresh scenarios so a saved job receipt
+ *   from one scenario is not another one's starting state. Refresh queue/status
+ *   responses use the same `lib/api` seam as the other writes.
  *
  *   `helpers/canvas-stub` and `helpers/render-home` — canvas, clock, frame
  *   loop, viewport. `home-field.test.tsx` gives the long version of all four.
@@ -94,6 +97,7 @@ const at = (daysAgo: number) => BASE - daysAgo * 86_400_000;
  * every copy of a repeated word is carried and the bug is invisible.
  */
 const FIRST = "We ask the owner when the spec and the code disagree";
+const refreshState = vi.hoisted(() => ({ body: "", status: "pending", requests: 0, empty: false }));
 
 const SPEC = "sig-spec";
 const CODE = "sig-code";
@@ -254,7 +258,7 @@ vi.mock("../src/lib/data", async (importOriginal) => {
         createdMs: at(3),
       })),
     }),
-    loadTopOfMind: async () => board(FIRST),
+    loadTopOfMind: async () => ({ ...board(refreshState.body || FIRST), ...(refreshState.empty ? { entries: [] } : {}) }),
   };
 });
 
@@ -263,6 +267,9 @@ vi.mock("../src/lib/api", async (importOriginal) => {
   return {
     ...actual,
     ...apiMockFrom(FACTS),
+    refreshTopOfMind: async () => { refreshState.requests += 1; return { jobId: "00000000-0000-4000-8000-000000000991" }; },
+    fetchTopOfMindRefresh: async () => ({ status: refreshState.status, runAfter: null,
+      result: refreshState.status === "succeeded" ? { kind: "top_of_mind", topOfMindId: "tom-self", version: 3, outcome: refreshState.empty ? "empty" : "changed" } : null }),
     /* The write behind "keep these words". Its RESULT is discarded by the
        page — the new sentence is already in hand — so this only has to
        resolve. What matters is that it is mocked at all: unmocked it would
@@ -313,6 +320,9 @@ beforeAll(() => {
 });
 
 beforeEach(async () => {
+  refreshState.body = ""; refreshState.status = "pending"; refreshState.requests = 0;
+  refreshState.empty = false;
+  sessionStorage.clear();
   layout = await mountWorld(FACTS);
 });
 
@@ -653,6 +663,31 @@ describe("what the poster is standing on", () => {
 });
 
 describe("board acts leave receipts", () => {
+  it("does not call queued work a completed redraw", async () => {
+    await press(".jar-board-act", /read it again/i);
+    await press(".jar-board-act", /^read again$/i);
+    expect(refreshState.requests).toBe(1);
+    expect(posterText()).toBe(FIRST);
+    expect(layout.container.textContent).not.toContain("sky was redrawn");
+  });
+
+  it("shows the completed current headline instead of the boot-time override", async () => {
+    refreshState.body = "We now test assumptions with a small experiment";
+    refreshState.status = "succeeded";
+    await press(".jar-board-act", /read it again/i);
+    await press(".jar-board-act", /^read again$/i);
+    await layout.step(20);
+    expect(posterText()).toBe(refreshState.body);
+  });
+
+  it("keeps an empty completion visible after the old headline disappears", async () => {
+    refreshState.empty = true; refreshState.status = "succeeded";
+    await press(".jar-board-act", /read it again/i);
+    await press(".jar-board-act", /^read again$/i);
+    await layout.step(10);
+    expect(layout.container.textContent).not.toContain(FIRST);
+    expect(layout.container.textContent).toContain("Nothing new to read yet.");
+  });
   /**
    * goal: the-legible-loop, Phase 2. A gesture on the board says what it
    * taught the loop, in the registry's exact words — and the registry pins
