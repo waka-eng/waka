@@ -76,6 +76,9 @@ import { isEditableTarget, isNativeSurface } from "../lib/surface-input";
 import { profileStorageKey, readProfileText, writeProfileText, type ProfileStorageScope } from "../lib/profile-storage";
 import { useTopOfMindRefresh } from "../lib/use-top-of-mind-refresh";
 import { useInspirationProcessing } from '../lib/use-inspiration-processing';
+import { useAuthoredSave } from '../lib/use-authored-save';
+import { restoreInspirationDraft, settleInspirationDraft } from '../lib/authored-save-drafts';
+import { AuthoredSaveNotice } from '../components/AuthoredSaveNotice';
 import { acceptsReadingSnapshot } from "../lib/reading-snapshot";
 import { clamp, clamp01, DAY_MS, easeOut, hashStr, kd, lerp, mix32, TAU } from "../lib/num";
 import {
@@ -176,7 +179,6 @@ import {
   resolveSignalDuplicate,
   affirmGroupProposal,
   declineGroupProposal,
-  createInspiration,
   createGroup,
   fetchPrinciples,
   createProfile,
@@ -187,6 +189,7 @@ import {
   type ApiGroupTimeline,
   type ApiGroupTopOfMind,
   type ApiReflection,
+  type ApiInspiration,
   leaveGroup,
   removeGroupMember,
   renameGroup,
@@ -249,7 +252,7 @@ import {
   loadTopOfMindVersion,
   loadSignal,
   loadSignals,
-  toInspiration,
+  toInspirationDetail,
   type Inspiration,
   type InspirationDetail,
   type Entry,
@@ -1098,7 +1101,7 @@ interface SimApi {
      answered without moving now: `.jar-prov-room` puts the grounds and the
      whole memory on screen over the world you are standing in. */
   /** A saved answer was added or taken back; every view of its orb agrees. */
-  reflectionChanged: (inspirationId: string, delta: 1 | -1) => void;
+  reflectionChanged: (inspirationId: string, delta: number) => void;
   /**
    * A MEMORY IS BORN AT THE MOUTH.
    *
@@ -1498,6 +1501,12 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
       synthesis, which the layout says in words rather than leaving blank. */
   const [topOfMind, setTopOfMind] = useState<TopOfMind | null>(null);
   const sourceProcessing = useInspirationProcessing(storageScope);
+  const inspirationSaveHandlers = useRef<Pick<Parameters<typeof useAuthoredSave>[0], 'onResolved' | 'onRemoved' | 'onEditRejected'> | null>(null);
+  const inspirationSave = useAuthoredSave({ scope: storageScope, operation: 'inspiration', enabled: phase === 'ready' && !offline,
+    onResolved: (...args) => { if (!inspirationSaveHandlers.current) throw new Error('Save view is not ready'); return inspirationSaveHandlers.current.onResolved(...args); },
+    onRemoved: (...args) => { if (!inspirationSaveHandlers.current) throw new Error('Save view is not ready'); inspirationSaveHandlers.current.onRemoved(...args); },
+    onEditRejected: (...args) => { if (!inspirationSaveHandlers.current) throw new Error('Save view is not ready'); inspirationSaveHandlers.current.onEditRejected?.(...args); },
+  });
   const sourceProcessingActiveRef = useRef(sourceProcessing.active);
   sourceProcessingActiveRef.current = sourceProcessing.active;
   // The comparison belongs to this verified snapshot, not every future read
@@ -1770,7 +1779,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
         : result.outcome;
     },
   });
-  const readingMessage: MessageKey | null = sourceProcessing.active && !readingRefresh.busy ? null
+  const readingMessage: MessageKey | null = (sourceProcessing.active || inspirationSave.phase !== 'idle') && !readingRefresh.busy ? null
     : !readingRefresh.busy && readingChecking ? "worldReadingChecking"
     : !readingRefresh.busy && readingCheckFailed ? "worldReadingCheckFailed"
     : topOfMind?.supportChanged &&
@@ -2002,9 +2011,6 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   /* where the pen last was, written on every keystroke — see the boundary
      effect beside the focus effect for why the field needs to be told */
   const mouthCaretRef = useRef(0);
-  useEffect(() => {
-    writeProfileText(storageScope, "draft", draft);
-  }, [draft, storageScope]);
   /* an unfinished sentence found on arrival opens the mouth holding it, rather
      than sitting invisible behind a phrase that says nothing about it */
   /**
@@ -8756,7 +8762,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        * on the way is the state change being announced, and the companion
        * answers with a flare.
        */
-      reflectionChanged: (inspirationId: string, delta: 1 | -1) => {
+      reflectionChanged: (inspirationId: string, delta: number) => {
         const matches = new Set<Ball>();
         for (const b of list) {
           if (b.id === inspirationId || b.sigId === inspirationId) matches.add(b);
@@ -10195,20 +10201,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       return;
     }
     setMouthOpen(false);
+    draftRef.current = ''; writeProfileText(storageScope, 'draft', '');
     setDraft("");
     setMouthNote("");
   }, [saveAsDraft]);
 
   /**
-   * KEEP IT. Optimism with honesty, in that order: the memory is born in the
-   * ground before the network is asked — because that is the payoff, and
-   * because a save that only appears once a server has agreed teaches you
-   * that the world is somewhere else — and if the keep does not land, the orb
-   * fades back out and the words come back with a line saying so.
-   *
-   * The birth is measured off the words while they are still on screen, so it
-   * happens before the mouth is emptied. React's state updates are queued;
-   * the DOM read below is of the field the person just typed into.
+   * KEEP IT. The owned draft and immutable pending intent survive until a
+   * saved row is confirmed. Only then does its orb arrive; a late completion
+   * never clears newer words or appends an already-known memory twice.
    */
   /**
    * The product's one translation of an error into words, kept in `lib` so the
@@ -10220,199 +10221,78 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     [],
   );
 
-  /* a keep is the draft reaching home: nothing waits any more */
-  const keepIt = useCallback(
-    (andReflect = false) => {
-    const text = draft.trim();
-    if (text === "") return;
-    /* LINKS TYPED INTO THE MOUTH BECOME ATTACHMENTS.
-       Paste a link and the archive turned it into one, which mattered far more
-       than it looked: the server fetches that page at capture time and feeds
-       what it reads to pattern extraction. Left as bare text the extraction
-       never sees the page, so the archive quietly learns less from exactly the
-       inspirations that carry the most — and nothing on screen says so. */
-    const links = Array.from(new Set(text.match(/https?:\/\/[^\s<>"')]+/g) ?? []));
-    const atMs = Date.now();
-    const seed: BornSeed = {
-      id: `kept-${atMs.toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-      capturedMs: atMs,
-      updatedMs: atMs,
-      textPreview: text,
-      kind: "note",
-      quote: null,
-      reflectionCount: 0,
-      /* Nothing has read it yet, and the world does not pretend otherwise:
-         distillation is a background pass on the server, so a memory a second
-         old is genuinely uncited, carries nothing, and is drawn that way.
-         When the pass lands, the re-light effect gives it whatever it turns
-         out to hold up. */
-      cited: false,
-      roots: 0,
-      promotion: 0,
-      onPoster: false,
-      underPrinciple: false,
-      inGroup: false,
-      terms: [],
-    };
-    bornRef.current = [...bornRef.current, seed];
-    simApiRef.current?.born(seed);
+  const sourceListMutationRef = useRef(0);
+  const attachmentRequestsRef = useRef(new Set<string>());
+  const birthInspiration = (id: string, text: string, atMs: number, serverId?: string) => {
+    const seed: BornSeed = { id, ...(serverId ? { sigId: serverId } : {}), capturedMs: atMs, updatedMs: atMs,
+      textPreview: text, kind: "note", quote: null, reflectionCount: 0,
+      cited: false, roots: 0, promotion: 0, onPoster: false, underPrinciple: false, inGroup: false, terms: [] };
+    bornRef.current = [...bornRef.current, seed]; simApiRef.current?.born(seed);
+    if (serverId) bornIdsRef.current.add(serverId);
     setClockMs(atMs);
-    setDraft("");
-    setMouthOpen(false);
-    setMouthNote("");
-    /**
-     * THE ORB IS THE RECEIPT — AND ON A WALL THAT IS NOT YOURS THERE IS NO
-     * ORB, SO THERE IS NO RECEIPT.
-     *
-     * A keep is always YOURS: it goes to your own archive wherever you happen
-     * to be standing when you write it. On your own wall that is invisible
-     * and right, because the memory drops into the ground in front of you and
-     * the drop is the acknowledgement. Standing in a room or on an agent's
-     * wall, the ground belongs to someone else, so nothing drops — and
-     * measured on this build, nothing else happened either: no orb, no line,
-     * no count (the archive door is not on a room's wall at all). The mouth
-     * simply emptied. A person who cannot tell whether it took writes it
-     * again.
-     *
-     * The world already owns the words for this. The founder ruled it for
-     * `save and reflect` on 2026-08-25 — the case where a keep happens and
-     * the orb is not what you are looking at: "make clear it was saved —
-     * character brightens with the word saved shown in the place of capture
-     * inspiration". Same shape, same slot, and it says WHERE as well as THAT,
-     * because "saved" alone would send somebody hunting this wall for an orb
-     * that was never going to be here.
-     */
-    /**
-     * WITH NOTHING BEHIND THE WORLD, THE KEEP IS NOT ASKED FOR.
-     *
-     * The orb is born, the ground re-fits around it and the gesture is
-     * genuinely exercisable — that is the whole reason the mouth stays open
-     * offline. What must not happen is the world implying a server agreed:
-     * there is no request, so there is no optimism to be honest about, and
-     * the marker line has already said that nothing here is kept. Retracting
-     * the orb instead would be worse — it would teach that the gesture is
-     * broken, when the only thing missing is the database.
-     */
-    if (offlineRef.current) return;
-    createInspiration({
-      text,
-      source: "app",
-      /* omitted when private: the column default decides what unset means */
-      ...(keepPublic ? { visibility: "public" as const } : {}),
-    }, { profile: storageScope?.profileId })
-      .then((made) => {
-        if (!readingMountedRef.current) return;
-        if (atWallRef.current.kind !== 'self') setCharSay('saved to your own wall');
-        if (made.processing) sourceProcessing.track(made.id, made.processing);
-        /* The canon returns the capture itself, so the id the world needs is
-           the row's own — there is no second identity to wait for any more.
-           Adopting it here means a reload finds the same memory rather than a
-           duplicate, which is what `fetched` upstream is checking. */
-        seed.sigId = made.id;
-        /* the world already has this orb (`born` above); recording the id
-           keeps it out of the pour signature so nothing is rebuilt */
-        bornIdsRef.current.add(made.id);
-        /* AND THE DESTINATION IS NOT RESET. `setKeepPublic(false)` stood here
-           and made every capture start over at private; the founder asked for
-           the last selection to hold (2026-09-08). It survives the keep, and
-           the reload, in the profile's stored preference — see the state above. */
-        simApiRef.current?.identify(seed.id, made.id);
-        /* AND IT JOINS THE ARCHIVE, NOT ONLY THE GROUND.
-           The orb was born on the canvas and the row was written on the
-           server, and `inspirations` — the list every other part of the page
-           reads — was told about neither. So headquarters kept computing
-           `empty` as `topOfMind === null && inspirations.length === 0` and kept
-           drawing the three-slot first-run scaffold, including the row
-           labelled "everything you keep" with an empty circle beside it,
-           while the thing just kept glowed underneath it.
-           `forgetIt` and `togglePublic` already keep this list honest on
-           their own success; keeping does now too. */
-        setInspirations((prev) =>
-          prev
-            ? [
-                ...prev,
-                toInspiration({
-                  id: made.id,
-                  textPreview: made.text,
-                  kind: made.kind,
-                  source: made.source,
-                  createdAt: made.createdAt,
-                  updatedAt: made.updatedAt,
-                  visibility: made.visibility,
-                  attachmentSummary: [],
-                  reflectionCount: 0,
-                }),
-              ]
-            : prev,
-        );
-        /* each link becomes an attachment on the memory just kept, so the
-           server can read the page and the extraction can use it */
-        for (const url of links)
-          finalizeAttachment({ type: "link", inspirationId: made.id, url }).catch(
-            () => undefined,
-          );
-
-        // Processing follows the server receipt. A ready reading is offered,
-        // never installed on a timer while the person writes or reflects.
-
-        /* KEPT, AND THEN ASKED ABOUT (founder, 2026-08-25).
-           You cannot reflect on something that does not exist yet — a
-           reflection is a row against a memory's id — so "reflect on this"
-           cannot be an alternative to keeping. It is keeping, and then the
-           question, without making you find the orb you just made and open it
-           yourself. Selecting the new orb opens its panel through the same
-           path a click does, and the reflection is already open inside it. */
-        if (andReflect) {
-          /* SAY IT WAS SAVED BEFORE ASKING THE QUESTION (founder, 2026-08-25:
-             "when clicking on save and reflect, make clear it was saved —
-             character brightens with the word saved shown in the place of
-             capture inspiration, and then have reflect workflow in modal").
-
-             It went straight to the question. Two things happened at once and
-             only one of them was visible, so the gesture read as "reflect"
-             with the keep taken on trust — and a keep taken on trust is the
-             one thing this world has never asked anybody to do. The plain
-             `save` beside it flares the companion and drops an orb; this did
-             the same underneath and said nothing.
-
-             So the acknowledgement comes first, in the two channels the world
-             already has: the creature brightens, and the word lands in the
-             mouth's own resting slot where the phrase lives. Then the card
-             opens with the question already in it. */
-          simApiRef.current?.acknowledge("kept");
-          setCharSay(say("worldSavedWord"));
-          /* THE SHEET, NOT THE CARD. `made.id` and not `seed.id`: a
-             reflection is a row against the SERVER's id, and the seed's is a
-             local one minted before the keep left. */
-          setReflectOn({ id: made.id, text });
-        }
-      })
-      .catch((err: unknown) => {
-        if (!readingMountedRef.current) return;
-        bornRef.current = bornRef.current.filter((s) => s.id !== seed.id);
-        simApiRef.current?.unborn(seed.id);
-        setDraft(text);
-        setMouthOpen(true);
-        /* and the world stops saying it was saved, because it was not */
-        setCharSay("");
-        setMouthNote(whyFailed(err, say("worldKeepFailed")));
-        /* and in a build with the internals on, the whole error, once */
-        if (showsDebug()) console.error("[waka] keep failed:", err);
+  };
+  inspirationSaveHandlers.current = {
+    onResolved: (intent, result, initiated) => {
+      if (intent.operation !== 'inspiration') return;
+      const remaining = settleInspirationDraft(profileStorageKey(storageScope, 'draft'), intent.input.text, draftRef.current);
+      draftRef.current = remaining; setDraft(remaining); setMouthNote('');
+      const made = result.inspiration, detail = toInspirationDetail(made);
+      const known = inspirationsRef.current?.some((item) => item.id === made.id) || bornIdsRef.current.has(made.id);
+      const revision = ++sourceListMutationRef.current;
+      detailsRef.current.set(made.id, detail);
+      if (!known && !result.recovered) birthInspiration(`kept-${intent.requestId}`, made.text, Date.parse(made.createdAt), made.id);
+      setInspirations((previous) => {
+        if (previous?.some((item) => item.id === made.id)) return previous.map((item) => item.id === made.id ? detail : item);
+        return !result.recovered ? [...(previous ?? []), detail] : previous;
       });
-    /* `keepPublic` IS A DEPENDENCY, and leaving it out silently discarded the
-       one privacy decision a person makes by hand. This callback reads
-       `keepPublic` when it builds the request, but the list said `[draft]`
-       only — so pressing "kept to yourself" until it read "going to your
-       rooms" changed the state and the label while React went on handing back
-       the callback that had closed over `false`. The memory saved PRIVATE.
-       It came out right only if the draft happened to change after the toggle,
-       which is to say: by luck.
-       It fails closed, so nothing was ever published by accident — but a
-       person who asked for something to reach their rooms was told it had and
-       it had not, which is the same lie in the safer direction. */
+      // A resumed older save may be outside the initially loaded field. Read
+      // its actual total rather than incrementing an already-counted memory.
+      if (!known && result.recovered) void loadInspirations(intent.profileId).then((field) => {
+        if (!readingMountedRef.current || sourceListMutationRef.current !== revision) return;
+        setInspirations(field.inspirations); setFieldBeyond(beyondOf(field));
+      }).catch(() => undefined);
+      if (result.processing) sourceProcessing.track(made.id, result.processing);
+      // Attachment-finalization idempotency/recovery is the separate G slice.
+      // Preserve this existing best-effort link path, skipping known links.
+      const links = Array.from(new Set(made.text.match(/https?:\/\/[^\s<>"')]+/g) ?? []));
+      for (const url of links) {
+        const linkKey = `${made.id}:${url}`;
+        if (made.attachments.some((item) => item.url === url) || attachmentRequestsRef.current.has(linkKey)) continue;
+        attachmentRequestsRef.current.add(linkKey);
+        void finalizeAttachment({ type: 'link', inspirationId: made.id, url }).catch(() => { attachmentRequestsRef.current.delete(linkKey); });
+      }
+      return () => { if (initiated && !remaining) {
+        simApiRef.current?.acknowledge('kept');
+        setCharSay(atWallRef.current.kind === 'self' ? say('worldSavedWord') : 'saved to your own wall');
+        if (intent.reflect) setReflectOn({ id: made.id, text: made.text });
+      } };
     },
-    [draft, keepPublic],
-  );
+    onRemoved: (intent) => {
+      if (intent.operation !== 'inspiration') return;
+      const remaining = settleInspirationDraft(profileStorageKey(storageScope, 'draft'), intent.input.text, draftRef.current);
+      draftRef.current = remaining; setDraft(remaining);
+    },
+    onEditRejected: (intent) => {
+      if (intent.operation !== 'inspiration') return;
+      const draft = restoreInspirationDraft(profileStorageKey(storageScope, 'draft'), intent.input.text, draftRef.current);
+      draftRef.current = draft; setDraft(draft); setMouthOpen(true); setCharSay('');
+    },
+  };
+
+  // The immutable, owned intent is durable before anything is sent. A newer
+  // draft can be written meanwhile, but cannot replace an unresolved save.
+  const keepIt = useCallback((andReflect = false) => {
+    const text = draftRef.current.trim();
+    if (!text || inspirationSave.pending || inspirationSave.busy) return;
+    if (offlineRef.current) {
+      birthInspiration(`kept-${Date.now().toString(36)}`, text, Date.now());
+      draftRef.current = ''; writeProfileText(storageScope, 'draft', ''); setDraft(''); setMouthOpen(false); return;
+    }
+    if (inspirationSave.start({ operation: 'inspiration', input: { text, source: 'app',
+      ...(keepPublic ? { visibility: 'public' as const } : {}) }, reflect: andReflect })) {
+      setMouthOpen(false); setMouthNote(''); setCharSay('');
+    }
+  }, [keepPublic, inspirationSave.pending, inspirationSave.busy, inspirationSave.start]);
 
   const onMouthKey = useCallback(
     (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
@@ -11928,7 +11808,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     setSelectedId,
     reloadReading: async () => { absorbBoard(await loadPersonalReading()); },
     beginReadingMutation,
-    onInspirationSaved: (made) => { if (made.processing) sourceProcessing.track(made.id, made.processing); },
+    onInspirationSaved: (made) => { sourceListMutationRef.current += 1; if (made.processing) sourceProcessing.track(made.id, made.processing); },
     onEntrySaved: () => {
       readingMutationRef.current += 1;
       readingNeedsLatestRef.current = true;
@@ -12094,6 +11974,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     setPublishing(true);
     updateInspiration(id, { visibility: next })
       .then(() => {
+        sourceListMutationRef.current += 1;
         const isPublic = next === "public";
         setInspirations((cur) =>
           (cur ?? []).map((c) => (c.id === id ? { ...c, isPublic } : c)),
@@ -12144,6 +12025,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const serverId = panelBall?.sigId ?? id;
     deleteInspiration(serverId)
       .then(() => {
+        sourceListMutationRef.current += 1;
         setSelectedId(null);
         simApiRef.current?.unborn(id);
         bornRef.current = bornRef.current.filter((s) => s.id !== id && s.sigId !== serverId);
@@ -12167,24 +12049,32 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     setReflectOpen(true);
   }, [panelId, panelBall]);
 
+  const synchronizeReflections = useCallback((owner: string, row: ApiInspiration | null) => {
+    const revision = ++sourceListMutationRef.current;
+    const apply = (detail: InspirationDetail) => {
+      const before = inspirationsRef.current?.find((item) => item.id === owner)?.reflectionCount ?? detailsRef.current.get(owner)?.reflectionCount ?? 0;
+      detailsRef.current.set(owner, detail);
+      inspirationsRef.current = inspirationsRef.current?.map((item) => item.id === owner ? { ...item, reflectionCount: detail.reflectionCount } : item) ?? null;
+      setPanel((cur) => cur?.detail?.id === owner || cur?.id === owner ? { ...cur!, detail } : cur);
+      setInspirations((cur) => cur?.map((item) => item.id === owner ? { ...item, reflectionCount: detail.reflectionCount } : item) ?? null);
+      simApiRef.current?.reflectionChanged(owner, detail.reflectionCount - before);
+    };
+    if (row) apply(toInspirationDetail(row));
+    else {
+      detailsRef.current.delete(owner);
+      setPanel((cur) => cur?.detail?.id === owner ? { ...cur, detail: null } : cur);
+      void loadInspiration(owner, storageScope?.profileId).then((detail) => {
+        if (readingMountedRef.current && sourceListMutationRef.current === revision) apply(detail);
+      }).catch(() => undefined);
+    }
+  }, []);
   const reflectionSaved = useCallback((made: ApiReflection) => {
-    const owner = made.inspirationId;
-    if (made.processing) sourceProcessing.track(owner, made.processing);
-    const cached = detailsRef.current.get(owner);
-    if (cached) detailsRef.current.set(owner, {
-      ...cached,
-      reflectionCount: cached.reflectionCount + 1,
-      reflections: [...cached.reflections, { id: made.id, question: made.question,
-        answer: made.answer, skipped: made.skipped, createdMs: Date.parse(made.createdAt) }],
-    });
-    setPanel((cur) => cur?.detail?.id === owner ? { ...cur, detail: detailsRef.current.get(owner) ?? cur.detail } : cur);
-    setInspirations((cur) => cur?.map((item) => item.id === owner
-      ? { ...item, reflectionCount: item.reflectionCount + 1 } : item) ?? null);
-    simApiRef.current?.reflectionChanged(owner, 1);
+    if (made.processing) sourceProcessing.track(made.inspirationId, made.processing);
     simApiRef.current?.acknowledge("answered");
   }, []);
 
   const reflectionRemoved = useCallback((id: string, owner: string) => {
+    sourceListMutationRef.current += 1;
     if (!offlineRef.current) sourceProcessing.track(owner);
     skyReadSequence.current += 1;
     const withoutDeletedCopy = (row: Evidence): Evidence => row.inspirationId !== owner ? row : {
@@ -12286,7 +12176,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     setReflectOn(null); setReflectOpen(false); setSelectedId(null);
     simApiRef.current?.goToWall(0); simApiRef.current?.toTop(); setPosterAsk(true);
   });
-  const sourceNotice = !offline && !readingRefresh.busy ? <InspirationProcessingNotice
+  const sourceNotice = !offline && !readingRefresh.busy && inspirationSave.phase === 'idle' ? <InspirationProcessingNotice
     processing={sourceProcessing} locale={locale} onView={viewSourceReading} displayedVersion={topOfMind?.version ?? 0} /> : null;
 
   return (
@@ -13487,7 +13377,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 placeholder={say("worldCapturePrompt")}
                 onChange={(e) => {
                   mouthCaretRef.current = e.target.selectionStart ?? e.target.value.length;
-                  setDraft(e.target.value);
+                  draftRef.current = e.target.value; writeProfileText(storageScope, 'draft', e.target.value); setDraft(e.target.value);
                   if (mouthNote !== "") setMouthNote("");
                 }}
                 onKeyDown={onMouthKey}
@@ -13587,6 +13477,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   type="button"
                   className={keepPublic ? "jar-where-off" : "jar-where-on"}
                   aria-pressed={!keepPublic}
+                  disabled={Boolean(inspirationSave.pending)}
                   onClick={() => setKeepPublic(false)}
                 >
                   {say("worldPrivate")}
@@ -13596,6 +13487,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   type="button"
                   className={keepPublic ? "jar-where-on" : "jar-where-off"}
                   aria-pressed={keepPublic}
+                  disabled={Boolean(inspirationSave.pending)}
                   onClick={() => setKeepPublic(true)}
                 >
                   {say("worldPublic")}
@@ -13609,18 +13501,19 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     own muted tier and lifts under the hand like every other
                     pressable word. */}
                 <button type="button" className="jar-where-verb" onClick={() => keepIt()}
-                  aria-label={say("worldSaveInspiration")} title={say("worldSaveInspiration")}>
+                  aria-label={say("worldSaveInspiration")} title={say("worldSaveInspiration")} disabled={Boolean(inspirationSave.pending)}>
                   {say("worldSave")}
                 </button>
                 <span aria-hidden="true" className="jar-mouth-dot"> · </span>
                 <button type="button" className="jar-where-off" onClick={() => keepIt(true)}
-                  aria-label={say("worldSaveAndReflect")} title={say("worldSaveAndReflect")}>
+                  aria-label={say("worldSaveAndReflect")} title={say("worldSaveAndReflect")} disabled={Boolean(inspirationSave.pending)}>
                   {say("worldReflect")}
                 </button>
               </p>
             ) : null}
             {/* the one honest line, in prose and never in the label register */}
             {mouthNote !== "" ? <p className="jar-mouth-note">{mouthNote}</p> : null}
+            <AuthoredSaveNotice save={inspirationSave} locale={locale} />
             </div>,
           )}
         </div>
@@ -13853,14 +13746,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             <ReflectionFlow
               key={panelBall?.sigId ?? panelId}
               inspirationId={(panelBall?.sigId ?? panelId) as string}
-              profileId={storageScope?.profileId}
+              scope={storageScope}
               processing={!reflectOn && sourceProcessing.active?.inspirationId === (panelBall?.sigId ?? panelId) ? sourceNotice : null}
-              draftKey={profileStorageKey(storageScope, `reflectionDraft:${panelBall?.sigId ?? panelId}`)}
               initialTurns={(panel.detail?.reflections ?? [])
                 .filter((item) => !item.skipped && item.answer)
                 .map((item): ReflectionTurn => ({ id: item.id, question: item.question, answer: item.answer as string }))}
               locale={locale}
               onSaved={reflectionSaved}
+              onSynchronized={(row) => synchronizeReflections((panelBall?.sigId ?? panelId) as string, row)}
               onRemoved={(id) => reflectionRemoved(id, (panelBall?.sigId ?? panelId) as string)}
               onDone={() => setReflectOpen(false)}
             />
@@ -14828,12 +14721,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           <ReflectionFlow
             key={reflectOn.id}
             inspirationId={reflectOn.id}
-            profileId={storageScope?.profileId}
+            scope={storageScope}
             processing={sourceProcessing.active?.inspirationId === reflectOn.id ? sourceNotice : null}
-            draftKey={profileStorageKey(storageScope, `reflectionDraft:${reflectOn.id}`)}
             initialTurns={[]}
             locale={locale}
             onSaved={reflectionSaved}
+            onSynchronized={(row) => synchronizeReflections(reflectOn.id, row)}
             onRemoved={(id) => reflectionRemoved(id, reflectOn.id)}
             onDone={() => setReflectOn(null)}
           />

@@ -218,6 +218,15 @@ agent's relayed excerpt, an agent's own observation.
   backfilled or expired into reusable keys. Keyless clients retain the ordinary
   non-idempotent create contract; the browser must preserve one key per pending
   intent, not invent a new key on every retry.
+  The browser journals the pending authored input and UUID locally under its
+  account/profile (and parent inspiration for answers) before sending. This is
+  temporary draft/recovery material, not a stored server-response snapshot or
+  generation receipt. Reopen/focus checks are read-only; an explicit retry may
+  resend the unchanged intent. Matching drafts settle before the pending record
+  is removed, newer drafts survive, and continuation happens after cleanup.
+  Validation rejection permits editing; an ambiguous response does not release
+  its identity. Corrupt records are never auto-submitted; a confirmed reset
+  preserves uninterpreted bytes in a separate, never-auto-adopted recovery key.
 - **Inspiration material revisions** distinguish changes to one source from
   changes to a profile or an artifact. `inspiration_revisions` holds personal
   and public counters for that inspiration, advanced transactionally by source

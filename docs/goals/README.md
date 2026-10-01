@@ -30,7 +30,7 @@ Work happening now, or stopped mid-way with a recorded reason.
 
 | Goal | Status |
 | --- | --- |
-| [`ux-feature-implementation.md`](ux-feature-implementation.md) | In flight — interaction, ownership, room privacy, support/worker fences, processing progress and keyed-save protocol locally verified; browser save-intent persistence, pending support, legacy context, later slices and release verification open. |
+| [`ux-feature-implementation.md`](ux-feature-implementation.md) | Paused by owner after wrapping keyed-save UI. Reliability/progress work locally checked; full release journey, remaining support/context work, visible UX/algorithm slices and rollout still open. |
 | [`everything-in-the-world.md`](everything-in-the-world.md) | Phase 2 passed (2026-08-23). Phase 3 next. |
 | [`every-workflow-works.md`](every-workflow-works.md) | Phase 2 passed (2026-08-22). Phase 3 next. |
 | [`the-legible-loop.md`](the-legible-loop.md) | In flight — Phases 1–5 passed; Phase 6 is next. |

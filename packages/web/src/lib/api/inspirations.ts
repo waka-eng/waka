@@ -232,10 +232,11 @@ export async function fetchInspirationPage(
 }
 
 /** GET /inspirations/:id — one capture with its attachments and reflections. */
-export async function fetchInspiration(id: string): Promise<ApiInspiration> {
+export async function fetchInspiration(id: string, options: ProfileScoped = {}, signal?: AbortSignal): Promise<ApiInspiration> {
   const body = await getJson<{ inspiration: ApiInspiration }>(
-    apiPath(`/inspirations/${encodeURIComponent(id)}`),
+    apiPath(`/inspirations/${encodeURIComponent(id)}${options.profile ? `?profile=${encodeURIComponent(options.profile)}` : ''}`),
     "Failed to load this capture",
+    signal,
   );
   if (!body.inspiration) {
     throw new ApiError({ status: 200, message: "Malformed capture response" });

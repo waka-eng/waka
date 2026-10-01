@@ -37,6 +37,8 @@ try {
     let sourceId = id(50), revision = 1;
     const receipt = () => ({ id: id(60 + revision), profileId: profile.id, inspirationId: sourceId,
       materialRevision: String(revision), jobId: id(70), requestVersion: String(revision) });
+    const savedRequests = new Map<string, { requestId: string; operation: 'inspiration' | 'reflection'; inspirationId: string;
+      reflectionId: string | null; processing: ReturnType<typeof receipt>; createdAt: string }>();
     const progress = () => ({ profileId: profile.id, inspirationId: sourceId, receipt: receipt(),
       currentMaterialRevision: String(revision), requestedMaterialRevision: String(revision),
       latestDerivedRevision: status === 'ready' ? String(revision) : '0', latestCompletedRevision: status === 'ready' ? String(revision) : '0',
@@ -50,24 +52,42 @@ try {
       const send = (json: unknown, code = 200) => route.fulfill({ status: code, json });
       if (path === '/auth/me') return send(viewer);
       if (path === '/profiles') return send({ profiles: [profile] });
+      if (path.startsWith('/inspirations/save-requests/')) {
+        const saved = savedRequests.get(path.split('/').at(-1)!);
+        return saved ? send({ saveRequest: saved }) : send({ error: 'No committed save found', code: 'save_not_found' }, 404);
+      }
       if (path === '/inspirations' && request.method() === 'POST') {
         assert.equal(url.searchParams.get('profile'), profile.id);
+        const requestId = request.headers()['idempotency-key'];
+        assert.match(requestId!, /^[0-9a-f-]{36}$/);
+        const previous = savedRequests.get(requestId!);
+        if (previous) return send({ inspiration: inspirations.find((item) => item.id === previous.inspirationId),
+          processing: previous.processing, saveRequest: { requestId, replayed: true } });
         saveCount += 1; sourceId = id(50 + saveCount); revision = 1; status = 'queued';
         const text = request.postDataJSON().text;
         const source = { ...inspirations[0]!, id: sourceId, text, textPreview: text, reflections: [] };
         inspirations.push(source);
-        return send({ inspiration: source, processing: receipt() }, 201);
+        const processing = receipt();
+        savedRequests.set(requestId!, { requestId: requestId!, operation: 'inspiration', inspirationId: source.id, reflectionId: null, processing, createdAt: date });
+        return send({ inspiration: source, processing, saveRequest: { requestId, replayed: false } }, 201);
       }
       if (path === '/inspirations') return send({ inspirations, total: inspirations.length });
       if (path === `/inspirations/${sourceId}/processing`) return send(progress());
       if (path === `/inspirations/${sourceId}/processing/retry`) { retryCount += 1; status = 'queued'; return send(progress(), 202); }
       if (path === `/inspirations/${sourceId}/reflections` && request.method() === 'POST') {
         assert.equal(url.searchParams.get('profile'), profile.id);
+        const requestId = request.headers()['idempotency-key'];
+        assert.match(requestId!, /^[0-9a-f-]{36}$/);
+        const previous = savedRequests.get(requestId!);
+        if (previous) return send({ reflection: inspirations.find((item) => item.id === previous.inspirationId)?.reflections.find((item) => (item as { id: string }).id === previous.reflectionId),
+          processing: previous.processing, saveRequest: { requestId, replayed: true } });
         answerCount += 1; revision += 1; status = 'queued';
         const reflection = { id: id(80 + answerCount), inspirationId: sourceId, ...request.postDataJSON(), skipped: false, createdAt: date };
         const source = inspirations.find((item) => item.id === sourceId)!;
         source.reflections.push(reflection); source.reflectionCount += 1;
-        return send({ reflection, processing: receipt() }, 201);
+        const processing = receipt();
+        savedRequests.set(requestId!, { requestId: requestId!, operation: 'reflection', inspirationId: sourceId, reflectionId: reflection.id, processing, createdAt: date });
+        return send({ reflection, processing, saveRequest: { requestId, replayed: false } }, 201);
       }
       if (path === `/inspirations/${sourceId}/reflection-question`) return send({ phase: 'ready', question: 'What could someone else add to that unfinished corner?' });
       if (/^\/inspirations\/[^/]+$/.test(path)) return send({ inspiration: inspirations.find((item) => item.id === path.split('/')[2]) });

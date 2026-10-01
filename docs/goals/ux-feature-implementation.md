@@ -1,6 +1,6 @@
 # Goal: implement the experience review
 
-Status: in flight — A/B, C input/output/cache, D1–D3d3 source/support/worker fences, E1 refresh, E2a–E2d source-to-reading progress and E2e1 keyed-save protocol locally checked; browser save-intent persistence/reconciliation, pending/statement support, legacy context and later slices remain open. Deployment-target verification, historical repair and full release verification remain open.
+Status: paused at the owner's request (2026-10-01), after wrapping E2e2. Input/ownership/privacy fixes, support/worker fences, source-to-reading progress, and keyed-save UI are locally checked. Full release-journey verification, pending/statement support, legacy context, later UX/algorithm slices, historical repair and deployment remain open. The full objective is unchanged.
 Created: 2026-10-01, on the owner's instruction to implement the full plan.
 Branch: `codex/ux-feature-implementation`.
 Baseline: `33e65a7` on `dev`.
@@ -30,7 +30,7 @@ experiments or revive superseded room goals.
 | C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | C1/C2/C3 code locally verified (51 SQL cases; full web 349/349). Read-only inventory completed across 5 rooms in the DB referenced by the local env files; hosted-stage mapping is not verified. Historical repair, deployment coordination and deployed verification remain pending. |
 | D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | D1–D3d3 provenance, automatic support checks, durable source handoffs, worker data-write fences and personal reading recovery locally verified. D3d3: 161 targeted SQL / 671 unit / 374 web. Pending/statement support, legacy personal context, complete downstream receipts, live semantic quality and historical repair remain open. |
 | E1 | F7/F8: authoritative poster and truthful manual refresh | Queue acceptance, changed/unchanged completion, failure and fresh displayed version verified | Implemented with job receipts, resumable profile-scoped polling, held-job manual upgrade and authoritative headline. Local checks pass (8 receipt SQL tests, 10 hook tests, full web 362/362); deployed verification remains open. |
-| E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | E2a–E2d processing/status/UI locally checked; E2e1 adds keyed capture/answer saves and API-client reconciliation (18 save SQL cases; 91 related SQL / 671 unit / 412 web). The browser composers still need persistent intent identities; their current keyless calls are NOT duplicate-safe yet. Complete release journey and deployed verification remain pending. |
+| E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | E2a–E2e2 processing/status, keyed-save protocol and owned browser journals locally checked. Current web: 433/433, typecheck/build and two rendered viewport checks pass; prior backend: 91 SQL / 671 unit. Full real-stack three-answer/failure journey, cross-device/browser and deployed verification remain pending. |
 | F | F11/F12: visible search and durable navigation | Results beyond initial archive, failure/no-match separation, stable IDs, deep links, Back/Forward and rename verified | Pending |
 | G | F13: capture attachments and recoverable failure | Paste/drop/select preview; saved text survives failure; retry attaches once; sharing destination clear | Pending |
 | H | F18: progressive initial load and bounded prefetch | Small/large archive baseline vs result, first useful view and card/search/deep-link integrity | Pending |
@@ -921,3 +921,60 @@ release journey remain required; these increments are not completion of D or E2.
   remains unchanged. Deploy schema/API before enabling keyed browser behavior
   and verify the actual hosted targets/protocol; no mixed-old-writer guarantee
   or end-to-end browser duplicate protection is claimed by this increment.
+- 2026-10-01, E2e2: reproduced a reflection retry without any request identity.
+  Capture and reflection now persist immutable, account/profile-scoped intents
+  before their first network request. Separate per-request keys avoid overwriting
+  simultaneous pending intents. Reopen/focus reads committed status; unknown
+  outcomes retain the same UUID and words for explicit retry. An older server
+  that cannot honor the protocol receives no authored POST. Storage failure
+  before preparation also sends nothing. Hung observations are bounded and
+  aborted; late account/source responses cannot alter the current view.
+- Both composers use the protocol. Drafts remain until confirmation; matching
+  draft cleanup precedes pending-key removal and continuation. Later in-memory
+  or stored drafts survive old completion. Reflection questions travel with
+  pending answers, current answers are loaded before continuing, and badge/orb
+  counts reconcile to served counts instead of blindly adding one on replay.
+  Opening a recovered answer does not buy a new question. Confirmed validation
+  errors allow Edit draft; ambiguous outcomes retain their identity. Removed
+  items are not recreated. Explicit corrupt-record reset preserves recovery
+  bytes without adopting them. Initial waits show progress, not Try again.
+- Verification at the requested stopping point: web typecheck, all 433 tests
+  across 64 suites, build and diff check pass. This includes 13 journal tests,
+  5 draft-settlement cases, reflection identity retry, and mounted capture tests
+  for same-ID retry and newer-draft preservation. The fully mocked rendered
+  capture → answer → explicit reading flow passes at 1280×900 and 390×844,
+  now requiring request IDs on its POSTs and serving the save-lookup protocol.
+  It still does NOT certify real-stack lost-response/reload recovery, the full
+  three-answer/retraction release gate, real-device behavior or deployed state.
+  No new backend/schema changes were needed in this batch; previous 91 SQL and
+  671 API unit checks belong to E2e1, not a fresh full-stack certification.
+  Nothing was pushed, deployed, repaired on hosted data or sent to a live model.
+
+## Pause checkpoint and reevaluation — 2026-10-01
+
+The owner asked to finish the active batch, pause, and reassess because the run
+had taken too long. E2e2 is wrapped locally; do not automatically pick up another
+slice. The original full A–J/L1–L3 goal remains incomplete.
+
+- **Locally implemented:** core input/focus/readability corrections, preservation
+  of human edits, account-scoped drafts, room/private-reflection boundaries,
+  substantial support/worker race fixes, truthful generation progress, explicit
+  reading adoption, and save/retry/recovery protocol plus browser journals.
+- **Partially finished / still needs proof:** remaining D support/context cases,
+  the complete release-1 journey and failure branches against a real local stack,
+  wider mobile/accessibility checks, cross-device behavior, actual generation
+  quality/latency/cost, historical-data repair and hosted rollout.
+- **Not yet delivered by this goal:** visible search and navigation improvements
+  (F), reliable attachment recovery (G), initial-load performance work (H),
+  evaluated reading/principle improvements (I), next-round room participation
+  and starters (J), password recovery (L1), complete policy/copy alignment (L2),
+  and onboarding, telemetry and user/release validation (L3).
+- **Reevaluation:** most effort went into reliability and implementation depth,
+  while much of the visible product roadmap remains pending. The next decision
+  should be a review of this substantial local change set and a short product
+  walkthrough, followed by a deliberately bounded release scope—not another
+  open-ended implementation pass. Verify deployed DB targets before migration;
+  separate GitHub/SST configuration is not proof of the actual runtime values.
+- **Known boundary:** attachment finalization still uses the prior best-effort
+  path; text/answer idempotency does not make uploads or link finalization safe
+  to retry. Deployed guarantees and completion of the full plan are not claimed.

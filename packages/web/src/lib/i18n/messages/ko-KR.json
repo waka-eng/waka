@@ -366,7 +366,6 @@
   "worldReadReflection": "되새김 읽기",
   "worldFromReflection": "내 되새김에서",
   "worldReflectionUnavailable": "이 되새김은 더 이상 볼 수 없어요.",
-  "worldKeepFailed": "간직되지 않았어요. 말은 아직 여기 있어요",
   "worldRoomNotMade": "방을 만들지 못했어요. 다른 이름으로 해 보세요.",
   "worldNoRoomAnswered": "그 링크에 답한 방이 없어요. 링크를 확인해 주세요.",
   "worldRoomRereading": "방이 스스로를 다시 읽고 있어요.",
@@ -383,7 +382,6 @@
   "worldRoomStillOpen": "이 방은 아직 열려 있어요.",
   "worldAgentNoWall": "그 에이전트는 아직 벽이 없어요.",
   "worldVisibilityUnchanged": "누가 볼 수 있는지는 그대로예요",
-  "worldReflectionNotSaved": "되새김이 저장되지 않았어요. 쓴 말은 아직 여기 있어요",
   "worldAgentFormingAlt": "아직 아무것도 만들어 내지 못했어요",
   "worldGroupFormingAlt": "만들어지는 중 — 아직 함께 읽은 것이 없어요",
   "worldNothingReadTogether": "아직 함께 읽은 것이 없어요",
@@ -507,5 +505,16 @@
   "worldSourceDismiss": "진행 알림 닫기",
   "worldSourceRetry": "다시 시도",
   "worldSourceCheck": "진행 상황 확인",
-  "worldSourcePrevious": "이전에 담긴 생각"
+  "worldSourcePrevious": "이전에 담긴 생각",
+  "worldSaveChecking": "저장을 확인하고 있어요…",
+  "worldSaveUncertain": "쓴 말은 여기 있어요. 저장 여부를 확인하지 못했어요.",
+  "worldSaveKeptCheckFailed": "쓴 말은 저장됐어요. 다시 불러오지 못했어요.",
+  "worldSaveRemoved": "그 기록은 삭제됐어요.",
+  "worldSaveStorageFailed": "쓴 말은 여기 있어요. 이 브라우저에서 저장을 준비하지 못했어요.",
+  "worldSaveUnavailable": "지금은 저장할 수 없어요. 쓴 말은 아직 여기 있어요.",
+  "worldSaveInvalid": "진행 중이던 저장을 복구하지 못했어요. 다시 시작하기 전에 영감 목록을 확인해 주세요.",
+  "worldSaveRejected": "저장하지 못했어요. 쓴 말을 수정할 수 있어요.",
+  "worldSaveEditDraft": "초안 수정",
+  "worldSaveStartAgain": "다시 시작",
+  "worldSaveResetConfirm": "초안은 남아 있어요. 먼저 영감 목록을 확인해 주세요. 다시 시작하면 중복으로 저장될 수 있어요."
 }

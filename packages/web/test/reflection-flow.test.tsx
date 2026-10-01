@@ -9,7 +9,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ReflectionFlow } from "../src/components/ReflectionFlow";
 import { profileStorageKey } from "../src/lib/profile-storage";
-import { createReflection, deleteReflection, requestReflectionQuestion, fetchReflectionQuestionStatus, type ApiReflectionQuestionStatus } from "../src/lib/api";
+import { ApiError, createReflection, deleteReflection, requestReflectionQuestion, fetchReflectionQuestionStatus, fetchInspiration, fetchInspirationSaveRequest, type ApiReflection, type ApiReflectionQuestionStatus } from "../src/lib/api";
 
 vi.mock("../src/lib/api", async (importOriginal) => ({
   ...await importOriginal<typeof import("../src/lib/api")>(),
@@ -17,6 +17,8 @@ vi.mock("../src/lib/api", async (importOriginal) => ({
   deleteReflection: vi.fn(),
   requestReflectionQuestion: vi.fn(),
   fetchReflectionQuestionStatus: vi.fn(),
+  fetchInspiration: vi.fn(),
+  fetchInspirationSaveRequest: vi.fn(),
 }));
 
 let host: HTMLDivElement;
@@ -28,6 +30,7 @@ const saved = { id: "reflection-1", inspirationId: "inspiration-1", question: "W
 const onSaved = vi.fn();
 const onRemoved = vi.fn();
 const onDone = vi.fn();
+const SCOPE = { accountId: 'account-1', profileId: 'profile-1' };
 
 function button(label: string): HTMLButtonElement {
   const found = [...host.querySelectorAll("button")].find((item) => item.textContent?.trim() === label);
@@ -46,6 +49,13 @@ async function writeAnswer(value: string) {
 beforeEach(() => {
   vi.resetAllMocks();
   window.localStorage.clear();
+  vi.mocked(fetchInspirationSaveRequest).mockRejectedValue(new ApiError({ status: 404, code: 'save_not_found', message: 'Not observed' }));
+  vi.mocked(fetchInspiration).mockImplementation(async () => {
+    const outcomes = await Promise.allSettled(vi.mocked(createReflection).mock.results.map((result) => result.value));
+    const rows = outcomes.flatMap((result) => result.status === 'fulfilled' && result.value?.id ? [result.value as ApiReflection] : []);
+    return { id: 'inspiration-1', profileId: SCOPE.profileId, text: 'A source', kind: 'note', source: 'app',
+      createdAt: saved.createdAt, updatedAt: saved.createdAt, attachments: [], reflections: [...new Map(rows.map((row) => [row.id, row])).values()] };
+  });
   Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: scrollIntoView });
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
@@ -53,11 +63,24 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 
 describe("reflection conversation", () => {
+  it("keeps one save identity when an answer response is lost and the person retries", async () => {
+    vi.mocked(createReflection).mockRejectedValueOnce(new Error('Response lost')).mockResolvedValueOnce(saved);
+    vi.mocked(requestReflectionQuestion).mockResolvedValue({ phase: 'ready', question: 'What did that leave room for?' });
+    await act(async () => root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={[]} locale="en-US"
+      onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
+    await writeAnswer(saved.answer!);
+    await act(async () => button('continue →').click());
+    const firstOptions = vi.mocked(createReflection).mock.calls[0]?.[2] as { requestId?: string };
+    expect(firstOptions?.requestId).toMatch(/^[0-9a-f-]{36}$/);
+    const retry = [...host.querySelectorAll('button')].find((item) => ['Try again', 'continue →'].includes(item.textContent?.trim() ?? ''))!;
+    await act(async () => retry.click());
+    expect(vi.mocked(createReflection).mock.calls[1]?.[2]).toMatchObject({ requestId: firstOptions.requestId });
+  });
   it("discards a pending follow-up when an earlier answer is removed", async () => {
     let finish!: (status: ApiReflectionQuestionStatus) => void;
     vi.mocked(requestReflectionQuestion).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
     vi.mocked(deleteReflection).mockResolvedValue(undefined);
-    await act(async () => root.render(<ReflectionFlow inspirationId="inspiration-1" initialTurns={[
+    await act(async () => root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={[
       { id: "earlier", question: "First question", answer: "PRIVATE_SENTINEL earlier answer" },
       { id: "latest", question: "Second question", answer: "A remaining thought" },
     ]} locale="en-US" onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
@@ -72,10 +95,10 @@ describe("reflection conversation", () => {
   });
 
   it("keeps the person's unsaved draft while discarding a question based on deleted context", async () => {
-    const draftKey = profileStorageKey({ accountId: "a", profileId: "p" }, "reflectionDraft:inspiration-1");
+    const draftKey = profileStorageKey(SCOPE, "reflectionDraft:inspiration-1");
     vi.mocked(requestReflectionQuestion).mockResolvedValue({ phase: "ready", question: "PRIVATE_SENTINEL generated question" });
     vi.mocked(deleteReflection).mockResolvedValue(undefined);
-    await act(async () => root.render(<ReflectionFlow inspirationId="inspiration-1" draftKey={draftKey} initialTurns={[
+    await act(async () => root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={[
       { id: "latest", question: "A question", answer: "An earlier saved answer" },
     ]} locale="en-US" onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
     await act(async () => button("ask another question →").click());
@@ -91,7 +114,7 @@ describe("reflection conversation", () => {
     const legacyKey = "waka.reflectionDraft:inspiration-1";
     window.localStorage.setItem(legacyKey, JSON.stringify({ afterId: null, answer: "unknown owner" }));
     const render = async (draftKey: string | null) => act(async () => root.render(
-      <ReflectionFlow key={draftKey} draftKey={draftKey} inspirationId="inspiration-1" initialTurns={[]}
+      <ReflectionFlow scope={draftKey === keyA ? { accountId: 'account-a', profileId: 'profile-a' } : { accountId: 'account-b', profileId: 'profile-b' }} key={draftKey} inspirationId="inspiration-1" initialTurns={[]}
         locale="en-US" onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />,
     ));
     await render(keyA);
@@ -106,12 +129,12 @@ describe("reflection conversation", () => {
   it("saves first, then asks one grounded follow-up and waits for the person", async () => {
     vi.mocked(createReflection).mockResolvedValue(saved);
     vi.mocked(requestReflectionQuestion).mockResolvedValue({ phase: "ready", question: "What made leaving that corner unfinished feel calmer?" });
-    await act(async () => root.render(<ReflectionFlow inspirationId="inspiration-1" profileId="profile-1" initialTurns={[]} locale="en-US"
+    await act(async () => root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={[]} locale="en-US"
       onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
     await writeAnswer(saved.answer!);
     expect(host.textContent).toContain("Your answer shapes the next question.");
     await act(async () => button("continue →").click());
-    expect(createReflection).toHaveBeenCalledWith("inspiration-1", { question: saved.question, answer: saved.answer }, { profile: "profile-1" });
+    expect(createReflection).toHaveBeenCalledWith("inspiration-1", { question: saved.question, answer: saved.answer }, expect.objectContaining({ profile: "profile-1", requestId: expect.any(String) }));
     expect(requestReflectionQuestion).toHaveBeenCalledWith("inspiration-1", saved.id, false);
     expect(host.textContent).toContain(saved.answer);
     expect(host.textContent).toContain("What made leaving that corner unfinished feel calmer?");
@@ -124,7 +147,7 @@ describe("reflection conversation", () => {
   it("treats the wait as part of the conversation while keeping the answer in view", async () => {
     vi.mocked(createReflection).mockResolvedValue(saved);
     vi.mocked(requestReflectionQuestion).mockReturnValue(new Promise(() => {}));
-    await act(async () => root.render(<ReflectionFlow inspirationId="inspiration-1" initialTurns={[]} locale="en-US"
+    await act(async () => root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={[]} locale="en-US"
       onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
     await writeAnswer(saved.answer!);
     await act(async () => button("continue →").click());
@@ -138,7 +161,7 @@ describe("reflection conversation", () => {
     vi.mocked(createReflection).mockResolvedValue(saved);
     vi.mocked(requestReflectionQuestion).mockRejectedValueOnce(new Error("offline"))
       .mockResolvedValueOnce({ phase: "ready", question: "What would you leave unfinished next time?" });
-    await act(async () => root.render(<ReflectionFlow inspirationId="inspiration-1" initialTurns={[]} locale="en-US"
+    await act(async () => root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={[]} locale="en-US"
       onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
     await writeAnswer(saved.answer!);
     await act(async () => button("continue →").click());
@@ -151,7 +174,7 @@ describe("reflection conversation", () => {
 
   it("does not spend on opening past reflections; go deeper is the person's choice", async () => {
     vi.mocked(requestReflectionQuestion).mockResolvedValue({ phase: "ready", question: "Which part of that memory still stays with you?" });
-    await act(async () => root.render(<ReflectionFlow inspirationId="inspiration-1"
+    await act(async () => root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1"
       initialTurns={[{ id: saved.id, question: saved.question, answer: saved.answer! }]} locale="en-US"
       onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
     expect(host.textContent).toContain(saved.answer);
@@ -162,7 +185,7 @@ describe("reflection conversation", () => {
 
   it("keeps the answer and closes without spending on another question when asked to finish", async () => {
     vi.mocked(createReflection).mockResolvedValue(saved);
-    await act(async () => root.render(<ReflectionFlow inspirationId="inspiration-1" initialTurns={[]} locale="en-US"
+    await act(async () => root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={[]} locale="en-US"
       onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
     await writeAnswer(saved.answer!);
     await act(async () => button("keep this & finish").click());
@@ -178,7 +201,7 @@ describe("reflection conversation", () => {
     vi.mocked(requestReflectionQuestion)
       .mockResolvedValueOnce({ phase: "ready", question: second.question })
       .mockResolvedValueOnce({ phase: "ready", question: "Who might add something you would not have imagined?" });
-    await act(async () => root.render(<ReflectionFlow inspirationId="inspiration-1" initialTurns={[]} locale="en-US"
+    await act(async () => root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={[]} locale="en-US"
       onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
     await writeAnswer(saved.answer!);
     await act(async () => button("continue →").click());

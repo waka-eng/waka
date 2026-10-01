@@ -63,6 +63,8 @@ const FACTS = {
 
 /** every keep the page attempts, in order, so the request can be read back */
 const kept: Array<{ visibility?: string }> = [];
+const saveCalls: Array<{ text: string; requestId?: string; profile?: string }> = [];
+const saveControl = vi.hoisted(() => ({ loseNext: false, holdNext: false, release: null as null | (() => void) }));
 const IDENTITY = vi.hoisted(() => ({ accountId: "account-1", profileId: "profile-viewer" }));
 
 vi.mock("../src/lib/api", async (importOriginal) => {
@@ -70,17 +72,24 @@ vi.mock("../src/lib/api", async (importOriginal) => {
   return {
     ...actual,
     ...apiMockFrom(FACTS),
-    createInspiration: async (body: { text: string; visibility?: string }) => {
+    fetchInspirationSaveRequest: async () => { throw new actual.ApiError({ status: 404, code: 'save_not_found', message: 'No committed save' }); },
+    createInspiration: async (body: { text: string; visibility?: string }, options: { requestId?: string; profile?: string }) => {
       kept.push({ visibility: body.visibility });
+      saveCalls.push({ text: body.text, requestId: options.requestId, profile: options.profile });
+      if (saveControl.loseNext) { saveControl.loseNext = false; throw new Error('Response lost'); }
+      if (saveControl.holdNext) { saveControl.holdNext = false; await new Promise<void>((resolve) => { saveControl.release = resolve; }); }
       const now = new Date().toISOString();
       return {
         id: `made-${kept.length}`,
+        profileId: IDENTITY.profileId,
         text: body.text,
         kind: "note",
         source: "app",
         visibility: body.visibility ?? "private",
         createdAt: now,
         updatedAt: now,
+        attachments: [],
+        reflections: [],
       };
     },
     refreshTopOfMind: async () => null,
@@ -126,6 +135,7 @@ beforeEach(() => {
   IDENTITY.accountId = SCOPE.accountId;
   IDENTITY.profileId = SCOPE.profileId;
   kept.length = 0;
+  saveCalls.length = 0; saveControl.loseNext = false; saveControl.holdNext = false; saveControl.release = null;
   window.localStorage.clear();
 });
 
@@ -176,6 +186,31 @@ async function press(word: RegExp): Promise<void> {
 }
 
 describe("the capture remembers where it last went", () => {
+  it('retries an uncertain keep with the original request identity', async () => {
+    saveControl.loseNext = true;
+    await worldWithTheMouthOpen(); await press(/^save$/i);
+    expect(saveCalls).toHaveLength(1);
+    expect(saveCalls[0]?.requestId).toMatch(/^[0-9a-f-]{36}$/);
+    await act(async () => layout!.container.querySelector<HTMLButtonElement>('.jar-source-status button')!.click());
+    expect(saveCalls).toHaveLength(2);
+    expect(saveCalls[1]).toEqual(saveCalls[0]);
+    expect(Object.keys(localStorage).filter((key) => key.includes(':pendingSave:'))).toHaveLength(0);
+  });
+
+  it('does not replace a newer draft when an earlier keep finishes', async () => {
+    saveControl.holdNext = true;
+    await worldWithTheMouthOpen(); await press(/^save$/i);
+    await act(async () => layout!.container.querySelector<HTMLButtonElement>('.jar-mouth-rest')!.click());
+    const field = layout!.container.querySelector<HTMLTextAreaElement>('.jar-mouth-field')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(field, 'My newer unsent draft');
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => saveControl.release!());
+    expect(field.value).toBe('My newer unsent draft');
+    expect(localStorage.getItem(DRAFT_KEY)).toBe('My newer unsent draft');
+    expect(kept).toHaveLength(1);
+  });
   it("does not assign an unscoped draft or sharing choice to the next account", async () => {
     window.localStorage.setItem("waka.draft", "an unattributed private draft");
     window.localStorage.setItem("waka.keepPublic", "1");

@@ -366,7 +366,6 @@
   "worldReadReflection": "read reflection",
   "worldFromReflection": "from your reflection",
   "worldReflectionUnavailable": "That reflection is no longer available.",
-  "worldKeepFailed": "That didn’t keep. The words are still here",
   "worldRoomNotMade": "That room could not be made. Try another name.",
   "worldNoRoomAnswered": "No room answered to that. Check the link.",
   "worldRoomRereading": "The room is reading itself again.",
@@ -383,7 +382,6 @@
   "worldRoomStillOpen": "That room is still open.",
   "worldAgentNoWall": "That agent has no wall yet.",
   "worldVisibilityUnchanged": "That didn’t change who can see it",
-  "worldReflectionNotSaved": "That reflection didn’t save. Your words are still here",
   "worldAgentFormingAlt": "I haven’t formed anything yet",
   "worldGroupFormingAlt": "Forming — nothing read together yet",
   "worldNothingReadTogether": "Nothing read together yet",
@@ -507,5 +505,16 @@
   "worldSourceDismiss": "Dismiss processing notice",
   "worldSourceRetry": "Try again",
   "worldSourceCheck": "Check progress",
-  "worldSourcePrevious": "Earlier reading"
+  "worldSourcePrevious": "Earlier reading",
+  "worldSaveChecking": "Checking your save…",
+  "worldSaveUncertain": "Your words are here. Couldn't confirm the save.",
+  "worldSaveKeptCheckFailed": "Your words are kept. Couldn't finish opening them.",
+  "worldSaveRemoved": "That saved item was removed.",
+  "worldSaveStorageFailed": "Your words are here. This browser couldn't prepare the save.",
+  "worldSaveUnavailable": "Saving is unavailable. Your words are still here.",
+  "worldSaveInvalid": "Couldn't recover the pending save. Check your inspirations before starting again.",
+  "worldSaveRejected": "That couldn't be saved. You can edit the words.",
+  "worldSaveEditDraft": "Edit draft",
+  "worldSaveStartAgain": "Start again",
+  "worldSaveResetConfirm": "Your draft will stay. Check your inspirations first—starting again could create a second copy."
 }
