@@ -99,3 +99,11 @@ Keep code, deployment, historical repair, and user validation evidence distinct.
   and restoration, private defaults, remembered public choice, and reflection
   drafts pass. Targeted suites 27/27; full web 331/331, typecheck/build pass.
   No user account was switched or modified during these checks.
+- Next: C requires a public-only projection for both prompts and embeddings,
+  plus assessment of legacy room-derived context/output. Use isolated local
+  SQL/provider fixtures before changing that path. B's final browser account
+  verification must also exercise overlapping authentication mutations and
+  cookie responses, beyond the stale read/profile responses already covered.
+  Local Vite preview remains available on port 3011 (fixture mode; no API on
+  port 3010). The broader C–J/L1–L3 scope and A/B deployed/mobile gates remain
+  pending; this is an implementation checkpoint, not goal completion.
