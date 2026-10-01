@@ -466,7 +466,7 @@
 .jar-ask {
   margin: var(--sp-10) 0 0;
   font-size: var(--t-ui);
-  color: var(--jar-faint);
+  color: var(--jar-muted);
   pointer-events: auto;
 }
 .jar-ask button {
@@ -487,7 +487,8 @@
 }
 /* Offered only after "not true" — a sequence, never a menu, so the
    destructive answer is never sitting beside the harmless ones. */
-.jar-ask--after { margin-top: var(--sp-6); opacity: 0.55; }
+.jar-ask--after { margin-top: var(--sp-6); opacity: 1; }
+.jar-ask button:disabled { opacity: 0.45; cursor: default; }
 
 /* WHAT YOU SAID, WORN BY THE STATEMENT.
    Agreed: unchanged, full weight. Half-agreed: lighter, the claim loosened.
@@ -1359,6 +1360,33 @@
   pointer-events: auto;
 }
 .jar-seek .jar-ask { margin-top: var(--sp-8); }
+
+/* A scrollable surface ends the world's gesture chain, on touch as on wheel. */
+[data-jar-surface] {
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y pinch-zoom;
+  scrollbar-width: thin;
+  scrollbar-color: var(--jar-scroll) transparent;
+}
+[data-jar-surface]:focus-visible {
+  outline: 1px solid var(--jar-muted);
+  outline-offset: -2px;
+}
+:where([data-jar-surface]) button {
+  font: inherit;
+  color: var(--jar-muted);
+  border: 0;
+  background: none;
+  min-height: 32px;
+  padding: var(--sp-4) var(--sp-8);
+  cursor: pointer;
+}
+:where([data-jar-surface]) button:focus-visible {
+  outline: 1px solid var(--jar-ink);
+  outline-offset: 2px;
+}
 
 /* A file picker in the world's voice: a word you press, and the input
    itself never shows. */
@@ -2534,7 +2562,7 @@
 }
 .jar-panel-foot--reflected { opacity: 1; }
 .jar-panel-foot--reflected .jar-panel-foot-c,
-.jar-panel-foot--reflected .jar-panel-foot-r { opacity: 0.55; }
+.jar-panel-foot--reflected .jar-panel-foot-r { opacity: 1; }
 .jar-panel-foot button.jar-panel-reflection-link {
   color: var(--jar-ink);
   font-size: var(--t-note);

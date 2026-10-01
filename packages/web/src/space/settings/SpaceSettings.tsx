@@ -19,6 +19,7 @@
  * reader had to prove were unrelated to the simulation.
  */
 import { Link } from "react-router-dom";
+import { DialogSurface } from "../../components/DialogSurface";
 
 import { useOptionalAuth } from "../../lib/auth-context";
 import { normalizeSupportedLocale, t } from "../../lib/locales";
@@ -162,8 +163,9 @@ export function SpaceSettings({
     ) : null;
 
   return (
-<div
+<DialogSurface
   className="jar-settings jar-settings--at-left"
+  onClose={onClose}
   data-jar-chrome="1"
   role="dialog"
   aria-label={say("worldSpaceSettingsAria")}
@@ -466,6 +468,6 @@ export function SpaceSettings({
       </p>
     </>
   )}
-</div>
+</DialogSurface>
   );
 }

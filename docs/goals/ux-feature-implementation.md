@@ -1,6 +1,6 @@
 # Goal: implement the experience review
 
-Status: in flight — scope registered; phase A starting.
+Status: in flight — phase A implemented and desktop-verified; B starting. Full release verification remains open.
 Created: 2026-10-01, on the owner's instruction to implement the full plan.
 Branch: `codex/ux-feature-implementation`.
 Baseline: `33e65a7` on `dev`.
@@ -25,7 +25,7 @@ experiments or revive superseded room goals.
 
 | Slice | Requirements | Gate | Current evidence |
 | --- | --- | --- | --- |
-| A | F5/F6/F10: input, overlay scrolling/focus, readable active controls | Reproduce slash/wheel defects; verify typing, caret, Escape/Tab, wheel/touch and contrast in actual affected flows; web checks | Starting |
+| A | F5/F6/F10: input, overlay scrolling/focus, readable active controls | Reproduce slash/wheel defects; verify typing, caret, Escape/Tab, wheel/touch and contrast in actual affected flows; web checks | Implemented; 5 original failures now pass, 325 web tests pass. Desktop fixture verified. Mobile touch/200% zoom and deployed verification remain open. |
 | B | F3/F4: edited principle preservation, truthful support, account-scoped drafts/preferences and cancellation | Isolated SQL preservation tests and two-account browser/state tests; API/web checks | Pending |
 | C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | Pending |
 | D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | Pending |
@@ -69,3 +69,12 @@ Keep code, deployment, historical repair, and user validation evidence distinct.
   was preserved. Remote `dev` matches the baseline (0 ahead / 0 behind).
   Registered the full A–J/L1–L3 scope before implementation. No live model
   calls or data repair performed.
+- 2026-10-01, A: baseline reproduced 5/5 failures (reflection slash and wheel
+  cancellation in room/reflection/settings/date surfaces). Shared input
+  ownership now passes those 5 cases; full field suite 12/12, targeted dialog
+  and related suites 42/42, full web suite 325/325, typecheck/build successful.
+  Local fixture browser: slash entered as `/`; Shift+Tab cycled from Close to
+  the final action; Escape restored the room opener; wheel left background
+  position unchanged. Computed active dialog text now yields 5.47:1 contrast
+  on its actual panel background. No live model calls. Mobile touch/200% zoom
+  and deployment are not claimed by these checks.

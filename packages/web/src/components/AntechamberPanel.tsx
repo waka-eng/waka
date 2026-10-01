@@ -21,6 +21,7 @@
 import type { ApiAntechamberRow } from "../lib/api";
 import { useOptionalAuth } from "../lib/auth-context";
 import { normalizeSupportedLocale, t } from "../lib/locales";
+import { DialogSurface } from "./DialogSurface";
 
 export interface AntechamberPanelProps {
   /** null until the fetch lands */
@@ -40,7 +41,8 @@ export function AntechamberPanel({
 }: AntechamberPanelProps): JSX.Element {
   const locale = normalizeSupportedLocale(useOptionalAuth()?.profile?.preferredLocale);
   return (
-    <div className="jar-roomform jar-antechamber" data-jar-chrome="1">
+    <DialogSurface className="jar-roomform jar-antechamber" data-jar-chrome="1"
+      aria-label={t(locale, "worldTheAntechamber")} onClose={onClose}>
       <div className="jar-label" style={{ marginBottom: 14 }}>
         {t(locale, "worldTheAntechamber")}
       </div>
@@ -85,6 +87,6 @@ export function AntechamberPanel({
           {t(locale, "worldClose")}
         </button>
       </p>
-    </div>
+    </DialogSurface>
   );
 }

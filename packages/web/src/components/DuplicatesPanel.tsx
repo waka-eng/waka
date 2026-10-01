@@ -19,6 +19,7 @@ import { useState } from "react";
 import type { ApiSignalDuplicate } from "../lib/api";
 import { useOptionalAuth } from "../lib/auth-context";
 import { normalizeSupportedLocale, t } from "../lib/locales";
+import { DialogSurface } from "./DialogSurface";
 
 export interface DuplicatesPanelProps {
   /** null until the fetch lands */
@@ -42,7 +43,7 @@ export function DuplicatesPanel({
   const open = (rows ?? []).filter((row) => !resolvedIds.has(row.id));
 
   return (
-    <div className="jar-roomform jar-duplicates" data-jar-chrome="1">
+    <DialogSurface className="jar-roomform jar-duplicates" data-jar-chrome="1" onClose={onClose}>
       <div className="jar-label" style={{ marginBottom: 14 }}>
         {t(locale, "worldGardenerAsks")}
       </div>
@@ -96,6 +97,6 @@ export function DuplicatesPanel({
           {t(locale, "worldClose")}
         </button>
       </p>
-    </div>
+    </DialogSurface>
   );
 }

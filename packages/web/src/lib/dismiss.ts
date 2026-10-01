@@ -61,6 +61,9 @@ export function useDismissAway(
     const key = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       const at = e.target as Element | null;
+      // DialogSurface handles Escape after the field's own handler and
+      // closes only that dialog. A capture listener must not close parents.
+      if (at instanceof Element && at.closest("[data-jar-surface]")) return;
       /* the field's own key, left alone: `isContentEditable` catches the
          rich cases, the tag list the plain ones */
       if (

@@ -65,11 +65,13 @@ import {
 import { createPortal } from "react-dom";
 import { PrincipleRead } from "../components/PrincipleRead";
 import { ReflectionFlow, type ReflectionTurn } from "../components/ReflectionFlow";
+import { DialogSurface } from "../components/DialogSurface";
 import { PrincipleEvidence } from "../components/PrincipleEvidence";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { hueCss } from "../lib/appearance";
 import { useDismissAway } from "../lib/dismiss";
+import { isEditableTarget, isNativeSurface } from "../lib/surface-input";
 import { clamp, clamp01, DAY_MS, easeOut, hashStr, kd, lerp, mix32, TAU } from "../lib/num";
 import {
   GRAIN_PX,
@@ -7777,7 +7779,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        already covered by the first word in this list. */
     const isInteractive = (t: EventTarget | null) =>
       t instanceof Element &&
-      t.closest("button, a, textarea, input, select, .jar-panel, [data-jar-interactive]") !== null;
+      (isNativeSurface(t) || t.closest("button, a, textarea, input, select") !== null);
 
     /** Hand the world back: the capture and the identity always go together. */
     const releaseOwner = (id: number) => {
@@ -8129,18 +8131,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       releaseOwner(e.pointerId);
     };
     const onWheel = (e: WheelEvent) => {
-      /* the panel scrolls its own content, and so does a long capture in the
-         mouth; neither ever drives the camera */
-      /* `.jar-mouth-slot--note` by name, not by living inside `.jar-mouth`:
-         the drawer is portalled to the world's root so that nothing moving can
-         displace it, which took it out of the layer this selector used to find
-         it by — and the wheel started driving the camera while you were trying
-         to scroll a page of pasted text. */
-      if (
-        e.target instanceof Element &&
-        e.target.closest(".jar-panel, .jar-mouth, .jar-mouth-slot--note")
-      )
-        return;
+      // Every reading/writing surface keeps browser scrolling, including at
+      // its edge. Moving the camera here also cancels the panel's own scroll.
+      if (e.defaultPrevented || isNativeSurface(e.target)) return;
       e.preventDefault();
       if (trip.active) return; /* mid-travel the wheel waits */
       const nowW = performance.now();
@@ -8175,6 +8168,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       wake();
     };
     const onKey = (e: KeyboardEvent) => {
+      // This guard precedes ALL shortcuts, including slash. Editors and IME
+      // composition keep their characters; browser shortcuts keep modifiers.
+      if (e.defaultPrevented || e.isComposing || e.metaKey || e.ctrlKey || e.altKey || isEditableTarget(e.target)) return;
+      // A reading card owns its paging arrows; other panels keep their keys.
+      if (isNativeSurface(e.target) && !(e.target instanceof Element && e.target.closest(".jar-panel"))) return;
       const step =
         e.key === "ArrowDown" || e.key === "PageDown"
           ? 1
@@ -8191,19 +8189,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       }
       const mine = step !== 0 || horiz || e.key === "Escape";
       if (!mine) return;
-      /* A FIELD'S KEYS ARE THE FIELD'S. The mouth stops its own keys from
-         reaching here, and the card's editor did not — so an arrow pressed
-         while editing a memory moved the caret AND travelled to the next
-         wall. Escape stays ours: leaving is what it means everywhere. */
-      const on = e.target;
-      if (
-        e.key !== "Escape" &&
-        on instanceof Element &&
-        (on.closest("input, textarea") !== null ||
-          (on as HTMLElement).isContentEditable === true)
-      ) {
-        return;
-      }
       /* the world handles this key, so the browser does not ALSO handle it:
          a native scroll or a focus move underneath the layout's own move is a
          second thing happening, and it reads as a fight */
@@ -13479,8 +13464,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            before this one was correct and could not have been sufficient.
            One element, contents turning like pages; what a new memory must
            reset — the scroll — is reset explicitly where `panel.id` changes. */
-        <div
+        <DialogSurface
           ref={panelRef}
+          active={panelOpen}
+          onClose={() => { simApiRef.current?.release(); setSelectedId(null); }}
           className={`jar-panel${panelOpen ? " jar-panel--in" : " jar-panel--out"}`}
           data-jar-chrome="1"
           role="dialog"
@@ -13883,7 +13870,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               </span>
             </p>
           ) : null}
-        </div>
+        </DialogSurface>
       ) : null}
 
       {/* ================= WHERE A STATEMENT CAME FROM =================
@@ -13902,8 +13889,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           field, which cost you the place you were reading from to find out
           where it came from — ruled out by the founder outright. */}
       {prov !== null ? (
-        <div
+        <DialogSurface
           className="jar-prov-room"
+          onClose={closeProv}
           data-jar-chrome="1"
           role="dialog"
           aria-label={say("worldWhereThisCameFrom")}
@@ -13949,7 +13937,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               {say("worldEnough")}
             </button>
           </p>
-        </div>
+        </DialogSurface>
       ) : null}
 
       {/* the one ask before a delete used to float here as its own sheet —
@@ -14313,7 +14301,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       {/* NAMING AN AGENT. One field, because that is all a profile needs to
           exist — what it becomes is written by the agent itself, working. */}
       {agentName !== null ? (
-        <div className="jar-seek" data-jar-chrome="1">
+        <DialogSurface className="jar-seek" data-jar-chrome="1"
+          aria-label={say("worldAgentNamePlaceholder")} onClose={() => setAgentName(null)}>
           <input
             className="jar-roomform-box"
             autoFocus
@@ -14340,7 +14329,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             </p>
           ) : null}
           <p className="jar-share-note">{say("worldAgentWritesOnce")}</p>
-        </div>
+        </DialogSurface>
       ) : null}
 
       {/* ================= THE AXIS, ALONG THE BOTTOM EDGE =================
@@ -14579,8 +14568,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             aria-hidden="true"
             onPointerDown={() => setNewPlace(false)}
           />
-        <div
+        <DialogSurface
           className="jar-seek jar-newplace"
+          onClose={() => setNewPlace(false)}
           data-jar-chrome="1"
           role="dialog"
           aria-label={say("worldMakeAnotherPlace")}
@@ -14608,7 +14598,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             <span className="jar-newplace-name">{say("worldAnAgent")}</span>
             <span className="jar-newplace-what">{say("worldAgentWhat")}</span>
           </button>
-        </div>
+        </DialogSurface>
         </>
       ) : null}
 
@@ -14629,8 +14619,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           delete ask wear. It says what was kept, asks, takes the answer, and
           goes. */}
       {reflectOn ? (
-        <div
+        <DialogSurface
           className="jar-seek jar-reflect-room"
+          onClose={() => setReflectOn(null)}
           data-jar-chrome="1"
           role="dialog"
           aria-label={say("worldReflectOnKept")}
@@ -14648,13 +14639,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             onRemoved={(id) => reflectionRemoved(id, reflectOn.id)}
             onDone={() => setReflectOn(null)}
           />
-        </div>
+        </DialogSurface>
       ) : null}
 
       {/* SEARCHING, AND IT IS ONE LINE. No results panel, no counts, no list —
           the answer is in the field, lit. Escape puts the field back. */}
       {seek !== null ? (
-        <div className="jar-seek" data-jar-chrome="1">
+        <DialogSurface className="jar-seek" data-jar-chrome="1"
+          aria-label={say("worldSeekPlaceholder")} onClose={() => setSeek(null)}>
           <input
             className="jar-roomform-box"
             autoFocus
@@ -14674,7 +14666,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               </button>
             )}
           </p>
-        </div>
+        </DialogSurface>
       ) : null}
 
       {/* MAKING OR JOINING A ROOM. A form, and it is honest about being one:
@@ -14683,7 +14675,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           the layout. So it is DOM, it sits over the layout rather than inside
           it, and the layout holds perfectly still behind it. */}
       {groupForm ? (
-        <div className="jar-roomform" data-jar-chrome="1">
+        <DialogSurface className="jar-roomform" data-jar-chrome="1"
+          aria-label={say("worldARoom")} onClose={() => setGroupForm(null)}>
           <div className="jar-roomform-tabs jar-label">
             <button
               type="button"
@@ -14748,7 +14741,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               ))}
             </div>
           ) : null}
-        </div>
+        </DialogSurface>
       ) : null}
 
       {/* THE ROOM, OPENED. Who is in it, how to bring somebody, what you can
@@ -14797,8 +14790,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           focus traps and text that reflows at 200%, and that is what
           `/profile` is for. This is the door and the label on it. */}
       {accountOpen && phase === "ready" ? (
-        <div
+        <DialogSurface
           className="jar-settings jar-settings--at-right"
+          onClose={closeAccount}
           data-jar-chrome="1"
           role="dialog"
           aria-label={say("worldYourAccount")}
@@ -14900,12 +14894,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               {say("worldSignOutLower")}
             </button>
           </p>
-        </div>
+        </DialogSurface>
       ) : null}
 
       {pendingJoin && phase === "ready" ? (
-        <div
+        <DialogSurface
           className="jar-settings"
+          onClose={closeJoin}
           data-jar-chrome="1"
           role="dialog"
           aria-label={say("worldJoinThisRoom")}
@@ -14923,7 +14918,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               {say("worldNotNow")}
             </button>
           </p>
-        </div>
+        </DialogSurface>
       ) : null}
 
       {settingsFor === spaceKey(atWall) && phase === "ready" ? (

@@ -58,6 +58,7 @@
  * nothing (see canvas-stub.ts), so brightness, colour and position on screen
  * are outside its reach and no test in this file may claim otherwise.
  */
+import { act } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
@@ -166,6 +167,36 @@ function expectGroundIsWhole(where: string) {
     a.present,
   );
 }
+
+describe("native input inside the world", () => {
+  it("lets a reflection answer type a slash without opening search", async () => {
+    const sheet = document.createElement("div");
+    sheet.className = "jar-seek jar-reflect-room";
+    sheet.setAttribute("role", "dialog");
+    const answer = document.createElement("textarea");
+    sheet.append(answer);
+    layout.container.querySelector(".jar")!.append(sheet);
+    const key = new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true });
+    await act(async () => answer.dispatchEvent(key));
+    expect(key.defaultPrevented, "the answer owns its slash").toBe(false);
+    expect(layout.container.querySelectorAll(".jar-seek")).toHaveLength(1);
+    sheet.remove();
+  });
+
+  it.each(["jar-roomform", "jar-seek jar-reflect-room", "jar-settings", "jar-dial"])(
+    "leaves wheel scrolling to %s instead of cancelling it for the camera",
+    async (className) => {
+      const sheet = document.createElement("div");
+      sheet.className = className;
+      sheet.setAttribute("data-jar-chrome", "1");
+      layout.container.querySelector(".jar")!.append(sheet);
+      const wheel = new WheelEvent("wheel", { deltaY: 240, bubbles: true, cancelable: true });
+      await act(async () => sheet.dispatchEvent(wheel));
+      expect(wheel.defaultPrevented, "the browser must be able to scroll this surface").toBe(false);
+      sheet.remove();
+    },
+  );
+});
 
 describe("the ground under a wall", () => {
   it("is whole when the layout first opens", async () => {

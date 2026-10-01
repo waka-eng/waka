@@ -13,6 +13,7 @@
  * words, and the panel's own test re-asserts not one digit gets through.
  */
 import type { ApiReading } from "../lib/api";
+import { DialogSurface } from "./DialogSurface";
 import { useOptionalAuth } from "../lib/auth-context";
 import { normalizeSupportedLocale, t } from "../lib/locales";
 
@@ -25,7 +26,8 @@ export interface ReadingPanelProps {
 export function ReadingPanel({ reading, onClose }: ReadingPanelProps): JSX.Element {
   const locale = normalizeSupportedLocale(useOptionalAuth()?.profile?.preferredLocale);
   return (
-    <div className="jar-roomform jar-reading" data-jar-chrome="1">
+    <DialogSurface className="jar-roomform jar-reading" data-jar-chrome="1"
+      aria-label={t(locale, "worldHowItReadsYou")} onClose={onClose}>
       <div className="jar-label" style={{ marginBottom: 14 }}>
         {t(locale, "worldHowItReadsYou")}
       </div>
@@ -48,6 +50,6 @@ export function ReadingPanel({ reading, onClose }: ReadingPanelProps): JSX.Eleme
           {t(locale, "worldClose")}
         </button>
       </p>
-    </div>
+    </DialogSurface>
   );
 }

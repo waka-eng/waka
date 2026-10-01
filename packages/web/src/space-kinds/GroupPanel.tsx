@@ -23,6 +23,7 @@ import { dateWords, givenName } from "../lib/words";
 import { groupHistoryEvents } from "./group-history";
 import type { GroupHistoryStop } from "./group-history";
 import { GroupMoment } from "./GroupMoment";
+import { DialogSurface } from "../components/DialogSurface";
 import type { Space } from "./index";
 
 export interface GroupPanelProps {
@@ -73,7 +74,8 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
   const say = (key: MessageKey) => t(locale, key);
 
   return (
-<div className="jar-roomform jar-roomform--group" data-jar-chrome="1">
+<DialogSurface className="jar-roomform jar-roomform--group" data-jar-chrome="1"
+  aria-label={say("worldShapeTogether")} onClose={onClose}>
   <div className="jar-group-panel-heading">
     <p className="jar-label">{selectedStop ? atWall.name : say("worldShapeTogether")}</p>
     <button type="button" onClick={onClose}>{say("worldClose")}</button>
@@ -233,6 +235,6 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
     </div>
   ) : null}
   </> : null}
-</div>
+</DialogSurface>
   );
 }
