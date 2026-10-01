@@ -1,6 +1,6 @@
 # The goals, and which ones are live
 
-`docs/goals/` is 11,000 lines across 28 documents — the largest thing in the
+`docs/goals/` is 11,000+ lines across 29 documents — the largest thing in the
 repository after `Home.tsx`, and until this index existed there was no way to
 tell, without opening all of them, that `three-layers.md` is a finished
 account of work that shipped in August and `everything-in-the-world.md` is
@@ -30,6 +30,7 @@ Work happening now, or stopped mid-way with a recorded reason.
 
 | Goal | Status |
 | --- | --- |
+| [`ux-feature-implementation.md`](ux-feature-implementation.md) | In flight — implementing the October 1 experience review; phase A starting. |
 | [`everything-in-the-world.md`](everything-in-the-world.md) | Phase 2 passed (2026-08-23). Phase 3 next. |
 | [`every-workflow-works.md`](every-workflow-works.md) | Phase 2 passed (2026-08-22). Phase 3 next. |
 | [`the-legible-loop.md`](the-legible-loop.md) | In flight — Phases 1–5 passed; Phase 6 is next. |
