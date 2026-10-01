@@ -18,6 +18,20 @@ import { t, type SupportedLocale } from "../lib/locales";
 import type { ApiGroupTopOfMind, ApiGroupWallSignal } from "../lib/api";
 import { formingWords, type WallChrome } from "../space/top-of-mind/board";
 
+/** Shared reads are permission-sensitive even when their version is unchanged. */
+export const GROUP_READ_TTL_MS = 30_000;
+
+export function groupReadingRestricts(previous: ApiGroupTopOfMind | null, next: ApiGroupTopOfMind): boolean {
+  if (!previous) return false;
+  if (next.restricted && !previous.restricted) return true;
+  if (previous.topOfMind?.id !== next.topOfMind?.id) return false;
+  return previous.entries.some((old) => !next.entries.some((row) =>
+    row.id === old.id && row.body === old.body && row.belief === old.belief && row.prompt === old.prompt));
+}
+
+export function groupReadingChanged(previous: ApiGroupTopOfMind | null, next: ApiGroupTopOfMind): boolean {
+  return JSON.stringify(previous) !== JSON.stringify(next);
+}
 
 /** One deduped evidence signal: a save this room's readings cited. */
 export interface GroupEvidence {
@@ -34,7 +48,7 @@ export interface GroupEvidence {
   citedBy: string[];
 }
 
-/** Everything a room needs before it is allowed to wake. Cached per session. */
+/** The verified reading and evidence for one short-lived room snapshot. */
 export interface GroupData {
   evidence: GroupEvidence[];
   top: ApiGroupTopOfMind | null;

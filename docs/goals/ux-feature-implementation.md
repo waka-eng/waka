@@ -1,6 +1,6 @@
 # Goal: implement the experience review
 
-Status: in flight — A/B and C input/output fixes locally checked; room cache revalidation and historical review remain open. Full release verification remains open.
+Status: in flight — A/B and C input/output/cache fixes locally checked; shared-data rollout and historical repair remain open. Full release verification remains open.
 Created: 2026-10-01, on the owner's instruction to implement the full plan.
 Branch: `codex/ux-feature-implementation`.
 Baseline: `33e65a7` on `dev`.
@@ -27,7 +27,7 @@ experiments or revive superseded room goals.
 | --- | --- | --- | --- |
 | A | F5/F6/F10: input, overlay scrolling/focus, readable active controls | Reproduce slash/wheel defects; verify typing, caret, Escape/Tab, wheel/touch and contrast in actual affected flows; web checks | Implemented; 5 original failures now pass, 325 web tests pass. Desktop fixture verified. Mobile touch/200% zoom and deployed verification remain open. |
 | B | F3/F4: edited principle preservation, truthful support, account-scoped drafts/preferences and cancellation | Isolated SQL preservation tests and two-account browser/state tests; API/web checks | B1: 6 SQL / 653 unit tests pass after 3 reproduced failures. B2: 4 failures reproduced, then two-account draft and stale-response checks pass; full web suite 331/331. Deployed/account-switch browser verification remains open. |
-| C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | C1 input-side and C2 downstream/current/historical read guards locally verified (51 SQL cases including 8 output-privacy cases). Browser cache invalidation, actual legacy assessment and reviewed repair/deployment remain pending. Do not deploy this partial slice alone. |
+| C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | C1/C2/C3 code locally verified (51 SQL cases; full web 349/349). Read-only shared DB inventory completed across 5 rooms. Historical repair, deployment coordination and deployed verification remain pending. |
 | D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | Pending |
 | E1 | F7/F8: authoritative poster and truthful manual refresh | Queue acceptance, changed/unchanged completion, failure and fresh displayed version verified | Pending |
 | E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | Pending |
@@ -185,3 +185,41 @@ Keep code, deployment, historical repair, and user validation evidence distinct.
   exact provenance and full revision-safe downstream handoff remain separate
   unfinished requirements; source-level reconciliation is not proved by these
   output filters.
+- 2026-10-01, C3: baseline reproduced 4/4 Home cache failures (same-version
+  restriction on focus/return, late stale response, and failed verification
+  retaining old wording). A fifth reproduction at the real HTTP client found
+  it dropped `restricted`, which component-only mocks had hidden. The client
+  now preserves that flag. Room reads are cancellable, token-owned, bounded
+  to 30 seconds and renewed only for the active room. Historical caches are
+  invalidated with the room, including pending reads. Known restrictions
+  remove old wording before slower bundle requests finish. Failure clears
+  unverified shared content and exposes Retry; a retry cannot be overwritten
+  by an older response. Field updates remove withdrawn inspirations, while
+  unchanged snapshots do not recreate the simulation. Room principle reads
+  likewise expire and withdraw on failed access verification; personal saved
+  content and drafts are unaffected.
+- C3 verification: full web suite 349/349 across 58 suites, web typecheck and
+  production build pass; diff check passes. The 15 added cases cover the
+  original failures, immediate restriction during a partial load, real field
+  removal, no field rebuild on unchanged reads, same-version panel polling,
+  bounded hung-read recovery, expired principles, historical pane/dial
+  revalidation, wire metadata and HTTP cancellation. These are real React/
+  simulation tests with documented network/canvas seams, not pixel/deployed
+  verification. No server-side generator or database writer changed in this slice.
+- C read-only impact assessment: verified `.env.local`, `.env.development`
+  and `.env.production` have identical connection URLs (same shared Neon DB).
+  Ran the report against all 5 room IDs returned by a bounded, read-only group
+  inventory. Reports at 2026-10-01 11:34:49–11:35:04 UTC were untruncated:
+  42 unverified signals, 42 reading versions containing 102 unverified entries,
+  1 locked entry, 0 room principles, and 8 failed derive-signals jobs (each at
+  3 attempts). All 42 signal rows had no current reflection on their linked
+  evidence; that does NOT exclude deleted answers or earlier prompt context,
+  and is not proof of exposure or proof of safety. No text/answer/quote was
+  fetched, no model invoked, and no shared row or schema modified. Identifiers
+  remain in the scoped tool report rather than being committed to the repo.
+- Rollout decision requested from the owner: separate dev data before
+  deployment (recommended), or coordinate a shared-database rollout. No
+  migration or repair is authorized by that inventory. A reviewed named
+  repair batch, old-worker coordination and deployed checks still gate C.
+  Local D/E and remaining delivery work can continue while that decision is
+  pending; the full A–J/L1–L3 goal remains unchanged and incomplete.

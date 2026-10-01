@@ -95,3 +95,16 @@ it("distinguishes withheld history from an empty room and does not claim nothing
   expect(host.textContent).not.toContain("Nothing read together yet");
   expect(host.textContent).not.toContain("The wording stayed the same.");
 });
+
+it("rechecks unchanged historical versions when the room read is revalidated", async () => {
+  vi.mocked(fetchGroupTopOfMind).mockImplementation(async (_group, version) => reading(version!, "Previously visible"));
+  await act(async () => root.render(<GroupMoment groupId="room-1" timeline={timeline} stop={stop} locale="en-US" readRevision={0} />));
+  expect(host.textContent).toContain("Previously visible");
+  vi.mocked(fetchGroupTopOfMind).mockImplementation(async (_group, version) => ({
+    ...reading(version!, ""), entries: [], restricted: true,
+  }));
+  await act(async () => root.render(<GroupMoment groupId="room-1" timeline={timeline} stop={stop} locale="en-US" readRevision={1} />));
+  expect(host.textContent).not.toContain("Previously visible");
+  expect(host.textContent).toContain("Some earlier wording is hidden");
+  expect(fetchGroupTopOfMind).toHaveBeenCalledTimes(4);
+});

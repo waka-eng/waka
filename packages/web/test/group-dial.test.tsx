@@ -79,6 +79,7 @@ const GROUP_NAME = "the reading circle";
 /** What the room reads now, and what it read before that. */
 const NOW_TEXT = "We ask the owner when the spec and the code disagree.";
 const THEN_TEXT = "We ship the thing we can explain to a stranger.";
+const privacy = vi.hoisted(() => ({ historicalRestricted: false }));
 
 /**
  * THE ROOM IS YOUNGER THAN THE ARCHIVE, ON PURPOSE.
@@ -169,6 +170,7 @@ vi.mock("../src/lib/api", async (importOriginal) => {
       const body = version === 1 ? THEN_TEXT : NOW_TEXT;
       const at = version === 1 ? V1_DAYS : V2_DAYS;
       return {
+        restricted: version === 1 && privacy.historicalRestricted,
         topOfMind: {
           id: `tom-${version ?? 2}`,
           version: version ?? 2,
@@ -176,7 +178,7 @@ vi.mock("../src/lib/api", async (importOriginal) => {
           reason: version === 1 ? "initial" : "member_proposal",
           createdAt: iso(at),
         },
-        entries: [
+        entries: version === 1 && privacy.historicalRestricted ? [] : [
           {
             id: `entry-${version ?? 2}`,
             type: "pattern",
@@ -220,9 +222,12 @@ let railEnd = 0;
 beforeAll(() => {
   installCanvasStub();
   setViewport(VIEW_W, VIEW_H);
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 });
 
 beforeEach(async () => {
+  privacy.historicalRestricted = false;
+  Object.defineProperty(document, "hidden", { configurable: true, value: false });
   layout = await mountWorld(FACTS);
   ago = (days: number) => Date.now() - days * DAY;
   await layout.travelTo(new RegExp(GROUP_NAME, "i"));
@@ -336,6 +341,15 @@ async function windToNow(): Promise<void> {
 }
 
 describe("the dial in a room", () => {
+  it("revalidates an already-open historical version when focus returns", async () => {
+    await windToDay(dayOf(ago(V1_DAYS)));
+    expect(posterText()).toContain(THEN_TEXT);
+    privacy.historicalRestricted = true;
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    await layout.step(40);
+    expect(layout.container.textContent).not.toContain(THEN_TEXT);
+    expect(layout.container.textContent).toContain("Some earlier wording is hidden");
+  });
   it("opens the shared-direction action from the room's current reading", async () => {
     const shape = one(".jar-room-shape");
     expect(shape.textContent).toContain("shape this together");

@@ -17,12 +17,13 @@ function Wording({ reading, locale }: { reading: ApiGroupTopOfMind | null; local
 }
 
 /** A selected date's complete event list and the room's wording across its read. */
-export function GroupMoment({ groupId, timeline, stop, locale }: {
+export function GroupMoment({ groupId, timeline, stop, locale, readRevision }: {
   groupId: string; timeline: ApiGroupTimeline; stop: GroupHistoryStop; locale: SupportedLocale;
+  readRevision?: number;
 }) {
   const events = eventsAtStop(groupHistoryEvents(timeline, locale), stop.at, stop.grain);
   const change = groupReadingChangeAtStop(timeline, stop);
-  const key = change ? `${groupId}:${change.before?.version ?? 0}:${change.after.version}` : null;
+  const key = change ? `${groupId}:${change.before?.version ?? 0}:${change.after.version}:${readRevision ?? 0}` : null;
   const [comparison, setComparison] = useState<Comparison | null>(null);
   const [failedKey, setFailedKey] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -44,7 +45,7 @@ export function GroupMoment({ groupId, timeline, stop, locale }: {
       if (active) setFailedKey(key);
     });
     return () => { active = false; };
-  }, [groupId, change?.before?.version, change?.after.version, key, attempt]);
+  }, [groupId, change?.before?.version, change?.after.version, key, attempt, readRevision]);
 
   const ready = comparison?.key === key ? comparison : null;
   const beforeWords = ready?.before?.entries.map((entry) => entry.body) ?? [];

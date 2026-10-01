@@ -292,10 +292,11 @@ export async function fetchGroupMembers(groupId: string): Promise<ApiGroupMember
 }
 
 /** GET /groups/:id/wall — the signals members have shared here. */
-export async function fetchGroupWall(groupId: string): Promise<ApiGroupWallSignal[]> {
+export async function fetchGroupWall(groupId: string, signal?: AbortSignal): Promise<ApiGroupWallSignal[]> {
   const body = await getJson<{ wall: ApiGroupWallSignal[] }>(
     apiPath(`/groups/${encodeURIComponent(groupId)}/wall`),
     "Failed to load this room's wall",
+    signal,
   );
   return Array.isArray(body.wall) ? body.wall : [];
 }
@@ -307,10 +308,11 @@ export interface ApiGroupField {
   total: number;
 }
 
-export async function fetchGroupField(groupId: string): Promise<ApiGroupField> {
+export async function fetchGroupField(groupId: string, signal?: AbortSignal): Promise<ApiGroupField> {
   const body = await getJson<{ field: ApiGroupFieldInspiration[]; total?: number }>(
     apiPath(`/groups/${encodeURIComponent(groupId)}/field`),
     "Failed to load this room's field",
+    signal,
   );
   const field = Array.isArray(body.field) ? body.field : [];
   return {
@@ -334,13 +336,15 @@ export async function fetchGroupField(groupId: string): Promise<ApiGroupField> {
 export async function fetchGroupTopOfMind(
   groupId: string,
   version?: number,
+  signal?: AbortSignal,
 ): Promise<ApiGroupTopOfMind> {
   const at = version === undefined ? "" : `?version=${encodeURIComponent(String(version))}`;
   const body = await getJson<ApiGroupTopOfMind>(
     apiPath(`/groups/${encodeURIComponent(groupId)}/top-of-mind${at}`),
     "Failed to load this room's top of mind",
+    signal,
   );
-  return { topOfMind: body.topOfMind ?? null, entries: body.entries ?? [] };
+  return { topOfMind: body.topOfMind ?? null, entries: body.entries ?? [], restricted: body.restricted === true };
 }
 
 /** POST /groups/:id/top-of-mind/refresh */
@@ -391,10 +395,12 @@ export async function fetchGroupTimeline(groupId: string): Promise<ApiGroupTimel
 /** GET /groups/:id/proposals */
 export async function fetchGroupProposals(
   groupId: string,
+  signal?: AbortSignal,
 ): Promise<ApiGroupProposal[]> {
   const body = await getJson<{ proposals: ApiGroupProposal[] }>(
     apiPath(`/groups/${encodeURIComponent(groupId)}/proposals`),
     "Failed to load proposals",
+    signal,
   );
   return Array.isArray(body.proposals) ? body.proposals : [];
 }

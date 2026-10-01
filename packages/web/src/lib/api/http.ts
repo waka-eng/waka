@@ -109,6 +109,7 @@ export interface ProfileScoped {
 export async function getJson<T>(
   path: string,
   fallbackMessage: string,
+  signal?: AbortSignal,
 ): Promise<T> {
   let res: Response;
   try {
@@ -116,6 +117,7 @@ export async function getJson<T>(
       method: "GET",
       credentials: "include",
       headers: { Accept: "application/json" },
+      ...(signal ? { signal } : {}),
     });
   } catch {
     throw new ApiError({

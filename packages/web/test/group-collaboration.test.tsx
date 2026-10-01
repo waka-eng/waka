@@ -28,6 +28,8 @@ const FACTS = {
   ] }],
 };
 const server = vi.hoisted(() => ({ version: 1, proposals: [] as ApiGroupProposal[], failNextAffirm: false,
+  restricted: false, failRead: false, nextReadGate: null as Promise<void> | null,
+  fieldHidden: false, fieldGate: null as Promise<void> | null,
   solo: false, newVersionReads: 0, reloadGate: null as Promise<void> | null,
   timelineGate: null as Promise<void> | null }));
 const iso = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
@@ -45,14 +47,27 @@ const top = (version: number): ApiGroupTopOfMind => ({
 
 vi.mock("../src/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/lib/api")>();
+  const base = apiMockFrom(FACTS);
   return {
-    ...actual, ...apiMockFrom(FACTS),
+    ...actual, ...base,
+    fetchGroupField: async (groupId: string) => {
+      const field = server.fieldHidden ? { field: [], total: 0 } : await base.fetchGroupField(groupId);
+      const gate = server.fieldGate; server.fieldGate = null;
+      if (gate) await gate;
+      return field;
+    },
     fetchGroupTopOfMind: async (_groupId: string, version?: number) => {
+      if (server.failRead) throw new Error("Room access could not be verified");
+      const snapshot = { ...top(version ?? server.version), restricted: server.restricted,
+        entries: server.restricted ? [] : top(version ?? server.version).entries };
+      const gate = server.nextReadGate;
+      server.nextReadGate = null;
+      if (gate) await gate;
       if (server.version === 2 && version === undefined) {
         server.newVersionReads += 1;
         if (server.newVersionReads >= 2 && server.reloadGate) await server.reloadGate;
       }
-      return top(version ?? server.version);
+      return snapshot;
     },
     fetchGroupTimeline: async () => {
       if (server.version === 2 && server.timelineGate) await server.timelineGate;
@@ -107,6 +122,9 @@ beforeAll(() => {
 });
 beforeEach(async () => {
   server.version = 1; server.proposals = []; server.failNextAffirm = false; server.solo = false;
+  server.restricted = false; server.failRead = false; server.nextReadGate = null;
+  server.fieldHidden = false; server.fieldGate = null;
+  Object.defineProperty(document, "hidden", { configurable: true, value: false });
   server.newVersionReads = 0; server.reloadGate = null; server.timelineGate = null;
   layout = await mountWorld(FACTS);
   await layout.travelTo(new RegExp(ROOM_NAME, "i"));
@@ -121,6 +139,108 @@ const open = async () => {
   await act(async () => find(".jar-room-shape").click());
   await act(async () => { await Promise.resolve(); });
 };
+
+it("applies a same-version restriction when the app regains focus", async () => {
+  expect(layout.container.textContent).toContain(BEFORE);
+  server.restricted = true;
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  await layout.step(10);
+  expect(layout.container.textContent).not.toContain(BEFORE);
+  expect(layout.container.textContent).toContain("Some earlier wording is hidden");
+});
+
+it("revalidates when returning to a room without needing a new version", async () => {
+  await layout.travelTo(/^Me$/i);
+  server.restricted = true;
+  await layout.travelTo(new RegExp(ROOM_NAME, "i"));
+  expect(layout.container.textContent).not.toContain(BEFORE);
+  expect(layout.container.textContent).toContain("Some earlier wording is hidden");
+});
+
+it("does not resurrect stale room data after a newer focus check", async () => {
+  let release!: () => void;
+  server.nextReadGate = new Promise<void>((resolve) => { release = resolve; });
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  server.restricted = true;
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  await act(async () => release());
+  await layout.step(10);
+  expect(layout.container.textContent).not.toContain(BEFORE);
+  expect(layout.container.textContent).toContain("Some earlier wording is hidden");
+});
+
+it("withdraws unverified cached wording on a failed refresh and lets the user retry", async () => {
+  server.failRead = true;
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  await layout.step(10);
+  expect(layout.container.textContent).not.toContain(BEFORE);
+  const retry = layout.container.querySelector<HTMLButtonElement>(".jar-wall-hold button");
+  expect(retry).not.toBeNull();
+  server.failRead = false;
+  server.restricted = true;
+  await act(async () => retry!.click());
+  await layout.step(10);
+  expect(layout.container.textContent).toContain("Some earlier wording is hidden");
+});
+
+it("applies a restriction immediately while another part of the room is still loading", async () => {
+  let release!: () => void;
+  server.fieldGate = new Promise<void>((resolve) => { release = resolve; });
+  server.restricted = true;
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  await layout.step(10);
+  expect(layout.container.textContent).not.toContain(BEFORE);
+  await act(async () => release());
+  await layout.step(10);
+  expect(layout.container.textContent).toContain("Some earlier wording is hidden");
+});
+
+it("removes withdrawn inspirations from the actual room field", async () => {
+  await layout.toField();
+  expect(layout.audit().present).toBeGreaterThan(0);
+  server.fieldHidden = true;
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  await layout.step(10);
+  expect(layout.audit().present).toBe(0);
+});
+
+it("does not rebuild the field for an unchanged permission check", async () => {
+  await layout.toField();
+  const field = (window as unknown as { wakaField: unknown }).wakaField;
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  await layout.step(10);
+  expect((window as unknown as { wakaField: unknown }).wakaField).toBe(field);
+});
+
+it("updates same-version restrictions while the collaboration panel is open", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  await open();
+  server.restricted = true;
+  await act(async () => vi.advanceTimersByTimeAsync(10_000));
+  vi.useRealTimers();
+  await layout.step(10);
+  expect(layout.container.textContent).not.toContain(BEFORE);
+  expect(find(".jar-roomform--group").textContent).toContain("Some earlier wording is hidden");
+  expect(find(".jar-roomform--group").textContent).not.toContain("new reading is here");
+});
+
+it("bounds a stalled permission check and ignores its response after retry", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  let release!: () => void;
+  server.nextReadGate = new Promise<void>((resolve) => { release = resolve; });
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  await act(async () => vi.advanceTimersByTimeAsync(30_000));
+  expect(layout.container.textContent).not.toContain(BEFORE);
+  const retry = layout.container.querySelector<HTMLButtonElement>(".jar-wall-hold button");
+  expect(retry).not.toBeNull();
+  server.restricted = true;
+  await act(async () => retry!.click());
+  await act(async () => release());
+  vi.useRealTimers();
+  await layout.step(10);
+  expect(layout.container.textContent).not.toContain(BEFORE);
+  expect(layout.container.textContent).toContain("Some earlier wording is hidden");
+});
 
 it("keeps a newly proposed thought visible while the room waits for others", async () => {
   await open();

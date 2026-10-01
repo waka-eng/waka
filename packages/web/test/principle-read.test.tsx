@@ -26,6 +26,23 @@ const principle = { id: "room-principle", statement: "Make room for experiments.
   conflictsWithId: null, createdAt: "2026-09-22", citedSignals: [{ id: "room-signal", statement: "Shared experiments recur." }] };
 
 describe("principle read", () => {
+  it("withdraws cached room principles when access can no longer be verified", async () => {
+    vi.mocked(fetchPrincipleRead).mockResolvedValueOnce({ principles: [principle], status: ready })
+      .mockRejectedValue(new Error("access withdrawn"));
+    await act(async () => root.render(<PrincipleRead groupId="room-1" active locale="en-US" />));
+    expect(host.textContent).toContain(principle.statement);
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    expect(host.textContent).not.toContain(principle.statement);
+  });
+
+  it("expires cached room principles if a background refresh never answers", async () => {
+    vi.mocked(fetchPrincipleRead).mockResolvedValueOnce({ principles: [principle], status: ready })
+      .mockImplementation(() => new Promise(() => {}));
+    await act(async () => root.render(<PrincipleRead groupId="room-1" active locale="en-US" />));
+    expect(host.textContent).toContain(principle.statement);
+    await act(async () => vi.advanceTimersByTimeAsync(30_000));
+    expect(host.textContent).not.toContain(principle.statement);
+  });
   it("explains withheld room principles without pretending the room has no history", async () => {
     vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: {
       phase: "waiting", eligible: false, signalCount: 0, topOfMindCount: 0, restricted: true,

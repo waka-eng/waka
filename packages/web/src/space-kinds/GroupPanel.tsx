@@ -39,6 +39,7 @@ export interface GroupPanelProps {
   /** The date the viewer wound this room to, if any. */
   selectedStop: GroupHistoryStop | null;
   readingRestricted?: boolean;
+  readRevision?: number;
   proposalState: "loading" | "ready" | "failed";
   onRetryProposals: () => void;
   pendingProposalId: string | null;
@@ -82,7 +83,7 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
     <button type="button" onClick={onClose}>{say("worldClose")}</button>
   </div>
   {timeline && selectedStop ? <GroupMoment
-    groupId={groupPanel} timeline={timeline} stop={selectedStop} locale={locale}
+    groupId={groupPanel} timeline={timeline} stop={selectedStop} locale={locale} readRevision={props.readRevision}
   /> : null}
 
   {!selectedStop ? <>

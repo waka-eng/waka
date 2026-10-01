@@ -86,6 +86,9 @@ import { deriveAgentChrome } from "../space-kinds/agent";
 import {
   deriveGroupChrome,
   groupWallOrbs,
+  GROUP_READ_TTL_MS,
+  groupReadingRestricts,
+  groupReadingChanged,
   type GroupData,
 } from "../space-kinds/group";
 import {
@@ -2143,10 +2146,14 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * ones rise into its peek row.
    */
   const wallProvRef = useRef<Map<string, Provenance>>(new Map());
-  /** Per-session room data: fetched once, when travel toward it begins. */
+  /** Short-lived permission-checked room snapshots, shared with the simulation. */
   const groupCacheRef = useRef<
-    Map<string, { status: "pending" | "ready" | "failed"; data: GroupData | null }>
+    Map<string, { status: "pending" | "ready" | "failed"; data: GroupData | null; checkedAt?: number; fieldFingerprint?: string; leaseToken?: symbol }>
   >(new Map());
+  const groupRequestsRef = useRef(new Map<string, { token: symbol; promise: Promise<boolean>; controller: AbortController; timer: number }>());
+  const groupLeaseTimersRef = useRef(new Map<string, number>());
+  const groupReadsAliveRef = useRef(true);
+  const [groupReadTick, setGroupReadTick] = useState(0);
   const groupChromeRef = useRef<Map<string, WallChrome>>(new Map());
   /* a room's ground, by group id, filled when the room wakes */
   const groupFieldRef = useRef<Map<string, ApiGroupFieldInspiration[]>>(new Map());
@@ -2168,15 +2175,12 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    */
   const groupTimelineRef = useRef<Map<string, ApiGroupTimeline>>(new Map());
   /**
-   * A room's board at a version it no longer stands at, fetched once and kept.
-   *
-   * Keyed `groupId:version`. Winding back and forth across the same month must
-   * not re-ask the server for a sentence that cannot have changed — a version
-   * is immutable by construction, superseded rather than edited.
+   * Historical row identity is immutable; permission to display it is not.
+   * Keyed `groupId:version`, invalidated whenever this room is revalidated.
    */
   const groupBoardAtRef = useRef<Map<string, ApiGroupTopOfMind>>(new Map());
-  /** Versions currently in flight, so one wind of the rail asks once. */
-  const groupBoardPendingRef = useRef<Set<string>>(new Set());
+  /** Token ownership also prevents invalidated historical reads landing late. */
+  const groupBoardPendingRef = useRef(new Map<string, { token: symbol; controller: AbortController }>());
   /** Both refs' change signal — they are filled from promises. */
   const [groupPastTick, setGroupPastTick] = useState(0);
   /**
@@ -2285,35 +2289,95 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * Fetch one room's jar — its readings' evidence plus its direction —
    * starting the moment travel toward it begins, so arrival usually finds it
    * ready. The room wakes only when the character has arrived AND this has
-   * resolved: a room never renders half-poured. Cached for the session; a
-   * failure clears itself so the next travel toward it tries again.
+   * resolved: a room never renders half-poured. Shared snapshots expire and
+   * are checked again on return/focus; failed verification clears stale data.
    */
-  const loadGroup = useCallback((groupId: string): Promise<boolean> => {
+  const clearGroupHistory = useCallback((groupId: string) => {
+    for (const key of groupBoardAtRef.current.keys()) if (key.startsWith(`${groupId}:`)) groupBoardAtRef.current.delete(key);
+    for (const [key, request] of groupBoardPendingRef.current) if (key.startsWith(`${groupId}:`)) {
+      request.controller.abort(); groupBoardPendingRef.current.delete(key);
+    }
+    setGroupPastTick((value) => value + 1);
+    setGroupReadTick((value) => value + 1);
+  }, []);
+
+  const clearGroupDisplay = useCallback((groupId: string) => {
+    window.clearTimeout(groupLeaseTimersRef.current.get(groupId));
+    groupLeaseTimersRef.current.delete(groupId);
+    groupCacheRef.current.delete(groupId);
+    groupChromeRef.current.delete(groupId);
+    groupFieldRef.current.delete(groupId);
+    groupBeyondRef.current.delete(groupId);
+    wallSignalsRef.current.delete(groupId);
+    posterSaidRef.current.delete(groupId);
+    clearGroupHistory(groupId);
+    if (atWallRef.current.kind === "group" && atWallRef.current.id === groupId) {
+      setChrome({ text: null, awayFrom: null, formingAlt: null, asOf: null, forming: null, empty: false, prevText: null });
+      setSelectedId(null); setPanel(null); setPanelOpen(false);
+      setProv(null); setProvFull(null); setProvPick(null);
+    }
+    setGroupFieldTick((value) => value + 1);
+  }, [clearGroupHistory]);
+
+  useEffect(() => {
+    groupReadsAliveRef.current = true;
+    return () => {
+      groupReadsAliveRef.current = false;
+      for (const request of groupRequestsRef.current.values()) { request.controller.abort(); window.clearTimeout(request.timer); }
+      groupRequestsRef.current.clear();
+      for (const request of groupBoardPendingRef.current.values()) request.controller.abort();
+      groupBoardPendingRef.current.clear();
+      for (const timer of groupLeaseTimersRef.current.values()) window.clearTimeout(timer);
+      groupLeaseTimersRef.current.clear();
+    };
+  }, []);
+
+  const loadGroup = useCallback((groupId: string, force = false): Promise<boolean> => {
     const cache = groupCacheRef.current;
+    const inFlight = groupRequestsRef.current.get(groupId);
+    if (inFlight && !force) return inFlight.promise;
+    if (inFlight) inFlight.controller.abort();
     const got = cache.get(groupId);
-    if (got && got.status !== "failed") return Promise.resolve(got.status === "ready");
-    cache.set(groupId, { status: "pending", data: null });
+    if (!force && got?.status === "ready" && Date.now() - (got.checkedAt ?? 0) < GROUP_READ_TTL_MS) return Promise.resolve(true);
+    const token = Symbol(groupId);
+    const controller = new AbortController();
+    const requestedAt = Date.now();
+    const current = () => groupReadsAliveRef.current && groupRequestsRef.current.get(groupId)?.token === token;
+    cache.set(groupId, { ...got, status: "pending", data: got?.data ?? null });
     setFailedGroups((prev) => {
       if (!prev.has(groupId)) return prev;
       const next = new Set(prev);
       next.delete(groupId);
       return next;
     });
-    return Promise.all([
-      fetchGroupTopOfMind(groupId),
-      fetchGroupWall(groupId).catch(() => [] as ApiGroupWallSignal[]),
-      fetchGroupProposals(groupId).catch(() => [] as ApiGroupProposal[]),
+    let timer = 0;
+    const deadline = new Promise<never>((_resolve, reject) => {
+      timer = window.setTimeout(() => {
+        controller.abort(); reject(new Error("Room verification timed out"));
+      }, GROUP_READ_TTL_MS);
+    });
+    const promise = Promise.race([Promise.all([
+      fetchGroupTopOfMind(groupId, undefined, controller.signal).then((top) => {
+        if (current() && groupReadingRestricts(got?.data?.top ?? null, top)) clearGroupDisplay(groupId);
+        return top;
+      }),
+      fetchGroupWall(groupId, controller.signal),
+      fetchGroupProposals(groupId, controller.signal),
       /* THE ROOM'S GROUND. Its members' public memories — the reason a room
          had a sky full of statements and nothing underneath them. A room
          never generates a signal: every statement here was formed on some
          member's own wall out of their own inspirations and then shared in,
          so the ground was always real and simply never fetched. */
-      fetchGroupField(groupId).catch(() => ({
-        field: [] as ApiGroupFieldInspiration[],
-        total: 0,
-      })),
-    ])
+      fetchGroupField(groupId, controller.signal),
+    ]), deadline])
       .then(([top, wall, proposals, ground]) => {
+        if (!current()) return false;
+        const fieldFingerprint = JSON.stringify(ground);
+        const fieldChanged = got?.fieldFingerprint !== fieldFingerprint;
+        const fieldIds = new Set(ground.field.map((row) => row.id));
+        const signalIds = new Set(wall.map((row) => row.signalId));
+        if ((groupFieldRef.current.get(groupId) ?? []).some((row) => !fieldIds.has(row.id)) ||
+          (wallSignalsRef.current.get(groupId) ?? []).some((row) => !signalIds.has(row.signalId))) clearGroupDisplay(groupId);
         wallSignalsRef.current.set(groupId, wall);
         groupFieldRef.current.set(groupId, ground.field);
         /* the same remainder the personal field keeps, per room: what its
@@ -2326,20 +2390,60 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
           groupId,
           deriveGroupChrome(top, openMs, evidence, localeRef.current),
         );
-        cache.set(groupId, { status: "ready", data: { evidence, top } });
-        setGroupFieldTick((n) => n + 1);
+        const entry = { status: "ready" as const, data: { evidence, top }, checkedAt: requestedAt, fieldFingerprint, leaseToken: token };
+        cache.set(groupId, entry);
+        setFailedGroups((prev) => {
+          if (!prev.has(groupId)) return prev;
+          const next = new Set(prev); next.delete(groupId); return next;
+        });
+        window.clearTimeout(groupLeaseTimersRef.current.get(groupId));
+        groupLeaseTimersRef.current.set(groupId, window.setTimeout(() => {
+          if (!groupReadsAliveRef.current || cache.get(groupId)?.leaseToken !== token) return;
+          clearGroupDisplay(groupId);
+          cache.set(groupId, { status: "failed", data: null });
+          setFailedGroups((prev) => new Set(prev).add(groupId));
+        }, Math.max(0, GROUP_READ_TTL_MS - (Date.now() - requestedAt))));
+        clearGroupHistory(groupId);
+        if (fieldChanged) setGroupFieldTick((n) => n + 1);
         simApiRef.current?.wake();
         return true;
       })
       .catch(() => {
+        if (!current()) return false;
+        clearGroupDisplay(groupId);
         cache.set(groupId, { status: "failed", data: null });
         setFailedGroups((prev) => new Set(prev).add(groupId));
         simApiRef.current?.wake();
         return false;
+      })
+      .finally(() => {
+        window.clearTimeout(timer);
+        if (current()) groupRequestsRef.current.delete(groupId);
       });
-  }, []);
+    groupRequestsRef.current.set(groupId, { token, promise, controller, timer });
+    return promise;
+  }, [clearGroupDisplay, clearGroupHistory]);
   const loadGroupRef = useRef(loadGroup);
   loadGroupRef.current = loadGroup;
+
+  // Revalidate on return/focus, and renew only the visible room's lease.
+  // Unchanged snapshots do not rebuild the field or replay its animation.
+  useEffect(() => {
+    if (atWall.kind !== "group" || offlineRef.current) return;
+    const groupId = atWall.id;
+    const refresh = () => {
+      if (!document.hidden) void loadGroup(groupId, true);
+    };
+    refresh();
+    const timer = window.setInterval(refresh, GROUP_READ_TTL_MS - 5_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [atWall.kind, atWall.id, loadGroup]);
 
   /**
    * THE GROUND AN ARRIVAL FINDS IS CURRENT. An agent's memories change while
@@ -3495,9 +3599,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * is not in hand yet, the wall says the room's name and waits, and if the
    * room had no board at T it says so honestly with the month beside it.
    *
-   * A version is immutable by construction — superseded, never edited — so
-   * one that has been fetched is kept for the session, and winding back and
-   * forth across the same month never asks twice.
+   * Winding within a verified snapshot reuses the version. Revalidating the
+   * room clears that cache: the version can survive while access changes.
    */
   const groupChromeAt = useCallback(
     (groupId: string, T: number, nowMs: number): WallChrome => {
@@ -3532,15 +3635,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       const held = groupBoardAtRef.current.get(key);
       if (!held) {
         if (!groupBoardPendingRef.current.has(key)) {
-          groupBoardPendingRef.current.add(key);
-          fetchGroupTopOfMind(groupId, then.version)
+          const token = Symbol(key);
+          const controller = new AbortController();
+          groupBoardPendingRef.current.set(key, { token, controller });
+          fetchGroupTopOfMind(groupId, then.version, controller.signal)
             .then((board) => {
+              if (!groupReadsAliveRef.current || groupBoardPendingRef.current.get(key)?.token !== token) return;
               groupBoardAtRef.current.set(key, board);
               setGroupPastTick((n) => n + 1);
             })
             .catch(() => undefined)
             .finally(() => {
-              groupBoardPendingRef.current.delete(key);
+              if (groupBoardPendingRef.current.get(key)?.token === token) groupBoardPendingRef.current.delete(key);
             });
         }
         return blank(monthTag(T, localeRef.current));
@@ -3551,7 +3657,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       return {
         text,
         awayFrom: null,
-        formingAlt: text ? null : say("worldNothingReadTogether"),
+        formingAlt: text ? null : say(held.restricted ? "worldRoomReadRestricted" : "worldNothingReadTogether"),
         /* WHEN THIS WAS THE ROOM. Stamped only when the sentence differs from
            the one up now, exactly as your own wall stamps its own past: a date
            on an unchanged sentence would report a change that did not happen. */
@@ -3645,7 +3751,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        map, so depending on it is what makes the poster appear on arrival
        rather than at whatever unrelated render happens next. `wallChromeNow`
        already depends on it for the same reason. */
-    [dial, adopted, notes, proposal, atWall, agents, emerging, topOfMind, inspirations, wokenGroups, groupFieldTick],
+    [dial, adopted, notes, proposal, atWall, agents, emerging, topOfMind, inspirations, wokenGroups, groupFieldTick, groupReadTick],
   );
   /* AND THE WALL REMEMBERS WHAT IT SAID, once it is on screen saying it.
      After the commit, not inside the updater: the sentence has to be recorded
@@ -3728,7 +3834,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       }
     }
     return m;
-  }, [walls, agents, wokenGroups, groupFieldTick, dial, adopted, notes, proposal, emerging, topOfMind, inspirations]);
+  }, [walls, agents, wokenGroups, groupFieldTick, groupReadTick, dial, adopted, notes, proposal, emerging, topOfMind, inspirations]);
 
   /**
    * WHAT EACH WALL'S CLAIM RESTS ON.
@@ -3777,7 +3883,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     }
     wallProvRef.current = m;
     simApiRef.current?.setProvenance(m);
-  }, [provenance, agents, inspirations, walls, wokenGroups]);
+  }, [provenance, agents, inspirations, walls, wokenGroups, groupFieldTick, groupReadTick]);
 
   /* The field's own invariant, reachable from the console — see SimApi.audit
      for why counting it beats looking at it. Dev-gated with the page itself. */
@@ -11348,7 +11454,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           : Date.parse(version.createdAt) >= acceptedVersion.acceptedAt);
         if (arrived) {
           groupCacheRef.current.delete(acceptedVersion.groupId);
-          const loaded = await loadGroupRef.current(acceptedVersion.groupId);
+          const loaded = await loadGroupRef.current(acceptedVersion.groupId, true);
           if (disposed) return;
           if (loaded) {
             applyChromeRef.current(TRef.current);
@@ -11387,11 +11493,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       try {
         const top = await fetchGroupTopOfMind(groupPanel);
         if (disposed) return;
-        const knownVersion = groupCacheRef.current.get(groupPanel)?.data?.top?.topOfMind?.version
+        const cachedTop = groupCacheRef.current.get(groupPanel)?.data?.top ?? null;
+        const knownVersion = cachedTop?.topOfMind?.version
           ?? groupTimelineRef.current.get(groupPanel)?.versions[0]?.version ?? null;
-        if (knownVersion !== null && top.topOfMind && top.topOfMind.version > knownVersion) {
+        if (groupReadingChanged(cachedTop, top)) {
           groupCacheRef.current.delete(groupPanel);
-          const loaded = await loadGroupRef.current(groupPanel);
+          if (groupReadingRestricts(cachedTop, top)) clearGroupDisplay(groupPanel);
+          const loaded = await loadGroupRef.current(groupPanel, true);
           if (disposed) return;
           if (loaded) {
             applyChromeRef.current(TRef.current);
@@ -11400,7 +11508,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               setGroupPastTick((value) => value + 1);
               setGroupTimelines((prev) => new Map(prev).set(groupPanel, timeline));
             }).catch(() => undefined);
-            setProposalReceipt({ groupId: groupPanel, text: say("worldRoomVersionArrived") });
+            if (knownVersion !== null && top.topOfMind && top.topOfMind.version > knownVersion) {
+              setProposalReceipt({ groupId: groupPanel, text: say("worldRoomVersionArrived") });
+            }
           }
         }
       } catch { /* last known reading stays in place */ }
@@ -11408,7 +11518,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     };
     timer = window.setTimeout(() => void refresh(), 10_000);
     return () => { disposed = true; window.clearTimeout(timer); };
-  }, [groupPanel, atWall, selectedGroupStop?.at, loadOpenProposals, locale]);
+  }, [groupPanel, atWall, selectedGroupStop?.at, loadOpenProposals, locale, clearGroupDisplay]);
 
   /** Leaving is destructive and irreversible, so it asks once, in words. */
   const [leaving, setLeaving] = useState<string | null>(null);
@@ -12171,7 +12281,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
              */
             const ready =
               w.kind === "self" ||
-              (w.kind === "group" ? c !== null : (agents ?? []).some((a) => a.agent.id === w.id));
+              (w.kind === "group" ? c !== null && !failedGroups.has(w.id) : (agents ?? []).some((a) => a.agent.id === w.id));
             return (
               <div
                 key={key}
@@ -12223,7 +12333,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       groupId={w.kind === "group" ? w.id : undefined}
                       active={here && !offlineRef.current}
                       locale={locale}
-                      refreshKey={w.kind === "group" ? groupFieldTick : undefined}
+                      refreshKey={w.kind === "group" ? groupReadTick : undefined}
                       onRead={w.kind === "self" ? setPrinciples : (rows) => setGroupPrincipleCounts((counts) =>
                         counts[w.id] === rows.length ? counts : { ...counts, [w.id]: rows.length })}
                     /> : null}
@@ -13102,7 +13212,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   </p>
                 ) : null}
                 {w.kind === "group" && failedGroups.has(w.id) && !ready ? (
-                  <p className="jar-wall-hold jar-label">{say("worldRoomUnreachable")}</p>
+                  <p className="jar-wall-hold jar-label">{say("worldRoomUnreachable")}{" "}
+                    <button type="button" onClick={() => void loadGroup(w.id, true)}>{say("worldRoomHistoryRetry")}</button>
+                  </p>
                 ) : null}
                 {/* THE EDGE OF THE WORLD, AND WHAT IS BEYOND IT.
                     Making a room and adding an agent both mean "a new column
@@ -14733,6 +14845,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         <GroupPanel
           groupId={groupPanel}
           readingRestricted={groupCacheRef.current.get(groupPanel)?.data?.top?.restricted}
+          readRevision={groupReadTick}
           members={members}
           space={atWall}
           openProposals={openProposals}

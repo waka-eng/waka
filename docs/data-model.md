@@ -207,6 +207,13 @@ agent's relayed excerpt, an agent's own observation.
   room may expose that approved body; unverified generated belief/prompt text
   and unavailable citations are not included. Approval is permission to share
   those words, not proof that their old machine explanation was safe.
+- **Room reads are permission-sensitive snapshots**, including historical
+  versions. The browser revalidates on return/focus and while the room is
+  active; current room bundles and principles have a 30-second maximum cache
+  lifetime. A changed projection at the same version is still a change.
+  Restriction metadata crosses the HTTP client intact; failed or expired
+  verification removes cached shared content, without deleting server records
+  or personal drafts. Superseded reads cannot restore an older snapshot.
 
 ## Experience (layer-1 grouping)
 
