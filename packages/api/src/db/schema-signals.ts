@@ -91,6 +91,9 @@ export const signals = pgTable(
      */
     unsupportedAt: timestamp("unsupported_at", { withTimezone: true }),
 
+    /** Automatic evidence-loss retirement, never a dismissal or merge. */
+    supportRetiredAt: timestamp("support_retired_at", { withTimezone: true }),
+
     /**
      * Set when the owner throws the pattern out. The row, its evidence and
      * its embedding all stay — dismissal deletes nothing — and from this

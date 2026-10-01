@@ -144,9 +144,11 @@ export async function refreshSignalLifecycle(
     null,
   );
 
+  const recovered = current.status === "retired" && current.supportRetiredAt !== null &&
+    current.dismissedAt === null && evidenceAt.length > 0;
   const promote =
-    current.status === "emerging" && evidenceAt.length >= SIGNAL_PROMOTION_MIN_EVIDENCE;
-  const status: SignalStatus = promote ? "active" : current.status;
+    (current.status === "emerging" || recovered) && evidenceAt.length >= SIGNAL_PROMOTION_MIN_EVIDENCE;
+  const status: SignalStatus = promote ? "active" : recovered ? "emerging" : current.status;
 
   await tx
     .update(signals)
@@ -157,6 +159,7 @@ export async function refreshSignalLifecycle(
       // Support returned. A locked signal keeps its text either way; what
       // changes is that readers stop being told it stands on nothing.
       unsupportedAt: evidenceAt.length > 0 ? null : current.unsupportedAt,
+      supportRetiredAt: recovered ? null : current.supportRetiredAt,
       updatedAt: now,
     })
     .where(eq(signals.id, signalId));
@@ -231,7 +234,7 @@ export async function reconcileSignalsAfterEvidenceLoss(
     if (signal.lockedAt) {
       await db
         .update(signals)
-        .set({ unsupportedAt: now, confidence: 0, lastEvidenceAt: null, updatedAt: now })
+        .set({ unsupportedAt: now, supportRetiredAt: null, confidence: 0, lastEvidenceAt: null, updatedAt: now })
         .where(eq(signals.id, signalId));
       unsupported.push(signalId);
     } else {
@@ -243,6 +246,7 @@ export async function reconcileSignalsAfterEvidenceLoss(
         .update(signals)
         .set({
           status: "retired",
+          supportRetiredAt: now,
           confidence: 0,
           lastEvidenceAt: null,
           unsupportedAt: null,

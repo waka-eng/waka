@@ -1,6 +1,6 @@
 # Goal: implement the experience review
 
-Status: in flight — A/B, C input/output/cache, D1 source provenance and E1 manual-refresh fixes locally checked; D2/D3, E2 and later delivery slices remain open. Deployment-target verification, historical repair and full release verification remain open.
+Status: in flight — A/B, C input/output/cache, D1 source provenance, D2 explicit review/application and E1 manual-refresh fixes locally checked; automatic D reconciliation, D3/E2 and later delivery slices remain open. Deployment-target verification, historical repair and full release verification remain open.
 Created: 2026-10-01, on the owner's instruction to implement the full plan.
 Branch: `codex/ux-feature-implementation`.
 Baseline: `33e65a7` on `dev`.
@@ -28,7 +28,7 @@ experiments or revive superseded room goals.
 | A | F5/F6/F10: input, overlay scrolling/focus, readable active controls | Reproduce slash/wheel defects; verify typing, caret, Escape/Tab, wheel/touch and contrast in actual affected flows; web checks | Implemented; 5 original failures now pass, 325 web tests pass. Desktop fixture verified. Mobile touch/200% zoom and deployed verification remain open. |
 | B | F3/F4: edited principle preservation, truthful support, account-scoped drafts/preferences and cancellation | Isolated SQL preservation tests and two-account browser/state tests; API/web checks | B1: 6 SQL / 653 unit tests pass after 3 reproduced failures. B2: 4 failures reproduced, then two-account draft and stale-response checks pass; full web suite 331/331. Deployed/account-switch browser verification remains open. |
 | C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | C1/C2/C3 code locally verified (51 SQL cases; full web 349/349). Read-only inventory completed across 5 rooms in the DB referenced by the local env files; hosted-stage mapping is not verified. Historical repair, deployment coordination and deployed verification remain pending. |
-| D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | D1 source identity/quote retention and stale derivation checks locally verified (16 source SQL cases; web 366/366). D2a read-only explicit support assessment verified (16 unit / 9 SQL cases); automatic withdrawal/restoration, full downstream fencing, durable handoff and historical repair remain open. |
+| D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | D1 source identity/quote retention verified. D2a/b explicit assessment and reversible application verified (30 support SQL cases; 104 related SQL / 671 unit / 366 web pass). Automatic reconciliation, current-artifact validity, full downstream fencing, source-save handoff and historical repair remain open. |
 | E1 | F7/F8: authoritative poster and truthful manual refresh | Queue acceptance, changed/unchanged completion, failure and fresh displayed version verified | Implemented with job receipts, resumable profile-scoped polling, held-job manual upgrade and authoritative headline. Local checks pass (8 receipt SQL tests, 10 hook tests, full web 362/362); deployed verification remains open. |
 | E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | Pending |
 | F | F11/F12: visible search and durable navigation | Results beyond initial archive, failure/no-match separation, stable IDs, deep links, Back/Forward and rename verified | Pending |
@@ -335,3 +335,44 @@ Keep code, deployment, historical repair, and user validation evidence distinct.
   protecting edited words. Then complete durable source-to-reading handoff
   and all downstream revision fences. No public state or threshold was added
   or changed; this checkpoint does not meet D's full acceptance gate.
+- 2026-10-01, D2b: migration 0036 adds metadata-only applied support reviews
+  and a distinct evidence-loss retirement marker. Explicit application rechecks
+  source hashes, claim/lock state, current membership and prior decisions under
+  transaction locks. Unsupported links stop being current evidence; a later
+  supported review restores the relationship without reviving deleted quotes.
+  Unresolved decisions do neither. Dismissals and merge retirement are not
+  reversed. Edited held/contested principles retain their words and regain
+  support when the current evidence qualifies again. The review record, signal/
+  principle standing and debounced reading request commit atomically; failed
+  enqueue rolls the entire application back. Replaying a review is idempotent.
+- D2b regression baseline: reproduced 3/3 re-entry failures with the new
+  explicit writer in place. Bounded extraction reattached a locked pattern's
+  withdrawn link; after generated retirement it minted a twin; an unaware SQL
+  writer could reinsert the withdrawn link. Matching now treats a source's
+  explicit withdrawal as mandatory context (including evidence-retired targets),
+  and related-source discovery cannot bypass it. A DB guard waits for concurrent
+  support writes before checking the latest decisive review. An unresolved
+  later review does not erase that decision. Those 3 original failures pass.
+- D2b verification: 30/30 support-review/application SQL cases pass, including
+  concurrent replay, an old insert observed waiting on a real database lock,
+  stale material/wording/membership/visibility rejection, lost-job rollback,
+  private-source exclusion and edited-principle restoration. Combined with
+  evidence, curation, room privacy, refresh-receipt and queue suites: 104/104
+  SQL tests across 10 suites. API unit suite 671 passed / 3 paid-live benches
+  skipped; web 366/366. API/web/admin and both operations CLI typechecks, web
+  build, migration check, CLI help checks and diff check pass. All writes
+  were confined to disposable schemas on explicit local `waka_agent_test`.
+- `pnpm apply:signal-support --help` documents the separate explicit application
+  command. It requires the report file, matching review/profile IDs and an
+  explicit DB URL; it makes no model calls and loads no dotenv defaults. It is
+  NOT authorization for a hosted repair. Migration 0036 and these operations
+  have not run on hosted data. No positive-budget live assessment, push or
+  deployment occurred. Older workers must not remain able to re-mint withdrawn
+  meanings; coordinate the full writer cutover before applying hosted reports.
+- Automatic source-edit reconciliation is still unconnected. Next integrate
+  reviewed support assessment with source mutation/derivation, complete durable
+  enqueue for every source write and fence statement/artifact revisions. Current
+  top-of-mind validity while replacement is pending, exact restored-support
+  attribution in the UI, and recovery/regeneration of unedited machine-derived
+  dependents remain open. The explicit apply tool is not a substitute for that
+  automatic product loop or for the full A–J/L1–L3 completion requirements.

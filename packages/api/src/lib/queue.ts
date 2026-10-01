@@ -339,8 +339,8 @@ async function enqueueKeyedJob(input: {
     | ReembedSignalPayload
     | GenerateReflectionQuestionPayload;
   idempotencyKey: string;
-}): Promise<EnqueueResult> {
-  const rows = await getDb().execute(sql<{ id: string }>`
+}, transaction?: Pick<ReturnType<typeof getDb>, "execute">): Promise<EnqueueResult> {
+  const rows = await (transaction ?? getDb()).execute(sql<{ id: string }>`
     INSERT INTO background_jobs (profile_id, type, payload, max_attempts, idempotency_key)
     VALUES (
       ${input.profileId}::uuid,
@@ -376,8 +376,12 @@ async function enqueueKeyedJob(input: {
   const [job] = rows as unknown as Array<{ id: string; created: boolean }>;
   if (!job) throw new Error(`Failed to enqueue ${input.type} job`);
 
-  if (shouldAutoDrainBackgroundJobs()) scheduleBackgroundJobDrain();
-  else await wakeBackgroundWorker();
+  // A transaction caller persists atomically and leaves waking to the normal
+  // post-commit worker tick. Never publish a wake for uncommitted job rows.
+  if (!transaction) {
+    if (shouldAutoDrainBackgroundJobs()) scheduleBackgroundJobDrain();
+    else await wakeBackgroundWorker();
+  }
   return { jobId: job.id, created: job.created };
 }
 
@@ -498,9 +502,10 @@ export async function enqueueDeriveSignals(
 export async function enqueueTopOfMindRefresh(
   profileId: string,
   reason: RefreshTopOfMindPayload["reason"],
+  transaction?: Pick<ReturnType<typeof getDb>, "execute">,
 ): Promise<EnqueueResult> {
   const payload: RefreshTopOfMindPayload = { reason };
-  const rows = await getDb().execute(sql<{ id: string }>`
+  const rows = await (transaction ?? getDb()).execute(sql<{ id: string }>`
     INSERT INTO background_jobs (profile_id, type, payload, max_attempts)
     VALUES (
       ${profileId}::uuid,
@@ -530,8 +535,10 @@ export async function enqueueTopOfMindRefresh(
   const [job] = rows as unknown as Array<{ id: string; created: boolean }>;
   if (!job) throw new Error("Failed to enqueue refresh_top_of_mind job");
 
-  if (shouldAutoDrainBackgroundJobs()) scheduleBackgroundJobDrain();
-  else await wakeBackgroundWorker();
+  if (!transaction) {
+    if (shouldAutoDrainBackgroundJobs()) scheduleBackgroundJobDrain();
+    else await wakeBackgroundWorker();
+  }
   return { jobId: job.id, created: job.created };
 }
 
@@ -550,13 +557,14 @@ export async function enqueueGroupTopOfMindRefresh(
   profileId: string,
   groupId: string,
   reason: RefreshGroupTopOfMindPayload["reason"],
+  transaction?: Pick<ReturnType<typeof getDb>, "execute">,
 ): Promise<EnqueueResult> {
   return enqueueKeyedJob({
     profileId,
     type: "refresh_group_top_of_mind",
     payload: { groupId, reason },
     idempotencyKey: `refresh_group_top_of_mind:${groupId}`,
-  });
+  }, transaction);
 }
 
 /** One generated follow-up per saved answer, even across repeated opens. */

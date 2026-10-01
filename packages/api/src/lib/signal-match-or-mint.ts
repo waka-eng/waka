@@ -31,12 +31,13 @@
  * (goals/the-legible-loop.md Phase 3).
  */
 
-import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 
 import {
   inspirations,
   signalEmbeddings,
   signalEvidence,
+  signalSupportReviews,
   signals,
   suppressions,
   type SignalStatus,
@@ -85,6 +86,7 @@ interface MatchTarget {
   statement: string;
   status: SignalStatus;
   locked: boolean;
+  withdrawn: boolean;
   embedding: number[];
 }
 
@@ -148,12 +150,13 @@ async function prepareJudgements(input: ApplyCandidatesInput, targets: MatchTarg
       decision = judged.relation === "same" ? "attach" : "mint";
     }
     if (decision === "attach" && nearest) {
+      if (nearest.target.withdrawn) continue;
       if (!nearest.target.locked && nearest.target.status === "emerging") {
         nearest.target.statement = candidate.statement;
         nearest.target.embedding = candidate.embedding;
       }
     } else projected.push({ id: `candidate:${index}`, statement: candidate.statement,
-      status: "emerging", locked: false, embedding: candidate.embedding });
+      status: "emerging", locked: false, withdrawn: false, embedding: candidate.embedding });
   }
   return judgements;
 }
@@ -162,7 +165,7 @@ export async function applyCandidates(
   tx: WakaTx,
   input: ApplyCandidatesInput,
 ): Promise<Pick<SignalDerivationResult, "matchedSignalIds" | "mintedSignalIds" | "promotedSignalIds">> {
-  const targets = await loadMatchTargets(tx, input.profileId, input.embeddingModel, input.inputPolicy);
+  const targets = await loadMatchTargets(tx, input.profileId, input.embeddingModel, input.inputPolicy, input.inspirationId, input.evidenceOwnerProfileId);
   const anchors = await loadSuppressionAnchors(tx, input.profileId, input.embeddingModel, input.inputPolicy);
   const prior = JSON.stringify({ targets, anchors });
   const judgements = await prepareJudgements(input, targets, anchors);
@@ -171,7 +174,7 @@ export async function applyCandidates(
   if (ids.length) await tx.select({ id: signals.id }).from(signals)
     .where(and(eq(signals.profileId, input.profileId), inArray(signals.id, ids)))
     .orderBy(asc(signals.id)).for("share");
-  const currentTargets = await loadMatchTargets(tx, input.profileId, input.embeddingModel, input.inputPolicy);
+  const currentTargets = await loadMatchTargets(tx, input.profileId, input.embeddingModel, input.inputPolicy, input.inspirationId, input.evidenceOwnerProfileId);
   const currentAnchors = await loadSuppressionAnchors(tx, input.profileId, input.embeddingModel, input.inputPolicy);
   if (JSON.stringify({ targets: currentTargets, anchors: currentAnchors }) !== prior) {
     throw new Error("Signal inputs changed during judgement; retry current statements");
@@ -223,6 +226,9 @@ export async function applyCandidates(
     const match = decision === "attach" ? nearest : null;
 
     if (match) {
+      // New discovery cannot reverse an explicit decision about this pair.
+      // Keep the retired target visible to matching so it cannot mint a twin.
+      if (match.target.withdrawn) continue;
       await attachEvidence(tx, {
         profileId: input.profileId,
         ownerProfileId: input.evidenceOwnerProfileId,
@@ -357,6 +363,7 @@ export async function applyCandidates(
       statement: candidate.statement,
       status: "emerging",
       locked: false,
+      withdrawn: false,
       embedding: candidate.embedding,
     });
   }
@@ -374,8 +381,17 @@ async function loadMatchTargets(
   tx: WakaTx,
   profileId: string,
   embeddingModel: string,
-  inputPolicy?: string,
+  inputPolicy: string | undefined,
+  inspirationId: string,
+  ownerProfileId: string,
 ): Promise<MatchTarget[]> {
+  const reviews = await tx.selectDistinctOn([signalSupportReviews.signalId], {
+    signalId: signalSupportReviews.signalId, verdict: signalSupportReviews.verdict,
+  }).from(signalSupportReviews).where(and(eq(signalSupportReviews.profileId, profileId),
+    eq(signalSupportReviews.ownerProfileId, ownerProfileId), eq(signalSupportReviews.inspirationId, inspirationId),
+    ne(signalSupportReviews.verdict, "unresolved")))
+    .orderBy(asc(signalSupportReviews.signalId), desc(signalSupportReviews.createdAt), desc(signalSupportReviews.reviewId));
+  const withdrawn = new Set(reviews.filter((row) => row.verdict === "unsupported").map((row) => row.signalId));
   const rows = await tx
     .select({
       id: signals.id,
@@ -390,21 +406,25 @@ async function loadMatchTargets(
       and(
         eq(signals.profileId, profileId),
         ...(inputPolicy ? [eq(signals.inputPolicy, inputPolicy)] : []),
-        // A retired signal is either evidence-dead or hidden by its owner.
-        // Reviving one because a new capture resembles it would undo a human
-        // decision without asking, so retired rows are simply not candidates.
-        inArray(signals.status, ["emerging", "active"]),
+        // Evidence-retired targets with an explicit refusal of THIS source
+        // participate only to prevent re-minting, never to regain evidence.
+        or(inArray(signals.status, ["emerging", "active"]), ...(withdrawn.size ? [
+          and(eq(signals.status, "retired"), isNotNull(signals.supportRetiredAt), inArray(signals.id, [...withdrawn])),
+        ] : [])),
         eq(signalEmbeddings.model, embeddingModel),
       ),
     )
-    .orderBy(desc(signals.lastEvidenceAt), asc(signals.id))
-    .limit(MATCH_CANDIDATE_SCAN_LIMIT);
+    // Mandatory refusals must not fall outside the ordinary bounded scan.
+    .orderBy(...(withdrawn.size ? [desc(inArray(signals.id, [...withdrawn]))] : []),
+      desc(signals.lastEvidenceAt), asc(signals.id))
+    .limit(MATCH_CANDIDATE_SCAN_LIMIT + withdrawn.size);
 
   return rows.map((row) => ({
     id: row.id,
     statement: row.statement,
     status: row.status,
     locked: row.lockedAt !== null,
+    withdrawn: withdrawn.has(row.id),
     embedding: row.embedding,
   }));
 }
@@ -553,9 +573,16 @@ async function attachRelatedEvidence(
       ),
     );
   const presentIds = new Set(stillPresent.map((row) => row.id));
+  const reviews = await tx.selectDistinctOn([signalSupportReviews.inspirationId], {
+    inspirationId: signalSupportReviews.inspirationId, verdict: signalSupportReviews.verdict,
+  }).from(signalSupportReviews).where(and(eq(signalSupportReviews.profileId, input.profileId),
+    eq(signalSupportReviews.ownerProfileId, input.ownerProfileId), eq(signalSupportReviews.signalId, input.signalId),
+    inArray(signalSupportReviews.inspirationId, cited.map((row) => row.inspirationId)), ne(signalSupportReviews.verdict, "unresolved")))
+    .orderBy(asc(signalSupportReviews.inspirationId), desc(signalSupportReviews.createdAt), desc(signalSupportReviews.reviewId));
+  const withdrawn = new Set(reviews.filter((row) => row.verdict === "unsupported").map((row) => row.inspirationId));
 
   for (const row of cited) {
-    if (!presentIds.has(row.inspirationId)) continue;
+    if (!presentIds.has(row.inspirationId) || withdrawn.has(row.inspirationId)) continue;
     await attachEvidence(tx, {
       profileId: input.profileId,
       ownerProfileId: input.ownerProfileId,

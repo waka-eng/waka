@@ -1,8 +1,9 @@
-/** Read-only shadow assessment before support withdrawal is enabled.
+/** Read-only assessment; automatic withdrawal remains disabled.
  * Reports contain identities/verdicts, never source text. A report is not a
- * write authorization: any future writer must recheck under transaction locks.
+ * write authorization: the explicit apply path rechecks under transaction locks.
  */
-import { and, asc, eq } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { and, asc, eq, isNotNull, or, sql } from "drizzle-orm";
 import { signalEvidence, signals } from "../db/index.js";
 import { getDb } from "./db.js";
 import { hashEmbeddingInput } from "./inspiration-embeddings.js";
@@ -21,6 +22,28 @@ export interface SignalSupportReviewItem {
   verdict: "supported" | "unsupported" | "unresolved";
   sourceIds: string[];
   issue?: ReviewIssue;
+}
+
+/** Current links plus previously assessed links: a withdrawn witness remains
+ * eligible for a new explicit assessment without retaining its old words. */
+export async function loadSupportClaims(db: Pick<ReturnType<typeof getDb>, "select">,
+  profileId: string, ownerProfileId: string, inspirationId: string) {
+  return db.select({ signalId: signals.id, statement: signals.statement,
+    lockedAt: signals.lockedAt, dismissedAt: signals.dismissedAt, status: signals.status,
+    supportRetiredAt: signals.supportRetiredAt, inputPolicy: signals.inputPolicy, evidenceId: signalEvidence.id,
+    lastReviewId: sql<string | null>`(SELECT r.review_id FROM signal_support_reviews r
+      WHERE r.signal_id = ${signals.id} AND r.owner_profile_id = ${ownerProfileId}::uuid
+      AND r.inspiration_id = ${inspirationId}::uuid ORDER BY r.created_at DESC, r.review_id DESC LIMIT 1)`,
+  }).from(signals).leftJoin(signalEvidence, and(eq(signalEvidence.signalId, signals.id),
+    eq(signalEvidence.ownerProfileId, ownerProfileId), eq(signalEvidence.inspirationId, inspirationId)))
+    .where(and(eq(signals.profileId, profileId), or(isNotNull(signalEvidence.id), sql`EXISTS (
+      SELECT 1 FROM signal_support_reviews r WHERE r.signal_id = ${signals.id}
+      AND r.owner_profile_id = ${ownerProfileId}::uuid AND r.inspiration_id = ${inspirationId}::uuid)`)))
+    .orderBy(asc(signals.id));
+}
+
+export function supportClaimsHash(claims: Awaited<ReturnType<typeof loadSupportClaims>>) {
+  return hashEmbeddingInput(JSON.stringify(claims));
 }
 
 export function supportReviewSources(material: InspirationMaterial): SignalSupportAssessmentInput["sources"] {
@@ -104,13 +127,7 @@ export async function reviewSignalSupport(db: ReturnType<typeof getDb>, input: {
   const material = await loadMaterial();
   if (!material) throw new GroupInputUnavailableError("missing_inspiration");
   if (isGroup && material.inspiration.visibility !== "public") throw new GroupInputUnavailableError("not_public");
-  const loadClaims = () => db.select({ signalId: signals.id, statement: signals.statement,
-    lockedAt: signals.lockedAt, dismissedAt: signals.dismissedAt, status: signals.status,
-    inputPolicy: signals.inputPolicy, evidenceId: signalEvidence.id })
-    .from(signalEvidence).innerJoin(signals, eq(signals.id, signalEvidence.signalId))
-    .where(and(eq(signalEvidence.profileId, destination), eq(signalEvidence.ownerProfileId, input.ownerProfileId),
-      eq(signalEvidence.inspirationId, input.inspirationId)))
-    .orderBy(asc(signals.id));
+  const loadClaims = () => loadSupportClaims(db, destination, input.ownerProfileId, input.inspirationId);
   const allClaims = await loadClaims();
   // Old room text itself can contain private material. Never feed it to a
   // new public assessment merely because its remaining inspirations are public.
@@ -125,10 +142,14 @@ export async function reviewSignalSupport(db: ReturnType<typeof getDb>, input: {
     JSON.stringify(allClaims) === JSON.stringify(currentClaims) &&
     (!isGroup || currentMembership?.id === membership?.id);
   return {
+    reviewId: randomUUID(),
     policy: SIGNAL_SUPPORT_REVIEW_POLICY,
     status: current ? "current" as const : "stale" as const,
     profileId: destination,
+    ownerProfileId: input.ownerProfileId,
+    membershipId: membership?.id ?? null,
     inspirationId: input.inspirationId,
+    claimsHash: supportClaimsHash(allClaims),
     material: material.identity,
     restrictedClaimCount: allClaims.length - claims.length,
     calls: assessed.calls,

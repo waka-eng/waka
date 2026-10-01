@@ -34,6 +34,7 @@ export * from "./schema-attachments";
 export * from "./schema-reflections";
 export * from "./schema-embeddings";
 export * from "./schema-signals";
+export * from "./schema-signal-support-reviews";
 export * from "./schema-top-of-mind";
 export * from "./schema-groups";
 export * from "./schema-group-coedit";

@@ -315,7 +315,7 @@ export async function resolveSignalDuplicate(
 
     await tx
       .update(signals)
-      .set({ status: "retired", updatedAt: now })
+      .set({ status: "retired", supportRetiredAt: null, updatedAt: now })
       .where(eq(signals.id, retired.id));
     await tx
       .update(signalDuplicates)

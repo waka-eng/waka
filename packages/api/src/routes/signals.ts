@@ -560,6 +560,7 @@ export async function releaseSignalStatement(
     .set({
       lockedAt: null,
       status: sql`case when ${signals.unsupportedAt} is not null then 'retired'::signal_status else ${signals.status} end`,
+      supportRetiredAt: sql`case when ${signals.unsupportedAt} is not null then now() else ${signals.supportRetiredAt} end`,
       unsupportedAt: null,
       updatedAt: new Date(),
     })
@@ -590,6 +591,7 @@ export async function dismissProfileSignal(
     .update(signals)
     .set({
       status: "retired",
+      supportRetiredAt: null,
       dismissedAt: sql`coalesce(${signals.dismissedAt}, now())`,
       updatedAt: new Date(),
     })

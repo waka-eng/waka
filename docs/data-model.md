@@ -243,8 +243,17 @@ agent's relayed excerpt, an agent's own observation.
   cannot supply evidence for the source being checked. Reports retain hashes,
   IDs and verdicts, not answer copies or generated explanations. Stale reports
   resolve nothing and no report alone authorizes a write. Automatic support
-  mutation is not yet enabled; it additionally requires commit-time validation,
-  reversible support history and atomic downstream reconciliation.
+  mutation during derivation is not yet enabled. An explicitly applied review
+  must revalidate material, statements, membership and prior assessments under
+  transaction locks. `signal_support_reviews` retains metadata-only decisions,
+  including unresolved checks, never withdrawn quotes or answer snapshots.
+  Only explicit unsupported decisions remove a current `signal_evidence` link;
+  supported decisions may restore it from current material. Discovery omissions
+  and unresolved reviews do neither. `signals.support_retired_at` distinguishes
+  retirement from lost support (recoverable on renewed evidence) from a human
+  dismissal or a merge (never reversed by a support check). Repeated application
+  of the same review is a no-op. Standing reconciliation and the downstream
+  reading request commit with the evidence change, not as a best-effort callback.
 
 ## Experience (layer-1 grouping)
 
