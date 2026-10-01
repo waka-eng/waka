@@ -75,7 +75,7 @@ import {
   type SetStateAction,
 } from "react";
 
-import { ApiError, updateInspiration, updateSignal, updateTopOfMindEntry } from "../lib/api";
+import { ApiError, updateInspiration, updateSignal, updateTopOfMindEntry, type ApiInspiration } from "../lib/api";
 import {
   loadTopOfMind,
   type Inspiration,
@@ -124,6 +124,7 @@ export interface OpenEdit {
  * next fetch, because the words are already in the person's hand.
  */
 export interface EditingDeps {
+  readonly onInspirationSaved?: (inspiration: ApiInspiration) => void;
   readonly reloadReading?: () => Promise<void>;
   readonly onEntrySaved?: () => void;
   readonly beginReadingMutation?: () => () => void;
@@ -281,7 +282,8 @@ export function useEditing(deps: EditingDeps): Editing {
     if (d.offline.current) return done();
     if (held.kind === "memory") {
       updateInspiration(held.id, { text })
-        .then(() => {
+        .then((made) => {
+          if (made) d.onInspirationSaved?.(made);
           d.setInspirations((prev) =>
             prev ? prev.map((c) => (c.id === held.id ? { ...c, preview: text } : c)) : prev,
           );

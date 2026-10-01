@@ -490,5 +490,22 @@
   "worldYesMerge": "yes, merge them",
   "worldKeepApart": "keep them apart",
   "worldContested": "contested — two of your patterns pull against each other; your answer settles it",
-  "worldValueContested": "Conflicting principles"
+  "worldValueContested": "Conflicting principles",
+  "worldSourceChecking": "Checking your reading…",
+  "worldSourceCheckFailed": "Your thought is kept. Couldn't check its reading.",
+  "worldSourceDelayed": "Your thought is kept. The reading is taking longer.",
+  "worldSourceWaiting": "Queued until {time}.",
+  "worldSourceFailed": "Your thought is kept. The reading couldn't finish.",
+  "worldSourceUnknown": "Your thought is kept. Processing needs another look.",
+  "worldSourceReady": "Your reading has an update.",
+  "worldSourcePartial": "Kept. Some attachments couldn't be read.",
+  "worldSourceEmpty": "Kept. Nothing new to add yet.",
+  "worldSourceUnchanged": "Your reading still holds.",
+  "worldSourceQueued": "Kept. Waiting to be read.",
+  "worldSourceReading": "Reading your latest thought…",
+  "worldSourceView": "See reading",
+  "worldSourceDismiss": "Dismiss processing notice",
+  "worldSourceRetry": "Try again",
+  "worldSourceCheck": "Check progress",
+  "worldSourcePrevious": "Earlier reading"
 }

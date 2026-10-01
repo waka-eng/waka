@@ -65,6 +65,7 @@ import {
 import { createPortal } from "react-dom";
 import { PrincipleRead } from "../components/PrincipleRead";
 import { ReflectionFlow, type ReflectionTurn } from "../components/ReflectionFlow";
+import { InspirationProcessingNotice } from '../components/InspirationProcessingNotice';
 import { DialogSurface } from "../components/DialogSurface";
 import { PrincipleEvidence } from "../components/PrincipleEvidence";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -74,6 +75,7 @@ import { useDismissAway } from "../lib/dismiss";
 import { isEditableTarget, isNativeSurface } from "../lib/surface-input";
 import { profileStorageKey, readProfileText, writeProfileText, type ProfileStorageScope } from "../lib/profile-storage";
 import { useTopOfMindRefresh } from "../lib/use-top-of-mind-refresh";
+import { useInspirationProcessing } from '../lib/use-inspiration-processing';
 import { acceptsReadingSnapshot } from "../lib/reading-snapshot";
 import { clamp, clamp01, DAY_MS, easeOut, hashStr, kd, lerp, mix32, TAU } from "../lib/num";
 import {
@@ -1495,6 +1497,12 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   /** LAYER 3 — the one artifact this profile stands on. Null before the first
       synthesis, which the layout says in words rather than leaving blank. */
   const [topOfMind, setTopOfMind] = useState<TopOfMind | null>(null);
+  const sourceProcessing = useInspirationProcessing(storageScope);
+  const sourceProcessingActiveRef = useRef(sourceProcessing.active);
+  sourceProcessingActiveRef.current = sourceProcessing.active;
+  // The comparison belongs to this verified snapshot, not every future read
+  // of the same artifact. Revalidation or a local edit withdraws the copy.
+  const [sourcePrevious, setSourcePrevious] = useState<{ body: string; reading: TopOfMind } | null>(null);
   const latestReadingRef = useRef<TopOfMind | null>(null);
   const readingMutationRef = useRef(0);
   const readingActionsPendingRef = useRef(0);
@@ -1515,6 +1523,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     return tom;
   }, [storageScope?.profileId]);
   const beginReadingMutation = useCallback(() => {
+    setSourcePrevious(null);
     readingMutationRef.current += 1;
     readingActionsPendingRef.current += 1;
     readingNeedsLatestRef.current = true;
@@ -1761,7 +1770,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
         : result.outcome;
     },
   });
-  const readingMessage: MessageKey | null = !readingRefresh.busy && readingChecking ? "worldReadingChecking"
+  const readingMessage: MessageKey | null = sourceProcessing.active && !readingRefresh.busy ? null
+    : !readingRefresh.busy && readingChecking ? "worldReadingChecking"
     : !readingRefresh.busy && readingCheckFailed ? "worldReadingCheckFailed"
     : topOfMind?.supportChanged &&
     ["idle", "changed", "unchanged", "empty"].includes(readingRefresh.phase)
@@ -3066,37 +3076,6 @@ function wallSlug(name: string): string {
 }
 
 const AWAY_LONG_ENOUGH_MS = 30_000;
-  /**
-   * HOW LONG A KEEP TAKES TO BECOME A READING, with margin.
-   *
-   * Measured, not guessed: `GET /api/top-of-mind` carried a rebuilt artifact
-   * three seconds after a first save on the local stack. Six is that, doubled,
-   * because being early means fetching the board the person already has and
-   * showing them nothing — the exact failure this is here to end.
-   *
-   * Being LATE is cheap by comparison: the poster simply waits for the next
-   * thing the person does. So the error is deliberately biased late.
-   */
-  const DERIVATION_SETTLE_MS = 6_000;
-  /**
-   * The pending "ask what it made of it" timer, so it can be called off.
-   *
-   * Two reasons, both found reviewing this session's own diff rather than by
-   * a gate. A person who keeps something and then signs out inside six
-   * seconds left a timer that fired `loadTopOfMind()` against a cleared
-   * cookie — a stray 401 from a component that no longer exists. And two
-   * keeps inside six seconds stacked two timers, so the board was fetched
-   * twice for one answer.
-   *
-   * One timer, replaced on each keep and cleared on unmount.
-   */
-  const settleTimerRef = useRef<number | null>(null);
-  useEffect(
-    () => () => {
-      if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
-    },
-    [],
-  );
   useEffect(() => {
     let hiddenAt: number | null = null;
     const onVisibility = () => {
@@ -3128,25 +3107,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             .catch(() => undefined),
         ),
         readSkyRef.current(),
-        /* LAYER 3 WAS THE ONE LEFT OUT, and it is the layer that changes most.
-           This handler exists to catch the world up after an absence and it
-           refreshed layer 1, layer 2 and the agent walls — every layer except
-           the board, which is fetched exactly once on mount and never again.
-
-           So a person who kept something, went away, and came back found their
-           memories updated, their patterns updated, and the poster still
-           showing what it showed before they typed. Measured: the server has a
-           built top of mind THREE SECONDS after a first save, and the world
-           does not show it within two minutes without a full page load.
-
-           `setNotes` alongside `setTopOfMind` because the mount path sets both
-           from one fetch — the canon's "exactly one artifact per profile"
-           showing up as exactly one request — and setting only one of them
-           here would leave the poster and the board's own entries disagreeing.
-
-           Found by `e2e:first-sixty --stage kept`. */
-        loadPersonalReading().then((tom) => absorbBoard(tom)),
       ]);
+      // Recheck the displayed artifact, not a newer headline behind an open
+      // composer. A pending save offers its completed reading explicitly.
+      if (latestReadingRef.current) verifyReadingRef.current(false);
+      else if (!sourceProcessingActiveRef.current && !isEditableTarget(document.activeElement)) {
+        void loadPersonalReading().then((tom) => {
+          if (!sourceProcessingActiveRef.current && !isEditableTarget(document.activeElement)) absorbBoard(tom);
+        }).catch(() => undefined);
+      }
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
@@ -10313,7 +10282,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      * because "saved" alone would send somebody hunting this wall for an orb
      * that was never going to be here.
      */
-    if (atWallRef.current.kind !== "self") setCharSay("saved to your own wall");
     /**
      * WITH NOTHING BEHIND THE WORLD, THE KEEP IS NOT ASKED FOR.
      *
@@ -10331,8 +10299,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       source: "app",
       /* omitted when private: the column default decides what unset means */
       ...(keepPublic ? { visibility: "public" as const } : {}),
-    })
+    }, { profile: storageScope?.profileId })
       .then((made) => {
+        if (!readingMountedRef.current) return;
+        if (atWallRef.current.kind !== 'self') setCharSay('saved to your own wall');
+        if (made.processing) sourceProcessing.track(made.id, made.processing);
         /* The canon returns the capture itself, so the id the world needs is
            the row's own — there is no second identity to wait for any more.
            Adopting it here means a reload finds the same memory rather than a
@@ -10381,36 +10352,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             () => undefined,
           );
 
-        /* AND THEN ASK WHAT IT MADE OF IT.
-           A keep enqueues derivation, and the server had a rebuilt top of mind
-           THREE SECONDS later when this was measured. The client never asked.
-           So the product did its one trick, in three seconds, and hid it until
-           the person happened to reload — which a person in their first minute
-           has no reason to do. They save the first thing they have ever told
-           it, watch nothing happen, and conclude nothing did.
-
-           THE LAW SAYS THE WORLD NEVER MOVES UNLESS THE USER MOVED IT, and
-           this obeys it: the user pressed save, and this is that press
-           landing. It is the same shape `restoreLead` already uses one screen
-           away — `restoreTopOfMindEntry(id).then(() => loadTopOfMind())` — a
-           person's act, and then the board asked what it says now.
-
-           ONE fetch, not a poll. A poll would be the world moving on its own,
-           which is the thing the law forbids. If the derivation is slower than
-           the settle below, the poster waits for the person's next move, which
-           is the right way round.
-
-           The catch is silent on purpose and it is a READ, not an act: when
-           this fails the poster keeps showing what was last known, which is
-           true rather than quiet. The failure-path audit's own rule. */
-        if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
-        settleTimerRef.current = window.setTimeout(() => {
-          settleTimerRef.current = null;
-          if (offlineRef.current) return;
-          loadPersonalReading()
-            .then((tom) => absorbBoard(tom))
-            .catch(() => undefined);
-        }, DERIVATION_SETTLE_MS);
+        // Processing follows the server receipt. A ready reading is offered,
+        // never installed on a timer while the person writes or reflects.
 
         /* KEPT, AND THEN ASKED ABOUT (founder, 2026-08-25).
            You cannot reflect on something that does not exist yet — a
@@ -10445,6 +10388,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         }
       })
       .catch((err: unknown) => {
+        if (!readingMountedRef.current) return;
         bornRef.current = bornRef.current.filter((s) => s.id !== seed.id);
         simApiRef.current?.unborn(seed.id);
         setDraft(text);
@@ -11984,6 +11928,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     setSelectedId,
     reloadReading: async () => { absorbBoard(await loadPersonalReading()); },
     beginReadingMutation,
+    onInspirationSaved: (made) => { if (made.processing) sourceProcessing.track(made.id, made.processing); },
     onEntrySaved: () => {
       readingMutationRef.current += 1;
       readingNeedsLatestRef.current = true;
@@ -12224,6 +12169,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
 
   const reflectionSaved = useCallback((made: ApiReflection) => {
     const owner = made.inspirationId;
+    if (made.processing) sourceProcessing.track(owner, made.processing);
     const cached = detailsRef.current.get(owner);
     if (cached) detailsRef.current.set(owner, {
       ...cached,
@@ -12239,6 +12185,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   }, []);
 
   const reflectionRemoved = useCallback((id: string, owner: string) => {
+    if (!offlineRef.current) sourceProcessing.track(owner);
     skyReadSequence.current += 1;
     const withoutDeletedCopy = (row: Evidence): Evidence => row.inspirationId !== owner ? row : {
       ...row, reason: null,
@@ -12320,6 +12267,27 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     () => ({ "--jar-mark": "var(--jar-live)" }) as CSSProperties,
     [],
   );
+
+  const viewSourceReading = () => void sourceProcessing.open(async (result, current) => {
+    const previous = latestReadingRef.current;
+    const [fetched, verifiedPrevious] = await Promise.all([
+      loadPersonalReading(),
+      previous?.id ? loadTopOfMindVersion(previous.id, storageScope?.profileId).catch(() => null) : Promise.resolve(null),
+    ]);
+    if (!current()) return;
+    const next = acceptsReadingSnapshot(latestReadingRef.current, fetched, storageScope?.profileId) ? fetched : latestReadingRef.current;
+    if (result.topOfMindId && (!next || next.version < result.version || (next.version === result.version && next.id !== result.topOfMindId))) {
+      throw new Error('The completed reading is not available yet');
+    }
+    const before = verifiedPrevious?.entries.find((entry) => entry.pinned) ?? verifiedPrevious?.entries[0];
+    const after = next?.entries.find((entry) => entry.pinned) ?? next?.entries[0];
+    if (!absorbBoard(next)) throw new Error('Reading changed while opening');
+    setSourcePrevious(before && after && before.body !== after.body ? { body: before.body, reading: next! } : null);
+    setReflectOn(null); setReflectOpen(false); setSelectedId(null);
+    simApiRef.current?.goToWall(0); simApiRef.current?.toTop(); setPosterAsk(true);
+  });
+  const sourceNotice = !offline && !readingRefresh.busy ? <InspirationProcessingNotice
+    processing={sourceProcessing} locale={locale} onView={viewSourceReading} displayedVersion={topOfMind?.version ?? 0} /> : null;
 
   return (
     <div ref={measured.root} className="jar" aria-label="Waka">
@@ -12998,6 +12966,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         ))}
                       </div>
                     ) : null}
+                    {here && w.kind === 'self' && posterAsk && !readingChecking && !readingCheckFailed && sourcePrevious && sourcePrevious.reading === topOfMind ? (
+                      <p className="jar-source-previous"><span>{say('worldSourcePrevious')}</span>{sourcePrevious.body}</p>
+                    ) : null}
                     {here && posterAsk ? (
                       posterChain.length > 0 ? (
                         /* THE SAME ROOM THE SKY OPENS. These rows travelled
@@ -13138,6 +13109,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         progress keeps them mounted regardless: a control that
                         vanished mid-work would take its own progress report
                         with it. */}
+                    {here && w.kind === 'self' && !reflectOn && !reflectOpen && !editing.open ? sourceNotice : null}
                     {here && w.kind === "self" && !offline && !lead && readingMessage ? (
                       <p className="jar-board-acts jar-reading-status" role="status" data-jar-chrome="1">
                         {readingMessage === "worldReadingSupportChanged" ? null : say(readingMessage)}
@@ -13881,6 +13853,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             <ReflectionFlow
               key={panelBall?.sigId ?? panelId}
               inspirationId={(panelBall?.sigId ?? panelId) as string}
+              profileId={storageScope?.profileId}
+              processing={!reflectOn && sourceProcessing.active?.inspirationId === (panelBall?.sigId ?? panelId) ? sourceNotice : null}
               draftKey={profileStorageKey(storageScope, `reflectionDraft:${panelBall?.sigId ?? panelId}`)}
               initialTurns={(panel.detail?.reflections ?? [])
                 .filter((item) => !item.skipped && item.answer)
@@ -14854,6 +14828,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           <ReflectionFlow
             key={reflectOn.id}
             inspirationId={reflectOn.id}
+            profileId={storageScope?.profileId}
+            processing={sourceProcessing.active?.inspirationId === reflectOn.id ? sourceNotice : null}
             draftKey={profileStorageKey(storageScope, `reflectionDraft:${reflectOn.id}`)}
             initialTurns={[]}
             locale={locale}

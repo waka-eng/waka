@@ -1,6 +1,6 @@
 # Goal: implement the experience review
 
-Status: in flight — A/B, C input/output/cache, D1–D3d3 source/support/worker fences, E1 refresh and E2a–E2c source-to-reading backend receipts locally checked; scoped processing status/retry, capture/reflection UI, idempotent saves, pending/statement support, legacy context and later slices remain open. Deployment-target verification, historical repair and full release verification remain open.
+Status: in flight — A/B, C input/output/cache, D1–D3d3 source/support/worker fences, E1 refresh and E2a–E2d source-to-reading receipts, status/retry and capture/reflection progress locally checked; idempotent saves, pending/statement support, legacy context and later slices remain open. Deployment-target verification, historical repair and full release verification remain open.
 Created: 2026-10-01, on the owner's instruction to implement the full plan.
 Branch: `codex/ux-feature-implementation`.
 Baseline: `33e65a7` on `dev`.
@@ -30,7 +30,7 @@ experiments or revive superseded room goals.
 | C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | C1/C2/C3 code locally verified (51 SQL cases; full web 349/349). Read-only inventory completed across 5 rooms in the DB referenced by the local env files; hosted-stage mapping is not verified. Historical repair, deployment coordination and deployed verification remain pending. |
 | D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | D1–D3d3 provenance, automatic support checks, durable source handoffs, worker data-write fences and personal reading recovery locally verified. D3d3: 161 targeted SQL / 671 unit / 374 web. Pending/statement support, legacy personal context, complete downstream receipts, live semantic quality and historical repair remain open. |
 | E1 | F7/F8: authoritative poster and truthful manual refresh | Queue acceptance, changed/unchanged completion, failure and fresh displayed version verified | Implemented with job receipts, resumable profile-scoped polling, held-job manual upgrade and authoritative headline. Local checks pass (8 receipt SQL tests, 10 hook tests, full web 362/362); deployed verification remains open. |
-| E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | E2a–E2c queue/material versions, source bindings, derivation/read completion and durable principle handoff locally verified (20 new completion SQL cases; 184 related SQL / 671 unit / 377 web). Scoped status/retry endpoints, ambiguous-save reconciliation and capture/reflection status UI remain pending. |
+| E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | E2a–E2d backend receipts, scoped status/recovery and explicit reading adoption locally verified. E2d: 13 status/recovery SQL cases, 65 related SQL / 671 unit / 399 web; desktop/mobile rendered fixture passes. Ambiguous-save reconciliation and the complete release journey remain pending. |
 | F | F11/F12: visible search and durable navigation | Results beyond initial archive, failure/no-match separation, stable IDs, deep links, Back/Forward and rename verified | Pending |
 | G | F13: capture attachments and recoverable failure | Paste/drop/select preview; saved text survives failure; retry attaches once; sharing destination clear | Pending |
 | H | F18: progressive initial load and bounded prefetch | Small/large archive baseline vs result, first useful view and card/search/deep-link integrity | Pending |
@@ -88,10 +88,11 @@ copies of private text:
   artifact adoption only on explicit action. Add idempotent save/reconciliation
   so an ambiguous POST does not duplicate inspirations or answers.
 
-The first implementation increment numbers requests and makes manual-refresh
-receipts version-aware. E2b adds material counters and per-request destination
-bindings. Downstream completion/artifact binding and the capture/reflection UI
-remain required; these increments are not completion of D or E2.
+E2a numbers requests and makes manual-refresh receipts version-aware. E2b adds
+material counters and per-request destination bindings; E2c binds downstream
+completion/artifact publication; E2d exposes scoped recovery and capture/answer
+progress with explicit adoption. Idempotent save reconciliation and the full
+release journey remain required; these increments are not completion of D or E2.
 
 ## Log
 
@@ -799,3 +800,62 @@ remain required; these increments are not completion of D or E2.
   wording only on explicit action. Then implement request-identity reconciliation
   for ambiguous source/answer saves and run the full release-1 journey. Do not
   call E2 or the full goal complete based on these backend-only checks.
+- 2026-10-01, E2d: client adapters had discarded the top-level processing
+  receipt on capture and answer saves (2 reproduced failures). They now retain
+  it for capture, answer and edit; capture/answer writes explicitly name the
+  profile that opened the composer. One session-stored metadata reference per
+  account/profile follows the latest relevant source through queued, active,
+  held, completed, failed or unknown work. Status checks do not generate.
+- Added personal `GET /inspirations/:id/processing` and explicit
+  `POST /:id/processing/retry`. A read-only snapshot verifies source/receipt
+  ownership, follows the newest current-material request, reports separate
+  derived/completed revisions, and hides partial/foreign results. Completed
+  metadata survives queue cleanup; legacy succeeded jobs do not imply current
+  completion. Recovery locks current ownership/material, resumes only missing
+  or failed enrichment/derivation/reading, does not duplicate saved material,
+  preserves active leases and cadence holds, and rolls back the job counter
+  if recording its new receipt fails. Keeper/read-only credentials cannot
+  recover and are not offered that action. Room processing metadata is not
+  exposed by this personal endpoint.
+- The UI shows one progress line, either beside reflection or on the personal
+  wall. Completion offers See reading; that action confirms status again and
+  fetches an owned matching-or-newer artifact before adoption. No new headline
+  arrives on the old six-second timer or silently on tab return. An earlier
+  wording comparison comes from a fresh historical projection, is tied to its
+  verified snapshot, and is withdrawn on revalidation/edit rather than kept as
+  an unverified text cache. Checking a failed/ambiguous recovery response never
+  repeats the POST automatically. Deleted/inaccessible sources remove their
+  progress reference. A future hold sleeps until eligibility and starts a
+  fresh bounded observation window then.
+- Additional unit reproductions caught 5 cases: deleted-source notices falsely
+  saying kept, a failed confirmation adopting old ready state, malformed ready
+  results, foreign receipt metadata, and a scheduled hold instantly becoming
+  delayed at eligibility. All now pass. The 16 hook cases also exercise resume,
+  old account/source responses, repeated recovery, hung reads, unchanged output
+  and explicit adoption. Raw words are not stored in the progress reference.
+- Rendered verification found 3 defects beyond the unit seam: following a
+  question scrolled the overflow-hidden world by 391px and clipped its dialog;
+  disabling a checking action dropped focus to the body so Escape failed; and
+  a 31-second simulated tab absence silently adopted the newer headline.
+  Follow-up focus now prevents ancestor scrolling and moves only the native
+  dialog/card scroll; progress actions retain focus while busy; returning
+  revalidates the displayed artifact instead of replacing it. The processing
+  action measures 44px high × 84.8px wide with 14px type in both viewports.
+- E2d verification: API/web typechecks, API unit 671/671 (3 paid-live benches
+  skipped), web 399/399 across 62 suites, build, migration check and diff check
+  pass. Real isolated-loopback SQL: 13 status/recovery + 18 source-binding +
+  20 completion + 6 profile-boundary + 8 keeper-key = 65/65. Manual
+  `pnpm e2e:source-processing` passes at 1280×900 and 390×844 (the latter with
+  mobile/touch emulation): saved answer, preserved unfinished draft, still
+  headline, explicit open/comparison, failure retry, reload resumption and
+  unchanged completion/dismissal. Current screenshots were inspected; this
+  fixture blocks non-local assets and mocks every API, uses reduced motion,
+  and does not certify deployed services, real device behavior, model quality,
+  or the full three-answer release journey. No hosted write, model call, push
+  or deployment occurred.
+- Next E2e: make ambiguous capture/answer saves reconcilable by request identity
+  instead of resubmitting and potentially duplicating authored content. Pending
+  attachment-finalization recovery belongs to G (registered enrichment failures
+  are covered here). D's pending/statement support, legacy context, full release
+  journey and all later A–J/L1–L3 requirements stay open. This is a locally
+  verified delivery increment, not completion of E2 or of the full goal.

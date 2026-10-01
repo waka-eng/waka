@@ -172,7 +172,7 @@ import {
 
 const DEFAULT_MAX_ATTEMPTS = 3;
 const MAX_ERROR_LENGTH = 1_000;
-const STALE_LOCK_SECONDS = 15 * 60;
+export const STALE_LOCK_SECONDS = 15 * 60;
 
 let drainScheduled = false;
 let drainTimer: ReturnType<typeof setTimeout> | null = null;

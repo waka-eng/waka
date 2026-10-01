@@ -26,9 +26,11 @@ import {
   ApiError,
   createFeedback,
   createInspiration,
+  createReflection,
   deleteInspiration,
   fetchCurrentViewer,
   fetchInspiration,
+  fetchInspirationProcessing,
   fetchInspirations,
   fetchPublicProfile,
   fetchSignal,
@@ -36,8 +38,10 @@ import {
   fetchTopOfMind,
   fetchTopOfMindRefresh,
   refreshTopOfMind,
+  retryInspirationProcessing,
   holdTopOfMindEntry,
   updateAuthPreferences,
+  updateInspiration,
   updateSignal,
   updateTopOfMindEntry,
   type ApiInspiration,
@@ -190,6 +194,60 @@ const topOfMind: ApiTopOfMind = {
 function stubFetch(response: Response): void {
   vi.stubGlobal("fetch", vi.fn(async () => response));
 }
+
+it('preserves the processing receipt on a saved inspiration', async () => {
+  const processing = { id: 'receipt', profileId: 'profile-1', inspirationId: inspiration.id, materialRevision: '2', jobId: 'job', requestVersion: '3' };
+  stubFetch(Response.json({ inspiration, processing }));
+  await expect(createInspiration({ text: inspiration.text })).resolves.toMatchObject({ processing });
+});
+
+it('preserves the processing receipt on a saved reflection', async () => {
+  const processing = { id: 'receipt', profileId: 'profile-1', inspirationId: inspiration.id, materialRevision: '3', jobId: 'job', requestVersion: '4' };
+  stubFetch(Response.json({ reflection: inspiration.reflections[0], processing }));
+  await expect(createReflection(inspiration.id, { question: 'Why?', answer: 'An answer' })).resolves.toMatchObject({ processing });
+});
+
+it('preserves the processing receipt after editing saved material', async () => {
+  const processing = { id: 'receipt', profileId: 'profile-1', inspirationId: inspiration.id, materialRevision: '4', jobId: 'job', requestVersion: '5' };
+  stubFetch(Response.json({ inspiration, processing }));
+  await expect(updateInspiration(inspiration.id, { text: inspiration.text })).resolves.toMatchObject({ processing });
+  expect(fetch).toHaveBeenCalledWith('/api/inspirations/inspiration-1', {
+    method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: inspiration.text }),
+  });
+});
+
+it('binds captures and answers to the profile that opened the composer', async () => {
+  stubFetch(Response.json({ inspiration }));
+  await createInspiration({ text: 'A thought' }, { profile: 'profile-1' });
+  expect(fetch).toHaveBeenCalledWith('/api/inspirations?profile=profile-1', {
+    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: 'A thought' }),
+  });
+  stubFetch(Response.json({ reflection: inspiration.reflections[0] }));
+  await createReflection(inspiration.id, { question: 'Why?', answer: 'An answer' }, { profile: 'profile-1' });
+  expect(fetch).toHaveBeenCalledWith('/api/inspirations/inspiration-1/reflections?profile=profile-1', {
+    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: 'Why?', answer: 'An answer' }),
+  });
+});
+
+it('checks processing as a cancellable scoped read, with no generation request', async () => {
+  const status = { profileId: 'profile-1', inspirationId: 'inspiration-1', phase: 'queued', currentMaterialRevision: '9007199254740993', result: null };
+  stubFetch(Response.json(status));
+  const controller = new AbortController();
+  await expect(fetchInspirationProcessing(inspiration.id, { profile: 'profile-1', receiptId: 'receipt-1' }, controller.signal)).resolves.toEqual(status);
+  expect(fetch).toHaveBeenCalledExactlyOnceWith('/api/inspirations/inspiration-1/processing?profile=profile-1&receipt=receipt-1', {
+    method: 'GET', credentials: 'include', headers: { Accept: 'application/json' }, signal: controller.signal,
+  });
+});
+
+it('retries only the explicitly named saved source, not another capture', async () => {
+  const status = { profileId: 'profile-1', inspirationId: 'inspiration-1', phase: 'queued', result: null };
+  stubFetch(Response.json(status, { status: 202 }));
+  const controller = new AbortController();
+  await expect(retryInspirationProcessing(inspiration.id, { profile: 'profile-1', receiptId: 'receipt-1' }, controller.signal)).resolves.toEqual(status);
+  expect(fetch).toHaveBeenCalledExactlyOnceWith('/api/inspirations/inspiration-1/processing/retry?profile=profile-1', {
+    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, signal: controller.signal, body: JSON.stringify({ receiptId: 'receipt-1' }),
+  });
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();

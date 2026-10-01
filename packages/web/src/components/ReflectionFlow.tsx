@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   createReflection,
   deleteReflection,
@@ -27,8 +27,10 @@ function savedDraft(draftKey: string | null, afterId: string | null): string {
   } catch { return ""; }
 }
 
-export function ReflectionFlow({ inspirationId, draftKey = null, initialTurns, locale, onSaved, onRemoved, onDone }: {
+export function ReflectionFlow({ inspirationId, profileId, processing, draftKey = null, initialTurns, locale, onSaved, onRemoved, onDone }: {
   inspirationId: string;
+  profileId?: string;
+  processing?: ReactNode;
   /** Scoped by the authenticated account/profile; anonymous surfaces persist nothing. */
   draftKey?: string | null;
   initialTurns: ReflectionTurn[];
@@ -58,11 +60,15 @@ export function ReflectionFlow({ inspirationId, draftKey = null, initialTurns, l
   }, [draftKey, latestId, answer]);
   useEffect(() => {
     // Each follow-up replaces the waiting beat. Bring the new question into
-    // the outer card/sheet's scroll position instead of leaving it below the
-    // growing history, where it can look as though nothing happened.
-    if (phase === "answering" && turns.length > 0) {
-      currentQuestion.current?.scrollIntoView?.({ block: "start" });
-    }
+    // the card/sheet, not every scroll ancestor. scrollIntoView also scrolls
+    // the overflow-hidden world and leaves an otherwise centered dialog clipped.
+    if (phase !== "answering") return;
+    const questionNode = currentQuestion.current;
+    questionNode?.querySelector('textarea')?.focus({ preventScroll: true });
+    const surface = questionNode?.closest<HTMLElement>('[data-jar-surface]');
+    if (!questionNode || !surface || turns.length === 0) return;
+    const padding = parseFloat(getComputedStyle(surface).paddingTop) || 0;
+    surface.scrollTop += questionNode.getBoundingClientRect().top - surface.getBoundingClientRect().top - padding;
   }, [phase, question, turns.length]);
 
   const beginQuestion = useCallback(async (afterId: string, retry = false) => {
@@ -106,7 +112,7 @@ export function ReflectionFlow({ inspirationId, draftKey = null, initialTurns, l
     setPhase("saving");
     setError("");
     try {
-      const made = await createReflection(inspirationId, { question, answer: words });
+      const made = await createReflection(inspirationId, { question, answer: words }, { profile: profileId });
       setTurns((prev) => [...prev, { id: made.id, question, answer: words }]);
       onSaved(made);
       setAnswer("");
@@ -162,7 +168,7 @@ export function ReflectionFlow({ inspirationId, draftKey = null, initialTurns, l
     {phase === "answering" ? <div ref={currentQuestion} className="jar-reflection-current">
       <p className="jar-label">{latest ? t(locale, "worldReflectionFollowup") : t(locale, "worldReflect")}</p>
       <p className="jar-reflect-q">{question}</p>
-      <textarea className="jar-reflect-box" rows={4} autoFocus value={answer}
+      <textarea className="jar-reflect-box" rows={4} value={answer}
         placeholder={t(locale, "worldInYourOwnWords")}
         onChange={(event) => setAnswer(event.target.value)} />
       <p className="jar-reflection-hint">{t(locale, "worldReflectionNextHint")}</p>
@@ -195,5 +201,6 @@ export function ReflectionFlow({ inspirationId, draftKey = null, initialTurns, l
       </button>
     </div> : null}
     {error ? <p className="jar-settings-warn" role="alert">{error}</p> : null}
+    {phase !== 'saving' && phase !== 'asking' ? processing : null}
   </div>;
 }

@@ -150,8 +150,9 @@ export async function postJson<T>(
   path: string,
   payload: unknown,
   fallbackMessage: string,
+  signal?: AbortSignal,
 ): Promise<T> {
-  return writeJson<T>("POST", path, payload, fallbackMessage);
+  return writeJson<T>("POST", path, payload, fallbackMessage, signal);
 }
 
 export async function patchJson<T>(
@@ -167,6 +168,7 @@ export async function writeJson<T>(
   path: string,
   payload: unknown,
   fallbackMessage: string,
+  signal?: AbortSignal,
 ): Promise<T> {
   /* THE ONE FETCH IN THIS FILE THAT WAS NOT WRAPPED.
      `getJson` and `requestVoid` each catch a dead connection and rethrow it as
@@ -189,6 +191,7 @@ export async function writeJson<T>(
   try {
     res = await fetch(path, {
       method,
+      ...(signal ? { signal } : {}),
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),

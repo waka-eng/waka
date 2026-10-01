@@ -47,6 +47,7 @@ export * from "./auth";
 export * from "./profiles";
 export * from "./sessions";
 export * from "./inspirations";
+export * from "./inspiration-processing";
 export * from "./attachments";
 export * from "./signals";
 export * from "./principles";

@@ -17,6 +17,7 @@ import {
   type ProfileScoped,
 } from "./http";
 import type { ApiAttachment, ApiAttachmentSummary } from "./attachments";
+import type { ApiInspirationProcessingReceipt } from './inspiration-processing';
 
 // ---------------------------------------------------------------------------
 // What a capture is
@@ -39,6 +40,7 @@ export type ApiInspirationVisibility = "private" | "public";
  * the person's own words, and input to extraction.
  */
 export interface ApiReflection {
+  processing?: ApiInspirationProcessingReceipt;
   id: string;
   inspirationId: string;
   question: string;
@@ -65,6 +67,7 @@ export interface ApiInspirationSummary {
 
 /** One capture, opened: the full text and everything hanging off it. */
 export interface ApiInspiration {
+  processing?: ApiInspirationProcessingReceipt;
   id: string;
   profileId: string;
   text: string;
@@ -137,13 +140,14 @@ export interface ApiInspirationPage {
  */
 export async function createInspiration(
   input: CreateInspirationRequest,
+  options: ProfileScoped = {},
 ): Promise<ApiInspiration> {
-  const body = await postJson<{ inspiration: ApiInspiration }>(
-    apiPath("/inspirations"),
+  const body = await postJson<{ inspiration: ApiInspiration; processing?: ApiInspirationProcessingReceipt }>(
+    apiPath(`/inspirations${options.profile ? `?profile=${encodeURIComponent(options.profile)}` : ''}`),
     input,
     "Failed to save this capture",
   );
-  return body.inspiration;
+  return { ...body.inspiration, ...(body.processing ? { processing: body.processing } : {}) };
 }
 
 /**
@@ -217,12 +221,12 @@ export async function updateInspiration(
   id: string,
   input: UpdateInspirationRequest,
 ): Promise<ApiInspiration> {
-  const body = await patchJson<{ inspiration: ApiInspiration }>(
+  const body = await patchJson<{ inspiration: ApiInspiration; processing?: ApiInspirationProcessingReceipt }>(
     apiPath(`/inspirations/${encodeURIComponent(id)}`),
     input,
     "Failed to update this capture",
   );
-  return body.inspiration;
+  return { ...body.inspiration, ...(body.processing ? { processing: body.processing } : {}) };
 }
 
 /**
@@ -249,13 +253,14 @@ export async function deleteInspiration(id: string): Promise<void> {
 export async function createReflection(
   inspirationId: string,
   input: CreateReflectionRequest,
+  options: ProfileScoped = {},
 ): Promise<ApiReflection> {
-  const body = await postJson<{ reflection: ApiReflection }>(
-    apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/reflections`),
+  const body = await postJson<{ reflection: ApiReflection; processing?: ApiInspirationProcessingReceipt }>(
+    apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/reflections${options.profile ? `?profile=${encodeURIComponent(options.profile)}` : ''}`),
     input,
     "Failed to save reflection",
   );
-  return body.reflection;
+  return { ...body.reflection, ...(body.processing ? { processing: body.processing } : {}) };
 }
 
 export interface ApiReflectionQuestionStatus {

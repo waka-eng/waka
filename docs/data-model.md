@@ -226,6 +226,18 @@ agent's relayed excerpt, an agent's own observation.
   gain a new completion. Completed receipts are historical facts, not promises
   of perpetual support after later edits. Recovery can reuse an already committed
   derivation/result without purchasing another extraction/synthesis.
+  Personal processing status is a read-only, profile-scoped snapshot: an owned
+  receipt may follow newer material or a later request, but partial publication
+  and legacy success are never called completed. Status contains identifiers,
+  counters and an owned artifact result, not source words or provider errors.
+  Explicit recovery resumes only missing/failed work, preserving active work
+  and scheduled holds. Reading-only credentials are not offered recovery.
+  The browser keeps one account/profile-scoped metadata reference in session
+  storage, boundedly checks status, and rechecks completion before the person
+  opens an updated reading. Neither a timeout nor returning to the tab installs
+  new wording. Removed/inaccessible sources withdraw the progress reference.
+  Room processing remains an internal destination fact, not a new way to expose
+  a member's private source-processing state to the room.
 - **Signal input policy** records the derivation contract, not user approval.
   `signals.input_policy = group-public-v1` means the room signal was minted
   using the public projection, authorized current membership, and only
@@ -592,6 +604,7 @@ words for the wrong layer. Disposition of every existing concept:
 | Route | Layer | Notes |
 |---|---|---|
 | `POST /api/inspirations`, `GET /api/inspirations` | L1 | Capture + private archive/recall (today's `GET /api/signals` archive behavior moves here), plus edit/delete. |
+| `GET /api/inspirations/:id/processing`, `POST /:id/processing/retry` | L1–L3 | Personal material-to-reading progress and explicit failed-work recovery; same profile access boundary, no generation on GET. |
 | `GET /api/signals` | L2 | **Repurposed**: lists the acting profile's distilled signals (statement, confidence, evidence count, lock/share state). |
 | `GET /api/top-of-mind` | L3 | Returns the acting profile's single current artifact (+ version metadata). |
 | `GET /api/principles`, `POST`, `PATCH /:id`, `DELETE /:id`, `POST /reorder` | L4 | Ranked set + owner curation. **No refresh endpoint** — generation belongs to the nightly cron alone. |

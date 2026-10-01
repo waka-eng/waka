@@ -106,16 +106,17 @@ describe("reflection conversation", () => {
   it("saves first, then asks one grounded follow-up and waits for the person", async () => {
     vi.mocked(createReflection).mockResolvedValue(saved);
     vi.mocked(requestReflectionQuestion).mockResolvedValue({ phase: "ready", question: "What made leaving that corner unfinished feel calmer?" });
-    await act(async () => root.render(<ReflectionFlow inspirationId="inspiration-1" initialTurns={[]} locale="en-US"
+    await act(async () => root.render(<ReflectionFlow inspirationId="inspiration-1" profileId="profile-1" initialTurns={[]} locale="en-US"
       onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
     await writeAnswer(saved.answer!);
     expect(host.textContent).toContain("Your answer shapes the next question.");
     await act(async () => button("continue →").click());
-    expect(createReflection).toHaveBeenCalledWith("inspiration-1", { question: saved.question, answer: saved.answer });
+    expect(createReflection).toHaveBeenCalledWith("inspiration-1", { question: saved.question, answer: saved.answer }, { profile: "profile-1" });
     expect(requestReflectionQuestion).toHaveBeenCalledWith("inspiration-1", saved.id, false);
     expect(host.textContent).toContain(saved.answer);
     expect(host.textContent).toContain("What made leaving that corner unfinished feel calmer?");
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" });
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(host.querySelector('textarea'));
     expect(createReflection).toHaveBeenCalledTimes(1);
     expect(button("done for now")).toBeTruthy();
   });

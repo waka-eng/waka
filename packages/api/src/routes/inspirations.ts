@@ -9,6 +9,8 @@
  *   POST   /api/inspirations/:id/reflections          human Q&A on a capture
  *   GET    /api/inspirations/:id/reflections
  *   DELETE /api/inspirations/:id/reflections/:reflectionId
+ *   GET    /api/inspirations/:id/processing            saved material → reading
+ *   POST   /api/inspirations/:id/processing/retry      recover failed work
  *
  * An inspiration is whatever arrived — pasted text, a link, an image, an
  * agent's relayed excerpt. It is editable and deletable, and it is never
@@ -22,7 +24,7 @@
  * is chosen by the server. A session acts as exactly one profile by default;
  * the optional `?profile=` parameter names another profile of the *same
  * account* and is checked against the access matrix per operation, so an agent
- * session can read and capture into its human's memory but cannot edit or
+ * session can read its human's memory but cannot capture into, edit or
  * delete it. A profile in another account is indistinguishable from one that
  * does not exist. See docs/data-model.md, and `inspirations-tenancy.ts` for
  * the one function every handler starts with.
@@ -53,8 +55,9 @@
  *   `inspirations-recall.ts`         GET / and GET /:id
  *   `inspirations-editing.ts`        PATCH /:id and DELETE /:id
  *   `inspirations-reflections.ts`    the three /:id/reflections routes
+ *   `inspirations-processing.ts`     read-only progress and explicit recovery
  *
- * The four handler modules register onto the router built below rather than
+ * The handler modules register onto the router built below rather than
  * returning sub-routers of their own. That is deliberate: `Hono.route()` has
  * its own merge semantics for middleware, and the authentication mounted here
  * covers this namespace only because it is `use("*")` on the very instance the
@@ -70,6 +73,7 @@ import { registerCaptureRoutes } from "./inspirations-capture.js";
 import { registerEditingRoutes } from "./inspirations-editing.js";
 import { registerRecallRoutes } from "./inspirations-recall.js";
 import { registerReflectionRoutes } from "./inspirations-reflections.js";
+import { registerProcessingRoutes } from "./inspirations-processing.js";
 
 export type { CreateInspirationInput } from "./inspirations-validation.js";
 
@@ -98,6 +102,7 @@ export function createInspirationsRoutes(
   registerRecallRoutes(routes, getDatabase);
   registerEditingRoutes(routes, getDatabase);
   registerReflectionRoutes(routes, getDatabase);
+  registerProcessingRoutes(routes, getDatabase);
 
   return routes;
 }
