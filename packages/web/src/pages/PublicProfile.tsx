@@ -32,6 +32,7 @@ const COPY_EN = {
     missingBody: "This handle is not shared yet, or the owner turned the page off.",
     topOfMind: "Top of mind",
     empty: "No public top-of-mind notes yet.",
+    supportChanged: "Kept here; its supporting patterns have changed.",
     title: (name: string) => (
       <>
         <span className="nc-title-name">{name}'s</span> top of mind
@@ -48,6 +49,7 @@ const COPY_KO = {
     missingBody: "아직 공유되지 않은 핸들이거나, 주인이 페이지를 닫아 뒀어요.",
     topOfMind: "톱 오브 마인드",
     empty: "아직 공개된 톱 오브 마인드가 없어요.",
+    supportChanged: "남겨 둔 문장이에요. 뒷받침하던 패턴은 달라졌어요.",
     title: (name: string) => (
       <>
         <span className="nc-title-name">{name}</span>의 톱 오브 마인드
@@ -177,6 +179,7 @@ export default function PublicProfilePage(): JSX.Element {
               >
                 <div className="nc-note-preview" aria-label="post-it preview">
                   <p className="nc-note-body nc-note-body--preview">{entry.body}</p>
+                  {entry.supportChanged ? <p className="nc-note-support">{copy.supportChanged}</p> : null}
                 </div>
               </article>
             ))

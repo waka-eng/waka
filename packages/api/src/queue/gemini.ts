@@ -809,10 +809,14 @@ Each entry:
   from the list you were given. Never invent an id, and never write an entry
   you cannot cite.
 
-Locked entries were written or edited by the person. Reproduce each one
+Locked or explicitly kept entries are the person's choices. Reproduce each one
 exactly — same type, same body, same belief, same prompt, same cited ids,
 character for character. Build the rest of the artifact around them. Their
-text is theirs; you may not improve it.
+text is theirs; you may not improve it. A locked entry marked supportChanged
+is kept wording, not an extra supported fact. Keep its body exactly, leave
+its cleared belief/prompt empty, and add citations only when the supplied
+signals genuinely support those exact words. Otherwise leave its citations
+empty; code preserves the words without claiming renewed support.
 
 Verdicts the person gave on earlier output are their judgement of your work.
 An entry or claim they marked not_true must not come back in the same form:
@@ -969,6 +973,7 @@ function buildTopOfMindSynthesisPrompt(input: TopOfMindSynthesisInput): string {
               belief: entry.belief ?? undefined,
               prompt: entry.prompt ?? undefined,
               citedSignalIds: entry.citedSignalIds,
+              supportChanged: entry.supportChanged || undefined,
             }),
           )
           .join("\n"),

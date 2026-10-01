@@ -451,8 +451,11 @@ not inherit its bypass. All starts still pass the account's model budget.
 
 ### 2. Selection: deterministic, scored, bounded
 
-Eligible signals are `active` (or `emerging` — see the cold start) and not
-unsupported. Each is scored — `computeSelectionScore`, weights summing to 1
+Eligible personal signals are `active` (or `emerging` — see the cold start),
+not dismissed or unsupported, with owned current evidence and no foreign-owner
+witnesses. This is the same standing predicate used by personal reading
+projection; a signal hidden there cannot immediately regenerate the conclusion.
+Each is scored — `computeSelectionScore`, weights summing to 1
 **[checked]**:
 
 ```
@@ -529,8 +532,8 @@ asserted as a settled pattern or belief while the dispute stands.
 **time shape**, the pattern's life worded deterministically from the
 evidence dates ("held for 4 months; last fed 2 weeks ago", "returning
 after 5 weeks quiet", "new this week"), so the model can tell an anchor
-from an arrival and name a comeback as one — the current live entries,
-every **locked** entry, recent feedback (newest first, with the
+from an arrival and name a comeback as one — the currently supported live entries,
+every **locked or pinned** entry, recent feedback (newest first, with the
 person's own correction text), and the provisional flag. The prompt
 forbids narrating the metadata itself: time chooses what leads and how
 firmly each thing is said, and never appears as dates or counts in the
@@ -562,13 +565,24 @@ person's own vocabulary back to them.
 | Every cited signal exists and belongs to this profile | Citations validated against the DB; invented ones dropped; an entry left citing nothing is dropped with it. An artifact that cites nothing is a horoscope. |
 | Locked entries survive **byte-identical** | Copied forward from storage, never from the model's reply — the model is asked to reproduce them and then not trusted to. Violations are counted and logged. |
 | Pins, dismissals, locks survive regeneration | Columns on entries, carried by code; the model never sees or controls them. |
-| "Nothing changed" is a decision, not a silence | A no-move pass preserves current entries and writes a version with reason `no_change`, including when the model omits the unchanged entries. A silent pass and a broken generator look identical from outside. |
-| No concurrent writes to one artifact family | Per-owner advisory lock held across read-synthesize-write; entry edits take the same lock. |
+| "Nothing changed" is a decision, not a silence | A no-move/no-signal pass carries the support-projected reading, not withheld machine conclusions. It compares that result to stored entries; removing stale text or updating citations is a change even if the model reports `noChange`. |
+| Stale generation cannot replace newer material | A per-profile revision is captured before input reads and locked/rechecked at commit, alongside the artifact-family lock and worker claim. Concurrent source, statement or human edits make generation retry. |
 | Order-shuffled citations are not a change | The no-change comparison treats citations as a set. |
 | Rejected content does not return | Entries whose latest verdict is `not_true` may not come back in the same form; corrections outrank model phrasing. |
 
 Versions form a chain: the previous live artifact is marked superseded and
 points at its replacement. Nothing is mutated in place; history is walkable.
+
+Personal read projection checks **all** an entry's citations. Unkept generated
+entries with lost support are withheld; locked/pinned words stay, explicitly
+marked as changed support, without old generated explanations. These kept
+entries remain available to synthesis as the person's choices, with no old
+citations presented as support. Exact body-and-type matches may acquire fresh
+validated citations without rewriting the words. Unsupported machine entries
+also stay out of the personal principle generator's current-reading context.
+The check is standing/ownership, not a new semantic-quality threshold. Pending
+source/statement reassessment and potentially contaminated legacy context still
+need separate handling; these projections do not certify that work complete.
 
 ### 5. The group's top of mind (`refreshTopOfMindForGroup`)
 

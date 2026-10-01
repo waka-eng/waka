@@ -124,6 +124,9 @@ export interface OpenEdit {
  * next fetch, because the words are already in the person's hand.
  */
 export interface EditingDeps {
+  readonly reloadReading?: () => Promise<void>;
+  readonly onEntrySaved?: () => void;
+  readonly beginReadingMutation?: () => () => void;
   /** Whether the page is running on the offline fixture, in which case an edit
       is a local act and the network is never asked. */
   readonly offline: MutableRefObject<boolean>;
@@ -262,6 +265,7 @@ export function useEditing(deps: EditingDeps): Editing {
       put(still ? { ...still, saving: false, saved: false } : null);
       if (err instanceof ApiError && err.status === 404) {
         put(null);
+        if (d.reloadReading) { void d.reloadReading().catch(() => undefined); return; }
         void loadTopOfMind()
           .then((tom) => {
             d.setTopOfMind(tom);
@@ -304,15 +308,18 @@ export function useEditing(deps: EditingDeps): Editing {
         })
         .catch(fail);
     } else {
+      const finish = d.beginReadingMutation?.() ?? (() => {});
       updateTopOfMindEntry(held.id, { body: text })
         .then(() => {
+          finish();
+          d.onEntrySaved?.();
           d.setNotes((prev) =>
             prev ? prev.map((n) => (n.id === held.id ? { ...n, body: text, locked: true } : n)) : prev,
           );
           d.setAdopted(null);
           done();
         })
-        .catch(fail);
+        .catch((error) => { finish(); fail(error); }).finally(finish);
     }
   }, [put]);
 

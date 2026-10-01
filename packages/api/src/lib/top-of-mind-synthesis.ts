@@ -29,6 +29,7 @@
 
 import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { readGenerationRevision, assertGenerationRevision } from "./generation-revision.js";
+import { personalSignalReadable, projectPersonalEntries } from "./personal-output.js";
 
 import {
   signalEmbeddings,
@@ -266,12 +267,14 @@ export interface CarriedEntry {
   dismissedAt: Date | null;
   sortOrder: number;
   citedSignalIds: string[];
+  supportChanged?: boolean;
 }
 
 interface LiveArtifactSnapshot {
   id: string;
   version: number;
   entries: CarriedEntry[];
+  storedEntries: CarriedEntry[];
 }
 
 // ---------------------------------------------------------------------------
@@ -366,7 +369,7 @@ async function selectSignals(
     .from(signals)
     .where(
       and(
-        eq(signals.profileId, profileId),
+        personalSignalReadable(profileId),
         inArray(signals.status, ["active", "emerging"]),
         // A locked statement with no support left is still the owner's text,
         // but it is not evidence of anything current, and the artifact is a
@@ -684,10 +687,7 @@ async function loadLiveArtifact(
     else citationsByEntry.set(row.entryId, [row.signalId]);
   }
 
-  return {
-    id: artifact.id,
-    version: artifact.version,
-    entries: entryRows.map((row) => ({
+  const asCarried = (row: typeof entryRows[number] & { supportChanged?: boolean }): CarriedEntry => ({
       type: row.type,
       body: row.body,
       belief: row.belief,
@@ -697,7 +697,14 @@ async function loadLiveArtifact(
       dismissedAt: row.dismissedAt,
       sortOrder: row.sortOrder,
       citedSignalIds: citationsByEntry.get(row.id) ?? [],
-    })),
+      supportChanged: row.supportChanged,
+  });
+  const projected = await projectPersonalEntries(db, profileId, entryRows);
+  return {
+    id: artifact.id,
+    version: artifact.version,
+    entries: projected.entries.map(asCarried),
+    storedEntries: entryRows.map(asCarried),
   };
 }
 
@@ -794,7 +801,11 @@ export function assembleEntries(input: {
     lockedAt: entry.lockedAt,
     pinnedAt: entry.pinnedAt,
     dismissedAt: entry.dismissedAt,
-    citedSignalIds: entry.citedSignalIds,
+    // Reground exact kept words only when this pass supplied fresh valid
+    // citations. Never rewrite them to fit a new machine interpretation.
+    citedSignalIds: entry.supportChanged
+      ? input.generated.find((candidate) => candidate.body === entry.body && candidate.type === entry.type && candidate.citedSignalIds.length > 0)?.citedSignalIds ?? entry.citedSignalIds
+      : entry.citedSignalIds,
   });
 
   const pinned = humanTouched
@@ -864,8 +875,8 @@ export function isUnchanged(previous: CarriedEntry[], next: PersistedEntry[]): b
   });
 }
 
-/** Everything the previous version held, in the order it held it. */
-function carryEverything(previous: LiveArtifactSnapshot): PersistedEntry[] {
+/** Carry the projected reading, optionally regrounding exact protected words. */
+function carryEverything(previous: LiveArtifactSnapshot, generated: TopOfMindSynthesisEntry[]): PersistedEntry[] {
   return [...previous.entries]
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((entry) => ({
@@ -876,7 +887,9 @@ function carryEverything(previous: LiveArtifactSnapshot): PersistedEntry[] {
       lockedAt: entry.lockedAt,
       pinnedAt: entry.pinnedAt,
       dismissedAt: entry.dismissedAt,
-      citedSignalIds: entry.citedSignalIds,
+      citedSignalIds: entry.supportChanged
+        ? generated.find((candidate) => candidate.body === entry.body && candidate.type === entry.type && candidate.citedSignalIds.length > 0)?.citedSignalIds ?? entry.citedSignalIds
+        : entry.citedSignalIds,
     }));
 }
 
@@ -1082,7 +1095,7 @@ export async function refreshTopOfMindForProfile(
   }
 
   const lockedBefore = (liveBefore?.entries ?? []).filter(
-    (entry) => entry.lockedAt !== null && entry.dismissedAt === null,
+    (entry) => (entry.lockedAt !== null || entry.pinnedAt !== null) && entry.dismissedAt === null,
   );
 
   let generated: TopOfMindSynthesisEntry[] = [];
@@ -1112,10 +1125,11 @@ export async function refreshTopOfMindForProfile(
         body: entry.body,
         belief: entry.belief,
         prompt: entry.prompt,
-        citedSignalIds: entry.citedSignalIds,
+        citedSignalIds: entry.supportChanged ? [] : entry.citedSignalIds,
+        supportChanged: entry.supportChanged,
       })),
       currentEntries: (liveBefore?.entries ?? [])
-        .filter((entry) => entry.dismissedAt === null)
+        .filter((entry) => entry.dismissedAt === null && !entry.supportChanged)
         .map((entry) => ({
           type: entry.type,
           body: entry.body,
@@ -1155,20 +1169,17 @@ export async function refreshTopOfMindForProfile(
     // version or edit was rejected above, not blended with stale model output.
     const previous = await loadLiveArtifact(tx, input.profileId);
 
-    // No eligible signals and an artifact already standing: nothing was
-    // synthesized, so nothing is known to have moved. Carrying the previous
-    // version forward whole is the honest record of that. Dropping its
-    // generated entries here would empty someone's top of mind on a
-    // technicality, without a single model call having been made.
-    // An explicit no-change response may omit entries; it is not a deletion.
+    // A no-change response may omit entries, but it cannot resurrect a
+    // conclusion whose cited support is no longer current. The live snapshot
+    // has already projected that support while retaining human choices.
     const preserveCurrent = (selected.length === 0 || modelSaidNoChange) && previous !== null;
     const entries = preserveCurrent
-      ? carryEverything(previous)
+      ? carryEverything(previous, generated)
       : assembleEntries({ carried: previous?.entries ?? [], generated });
 
     const unchanged =
       previous !== null &&
-      (preserveCurrent || isUnchanged(previous.entries, entries));
+      isUnchanged(previous.storedEntries, entries);
     const reason: TopOfMindRevisionReason = previous === null
       ? "initial"
       : unchanged

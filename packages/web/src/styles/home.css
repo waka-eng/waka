@@ -377,6 +377,11 @@
   font-style: italic;
   color: var(--jar-muted);
 }
+.jar-forming--attention {
+  color: var(--jar-ink);
+  font-size: var(--t-body);
+  font-style: normal;
+}
 .jar-asof {
   margin: var(--sp-12) 0 0;
   animation: jar-arrive 0.3s cubic-bezier(0.22, 1, 0.36, 1);
@@ -555,6 +560,19 @@
    axis. Pressable is said by the light instead: quiet at rest, the page's own
    ink under the pointer. */
 .jar-board-act:hover { color: var(--jar-ink); }
+/* Recovery is an active task, not background metadata. Keep the same plain
+   text controls, with a readable resting state and a full touch target. */
+.jar-reading-status {
+  opacity: 1;
+  color: var(--jar-ink);
+  gap: var(--sp-12);
+}
+.jar-reading-status .jar-board-act {
+  --t-label-size: var(--t-note);
+  min-height: 44px;
+  padding: var(--sp-8) 0;
+  color: var(--jar-ink);
+}
 /* Throwing out the sentence you are standing on is one step quieter than
    keeping it, and it never wears a colour — this world spends temperature on
    aliveness alone. */

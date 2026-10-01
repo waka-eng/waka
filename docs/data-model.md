@@ -381,6 +381,23 @@ agent's distilled working memory.
   mutated in place.
 - **Profile-scoped**: generated from that profile's signals; the admin
   can edit entries (which locks them), pin, dismiss, reorder.
+- **Current support is projected when read.** Personal current and historical
+  version reads check the entire citation set against standing, owned evidence.
+  A retired, dismissed, unsupported, missing or foreign-evidenced signal cannot
+  support a current conclusion. Unkept machine text with any invalid citation
+  is withheld, not salvaged by silently trimming its citations. Locked/pinned
+  wording survives with `supportChanged`; stale generated belief/prompt text is
+  cleared and only current citations are returned. Stored history is not erased
+  by this projection. Public profiles apply the same rule, recheck both sharing
+  flags when fetching content, and return no private identifiers or sources.
+  This describes current standing, not verification of legacy lineage or proof
+  that a pending source/statement edit has completed semantic reassessment.
+- **A reading check does not generate.** The private version endpoint rechecks
+  the displayed version with its `profileId` and `generationRevision` from one
+  database snapshot. The browser rejects older snapshots, cancels on identity/
+  view changes and pauses checks while editing. A failed check retains the last
+  reading and offers a GET-only retry. A separate explicit reread requests
+  generation. The revision orders reads; it is not a source-completion receipt.
 - **Group**: generated from the room's OWN signals — distilled from the
   pooled public memories of its members (ruling 2026-08-24; previously
   from signals members shared in, whose record survives as history).

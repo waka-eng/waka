@@ -46,7 +46,7 @@ import {
   type ApiTopOfMind,
   type ApiViewer,
 } from "../src/lib/api";
-import { loadSignal } from "../src/lib/data";
+import { loadSignal, loadTopOfMindVersion } from "../src/lib/data";
 
 const viewer: ApiViewer = {
   account: {
@@ -344,6 +344,18 @@ describe("signals", () => {
 });
 
 describe("top of mind", () => {
+  it("checks a shown version in its explicit profile with cancellation and support metadata intact", async () => {
+    const controller = new AbortController();
+    stubFetch(Response.json({ topOfMind: { ...topOfMind, profileId: 'profile-1', generationRevision: '9007199254740993', supportChanged: true,
+      entries: topOfMind.entries.map((entry) => ({ ...entry, supportChanged: true })) } }));
+    const result = await loadTopOfMindVersion(topOfMind.id, 'profile-1', controller.signal);
+    expect(result).toMatchObject({ id: topOfMind.id, profileId: 'profile-1', generationRevision: '9007199254740993', supportChanged: true });
+    expect(result?.entries[0]).toMatchObject({ supportChanged: true });
+    expect(fetch).toHaveBeenCalledWith('/api/top-of-mind/versions/top-of-mind-1?profile=profile-1', {
+      method: 'GET', credentials: 'include', headers: { Accept: 'application/json' }, signal: controller.signal,
+    });
+  });
+
   it("reads the one current artifact and its entries", async () => {
     stubFetch(Response.json({ topOfMind }));
 

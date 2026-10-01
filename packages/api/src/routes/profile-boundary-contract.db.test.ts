@@ -133,6 +133,7 @@ const READS: Probe[] = [
   { name: "open one signal", method: "GET", path: `/api/signals/${GHOST}` },
   { name: "read the top of mind", method: "GET", path: "/api/top-of-mind" },
   { name: "read its versions", method: "GET", path: "/api/top-of-mind/versions" },
+  { name: "read a particular version", method: "GET", path: `/api/top-of-mind/versions/${GHOST}` },
   { name: "list principles", method: "GET", path: "/api/principles" },
   { name: "list experiences", method: "GET", path: "/api/experiences" },
   { name: "read the graph", method: "GET", path: "/api/graph" },

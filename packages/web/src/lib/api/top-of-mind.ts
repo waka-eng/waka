@@ -57,6 +57,7 @@ export interface ApiTopOfMindEntry {
       feedback and lock records at serve time, never stored. */
   citedSignals: Array<{ id: string; statement: string; answered: boolean; locked: boolean; contested: boolean }>;
   createdAt: string;
+  supportChanged?: boolean;
 }
 
 /**
@@ -71,6 +72,9 @@ export interface ApiTopOfMind {
   reason: ApiTopOfMindReason;
   createdAt: string;
   entries: ApiTopOfMindEntry[];
+  supportChanged?: boolean;
+  generationRevision?: string;
+  profileId?: string;
 }
 
 export type ApiTopOfMindStatus = "live" | "superseded";
@@ -99,6 +103,7 @@ export interface ApiTopOfMindVersion {
  */
 export async function fetchTopOfMind(
   options: ProfileScoped = {},
+  signal?: AbortSignal,
 ): Promise<ApiTopOfMind | null> {
   const query = options.profile
     ? `?profile=${encodeURIComponent(options.profile)}`
@@ -106,6 +111,7 @@ export async function fetchTopOfMind(
   const body = await getJson<{ topOfMind: ApiTopOfMind | null }>(
     apiPath(`/top-of-mind${query}`),
     "Failed to load your top of mind",
+    signal,
   );
   return body.topOfMind ?? null;
 }
@@ -117,6 +123,13 @@ export async function fetchTopOfMindVersions(): Promise<ApiTopOfMindVersion[]> {
     "Failed to load earlier versions",
   );
   return Array.isArray(body.versions) ? body.versions : [];
+}
+
+export async function fetchTopOfMindVersion(artifactId: string, options: ProfileScoped = {}, signal?: AbortSignal): Promise<ApiTopOfMind> {
+  const query = options.profile ? `?profile=${encodeURIComponent(options.profile)}` : "";
+  const body = await getJson<{ topOfMind: ApiTopOfMind }>(
+    apiPath(`/top-of-mind/versions/${encodeURIComponent(artifactId)}${query}`), "Failed to check this reading", signal);
+  return body.topOfMind;
 }
 
 /**

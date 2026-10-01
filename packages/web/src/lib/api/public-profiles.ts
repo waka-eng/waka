@@ -28,6 +28,7 @@ export interface ApiPublicTopOfMindEntry {
   belief: string | null;
   prompt: string | null;
   pinned: boolean;
+  supportChanged?: boolean;
 }
 
 export interface ApiPublicTopOfMind {

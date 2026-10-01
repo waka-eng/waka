@@ -50,6 +50,7 @@ import {
   type ApiSignal,
   type ApiSignalEvidence,
   type ApiTopOfMind,
+  fetchTopOfMindVersion,
   type ApiTopOfMindEntry,
   type ApiTopOfMindEntryType,
 } from "./api";
@@ -199,6 +200,7 @@ export interface Entry {
       (a verdict, a star) — false while only the machine believes it. */
   citedSignals: Array<{ id: string; statement: string; answered: boolean; locked: boolean; contested: boolean }>;
   createdMs: number;
+  supportChanged?: boolean;
 }
 
 export interface TopOfMind {
@@ -207,6 +209,9 @@ export interface TopOfMind {
   reason: ApiTopOfMind["reason"];
   createdMs: number;
   entries: Entry[];
+  supportChanged?: boolean;
+  generationRevision?: string;
+  profileId?: string;
 }
 
 /* ------------------------------------------------------------- conversion */
@@ -266,6 +271,7 @@ function toEvidence(signalId: string, row: ApiSignalEvidence): Evidence {
 
 function toEntry(row: ApiTopOfMindEntry): Entry {
   return {
+    supportChanged: row.supportChanged === true,
     id: row.id,
     type: row.type,
     body: row.body,
@@ -396,16 +402,26 @@ export async function loadSignals(profile?: string): Promise<Signal[]> {
 
 /** HEADQUARTERS. Null is a real state, not an error: a profile with nothing
     synthesized yet has nothing to stand on, and the layout says so in words. */
-export async function loadTopOfMind(profile?: string): Promise<TopOfMind | null> {
-  const row = await fetchTopOfMind({ profile });
-  if (!row) return null;
+export async function loadTopOfMind(profile?: string, signal?: AbortSignal): Promise<TopOfMind | null> {
+  const row = await fetchTopOfMind({ profile }, signal);
+  return row ? toTopOfMind(row) : null;
+}
+
+function toTopOfMind(row: ApiTopOfMind): TopOfMind {
   return {
     id: row.id,
     version: row.version,
     reason: row.reason,
     createdMs: ms(row.createdAt),
     entries: (row.entries ?? []).map(toEntry).filter((e) => !e.dismissed),
+    supportChanged: row.supportChanged === true,
+    generationRevision: row.generationRevision,
+    profileId: row.profileId,
   };
+}
+
+export async function loadTopOfMindVersion(id: string, profile?: string, signal?: AbortSignal): Promise<TopOfMind> {
+  return toTopOfMind(await fetchTopOfMindVersion(id, { profile }, signal));
 }
 
 /** One memory opened: the words in full, what was attached, and what the

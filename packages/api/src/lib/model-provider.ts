@@ -155,6 +155,8 @@ export interface TopOfMindLockedEntry {
   belief: string | null;
   prompt: string | null;
   citedSignalIds: string[];
+  /** Keep the person's wording without treating it as additional evidence. */
+  supportChanged?: boolean;
 }
 
 /**

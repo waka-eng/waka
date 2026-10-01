@@ -22,9 +22,9 @@
  * you at the origin, rooms to the right. The field never changes with it: the
  * ground is always your own archive ("3번째 섹션에서는 양옆 못 움직여야 해").
  *
- * A room is a wall of STATEMENTS. Members share signals, never inspirations, so
- * another person's raw memories never appear here — not as orbs, not as
- * quotes, not in an orbit.
+ * A room reads its current members' public inspirations and owns its derived
+ * signals and shared reading. Reflection answers remain personal; publishing
+ * their parent inspiration does not publish those answers.
  *
  * Founder rulings implemented here, not decorated around:
  *   - Light is the only meaning channel. Glow = aliveness as a continuum;
@@ -74,6 +74,7 @@ import { useDismissAway } from "../lib/dismiss";
 import { isEditableTarget, isNativeSurface } from "../lib/surface-input";
 import { profileStorageKey, readProfileText, writeProfileText, type ProfileStorageScope } from "../lib/profile-storage";
 import { useTopOfMindRefresh } from "../lib/use-top-of-mind-refresh";
+import { acceptsReadingSnapshot } from "../lib/reading-snapshot";
 import { clamp, clamp01, DAY_MS, easeOut, hashStr, kd, lerp, mix32, TAU } from "../lib/num";
 import {
   GRAIN_PX,
@@ -243,6 +244,7 @@ import {
   beyondOf,
   EMPTY_FIELD,
   loadTopOfMind,
+  loadTopOfMindVersion,
   loadSignal,
   loadSignals,
   toInspiration,
@@ -1493,6 +1495,37 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   /** LAYER 3 — the one artifact this profile stands on. Null before the first
       synthesis, which the layout says in words rather than leaving blank. */
   const [topOfMind, setTopOfMind] = useState<TopOfMind | null>(null);
+  const latestReadingRef = useRef<TopOfMind | null>(null);
+  const readingMutationRef = useRef(0);
+  const readingActionsPendingRef = useRef(0);
+  const readingMountedRef = useRef(true);
+  const readingNeedsLatestRef = useRef(false);
+  const [readingCheckFailed, setReadingCheckFailed] = useState(false);
+  const [readingChecking, setReadingChecking] = useState(false);
+  const verifyReadingRef = useRef<(manual?: boolean) => void>(() => {});
+  useEffect(() => {
+    readingMountedRef.current = true;
+    return () => { readingMountedRef.current = false; readingMutationRef.current += 1; };
+  }, []);
+  const loadPersonalReading = useCallback(async (signal?: AbortSignal) => {
+    const mutation = readingMutationRef.current;
+    if (readingActionsPendingRef.current) throw new Error("Reading is being updated");
+    const tom = await loadTopOfMind(storageScope?.profileId, signal);
+    if (!readingMountedRef.current || mutation !== readingMutationRef.current || readingActionsPendingRef.current) throw new Error("Reading request superseded");
+    return tom;
+  }, [storageScope?.profileId]);
+  const beginReadingMutation = useCallback(() => {
+    readingMutationRef.current += 1;
+    readingActionsPendingRef.current += 1;
+    readingNeedsLatestRef.current = true;
+    let finished = false;
+    return () => {
+      if (finished) return;
+      finished = true;
+      readingActionsPendingRef.current -= 1;
+      readingMutationRef.current += 1;
+    };
+  }, []);
   /** pattern id → what it rests on. Filled by the sky's background sweep;
       read by the orbit, which never fetches on tap. */
   const evidenceBySignalRef = useRef<Map<string, Evidence[]>>(new Map());
@@ -1694,6 +1727,9 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const [provPick, setProvPick] = useState<string | null>(null);
   /** the chosen ground, fetched whole — `null` while it is on its way */
   const [provFull, setProvFull] = useState<{ id: string; text: string } | null>(null);
+  useEffect(() => {
+    if (!prov) { setProvPick(null); setProvFull(null); }
+  }, [prov]);
   /**
    * WHAT YOU HAVE SAID ABOUT A PATTERN, THIS SESSION.
    *
@@ -1711,8 +1747,9 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const readingRefresh = useTopOfMindRefresh({
     storageKey: profileStorageKey(storageScope, "readingRefresh"),
     onComplete: async (result, current) => {
-      const tom = await loadTopOfMind();
+      const fetched = await loadPersonalReading();
       if (!current()) return;
+      const tom = acceptsReadingSnapshot(latestReadingRef.current, fetched, storageScope?.profileId) ? fetched : latestReadingRef.current;
       if (result.topOfMindId && (!tom || tom.version < result.version ||
         (tom.version === result.version && tom.id !== result.topOfMindId))) {
         throw new Error("The completed reading is not available yet");
@@ -1724,7 +1761,11 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
         : result.outcome;
     },
   });
-  const readingMessage: MessageKey | null = ({
+  const readingMessage: MessageKey | null = !readingRefresh.busy && readingChecking ? "worldReadingChecking"
+    : !readingRefresh.busy && readingCheckFailed ? "worldReadingCheckFailed"
+    : topOfMind?.supportChanged &&
+    ["idle", "changed", "unchanged", "empty"].includes(readingRefresh.phase)
+    ? "worldReadingSupportChanged" : ({
     idle: null, starting: "worldReadRequesting", pending: "worldReadQueued", running: "worldReadingNow",
     waiting: "worldReadWaiting", delayed: "worldReadDelayed", error: "worldReadCheckFailed",
     failed: "worldReadFailed", unknown: "worldReadUnknown", changed: "worldReadUpdated",
@@ -1769,11 +1810,12 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     setBoardToast(say(RECEIPTS.pinned.messageKey));
     window.setTimeout(() => setBoardToast(null), 6000);
     if (offlineRef.current) return;
+    const finish = beginReadingMutation();
     holdTopOfMindEntry(entry.id).catch(() => {
       setNotes((prev) =>
         prev ? prev.map((n) => (n.id === entry.id ? { ...n, pinned: false } : n)) : prev,
       );
-    });
+    }).finally(finish);
   }, []);
 
   /**
@@ -1791,11 +1833,13 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     setUndrop({ id: entry.id, body: entry.body });
     window.setTimeout(() => setUndrop((u) => (u?.id === entry.id ? null : u)), 9000);
     if (offlineRef.current) return;
+    const finish = beginReadingMutation();
     dismissTopOfMindEntry(entry.id).catch(() => {
-      loadTopOfMind()
-        .then((tom) => setNotes(tom?.entries ?? []))
+      finish();
+      loadPersonalReading()
+        .then((tom) => absorbBoard(tom))
         .catch(() => undefined);
-    });
+    }).finally(finish);
   }, []);
 
   /** The statement just taken down, for as long as taking it back still makes
@@ -1806,13 +1850,11 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     const id = undrop.id;
     setUndrop(null);
     if (offlineRef.current) return;
+    const finish = beginReadingMutation();
     restoreTopOfMindEntry(id)
-      .then(() => loadTopOfMind())
-      .then((tom) => {
-        setNotes(tom?.entries ?? []);
-        setTopOfMind(tom);
-      })
-      .catch(() => undefined);
+      .then(() => { finish(); return loadPersonalReading(); })
+      .then((tom) => absorbBoard(tom))
+      .catch(() => undefined).finally(finish);
   }, [undrop]);
   /* ---- walls (v10): the columns either side of the owner's own ---- */
   /** The rooms, newest first: the columns to the RIGHT. */
@@ -2653,6 +2695,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
       setSignals(layout.signals);
       setCitations(layout.citations);
       setTopOfMind(null);
+      latestReadingRef.current = null;
       /* THE FIXTURE DESCRIBES THE WHOLE WORLD, NOT JUST YOUR WALL.
          This set no groups and no agents, so the dev fixture rendered exactly
          one column — which meant every wall-specific behaviour in this layout
@@ -2814,30 +2857,10 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
       });
     /* LAYER 3 — headquarters. Exactly one artifact per profile, so this is a
        single object and null is a real state rather than an error. */
-    loadTopOfMind()
+    loadPersonalReading()
       .then((tom) => {
         if (dead || offlineRef.current) return;
-        setTopOfMind(tom);
-        /* The board's entries ARE the readings the world reads: one artifact,
-           its statements, in the server's order. Setting them here rather than
-           from a second endpoint is the canon's "exactly one per profile"
-           showing up in the client as exactly one fetch. */
-        setNotes(tom?.entries ?? []);
-        if (!tom) return;
-        /* WHAT THE POSTER RESTS ON — TWO HOPS DOWN, NOT ONE.
-           An entry cites PATTERNS, and a pattern cites MEMORIES. The peek row
-           beneath the ambition is made of orbs, so it needs the far end of
-           that chain: the memories the signals under this statement were
-           drawn from. Keyed by pattern id it matched nothing and the row fell
-           back to "the newest few", which is the one thing it must never be —
-           the row is what LED HERE, not what happened lately.
-           The second hop arrives with the sky's background sweep, so the row
-           is filled in there rather than guessed at here. */
-        setProvenance(new Map());
-        const lead = tom.entries.find((e) => e.pinned) ?? tom.entries[0];
-        if (lead) {
-          setAdopted({ ambition: lead.body, groupName: null, createdMs: lead.createdMs });
-        }
+        if (absorbBoard(tom)) setProvenance(new Map());
       })
       .catch(() => {
         /* no board — the world still pours, and headquarters says so */
@@ -2998,6 +3021,13 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * it never moves the camera or replaces an open inspiration/reflection.
    */
   const absorbBoard = useCallback((tom: TopOfMind | null) => {
+    if (!acceptsReadingSnapshot(latestReadingRef.current, tom, storageScope?.profileId)) return false;
+    if (tom?.supportChanged && atWallRef.current.kind === "self") {
+      setProv((current) => current && !tom.entries.some((entry) => entry.body === current.lead && !entry.supportChanged) ? null : current);
+    }
+    latestReadingRef.current = tom;
+    readingNeedsLatestRef.current = false;
+    setReadingCheckFailed(false);
     setTopOfMind(tom);
     setNotes(tom?.entries ?? []);
     /* AND THE CLOCK HAS TO KNOW THE ENTRY EXISTS.
@@ -3026,7 +3056,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     for (const e of tom?.entries ?? []) TRef.current = Math.max(TRef.current, e.createdMs);
     const lead = tom?.entries.find((e: Entry) => e.pinned) ?? tom?.entries[0];
     setAdopted(lead ? { ambition: lead.body, groupName: null, createdMs: lead.createdMs } : null);
-  }, []);
+    return true;
+  }, [storageScope?.profileId]);
 
   /** A wall's name as an address segment: lowercased, spaces to hyphens,
     everything else URI-encoded — readable for latin names, correct for any. */
@@ -3114,7 +3145,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
            here would leave the poster and the board's own entries disagreeing.
 
            Found by `e2e:first-sixty --stage kept`. */
-        loadTopOfMind().then((tom) => absorbBoard(tom)),
+        loadPersonalReading().then((tom) => absorbBoard(tom)),
       ]);
     };
     document.addEventListener("visibilitychange", onVisibility);
@@ -3713,7 +3744,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               return {
                 text: at.text,
                 awayFrom: null,
-                formingAlt: null,
+                formingAlt: topOfMind?.supportChanged ? say("worldReadingSupportChanged") : null,
                 asOf:
                   at.text && at.text !== current.text && nowMs - T > 60_000
                     ? monthTag(T)
@@ -3824,7 +3855,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         m.set(spaceKey(w), {
           text: at.text,
           awayFrom: null,
-          formingAlt: null,
+          formingAlt: topOfMind?.supportChanged ? say("worldReadingSupportChanged") : null,
           asOf: null,
           forming: formingWords(nowMs, proposal ? proposal.createdMs : null, emerging, localeRef.current),
           empty: topOfMind === null && (inspirations?.length ?? 0) === 0,
@@ -9776,7 +9807,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
      while it is on its way rather than rendering a shorter version of the
      truth. */
   useEffect(() => {
-    if (provPick === null) {
+    if (!prov || provPick === null) {
       setProvFull(null);
       return undefined;
     }
@@ -10376,7 +10407,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         settleTimerRef.current = window.setTimeout(() => {
           settleTimerRef.current = null;
           if (offlineRef.current) return;
-          loadTopOfMind()
+          loadPersonalReading()
             .then((tom) => absorbBoard(tom))
             .catch(() => undefined);
         }, DERIVATION_SETTLE_MS);
@@ -10834,8 +10865,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
              so the settled light is fetched, not guessed. `partly` resolves
              nothing and the refetch honestly brings the waver back. */
           if (!contested) return;
-          loadTopOfMind()
-            .then((tom) => setNotes(tom?.entries ?? []))
+          loadPersonalReading()
+            .then((tom) => absorbBoard(tom))
             .catch(() => undefined);
         })
         .catch(() => {
@@ -10917,6 +10948,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    */
   const [entrusting, setEntrusting] = useState<string | null>(null);
   const entrustLead = useCallback((entryId: string) => {
+    const finish = beginReadingMutation();
     releaseTopOfMindEntry(entryId)
       .then((updated) => {
         setNotes((prev) =>
@@ -10926,7 +10958,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         );
         setEntrusting(null);
       })
-      .catch(() => setEntrusting(null));
+      .catch(() => setEntrusting(null)).finally(finish);
   }, []);
 
   /**
@@ -11950,7 +11982,66 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     setTopOfMind,
     setAdopted,
     setSelectedId,
+    reloadReading: async () => { absorbBoard(await loadPersonalReading()); },
+    beginReadingMutation,
+    onEntrySaved: () => {
+      readingMutationRef.current += 1;
+      readingNeedsLatestRef.current = true;
+      void loadPersonalReading().then((tom) => absorbBoard(tom)).catch(() => setReadingCheckFailed(true));
+    },
   });
+  // Revalidate the version already on screen. This can withdraw stale support
+  // without replacing it with a newly generated sentence while someone reads.
+  useEffect(() => {
+    if (offlineRef.current || atWall.kind !== "self" || !topOfMind?.id || editing.open || readingRefresh.busy) return;
+    let active = true;
+    let controller: AbortController | null = null;
+    let timeout: number | null = null;
+    let inFlight = false;
+    const verify = async (manual = false) => {
+      const shown = latestReadingRef.current;
+      if (!active || !shown || inFlight || readingActionsPendingRef.current || document.hidden || isEditableTarget(document.activeElement)) return;
+      const mutation = readingMutationRef.current;
+      const needsLatest = readingNeedsLatestRef.current;
+      inFlight = true;
+      if (manual) setReadingChecking(true);
+      controller = new AbortController();
+      const signal = controller.signal;
+      let timedOut = false;
+      const deadline = new Promise<never>((_, reject) => {
+        timeout = window.setTimeout(() => {
+          timedOut = true; controller?.abort(); reject(new Error("Reading check timed out"));
+        }, 30_000);
+      });
+      try {
+        const checked = await Promise.race([needsLatest ? loadPersonalReading(signal)
+          : loadTopOfMindVersion(shown.id, storageScope?.profileId, signal), deadline]);
+        if (!active || mutation !== readingMutationRef.current || (!needsLatest && latestReadingRef.current?.id !== shown.id)) return;
+        if (!needsLatest && checked?.id !== shown.id) throw new Error("Reading check returned a different version");
+        absorbBoard(checked);
+      } catch {
+        if (active && (timedOut || !signal.aborted)) setReadingCheckFailed(true);
+      } finally {
+        if (timeout !== null) window.clearTimeout(timeout);
+        inFlight = false;
+        if (active) setReadingChecking(false);
+      }
+    };
+    verifyReadingRef.current = (manual = true) => { void verify(manual); };
+    const onFocus = () => { void verify(); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    const interval = window.setInterval(onFocus, 30_000);
+    return () => {
+      active = false; controller?.abort();
+      if (timeout !== null) window.clearTimeout(timeout);
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+      verifyReadingRef.current = () => {};
+      setReadingChecking(false);
+    };
+  }, [topOfMind?.id, atWall.kind, Boolean(editing.open), readingRefresh.busy, storageScope?.profileId, absorbBoard, loadPersonalReading]);
   /* the one thing `stepToMemory` needs and cannot close over: see its note */
   leaveWordsRef.current = () => {
     if (editing.open) editing.leave();
@@ -12686,7 +12777,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                          for a wall that has not worked yet would teach the
                          reader that the poster is generated copy and destroy
                          the credibility of every wall they read afterwards. */
-                      <p className="jar-forming">
+                      <p className={`jar-forming${w.kind === "self" && topOfMind?.supportChanged ? " jar-forming--attention" : ""}`}>
                         {c.formingAlt ?? say("worldFormingNothingAdopted")}
                       </p>
                     )}
@@ -12930,7 +13021,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                            sentence somebody wrote by hand, and saying so is
                            more useful than an empty band */
                         <div className="jar-prov jar-prov--poster" data-jar-chrome="1">
-                          <p className="jar-prov-lead jar-label">{say("worldWrittenByHand")}</p>
+                          <p className="jar-prov-lead jar-label">{say(w.kind === "self" && lead?.supportChanged ? "worldReadingSupportChanged" : "worldWrittenByHand")}</p>
                         </div>
                       )
                     ) : null}
@@ -13048,11 +13139,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         vanished mid-work would take its own progress report
                         with it. */}
                     {here && w.kind === "self" && !offline && !lead && readingMessage ? (
-                      <p className="jar-board-acts" role="status" data-jar-chrome="1">
-                        {say(readingMessage)}
-                        {!readingRefresh.busy && (readingRefresh.canResume || ["error", "failed", "unknown"].includes(readingRefresh.phase)) ? (
-                          <button className="jar-board-act jar-label" type="button" onClick={() => void readingRefresh.start()}>
-                            {say(readingRefresh.canResume ? "worldReadCheck" : "worldReadAgain")}
+                      <p className="jar-board-acts jar-reading-status" role="status" data-jar-chrome="1">
+                        {readingMessage === "worldReadingSupportChanged" ? null : say(readingMessage)}
+                        {!readingRefresh.busy && (readingCheckFailed || readingChecking || topOfMind?.supportChanged || readingRefresh.canResume || ["error", "failed", "unknown"].includes(readingRefresh.phase)) ? (
+                          <button className="jar-board-act jar-label" type="button" disabled={readingChecking}
+                            onClick={() => readingCheckFailed ? verifyReadingRef.current(true) : void readingRefresh.start()}>
+                            {say(readingCheckFailed || readingChecking ? "worldReadingCheckAgain" : readingRefresh.canResume ? "worldReadCheck" : "worldReadAgain")}
                           </button>
                         ) : null}
                       </p>
@@ -13063,7 +13155,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     lead &&
                     !editing.open &&
                     (posterAsk || board.step !== "rest" || readingMessage !== null) ? (
-                      <div className="jar-board-acts" data-jar-chrome="1">
+                      <div className={`jar-board-acts${readingMessage !== null ? " jar-reading-status" : ""}`} data-jar-chrome="1">
                         {readingRefresh.busy ? (
                           <span className="jar-board-act jar-label" role="status">{say(readingMessage ?? "worldReadingNow")}</span>
                         ) : board.step === "asking" ? (
@@ -13103,9 +13195,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                             <button
                               type="button"
                               className="jar-board-act jar-label"
-                              onClick={() => readingRefresh.canResume ? void readingRefresh.start() : setBoard({ step: "asking" })}
+                              disabled={readingChecking}
+                              onClick={() => readingCheckFailed ? verifyReadingRef.current(true)
+                                : readingRefresh.canResume ? void readingRefresh.start() : setBoard({ step: "asking" })}
                             >
-                              {say(readingRefresh.canResume ? "worldReadCheck" : "worldReadItAgain")}
+                              {say(readingCheckFailed || readingChecking ? "worldReadingCheckAgain" : readingRefresh.canResume ? "worldReadCheck" : "worldReadItAgain")}
                             </button>
                             {/* Holding is the person overruling the ordering:
                                 the server keeps feeding the entry but never

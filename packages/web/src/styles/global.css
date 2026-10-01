@@ -143,11 +143,16 @@
 }
 
 .nc-canvas {
+  /* This public paper surface must not inherit the dark app's pale ink. */
+  --ink: #1a1a1a;
+  --w-ink: var(--ink);
+  --ink-1: var(--ink);
+  --ink-3: color-mix(in srgb, var(--ink) 72%, transparent);
   position: relative;
   min-height: 100vh;
   height: 100dvh;
   background: #ffffff;
-  color: #1a1a1a;
+  color: var(--ink);
   font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
   display: flex;
   flex-direction: column;
@@ -178,7 +183,7 @@
   font-size: clamp(42px, 6vw, 72px);
   line-height: 1.18;
   letter-spacing: -0.025em;
-  color: #1a1a1a;
+  color: var(--ink);
   text-transform: lowercase;
 }
 
@@ -361,6 +366,13 @@
 
 .nc-note--featured .nc-note-body--preview {
   overflow-wrap: normal;
+}
+
+.nc-note-support {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--t-body);
+  line-height: 1.4;
 }
 
 

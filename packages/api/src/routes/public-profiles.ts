@@ -7,8 +7,8 @@
  *
  * Nobody is authenticated here, so the rules are the strict ones:
  *
- *   - **Inspirations never appear.** Raw captures are private to the owning
- *     account, full stop — this file does not read that table at all.
+ *   - **Inspirations never appear here.** Support checks inspect whether
+ *     owned evidence exists, never return raw captures or reflection answers.
  *   - **Signals never appear.** A top-of-mind entry rests on signals, but the
  *     evidence stays behind; only the synthesized entry is public.
  *   - **No identifiers leave.** Profile, artifact, entry, and signal ids stay
@@ -29,6 +29,7 @@ import {
   type TopOfMindEntryType,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
+import { personalEntryReadable, projectPersonalEntries } from "../lib/personal-output.js";
 import { normalizeSupportedLocale, type SupportedLocale } from "../lib/locales.js";
 import {
   normalizePublicHandle,
@@ -79,6 +80,7 @@ export interface PublicTopOfMindEntry {
   belief: string | null;
   prompt: string | null;
   pinned: boolean;
+  supportChanged?: boolean;
 }
 
 export interface PublicTopOfMind {
@@ -155,36 +157,44 @@ async function getPublicTopOfMind(
     .select({
       version: topOfMinds.version,
       publishedAt: topOfMinds.createdAt,
+      id: topOfMindEntries.id,
       type: topOfMindEntries.type,
       body: topOfMindEntries.body,
       belief: topOfMindEntries.belief,
       prompt: topOfMindEntries.prompt,
       pinnedAt: topOfMindEntries.pinnedAt,
+      lockedAt: topOfMindEntries.lockedAt,
+      dismissedAt: topOfMindEntries.dismissedAt,
     })
     .from(topOfMinds)
     .innerJoin(topOfMindEntries, eq(topOfMindEntries.topOfMindId, topOfMinds.id))
+    .innerJoin(profiles, eq(profiles.id, topOfMinds.profileId))
     .where(
       and(
         eq(topOfMinds.profileId, input.profileId),
         eq(topOfMinds.status, "live"),
         isNull(topOfMindEntries.dismissedAt),
+        eq(profiles.type, "human"), eq(profiles.publicProfileEnabled, true), eq(profiles.publicTopOfMindEnabled, true),
+        personalEntryReadable(input.profileId),
       ),
     )
-    .orderBy(asc(topOfMindEntries.sortOrder))
-    .limit(input.limit);
+    .orderBy(asc(topOfMindEntries.sortOrder)).limit(input.limit);
 
-  const first = rows[0];
+  const { entries } = await projectPersonalEntries(db, input.profileId, rows);
+  const visible = entries.slice(0, input.limit);
+  const first = visible[0];
   if (!first) return null;
 
   return {
     version: first.version,
     publishedAt: first.publishedAt.toISOString(),
-    entries: rows.map((row) => ({
+    entries: visible.map((row) => ({
       type: row.type,
       body: row.body,
       belief: row.belief ?? null,
       prompt: row.prompt ?? null,
       pinned: row.pinnedAt !== null,
+      supportChanged: row.supportChanged,
     })),
   };
 }

@@ -38,6 +38,8 @@ import { getDb } from "../lib/db.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
 import { enqueueTopOfMindRefresh } from "../lib/queue.js";
 import { loadTopOfMindRefreshStatus } from "../lib/top-of-mind-refresh-status.js";
+import { projectPersonalEntries } from "../lib/personal-output.js";
+import { readGenerationRevision } from "../lib/generation-revision.js";
 import { acquireTopOfMindArtifactLock } from "../lib/top-of-mind-family-lock.js";
 import { validationDetails } from "../lib/validation.js";
 import { loadProfileTarget, resolveProfileScope } from "./signals.js";
@@ -116,6 +118,7 @@ export interface TopOfMindEntryView {
       (goals/the-legible-loop.md Phase 4). */
   citedSignals: Array<{ id: string; statement: string; answered: boolean; locked: boolean; contested: boolean }>;
   createdAt: string;
+  supportChanged?: boolean;
 }
 
 export interface TopOfMindView {
@@ -124,6 +127,10 @@ export interface TopOfMindView {
   reason: TopOfMindRevisionReason;
   createdAt: string;
   entries: TopOfMindEntryView[];
+  supportChanged?: boolean;
+  /** Orders private read snapshots; not the artifact's version or completion. */
+  generationRevision?: string;
+  profileId?: string;
 }
 
 export interface TopOfMindVersionView {
@@ -146,21 +153,24 @@ function toIso(value: Date | null): string | null {
 }
 
 async function loadEntries(
-  db: WakaDb,
+  db: WakaDb | WakaTx,
   profileId: string,
   topOfMindId: string,
   includeDismissed: boolean,
-): Promise<TopOfMindEntryView[]> {
+  includeWithheld = false,
+): Promise<{ entries: TopOfMindEntryView[]; supportChanged: boolean }> {
   const entryRows = await db
     .select()
     .from(topOfMindEntries)
     .where(eq(topOfMindEntries.topOfMindId, topOfMindId))
     .orderBy(asc(topOfMindEntries.sortOrder));
 
-  const visible = includeDismissed
+  const selected = includeDismissed
     ? entryRows
     : entryRows.filter((row) => row.dismissedAt === null);
-  if (visible.length === 0) return [];
+  const projected = await projectPersonalEntries(db, profileId, selected, includeWithheld);
+  const visible = projected.entries;
+  if (visible.length === 0) return { entries: [], supportChanged: projected.supportChanged };
 
   const citationRows = await db
     .select({
@@ -244,6 +254,7 @@ async function loadEntries(
     // The inner join already excludes citations whose signal was deleted;
     // this narrows the type to match.
     if (row.signalId === null) continue;
+    if (!projected.citationsByEntry.get(row.entryId)?.includes(row.signalId)) continue;
     const cited = {
       id: row.signalId,
       statement: row.statement,
@@ -264,7 +275,7 @@ async function loadEntries(
     else citationsByEntry.set(row.entryId, [cited]);
   }
 
-  return visible.map((row) => ({
+  return { supportChanged: projected.supportChanged, entries: visible.map((row) => ({
     id: row.id,
     type: row.type,
     body: row.body,
@@ -276,17 +287,32 @@ async function loadEntries(
     sortOrder: row.sortOrder,
     citedSignals: citationsByEntry.get(row.id) ?? [],
     createdAt: row.createdAt.toISOString(),
-  }));
+    supportChanged: row.supportChanged,
+  })) };
 }
 
 export async function getLiveTopOfMind(
   db: WakaDb,
   input: { profileId: string; includeDismissed?: boolean },
 ): Promise<TopOfMindView | null> {
-  const [artifact] = await db
+  return readProfileArtifact(db, input);
+}
+
+export async function getTopOfMindVersion(db: WakaDb, input: { profileId: string; artifactId: string }): Promise<TopOfMindView | null> {
+  return readProfileArtifact(db, input);
+}
+
+async function readProfileArtifact(db: WakaDb, input: { profileId: string; artifactId?: string; includeDismissed?: boolean }): Promise<TopOfMindView | null> {
+  // The token and its projected data must come from one snapshot. Stamping
+  // an old projection with a newer token would defeat client stale-read guards.
+  return db.transaction(async (tx) => {
+  const revision = await readGenerationRevision(tx, { profileId: input.profileId });
+  if (!revision) return null;
+  const [artifact] = await tx
     .select()
     .from(topOfMinds)
-    .where(and(eq(topOfMinds.profileId, input.profileId), eq(topOfMinds.status, "live")))
+    .where(and(eq(topOfMinds.profileId, input.profileId), input.artifactId
+      ? eq(topOfMinds.id, input.artifactId) : eq(topOfMinds.status, "live")))
     .limit(1);
   if (!artifact) return null;
 
@@ -295,8 +321,11 @@ export async function getLiveTopOfMind(
     version: artifact.version,
     reason: artifact.reason,
     createdAt: artifact.createdAt.toISOString(),
-    entries: await loadEntries(db, input.profileId, artifact.id, input.includeDismissed === true),
+    profileId: input.profileId,
+    generationRevision: revision.revision.toString(),
+    ...await loadEntries(tx, input.profileId, artifact.id, input.includeDismissed === true),
   };
+  }, { isolationLevel: "repeatable read", accessMode: "read only" });
 }
 
 export async function listTopOfMindVersions(
@@ -386,7 +415,9 @@ export async function updateLiveEntry(
   });
 
   if (topOfMindId === null) return null;
-  const entries = await loadEntries(db, input.profileId, topOfMindId.topOfMindId, true);
+  // The owner may release/dismiss a now-withheld entry. Returning its mutation
+  // receipt is not the same as serving it as a current generated conclusion.
+  const { entries } = await loadEntries(db, input.profileId, topOfMindId.topOfMindId, true, true);
   return entries.find((row) => row.id === topOfMindId.entryId) ?? null;
 }
 
@@ -445,6 +476,7 @@ async function resolveSupersededEntry(
 export interface TopOfMindRouteDependencies {
   getDatabase?: typeof getDb;
   getTopOfMind?: typeof getLiveTopOfMind;
+  getVersion?: typeof getTopOfMindVersion;
   listVersions?: typeof listTopOfMindVersions;
   updateEntry?: typeof updateLiveEntry;
   requestRefresh?: typeof enqueueTopOfMindRefresh;
@@ -530,6 +562,18 @@ export function createTopOfMindRoutes(
       limit: parsedQuery.data.limit ?? DEFAULT_VERSION_LIMIT,
     });
     return c.json({ versions }, 200);
+  });
+
+  routes.get("/versions/:artifactId", async (c) => {
+    const id = z.string().uuid().safeParse(c.req.param("artifactId"));
+    const query = scopeQuerySchema.safeParse(c.req.query());
+    if (!id.success || !query.success) return c.json({ error: "Invalid reading version request" }, 400);
+    const db = getDatabase();
+    const scope = await resolveProfileScope(db, c.get("session"), query.data.profile, "read", loadProfile);
+    if (!scope.ok) return c.json(scope.body, scope.status);
+    const topOfMind = await (deps.getVersion ?? getTopOfMindVersion)(db, { profileId: scope.profileId, artifactId: id.data });
+    if (!topOfMind) return c.json({ error: "Reading version not found" }, 404);
+    return c.json({ topOfMind });
   });
 
   routes.post("/refresh", async (c) => {

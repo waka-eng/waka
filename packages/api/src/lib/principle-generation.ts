@@ -20,6 +20,7 @@ import { and, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 
 import { randomUUID } from "node:crypto";
 import { readGenerationRevision, assertGenerationRevision } from "./generation-revision.js";
+import { personalSignalReadable, projectPersonalEntries } from "./personal-output.js";
 import {
   inspirations,
   principles,
@@ -258,7 +259,7 @@ export async function loadPrincipleMaterial(db: WakaDb, profileId: string) {
   const rows = await db.select({ id: signals.id, statement: signals.statement,
     lastEvidenceAt: signals.lastEvidenceAt, updatedAt: signals.updatedAt })
     .from(signals).where(and(eq(signals.profileId, profileId), eq(signals.status, "active"),
-      ...(profile?.groupId ? [groupSignalReadable(profile.groupId)] : [])));
+      ...(profile?.groupId ? [groupSignalReadable(profile.groupId)] : [personalSignalReadable(profileId)])));
   const activeSignals = rows;
   const evidence = await loadCitationEvidence(db, profileId, activeSignals.map((row) => row.id));
   return { activeSignals, evidence, groupId: profile?.groupId ?? null,
@@ -318,7 +319,7 @@ export async function refreshPrinciplesForProfile(
     : [];
   const currentEntries = groupId
     ? (await projectGroupEntries(db, groupId, storedEntries)).entries
-    : storedEntries;
+    : (await projectPersonalEntries(db, input.profileId, storedEntries)).entries.filter((entry) => !entry.supportChanged);
 
   const distilled = await provider.distillPrinciples({
     profileId: input.profileId,

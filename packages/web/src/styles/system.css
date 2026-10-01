@@ -301,12 +301,6 @@
 
 .nc-note { border-radius: var(--r-paper); }
 
-.nc-note-body,
-
-/* Length tempers the size; the floor stays legible. The old ladder bottomed
-   out at 9px, which is below the size at which anyone reads anything. */
-
-
 /* ==========================================================================
    5. CAPTURE
 

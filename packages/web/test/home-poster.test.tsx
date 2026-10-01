@@ -97,7 +97,8 @@ const at = (daysAgo: number) => BASE - daysAgo * 86_400_000;
  * every copy of a repeated word is carried and the bug is invisible.
  */
 const FIRST = "We ask the owner when the spec and the code disagree";
-const refreshState = vi.hoisted(() => ({ body: "", status: "pending", requests: 0, empty: false }));
+const refreshState = vi.hoisted(() => ({ body: "", status: "pending", requests: 0, empty: false,
+  supportChanged: false, revision: "1", checks: 0, failCheck: false }));
 
 const SPEC = "sig-spec";
 const CODE = "sig-code";
@@ -258,7 +259,14 @@ vi.mock("../src/lib/data", async (importOriginal) => {
         createdMs: at(3),
       })),
     }),
-    loadTopOfMind: async () => ({ ...board(refreshState.body || FIRST), ...(refreshState.empty ? { entries: [] } : {}) }),
+    loadTopOfMind: async () => ({ ...board(refreshState.body || FIRST), generationRevision: refreshState.revision,
+      supportChanged: refreshState.supportChanged, ...(refreshState.empty ? { entries: [] } : {}) }),
+    loadTopOfMindVersion: async () => {
+      refreshState.checks += 1;
+      if (refreshState.failCheck) throw new Error("reading unavailable");
+      return { ...board(refreshState.body || FIRST), generationRevision: refreshState.revision,
+        supportChanged: refreshState.supportChanged, ...(refreshState.empty ? { entries: [] } : {}) };
+    },
   };
 });
 
@@ -276,10 +284,11 @@ vi.mock("../src/lib/api", async (importOriginal) => {
        reach the network, fail, and the page would answer by reloading the
        board, which would put the OLD sentence back and quietly turn every
        rewrite case below into a test of nothing. */
-    updateTopOfMindEntry: async (entryId: string, input: { body: string }) => ({
-      id: entryId,
-      body: input.body,
-    }),
+    updateTopOfMindEntry: async (entryId: string, input: { body: string }) => {
+      refreshState.body = input.body;
+      refreshState.revision = String(BigInt(refreshState.revision) + 1n);
+      return { id: entryId, body: input.body };
+    },
     /* The write behind answering a ground. Unmocked it would reach a network
        that is not there, and the page — honestly — would take the answer
        back off the map when the request died, unlighting the ground the
@@ -322,6 +331,8 @@ beforeAll(() => {
 beforeEach(async () => {
   refreshState.body = ""; refreshState.status = "pending"; refreshState.requests = 0;
   refreshState.empty = false;
+  refreshState.supportChanged = false; refreshState.revision = "1";
+  refreshState.checks = 0; refreshState.failCheck = false;
   sessionStorage.clear();
   layout = await mountWorld(FACTS);
 });
@@ -663,6 +674,31 @@ describe("what the poster is standing on", () => {
 });
 
 describe("board acts leave receipts", () => {
+  it("withdraws stale text at the same version and offers a clear reread", async () => {
+    refreshState.empty = true; refreshState.supportChanged = true; refreshState.revision = "2";
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    await layout.step(12);
+    expect(layout.container.textContent).not.toContain(FIRST);
+    expect(layout.container.textContent).toContain("This reading needs another look.");
+    expect(refreshState.requests).toBe(0);
+    const reread = [...layout.container.querySelectorAll<HTMLButtonElement>(".jar-board-act")]
+      .find((button) => /^read again$/i.test(button.textContent?.trim() ?? ""));
+    expect(reread).toBeDefined();
+    await act(async () => reread!.click());
+    expect(refreshState.requests).toBe(1);
+  });
+
+  it("checks a failed validation without creating another generation job", async () => {
+    refreshState.failCheck = true;
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    await layout.step(6);
+    expect(posterText()).toBe(FIRST);
+    const checks = refreshState.checks;
+    refreshState.failCheck = false;
+    await press(".jar-board-act", /check again/i);
+    expect(refreshState.checks).toBeGreaterThan(checks);
+    expect(refreshState.requests).toBe(0);
+  });
   it("does not call queued work a completed redraw", async () => {
     await press(".jar-board-act", /read it again/i);
     await press(".jar-board-act", /^read again$/i);

@@ -1,6 +1,6 @@
 # Goal: implement the experience review
 
-Status: in flight — A/B, C input/output/cache, D1–D3b support/source handoffs and reading/principle commit fences, plus E1 manual refresh locally checked; existing-reading validity, statement propagation, E2 and later delivery slices remain open. Deployment-target verification, historical repair and full release verification remain open.
+Status: in flight — A/B, C input/output/cache, D1–D3c support/source handoffs, commit fences and personal reading recovery, plus E1 manual refresh locally checked; pending/statement support, legacy context, E2 and later delivery slices remain open. Deployment-target verification, historical repair and full release verification remain open.
 Created: 2026-10-01, on the owner's instruction to implement the full plan.
 Branch: `codex/ux-feature-implementation`.
 Baseline: `33e65a7` on `dev`.
@@ -28,7 +28,7 @@ experiments or revive superseded room goals.
 | A | F5/F6/F10: input, overlay scrolling/focus, readable active controls | Reproduce slash/wheel defects; verify typing, caret, Escape/Tab, wheel/touch and contrast in actual affected flows; web checks | Implemented; 5 original failures now pass, 325 web tests pass. Desktop fixture verified. Mobile touch/200% zoom and deployed verification remain open. |
 | B | F3/F4: edited principle preservation, truthful support, account-scoped drafts/preferences and cancellation | Isolated SQL preservation tests and two-account browser/state tests; API/web checks | B1: 6 SQL / 653 unit tests pass after 3 reproduced failures. B2: 4 failures reproduced, then two-account draft and stale-response checks pass; full web suite 331/331. Deployed/account-switch browser verification remains open. |
 | C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | C1/C2/C3 code locally verified (51 SQL cases; full web 349/349). Read-only inventory completed across 5 rooms in the DB referenced by the local env files; hosted-stage mapping is not verified. Historical repair, deployment coordination and deployed verification remain pending. |
-| D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | D1–D3b source provenance, automatic support checks, transactional handoffs and reading/principle write fences locally verified (149 SQL / 671 unit / 366 web pass). Existing-artifact validity, statement-change propagation, lower-layer claim fences, live semantic quality and historical repair remain open. |
+| D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | D1–D3c provenance, automatic support checks, durable handoffs, write fences and personal reading support/recovery locally verified. D3c: 78 targeted SQL / 671 unit / 374 web; synthetic rendered checks at two viewport sizes. Pending/statement support, legacy personal context, lower-layer claim fences, live semantic quality and historical repair remain open. |
 | E1 | F7/F8: authoritative poster and truthful manual refresh | Queue acceptance, changed/unchanged completion, failure and fresh displayed version verified | Implemented with job receipts, resumable profile-scoped polling, held-job manual upgrade and authoritative headline. Local checks pass (8 receipt SQL tests, 10 hook tests, full web 362/362); deployed verification remains open. |
 | E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | Pending |
 | F | F11/F12: visible search and durable navigation | Results beyond initial archive, failure/no-match separation, stable IDs, deep links, Back/Forward and rename verified | Pending |
@@ -487,3 +487,50 @@ Keep code, deployment, historical repair, and user validation evidence distinct.
   saves, personal cache invalidation and E2's visible journey remain open.
   Routine database-error logging also needs review for parameter/content leakage
   under L3. The full A–J/L1–L3 objective and release gates remain unchanged.
+- 2026-10-01, D3c baseline: reproduced 5 personal-output failures (unsupported
+  generated text served, locked/pinned stale explanations, public unsupported
+  text and no-signal carry resurrection), then 1 public opt-out read race and
+  2 selection gaps (dismissed/foreign-evidenced signals still reaching personal
+  generation). All eight now pass. Synthetic fixtures establish these defects,
+  not incidence or exposure in hosted accounts.
+- Personal current/version/public reads now project the complete citation set.
+  Invalid machine conclusions are withheld instead of salvaged by dropping only
+  the invalid citation. Locked/pinned wording survives with changed standing;
+  copied belief/prompt text is cleared. Read projection does not erase history.
+  Public content queries recheck both sharing flags and filter before their
+  bounded limit. Public output retains no private IDs, sources or explanations.
+  Personal generation and principle input use the same standing predicate;
+  no-change/no-signal carry cannot re-certify withheld conclusions. Exact kept
+  body/type matches can regain valid citations without changing human words.
+- Private version revalidation reads projection and generation revision in one
+  repeatable-read snapshot. Home checks its displayed version on focus/visibility
+  and a 30-second interval only while relevant, with cancellation, a bounded
+  deadline and mutation/identity/order guards. It does not automatically install
+  another version while someone reads. A failed check keeps the last reading
+  and offers GET-only "Check again"; a separate "Read again" starts generation.
+  Open stale personal provenance is closed when changed support is applied.
+- Rendered verification caught two styling defects missed by unit checks:
+  recovery controls inherited the 10px dim metadata register, and public paper
+  headings/body inherited dark-surface ink. Recovery now uses 14px labels and
+  44px targets; the public surface scopes its ink, and a dangling CSS selector
+  no longer makes note text inherit loading-copy styling. Layouts are unchanged.
+  `pnpm e2e:reading-support` is a manual all-network-mocked browser check, not a
+  new automatic browser gate. At 1280×900 and 390×844 it verifies one support
+  notice, failed-check recovery without generation, public kept wording, no
+  horizontal overflow or page errors. Screenshots inspected. Computed contrast:
+  recovery 17.03:1; public title 17.40:1; note/standing 8.26:1. External fonts are
+  blocked in this fixture, so the screenshots use fallback fonts.
+- D3c verification: 15/15 personal-support SQL cases; with refresh, fencing,
+  group-output, principles, contested, cadence and boundary regressions, 78
+  distinct SQL cases pass. API unit 671 passed / 3 paid-live benches skipped;
+  web 374/374 across 61 suites. API/web/admin and the manual browser script
+  typechecks, web build, migration and diff checks pass. All SQL writes used
+  disposable schemas on explicit local `waka_agent_test`; browser APIs were
+  entirely synthetic. No live model calls, hosted schema/repair, push or deploy.
+- This is current-standing projection, not a complete proof of current meaning.
+  Source/statement edits pending assessment, historical personal feedback/context
+  contamination, principle read-side standing, lower-layer worker ownership and
+  complete personal cache invalidation remain open. E2 still needs exact
+  source-to-artifact receipts, ambiguous-save reconciliation and the full visible
+  journey. Entry mutation ordering/failure receipts and draft recovery also need
+  work; snapshot guards do not claim to solve them. Full A–J/L1–L3 gates remain.
