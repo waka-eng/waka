@@ -18,6 +18,8 @@ import {
 } from "./http";
 import type { ApiAttachment, ApiAttachmentSummary } from "./attachments";
 import type { ApiInspirationProcessingReceipt } from './inspiration-processing';
+import type { ApiInspirationSaveReceipt, InspirationSaveOptions } from './inspiration-save-requests';
+import { fetchInspirationSaveRequest } from './inspiration-save-requests';
 
 // ---------------------------------------------------------------------------
 // What a capture is
@@ -40,6 +42,7 @@ export type ApiInspirationVisibility = "private" | "public";
  * the person's own words, and input to extraction.
  */
 export interface ApiReflection {
+  saveRequest?: ApiInspirationSaveReceipt;
   processing?: ApiInspirationProcessingReceipt;
   id: string;
   inspirationId: string;
@@ -67,6 +70,7 @@ export interface ApiInspirationSummary {
 
 /** One capture, opened: the full text and everything hanging off it. */
 export interface ApiInspiration {
+  saveRequest?: ApiInspirationSaveReceipt;
   processing?: ApiInspirationProcessingReceipt;
   id: string;
   profileId: string;
@@ -132,22 +136,50 @@ export interface ApiInspirationPage {
 // The archive
 // ---------------------------------------------------------------------------
 
-/**
- * POST /inspirations
- *
- * Persists a capture owned by the acting profile. The server returns 201 with
- * the canonical row; signal derivation happens in the background afterwards.
- */
+/** Reconcile a keyed, explicitly scoped write once. The caller owns the frozen
+ * payload and identity; looking up a receipt never authorizes a fresh create. */
+async function reconcileInspirationSave<T>(write: () => Promise<T>, options: InspirationSaveOptions,
+  operation: 'inspiration' | 'reflection', inspirationId?: string): Promise<T> {
+  try { return await write(); }
+  catch (original) {
+    if (!options.requestId || !options.profile || options.signal?.aborted || !(original instanceof ApiError) ||
+      !(original.status === 0 || original.status === 408 || original.status >= 500 || original.code === 'save_in_progress')) throw original;
+    let saved;
+    try { saved = await fetchInspirationSaveRequest(options.requestId, options, options.signal); }
+    catch (check) {
+      if (check instanceof ApiError && [401, 403, 410].includes(check.status)) throw check;
+      // Missing/in-flight is not proof of failure. Keep the ambiguous outcome
+      // so the pending intent can be resumed; never manufacture a fresh key.
+      throw original;
+    }
+    if (saved.operation !== operation || (inspirationId && saved.inspirationId !== inspirationId)) {
+      throw new ApiError({ status: 409, code: 'save_request_conflict', message: 'This save request was already used for different content.' });
+    }
+    // Lookup identifies committed work, but cannot prove its original payload
+    // matches this call. One replay with the SAME identity lets the server
+    // verify the input hash and return current words, without another create.
+    // This is bounded: a second ambiguous response returns to the caller.
+    return write();
+  }
+}
+
+/** First saves return 201; a replay returns the current row without another
+ * capture. Processing is separate from either save acknowledgment. */
 export async function createInspiration(
   input: CreateInspirationRequest,
-  options: ProfileScoped = {},
+  options: InspirationSaveOptions = {},
 ): Promise<ApiInspiration> {
-  const body = await postJson<{ inspiration: ApiInspiration; processing?: ApiInspirationProcessingReceipt }>(
-    apiPath(`/inspirations${options.profile ? `?profile=${encodeURIComponent(options.profile)}` : ''}`),
-    input,
+  const intent = { ...options };
+  const payload = JSON.parse(JSON.stringify(input)) as CreateInspirationRequest;
+  const path = apiPath(`/inspirations${intent.profile ? `?profile=${encodeURIComponent(intent.profile)}` : ''}`);
+  const body = await reconcileInspirationSave(() => postJson<{ inspiration: ApiInspiration; processing?: ApiInspirationProcessingReceipt; saveRequest?: ApiInspirationSaveReceipt }>(
+    path,
+    payload,
     "Failed to save this capture",
-  );
-  return { ...body.inspiration, ...(body.processing ? { processing: body.processing } : {}) };
+    intent.signal,
+    intent.requestId,
+  ), intent, 'inspiration');
+  return { ...body.inspiration, ...(body.processing ? { processing: body.processing } : {}), ...(body.saveRequest ? { saveRequest: body.saveRequest } : {}) };
 }
 
 /**
@@ -253,14 +285,19 @@ export async function deleteInspiration(id: string): Promise<void> {
 export async function createReflection(
   inspirationId: string,
   input: CreateReflectionRequest,
-  options: ProfileScoped = {},
+  options: InspirationSaveOptions = {},
 ): Promise<ApiReflection> {
-  const body = await postJson<{ reflection: ApiReflection; processing?: ApiInspirationProcessingReceipt }>(
-    apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/reflections${options.profile ? `?profile=${encodeURIComponent(options.profile)}` : ''}`),
-    input,
+  const intent = { ...options };
+  const payload = JSON.parse(JSON.stringify(input)) as CreateReflectionRequest;
+  const path = apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/reflections${intent.profile ? `?profile=${encodeURIComponent(intent.profile)}` : ''}`);
+  const body = await reconcileInspirationSave(() => postJson<{ reflection: ApiReflection; processing?: ApiInspirationProcessingReceipt; saveRequest?: ApiInspirationSaveReceipt }>(
+    path,
+    payload,
     "Failed to save reflection",
-  );
-  return { ...body.reflection, ...(body.processing ? { processing: body.processing } : {}) };
+    intent.signal,
+    intent.requestId,
+  ), intent, 'reflection', inspirationId);
+  return { ...body.reflection, ...(body.processing ? { processing: body.processing } : {}), ...(body.saveRequest ? { saveRequest: body.saveRequest } : {}) };
 }
 
 export interface ApiReflectionQuestionStatus {

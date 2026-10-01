@@ -1,6 +1,6 @@
 # Goal: implement the experience review
 
-Status: in flight — A/B, C input/output/cache, D1–D3d3 source/support/worker fences, E1 refresh and E2a–E2d source-to-reading receipts, status/retry and capture/reflection progress locally checked; idempotent saves, pending/statement support, legacy context and later slices remain open. Deployment-target verification, historical repair and full release verification remain open.
+Status: in flight — A/B, C input/output/cache, D1–D3d3 source/support/worker fences, E1 refresh, E2a–E2d source-to-reading progress and E2e1 keyed-save protocol locally checked; browser save-intent persistence/reconciliation, pending/statement support, legacy context and later slices remain open. Deployment-target verification, historical repair and full release verification remain open.
 Created: 2026-10-01, on the owner's instruction to implement the full plan.
 Branch: `codex/ux-feature-implementation`.
 Baseline: `33e65a7` on `dev`.
@@ -30,7 +30,7 @@ experiments or revive superseded room goals.
 | C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | C1/C2/C3 code locally verified (51 SQL cases; full web 349/349). Read-only inventory completed across 5 rooms in the DB referenced by the local env files; hosted-stage mapping is not verified. Historical repair, deployment coordination and deployed verification remain pending. |
 | D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | D1–D3d3 provenance, automatic support checks, durable source handoffs, worker data-write fences and personal reading recovery locally verified. D3d3: 161 targeted SQL / 671 unit / 374 web. Pending/statement support, legacy personal context, complete downstream receipts, live semantic quality and historical repair remain open. |
 | E1 | F7/F8: authoritative poster and truthful manual refresh | Queue acceptance, changed/unchanged completion, failure and fresh displayed version verified | Implemented with job receipts, resumable profile-scoped polling, held-job manual upgrade and authoritative headline. Local checks pass (8 receipt SQL tests, 10 hook tests, full web 362/362); deployed verification remains open. |
-| E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | E2a–E2d backend receipts, scoped status/recovery and explicit reading adoption locally verified. E2d: 13 status/recovery SQL cases, 65 related SQL / 671 unit / 399 web; desktop/mobile rendered fixture passes. Ambiguous-save reconciliation and the complete release journey remain pending. |
+| E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | E2a–E2d processing/status/UI locally checked; E2e1 adds keyed capture/answer saves and API-client reconciliation (18 save SQL cases; 91 related SQL / 671 unit / 412 web). The browser composers still need persistent intent identities; their current keyless calls are NOT duplicate-safe yet. Complete release journey and deployed verification remain pending. |
 | F | F11/F12: visible search and durable navigation | Results beyond initial archive, failure/no-match separation, stable IDs, deep links, Back/Forward and rename verified | Pending |
 | G | F13: capture attachments and recoverable failure | Paste/drop/select preview; saved text survives failure; retry attaches once; sharing destination clear | Pending |
 | H | F18: progressive initial load and bounded prefetch | Small/large archive baseline vs result, first useful view and card/search/deep-link integrity | Pending |
@@ -859,3 +859,65 @@ release journey remain required; these increments are not completion of D or E2.
   are covered here). D's pending/statement support, legacy context, full release
   journey and all later A–J/L1–L3 requirements stay open. This is a locally
   verified delivery increment, not completion of E2 or of the full goal.
+- 2026-10-01, E2e1 baseline: 4/4 real-route cases failed. Repeating a lost
+  capture response produced 2 captures instead of 1; repeating an answer
+  produced 2 answers; reusing an identity for other words created rather than
+  conflicting; no committed-request lookup existed. Three client-wire cases
+  separately failed because save metadata/error codes were discarded and the
+  request identity was not sent.
+- Migration 0042 adds `inspiration_save_requests`, keyed by profile and UUID
+  request identity, with normalized input hashes and source/answer/processing
+  references. It contains no authored response snapshots. Parent references
+  carry the tenant through composite FKs. Delete triggers clear output links
+  and processing metadata, leaving a non-reusable tombstone; profile erasure
+  removes it. No expiry or historical backfill can silently turn an old key
+  into another create. Existing words/answers survive the additive upgrade.
+- Capture/answer creation accepts an optional UUID `Idempotency-Key`. Authored
+  rows, inline answers, experience/citation writes, processing jobs and the
+  request record commit together. Same-intent replays return current permitted
+  content and the original processing reference, not stale original words,
+  another answer or another derivation request. Changed input/operation/parent
+  conflicts; removed results return 410. A profile-scoped non-waiting request
+  lock serializes concurrent intents, with a specific in-progress response;
+  replays also fail promptly on locked output rows instead of hanging. Keyless
+  creates remain ordinary independent creates, not purportedly deduplicated.
+- Added metadata-only `GET /inspirations/save-requests/:requestId`, under the
+  existing profile read boundary. A 404 says no committed save was observed,
+  not that a still-running POST failed; 410 denotes deliberate removal.
+  Neither lookup nor replay creates generation work. The client preserves
+  save acknowledgments, failure codes, cancellation and explicit request IDs.
+  For a keyed, explicitly profiled ambiguous write it performs one lookup; a
+  confirmed existing record permits one same-identity POST to verify the
+  original input hash and read the current result. Unknown lookup, cancellation,
+  second network loss and removal do not cause an automatic new create. Inputs,
+  owner and key are frozen for that attempt, so mutating a caller's objects
+  cannot redirect recovery to another profile or payload. This is a bounded
+  API protocol, not a substitute for the browser's durable intent storage.
+- E2e1 checks: 18/18 save SQL cases pass, including upgrade, normalized/repeated
+  input, genuine distinct saves, original-result edits, deleted capture/answer,
+  profile/FK boundaries, erasure, full transaction rollback, a confirmed held
+  request lock, simultaneous independent connections and locked-result replay.
+  With 7 related suites, 91/91 SQL cases pass, including the actual fresh
+  migrator. API unit 671 passed / 3 paid-live benches skipped; web 412/412.
+  Both typechecks, web build, migration check and diff check pass; the generated
+  41-table snapshot has zero diff against the current schema. All mutations
+  used explicit disposable loopback databases/schemas. No hosted migration,
+  model call, data repair, push or deployment occurred.
+  The existing rendered processing flow also passes at both 1280×900 and
+  390×844 after the client changes; it still exercises keyless composer calls,
+  so it is regression evidence, not browser save-idempotency certification.
+- Next E2e2 is still required for the user-visible fix: persist the exact
+  pending capture/answer intent, UUID and owner BEFORE sending. Current Home
+  and ReflectionFlow calls still omit request IDs. Survive optimistic draft
+  clearing, reload, dialog exit, timeout, and account changes without choosing
+  a new key. Reconcile a saved result before editing/replacing an unresolved
+  intent; do not append a second orb, archive row or answer on replay. Preserve
+  a newer unsent draft separately, and keep a pending answer's original question
+  as well as its words. Sync current answers before requesting a follow-up if
+  another device has moved ahead. A removed result must not be recreated by an
+  automatic retry. Clear resolved pending metadata/drafts in a crash-safe order.
+  Verify the three-answer release journey and failure branches after this is
+  wired; attachment finalization remains G. The complete A–J/L1–L3 objective
+  remains unchanged. Deploy schema/API before enabling keyed browser behavior
+  and verify the actual hosted targets/protocol; no mixed-old-writer guarantee
+  or end-to-end browser duplicate protection is claimed by this increment.

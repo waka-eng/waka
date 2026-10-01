@@ -130,6 +130,7 @@ const READS: Probe[] = [
   { name: "open one inspiration", method: "GET", path: `/api/inspirations/${GHOST}` },
   { name: "read its reflections", method: "GET", path: `/api/inspirations/${GHOST}/reflections` },
   { name: "read source processing", method: "GET", path: `/api/inspirations/${GHOST}/processing` },
+  { name: "lookup saved request", method: "GET", path: `/api/inspirations/save-requests/${GHOST}` },
   { name: "list signals", method: "GET", path: "/api/signals" },
   { name: "open one signal", method: "GET", path: `/api/signals/${GHOST}` },
   { name: "read the top of mind", method: "GET", path: "/api/top-of-mind" },

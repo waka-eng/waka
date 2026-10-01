@@ -31,6 +31,7 @@ export * from "./schema-grants";
 export * from "./schema-cli-login-codes";
 export * from "./schema-inspirations";
 export * from "./schema-inspiration-processing";
+export * from "./schema-inspiration-save-requests";
 export * from "./schema-attachments";
 export * from "./schema-reflections";
 export * from "./schema-embeddings";

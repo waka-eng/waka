@@ -439,6 +439,16 @@ including after its job was cleaned up, while a changed pass binds a new read.
 Room jobs waiting for affirmations produce no publication receipt. These are
 backend facts for progress reporting, not extra public maturity labels.
 
+Authored save identity is separate again. Capture and answer POSTs may carry a
+UUID `Idempotency-Key`; source/answer rows, their numbered processing request,
+and `inspiration_save_requests` commit atomically. Replaying that identity with
+the same normalized input reads the current saved item instead of enqueueing
+again. A different input conflicts, and a deleted result stays deleted. The
+save acknowledgment (201 for new, 200 for replay) proves only that the words
+were accepted, not that any derived reading completed. The save-request lookup
+is metadata-only and never starts generation. A missing lookup can overlap an
+in-flight transaction and must not cause a client to invent another identity.
+
 `GET /api/inspirations/:id/processing` follows an authorized personal receipt
 to the newest request for current material, with separate derived/completed
 counters. A published result is hidden until derivation and its dependency

@@ -23,6 +23,8 @@ import type { AuthEnv } from "../lib/middleware.js";
 import { enqueueReflectionQuestion, reflectionQuestionJobKey, wakeCommittedBackgroundJobs } from "../lib/queue.js";
 import { validationDetails } from "../lib/validation.js";
 import { requestSignalDerivation } from "../lib/inspiration-derivation-requests.js";
+import { InspirationSaveError, inspirationSaveFailure, parseInspirationSaveRequestId, runInspirationSave } from '../lib/inspiration-save-requests.js';
+import { readSavedReflection } from './inspirations-save-requests.js';
 import {
   reflectionSelection,
   serializeReflection,
@@ -121,6 +123,7 @@ export function registerReflectionRoutes(
    * Adding one therefore asks for re-derivation, the same as editing the text.
    */
   routes.post("/:id/reflections", async (c) => {
+    c.header('Cache-Control', 'private, no-store');
     const idCheck = uuidSchema.safeParse(c.req.param("id"));
     if (!idCheck.success) {
       return c.json({ error: "Invalid inspiration id" }, 400);
@@ -157,41 +160,40 @@ export function registerReflectionRoutes(
     const target = await resolveTargetProfile(db, session, query.data.profile, "write");
     if (!target.ok) return c.json(target.body, target.status);
 
-    const [parent] = await db
-      .select({ id: inspirations.id })
-      .from(inspirations)
-      .where(
-        and(
-          eq(inspirations.id, idCheck.data),
-          eq(inspirations.profileId, target.profileId),
-        ),
-      )
-      .limit(1);
-
-    if (!parent) return c.json({ error: "Inspiration not found" }, 404);
-
-    const inserted = await db.transaction(async (tx) => {
-      const [row] = await tx
-      .insert(reflections)
-      .values({
+    try {
+      const saved = await runInspirationSave(db, {
         profileId: target.profileId,
-        inspirationId: parent.id,
-        question: parsed.data.question,
-        answer: parsed.data.answer ?? null,
-        skipped: parsed.data.skipped ?? false,
-      })
-      .returning(reflectionSelection);
-      if (!row) return undefined;
-      const processing = await requestSignalDerivation({ profileId: target.profileId, inspirationId: parent.id,
-        reason: "edited", changedSource: "reflection" }, tx);
-      return { ...row, processing: processing.receipt };
-    });
+        requestId: parseInspirationSaveRequestId(c.req.header('Idempotency-Key')),
+        operation: 'reflection',
+        material: { inspirationId: idCheck.data.toLowerCase(), question: parsed.data.question,
+          answer: parsed.data.answer ?? null, skipped: parsed.data.skipped ?? false },
+      }, async (tx) => {
+        const [parent] = await tx.select({ id: inspirations.id }).from(inspirations)
+          .where(and(eq(inspirations.id, idCheck.data), eq(inspirations.profileId, target.profileId))).limit(1);
+        if (!parent) throw new InspirationSaveError(404, 'inspiration_not_found', 'Inspiration not found');
+        const [row] = await tx.insert(reflections).values({
+          profileId: target.profileId,
+          inspirationId: parent.id,
+          question: parsed.data.question,
+          answer: parsed.data.answer ?? null,
+          skipped: parsed.data.skipped ?? false,
+        }).returning(reflectionSelection);
+        if (!row) throw new Error('Failed to create reflection');
+        const processing = await requestSignalDerivation({ profileId: target.profileId, inspirationId: parent.id,
+          reason: "edited", changedSource: "reflection" }, tx);
+        return { inspirationId: parent.id, reflectionId: row.id, processing: processing.receipt,
+          response: { reflection: serializeReflection(row), processing: processing.receipt } };
+      }, (tx, record) => readSavedReflection(tx, target.profileId, record));
 
-    if (!inserted) return c.json({ error: "Failed to create reflection" }, 500);
-
-    await wakeCommittedBackgroundJobs();
-
-    return c.json({ reflection: serializeReflection(inserted), processing: inserted.processing }, 201);
+      await wakeCommittedBackgroundJobs();
+      return c.json({ ...saved.response, ...(saved.saveRequest ? { saveRequest: saved.saveRequest } : {}) }, saved.replayed ? 200 : 201);
+    } catch (error) {
+      const failure = inspirationSaveFailure(error);
+      if (failure) return c.json({ error: failure.message, code: failure.code }, failure.status);
+      const code = (error as { cause?: { code?: string } }).cause?.code ?? (error as { code?: string }).code;
+      if (code === '23503') return c.json({ error: 'Inspiration not found' }, 404);
+      throw error;
+    }
   });
 
   /**

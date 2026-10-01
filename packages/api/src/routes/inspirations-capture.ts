@@ -32,6 +32,8 @@ import type { AuthenticatedSession } from "../lib/session.js";
 import { validationDetails } from "../lib/validation.js";
 import { requestSignalDerivation } from "../lib/inspiration-derivation-requests.js";
 import { wakeCommittedBackgroundJobs } from "../lib/queue.js";
+import { inspirationSaveFailure, parseInspirationSaveRequestId, runInspirationSave } from '../lib/inspiration-save-requests.js';
+import { readSavedInspiration } from './inspirations-save-requests.js';
 import {
   inspirationSelection,
   reflectionSelection,
@@ -60,16 +62,15 @@ export function sourceForCapture(
 /**
  * CAPTURING FOR SOMEONE IS NOT PUBLISHING FOR THEM.
  *
- * Agents legitimately hold "capture" on the human profile — relaying
- * something you said is the whole point of the tool. `visibility` is a
- * different permission wearing the same request: public means the text
+ * Cross-profile capture is now the human admin's act; agents cannot capture
+ * into the human's memory. `visibility` still needs its own conservative
+ * treatment for a cross-profile write: public means the text
  * enters the ground of every group that profile belongs to, attributed to
  * them, readable across an account boundary the canon says an inspiration
  * never crosses.
  *
- * An agent credential is reachable by prompt injection, so this was a
- * one-request path from "an agent read a poisoned page" to "a stranger's
- * sentence is published under your name in your rooms". Writing for
+ * Before the read-only agent boundary, this guarded the one-request path
+ * from poisoned context to publishing under someone else's name. Writing for
  * yourself is unchanged; writing for someone else falls back to the
  * column's default, which is private.
  *
@@ -99,6 +100,7 @@ export function registerCaptureRoutes(
   getDatabase: typeof getDb,
 ): void {
   routes.post("/", async (c) => {
+    c.header('Cache-Control', 'private, no-store');
     let rawBody: unknown;
     try {
       rawBody = await c.req.json();
@@ -151,9 +153,15 @@ export function registerCaptureRoutes(
 
     const now = new Date();
     const reflectionInputs = parsed.data.reflections ?? [];
+    const citedPrincipleIds = [...new Set((parsed.data.citedPrincipleIds ?? []).map((id) => id.toLowerCase()))].sort();
 
     const persistInspiration = () =>
-      db.transaction(async (tx) => {
+      runInspirationSave(db, {
+        profileId: target.profileId, requestId: parseInspirationSaveRequestId(c.req.header('Idempotency-Key')), operation: 'inspiration',
+        material: { text: parsed.data.text, kind: parsed.data.kind ?? null, source, visibility: visibility ?? 'private',
+          experience: parsed.data.experience ?? null, citedPrincipleIds,
+          reflections: reflectionInputs.map((reflection) => ({ question: reflection.question, answer: reflection.answer ?? null, skipped: reflection.skipped ?? false })) },
+      }, async (tx) => {
       /* THE NAMED GROUND, found or made in the same transaction as the
          memory that stands on it. Find-or-create by name because a name is
          how the keeper (usually an agent mid-task) refers to the stretch of
@@ -197,7 +205,6 @@ export function registerCaptureRoutes(
          invented id — or a real principle belonging to someone else — is
          refused by Postgres itself, and the p-id citations agents are
          instructed to make stop evaporating into their own transcripts. */
-      const citedPrincipleIds = parsed.data.citedPrincipleIds ?? [];
       if (citedPrincipleIds.length > 0) {
         await tx.insert(decisionPrincipleCitations).values(
           [...new Set(citedPrincipleIds)].map((principleId) => ({
@@ -229,13 +236,16 @@ export function registerCaptureRoutes(
 
         const processing = await requestSignalDerivation({ profileId: target.profileId, inspirationId: inserted.id,
           reason: "created", changedSource: "inspiration" }, tx);
-        return { inserted, insertedReflections, processing: processing.receipt };
-      });
+        return { inspirationId: inserted.id, reflectionId: null, processing: processing.receipt,
+          response: { inspiration: serializeInspirationDetail(inserted, { attachments: [], reflections: insertedReflections }), processing: processing.receipt } };
+      }, (tx, saved) => readSavedInspiration(tx, target.profileId, saved));
 
     let persisted: Awaited<ReturnType<typeof persistInspiration>>;
     try {
       persisted = await persistInspiration();
     } catch (err) {
+      const failure = inspirationSaveFailure(err);
+      if (failure) return c.json({ error: failure.message, code: failure.code }, failure.status);
       /* The composite FK doing its job: the cited id is not a principle of
          this profile. That is a caller mistake, not a server fault. Drizzle
          wraps the postgres error, so the code may sit one level down. */
@@ -253,15 +263,6 @@ export function registerCaptureRoutes(
 
     await wakeCommittedBackgroundJobs();
 
-    return c.json(
-      {
-        inspiration: serializeInspirationDetail(persisted.inserted, {
-          attachments: [],
-          reflections: persisted.insertedReflections,
-        }),
-        processing: persisted.processing,
-      },
-      201,
-    );
+    return c.json({ ...persisted.response, ...(persisted.saveRequest ? { saveRequest: persisted.saveRequest } : {}) }, persisted.replayed ? 200 : 201);
   });
 }

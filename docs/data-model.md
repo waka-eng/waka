@@ -198,6 +198,26 @@ agent's relayed excerpt, an agent's own observation.
   `inspiration_embeddings.input_scope` is part of the vector's identity with
   inspiration and model. Both scopes belong to the capture's owner. Room
   retrieval must never use a personal vector, including legacy vectors.
+- **Inspiration save requests** make authored capture/answer submissions
+  reconcilable after an ambiguous response. An optional UUID `Idempotency-Key`
+  identifies one intent within the target profile. `inspiration_save_requests`
+  has a composite `(profile_id, request_id)` primary key; it records the operation,
+  a normalized input hash, the created source/answer references and original
+  processing metadata in the same transaction as the authored rows and jobs.
+  It stores no duplicate words, attachment content, or response-body snapshots.
+  Reusing the key for the same operation/input returns the current owned item
+  without another write; changed input or operation is a conflict. Concurrent
+  submissions share a transaction-scoped request lock; an in-flight conflict
+  is retryable, never reported as committed. A missing lookup is not proof that
+  an earlier network request cannot still commit.
+  Live output links use tenant-bearing composite foreign keys. Deletion clears
+  those links and processing metadata before the parent is removed, retaining
+  the request/hash as a tombstone until profile erasure. A replay of a removed
+  item returns Gone rather than resurrecting it. Replays read current permitted
+  material, not stale words from the first response. Historical requests are not
+  backfilled or expired into reusable keys. Keyless clients retain the ordinary
+  non-idempotent create contract; the browser must preserve one key per pending
+  intent, not invent a new key on every retry.
 - **Inspiration material revisions** distinguish changes to one source from
   changes to a profile or an artifact. `inspiration_revisions` holds personal
   and public counters for that inspiration, advanced transactionally by source
@@ -604,6 +624,7 @@ words for the wrong layer. Disposition of every existing concept:
 | Route | Layer | Notes |
 |---|---|---|
 | `POST /api/inspirations`, `GET /api/inspirations` | L1 | Capture + private archive/recall (today's `GET /api/signals` archive behavior moves here), plus edit/delete. |
+| `GET /api/inspirations/save-requests/:requestId` | L1 | Read-only reconciliation of an optional `Idempotency-Key` used on capture/answer creation. Returns only committed identity/processing metadata; missing is not proof of failure, removed is Gone. |
 | `GET /api/inspirations/:id/processing`, `POST /:id/processing/retry` | L1–L3 | Personal material-to-reading progress and explicit failed-work recovery; same profile access boundary, no generation on GET. |
 | `GET /api/signals` | L2 | **Repurposed**: lists the acting profile's distilled signals (statement, confidence, evidence count, lock/share state). |
 | `GET /api/top-of-mind` | L3 | Returns the acting profile's single current artifact (+ version metadata). |

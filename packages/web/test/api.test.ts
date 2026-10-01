@@ -31,6 +31,7 @@ import {
   fetchCurrentViewer,
   fetchInspiration,
   fetchInspirationProcessing,
+  fetchInspirationSaveRequest,
   fetchInspirations,
   fetchPublicProfile,
   fetchSignal,
@@ -247,6 +248,143 @@ it('retries only the explicitly named saved source, not another capture', async 
   expect(fetch).toHaveBeenCalledExactlyOnceWith('/api/inspirations/inspiration-1/processing/retry?profile=profile-1', {
     method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, signal: controller.signal, body: JSON.stringify({ receiptId: 'receipt-1' }),
   });
+});
+
+it('sends a stable save identity and preserves replay metadata for an inspiration', async () => {
+  const requestId = '00000000-0000-4000-8000-000000000123';
+  const saveRequest = { requestId, replayed: true };
+  const controller = new AbortController();
+  stubFetch(Response.json({ inspiration, saveRequest }));
+  await expect(createInspiration({ text: 'A thought' }, { profile: 'profile-1', requestId, signal: controller.signal }))
+    .resolves.toMatchObject({ saveRequest });
+  expect(fetch).toHaveBeenCalledExactlyOnceWith('/api/inspirations?profile=profile-1', {
+    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestId },
+    signal: controller.signal, body: JSON.stringify({ text: 'A thought' }),
+  });
+});
+
+it('sends the answer intent unchanged on a replay, not a new identity for each call', async () => {
+  const requestId = '00000000-0000-4000-8000-000000000124';
+  const saveRequest = { requestId, replayed: true };
+  const options = { profile: 'profile-1', requestId };
+  stubFetch(Response.json({ reflection: inspiration.reflections[0], saveRequest }));
+  await expect(createReflection(inspiration.id, { question: 'Why?', answer: 'An answer' }, options)).resolves.toMatchObject({ saveRequest });
+  expect(fetch).toHaveBeenCalledWith('/api/inspirations/inspiration-1/reflections?profile=profile-1', {
+    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestId },
+    body: JSON.stringify({ question: 'Why?', answer: 'An answer' }),
+  });
+  stubFetch(Response.json({ reflection: inspiration.reflections[0], saveRequest }));
+  await createReflection(inspiration.id, { question: 'Why?', answer: 'An answer' }, options);
+  expect(vi.mocked(fetch).mock.calls[0]?.[1]?.headers).toMatchObject({ 'Idempotency-Key': requestId });
+});
+
+it('keeps the distinct failure code for an in-flight save instead of treating it as a content conflict', async () => {
+  stubFetch(Response.json({ error: 'Still saving', code: 'save_in_progress' }, { status: 409 }));
+  await expect(createInspiration({ text: 'A thought' })).rejects.toMatchObject({ status: 409, code: 'save_in_progress' });
+});
+
+it('looks up a save by identity without reposting authored words', async () => {
+  const requestId = '00000000-0000-4000-8000-000000000125';
+  const processing = { id: 'receipt', profileId: 'profile-1', inspirationId: inspiration.id, materialRevision: '1', jobId: 'job', requestVersion: '1' };
+  const saved = { requestId, operation: 'inspiration', inspirationId: inspiration.id, reflectionId: null, processing, createdAt: inspiration.createdAt };
+  const controller = new AbortController();
+  stubFetch(Response.json({ saveRequest: saved }));
+  await expect(fetchInspirationSaveRequest(requestId, { profile: 'profile-1' }, controller.signal)).resolves.toEqual(saved);
+  expect(fetch).toHaveBeenCalledExactlyOnceWith(`/api/inspirations/save-requests/${requestId}?profile=profile-1`, {
+    method: 'GET', credentials: 'include', headers: { Accept: 'application/json' }, signal: controller.signal,
+  });
+});
+
+it('refuses save lookup metadata from a different owner', async () => {
+  const requestId = '00000000-0000-4000-8000-000000000126';
+  stubFetch(Response.json({ saveRequest: { requestId, operation: 'inspiration', inspirationId: inspiration.id, reflectionId: null,
+    processing: { profileId: 'other-profile', inspirationId: inspiration.id } } }));
+  await expect(fetchInspirationSaveRequest(requestId, { profile: 'profile-1' })).rejects.toMatchObject({ message: 'Could not verify this save' });
+});
+
+it('preserves missing-versus-removed save lookup errors for reconciliation', async () => {
+  for (const [status, code] of [[404, 'save_not_found'], [410, 'saved_item_removed']] as const) {
+    stubFetch(Response.json({ error: 'Unavailable', code }, { status }));
+    await expect(fetchInspirationSaveRequest('a-request')).rejects.toMatchObject({ status, code });
+  }
+});
+
+it('does not turn an explicitly empty request identity into an unkeyed create', async () => {
+  stubFetch(Response.json({ error: 'Invalid key', code: 'invalid_save_request' }, { status: 400 }));
+  await expect(createInspiration({ text: 'A thought' }, { requestId: '' })).rejects.toMatchObject({ status: 400 });
+  expect(vi.mocked(fetch).mock.calls[0]?.[1]?.headers).toMatchObject({ 'Idempotency-Key': '' });
+});
+
+it('reconciles a lost response and confirms the same input against its committed identity', async () => {
+  const requestId = '00000000-0000-4000-8000-000000000127';
+  const processing = { id: 'receipt', profileId: 'profile-1', inspirationId: inspiration.id, materialRevision: '1', jobId: 'job', requestVersion: '1' };
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new TypeError('Response lost'))
+    .mockResolvedValueOnce(Response.json({ saveRequest: { requestId, operation: 'inspiration', inspirationId: inspiration.id, reflectionId: null, processing } }))
+    .mockResolvedValueOnce(Response.json({ inspiration, processing, saveRequest: { requestId, replayed: true } })));
+  await expect(createInspiration({ text: 'A thought' }, { profile: 'profile-1', requestId })).resolves.toMatchObject({ id: inspiration.id, saveRequest: { requestId, replayed: true } });
+  expect(fetch).toHaveBeenCalledTimes(3);
+  const calls = vi.mocked(fetch).mock.calls;
+  expect(calls[1]?.[1]?.method).toBe('GET');
+  expect(calls[1]?.[1]?.body).toBeUndefined();
+  expect(calls[2]).toEqual(calls[0]);
+});
+
+it('does not turn an unobserved in-flight save into another automatic POST', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new TypeError('Response lost'))
+    .mockResolvedValueOnce(Response.json({ error: 'No committed save found', code: 'save_not_found' }, { status: 404 })));
+  await expect(createInspiration({ text: 'A thought' }, { profile: 'profile-1', requestId: 'request' })).rejects.toMatchObject({ status: 0 });
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+it('does not call an unrelated payload saved merely because its key exists', async () => {
+  const requestId = '00000000-0000-4000-8000-000000000128';
+  const processing = { id: 'receipt', profileId: 'profile-1', inspirationId: inspiration.id, materialRevision: '1', jobId: 'job', requestVersion: '1' };
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new TypeError('Conflict response lost'))
+    .mockResolvedValueOnce(Response.json({ saveRequest: { requestId, operation: 'inspiration', inspirationId: inspiration.id, reflectionId: null, processing } }))
+    .mockResolvedValueOnce(Response.json({ error: 'Different content', code: 'save_request_conflict' }, { status: 409 })));
+  await expect(createInspiration({ text: 'Changed words under a reused identity' }, { profile: 'profile-1', requestId }))
+    .rejects.toMatchObject({ status: 409, code: 'save_request_conflict' });
+  expect(fetch).toHaveBeenCalledTimes(3);
+});
+
+it('stops reconciliation when the saved item was deliberately removed', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new TypeError('Response lost'))
+    .mockResolvedValueOnce(Response.json({ error: 'Removed', code: 'saved_item_removed' }, { status: 410 })));
+  await expect(createReflection(inspiration.id, { question: 'Why?', answer: 'An answer' }, { profile: 'profile-1', requestId: 'request' }))
+    .rejects.toMatchObject({ status: 410, code: 'saved_item_removed' });
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+it('does not turn cancellation into another request or recurse after a second lost response', async () => {
+  const controller = new AbortController(); controller.abort();
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Aborted')));
+  await expect(createInspiration({ text: 'A thought' }, { requestId: 'request', signal: controller.signal })).rejects.toMatchObject({ status: 0 });
+  expect(fetch).toHaveBeenCalledOnce();
+
+  const requestId = '00000000-0000-4000-8000-000000000129';
+  const processing = { profileId: 'profile-1', inspirationId: inspiration.id };
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new TypeError('Lost'))
+    .mockResolvedValueOnce(Response.json({ saveRequest: { requestId, operation: 'inspiration', inspirationId: inspiration.id, reflectionId: null, processing } }))
+    .mockRejectedValueOnce(new TypeError('Lost again')));
+  await expect(createInspiration({ text: 'A thought' }, { profile: 'profile-1', requestId })).rejects.toMatchObject({ status: 0 });
+  expect(fetch).toHaveBeenCalledTimes(3);
+});
+
+it('freezes the owner, identity and payload before waiting for a network response', async () => {
+  const requestId = '00000000-0000-4000-8000-000000000130';
+  const processing = { profileId: 'profile-1', inspirationId: inspiration.id };
+  const options = { profile: 'profile-1', requestId };
+  const input = { text: 'Original words', reflections: [{ question: 'Why?', answer: 'Original answer' }] };
+  vi.stubGlobal('fetch', vi.fn().mockImplementationOnce(async () => {
+    options.profile = 'another-profile'; options.requestId = 'another-key'; input.text = 'Later words'; input.reflections[0]!.answer = 'Later answer';
+    throw new TypeError('Response lost');
+  }).mockResolvedValueOnce(Response.json({ saveRequest: { requestId, operation: 'inspiration', inspirationId: inspiration.id, reflectionId: null, processing } }))
+    .mockResolvedValueOnce(Response.json({ inspiration, saveRequest: { requestId, replayed: true } })));
+  await expect(createInspiration(input, options)).resolves.toMatchObject({ saveRequest: { requestId, replayed: true } });
+  const calls = vi.mocked(fetch).mock.calls;
+  expect(calls[1]?.[0]).toBe(`/api/inspirations/save-requests/${requestId}?profile=profile-1`);
+  expect(calls[2]).toEqual(calls[0]);
+  expect(JSON.parse(String(calls[2]?.[1]?.body))).toEqual({ text: 'Original words', reflections: [{ question: 'Why?', answer: 'Original answer' }] });
 });
 
 afterEach(() => {

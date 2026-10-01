@@ -11,6 +11,7 @@
  *   DELETE /api/inspirations/:id/reflections/:reflectionId
  *   GET    /api/inspirations/:id/processing            saved material → reading
  *   POST   /api/inspirations/:id/processing/retry      recover failed work
+ *   GET    /api/inspirations/save-requests/:requestId  reconcile an authored save
  *
  * An inspiration is whatever arrived — pasted text, a link, an image, an
  * agent's relayed excerpt. It is editable and deletable, and it is never
@@ -56,6 +57,7 @@
  *   `inspirations-editing.ts`        PATCH /:id and DELETE /:id
  *   `inspirations-reflections.ts`    the three /:id/reflections routes
  *   `inspirations-processing.ts`     read-only progress and explicit recovery
+ *   `inspirations-save-requests.ts`  committed save lookup and current replay data
  *
  * The handler modules register onto the router built below rather than
  * returning sub-routers of their own. That is deliberate: `Hono.route()` has
@@ -74,6 +76,7 @@ import { registerEditingRoutes } from "./inspirations-editing.js";
 import { registerRecallRoutes } from "./inspirations-recall.js";
 import { registerReflectionRoutes } from "./inspirations-reflections.js";
 import { registerProcessingRoutes } from "./inspirations-processing.js";
+import { registerSaveRequestRoutes } from './inspirations-save-requests.js';
 
 export type { CreateInspirationInput } from "./inspirations-validation.js";
 
@@ -103,6 +106,7 @@ export function createInspirationsRoutes(
   registerEditingRoutes(routes, getDatabase);
   registerReflectionRoutes(routes, getDatabase);
   registerProcessingRoutes(routes, getDatabase);
+  registerSaveRequestRoutes(routes, getDatabase);
 
   return routes;
 }

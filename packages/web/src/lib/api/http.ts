@@ -48,16 +48,19 @@ export type ApiFieldErrors = Record<string, string[] | undefined>;
 export class ApiError extends Error {
   readonly status: number;
   readonly fieldErrors?: ApiFieldErrors;
+  readonly code?: string;
 
   constructor(input: {
     status: number;
     message: string;
     fieldErrors?: ApiFieldErrors;
+    code?: string;
   }) {
     super(input.message);
     this.name = "ApiError";
     this.status = input.status;
     this.fieldErrors = input.fieldErrors;
+    this.code = input.code;
   }
 }
 
@@ -134,12 +137,13 @@ export async function getJson<T>(
   }
 
   if (!res.ok) {
-    const errorBody = (body ?? {}) as { error?: string; details?: ApiFieldErrors };
+    const errorBody = (body ?? {}) as { error?: string; details?: ApiFieldErrors; code?: string };
     throw new ApiError({
       status: res.status,
       message:
         errorBody.error ?? `${fallbackMessage} (HTTP ${res.status}). Please try again.`,
       fieldErrors: errorBody.details,
+      code: typeof errorBody.code === 'string' ? errorBody.code : undefined,
     });
   }
 
@@ -151,8 +155,9 @@ export async function postJson<T>(
   payload: unknown,
   fallbackMessage: string,
   signal?: AbortSignal,
+  requestId?: string,
 ): Promise<T> {
-  return writeJson<T>("POST", path, payload, fallbackMessage, signal);
+  return writeJson<T>("POST", path, payload, fallbackMessage, signal, requestId);
 }
 
 export async function patchJson<T>(
@@ -169,6 +174,7 @@ export async function writeJson<T>(
   payload: unknown,
   fallbackMessage: string,
   signal?: AbortSignal,
+  requestId?: string,
 ): Promise<T> {
   /* THE ONE FETCH IN THIS FILE THAT WAS NOT WRAPPED.
      `getJson` and `requestVoid` each catch a dead connection and rethrow it as
@@ -193,7 +199,7 @@ export async function writeJson<T>(
       method,
       ...(signal ? { signal } : {}),
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(requestId !== undefined ? { 'Idempotency-Key': requestId } : {}) },
       body: JSON.stringify(payload),
     });
   } catch {
@@ -214,6 +220,7 @@ export async function writeJson<T>(
     const errorBody = (body ?? {}) as {
       error?: string;
       details?: ApiFieldErrors;
+      code?: string;
     };
     throw new ApiError({
       status: res.status,
@@ -221,6 +228,7 @@ export async function writeJson<T>(
         errorBody.error ??
         `${fallbackMessage} (HTTP ${res.status}). Please try again.`,
       fieldErrors: errorBody.details,
+      code: typeof errorBody.code === 'string' ? errorBody.code : undefined,
     });
   }
 
@@ -264,11 +272,12 @@ export async function requestVoid(
   } catch {
     // Non-JSON error body — fall back to the caller's message.
   }
-  const errorBody = (body ?? {}) as { error?: string; details?: ApiFieldErrors };
+  const errorBody = (body ?? {}) as { error?: string; details?: ApiFieldErrors; code?: string };
   throw new ApiError({
     status: res.status,
     message:
       errorBody.error ?? `${fallbackMessage} (HTTP ${res.status}). Please try again.`,
     fieldErrors: errorBody.details,
+    code: typeof errorBody.code === 'string' ? errorBody.code : undefined,
   });
 }
