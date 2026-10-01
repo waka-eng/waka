@@ -213,6 +213,19 @@ agent's relayed excerpt, an agent's own observation.
   Reprocessing unchanged material creates another receipt, not inherited success.
   Numbered reading requests and an artifact result explain the next stage.
   Source deletion removes this metadata too; no private text is copied into it.
+  `derived_at` is written only after a successful, current source pass, not
+  queue acceptance. Transient support failures and pending/failed enrichment
+  do not certify derivation. Changed standing binds an exact numbered reading
+  request; an unchanged pass retains earlier unfinished dependencies, recovering
+  failed/missing reads instead of silently dropping them. Genuine no-change
+  work without such a dependency may settle against the current artifact.
+  Publication records its artifact result in the same transaction. A result
+  arriving during extraction is retained, but `completed_at` waits for both
+  derivation and the required read while material/permission are current.
+  Superseded revisions, withdrawn room material and departed members cannot
+  gain a new completion. Completed receipts are historical facts, not promises
+  of perpetual support after later edits. Recovery can reuse an already committed
+  derivation/result without purchasing another extraction/synthesis.
 - **Signal input policy** records the derivation contract, not user approval.
   `signals.input_policy = group-public-v1` means the room signal was minted
   using the public projection, authorized current membership, and only
@@ -306,6 +319,10 @@ agent's relayed excerpt, an agent's own observation.
   Principle comparisons finish before the batch transaction starts, and a
   busy human-edited principle makes generation retry rather than wait back on
   the person's row. A human edit still owns its wording.
+  Worker-driven reading publication also commits its eligible principle request
+  in that transaction; failed handoff rolls back publication rather than leaving
+  the next layer unscheduled. This schedules principles, not certifies that they
+  have already been generated.
 - **Worker claims guard data writes, not only job settlement.** Capture-vector
   writes, applied support reviews, discovered evidence/signals, enrichment caches
   and pattern-comparison records check the claimed job inside their own write

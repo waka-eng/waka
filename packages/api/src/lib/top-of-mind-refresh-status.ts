@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { backgroundJobs } from "../db/index.js";
+import { backgroundJobs, type BackgroundJobResult } from "../db/index.js";
 import { getDb } from "./db.js";
 
 const resultSchema = z.object({
@@ -9,6 +9,11 @@ const resultSchema = z.object({
 }).refine((result) => result.topOfMindId === null
   ? result.outcome === "empty" && result.version === 0
   : result.version > 0);
+
+export function parseTopOfMindRefreshResult(value: unknown): BackgroundJobResult | null {
+  const parsed = resultSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
 
 /** Never expose provider errors/payloads or another profile's job. */
 export async function loadTopOfMindRefreshStatus(db: ReturnType<typeof getDb>, profileId: string, jobId: string, requestVersion?: string) {
@@ -20,8 +25,8 @@ export async function loadTopOfMindRefreshStatus(db: ReturnType<typeof getDb>, p
   if (!row) return null;
   const requested = requestVersion === undefined ? row.requestVersion : BigInt(requestVersion);
   if (requested < 1n || requested > row.requestVersion) return null;
-  const parsed = resultSchema.safeParse(row.result);
-  const result = row.status === "succeeded" && !row.rerun && row.completedVersion >= requested && parsed.success ? parsed.data : null;
+  const parsed = parseTopOfMindRefreshResult(row.result);
+  const result = row.status === "succeeded" && !row.rerun && row.completedVersion >= requested ? parsed : null;
   return {
     requestVersion: row.requestVersion.toString(), completedVersion: row.completedVersion.toString(),
     status: row.status === "succeeded" && !result ? "unknown" as const : row.status,

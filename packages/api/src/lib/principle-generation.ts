@@ -253,7 +253,7 @@ export interface PrincipleGenerationDependencies {
 }
 
 /** Room signals must pass the same current-member visibility gate as the wall. */
-export async function loadPrincipleMaterial(db: WakaDb, profileId: string) {
+export async function loadPrincipleMaterial(db: WakaDb | WakaTx, profileId: string) {
   const [profile] = await db.select({ groupId: profiles.groupId, preferredLocale: profiles.preferredLocale }).from(profiles)
     .where(eq(profiles.id, profileId)).limit(1);
   const rows = await db.select({ id: signals.id, statement: signals.statement,

@@ -423,11 +423,21 @@ citations against exactly that set. Neither is any use without the other.
 | Trigger | Condition |
 |---|---|
 | A derivation changes evidence | Only if it attached, minted, promoted, explicitly withdrew or restored support. Empty discovery with unchanged support requests no synthesis; explicit withdrawal can request one even with no new candidates. The job commits with the change. **[checked]** |
+| A required earlier read failed or disappeared | Processing recovery restores that outstanding dependency. This does not make every no-change capture buy another synthesis. |
 | A signal is edited or deleted | Always (the artifact may cite it) |
 | An inspiration is deleted | Always (its cascade may have retired signals) |
 | Feedback is given | Always (a verdict changes what synthesis should weigh) |
 | `POST /api/top-of-mind/refresh` | Manual, debounced |
 | The profile's language changes | Always (`PATCH /api/auth/me/preferences`) — the artifact must re-speak in the new language, not wait for an unrelated refresh |
+
+Source processing and job success are distinct. A pass records successful
+derivation against the exact source revision and claimed request; publication
+records the actual artifact in the same transaction as its processing receipt
+and eligible principle enqueue. A read finishing during extraction is retained
+without premature completion. The final no-change pass can use that result,
+including after its job was cleaned up, while a changed pass binds a new read.
+Room jobs waiting for affirmations produce no publication receipt. These are
+backend facts for progress reporting, not extra public maturity labels.
 
 Refreshes are debounced to one pending pass per profile, with the same
 trailing-edge `rerun_requested` semantics as derivation.

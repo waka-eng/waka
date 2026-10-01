@@ -63,6 +63,8 @@ import {
 import { assertMaterialCurrent, loadInspirationMaterial, relatedMaterialIdentity, resolveMaterialQuote } from "./inspiration-material.js";
 import { reviewSignalSupport } from "./signal-support-review.js";
 import { applySignalSupportReview } from "./signal-support-apply.js";
+import { bindInspirationReading, finishInspirationDerivation, isInspirationDerivationRecorded, readInspirationRevision,
+  type ClaimedDerivationRequest, type DerivationProcessingInput } from "./inspiration-processing.js";
 import { enqueueGroupTopOfMindRefresh, enqueueTopOfMindRefresh, wakeCommittedBackgroundJobs } from "./queue.js";
 import {
   getDefaultModelProvider,
@@ -128,6 +130,7 @@ export interface SignalDerivationDependencies {
   embeddingClient?: StatementEmbeddingClient;
   now?: Date;
   beforeCommit?: (tx: WakaTx) => Promise<void>;
+  processingRequest?: ClaimedDerivationRequest;
 }
 
 export interface SignalDerivationResult {
@@ -158,8 +161,6 @@ export async function deriveSignalsForInspiration(
 ): Promise<SignalDerivationResult> {
   const db = deps.db ?? getDb();
   const now = deps.now ?? new Date();
-  const provider = deps.modelProvider ?? (await getDefaultModelProvider());
-  const embeddingClient = deps.embeddingClient ?? new GeminiEmbeddingHttpClient();
 
   const [inspirationRow] = await db
     .select()
@@ -223,6 +224,38 @@ export async function deriveSignalsForInspiration(
     };
   }
 
+  const processingInput = (materialRevision: string | undefined): DerivationProcessingInput => {
+    if (!materialRevision || !deps.processingRequest) throw new Error("Source processing requires a material revision and claimed request");
+    return { profileId, ownerProfileId: inspirationRow.profileId, inspirationId: inspirationRow.id,
+      materialRevision, request: deps.processingRequest };
+  };
+  const requestReading = async (tx: WakaTx) => {
+    if (!isGroup) return enqueueTopOfMindRefresh(profileId, "signals_changed", tx);
+    const [destination] = await tx.select({ groupId: profiles.groupId }).from(profiles).where(eq(profiles.id, profileId)).limit(1);
+    if (!destination?.groupId) throw new Error("Derivation destination no longer names a group");
+    return enqueueGroupTopOfMindRefresh(inspirationRow.profileId, destination.groupId, "signals_changed", tx);
+  };
+  if (deps.processingRequest) {
+    const revision = await readInspirationRevision(db, inspirationRow.profileId, inspirationRow.id, isGroup ? "public" : "personal");
+    if (revision && await isInspirationDerivationRecorded(db, processingInput(revision.toString()))) {
+      const material = await loadInspirationMaterial(db, inspirationRow.profileId, inspirationRow.id, isGroup ? "public" : "personal");
+      if (!material || material.identity.revision !== revision.toString()) throw new Error("Source material changed before processing recovery");
+      await db.transaction(async (tx) => {
+        await acquireSignalDerivationLock(tx, profileId);
+        if (isGroup && membership) await assertGroupInputCurrent(tx, { mindProfileId: profileId, membershipId: membership.id,
+          inspiration: material.inspiration, attachments: material.attachmentRows.filter((row) => row.status === "ready" && row.text !== null)
+            .map(({ id, kind, text, hostname, name }) => ({ id, kind, text, hostname, name })), related: [] });
+        await assertMaterialCurrent(tx, material, []);
+        await deps.beforeCommit?.(tx);
+        await finishInspirationDerivation(tx, processingInput(revision.toString()), { complete: true, requestReading: () => requestReading(tx) });
+      });
+      await wakeCommittedBackgroundJobs();
+      return emptyResult("no_candidates");
+    }
+  }
+  const provider = deps.modelProvider ?? (await getDefaultModelProvider());
+  const embeddingClient = deps.embeddingClient ?? new GeminiEmbeddingHttpClient();
+
   // Existing support is its own question, before bounded discovery. Applying
   // it rechecks current inputs under locks and persists any reading request.
   // A later extraction failure cannot lose the committed correction.
@@ -232,7 +265,8 @@ export async function deriveSignalsForInspiration(
       provider, maxCalls: 1, reuseCurrentAssessments: true });
     if (review.status !== "current") throw new Error("Source material changed during support assessment");
     reviewedMaterialHash = review.material.hash;
-    const applied = review.calls > 0 ? await applySignalSupportReview(db, review, { beforeCommit: deps.beforeCommit }) : null;
+    const applied = review.calls > 0 ? await applySignalSupportReview(db, review, { beforeCommit: deps.beforeCommit,
+      onReadingRequested: deps.processingRequest ? (tx, job) => bindInspirationReading(tx, processingInput(review.material.revision), job) : undefined }) : null;
     supportReview = { checked: review.items.length, withdrawn: applied?.withdrawn.length ?? 0,
       restored: applied?.restored.length ?? 0, unresolved: review.items.filter((item) => item.verdict === "unresolved").length,
       retryable: review.items.some((item) => item.issue && ["provider_unavailable", "missing_verdict", "invalid_verdict", "budget_exhausted"].includes(item.issue)) };
@@ -372,10 +406,16 @@ export async function deriveSignalsForInspiration(
     await assertMaterialCurrent(tx, material, relatedInspirations);
     await deps.beforeCommit?.(tx);
   };
+  const canComplete = !supportReview?.retryable && !material.attachmentRows.some((row) => row.status !== "ready" && row.status !== "unavailable");
 
   if (statements.length === 0) {
     try {
-      await db.transaction(async (tx) => { await acquireSignalDerivationLock(tx, profileId); await validateSources(tx); });
+      await db.transaction(async (tx) => {
+        await acquireSignalDerivationLock(tx, profileId); await validateSources(tx);
+        if (deps.processingRequest) await finishInspirationDerivation(tx, processingInput(material.identity.revision), {
+          complete: canComplete, requestReading: () => requestReading(tx),
+        });
+      });
       await wakeCommittedBackgroundJobs();
       return emptyResult("no_candidates");
     } catch (error) {
@@ -413,15 +453,13 @@ export async function deriveSignalsForInspiration(
         material: material.identity,
         beforeWrites: () => validateSources(tx),
       });
+      let reading: Awaited<ReturnType<typeof requestReading>> | undefined;
       const changed = applied.matchedSignalIds.length > 0 ||
         applied.mintedSignalIds.length > 0 || applied.promotedSignalIds.length > 0;
-      if (changed) {
-        if (isGroup) {
-          const groupId = profileRows[0]?.groupId;
-          if (!groupId) throw new Error("Derivation destination no longer names a group");
-          await enqueueGroupTopOfMindRefresh(inspiration.profileId, groupId, "signals_changed", tx);
-        } else await enqueueTopOfMindRefresh(profileId, "signals_changed", tx);
-      }
+      if (changed) reading = await requestReading(tx);
+      if (deps.processingRequest) await finishInspirationDerivation(tx, processingInput(material.identity.revision), {
+        reading, complete: canComplete, requestReading: () => requestReading(tx),
+      });
       return applied;
     });
   } catch (error) {

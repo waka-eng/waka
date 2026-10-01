@@ -45,6 +45,7 @@ import {
   topOfMinds,
   type TopOfMindEntryType,
   type TopOfMindRevisionReason,
+  type BackgroundJobResult,
   feedback,
   signalContradictions,
 } from "../db/index.js";
@@ -187,6 +188,7 @@ export interface TopOfMindRefreshDependencies {
   now?: Date;
   /** Worker claim fence, inside the final transaction after input validation. */
   beforeCommit?: (tx: Pick<WakaTx, "select">) => Promise<void>;
+  onPublished?: (tx: WakaTx, publication: { profileId: string; result: BackgroundJobResult }) => Promise<void>;
 }
 
 export interface TopOfMindRefreshResult {
@@ -1083,6 +1085,12 @@ export async function refreshTopOfMindForProfile(
     // There is no artifact and nothing to make one from. Recording versions
     // of nothing would fill the chain with entries that say only that the
     // profile is new.
+    if (deps.onPublished) await db.transaction(async (tx) => {
+      await acquireTopOfMindArtifactLock(tx, { profileId: input.profileId });
+      await assertGenerationRevision(tx, revision);
+      await deps.beforeCommit?.(tx);
+      await deps.onPublished!(tx, { profileId: input.profileId, result: { kind: "top_of_mind", topOfMindId: null, version: 0, outcome: "empty" } });
+    });
     return {
       status: "nothing_to_synthesize",
       topOfMindId: null,
@@ -1193,6 +1201,9 @@ export async function refreshTopOfMindForProfile(
       reason,
       now,
     });
+
+    await deps.onPublished?.(tx, { profileId: input.profileId, result: { kind: "top_of_mind", topOfMindId: created.id,
+      version: created.version, outcome: entries.length === 0 ? "empty" : reason === "no_change" ? "unchanged" : "changed" } });
 
     return { created, reason, entryCount: entries.length };
   });
@@ -1789,6 +1800,12 @@ export async function refreshTopOfMindForGroup(
   const pending = await loadUnappliedProposals(db, input.groupId, liveBefore?.createdAt ?? null);
 
   if (shared.length === 0 && liveBefore === null && pending.length === 0) {
+    if (deps.onPublished) await db.transaction(async (tx) => {
+      await acquireTopOfMindArtifactLock(tx, { groupId: input.groupId });
+      await assertGenerationRevision(tx, revision);
+      await deps.beforeCommit?.(tx);
+      await deps.onPublished!(tx, { profileId: revision.profileId, result: { kind: "top_of_mind", topOfMindId: null, version: 0, outcome: "empty" } });
+    });
     return nothing;
   }
 
@@ -1944,6 +1961,9 @@ export async function refreshTopOfMindForGroup(
       ownerBySignalId,
       now,
     });
+
+    await deps.onPublished?.(tx, { profileId: revision.profileId, result: { kind: "top_of_mind", topOfMindId: created.id,
+      version: created.version, outcome: entries.length === 0 ? "empty" : reason === "no_change" ? "unchanged" : "changed" } });
 
     return { created, reason, entryCount: entries.length, applied: applied.applied };
   });

@@ -148,7 +148,7 @@ import {
 } from "../db/index.js";
 import { getDb } from "./db.js";
 import { getDefaultModelProvider } from "./model-provider.js";
-import { InspirationProcessingUnavailableError, recordInspirationProcessingRequest, type InspirationProcessingReceipt } from "./inspiration-processing.js";
+import { InspirationProcessingUnavailableError, recordInspirationProcessingRequest, recordInspirationReadingResult, type InspirationProcessingReceipt } from "./inspiration-processing.js";
 import {
   type AccountModelUsage,
   assessModelBudget,
@@ -167,6 +167,7 @@ import {
   refreshTopOfMindForGroup,
   refreshTopOfMindForProfile,
   ShiftFloorHeldError,
+  type TopOfMindRefreshDependencies,
 } from "./top-of-mind-synthesis.js";
 
 const DEFAULT_MAX_ATTEMPTS = 3;
@@ -400,16 +401,25 @@ export async function enqueueRefreshPrinciples(
   profileId: string,
   materialKey: string,
   retry = false,
+  transaction?: Pick<ReturnType<typeof getDb>, "select" | "execute">,
 ): Promise<EnqueueResult> {
+  const db = transaction ?? getDb();
   const key = `refresh_principles:${profileId}:${materialKey}`;
-  const [target] = await getDb().select({ groupId: profiles.groupId }).from(profiles)
+  const [target] = await db.select({ groupId: profiles.groupId }).from(profiles)
     .where(eq(profiles.id, profileId)).limit(1);
-  const [member] = target?.groupId ? await getDb().select({ profileId: groupMembers.profileId })
+  const [member] = target?.groupId ? await db.select({ profileId: groupMembers.profileId })
     .from(groupMembers).where(eq(groupMembers.groupId, target.groupId))
     .orderBy(asc(groupMembers.profileId)).limit(1) : [];
   const ownerProfileId = target?.groupId ? member?.profileId : profileId;
   if (!ownerProfileId) throw new Error("No current member can request room principles");
-  const rows = await getDb().execute(sql<{ id: string }>`
+  if (transaction) {
+    // A group publication may already hold membership rows. Never wait back
+    // on a billing profile being erased while that erase waits on membership.
+    const [owner] = await db.select({ id: profiles.id }).from(profiles)
+      .where(eq(profiles.id, ownerProfileId)).for("key share", { noWait: true });
+    if (!owner) throw new Error("Principle request owner is no longer available");
+  }
+  const rows = await db.execute(sql<{ id: string }>`
     INSERT INTO background_jobs (profile_id, type, payload, max_attempts, idempotency_key)
     VALUES (${ownerProfileId}::uuid, 'refresh_principles', ${JSON.stringify({ profileId })}::jsonb,
       ${DEFAULT_MAX_ATTEMPTS}, ${key})
@@ -422,12 +432,14 @@ export async function enqueueRefreshPrinciples(
     RETURNING id, request_version::text AS "requestVersion"
   `);
   const [changed] = rows as unknown as Array<{ id: string; requestVersion: string }>;
-  const [existing] = changed ? [changed] : await getDb().select({ id: backgroundJobs.id, requestVersion: backgroundJobs.requestVersion })
+  const [existing] = changed ? [changed] : await db.select({ id: backgroundJobs.id, requestVersion: backgroundJobs.requestVersion })
     .from(backgroundJobs).where(eq(backgroundJobs.idempotencyKey, key)).limit(1);
   if (!existing) throw new Error("Failed to enqueue principles");
   // Also wake an existing pending/stale job; claim-time locks bound retries.
-  if (shouldAutoDrainBackgroundJobs()) scheduleBackgroundJobDrain();
-  else await wakeBackgroundWorker();
+  if (!transaction) {
+    if (shouldAutoDrainBackgroundJobs()) scheduleBackgroundJobDrain();
+    else await wakeBackgroundWorker();
+  }
   return { jobId: existing.id, requestVersion: existing.requestVersion.toString(), created: Boolean(changed) };
 }
 
@@ -923,6 +935,10 @@ async function loadReflectionQuestionContext(db: Pick<ReturnType<typeof getDb>, 
 }
 
 export async function processBackgroundJob(job: BackgroundJob): Promise<BackgroundJobResult | void> {
+  const onReadingPublished: NonNullable<TopOfMindRefreshDependencies['onPublished']> = async (tx, publication) => {
+    await recordInspirationReadingResult(tx, { ...publication, jobId: job.id, requestVersion: job.requestVersion.toString() });
+    await (await import('./principle-status.js')).enqueuePrinciplesAfterReading(tx, publication.profileId);
+  };
   switch (job.type) {
     case "generate_reflection_question": {
       const payload = parseGenerateReflectionQuestionPayload(job.payload);
@@ -1000,6 +1016,7 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
       if (!source) return dropPoisonPayload(job);
       const result = await deriveSignalsForInspiration(payload, {
         beforeCommit: (tx) => assertBackgroundJobOwnership(tx, job, true),
+        processingRequest: { jobId: job.id, requestVersion: job.requestVersion.toString() },
       });
       if (result.supportReview?.retryable) {
         throw new Error("Existing support could not be fully assessed; retry current material");
@@ -1021,7 +1038,9 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
       const result = await refreshTopOfMindForProfile({
         profileId: job.profileId,
         reason: payload.reason,
-      }, { beforeCommit: (tx) => assertBackgroundJobOwnership(tx, job) });
+      }, { beforeCommit: (tx) => assertBackgroundJobOwnership(tx, job),
+        onPublished: onReadingPublished,
+      });
       console.log("[background-jobs] refreshed top of mind", {
         jobId: job.id,
         profileId: job.profileId,
@@ -1030,7 +1049,6 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
         reason: result.reason,
         entryCount: result.entryCount,
       });
-      await (await import("./principle-status.js")).requestPrincipleRefresh(getDb(), job.profileId);
       return {
         kind: "top_of_mind", topOfMindId: result.topOfMindId, version: result.version,
         outcome: result.entryCount === 0 ? "empty"
@@ -1045,10 +1063,9 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
       await refreshTopOfMindForGroup({
         groupId: payload.groupId,
         reason: payload.reason,
-      }, { beforeCommit: (tx) => assertBackgroundJobOwnership(tx, job) });
-      const [mind] = await getDb().select({ id: profiles.id }).from(profiles)
-        .where(and(eq(profiles.groupId, payload.groupId), eq(profiles.type, "group"))).limit(1);
-      if (mind) await (await import("./principle-status.js")).requestPrincipleRefresh(getDb(), mind.id);
+      }, { beforeCommit: (tx) => assertBackgroundJobOwnership(tx, job),
+        onPublished: onReadingPublished,
+      });
       return;
     }
 

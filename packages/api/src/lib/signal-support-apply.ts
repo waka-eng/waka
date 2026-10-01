@@ -8,7 +8,7 @@ import { GROUP_INPUT_POLICY } from "./group-inputs.js";
 import { hashEmbeddingInput } from "./inspiration-embeddings.js";
 import { loadInspirationMaterial } from "./inspiration-material.js";
 import { promoteIfDemonstrated, reconcilePrinciplesAfterSignalLoss } from "./principle-generation.js";
-import { enqueueGroupTopOfMindRefresh, enqueueTopOfMindRefresh } from "./queue.js";
+import { enqueueGroupTopOfMindRefresh, enqueueTopOfMindRefresh, type EnqueueResult } from "./queue.js";
 import { reconcileSignalsAfterEvidenceLoss, refreshSignalLifecycle } from "./signal-lifecycle.js";
 import { acquireSignalDerivationLock } from "./signal-match-or-mint.js";
 import { loadSupportClaims, SIGNAL_SUPPORT_REVIEW_POLICY, supportClaimsHash, supportReviewSources } from "./signal-support-review.js";
@@ -35,7 +35,7 @@ type WakaDb = ReturnType<typeof getDb>;
 type WakaTx = Parameters<Parameters<WakaDb["transaction"]>[0]>[0];
 
 export async function applySignalSupportReview(db: WakaDb, reportInput: unknown,
-  deps: { beforeCommit?: (tx: WakaTx) => Promise<void> } = {}) {
+  deps: { beforeCommit?: (tx: WakaTx) => Promise<void>; onReadingRequested?: (tx: WakaTx, job: EnqueueResult) => Promise<void> } = {}) {
   const report = reportSchema.parse(reportInput);
   const reportHash = hashEmbeddingInput(JSON.stringify(report));
   if (new Set(report.items.map((row) => row.signalId)).size !== report.items.length) throw new Error("Duplicate support review claims");
@@ -116,6 +116,7 @@ export async function applySignalSupportReview(db: WakaDb, reportInput: unknown,
     const job = !changed ? null : membership
       ? await enqueueGroupTopOfMindRefresh(report.ownerProfileId, membership.groupId, "signals_changed", tx)
       : await enqueueTopOfMindRefresh(report.profileId, "signals_changed", tx);
+    if (job) await deps.onReadingRequested?.(tx, job);
     return { alreadyApplied: false, withdrawn, restored, jobId: job?.jobId ?? null };
   });
 }

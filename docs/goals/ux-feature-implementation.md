@@ -1,6 +1,6 @@
 # Goal: implement the experience review
 
-Status: in flight — A/B, C input/output/cache, D1–D3d3 source/support/worker fences, E1 refresh and E2a–E2b numbered source/request receipts locally checked; worker-to-artifact completion, pending/statement support, legacy context, capture/reflection status and later slices remain open. Deployment-target verification, historical repair and full release verification remain open.
+Status: in flight — A/B, C input/output/cache, D1–D3d3 source/support/worker fences, E1 refresh and E2a–E2c source-to-reading backend receipts locally checked; scoped processing status/retry, capture/reflection UI, idempotent saves, pending/statement support, legacy context and later slices remain open. Deployment-target verification, historical repair and full release verification remain open.
 Created: 2026-10-01, on the owner's instruction to implement the full plan.
 Branch: `codex/ux-feature-implementation`.
 Baseline: `33e65a7` on `dev`.
@@ -30,7 +30,7 @@ experiments or revive superseded room goals.
 | C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | C1/C2/C3 code locally verified (51 SQL cases; full web 349/349). Read-only inventory completed across 5 rooms in the DB referenced by the local env files; hosted-stage mapping is not verified. Historical repair, deployment coordination and deployed verification remain pending. |
 | D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | D1–D3d3 provenance, automatic support checks, durable source handoffs, worker data-write fences and personal reading recovery locally verified. D3d3: 161 targeted SQL / 671 unit / 374 web. Pending/statement support, legacy personal context, complete downstream receipts, live semantic quality and historical repair remain open. |
 | E1 | F7/F8: authoritative poster and truthful manual refresh | Queue acceptance, changed/unchanged completion, failure and fresh displayed version verified | Implemented with job receipts, resumable profile-scoped polling, held-job manual upgrade and authoritative headline. Local checks pass (8 receipt SQL tests, 10 hook tests, full web 362/362); deployed verification remains open. |
-| E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | E2a–E2b queue versions, scoped material counters and atomic source/request bindings locally verified. Per-destination completion/artifact binding, ambiguous-save reconciliation and capture/reflection status UI remain pending. |
+| E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | E2a–E2c queue/material versions, source bindings, derivation/read completion and durable principle handoff locally verified (20 new completion SQL cases; 184 related SQL / 671 unit / 377 web). Scoped status/retry endpoints, ambiguous-save reconciliation and capture/reflection status UI remain pending. |
 | F | F11/F12: visible search and durable navigation | Results beyond initial archive, failure/no-match separation, stable IDs, deep links, Back/Forward and rename verified | Pending |
 | G | F13: capture attachments and recoverable failure | Paste/drop/select preview; saved text survives failure; retry attaches once; sharing destination clear | Pending |
 | H | F18: progressive initial load and bounded prefetch | Small/large archive baseline vs result, first useful view and card/search/deep-link integrity | Pending |
@@ -754,3 +754,48 @@ remain required; these increments are not completion of D or E2.
   preservation, one-line capture/reflection progress and ambiguous-save
   idempotency. None of those completion/UI gates is claimed by E2b; the new
   receipt completion fields deliberately remain unset until the chain is wired.
+- 2026-10-01, E2c baseline: 3/3 source-completion cases failed because no stage
+  wrote derivation/completion or carried a required prior read. Separately
+  reproduced the principle handoff gap: a deliberately refused principle enqueue
+  left the reading and source completion already published. That reproduction
+  used the actual old post-publication path, not a guessed failure condition.
+- Derivation now binds source receipts to support/discovery reading requests
+  inside those data transactions. Its successful final pass marks derivation;
+  genuine no-change work may settle without synthesis, but it retains an earlier
+  unfinished read. Failed/missing reads can be requested again. Recovery of a
+  committed derivation skips another extraction and does not duplicate its read.
+  Transient support failures or pending/failed attachment enrichment do not
+  mark source processing complete.
+- Personal/group publication records the first matching numbered artifact
+  result in the artifact transaction, including a valid empty read. Results
+  arriving during extraction survive failure/retry and finished-job cleanup,
+  without completing the source before derivation succeeds. A later required
+  read clears the earlier result. Current material, source scope and membership
+  gate completion; stale revisions and withdrawn/departed room sources do not
+  acquire new completion. Room waiting-for-affirmations is not publication.
+  Recorded results are parsed as metadata and checked against artifact ownership.
+- Eligible principle scheduling moved from the worker's post-commit tail into
+  publication. Eligibility is read once for this handoff, through the same
+  transaction, and no wake/model call occurs under that transaction. A failed
+  enqueue rolls back the reading and its receipts; retry commits all three.
+  Billing-profile locks are non-waiting for the transactional group handoff.
+  Broader account-erasure concurrency and manual-refresh recovery after a crash
+  between publication and job settlement still need release-level verification.
+- E2c verification: 20/20 real SQL completion cases pass, including current
+  publication, no-change, inherited/failed/missing dependencies, large-stage
+  failure/retry, early publication, cleaned-up jobs, malformed cached result,
+  newer requests, source races, empty-read lease loss, enrichment, room waiting,
+  privacy/leave and principle handoff rollback. With 11 related suites: 184/184
+  SQL cases. API unit 671 passed / 3 paid-live benches skipped; web 377/377.
+  API typecheck, migration/diff checks and 5/5 offline migration-integrity checks
+  pass. All DB writes were in explicit local disposable schemas; providers were
+  injected. No hosted changes, live model calls, push or deployment occurred.
+- E2d next: expose profile-scoped processing status and recovery. A response
+  must distinguish a specific receipt from the latest material/repeated request,
+  follow superseding material without claiming deleted words were read, hide a
+  partial publication until completion, and classify cadence, room participation,
+  enrichment and unknown/legacy work truthfully. Preserve receipts through client
+  API adapters and account-scoped storage, show one status line, and adopt ready
+  wording only on explicit action. Then implement request-identity reconciliation
+  for ambiguous source/answer saves and run the full release-1 journey. Do not
+  call E2 or the full goal complete based on these backend-only checks.
