@@ -30,7 +30,7 @@ Work happening now, or stopped mid-way with a recorded reason.
 
 | Goal | Status |
 | --- | --- |
-| [`ux-feature-implementation.md`](ux-feature-implementation.md) | In flight — interaction, ownership, room privacy and manual-refresh fixes locally verified; evidence reconciliation, remaining delivery slices and release verification open. |
+| [`ux-feature-implementation.md`](ux-feature-implementation.md) | In flight — interaction, ownership, room privacy, automatic evidence checks and durable learning requests locally verified; artifact fencing, completion UX, remaining slices and release verification open. |
 | [`everything-in-the-world.md`](everything-in-the-world.md) | Phase 2 passed (2026-08-23). Phase 3 next. |
 | [`every-workflow-works.md`](every-workflow-works.md) | Phase 2 passed (2026-08-22). Phase 3 next. |
 | [`the-legible-loop.md`](the-legible-loop.md) | In flight — Phases 1–5 passed; Phase 6 is next. |

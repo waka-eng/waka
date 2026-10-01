@@ -80,6 +80,7 @@ export async function applySignalSupportReview(db: ReturnType<typeof getDb>, rep
       // The positive decision must exist before restoring a link: the DB
       // guard prevents an older/unaware writer from undoing withdrawal.
       await tx.insert(signalSupportReviews).values({ reviewId: report.reviewId, reviewHash: reportHash,
+        policy: report.policy,
         profileId: report.profileId, ownerProfileId: report.ownerProfileId, inspirationId: report.inspirationId,
         signalId: item.signalId, statementHash: item.statementHash, material: material.identity,
         verdict: item.verdict, issue: item.issue ?? null, sourceIds: item.sourceIds });

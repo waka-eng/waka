@@ -1,10 +1,10 @@
-/** Read-only assessment; automatic withdrawal remains disabled.
+/** Read-only assessment, shared by automatic derivation and explicit review.
  * Reports contain identities/verdicts, never source text. A report is not a
  * write authorization: the explicit apply path rechecks under transaction locks.
  */
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, isNotNull, or, sql } from "drizzle-orm";
-import { signalEvidence, signals } from "../db/index.js";
+import { and, asc, desc, eq, isNotNull, or, sql } from "drizzle-orm";
+import { signalEvidence, signals, signalSupportReviews } from "../db/index.js";
 import { getDb } from "./db.js";
 import { hashEmbeddingInput } from "./inspiration-embeddings.js";
 import { loadInspirationMaterial, type InspirationMaterial } from "./inspiration-material.js";
@@ -118,6 +118,9 @@ export async function reviewSignalSupport(db: ReturnType<typeof getDb>, input: {
   deriveIntoProfileId?: string;
   provider: Pick<ModelProvider, "assessSignalSupport">;
   maxCalls: number;
+  /** Worker retries reuse checks only for identical material and words.
+   * Explicit/operator reviews default to a fresh independent check. */
+  reuseCurrentAssessments?: boolean;
 }) {
   const destination = input.deriveIntoProfileId ?? input.ownerProfileId;
   const isGroup = input.deriveIntoProfileId !== undefined;
@@ -132,8 +135,25 @@ export async function reviewSignalSupport(db: ReturnType<typeof getDb>, input: {
   // Old room text itself can contain private material. Never feed it to a
   // new public assessment merely because its remaining inspirations are public.
   const claims = allClaims.filter((row) => !isGroup || row.inputPolicy === GROUP_INPUT_POLICY);
+  const previous = input.reuseCurrentAssessments ? await db.selectDistinctOn([signalSupportReviews.signalId], {
+    signalId: signalSupportReviews.signalId, statementHash: signalSupportReviews.statementHash,
+    material: signalSupportReviews.material, verdict: signalSupportReviews.verdict,
+    policy: signalSupportReviews.policy,
+    sourceIds: signalSupportReviews.sourceIds, issue: signalSupportReviews.issue,
+  }).from(signalSupportReviews).where(and(eq(signalSupportReviews.profileId, destination),
+    eq(signalSupportReviews.ownerProfileId, input.ownerProfileId), eq(signalSupportReviews.inspirationId, input.inspirationId)))
+    .orderBy(asc(signalSupportReviews.signalId), desc(signalSupportReviews.createdAt), desc(signalSupportReviews.reviewId)) : [];
+  const reused = new Map<string, SignalSupportReviewItem>();
+  for (const claim of claims) {
+    const prior = previous.find((row) => row.signalId === claim.signalId);
+    if (prior && prior.policy === SIGNAL_SUPPORT_REVIEW_POLICY && prior.material?.hash === material.identity.hash &&
+      prior.statementHash === hashEmbeddingInput(claim.statement) && prior.issue === null) {
+      reused.set(claim.signalId, { signalId: claim.signalId, statementHash: prior.statementHash,
+        verdict: prior.verdict, sourceIds: prior.sourceIds });
+    }
+  }
   const assessed = await assessExistingClaims({ material,
-    claims: claims.map(({ signalId, statement }) => ({ signalId, statement })),
+    claims: claims.filter((row) => !reused.has(row.signalId)).map(({ signalId, statement }) => ({ signalId, statement })),
     provider: input.provider, maxCalls: input.maxCalls });
   const currentMaterial = await loadMaterial();
   const currentClaims = await loadClaims();
@@ -153,7 +173,8 @@ export async function reviewSignalSupport(db: ReturnType<typeof getDb>, input: {
     material: material.identity,
     restrictedClaimCount: allClaims.length - claims.length,
     calls: assessed.calls,
-    items: assessed.items.map((item): SignalSupportReviewItem => current ? item : {
+    items: claims.map((claim) => reused.get(claim.signalId) ?? assessed.items.find((item) => item.signalId === claim.signalId)!)
+      .map((item): SignalSupportReviewItem => current ? item : {
       ...item, verdict: "unresolved", sourceIds: [], issue: "inputs_changed",
     }),
   };

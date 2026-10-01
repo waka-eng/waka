@@ -13,6 +13,8 @@ export const signalSupportReviews = pgTable("signal_support_reviews", {
   ownerProfileId: uuid("owner_profile_id").notNull(),
   inspirationId: uuid("inspiration_id").notNull(),
   reviewHash: text("review_hash").notNull(),
+  /** Null legacy decisions are not reusable by a newer assessment policy. */
+  policy: text("policy"),
   statementHash: text("statement_hash").notNull(),
   material: jsonb("material").$type<InspirationMaterialIdentity>().notNull(),
   verdict: text("verdict").$type<"supported" | "unsupported" | "unresolved">().notNull(),

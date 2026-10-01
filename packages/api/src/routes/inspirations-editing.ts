@@ -21,7 +21,7 @@ import {
 } from "@aws-sdk/client-s3";
 
 import { makeAttachmentsS3Client } from "../lib/s3-client.js";
-import { and, asc, eq, isNotNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { Hono } from "hono";
 
 import {
@@ -29,19 +29,22 @@ import {
   inspirations,
   reflections,
   signalEvidence,
+  signals,
+  profiles,
+  backgroundJobs,
   type Inspiration,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import { reconcilePrinciplesAfterSignalLoss } from "../lib/principle-generation.js";
 import type { AuthEnv } from "../lib/middleware.js";
-import { enqueueTopOfMindRefresh } from "../lib/queue.js";
+import { enqueueTopOfMindRefresh, enqueueGroupTopOfMindRefresh, wakeCommittedBackgroundJobs } from "../lib/queue.js";
 import {
   acquireSignalDerivationLock,
   reconcileSignalsAfterEvidenceLoss,
 } from "../lib/signal-derivation.js";
 import { validationDetails } from "../lib/validation.js";
 import { attachmentSelection, serializeAttachment } from "./attachments.js";
-import { requestSignalDerivation } from "./inspirations-derivation.js";
+import { requestSignalDerivation } from "../lib/inspiration-derivation-requests.js";
 import {
   inspirationSelection,
   reflectionSelection,
@@ -186,7 +189,11 @@ export function registerEditingRoutes(
     // One statement carrying the tenant predicate: a capture belonging to
     // another profile matches nothing and comes back as absent, never as
     // forbidden, so this cannot be used to enumerate ids.
-    const [updated] = await db
+    const updated = await db.transaction(async (tx) => {
+      const [previous] = await tx.select({ visibility: inspirations.visibility }).from(inspirations)
+        .where(and(eq(inspirations.id, idCheck.data), eq(inspirations.profileId, target.profileId))).for("update");
+      if (!previous) return undefined;
+      const [row] = await tx
       .update(inspirations)
       .set(patch)
       .where(
@@ -196,15 +203,14 @@ export function registerEditingRoutes(
         ),
       )
       .returning(inspirationSelection);
+      if (row) await requestSignalDerivation({ profileId: target.profileId, inspirationId: row.id,
+        reason: "edited", changedSource: "inspiration", previousVisibility: previous.visibility }, tx);
+      return row;
+    });
 
     if (!updated) return c.json({ error: "Inspiration not found" }, 404);
 
-    await requestSignalDerivation({
-      profileId: target.profileId,
-      inspirationId: updated.id,
-      reason: "edited",
-      changedSource: "inspiration",
-    });
+    await wakeCommittedBackgroundJobs();
 
     const [attachmentRows, reflectionRows] = await Promise.all([
       db
@@ -281,27 +287,26 @@ export function registerEditingRoutes(
         ),
       );
 
-    // Likewise: the evidence rows naming this capture are about to cascade
-    // away, and afterwards there is no join left to find the signals that
-    // rested on it. Collect, delete, and reconcile run in one transaction
-    // that holds the profile's derivation lock, so a derivation for this same
-    // capture cannot commit new evidence between the collect and the delete —
-    // which would let the FK cascade drop a signal's only support while
-    // reconcile, working from the pre-delete id list, never learns to retire
-    // it. A ghost pattern with zero evidence is exactly the state the cascade
-    // rule forbids.
+    // Lock the source before collecting every destination's witnesses.
+    // No derivation can add a new source FK after this collection. Lock the
+    // affected signal rows too, preserving edits made before this transaction.
     const deleted = await db.transaction(async (tx) => {
       await acquireSignalDerivationLock(tx, target.profileId);
+      const [parent] = await tx.select({ id: inspirations.id }).from(inspirations)
+        .where(and(eq(inspirations.id, idCheck.data), eq(inspirations.profileId, target.profileId))).for("update");
+      if (!parent) return [];
 
       const citingRows = await tx
-        .selectDistinct({ signalId: signalEvidence.signalId })
+        .selectDistinct({ signalId: signalEvidence.signalId, profileId: signalEvidence.profileId })
         .from(signalEvidence)
         .where(
           and(
             eq(signalEvidence.inspirationId, idCheck.data),
-            eq(signalEvidence.profileId, target.profileId),
+            eq(signalEvidence.ownerProfileId, target.profileId),
           ),
         );
+      if (citingRows.length) await tx.select({ id: signals.id }).from(signals)
+        .where(inArray(signals.id, citingRows.map((row) => row.signalId))).orderBy(asc(signals.id)).for("update");
 
       const removed = await tx
         .delete(inspirations)
@@ -315,21 +320,19 @@ export function registerEditingRoutes(
 
       if (removed.length === 0) return removed;
 
-      await reconcileSignalsAfterEvidenceLoss(tx, {
-        profileId: target.profileId,
-        signalIds: citingRows.map((row) => row.signalId),
-      });
-      /* Layer 4 follows layer 2 down. A principle stands on signals, so a
-         deletion that costs a signal its support must reach the principles
-         citing it in the SAME transaction — otherwise a principle keeps
-         asserting something whose evidence has just been removed. This call
-         lived in the monolithic inspirations.ts on `dev`; it is carried here
-         because that file became a registrar and this is where its delete
-         path went. */
-      await reconcilePrinciplesAfterSignalLoss(tx, {
-        profileId: target.profileId,
-        signalIds: citingRows.map((row) => row.signalId),
-      });
+      await tx.delete(backgroundJobs).where(and(eq(backgroundJobs.profileId, target.profileId),
+        inArray(backgroundJobs.type, ["derive_signals", "enrich_attachment", "generate_reflection_question"]),
+        sql`${backgroundJobs.payload}->>'inspirationId' = ${idCheck.data}`));
+      for (const profileId of [...new Set([target.profileId, ...citingRows.map((row) => row.profileId)])].sort()) {
+        const signalIds = citingRows.filter((row) => row.profileId === profileId).map((row) => row.signalId);
+        await reconcileSignalsAfterEvidenceLoss(tx, { profileId, signalIds });
+        await reconcilePrinciplesAfterSignalLoss(tx, { profileId, signalIds });
+        if (profileId === target.profileId) await enqueueTopOfMindRefresh(profileId, "signals_changed", tx);
+        else {
+          const [destination] = await tx.select({ groupId: profiles.groupId }).from(profiles).where(eq(profiles.id, profileId));
+          if (destination?.groupId) await enqueueGroupTopOfMindRefresh(target.profileId, destination.groupId, "signals_changed", tx);
+        }
+      }
       return removed;
     });
 
@@ -337,6 +340,7 @@ export function registerEditingRoutes(
       return c.json({ error: "Inspiration not found" }, 404);
     }
 
+    await wakeCommittedBackgroundJobs();
     await sweepAttachmentObjects(
       s3KeyRows
         .map((row) => row.s3Key)
@@ -344,17 +348,6 @@ export function registerEditingRoutes(
       idCheck.data,
     );
 
-    // The reconcile above may have retired signals the live artifact cites,
-    // so re-synthesise it. Best-effort: the delete has committed, and a
-    // failed enqueue means a stale board next refresh, not a lost delete.
-    void enqueueTopOfMindRefresh(target.profileId, "signals_changed").catch(
-      (err: unknown) => {
-        console.warn("[inspirations] refresh enqueue after delete failed", {
-          profileId: target.profileId,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      },
-    );
 
     return c.json({ id: deleted[0]!.id }, 200);
   });

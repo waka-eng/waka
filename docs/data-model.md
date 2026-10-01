@@ -243,9 +243,13 @@ agent's relayed excerpt, an agent's own observation.
   cannot supply evidence for the source being checked. Reports retain hashes,
   IDs and verdicts, not answer copies or generated explanations. Stale reports
   resolve nothing and no report alone authorizes a write. Automatic support
-  mutation during derivation is not yet enabled. An explicitly applied review
-  must revalidate material, statements, membership and prior assessments under
-  transaction locks. `signal_support_reviews` retains metadata-only decisions,
+  assessment now runs before bounded discovery during derivation, with one
+  bounded support call per attempt and reuse only for identical material,
+  statement and `signal_support_reviews.policy`. A genuine unresolved answer
+  remains distinct from an unavailable or malformed response; the latter asks
+  the worker to retry. Explicit operator reviews can force a fresh assessment.
+  Applying any review must revalidate material, statements, membership and
+  prior assessments under transaction locks. `signal_support_reviews` retains metadata-only decisions,
   including unresolved checks, never withdrawn quotes or answer snapshots.
   Only explicit unsupported decisions remove a current `signal_evidence` link;
   supported decisions may restore it from current material. Discovery omissions
@@ -254,6 +258,18 @@ agent's relayed excerpt, an agent's own observation.
   dismissal or a merge (never reversed by a support check). Repeated application
   of the same review is a no-op. Standing reconciliation and the downstream
   reading request commit with the evidence change, not as a best-effort callback.
+- **Source writes durably request learning.** Capture, inspiration edit,
+  reflection save/removal and attachment finalization commit their queue rows
+  in the source transaction. Enrichment rechecks the attachment resource after
+  fetching and commits its cache and personal/public-only fan-out together.
+  Discovery commits its reading request with its evidence changes. Worker wakes
+  happen after commit and may fail without losing the saved work. Creation and
+  edits share one source/destination job key; a newer request survives even an
+  exhausted older attempt. Deletion locks the source, reconciles all citing
+  destinations, cancels obsolete source jobs and persists reading requests in
+  one transaction. None of this makes a held or unfinished reading complete;
+  source-to-artifact completion receipts and full downstream fences remain
+  separate requirements.
 
 ## Experience (layer-1 grouping)
 

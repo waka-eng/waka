@@ -1,6 +1,6 @@
 # Goal: implement the experience review
 
-Status: in flight — A/B, C input/output/cache, D1 source provenance, D2 explicit review/application and E1 manual-refresh fixes locally checked; automatic D reconciliation, D3/E2 and later delivery slices remain open. Deployment-target verification, historical repair and full release verification remain open.
+Status: in flight — A/B, C input/output/cache, D1/D2 and D3a automatic support/source handoffs, plus E1 manual refresh locally checked; artifact/statement fencing, E2 and later delivery slices remain open. Deployment-target verification, historical repair and full release verification remain open.
 Created: 2026-10-01, on the owner's instruction to implement the full plan.
 Branch: `codex/ux-feature-implementation`.
 Baseline: `33e65a7` on `dev`.
@@ -28,7 +28,7 @@ experiments or revive superseded room goals.
 | A | F5/F6/F10: input, overlay scrolling/focus, readable active controls | Reproduce slash/wheel defects; verify typing, caret, Escape/Tab, wheel/touch and contrast in actual affected flows; web checks | Implemented; 5 original failures now pass, 325 web tests pass. Desktop fixture verified. Mobile touch/200% zoom and deployed verification remain open. |
 | B | F3/F4: edited principle preservation, truthful support, account-scoped drafts/preferences and cancellation | Isolated SQL preservation tests and two-account browser/state tests; API/web checks | B1: 6 SQL / 653 unit tests pass after 3 reproduced failures. B2: 4 failures reproduced, then two-account draft and stale-response checks pass; full web suite 331/331. Deployed/account-switch browser verification remains open. |
 | C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | C1/C2/C3 code locally verified (51 SQL cases; full web 349/349). Read-only inventory completed across 5 rooms in the DB referenced by the local env files; hosted-stage mapping is not verified. Historical repair, deployment coordination and deployed verification remain pending. |
-| D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | D1 source identity/quote retention verified. D2a/b explicit assessment and reversible application verified (30 support SQL cases; 104 related SQL / 671 unit / 366 web pass). Automatic reconciliation, current-artifact validity, full downstream fencing, source-save handoff and historical repair remain open. |
+| D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | D1–D3a source provenance, automatic support checks and transactional handoffs locally verified (113 SQL / 671 unit / 366 web pass). Current-artifact validity, statement-change propagation, full downstream fencing, live semantic quality and historical repair remain open. |
 | E1 | F7/F8: authoritative poster and truthful manual refresh | Queue acceptance, changed/unchanged completion, failure and fresh displayed version verified | Implemented with job receipts, resumable profile-scoped polling, held-job manual upgrade and authoritative headline. Local checks pass (8 receipt SQL tests, 10 hook tests, full web 362/362); deployed verification remains open. |
 | E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | Pending |
 | F | F11/F12: visible search and durable navigation | Results beyond initial archive, failure/no-match separation, stable IDs, deep links, Back/Forward and rename verified | Pending |
@@ -376,3 +376,56 @@ Keep code, deployment, historical repair, and user validation evidence distinct.
   attribution in the UI, and recovery/regeneration of unedited machine-derived
   dependents remain open. The explicit apply tool is not a substitute for that
   automatic product loop or for the full A–J/L1–L3 completion requirements.
+- 2026-10-01, D3a baseline: reproduced 4/4 route failures when queue insertion
+  was rejected: capture, edit, answer save and answer removal still committed
+  and returned 200/201. Reproduced 2/2 automatic-support gaps: empty discovery
+  left explicitly unsupported evidence standing and new material could not
+  restore its retired claim. Also reproduced 1/1 queue-tail failure: an older
+  exhausted attempt marked a job failed with `rerun_requested = true`, stranding
+  a newer committed source edit. These seven reproduced failures now pass.
+  The suspected manual-reread/daily-hold race already behaved correctly; its
+  passing regression was retained without changing that behavior.
+- D3a implementation: normal derivation assesses existing/withdrawn links before
+  bounded discovery, with at most one 12-claim support call per attempt. Stable
+  decisions are reused only for identical source material, wording and policy;
+  migration 0037 stamps that policy explicitly, and legacy unstamped checks
+  are not reused. Genuine uncertainty preserves support; unavailable, malformed,
+  missing or budget-incomplete assessments request worker retry. Changed source
+  material invalidates the pass. Explicit operator review still forces a fresh
+  check, including a mistaken negative assessment on unchanged material.
+- Capture/edit, reflection save/removal, attachment finalization, enrichment
+  cache updates and discovery now persist their next jobs transactionally.
+  Enrichment rechecks the fetched resource after the network call. Public work
+  fans out using current ownership/visibility; private answers never do. A
+  public-to-private change queues room rereading rather than private derivation.
+  Source deletion locks the parent and affected signals, reconciles every cited
+  destination, cancels obsolete source jobs and persists reading requests.
+  The shared source-request helper moved from routes to
+  `lib/inspiration-derivation-requests.ts`; it no longer swallows enqueue errors.
+  Worker wake-ups remain post-commit and recoverable.
+- Creation and edits now share one source/destination key. A newer request
+  arriving during a failed older attempt returns to pending with a fresh retry
+  allowance rather than inheriting that attempt's terminal failure. Discovery's
+  reading request moved into its write transaction; the documentation drift
+  gate now checks the authoritative writer plus the explicit support writer.
+  Real SQL cases verify that empty discovery with unchanged support creates no
+  reading job, while actual withdrawal can create one without new candidates.
+- D3a verification: 113/113 SQL tests across 10 suites pass, including 14
+  source-job durability tests and 9 automatic-support tests. Those cover partial
+  room-fan-out rollback, enrichment/reading handoff rollback, fetched-resource
+  races, same-input caching and policy changes, failure vs genuine uncertainty,
+  room privacy, deletion across destinations, old-job settlement and recovery.
+  API unit suite 671 passed / 3 paid-live benches skipped; web 366/366.
+  API/web/admin typechecks, web build, migration and diff checks pass. All SQL
+  used explicit loopback `waka_agent_test` isolated schemas. No live model
+  calls, hosted migrations/repair, push or deployment occurred.
+- D still has release-blocking work. Current generated readings must stop
+  claiming withdrawn support while replacement is pending; human-edited entries
+  must remain with truthful standing. Human/machine statement changes need
+  source rechecks and all synthesis/principle commits need source/statement
+  fences. Exact restored-support attribution and recovery of machine-derived
+  dependents remain open, as do live semantic-quality checks before rollout.
+  E2 must carry source revision and artifact completion through the actual UI,
+  including ambiguous saves and repeated requests. Coordinate older workers
+  and legacy reason-keyed jobs at cutover; the new key does not establish that
+  an already-running old worker is safe. A–J/L1–L3 scope is unchanged.

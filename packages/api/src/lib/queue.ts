@@ -452,23 +452,21 @@ export async function enqueueEnrichAttachment(
   profileId: string,
   attachmentId: string,
   inspirationId: string,
+  transaction?: Pick<ReturnType<typeof getDb>, "execute">,
 ): Promise<EnqueueResult> {
   return enqueueKeyedJob({
     profileId,
     type: "enrich_attachment",
     payload: { attachmentId, inspirationId },
     idempotencyKey: `enrich_attachment:${attachmentId}`,
-  });
+  }, transaction);
 }
 
 /**
  * Distill one capture into signals.
  *
- * The reason is part of the key: a re-derivation after an edit is genuinely
- * different work from the original pass, and collapsing the two would mean an
- * edited capture never gets re-read. Editing the same capture again re-arms
- * the row rather than colliding with it — see the conflict clause above; the
- * cascade rule in the data model requires every edit to re-derive.
+ * One live request per source/destination. A change arriving during work sets
+ * rerun_requested, so creation and edits can coalesce without losing the tail.
  */
 export async function enqueueDeriveSignals(
   profileId: string,
@@ -478,6 +476,7 @@ export async function enqueueDeriveSignals(
       room's mind; part of the key, or the personal pass and every room's
       pass over one capture would collapse into whichever enqueued first */
   deriveIntoProfileId?: string,
+  transaction?: Pick<ReturnType<typeof getDb>, "execute">,
 ): Promise<EnqueueResult> {
   return enqueueKeyedJob({
     profileId,
@@ -486,9 +485,9 @@ export async function enqueueDeriveSignals(
       ? { inspirationId, reason, deriveIntoProfileId }
       : { inspirationId, reason },
     idempotencyKey: deriveIntoProfileId
-      ? `derive_signals:${inspirationId}:${reason}:${deriveIntoProfileId}`
-      : `derive_signals:${inspirationId}:${reason}`,
-  });
+      ? `derive_signals:${inspirationId}:${deriveIntoProfileId}`
+      : `derive_signals:${inspirationId}`,
+  }, transaction);
 }
 
 /**
@@ -626,6 +625,13 @@ function shouldAutoDrainBackgroundJobs(): boolean {
   if (process.env.WAKA_BACKGROUND_JOB_AUTODRAIN === "1") return true;
   if (process.env.WAKA_BACKGROUND_JOB_AUTODRAIN === "0") return false;
   return process.env.NODE_ENV !== "test" && !process.env.AWS_LAMBDA_FUNCTION_NAME;
+}
+
+/** Call only after the data/job transaction commits. Wake failure cannot
+ * turn a successful save into a retry; the durable job remains recoverable. */
+export async function wakeCommittedBackgroundJobs(): Promise<void> {
+  if (shouldAutoDrainBackgroundJobs()) scheduleBackgroundJobDrain();
+  else await wakeBackgroundWorker();
 }
 
 /**
@@ -887,9 +893,9 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
 
       const enrichment = await enrichAttachment(payload.attachmentId);
 
-      // `enrichAttachment` never throws, because a login wall or a page of
-      // pure JavaScript is an ordinary outcome of saving things from the
-      // internet. Exactly one of its verdicts is worth another attempt:
+      // A login wall or an unreadable page is an ordinary outcome. Source
+      // races and failed transactional handoffs throw for retry. Among
+      // ordinary fetch verdicts, one is worth another attempt:
       // `failed` means the page was never reached. Throwing here is what
       // hands that case to the backoff already built into the drain — without
       // it, one timed-out fetch leaves the attachment unenriched forever and
@@ -900,13 +906,8 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
         );
       }
 
-      // `unavailable` and `missing` are settled answers — the page has nothing
-      // to give, or the attachment is gone. Both are terminal, and both still
-      // leave the capture worth distilling with whatever it does have.
-      //
-      // Enqueued rather than called inline: a slow page fetch and a model
-      // extraction should not share one attempt budget.
-      await enqueueDeriveSignals(job.profileId, payload.inspirationId, "edited");
+      // The enrichment writer already committed scope-correct derivation
+      // requests with the new cached material. Missing parents need no job.
       return;
     }
 
@@ -915,34 +916,16 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
       if (!payload) return dropPoisonPayload(job);
 
       const result = await deriveSignalsForInspiration(payload);
+      if (result.supportReview?.retryable) {
+        throw new Error("Existing support could not be fully assessed; retry current material");
+      }
       console.log("[background-jobs] derived signals", {
         jobId: job.id,
         inspirationId: payload.inspirationId,
         summary: describeSignalDerivation(result),
       });
 
-      // The artifact only needs reconsidering when the signal set actually
-      // moved. A capture that yielded nothing must not cost a synthesis.
-      const changed =
-        result.matchedSignalIds.length > 0 ||
-        result.mintedSignalIds.length > 0 ||
-        result.promotedSignalIds.length > 0;
-      if (changed) {
-        if (payload.deriveIntoProfileId) {
-          /* a room pass moved a ROOM's signals, so it is the room's board
-             that needs reconsidering — the keeper's own poster learned
-             nothing from it */
-          const mindGroupId = await groupIdOfMind(payload.deriveIntoProfileId);
-          /* owned by the same keeper as the derive pass, for the same budget
-             reason: the refresh spends the model key, and the keep that made
-             it necessary is whose spend it is */
-          if (mindGroupId) {
-            await enqueueGroupTopOfMindRefresh(job.profileId, mindGroupId, "signals_changed");
-          }
-        } else {
-          await enqueueTopOfMindRefresh(job.profileId, "signals_changed");
-        }
-      }
+      // Changed evidence and its reading request were committed together.
       return;
     }
 
@@ -1406,10 +1389,12 @@ async function markJobFailedOrPending(
   ).toISOString();
   await getDb().execute(sql`
     UPDATE background_jobs
-    SET status = ${status}::background_job_status,
-        locked_at = ${lockedAt}::timestamptz,
-        run_after = ${runAfter}::timestamptz,
-        last_error = ${sanitizeError(err)},
+    SET status = CASE WHEN rerun_requested THEN 'pending'::background_job_status ELSE ${status}::background_job_status END,
+        locked_at = CASE WHEN rerun_requested THEN NULL ELSE ${lockedAt}::timestamptz END,
+        run_after = CASE WHEN rerun_requested THEN ${now.toISOString()}::timestamptz ELSE ${runAfter}::timestamptz END,
+        last_error = CASE WHEN rerun_requested THEN NULL ELSE ${sanitizeError(err)} END,
+        attempts = CASE WHEN rerun_requested THEN 0 ELSE attempts END,
+        rerun_requested = false,
         result = NULL,
         updated_at = ${now.toISOString()}::timestamptz
     WHERE id = ${job.id}::uuid AND status = 'running'

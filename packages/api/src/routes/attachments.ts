@@ -52,7 +52,8 @@ import {
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import { type AuthEnv, profileAccessError, requireAuth, asAccountProfile } from "../lib/middleware.js";
-import { enqueueEnrichAttachment } from "../lib/queue.js";
+import { enqueueEnrichAttachment, wakeCommittedBackgroundJobs } from "../lib/queue.js";
+import { requestSignalDerivation } from "../lib/inspiration-derivation-requests.js";
 import { validationDetails } from "../lib/validation.js";
 
 // ---------------------------------------------------------------------------
@@ -602,27 +603,19 @@ attachmentsRoutes.post("/", async (c) => {
     };
   }
 
-  const [inserted] = await db.insert(attachments).values(rowToInsert).returning(
-    attachmentSelection,
-  );
+  const inserted = await db.transaction(async (tx) => {
+    const [row] = await tx.insert(attachments).values(rowToInsert).returning(attachmentSelection);
+    if (row?.enrichmentStatus === "pending") await enqueueEnrichAttachment(parent.profileId, row.id, parent.id, tx);
+    else if (row) await requestSignalDerivation({ profileId: parent.profileId, inspirationId: parent.id,
+      reason: "edited", changedSource: "inspiration" }, tx);
+    return row;
+  });
 
   if (!inserted) {
     return c.json({ error: "Failed to record attachment" }, 500);
   }
 
-  if (inserted.enrichmentStatus === "pending") {
-    // Best-effort, like every enqueue on a write path: the attachment is
-    // already durable, and a 5xx here would tempt the client into retrying a
-    // finalize that would create a second row for the same object.
-    try {
-      await enqueueEnrichAttachment(parent.profileId, inserted.id, parent.id);
-    } catch (err) {
-      console.error("[attachments] failed to enqueue enrichment job:", {
-        attachmentId: inserted.id,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }
+  await wakeCommittedBackgroundJobs();
 
   return c.json({ attachment: serializeAttachment(inserted) }, 201);
 });

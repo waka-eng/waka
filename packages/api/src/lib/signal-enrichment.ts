@@ -38,14 +38,17 @@
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import {
   attachments,
+  inspirations,
   type AttachmentEnrichmentKind,
   type AttachmentType,
 } from "../db/index.js";
 import { getDb } from "./db.js";
+import { requestSignalDerivation } from "./inspiration-derivation-requests.js";
+import { wakeCommittedBackgroundJobs } from "./queue.js";
 import {
   describeImage,
   ImageDescriptionError,
@@ -584,6 +587,7 @@ export type EnrichAttachmentResult = AttachmentEnrichmentVerdict | { status: "mi
 
 interface EnrichAttachmentDeps {
   db?: WakaDb;
+  readAttachment?: (attachment: AttachmentRow) => Promise<{ result: AttachmentEnrichmentVerdict; link?: Partial<LinkEnrichment> }>;
 }
 
 interface AttachmentRow {
@@ -731,11 +735,9 @@ async function enrichLinkAttachment(attachment: AttachmentRow): Promise<{
 /**
  * Enrich one attachment and record the verdict on its row.
  *
- * Never throws. A dead link, a login wall, or a page of pure JavaScript is an
- * ordinary outcome of saving things from the internet, and none of them should
- * poison a queue or cost a member their capture. The result is returned so the
- * caller can retry the one case worth retrying — `failed`, which means the page
- * was never reached.
+ * Fetch outcomes are data, not thrown errors. Source races and persistence
+ * failures do throw for a worker retry: cached content and its downstream
+ * learning request must commit together. No lock spans a network/model call.
  */
 export async function enrichAttachment(
   attachmentId: string,
@@ -746,6 +748,8 @@ export async function enrichAttachment(
   const [attachment] = await db
     .select({
       id: attachments.id,
+      profileId: attachments.profileId,
+      inspirationId: attachments.inspirationId,
       type: attachments.type,
       url: attachments.url,
       s3Key: attachments.s3Key,
@@ -759,7 +763,11 @@ export async function enrichAttachment(
   let result: AttachmentEnrichmentVerdict;
   let link: Partial<LinkEnrichment> = {};
 
-  if (attachment.type === "link") {
+  if (deps.readAttachment) {
+    const outcome = await deps.readAttachment(attachment);
+    result = outcome.result;
+    link = outcome.link ?? {};
+  } else if (attachment.type === "link") {
     const outcome = await enrichLinkAttachment(attachment);
     result = outcome.result;
     link = outcome.link;
@@ -770,7 +778,17 @@ export async function enrichAttachment(
   }
 
   const now = new Date();
-  await db
+  const persisted = await db.transaction(async (tx) => {
+    const [parent] = await tx.select({ id: inspirations.id }).from(inspirations)
+      .where(and(eq(inspirations.id, attachment.inspirationId), eq(inspirations.profileId, attachment.profileId))).for("update");
+    if (!parent) return false;
+    const [current] = await tx.select().from(attachments).where(eq(attachments.id, attachmentId)).for("update");
+    if (!current) return false;
+    if (current.url !== attachment.url || current.type !== attachment.type || current.s3Key !== attachment.s3Key ||
+      current.contentType !== attachment.contentType || current.profileId !== attachment.profileId || current.inspirationId !== attachment.inspirationId) {
+      throw new Error("Attachment material changed during enrichment; retry current source");
+    }
+    await tx
     .update(attachments)
     .set({
       enrichmentStatus: result.status,
@@ -790,6 +808,16 @@ export async function enrichAttachment(
       updatedAt: now,
     })
     .where(eq(attachments.id, attachmentId));
+    const nextText = result.status === "ready" ? (result.text ?? link.text ?? null) : null;
+    if (current.enrichmentStatus !== result.status || current.enrichmentText !== nextText ||
+      current.enrichmentKind !== (result.status === "ready" ? result.kind : null) ||
+      current.hostname !== (link.hostname ?? null)) {
+      await requestSignalDerivation({ profileId: attachment.profileId, inspirationId: attachment.inspirationId,
+        reason: "edited", changedSource: "inspiration" }, tx);
+    }
+    return true;
+  });
 
-  return result;
+  if (persisted) await wakeCommittedBackgroundJobs();
+  return persisted ? result : { status: "missing" };
 }

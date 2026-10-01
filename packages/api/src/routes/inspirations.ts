@@ -48,7 +48,7 @@
  *   `inspirations-validation.ts`     every schema a request is checked against
  *   `inspirations-tenancy.ts`        whose memory, and may this session touch it
  *   `inspirations-serialization.ts`  every field that leaves, named
- *   `inspirations-derivation.ts`     asking layer 2 to catch up
+ *   `lib/inspiration-derivation-requests.ts`  durable layer-2 requests
  *   `inspirations-capture.ts`        POST /
  *   `inspirations-recall.ts`         GET / and GET /:id
  *   `inspirations-editing.ts`        PATCH /:id and DELETE /:id

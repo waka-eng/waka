@@ -82,13 +82,15 @@ Everything below specifies each step precisely.
 
 ## Layer 1 → Layer 2: how a signal is generated
 
-**The whole layer in one table.** One capture flows through seven decisions,
-in this order. Three involve the model — and each of those is either confined
-to a band or verified after the fact; everything that admits, promotes, or
-ranks is arithmetic.
+**The whole layer in one table.** Existing support is checked separately before
+discovery. Then the inspiration flows through the seven discovery/lifecycle
+decisions below. A model proposes meaning and assesses support; code validates
+identities, permissions, revisions and standing. A valid ID or literal quote
+alone does not prove a model's semantic judgment correct.
 
 | # | Decision | Decided by | The rule |
 |---|---|---|---|
+| 0 | Does this inspiration's current material still support each previously linked claim? | **Model, explicit assessment** | Supported keeps/restores the link; unsupported withdraws it; unresolved, unavailable or omitted verdicts do not withdraw. Same-policy checks are reusable only for identical material and wording. |
 | 1 | Which earlier captures are worth showing alongside this one | Arithmetic | cosine over stored capture vectors — floor `RELATED_INSPIRATION_MIN_COSINE` (0.6), strongest `RELATED_INSPIRATION_CONTEXT_LIMIT` (5) of the `RELATED_INSPIRATION_SCAN_LIMIT` (500) most recent |
 | 2 | Is there a durable pattern here, and in what words | **Model** | 0 to `MAX_SIGNAL_CANDIDATES` (3) statements — zero is a sanctioned answer; its quote is kept only if it is a verbatim span of the capture |
 | 3 | Which earlier captures co-witness a statement | **Model proposes, code verifies** | at most `MAX_RELATED_INSPIRATION_CITATIONS` (2) per statement; only ids that were actually offered; each citation needs a verbatim quote from the cited capture's own text or it is dropped whole |
@@ -107,16 +109,29 @@ pin exactly. The subsections below take the steps in the same order.
 | A capture lands (`POST /api/inspirations`) | `created` | `packages/api/src/routes/inspirations.ts` |
 | A capture's text or kind is edited | `edited` | same |
 | A reflection is added or removed | `edited` | same |
-| An attachment finishes enriching | `edited` (re-derive with new context) | `packages/api/src/lib/queue.ts` |
+| An attachment's cached enrichment changes | `edited` (re-derive with new context) | `packages/api/src/lib/signal-enrichment.ts` |
 
 Deleting an inspiration does **not** start a derivation — it runs the
 reverse operation (step 7) inside the delete transaction.
 
-Jobs are keyed per inspiration in the Postgres queue, so a burst of edits
-coalesces into one run. An edit landing while a run is already executing sets
+Source writes and their jobs commit together. Personal and room destinations
+have separate keys; creation and edits for one source/destination share a key,
+so a burst coalesces into one run. An edit landing while a run is executing sets
 `rerun_requested`: the running pass read its inputs before the edit existed,
 so on completion the job runs exactly once more. A trailing edit is never
-lost. **[checked]**
+lost, including when the older attempt fails. **[checked]** Worker waking happens
+after commit; a failed wake cannot erase the saved job. Reflection-only changes
+queue personal work, never room derivation. Turning a public source private
+queues room rereading without sending private material into a room pass.
+
+Before discovery, existing and previously withdrawn links receive explicit
+support assessment. Each automatic attempt makes at most one support call
+(up to 12 claims); remaining or unavailable checks request another attempt.
+Previously settled same-policy/same-material/same-wording checks are reused,
+so retries advance rather than repeatedly paying for the first batch. A genuine
+unresolved verdict is retained distinctly from transport or malformed-output
+failure. Explicit operator reviews can force fresh assessment of unchanged
+material. No deleted quote is restored with a recovered relationship.
 
 ### 2. What the model gets to read
 
@@ -124,7 +139,7 @@ Everything is bounded, provenance-labeled, and fenced:
 
 - **The capture itself.** Inputs are clipped on the way in, and whatever the
   model returns is clipped again in code — statements to 500 characters.
-- **Your reflection answers** — the strongest context a capture carries.
+- **Your reflection answers** — personal passes only; never room inputs.
 - **Link enrichment** — the page is fetched with per-hop SSRF checks (every
   redirect re-validated, private ranges refused unless allowlisted via
   `WAKA_ENRICHMENT_ALLOWED_HOSTS`), under a hard timeout and byte cap, then
@@ -382,7 +397,7 @@ citations against exactly that set. Neither is any use without the other.
 
 | Trigger | Condition |
 |---|---|
-| A derivation completes | Only if it attached, minted, or promoted something — a capture that yielded nothing costs no synthesis **[checked]** |
+| A derivation changes evidence | Only if it attached, minted, promoted, explicitly withdrew or restored support. Empty discovery with unchanged support requests no synthesis; explicit withdrawal can request one even with no new candidates. The job commits with the change. **[checked]** |
 | A signal is edited or deleted | Always (the artifact may cite it) |
 | An inspiration is deleted | Always (its cascade may have retired signals) |
 | Feedback is given | Always (a verdict changes what synthesis should weigh) |

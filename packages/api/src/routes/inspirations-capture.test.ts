@@ -38,6 +38,7 @@ vi.mock("../lib/db.js", () => ({
 }));
 
 vi.mock("../lib/queue.js", () => ({
+  wakeCommittedBackgroundJobs: vi.fn(async () => {}),
   enqueueDeriveSignals: vi.fn(async () => ({ id: "job", created: true })),
   enqueueTopOfMindRefresh: vi.fn(async () => ({ id: "job", created: true })),
   enqueueEnrichAttachment: vi.fn(async () => ({ id: "job", created: true })),
@@ -99,6 +100,7 @@ function fakeDatabase(
   };
 
   const tx = {
+    select: () => ({ from: () => ({ where: () => ({ limit: async () => [] }) }) }),
     insert: (table: unknown) => ({
       values: (values: any) => ({
         returning: async () => {

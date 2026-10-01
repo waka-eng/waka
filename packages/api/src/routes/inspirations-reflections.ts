@@ -20,9 +20,9 @@ import { z } from "zod";
 import { backgroundJobs, inspirations, reflections } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import type { AuthEnv } from "../lib/middleware.js";
-import { enqueueReflectionQuestion, reflectionQuestionJobKey } from "../lib/queue.js";
+import { enqueueReflectionQuestion, reflectionQuestionJobKey, wakeCommittedBackgroundJobs } from "../lib/queue.js";
 import { validationDetails } from "../lib/validation.js";
-import { requestSignalDerivation } from "./inspirations-derivation.js";
+import { requestSignalDerivation } from "../lib/inspiration-derivation-requests.js";
 import {
   reflectionSelection,
   serializeReflection,
@@ -170,7 +170,8 @@ export function registerReflectionRoutes(
 
     if (!parent) return c.json({ error: "Inspiration not found" }, 404);
 
-    const [inserted] = await db
+    const inserted = await db.transaction(async (tx) => {
+      const [row] = await tx
       .insert(reflections)
       .values({
         profileId: target.profileId,
@@ -180,15 +181,14 @@ export function registerReflectionRoutes(
         skipped: parsed.data.skipped ?? false,
       })
       .returning(reflectionSelection);
+      if (row) await requestSignalDerivation({ profileId: target.profileId, inspirationId: parent.id,
+        reason: "edited", changedSource: "reflection" }, tx);
+      return row;
+    });
 
     if (!inserted) return c.json({ error: "Failed to create reflection" }, 500);
 
-    await requestSignalDerivation({
-      profileId: target.profileId,
-      inspirationId: parent.id,
-      reason: "edited",
-      changedSource: "reflection",
-    });
+    await wakeCommittedBackgroundJobs();
 
     return c.json({ reflection: serializeReflection(inserted) }, 201);
   });
@@ -271,7 +271,8 @@ export function registerReflectionRoutes(
     const target = await resolveTargetProfile(db, session, query.data.profile, "write");
     if (!target.ok) return c.json(target.body, target.status);
 
-    const [deleted] = await db
+    const deleted = await db.transaction(async (tx) => {
+      const [row] = await tx
       .delete(reflections)
       .where(
         and(
@@ -281,17 +282,14 @@ export function registerReflectionRoutes(
         ),
       )
       .returning({ id: reflections.id });
+      if (row) await requestSignalDerivation({ profileId: target.profileId, inspirationId: idCheck.data,
+        reason: "edited", changedSource: "reflection" }, tx);
+      return row;
+    });
 
     if (!deleted) return c.json({ error: "Reflection not found" }, 404);
 
-    /* The answer was part of the inspiration's derivation context. Removing
-       it must ask the same pipeline to reconsider what still stands. */
-    await requestSignalDerivation({
-      profileId: target.profileId,
-      inspirationId: idCheck.data,
-      reason: "edited",
-      changedSource: "reflection",
-    });
+    await wakeCommittedBackgroundJobs();
 
     return c.json({ deleted: true, id: deleted.id }, 200);
   });

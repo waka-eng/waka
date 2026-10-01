@@ -252,15 +252,18 @@ describe("the doc's [checked] structural claims", () => {
     expect(typeof derivation.computeSignalConfidence).toBe("function");
   });
 
-  it("keeps a capture that yields nothing from costing a synthesis", () => {
-    // The trigger table claims refresh-after-derivation is conditional on the
-    // signal set moving. The queue encodes that as an explicit `changed`
-    // check; this pins the code shape the claim rests on.
-    const queueSource = readFileSync(
-      resolve(REPO_ROOT, "packages/api/src/lib/queue.ts"),
+  it("requests synthesis only when discovery or explicit reconciliation changed support", () => {
+    // The enqueue moved into the evidence transaction. Pin its real owner,
+    // not a no-longer-authoritative check in the job router. SQL tests also
+    // verify the unchanged and explicit-withdrawal zero-candidate branches.
+    const derivationSource = readFileSync(
+      resolve(REPO_ROOT, "packages/api/src/lib/signal-derivation.ts"),
       "utf8",
     );
-    expect(queueSource).toMatch(/const changed =[\s\S]{0,200}if \(changed\)/);
+    expect(derivationSource).toMatch(/const changed =[\s\S]{0,200}if \(changed\)/);
+    const supportSource = readFileSync(resolve(REPO_ROOT, "packages/api/src/lib/signal-support-apply.ts"), "utf8");
+    expect(supportSource).toMatch(/const changed = withdrawn\.length \+ restored\.length > 0/);
+    expect(supportSource).toMatch(/const job = !changed \? null/);
   });
 
   it("keeps confidence computed live at reads and selection, not served stale", () => {

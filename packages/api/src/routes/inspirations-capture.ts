@@ -30,7 +30,8 @@ import { getDb } from "../lib/db.js";
 import type { AuthEnv } from "../lib/middleware.js";
 import type { AuthenticatedSession } from "../lib/session.js";
 import { validationDetails } from "../lib/validation.js";
-import { requestSignalDerivation } from "./inspirations-derivation.js";
+import { requestSignalDerivation } from "../lib/inspiration-derivation-requests.js";
+import { wakeCommittedBackgroundJobs } from "../lib/queue.js";
 import {
   inspirationSelection,
   reflectionSelection,
@@ -226,6 +227,8 @@ export function registerCaptureRoutes(
               .returning(reflectionSelection)
           : [];
 
+        await requestSignalDerivation({ profileId: target.profileId, inspirationId: inserted.id,
+          reason: "created", changedSource: "inspiration" }, tx);
         return { inserted, insertedReflections };
       });
 
@@ -248,12 +251,7 @@ export function registerCaptureRoutes(
       throw err;
     }
 
-    await requestSignalDerivation({
-      profileId: target.profileId,
-      inspirationId: persisted.inserted.id,
-      reason: "created",
-      changedSource: "inspiration",
-    });
+    await wakeCommittedBackgroundJobs();
 
     return c.json(
       {

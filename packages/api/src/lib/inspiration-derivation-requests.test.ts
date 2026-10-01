@@ -5,14 +5,15 @@ const database = vi.hoisted(() => vi.fn(() => { throw new Error("Unexpected room
 vi.mock("../lib/queue.js", () => ({ enqueueDeriveSignals: enqueue }));
 vi.mock("../lib/db.js", () => ({ getDb: database }));
 
-import { requestSignalDerivation } from "./inspirations-derivation.js";
+import { requestSignalDerivation } from "./inspiration-derivation-requests.js";
 
 beforeEach(() => { vi.clearAllMocks(); });
 
 it("updates personal learning without triggering room generation for a private reflection", async () => {
+  const transaction = {} as never;
   await requestSignalDerivation({
     profileId: "person", inspirationId: "capture", reason: "edited", changedSource: "reflection",
-  });
-  expect(enqueue).toHaveBeenCalledExactlyOnceWith("person", "capture", "edited");
+  }, transaction);
+  expect(enqueue).toHaveBeenCalledExactlyOnceWith("person", "capture", "edited", undefined, transaction);
   expect(database).not.toHaveBeenCalled();
 });

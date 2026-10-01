@@ -61,6 +61,9 @@ import {
   GroupInputUnavailableError,
 } from "./group-inputs.js";
 import { assertMaterialCurrent, loadInspirationMaterial, relatedMaterialIdentity, resolveMaterialQuote } from "./inspiration-material.js";
+import { reviewSignalSupport } from "./signal-support-review.js";
+import { applySignalSupportReview } from "./signal-support-apply.js";
+import { enqueueGroupTopOfMindRefresh, enqueueTopOfMindRefresh, wakeCommittedBackgroundJobs } from "./queue.js";
 import {
   getDefaultModelProvider,
   type ModelProvider,
@@ -137,6 +140,7 @@ export interface SignalDerivationResult {
   mintedSignalIds: string[];
   /** Signals that crossed the evidence bar into `active` on this pass. */
   promotedSignalIds: string[];
+  supportReview?: { checked: number; withdrawn: number; restored: number; unresolved: number; retryable: boolean };
 }
 
 /**
@@ -182,9 +186,11 @@ export async function deriveSignalsForInspiration(
      memory's owner wherever the pass is landing. */
   const profileId = input.deriveIntoProfileId ?? inspirationRow.profileId;
   const isGroup = input.deriveIntoProfileId !== undefined;
+  let supportReview: SignalDerivationResult["supportReview"];
+  let reviewedMaterialHash: string | null = null;
   const emptyResult = (status: SignalDerivationResult["status"]): SignalDerivationResult => ({
     status, inspirationId: inspirationRow.id, profileId, candidateCount: 0,
-    matchedSignalIds: [], mintedSignalIds: [], promotedSignalIds: [],
+    matchedSignalIds: [], mintedSignalIds: [], promotedSignalIds: [], supportReview,
   });
   const membership = isGroup ? await loadGroupInputMembership(db, inspirationRow.profileId, profileId) : null;
   if (isGroup && !membership) return emptyResult("not_authorized");
@@ -216,8 +222,26 @@ export async function deriveSignalsForInspiration(
     };
   }
 
+  // Existing support is its own question, before bounded discovery. Applying
+  // it rechecks current inputs under locks and persists any reading request.
+  // A later extraction failure cannot lose the committed correction.
+  try {
+    const review = await reviewSignalSupport(db, { ownerProfileId: inspirationRow.profileId,
+      inspirationId: inspirationRow.id, deriveIntoProfileId: input.deriveIntoProfileId,
+      provider, maxCalls: 1, reuseCurrentAssessments: true });
+    if (review.status !== "current") throw new Error("Source material changed during support assessment");
+    reviewedMaterialHash = review.material.hash;
+    const applied = review.calls > 0 ? await applySignalSupportReview(db, review) : null;
+    supportReview = { checked: review.items.length, withdrawn: applied?.withdrawn.length ?? 0,
+      restored: applied?.restored.length ?? 0, unresolved: review.items.filter((item) => item.verdict === "unresolved").length,
+      retryable: review.items.some((item) => item.issue && ["provider_unavailable", "missing_verdict", "invalid_verdict", "budget_exhausted"].includes(item.issue)) };
+  } catch (error) {
+    if (error instanceof GroupInputUnavailableError) return emptyResult(error.status);
+    throw error;
+  }
   const material = await loadInspirationMaterial(db, inspirationRow.profileId, inspirationRow.id, isGroup ? "public" : "personal");
   if (!material) return emptyResult("missing_inspiration");
+  if (material.identity.hash !== reviewedMaterialHash) throw new Error("Source material changed after support assessment");
   const inspiration = material.inspiration;
   if (isGroup && inspiration.visibility !== "public") return emptyResult("not_public");
   const reflectionRows = material.reflectionRows;
@@ -225,7 +249,7 @@ export async function deriveSignalsForInspiration(
     .map(({ id, kind, text, hostname, name }) => ({ id, kind, text, hostname, name }));
   const [profileRows, existingStatements] = await Promise.all([
     db
-      .select({ preferredLocale: profiles.preferredLocale })
+      .select({ preferredLocale: profiles.preferredLocale, groupId: profiles.groupId })
       .from(profiles)
       .where(eq(profiles.id, profileId))
       .limit(1),
@@ -349,6 +373,7 @@ export async function deriveSignalsForInspiration(
   if (statements.length === 0) {
     try {
       await db.transaction(async (tx) => { await acquireSignalDerivationLock(tx, profileId); await validateSources(tx); });
+      await wakeCommittedBackgroundJobs();
       return emptyResult("no_candidates");
     } catch (error) {
       if (error instanceof GroupInputUnavailableError) return emptyResult(error.status);
@@ -385,6 +410,15 @@ export async function deriveSignalsForInspiration(
         material: material.identity,
         beforeWrites: () => validateSources(tx),
       });
+      const changed = applied.matchedSignalIds.length > 0 ||
+        applied.mintedSignalIds.length > 0 || applied.promotedSignalIds.length > 0;
+      if (changed) {
+        if (isGroup) {
+          const groupId = profileRows[0]?.groupId;
+          if (!groupId) throw new Error("Derivation destination no longer names a group");
+          await enqueueGroupTopOfMindRefresh(inspiration.profileId, groupId, "signals_changed", tx);
+        } else await enqueueTopOfMindRefresh(profileId, "signals_changed", tx);
+      }
       return applied;
     });
   } catch (error) {
@@ -392,11 +426,13 @@ export async function deriveSignalsForInspiration(
     throw error;
   }
 
+  await wakeCommittedBackgroundJobs();
   return {
     status: "derived",
     inspirationId: inspiration.id,
     profileId,
     candidateCount: embedded.length,
+    supportReview,
     ...outcome,
   };
 }
