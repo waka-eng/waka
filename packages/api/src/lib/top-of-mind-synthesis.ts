@@ -27,7 +27,8 @@
  * previous system hid its failures in exactly that gap.
  */
 
-import { and, asc, desc, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { readGenerationRevision, assertGenerationRevision } from "./generation-revision.js";
 
 import {
   signalEmbeddings,
@@ -183,6 +184,8 @@ export interface TopOfMindRefreshDependencies {
   db?: WakaDb;
   modelProvider?: ModelProvider;
   now?: Date;
+  /** Worker claim fence, inside the final transaction after input validation. */
+  beforeCommit?: (tx: Pick<WakaTx, "select">) => Promise<void>;
 }
 
 export interface TopOfMindRefreshResult {
@@ -966,7 +969,13 @@ async function loadRecentFeedback(
       correctionText: feedback.correctionText,
     })
     .from(feedback)
-    .where(eq(feedback.profileId, profileId))
+    .where(and(eq(feedback.profileId, profileId), or(
+      and(eq(feedback.targetType, "signal"), sql`EXISTS (SELECT 1 FROM signals fs
+        WHERE fs.id = ${feedback.targetId} AND fs.profile_id = ${profileId}::uuid)`),
+      and(eq(feedback.targetType, "top_of_mind_entry"), sql`EXISTS (SELECT 1 FROM top_of_mind_entries fe
+        JOIN top_of_minds fm ON fm.id = fe.top_of_mind_id
+        WHERE fe.id = ${feedback.targetId} AND fm.profile_id = ${profileId}::uuid)`),
+    )))
     .orderBy(desc(feedback.createdAt))
     .limit(RECENT_FEEDBACK_LIMIT);
   if (rows.length === 0) return [];
@@ -982,13 +991,14 @@ async function loadRecentFeedback(
     ? await db
         .select({ id: signals.id, statement: signals.statement })
         .from(signals)
-        .where(inArray(signals.id, signalIds))
+        .where(and(eq(signals.profileId, profileId), inArray(signals.id, signalIds)))
     : [];
   const bodies = entryIds.length
     ? await db
         .select({ id: topOfMindEntries.id, body: topOfMindEntries.body })
         .from(topOfMindEntries)
-        .where(inArray(topOfMindEntries.id, entryIds))
+        .innerJoin(topOfMinds, eq(topOfMinds.id, topOfMindEntries.topOfMindId))
+        .where(and(eq(topOfMinds.profileId, profileId), inArray(topOfMindEntries.id, entryIds)))
     : [];
 
   const aboutById = new Map<string, string>();
@@ -997,8 +1007,9 @@ async function loadRecentFeedback(
 
   return rows.flatMap((row) => {
     const about = aboutById.get(row.targetId);
-    // A verdict on something since deleted still shaped the person's history,
-    // but without its text the model would be reasoning about a blank.
+    // Personal synthesis corrects this profile's own readings. Room reactions
+    // stay in room context; old feedback is not permission to fetch another
+    // profile's evolving (possibly now-private) statement.
     if (!about) return [];
     return [
       {
@@ -1018,6 +1029,9 @@ export async function refreshTopOfMindForProfile(
   const db = deps.db ?? getDb();
   const now = deps.now ?? new Date();
   const provider = deps.modelProvider ?? (await getDefaultModelProvider());
+  const revision = await readGenerationRevision(db, { profileId: input.profileId });
+  if (!revision) return { status: "nothing_to_synthesize", topOfMindId: null, version: 0,
+    reason: null, entryCount: 0, droppedCitations: 0, lockViolations: 0 };
 
   /* THE FLOOR, before any other work. Only the automatic path waits: a
      `manual` refresh is the person (their own "Read it again", a language
@@ -1134,10 +1148,11 @@ export async function refreshTopOfMindForProfile(
 
   const written = await db.transaction(async (tx) => {
     await acquireTopOfMindArtifactLock(tx, { profileId: input.profileId });
+    await assertGenerationRevision(tx, revision);
+    await deps.beforeCommit?.(tx);
 
-    // Re-read under the lock. Another pass may have landed a version while
-    // this one was waiting on the provider, and the human decisions on that
-    // newer version are the ones that must be carried forward.
+    // Re-read under the validated revision/family locks. Any intervening
+    // version or edit was rejected above, not blended with stale model output.
     const previous = await loadLiveArtifact(tx, input.profileId);
 
     // No eligible signals and an artifact already standing: nothing was
@@ -1728,6 +1743,8 @@ export async function refreshTopOfMindForGroup(
     appliedProposals: 0,
     droppedCitations: 0,
   };
+  const revision = await readGenerationRevision(db, { groupId: input.groupId });
+  if (!revision) return nothing;
 
   const [groupRows, memberRows] = await Promise.all([
     db
@@ -1855,6 +1872,8 @@ export async function refreshTopOfMindForGroup(
 
   const written = await db.transaction(async (tx) => {
     await acquireTopOfMindArtifactLock(tx, { groupId: input.groupId });
+    await assertGenerationRevision(tx, revision);
+    await deps.beforeCommit?.(tx);
     await tx.select({ id: groups.id }).from(groups).where(eq(groups.id, input.groupId)).for("update");
     const currentMembers = await tx.select({ profileId: groupMembers.profileId }).from(groupMembers)
       .where(eq(groupMembers.groupId, input.groupId)).for("share");
@@ -1863,9 +1882,8 @@ export async function refreshTopOfMindForGroup(
       throw new Error("Room membership changed during synthesis; retry current members");
     }
 
-    // Re-read under the lock, same as the personal pass: a version may have
-    // landed while this one waited on the provider, and the members'
-    // decisions on that newer version are the ones that must carry.
+    // Re-read the validated snapshot. Keep the explicit room checks as
+    // defense in depth alongside the shared generation-revision fence.
     const previous = await loadLiveGroupArtifact(tx, input.groupId);
     if (previous?.id !== liveBefore?.id) throw new Error("Room reading changed during synthesis; retry current version");
     const currentShared = await loadGroupSharedSignals(tx, input.groupId, now);

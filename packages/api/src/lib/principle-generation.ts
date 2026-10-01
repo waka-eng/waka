@@ -18,8 +18,9 @@
 
 import { and, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 
+import { randomUUID } from "node:crypto";
+import { readGenerationRevision, assertGenerationRevision } from "./generation-revision.js";
 import {
-  type Principle,
   inspirations,
   principles,
   principleSignals,
@@ -246,6 +247,8 @@ export interface PrincipleGenerationDependencies {
   db?: WakaDb;
   modelProvider?: ModelProvider;
   now?: Date;
+  /** No network calls: verify the worker still owns its claim at commit. */
+  beforeCommit?: (tx: Pick<WakaTx, "select">) => Promise<void>;
 }
 
 /** Room signals must pass the same current-member visibility gate as the wall. */
@@ -277,6 +280,8 @@ export async function refreshPrinciplesForProfile(
     redeemed: 0,
     dropped: 0,
   };
+  const revision = await readGenerationRevision(db, { profileId: input.profileId });
+  if (!revision) return none;
 
   // The cheap gate: active signals with their longevity stats. Nearly every
   // night ends here, with zero model calls.
@@ -360,17 +365,26 @@ export async function refreshPrinciplesForProfile(
     }
     valid.push({ ...candidate, statement, citedSignalIds: cited });
   }
-  if (valid.length === 0) return result;
+  if (valid.length === 0) {
+    await db.transaction(async (tx) => {
+      await assertGenerationRevision(tx, revision);
+      await deps.beforeCommit?.(tx);
+    });
+    return result;
+  }
 
   result.status = "evaluated";
 
+  // Plan the complete batch before writing. Provisional IDs let a later
+  // candidate compare against an earlier mint without persisting it first.
+  const standingSet = existing.map((row) => ({ id: row.id, statement: row.statement }));
+  const planned: Array<{ candidate: PrincipleCandidate; matchedId: string | null; conflictingId: string | null; mintedId: string }> = [];
   for (const candidate of valid) {
-    // Judge against the standing set — conservative toward independent, so a
-    // failure direction is a visible near-duplicate, never a silent merge or
-    // a phantom conflict.
-    let matched: Principle | null = null;
-    let conflicting: Principle | null = null;
-    for (const standing of existing) {
+    // Compare against the standing set, including earlier planned candidates.
+    // An unavailable comparison aborts the entire batch before any write.
+    let matchedId: string | null = null;
+    let conflictingId: string | null = null;
+    for (const standing of standingSet) {
       /* An unreachable judge used to mean "independent for this pair" —
          which minted near-duplicate principles on layer 4, the ranked,
          visible surface, whenever the road was down. It propagates now:
@@ -382,23 +396,42 @@ export async function refreshPrinciplesForProfile(
         existingStatement: standing.statement,
       });
       if (relation === "same") {
-        matched = standing;
+        matchedId = standing.id;
         break;
       }
-      if (relation === "conflicting" && !conflicting) conflicting = standing;
+      if (relation === "conflicting" && !conflictingId) conflictingId = standing.id;
     }
+    const mintedId = randomUUID();
+    planned.push({ candidate, matchedId, conflictingId, mintedId });
+    if (!matchedId) standingSet.push({ id: mintedId, statement: candidate.statement });
+  }
 
-    if (matched) {
-      const attached = await attachCitations(db, input.profileId, matched.id, candidate.citedSignalIds);
-      result.attached += attached;
-      if (matched.state === "aspirational" || matched.unsupportedAt !== null) {
-        const promoted = await promoteIfDemonstrated(db, input.profileId, matched.id, now);
-        if (promoted) result.redeemed += 1;
+  return db.transaction(async (tx) => {
+    await assertGenerationRevision(tx, revision);
+    await deps.beforeCommit?.(tx);
+    try {
+      // A human update may already own a row while its revision trigger waits
+      // on our fence. Never wait back on that row: release and retry instead
+      // of creating a deadlock that could abort the person's edit.
+      await tx.select({ id: principles.id }).from(principles)
+        .where(eq(principles.profileId, input.profileId)).for("no key update", { noWait: true });
+    } catch (error) {
+      const code = (error as { code?: string; cause?: { code?: string } }).cause?.code ?? (error as { code?: string }).code;
+      if (code === "55P03") throw new Error("Generation inputs changed; retry current inputs");
+      throw error;
+    }
+    for (const { candidate, matchedId, conflictingId, mintedId } of planned) {
+      if (matchedId) {
+        const attached = await attachCitations(tx, input.profileId, matchedId, candidate.citedSignalIds);
+        result.attached += attached;
+        const matched = existing.find((row) => row.id === matchedId);
+        if (matched && (matched.state === "aspirational" || matched.unsupportedAt !== null)) {
+          const promoted = await promoteIfDemonstrated(tx, input.profileId, matchedId, now);
+          if (promoted) result.redeemed += 1;
+        }
+        continue;
       }
-      continue;
-    }
 
-    const minted = await db.transaction(async (tx) => {
       const ranks = await tx
         .select({ rank: principles.rank })
         .from(principles)
@@ -406,6 +439,7 @@ export async function refreshPrinciplesForProfile(
       const [row] = await tx
         .insert(principles)
         .values({
+          id: mintedId,
           profileId: input.profileId,
           statement: candidate.statement,
           inputPolicy: groupId ? GROUP_INPUT_POLICY : null,
@@ -432,29 +466,27 @@ export async function refreshPrinciplesForProfile(
         reason: "minted",
         now,
       });
-      return row!;
-    });
-    existing.push(minted);
-    result.minted += 1;
+      result.minted += 1;
 
-    if (conflicting) {
-      await db
-        .update(principles)
-        .set({ state: "contested", conflictsWithId: conflicting.id, updatedAt: now })
-        .where(eq(principles.id, minted.id));
-      await db
-        .update(principles)
-        .set({ state: "contested", conflictsWithId: minted.id, updatedAt: now })
-        .where(eq(principles.id, conflicting.id));
-      result.conflicts += 1;
+      if (conflictingId) {
+        await tx
+          .update(principles)
+          .set({ state: "contested", conflictsWithId: conflictingId, updatedAt: now })
+          .where(eq(principles.id, mintedId));
+        await tx
+          .update(principles)
+          .set({ state: "contested", conflictsWithId: mintedId, updatedAt: now })
+          .where(eq(principles.id, conflictingId));
+        result.conflicts += 1;
+      }
     }
-  }
 
-  return result;
+    return result;
+  });
 }
 
 async function attachCitations(
-  db: WakaDb,
+  db: WakaDb | WakaTx,
   profileId: string,
   principleId: string,
   signalIds: string[],

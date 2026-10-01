@@ -261,7 +261,7 @@ describe("applying explicit support decisions", () => {
     let attempt: Promise<unknown> | undefined;
     try {
       await t.sql.begin(async (tx) => {
-        await tx`SELECT id FROM signals WHERE id = ${f.signalId} FOR UPDATE`;
+        await tx`SELECT id FROM signals WHERE id = ${f.signalId} FOR NO KEY UPDATE`;
         await tx`INSERT INTO signal_support_reviews (review_id, signal_id, profile_id, owner_profile_id, inspiration_id,
           review_hash, statement_hash, material, verdict, source_ids)
           VALUES (${report.reviewId}, ${f.signalId}, ${f.ownerProfileId}, ${f.ownerProfileId}, ${f.inspirationId},

@@ -267,6 +267,20 @@
       "when": 1790812800006,
       "tag": "0037_support-review-policy",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1790812800007,
+      "tag": "0038_generation-revisions",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1790812800008,
+      "tag": "0039_child-cascade-redaction",
+      "breakpoints": true
     }
   ]
 }

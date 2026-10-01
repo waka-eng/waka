@@ -1,9 +1,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
 import { setDefaultModelProviderForTests, type ModelProvider } from "./model-provider.js";
-import { enqueueTopOfMindRefresh, postgresBackgroundJobStore, runBackgroundJobWorker } from "./queue.js";
+import { enqueueTopOfMindRefresh, postgresBackgroundJobStore, processBackgroundJob, runBackgroundJobWorker } from "./queue.js";
 import { loadTopOfMindRefreshStatus } from "./top-of-mind-refresh-status.js";
 import { ShiftFloorHeldError } from "./top-of-mind-synthesis.js";
+import { createGroupForProfile, joinGroupByCode } from "../routes/groups-membership.js";
 
 let t: TestDatabase;
 let seq = 0;
@@ -17,13 +18,22 @@ async function person() {
   const [p] = await t.sql`INSERT INTO profiles (account_id, type, name) VALUES (${a.id}, 'human', 'Owner') RETURNING id`;
   return p.id as string;
 }
-async function material() {
+async function material({ active = false, destinationId = profileId, owners = [profileId] } = {}) {
+  const ids: string[] = [];
   for (let i = 0; i < 3; i++) {
-    const [inspiration] = await t.sql`INSERT INTO inspirations (profile_id, text) VALUES (${profileId}, 'A public fixture') RETURNING id`;
-    const [signal] = await t.sql`INSERT INTO signals (profile_id, statement) VALUES (${profileId}, 'Small steps recur') RETURNING id`;
-    await t.sql`INSERT INTO signal_evidence (profile_id, owner_profile_id, signal_id, inspiration_id)
-      VALUES (${profileId}, ${profileId}, ${signal.id}, ${inspiration.id})`;
+    const [signal] = await t.sql`INSERT INTO signals (profile_id, statement, input_policy)
+      VALUES (${destinationId}, 'Small steps recur', ${destinationId === profileId ? null : 'group-public-v1'}) RETURNING id`;
+    ids.push(signal.id as string);
+    for (let j = 0; j < (active ? 3 : 1); j++) {
+      const owner = owners[j % owners.length]!;
+      const [inspiration] = await t.sql`INSERT INTO inspirations (profile_id, text, visibility)
+        VALUES (${owner}, 'A fixture', ${destinationId === profileId ? 'private' : 'public'}) RETURNING id`;
+      await t.sql`INSERT INTO signal_evidence (profile_id, owner_profile_id, signal_id, inspiration_id)
+        VALUES (${destinationId}, ${owner}, ${signal.id}, ${inspiration.id})`;
+    }
+    if (active) await t.sql`UPDATE signals SET status = 'active' WHERE id = ${signal.id}`;
   }
+  return ids;
 }
 const state = (jobId: string) => loadTopOfMindRefreshStatus(t.db as never, profileId, jobId);
 
@@ -48,6 +58,49 @@ beforeEach(async () => {
 afterAll(async () => { setDefaultModelProviderForTests(null); await t?.cleanup(); });
 
 describe("top of mind completion receipts", () => {
+  it.each(['group', 'principles'] as const)('a reclaimed %s worker cannot persist generated output', async (target) => {
+    let groupId: string | null = null;
+    let destinationId = profileId;
+    let owners = [profileId];
+    if (target === 'group') {
+      const other = await person();
+      const group = await createGroupForProfile(t.db as never, { profileId, name: 'Lease fixture' });
+      await joinGroupByCode(t.db as never, { profileId: other, joinCode: group.joinCode });
+      groupId = group.id;
+      destinationId = (await t.sql`SELECT id FROM profiles WHERE group_id = ${groupId}`)[0].id as string;
+      owners = [profileId, other];
+    }
+    const ids = await material({ active: true, destinationId, owners });
+    const [artifact] = await t.sql`INSERT INTO top_of_minds(profile_id, group_id) VALUES (${groupId ? null : profileId}, ${groupId}) RETURNING id`;
+    const [entry] = await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id, type, body, input_policy)
+      VALUES (${artifact.id}, 'pattern', 'A current reading', ${groupId ? 'group-public-v1' : null}) RETURNING id`;
+    for (const id of ids) await t.sql`INSERT INTO top_of_mind_entry_signals(entry_id, signal_id) VALUES (${entry.id}, ${id})`;
+    const [job] = await t.sql`INSERT INTO background_jobs(profile_id, type, payload)
+      VALUES (${profileId}, ${groupId ? 'refresh_group_top_of_mind' : 'refresh_principles'},
+        ${JSON.stringify(groupId ? { groupId, reason: 'manual' } : { profileId })}::jsonb) RETURNING id`;
+    const claimed = await postgresBackgroundJobStore.claimNext(new Date(Date.now() + 1000));
+    expect(claimed?.id).toBe(job.id);
+    const steal = async () => { await t.sql`UPDATE background_jobs SET locked_at = now() + interval '2 seconds', attempts = attempts + 1 WHERE id = ${job.id}`; };
+    setDefaultModelProviderForTests({
+      synthesizeTopOfMind: async () => { await steal(); return { entries: [{ type: 'pattern', body: 'A stale group reading', citedSignalIds: ids }] }; },
+      distillPrinciples: async () => { await steal(); return { candidates: [{ type: 'maxim', statement: 'A stale principle', citedSignalIds: ids }] }; },
+    } as unknown as ModelProvider);
+    await expect(processBackgroundJob(claimed!)).rejects.toThrow(/ownership changed/i);
+    expect(await t.sql`SELECT id FROM top_of_minds`).toHaveLength(1);
+    expect(await t.sql`SELECT id FROM principles`).toHaveLength(0);
+  });
+  it("a reclaimed job cannot commit an artifact even when its source inputs did not change", async () => {
+    await material();
+    const { jobId } = await enqueueTopOfMindRefresh(profileId, "manual");
+    const claimed = await postgresBackgroundJobStore.claimNext(new Date(Date.now() + 1000));
+    expect(claimed?.id).toBe(jobId);
+    beforeSynthesis = async () => {
+      await t.sql`UPDATE background_jobs SET locked_at = now() + interval '2 seconds', attempts = attempts + 1 WHERE id = ${jobId}`;
+    };
+    await expect(processBackgroundJob(claimed!)).rejects.toThrow(/ownership changed/i);
+    expect(await t.sql`SELECT id FROM top_of_minds WHERE profile_id = ${profileId}`).toHaveLength(0);
+    expect((await state(jobId))?.status).toBe("running");
+  });
   it("exposes a completed artifact only after the worker finishes", async () => {
     await material();
     const { jobId } = await enqueueTopOfMindRefresh(profileId, "manual");

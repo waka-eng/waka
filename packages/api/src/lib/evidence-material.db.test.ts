@@ -30,6 +30,19 @@ function stubs(quote: string) {
 }
 
 describe("evidence uses the material that was actually read", () => {
+  it("deletes a reflected inspiration without rechecking orphaned quote or attachment references", async () => {
+    const f = await fixture();
+    await deriveSignalsForInspiration({ inspirationId: f.inspirationId, reason: "created" }, {
+      db: t.db as never, ...stubs("PRIVATE_SENTINEL I need quiet before deciding"),
+    });
+    expect((await t.sql`SELECT quote_reflection_id FROM signal_evidence WHERE inspiration_id = ${f.inspirationId}`)[0].quote_reflection_id).toBe(f.reflectionId);
+    await t.sql`INSERT INTO attachments(profile_id, inspiration_id, type, url, enrichment_status)
+      VALUES (${f.profileId}, ${f.inspirationId}, 'link', 'https://example.test', 'pending')`;
+    await t.sql`DELETE FROM inspirations WHERE id = ${f.inspirationId}`;
+    expect(await t.sql`SELECT id FROM signal_evidence WHERE inspiration_id = ${f.inspirationId}`).toHaveLength(0);
+    expect(await t.sql`SELECT id FROM reflections WHERE inspiration_id = ${f.inspirationId}`).toHaveLength(0);
+    expect(await t.sql`SELECT id FROM attachments WHERE inspiration_id = ${f.inspirationId}`).toHaveLength(0);
+  });
   it("records the exact reflected source and hashes, without storing another answer copy", async () => {
     const f = await fixture();
     const result = await deriveSignalsForInspiration({ inspirationId: f.inspirationId, reason: "created" }, {

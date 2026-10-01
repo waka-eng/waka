@@ -78,6 +78,21 @@ platform-team offer. I keep choosing depth over breadth."*
 
 Everything below specifies each step precisely.
 
+**Generation commits against the inputs it read.** Personal/room synthesis and
+principle generation capture an internal profile generation revision before
+loading inputs. Source, evidence, statement, relevant room and human-edit
+changes advance it transactionally. A final locked comparison rejects stale
+results, including a change followed by a revert. Private reflection changes
+do not advance a room's revision. Worker-driven artifact/principle writes also
+check their job claim inside that transaction; a reclaimed worker cannot write
+output merely because the material happens to be unchanged. No model call is
+made while those final locks are held.
+
+Principle comparisons are planned as a whole batch before any write, including
+comparisons against candidates about to be minted. A failed later comparison
+therefore leaves no partial principle batch. These are commit guarantees, not
+proof that an already-published reading remains supported after a later edit.
+
 ---
 
 ## Layer 1 → Layer 2: how a signal is generated

@@ -270,6 +270,24 @@ agent's relayed excerpt, an agent's own observation.
   one transaction. None of this makes a held or unfinished reading complete;
   source-to-artifact completion receipts and full downstream fences remain
   separate requirements.
+- **Generation revision** is a per-profile, monotonic invalidation token in
+  `generation_revisions`, not another public reading version. Relevant source,
+  evidence, statement, feedback, artifact and principle changes advance it in
+  the same transaction. A room's token also covers membership/proposals and
+  public member metadata; private reflection changes advance only personal
+  dependencies. Generators capture the token before reading their inputs and
+  lock/recheck it after model calls, before committing any output. This catches
+  changes even when text changes back to its earlier wording. It stores no
+  source text and does not by itself prove current-output validity or learning
+  completion. Worker-driven reading/principle commits also check and lock their
+  job claim; input freshness alone does not authorize a reclaimed worker.
+  Principle comparisons finish before the batch transaction starts, and a
+  busy human-edited principle makes generation retry rather than wait back on
+  the person's row. A human edit still owns its wording.
+- **Personal feedback context stays in its profile.** Personal synthesis uses
+  feedback on that profile's own signals and entries. Reactions to another
+  profile or room remain stored for that context; they are not permission to
+  fetch that target's later, potentially private wording into personal prompts.
 
 ## Experience (layer-1 grouping)
 

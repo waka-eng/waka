@@ -306,7 +306,7 @@ export function registerEditingRoutes(
           ),
         );
       if (citingRows.length) await tx.select({ id: signals.id }).from(signals)
-        .where(inArray(signals.id, citingRows.map((row) => row.signalId))).orderBy(asc(signals.id)).for("update");
+        .where(inArray(signals.id, citingRows.map((row) => row.signalId))).orderBy(asc(signals.id)).for("no key update");
 
       const removed = await tx
         .delete(inspirations)

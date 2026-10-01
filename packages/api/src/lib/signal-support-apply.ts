@@ -59,7 +59,7 @@ export async function applySignalSupportReview(db: ReturnType<typeof getDb>, rep
     const beforeLocks = await loadSupportClaims(tx, report.profileId, report.ownerProfileId, report.inspirationId);
     if (beforeLocks.length) await tx.select({ id: signals.id }).from(signals)
       .where(and(eq(signals.profileId, report.profileId), inArray(signals.id, beforeLocks.map((row) => row.signalId))))
-      .orderBy(asc(signals.id)).for("update");
+      .orderBy(asc(signals.id)).for("no key update");
     const current = await loadSupportClaims(tx, report.profileId, report.ownerProfileId, report.inspirationId);
     if (supportClaimsHash(current) !== report.claimsHash) throw new Error("Support review claims changed");
     const allowed = current.filter((row) => !isGroup || row.inputPolicy === GROUP_INPUT_POLICY);

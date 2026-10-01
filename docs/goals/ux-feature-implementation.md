@@ -1,6 +1,6 @@
 # Goal: implement the experience review
 
-Status: in flight — A/B, C input/output/cache, D1/D2 and D3a automatic support/source handoffs, plus E1 manual refresh locally checked; artifact/statement fencing, E2 and later delivery slices remain open. Deployment-target verification, historical repair and full release verification remain open.
+Status: in flight — A/B, C input/output/cache, D1–D3b support/source handoffs and reading/principle commit fences, plus E1 manual refresh locally checked; existing-reading validity, statement propagation, E2 and later delivery slices remain open. Deployment-target verification, historical repair and full release verification remain open.
 Created: 2026-10-01, on the owner's instruction to implement the full plan.
 Branch: `codex/ux-feature-implementation`.
 Baseline: `33e65a7` on `dev`.
@@ -28,7 +28,7 @@ experiments or revive superseded room goals.
 | A | F5/F6/F10: input, overlay scrolling/focus, readable active controls | Reproduce slash/wheel defects; verify typing, caret, Escape/Tab, wheel/touch and contrast in actual affected flows; web checks | Implemented; 5 original failures now pass, 325 web tests pass. Desktop fixture verified. Mobile touch/200% zoom and deployed verification remain open. |
 | B | F3/F4: edited principle preservation, truthful support, account-scoped drafts/preferences and cancellation | Isolated SQL preservation tests and two-account browser/state tests; API/web checks | B1: 6 SQL / 653 unit tests pass after 3 reproduced failures. B2: 4 failures reproduced, then two-account draft and stale-response checks pass; full web suite 331/331. Deployed/account-switch browser verification remains open. |
 | C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | C1/C2/C3 code locally verified (51 SQL cases; full web 349/349). Read-only inventory completed across 5 rooms in the DB referenced by the local env files; hosted-stage mapping is not verified. Historical repair, deployment coordination and deployed verification remain pending. |
-| D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | D1–D3a source provenance, automatic support checks and transactional handoffs locally verified (113 SQL / 671 unit / 366 web pass). Current-artifact validity, statement-change propagation, full downstream fencing, live semantic quality and historical repair remain open. |
+| D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | D1–D3b source provenance, automatic support checks, transactional handoffs and reading/principle write fences locally verified (149 SQL / 671 unit / 366 web pass). Existing-artifact validity, statement-change propagation, lower-layer claim fences, live semantic quality and historical repair remain open. |
 | E1 | F7/F8: authoritative poster and truthful manual refresh | Queue acceptance, changed/unchanged completion, failure and fresh displayed version verified | Implemented with job receipts, resumable profile-scoped polling, held-job manual upgrade and authoritative headline. Local checks pass (8 receipt SQL tests, 10 hook tests, full web 362/362); deployed verification remains open. |
 | E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | Pending |
 | F | F11/F12: visible search and durable navigation | Results beyond initial archive, failure/no-match separation, stable IDs, deep links, Back/Forward and rename verified | Pending |
@@ -429,3 +429,61 @@ Keep code, deployment, historical repair, and user validation evidence distinct.
   including ambiguous saves and repeated requests. Coordinate older workers
   and legacy reason-keyed jobs at cutover; the new key does not establish that
   an already-running old worker is safe. A–J/L1–L3 scope is unchanged.
+- 2026-10-01, D3b baseline: reproduced 6/6 generation failures: a personal
+  reading committed after source, signal or entry edits; an older pass replaced
+  a newer reading; changed evidence still minted a principle; and a later
+  failed principle comparison left an earlier candidate persisted. Separately
+  reproduced a revoked-share lookup through old personal feedback (1/1) and
+  an artifact written by a reclaimed worker despite unchanged inputs (1/1).
+  These eight baseline failures now pass. The privacy reproduction used
+  synthetic accounts; hosted incidence/exposure was not assessed.
+- Migration 0038 introduces per-profile generation revisions, advanced in the
+  same transaction as relevant mutations. Personal/room synthesis and principle
+  generation capture the revision before loading their inputs and recheck it
+  under a final transaction lock. A private reflection does not advance its
+  room's revision. Actual-write triggers avoid invalidating on ignored duplicate
+  inserts; rolled-back writes roll back the token. These are internal commit
+  tokens, not public reading versions or source-completion receipts.
+- Principle comparisons now plan the entire batch, including provisional
+  same-batch targets, before any write. Citation attachment, promotion, minting,
+  history and conflicts commit together. Personal/room/principle workers verify
+  their claim inside the write transaction, not only at job settlement. Final
+  principle-row locking is non-waiting so a simultaneous human edit can finish
+  while generation retries; signal support/deletion locks protect mutable words
+  without blocking artifact citation FKs.
+- Personal feedback input is filtered to owned targets before its bounded
+  context scan, then ownership is checked again when loading target wording.
+  Room/other-profile reactions remain stored but cannot retrieve another
+  profile's later private words into a personal prompt or crowd out an owned
+  correction. This closes the reproduced fresh lookup; it does NOT certify
+  previously generated personal readings/principles or their recycled context.
+  A separate metadata-only historical impact scope and conservative serving/
+  regeneration treatment are still needed for potentially affected outputs.
+- Additional verification exposed a D1 cascade defect: deleting a reflected
+  inspiration could update evidence after its parent was gone, failing the
+  composite FK. Migration 0039 removes that parent's witnesses before child
+  cascades, skips redundant child-copy cleanup and keeps standalone reflection/
+  attachment redaction intact. It also aligns the withdrawn-evidence guard with
+  non-key signal locks; a real waiting-insert test verifies old writers still
+  cannot restore a withdrawn link. No historical data was repaired by these
+  migration definitions.
+- D3b verification: 149/149 SQL tests across 12 suites pass, including 21
+  generation-fencing cases, 11 refresh/lease cases and reflected-source deletion.
+  Cases include change-and-revert, private-answer room isolation, public deletion,
+  member metadata/feedback changes, rollback, actual lock waits, concurrent human
+  edits, complete-batch failure, and personal/group/principle claim loss. API unit
+  suite 671 passed / 3 paid-live benches skipped; web 366/366. API/web/admin
+  typechecks, web build, migration and diff checks pass. Tests used only explicit
+  loopback `waka_agent_test` isolated schemas. No live model calls, hosted schema
+  changes/repair, push or deployment. No API server was listening on local 3010.
+- Next D work is read-side truth, not more claim that fences finish the loop:
+  already-published personal readings can still carry withdrawn support, and
+  the no-signal/no-change carry path must not re-certify those words. Preserve
+  edited/pinned wording with accurate standing, contain unverified legacy
+  personal context, and expose a concise recovery path. Source/statement changes
+  also need pending-support treatment and complete downstream re-assessment;
+  question, embedding and derivation worker claim checks are not established
+  by the reading/principle checks above. Source-to-artifact receipts, ambiguous
+  saves, personal cache invalidation and E2's visible journey remain open.
+  Routine database-error logging also needs review for parameter/content leakage
+  under L3. The full A–J/L1–L3 objective and release gates remain unchanged.

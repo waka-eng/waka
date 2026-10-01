@@ -845,6 +845,18 @@ export async function runBackgroundJobWorker(
 // The job router
 // ---------------------------------------------------------------------------
 
+/** Settlement fencing alone is too late: a reclaimed worker must not write
+ * an artifact first and only discover its lost claim when marking success. */
+async function assertBackgroundJobOwnership(tx: Pick<ReturnType<typeof getDb>, "select">, job: BackgroundJob) {
+  const lockedAt = coerceNullableDate(job.lockedAt);
+  if (!lockedAt) throw new Error("Background job ownership changed before commit");
+  const [owned] = await tx.select({ id: backgroundJobs.id }).from(backgroundJobs)
+    .where(and(eq(backgroundJobs.id, job.id), eq(backgroundJobs.profileId, job.profileId),
+      eq(backgroundJobs.type, job.type), eq(backgroundJobs.status, "running"),
+      eq(backgroundJobs.lockedAt, lockedAt), eq(backgroundJobs.attempts, job.attempts))).for("update");
+  if (!owned) throw new Error("Background job ownership changed before commit");
+}
+
 export async function processBackgroundJob(job: BackgroundJob): Promise<BackgroundJobResult | void> {
   switch (job.type) {
     case "generate_reflection_question": {
@@ -884,7 +896,7 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
           .where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.profileId, job.profileId))).limit(1);
         if (!member) throw new Error("Room principles require a current member");
       }
-      await refreshPrinciplesForProfile({ profileId });
+      await refreshPrinciplesForProfile({ profileId }, { beforeCommit: (tx) => assertBackgroundJobOwnership(tx, job) });
       return;
     }
     case "enrich_attachment": {
@@ -936,7 +948,7 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
       const result = await refreshTopOfMindForProfile({
         profileId: job.profileId,
         reason: payload.reason,
-      });
+      }, { beforeCommit: (tx) => assertBackgroundJobOwnership(tx, job) });
       console.log("[background-jobs] refreshed top of mind", {
         jobId: job.id,
         profileId: job.profileId,
@@ -960,7 +972,7 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
       await refreshTopOfMindForGroup({
         groupId: payload.groupId,
         reason: payload.reason,
-      });
+      }, { beforeCommit: (tx) => assertBackgroundJobOwnership(tx, job) });
       const [mind] = await getDb().select({ id: profiles.id }).from(profiles)
         .where(and(eq(profiles.groupId, payload.groupId), eq(profiles.type, "group"))).limit(1);
       if (mind) await (await import("./principle-status.js")).requestPrincipleRefresh(getDb(), mind.id);

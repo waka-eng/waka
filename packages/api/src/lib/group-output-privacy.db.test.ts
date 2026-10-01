@@ -164,7 +164,7 @@ describe("room output privacy", () => {
     });
     await expect(refreshTopOfMindForGroup({ groupId: f.groupId, reason: "manual" }, {
       db: t.db as never, modelProvider: { synthesizeTopOfMind: synthesize } as unknown as ModelProvider,
-    })).rejects.toThrow("membership changed");
+    })).rejects.toThrow("Generation inputs changed");
     expect(await t.sql`SELECT id FROM top_of_minds WHERE group_id = ${f.groupId}`).toHaveLength(1);
   });
 
