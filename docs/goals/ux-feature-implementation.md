@@ -1,6 +1,6 @@
 # Goal: implement the experience review
 
-Status: in flight — A/B and C input/output/cache fixes locally checked; shared-data rollout and historical repair remain open. Full release verification remains open.
+Status: in flight — A/B and C input/output/cache fixes locally checked; deployment-target verification and historical repair remain open. Full release verification remains open.
 Created: 2026-10-01, on the owner's instruction to implement the full plan.
 Branch: `codex/ux-feature-implementation`.
 Baseline: `33e65a7` on `dev`.
@@ -27,7 +27,7 @@ experiments or revive superseded room goals.
 | --- | --- | --- | --- |
 | A | F5/F6/F10: input, overlay scrolling/focus, readable active controls | Reproduce slash/wheel defects; verify typing, caret, Escape/Tab, wheel/touch and contrast in actual affected flows; web checks | Implemented; 5 original failures now pass, 325 web tests pass. Desktop fixture verified. Mobile touch/200% zoom and deployed verification remain open. |
 | B | F3/F4: edited principle preservation, truthful support, account-scoped drafts/preferences and cancellation | Isolated SQL preservation tests and two-account browser/state tests; API/web checks | B1: 6 SQL / 653 unit tests pass after 3 reproduced failures. B2: 4 failures reproduced, then two-account draft and stale-response checks pass; full web suite 331/331. Deployed/account-switch browser verification remains open. |
-| C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | C1/C2/C3 code locally verified (51 SQL cases; full web 349/349). Read-only shared DB inventory completed across 5 rooms. Historical repair, deployment coordination and deployed verification remain pending. |
+| C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | C1/C2/C3 code locally verified (51 SQL cases; full web 349/349). Read-only inventory completed across 5 rooms in the DB referenced by the local env files; hosted-stage mapping is not verified. Historical repair, deployment coordination and deployed verification remain pending. |
 | D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | Pending |
 | E1 | F7/F8: authoritative poster and truthful manual refresh | Queue acceptance, changed/unchanged completion, failure and fresh displayed version verified | Pending |
 | E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | Pending |
@@ -206,8 +206,10 @@ Keep code, deployment, historical repair, and user validation evidence distinct.
   revalidation, wire metadata and HTTP cancellation. These are real React/
   simulation tests with documented network/canvas seams, not pixel/deployed
   verification. No server-side generator or database writer changed in this slice.
-- C read-only impact assessment: verified `.env.local`, `.env.development`
-  and `.env.production` have identical connection URLs (same shared Neon DB).
+- C read-only impact assessment: verified the LOCAL files `.env.local`,
+  `.env.development` and `.env.production` have identical connection URLs.
+  This does not establish which databases the hosted stages use (see correction
+  below). The inventory queried only the DB referenced by these local files.
   Ran the report against all 5 room IDs returned by a bounded, read-only group
   inventory. Reports at 2026-10-01 11:34:49–11:35:04 UTC were untruncated:
   42 unverified signals, 42 reading versions containing 102 unverified entries,
@@ -217,9 +219,22 @@ Keep code, deployment, historical repair, and user validation evidence distinct.
   and is not proof of exposure or proof of safety. No text/answer/quote was
   fetched, no model invoked, and no shared row or schema modified. Identifiers
   remain in the scoped tool report rather than being committed to the repo.
-- Rollout decision requested from the owner: separate dev data before
-  deployment (recommended), or coordinate a shared-database rollout. No
-  migration or repair is authorized by that inventory. A reviewed named
+- The initial rollout question assumed hosted dev and production shared a
+  database; that assumption was premature and the question is withdrawn.
+  No migration or repair is authorized by the inventory. A reviewed named
   repair batch, old-worker coordination and deployed checks still gate C.
-  Local D/E and remaining delivery work can continue while that decision is
-  pending; the full A–J/L1–L3 goal remains unchanged and incomplete.
+  Local D/E and remaining delivery work can continue; the full A–J/L1–L3
+  goal remains unchanged and incomplete.
+- 2026-10-01 correction after the owner's request to double-check: deployment
+  uses separate GitHub secrets. `deploy-dev.yml` sets migration environment
+  `DB_CONNECTION_URL` from `secrets.DB_CONNECTION_URL_DEV`; `deploy.yml` uses
+  `secrets.DB_CONNECTION_URL`. Runtime functions receive the SST
+  `DbConnectionUrl` secret scoped to `development` or `production`, not local
+  dotenv files. The production workflow explicitly synchronizes its DB secret;
+  development currently relies on its existing stage secret. Local files
+  still match, but live equality was never established. Runtime discovery via
+  the local AWS credentials was denied (`lambda:ListFunctions`); no deployed
+  secret values were read. Treat deployment targets as separately configured,
+  verify the actual stage binding before any migration/repair, and do not
+  classify the 5-room inventory as covering both deployed stages. No env file,
+  secret, workflow, hosted database, or infrastructure was changed.
