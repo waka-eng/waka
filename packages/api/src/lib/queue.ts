@@ -1006,7 +1006,9 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
       // `profile_id` is written by the route from the resolved session scope,
       // so an id that arrived in a payload can never reach another tenant's
       // signal even if a payload were ever forged.
-      await reembedSignal({ profileId: job.profileId, signalId: payload.signalId });
+      await reembedSignal({ profileId: job.profileId, signalId: payload.signalId }, {
+        beforeCommit: (tx) => assertBackgroundJobOwnership(tx, job, true),
+      });
       return;
     }
 

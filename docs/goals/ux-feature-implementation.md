@@ -1,6 +1,6 @@
 # Goal: implement the experience review
 
-Status: in flight — A/B, C input/output/cache, D1–D3c support/source handoffs and reading recovery, D3d1 follow-up question fences, plus E1 manual refresh locally checked; pending/statement support, remaining lower-layer fences, legacy context, E2 and later slices remain open. Deployment-target verification, historical repair and full release verification remain open.
+Status: in flight — A/B, C input/output/cache, D1–D3c support/source handoffs and reading recovery, D3d1–D3d2 question/statement-vector fences, plus E1 manual refresh locally checked; pending/statement support, remaining lower-layer fences, legacy context, E2 and later slices remain open. Deployment-target verification, historical repair and full release verification remain open.
 Created: 2026-10-01, on the owner's instruction to implement the full plan.
 Branch: `codex/ux-feature-implementation`.
 Baseline: `33e65a7` on `dev`.
@@ -559,3 +559,27 @@ Keep code, deployment, historical repair, and user validation evidence distinct.
   failure path can delete a newer vector. These are the next lower-layer cases,
   not resolved by the question or reading guards. D/E2 and later release gates
   retain their full scope.
+- 2026-10-01, D3d2 baseline: all 6 statement-vector race/cache cases failed.
+  Older success/failure could overwrite/delete a newer edit's vector; same-input
+  concurrent success was replaced or deleted; an existing current vector still
+  spent another call; and a direct stale-wording request was not rejected.
+- Re-embedding now checks scoped current wording before calling the provider,
+  reuses matching cache, and locks/rechecks the statement plus worker claim
+  before writing. It does not wait back on a human's row lock. A concurrent
+  matching cache wins on either provider outcome. Failure cleanup is restricted
+  to this model's mismatched hash; provider failure with no valid output requests
+  the existing bounded queue retry. Source/claim/DB failures cannot masquerade
+  as provider failure or delete cache. Private provider error text is not logged
+  or propagated from this path. Neither human wording nor locks are changed.
+- D3d2 verification: 12/12 new SQL tests pass, including real queue-router claim
+  loss on success and failure, a second-connection human row lock, model-scoped
+  cleanup, refused-commit rollback and cache reuse. With question fences, signal
+  lock/statement-chain/suppression and reading receipt suites: 47/47 SQL tests.
+  API typecheck and 671 unit tests pass / 3 paid-live benches skipped. All SQL
+  used disposable schemas on explicit local `waka_agent_test`; clients were
+  injected or their embedding method replaced in the test. No live provider,
+  hosted write, push or deployment. No numerical threshold changed.
+- Remaining D3d work still includes capture-vector, support-review, discovery,
+  enrichment and gardening commit claims. Statement edit/drop/enqueue ordering
+  and durable statement-support propagation are not established by this writer
+  fix. The source-to-artifact contract and all later delivery gates remain open.

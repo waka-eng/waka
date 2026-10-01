@@ -365,6 +365,16 @@ queue where the per-account budget can see it. In between, the signal is
 simply not a match target; a similar capture mints a visible near-duplicate.
 The recoverable mistake, again.
 
+The re-embedding worker reuses a current model/input hash without another
+provider call. Otherwise it verifies current statement text and its worker
+claim in the final cache transaction. Concurrent valid output wins over both
+a slow success and a slow failure; neither path deletes another model's rows.
+A provider failure without valid current output removes only the mismatched
+model cache and requests the queue's bounded retry, not silent success. Source,
+claim and database failures remain failures rather than triggering that cache
+cleanup. No lock spans the embedding call, and a busy human-edited statement
+makes the worker retry instead of waiting back on the person.
+
 ### Asking the memory (`GET /api/recall?q=…`)
 
 The one door that turns the memory from something a mind receives into

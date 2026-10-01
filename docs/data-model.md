@@ -357,6 +357,12 @@ evidence.
 - **Human-curated**: the profile's admin can edit a signal's statement,
   merge, hide, or delete it. A human edit **locks** the signal (see the
   edit rule).
+  Re-embedding loads current wording and reuses a matching model/input hash.
+  After a provider call it locks and rechecks the statement and worker claim
+  before changing the cache. A slow success cannot replace a newer vector;
+  a slow failure cannot delete one. Only that model's mismatched cache may be
+  removed, and missing output is retried through the normal bounded queue.
+  A concurrent human edit takes priority over a waiting embedding writer.
 - **The shareable unit**: sharing is a per-signal, per-group choice. A
   shared signal appears on that group's wall as its distilled statement.
   Its evidence (the underlying inspirations) stays private — members see

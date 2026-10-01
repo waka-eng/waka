@@ -17,7 +17,7 @@
  * names this file as their home and fails if a route so much as mentions them.
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 
 import { signalEmbeddings, signals } from "../db/index.js";
 import { getDb } from "./db.js";
@@ -33,6 +33,12 @@ type WakaTx = Parameters<Parameters<WakaDb["transaction"]>[0]>[0];
 export interface StatementEmbeddingClient {
   readonly model: string;
   embed(input: string): Promise<number[]>;
+}
+
+interface ReembeddingDependencies {
+  embeddingClient?: StatementEmbeddingClient;
+  /** The queue verifies its still-current claim inside the write transaction. */
+  beforeCommit?: (tx: WakaTx) => Promise<void>;
 }
 
 /**
@@ -108,45 +114,52 @@ export async function dropSignalEmbedding(
  * This spends the shared model key, so it runs from the queue and nowhere
  * else — see `reembedSignal` below and the `reembed_signal` job type.
  *
- * On an embedding failure the stale row is removed rather than left wrong,
- * and the job is *not* failed for it. A throw would buy a retry that spends
- * two more metered starts to reach the same place the failure path already
- * reaches: no vector, and a near-duplicate the owner can merge.
+ * A provider failure cannot remove a newer successful vector. Only this
+ * model's mismatched cache may be removed, under the same source/claim locks
+ * as a successful write. Missing current output then fails for the queue's
+ * bounded retry; a valid concurrent result already satisfies the request.
  */
 export async function reembedSignalStatement(
   db: WakaDb,
   input: { profileId: string; signalId: string; statement: string },
-  deps: { embeddingClient?: StatementEmbeddingClient } = {},
+  deps: ReembeddingDependencies = {},
 ): Promise<void> {
   const client = deps.embeddingClient ?? new GeminiEmbeddingHttpClient();
+  const inputHash = hashEmbeddingInput(input.statement);
+  const [initial] = await db.select({ statement: signals.statement }).from(signals)
+    .where(and(eq(signals.profileId, input.profileId), eq(signals.id, input.signalId))).limit(1);
+  if (!initial) return;
+  if (initial.statement !== input.statement) throw new Error("Signal statement changed; retry current wording");
+  const [cached] = await db.select({ inputHash: signalEmbeddings.inputHash }).from(signalEmbeddings)
+    .where(and(eq(signalEmbeddings.profileId, input.profileId), eq(signalEmbeddings.signalId, input.signalId), eq(signalEmbeddings.model, client.model))).limit(1);
+  if (cached?.inputHash === inputHash) return;
+
+  let embedding: number[] | null = null;
   try {
-    const embedding = await client.embed(input.statement);
-    await db
-      .insert(signalEmbeddings)
-      .values({
-        profileId: input.profileId,
-        signalId: input.signalId,
-        model: client.model,
-        dimensions: embedding.length,
-        inputHash: hashEmbeddingInput(input.statement),
-        embedding,
-      })
-      .onConflictDoUpdate({
-        target: [signalEmbeddings.signalId, signalEmbeddings.model],
-        set: {
-          dimensions: embedding.length,
-          inputHash: hashEmbeddingInput(input.statement),
-          embedding,
-          updatedAt: new Date(),
-        },
-      });
-  } catch (err) {
-    console.warn("[signals] re-embed after edit failed; dropping stale vector", {
-      signalId: input.signalId,
-      error: err instanceof Error ? err.message : String(err),
-    });
-    await dropSignalEmbedding(db, input);
+    embedding = await client.embed(input.statement);
+  } catch {
+    // Provider errors may include private inputs. Only a stable failure code
+    // reaches the worker; source/DB/claim errors are not embedding failures.
   }
+  const missing = await db.transaction(async (tx) => {
+    const [current] = await tx.select({ statement: signals.statement }).from(signals)
+      .where(and(eq(signals.profileId, input.profileId), eq(signals.id, input.signalId)))
+      .limit(1).for("no key update", { noWait: true });
+    if (!current) return false;
+    if (current.statement !== input.statement) throw new Error("Signal statement changed; retry current wording");
+    await deps.beforeCommit?.(tx);
+    const [concurrent] = await tx.select({ inputHash: signalEmbeddings.inputHash }).from(signalEmbeddings)
+      .where(and(eq(signalEmbeddings.profileId, input.profileId), eq(signalEmbeddings.signalId, input.signalId), eq(signalEmbeddings.model, client.model))).limit(1);
+    if (concurrent?.inputHash === inputHash) return false;
+    if (!embedding) {
+      await tx.delete(signalEmbeddings).where(and(eq(signalEmbeddings.profileId, input.profileId),
+        eq(signalEmbeddings.signalId, input.signalId), eq(signalEmbeddings.model, client.model), ne(signalEmbeddings.inputHash, inputHash)));
+      return true;
+    }
+    await writeSignalEmbedding(tx, { ...input, model: client.model, embedding });
+    return false;
+  });
+  if (missing) throw new Error("Signal embedding unavailable; retry current wording");
 }
 
 /**
@@ -162,7 +175,7 @@ export async function reembedSignalStatement(
  */
 export async function reembedSignal(
   input: { profileId: string; signalId: string },
-  deps: { db?: WakaDb; embeddingClient?: StatementEmbeddingClient } = {},
+  deps: ReembeddingDependencies & { db?: WakaDb } = {},
 ): Promise<void> {
   const db = deps.db ?? getDb();
   const [signal] = await db
