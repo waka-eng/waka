@@ -30,7 +30,11 @@ const reportSchema = z.object({
   }).strict()),
 }).strict();
 
-export async function applySignalSupportReview(db: ReturnType<typeof getDb>, reportInput: unknown) {
+type WakaDb = ReturnType<typeof getDb>;
+type WakaTx = Parameters<Parameters<WakaDb["transaction"]>[0]>[0];
+
+export async function applySignalSupportReview(db: WakaDb, reportInput: unknown,
+  deps: { beforeCommit?: (tx: WakaTx) => Promise<void> } = {}) {
   const report = reportSchema.parse(reportInput);
   const reportHash = hashEmbeddingInput(JSON.stringify(report));
   if (new Set(report.items.map((row) => row.signalId)).size !== report.items.length) throw new Error("Duplicate support review claims");
@@ -68,6 +72,7 @@ export async function applySignalSupportReview(db: ReturnType<typeof getDb>, rep
     const withdrawn: string[] = [];
     const restored: string[] = [];
     const now = new Date();
+    await deps.beforeCommit?.(tx);
     for (const item of report.items) {
       const claim = allowed.find((row) => row.signalId === item.signalId);
       if (!claim || hashEmbeddingInput(claim.statement) !== item.statementHash) throw new Error("Support review statement changed");

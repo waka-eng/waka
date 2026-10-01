@@ -42,7 +42,8 @@ import {
 } from "../db/index.js";
 import { recordContradiction } from "./contested-pairs.js";
 import { getDb } from "./db.js";
-import type { ModelProvider } from "./model-provider.js";
+import { readGenerationRevision, assertGenerationRevision } from "./generation-revision.js";
+import type { ModelProvider, SignalMatchJudgement } from "./model-provider.js";
 import { getDefaultModelProvider } from "./model-provider.js";
 import { cosineSimilarity } from "../scoring/vector.js";
 import {
@@ -54,9 +55,20 @@ import { refreshSignalLifecycle } from "./signal-lifecycle.js";
 import type { SupportedLocale } from "./locales.js";
 
 type WakaDb = ReturnType<typeof getDb>;
+type WakaTx = Parameters<Parameters<WakaDb["transaction"]>[0]>[0];
 
 const normalizePair = (x: string, y: string): { a: string; b: string } =>
   x < y ? { a: x, b: y } : { a: y, b: x };
+
+async function readRecordedPairs(db: Pick<WakaDb, "select">, ids: string[]): Promise<Set<string>> {
+  const [duplicates, contradictions] = await Promise.all([
+    db.select({ a: signalDuplicates.aSignalId, b: signalDuplicates.bSignalId }).from(signalDuplicates)
+      .where(or(inArray(signalDuplicates.aSignalId, ids), inArray(signalDuplicates.bSignalId, ids))),
+    db.select({ a: signalContradictions.aSignalId, b: signalContradictions.bSignalId }).from(signalContradictions)
+      .where(or(inArray(signalContradictions.aSignalId, ids), inArray(signalContradictions.bSignalId, ids))),
+  ]);
+  return new Set([...duplicates, ...contradictions].map((row) => `${row.a}:${row.b}`));
+}
 
 export interface GardenPassSummary {
   scanned: number;
@@ -73,9 +85,12 @@ export async function tendSignalGarden(
     preferredLocale: SupportedLocale;
     provider?: ModelProvider;
     now?: Date;
+    beforeCommit?: (tx: WakaTx) => Promise<void>;
   },
 ): Promise<GardenPassSummary> {
   const provider = input.provider ?? (await getDefaultModelProvider());
+  const revision = await readGenerationRevision(db, { profileId: input.profileId });
+  if (!revision) return { scanned: 0, suspectPairs: 0, judged: 0, proposed: 0, opposed: 0 };
 
   /* The standing set, most-recently-evidenced first — the same bounding rule
      match-or-mint scans by. Dismissed rows are out (their vectors are
@@ -111,27 +126,7 @@ export async function tendSignalGarden(
   }
 
   /* every pair already on the record, in either table, in any state */
-  const [duplicateRows, contradictionRows] = await Promise.all([
-    db
-      .select({ a: signalDuplicates.aSignalId, b: signalDuplicates.bSignalId })
-      .from(signalDuplicates)
-      .where(
-        or(inArray(signalDuplicates.aSignalId, ids), inArray(signalDuplicates.bSignalId, ids)),
-      ),
-    db
-      .select({ a: signalContradictions.aSignalId, b: signalContradictions.bSignalId })
-      .from(signalContradictions)
-      .where(
-        or(
-          inArray(signalContradictions.aSignalId, ids),
-          inArray(signalContradictions.bSignalId, ids),
-        ),
-      ),
-  ]);
-  const recorded = new Set<string>();
-  for (const row of [...duplicateRows, ...contradictionRows]) {
-    recorded.add(`${row.a}:${row.b}`);
-  }
+  const recorded = await readRecordedPairs(db, ids);
 
   /* pairwise, in process — bounded by the scan limit, and only the pairs
      the attach threshold itself would call the same pattern */
@@ -159,6 +154,7 @@ export async function tendSignalGarden(
     opposed: 0,
   };
 
+  const plans: Array<{ pair: (typeof suspects)[number]; relation: SignalMatchJudgement["relation"] }> = [];
   for (const pair of suspects.slice(0, GARDENER_MAX_JUDGED_PAIRS)) {
     /* the same austere judge derivation uses; a road failure throws and the
        job attempt retries — the failure-honesty rule, unchanged here */
@@ -168,30 +164,47 @@ export async function tendSignalGarden(
       existingStatement: pair.b.statement,
     });
     summary.judged += 1;
-
-    if (verdict.relation === "same") {
-      const { a, b } = normalizePair(pair.a.id, pair.b.id);
-      await db
-        .insert(signalDuplicates)
-        .values({
-          profileId: input.profileId,
-          aSignalId: a,
-          bSignalId: b,
-          similarity: pair.sim,
-          createdAt: input.now ?? new Date(),
-        })
-        .onConflictDoNothing();
-      summary.proposed += 1;
-    } else if (verdict.relation === "opposed") {
-      await recordContradiction(db, {
-        profileId: input.profileId,
-        signalId: pair.a.id,
-        opposesSignalId: pair.b.id,
-        now: input.now,
-      });
-      summary.opposed += 1;
-    }
+    plans.push({ pair, relation: verdict.relation });
   }
+  if (!plans.length) return summary;
+
+  // Finish every provider call first. A later failure cannot leave a partial
+  // proposal batch, and a human edit while judging invalidates the whole pass.
+  await db.transaction(async (tx) => {
+    await assertGenerationRevision(tx, revision);
+    await tx.select({ id: signals.id }).from(signals)
+      .where(and(eq(signals.profileId, input.profileId), inArray(signals.id, ids)))
+      .for("no key update", { noWait: true });
+    await input.beforeCommit?.(tx);
+    const currentRecorded = await readRecordedPairs(tx, ids);
+    for (const { pair, relation } of plans) {
+      const { a, b } = normalizePair(pair.a.id, pair.b.id);
+      // A proposal/owner decision may have arrived during judging. A later
+      // machine verdict must not create a conflicting second kind of pair.
+      if (currentRecorded.has(`${a}:${b}`)) continue;
+      if (relation === "same") {
+        const inserted = await tx
+          .insert(signalDuplicates)
+          .values({
+            profileId: input.profileId,
+            aSignalId: a,
+            bSignalId: b,
+            similarity: pair.sim,
+            createdAt: input.now ?? new Date(),
+          })
+          .onConflictDoNothing().returning({ id: signalDuplicates.id });
+        summary.proposed += inserted.length;
+      } else if (relation === "opposed") {
+        await recordContradiction(tx, {
+          profileId: input.profileId,
+          signalId: pair.a.id,
+          opposesSignalId: pair.b.id,
+          now: input.now,
+        });
+        summary.opposed += 1;
+      }
+    }
+  });
 
   return summary;
 }

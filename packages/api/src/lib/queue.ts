@@ -125,7 +125,7 @@
  * Splitting the guard from the claim is the one move that must not be made.
  */
 
-import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 
 import {
   type BackgroundJob,
@@ -143,6 +143,8 @@ import {
   inspirations,
   reflections,
   generationRevisions,
+  attachments,
+  signalEvidence,
 } from "../db/index.js";
 import { getDb } from "./db.js";
 import { getDefaultModelProvider } from "./model-provider.js";
@@ -851,6 +853,28 @@ export async function runBackgroundJobWorker(
 async function assertBackgroundJobOwnership(tx: Pick<ReturnType<typeof getDb>, "select">, job: BackgroundJob, noWait = false) {
   const lockedAt = coerceNullableDate(job.lockedAt);
   if (!lockedAt) throw new Error("Background job ownership changed before commit");
+  if (noWait) {
+    // Mutation triggers advance revisions before source routes enqueue work.
+    // Taking the job first and then waiting for such a revision would invert
+    // that order. Lock every revision this stage may write before its claim;
+    // a busy human transaction wins instead of becoming a deadlock victim.
+    const owners = new Set([job.profileId]);
+    if (job.type === "derive_signals") {
+      const destination = readString(job.payload, "deriveIntoProfileId");
+      if (destination) owners.add(destination);
+    }
+    if (job.type === "enrich_attachment") {
+      const inspirationId = readString(job.payload, "inspirationId");
+      if (inspirationId) {
+        const destinations = await tx.select({ profileId: signalEvidence.profileId }).from(signalEvidence)
+          .where(and(eq(signalEvidence.ownerProfileId, job.profileId), eq(signalEvidence.inspirationId, inspirationId)));
+        for (const row of destinations) owners.add(row.profileId);
+      }
+    }
+    await tx.select({ id: generationRevisions.profileId }).from(generationRevisions)
+      .where(inArray(generationRevisions.profileId, [...owners])).orderBy(asc(generationRevisions.profileId))
+      .for("update", { noWait: true });
+  }
   const [owned] = await tx.select({ id: backgroundJobs.id }).from(backgroundJobs)
     .where(and(eq(backgroundJobs.id, job.id), eq(backgroundJobs.profileId, job.profileId),
       eq(backgroundJobs.type, job.type), eq(backgroundJobs.status, "running"),
@@ -922,7 +946,13 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
       const payload = parseEnrichAttachmentPayload(job.payload);
       if (!payload) return dropPoisonPayload(job);
 
-      const enrichment = await enrichAttachment(payload.attachmentId);
+      const [source] = await getDb().select({ id: attachments.id }).from(attachments)
+        .where(and(eq(attachments.id, payload.attachmentId), eq(attachments.profileId, job.profileId),
+          eq(attachments.inspirationId, payload.inspirationId))).limit(1);
+      if (!source) return dropPoisonPayload(job);
+      const enrichment = await enrichAttachment(payload.attachmentId, {
+        beforeCommit: (tx) => assertBackgroundJobOwnership(tx, job, true),
+      });
 
       // A login wall or an unreadable page is an ordinary outcome. Source
       // races and failed transactional handoffs throw for retry. Among
@@ -946,7 +976,12 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
       const payload = parseDeriveSignalsPayload(job.payload);
       if (!payload) return dropPoisonPayload(job);
 
-      const result = await deriveSignalsForInspiration(payload);
+      const [source] = await getDb().select({ id: inspirations.id }).from(inspirations)
+        .where(and(eq(inspirations.id, payload.inspirationId), eq(inspirations.profileId, job.profileId))).limit(1);
+      if (!source) return dropPoisonPayload(job);
+      const result = await deriveSignalsForInspiration(payload, {
+        beforeCommit: (tx) => assertBackgroundJobOwnership(tx, job, true),
+      });
       if (result.supportReview?.retryable) {
         throw new Error("Existing support could not be fully assessed; retry current material");
       }
@@ -1020,6 +1055,7 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
         .limit(1);
       const summary = await tendSignalGarden(getDb(), {
         profileId: job.profileId,
+        beforeCommit: (tx) => assertBackgroundJobOwnership(tx, job, true),
         preferredLocale: isSupportedLocale(profileRow?.preferredLocale)
           ? profileRow.preferredLocale
           : "en-US",

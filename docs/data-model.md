@@ -291,6 +291,15 @@ agent's relayed excerpt, an agent's own observation.
   Principle comparisons finish before the batch transaction starts, and a
   busy human-edited principle makes generation retry rather than wait back on
   the person's row. A human edit still owns its wording.
+- **Worker claims guard data writes, not only job settlement.** Capture-vector
+  writes, applied support reviews, discovered evidence/signals, enrichment caches
+  and pattern-comparison records check the claimed job inside their own write
+  transaction. Source jobs first verify that the referenced capture/attachment
+  belongs to the job's profile. Reclaimed work cannot mutate data or enqueue a
+  downstream reading as part of that transaction. Valid earlier stages remain
+  committed if a later stage loses its claim; a job is not one giant transaction.
+  Pattern comparison prepares all judgments before its batch write, verifies
+  the generation revision, and respects decisions recorded while it was waiting.
 - **Personal feedback context stays in its profile.** Personal synthesis uses
   feedback on that profile's own signals and entries. Reactions to another
   profile or room remain stored for that context; they are not permission to

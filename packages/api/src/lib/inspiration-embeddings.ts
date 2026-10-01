@@ -256,6 +256,7 @@ export interface EnsureInspirationEmbeddingParams {
   inputScope?: InspirationEmbeddingScope;
   db?: WakaDb;
   client?: GeminiEmbeddingClient;
+  beforeCommit?: (tx: Parameters<Parameters<WakaDb["transaction"]>[0]>[0]) => Promise<void>;
 }
 
 export type EnsureInspirationEmbeddingResult =
@@ -500,6 +501,7 @@ export async function ensureInspirationEmbedding(
       };
     }
 
+    await params.beforeCommit?.(tx);
     const now = new Date();
     const status = existing ? "updated" : "created";
     const [stored] = await tx

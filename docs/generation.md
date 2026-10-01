@@ -678,6 +678,12 @@ gardener looks:
   row — a PROPOSAL; `opposed` writes the same contradiction row a
   capture-time opposition writes; `independent` writes nothing.
 
+All comparison calls finish before the batch transaction starts. A failed
+later call cannot leave earlier proposals persisted. The final transaction
+checks the input revision and worker claim, acquires non-waiting statement
+locks, and rechecks recorded pairs. A keep-apart decision arriving during a
+call wins over that late verdict; a concurrent human edit makes the pass retry.
+
 **The merge is the owner's act** (`POST /api/signal-duplicates/:id/resolve`,
 human sessions only — the world never moves unless the user moved it, and a
 merge moves their memory):

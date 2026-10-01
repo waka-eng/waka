@@ -127,6 +127,7 @@ export interface SignalDerivationDependencies {
   modelProvider?: ModelProvider;
   embeddingClient?: StatementEmbeddingClient;
   now?: Date;
+  beforeCommit?: (tx: WakaTx) => Promise<void>;
 }
 
 export interface SignalDerivationResult {
@@ -231,7 +232,7 @@ export async function deriveSignalsForInspiration(
       provider, maxCalls: 1, reuseCurrentAssessments: true });
     if (review.status !== "current") throw new Error("Source material changed during support assessment");
     reviewedMaterialHash = review.material.hash;
-    const applied = review.calls > 0 ? await applySignalSupportReview(db, review) : null;
+    const applied = review.calls > 0 ? await applySignalSupportReview(db, review, { beforeCommit: deps.beforeCommit }) : null;
     supportReview = { checked: review.items.length, withdrawn: applied?.withdrawn.length ?? 0,
       restored: applied?.restored.length ?? 0, unresolved: review.items.filter((item) => item.verdict === "unresolved").length,
       retryable: review.items.some((item) => item.issue && ["provider_unavailable", "missing_verdict", "invalid_verdict", "budget_exhausted"].includes(item.issue)) };
@@ -285,6 +286,7 @@ export async function deriveSignalsForInspiration(
     inputScope: isGroup ? "public" : "personal",
     db,
     client: embeddingClient,
+    beforeCommit: deps.beforeCommit,
   });
   if (inspirationEmbedding.status === "stale_source") {
     throw new Error("Source material changed during embedding");
@@ -368,6 +370,7 @@ export async function deriveSignalsForInspiration(
       attachments: attachmentRows, related: relatedInspirations,
     });
     await assertMaterialCurrent(tx, material, relatedInspirations);
+    await deps.beforeCommit?.(tx);
   };
 
   if (statements.length === 0) {

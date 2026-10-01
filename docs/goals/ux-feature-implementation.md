@@ -1,6 +1,6 @@
 # Goal: implement the experience review
 
-Status: in flight — A/B, C input/output/cache, D1–D3c support/source handoffs and reading recovery, D3d1–D3d2 question/statement-vector fences, plus E1 manual refresh locally checked; pending/statement support, remaining lower-layer fences, legacy context, E2 and later slices remain open. Deployment-target verification, historical repair and full release verification remain open.
+Status: in flight — A/B, C input/output/cache, D1–D3d3 support/source handoffs, reading recovery and worker data-write fences, plus E1 manual refresh locally checked; pending/statement support, legacy context, E2 and later slices remain open. Deployment-target verification, historical repair and full release verification remain open.
 Created: 2026-10-01, on the owner's instruction to implement the full plan.
 Branch: `codex/ux-feature-implementation`.
 Baseline: `33e65a7` on `dev`.
@@ -28,7 +28,7 @@ experiments or revive superseded room goals.
 | A | F5/F6/F10: input, overlay scrolling/focus, readable active controls | Reproduce slash/wheel defects; verify typing, caret, Escape/Tab, wheel/touch and contrast in actual affected flows; web checks | Implemented; 5 original failures now pass, 325 web tests pass. Desktop fixture verified. Mobile touch/200% zoom and deployed verification remain open. |
 | B | F3/F4: edited principle preservation, truthful support, account-scoped drafts/preferences and cancellation | Isolated SQL preservation tests and two-account browser/state tests; API/web checks | B1: 6 SQL / 653 unit tests pass after 3 reproduced failures. B2: 4 failures reproduced, then two-account draft and stale-response checks pass; full web suite 331/331. Deployed/account-switch browser verification remains open. |
 | C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | C1/C2/C3 code locally verified (51 SQL cases; full web 349/349). Read-only inventory completed across 5 rooms in the DB referenced by the local env files; hosted-stage mapping is not verified. Historical repair, deployment coordination and deployed verification remain pending. |
-| D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | D1–D3c provenance, automatic support checks, durable handoffs, write fences and personal reading support/recovery locally verified. D3c: 78 targeted SQL / 671 unit / 374 web; synthetic rendered checks at two viewport sizes. Pending/statement support, legacy personal context, lower-layer claim fences, live semantic quality and historical repair remain open. |
+| D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | D1–D3d3 provenance, automatic support checks, durable source handoffs, worker data-write fences and personal reading recovery locally verified. D3d3: 161 targeted SQL / 671 unit / 374 web. Pending/statement support, legacy personal context, complete downstream receipts, live semantic quality and historical repair remain open. |
 | E1 | F7/F8: authoritative poster and truthful manual refresh | Queue acceptance, changed/unchanged completion, failure and fresh displayed version verified | Implemented with job receipts, resumable profile-scoped polling, held-job manual upgrade and authoritative headline. Local checks pass (8 receipt SQL tests, 10 hook tests, full web 362/362); deployed verification remains open. |
 | E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | Pending |
 | F | F11/F12: visible search and durable navigation | Results beyond initial archive, failure/no-match separation, stable IDs, deep links, Back/Forward and rename verified | Pending |
@@ -583,3 +583,46 @@ Keep code, deployment, historical repair, and user validation evidence distinct.
   enrichment and gardening commit claims. Statement edit/drop/enqueue ordering
   and durable statement-support propagation are not established by this writer
   fix. The source-to-artifact contract and all later delivery gates remain open.
+- 2026-10-01, D3d3 baseline: 10/10 new worker cases failed: reclaimed capture-
+  vector, support, discovery, match, enrichment and comparison writes were still
+  accepted; a failed later comparison left a partial proposal batch; and source
+  jobs could act on another profile's capture/attachment when given a poisoned
+  internal payload. A further reproduced case showed a late opposed verdict
+  overriding the effect of a keep-apart decision recorded during its call.
+  These are isolated reproductions, not evidence of hosted exploitation.
+- The queue now passes its commit-claim guard through capture-vector storage,
+  support application, discovery's final source check, enrichment and comparison
+  persistence. Each check and its writes share a transaction; guard failure
+  rolls that stage back. Source jobs check owner/parent binding before any
+  provider/fetch. Direct reviewed operations keep their existing explicit
+  authority. Earlier stages validly committed before a later claim loss are
+  not rolled back, and no incomplete job is called a complete learning receipt.
+- Comparison now prepares all judgments before its batch write, verifies the
+  profile revision, uses non-waiting statement locks, and rechecks recorded
+  pairs before inserting. A concurrent keep-apart decision cannot gain a new
+  contradictory pair from that late verdict. No model thresholds or public
+  states changed; partial provider failure leaves no comparison records.
+- D3d3 verification: 16/16 new real-SQL worker tests pass, including successful
+  derivation/support/enrichment (not only rejection cases), changed wording,
+  claim loss at each stage, poisoned-owner payloads, keep-apart races and a real
+  second-connection human lock. With nine related pipeline suites plus gardener
+  coverage: 161/161 SQL tests across 11 suites. API typecheck, 671 API unit tests
+  and 374 web tests pass; 3 paid-live benches skipped. Migration and diff checks
+  pass. All SQL used disposable schemas on explicit loopback `waka_agent_test`;
+  model methods and the enrichment fetch were replaced with deterministic test
+  data, with the fixture host allowlisted only in the test. No live provider,
+  hosted data/schema write, push or deployment.
+- Lock-order review added one more real two-connection test: a source writer
+  holding a generation revision can still update its job row after the worker
+  yields. Lower-stage guards acquire affected revision rows non-waiting before
+  taking the claim, matching mutation-trigger → enqueue order; enrichment
+  includes existing evidence destinations. This avoids introducing a claim/
+  revision wait cycle while adding ownership checks. The explicit support
+  application CLI help smoke check also passes; no report was applied.
+- The full goal is still incomplete. Next required work is the source/statement
+  revision and completion contract: pending support must be truthful, statement
+  edits must durably request reassessment, and a saved answer must be traceable
+  to its actual completed reading rather than a recycled job ID. Post-artifact
+  principle scheduling is still outside its artifact transaction. Historical
+  context/repair, cross-device caches, live semantic evaluation and every later
+  delivery/release gate remain open; worker claim guards do not prove them.

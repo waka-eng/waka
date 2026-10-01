@@ -587,6 +587,7 @@ export type EnrichAttachmentResult = AttachmentEnrichmentVerdict | { status: "mi
 
 interface EnrichAttachmentDeps {
   db?: WakaDb;
+  beforeCommit?: (tx: Parameters<Parameters<WakaDb["transaction"]>[0]>[0]) => Promise<void>;
   readAttachment?: (attachment: AttachmentRow) => Promise<{ result: AttachmentEnrichmentVerdict; link?: Partial<LinkEnrichment> }>;
 }
 
@@ -788,6 +789,7 @@ export async function enrichAttachment(
       current.contentType !== attachment.contentType || current.profileId !== attachment.profileId || current.inspirationId !== attachment.inspirationId) {
       throw new Error("Attachment material changed during enrichment; retry current source");
     }
+    await deps.beforeCommit?.(tx);
     await tx
     .update(attachments)
     .set({
