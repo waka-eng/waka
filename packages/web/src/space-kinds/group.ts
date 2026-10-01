@@ -111,7 +111,7 @@ export function deriveGroupChrome(
   return {
     text: ambition,
     awayFrom: null,
-    formingAlt: ambition ? null : t(locale, "worldGroupFormingAlt"),
+    formingAlt: ambition ? null : t(locale, top.restricted ? "worldRoomReadRestricted" : "worldGroupFormingAlt"),
     asOf: null,
     /* A room forms through proposals, not through signals overhead: members'
        signals stay on their own walls, so an open proposal is the only thing

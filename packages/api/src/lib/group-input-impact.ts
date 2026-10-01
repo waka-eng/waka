@@ -25,17 +25,19 @@ export async function buildGroupInputImpactReport(client: Sql, groupId: string, 
       WHERE p.group_id = ${groupId} AND p.type = 'group'
         AND (to_jsonb(s)->>'input_policy') IS DISTINCT FROM ${GROUP_INPUT_POLICY}
       ORDER BY s.id LIMIT ${limit}`;
-    // Current citations cannot prove earlier prompt context was clean. Include
-    // the entire group's derivative history until it has separate policy stamps.
+    // Keep the full version chain in the inventory, but distinguish entries
+    // without a writer policy from versions produced entirely by new writers.
     const readings = await tx`
       SELECT m.id, m.version, m.status, m.created_at,
         (SELECT count(*)::int FROM top_of_mind_entries e WHERE e.top_of_mind_id = m.id) AS entry_count,
         (SELECT count(*)::int FROM top_of_mind_entries e WHERE e.top_of_mind_id = m.id AND e.locked_at IS NOT NULL) AS human_edited_entry_count,
+        (SELECT count(*)::int FROM top_of_mind_entries e WHERE e.top_of_mind_id = m.id AND (to_jsonb(e)->>'input_policy') IS DISTINCT FROM ${GROUP_INPUT_POLICY}) AS unverified_entry_count,
         count(*) OVER()::int AS total_count
       FROM top_of_minds m WHERE m.group_id = ${groupId}
       ORDER BY m.version DESC, m.id LIMIT ${limit}`;
     const principles = await tx`
       SELECT r.id, r.origin, r.state, r.locked_at IS NOT NULL AS human_edited,
+        to_jsonb(r)->>'input_policy' AS input_policy,
         count(*) OVER()::int AS total_count
       FROM principles r JOIN profiles p ON p.id = r.profile_id
       WHERE p.group_id = ${groupId} AND p.type = 'group'
@@ -46,6 +48,8 @@ export async function buildGroupInputImpactReport(client: Sql, groupId: string, 
       WHERE j.status IN ('pending', 'running', 'failed') AND (
         j.payload->>'groupId' = ${groupId}
         OR j.payload->>'deriveIntoProfileId' IN (SELECT id::text FROM profiles WHERE group_id = ${groupId} AND type = 'group')
+        OR j.payload->>'profileId' IN (SELECT id::text FROM profiles WHERE group_id = ${groupId} AND type = 'group')
+        OR j.payload->>'signalId' IN (SELECT s.id::text FROM signals s JOIN profiles p ON p.id = s.profile_id WHERE p.group_id = ${groupId} AND p.type = 'group')
         OR j.profile_id IN (SELECT id FROM profiles WHERE group_id = ${groupId} AND type = 'group')
       ) ORDER BY j.id LIMIT ${limit}`;
     const section = (rows: typeof signals) => ({
@@ -63,7 +67,7 @@ export async function buildGroupInputImpactReport(client: Sql, groupId: string, 
       limitations: [
         "Existing reflections show possible exposure, not proof they affected a statement.",
         "Deleted reflections and prior prompt context cannot be reconstructed from current citations.",
-        "All reading/principle versions remain in review scope until their input lineage is verified.",
+        "A writer policy narrows review; legacy entries, old prompt context and current sharing still need separate assessment.",
         "Browser caches, external logs, and completed job payload retention require separate review.",
         "This inventory authorizes no repair or deletion. Preserve human wording and current sharing choices.",
       ],

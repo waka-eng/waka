@@ -35,6 +35,7 @@ export interface ApiPrinciple {
 }
 
 export interface ApiPrincipleStatus {
+  restricted?: boolean;
   phase: "waiting" | "pending" | "processing" | "ready" | "failed";
   eligible: boolean;
   signalCount: number;

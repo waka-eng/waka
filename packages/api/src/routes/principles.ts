@@ -57,12 +57,14 @@ import {
 } from "../lib/model-provider.js";
 import {
   PRINCIPLE_MAX_STATEMENT_LENGTH,
+  PRINCIPLE_MIN_SIGNALS,
   refreshPrinciplesForProfile,
 } from "../lib/principle-generation.js";
 import { normalizeSupportedLocale } from "../lib/locales.js";
 import { validationDetails } from "../lib/validation.js";
 import { loadProfileTarget, resolveProfileScope } from "./signals.js";
 import { loadPrincipleStatus, requestPrincipleRefresh } from "../lib/principle-status.js";
+import { groupPrincipleReadable } from "../lib/group-output.js";
 
 type WakaDb = ReturnType<typeof getDb>;
 
@@ -118,10 +120,13 @@ export interface PrincipleView {
 }
 
 export async function loadPrincipleViews(db: WakaDb, profileId: string): Promise<PrincipleView[]> {
+  const [profile] = await db.select({ groupId: profiles.groupId }).from(profiles)
+    .where(eq(profiles.id, profileId)).limit(1);
   const rows = await db
     .select()
     .from(principles)
-    .where(eq(principles.profileId, profileId))
+    .where(and(eq(principles.profileId, profileId),
+      ...(profile?.groupId ? [groupPrincipleReadable(profile.groupId, PRINCIPLE_MIN_SIGNALS)] : [])))
     .orderBy(asc(principles.rank));
   if (rows.length === 0) return [];
 

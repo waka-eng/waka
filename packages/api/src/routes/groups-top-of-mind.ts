@@ -29,6 +29,7 @@ import { getDb } from "../lib/db.js";
 import { labelMembersByProfileId } from "../lib/member-labels.js";
 import { enqueueGroupTopOfMindRefresh as enqueueGroupRefreshJob } from "../lib/queue.js";
 import { loadGroupMembership } from "./groups-membership.js";
+import { projectGroupEntries } from "../lib/group-output.js";
 
 type WakaDb = ReturnType<typeof getDb>;
 
@@ -47,6 +48,8 @@ export interface GroupTopOfMindEntryView {
 }
 
 export interface GroupTopOfMindView {
+  /** Stored wording is retained but cannot currently be safely published. */
+  restricted?: boolean;
   topOfMind: {
     id: string;
     version: number;
@@ -224,9 +227,10 @@ export async function loadGroupTopOfMind(
     .limit(1);
   if (!artifact) return { topOfMind: null, entries: [] };
 
-  const entryRows = await db
+  const storedEntries = await db
     .select({
       id: topOfMindEntries.id,
+      inputPolicy: topOfMindEntries.inputPolicy,
       type: topOfMindEntries.type,
       body: topOfMindEntries.body,
       belief: topOfMindEntries.belief,
@@ -245,9 +249,12 @@ export async function loadGroupTopOfMind(
     )
     .orderBy(asc(topOfMindEntries.sortOrder), asc(topOfMindEntries.createdAt));
 
+  const projected = await projectGroupEntries(db, groupId, storedEntries);
+  const entryRows = projected.entries;
   const entryIds = entryRows.map((row) => row.id);
+  const readableSignalIds = [...new Set([...projected.citationsByEntry.values()].flat())];
   const contributorsByEntry = new Map<string, Array<{ profileId: string; name: string }>>();
-  if (entryIds.length > 0) {
+  if (entryIds.length > 0 && readableSignalIds.length > 0) {
     const citationRows = await db
       .selectDistinct({
         entryId: topOfMindEntrySignals.entryId,
@@ -256,7 +263,7 @@ export async function loadGroupTopOfMind(
       })
       .from(topOfMindEntrySignals)
       .innerJoin(profiles, eq(profiles.id, topOfMindEntrySignals.ownerProfileId))
-      .where(inArray(topOfMindEntrySignals.entryId, entryIds))
+      .where(and(inArray(topOfMindEntrySignals.entryId, entryIds), inArray(topOfMindEntrySignals.signalId, readableSignalIds)))
       .orderBy(asc(topOfMindEntrySignals.entryId));
 
     /**
@@ -308,6 +315,7 @@ export async function loadGroupTopOfMind(
       .where(
         and(
           inArray(topOfMindEntrySignals.entryId, entryIds),
+          inArray(topOfMindEntrySignals.signalId, readableSignalIds),
           isNull(topOfMindEntrySignals.ownerProfileId),
         ),
       )
@@ -356,6 +364,7 @@ export async function loadGroupTopOfMind(
       reason: artifact.reason,
       createdAt: artifact.createdAt.toISOString(),
     },
+    restricted: projected.restricted,
     entries: entryRows.map((row) => ({
       id: row.id,
       type: row.type,

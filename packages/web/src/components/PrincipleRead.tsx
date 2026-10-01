@@ -73,11 +73,12 @@ export function PrincipleRead({ groupId, active, locale, refreshKey, onRead }: {
       ? failed ? "worldPrinciplesRoomLoadFailed" : "worldPrinciplesRoomGenerationFailed"
       : "worldPrinciplesError"
     : !status ? groupId ? "worldPrinciplesRoomChecking" : "worldPrinciplesLoading"
+    : groupId && status.restricted ? "worldRoomPrinciplesRestricted"
     : status.phase === "processing" || status.phase === "pending" ? "worldPrinciplesReading"
     : status.signalCount < 3 ? (groupId ? "worldPrinciplesNeedRoomPatterns" : "worldValuesSubSelf")
     : status.topOfMindCount < 1 ? "worldPrinciplesNeedRead"
     : "worldPrinciplesNoCandidate";
-  const groupEmpty = Boolean(groupId && rows.length === 0 && status && !error);
+  const groupEmpty = Boolean(groupId && rows.length === 0 && status && !error && !status.restricted);
   const groupSignalCount = Math.min(status?.signalCount ?? 0, 3);
   const groupStage = !status || status.signalCount < 3 ? "patterns"
     : status.topOfMindCount < 1 ? "topOfMind"
@@ -130,7 +131,7 @@ export function PrincipleRead({ groupId, active, locale, refreshKey, onRead }: {
       </> : null}
       <p className="jar-principles-empty-detail">{t(locale, groupStageDetail[groupStage])}</p>
     </div> : null}
-    {!groupEmpty && (rows.length === 0 || error || status?.phase === "processing") ?
+    {!groupEmpty && (rows.length === 0 || error || status?.phase === "processing" || (groupId && status?.restricted)) ?
       <p className="jar-values-sub" role={error ? "alert" : status?.phase === "processing" ? "status" : undefined}>
         {t(locale, message)}
         {error ? <> <button type="button" onClick={() => setAttempt((value) => value + 1)}>

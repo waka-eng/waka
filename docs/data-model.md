@@ -198,6 +198,15 @@ agent's relayed excerpt, an agent's own observation.
   unverified, not automatically safe because new evidence matches them.
   Preserve them for reviewed historical repair; do not carry them into new
   generation. Personal signals have no room input policy.
+- **Derived room output carries the same policy** on
+  `top_of_mind_entries.input_policy` and `principles.input_policy`. Current
+  safe citations alone cannot certify wording generated from older context.
+  Unverified generated output is withheld from reads and prompts, not deleted.
+  Protected entries continue in the stored version chain while withheld.
+  A locked entry whose exact body was explicitly proposed and accepted by the
+  room may expose that approved body; unverified generated belief/prompt text
+  and unavailable citations are not included. Approval is permission to share
+  those words, not proof that their old machine explanation was safe.
 
 ## Experience (layer-1 grouping)
 

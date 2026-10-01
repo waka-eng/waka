@@ -58,6 +58,8 @@ import {
   type TopOfMindRecentFeedback,
 } from "./model-provider.js";
 import { acquireTopOfMindArtifactLock } from "./top-of-mind-family-lock.js";
+import { GROUP_INPUT_POLICY } from "./group-inputs.js";
+import { groupSignalReadable, projectGroupEntries } from "./group-output.js";
 
 type WakaDb = ReturnType<typeof getDb>;
 type WakaTx = Parameters<Parameters<WakaDb["transaction"]>[0]>[0];
@@ -1208,6 +1210,7 @@ export interface GroupTopOfMindRefreshResult {
 interface GroupCarriedEntry extends CarriedEntry {
   /** Null for an entry added by proposal in this very pass. */
   id: string | null;
+  inputPolicy?: string | null;
 }
 
 interface GroupLiveArtifactSnapshot {
@@ -1215,6 +1218,8 @@ interface GroupLiveArtifactSnapshot {
   version: number;
   createdAt: Date;
   entries: GroupCarriedEntry[];
+  /** Preserve protected words in storage without showing or prompting them. */
+  withheldEntries: GroupCarriedEntry[];
   /** signalId → the member whose signal it was when cited. */
   citationOwners: Map<string, string>;
 }
@@ -1264,6 +1269,7 @@ export function applyGroupProposals(
       if (!body) continue;
       entries.push({
         id: null,
+        inputPolicy: GROUP_INPUT_POLICY,
         type: "pattern",
         body,
         belief: null,
@@ -1290,6 +1296,10 @@ export function applyGroupProposals(
       if (!body) continue;
       target.body = body;
       target.lockedAt = now;
+      target.inputPolicy = GROUP_INPUT_POLICY;
+      target.belief = null;
+      target.prompt = null;
+      target.citedSignalIds = [];
       applied += 1;
     }
   }
@@ -1345,23 +1355,23 @@ async function loadLiveGroupArtifact(
     if (row.ownerProfileId) citationOwners.set(row.signalId, row.ownerProfileId);
   }
 
+  const projected = await projectGroupEntries(db, groupId, entryRows);
+  const allowedIds = new Set(projected.entries.map((row) => row.id));
+  const asCarried = (row: typeof entryRows[number], allowed: boolean): GroupCarriedEntry => ({
+    id: row.id, type: row.type, body: row.body, belief: row.belief, prompt: row.prompt,
+    lockedAt: row.lockedAt, pinnedAt: row.pinnedAt, dismissedAt: row.dismissedAt,
+    sortOrder: row.sortOrder, inputPolicy: allowed ? GROUP_INPUT_POLICY : null,
+    citedSignalIds: (allowed ? projected.citationsByEntry : citationsByEntry).get(row.id) ?? [],
+  });
+
   return {
     id: artifact.id,
     version: artifact.version,
     createdAt: artifact.createdAt,
     citationOwners,
-    entries: entryRows.map((row) => ({
-      id: row.id,
-      type: row.type,
-      body: row.body,
-      belief: row.belief,
-      prompt: row.prompt,
-      lockedAt: row.lockedAt,
-      pinnedAt: row.pinnedAt,
-      dismissedAt: row.dismissedAt,
-      sortOrder: row.sortOrder,
-      citedSignalIds: citationsByEntry.get(row.id) ?? [],
-    })),
+    entries: projected.entries.map((row) => asCarried(row, true)),
+    withheldEntries: entryRows.filter((row) => !allowedIds.has(row.id))
+      .map((row) => asCarried(row, false)),
   };
 }
 
@@ -1376,7 +1386,7 @@ async function loadLiveGroupArtifact(
  * now touch because they are the room's rows.
  */
 async function loadGroupSharedSignals(
-  db: WakaDb,
+  db: WakaDb | WakaTx,
   groupId: string,
   now: Date,
 ): Promise<GroupSharedSignal[]> {
@@ -1398,6 +1408,7 @@ async function loadGroupSharedSignals(
     .where(
       and(
         eq(signals.profileId, mind.mindId),
+        groupSignalReadable(groupId),
         ne(signals.status, "retired"),
         isNull(signals.dismissedAt),
       ),
@@ -1437,6 +1448,7 @@ async function loadGroupSharedSignals(
   >();
   const voicesBySignal = new Map<string, Map<string, string>>();
   for (const row of evidenceRows) {
+    if (!row.memberProfileId || row.visibility !== "public") continue;
     const bucket = evidenceBySignal.get(row.signalId);
     if (bucket) bucket.push(row);
     else evidenceBySignal.set(row.signalId, [row]);
@@ -1526,6 +1538,7 @@ async function writeGroupVersion(
     groupId: string;
     previous: GroupLiveArtifactSnapshot | null;
     entries: PersistedEntry[];
+    withheldEntries: GroupCarriedEntry[];
     reason: TopOfMindRevisionReason;
     /** signalId → member, for citation attribution on group entries. */
     ownerBySignalId: Map<string, string>;
@@ -1557,11 +1570,16 @@ async function writeGroupVersion(
       .where(eq(topOfMinds.id, input.previous.id));
   }
 
-  for (const [index, entry] of input.entries.entries()) {
+  const stored = [
+    ...input.entries.map((entry) => ({ entry, inputPolicy: GROUP_INPUT_POLICY as string | null })),
+    ...input.withheldEntries.filter(isHumanTouched).map((entry) => ({ entry, inputPolicy: null as string | null })),
+  ];
+  for (const [index, { entry, inputPolicy }] of stored.entries()) {
     const [insertedEntry] = await tx
       .insert(topOfMindEntries)
       .values({
         topOfMindId: created.id,
+        inputPolicy,
         type: entry.type,
         body: entry.body,
         belief: entry.belief,
@@ -1761,8 +1779,9 @@ export async function refreshTopOfMindForGroup(
   }
 
   // Members' decisions land before the model writes a word.
-  const appliedBefore = applyGroupProposals(liveBefore?.entries ?? [], pending, now);
-  const lockedNow = appliedBefore.entries.filter(
+  const appliedBefore = applyGroupProposals([...(liveBefore?.entries ?? []), ...(liveBefore?.withheldEntries ?? [])], pending, now);
+  const publicBefore = appliedBefore.entries.filter((entry) => entry.inputPolicy === GROUP_INPUT_POLICY);
+  const lockedNow = publicBefore.filter(
     (entry) => entry.lockedAt !== null && entry.dismissedAt === null,
   );
 
@@ -1809,7 +1828,7 @@ export async function refreshTopOfMindForGroup(
         prompt: entry.prompt,
         citedSignalIds: entry.citedSignalIds,
       })),
-      currentEntries: appliedBefore.entries
+      currentEntries: publicBefore
         .filter((entry) => entry.dismissedAt === null)
         .map((entry) => ({
           type: entry.type,
@@ -1835,22 +1854,36 @@ export async function refreshTopOfMindForGroup(
 
   const written = await db.transaction(async (tx) => {
     await acquireTopOfMindArtifactLock(tx, { groupId: input.groupId });
+    await tx.select({ id: groups.id }).from(groups).where(eq(groups.id, input.groupId)).for("update");
+    const currentMembers = await tx.select({ profileId: groupMembers.profileId }).from(groupMembers)
+      .where(eq(groupMembers.groupId, input.groupId)).for("share");
+    if (JSON.stringify(currentMembers.map((row) => row.profileId).sort()) !==
+      JSON.stringify(memberRows.map((row) => row.profileId).sort())) {
+      throw new Error("Room membership changed during synthesis; retry current members");
+    }
 
     // Re-read under the lock, same as the personal pass: a version may have
     // landed while this one waited on the provider, and the members'
     // decisions on that newer version are the ones that must carry.
     const previous = await loadLiveGroupArtifact(tx, input.groupId);
+    if (previous?.id !== liveBefore?.id) throw new Error("Room reading changed during synthesis; retry current version");
+    const currentShared = await loadGroupSharedSignals(tx, input.groupId, now);
+    if (JSON.stringify(currentShared) !== JSON.stringify(shared)) {
+      throw new Error("Room public material changed during synthesis; retry current inputs");
+    }
     const proposals = await loadUnappliedProposals(
       tx,
       input.groupId,
       previous?.createdAt ?? null,
     );
-    const applied = applyGroupProposals(previous?.entries ?? [], proposals, now);
+    const applied = applyGroupProposals([...(previous?.entries ?? []), ...(previous?.withheldEntries ?? [])], proposals, now);
+    const publicCarried = applied.entries.filter((entry) => entry.inputPolicy === GROUP_INPUT_POLICY);
+    const withheldEntries = applied.entries.filter((entry) => entry.inputPolicy !== GROUP_INPUT_POLICY);
 
     const nothingReconsidered = shared.length === 0 && previous !== null;
     const entries = nothingReconsidered
-      ? carryCarriedEntries(applied.entries)
-      : assembleEntries({ carried: applied.entries, generated });
+      ? carryCarriedEntries(publicCarried)
+      : assembleEntries({ carried: publicCarried, generated });
 
     const unchanged =
       previous !== null &&
@@ -1876,6 +1909,7 @@ export async function refreshTopOfMindForGroup(
       groupId: input.groupId,
       previous,
       entries,
+      withheldEntries,
       reason,
       ownerBySignalId,
       now,

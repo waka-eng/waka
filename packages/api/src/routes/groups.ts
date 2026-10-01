@@ -569,6 +569,7 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
             createdAt: view.topOfMind.createdAt,
           }
         : null,
+      restricted: view.restricted ?? false,
       entries: view.entries.map((entry) => ({
         id: entry.id,
         type: entry.type,

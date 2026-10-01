@@ -59,6 +59,8 @@ export const principles = pgTable(
 
     /** The directive, in the owner's language. Phrased as a constraint. */
     statement: text("statement").notNull(),
+    /** Room derivation policy; never inferred from today's citations. */
+    inputPolicy: text("input_policy"),
 
     type: principleTypeEnum("type").notNull().default("maxim"),
     state: principleStateEnum("state").notNull().default("held"),

@@ -190,6 +190,7 @@ describe("declaring", () => {
     mockState.db = makeDb([
       [], // rank query inside transaction
       [], // statement-chain writer: current-row lookup (none — chained from birth)
+      [{ groupId: null }], // view scope: this is a personal profile
       [
         {
           id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",

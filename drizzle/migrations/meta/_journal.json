@@ -232,6 +232,13 @@
       "when": 1790812800001,
       "tag": "0032_group-public-inputs",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1790812800002,
+      "tag": "0033_group-output-policy",
+      "breakpoints": true
     }
   ]
 }

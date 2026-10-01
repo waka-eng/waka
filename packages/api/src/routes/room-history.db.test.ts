@@ -272,8 +272,12 @@ describe("the gate: refresh, acceptance, removal, re-join — everything prior s
       [v2.id, "what the room reads now"],
     ] as const) {
       const [entry] = await t.sql`
-        INSERT INTO top_of_mind_entries (top_of_mind_id, type, body, sort_order)
-        VALUES (${versionId}, 'pattern', ${body}, 0) RETURNING id`;
+        INSERT INTO top_of_mind_entries (top_of_mind_id, type, body, sort_order, locked_at)
+        VALUES (${versionId}, 'pattern', ${body}, 0, now()) RETURNING id`;
+      // This fixture represents members' approved wording. Unverified
+      // generated history has a separate privacy regression suite.
+      await t.sql`INSERT INTO group_top_of_mind_proposals (group_id, proposed_by_profile_id, kind, body, status, resolved_at)
+        VALUES (${g.groupId}, ${g.a}, 'add_entry', ${body}, 'accepted', now())`;
       await t.sql`
         INSERT INTO top_of_mind_entry_signals (entry_id, signal_id, owner_profile_id)
         VALUES (${entry.id}, ${signal.id}, ${g.a})`;
@@ -294,8 +298,8 @@ describe("the gate: refresh, acceptance, removal, re-join — everything prior s
     ).toEqual(["what the room read in March"]);
     expect(
       then.entries[0]?.contributors.map((c) => c.profileId),
-      "and who fed it, as it stood",
-    ).toEqual([g.a]);
+      "unverified legacy citations must not invent public contribution credit",
+    ).toEqual([]);
   });
 
   it("will not serve another room's version to someone who guesses an integer", async () => {
@@ -309,14 +313,18 @@ describe("the gate: refresh, acceptance, removal, re-join — everything prior s
       INSERT INTO top_of_minds (group_id, version, status, reason)
       VALUES (${mine.groupId}, 1, 'live', 'initial') RETURNING id`;
     await t.sql`
-      INSERT INTO top_of_mind_entries (top_of_mind_id, type, body, sort_order)
-      VALUES (${ours.id}, 'pattern', 'ours', 0)`;
+      INSERT INTO top_of_mind_entries (top_of_mind_id, type, body, sort_order, locked_at)
+      VALUES (${ours.id}, 'pattern', 'ours', 0, now())`;
+    await t.sql`INSERT INTO group_top_of_mind_proposals (group_id, proposed_by_profile_id, kind, body, status, resolved_at)
+      VALUES (${mine.groupId}, ${mine.a}, 'add_entry', 'ours', 'accepted', now())`;
     const [alsoOne] = await t.sql`
       INSERT INTO top_of_minds (group_id, version, status, reason)
       VALUES (${theirs.groupId}, 1, 'live', 'initial') RETURNING id`;
     await t.sql`
-      INSERT INTO top_of_mind_entries (top_of_mind_id, type, body, sort_order)
-      VALUES (${alsoOne.id}, 'pattern', 'theirs', 0)`;
+      INSERT INTO top_of_mind_entries (top_of_mind_id, type, body, sort_order, locked_at)
+      VALUES (${alsoOne.id}, 'pattern', 'theirs', 0, now())`;
+    await t.sql`INSERT INTO group_top_of_mind_proposals (group_id, proposed_by_profile_id, kind, body, status, resolved_at)
+      VALUES (${theirs.groupId}, ${theirs.a}, 'add_entry', 'theirs', 'accepted', now())`;
 
     const read = await loadGroupTopOfMind(t.db as never, mine.groupId, { version: 1 });
     expect(read.entries.map((e) => e.body)).toEqual(["ours"]);

@@ -26,7 +26,8 @@ async function person() {
 async function material(profileId: string, owners: string[], targetGroupId?: string) {
   const ids: string[] = [];
   for (let n = 0; n < 3; n++) {
-    const [s] = await t.sql`INSERT INTO signals(profile_id,statement) VALUES (${profileId},${`Pattern ${n}`}) RETURNING id`;
+    const [s] = await t.sql`INSERT INTO signals(profile_id,statement,input_policy)
+      VALUES (${profileId},${`Pattern ${n}`},${targetGroupId ? "group-public-v1" : null}) RETURNING id`;
     for (let i = 0; i < 3; i++) {
       const author = owners[i % owners.length]!;
       const [inspirationRow] = await t.sql`INSERT INTO inspirations(profile_id,text,visibility)
@@ -40,8 +41,8 @@ async function material(profileId: string, owners: string[], targetGroupId?: str
   const [tom] = targetGroupId
     ? await t.sql`INSERT INTO top_of_minds(group_id) VALUES (${targetGroupId}) RETURNING id`
     : await t.sql`INSERT INTO top_of_minds(profile_id) VALUES (${profileId}) RETURNING id`;
-  const [entry] = await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body)
-    VALUES (${tom.id},'pattern','A present focus') RETURNING id`;
+  const [entry] = await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body,input_policy)
+    VALUES (${tom.id},'pattern','A present focus',${targetGroupId ? "group-public-v1" : null}) RETURNING id`;
   for (const id of ids) await t.sql`INSERT INTO top_of_mind_entry_signals(entry_id,signal_id) VALUES (${entry.id},${id})`;
   return ids;
 }

@@ -153,6 +153,7 @@ export interface ApiGroupTopOfMindEntry {
 }
 
 export interface ApiGroupTopOfMind {
+  restricted?: boolean;
   topOfMind: {
     id: string;
     version: number;

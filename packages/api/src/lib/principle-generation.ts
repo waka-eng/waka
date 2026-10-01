@@ -33,7 +33,8 @@ import {
 import { getDb } from "./db.js";
 import { normalizeSupportedLocale } from "./locales.js";
 import { writePrincipleStatementChain } from "./statement-chains.js";
-import { loadGroupWall } from "../routes/groups-wall.js";
+import { GROUP_INPUT_POLICY } from "./group-inputs.js";
+import { groupPrincipleReadable, groupSignalReadable, projectGroupEntries } from "./group-output.js";
 import {
   getDefaultModelProvider,
   type ModelProvider,
@@ -185,6 +186,8 @@ async function loadCitationEvidence(
   for (const id of signalIds) {
     out.set(id, { signalId: id, evidenceAt: [], tomVersionIds: [] });
   }
+  const [profile] = await db.select({ groupId: profiles.groupId }).from(profiles)
+    .where(eq(profiles.id, profileId)).limit(1);
 
   // Dated by the CAPTURE that witnesses it, not by when the link was noticed
   // — same rule as confidence and selection. The span describes the
@@ -195,12 +198,13 @@ async function loadCitationEvidence(
     .from(signalEvidence)
     .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
     .where(
-      and(eq(signalEvidence.profileId, profileId), inArray(signalEvidence.signalId, signalIds)),
+      and(eq(signalEvidence.profileId, profileId), inArray(signalEvidence.signalId, signalIds),
+        ...(profile?.groupId ? [eq(inspirations.visibility, "public"), sql`EXISTS (
+          SELECT 1 FROM group_members m WHERE m.group_id = ${profile.groupId}::uuid
+          AND m.profile_id = ${inspirations.profileId})`] : [])),
     );
   for (const row of evidenceRows) out.get(row.signalId)?.evidenceAt.push(row.createdAt);
 
-  const [profile] = await db.select({ groupId: profiles.groupId }).from(profiles)
-    .where(eq(profiles.id, profileId)).limit(1);
   const tomRows = await db
     .select({ signalId: topOfMindEntrySignals.signalId, topOfMindId: topOfMindEntries.topOfMindId })
     .from(topOfMindEntrySignals)
@@ -212,6 +216,7 @@ async function loadCitationEvidence(
           ? eq(topOfMinds.groupId, profile.groupId)
           : eq(topOfMinds.profileId, profileId),
         inArray(topOfMindEntrySignals.signalId, signalIds),
+        ...(profile?.groupId ? [eq(topOfMindEntries.inputPolicy, GROUP_INPUT_POLICY)] : []),
       ),
     );
   for (const row of tomRows) {
@@ -247,13 +252,11 @@ export interface PrincipleGenerationDependencies {
 export async function loadPrincipleMaterial(db: WakaDb, profileId: string) {
   const [profile] = await db.select({ groupId: profiles.groupId, preferredLocale: profiles.preferredLocale }).from(profiles)
     .where(eq(profiles.id, profileId)).limit(1);
-  const visibleIds = profile?.groupId
-    ? new Set((await loadGroupWall(db, profile.groupId)).map((row) => row.signalId))
-    : null;
   const rows = await db.select({ id: signals.id, statement: signals.statement,
     lastEvidenceAt: signals.lastEvidenceAt, updatedAt: signals.updatedAt })
-    .from(signals).where(and(eq(signals.profileId, profileId), eq(signals.status, "active")));
-  const activeSignals = rows.filter((row) => !visibleIds || visibleIds.has(row.id));
+    .from(signals).where(and(eq(signals.profileId, profileId), eq(signals.status, "active"),
+      ...(profile?.groupId ? [groupSignalReadable(profile.groupId)] : [])));
+  const activeSignals = rows;
   const evidence = await loadCitationEvidence(db, profileId, activeSignals.map((row) => row.id));
   return { activeSignals, evidence, groupId: profile?.groupId ?? null,
     preferredLocale: profile?.preferredLocale ?? "en-US",
@@ -294,19 +297,23 @@ export async function refreshPrinciplesForProfile(
   const existing = await db
     .select()
     .from(principles)
-    .where(eq(principles.profileId, input.profileId));
+    .where(and(eq(principles.profileId, input.profileId),
+      ...(groupId ? [groupPrincipleReadable(groupId, PRINCIPLE_MIN_SIGNALS)] : [])));
 
   const [liveTom] = await db
     .select({ id: topOfMinds.id })
     .from(topOfMinds)
     .where(and(groupId ? eq(topOfMinds.groupId, groupId) : eq(topOfMinds.profileId, input.profileId), eq(topOfMinds.status, "live")))
     .limit(1);
-  const currentEntries = liveTom
+  const storedEntries = liveTom
     ? await db
-        .select({ body: topOfMindEntries.body })
+        .select()
         .from(topOfMindEntries)
         .where(eq(topOfMindEntries.topOfMindId, liveTom.id))
     : [];
+  const currentEntries = groupId
+    ? (await projectGroupEntries(db, groupId, storedEntries)).entries
+    : storedEntries;
 
   const distilled = await provider.distillPrinciples({
     profileId: input.profileId,
@@ -401,6 +408,7 @@ export async function refreshPrinciplesForProfile(
         .values({
           profileId: input.profileId,
           statement: candidate.statement,
+          inputPolicy: groupId ? GROUP_INPUT_POLICY : null,
           type: candidate.type,
           state: "held",
           origin: "minted",

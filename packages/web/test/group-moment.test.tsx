@@ -84,3 +84,14 @@ it("lets the viewer retry a failed historical read", async () => {
   expect(host.textContent).toContain("We build through questions.");
   expect(host.querySelector('[role="alert"]')).toBeNull();
 });
+
+it("distinguishes withheld history from an empty room and does not claim nothing changed", async () => {
+  vi.mocked(fetchGroupTopOfMind).mockImplementation(async (_group, version) => ({
+    ...reading(version!, "Still public"), restricted: true,
+  }));
+  await act(async () => root.render(<GroupMoment groupId="room-1" timeline={timeline} stop={stop} locale="en-US" />));
+  expect(host.textContent).toContain("Some earlier wording is hidden until its sources are verified.");
+  expect(host.textContent).toContain("Still public");
+  expect(host.textContent).not.toContain("Nothing read together yet");
+  expect(host.textContent).not.toContain("The wording stayed the same.");
+});

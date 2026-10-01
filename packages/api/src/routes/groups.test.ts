@@ -423,6 +423,7 @@ describe("GET /api/groups/:groupId/wall", () => {
 describe("GET /api/groups/:groupId/top-of-mind", () => {
   it("returns the live artifact with per-entry member attribution", async () => {
     const view: GroupTopOfMindView = {
+      restricted: false,
       topOfMind: {
         id: "00000000-0000-4000-8000-000000000501",
         version: 2,
@@ -464,7 +465,13 @@ describe("GET /api/groups/:groupId/top-of-mind", () => {
     const response = await app.request(`/api/groups/${groupId}/top-of-mind`);
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ topOfMind: null, entries: [] });
+    await expect(response.json()).resolves.toEqual({ topOfMind: null, entries: [], restricted: false });
+  });
+
+  it("preserves the restriction notice on a historical read", async () => {
+    const app = mountWith({ loadTopOfMind: vi.fn(async () => ({ topOfMind: null, entries: [], restricted: true })) });
+    const response = await app.request(`/api/groups/${groupId}/top-of-mind?version=1`);
+    await expect(response.json()).resolves.toEqual({ topOfMind: null, entries: [], restricted: true });
   });
 });
 

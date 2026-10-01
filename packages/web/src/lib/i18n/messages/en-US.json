@@ -370,6 +370,8 @@
   "worldAgentFormingAlt": "I haven’t formed anything yet",
   "worldGroupFormingAlt": "Forming — nothing read together yet",
   "worldNothingReadTogether": "Nothing read together yet",
+  "worldRoomReadRestricted": "Some earlier wording is hidden until its sources are verified.",
+  "worldRoomPrinciplesRestricted": "Earlier principles are kept, but hidden until their sources are verified.",
   "worldNewAmbitionForming": "A new ambition is forming",
   "worldSignalsForming": "{countWords} {count, plural, one {signal is} other {signals are}} forming",
   "worldReceiptVerdictKept": "on the record",

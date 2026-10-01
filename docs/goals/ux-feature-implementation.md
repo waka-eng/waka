@@ -1,6 +1,6 @@
 # Goal: implement the experience review
 
-Status: in flight — A/B and C input-side fixes locally checked; C output containment and historical review remain open. Full release verification remains open.
+Status: in flight — A/B and C input/output fixes locally checked; room cache revalidation and historical review remain open. Full release verification remains open.
 Created: 2026-10-01, on the owner's instruction to implement the full plan.
 Branch: `codex/ux-feature-implementation`.
 Baseline: `33e65a7` on `dev`.
@@ -27,7 +27,7 @@ experiments or revive superseded room goals.
 | --- | --- | --- | --- |
 | A | F5/F6/F10: input, overlay scrolling/focus, readable active controls | Reproduce slash/wheel defects; verify typing, caret, Escape/Tab, wheel/touch and contrast in actual affected flows; web checks | Implemented; 5 original failures now pass, 325 web tests pass. Desktop fixture verified. Mobile touch/200% zoom and deployed verification remain open. |
 | B | F3/F4: edited principle preservation, truthful support, account-scoped drafts/preferences and cancellation | Isolated SQL preservation tests and two-account browser/state tests; API/web checks | B1: 6 SQL / 653 unit tests pass after 3 reproduced failures. B2: 4 failures reproduced, then two-account draft and stale-response checks pass; full web suite 331/331. Deployed/account-switch browser verification remains open. |
-| C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | C1 input-side changes verified with 16 room SQL cases; metadata-only report implemented and fixture-tested. C2 downstream synthesis/current/historical serving and actual impact assessment remain pending. Do not deploy C1 alone. |
+| C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | C1 input-side and C2 downstream/current/historical read guards locally verified (51 SQL cases including 8 output-privacy cases). Browser cache invalidation, actual legacy assessment and reviewed repair/deployment remain pending. Do not deploy this partial slice alone. |
 | D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | Pending |
 | E1 | F7/F8: authoritative poster and truthful manual refresh | Queue acceptance, changed/unchanged completion, failure and fresh displayed version verified | Pending |
 | E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | Pending |
@@ -144,3 +144,44 @@ Keep code, deployment, historical repair, and user validation evidence distinct.
   wording without silently certifying it, show honest restricted output,
   and assess actual legacy scope before a named repair batch. Existing output
   readers are not yet protected by C1; the full C gate has NOT passed.
+- 2026-10-01, C2: baseline reproduced 5/5 output privacy failures: unverified
+  room signals served with two voices; current/historical raw entry bodies;
+  unverified belief/prompt fields riding on approved body text; old protected
+  entries in synthesis prompts; and legacy principles served because their
+  current citations looked safe. Added nullable policy stamps in migration
+  0033 and a shared read/prompt projection. Verified current room signals are
+  the only eligible citations. Legacy generated words stay stored but are
+  withheld; protected entries are carried in the version chain without being
+  shown or fed to a model. Exact member-proposed, accepted body text remains
+  readable without unverified generated explanation or citation attribution.
+- C2 principle generation now excludes unverified principles and readings
+  from distillation/matching, stamps new room principles, and counts only
+  verified room reading appearances. Room synthesis checks current membership,
+  artifact version and selected public material again before writing.
+  API restriction metadata drives a short notice in current room, history and
+  principle views; withheld content is not described as an empty room, a
+  failed generation, or an unchanged historical reading. The impact report
+  now distinguishes unverified entry counts and finds room principle jobs
+  billed to a member via their destination payload.
+- C2 verification: 8/8 output-privacy SQL cases pass, including new principle
+  prompt isolation, protected-word persistence, membership changing during
+  synthesis, and metadata-only inventory of member-billed room jobs. Combined
+  room/history/reaction/principle/input suite: 51/51 SQL cases. API unit suite
+  655 passed / 3 paid-live benches skipped; full web suite 334/334. API and web
+  typechecks, web build, migration check and diff check pass. Fixtures now
+  distinguish verified generated records from legacy records; the history
+  fixture explicitly records member approval and asserts that unverified
+  legacy citations do not expose contribution credit. No live model calls,
+  shared database writes, push or deployment occurred.
+- Remaining C checks are concrete, not a claim of completed containment:
+  Home caches room bundles for the session and its open-panel poll compares
+  only version numbers. A restricted projection can change at the SAME
+  version. Revalidate cached room data on return/focus, apply fresh restrictions
+  without waiting for a new artifact, and exercise failure/retry and account
+  change. HTTP responses already use `no-store, private` globally, but that
+  does not invalidate the in-memory cache. Then run the scoped read-only
+  legacy inventory, review uncertainty/retention/old workers and repair scope,
+  and verify the protected serving behavior in a deployed environment. D's
+  exact provenance and full revision-safe downstream handoff remain separate
+  unfinished requirements; source-level reconciliation is not proved by these
+  output filters.

@@ -115,6 +115,8 @@ export const topOfMindEntries = pgTable(
   "top_of_mind_entries",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    /** Room derivation policy; null legacy entries require review. */
+    inputPolicy: text("input_policy"),
 
     topOfMindId: uuid("top_of_mind_id")
       .notNull()

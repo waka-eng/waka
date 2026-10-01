@@ -69,7 +69,7 @@ async function seedGrownSignal(
   const [mind] = await t.sql`
     SELECT id FROM profiles WHERE group_id = ${groupId} AND type = 'group'`;
   const [sig] = await t.sql`
-    INSERT INTO signals (profile_id, statement) VALUES (${mind!.id}, ${statement}) RETURNING id`;
+    INSERT INTO signals (profile_id, statement, input_policy) VALUES (${mind!.id}, ${statement}, 'group-public-v1') RETURNING id`;
   for (const voice of voices) {
     const [memory] = await t.sql`
       INSERT INTO inspirations (profile_id, text, visibility)

@@ -8,9 +8,12 @@ type Comparison = { key: string; before: ApiGroupTopOfMind | null; after: ApiGro
 
 function Wording({ reading, locale }: { reading: ApiGroupTopOfMind | null; locale: SupportedLocale }) {
   const entries = reading?.entries ?? [];
-  return entries.length > 0 ? <ul className="jar-group-moment-words">
+  return <>
+    {reading?.restricted ? <p className="jar-was" role="status">{t(locale, "worldRoomReadRestricted")}</p> : null}
+    {entries.length > 0 ? <ul className="jar-group-moment-words">
     {entries.map((entry) => <li key={entry.id}>{entry.body}</li>)}
-  </ul> : <p className="jar-was">{t(locale, "worldNothingReadTogether")}</p>;
+  </ul> : reading?.restricted ? null : <p className="jar-was">{t(locale, "worldNothingReadTogether")}</p>}
+  </>;
 }
 
 /** A selected date's complete event list and the room's wording across its read. */
@@ -46,7 +49,7 @@ export function GroupMoment({ groupId, timeline, stop, locale }: {
   const ready = comparison?.key === key ? comparison : null;
   const beforeWords = ready?.before?.entries.map((entry) => entry.body) ?? [];
   const afterWords = ready?.after.entries.map((entry) => entry.body) ?? [];
-  const wordingHeld = beforeWords.length > 0 && beforeWords.length === afterWords.length &&
+  const wordingHeld = !ready?.before?.restricted && !ready?.after.restricted && beforeWords.length > 0 && beforeWords.length === afterWords.length &&
     beforeWords.every((body, index) => body === afterWords[index]);
   return <section className="jar-group-moment" aria-label={t(locale, "worldRoomHistorySelected")}>
     <p className="jar-prov-lead jar-label">{t(locale, "worldRoomHistorySelected")} · {stop.label}</p>

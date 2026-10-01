@@ -370,6 +370,8 @@
   "worldAgentFormingAlt": "아직 아무것도 만들어 내지 못했어요",
   "worldGroupFormingAlt": "만들어지는 중 — 아직 함께 읽은 것이 없어요",
   "worldNothingReadTogether": "아직 함께 읽은 것이 없어요",
+  "worldRoomReadRestricted": "일부 이전 문장은 근거가 확인될 때까지 숨겨져 있어요.",
+  "worldRoomPrinciplesRestricted": "이전 원칙은 보관되어 있지만, 근거가 확인될 때까지 숨겨져 있어요.",
   "worldNewAmbitionForming": "새로운 문장이 만들어지고 있어요",
   "worldSignalsForming": "신호 {countWords} 개가 만들어지고 있어요",
   "worldReceiptVerdictKept": "기록에 남았어요",

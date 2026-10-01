@@ -14732,6 +14732,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       {groupPanel && atWall.kind === "group" && atWall.id === groupPanel ? (
         <GroupPanel
           groupId={groupPanel}
+          readingRestricted={groupCacheRef.current.get(groupPanel)?.data?.top?.restricted}
           members={members}
           space={atWall}
           openProposals={openProposals}

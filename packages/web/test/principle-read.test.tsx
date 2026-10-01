@@ -26,6 +26,15 @@ const principle = { id: "room-principle", statement: "Make room for experiments.
   conflictsWithId: null, createdAt: "2026-09-22", citedSignals: [{ id: "room-signal", statement: "Shared experiments recur." }] };
 
 describe("principle read", () => {
+  it("explains withheld room principles without pretending the room has no history", async () => {
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: {
+      phase: "waiting", eligible: false, signalCount: 0, topOfMindCount: 0, restricted: true,
+    } });
+    await act(async () => root.render(<PrincipleRead groupId="room-1" active locale="en-US" />));
+    expect(host.textContent).toContain("Earlier principles are kept, but hidden until their sources are verified.");
+    expect(host.querySelector('[role="progressbar"]')).toBeNull();
+    expect(requestPrincipleRead).not.toHaveBeenCalled();
+  });
   it("shows room progress and what members can do at each empty stage", async () => {
     vi.mocked(fetchPrincipleRead)
       .mockResolvedValueOnce({ principles: [], status: { ...ready, phase: "waiting", eligible: false, signalCount: 1, topOfMindCount: 0 } })

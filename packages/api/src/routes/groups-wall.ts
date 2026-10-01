@@ -28,6 +28,7 @@ import {
 import { GROUP_SIGNAL_MIN_VOICES } from "../lib/signal-derivation-thresholds.js";
 import { getDb } from "../lib/db.js";
 import { labelMembersByProfileId } from "../lib/member-labels.js";
+import { groupSignalReadable } from "../lib/group-output.js";
 
 type WakaDb = ReturnType<typeof getDb>;
 
@@ -109,6 +110,7 @@ export async function loadGroupWall(
     .where(
       and(
         eq(signals.profileId, mind.mindId),
+        groupSignalReadable(groupId),
         ne(signals.status, "retired"),
         isNull(signals.dismissedAt),
       ),

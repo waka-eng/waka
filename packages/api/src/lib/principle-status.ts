@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
-import { eq } from "drizzle-orm";
-import { backgroundJobs } from "../db/index.js";
+import { and, eq, sql } from "drizzle-orm";
+import { backgroundJobs, principles } from "../db/index.js";
 import { getDb } from "./db.js";
-import { loadPrincipleMaterial } from "./principle-generation.js";
+import { loadPrincipleMaterial, PRINCIPLE_MIN_SIGNALS } from "./principle-generation.js";
+import { groupPrincipleReadable } from "./group-output.js";
 import { enqueueRefreshPrinciples } from "./queue.js";
 
 type Db = ReturnType<typeof getDb>;
@@ -28,7 +29,10 @@ export async function loadPrincipleStatus(db: Db, profileId: string) {
     : job?.status === "failed" ? "failed"
     : job?.status === "succeeded" ? "ready"
     : job ? "processing" : "pending";
+  const withheld = material.groupId ? await db.select({ id: principles.id }).from(principles)
+    .where(and(eq(principles.profileId, profileId), sql`(${groupPrincipleReadable(material.groupId, PRINCIPLE_MIN_SIGNALS)}) IS NOT TRUE`)).limit(1) : [];
   return { phase, eligible: material.eligibility.eligible,
+    restricted: withheld.length > 0,
     signalCount: material.eligibility.distinctSignals,
     topOfMindCount: material.eligibility.tomAppearances };
 }

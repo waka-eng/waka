@@ -38,6 +38,7 @@ export interface GroupPanelProps {
   timeline: ApiGroupTimeline | null;
   /** The date the viewer wound this room to, if any. */
   selectedStop: GroupHistoryStop | null;
+  readingRestricted?: boolean;
   proposalState: "loading" | "ready" | "failed";
   onRetryProposals: () => void;
   pendingProposalId: string | null;
@@ -85,6 +86,7 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
   /> : null}
 
   {!selectedStop ? <>
+    {props.readingRestricted ? <p className="jar-was" role="status">{say("worldRoomReadRestricted")}</p> : null}
     <p className="jar-room-shape-note">{say("worldRoomProposalHow")}</p>
     {proposalState === "loading" ? <p className="jar-was" role="status">{say("worldRoomProposalsLoading")}</p> : null}
     {proposalState === "failed" ? <p className="jar-was" role="alert">
