@@ -192,6 +192,7 @@ export interface BackgroundJobSummary {
 
 export interface EnqueueResult {
   jobId: string;
+  requestVersion: string;
   /**
    * False when an equivalent job was already waiting and this request joined
    * it. Callers surface it so a second "refresh" click can say the pass is
@@ -355,6 +356,7 @@ async function enqueueKeyedJob(input: {
     ON CONFLICT (idempotency_key)
     WHERE idempotency_key IS NOT NULL
     DO UPDATE SET
+      request_version = background_jobs.request_version + 1,
       status = CASE
         WHEN ${TERMINAL_JOB_STATUS} THEN 'pending'::background_job_status
         ELSE background_jobs.status
@@ -374,9 +376,9 @@ async function enqueueKeyedJob(input: {
       END,
       max_attempts = GREATEST(background_jobs.max_attempts, EXCLUDED.max_attempts),
       updated_at = now()
-    RETURNING id, (xmax = 0) AS created
+    RETURNING id, request_version::text AS "requestVersion", (xmax = 0) AS created
   `);
-  const [job] = rows as unknown as Array<{ id: string; created: boolean }>;
+  const [job] = rows as unknown as Array<{ id: string; requestVersion: string; created: boolean }>;
   if (!job) throw new Error(`Failed to enqueue ${input.type} job`);
 
   // A transaction caller persists atomically and leaves waking to the normal
@@ -385,7 +387,7 @@ async function enqueueKeyedJob(input: {
     if (shouldAutoDrainBackgroundJobs()) scheduleBackgroundJobDrain();
     else await wakeBackgroundWorker();
   }
-  return { jobId: job.id, created: job.created };
+  return { jobId: job.id, requestVersion: job.requestVersion, created: job.created };
 }
 
 /**
@@ -412,19 +414,20 @@ export async function enqueueRefreshPrinciples(
       ${DEFAULT_MAX_ATTEMPTS}, ${key})
     ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL
     DO UPDATE SET status = 'pending', attempts = 0, locked_at = NULL,
+      request_version = background_jobs.request_version + 1,
       profile_id = EXCLUDED.profile_id,
       run_after = now(), last_error = NULL, updated_at = now()
     WHERE background_jobs.status = 'failed' AND ${retry}
-    RETURNING id
+    RETURNING id, request_version::text AS "requestVersion"
   `);
-  const [changed] = rows as unknown as Array<{ id: string }>;
-  const [existing] = changed ? [changed] : await getDb().select({ id: backgroundJobs.id })
+  const [changed] = rows as unknown as Array<{ id: string; requestVersion: string }>;
+  const [existing] = changed ? [changed] : await getDb().select({ id: backgroundJobs.id, requestVersion: backgroundJobs.requestVersion })
     .from(backgroundJobs).where(eq(backgroundJobs.idempotencyKey, key)).limit(1);
   if (!existing) throw new Error("Failed to enqueue principles");
   // Also wake an existing pending/stale job; claim-time locks bound retries.
   if (shouldAutoDrainBackgroundJobs()) scheduleBackgroundJobDrain();
   else await wakeBackgroundWorker();
-  return { jobId: existing.id, created: Boolean(changed) };
+  return { jobId: existing.id, requestVersion: existing.requestVersion.toString(), created: Boolean(changed) };
 }
 
 /**
@@ -522,6 +525,7 @@ export async function enqueueTopOfMindRefresh(
       -- Landing on a running refresh means the signals changed after it began
       -- reading them; flag a re-run so the artifact reflects the change rather
       -- than staying stale until some unrelated later event.
+      request_version = background_jobs.request_version + 1,
       rerun_requested = CASE WHEN ${RUNNING_JOB_STATUS} THEN true ELSE background_jobs.rerun_requested END,
       payload = CASE
         WHEN ${RUNNING_JOB_STATUS} AND NOT background_jobs.rerun_requested THEN EXCLUDED.payload
@@ -532,16 +536,16 @@ export async function enqueueTopOfMindRefresh(
         THEN LEAST(background_jobs.run_after, now()) ELSE background_jobs.run_after END,
       result = NULL,
       updated_at = now()
-    RETURNING id, (xmax = 0) AS created
+    RETURNING id, request_version::text AS "requestVersion", (xmax = 0) AS created
   `);
-  const [job] = rows as unknown as Array<{ id: string; created: boolean }>;
+  const [job] = rows as unknown as Array<{ id: string; requestVersion: string; created: boolean }>;
   if (!job) throw new Error("Failed to enqueue refresh_top_of_mind job");
 
   if (!transaction) {
     if (shouldAutoDrainBackgroundJobs()) scheduleBackgroundJobDrain();
     else await wakeBackgroundWorker();
   }
-  return { jobId: job.id, created: job.created };
+  return { jobId: job.id, requestVersion: job.requestVersion, created: job.created };
 }
 
 /**
@@ -1379,6 +1383,8 @@ async function claimNextBackgroundJob(now = new Date()): Promise<BackgroundJob |
       job.type,
       job.payload,
       job.result,
+      job.request_version AS "requestVersion",
+      job.completed_version AS "completedVersion",
       job.rerun_requested AS "rerunRequested",
       job.status,
       job.attempts,
@@ -1393,7 +1399,8 @@ async function claimNextBackgroundJob(now = new Date()): Promise<BackgroundJob |
   `);
 
   const result = rows as unknown as BackgroundJob[];
-  return result[0] ?? null;
+  const job = result[0];
+  return job ? { ...job, requestVersion: BigInt(job.requestVersion), completedVersion: BigInt(job.completedVersion) } : null;
 }
 
 async function markJobSucceeded(job: BackgroundJob, completion: BackgroundJobResult | null): Promise<boolean> {
@@ -1408,6 +1415,7 @@ async function markJobSucceeded(job: BackgroundJob, completion: BackgroundJobRes
           ELSE 'succeeded'::background_job_status
         END,
         result = CASE WHEN rerun_requested THEN NULL ELSE ${completion ? JSON.stringify(completion) : null}::jsonb END,
+        completed_version = GREATEST(completed_version, ${job.requestVersion.toString()}::bigint),
         rerun_requested = false,
         attempts = CASE WHEN rerun_requested THEN 0 ELSE attempts END,
         run_after = CASE WHEN rerun_requested THEN now() ELSE run_after END,

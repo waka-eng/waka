@@ -23,6 +23,8 @@
 import { relations, sql } from "drizzle-orm";
 import {
   boolean,
+  bigint,
+  check,
   index,
   integer,
   jsonb,
@@ -142,6 +144,9 @@ export const backgroundJobs = pgTable(
     type: backgroundJobTypeEnum("type").notNull(),
     payload: jsonb("payload").$type<BackgroundJobPayload>().notNull(),
     result: jsonb("result").$type<BackgroundJobResult>(),
+    /** Queue request identity, not a source revision or artifact version. */
+    requestVersion: bigint("request_version", { mode: "bigint" }).notNull().default(sql`1`),
+    completedVersion: bigint("completed_version", { mode: "bigint" }).notNull().default(sql`0`),
     status: backgroundJobStatusEnum("status").notNull().default("pending"),
 
     attempts: integer("attempts").notNull().default(0),
@@ -186,6 +191,7 @@ export const backgroundJobs = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
+    requestVersionCheck: check("background_jobs_request_version_check", sql`${table.requestVersion} > 0 AND ${table.completedVersion} >= 0 AND ${table.completedVersion} <= ${table.requestVersion}`),
     runnableIdx: index("background_jobs_runnable_idx")
       .on(table.runAfter, table.createdAt)
       .where(sql`${table.status} = 'pending'`),

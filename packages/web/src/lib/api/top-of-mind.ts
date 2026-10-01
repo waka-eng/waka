@@ -149,20 +149,26 @@ export interface ApiTopOfMindRefreshStatus {
   status: "pending" | "running" | "succeeded" | "failed" | "unknown";
   runAfter: string | null;
   result: ApiTopOfMindRefreshResult | null;
+  requestVersion?: string;
+  completedVersion?: string;
 }
 
-export async function refreshTopOfMind(): Promise<{ jobId: string }> {
-  const receipt = await postJson<{ jobId: string }>(
+export interface ApiTopOfMindRefreshReceipt { jobId: string; requestVersion: string }
+
+export async function refreshTopOfMind(): Promise<ApiTopOfMindRefreshReceipt> {
+  const receipt = await postJson<ApiTopOfMindRefreshReceipt>(
     apiPath("/top-of-mind/refresh"),
     {},
     "Failed to start a new reading",
   );
-  if (!receipt?.jobId) throw new Error("The reading request did not return a receipt");
-  return { jobId: receipt.jobId };
+  if (typeof receipt?.jobId !== "string" || !receipt.jobId || typeof receipt.requestVersion !== "string" ||
+    !/^[1-9]\d{0,18}$/.test(receipt.requestVersion)) throw new Error("The reading request did not return a versioned receipt");
+  return { jobId: receipt.jobId, requestVersion: receipt.requestVersion };
 }
 
-export function fetchTopOfMindRefresh(jobId: string, signal?: AbortSignal): Promise<ApiTopOfMindRefreshStatus> {
-  return getJson(apiPath(`/top-of-mind/refresh/${encodeURIComponent(jobId)}`), "Failed to check your reading", signal);
+export function fetchTopOfMindRefresh(jobId: string, signal?: AbortSignal, requestVersion?: string): Promise<ApiTopOfMindRefreshStatus> {
+  const query = requestVersion ? `?requestVersion=${encodeURIComponent(requestVersion)}` : "";
+  return getJson(apiPath(`/top-of-mind/refresh/${encodeURIComponent(jobId)}${query}`), "Failed to check your reading", signal);
 }
 
 // ---------------------------------------------------------------------------

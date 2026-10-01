@@ -1,6 +1,6 @@
 # Goal: implement the experience review
 
-Status: in flight — A/B, C input/output/cache, D1–D3d3 support/source handoffs, reading recovery and worker data-write fences, plus E1 manual refresh locally checked; pending/statement support, legacy context, E2 and later slices remain open. Deployment-target verification, historical repair and full release verification remain open.
+Status: in flight — A/B, C input/output/cache, D1–D3d3 source/support/worker fences, E1 refresh and E2a numbered job receipts locally checked; material-to-artifact binding, pending/statement support, legacy context, capture/reflection status and later slices remain open. Deployment-target verification, historical repair and full release verification remain open.
 Created: 2026-10-01, on the owner's instruction to implement the full plan.
 Branch: `codex/ux-feature-implementation`.
 Baseline: `33e65a7` on `dev`.
@@ -30,7 +30,7 @@ experiments or revive superseded room goals.
 | C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | C1/C2/C3 code locally verified (51 SQL cases; full web 349/349). Read-only inventory completed across 5 rooms in the DB referenced by the local env files; hosted-stage mapping is not verified. Historical repair, deployment coordination and deployed verification remain pending. |
 | D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | D1–D3d3 provenance, automatic support checks, durable source handoffs, worker data-write fences and personal reading recovery locally verified. D3d3: 161 targeted SQL / 671 unit / 374 web. Pending/statement support, legacy personal context, complete downstream receipts, live semantic quality and historical repair remain open. |
 | E1 | F7/F8: authoritative poster and truthful manual refresh | Queue acceptance, changed/unchanged completion, failure and fresh displayed version verified | Implemented with job receipts, resumable profile-scoped polling, held-job manual upgrade and authoritative headline. Local checks pass (8 receipt SQL tests, 10 hook tests, full web 362/362); deployed verification remains open. |
-| E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | Pending |
+| E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | E2a queue request versions and version-aware manual receipts locally verified. Exact source-material revision binding, per-destination completion, ambiguous-save reconciliation and capture/reflection status UI remain pending. |
 | F | F11/F12: visible search and durable navigation | Results beyond initial archive, failure/no-match separation, stable IDs, deep links, Back/Forward and rename verified | Pending |
 | G | F13: capture attachments and recoverable failure | Paste/drop/select preview; saved text survives failure; retry attaches once; sharing destination clear | Pending |
 | H | F18: progressive initial load and bounded prefetch | Small/large archive baseline vs result, first useful view and card/search/deep-link integrity | Pending |
@@ -62,6 +62,36 @@ Keep code, deployment, historical repair, and user validation evidence distinct.
   choices. A safe new writer alone does not prove old data repaired.
 - Mark a slice complete only when its scoped gate is evidenced. Record missing
   external validation or provisioning explicitly; do not count it as done.
+
+## Source-to-reading completion contract (D/E2)
+
+Keep three identities separate: an inspiration's allowed-material revision,
+a numbered request on a possibly reused job, and a published reading version.
+Queue request versions alone are not evidence that a saved answer was read.
+The remaining implementation must bind all three, with metadata rather than
+copies of private text:
+
+- Track personal and public source revisions separately; private reflections
+  advance only personal material. Do not certify legacy processed state.
+- In the save transaction, bind the requested material to its destination and
+  exact derivation request. Retain the latest derived and completed material
+  revisions independently; a newer request never inherits an older completion.
+  A later material revision may supersede an earlier receipt; do not claim
+  that deleted or replaced words themselves were read.
+- At successful derivation, bind changed standing to the exact downstream read
+  request. A genuine no-change derivation may settle without buying another
+  synthesis, but it cannot skip an earlier outstanding read dependency.
+- Bind completion to the actual artifact transaction/result. Respect cadence,
+  failure, coalescing, newer requests and current ownership at every handoff.
+  A job ID, queued acceptance, or timeout alone proves none of these outcomes.
+- Expose one resumable status line for the latest relevant save, with matching
+  artifact adoption only on explicit action. Add idempotent save/reconciliation
+  so an ambiguous POST does not duplicate inspirations or answers.
+
+The first implementation increment numbers requests and makes manual-refresh
+receipts version-aware. Source revision storage, per-destination progress,
+downstream artifact binding and the capture/reflection UI remain required; this
+increment must not be presented as completion of D or E2.
 
 ## Log
 
@@ -626,3 +656,45 @@ Keep code, deployment, historical repair, and user validation evidence distinct.
   principle scheduling is still outside its artifact transaction. Historical
   context/repair, cross-device caches, live semantic evaluation and every later
   delivery/release gate remain open; worker claim guards do not prove them.
+- 2026-10-01, E2a: fixed the prerequisite request identity before exposing a
+  capture/reflection completion claim. Seven initial SQL cases failed because
+  a reusable job had no numbered request/completion coverage. Migration 0040
+  adds bigint requested/completed versions with invariant checks. Coalescing
+  retains one job while numbering each accepted request; terminal reuse and
+  explicit retries get new numbers. A worker acknowledges only the version it
+  claimed, under its existing lease predicate. Holds, failures and rolled-back
+  saves acknowledge nothing. Legacy completed coverage starts at zero.
+- Refresh acceptance/status now carry decimal-string counters. The browser
+  persists the numbered receipt, asks for that request when polling/resuming,
+  and rejects an older success on the same job instead of adopting it. Checks
+  retry the same receipt without buying another generation; values beyond the
+  JavaScript integer range preserve precision. Older browser sessions containing
+  only a job ID may ask the server for current status, but unverified legacy
+  success is reported as unknown rather than fabricated completion.
+- Migration readiness uncovered missing latest snapshots and bigint-default
+  serialization failure. Restored an authoritative 0040 snapshot from the current
+  38-table TypeScript schema using the installed Drizzle generator; a fresh
+  generated snapshot produces zero diff statements and serializes without a
+  custom bigint codec after SQL-literal defaults replaced bigint JS defaults.
+  The real empty-database migration passed, but the conservative enum-upgrade
+  scanner flagged 16 comparisons in this branch's UNDEPLOYED 0035/0038/0039
+  trigger definitions. Explicit text comparisons fix those warnings without
+  weakening the gate or editing any known deployed migration.
+- E2a verification: 12/12 new SQL cases pass, covering pending/running/terminal
+  reuse, rollback, failure/hold, late settlement, principle retry, real refresh
+  routes, operational retry serialization, large counters, scoped status reads,
+  and upgrade of a legacy completed row without inventing coverage. With queue,
+  source durability, write fences, provenance and migration tests: 96/96 SQL
+  cases across eight suites. API unit 671 passed / 3 paid-live benches skipped;
+  web 377/377. API/web/admin types, web build, migration/diff checks and all 5
+  offline migration-integrity checks pass. The fresh-migration test created and
+  removed its disposable local database; all other SQL used isolated loopback
+  `waka_agent_test` schemas. No hosted write, live provider, push or deploy.
+- E2 is NOT complete: queue versions are not source-material revisions. Next
+  bind saved material and per-destination derivation to exact downstream
+  reading completion, including no-change work, earlier unfinished dependencies,
+  cadence, attachment enrichment and concurrent edits; then wire the one-line
+  capture/reflection experience and idempotent ambiguous-save recovery. The
+  operational retry route also still needs worker wake-up/recovery verification.
+  Deploy only after verifying stage targets and coordinating old workers; an
+  unaware old writer cannot certify numbered completion. Full A–J/L1–L3 remains.

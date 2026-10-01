@@ -24,7 +24,7 @@ BEGIN
           AND s.input_policy IS DISTINCT FROM 'group-public-v1'))));
   DELETE FROM inspiration_embeddings WHERE profile_id = OLD.profile_id
     AND inspiration_id = OLD.inspiration_id AND input_scope = 'personal';
-  DELETE FROM background_jobs WHERE profile_id = OLD.profile_id AND type = 'generate_reflection_question'
+  DELETE FROM background_jobs WHERE profile_id = OLD.profile_id AND type::text = 'generate_reflection_question'
     AND payload->>'inspirationId' = OLD.inspiration_id::text;
   IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
   RETURN NEW;
@@ -73,7 +73,7 @@ BEGIN
     -- Remove witnesses while their parent still exists. Otherwise the later
     -- reflection FK's SET NULL can update evidence after the parent vanished.
     DELETE FROM signal_evidence WHERE owner_profile_id = OLD.profile_id AND inspiration_id = OLD.id;
-    DELETE FROM background_jobs WHERE profile_id = OLD.profile_id AND type = 'generate_reflection_question'
+    DELETE FROM background_jobs WHERE profile_id = OLD.profile_id AND type::text = 'generate_reflection_question'
       AND payload->>'inspirationId' = OLD.id::text;
     RETURN OLD;
   END IF;
@@ -82,7 +82,7 @@ BEGIN
   IF OLD.text IS DISTINCT FROM NEW.text THEN
     UPDATE signal_evidence SET quote = NULL, quote_source = NULL, quote_source_hash = NULL
       WHERE owner_profile_id = OLD.profile_id AND inspiration_id = OLD.id AND quote_reflection_id IS NULL;
-    DELETE FROM background_jobs WHERE profile_id = OLD.profile_id AND type = 'generate_reflection_question'
+    DELETE FROM background_jobs WHERE profile_id = OLD.profile_id AND type::text = 'generate_reflection_question'
       AND payload->>'inspirationId' = OLD.id::text;
   END IF;
   DELETE FROM inspiration_embeddings WHERE profile_id = OLD.profile_id AND inspiration_id = OLD.id;

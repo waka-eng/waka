@@ -17,7 +17,7 @@
  * inspect the machinery, not permission to read other people's memory.
  */
 
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 
 import {
@@ -268,6 +268,8 @@ export function createAdminBackgroundJobsRoutes(
       .update(backgroundJobs)
       .set({
         status: "pending",
+        requestVersion: sql`${backgroundJobs.requestVersion} + 1`,
+        result: null,
         attempts: 0,
         lockedAt: null,
         lastError: null,

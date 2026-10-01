@@ -289,8 +289,8 @@ describe("PATCH /api/signals/:signalId", () => {
       locked: true,
     }));
     const dropEmbedding = vi.fn(async () => undefined);
-    const requestReembed = vi.fn(async () => ({ jobId: "job-2", created: true }));
-    const requestRefresh = vi.fn(async () => ({ jobId: "job-1", created: true }));
+    const requestReembed = vi.fn(async () => ({ jobId: "job-2", requestVersion: "1", created: true }));
+    const requestRefresh = vi.fn(async () => ({ jobId: "job-1", requestVersion: "1", created: true }));
     const app = new Hono();
     app.route(
       "/api/signals",
@@ -353,7 +353,7 @@ describe("PATCH /api/signals/:signalId", () => {
         updateStatement,
         dropEmbedding: vi.fn(async () => undefined),
         requestReembed,
-        requestRefresh: vi.fn(async () => ({ jobId: "job-1", created: true })),
+        requestRefresh: vi.fn(async () => ({ jobId: "job-1", requestVersion: "1", created: true })),
         authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
       }),
     );

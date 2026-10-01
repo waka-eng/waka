@@ -300,6 +300,13 @@ agent's relayed excerpt, an agent's own observation.
   committed if a later stage loses its claim; a job is not one giant transaction.
   Pattern comparison prepares all judgments before its batch write, verifies
   the generation revision, and respects decisions recorded while it was waiting.
+- **A job request is numbered independently of its job ID.** `request_version`
+  advances when new work joins a reusable queue row; a claim carries the version
+  it began with. Only successful owned settlement advances `completed_version`,
+  and only through that claim's version, even when newer work is waiting. A
+  retry or cadence hold is not completion. API versions are decimal strings.
+  These numbers identify queue requests, not source material or artifact
+  versions. Legacy completion is unverified (zero), never backfilled by guessing.
 - **Personal feedback context stays in its profile.** Personal synthesis uses
   feedback on that profile's own signals and entries. Reactions to another
   profile or room remain stored for that context; they are not permission to

@@ -275,8 +275,9 @@ vi.mock("../src/lib/api", async (importOriginal) => {
   return {
     ...actual,
     ...apiMockFrom(FACTS),
-    refreshTopOfMind: async () => { refreshState.requests += 1; return { jobId: "00000000-0000-4000-8000-000000000991" }; },
+    refreshTopOfMind: async () => { refreshState.requests += 1; return { jobId: "00000000-0000-4000-8000-000000000991", requestVersion: "1" }; },
     fetchTopOfMindRefresh: async () => ({ status: refreshState.status, runAfter: null,
+      requestVersion: "1", completedVersion: refreshState.status === "succeeded" ? "1" : "0",
       result: refreshState.status === "succeeded" ? { kind: "top_of_mind", topOfMindId: "tom-self", version: 3, outcome: refreshState.empty ? "empty" : "changed" } : null }),
     /* The write behind "keep these words". Its RESULT is discarded by the
        page — the new sentence is already in hand — so this only has to

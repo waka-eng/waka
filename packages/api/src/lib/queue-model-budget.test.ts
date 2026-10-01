@@ -136,6 +136,8 @@ class InMemoryBackgroundJobStore implements BackgroundJobStore {
       type: "derive_signals",
       payload: { inspirationId: `inspiration-${row.id}`, reason: "created" },
       result: null,
+      requestVersion: 1n,
+      completedVersion: 0n,
       status: "running",
       attempts: row.attempts,
       maxAttempts: MAX_ATTEMPTS,

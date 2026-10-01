@@ -34,6 +34,7 @@ import {
   fetchSignal,
   fetchSignals,
   fetchTopOfMind,
+  fetchTopOfMindRefresh,
   refreshTopOfMind,
   holdTopOfMindEntry,
   updateAuthPreferences,
@@ -344,6 +345,16 @@ describe("signals", () => {
 });
 
 describe("top of mind", () => {
+  it("requests the numbered reading receipt and carries its completion counters unchanged", async () => {
+    const state = { status: 'pending', requestVersion: '9007199254740993', completedVersion: '9007199254740992', runAfter: null, result: null };
+    stubFetch(Response.json(state));
+    const controller = new AbortController();
+    await expect(fetchTopOfMindRefresh('job-id', controller.signal, state.requestVersion)).resolves.toEqual(state);
+    expect(fetch).toHaveBeenCalledWith('/api/top-of-mind/refresh/job-id?requestVersion=9007199254740993', {
+      method: 'GET', credentials: 'include', headers: { Accept: 'application/json' }, signal: controller.signal,
+    });
+  });
+
   it("checks a shown version in its explicit profile with cancellation and support metadata intact", async () => {
     const controller = new AbortController();
     stubFetch(Response.json({ topOfMind: { ...topOfMind, profileId: 'profile-1', generationRevision: '9007199254740993', supportChanged: true,
@@ -378,9 +389,9 @@ describe("top of mind", () => {
   });
 
   it("keeps the queue receipt rather than treating acceptance as completion", async () => {
-    stubFetch(Response.json({ status: "queued", jobId: "read-job" }, { status: 202 }));
+    stubFetch(Response.json({ status: "queued", jobId: "read-job", requestVersion: "2" }, { status: 202 }));
 
-    await expect(refreshTopOfMind()).resolves.toEqual({ jobId: "read-job" });
+    await expect(refreshTopOfMind()).resolves.toEqual({ jobId: "read-job", requestVersion: "2" });
     expect(fetch).toHaveBeenCalledWith("/api/top-of-mind/refresh", {
       method: "POST",
       credentials: "include",

@@ -3,8 +3,10 @@ import { ApiError, fetchTopOfMindRefresh, refreshTopOfMind, type ApiTopOfMindRef
 
 type Phase = "idle" | "starting" | "pending" | "running" | "waiting" | "delayed" | "error" | "failed" | "unknown" | "changed" | "unchanged" | "empty";
 type Complete = (result: ApiTopOfMindRefreshResult, current: () => boolean) => Promise<ApiTopOfMindRefreshResult["outcome"] | void>;
+// A missing version is only for resuming an older browser's stored job ID.
+type SavedRequest = { jobId: string; requestVersion?: string };
 
-async function readStep(id: string, run: AbortSignal, current: () => boolean, complete: Complete): Promise<ApiTopOfMindRefreshStatus> {
+async function readStep(receipt: SavedRequest, run: AbortSignal, current: () => boolean, complete: Complete): Promise<ApiTopOfMindRefreshStatus> {
   const request = new AbortController();
   const abort = () => request.abort();
   run.addEventListener("abort", abort, { once: true });
@@ -13,7 +15,13 @@ async function readStep(id: string, run: AbortSignal, current: () => boolean, co
   try {
     return await Promise.race([
       (async () => {
-        const state = await fetchTopOfMindRefresh(id, request.signal);
+        const state = await fetchTopOfMindRefresh(receipt.jobId, request.signal, receipt.requestVersion);
+        if (receipt.requestVersion && (typeof state.requestVersion !== "string" || !/^\d+$/.test(state.requestVersion) ||
+          BigInt(state.requestVersion) < BigInt(receipt.requestVersion) ||
+          (state.status === "succeeded" && (typeof state.completedVersion !== "string" || !/^\d+$/.test(state.completedVersion) ||
+            BigInt(state.completedVersion) < BigInt(receipt.requestVersion))))) {
+          throw new Error("Reading status belongs to an older request");
+        }
         if (valid() && state.status === "succeeded" && state.result) {
           const outcome = await complete(state.result, valid);
           return { ...state, result: { ...state.result, outcome: outcome ?? state.result.outcome } };
@@ -36,7 +44,7 @@ export function useTopOfMindRefresh(options: {
 }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [canResume, setCanResume] = useState(false);
-  const job = useRef<string | null>(null);
+  const job = useRef<SavedRequest | null>(null);
   const controller = useRef<AbortController | null>(null);
   const accepting = useRef(false);
   const timer = useRef<number | undefined>(undefined);
@@ -45,11 +53,11 @@ export function useTopOfMindRefresh(options: {
   completion.current = options.onComplete;
   key.current = options.storageKey;
 
-  const remember = (id: string | null) => {
-    job.current = id; setCanResume(id !== null);
+  const remember = (receipt: SavedRequest | null) => {
+    job.current = receipt; setCanResume(receipt !== null);
     try {
       if (key.current) {
-        if (id) sessionStorage.setItem(key.current, id);
+        if (receipt) sessionStorage.setItem(key.current, JSON.stringify(receipt));
         else sessionStorage.removeItem(key.current);
       }
     } catch { /* an unavailable browser store does not cancel server work */ }
@@ -72,7 +80,7 @@ export function useTopOfMindRefresh(options: {
       try {
         const receipt = await refreshTopOfMind();
         if (!current()) return;
-        remember(receipt.jobId);
+        remember(receipt);
       } catch {
         if (current()) setPhase("error");
         return;
@@ -80,11 +88,11 @@ export function useTopOfMindRefresh(options: {
         if (current()) accepting.current = false;
       }
     }
-    const id = job.current!;
+    const receipt = job.current!;
     const poll = async () => {
       if (!current() || document.hidden) return;
       try {
-        const state = await readStep(id, run.signal, current, (...args) => completion.current(...args));
+        const state = await readStep(receipt, run.signal, current, (...args) => completion.current(...args));
         if (!current()) return;
         if (state.status === "succeeded" && state.result) {
           remember(null); setPhase(state.result.outcome);
@@ -118,7 +126,15 @@ export function useTopOfMindRefresh(options: {
   useEffect(() => {
     job.current = null;
     setPhase("idle");
-    try { if (options.storageKey) job.current = sessionStorage.getItem(options.storageKey); } catch { /* memory only */ }
+    try {
+      const saved = options.storageKey && sessionStorage.getItem(options.storageKey);
+      if (saved) {
+        if (saved.startsWith("{")) {
+          const parsed = JSON.parse(saved) as SavedRequest;
+          if (typeof parsed.jobId === "string" && typeof parsed.requestVersion === "string" && /^[1-9]\d*$/.test(parsed.requestVersion)) job.current = parsed;
+        } else job.current = { jobId: saved };
+      }
+    } catch { /* malformed/unavailable storage is not proof of server work */ }
     setCanResume(job.current !== null);
     if (job.current) void start();
     const resume = () => { if (job.current && !document.hidden) void start(); };

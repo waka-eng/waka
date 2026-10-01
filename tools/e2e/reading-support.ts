@@ -47,7 +47,7 @@ try {
       if (path === '/experiences') return send({ experiences: [] });
       if (path === '/principles') return send({ principles: [] });
       if (path === '/principles/status') return send({ status: { phase: 'waiting', eligible: false, signalCount: 0, topOfMindCount: 0 } });
-      if (path === '/top-of-mind/refresh') { generated += 1; return send({ jobId: id(30), status: 'queued' }, 202); }
+      if (path === '/top-of-mind/refresh') { generated += 1; return send({ jobId: id(30), requestVersion: '1', status: 'queued' }, 202); }
       if (path === '/top-of-mind' || path === `/top-of-mind/versions/${reading.id}`) {
         if (failCheck && path.includes('/versions/')) return send({ error: 'Synthetic unavailable' }, 503);
         return send({ topOfMind: reading });

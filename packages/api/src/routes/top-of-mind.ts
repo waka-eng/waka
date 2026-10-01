@@ -594,20 +594,20 @@ export function createTopOfMindRoutes(
     );
     if (!scope.ok) return c.json(scope.body, scope.status);
 
-    const { jobId } = await requestRefresh(scope.profileId, "manual");
+    const { jobId, requestVersion } = await requestRefresh(scope.profileId, "manual");
     // 202: the artifact a caller reads back now is still the current version.
     // The queue collapses concurrent requests into one synthesis.
-    return c.json({ status: "queued", jobId }, 202);
+    return c.json({ status: "queued", jobId, requestVersion }, 202);
   });
 
   routes.get("/refresh/:jobId", async (c) => {
     const jobId = z.string().uuid().safeParse(c.req.param("jobId"));
-    const query = scopeQuerySchema.safeParse(c.req.query());
+    const query = scopeQuerySchema.extend({ requestVersion: z.string().regex(/^[1-9]\d{0,18}$/).optional() }).safeParse(c.req.query());
     if (!jobId.success || !query.success) return c.json({ error: "Invalid refresh status request" }, 400);
     const db = getDatabase();
     const scope = await resolveProfileScope(db, c.get("session"), query.data.profile, "read", loadProfile);
     if (!scope.ok) return c.json(scope.body, scope.status);
-    const status = await (deps.loadRefreshStatus ?? loadTopOfMindRefreshStatus)(db, scope.profileId, jobId.data);
+    const status = await (deps.loadRefreshStatus ?? loadTopOfMindRefreshStatus)(db, scope.profileId, jobId.data, query.data.requestVersion);
     if (!status) return c.json({ error: "Reading request not found" }, 404);
     return c.json(status);
   });

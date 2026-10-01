@@ -31,8 +31,8 @@ BEGIN
   SELECT array_agg(DISTINCT e.profile_id) INTO affected
     FROM signal_evidence e JOIN profiles p ON p.id = e.profile_id JOIN signals s ON s.id = e.signal_id
     WHERE e.inspiration_id = ANY(source_ids) AND e.owner_profile_id = ANY(owner_ids) AND (
-      (p.type <> 'group' AND e.profile_id = e.owner_profile_id) OR
-      (p.type = 'group' AND s.input_policy = 'group-public-v1' AND TG_TABLE_NAME <> 'reflections' AND (
+      (p.type::text <> 'group' AND e.profile_id = e.owner_profile_id) OR
+      (p.type::text = 'group' AND s.input_policy = 'group-public-v1' AND TG_TABLE_NAME <> 'reflections' AND (
         (TG_TABLE_NAME = 'inspirations' AND (prior->>'visibility' = 'public' OR current_row->>'visibility' = 'public')) OR
         (TG_TABLE_NAME = 'attachments' AND EXISTS (SELECT 1 FROM inspirations i WHERE i.id = e.inspiration_id AND i.visibility = 'public'))
       )));
@@ -67,7 +67,7 @@ BEGIN
     IF TG_OP = 'UPDATE' AND ROW(OLD.name, OLD.preferred_locale, OLD.group_id) IS NOT DISTINCT FROM ROW(NEW.name, NEW.preferred_locale, NEW.group_id) THEN RETURN NEW; END IF;
     affected := ARRAY[(row_data->>'id')::uuid];
     SELECT array_agg(p.id) INTO extra FROM profiles p JOIN group_members m ON m.group_id = p.group_id
-      WHERE p.type = 'group' AND m.profile_id = (row_data->>'id')::uuid;
+      WHERE p.type::text = 'group' AND m.profile_id = (row_data->>'id')::uuid;
     affected := affected || coalesce(extra, ARRAY[]::uuid[]);
   ELSIF TG_TABLE_NAME IN ('groups', 'group_members', 'group_top_of_mind_proposals', 'group_top_of_mind_affirmations') THEN
     IF TG_TABLE_NAME = 'groups' THEN
@@ -76,25 +76,25 @@ BEGIN
     ELSIF TG_TABLE_NAME = 'group_top_of_mind_affirmations' THEN
       SELECT group_id INTO group_id_value FROM group_top_of_mind_proposals WHERE id = (row_data->>'proposal_id')::uuid;
     ELSE group_id_value := (row_data->>'group_id')::uuid; END IF;
-    SELECT array_agg(id) INTO affected FROM profiles WHERE type = 'group' AND group_id = group_id_value;
+    SELECT array_agg(id) INTO affected FROM profiles WHERE type::text = 'group' AND group_id = group_id_value;
   ELSIF TG_TABLE_NAME = 'top_of_minds' THEN
     owner_id := (row_data->>'profile_id')::uuid;
-    IF owner_id IS NULL THEN SELECT id INTO owner_id FROM profiles WHERE type = 'group' AND group_id = (row_data->>'group_id')::uuid; END IF;
+    IF owner_id IS NULL THEN SELECT id INTO owner_id FROM profiles WHERE type::text = 'group' AND group_id = (row_data->>'group_id')::uuid; END IF;
     affected := ARRAY[owner_id];
   ELSIF TG_TABLE_NAME IN ('top_of_mind_entries', 'top_of_mind_entry_signals') THEN
     IF TG_TABLE_NAME = 'top_of_mind_entries' THEN
-      SELECT coalesce(m.profile_id,p.id) INTO owner_id FROM top_of_minds m LEFT JOIN profiles p ON p.type = 'group' AND p.group_id = m.group_id
+      SELECT coalesce(m.profile_id,p.id) INTO owner_id FROM top_of_minds m LEFT JOIN profiles p ON p.type::text = 'group' AND p.group_id = m.group_id
         WHERE m.id = (row_data->>'top_of_mind_id')::uuid;
     ELSE
       SELECT coalesce(m.profile_id,p.id) INTO owner_id FROM top_of_mind_entries e JOIN top_of_minds m ON m.id = e.top_of_mind_id
-        LEFT JOIN profiles p ON p.type = 'group' AND p.group_id = m.group_id WHERE e.id = (row_data->>'entry_id')::uuid;
+        LEFT JOIN profiles p ON p.type::text = 'group' AND p.group_id = m.group_id WHERE e.id = (row_data->>'entry_id')::uuid;
     END IF;
     affected := ARRAY[owner_id];
   ELSE
     affected := ARRAY[(prior->>'profile_id')::uuid, (current_row->>'profile_id')::uuid];
     IF TG_TABLE_NAME IN ('signals', 'signal_embeddings', 'signal_evidence') THEN
       owner_id := (row_data->>'profile_id')::uuid;
-      IF EXISTS (SELECT 1 FROM profiles WHERE id = owner_id AND type = 'group') THEN
+      IF EXISTS (SELECT 1 FROM profiles WHERE id = owner_id AND type::text = 'group') THEN
         IF TG_TABLE_NAME = 'signals' THEN
           IF coalesce(prior->>'input_policy','') <> 'group-public-v1' AND coalesce(current_row->>'input_policy','') <> 'group-public-v1' THEN
             IF TG_OP = 'DELETE' THEN RETURN OLD; END IF; RETURN NEW;
@@ -105,9 +105,9 @@ BEGIN
       END IF;
     ELSIF TG_TABLE_NAME = 'feedback' THEN
       IF row_data->>'target_type' = 'signal' THEN SELECT profile_id INTO owner_id FROM signals WHERE id = (row_data->>'target_id')::uuid;
-      ELSIF row_data->>'target_type' = 'principle' THEN SELECT profile_id INTO owner_id FROM principles WHERE id = (row_data->>'target_id')::uuid;
+      ELSIF (row_data->>'target_type')::text = 'principle' THEN SELECT profile_id INTO owner_id FROM principles WHERE id = (row_data->>'target_id')::uuid;
       ELSE SELECT coalesce(m.profile_id,p.id) INTO owner_id FROM top_of_mind_entries e JOIN top_of_minds m ON m.id = e.top_of_mind_id
-        LEFT JOIN profiles p ON p.type = 'group' AND p.group_id = m.group_id WHERE e.id = (row_data->>'target_id')::uuid; END IF;
+        LEFT JOIN profiles p ON p.type::text = 'group' AND p.group_id = m.group_id WHERE e.id = (row_data->>'target_id')::uuid; END IF;
       affected := affected || ARRAY[owner_id];
     END IF;
   END IF;

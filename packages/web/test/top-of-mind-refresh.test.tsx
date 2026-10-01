@@ -18,8 +18,9 @@ vi.mock("../src/lib/api", async (original) => ({
 const keyA = profileStorageKey({ accountId: "A", profileId: "person" }, "readingRefresh")!;
 const keyB = profileStorageKey({ accountId: "B", profileId: "person" }, "readingRefresh")!;
 const completed: ApiTopOfMindRefreshResult = { kind: "top_of_mind", topOfMindId: "artifact-2", version: 2, outcome: "changed" };
-const pending = { status: "pending" as const, runAfter: null, result: null };
-const done = { status: "succeeded" as const, runAfter: null, result: completed };
+const receipt = { jobId: "request-A", requestVersion: "2" };
+const pending = { status: "pending" as const, requestVersion: "2", completedVersion: "0", runAfter: null, result: null };
+const done = { status: "succeeded" as const, requestVersion: "2", completedVersion: "2", runAfter: null, result: completed };
 const onComplete = vi.fn(async (_result: ApiTopOfMindRefreshResult, _current: () => boolean) => {});
 let host: HTMLDivElement;
 let root: Root;
@@ -33,7 +34,7 @@ beforeEach(() => {
   Object.defineProperty(document, "hidden", { configurable: true, value: false });
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
-  vi.mocked(refreshTopOfMind).mockResolvedValue({ jobId: "request-A" });
+  vi.mocked(refreshTopOfMind).mockResolvedValue(receipt);
   vi.mocked(fetchTopOfMindRefresh).mockResolvedValue(pending);
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); });
@@ -42,7 +43,7 @@ it("waits for completion, then clears the saved receipt", async () => {
   await act(async () => root.render(<Probe />)); await click();
   expect(host.textContent).toContain("pending:true");
   expect(onComplete).not.toHaveBeenCalled();
-  expect(sessionStorage.getItem(keyA)).toBe("request-A");
+  expect(JSON.parse(sessionStorage.getItem(keyA)!)).toEqual(receipt);
   vi.mocked(fetchTopOfMindRefresh).mockResolvedValue(done);
   await act(async () => vi.advanceTimersByTimeAsync(1500));
   expect(host.textContent).toContain("changed:false");
@@ -62,7 +63,7 @@ it("resumes an existing receipt without enqueueing again", async () => {
   sessionStorage.setItem(keyA, "already-running");
   await act(async () => root.render(<Probe />));
   expect(refreshTopOfMind).not.toHaveBeenCalled();
-  expect(fetchTopOfMindRefresh).toHaveBeenCalledWith("already-running", expect.any(AbortSignal));
+  expect(fetchTopOfMindRefresh).toHaveBeenCalledWith("already-running", expect.any(AbortSignal), undefined);
   expect(host.textContent).toContain("pending:true");
 });
 
@@ -78,7 +79,7 @@ it("retries failed status reads without buying another generation", async () => 
 });
 
 it("does not confuse terminal failure or an expired receipt with success", async () => {
-  vi.mocked(fetchTopOfMindRefresh).mockResolvedValue({ status: "failed", runAfter: null, result: null });
+  vi.mocked(fetchTopOfMindRefresh).mockResolvedValue({ ...pending, status: "failed" });
   await act(async () => root.render(<Probe />)); await click();
   expect(host.textContent).toContain("failed:false");
   expect(onComplete).not.toHaveBeenCalled();
@@ -95,7 +96,7 @@ it("bounds hung status reads and preserves the same request for recovery", async
   expect(host.textContent).toContain("error:true");
   expect(onComplete).not.toHaveBeenCalled();
   expect(refreshTopOfMind).toHaveBeenCalledOnce();
-  expect(sessionStorage.getItem(keyA)).toBe("request-A");
+  expect(JSON.parse(sessionStorage.getItem(keyA)!)).toEqual(receipt);
 });
 
 it("does not accept an old identity's late response after switching profiles", async () => {
@@ -112,11 +113,11 @@ it("does not accept an old identity's late response after switching profiles", a
 });
 
 it("deduplicates repeated starts before the receipt arrives", async () => {
-  let finish!: (value: { jobId: string }) => void;
+  let finish!: (value: typeof receipt) => void;
   vi.mocked(refreshTopOfMind).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
   await act(async () => root.render(<Probe />)); await click(); await click();
   expect(refreshTopOfMind).toHaveBeenCalledOnce();
-  await act(async () => finish({ jobId: "request-A" }));
+  await act(async () => finish(receipt));
   expect(host.textContent).toContain("pending:true");
 });
 
@@ -131,4 +132,27 @@ it("shows a scheduled read as waiting, then offers to check rather than declarin
   await click();
   expect(host.textContent).toContain("changed:false");
   expect(refreshTopOfMind).toHaveBeenCalledOnce();
+});
+
+it("does not acknowledge an older completion on the same job; keeps checking the numbered receipt", async () => {
+  vi.mocked(fetchTopOfMindRefresh).mockResolvedValueOnce({ ...done, completedVersion: "1" }).mockResolvedValue(done);
+  await act(async () => root.render(<Probe />)); await click();
+  expect(onComplete).not.toHaveBeenCalled();
+  expect(JSON.parse(sessionStorage.getItem(keyA)!)).toEqual(receipt);
+  await act(async () => vi.advanceTimersByTimeAsync(1000));
+  expect(onComplete).toHaveBeenCalledOnce();
+  expect(fetchTopOfMindRefresh).toHaveBeenLastCalledWith(receipt.jobId, expect.any(AbortSignal), receipt.requestVersion);
+  expect(refreshTopOfMind).toHaveBeenCalledOnce();
+});
+
+it("resumes a numbered request and preserves versions larger than JavaScript numbers", async () => {
+  const version = "9007199254740993";
+  sessionStorage.setItem(keyA, JSON.stringify({ ...receipt, requestVersion: version }));
+  vi.mocked(fetchTopOfMindRefresh).mockResolvedValueOnce({ ...done, requestVersion: version, completedVersion: "9007199254740992" })
+    .mockResolvedValue({ ...done, requestVersion: version, completedVersion: version });
+  await act(async () => root.render(<Probe />));
+  expect(onComplete).not.toHaveBeenCalled();
+  await act(async () => vi.advanceTimersByTimeAsync(1000));
+  expect(onComplete).toHaveBeenCalledOnce();
+  expect(refreshTopOfMind).not.toHaveBeenCalled();
 });
