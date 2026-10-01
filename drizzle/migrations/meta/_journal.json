@@ -225,6 +225,13 @@
       "when": 1790812800000,
       "tag": "0031_keep-edited-principles",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1790812800001,
+      "tag": "0032_group-public-inputs",
+      "breakpoints": true
     }
   ]
 }

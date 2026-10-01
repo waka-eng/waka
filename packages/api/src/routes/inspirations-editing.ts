@@ -203,6 +203,7 @@ export function registerEditingRoutes(
       profileId: target.profileId,
       inspirationId: updated.id,
       reason: "edited",
+      changedSource: "inspiration",
     });
 
     const [attachmentRows, reflectionRows] = await Promise.all([

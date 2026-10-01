@@ -100,8 +100,10 @@ A full pass of all four is well under a dollar.
   the fetcher follows user-supplied URLs from inside the network. Loopback
   fixtures need `WAKA_ENRICHMENT_ALLOWED_HOSTS`, which is empty by default and
   set by nothing in the deployed configuration.
-- **`.env.development` and `.env.production` point at the same Neon database.**
-  Local work uses `.env.local`, which points at local Postgres.
+- **An env filename does not establish database isolation.** `.env.local`
+  has also pointed at shared Neon data. Verify the actual host before any
+  mutation; explicitly set `DB_CONNECTION_URL` to a disposable local database
+  for tests instead of trusting an env-file default.
 - **Composite foreign keys carry the tenant.** Child rows reference
   `(profile_id, parent_id)`, so a cross-profile link is refused by Postgres
   rather than by a query someone remembered to scope.

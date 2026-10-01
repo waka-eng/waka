@@ -12,8 +12,9 @@
  * cheap — re-embed only when the source text or the model actually changed.
  */
 
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
+  check,
   foreignKey,
   index,
   integer,
@@ -29,6 +30,8 @@ import { inspirations } from "./schema-inspirations";
 import { profiles } from "./schema-profiles";
 import { signals } from "./schema-signals";
 
+export type InspirationEmbeddingScope = "personal" | "public";
+
 export const inspirationEmbeddings = pgTable(
   "inspiration_embeddings",
   {
@@ -41,6 +44,7 @@ export const inspirationEmbeddings = pgTable(
     inspirationId: uuid("inspiration_id").notNull(),
 
     model: text("model").notNull(),
+    inputScope: text("input_scope").$type<InspirationEmbeddingScope>().notNull().default("personal"),
     dimensions: integer("dimensions").notNull(),
     /** SHA-256 of the canonical embedding input; regenerate only on change. */
     inputHash: text("input_hash").notNull(),
@@ -50,10 +54,12 @@ export const inspirationEmbeddings = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
-    inspirationModelUnique: uniqueIndex("inspiration_embeddings_inspiration_model_idx").on(
+    inspirationModelScopeUnique: uniqueIndex("inspiration_embeddings_inspiration_model_scope_idx").on(
       table.inspirationId,
       table.model,
+      table.inputScope,
     ),
+    inputScopeCheck: check("inspiration_embeddings_input_scope_check", sql`${table.inputScope} IN ('personal', 'public')`),
     profileIdx: index("inspiration_embeddings_profile_idx").on(table.profileId),
     inspirationFk: foreignKey({
       columns: [table.profileId, table.inspirationId],

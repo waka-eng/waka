@@ -31,9 +31,11 @@ export function requestSignalDerivation(input: {
   profileId: string;
   inspirationId: string;
   reason: DeriveSignalsPayload["reason"];
+  /** Private answers change personal learning, never a room's inputs. */
+  changedSource: "inspiration" | "reflection";
 }): Promise<void> {
   return enqueueDeriveSignals(input.profileId, input.inspirationId, input.reason)
-    .then(() => fanOutToGroups(input))
+    .then(() => input.changedSource === "inspiration" ? fanOutToGroups(input) : undefined)
     .catch((err: unknown) => {
       console.error("[inspirations] failed to enqueue signal derivation:", {
         inspirationId: input.inspirationId,

@@ -67,6 +67,9 @@ export const signals = pgTable(
     /** The distilled pattern, in the profile owner's own language. */
     statement: text("statement").notNull(),
 
+    /** Null room rows predate public-only derivation and require review. */
+    inputPolicy: text("input_policy"),
+
     status: signalStatusEnum("status").notNull().default("emerging"),
 
     /** 0–100, derived from evidence count, time spread, and source diversity. */

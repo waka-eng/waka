@@ -1,7 +1,7 @@
 /**
  * Gemini embeddings for the two things signal generation compares.
  *
- * One persisted vector per inspiration per model, and one per signal
+ * One persisted vector per inspiration, model and input scope, and one per signal
  * statement. Match-or-mint needs both: a capture is embedded to find what it
  * resembles, and every statement is embedded so "is this the same pattern we
  * already know?" is answered by cosine distance rather than by a model call.
@@ -26,6 +26,7 @@ import {
   type Attachment,
   type Inspiration,
   type InspirationEmbedding,
+  type InspirationEmbeddingScope,
   type Reflection,
 } from "../db/index.js";
 import { getDb } from "./db.js";
@@ -252,13 +253,14 @@ export class GeminiEmbeddingHttpClient implements GeminiEmbeddingClient {
 export interface EnsureInspirationEmbeddingParams {
   profileId: string;
   inspirationId: string;
+  inputScope?: InspirationEmbeddingScope;
   db?: WakaDb;
   client?: GeminiEmbeddingClient;
 }
 
 export type EnsureInspirationEmbeddingResult =
   | {
-      status: "missing_inspiration";
+      status: "missing_inspiration" | "not_public";
       embedding: null;
       generated: false;
       inputHash: null;
@@ -303,6 +305,7 @@ async function loadExistingEmbedding(
   profileId: string,
   inspirationId: string,
   model: string,
+  inputScope: InspirationEmbeddingScope,
 ): Promise<InspirationEmbedding | null> {
   const rows = await db
     .select()
@@ -312,6 +315,7 @@ async function loadExistingEmbedding(
         eq(inspirationEmbeddings.profileId, profileId),
         eq(inspirationEmbeddings.inspirationId, inspirationId),
         eq(inspirationEmbeddings.model, model),
+        eq(inspirationEmbeddings.inputScope, inputScope),
       ),
     )
     .limit(1);
@@ -365,9 +369,10 @@ async function buildCanonicalInputForInspiration(
   db: WakaDb,
   profileId: string,
   inspiration: Inspiration,
+  inputScope: InspirationEmbeddingScope,
 ): Promise<string> {
   const [reflectionRows, attachmentRows] = await Promise.all([
-    loadProfileScopedReflections(db, profileId, inspiration.id),
+    inputScope === "personal" ? loadProfileScopedReflections(db, profileId, inspiration.id) : [],
     loadProfileScopedAttachments(db, profileId, inspiration.id),
   ]);
   return buildCanonicalInspirationEmbeddingInput({
@@ -382,6 +387,7 @@ async function acquireEmbeddingAdvisoryLock(
   db: WakaDb,
   params: Pick<EnsureInspirationEmbeddingParams, "profileId" | "inspirationId"> & {
     model: string;
+    inputScope: InspirationEmbeddingScope;
   },
 ): Promise<void> {
   await db.execute(
@@ -390,6 +396,7 @@ async function acquireEmbeddingAdvisoryLock(
       params.profileId,
       params.inspirationId,
       params.model,
+      params.inputScope,
     ].join(":")}, 0))`,
   );
 }
@@ -399,9 +406,11 @@ async function sourceMatchesSnapshot(
   profileId: string,
   source: Inspiration | null,
   snapshot: { inputHash: string },
+  inputScope: InspirationEmbeddingScope,
 ): Promise<boolean> {
   if (!source) return false;
-  const currentInput = await buildCanonicalInputForInspiration(db, profileId, source);
+  if (inputScope === "public" && source.visibility !== "public") return false;
+  const currentInput = await buildCanonicalInputForInspiration(db, profileId, source, inputScope);
   return hashEmbeddingInput(currentInput) === snapshot.inputHash;
 }
 
@@ -420,12 +429,14 @@ export async function ensureInspirationEmbedding(
 ): Promise<EnsureInspirationEmbeddingResult> {
   const db: WakaDb = params.db ?? getDb();
   const client = params.client ?? new GeminiEmbeddingHttpClient();
+  const inputScope = params.inputScope ?? "personal";
 
   return db.transaction(async (tx) => {
     await acquireEmbeddingAdvisoryLock(tx, {
       profileId: params.profileId,
       inspirationId: params.inspirationId,
       model: client.model,
+      inputScope,
     });
 
     const inspiration = await loadProfileScopedInspiration(
@@ -441,11 +452,15 @@ export async function ensureInspirationEmbedding(
         inputHash: null,
       };
     }
+    if (inputScope === "public" && inspiration.visibility !== "public") {
+      return { status: "not_public", embedding: null, generated: false, inputHash: null };
+    }
 
     const canonicalInput = await buildCanonicalInputForInspiration(
       tx,
       params.profileId,
       inspiration,
+      inputScope,
     );
     const inputHash = hashEmbeddingInput(canonicalInput);
     const existing = await loadExistingEmbedding(
@@ -453,6 +468,7 @@ export async function ensureInspirationEmbedding(
       params.profileId,
       params.inspirationId,
       client.model,
+      inputScope,
     );
 
     if (existing && !needsEmbeddingRegeneration(existing, inputHash, client.model)) {
@@ -466,7 +482,7 @@ export async function ensureInspirationEmbedding(
       params.inspirationId,
     );
     if (
-      !(await sourceMatchesSnapshot(tx, params.profileId, freshSource, { inputHash }))
+      !(await sourceMatchesSnapshot(tx, params.profileId, freshSource, { inputHash }, inputScope))
     ) {
       return {
         status: "stale_source",
@@ -484,13 +500,14 @@ export async function ensureInspirationEmbedding(
         profileId: inspiration.profileId,
         inspirationId: inspiration.id,
         model: client.model,
+        inputScope,
         dimensions: embedding.length,
         inputHash,
         embedding,
         updatedAt: now,
       })
       .onConflictDoUpdate({
-        target: [inspirationEmbeddings.inspirationId, inspirationEmbeddings.model],
+        target: [inspirationEmbeddings.inspirationId, inspirationEmbeddings.model, inspirationEmbeddings.inputScope],
         set: {
           profileId: inspiration.profileId,
           dimensions: embedding.length,
@@ -508,4 +525,3 @@ export async function ensureInspirationEmbedding(
     return { status, embedding: stored, generated: true, inputHash };
   });
 }
-

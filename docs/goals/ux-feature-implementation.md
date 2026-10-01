@@ -1,6 +1,6 @@
 # Goal: implement the experience review
 
-Status: in flight — A/B fixes implemented with local checks; C containment next. Full release verification remains open.
+Status: in flight — A/B and C input-side fixes locally checked; C output containment and historical review remain open. Full release verification remains open.
 Created: 2026-10-01, on the owner's instruction to implement the full plan.
 Branch: `codex/ux-feature-implementation`.
 Baseline: `33e65a7` on `dev`.
@@ -27,7 +27,7 @@ experiments or revive superseded room goals.
 | --- | --- | --- | --- |
 | A | F5/F6/F10: input, overlay scrolling/focus, readable active controls | Reproduce slash/wheel defects; verify typing, caret, Escape/Tab, wheel/touch and contrast in actual affected flows; web checks | Implemented; 5 original failures now pass, 325 web tests pass. Desktop fixture verified. Mobile touch/200% zoom and deployed verification remain open. |
 | B | F3/F4: edited principle preservation, truthful support, account-scoped drafts/preferences and cancellation | Isolated SQL preservation tests and two-account browser/state tests; API/web checks | B1: 6 SQL / 653 unit tests pass after 3 reproduced failures. B2: 4 failures reproduced, then two-account draft and stale-response checks pass; full web suite 331/331. Deployed/account-switch browser verification remains open. |
-| C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | Pending |
+| C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | C1 input-side changes verified with 16 room SQL cases; metadata-only report implemented and fixture-tested. C2 downstream synthesis/current/historical serving and actual impact assessment remain pending. Do not deploy C1 alone. |
 | D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | Pending |
 | E1 | F7/F8: authoritative poster and truthful manual refresh | Queue acceptance, changed/unchanged completion, failure and fresh displayed version verified | Pending |
 | E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | Pending |
@@ -107,3 +107,40 @@ Keep code, deployment, historical repair, and user validation evidence distinct.
   Local Vite preview remains available on port 3011 (fixture mode; no API on
   port 3010). The broader C–J/L1–L3 scope and A/B deployed/mobile gates remain
   pending; this is an implementation checkpoint, not goal completion.
+- 2026-10-01, C1: reproduced 6/6 SQL failures: private answers in extraction
+  and vectors, departed membership before/during extraction, visibility and
+  text changing during extraction. A separate unit reproduction confirmed
+  private reflection changes still fanned out room jobs (1/1 failed).
+  Added `input_scope` to embedding identity and `input_policy` to signals;
+  room extraction/retrieval excludes answers and unverified legacy context,
+  matching, and suppression anchors. Personal answers remain available to
+  personal learning. Reflection saves/deletions now queue only personal work.
+  Commit-time membership, primary/related capture and attachment checks run
+  after model calls and roll back outdated output; locks hold those checks
+  through commit. Changed public material raises a retryable error.
+- C1 verification: 16/16 room-derivation SQL tests, 6/6 room visibility tests,
+  and 6/6 principle preservation tests passed on isolated local Postgres
+  schemas (28 total). Cases include private-only edits leaving retrieval
+  unchanged, rejected non-group destinations, legacy context/match/suppression
+  exclusion, and a privacy change inside the match judge rolling back the
+  restatement and evidence. The concurrency fixture initially stalled on the
+  harness's single connection; stopped its identified process, removed only
+  its disposable schema, and reran using a separate simulated-user connection.
+  API typecheck, report-script typecheck, migration check and diff check pass.
+  API unit suite: 654 passed, 3 paid/live benches skipped. No live model calls.
+- C1 impact tooling: `pnpm report:group-input-impact --group-id <uuid>`
+  (`tools/ops/report-group-input-impact.ts`)
+  requires an explicit connection URL and group ID; emits only IDs/counts and
+  uncertainty, inside a repeatable-read/read-only transaction. The fixture
+  verifies scope isolation, no content disclosure/mutation and truncation.
+  It has NOT been run against shared data. It is an inventory, not authority
+  to repair and not proof of historical exposure or safety.
+- C deployment hold: migration 0032 replaces the embedding conflict index.
+  Old derivation workers must be stopped/drained before migration, followed
+  by new workers; do not run mixed versions or roll back to the private-input
+  writer. No shared migration, push, deployment, or historical repair occurred.
+  Next complete C2: exclude unverified signals/artifacts/principles from every
+  downstream prompt and current/historical read, preserve authored/locked
+  wording without silently certifying it, show honest restricted output,
+  and assess actual legacy scope before a named repair batch. Existing output
+  readers are not yet protected by C1; the full C gate has NOT passed.

@@ -107,6 +107,8 @@ export interface ResolvedCandidate {
 
 interface ApplyCandidatesInput {
   profileId: string;
+  /** Room context, targets and new signals must share the verified policy. */
+  inputPolicy?: string;
   inspirationId: string;
   /**
    * WHOSE MEMORY THE EVIDENCE CITES — the inspiration's owner. Equal to
@@ -128,8 +130,8 @@ export async function applyCandidates(
   tx: WakaTx,
   input: ApplyCandidatesInput,
 ): Promise<Pick<SignalDerivationResult, "matchedSignalIds" | "mintedSignalIds" | "promotedSignalIds">> {
-  const targets = await loadMatchTargets(tx, input.profileId, input.embeddingModel);
-  const anchors = await loadSuppressionAnchors(tx, input.profileId, input.embeddingModel);
+  const targets = await loadMatchTargets(tx, input.profileId, input.embeddingModel, input.inputPolicy);
+  const anchors = await loadSuppressionAnchors(tx, input.profileId, input.embeddingModel, input.inputPolicy);
 
   const matchedSignalIds: string[] = [];
   const mintedSignalIds: string[] = [];
@@ -245,6 +247,7 @@ export async function applyCandidates(
       .values({
         profileId: input.profileId,
         statement: candidate.statement,
+        inputPolicy: input.inputPolicy,
         status: "emerging",
         confidence: 0,
       })
@@ -331,6 +334,7 @@ async function loadMatchTargets(
   tx: WakaTx,
   profileId: string,
   embeddingModel: string,
+  inputPolicy?: string,
 ): Promise<MatchTarget[]> {
   const rows = await tx
     .select({
@@ -345,6 +349,7 @@ async function loadMatchTargets(
     .where(
       and(
         eq(signals.profileId, profileId),
+        ...(inputPolicy ? [eq(signals.inputPolicy, inputPolicy)] : []),
         // A retired signal is either evidence-dead or hidden by its owner.
         // Reviving one because a new capture resembles it would undo a human
         // decision without asking, so retired rows are simply not candidates.
@@ -396,6 +401,7 @@ async function loadSuppressionAnchors(
   tx: WakaTx,
   profileId: string,
   embeddingModel: string,
+  inputPolicy?: string,
 ): Promise<SuppressionAnchor[]> {
   return tx
     .select({
@@ -408,6 +414,7 @@ async function loadSuppressionAnchors(
     .where(
       and(
         eq(signals.profileId, profileId),
+        ...(inputPolicy ? [eq(signals.inputPolicy, inputPolicy)] : []),
         isNotNull(signals.dismissedAt),
         eq(signalEmbeddings.model, embeddingModel),
       ),

@@ -252,6 +252,7 @@ export function registerCaptureRoutes(
       profileId: target.profileId,
       inspirationId: persisted.inserted.id,
       reason: "created",
+      changedSource: "inspiration",
     });
 
     return c.json(

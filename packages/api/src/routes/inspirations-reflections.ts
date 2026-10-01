@@ -187,6 +187,7 @@ export function registerReflectionRoutes(
       profileId: target.profileId,
       inspirationId: parent.id,
       reason: "edited",
+      changedSource: "reflection",
     });
 
     return c.json({ reflection: serializeReflection(inserted) }, 201);
@@ -289,6 +290,7 @@ export function registerReflectionRoutes(
       profileId: target.profileId,
       inspirationId: idCheck.data,
       reason: "edited",
+      changedSource: "reflection",
     });
 
     return c.json({ deleted: true, id: deleted.id }, 200);

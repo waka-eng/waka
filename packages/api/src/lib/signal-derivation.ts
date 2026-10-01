@@ -57,6 +57,13 @@ import {
 } from "./inspiration-embeddings.js";
 import { normalizeSupportedLocale } from "./locales.js";
 import {
+  assertGroupInputCurrent,
+  loadGroupInputAttachments,
+  loadGroupInputMembership,
+  GROUP_INPUT_POLICY,
+  GroupInputUnavailableError,
+} from "./group-inputs.js";
+import {
   getDefaultModelProvider,
   type ModelProvider,
   type RelatedInspirationContext,
@@ -121,7 +128,7 @@ export interface SignalDerivationDependencies {
 }
 
 export interface SignalDerivationResult {
-  status: "derived" | "missing_inspiration" | "no_candidates" | "not_public";
+  status: "derived" | "missing_inspiration" | "no_candidates" | "not_public" | "not_authorized";
   inspirationId: string;
   profileId: string | null;
   candidateCount: number;
@@ -175,6 +182,13 @@ export async function deriveSignalsForInspiration(
      exception is the capture's own layer-1 embedding, which stays with the
      memory's owner wherever the pass is landing. */
   const profileId = input.deriveIntoProfileId ?? inspiration.profileId;
+  const isGroup = input.deriveIntoProfileId !== undefined;
+  const emptyResult = (status: SignalDerivationResult["status"]): SignalDerivationResult => ({
+    status, inspirationId: inspiration.id, profileId, candidateCount: 0,
+    matchedSignalIds: [], mintedSignalIds: [], promotedSignalIds: [],
+  });
+  const membership = isGroup ? await loadGroupInputMembership(db, inspiration.profileId, profileId) : null;
+  if (isGroup && !membership) return emptyResult("not_authorized");
 
   /**
    * A ROOM PASS RE-READS THE SWITCH IT WAS ENQUEUED ON.
@@ -209,7 +223,7 @@ export async function deriveSignalsForInspiration(
       .from(profiles)
       .where(eq(profiles.id, profileId))
       .limit(1),
-    db
+    isGroup ? [] : db
       .select({
         question: reflections.question,
         answer: reflections.answer,
@@ -222,8 +236,9 @@ export async function deriveSignalsForInspiration(
           isNotNull(reflections.answer),
         ),
       ),
-    db
+    isGroup ? loadGroupInputAttachments(db, inspiration.profileId, inspiration.id) : db
       .select({
+        id: attachments.id,
         kind: attachments.enrichmentKind,
         text: attachments.enrichmentText,
         hostname: attachments.hostname,
@@ -243,6 +258,7 @@ export async function deriveSignalsForInspiration(
       .where(
         and(
           eq(signals.profileId, profileId),
+          ...(isGroup ? [eq(signals.inputPolicy, GROUP_INPUT_POLICY)] : []),
           inArray(signals.status, ["emerging", "active"]),
         ),
       )
@@ -261,14 +277,19 @@ export async function deriveSignalsForInspiration(
     Same model-call count as before; the vector was never optional.
   */
   const inspirationEmbedding = await ensureInspirationEmbedding({
-    /* the memory's own vector belongs to the memory's OWNER, whichever space
-       this pass derives into — a room pass reuses it and must not write a
-       copy under the mind (the composite FK would refuse anyway) */
+    /* Both scope-specific vectors belong to the memory's OWNER. A room
+       never reuses a personal vector, which can encode private answers. */
     profileId: inspiration.profileId,
     inspirationId: inspiration.id,
+    inputScope: isGroup ? "public" : "personal",
     db,
     client: embeddingClient,
   });
+  if (isGroup && inspirationEmbedding.status === "stale_source") {
+    throw new Error("Room material changed during embedding");
+  }
+  if (isGroup && inspirationEmbedding.status === "not_public") return emptyResult("not_public");
+  if (isGroup && inspirationEmbedding.status === "missing_inspiration") return emptyResult("missing_inspiration");
   const relatedInspirations = inspirationEmbedding.embedding
     ? await findRelatedInspirations(db, {
         /* recurrence is retrieved over the KEEPER's earlier captures on every
@@ -384,21 +405,32 @@ export async function deriveSignalsForInspiration(
     if (!duplicate) embedded.push({ ...candidate, embedding });
   }
 
-  const outcome = await db.transaction(async (tx) => {
-    await acquireSignalDerivationLock(tx, profileId);
-    return applyCandidates(tx, {
-      profileId,
-      /* a personal derivation reads its own memory; the room path (which
-         derives into a mind while citing a member) sets these apart */
-      evidenceOwnerProfileId: inspiration.profileId,
-      inspirationId: inspiration.id,
-      candidates: embedded,
-      embeddingModel: embeddingClient.model,
-      provider,
-      preferredLocale: normalizeSupportedLocale(profileRows[0]?.preferredLocale),
-      now,
+  let outcome;
+  try {
+    outcome = await db.transaction(async (tx) => {
+      await acquireSignalDerivationLock(tx, profileId);
+      const applied = await applyCandidates(tx, {
+        profileId,
+        inputPolicy: isGroup ? GROUP_INPUT_POLICY : undefined,
+        /* A room's evidence still belongs to the capture's owner. */
+        evidenceOwnerProfileId: inspiration.profileId,
+        inspirationId: inspiration.id,
+        candidates: embedded,
+        embeddingModel: embeddingClient.model,
+        provider,
+        preferredLocale: normalizeSupportedLocale(profileRows[0]?.preferredLocale),
+        now,
+      });
+      if (isGroup && membership) await assertGroupInputCurrent(tx, {
+        mindProfileId: profileId, membershipId: membership.id, inspiration,
+        attachments: attachmentRows, related: relatedInspirations,
+      });
+      return applied;
     });
-  });
+  } catch (error) {
+    if (error instanceof GroupInputUnavailableError) return emptyResult(error.status);
+    throw error;
+  }
 
   return {
     status: "derived",
@@ -440,6 +472,7 @@ async function findRelatedInspirations(
       and(
         eq(inspirationEmbeddings.profileId, input.profileId),
         eq(inspirationEmbeddings.model, input.model),
+        eq(inspirationEmbeddings.inputScope, input.publicOnly ? "public" : "personal"),
         ...(input.publicOnly ? [eq(inspirations.visibility, "public" as const)] : []),
       ),
     )

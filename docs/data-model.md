@@ -183,8 +183,21 @@ agent's relayed excerpt, an agent's own observation.
   human *saved*, not only what they typed.
 - **Reflections** — the short Q&A a human attaches at capture (or later)
   — are layer-1 detail on the inspiration: kept, human-authored, and
-  input to extraction. The guided question *generator* is a parked
-  feature; the stored reflections are not.
+  input to personal extraction. Guided follow-up questions use saved answers
+  as context. Answers remain personal even when their parent inspiration is
+  public: publishing a capture does not publish its reflections.
+- **Embedding input scope** separates `personal` material (including answers)
+  from `public` material (capture and attachment context, never answers).
+  `inspiration_embeddings.input_scope` is part of the vector's identity with
+  inspiration and model. Both scopes belong to the capture's owner. Room
+  retrieval must never use a personal vector, including legacy vectors.
+- **Signal input policy** records the derivation contract, not user approval.
+  `signals.input_policy = group-public-v1` means the room signal was minted
+  using the public projection, authorized current membership, and only
+  same-policy context/match targets. Legacy null-policy room signals are
+  unverified, not automatically safe because new evidence matches them.
+  Preserve them for reviewed historical repair; do not carry them into new
+  generation. Personal signals have no room input policy.
 
 ## Experience (layer-1 grouping)
 
