@@ -72,6 +72,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { hueCss } from "../lib/appearance";
 import { useDismissAway } from "../lib/dismiss";
 import { isEditableTarget, isNativeSurface } from "../lib/surface-input";
+import { profileStorageKey, readProfileText, writeProfileText, type ProfileStorageScope } from "../lib/profile-storage";
 import { clamp, clamp01, DAY_MS, easeOut, hashStr, kd, lerp, mix32, TAU } from "../lib/num";
 import {
   GRAIN_PX,
@@ -1266,10 +1267,16 @@ export default function HomePage(): JSX.Element {
      a prototype living beside the real surface; the only things still behind
      `showsDebug()` are the offline fixture and the mock walls, which is where
      that gate belongs. */
-  return <HomeExperience />;
+  const auth = useOptionalAuth();
+  const storageScope = useMemo<ProfileStorageScope | null>(() =>
+    auth?.account?.id && auth.profile?.id
+      ? { accountId: auth.account.id, profileId: auth.profile.id } : null,
+  [auth?.account?.id, auth?.profile?.id]);
+  // Unmount the old world's caches, readers and writers at an identity change.
+  return <HomeExperience key={profileStorageKey(storageScope, "world") ?? "anonymous"} storageScope={storageScope} />;
 }
 
-function HomeExperience(): JSX.Element {
+function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | null }): JSX.Element {
   const [phase, setPhase] = useState<"loading" | "ready" | "failed">("loading");
   /**
    * NOTHING BEHIND THIS WORLD BUT THE FIXTURE — see offlineHome().
@@ -1925,13 +1932,7 @@ function HomeExperience(): JSX.Element {
    * says so. Glancing at the world is now save-as-draft + one press back,
    * and nothing is ever half-hidden behind a strip of itself.
    */
-  const [draft, setDraft] = useState(() => {
-    try {
-      return window.localStorage.getItem("waka.draft") ?? "";
-    } catch {
-      return "";
-    }
-  });
+  const [draft, setDraft] = useState(() => readProfileText(storageScope, "draft"));
   /* the words where a callback can reach them without re-binding per keystroke */
   const draftRef = useRef("");
   draftRef.current = draft;
@@ -1939,13 +1940,8 @@ function HomeExperience(): JSX.Element {
      effect beside the focus effect for why the field needs to be told */
   const mouthCaretRef = useRef(0);
   useEffect(() => {
-    try {
-      if (draft) window.localStorage.setItem("waka.draft", draft);
-      else window.localStorage.removeItem("waka.draft");
-    } catch {
-      /* private mode: the draft lives as long as the tab does */
-    }
-  }, [draft]);
+    writeProfileText(storageScope, "draft", draft);
+  }, [draft, storageScope]);
   /* an unfinished sentence found on arrival opens the mouth holding it, rather
      than sitting invisible behind a phrase that says nothing about it */
   /**
@@ -1972,28 +1968,11 @@ function HomeExperience(): JSX.Element {
    * selection" means. Private mode, or storage that throws, falls back to the
    * same private default rather than to whatever the tab happened to hold.
    */
-  const [keepPublic, setKeepPublic] = useState(() => {
-    try {
-      return window.localStorage.getItem("waka.keepPublic") === "1";
-    } catch {
-      return false;
-    }
-  });
+  const [keepPublic, setKeepPublic] = useState(() => readProfileText(storageScope, "keepPublic") === "1");
   useEffect(() => {
-    try {
-      if (keepPublic) window.localStorage.setItem("waka.keepPublic", "1");
-      else window.localStorage.removeItem("waka.keepPublic");
-    } catch {
-      /* private mode: the choice lives as long as the tab does */
-    }
-  }, [keepPublic]);
-  const [mouthOpen, setMouthOpen] = useState(() => {
-    try {
-      return (window.localStorage.getItem("waka.draft") ?? "") !== "";
-    } catch {
-      return false;
-    }
-  });
+    writeProfileText(storageScope, "keepPublic", keepPublic ? "1" : "");
+  }, [keepPublic, storageScope]);
+  const [mouthOpen, setMouthOpen] = useState(() => readProfileText(storageScope, "draft") !== "");
   const [newInspirationRequested, setNewInspirationRequested] = useState(false);
   /** The one honest line: it did not keep. Never a modal, never a silence. */
   const [mouthNote, setMouthNote] = useState("");
@@ -10061,7 +10040,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   /**
    * SAVE AS DRAFT IS A DOOR, NOT A STORE (founder, 2026-08-27: "remove
    * minimize and instead say save as draft"). The store already existed —
-   * the mouth live-writes every keystroke to this device's `waka.draft` and
+   * the mouth live-writes every keystroke to this profile's device draft and
    * restores it on arrival, and has since before the drawer. What did not
    * exist was a way OUT that admits the words are kept: minimize held the
    * page half-open, and Escape threw the words away. So the door closes the
@@ -10222,7 +10201,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         /* AND THE DESTINATION IS NOT RESET. `setKeepPublic(false)` stood here
            and made every capture start over at private; the founder asked for
            the last selection to hold (2026-09-08). It survives the keep, and
-           the reload, in `waka.keepPublic` — see the state's own note. */
+           the reload, in the profile's stored preference — see the state above. */
         simApiRef.current?.identify(seed.id, made.id);
         /* AND IT JOINS THE ARCHIVE, NOT ONLY THE GROUND.
            The orb was born on the canvas and the row was written on the
@@ -13662,6 +13641,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             <ReflectionFlow
               key={panelBall?.sigId ?? panelId}
               inspirationId={(panelBall?.sigId ?? panelId) as string}
+              draftKey={profileStorageKey(storageScope, `reflectionDraft:${panelBall?.sigId ?? panelId}`)}
               initialTurns={(panel.detail?.reflections ?? [])
                 .filter((item) => !item.skipped && item.answer)
                 .map((item): ReflectionTurn => ({ id: item.id, question: item.question, answer: item.answer as string }))}
@@ -14634,6 +14614,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           <ReflectionFlow
             key={reflectOn.id}
             inspirationId={reflectOn.id}
+            draftKey={profileStorageKey(storageScope, `reflectionDraft:${reflectOn.id}`)}
             initialTurns={[]}
             locale={locale}
             onSaved={reflectionSaved}

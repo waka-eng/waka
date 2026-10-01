@@ -1,6 +1,6 @@
 # Goal: implement the experience review
 
-Status: in flight — phase A implemented and desktop-verified; B starting. Full release verification remains open.
+Status: in flight — A/B fixes implemented with local checks; C containment next. Full release verification remains open.
 Created: 2026-10-01, on the owner's instruction to implement the full plan.
 Branch: `codex/ux-feature-implementation`.
 Baseline: `33e65a7` on `dev`.
@@ -26,7 +26,7 @@ experiments or revive superseded room goals.
 | Slice | Requirements | Gate | Current evidence |
 | --- | --- | --- | --- |
 | A | F5/F6/F10: input, overlay scrolling/focus, readable active controls | Reproduce slash/wheel defects; verify typing, caret, Escape/Tab, wheel/touch and contrast in actual affected flows; web checks | Implemented; 5 original failures now pass, 325 web tests pass. Desktop fixture verified. Mobile touch/200% zoom and deployed verification remain open. |
-| B | F3/F4: edited principle preservation, truthful support, account-scoped drafts/preferences and cancellation | Isolated SQL preservation tests and two-account browser/state tests; API/web checks | B1 preservation implemented: baseline 3 failures, then 6 SQL / 653 unit tests pass. B2 storage/cancellation pending. |
+| B | F3/F4: edited principle preservation, truthful support, account-scoped drafts/preferences and cancellation | Isolated SQL preservation tests and two-account browser/state tests; API/web checks | B1: 6 SQL / 653 unit tests pass after 3 reproduced failures. B2: 4 failures reproduced, then two-account draft and stale-response checks pass; full web suite 331/331. Deployed/account-switch browser verification remains open. |
 | C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | Pending |
 | D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | Pending |
 | E1 | F7/F8: authoritative poster and truthful manual refresh | Queue acceptance, changed/unchanged completion, failure and fresh displayed version verified | Pending |
@@ -90,3 +90,12 @@ Keep code, deployment, historical repair, and user validation evidence distinct.
   disputes. After fix: 6/6 SQL tests, 653 API unit tests passed (3 live benches
   skipped), both typechecks passed, 15 targeted web checks passed, migration
   check passed. No shared database migration or historical repair executed.
+- 2026-10-01, B2: reproduced unscoped-draft disclosure (1 failure) and a late
+  refresh/profile/preferences response restoring a signed-out account
+  (3 failures). Capture/reflection drafts and visibility now use account +
+  profile storage keys; Home and protected route state remount on identity
+  changes; late identity-bound replies are ignored. Legacy unowned drafts are
+  retained locally but never auto-assigned. Two-account same-mount switching
+  and restoration, private defaults, remembered public choice, and reflection
+  drafts pass. Targeted suites 27/27; full web 331/331, typecheck/build pass.
+  No user account was switched or modified during these checks.

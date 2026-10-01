@@ -42,6 +42,7 @@ import { act } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { installCanvasStub, setViewport } from "./helpers/canvas-stub";
+import { profileStorageKey } from "../src/lib/profile-storage";
 import {
   apiMockFrom,
   dataMockFrom,
@@ -62,6 +63,7 @@ const FACTS = {
 
 /** every keep the page attempts, in order, so the request can be read back */
 const kept: Array<{ visibility?: string }> = [];
+const IDENTITY = vi.hoisted(() => ({ accountId: "account-1", profileId: "profile-viewer" }));
 
 vi.mock("../src/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/lib/api")>();
@@ -100,11 +102,17 @@ vi.mock("../src/lib/auth-context", async (importOriginal) => {
     refresh: async () => undefined,
     signOut: async () => undefined,
   };
-  return { ...actual, useOptionalAuth: () => session, useAuth: () => session };
+  const current = () => ({ ...session,
+    account: { ...session.account, id: IDENTITY.accountId },
+    profile: { ...session.profile, id: IDENTITY.profileId },
+  });
+  return { ...actual, useOptionalAuth: current, useAuth: current };
 });
 
 /** The key the choice is remembered under. Named once, asserted everywhere. */
-const KEY = "waka.keepPublic";
+const SCOPE = { accountId: "account-1", profileId: VIEWER_ID };
+const KEY = profileStorageKey(SCOPE, "keepPublic")!;
+const DRAFT_KEY = profileStorageKey(SCOPE, "draft")!;
 
 let layout: MountedWorld | undefined;
 
@@ -115,6 +123,8 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  IDENTITY.accountId = SCOPE.accountId;
+  IDENTITY.profileId = SCOPE.profileId;
   kept.length = 0;
   window.localStorage.clear();
 });
@@ -134,7 +144,7 @@ afterEach(() => {
  * person would have typed; the case is about where they go.
  */
 async function worldWithTheMouthOpen(): Promise<MountedWorld> {
-  window.localStorage.setItem("waka.draft", "a thing worth keeping");
+  window.localStorage.setItem(DRAFT_KEY, "a thing worth keeping");
   layout = await mountWorld(FACTS);
   return layout;
 }
@@ -166,6 +176,32 @@ async function press(word: RegExp): Promise<void> {
 }
 
 describe("the capture remembers where it last went", () => {
+  it("does not assign an unscoped draft or sharing choice to the next account", async () => {
+    window.localStorage.setItem("waka.draft", "an unattributed private draft");
+    window.localStorage.setItem("waka.keepPublic", "1");
+    layout = await mountWorld(FACTS);
+    expect(layout.container.querySelector("textarea")?.value ?? "").not.toContain("an unattributed private draft");
+    expect(window.localStorage.getItem("waka.draft")).toBe("an unattributed private draft");
+  });
+  it("isolates drafts and sharing choices when identity changes in the same mounted app", async () => {
+    window.localStorage.setItem(KEY, "1");
+    await worldWithTheMouthOpen();
+    expect(destination().public).toBe(true);
+    const other = { accountId: "account-2", profileId: "profile-2" };
+    const otherDraftKey = profileStorageKey(other, "draft")!;
+    window.localStorage.setItem(otherDraftKey, "a separate account's draft");
+    Object.assign(IDENTITY, other);
+    await layout!.rerender();
+    expect(layout!.container.querySelector("textarea")?.value).toBe("a separate account's draft");
+    expect(destination()).toEqual({ private: true, public: false });
+    expect(window.localStorage.getItem(DRAFT_KEY)).toBe("a thing worth keeping");
+    expect(window.localStorage.getItem(KEY)).toBe("1");
+    Object.assign(IDENTITY, SCOPE);
+    await layout!.rerender();
+    expect(layout!.container.querySelector("textarea")?.value).toBe("a thing worth keeping");
+    expect(destination().public).toBe(true);
+    expect(window.localStorage.getItem(otherDraftKey)).toBe("a separate account's draft");
+  });
   it("starts private when nothing has ever been said", async () => {
     await worldWithTheMouthOpen();
     expect(destination()).toEqual({ private: true, public: false });

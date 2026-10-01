@@ -8,6 +8,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ReflectionFlow } from "../src/components/ReflectionFlow";
+import { profileStorageKey } from "../src/lib/profile-storage";
 import { createReflection, requestReflectionQuestion, fetchReflectionQuestionStatus } from "../src/lib/api";
 
 vi.mock("../src/lib/api", async (importOriginal) => ({
@@ -52,6 +53,24 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 
 describe("reflection conversation", () => {
+  it("keeps unfinished answers with their account and leaves unscoped drafts unclaimed", async () => {
+    const keyA = profileStorageKey({ accountId: "account-a", profileId: "profile-a" }, "reflectionDraft:inspiration-1");
+    const keyB = profileStorageKey({ accountId: "account-b", profileId: "profile-b" }, "reflectionDraft:inspiration-1");
+    const legacyKey = "waka.reflectionDraft:inspiration-1";
+    window.localStorage.setItem(legacyKey, JSON.stringify({ afterId: null, answer: "unknown owner" }));
+    const render = async (draftKey: string | null) => act(async () => root.render(
+      <ReflectionFlow key={draftKey} draftKey={draftKey} inspirationId="inspiration-1" initialTurns={[]}
+        locale="en-US" onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />,
+    ));
+    await render(keyA);
+    expect(host.querySelector("textarea")!.value).toBe("");
+    await writeAnswer("An unfinished private thought.");
+    await render(keyB);
+    expect(host.querySelector("textarea")!.value).toBe("");
+    await render(keyA);
+    expect(host.querySelector("textarea")!.value).toBe("An unfinished private thought.");
+    expect(window.localStorage.getItem(legacyKey)).toContain("unknown owner");
+  });
   it("saves first, then asks one grounded follow-up and waits for the person", async () => {
     vi.mocked(createReflection).mockResolvedValue(saved);
     vi.mocked(requestReflectionQuestion).mockResolvedValue({ phase: "ready", question: "What made leaving that corner unfinished feel calmer?" });

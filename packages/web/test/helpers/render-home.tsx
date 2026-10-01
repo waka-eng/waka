@@ -213,6 +213,8 @@ export interface MountedWorld {
   audit(): FieldAudit;
   /** advance the frame loop by roughly `frames` animation frames */
   step(frames?: number): Promise<void>;
+  /** Re-render the same provider/router tree to exercise identity changes. */
+  rerender(): Promise<void>;
   /** click a wall in the axis along the bottom and let the travel finish */
   travelTo(name: RegExp): Promise<void>;
   /**
@@ -424,6 +426,13 @@ export async function mountWorld(facts: WorldFacts): Promise<MountedWorld> {
     container,
     audit,
     step,
+    async rerender() {
+      await act(async () => {
+        root.render(createElement(MemoryRouter, null,
+          createElement(AuthProvider, null, createElement(HomePage) as ReactElement)));
+      });
+      await step(30);
+    },
     async travelTo(name) {
       /*
        * THE ROUTE A PERSON ACTUALLY HAS.

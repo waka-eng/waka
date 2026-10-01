@@ -365,6 +365,26 @@ describe("auth boundary", () => {
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
+  it.each(["refresh", "profile", "preferences"])("does not restore a signed-out account from an older %s response", async (operation) => {
+    vi.mocked(fetchCurrentViewer).mockResolvedValue(cachedViewer);
+    await renderAuthRoutes({ initialPath: "/login", loginElement: createElement(LoginActionProbe) });
+    let settle: (value: ApiViewer) => void = () => undefined;
+    const response = new Promise<ApiViewer>((resolve) => { settle = resolve; });
+    vi.mocked(fetchCurrentViewer).mockReturnValue(response);
+    vi.mocked(updateAuthProfile).mockReturnValue(response);
+    vi.mocked(updateAuthPreferences).mockReturnValue(response);
+    let pending!: Promise<unknown>;
+    await act(async () => {
+      pending = operation === "refresh" ? latestAuth!.refresh()
+        : operation === "profile" ? latestAuth!.updateProfile({ name: "New name" })
+        : latestAuth!.updatePreferredLocale("en-US");
+    });
+    await act(async () => latestAuth!.logout());
+    await act(async () => { settle(cachedViewer); await pending; });
+    expect(latestAuth!.account).toBeNull();
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
   it("does not let a stale initial /auth/me response clear a newer login", async () => {
     let resolveInitialMe: (viewer: null) => void = () => undefined;
     vi.mocked(fetchCurrentViewer).mockReturnValue(

@@ -365,7 +365,9 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   }, [applyViewer]);
 
   const refresh = useCallback(async (): Promise<ApiViewer | null> => {
+    const startedAt = authMutationRef.current;
     const fresh = await fetchCurrentViewer();
+    if (!aliveRef.current || startedAt !== authMutationRef.current) return fresh;
     setServerUnreachable(false);
     applyViewer(fresh);
     return fresh;
@@ -373,8 +375,9 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
 
   const updatePreferredLocale = useCallback(
     async (preferredLocale: SupportedLocale): Promise<ApiViewer> => {
+      const startedAt = authMutationRef.current;
       const updated = await updateAuthPreferences({ preferredLocale });
-      applyViewer(updated);
+      if (aliveRef.current && startedAt === authMutationRef.current) applyViewer(updated);
       return updated;
     },
     [applyViewer],
@@ -382,16 +385,18 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
 
   const updateProfile = useCallback(
     async (input: UpdateProfileInput): Promise<ApiViewer> => {
+      const startedAt = authMutationRef.current;
       const updated = await updateAuthProfile(input);
-      applyViewer(updated);
+      if (aliveRef.current && startedAt === authMutationRef.current) applyViewer(updated);
       return updated;
     },
     [applyViewer],
   );
 
   const deleteAccount = useCallback(async (): Promise<void> => {
+    const startedAt = authMutationRef.current;
     await apiDeleteAccount();
-    applyViewer(null);
+    if (aliveRef.current && startedAt === authMutationRef.current) applyViewer(null);
   }, [applyViewer]);
 
   /**

@@ -24,7 +24,7 @@
  * frame is the only honest answer.
  */
 
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 
 import { useAuth } from "../lib/auth-context";
@@ -36,7 +36,7 @@ export interface RequireAuthProps {
 }
 
 export function RequireAuth({ children, requireAdmin = false }: RequireAuthProps): JSX.Element {
-  const { isAuthenticated, isLoading, account } = useAuth();
+  const { isAuthenticated, isLoading, account, profile } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -70,7 +70,8 @@ export function RequireAuth({ children, requireAdmin = false }: RequireAuthProps
     return <Navigate to="/" replace />;
   }
 
-  return <>{children}</>;
+  // A different identity receives fresh route state, caches and pending work.
+  return <Fragment key={`${account?.id ?? ""}:${profile?.id ?? ""}`}>{children}</Fragment>;
 }
 
 export default RequireAuth;

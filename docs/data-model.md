@@ -40,6 +40,13 @@ Agent separation is **structural, not a lens**: an agent's own memory
 lives in its own profile, not as filtered views over the human's data.
 (The earlier lens-board design is superseded by this.)
 
+Browser drafts and the remembered capture visibility choice are scoped to
+both account and profile. Changing identity discards the previous identity's
+in-memory page state and ignores its late responses. Unattributed legacy
+device drafts remain unassigned; a new sign-in must not silently claim or
+display them. Completed reflections remain server-owned inspiration detail,
+while unfinished drafts belong only to their authenticated storage scope.
+
 ### Credentials bind to a profile
 
 Every session acts *as* exactly one profile:

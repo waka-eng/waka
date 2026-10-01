@@ -17,17 +17,20 @@ export interface ReflectionTurn {
 
 type Phase = "answering" | "saving" | "asking" | "saved" | "question_failed";
 
-function savedDraft(inspirationId: string, afterId: string | null): string {
+function savedDraft(draftKey: string | null, afterId: string | null): string {
+  if (!draftKey) return "";
   try {
-    const raw = window.localStorage.getItem(`waka.reflectionDraft:${inspirationId}`);
+    const raw = window.localStorage.getItem(draftKey);
     if (!raw) return "";
     const parsed = JSON.parse(raw) as { afterId?: string | null; answer?: string };
     return parsed.afterId === afterId && typeof parsed.answer === "string" ? parsed.answer : "";
   } catch { return ""; }
 }
 
-export function ReflectionFlow({ inspirationId, initialTurns, locale, onSaved, onRemoved, onDone }: {
+export function ReflectionFlow({ inspirationId, draftKey = null, initialTurns, locale, onSaved, onRemoved, onDone }: {
   inspirationId: string;
+  /** Scoped by the authenticated account/profile; anonymous surfaces persist nothing. */
+  draftKey?: string | null;
   initialTurns: ReflectionTurn[];
   locale: SupportedLocale;
   onSaved: (reflection: ApiReflection) => void;
@@ -37,7 +40,7 @@ export function ReflectionFlow({ inspirationId, initialTurns, locale, onSaved, o
   const [turns, setTurns] = useState(initialTurns);
   const [phase, setPhase] = useState<Phase>(initialTurns.length > 0 ? "saved" : "answering");
   const [question, setQuestion] = useState(initialTurns.length > 0 ? "" : t(locale, "worldFirstReflectionQuestion"));
-  const [answer, setAnswer] = useState(() => savedDraft(inspirationId, initialTurns.at(-1)?.id ?? null));
+  const [answer, setAnswer] = useState(() => savedDraft(draftKey, initialTurns.at(-1)?.id ?? null));
   const [error, setError] = useState("");
   const [removingId, setRemovingId] = useState<string | null>(null);
   const saving = useRef(false);
@@ -47,12 +50,12 @@ export function ReflectionFlow({ inspirationId, initialTurns, locale, onSaved, o
 
   useEffect(() => () => { requestSequence.current += 1; }, []);
   useEffect(() => {
+    if (!draftKey) return;
     try {
-      const key = `waka.reflectionDraft:${inspirationId}`;
-      if (answer.trim()) window.localStorage.setItem(key, JSON.stringify({ afterId: latestId, answer }));
-      else window.localStorage.removeItem(key);
+      if (answer.trim()) window.localStorage.setItem(draftKey, JSON.stringify({ afterId: latestId, answer }));
+      else window.localStorage.removeItem(draftKey);
     } catch { /* the open answer still lives in React state */ }
-  }, [inspirationId, latestId, answer]);
+  }, [draftKey, latestId, answer]);
   useEffect(() => {
     // Each follow-up replaces the waiting beat. Bring the new question into
     // the outer card/sheet's scroll position instead of leaving it below the
@@ -71,7 +74,7 @@ export function ReflectionFlow({ inspirationId, initialTurns, locale, onSaved, o
       for (let check = 0; check < 30 && sequence === requestSequence.current; check += 1) {
         if (status.phase === "ready" && status.question) {
           setQuestion(status.question);
-          setAnswer(savedDraft(inspirationId, afterId));
+          setAnswer(savedDraft(draftKey, afterId));
           setPhase("answering");
           return;
         }
@@ -94,7 +97,7 @@ export function ReflectionFlow({ inspirationId, initialTurns, locale, onSaved, o
         setPhase("question_failed");
       }
     }
-  }, [inspirationId, locale]);
+  }, [inspirationId, draftKey, locale]);
 
   const saveAnswer = async (continueReflecting: boolean) => {
     const words = answer.trim();
