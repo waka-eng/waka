@@ -132,6 +132,7 @@ import {
   type BackgroundJobResult,
   groupMembers,
   backgroundJobs,
+  backgroundJobTypeValues,
   type BackgroundJobStatus,
   type DeriveSignalsPayload,
   type ReviewSignalSupportPayload,
@@ -1347,6 +1348,10 @@ function runnableBackgroundJobPredicate(nowIso: string) {
         AND candidate.attempts < candidate.max_attempts
       )
     )
+    -- A migrated database can contain work from a newer API build. An older
+    -- worker must leave it queued, not claim it and spend unsupported retries.
+    -- Peek and claim share this predicate, including stale-lease reclamation.
+    AND candidate.type::text IN (${sql.join(backgroundJobTypeValues.map((type) => sql`${type}`), sql`, `)})
   `;
 }
 
