@@ -22,6 +22,7 @@
 import { relations, sql } from "drizzle-orm";
 import {
   doublePrecision,
+  bigint,
   check,
   foreignKey,
   index,
@@ -69,6 +70,7 @@ export const signals = pgTable(
 
     /** The distilled pattern, in the profile owner's own language. */
     statement: text("statement").notNull(),
+    statementRevision: bigint('statement_revision', { mode: 'bigint' }).notNull().default(sql`1`),
 
     /** Null room rows predate public-only derivation and require review. */
     inputPolicy: text("input_policy"),
@@ -131,6 +133,7 @@ export const signals = pgTable(
      * needs its target to exist at the moment the constraint is created.
      */
     profileIdIdUnique: unique("signals_profile_id_id_unique").on(table.profileId, table.id),
+    statementRevisionPositive: check('signals_statement_revision_positive', sql`${table.statementRevision} > 0`),
   }),
 );
 
@@ -165,6 +168,8 @@ export const signalEvidence = pgTable(
 
     signalId: uuid("signal_id").notNull(),
     inspirationId: uuid("inspiration_id").notNull(),
+    statementRevision: bigint('statement_revision', { mode: 'bigint' }),
+    materialRevision: bigint('material_revision', { mode: 'bigint' }),
 
     /** Why this capture supports this pattern — generated, bounded. */
     reason: text("reason"),
@@ -202,6 +207,8 @@ export const signalEvidence = pgTable(
       table.inspirationId,
     ),
     signalIdx: index("signal_evidence_signal_idx").on(table.signalId),
+    supportRevisionsPositive: check('signal_evidence_support_revisions_positive', sql`(${table.statementRevision} IS NULL OR ${table.statementRevision} > 0)
+      AND (${table.materialRevision} IS NULL OR ${table.materialRevision} > 0)`),
     privateQuoteCheck: check("signal_evidence_private_quote_check", sql`${table.quoteReflectionId} IS NULL OR
       (${table.profileId} = ${table.ownerProfileId} AND ${table.quote} IS NOT NULL
        AND (${table.quoteSource} = 'own') IS TRUE AND ${table.quoteSourceHash} IS NOT NULL)`),

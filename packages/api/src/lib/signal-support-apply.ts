@@ -89,18 +89,26 @@ export async function applySignalSupportReview(db: WakaDb, reportInput: unknown,
       await tx.insert(signalSupportReviews).values({ reviewId: report.reviewId, reviewHash: reportHash,
         policy: report.policy,
         profileId: report.profileId, ownerProfileId: report.ownerProfileId, inspirationId: report.inspirationId,
-        signalId: item.signalId, statementHash: item.statementHash, material: material.identity,
+        signalId: item.signalId, statementHash: item.statementHash, statementRevision: BigInt(claim.statementRevision), material: material.identity,
         verdict: item.verdict, issue: item.issue ?? null, sourceIds: item.sourceIds });
       if (item.verdict === "unsupported") {
         const removed = await tx.delete(signalEvidence).where(and(eq(signalEvidence.profileId, report.profileId),
           eq(signalEvidence.ownerProfileId, report.ownerProfileId), eq(signalEvidence.signalId, item.signalId),
           eq(signalEvidence.inspirationId, report.inspirationId))).returning({ id: signalEvidence.id });
         if (removed.length) withdrawn.push(item.signalId);
+      } else if (item.verdict === 'supported' && claim.evidenceId) {
+        const renewed = claim.evidenceCurrent !== true;
+        await tx.update(signalEvidence).set({ statementRevision: BigInt(claim.statementRevision),
+          materialRevision: BigInt(material.identity.revision!), material: material.identity,
+          ...(renewed ? { reason: null, quote: null, quoteSource: null, quoteReflectionId: null, quoteSourceHash: null } : {}) })
+          .where(eq(signalEvidence.id, claim.evidenceId));
+        if (renewed) restored.push(item.signalId);
       } else if (item.verdict === "supported" && !claim.evidenceId && claim.dismissedAt === null &&
         (claim.status !== "retired" || claim.supportRetiredAt !== null)) {
         // Restore only the relationship. Deleted quotes/reasons never return.
         await tx.insert(signalEvidence).values({ profileId: report.profileId, ownerProfileId: report.ownerProfileId,
-          signalId: item.signalId, inspirationId: report.inspirationId, material: material.identity });
+          signalId: item.signalId, inspirationId: report.inspirationId, material: material.identity,
+          statementRevision: BigInt(claim.statementRevision), materialRevision: BigInt(material.identity.revision!) });
         restored.push(item.signalId);
       }
     }

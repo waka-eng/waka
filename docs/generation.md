@@ -954,6 +954,16 @@ support assessment used by derivation. It does not extract candidates or create
 source-processing completion receipts. Its key is separate from `derive_signals`,
 so an ordinary capture request cannot be replaced by support-only work.
 
+Support decisions and citations bind monotonic statement/material/body
+revisions. A source or wording change makes earlier proof non-current until
+it is checked against the new inputs. Change-and-return cannot reuse a cached
+old verdict. A positive evidence check does not certify an old artifact's
+wording; a new synthesis supplies its own bindings. Human-edited words remain
+with changed support, and their previous generated explanation is withheld.
+Read workers wait for queued/running input checks before synthesis. Manual
+reads can recover failed/missing reviews while active checks continue;
+finished uncertainty preserves the words without an automatic retry loop.
+
 One prompt, two roads: every generation task runs through OpenRouter on the
 pinned DeepSeek snapshot when `OPENROUTER_API_KEY` is present, and falls back
 to Gemini without it. Embeddings never switch roads — the stored vectors and

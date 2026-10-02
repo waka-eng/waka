@@ -309,6 +309,27 @@
       "when": 1790902148496,
       "tag": "0043_statement-support-work",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1790902879858,
+      "tag": "0044_current-support-revisions",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1790903609238,
+      "tag": "0045_support-verdict-revisions",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1790906016769,
+      "tag": "0046_owned-word-revisions",
+      "breakpoints": true
     }
   ]
 }

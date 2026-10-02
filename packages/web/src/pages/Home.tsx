@@ -12433,6 +12433,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                             <span className="jar-poster-away jar-label"> {say("worldWrittenByHand")}</span>
                           ) : null}
                           {pr.unsupported ? <p className="jar-values-sub">{say("worldPrincipleSupportChanged")}</p> : null}
+                          {!pr.unsupported && pr.supportChanged ? <p className="jar-values-sub">{say("worldPrincipleSupportUnconfirmed")}</p> : null}
                           {/* THE VERBS, under the sentence they are about.
                               Order is by consequence: correcting is
                               harmless, moving is reversible, disputing is

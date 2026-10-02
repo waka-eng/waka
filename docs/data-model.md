@@ -343,6 +343,25 @@ agent's relayed excerpt, an agent's own observation.
   current-input/claim fences. It never certifies an inspiration's full
   derivation or completes its source-processing receipt. An identical edit
   of already locked words adds no history or generation request.
+- **Current support is revision-bound.** `signals.statement_revision` advances
+  on every actual wording change, including change-and-revert. Evidence binds
+  `statement_revision` and the allowed source's `material_revision`; artifact
+  and principle citations bind the statement revision they consumed. Changed
+  inputs make a link pending without deleting it or asserting the claim false.
+  Only a current positive assessment or grounded new discovery renews evidence;
+  new artifact generation renews its own citations. Missing legacy statement
+  stamps refer only to the migration baseline (revision one), never the latest
+  wording. Existing exact material identities may provide their recorded
+  revision; missing material lineage is not filled with the newest counter.
+  Protected wording remains readable with changed support and without stale
+  generated explanation. The baseline preserves prior standing, not proof of
+  historical semantic review or a completed historical repair.
+  Cached support verdicts also bind the statement and material revisions;
+  identical text after an intervening change cannot renew an earlier verdict.
+  Entry body and principle statement revisions similarly bind citations to
+  their owning words. Editing those words retains their old citation records
+  as non-current lineage; regeneration can ground the new words with new
+  bindings without restoring copied explanations from the previous wording.
 - **Source writes durably request learning.** Capture, inspiration edit,
   reflection save/removal and attachment finalization commit their queue rows
   in the source transaction. Enrichment rechecks the attachment resource after

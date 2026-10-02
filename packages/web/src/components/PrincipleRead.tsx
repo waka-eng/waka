@@ -52,14 +52,13 @@ export function PrincipleRead({ groupId, active, locale, refreshKey, onRead }: {
         delay = result.status.phase === "processing" || result.status.phase === "pending"
           ? 10_000 : groupId && result.principles.length === 0 ? 15_000 : 60_000;
         if (groupId) delay = Math.min(delay, GROUP_READ_TTL_MS - 5_000);
-        if (!ensured && result.status.eligible &&
-          (result.status.phase === "pending" ||
-            (result.status.phase === "failed" && attempt > retriedAttempt.current))) {
+        if (!ensured && ((result.status.eligible && !result.status.supportPending && result.status.phase === 'pending') ||
+          ((result.status.eligible || result.status.supportPending) && result.status.phase === 'failed' && attempt > retriedAttempt.current))) {
           const retry = attempt > retriedAttempt.current;
           retriedAttempt.current = attempt;
           await requestPrincipleRead(groupId, retry);
           ensured = true;
-          if (!disposed) setStatus({ ...result.status, phase: "processing" });
+          if (!disposed) setStatus({ ...result.status, phase: result.status.supportPending ? 'pending' : 'processing' });
         }
       } catch {
         if (!disposed && groupId) {
@@ -88,16 +87,17 @@ export function PrincipleRead({ groupId, active, locale, refreshKey, onRead }: {
   const error = failed || status?.phase === "failed";
   // Neighboring walls do not retain another room's last verified wording.
   const visibleRows = groupId && !active ? [] : rows;
-  const message = error ? groupId
+  const message = error ? status?.supportPending ? 'worldSupportCheckFailed' : groupId
       ? failed ? "worldPrinciplesRoomLoadFailed" : "worldPrinciplesRoomGenerationFailed"
       : "worldPrinciplesError"
     : !status ? groupId ? "worldPrinciplesRoomChecking" : "worldPrinciplesLoading"
+    : status.supportPending ? (status.phase === 'processing' ? 'worldSupportChecking' : status.phase === 'pending' ? 'worldSupportQueued' : 'worldSupportNeedsContext')
     : groupId && status.restricted ? "worldRoomPrinciplesRestricted"
     : status.phase === "processing" || status.phase === "pending" ? "worldPrinciplesReading"
     : status.signalCount < 3 ? (groupId ? "worldPrinciplesNeedRoomPatterns" : "worldValuesSubSelf")
     : status.topOfMindCount < 1 ? "worldPrinciplesNeedRead"
     : "worldPrinciplesNoCandidate";
-  const groupEmpty = Boolean(groupId && visibleRows.length === 0 && status && !error && !status.restricted);
+  const groupEmpty = Boolean(groupId && visibleRows.length === 0 && status && !error && !status.restricted && !status.supportPending);
   const groupSignalCount = Math.min(status?.signalCount ?? 0, 3);
   const groupStage = !status || status.signalCount < 3 ? "patterns"
     : status.topOfMindCount < 1 ? "topOfMind"
@@ -128,6 +128,7 @@ export function PrincipleRead({ groupId, active, locale, refreshKey, onRead }: {
         </p>
         {row.state === "contested" ? <p className="jar-values-sub">{t(locale, "worldValueContested")}</p> : null}
         {row.unsupported ? <p className="jar-values-sub">{t(locale, "worldPrincipleSupportChanged")}</p> : null}
+        {!row.unsupported && row.supportChanged ? <p className="jar-values-sub">{t(locale, "worldPrincipleSupportUnconfirmed")}</p> : null}
         <details className="jar-values-sub" data-jar-interactive="1">
           <summary>{t(locale, "worldPrinciplesEvidence")}</summary>
           <PrincipleEvidence signals={row.citedSignals} locale={locale} />

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, jsonb, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { bigint, check, foreignKey, index, jsonb, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { inspirations } from "./schema-inspirations.js";
 import { signals } from "./schema-signals.js";
 import type { InspirationMaterialIdentity } from "../lib/inspiration-material.js";
@@ -16,6 +16,7 @@ export const signalSupportReviews = pgTable("signal_support_reviews", {
   /** Null legacy decisions are not reusable by a newer assessment policy. */
   policy: text("policy"),
   statementHash: text("statement_hash").notNull(),
+  statementRevision: bigint('statement_revision', { mode: 'bigint' }),
   material: jsonb("material").$type<InspirationMaterialIdentity>().notNull(),
   verdict: text("verdict").$type<"supported" | "unsupported" | "unresolved">().notNull(),
   issue: text("issue"),

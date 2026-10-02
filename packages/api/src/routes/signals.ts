@@ -52,6 +52,7 @@ import {
 } from "../lib/middleware.js";
 import { enqueueTopOfMindRefresh, wakeCommittedBackgroundJobs } from "../lib/queue.js";
 import { lockSignalStatementSources, requestSignalStatementWork } from '../lib/signal-statement-work.js';
+import { evidenceSupportCurrent } from '../lib/signal-support-state.js';
 import { reconcilePrinciplesAfterSignalLoss } from "../lib/principle-generation.js";
 import {
   computeSignalConfidence,
@@ -141,6 +142,7 @@ export interface SignalSummary {
   locked: boolean;
   /** Locked, but every capture behind it is gone. */
   unsupported: boolean;
+  supportPending?: boolean;
   /** Thrown out by the owner. The row and evidence stay; its vector is now a
       suppression anchor — derivation refuses candidates near it, on the
       record. Dismissed rows also read `status: "retired"`. */
@@ -234,10 +236,12 @@ async function decorateSignals(
         signalId: signalEvidence.signalId,
         createdAt: inspirations.createdAt,
         source: inspirations.source,
+        current: evidenceSupportCurrent(),
       })
       .from(signalEvidence)
+      .innerJoin(signals, eq(signals.id, signalEvidence.signalId))
       .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
-      .where(inArray(signalEvidence.signalId, ids)),
+      .where(and(inArray(signalEvidence.signalId, ids), eq(signalEvidence.ownerProfileId, ownerProfileId))),
     db
       .select({ signalId: signalShares.signalId, groupId: signalShares.groupId })
       .from(signalShares)
@@ -300,6 +304,7 @@ async function decorateSignals(
   // must not reach these private tables.
   const evidenceBySignal = new Map<string, Array<{ createdAt: Date; source: "app" | "agent" }>>();
   for (const row of evidenceRows) {
+    if (row.current !== true) continue;
     const bucket = evidenceBySignal.get(row.signalId);
     if (bucket) bucket.push(row);
     else evidenceBySignal.set(row.signalId, [row]);
@@ -314,6 +319,7 @@ async function decorateSignals(
     ]),
   );
 
+  const pendingIds = new Set(evidenceRows.filter((row) => row.current !== true).map((row) => row.signalId));
   const countBySignal = new Map(
     [...evidenceBySignal.entries()].map(([id, list]) => [id, list.length]),
   );
@@ -345,6 +351,7 @@ async function decorateSignals(
     lastEvidenceAt: toIso(row.lastEvidenceAt),
     locked: row.lockedAt !== null,
     unsupported: row.unsupportedAt !== null,
+    ...(pendingIds.has(row.id) ? { supportPending: true } : {}),
     dismissed: row.dismissedAt !== null,
     contested: contestedIds.has(row.id),
     yielded: yieldedIds.has(row.id),
@@ -448,14 +455,16 @@ export async function getProfileSignal(
       quoteSource: signalEvidence.quoteSource,
       quoteReflectionId: signalEvidence.quoteReflectionId,
       material: signalEvidence.material,
+      current: evidenceSupportCurrent(),
       /* dated by the CAPTURE that witnesses it (dev, PR #266): evidence is
          as old as the memory, not as the pass that noticed it */
       createdAt: inspirations.createdAt,
       text: inspirations.text,
     })
     .from(signalEvidence)
+    .innerJoin(signals, eq(signals.id, signalEvidence.signalId))
     .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
-    .where(eq(signalEvidence.signalId, input.signalId))
+    .where(and(eq(signalEvidence.signalId, input.signalId), eq(signalEvidence.ownerProfileId, input.profileId)))
     .orderBy(desc(inspirations.createdAt));
 
   const reflectionIds = evidenceRows.flatMap((row) => row.quoteReflectionId ? [row.quoteReflectionId] : []);
@@ -474,11 +483,11 @@ export async function getProfileSignal(
       const sources = evidence.quoteSource === "enrichment"
         ? enriched.filter((row) => row.inspirationId === evidence.inspirationId).map((row) => row.text ?? "")
         : evidence.quoteReflectionId ? [answersById.get(evidence.quoteReflectionId) ?? ""] : [evidence.text];
-      const quote = sources.map((text) => quoteForEvidence(evidence.quote, { text, enrichment: null }, 500)).find(Boolean) ?? null;
+      const quote = evidence.current === true ? sources.map((text) => quoteForEvidence(evidence.quote, { text, enrichment: null }, 500)).find(Boolean) ?? null : null;
       return {
         inspirationId: evidence.inspirationId,
         preview: truncatePreview(evidence.text),
-        reason: evidence.material ? evidence.reason : null,
+        reason: evidence.current === true && evidence.material ? evidence.reason : null,
         quote,
         quoteSource: quote ? evidence.quoteSource : null,
         quoteReflectionId: quote ? evidence.quoteReflectionId : null,

@@ -45,10 +45,12 @@ async function fixture() {
   return { groupId: group.id, mind: mind.id as string, a, b, ids, inspirationIds };
 }
 
-async function legacyReading(groupId: string, ids: string[], locked = true) {
+async function legacyReading(groupId: string, ids: string[], locked = true, verified = false) {
   const [artifact] = await t.sql`INSERT INTO top_of_minds (group_id, version, status) VALUES (${groupId}, 1, 'live') RETURNING id`;
-  const [entry] = await t.sql`INSERT INTO top_of_mind_entries (top_of_mind_id, type, body, belief, prompt, locked_at)
-    VALUES (${artifact.id}, 'pattern', 'PRIVATE_SENTINEL legacy body', 'PRIVATE_SENTINEL belief', 'PRIVATE_SENTINEL prompt', ${locked ? new Date().toISOString() : null}) RETURNING id`;
+  const [entry] = await t.sql`INSERT INTO top_of_mind_entries (top_of_mind_id, type, body, belief, prompt, locked_at, input_policy)
+    VALUES (${artifact.id}, 'pattern', ${verified ? 'Our current public direction' : 'PRIVATE_SENTINEL legacy body'},
+      ${verified ? null : 'PRIVATE_SENTINEL belief'}, ${verified ? null : 'PRIVATE_SENTINEL prompt'},
+      ${locked ? new Date().toISOString() : null}, ${verified ? 'group-public-v1' : null}) RETURNING id`;
   for (const id of ids) await t.sql`INSERT INTO top_of_mind_entry_signals (entry_id, signal_id) VALUES (${entry.id}, ${id})`;
   return { artifactId: artifact.id as string, entryId: entry.id as string };
 }
@@ -121,9 +123,7 @@ describe("room output privacy", () => {
 
   it("preserves a verified room reading when the provider explicitly says no change", async () => {
     const f = await fixture();
-    const old = await legacyReading(f.groupId, f.ids, false);
-    await t.sql`UPDATE top_of_mind_entries SET body = 'Our current public direction', belief = NULL, prompt = NULL,
-      input_policy = 'group-public-v1' WHERE id = ${old.entryId}`;
+    await legacyReading(f.groupId, f.ids, false, true);
     await refreshTopOfMindForGroup({ groupId: f.groupId, reason: "manual" }, {
       db: t.db as never, modelProvider: { synthesizeTopOfMind: async () => ({ noChange: true, entries: [] }) } as unknown as ModelProvider,
     });

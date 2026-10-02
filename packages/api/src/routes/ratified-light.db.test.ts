@@ -127,7 +127,9 @@ describe("ratified light: the served ground says who holds it", () => {
     await updateSignalStatement(t.db as never, {
       profileId,
       signalId: ground,
-      statement: "My own wording of this.",
+      // Locking identical words changes their ownership, not their meaning.
+      // A reworded ground requires fresh proof and a new reading separately.
+      statement: "Machine's wording.",
     });
 
     expect(

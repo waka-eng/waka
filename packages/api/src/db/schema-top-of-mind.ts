@@ -21,6 +21,7 @@
 import { relations, sql } from "drizzle-orm";
 import {
   check,
+  bigint,
   index,
   integer,
   pgEnum,
@@ -126,6 +127,7 @@ export const topOfMindEntries = pgTable(
 
     /** The entry itself, in the owner's voice. */
     body: text("body").notNull(),
+    bodyRevision: bigint('body_revision', { mode: 'bigint' }).notNull().default(sql`1`),
     /**
      * A crisp declarative claim, when the entry supports one. Native here by
      * deliberate decision rather than inherited: the old pipeline generated
@@ -181,6 +183,8 @@ export const topOfMindEntrySignals = pgTable(
   "top_of_mind_entry_signals",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    statementRevision: bigint('statement_revision', { mode: 'bigint' }),
+    entryBodyRevision: bigint('entry_body_revision', { mode: 'bigint' }),
 
     entryId: uuid("entry_id")
       .notNull()

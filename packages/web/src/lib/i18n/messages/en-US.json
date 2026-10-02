@@ -1,4 +1,9 @@
 {
+  "worldSupportQueued": "A support check is queued.",
+  "worldSupportCheckFailed": "Couldn't confirm current support. Your words are kept.",
+  "worldSupportChecking": "Checking current support…",
+  "worldSupportNeedsContext": "These patterns need more context before principles can form.",
+  "worldPrincipleSupportUnconfirmed": "Your words are kept. Their support is not confirmed.",
   "worldPrinciplesRoomChecking": "Checking the room’s principles…",
   "worldPrinciplesRoomLoadFailed": "We couldn’t load the room’s principles. Please try again.",
   "worldPrinciplesRoomGenerationFailed": "WAKA couldn’t finish the latest room read. You can try it again.",

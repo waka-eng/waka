@@ -10,6 +10,7 @@ import { hashEmbeddingInput } from "./inspiration-embeddings.js";
 import { loadInspirationMaterial, type InspirationMaterial } from "./inspiration-material.js";
 import { GROUP_INPUT_POLICY, GroupInputUnavailableError, loadGroupInputMembership } from "./group-inputs.js";
 import type { ModelProvider, SignalSupportAssessmentInput } from "./model-provider.js";
+import { evidenceSupportCurrent } from './signal-support-state.js';
 
 export const SIGNAL_SUPPORT_REVIEW_POLICY = "signal-support-review-v1";
 export const SUPPORT_REVIEW_BATCH_SIZE = 12;
@@ -29,6 +30,8 @@ export interface SignalSupportReviewItem {
 export async function loadSupportClaims(db: Pick<ReturnType<typeof getDb>, "select">,
   profileId: string, ownerProfileId: string, inspirationId: string) {
   return db.select({ signalId: signals.id, statement: signals.statement,
+    statementRevision: sql<string>`${signals.statementRevision}::text`,
+    evidenceCurrent: evidenceSupportCurrent(),
     lockedAt: signals.lockedAt, dismissedAt: signals.dismissedAt, status: signals.status,
     supportRetiredAt: signals.supportRetiredAt, inputPolicy: signals.inputPolicy, evidenceId: signalEvidence.id,
     lastReviewId: sql<string | null>`(SELECT r.review_id FROM signal_support_reviews r
@@ -137,6 +140,7 @@ export async function reviewSignalSupport(db: ReturnType<typeof getDb>, input: {
   const claims = allClaims.filter((row) => !isGroup || row.inputPolicy === GROUP_INPUT_POLICY);
   const previous = input.reuseCurrentAssessments ? await db.selectDistinctOn([signalSupportReviews.signalId], {
     signalId: signalSupportReviews.signalId, statementHash: signalSupportReviews.statementHash,
+    statementRevision: sql<string | null>`${signalSupportReviews.statementRevision}::text`,
     material: signalSupportReviews.material, verdict: signalSupportReviews.verdict,
     policy: signalSupportReviews.policy,
     sourceIds: signalSupportReviews.sourceIds, issue: signalSupportReviews.issue,
@@ -147,6 +151,7 @@ export async function reviewSignalSupport(db: ReturnType<typeof getDb>, input: {
   for (const claim of claims) {
     const prior = previous.find((row) => row.signalId === claim.signalId);
     if (prior && prior.policy === SIGNAL_SUPPORT_REVIEW_POLICY && prior.material?.hash === material.identity.hash &&
+      prior.material?.revision === material.identity.revision && prior.statementRevision === claim.statementRevision &&
       prior.statementHash === hashEmbeddingInput(claim.statement) && prior.issue === null) {
       reused.set(claim.signalId, { signalId: claim.signalId, statementHash: prior.statementHash,
         verdict: prior.verdict, sourceIds: prior.sourceIds });

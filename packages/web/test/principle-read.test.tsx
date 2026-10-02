@@ -26,6 +26,35 @@ const principle = { id: "room-principle", statement: "Make room for experiments.
   conflictsWithId: null, createdAt: "2026-09-22", citedSignals: [{ id: "room-signal", statement: "Shared experiments recur." }] };
 
 describe("principle read", () => {
+  it('shows queued support without asking for inspirations or generating on mount', async () => {
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: {
+      ...ready, phase: 'pending', eligible: false, signalCount: 0, topOfMindCount: 0, supportPending: true,
+    } });
+    await act(async () => root.render(<PrincipleRead groupId="room-1" active locale="en-US" />));
+    expect(host.textContent).toContain('A support check is queued.');
+    expect(host.querySelector('[role="progressbar"]')).toBeNull();
+    expect(requestPrincipleRead).not.toHaveBeenCalled();
+  });
+
+  it('explicitly retries a failed support check even when current eligibility is below the bar', async () => {
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [], status: {
+      ...ready, phase: 'failed', eligible: false, signalCount: 0, topOfMindCount: 0, supportPending: true,
+    } });
+    vi.mocked(requestPrincipleRead).mockResolvedValue();
+    await act(async () => root.render(<PrincipleRead groupId="room-1" active locale="en-US" />));
+    expect(host.textContent).toContain("Couldn't confirm current support. Your words are kept.");
+    await act(async () => host.querySelector('button')!.click());
+    expect(requestPrincipleRead).toHaveBeenCalledWith('room-1', true);
+    expect(host.textContent).toContain('A support check is queued.');
+  });
+
+  it('keeps protected words while displaying unconfirmed support', async () => {
+    vi.mocked(fetchPrincipleRead).mockResolvedValue({ principles: [{ ...principle, locked: true, supportChanged: true, citedSignals: [] }], status: ready });
+    await act(async () => root.render(<PrincipleRead groupId="room-1" active locale="en-US" />));
+    expect(host.textContent).toContain(principle.statement);
+    expect(host.textContent).toContain('Your words are kept. Their support is not confirmed.');
+    expect(host.textContent).not.toContain('Shared experiments recur.');
+  });
   it("withdraws cached room principles when access can no longer be verified", async () => {
     vi.mocked(fetchPrincipleRead).mockResolvedValueOnce({ principles: [principle], status: ready })
       .mockRejectedValue(new Error("access withdrawn"));

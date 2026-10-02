@@ -33,3 +33,26 @@ export async function requestSignalStatementWork(tx: Transaction, input: {
   }
   await enqueueTopOfMindRefresh(input.profileId, 'signals_changed', tx);
 }
+
+/** New machine wording validates its immediate sources, but cannot silently
+ * renew the statement's other witnesses. Review only currently allowed ones. */
+export async function requestRemainingSignalSupportReviews(tx: Transaction, input: {
+  profileId: string; signalId: string; verifiedInspirationIds: string[];
+}) {
+  const sources = await tx.execute<{ id: string; ownerProfileId: string }>(sql`
+    SELECT i.id, i.profile_id AS "ownerProfileId" FROM inspirations i WHERE (
+      EXISTS (SELECT 1 FROM signal_evidence e WHERE e.profile_id = ${input.profileId}::uuid
+        AND e.signal_id = ${input.signalId}::uuid AND e.owner_profile_id = i.profile_id AND e.inspiration_id = i.id)
+      OR EXISTS (SELECT 1 FROM signal_support_reviews r WHERE r.profile_id = ${input.profileId}::uuid
+        AND r.signal_id = ${input.signalId}::uuid AND r.owner_profile_id = i.profile_id AND r.inspiration_id = i.id)
+    ) AND (i.profile_id = ${input.profileId}::uuid OR (i.visibility::text = 'public' AND EXISTS (
+      SELECT 1 FROM profiles p JOIN group_members m ON m.group_id = p.group_id
+      WHERE p.id = ${input.profileId}::uuid AND p.type::text = 'group' AND m.profile_id = i.profile_id
+    ))) ORDER BY i.profile_id, i.id FOR KEY SHARE NOWAIT`);
+  const verified = new Set(input.verifiedInspirationIds);
+  for (const source of sources) {
+    if (verified.has(source.id)) continue;
+    await enqueueSignalSupportReview(source.ownerProfileId, source.id, tx,
+      source.ownerProfileId === input.profileId ? undefined : input.profileId);
+  }
+}

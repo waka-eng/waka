@@ -16,7 +16,7 @@
  *      drops to one voice and stops being served — not deleted, not retired,
  *      simply no longer standing on enough ground to wear the room's name.
  *
- *   2. TURNING IT PUBLIC AGAIN PUTS THE VOICE BACK, with no re-derivation.
+ *   2. TURNING IT PUBLIC AGAIN MAKES ITS VOICE ELIGIBLE FOR A FRESH CHECK.
  *      This is why the withdrawal reads visibility at serve time instead of
  *      deleting evidence rows: a delete would make the switch one-way in the
  *      other direction, and the founder's law is that fading never deletes.
@@ -94,6 +94,9 @@ function stubs(statement: string, axis: number) {
     judgeSignalMatch: async () => {
       throw new Error("identical embeddings match above the judge band");
     },
+    assessSignalSupport: async (input: { claims: Array<{ signalId: string }>; sources: Array<{ id: string }> }) => ({
+      assessments: input.claims.map((claim) => ({ signalId: claim.signalId, verdict: 'supported', sourceIds: [input.sources[0]!.id] })),
+    }),
   } as unknown as ModelProvider;
   const embeddingClient = {
     model: EMBEDDING_MODEL,
@@ -132,6 +135,7 @@ async function groupWithTwoVoices(): Promise<{
   bo: string;
   ariKeep: string;
   signalId: string;
+  mind: string;
 }> {
   const ari = await seedPerson("Ari");
   const bo = await seedPerson("Bo");
@@ -155,8 +159,14 @@ async function groupWithTwoVoices(): Promise<{
     { inspirationId: boKeep, reason: "created", deriveIntoProfileId: mind },
     { db: t.db as never, modelProvider: b.provider, embeddingClient: b.embeddingClient },
   );
+  // The second pass restated the shared claim. Its other witness must be
+  // checked against those new words before the wall credits both members.
+  await deriveSignalsForInspiration(
+    { inspirationId: ariKeep, reason: 'edited', deriveIntoProfileId: mind, supportOnly: true },
+    { db: t.db as never, modelProvider: b.provider, embeddingClient: b.embeddingClient },
+  );
 
-  return { groupId: group.id, ari, bo, ariKeep, signalId: first.mintedSignalIds[0]! };
+  return { groupId: group.id, ari, bo, ariKeep, mind, signalId: first.mintedSignalIds[0]! };
 }
 
 afterAll(async () => {
@@ -170,7 +180,7 @@ describe("the one switch, turned back", () => {
   });
 
   it("withdraws a voice from the room's wall when its memory goes private, and returns it when it comes back", async () => {
-    const { groupId, ariKeep, signalId } = await groupWithTwoVoices();
+    const { groupId, ariKeep, signalId, mind } = await groupWithTwoVoices();
 
     const before = await loadGroupWall(t.db as never, groupId);
     expect(before, "two public voices put the statement on the wall").toHaveLength(1);
@@ -196,9 +206,13 @@ describe("the one switch, turned back", () => {
     expect(evidence.length, "the record survives the withdrawal").toBe(2);
 
     await setVisibility(ariKeep, "public");
+    expect(await loadGroupWall(t.db as never, groupId)).toHaveLength(0);
+    const checked = stubs('We keep choosing walks over meetings.', 0);
+    await deriveSignalsForInspiration({ inspirationId: ariKeep, reason: 'edited', deriveIntoProfileId: mind, supportOnly: true },
+      { db: t.db as never, modelProvider: checked.provider, embeddingClient: checked.embeddingClient });
 
     const after = await loadGroupWall(t.db as never, groupId);
-    expect(after, "the switch turns both ways, with nothing re-derived").toHaveLength(1);
+    expect(after, "the switch turns both ways after a fresh support check").toHaveLength(1);
     expect(after[0]!.contributors.map((c) => c.name).sort()).toEqual(["Ari", "Bo"]);
   });
 

@@ -27,6 +27,7 @@ export interface ApiPrinciple {
   rank: number;
   locked: boolean;
   unsupported?: boolean;
+  supportChanged?: boolean;
   heldSince: string | null;
   conflictsWithId: string | null;
   citedSignals: Array<{ id: string; statement: string; examples?: Array<{ text: string; createdAt: string }> }>;
@@ -36,6 +37,7 @@ export interface ApiPrinciple {
 
 export interface ApiPrincipleStatus {
   restricted?: boolean;
+  supportPending?: boolean;
   phase: "waiting" | "pending" | "processing" | "ready" | "failed";
   eligible: boolean;
   signalCount: number;

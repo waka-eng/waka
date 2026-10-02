@@ -1152,3 +1152,77 @@ mutation occurred. Keep this batch on the implementation branch until the
 pending-support reader/worker handling is ready; old worker builds do not know
 the new job type, so the deployment step must coordinate their transition.
 No production deployment or historical repair is authorized by this checkpoint.
+
+## D3e2 — pending support and word-bound citations — 2026-10-01
+
+Previous turn: progress (atomic statement work, 11 SQL regressions, pushed
+draft PR [#331](https://github.com/waka-eng/waka/pull/331)). Its CI run
+`36948345809` succeeded. The complete A–J/L1–L3 objective remains active.
+
+Declared gate: changing a source or statement must stop presenting old support
+as current before a worker finishes. Protected words survive; copied generated
+explanations do not. Positive assessment can renew an unchanged claim without
+duplicating its witness, but cannot certify an artifact built from different
+wording. Failed checks keep relationships and give an explicit recovery path.
+
+Baseline: 6/6 serving/review cases failed (source edits served old conclusions,
+protected entries retained old explanations, positive checks did not renew
+source lineage, rewritten signals recertified old artifacts, provider failure
+still served unchecked proof, and a change-and-return accepted an old review).
+Two additional cached-verdict cases failed after source/statement change-and-
+return. Two owner-word cases failed: editing an entry or principle kept its
+previous wording's citations as current. These 10 reproductions now pass.
+
+Canon-first migrations 0044–0046 add monotonic wording/body counters and bind
+evidence, review-cache records and artifact/principle citations to their consumed
+revisions. Counters advance on actual changes, including change-and-return;
+clients cannot reset them by supplying a counter. Nullable old bindings refer
+only to the migration baseline, and exact existing material identities retain
+their recorded source revision. No legacy value is replaced with the newest
+counter or described as independently reviewed. This does not repair history.
+
+Personal/public/room serving and generation share the revision predicates.
+Unsupported generated conclusions are withheld; edited/pinned words remain
+with changed-support metadata and cleared old explanation/citations. Private
+answer changes still leave public room proof current. Machine restatements
+stamp their immediate grounded sources after the wording change and durably
+request checks for their other currently allowed witnesses. Fresh generation
+binds its own citations; copied old bindings do not acquire new authority.
+Private signal evidence queries now keep foreign-profile sources out, and
+pending quotes/reasons are not presented as current support. Exports serialize
+new bigint counters as decimal strings.
+
+Read workers hold for actual queued/running support work without consuming a
+retry or publishing an empty success; future input eligibility controls the
+hold time. Manual reads bypass cadence, not input checks. Explicit reading/
+principle retries recover missing/failed reviews; active checks are left alone,
+and finished genuine uncertainty does not start a retry loop. The principle UI
+distinguishes queued checks from active checks, preserves protected wording
+with one short notice, and permits failed-support retry below the generation
+bar. Opening a queued support view does not buy another read.
+
+Verification: full API 1,131 passed / 3 paid-live benches skipped across 102
+passing suites; full web 438/438 across 64 suites. The 14 new real-SQL cases
+cover the original failures, cache revisions, long input holds, failed-check
+recovery, owner body edits, machine restatement → review → fresh reading, and
+private-answer/public-source room isolation. Three new component cases verify
+queued copy/no mount POST, explicit failed-check retry and protected wording.
+API/web typechecks, web build, migration/diff checks and both fresh-migration
+cases pass. Older fixtures now declare current proof before testing commit
+races, keep identical-word locking separate from rewording, construct a
+verified no-change reading directly, and actually recheck a restored public
+voice. Their original privacy/fence/standing assertions remain.
+
+Production-build manual browser checks pass at 1280×900 and 390×844 for both
+reading support and capture/reflection recovery. The support fixture now waits
+for camera motion to settle before screenshot inspection. The new notice uses
+14px text at 5.45:1 contrast; existing recovery controls remain 44px high,
+14px, 17.03:1. APIs are synthetic and non-local assets blocked, so this is
+rendered UI evidence rather than a connected real-stack or deployed result.
+
+All SQL used disposable loopback schemas/databases; no live model or hosted
+DB mutation occurred. PR #331 stays draft pending broader release checks and
+worker cutover. Next: finish bounded support-review coverage/recovery for large
+claim sets, audit remaining legacy personal context, and connect the complete
+browser/worker release journey. Historical repair, deployment verification,
+semantic quality/cost, later F–J/L1–L3 work and the full goal remain open.

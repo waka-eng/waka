@@ -1,6 +1,6 @@
 /** Manual rendered check, not a live-stack journey. All API traffic is synthetic;
  * every non-local resource is blocked. No account, database or model is used.
- * Run `pnpm --filter @waka/web build`, serve that build on 127.0.0.1:3011,
+ * Run `pnpm --filter @waka/web build`, serve its production preview on 127.0.0.1:3012,
  * then `pnpm e2e:reading-support`. Screenshots go to a fresh temporary directory.
  */
 import assert from 'node:assert/strict';
@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { launchChromium } from './browser.js';
 
-const origin = 'http://127.0.0.1:3011';
+const origin = 'http://127.0.0.1:3012';
 const output = mkdtempSync(join(tmpdir(), 'waka-reading-support-'));
 console.log(`Screenshots: ${output}`);
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -22,6 +22,9 @@ const inspirations = ['A quiet walk makes room for a new idea.', 'Small choices 
     visibility: 'private', createdAt: date, updatedAt: date, attachments: [], attachmentSummary: [], reflections: [], reflectionCount: 0 }));
 const reading = { id: id(20), profileId: profile.id, version: 1, reason: 'regenerated', createdAt: date,
   generationRevision: '1', supportChanged: true, entries: [] };
+const ownWords = 'Choose experiments without erasing your own words.';
+const principle = { id: id(60), statement: ownWords, type: 'maxim', state: 'held', origin: 'minted', rank: 1,
+  locked: true, unsupported: false, supportChanged: true, heldSince: date, conflictsWithId: null, citedSignals: [], createdAt: date };
 const browser = await launchChromium({ headless: true });
 try {
   for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
@@ -45,7 +48,7 @@ try {
       if (path === '/signals') return send({ signals: [] });
       if (path === '/groups') return send({ groups: [] });
       if (path === '/experiences') return send({ experiences: [] });
-      if (path === '/principles') return send({ principles: [] });
+      if (path === '/principles') return send({ principles: [principle] });
       if (path === '/principles/status') return send({ status: { phase: 'waiting', eligible: false, signalCount: 0, topOfMindCount: 0 } });
       if (path === '/top-of-mind/refresh') { generated += 1; return send({ jobId: id(30), requestVersion: '1', status: 'queued' }, 202); }
       if (path === '/top-of-mind' || path === `/top-of-mind/versions/${reading.id}`) {
@@ -100,6 +103,29 @@ try {
     await page.getByRole('button', { name: 'Check again', exact: true }).click();
     await page.getByRole('button', { name: 'Read again', exact: true }).waitFor();
     assert.equal(generated, 0, 'A status-check retry must not trigger generation');
+    await page.getByRole('button', { name: 'principles', exact: true }).click();
+    await page.getByText(ownWords, { exact: true }).waitFor();
+    await page.getByText('Your words are kept. Their support is not confirmed.', { exact: true }).waitFor();
+    await page.waitForFunction(() => {
+      const element = document.querySelector('.jar-values-value');
+      if (!element) return false;
+      const bounds = element.getBoundingClientRect();
+      return bounds.top >= 0 && bounds.bottom <= window.innerHeight && bounds.left >= 0 && bounds.right <= window.innerWidth;
+    });
+    await page.waitForFunction(`(() => {
+      const surface = document.querySelector('.jar-hq');
+      const transform = surface?.style.transform;
+      if (!transform) return false;
+      const state = window.__wakaReadingSupportCamera ??= { transform: '', stable: 0 };
+      state.stable = state.transform === transform ? state.stable + 1 : 0;
+      state.transform = transform;
+      return state.stable >= 8;
+    })()`);
+    await page.screenshot({ path: join(output, `principle-support-${viewport.width}.png`) });
+    const supportNotice = await measureText('.jar-values-sub', '.jar');
+    console.log('Principle support notice', supportNotice);
+    assert.ok(supportNotice.size >= 14 && supportNotice.contrast >= 4.5, 'Unconfirmed support must be readable');
+    assert.equal(generated, 0, 'Looking at protected principles must not buy a reading');
     await page.goto(`${origin}/@preview`);
     await page.getByText('Kept here; its supporting patterns have changed.', { exact: true }).waitFor();
     await page.screenshot({ path: join(output, `public-${viewport.width}.png`), fullPage: true });
