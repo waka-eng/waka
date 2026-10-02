@@ -63,6 +63,8 @@ import { writeSignalEmbedding } from "./signal-embeddings.js";
 import { refreshSignalLifecycle } from "./signal-lifecycle.js";
 import { writeSignalStatementChain } from "./statement-chains.js";
 import type { InspirationMaterialIdentity } from "./inspiration-material.js";
+import { readInspirationRevision } from './inspiration-processing.js';
+import { requestRemainingSignalSupportReviews } from './signal-statement-work.js';
 
 type WakaDb = ReturnType<typeof getDb>;
 type WakaTx = Parameters<Parameters<WakaDb["transaction"]>[0]>[0];
@@ -229,27 +231,6 @@ export async function applyCandidates(
       // New discovery cannot reverse an explicit decision about this pair.
       // Keep the retired target visible to matching so it cannot mint a twin.
       if (match.target.withdrawn) continue;
-      await attachEvidence(tx, {
-        profileId: input.profileId,
-        ownerProfileId: input.evidenceOwnerProfileId,
-        signalId: match.target.id,
-        inspirationId: input.inspirationId,
-        reason: candidate.reason,
-        quote: candidate.quote,
-        quoteSource: candidate.quoteSource,
-        quoteReflectionId: candidate.quoteReflectionId ?? null,
-        quoteSourceHash: candidate.quoteSourceHash ?? null,
-        material: input.material ?? null,
-      });
-      await attachRelatedEvidence(
-        tx,
-        {
-          profileId: input.profileId,
-          ownerProfileId: input.evidenceOwnerProfileId,
-          signalId: match.target.id,
-        },
-        candidate.relatedEvidence,
-      );
 
       // An emerging signal is a first draft read from a single capture; the
       // capture that confirms it usually names the pattern better. Once a
@@ -277,8 +258,19 @@ export async function applyCandidates(
           });
           match.target.statement = candidate.statement;
           match.target.embedding = candidate.embedding;
+          await requestRemainingSignalSupportReviews(tx, { profileId: input.profileId, signalId: match.target.id,
+            verifiedInspirationIds: [input.inspirationId, ...candidate.relatedEvidence.map((row) => row.inspirationId)] });
         }
       }
+
+      await attachEvidence(tx, {
+        profileId: input.profileId, ownerProfileId: input.evidenceOwnerProfileId, signalId: match.target.id,
+        inspirationId: input.inspirationId, reason: candidate.reason, quote: candidate.quote,
+        quoteSource: candidate.quoteSource, quoteReflectionId: candidate.quoteReflectionId ?? null,
+        quoteSourceHash: candidate.quoteSourceHash ?? null, material: input.material ?? null,
+      });
+      await attachRelatedEvidence(tx, { profileId: input.profileId,
+        ownerProfileId: input.evidenceOwnerProfileId, signalId: match.target.id }, candidate.relatedEvidence);
 
       matchedSignalIds.push(match.target.id);
       touched.add(match.target.id);
@@ -514,6 +506,11 @@ async function attachEvidence(
     material?: InspirationMaterialIdentity | null;
   },
 ): Promise<void> {
+  const [statement] = await tx.select({ revision: signals.statementRevision }).from(signals)
+    .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId))).limit(1);
+  const materialRevision = await readInspirationRevision(tx, input.ownerProfileId, input.inspirationId,
+    input.profileId === input.ownerProfileId ? 'personal' : 'public');
+  if (!statement || materialRevision === null) throw new Error('Current evidence revision is unavailable');
   // Re-derivation after an edit revisits captures this signal already cites.
   // The unique index keeps a re-run from inflating support. Replace the old
   // quote and provenance with the material just verified, not the first copy.
@@ -530,12 +527,13 @@ async function attachEvidence(
       quoteReflectionId: input.quoteReflectionId ?? null,
       quoteSourceHash: input.quoteSourceHash ?? null,
       material: input.material ?? null,
+      statementRevision: statement.revision, materialRevision,
     })
     .onConflictDoUpdate({
       target: [signalEvidence.signalId, signalEvidence.inspirationId],
       set: { reason: input.reason, quote: input.quote, quoteSource: input.quoteSource,
         quoteReflectionId: input.quoteReflectionId ?? null, quoteSourceHash: input.quoteSourceHash ?? null,
-        material: input.material ?? null },
+        material: input.material ?? null, statementRevision: statement.revision, materialRevision },
     });
 }
 

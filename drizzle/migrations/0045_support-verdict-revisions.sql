@@ -1,0 +1,1 @@
+ALTER TABLE "signal_support_reviews" ADD COLUMN "statement_revision" bigint;

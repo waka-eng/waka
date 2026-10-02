@@ -16,11 +16,12 @@
  * qualification tests: docs/generation.md; phases: docs/goals/principles.md.
  */
 
-import { and, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
+import { and, eq, getTableColumns, inArray, isNotNull, or, sql } from "drizzle-orm";
 
 import { randomUUID } from "node:crypto";
 import { readGenerationRevision, assertGenerationRevision } from "./generation-revision.js";
-import { personalSignalReadable, projectPersonalEntries } from "./personal-output.js";
+import { personalEntrySupportCurrent, personalPrincipleSupportCurrent, personalSignalReadable, projectPersonalEntries } from "./personal-output.js";
+import { citationStatementCurrent, evidenceSupportCurrent, loadSignalStatementRevisions } from './signal-support-state.js';
 import {
   inspirations,
   principles,
@@ -36,7 +37,7 @@ import { getDb } from "./db.js";
 import { normalizeSupportedLocale } from "./locales.js";
 import { writePrincipleStatementChain } from "./statement-chains.js";
 import { GROUP_INPUT_POLICY } from "./group-inputs.js";
-import { groupPrincipleReadable, groupSignalReadable, projectGroupEntries } from "./group-output.js";
+import { groupEntrySupportCurrent, groupPrincipleReadable, groupSignalReadable, projectGroupEntries } from "./group-output.js";
 import {
   getDefaultModelProvider,
   type ModelProvider,
@@ -198,9 +199,10 @@ async function loadCitationEvidence(
   const evidenceRows = await db
     .select({ signalId: signalEvidence.signalId, createdAt: inspirations.createdAt })
     .from(signalEvidence)
+    .innerJoin(signals, eq(signals.id, signalEvidence.signalId))
     .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
     .where(
-      and(eq(signalEvidence.profileId, profileId), inArray(signalEvidence.signalId, signalIds),
+      and(eq(signalEvidence.profileId, profileId), inArray(signalEvidence.signalId, signalIds), evidenceSupportCurrent(),
         ...(profile?.groupId ? [eq(inspirations.visibility, "public"), sql`EXISTS (
           SELECT 1 FROM group_members m WHERE m.group_id = ${profile.groupId}::uuid
           AND m.profile_id = ${inspirations.profileId})`] : [])),
@@ -210,6 +212,7 @@ async function loadCitationEvidence(
   const tomRows = await db
     .select({ signalId: topOfMindEntrySignals.signalId, topOfMindId: topOfMindEntries.topOfMindId })
     .from(topOfMindEntrySignals)
+    .innerJoin(signals, eq(signals.id, topOfMindEntrySignals.signalId))
     .innerJoin(topOfMindEntries, eq(topOfMindEntries.id, topOfMindEntrySignals.entryId))
     .innerJoin(topOfMinds, eq(topOfMinds.id, topOfMindEntries.topOfMindId))
     .where(
@@ -218,6 +221,8 @@ async function loadCitationEvidence(
           ? eq(topOfMinds.groupId, profile.groupId)
           : eq(topOfMinds.profileId, profileId),
         inArray(topOfMindEntrySignals.signalId, signalIds),
+        citationStatementCurrent('top_of_mind_entry_signals'),
+        profile?.groupId ? groupEntrySupportCurrent(profile.groupId) : personalEntrySupportCurrent(profileId),
         ...(profile?.groupId ? [eq(topOfMindEntries.inputPolicy, GROUP_INPUT_POLICY)] : []),
       ),
     );
@@ -301,10 +306,11 @@ export async function refreshPrinciplesForProfile(
   const preferredLocale = normalizeSupportedLocale(profileRow?.preferredLocale);
 
   const existing = await db
-    .select()
+    .select({ ...getTableColumns(principles), supportCurrent: groupId
+      ? groupPrincipleReadable(groupId, PRINCIPLE_MIN_SIGNALS) : personalPrincipleSupportCurrent(input.profileId, PRINCIPLE_MIN_SIGNALS) })
     .from(principles)
     .where(and(eq(principles.profileId, input.profileId),
-      ...(groupId ? [groupPrincipleReadable(groupId, PRINCIPLE_MIN_SIGNALS)] : [])));
+      ...(groupId ? [eq(principles.inputPolicy, GROUP_INPUT_POLICY)] : [])));
 
   const [liveTom] = await db
     .select({ id: topOfMinds.id })
@@ -336,10 +342,10 @@ export async function refreshPrinciplesForProfile(
         tomAppearances: stats?.tomVersionIds.length ?? 0,
       };
     }),
-    currentPrinciples: existing.map((row) => ({
+    currentPrinciples: existing.filter((row) => row.supportCurrent || row.lockedAt !== null || row.origin === 'declared').map((row) => ({
       id: row.id,
       statement: row.statement,
-      state: row.state,
+      state: row.supportCurrent || row.state === 'contested' ? row.state : 'aspirational',
     })),
     currentEntries: currentEntries.map((row) => ({ body: row.body })),
   });
@@ -378,14 +384,16 @@ export async function refreshPrinciplesForProfile(
 
   // Plan the complete batch before writing. Provisional IDs let a later
   // candidate compare against an earlier mint without persisting it first.
-  const standingSet = existing.map((row) => ({ id: row.id, statement: row.statement }));
+  const standingSet = existing.filter((row) => row.supportCurrent || row.lockedAt !== null || row.origin === 'declared')
+    .map((row) => ({ id: row.id, statement: row.statement }));
   const planned: Array<{ candidate: PrincipleCandidate; matchedId: string | null; conflictingId: string | null; mintedId: string }> = [];
   for (const candidate of valid) {
     // Compare against the standing set, including earlier planned candidates.
     // An unavailable comparison aborts the entire batch before any write.
-    let matchedId: string | null = null;
+    let matchedId: string | null = existing.find((row) => !row.supportCurrent && row.statement === candidate.statement)?.id ?? null;
     let conflictingId: string | null = null;
     for (const standing of standingSet) {
+      if (matchedId) break;
       /* An unreachable judge used to mean "independent for this pair" —
          which minted near-duplicate principles on layer 4, the ranked,
          visible surface, whenever the road was down. It propagates now:
@@ -451,11 +459,14 @@ export async function refreshPrinciplesForProfile(
           heldSince: now,
         })
         .returning();
+      const revisions = await loadSignalStatementRevisions(tx, candidate.citedSignalIds);
       await tx.insert(principleSignals).values(
         candidate.citedSignalIds.map((signalId) => ({
           profileId: input.profileId,
           principleId: row!.id,
           signalId,
+          statementRevision: revisions.get(signalId),
+          principleStatementRevision: row!.statementRevision,
         })),
       );
       // The chain begins at birth — the machine's sentence every later
@@ -493,9 +504,25 @@ async function attachCitations(
   signalIds: string[],
 ): Promise<number> {
   if (signalIds.length === 0) return 0;
+  const revisions = await loadSignalStatementRevisions(db, signalIds);
+  const [parent] = await db.select({ revision: principles.statementRevision }).from(principles)
+    .where(and(eq(principles.profileId, profileId), eq(principles.id, principleId))).limit(1);
+  if (!parent) throw new Error('Principle citation parent is unavailable');
+  for (const signalId of signalIds) {
+    await db.update(principleSignals).set({ statementRevision: revisions.get(signalId), principleStatementRevision: parent.revision })
+      .where(and(eq(principleSignals.profileId, profileId), eq(principleSignals.principleId, principleId), eq(principleSignals.signalId, signalId)));
+  }
+  const [profile] = await db.select({ groupId: profiles.groupId }).from(profiles).where(eq(profiles.id, profileId)).limit(1);
+  // A fresh matching candidate supplies current grounding. Retain other
+  // current citations; stale ones no longer explain this renewed statement.
+  await db.delete(principleSignals).where(and(eq(principleSignals.profileId, profileId), eq(principleSignals.principleId, principleId), sql`
+    (coalesce(${principleSignals.principleStatementRevision}, 1) <> ${parent.revision} OR
+    NOT EXISTS (SELECT 1 FROM signals WHERE signals.id = ${principleSignals.signalId}
+      AND ${citationStatementCurrent('principle_signals')}
+      AND ${profile?.groupId ? groupSignalReadable(profile.groupId) : personalSignalReadable(profileId)}))`));
   const inserted = await db
     .insert(principleSignals)
-    .values(signalIds.map((signalId) => ({ profileId, principleId, signalId })))
+    .values(signalIds.map((signalId) => ({ profileId, principleId, signalId, statementRevision: revisions.get(signalId), principleStatementRevision: parent.revision })))
     .onConflictDoNothing()
     .returning({ id: principleSignals.id });
   return inserted.length;
@@ -512,11 +539,13 @@ export async function promoteIfDemonstrated(
   principleId: string,
   now: Date,
 ): Promise<boolean> {
+  const [profile] = await db.select({ groupId: profiles.groupId }).from(profiles).where(eq(profiles.id, profileId)).limit(1);
   const cited = await db
     .select({ signalId: principleSignals.signalId })
     .from(principleSignals)
     .innerJoin(signals, eq(signals.id, principleSignals.signalId))
-    .where(and(eq(principleSignals.principleId, principleId), eq(signals.status, "active")));
+    .where(and(eq(principleSignals.principleId, principleId), eq(signals.status, "active"),
+      citationStatementCurrent('principle_signals'), profile?.groupId ? groupSignalReadable(profile.groupId) : personalSignalReadable(profileId)));
   const evidence = await loadCitationEvidence(
     db,
     profileId,

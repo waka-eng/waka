@@ -29,7 +29,9 @@
  */
 
 import { recordConsultation } from "../lib/consultations.js";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
+import { personalPrincipleReadable, personalPrincipleSupportCurrent, personalSignalReadable } from '../lib/personal-output.js';
+import { citationBodyCurrent, citationStatementCurrent, evidenceSupportCurrent } from '../lib/signal-support-state.js';
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
@@ -64,7 +66,7 @@ import { normalizeSupportedLocale } from "../lib/locales.js";
 import { validationDetails } from "../lib/validation.js";
 import { loadProfileTarget, resolveProfileScope } from "./signals.js";
 import { loadPrincipleStatus, requestPrincipleRefresh } from "../lib/principle-status.js";
-import { groupPrincipleReadable } from "../lib/group-output.js";
+import { groupPrincipleReadable, groupSignalReadable } from "../lib/group-output.js";
 
 type WakaDb = ReturnType<typeof getDb>;
 
@@ -112,6 +114,7 @@ export interface PrincipleView {
   locked: boolean;
   /** Previously demonstrated support was withdrawn; human wording remains. */
   unsupported?: boolean;
+  supportChanged?: boolean;
   heldSince: string | null;
   conflictsWithId: string | null;
   citedSignals: Array<{ id: string; statement: string; examples?: Array<{ text: string; createdAt: string }> }>;
@@ -123,10 +126,12 @@ export async function loadPrincipleViews(db: WakaDb, profileId: string): Promise
   const [profile] = await db.select({ groupId: profiles.groupId }).from(profiles)
     .where(eq(profiles.id, profileId)).limit(1);
   const rows = await db
-    .select()
+    .select({ ...getTableColumns(principles), supportCurrent: profile?.groupId
+      ? groupPrincipleReadable(profile.groupId, PRINCIPLE_MIN_SIGNALS) : personalPrincipleSupportCurrent(profileId, PRINCIPLE_MIN_SIGNALS) })
     .from(principles)
     .where(and(eq(principles.profileId, profileId),
-      ...(profile?.groupId ? [groupPrincipleReadable(profile.groupId, PRINCIPLE_MIN_SIGNALS)] : [])))
+      ...(profile?.groupId ? [groupPrincipleReadable(profile.groupId, PRINCIPLE_MIN_SIGNALS)]
+        : [personalPrincipleReadable(profileId, PRINCIPLE_MIN_SIGNALS)])))
     .orderBy(asc(principles.rank));
   if (rows.length === 0) return [];
 
@@ -135,9 +140,13 @@ export async function loadPrincipleViews(db: WakaDb, profileId: string): Promise
       principleId: principleSignals.principleId,
       signalId: principleSignals.signalId,
       statement: signals.statement,
+      current: sql<boolean>`${citationStatementCurrent('principle_signals')} AND ${profile?.groupId
+        ? groupSignalReadable(profile.groupId) : personalSignalReadable(profileId)}
+        AND ${citationBodyCurrent('principle_signals', 'principles', 'principle_statement_revision', 'statement_revision')}`,
     })
     .from(principleSignals)
     .innerJoin(signals, eq(signals.id, principleSignals.signalId))
+    .innerJoin(principles, eq(principles.id, principleSignals.principleId))
     .where(
       inArray(
         principleSignals.principleId,
@@ -145,7 +154,9 @@ export async function loadPrincipleViews(db: WakaDb, profileId: string): Promise
       ),
     );
   const citationsByPrinciple = new Map<string, Array<{ id: string; statement: string }>>();
+  const changedSupport = new Set<string>();
   for (const row of citationRows) {
+    if (!row.current) { changedSupport.add(row.principleId); continue; }
     const cited = { id: row.signalId, statement: row.statement };
     const bucket = citationsByPrinciple.get(row.principleId);
     if (bucket) bucket.push(cited);
@@ -168,9 +179,11 @@ export async function loadPrincipleViews(db: WakaDb, profileId: string): Promise
         ${inspirations.createdAt} AS created_at,
         row_number() OVER (PARTITION BY ${signalEvidence.signalId} ORDER BY ${inspirations.createdAt} DESC, ${inspirations.id}) AS position
       FROM ${signalEvidence}
+      JOIN ${signals} ON ${signals.id} = ${signalEvidence.signalId}
       JOIN ${inspirations} ON ${inspirations.id} = ${signalEvidence.inspirationId}
       WHERE ${signalEvidence.profileId} = ${profileId}::uuid
         AND ${inspirations.profileId} = ${profileId}::uuid
+        AND ${evidenceSupportCurrent()}
         AND ${signalEvidence.signalId} IN (
           SELECT ${principleSignals.signalId} FROM ${principleSignals}
           WHERE ${principleSignals.profileId} = ${profileId}::uuid
@@ -193,9 +206,10 @@ export async function loadPrincipleViews(db: WakaDb, profileId: string): Promise
     rank: row.rank,
     locked: row.lockedAt !== null,
     unsupported: row.unsupportedAt != null,
+    supportChanged: changedSupport.has(row.id) || (!row.supportCurrent && row.heldSince !== null),
     heldSince: row.heldSince?.toISOString() ?? null,
     conflictsWithId: row.conflictsWithId,
-    citedSignals: (citationsByPrinciple.get(row.id) ?? []).map((signal) => ({
+    citedSignals: (changedSupport.has(row.id) ? [] : citationsByPrinciple.get(row.id) ?? []).map((signal) => ({
       ...signal, examples: examplesBySignal.get(signal.id) ?? [],
     })),
     createdAt: row.createdAt.toISOString(),
@@ -256,10 +270,12 @@ export function renderPrinciplesMarkdown(
     const marker =
       view.state === "contested" && view.conflictsWithId
         ? `contested, in tension with ${shortId(view.conflictsWithId)}`
-        : view.state;
+        : view.supportChanged && !view.unsupported ? `${view.state}; current support unconfirmed` : view.state;
     lines.push(`${view.rank}. \`${shortId(view.id)}\` (${marker}) — ${view.statement}`);
     if (view.unsupported) {
       lines.push("   Supporting evidence has been withdrawn. Preserve the owner's wording; do not describe it as demonstrated by their history or as rejected by them.");
+    } else if (view.supportChanged) {
+      lines.push("   Current support is not confirmed. Preserve the owner's wording; do not treat the earlier citations as current proof.");
     }
   }
   lines.push("");

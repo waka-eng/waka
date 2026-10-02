@@ -10226,7 +10226,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       const known = inspirationsRef.current?.some((item) => item.id === made.id) || bornIdsRef.current.has(made.id);
       const revision = ++sourceListMutationRef.current;
       detailsRef.current.set(made.id, detail);
-      if (!known && !result.recovered) birthInspiration(`kept-${intent.requestId}`, made.text, Date.parse(made.createdAt), made.id);
+      if (!known && !result.recovered) birthInspiration(made.id, made.text, Date.parse(made.createdAt), made.id);
       setInspirations((previous) => {
         if (previous?.some((item) => item.id === made.id)) return previous.map((item) => item.id === made.id ? detail : item);
         return !result.recovered ? [...(previous ?? []), detail] : previous;
@@ -12433,6 +12433,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                             <span className="jar-poster-away jar-label"> {say("worldWrittenByHand")}</span>
                           ) : null}
                           {pr.unsupported ? <p className="jar-values-sub">{say("worldPrincipleSupportChanged")}</p> : null}
+                          {!pr.unsupported && pr.supportChanged ? <p className="jar-values-sub">{say("worldPrincipleSupportUnconfirmed")}</p> : null}
                           {/* THE VERBS, under the sentence they are about.
                               Order is by consequence: correcting is
                               harmless, moving is reversible, disputing is

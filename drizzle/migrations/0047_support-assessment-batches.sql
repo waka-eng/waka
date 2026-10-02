@@ -1,0 +1,1 @@
+ALTER TYPE "public"."background_job_type" ADD VALUE 'assess_signal_support' BEFORE 'refresh_top_of_mind';

@@ -30,6 +30,8 @@
 import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { readGenerationRevision, assertGenerationRevision } from "./generation-revision.js";
 import { personalSignalReadable, projectPersonalEntries } from "./personal-output.js";
+import { assertSignalSupportSettled, loadSignalStatementRevisions } from './signal-support-state.js';
+import { BackgroundJobHeldError } from './background-job-hold.js';
 
 import {
   signalEmbeddings,
@@ -161,13 +163,10 @@ export function assessShiftFloor(
  * the job back to sleep (pending, run_after = heldUntil, attempts untouched)
  * — a hold, not a failure, exactly as the model budget defers.
  */
-export class ShiftFloorHeldError extends Error {
-  readonly heldUntil: Date;
-
+export class ShiftFloorHeldError extends BackgroundJobHeldError {
   constructor(heldUntil: Date) {
-    super(`top-of-mind shift floor holds until ${heldUntil.toISOString()}`);
+    super(heldUntil, `top-of-mind shift floor holds until ${heldUntil.toISOString()}`, 'cadence');
     this.name = "ShiftFloorHeldError";
-    this.heldUntil = heldUntil;
   }
 }
 
@@ -946,16 +945,19 @@ async function writeVersion(
         dismissedAt: entry.dismissedAt,
         sortOrder: index,
       })
-      .returning({ id: topOfMindEntries.id });
+      .returning({ id: topOfMindEntries.id, bodyRevision: topOfMindEntries.bodyRevision });
     if (!insertedEntry) throw new Error("Failed to insert top of mind entry");
 
     if (entry.citedSignalIds.length > 0) {
+      const revisions = await loadSignalStatementRevisions(tx, entry.citedSignalIds);
       await tx
         .insert(topOfMindEntrySignals)
         .values(
           entry.citedSignalIds.map((signalId) => ({
             entryId: insertedEntry.id,
             signalId,
+            statementRevision: revisions.get(signalId),
+            entryBodyRevision: insertedEntry.bodyRevision,
           })),
         )
         .onConflictDoNothing();
@@ -1047,6 +1049,7 @@ export async function refreshTopOfMindForProfile(
   const revision = await readGenerationRevision(db, { profileId: input.profileId });
   if (!revision) return { status: "nothing_to_synthesize", topOfMindId: null, version: 0,
     reason: null, entryCount: 0, droppedCitations: 0, lockViolations: 0 };
+  await assertSignalSupportSettled(db, input.profileId, now);
 
   /* THE FLOOR, before any other work. Only the automatic path waits: a
      `manual` refresh is the person (their own "Read it again", a language
@@ -1627,16 +1630,19 @@ async function writeGroupVersion(
         dismissedAt: entry.dismissedAt,
         sortOrder: index,
       })
-      .returning({ id: topOfMindEntries.id });
+      .returning({ id: topOfMindEntries.id, bodyRevision: topOfMindEntries.bodyRevision });
     if (!insertedEntry) throw new Error("Failed to insert group top of mind entry");
 
     if (entry.citedSignalIds.length > 0) {
+      const revisions = await loadSignalStatementRevisions(tx, entry.citedSignalIds);
       await tx
         .insert(topOfMindEntrySignals)
         .values(
           entry.citedSignalIds.map((signalId) => ({
             entryId: insertedEntry.id,
             signalId,
+            statementRevision: revisions.get(signalId),
+            entryBodyRevision: insertedEntry.bodyRevision,
             ownerProfileId: input.ownerBySignalId.get(signalId) ?? null,
           })),
         )
@@ -1767,6 +1773,7 @@ export async function refreshTopOfMindForGroup(
   };
   const revision = await readGenerationRevision(db, { groupId: input.groupId });
   if (!revision) return nothing;
+  await assertSignalSupportSettled(db, revision.profileId, now);
 
   const [groupRows, memberRows] = await Promise.all([
     db

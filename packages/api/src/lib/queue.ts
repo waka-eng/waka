@@ -135,6 +135,8 @@ import {
   backgroundJobTypeValues,
   type BackgroundJobStatus,
   type DeriveSignalsPayload,
+  type ReviewSignalSupportPayload,
+  type AssessSignalSupportPayload,
   type EnrichAttachmentPayload,
   type GenerateReflectionQuestionPayload,
   type ReembedSignalPayload,
@@ -148,6 +150,13 @@ import {
   signalEvidence,
 } from "../db/index.js";
 import { getDb } from "./db.js";
+import { z } from 'zod';
+import { BackgroundJobHeldError } from './background-job-hold.js';
+import { loadPendingSignalSupportSources } from './signal-support-state.js';
+import { reviewSignalSupport, SUPPORT_REVIEW_BATCH_SIZE } from './signal-support-review.js';
+import { applySignalSupportReview } from './signal-support-apply.js';
+import { GroupInputUnavailableError } from './group-inputs.js';
+import { bindInspirationSupportReading } from './inspiration-processing.js';
 import { getDefaultModelProvider } from "./model-provider.js";
 import { InspirationProcessingUnavailableError, recordInspirationProcessingRequest, recordInspirationReadingResult, type InspirationProcessingReceipt } from "./inspiration-processing.js";
 import {
@@ -167,7 +176,6 @@ import { tendSignalGarden } from "./signal-gardener.js";
 import {
   refreshTopOfMindForGroup,
   refreshTopOfMindForProfile,
-  ShiftFloorHeldError,
   type TopOfMindRefreshDependencies,
 } from "./top-of-mind-synthesis.js";
 
@@ -295,7 +303,7 @@ export interface BackgroundJobStore {
   ): Promise<void>;
   /** Put a claimed job back to sleep until `until` — a hold, not a failure:
       the claim's attempt is handed back and no error is recorded. */
-  holdJob(job: BackgroundJob, until: Date): Promise<void>;
+  holdJob(job: BackgroundJob, until: Date, reason?: 'support' | 'cadence'): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -333,6 +341,8 @@ async function enqueueKeyedJob(input: {
   type:
     | "enrich_attachment"
     | "derive_signals"
+    | "review_signal_support"
+    | "assess_signal_support"
     | "refresh_group_top_of_mind"
     | "refresh_principles"
     | "reembed_signal"
@@ -341,6 +351,8 @@ async function enqueueKeyedJob(input: {
   payload:
     | EnrichAttachmentPayload
     | DeriveSignalsPayload
+    | ReviewSignalSupportPayload
+    | AssessSignalSupportPayload
     | RefreshGroupTopOfMindPayload
     | { profileId: string }
     | ReembedSignalPayload
@@ -524,6 +536,44 @@ export async function enqueueDeriveSignals(
   return result;
 }
 
+/** Existing-claim review does not discover candidates or certify a saved
+ * source's full derivation. Its key cannot absorb ordinary capture work. */
+export async function enqueueSignalSupportReview(profileId: string, inspirationId: string,
+  transaction: Pick<ReturnType<typeof getDb>, 'execute'>,
+  deriveIntoProfileId?: string,
+): Promise<EnqueueResult> {
+  return enqueueKeyedJob({ profileId, type: 'review_signal_support',
+    payload: { inspirationId, ...(deriveIntoProfileId ? { deriveIntoProfileId } : {}) },
+    idempotencyKey: `review_signal_support:${inspirationId}${deriveIntoProfileId ? `:${deriveIntoProfileId}` : ''}` }, transaction);
+}
+
+export async function enqueueSignalSupportBatch(profileId: string, payload: AssessSignalSupportPayload,
+  key: string, transaction: Pick<ReturnType<typeof getDb>, 'execute'>) {
+  return enqueueKeyedJob({ profileId, type: 'assess_signal_support', payload, idempotencyKey: key }, transaction);
+}
+
+/** Explicit reads can recover missing/failed checks. Active checks are left
+ * alone; succeeded uncertainty asks for more context, not an automatic loop. */
+export async function recoverPendingSignalSupport(db: Pick<ReturnType<typeof getDb>, 'execute'>, profileId: string) {
+  const sources = await loadPendingSignalSupportSources(db, profileId);
+  for (const source of sources) {
+    const destination = source.ownerProfileId === profileId ? undefined : profileId;
+    const key = `review_signal_support:${source.inspirationId}${destination ? `:${destination}` : ''}`;
+    const [job] = await db.execute<{ status: string }>(sql`SELECT status::text FROM background_jobs
+      WHERE idempotency_key = ${key} AND profile_id = ${source.ownerProfileId}::uuid`);
+    if (!job || job.status === 'failed') await enqueueSignalSupportReview(source.ownerProfileId, source.inspirationId, db, destination);
+    await db.execute(sql`UPDATE background_jobs SET status = 'pending', attempts = 0, locked_at = NULL,
+      request_version = request_version + 1, run_after = now(), last_error = NULL, result = NULL, rerun_requested = false
+      WHERE type::text = 'assess_signal_support' AND status::text = 'failed'
+        AND profile_id = ${source.ownerProfileId}::uuid AND payload->>'inspirationId' = ${source.inspirationId}
+        AND coalesce(payload->>'deriveIntoProfileId', profile_id::text) = ${profileId}
+        AND payload->>'materialRevision' = (SELECT CASE WHEN ${source.ownerProfileId}::uuid = ${profileId}::uuid
+          THEN personal_revision ELSE public_revision END::text FROM inspiration_revisions
+          WHERE inspiration_id = ${source.inspirationId}::uuid AND profile_id = ${source.ownerProfileId}::uuid)`);
+  }
+  return sources;
+}
+
 /**
  * Re-synthesize a profile's top of mind.
  *
@@ -537,6 +587,11 @@ export async function enqueueTopOfMindRefresh(
   reason: RefreshTopOfMindPayload["reason"],
   transaction?: Pick<ReturnType<typeof getDb>, "execute">,
 ): Promise<EnqueueResult> {
+  if (reason === 'manual' && !transaction) {
+    const result = await getDb().transaction((tx) => enqueueTopOfMindRefresh(profileId, reason, tx));
+    await wakeCommittedBackgroundJobs(); return result;
+  }
+  if (reason === 'manual' && transaction) await recoverPendingSignalSupport(transaction, profileId);
   const payload: RefreshTopOfMindPayload = { reason };
   const rows = await (transaction ?? getDb()).execute(sql<{ id: string }>`
     INSERT INTO background_jobs (profile_id, type, payload, max_attempts)
@@ -593,6 +648,15 @@ export async function enqueueGroupTopOfMindRefresh(
   reason: RefreshGroupTopOfMindPayload["reason"],
   transaction?: Pick<ReturnType<typeof getDb>, "execute">,
 ): Promise<EnqueueResult> {
+  if (reason === 'manual' && !transaction) {
+    const result = await getDb().transaction((tx) => enqueueGroupTopOfMindRefresh(profileId, groupId, reason, tx));
+    await wakeCommittedBackgroundJobs(); return result;
+  }
+  if (reason === 'manual' && transaction) {
+    const [mind] = await transaction.execute<{ id: string }>(sql`SELECT id FROM profiles
+      WHERE group_id = ${groupId}::uuid AND type::text = 'group'`);
+    if (mind) await recoverPendingSignalSupport(transaction, mind.id);
+  }
   return enqueueKeyedJob({
     profileId,
     type: "refresh_group_top_of_mind",
@@ -637,13 +701,14 @@ export async function enqueueReflectionQuestion(
 export async function enqueueSignalReembed(
   profileId: string,
   signalId: string,
+  transaction?: Pick<ReturnType<typeof getDb>, "select" | "execute">,
 ): Promise<EnqueueResult> {
   return enqueueKeyedJob({
     profileId,
     type: "reembed_signal",
     payload: { signalId },
     idempotencyKey: `reembed_signal:${signalId}`,
-  });
+  }, transaction);
 }
 
 // ---------------------------------------------------------------------------
@@ -845,10 +910,11 @@ export async function drainBackgroundJobs(
       const completion = await (options.processor ?? processBackgroundJob)(job);
       if (await store.markSucceeded(job, completion ?? null)) result.succeeded += 1;
     } catch (err) {
-      if (err instanceof ShiftFloorHeldError) {
-        await store.holdJob(job, err.heldUntil);
+      if (err instanceof BackgroundJobHeldError) {
+        if (err.reason === 'support') await store.holdJob(job, err.heldUntil, 'support');
+        else await store.holdJob(job, err.heldUntil);
         result.held += 1;
-        console.log("[background-jobs] shift floor holds; refresh sleeps", {
+        console.log("[background-jobs] refresh waits", {
           jobId: job.id,
           profileId: job.profileId,
           heldUntil: err.heldUntil.toISOString(),
@@ -891,7 +957,7 @@ async function assertBackgroundJobOwnership(tx: Pick<ReturnType<typeof getDb>, "
     // that order. Lock every revision this stage may write before its claim;
     // a busy human transaction wins instead of becoming a deadlock victim.
     const owners = new Set([job.profileId]);
-    if (job.type === "derive_signals") {
+    if (job.type === "derive_signals" || job.type === 'review_signal_support' || job.type === 'assess_signal_support') {
       const destination = readString(job.payload, "deriveIntoProfileId");
       if (destination) owners.add(destination);
     }
@@ -941,6 +1007,33 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
     await (await import('./principle-status.js')).enqueuePrinciplesAfterReading(tx, publication.profileId);
   };
   switch (job.type) {
+    case 'assess_signal_support': {
+      const payload = parseAssessSignalSupportPayload(job.payload);
+      if (!payload) return dropPoisonPayload(job);
+      const db = getDb();
+      const [source] = await db.select({ id: inspirations.id }).from(inspirations)
+        .where(and(eq(inspirations.id, payload.inspirationId), eq(inspirations.profileId, job.profileId))).limit(1);
+      if (!source) return dropPoisonPayload(job);
+      try {
+        if (!await (await import('./signal-support-batches.js')).supportBatchInputsCurrent(db, job.profileId, payload)) return dropPoisonPayload(job);
+      } catch (error) {
+        if (error instanceof GroupInputUnavailableError) return dropPoisonPayload(job);
+        throw error;
+      }
+      const report = await reviewSignalSupport(db, { ownerProfileId: job.profileId, inspirationId: payload.inspirationId,
+        deriveIntoProfileId: payload.deriveIntoProfileId, signalIds: payload.signalIds,
+        expectedInputs: payload,
+        maxCalls: 1, reuseCurrentAssessments: true, provider: await getDefaultModelProvider() });
+      if (report.status !== 'current') throw new Error('Support batch inputs changed');
+      await applySignalSupportReview(db, report, { beforeCommit: (tx) => assertBackgroundJobOwnership(tx, job, true),
+        onReadingRequested: (tx, reading) => bindInspirationSupportReading(tx, {
+          ownerProfileId: job.profileId, profileId: payload.deriveIntoProfileId ?? job.profileId,
+          inspirationId: payload.inspirationId, materialRevision: report.material.revision!,
+        }, reading),
+      });
+      if (report.items.some((item) => item.issue !== undefined)) throw new Error('Support batch could not be fully assessed');
+      return;
+    }
     case "generate_reflection_question": {
       const payload = parseGenerateReflectionQuestionPayload(job.payload);
       if (!payload) return dropPoisonPayload(job);
@@ -1008,16 +1101,20 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
       return;
     }
 
+    case "review_signal_support":
     case "derive_signals": {
-      const payload = parseDeriveSignalsPayload(job.payload);
+      const payload = job.type === 'review_signal_support'
+        ? parseDeriveSignalsPayload({ ...(typeof job.payload === 'object' && job.payload ? job.payload : {}), reason: 'edited' })
+        : parseDeriveSignalsPayload(job.payload);
       if (!payload) return dropPoisonPayload(job);
 
       const [source] = await getDb().select({ id: inspirations.id }).from(inspirations)
         .where(and(eq(inspirations.id, payload.inspirationId), eq(inspirations.profileId, job.profileId))).limit(1);
       if (!source) return dropPoisonPayload(job);
-      const result = await deriveSignalsForInspiration(payload, {
+      const supportOnly = job.type === 'review_signal_support';
+      const result = await deriveSignalsForInspiration({ ...payload, supportOnly }, {
         beforeCommit: (tx) => assertBackgroundJobOwnership(tx, job, true),
-        processingRequest: { jobId: job.id, requestVersion: job.requestVersion.toString() },
+        ...(supportOnly ? {} : { processingRequest: { jobId: job.id, requestVersion: job.requestVersion.toString() } }),
       });
       if (result.supportReview?.retryable) {
         throw new Error("Existing support could not be fully assessed; retry current material");
@@ -1171,6 +1268,19 @@ function parseDeriveSignalsPayload(payload: unknown): DeriveSignalsPayload | nul
   return deriveIntoProfileId
     ? { inspirationId, reason, deriveIntoProfileId }
     : { inspirationId, reason };
+}
+
+function parseAssessSignalSupportPayload(payload: unknown): AssessSignalSupportPayload | null {
+  const revision = z.string().regex(/^[1-9]\d*$/), hash = z.string().regex(/^[a-f0-9]{64}$/), uuid = z.string().uuid();
+  const parsed = z.object({ inspirationId: uuid, deriveIntoProfileId: uuid.optional(),
+    signalIds: z.array(uuid).min(1).max(SUPPORT_REVIEW_BATCH_SIZE), materialRevision: revision,
+    materialHash: hash, membershipId: uuid.nullable(),
+    statements: z.array(z.object({ id: uuid, revision, hash }).strict()).min(1).max(SUPPORT_REVIEW_BATCH_SIZE),
+  }).strict().safeParse(payload);
+  if (!parsed.success || new Set(parsed.data.signalIds).size !== parsed.data.signalIds.length ||
+    new Set(parsed.data.statements.map((item) => item.id)).size !== parsed.data.signalIds.length ||
+    parsed.data.statements.some((item) => !parsed.data.signalIds.includes(item.id))) return null;
+  return parsed.data;
 }
 
 function parseRefreshTopOfMindPayload(payload: unknown): RefreshTopOfMindPayload | null {
@@ -1473,14 +1583,16 @@ async function markJobSucceeded(job: BackgroundJob, completion: BackgroundJobRes
  * for days must not exhaust itself into `failed` without ever failing), and
  * `last_error` stays clean — there is no error to record.
  */
-async function holdBackgroundJob(job: BackgroundJob, until: Date): Promise<void> {
+async function holdBackgroundJob(job: BackgroundJob, until: Date, reason: 'support' | 'cadence' = 'cadence'): Promise<void> {
   await getDb().execute(sql`
     UPDATE background_jobs
     SET status = 'pending'::background_job_status,
         locked_at = NULL,
         started_at = NULL,
         attempts = GREATEST(attempts - 1, 0),
-        run_after = CASE WHEN payload->>'reason' = 'manual' THEN now() ELSE ${until.toISOString()}::timestamptz END,
+        run_after = CASE WHEN ${reason} = 'cadence' AND payload->>'reason' = 'manual' THEN now()
+          WHEN ${reason} = 'support' AND rerun_requested THEN LEAST(${until.toISOString()}::timestamptz, now() + interval '5 seconds')
+          ELSE ${until.toISOString()}::timestamptz END,
         result = NULL,
         rerun_requested = false,
         updated_at = now()

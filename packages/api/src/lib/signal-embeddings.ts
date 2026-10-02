@@ -92,7 +92,7 @@ export async function writeSignalEmbedding(
  * silent and wrong.
  */
 export async function dropSignalEmbedding(
-  db: WakaDb,
+  db: Pick<WakaDb, 'delete'>,
   input: { profileId: string; signalId: string },
 ): Promise<void> {
   await db

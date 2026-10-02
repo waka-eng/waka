@@ -53,8 +53,9 @@ async function groupFixture() {
     const [signal] = await t.sql`INSERT INTO signals(profile_id, statement, input_policy) VALUES (${mind.id}, ${`Shared pattern ${i}`}, 'group-public-v1') RETURNING id`;
     ids.push(signal.id as string);
     for (const [owner, inspirationId] of [[f.profileId, f.sourceIds[0]!], [other.id, source.id], [f.profileId, f.sourceIds[1]!]]) {
-      await t.sql`INSERT INTO signal_evidence(profile_id, owner_profile_id, signal_id, inspiration_id)
-        VALUES (${mind.id}, ${owner}, ${signal.id}, ${inspirationId})`;
+      await t.sql`INSERT INTO signal_evidence(profile_id, owner_profile_id, signal_id, inspiration_id, material_revision)
+        VALUES (${mind.id}, ${owner}, ${signal.id}, ${inspirationId},
+          (SELECT public_revision FROM inspiration_revisions WHERE inspiration_id = ${inspirationId}))`;
     }
     await t.sql`UPDATE signals SET status = 'active' WHERE id = ${signal.id}`;
   }

@@ -19,8 +19,9 @@
  * of support separately from a contested stance.
  */
 
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
+  bigint,
   foreignKey,
   index,
   integer,
@@ -59,6 +60,7 @@ export const principles = pgTable(
 
     /** The directive, in the owner's language. Phrased as a constraint. */
     statement: text("statement").notNull(),
+    statementRevision: bigint('statement_revision', { mode: 'bigint' }).notNull().default(sql`1`),
     /** Room derivation policy; never inferred from today's citations. */
     inputPolicy: text("input_policy"),
 
@@ -116,6 +118,8 @@ export const principleSignals = pgTable(
   "principle_signals",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    statementRevision: bigint('statement_revision', { mode: 'bigint' }),
+    principleStatementRevision: bigint('principle_statement_revision', { mode: 'bigint' }),
 
     profileId: uuid("profile_id")
       .notNull()

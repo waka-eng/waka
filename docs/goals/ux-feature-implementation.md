@@ -1100,3 +1100,197 @@ reassessment. Close that source/statement handoff and its pending-support
 serving gap before claiming the personal loop complete. Historical context,
 older-job/account races, real-stack/deployed walks and all later slices remain
 open; these two UI fixes do not complete the goal.
+
+## D3e1 — durable human statement work — 2026-10-01
+
+The previous goal turn made progress (two browser-reproduced recovery fixes,
+regressions and dev push). Its `3c79dbe` CI (`36947028521`) and dev deployment
+(`36947028650`) both succeeded. Current work remains the complete experience
+plan, with D's statement/pending-support gate as the next prerequisite.
+
+Declared atomicity gate: an edited/reverted signal cannot commit wording,
+history or vector removal while losing any required job. Old witnesses must
+be rechecked, including withdrawn links whose sources still exist; a support
+check must not rediscover candidates or certify a capture's full derivation.
+Executed the original routes before the change: 6/6 cases failed (three queue
+failure cases still answered 200, missing witness rechecks, repeated locked
+wording adding history, and revert missing witness rechecks). Fixture setup
+was first corrected to the actual JSONB/dimensions/input-hash embedding schema;
+those setup errors were not counted as product reproductions.
+
+Signal edit/revert now lock their owned source parents before the statement,
+serialize against derivation and commit history, stale-vector removal,
+re-embedding, witness reviews and reading request together. A busy source
+writer wins promptly (409, no partial edit). An identical already-locked edit
+adds no chain/job receipt; it can still settle a newly recorded dispute.
+Wake-up follows commit. Source deletion also cancels the new review jobs.
+
+Canon-first addition and migration 0043 introduce `review_signal_support`, a
+separate keyed, metered worker operation. It runs the existing bounded support
+assessment and its current-material/worker fences without extraction or vector
+discovery. It creates no `inspiration_processing` receipt and cannot claim one
+complete. This avoids duplicate discovery while the edited signal is waiting
+for its new vector, and keeps ordinary capture jobs separate. The generator
+rejects attempts to combine support-only work with source-completion authority.
+Machine restatement propagation and pending-support serving remain next.
+
+Verification: 11/11 new real-route/SQL cases pass, including all failed job
+insertions, identical replay, revert rollback, previously withdrawn support
+restoration, current negative assessment preserving locked words, second-client
+source locking and a reclaimed review worker. Full API: 1,117 passed, 3
+paid-live benches skipped, 101 passing suites. API typecheck and 435/435 web
+tests pass. Fresh migration 2/2, generated 0043 snapshot/journal, migration,
+vocabulary and diff checks pass. Two older lock fixtures now explicitly run
+deterministic re-embedding after an edit before testing later matching; their
+original word-preservation/promotion/release assertions are retained.
+
+This passes the scoped durable-human-edit checkpoint. It does not prove current
+support while assessment is pending, propagate machine restatements across all
+witnesses, repair history or complete D/release 1. Migration 0043 was exercised
+only in disposable loopback schemas/databases. No live provider or hosted DB
+mutation occurred. Keep this batch on the implementation branch until the
+pending-support reader/worker handling is ready; old worker builds do not know
+the new job type, so the deployment step must coordinate their transition.
+No production deployment or historical repair is authorized by this checkpoint.
+
+## D3e2 — pending support and word-bound citations — 2026-10-01
+
+Previous turn: progress (atomic statement work, 11 SQL regressions, pushed
+draft PR [#331](https://github.com/waka-eng/waka/pull/331)). Its CI run
+`36948345809` succeeded. The complete A–J/L1–L3 objective remains active.
+
+Declared gate: changing a source or statement must stop presenting old support
+as current before a worker finishes. Protected words survive; copied generated
+explanations do not. Positive assessment can renew an unchanged claim without
+duplicating its witness, but cannot certify an artifact built from different
+wording. Failed checks keep relationships and give an explicit recovery path.
+
+Baseline: 6/6 serving/review cases failed (source edits served old conclusions,
+protected entries retained old explanations, positive checks did not renew
+source lineage, rewritten signals recertified old artifacts, provider failure
+still served unchecked proof, and a change-and-return accepted an old review).
+Two additional cached-verdict cases failed after source/statement change-and-
+return. Two owner-word cases failed: editing an entry or principle kept its
+previous wording's citations as current. These 10 reproductions now pass.
+
+Canon-first migrations 0044–0046 add monotonic wording/body counters and bind
+evidence, review-cache records and artifact/principle citations to their consumed
+revisions. Counters advance on actual changes, including change-and-return;
+clients cannot reset them by supplying a counter. Nullable old bindings refer
+only to the migration baseline, and exact existing material identities retain
+their recorded source revision. No legacy value is replaced with the newest
+counter or described as independently reviewed. This does not repair history.
+
+Personal/public/room serving and generation share the revision predicates.
+Unsupported generated conclusions are withheld; edited/pinned words remain
+with changed-support metadata and cleared old explanation/citations. Private
+answer changes still leave public room proof current. Machine restatements
+stamp their immediate grounded sources after the wording change and durably
+request checks for their other currently allowed witnesses. Fresh generation
+binds its own citations; copied old bindings do not acquire new authority.
+Private signal evidence queries now keep foreign-profile sources out, and
+pending quotes/reasons are not presented as current support. Exports serialize
+new bigint counters as decimal strings.
+
+Read workers hold for actual queued/running support work without consuming a
+retry or publishing an empty success; future input eligibility controls the
+hold time. Manual reads bypass cadence, not input checks. Explicit reading/
+principle retries recover missing/failed reviews; active checks are left alone,
+and finished genuine uncertainty does not start a retry loop. The principle UI
+distinguishes queued checks from active checks, preserves protected wording
+with one short notice, and permits failed-support retry below the generation
+bar. Opening a queued support view does not buy another read.
+
+Verification: full API 1,131 passed / 3 paid-live benches skipped across 102
+passing suites; full web 438/438 across 64 suites. The 14 new real-SQL cases
+cover the original failures, cache revisions, long input holds, failed-check
+recovery, owner body edits, machine restatement → review → fresh reading, and
+private-answer/public-source room isolation. Three new component cases verify
+queued copy/no mount POST, explicit failed-check retry and protected wording.
+API/web typechecks, web build, migration/diff checks and both fresh-migration
+cases pass. Older fixtures now declare current proof before testing commit
+races, keep identical-word locking separate from rewording, construct a
+verified no-change reading directly, and actually recheck a restored public
+voice. Their original privacy/fence/standing assertions remain.
+
+Production-build manual browser checks pass at 1280×900 and 390×844 for both
+reading support and capture/reflection recovery. The support fixture now waits
+for camera motion to settle before screenshot inspection. The new notice uses
+14px text at 5.45:1 contrast; existing recovery controls remain 44px high,
+14px, 17.03:1. APIs are synthetic and non-local assets blocked, so this is
+rendered UI evidence rather than a connected real-stack or deployed result.
+
+All SQL used disposable loopback schemas/databases; no live model or hosted
+DB mutation occurred. PR #331 stays draft pending broader release checks and
+worker cutover. Next: finish bounded support-review coverage/recovery for large
+claim sets, audit remaining legacy personal context, and connect the complete
+browser/worker release journey. Historical repair, deployment verification,
+semantic quality/cost, later F–J/L1–L3 work and the full goal remain open.
+
+## D3e3 — bounded support coverage — 2026-10-01
+
+Baseline: a changed source with forty existing claims exhausted its ordinary
+three retries before checking all claims. Partial coverage also repeated
+discovery. This is unfinished work, not a provider failure.
+
+Canon-first migration 0047 adds separately metered `assess_signal_support`
+jobs. Each immutable batch names at most twelve claims and binds material,
+membership and statement revisions. The coordinator waits without consuming a
+retry, then discovers once after all current coverage exists. Actual faults
+retain bounded retries; explicit source/reading recovery resumes failed
+batches. Stale batches make no provider call, reclaimed workers cannot commit,
+and partial reports cannot apply verdicts outside their named scope. Batch
+reading work binds matching unfinished source receipts without certifying full
+derivation or completion.
+
+Verification: six new real-SQL cases pass, including forty claims covered in
+four assessment calls, separately metered starts, one discovery pass and no
+failed jobs. Full API: 1,137 passed, three paid-live benches skipped, 103
+passing suites. API typecheck, migration check and diff check pass. All SQL
+used explicit disposable loopback databases; providers/vectors were synthetic.
+No hosted database, actual account or live provider was changed.
+
+The owner requested delivery of the current work to dev and continuation of
+the full goal. Before that delivery, deploy a worker compatibility guard so
+an older worker leaves newer job types pending rather than exhausting their
+attempts. Connected release-journey verification, legacy context, deployed
+checks, historical repair and the remaining A–J/L1–L3 gates stay open.
+
+## E2h — connected browser/worker loop and saved identity — 2026-10-01
+
+The owner's dev request is being delivered through PRs #332 (worker
+compatibility) and #331 (revision-bound support and bounded reviews). #332
+CI passed and its development deployment succeeded at 03:12:46 UTC on
+2026-10-02. Allow at least fourteen minutes for pre-compatibility worker
+invocations to expire before #331's deployment. #331 CI also passed; the full
+local API suite now passes 1,139 tests with three paid-live benches skipped.
+
+The new manual `e2e:connected-learning` gate bridges a production-build
+browser into the real authenticated Hono routes, queue workers and isolated
+local SQL. No processing statuses or reading responses are invented by the
+browser fixture. Providers and embeddings are deterministic; network model
+calls are refused.
+
+Baseline found a real saved-identity defect: the scene birthed a confirmed
+capture as `kept-<requestId>`, while the archive keyboard used its persisted
+inspiration ID. Its card could not reopen without reload. Reloading proved
+the saved reflection data was intact. Confirmed captures now use the saved
+ID in both places; the unsaved offline preview keeps its temporary identity.
+
+After fix, the connected gate passes at 1280×900 and 390×844: one capture,
+three exact saved answers, generated follow-ups, real derivation and support
+checks, truthful daily hold/manual override, owned artifact completion,
+explicit reading adoption, keyboard reopening without reload, and retraction
+of the exact cited answer. The remaining two answers persist and the old
+generated conclusion is withheld by the real read projection. Eight extraction,
+four assessment and four synthesis fixture calls across both sizes; zero
+provider network calls. Screenshots inspected. Full web 438/438,
+web typecheck/build, strict manual-script typecheck and diff checks pass.
+
+This closes the connected local happy-path gap, not all of E2 or release 1.
+The manual cadence override uses the real API directly, so its UI path is not
+claimed here. Connected failure/account-switch/cross-device paths and deployed
+walks remain open. Audit also found personal synthesis feedback context checks
+target ownership but not current support or consumed wording; reproduce and
+fix that next without discarding the person's feedback history. Later F–J,
+L1–L3, semantic evaluation and reviewed historical repair remain open.

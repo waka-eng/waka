@@ -323,7 +323,7 @@ export function registerEditingRoutes(
       if (removed.length === 0) return removed;
 
       await tx.delete(backgroundJobs).where(and(eq(backgroundJobs.profileId, target.profileId),
-        inArray(backgroundJobs.type, ["derive_signals", "enrich_attachment", "generate_reflection_question"]),
+        inArray(backgroundJobs.type, ["derive_signals", "review_signal_support", "assess_signal_support", "enrich_attachment", "generate_reflection_question"]),
         sql`${backgroundJobs.payload}->>'inspirationId' = ${idCheck.data}`));
       for (const profileId of [...new Set([target.profileId, ...citingRows.map((row) => row.profileId)])].sort()) {
         const signalIds = citingRows.filter((row) => row.profileId === profileId).map((row) => row.signalId);

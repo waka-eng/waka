@@ -64,6 +64,23 @@ export async function bindInspirationReading(tx: Transaction, input: DerivationP
       AND ${derivationScope(input)} AND p.completed_at IS NULL AND ${currentMaterial} AND ${authorizedDestination} AND ${allowedSource}`);
 }
 
+/** A batch changes current standing for the source, including requests that
+ * arrived while coverage was in flight. Bind only current incomplete receipts;
+ * the later full derivation is still required before any completion. */
+export async function bindInspirationSupportReading(tx: Transaction, input: {
+  profileId: string; ownerProfileId: string; inspirationId: string; materialRevision: string;
+}, reading: EnqueueResult): Promise<void> {
+  await tx.execute(sql`UPDATE inspiration_processing p SET
+    reading_job_id = ${reading.jobId}::uuid, reading_request_version = ${reading.requestVersion}::bigint,
+    result = CASE WHEN p.reading_job_id = ${reading.jobId}::uuid AND p.reading_request_version = ${reading.requestVersion}::bigint
+      THEN p.result ELSE NULL END
+    FROM inspirations i, inspiration_revisions r
+    WHERE i.id = p.inspiration_id AND i.profile_id = p.owner_profile_id AND r.inspiration_id = i.id AND r.profile_id = i.profile_id
+      AND p.profile_id = ${input.profileId}::uuid AND p.owner_profile_id = ${input.ownerProfileId}::uuid
+      AND p.inspiration_id = ${input.inspirationId}::uuid AND p.material_revision = ${input.materialRevision}::bigint
+      AND p.completed_at IS NULL AND ${currentMaterial} AND ${authorizedDestination} AND ${allowedSource}`);
+}
+
 async function currentArtifactResult(tx: Transaction, profileId: string): Promise<BackgroundJobResult> {
   const [row] = await tx.execute(sql`SELECT m.id, m.version,
     EXISTS(SELECT 1 FROM top_of_mind_entries e WHERE e.top_of_mind_id = m.id AND e.dismissed_at IS NULL) AS has_entries

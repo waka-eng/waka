@@ -9,6 +9,8 @@ import { createFeedbackForProfile } from "../routes/feedback.js";
 import { loadPrincipleMaterial, promoteIfDemonstrated, refreshPrinciplesForProfile, reconcilePrinciplesAfterSignalLoss } from "./principle-generation.js";
 import { requestPrincipleRefresh, loadPrincipleStatus } from "./principle-status.js";
 import type { ModelProvider } from "./model-provider.js";
+import { reviewSignalSupport } from './signal-support-review.js';
+import { applySignalSupportReview } from './signal-support-apply.js';
 
 let t: TestDatabase;
 let owner: string;
@@ -139,6 +141,16 @@ describe("principles across personal and room profiles", () => {
     expect((await loadPrincipleMaterial(t.db as never, mindId)).eligibility.eligible).toBe(false);
     expect(await (await app.request(`/groups/${groupId}/principles`)).json()).toEqual({ principles: [] });
     await t.sql`UPDATE inspirations SET visibility='public' WHERE profile_id=${other}`;
+    // Returning to public advances the source revision. Renew its proof through
+    // the real review writer before later cases expect eligible room material.
+    const sources = await t.sql`SELECT id FROM inspirations WHERE profile_id = ${other}`;
+    for (const source of sources) {
+      const report = await reviewSignalSupport(t.db as never, { ownerProfileId: other, inspirationId: source.id as string,
+        deriveIntoProfileId: mindId, maxCalls: 1, provider: { assessSignalSupport: async (input) => ({
+          assessments: input.claims.map((claim) => ({ signalId: claim.signalId, verdict: 'supported', sourceIds: [input.sources[0]!.id] })),
+        }) } });
+      await applySignalSupportReview(t.db as never, report);
+    }
   });
 
   it("undoes only the owner's selected dispute, without changing locked words or model conflicts", async () => {

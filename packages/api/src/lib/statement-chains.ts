@@ -35,6 +35,7 @@ import {
   type StatementReason,
 } from "../db/index.js";
 import type { getDb } from "./db.js";
+import { lockSignalStatementSources, requestSignalStatementWork } from './signal-statement-work.js';
 
 type WakaDb = ReturnType<typeof getDb>;
 type WakaTx = Parameters<Parameters<WakaDb["transaction"]>[0]>[0];
@@ -187,19 +188,19 @@ export type RevertOutcome =
  * Restore the machine's newest statement byte-for-byte and clear the lock.
  * The restoration is itself a chain row (`reverted`, machine-side — a
  * second revert after a later edit returns to the same sentence).
- * Embedding maintenance is the caller's: the route drops the stale vector
- * and enqueues the re-embed, exactly as the edit path does.
+ * Vector maintenance, source rechecks and reading work commit with the revert.
  */
 export async function revertSignalStatement(
   db: WakaDb,
   input: { profileId: string; signalId: string },
 ): Promise<RevertOutcome> {
   return db.transaction(async (tx) => {
+    const inspirationIds = await lockSignalStatementSources(tx, input.profileId, input.signalId);
     const [row] = await tx
       .select({ id: signals.id, statement: signals.statement })
       .from(signals)
       .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
-      .limit(1);
+      .limit(1).for('no key update', { noWait: true });
     if (!row) return { outcome: "not_found" };
 
     const [machine] = await tx
@@ -227,6 +228,7 @@ export async function revertSignalStatement(
       .update(signals)
       .set({ statement: machine.statement, lockedAt: null, updatedAt: now })
       .where(eq(signals.id, input.signalId));
+    await requestSignalStatementWork(tx, { ...input, inspirationIds });
 
     return { outcome: "reverted", statement: machine.statement };
   });

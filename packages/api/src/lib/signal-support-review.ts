@@ -10,6 +10,7 @@ import { hashEmbeddingInput } from "./inspiration-embeddings.js";
 import { loadInspirationMaterial, type InspirationMaterial } from "./inspiration-material.js";
 import { GROUP_INPUT_POLICY, GroupInputUnavailableError, loadGroupInputMembership } from "./group-inputs.js";
 import type { ModelProvider, SignalSupportAssessmentInput } from "./model-provider.js";
+import { evidenceSupportCurrent } from './signal-support-state.js';
 
 export const SIGNAL_SUPPORT_REVIEW_POLICY = "signal-support-review-v1";
 export const SUPPORT_REVIEW_BATCH_SIZE = 12;
@@ -29,6 +30,8 @@ export interface SignalSupportReviewItem {
 export async function loadSupportClaims(db: Pick<ReturnType<typeof getDb>, "select">,
   profileId: string, ownerProfileId: string, inspirationId: string) {
   return db.select({ signalId: signals.id, statement: signals.statement,
+    statementRevision: sql<string>`${signals.statementRevision}::text`,
+    evidenceCurrent: evidenceSupportCurrent(),
     lockedAt: signals.lockedAt, dismissedAt: signals.dismissedAt, status: signals.status,
     supportRetiredAt: signals.supportRetiredAt, inputPolicy: signals.inputPolicy, evidenceId: signalEvidence.id,
     lastReviewId: sql<string | null>`(SELECT r.review_id FROM signal_support_reviews r
@@ -121,6 +124,11 @@ export async function reviewSignalSupport(db: ReturnType<typeof getDb>, input: {
   /** Worker retries reuse checks only for identical material and words.
    * Explicit/operator reviews default to a fresh independent check. */
   reuseCurrentAssessments?: boolean;
+  /** Explicit batch scope; absence means exhaustive source coverage. */
+  signalIds?: string[];
+  /** Queue batches must assess the version they were scheduled for. */
+  expectedInputs?: { materialRevision: string; materialHash: string; membershipId: string | null;
+    statements: Array<{ id: string; revision: string; hash: string }> };
 }) {
   const destination = input.deriveIntoProfileId ?? input.ownerProfileId;
   const isGroup = input.deriveIntoProfileId !== undefined;
@@ -131,12 +139,26 @@ export async function reviewSignalSupport(db: ReturnType<typeof getDb>, input: {
   if (!material) throw new GroupInputUnavailableError("missing_inspiration");
   if (isGroup && material.inspiration.visibility !== "public") throw new GroupInputUnavailableError("not_public");
   const loadClaims = () => loadSupportClaims(db, destination, input.ownerProfileId, input.inspirationId);
-  const allClaims = await loadClaims();
+  const loadedClaims = await loadClaims();
+  const selected = input.signalIds ? new Set(input.signalIds) : null;
+  if (selected && (selected.size !== input.signalIds!.length || selected.size === 0 || selected.size > SUPPORT_REVIEW_BATCH_SIZE ||
+    input.signalIds!.some((id) => !loadedClaims.some((claim) => claim.signalId === id)))) throw new Error('Invalid support batch scope');
+  const allClaims = selected ? loadedClaims.filter((claim) => selected.has(claim.signalId)) : loadedClaims;
   // Old room text itself can contain private material. Never feed it to a
   // new public assessment merely because its remaining inspirations are public.
   const claims = allClaims.filter((row) => !isGroup || row.inputPolicy === GROUP_INPUT_POLICY);
+  if (input.expectedInputs) {
+    const expected = input.expectedInputs;
+    if (expected.materialRevision !== material.identity.revision || expected.materialHash !== material.identity.hash ||
+      expected.membershipId !== (membership?.id ?? null) || expected.statements.length !== claims.length ||
+      expected.statements.some((statement) => !claims.some((claim) => claim.signalId === statement.id &&
+        claim.statementRevision === statement.revision && hashEmbeddingInput(claim.statement) === statement.hash))) {
+      throw new Error('Support batch inputs changed before assessment');
+    }
+  }
   const previous = input.reuseCurrentAssessments ? await db.selectDistinctOn([signalSupportReviews.signalId], {
     signalId: signalSupportReviews.signalId, statementHash: signalSupportReviews.statementHash,
+    statementRevision: sql<string | null>`${signalSupportReviews.statementRevision}::text`,
     material: signalSupportReviews.material, verdict: signalSupportReviews.verdict,
     policy: signalSupportReviews.policy,
     sourceIds: signalSupportReviews.sourceIds, issue: signalSupportReviews.issue,
@@ -147,6 +169,7 @@ export async function reviewSignalSupport(db: ReturnType<typeof getDb>, input: {
   for (const claim of claims) {
     const prior = previous.find((row) => row.signalId === claim.signalId);
     if (prior && prior.policy === SIGNAL_SUPPORT_REVIEW_POLICY && prior.material?.hash === material.identity.hash &&
+      prior.material?.revision === material.identity.revision && prior.statementRevision === claim.statementRevision &&
       prior.statementHash === hashEmbeddingInput(claim.statement) && prior.issue === null) {
       reused.set(claim.signalId, { signalId: claim.signalId, statementHash: prior.statementHash,
         verdict: prior.verdict, sourceIds: prior.sourceIds });
@@ -156,7 +179,7 @@ export async function reviewSignalSupport(db: ReturnType<typeof getDb>, input: {
     claims: claims.filter((row) => !reused.has(row.signalId)).map(({ signalId, statement }) => ({ signalId, statement })),
     provider: input.provider, maxCalls: input.maxCalls });
   const currentMaterial = await loadMaterial();
-  const currentClaims = await loadClaims();
+  const currentClaims = (await loadClaims()).filter((claim) => !selected || selected.has(claim.signalId));
   const currentMembership = isGroup ? await loadGroupInputMembership(db, input.ownerProfileId, destination) : null;
   const current = currentMaterial?.identity.hash === material.identity.hash &&
     currentMaterial?.identity.revision === material.identity.revision &&
@@ -171,6 +194,7 @@ export async function reviewSignalSupport(db: ReturnType<typeof getDb>, input: {
     membershipId: membership?.id ?? null,
     inspirationId: input.inspirationId,
     claimsHash: supportClaimsHash(allClaims),
+    ...(input.signalIds ? { signalIds: input.signalIds } : {}),
     material: material.identity,
     restrictedClaimCount: allClaims.length - claims.length,
     calls: assessed.calls,

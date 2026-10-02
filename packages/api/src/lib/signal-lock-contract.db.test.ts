@@ -18,6 +18,7 @@ import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.
 import { releaseSignalStatement, updateSignalStatement } from "../routes/signals.js";
 import { deriveSignalsForInspiration } from "./signal-derivation.js";
 import { applyCandidates, acquireSignalDerivationLock } from "./signal-match-or-mint.js";
+import { reembedSignalStatement } from './signal-embeddings.js';
 import type { ModelProvider } from "./model-provider.js";
 
 let t: TestDatabase;
@@ -115,6 +116,11 @@ describe("regeneration updates a locked signal's support, never its words", () =
       statement: ownersWords,
     });
     expect(edited?.locked).toBe(true);
+    // The edit invalidates the machine wording's vector. Finish its queued
+    // vector work before probing later matching; no live provider is used.
+    await reembedSignalStatement(t.db as never, { profileId, signalId, statement: ownersWords }, {
+      embeddingClient: { model: EMBEDDING_MODEL, embed: async () => NEAR_EMBEDDING },
+    });
 
     // Three more captures land on the same pattern. The model proposes its
     // own wording every time; the owner's must survive every pass.
@@ -149,6 +155,9 @@ describe("regeneration updates a locked signal's support, never its words", () =
       profileId,
       signalId,
       statement: "내가 고쳐 쓴 문장.",
+    });
+    await reembedSignalStatement(t.db as never, { profileId, signalId, statement: '내가 고쳐 쓴 문장.' }, {
+      embeddingClient: { model: EMBEDDING_MODEL, embed: async () => NEAR_EMBEDDING },
     });
 
     // Locked: the next pass attaches but may not restate.

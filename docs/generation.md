@@ -947,6 +947,33 @@ The authoritative values. Machine-checked against code — see
 
 ### Model calls (`packages/api/src/queue/gemini.ts`, `packages/api/src/lib/openrouter-http.ts`, `packages/api/src/lib/inspiration-embeddings.ts`)
 
+Human signal edits and reverts persist vector replacement, reading work and
+`review_signal_support` jobs with the statement transaction. Each review job
+checks existing and previously withdrawn owned witnesses with the same bounded
+support assessment used by derivation. It does not extract candidates or create
+source-processing completion receipts. Its key is separate from `derive_signals`,
+so an ordinary capture request cannot be replaced by support-only work.
+
+Support decisions and citations bind monotonic statement/material/body
+revisions. A source or wording change makes earlier proof non-current until
+it is checked against the new inputs. Change-and-return cannot reuse a cached
+old verdict. A positive evidence check does not certify an old artifact's
+wording; a new synthesis supplies its own bindings. Human-edited words remain
+with changed support, and their previous generated explanation is withheld.
+Read workers wait for queued/running input checks before synthesis. Manual
+reads can recover failed/missing reviews while active checks continue;
+finished uncertainty preserves the words without an automatic retry loop.
+
+Large sources use `assess_signal_support` jobs, each scoped to at most twelve
+claims and one assessment call per attempt. The coordinator waits without
+spending a retry while coverage is incomplete; actual provider failures retain
+bounded retries and explicit recovery. Each batch binds the source material,
+membership and statement revisions it was scheduled for. A stale batch makes
+no provider call, and a partial report cannot apply verdicts outside its named
+claims or claim full source completion. Discovery runs only after current
+coverage is complete. Reading dependencies created by a batch attach to the
+matching unfinished source receipts, without marking those receipts derived.
+
 One prompt, two roads: every generation task runs through OpenRouter on the
 pinned DeepSeek snapshot when `OPENROUTER_API_KEY` is present, and falls back
 to Gemini without it. Embeddings never switch roads — the stored vectors and

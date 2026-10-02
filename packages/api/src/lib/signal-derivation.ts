@@ -122,6 +122,8 @@ export interface DeriveSignalsInput {
    * spaces — which is the founder's x+y+z, made literal.
    */
   deriveIntoProfileId?: string;
+  /** Internal support job: review existing claims without discovering new ones. */
+  supportOnly?: boolean;
 }
 
 export interface SignalDerivationDependencies {
@@ -160,6 +162,7 @@ export async function deriveSignalsForInspiration(
   deps: SignalDerivationDependencies = {},
 ): Promise<SignalDerivationResult> {
   const db = deps.db ?? getDb();
+  if (input.supportOnly && deps.processingRequest) throw new Error('Support-only work cannot certify source derivation');
   const now = deps.now ?? new Date();
 
   const [inspirationRow] = await db
@@ -254,6 +257,10 @@ export async function deriveSignalsForInspiration(
     }
   }
   const provider = deps.modelProvider ?? (await getDefaultModelProvider());
+  if (deps.beforeCommit) await (await import('./signal-support-batches.js')).ensureSupportBatchCoverage(db, {
+    ownerProfileId: inspirationRow.profileId, inspirationId: inspirationRow.id,
+    deriveIntoProfileId: input.deriveIntoProfileId, provider, beforeCommit: deps.beforeCommit,
+  });
   const embeddingClient = deps.embeddingClient ?? new GeminiEmbeddingHttpClient();
 
   // Existing support is its own question, before bounded discovery. Applying
@@ -269,7 +276,7 @@ export async function deriveSignalsForInspiration(
       onReadingRequested: deps.processingRequest ? (tx, job) => bindInspirationReading(tx, processingInput(review.material.revision), job) : undefined }) : null;
     supportReview = { checked: review.items.length, withdrawn: applied?.withdrawn.length ?? 0,
       restored: applied?.restored.length ?? 0, unresolved: review.items.filter((item) => item.verdict === "unresolved").length,
-      retryable: review.items.some((item) => item.issue && ["provider_unavailable", "missing_verdict", "invalid_verdict", "budget_exhausted"].includes(item.issue)) };
+      retryable: review.items.some((item) => item.issue !== undefined) };
   } catch (error) {
     if (error instanceof GroupInputUnavailableError) return emptyResult(error.status);
     throw error;
@@ -282,6 +289,19 @@ export async function deriveSignalsForInspiration(
   const reflectionRows = material.reflectionRows;
   const attachmentRows = material.attachmentRows.filter((row) => row.status === "ready" && row.text !== null)
     .map(({ id, kind, text, hostname, name }) => ({ id, kind, text, hostname, name }));
+  if (input.supportOnly) {
+    await db.transaction(async (tx) => {
+      await acquireSignalDerivationLock(tx, profileId);
+      if (isGroup && membership) await assertGroupInputCurrent(tx, {
+        mindProfileId: profileId, membershipId: membership.id, inspiration,
+        attachments: attachmentRows, related: [],
+      });
+      await assertMaterialCurrent(tx, material, []);
+      await deps.beforeCommit?.(tx);
+    });
+    await wakeCommittedBackgroundJobs();
+    return emptyResult('no_candidates');
+  }
   const [profileRows, existingStatements] = await Promise.all([
     db
       .select({ preferredLocale: profiles.preferredLocale, groupId: profiles.groupId })
