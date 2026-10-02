@@ -398,12 +398,12 @@ export const attachmentSelection = {
 // ---------------------------------------------------------------------------
 
 /**
- * Only a link or an image carries material a machine can read. A file records
+ * Links, images and audio carry material a machine can read. A file records
  * the honest verdict immediately rather than occupying a queue slot to reach
  * the same conclusion.
  */
 function initialEnrichmentStatus(type: Attachment["type"]): AttachmentEnrichmentStatus {
-  return type === "link" || type === "image" ? "pending" : "unavailable";
+  return type === "link" || type === "image" || type === 'audio' ? "pending" : "unavailable";
 }
 
 // ---------------------------------------------------------------------------

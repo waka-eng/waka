@@ -31,7 +31,7 @@ import type { SupportedLocale } from "./locales.js";
 
 /** Machine-derived context about something the human saved, not typed. */
 export interface AttachmentEnrichmentContext {
-  kind: "page_body" | "image_description";
+  kind: "page_body" | "image_description" | "audio_transcription";
   /** For a link, its hostname; for an image, its file name when known. */
   label: string | null;
   text: string;

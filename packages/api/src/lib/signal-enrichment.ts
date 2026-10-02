@@ -56,6 +56,7 @@ import {
   MAX_IMAGE_BYTES,
 } from "./image-description.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
+import { enrichAudioAttachment } from './audio-enrichment.js';
 import {
   composeEnrichmentText,
   extractLinkMetadata,
@@ -755,6 +756,9 @@ export async function enrichAttachment(
       url: attachments.url,
       s3Key: attachments.s3Key,
       contentType: attachments.contentType,
+      enrichmentStatus: attachments.enrichmentStatus,
+      enrichmentKind: attachments.enrichmentKind,
+      enrichmentText: attachments.enrichmentText,
     })
     .from(attachments)
     .where(eq(attachments.id, attachmentId))
@@ -774,6 +778,12 @@ export async function enrichAttachment(
     link = outcome.link;
   } else if (attachment.type === "image") {
     result = await enrichImageAttachment(attachment);
+  } else if (attachment.type === 'audio') {
+    // Reclaimed/replayed work reuses this owned attachment's committed text.
+    // Human transcript corrections are a separate C06 write contract.
+    result = attachment.enrichmentStatus === 'ready' && attachment.enrichmentKind === 'audio_transcription'
+      ? { status: 'ready', kind: 'audio_transcription', reason: null, text: attachment.enrichmentText ?? '' }
+      : await enrichAudioAttachment(attachment);
   } else {
     result = { status: "unavailable", reason: "unsupported_attachment_type" };
   }

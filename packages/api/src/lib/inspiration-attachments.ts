@@ -44,8 +44,6 @@ export async function prepareInspirationAttachments(inputs: InspirationAttachmen
     }
     return { ...common, type: input.type, s3Key: input.key, contentType: input.contentType, size: input.size,
       url: attachmentObjectUrl(bucket, attachmentsRegion(), input.key),
-      // Audio storage is usable before C06 supplies transcription. Never
-      // promise an analysis job that this version does not implement.
-      enrichmentStatus: input.type === 'image' ? 'pending' as const : 'unavailable' as const };
+      enrichmentStatus: 'pending' as const };
   }));
 }

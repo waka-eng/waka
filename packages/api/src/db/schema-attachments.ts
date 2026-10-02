@@ -51,7 +51,7 @@ export const attachmentEnrichmentStatusEnum = pgEnum(
  * uniformly, but a reader (and a quote's attribution) needs to know whether
  * it is a page's own prose or a description of a picture.
  */
-export const attachmentEnrichmentKindValues = ["page_body", "image_description"] as const;
+export const attachmentEnrichmentKindValues = ["page_body", "image_description", "audio_transcription"] as const;
 export type AttachmentEnrichmentKind = (typeof attachmentEnrichmentKindValues)[number];
 export const attachmentEnrichmentKindEnum = pgEnum(
   "attachment_enrichment_kind",

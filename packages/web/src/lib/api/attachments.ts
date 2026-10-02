@@ -21,7 +21,7 @@ import { ApiError, apiPath, getJson, postJson } from "./http";
 /** Attachment kinds — mirrors the Postgres `attachment_type` enum. */
 export type AttachmentType = "link" | "image" | "file" | "audio";
 export type AttachmentEnrichmentStatus = "pending" | "ready" | "failed" | "unavailable";
-export type AttachmentEnrichmentKind = "page_body" | "image_description";
+export type AttachmentEnrichmentKind = "page_body" | "image_description" | "audio_transcription";
 
 export async function fetchAttachmentUrl(id: string, signal?: AbortSignal): Promise<string> {
   const body = await getJson<{ attachmentId: string; url: string }>(apiPath(`/attachments/${encodeURIComponent(id)}/url`), 'Could not open this attachment', signal);

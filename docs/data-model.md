@@ -147,10 +147,14 @@ human prose. A bundle save identifies one immutable intent and commits its
 inspiration, attachment rows and processing request atomically after uploads.
 Replaying it returns current owned data without creating another attachment.
 
-Audio is an attachment kind. Its original bytes remain separate from the planned
-`audio_transcription` enrichment and a person's `transcript_correction`; machine
-retries never overwrite that correction. Original audio, transcript and answers
-from the same capture do not establish independent repeated experiences.
+Audio is an attachment kind. Its original bytes remain separate from
+`audio_transcription` enrichment, stored as the attachment's machine-derived
+enrichment text. New audio captures request the existing durable enrichment job;
+valid completed transcripts are reused for the same attachment. No intelligible
+speech is unavailable material, not invented words. The planned
+`transcript_correction` remains separately authored content that machine retries
+must never overwrite. Original audio, transcript and answers from the same
+capture do not establish independent repeated experiences.
 
 The approved later review/conversation/export contracts are detailed in
 [the personal capture contract](plans/2026-10-02-capture-foundation-contract.md).

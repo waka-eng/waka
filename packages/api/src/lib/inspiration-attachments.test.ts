@@ -46,6 +46,6 @@ describe('one capture manifest', () => {
   it('binds uploaded bytes to the target profile without claiming a transcription job exists', async () => {
     vi.stubEnv('ATTACHMENTS_BUCKET', 'unit-fixture');
     const rows = await prepareInspirationAttachments([audio], { ...owner, profileId: 'owned-agent' }, async () => ({ ContentLength: 120, ContentType: audio.contentType }));
-    expect(rows[0]).toMatchObject({ profileId: 'owned-agent', inspirationId: owner.inspirationId, type: 'audio', enrichmentStatus: 'unavailable', s3Key: audio.key });
+    expect(rows[0]).toMatchObject({ profileId: 'owned-agent', inspirationId: owner.inspirationId, type: 'audio', enrichmentStatus: 'pending', s3Key: audio.key });
   });
 });

@@ -1,0 +1,1 @@
+ALTER TYPE "public"."attachment_enrichment_kind" ADD VALUE 'audio_transcription';

@@ -49,7 +49,7 @@ These are approved names; rows marked planned do not claim shipped storage or UI
 | Concept | Data or API name | UI | Plain line | Status |
 | --- | --- | --- | --- | --- |
 | Recorded audio attachment | `audio` | Recording | what you recorded | in implementation |
-| Machine transcript of recorded audio | `audio_transcription` | Transcript | what was heard in this recording | planned |
+| Machine transcript of recorded audio | `audio_transcription` | Transcript | what was heard in this recording | in implementation |
 | A person's correction of the transcript | `transcript_correction` | Edit transcript | correct what was heard without replacing the recording | planned |
 | One private review of selected inspirations | `review_session` | Review | revisit a few things you kept | planned |
 | A conversation using the profile's memory | `conversation` | Talk with WAKA | think through a question with your own experiences | planned |
