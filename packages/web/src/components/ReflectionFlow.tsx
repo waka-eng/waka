@@ -48,7 +48,9 @@ export function ReflectionFlow({ inspirationId, scope, processing, initialTurns,
   const [phase, setPhase] = useState<Phase>(restored.current?.answer || initialTurns.length === 0 ? "answering" : "saved");
   const [question, setQuestion] = useState(restored.current?.question || (initialTurns.length > 0 && !restored.current?.answer ? "" : t(locale, "worldFirstReflectionQuestion")));
   const [answer, setAnswer] = useState(restored.current?.answer ?? '');
-  const [draftAfterId, setDraftAfterId] = useState(restored.current?.afterId ?? initialTurns.at(-1)?.id ?? null);
+  // null belongs to the first question. A committed answer can already be in
+  // initialTurns while its lost-response journal still owns that first draft.
+  const [draftAfterId, setDraftAfterId] = useState(restored.current ? restored.current.afterId : initialTurns.at(-1)?.id ?? null);
   const draftRef = useRef<ReflectionDraft>({ afterId: draftAfterId, question, answer });
   draftRef.current = { afterId: draftAfterId, question, answer };
   const [error, setError] = useState("");

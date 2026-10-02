@@ -1,7 +1,8 @@
 /** Manual rendered check of capture → reflection → explicit reading adoption.
  * All API traffic is synthetic and non-local resources are blocked. This is
  * UI evidence, not proof of a deployed worker or a live-model result.
- * Build web, serve on 127.0.0.1:3011, then `pnpm e2e:source-processing`.
+ * Build web, serve its production preview on 127.0.0.1:3012, then run
+ * `pnpm e2e:source-processing`. Vite dev bypasses the production auth guard.
  */
 import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
@@ -9,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { launchChromium } from './browser.js';
 
-const origin = 'http://127.0.0.1:3011';
+const origin = 'http://127.0.0.1:3012';
 const output = mkdtempSync(join(tmpdir(), 'waka-source-processing-'));
 console.log(`Screenshots: ${output}`);
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -17,6 +18,8 @@ const date = '2026-10-01T10:00:00.000Z';
 const profile = { id: id(1), accountId: id(2), type: 'human', name: 'Preview', avatarUrl: null,
   preferredLocale: 'en-US', publicHandle: 'preview', publicProfileEnabled: true, publicTopOfMindEnabled: true };
 const viewer = { account: { id: id(2), email: 'preview@example.test', onboardingCompletedAt: date, isAdmin: false }, profile };
+const otherProfile = { ...profile, id: id(201), accountId: id(202), name: 'Other account', publicHandle: 'other' };
+const otherViewer = { account: { ...viewer.account, id: id(202), email: 'other@example.test' }, profile: otherProfile };
 const before = 'You make room for quiet work.';
 const after = 'You leave space for others to add their ideas.';
 const reading = (version: number) => ({ id: id(20 + version), profileId: profile.id, version, reason: 'regenerated', createdAt: date,
@@ -33,8 +36,13 @@ try {
       .map((text, index) => ({ id: id(10 + index), profileId: profile.id, text, textPreview: text, kind: 'note', source: 'app',
         visibility: 'private', createdAt: date, updatedAt: date, attachments: [], attachmentSummary: [], reflections: [] as unknown[], reflectionCount: 0 }));
     let version = 1, status: 'queued' | 'processing' | 'ready' | 'failed' = 'queued';
-    let saveCount = 0, answerCount = 0, retryCount = 0, generationCount = 0;
+    let saveCount = 0, answerCount = 0, retryCount = 0, generationCount = 0, questionCount = 0;
     let sourceId = id(50), revision = 1;
+    let activeViewer: typeof viewer | null = viewer;
+    let loseCaptureResponse = false, loseAnswerResponse = false;
+    const unavailableLookups = new Set<string>();
+    const authoredPosts: Array<{ operation: string; requestId: string; profileId: string; input: unknown }> = [];
+    const saveLookups: Array<{ requestId: string; profileId: string }> = [];
     const receipt = () => ({ id: id(60 + revision), profileId: profile.id, inspirationId: sourceId,
       materialRevision: String(revision), jobId: id(70), requestVersion: String(revision) });
     const savedRequests = new Map<string, { requestId: string; operation: 'inspiration' | 'reflection'; inspirationId: string;
@@ -50,16 +58,31 @@ try {
       if (!url.pathname.startsWith('/api/')) return url.origin === origin ? route.continue() : route.abort();
       const path = url.pathname.slice(4);
       const send = (json: unknown, code = 200) => route.fulfill({ status: code, json });
-      if (path === '/auth/me') return send(viewer);
-      if (path === '/profiles') return send({ profiles: [profile] });
+      if (path === '/auth/me') return activeViewer ? send(activeViewer) : send({ error: 'Signed out' }, 401);
+      if (path === '/auth/logout') { activeViewer = null; return send({ ok: true }); }
+      if (path === '/auth/login') {
+        activeViewer = request.postDataJSON().email === otherViewer.account.email ? otherViewer : viewer;
+        return send({ ...activeViewer, token: 'synthetic-browser-session' });
+      }
+      if (!activeViewer) return send({ error: 'Signed out' }, 401);
+      const owner = activeViewer.profile;
+      if (url.searchParams.has('profile') && url.searchParams.get('profile') !== owner.id) return send({ error: 'Not found' }, 404);
+      if (path === '/profiles') return send({ profiles: [owner] });
       if (path.startsWith('/inspirations/save-requests/')) {
-        const saved = savedRequests.get(path.split('/').at(-1)!);
+        const requestId = path.split('/').at(-1)!;
+        saveLookups.push({ requestId, profileId: owner.id });
+        if (unavailableLookups.has(requestId)) return send({ error: 'Temporary synthetic connection failure' }, 503);
+        const saved = savedRequests.get(requestId);
+        if (saved && saved.processing.profileId !== owner.id) return send({ error: 'No committed save found', code: 'save_not_found' }, 404);
         return saved ? send({ saveRequest: saved }) : send({ error: 'No committed save found', code: 'save_not_found' }, 404);
       }
+      const scopedSource = /^\/inspirations\/([^/]+)(?:\/|$)/.exec(path)?.[1];
+      if (scopedSource && !inspirations.some((item) => item.id === scopedSource && item.profileId === owner.id)) return send({ error: 'Not found' }, 404);
       if (path === '/inspirations' && request.method() === 'POST') {
         assert.equal(url.searchParams.get('profile'), profile.id);
         const requestId = request.headers()['idempotency-key'];
         assert.match(requestId!, /^[0-9a-f-]{36}$/);
+        authoredPosts.push({ operation: 'inspiration', requestId: requestId!, profileId: owner.id, input: request.postDataJSON() });
         const previous = savedRequests.get(requestId!);
         if (previous) return send({ inspiration: inspirations.find((item) => item.id === previous.inspirationId),
           processing: previous.processing, saveRequest: { requestId, replayed: true } });
@@ -69,15 +92,23 @@ try {
         inspirations.push(source);
         const processing = receipt();
         savedRequests.set(requestId!, { requestId: requestId!, operation: 'inspiration', inspirationId: source.id, reflectionId: null, processing, createdAt: date });
+        if (loseCaptureResponse) {
+          loseCaptureResponse = false; unavailableLookups.add(requestId!);
+          return route.abort('connectionreset');
+        }
         return send({ inspiration: source, processing, saveRequest: { requestId, replayed: false } }, 201);
       }
-      if (path === '/inspirations') return send({ inspirations, total: inspirations.length });
+      if (path === '/inspirations') {
+        const owned = inspirations.filter((item) => item.profileId === owner.id);
+        return send({ inspirations: owned, total: owned.length });
+      }
       if (path === `/inspirations/${sourceId}/processing`) return send(progress());
       if (path === `/inspirations/${sourceId}/processing/retry`) { retryCount += 1; status = 'queued'; return send(progress(), 202); }
       if (path === `/inspirations/${sourceId}/reflections` && request.method() === 'POST') {
         assert.equal(url.searchParams.get('profile'), profile.id);
         const requestId = request.headers()['idempotency-key'];
         assert.match(requestId!, /^[0-9a-f-]{36}$/);
+        authoredPosts.push({ operation: 'reflection', requestId: requestId!, profileId: owner.id, input: request.postDataJSON() });
         const previous = savedRequests.get(requestId!);
         if (previous) return send({ reflection: inspirations.find((item) => item.id === previous.inspirationId)?.reflections.find((item) => (item as { id: string }).id === previous.reflectionId),
           processing: previous.processing, saveRequest: { requestId, replayed: true } });
@@ -87,13 +118,20 @@ try {
         source.reflections.push(reflection); source.reflectionCount += 1;
         const processing = receipt();
         savedRequests.set(requestId!, { requestId: requestId!, operation: 'reflection', inspirationId: sourceId, reflectionId: reflection.id, processing, createdAt: date });
+        if (loseAnswerResponse) {
+          loseAnswerResponse = false; unavailableLookups.add(requestId!);
+          return route.abort('connectionreset');
+        }
         return send({ reflection, processing, saveRequest: { requestId, replayed: false } }, 201);
       }
-      if (path === `/inspirations/${sourceId}/reflection-question`) return send({ phase: 'ready', question: 'What could someone else add to that unfinished corner?' });
-      if (/^\/inspirations\/[^/]+$/.test(path)) return send({ inspiration: inspirations.find((item) => item.id === path.split('/')[2]) });
+      if (path === `/inspirations/${sourceId}/reflection-question`) { questionCount += 1; return send({ phase: 'ready', question: 'What could someone else add to that unfinished corner?' }); }
+      if (/^\/inspirations\/[^/]+$/.test(path)) {
+        const source = inspirations.find((item) => item.id === path.split('/')[2] && item.profileId === owner.id);
+        return source ? send({ inspiration: source }) : send({ error: 'Not found' }, 404);
+      }
       const signal = { id: id(100), statement: 'Small openings make room for new ideas.', status: 'active', confidence: 80,
         evidenceCount: 3, lastEvidenceAt: date, locked: false, unsupported: false, sharedGroupIds: [], createdAt: date };
-      if (path === '/signals') return send({ signals: [signal] });
+      if (path === '/signals') return send({ signals: owner.id === profile.id ? [signal] : [] });
       if (path === `/signals/${signal.id}`) return send({ signal: { ...signal, evidence: inspirations.slice(0, 3).map((item) => ({
         inspirationId: item.id, preview: item.text, quote: item.text, quoteSource: 'own', reason: null, createdAt: date,
       })) } });
@@ -102,7 +140,8 @@ try {
       if (path === '/principles') return send({ principles: [] });
       if (path === '/principles/status') return send({ status: { phase: 'waiting', eligible: false, signalCount: 0, topOfMindCount: 0 } });
       if (path === '/top-of-mind/refresh') { generationCount += 1; return send({ jobId: id(90), requestVersion: '1', status: 'queued' }, 202); }
-      if (path === '/top-of-mind') return send({ topOfMind: reading(version) });
+      if (path === '/top-of-mind') return send({ topOfMind: owner.id === profile.id ? reading(version)
+        : { ...reading(1), profileId: owner.id, entries: [{ ...reading(1).entries[0]!, body: 'Other account reading', citedSignals: [] }] } });
       if (path === '/top-of-mind/versions') return send({ versions: Array.from({ length: version }, (_, index) => ({ ...reading(index + 1), entryCount: 1 })) });
       if (path.startsWith('/top-of-mind/versions/')) return send({ topOfMind: reading(path.endsWith(id(21)) ? 1 : 2) });
       if (path === '/weather') return send({ weather: { told: null, days: [], antechamber: [] } });
@@ -112,6 +151,11 @@ try {
     const page = await context.newPage();
     page.setDefaultTimeout(10_000);
     page.on('pageerror', (error) => pageErrors.push(error.message));
+    const openComposer = async () => {
+      const textbox = page.getByRole('textbox', { name: 'Capture inspiration', exact: true });
+      if (!await textbox.isVisible()) await page.getByRole('button', { name: 'Capture inspiration', exact: true }).click();
+      return textbox;
+    };
     try {
     await page.goto(origin);
     const poster = page.locator('.jar-poster[data-jar-chrome="1"]');
@@ -199,9 +243,91 @@ try {
     await page.getByText('Your reading still holds.', { exact: true }).waitFor();
     await page.getByRole('button', { name: 'Dismiss processing notice', exact: true }).click();
     assert.equal(await page.locator('.jar-source-status').count(), 0);
+
+    // A committed capture with a lost response remains one owned intent
+    // through reload, a newer draft, and signing into another account.
+    const keptText = 'A capture whose response never reached this browser.';
+    const newerDraft = 'A newer unfinished thought must survive recovery.';
+    loseCaptureResponse = true;
+    await page.getByRole('button', { name: 'Capture inspiration', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Capture inspiration', exact: true }).fill(keptText);
+    await page.getByRole('button', { name: 'Save inspiration', exact: true }).click();
+    await page.getByText("Your words are here. Couldn't confirm the save.", { exact: true }).waitFor();
+    const captureRequest = authoredPosts.at(-1)!;
+    assert.equal(captureRequest.operation, 'inspiration');
+    const pending = () => page.evaluate(() => Object.entries(localStorage).filter(([key]) => key.includes(':pendingSave:')));
+    assert.equal((await pending()).length, 1);
+    await page.reload();
+    await page.getByText("Your words are here. Couldn't confirm the save.", { exact: true }).waitFor();
+    assert.equal(authoredPosts.filter((item) => item.requestId === captureRequest.requestId).length, 1, 'Reload must not repost an ambiguous save');
+    await (await openComposer()).fill(newerDraft);
+    assert.equal(await page.getByRole('button', { name: 'Save inspiration', exact: true }).isDisabled(), true);
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Your account', exact: true }).click();
+    await page.getByRole('button', { name: 'sign out', exact: true }).click();
+    await page.waitForURL('**/login');
+    const signIn = async (email: string) => {
+      await page.getByLabel('Email', { exact: true }).fill(email);
+      await page.getByLabel('Password', { exact: true }).fill('synthetic-password');
+      await page.locator('form button[type="submit"]').click();
+      await page.waitForURL(origin + '/');
+    };
+    await signIn(otherViewer.account.email);
+    await poster.waitFor();
+    assert.equal((await poster.textContent())?.trim(), 'Other account reading');
+    await openComposer();
+    assert.equal(await page.getByRole('textbox', { name: 'Capture inspiration', exact: true }).inputValue(), '', 'The second account must not inherit the first account draft');
+    assert.equal(await page.locator('.jar-source-status').count(), 0, 'The second account must not inherit save or processing status');
+    assert.equal(saveLookups.some((item) => item.profileId === otherProfile.id && item.requestId === captureRequest.requestId), false);
+    assert.equal((await pending()).length, 1, 'The first account journal must remain available to its owner');
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Your account', exact: true }).click();
+    await page.getByRole('button', { name: 'sign out', exact: true }).click();
+    await page.waitForURL('**/login');
+    unavailableLookups.delete(captureRequest.requestId);
+    await signIn(viewer.account.email);
+    await page.getByText('Kept. Waiting to be read.', { exact: true }).waitFor();
+    await page.waitForFunction(() => !Object.keys(localStorage).some((key) => key.includes(':pendingSave:')));
+    assert.equal(authoredPosts.filter((item) => item.requestId === captureRequest.requestId).length, 1, 'Returning to the owner recovers by GET, without a replay POST');
+    assert.equal(inspirations.filter((item) => item.text === keptText).length, 1);
+    await openComposer();
+    assert.equal(await page.getByRole('textbox', { name: 'Capture inspiration', exact: true }).inputValue(), newerDraft);
+    await page.screenshot({ path: join(output, `recovered-capture-${viewport.width}.png`) });
+
+    // A saved answer must also reconcile on reopening its inspiration. Its
+    // original question stays with it and opening buys no follow-up question.
+    await page.getByRole('button', { name: 'Save and reflect on this inspiration', exact: true }).click();
+    await dialog.waitFor();
+    const lostAnswer = 'This answer is kept even if its response is lost.';
+    await dialog.locator('textarea').fill(lostAnswer);
+    const askedQuestion = await dialog.locator('.jar-reflect-q').last().innerText();
+    loseAnswerResponse = true;
+    await dialog.getByRole('button', { name: 'continue →', exact: true }).click();
+    await dialog.getByText("Your words are here. Couldn't confirm the save.", { exact: true }).waitFor();
+    const answerRequest = authoredPosts.at(-1)!;
+    assert.equal(answerRequest.operation, 'reflection');
+    assert.deepEqual(answerRequest.input, { question: askedQuestion, answer: lostAnswer });
+    const questionsBeforeRecovery = questionCount;
+    await dialog.getByRole('button', { name: 'done for now', exact: true }).click();
+    await page.reload();
+    unavailableLookups.delete(answerRequest.requestId);
+    await page.locator('.jar-saved').click();
+    const ground = page.getByRole('listbox');
+    await ground.waitFor(); await ground.focus(); await ground.press('End');
+    const card = page.getByRole('dialog', { name: 'a saved inspiration', exact: true });
+    await card.waitFor();
+    await card.getByRole('button', { name: 'read reflection', exact: true }).click();
+    await card.getByRole('button', { name: 'ask another question →', exact: true }).waitFor();
+    await card.getByText(lostAnswer, { exact: true }).waitFor();
+    await page.waitForFunction(() => !Object.keys(localStorage).some((key) => key.includes(':pendingSave:')));
+    assert.equal(authoredPosts.filter((item) => item.requestId === answerRequest.requestId).length, 1);
+    assert.equal(questionCount, questionsBeforeRecovery, 'Reopening a saved answer must not request another question automatically');
+    assert.equal(inspirations.find((item) => item.id === sourceId)!.reflections.length, 1);
+    assert.equal(await card.locator('textarea').count(), 0, 'Recovered completed words must not be offered as an unsaved answer');
+    await page.screenshot({ path: join(output, `recovered-reflection-${viewport.width}.png`) });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
     assert.deepEqual(pageErrors, []); assert.deepEqual([...unknown], []);
-    console.log(`PASS ${viewport.width}×${viewport.height}: saved answer, untouched draft, explicit adoption, verified comparison and failed-pass retry`);
+    console.log(`PASS ${viewport.width}×${viewport.height}: saved answer, explicit adoption, failed-pass retry, lost-response reload and owned account recovery`);
     } catch (error) {
       await page.screenshot({ path: join(output, `failure-${viewport.width}.png`) });
       console.log('Failure surface:', (await page.locator('body').innerText()).slice(0, 2500), 'Unknown routes:', [...unknown], 'Page errors:', pageErrors);

@@ -10192,20 +10192,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     setMouthNote("");
   }, []);
 
-  /** Escape: back to the phrase — and for a long note, the words are KEPT.
-      Losing a page of writing to a reflex key is the one thing this surface
-      must never do; a short line still clears, as it always has. */
-  const cancelMouth = useCallback(() => {
-    if (draftRef.current.length > 140 || draftRef.current.includes("\n")) {
-      saveAsDraft();
-      return;
-    }
-    setMouthOpen(false);
-    draftRef.current = ''; writeProfileText(storageScope, 'draft', '');
-    setDraft("");
-    setMouthNote("");
-  }, [saveAsDraft]);
-
   /**
    * KEEP IT. The owned draft and immutable pending intent survive until a
    * saved row is confirmed. Only then does its orb arrive; a late completion
@@ -10303,7 +10289,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       e.stopPropagation();
       if (e.key === "Escape") {
         e.preventDefault();
-        cancelMouth();
+        // Closing the composer keeps the owned draft, including a newer
+        // short thought written while an earlier save is being reconciled.
+        saveAsDraft();
         return;
       }
       if (e.key !== "Enter") return;
@@ -10318,7 +10306,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       e.preventDefault();
       keepIt();
     },
-    [cancelMouth, keepIt],
+    [saveAsDraft, keepIt],
   );
 
   /** Empty and left alone, it goes back to being a phrase. With words in it

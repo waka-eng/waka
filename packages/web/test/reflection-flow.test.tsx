@@ -76,6 +76,36 @@ describe("reflection conversation", () => {
     await act(async () => retry.click());
     expect(vi.mocked(createReflection).mock.calls[1]?.[2]).toMatchObject({ requestId: firstOptions.requestId });
   });
+
+  it('reopening a committed first answer settles its original draft instead of offering it to save again', async () => {
+    vi.mocked(createReflection).mockRejectedValueOnce(new Error('Response lost'));
+    const render = (initialTurns: Array<{ id: string; question: string; answer: string }>) => root.render(
+      <ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={initialTurns} locale="en-US"
+        onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />,
+    );
+    await act(async () => render([]));
+    await writeAnswer(saved.answer);
+    await act(async () => button('continue →').click());
+    const key = Object.keys(localStorage).find((item) => item.includes(':pendingSave:'))!;
+    const intent = JSON.parse(localStorage.getItem(key)!);
+    expect(intent.afterId).toBeNull();
+    await act(async () => root.unmount()); root = createRoot(host);
+    vi.mocked(fetchInspirationSaveRequest).mockResolvedValue({ requestId: intent.requestId, operation: 'reflection',
+      inspirationId: saved.inspirationId, reflectionId: saved.id,
+      processing: { id: 'receipt', profileId: SCOPE.profileId, inspirationId: saved.inspirationId,
+        materialRevision: '2', jobId: 'job', requestVersion: '2' }, createdAt: saved.createdAt });
+    vi.mocked(fetchInspiration).mockResolvedValue({ id: saved.inspirationId, profileId: SCOPE.profileId,
+      text: 'A source', kind: 'note', source: 'app', createdAt: saved.createdAt, updatedAt: saved.createdAt,
+      attachments: [], reflections: [saved] });
+    await act(async () => render([{ id: saved.id, question: saved.question, answer: saved.answer }]));
+    expect(host.querySelector('textarea')).toBeNull();
+    expect(localStorage.getItem(profileStorageKey(SCOPE, 'reflectionDraft:inspiration-1')!)).toBeNull();
+    expect(localStorage.getItem(key)).toBeNull();
+    expect(createReflection).toHaveBeenCalledOnce();
+    expect(onSaved).toHaveBeenCalledOnce();
+    expect(requestReflectionQuestion).not.toHaveBeenCalled();
+    expect(button('ask another question →')).toBeTruthy();
+  });
   it("discards a pending follow-up when an earlier answer is removed", async () => {
     let finish!: (status: ApiReflectionQuestionStatus) => void;
     vi.mocked(requestReflectionQuestion).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));

@@ -211,6 +211,23 @@ describe("the capture remembers where it last went", () => {
     expect(localStorage.getItem(DRAFT_KEY)).toBe('My newer unsent draft');
     expect(kept).toHaveLength(1);
   });
+
+  it('Escape keeps a newer short draft while an earlier save is uncertain', async () => {
+    saveControl.loseNext = true;
+    await worldWithTheMouthOpen(); await press(/^save$/i);
+    await act(async () => layout!.container.querySelector<HTMLButtonElement>('.jar-mouth-rest')!.click());
+    const field = layout!.container.querySelector<HTMLTextAreaElement>('.jar-mouth-field')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(field, 'A newer thought');
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
+    expect(localStorage.getItem(DRAFT_KEY)).toBe('A newer thought');
+    expect(saveCalls).toHaveLength(1);
+    expect(Object.keys(localStorage).filter((key) => key.includes(':pendingSave:'))).toHaveLength(1);
+    await act(async () => layout!.container.querySelector<HTMLButtonElement>('.jar-mouth-rest')!.click());
+    expect(layout!.container.querySelector<HTMLTextAreaElement>('.jar-mouth-field')!.value).toBe('A newer thought');
+  });
   it("does not assign an unscoped draft or sharing choice to the next account", async () => {
     window.localStorage.setItem("waka.draft", "an unattributed private draft");
     window.localStorage.setItem("waka.keepPublic", "1");

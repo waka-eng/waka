@@ -30,7 +30,7 @@ experiments or revive superseded room goals.
 | C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | C1/C2/C3 code locally verified (51 SQL cases; full web 349/349). Read-only inventory completed across 5 rooms in the DB referenced by the local env files; hosted-stage mapping is not verified. Historical repair, deployment coordination and deployed verification remain pending. |
 | D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | D1–D3d3 provenance, automatic support checks, durable source handoffs, worker data-write fences and personal reading recovery locally verified. D3d3: 161 targeted SQL / 671 unit / 374 web. Pending/statement support, legacy personal context, complete downstream receipts, live semantic quality and historical repair remain open. |
 | E1 | F7/F8: authoritative poster and truthful manual refresh | Queue acceptance, changed/unchanged completion, failure and fresh displayed version verified | Implemented with job receipts, resumable profile-scoped polling, held-job manual upgrade and authoritative headline. Local checks pass (8 receipt SQL tests, 10 hook tests, full web 362/362); deployed verification remains open. |
-| E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | E2a–E2e2 processing/status, keyed-save protocol and owned browser journals locally checked. Current web: 433/433, typecheck/build and two rendered viewport checks pass; prior backend: 91 SQL / 671 unit. Full real-stack three-answer/failure journey, cross-device/browser and deployed verification remain pending. |
+| E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | E2a–E2g processing/status, keyed saves and browser recovery locally checked. Web: 435/435; production-build desktop/mobile lost-response, reload and account-switch checks pass. Backend three-answer/retraction/recovery journey passes in real routes/SQL. Complete real-stack/browser journey, older-job branch, cross-device and deployed verification remain pending. |
 | F | F11/F12: visible search and durable navigation | Results beyond initial archive, failure/no-match separation, stable IDs, deep links, Back/Forward and rename verified | Pending |
 | G | F13: capture attachments and recoverable failure | Paste/drop/select preview; saved text survives failure; retry attaches once; sharing destination clear | Pending |
 | H | F18: progressive initial load and bounded prefetch | Small/large archive baseline vs result, first useful view and card/search/deep-link integrity | Pending |
@@ -1050,3 +1050,53 @@ Real-browser ambiguous-response/reload recovery, account switching, the complete
 older-job-finishes-last journey, room/deployed walkthroughs, pending/statement
 support and historical context/repair remain open. Continue with the bounded
 browser recovery journey before starting F–J or claiming E2/release completion.
+
+## E2g — browser recovery and draft fixes — 2026-10-01
+
+The previous goal turn made progress: it pushed the batch, fixed the CI fixture
+and added the real-route backend journey. On this resumed turn, the app goal
+tracker is active. Remote `25d5b6e` has successful CI (`36946246366`) and dev
+deployment (`36946246440`). The full A–J/L1–L3 objective remains unchanged.
+
+Declared browser gate: commit a capture/answer but drop its response, make
+lookup temporarily unavailable, reload, then recover by its original identity.
+There must be one saved row, no automatic repeat POST or follow-up question,
+and a newer owned draft must survive signing out/in while another account
+sees neither that draft nor its processing/recovery status.
+
+Expanded the manual `e2e:source-processing` fixture with connection-reset
+responses after synthetic commits, failed status lookups, owned request logs,
+reload and actual sign-out/sign-in UI. Its server fixtures enforce profile
+boundaries. The test now uses the production web build at loopback port 3012:
+the old Vite dev server intentionally bypasses RequireAuth, so it could not
+prove the production sign-out navigation. All API responses remain synthetic;
+non-local assets are blocked, and no real account/model/database is touched.
+
+Two product failures were reproduced in both the browser and targeted React
+tests before fixing them:
+
+- Escape deleted a newer short capture draft while an older save was uncertain
+  (expected words, actual stored draft null). It now closes through the existing
+  save-as-draft action, preserving short and long drafts consistently.
+- A recovered first reflection was shown as both saved and an unfinished
+  answer (expected no textarea, actual textarea held the saved words). Restore
+  now preserves the first question's null predecessor instead of substituting
+  the newly committed answer ID. Matching draft cleanup can therefore finish;
+  no new question is requested just by opening it.
+
+After fix: 38/38 targeted hook/composer/reflection/draft tests, 435/435 complete
+web tests across 64 suites, web typecheck/build, manual-script typecheck and
+diff check pass. The production-build browser journey passes at 1280×900 and
+390×844 with touch/mobile emulation. Screenshots inspected; no page errors or
+horizontal overflow. Processing controls remain 44px high with 14px labels.
+Reopening/recovery issues one POST per authored intent, keeps the original
+question, clears only the matching draft/journal and offers an explicit next
+question. The browser fixture and backend journey are complementary evidence;
+they do not yet establish one connected real-browser/real-worker journey.
+
+Next D checkpoint: statement edits still commit before vector removal and
+best-effort queue insertion, and they do not durably request existing-evidence
+reassessment. Close that source/statement handoff and its pending-support
+serving gap before claiming the personal loop complete. Historical context,
+older-job/account races, real-stack/deployed walks and all later slices remain
+open; these two UI fixes do not complete the goal.
