@@ -973,6 +973,9 @@ entry words remain the person's words. Recording a verdict, immediate dispute
 changes and required reading work is atomic. Deliberate personal corrections
 request a manual reading rather than waiting for the passive daily floor;
 room-only reactions request only the currently accessible room readings.
+Room synthesis now consumes the latest current-word stances of current members,
+deduplicated per member and signal before the context limit. It does not consume
+their free-form correction text. Existing first-draft thresholds are unchanged.
 
 Large sources use `assess_signal_support` jobs, each scoped to at most twelve
 claims and one assessment call per attempt. The coordinator waits without

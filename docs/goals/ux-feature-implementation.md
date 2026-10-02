@@ -1,6 +1,6 @@
 # Goal: implement the experience review
 
-Status: in flight at the owner's request: deliver checked batches to dev and continue the full goal. Revision-bound support, source/reading receipts and the connected local personal loop are now in dev. Revision-bound feedback/current-context work is locally checked but not deployed. Remaining release cases, later UX/algorithm slices, semantic validation, historical repair and deployed verification stay open. The full objective is unchanged.
+Status: paused at the owner's request after completing the current feedback/room-flow batch. Delivery of the checked batch to dev is explicitly requested; no further implementation should continue after it. Remaining release cases, later UX/algorithm slices, semantic validation, historical repair and deployed verification stay open. The full objective is unchanged, not completed.
 Created: 2026-10-01, on the owner's instruction to implement the full plan.
 Branch: `codex/ux-feedback-revisions`; preceding implementation delivered through `codex/ux-feature-implementation`.
 Baseline: `33e65a7` on `dev`.
@@ -1349,3 +1349,48 @@ This batch is reviewable local progress, not a deployed fix or goal completion.
 Next: concurrent target/access guard coverage, complete room-control revisions,
 then connected failure/account-switch and deployed release verification. The
 remaining F–J/L1–L3 and measured semantic-quality/repair gates remain open.
+
+## D3e5 — current room targets and pause checkpoint — 2026-10-01
+
+The prior turn made progress: D3e4 was committed and pushed as draft PR #333;
+its CI passed. The owner now requests completing this task, pausing, and merging
+all remaining work to dev. #333 is the only open repository PR.
+
+Concurrent SQL checks verify that a busy owned target returns 409 without a
+verdict/job, an older displayed revision still fails after the writer commits,
+and a freshly read revision succeeds. An unauthorized reader gets 404 even
+while another profile's target is busy, not an existence-revealing conflict.
+
+Room UI review found raw inspiration cards being treated as shared statements,
+and identical public inspiration IDs colliding across personal/room scenes.
+Room scene instances now have stable namespaced view keys, while API calls keep
+the inspiration's actual ID. The room's member chooser, count, keyboard reach
+and card ownership use the same member scope. Another member's public card is
+readonly; one's own can reflect privately. Signal feedback is offered in Shape
+together on actual room statements, not inspiration IDs. The HTTP wall serializer
+now carries their wording revision, rather than dropping it between SQL and UI.
+
+The new reply controls preserve focus, refuse duplicate in-flight submission,
+acknowledge only a confirmed write, and discard late results after wording,
+account or room changes. Read failure does not retract an acknowledged write.
+Current members' latest current-word verdicts reach room synthesis; personal
+correction text and outsider verdicts do not. Existing first-draft thresholds
+remain unchanged. A related room-entry race now waits for the group roster
+before declaring a deep link missing; no broad navigation redesign is claimed.
+
+Verification: full API 1,159 passed / three paid-live benches skipped; web
+447/447 across 65 suites. Typechecks, production build, vocabulary/seam/design
+ratchets, migration/diff checks pass. The connected real-auth/Hono/SQL/worker
+journey passes at 1280×900 and 390×844, now including member-ground selection,
+readonly peer captures, actual statement/revision POST and a persisted reply.
+New controls measure at least 44px high with 14px text; screenshots inspected.
+Providers/vectors are deterministic; explicit disposable loopback SQL only.
+No live provider calls, historical repair, production deployment or actual
+account mutation were performed during implementation.
+
+Current task implementation is complete. Pause the app goal before the
+separately authorized delivery to dev. Remaining work is not erased: connected
+failure/account-switch/cross-device coverage, deployed task walks, broader
+navigation/search/attachments/performance, evaluated generation, the room
+participation/next-round contract, launch requirements and reviewed historical
+repair still require work after an explicit resume. Do not mark this goal complete.

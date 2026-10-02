@@ -64,6 +64,7 @@ export interface GroupWallReaction {
 export interface GroupWallSignal {
   signalId: string;
   statement: string;
+  statementRevision?: string;
   /**
    * The room's own confidence, as its lifecycle last wrote it. The old
    * caveat ("stale by design — a member must never touch another member's
@@ -103,6 +104,7 @@ export async function loadGroupWall(
     .select({
       signalId: signals.id,
       statement: signals.statement,
+      statementRevision: signals.statementRevision,
       confidence: signals.confidence,
       lockedAt: signals.lockedAt,
       createdAt: signals.createdAt,
@@ -254,6 +256,7 @@ export async function loadGroupWall(
   return served.map((row) => ({
     signalId: row.signalId,
     statement: row.statement,
+    statementRevision: row.statementRevision.toString(),
     confidenceAsWritten: row.confidence,
     locked: row.lockedAt !== null,
     contributors: (contributorsBySignal.get(row.signalId) ?? [])

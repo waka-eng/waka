@@ -68,6 +68,7 @@ export interface ApiGroupWallReaction {
 export interface ApiGroupWallSignal {
   signalId: string;
   statement: string;
+  statementRevision?: string;
   /** The room's own confidence, as its lifecycle last wrote it. */
   confidenceAsWritten: number;
   /** The words are held (locked) — the star renders where they are read. */

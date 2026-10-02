@@ -1715,17 +1715,18 @@ export function groupDraftMinAffirmed(memberCount: number): number {
     : GROUP_DRAFT_MIN_AFFIRMED;
 }
 
-async function countAffirmedSharedSignals(
+async function loadGroupSignalVerdicts(
   db: WakaDb,
   groupId: string,
   shared: GroupSharedSignal[],
-): Promise<number> {
-  if (shared.length === 0) return 0;
+): Promise<Array<{ targetId: string; reactorProfileId: string; value: typeof feedback.$inferSelect.value; createdAt: Date }>> {
+  if (shared.length === 0) return [];
   const rows = await db
-    .select({
+    .selectDistinctOn([feedback.targetId, feedback.profileId], {
       targetId: feedback.targetId,
       reactorProfileId: feedback.profileId,
       value: feedback.value,
+      createdAt: feedback.createdAt,
     })
     .from(feedback)
     .innerJoin(
@@ -1742,8 +1743,14 @@ async function countAffirmedSharedSignals(
         ),
       ),
     )
-    .orderBy(desc(feedback.createdAt));
+    .orderBy(asc(feedback.targetId), asc(feedback.profileId), desc(feedback.createdAt), desc(feedback.id));
+  return rows;
+}
 
+function countAffirmedSharedSignals(
+  shared: GroupSharedSignal[],
+  rows: Array<{ targetId: string; reactorProfileId: string; value: string }>,
+): number {
   const ownerBySignal = new Map(shared.map((signal) => [signal.id, signal.ownerProfileId]));
   const seenPair = new Set<string>();
   const affirmedSignals = new Set<string>();
@@ -1808,6 +1815,7 @@ export async function refreshTopOfMindForGroup(
     loadGroupSharedSignals(db, input.groupId, now),
     loadLiveGroupArtifact(db, input.groupId),
   ]);
+  const groupVerdicts = await loadGroupSignalVerdicts(db, input.groupId, shared);
   const pending = await loadUnappliedProposals(db, input.groupId, liveBefore?.createdAt ?? null);
 
   if (shared.length === 0 && liveBefore === null && pending.length === 0) {
@@ -1824,7 +1832,7 @@ export async function refreshTopOfMindForGroup(
   // caller learns the room is waiting, not that there was nothing to say.
   let waitingForAffirmations = false;
   if (liveBefore === null && shared.length > 0) {
-    const affirmed = await countAffirmedSharedSignals(db, input.groupId, shared);
+    const affirmed = countAffirmedSharedSignals(shared, groupVerdicts);
     if (affirmed < groupDraftMinAffirmed(memberRows.length)) {
       if (pending.length === 0) {
         return { ...nothing, status: "waiting_for_affirmations" };
@@ -1859,7 +1867,13 @@ export async function refreshTopOfMindForGroup(
       profileId: input.groupId,
       preferredLocale: hostLocale,
       provisional: false,
-      recentFeedback: [],
+      // Stances are public room input; free-form personal correction text is not.
+      recentFeedback: [...groupVerdicts].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        .slice(0, RECENT_FEEDBACK_LIMIT).flatMap((row) => {
+          const signal = shared.find((candidate) => candidate.id === row.targetId);
+          return signal && signal.ownerProfileId !== row.reactorProfileId
+            ? [{ target: 'signal' as const, about: signal.statement, value: row.value, correction: null }] : [];
+        }),
       group: {
         name: group.name,
         memberNames: memberRows.map((row) => row.name),

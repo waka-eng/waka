@@ -420,6 +420,11 @@ agent's relayed excerpt, an agent's own observation.
   feedback on that profile's own signals and entries. Reactions to another
   profile or room remain stored for that context; they are not permission to
   fetch that target's later, potentially private wording into personal prompts.
+- **Room feedback input is current member stance, not private correction text.**
+  Room synthesis receives each current member's latest verdict on current room
+  signal wording. Its context is bounded after per-member deduplication and
+  word/access filtering. Personal free-form correction bodies remain private
+  and are never copied into a room prompt.
 - **Feedback belongs to the words that were judged.** `feedback.target_revision`
   binds a verdict to the signal/principle statement or entry body revision read
   when it was recorded. New writes capture that revision under the target's

@@ -146,6 +146,8 @@ import { paintField } from "../space/inspiration/field-paint";
 import {
   bornBall,
   makeAgentBall,
+  makeGroupInspirationBall,
+  groupInspirationViewId,
   makeBall,
   seedOf,
   skyOf,
@@ -1878,6 +1880,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   /* ---- walls (v10): the columns either side of the owner's own ---- */
   /** The rooms, newest first: the columns to the RIGHT. */
   const [groups, setGroups] = useState<ApiGroupSummary[]>([]);
+  const [groupRosterReady, setGroupRosterReady] = useState(false);
   /* Layer 4's state is declared UP with the sky, because the field's light
      reads it: see `principles` there, and `carryOf` for why. Its surface —
      the quiet line under the top of mind — is far below. */
@@ -2657,7 +2660,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
          paint. Only once it has does a missing name mean a missing wall,
          which says so by going home. Latching before that sent every
          /w/<agent> reload back to ME (caught live, 2026-08-31). */
-      if (agentRoster === null) return;
+      if (agentRoster === null || !groupRosterReady) return;
       openedAtRef.current = true;
       window.history.replaceState(null, "", "/");
       return;
@@ -2680,7 +2683,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     return () => {
       dead = true;
     };
-  }, [wallParam, walls, phase, agentRoster]);
+  }, [wallParam, walls, phase, agentRoster, groupRosterReady]);
 
   /** A room woke: its words may exist now. Discrete, pushed from the loop. */
   const pushWoken = useCallback((groupId: string) => {
@@ -2789,6 +2792,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
       }
       setGroupFieldTick((n) => n + 1);
       setGroups(fixtureGroups);
+      setGroupRosterReady(true);
       setProposal(null);
       setAdopted(layout.adopted);
       setProvenance(layout.provenance);
@@ -2910,6 +2914,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
       /* The map (v8): rooms line up to the right of your own wall,
          newest room first. This is the horizontal axis. */
       if (!dead) {
+        setGroupRosterReady(true);
         setGroups(
           [...rows].sort(
             (a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0),
@@ -3968,19 +3973,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       .filter((w) => w.kind === "group")
       .flatMap((w) =>
         (groupFieldRef.current.get(w.id) ?? []).map((cap) =>
-          makeAgentBall({
-            id: cap.id,
-            agentId: w.id,
-            origin: cap.ownerType === "agent" ? "agent" : "human",
-            textPreview: cap.text,
-            quote: null,
-            kind: cap.kind,
-            capturedAt: cap.createdAt,
-            updatedAt: cap.updatedAt,
-            producedBy: null,
-            ownerProfileId: cap.ownerProfileId,
-            ownerName: cap.ownerName,
-          }),
+          makeGroupInspirationBall(cap, w, viewerIdRef.current),
         ),
       );
     /* WHOSE HUE IS WHOSE, DECIDED ONCE.
@@ -9387,7 +9380,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     /* A room orb that belongs to another member: the 180ch preview/quote is
        the WHOLE panel — the full text of someone else's save is not ours to
        fetch, so nothing is missing and nothing loads. One appearance. */
-    const groupBall = groupBallsRef.current.get(selectedId);
+    const selectedBall = ballsRef.current?.byId.get(selectedId);
+    const groupBall = selectedBall?.col !== undefined ? selectedBall : groupBallsRef.current.get(selectedId);
     if (groupBall && !groupBall.own) {
       setPanel({ id: selectedId, detail: null, partial: false });
       setPanelOpen(true);
@@ -9928,17 +9922,18 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     }
     if (atWall.kind === "group") {
       return (groupFieldRef.current.get(atWall.id) ?? [])
+        .filter((row) => row.ownerProfileId === (standing ?? viewerIdRef.current))
         .slice()
         .sort((x, y) => Date.parse(y.createdAt) - Date.parse(x.createdAt))
         /* whose memory it is, said out loud — on a room's ground that is the
            fact the per-member hue carries, and a hue is not readable aloud */
-        .map((m) => ({ id: m.id, label: `${m.ownerName}: ${clean(m.text)}` }));
+        .map((m) => ({ id: groupInspirationViewId(atWall.id, m.id), label: `${m.ownerName}: ${clean(m.text)}` }));
     }
     return (inspirations ?? [])
       .slice()
       .sort((x, y) => y.capturedMs - x.capturedMs)
       .map((m) => ({ id: m.id, label: `${clean(m.preview)}${m.reflectionCount > 0 ? `, ${say("worldReflected")}` : ""}` }));
-  }, [atWall, agents, inspirations, groupFieldTick, locale, say]);
+  }, [atWall, agents, inspirations, groupFieldTick, standing, locale, say]);
 
   /**
    * Where the reach is standing. Null until a key is pressed or an orb is
@@ -13691,43 +13686,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             <p className="jar-panel-cited jar-label">{citedWords(panelBall.citedBy, locale)}</p>
           ) : null}
 
-          {/* A ROOM ORB IS SOMEBODY'S STATEMENT, AND YOU MAY ANSWER IT.
-              It used to carry no action at all, on the reasoning that another
-              member's save is theirs to reflect on — which is right about
-              REFLECTING and was wrong about everything else. What hangs on a
-              room's wall is a shared pattern, put there to be read by the
-              room, and a room where you can read a claim about the group and
-              not say whether you recognise it is a noticeboard.
-              Three answers, no deletion: removing it would be editing
-              someone else's mind, and the room's own board moves by proposal
-              and affirmation instead (founder ruling). */}
-          {panelIsGroup && !panelBall.own && panelBall.sigId ? (
-            /* keyed by the SIGNAL's id, which is what the feedback was filed
-               against — the ball's own id is namespaced per room and would
-               read back empty every time */
-            verdicts.has(panelBall.sigId) ? null : (
-              /* the same one quiet line the sky uses — not a row of controls */
-              <p className="jar-ask">
-                <button type="button" onClick={() => sayVerdict(panelBall.sigId as string, "true")}>
-                  {say("worldYes")}
-                </button>
-                <span aria-hidden="true"> · </span>
-                <button
-                  type="button"
-                  onClick={() => sayVerdict(panelBall.sigId as string, "partly")}
-                >
-                  {say("worldPartly")}
-                </button>
-                <span aria-hidden="true"> · </span>
-                <button
-                  type="button"
-                  onClick={() => sayVerdict(panelBall.sigId as string, "not_true")}
-                >
-                  {say("worldNotTrue")}
-                </button>
-              </p>
-            )
-          ) : null}
+          {/* Public capture cards are not signal statements. Room pattern
+              reactions live in Shape together and never post a capture ID. */}
 
           {/* The one action. Everything else that used to be here — the
               sparks block, what this feeds, nearby in your jar — was
@@ -14833,7 +14793,16 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       {groupPanel && atWall.kind === "group" && atWall.id === groupPanel ? (
         <GroupPanel
           groupId={groupPanel}
-          readingRestricted={groupCacheRef.current.get(groupPanel)?.data?.top?.restricted}
+          readingRestricted={failedGroups.has(groupPanel) || groupCacheRef.current.get(groupPanel)?.data?.top?.restricted}
+          signals={wallSignalsRef.current.get(groupPanel) ?? []}
+          onSignalResponse={async (signalId, value, targetRevision) => {
+            await createFeedback({ targetType: 'signal', targetId: signalId, value, targetRevision });
+          }}
+          onRefreshSignals={async () => {
+            const ready = await loadGroupRef.current(groupPanel, true);
+            if (ready) setGroupReadTick((value) => value + 1);
+            return ready;
+          }}
           readRevision={groupReadTick}
           members={members}
           space={atWall}

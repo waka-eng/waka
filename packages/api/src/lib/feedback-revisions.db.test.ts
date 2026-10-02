@@ -6,6 +6,10 @@ import { createFeedbackForProfile, listFeedbackForProfile } from '../routes/feed
 import { feedbackWordingCurrent } from './feedback-revisions.js';
 import { feedback } from '../db/index.js';
 import { createGroupForProfile, joinGroupByCode } from '../routes/groups-membership.js';
+import postgres from 'postgres';
+import { Hono } from 'hono';
+import { createFeedbackRoutes } from '../routes/feedback.js';
+import type { AuthEnv } from './middleware.js';
 
 const state = vi.hoisted(() => ({ db: null as unknown }));
 vi.mock('./db.js', () => ({ getDb: () => state.db }));
@@ -33,7 +37,51 @@ async function context(profileId: string) {
   return seen;
 }
 
+function actor(profileId: string) {
+  const app = new Hono<AuthEnv>();
+  app.route('/feedback', createFeedbackRoutes({ getDatabase: () => t.db as never, authMiddleware: async (c, next) => {
+    c.set('session', { sessionId: '00000000-0000-4000-8000-000000000001',
+      account: { id: '00000000-0000-4000-8000-000000000002', email: 'fixture@example.test' },
+      profile: { id: profileId, accountId: '00000000-0000-4000-8000-000000000002', type: 'human', name: 'Fixture', preferredLocale: 'en-US' } });
+    await next();
+  } }));
+  return (targetId: string, targetRevision = '1') => app.request('/feedback', { method: 'POST',
+    headers: { 'content-type': 'application/json' }, body: JSON.stringify({ targetType: 'signal', targetId, targetRevision, value: 'partly' }) });
+}
+
+async function holdSignal(signalId: string, run: () => Promise<void>) {
+  const other = postgres(process.env.DB_CONNECTION_URL!, { max: 1, prepare: false, connection: { search_path: t.schemaName } });
+  let release!: () => void, locked!: () => void;
+  const ready = new Promise<void>((resolve) => { locked = resolve; });
+  const released = new Promise<void>((resolve) => { release = resolve; });
+  const holding = other.begin(async (tx) => {
+    await tx`UPDATE signals SET statement='Concurrent wording' WHERE id=${signalId}`;
+    locked(); await released;
+  });
+  try { await ready; await run(); }
+  finally { release(); await holding; await other.end(); }
+}
+
 describe('feedback stays with its words, not just its ID', () => {
+  it('conflicts promptly with a concurrent wording writer, then accepts only the new displayed revision', async () => {
+    const f = await fixture(), post = actor(f.profileId);
+    await holdSignal(f.signals[0]!, async () => {
+      const response = await post(f.signals[0]!);
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({ code: 'feedback_target_changed' });
+      expect(await t.sql`SELECT id FROM feedback`).toHaveLength(0);
+      expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(0);
+    });
+    expect((await post(f.signals[0]!, '1')).status).toBe(409);
+    expect((await post(f.signals[0]!, '2')).status).toBe(201);
+  });
+
+  it('does not reveal another profile’s busy target through a conflict response', async () => {
+    const a = await fixture(), b = await fixture(), post = actor(b.profileId);
+    await holdSignal(a.signals[0]!, async () => { expect((await post(a.signals[0]!)).status).toBe(404); });
+    expect(await t.sql`SELECT id FROM feedback`).toHaveLength(0);
+    expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(0);
+  });
   it.each(['stale_signal', 'stale_entry', 'rewritten_signal'])('does not recycle %s as personal synthesis context', async (kind) => {
     const f = await fixture(); let targetId = f.signals[0]!;
     if (kind === 'stale_entry') {

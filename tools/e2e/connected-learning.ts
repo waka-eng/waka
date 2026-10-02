@@ -38,6 +38,7 @@ const { app } = await import('../../packages/api/src/index.js');
 const { signSessionToken } = await import('../../packages/api/src/lib/auth.js');
 const { createSessionRow } = await import('../../packages/api/src/lib/session.js');
 const { drainBackgroundJobs } = await import('../../packages/api/src/lib/queue.js');
+const { createGroupForProfile, joinGroupByCode } = await import('../../packages/api/src/routes/groups-membership.js');
 const { setDefaultModelProviderForTests } = await import('../../packages/api/src/lib/model-provider.js');
 const { GeminiEmbeddingHttpClient } = await import('../../packages/api/src/lib/inspiration-embeddings.js');
 const embed = GeminiEmbeddingHttpClient.prototype.embed;
@@ -173,11 +174,75 @@ try {
       assert.equal((await t.sql`SELECT id FROM signal_evidence`).length, 0);
       const current = await (await api('/top-of-mind')).json() as { topOfMind: { entries: unknown[] } };
       assert.equal(current.topOfMind.entries.length, 0, 'The retracted answer cannot keep its generated conclusion current');
+
+      // A room source card is a public capture, not a statement to judge.
+      const [otherAccount] = await t.sql`INSERT INTO accounts(email) VALUES (${`room-peer-${viewport.width}@example.test`}) RETURNING id`;
+      const [otherProfile] = await t.sql`INSERT INTO profiles(account_id,type,name) VALUES (${otherAccount.id},'human','Bo') RETURNING id`;
+      const group = await createGroupForProfile(t.db as never, { profileId: profile.id as string, name: `feedback room ${viewport.width}` });
+      await joinGroupByCode(t.db as never, { profileId: otherProfile.id as string, joinCode: group.joinCode });
+      const publicSources: string[] = [];
+      for (const owner of [profile.id, otherProfile.id]) {
+        const [shared] = await t.sql`INSERT INTO inspirations(profile_id,text,visibility,created_at)
+          VALUES (${owner},${owner === profile.id ? 'I learn by trying a small experiment.' : 'A public idea from Bo.'},'public',
+            ${new Date(Date.now() - (owner === profile.id ? 5_000 : 10_000)).toISOString()}) RETURNING id`;
+        publicSources.push(shared.id as string);
+      }
+      const [mind] = await t.sql`SELECT id FROM profiles WHERE group_id=${group.id} AND type='group'`;
+      const [sharedPattern] = await t.sql`INSERT INTO signals(profile_id,statement,input_policy)
+        VALUES (${mind.id},'Small experiments help us learn.','group-public-v1') RETURNING id`;
+      for (let n = 0; n < publicSources.length; n++) await t.sql`INSERT INTO signal_evidence(profile_id,owner_profile_id,signal_id,inspiration_id)
+        VALUES (${mind.id},${n === 0 ? profile.id : otherProfile.id},${sharedPattern.id},${publicSources[n]!})`;
+      await page.goto(`${origin}/w/feedback-room-${viewport.width}`);
+      await page.waitForFunction((name) => document.querySelector('.jar-here')?.textContent?.toLowerCase().includes(name.toLowerCase()), group.name);
+      await page.waitForFunction(`(() => {
+        const transform = document.querySelector('.jar-hq')?.style.transform;
+        if (!transform) return false;
+        const state = window.__wakaRoomArrival ??= { transform: '', stable: 0 };
+        state.stable = state.transform === transform ? state.stable + 1 : 0;
+        state.transform = transform;
+        return state.stable >= 8;
+      })()`);
+      await page.getByRole('radio', { name: 'Bo', exact: true }).click();
+      await page.getByRole('button', { name: '1 inspiration', exact: true }).click();
+      const roomArchive = page.getByRole('listbox'); await roomArchive.waitFor();
+      await page.waitForFunction(`(() => {
+        const transform = document.querySelector('.jar-hq')?.style.transform;
+        if (!transform) return false;
+        const state = window.__wakaRoomCamera ??= { transform: '', stable: 0 };
+        state.stable = state.transform === transform ? state.stable + 1 : 0;
+        state.transform = transform;
+        return state.stable >= 8;
+      })()`);
+      await roomArchive.focus();
+      await roomArchive.press('Home');
+      await page.locator('.jar-panel').getByText('A public idea from Bo.', { exact: true }).waitFor();
+      assert.equal(await page.locator('.jar-panel').getByRole('button', { name: /reflect|edit|delete|not true/i }).count(), 0);
+      await page.keyboard.press('Escape');
+      await page.getByRole('button', { name: 'back up to the wall', exact: true }).click();
+      await page.getByRole('button', { name: 'shape this together', exact: true }).click();
+      const patterns = page.getByRole('region', { name: 'Shared patterns', exact: true });
+      await patterns.getByText('Small experiments help us learn.', { exact: true }).waitFor();
+      const [posted] = await Promise.all([
+        page.waitForRequest((request) => request.method() === 'POST' && new URL(request.url()).pathname === '/api/feedback'),
+        patterns.getByRole('button', { name: 'yes', exact: true }).click(),
+      ]);
+      assert.deepEqual(posted.postDataJSON(), { targetType: 'signal', targetId: sharedPattern.id, value: 'true', targetRevision: '1' });
+      await patterns.getByText('Your reply is saved.', { exact: true }).waitFor();
+      const size = await patterns.getByRole('button', { name: 'yes', exact: true }).evaluate((button) => ({
+        height: button.getBoundingClientRect().height, size: parseFloat(getComputedStyle(button).fontSize),
+      }));
+      assert.ok(size.height >= 44 && size.size >= 14);
+      await page.screenshot({ path: join(output, `room-feedback-${viewport.width}.png`) });
+      const [verdict] = await t.sql`SELECT target_revision::text FROM feedback WHERE profile_id=${profile.id} AND target_id=${sharedPattern.id}`;
+      assert.equal(verdict.target_revision, '1');
       assert.deepEqual(errors, []); assert.deepEqual(failures, []);
       console.log(`Connected journey ${viewport.width}: three answers, owned reading, cited-answer retraction passed`);
     } catch (error) {
       await page.screenshot({ path: join(output, `failure-${viewport.width}.png`) });
-      console.error({ errors, failures, screenshots: output });
+      console.error({ errors, failures, screenshots: output,
+        roomControls: await page.locator('.jar-room-patterns').evaluateAll((rows) => rows.map((row) => ({ text: row.textContent,
+          buttons: [...row.querySelectorAll('button')].map((button) => ({ text: button.textContent, disabled: button.getAttribute('aria-disabled'),
+            pointer: getComputedStyle(button).pointerEvents, bounds: button.getBoundingClientRect().toJSON() })) }))) });
       throw error;
     } finally { await context.close(); }
   }

@@ -26,6 +26,7 @@
 import { Inspiration, type Evidence, type Signal } from "../../lib/data";
 import { hashStr, mix32, TAU } from "../../lib/num";
 import { type ApiAgentSignal } from "../../lib/agent-contract";
+import type { ApiGroupFieldInspiration } from '../../lib/api';
 import { FIELD_CARRY_PROMOTION_EVIDENCE } from "../../lib/aliveness";
 import { sizeIdxFor } from "../../canvas/sprites";
 
@@ -584,4 +585,22 @@ export function makeAgentBall(s: ApiAgentSignal): Ball {
   b.ampBaseX = b.ampX;
   b.ampBaseY = b.ampY;
   return b;
+}
+
+/** A scene instance is not another API identifier for its inspiration. */
+export function groupInspirationViewId(groupId: string, inspirationId: string) {
+  return `group:${groupId}:inspiration:${inspirationId}`;
+}
+
+export function makeGroupInspirationBall(inspiration: ApiGroupFieldInspiration, group: { id: string; col: number }, viewerProfileId: string | null): Ball {
+  const ball = makeAgentBall({ id: groupInspirationViewId(group.id, inspiration.id), agentId: group.id,
+    origin: inspiration.source === 'agent' || inspiration.ownerType === 'agent' ? 'agent' : 'human',
+    textPreview: inspiration.text, quote: null, kind: inspiration.kind,
+    capturedAt: inspiration.createdAt, updatedAt: inspiration.updatedAt, producedBy: null,
+    ownerProfileId: inspiration.ownerProfileId, ownerName: inspiration.ownerName });
+  ball.col = group.col;
+  ball.sigId = inspiration.id; // Existing field holds the saved inspiration ID, not a signal ID.
+  ball.authorName = inspiration.ownerName;
+  ball.own = viewerProfileId !== null && inspiration.ownerProfileId === viewerProfileId;
+  return ball;
 }
