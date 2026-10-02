@@ -15,6 +15,8 @@ import type {
   ApiGroupMember,
   ApiGroupProposal,
   ApiGroupTimeline,
+  ApiGroupWallSignal,
+  ApiFeedbackValue,
 } from "../lib/api";
 import { useOptionalAuth } from "../lib/auth-context";
 import { formatMessage, normalizeSupportedLocale, t } from "../lib/locales";
@@ -25,6 +27,7 @@ import type { GroupHistoryStop } from "./group-history";
 import { GroupMoment } from "./GroupMoment";
 import { DialogSurface } from "../components/DialogSurface";
 import type { Space } from "./index";
+import { GroupSignalFeedback } from './GroupSignalFeedback';
 
 export interface GroupPanelProps {
   /** the group whose panel this is */
@@ -51,6 +54,9 @@ export interface GroupPanelProps {
   sendProposal: (groupId: string) => void;
   answerProposal: (groupId: string, id: string, yes: boolean) => void;
   onClose: () => void;
+  signals?: ApiGroupWallSignal[];
+  onSignalResponse?: (signalId: string, value: ApiFeedbackValue, revision: string) => Promise<void>;
+  onRefreshSignals?: () => Promise<boolean>;
 }
 
 export function GroupPanel(props: GroupPanelProps): JSX.Element {
@@ -72,7 +78,8 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
     answerProposal,
     onClose,
   } = props;
-  const locale = normalizeSupportedLocale(useOptionalAuth()?.profile?.preferredLocale);
+  const auth = useOptionalAuth();
+  const locale = normalizeSupportedLocale(auth?.profile?.preferredLocale);
   const say = (key: MessageKey) => t(locale, key);
 
   return (
@@ -88,6 +95,10 @@ export function GroupPanel(props: GroupPanelProps): JSX.Element {
 
   {!selectedStop ? <>
     {props.readingRestricted ? <p className="jar-was" role="status">{say("worldRoomReadRestricted")}</p> : null}
+    {!props.readingRestricted && props.onSignalResponse && props.onRefreshSignals ? <GroupSignalFeedback
+      key={`${auth?.profile?.id}:${groupPanel}`} groupId={groupPanel} viewerProfileId={auth?.profile?.id ?? null}
+      signals={props.signals ?? []} locale={locale} onSubmit={props.onSignalResponse} onRefresh={props.onRefreshSignals}
+    /> : null}
     <p className="jar-room-shape-note">{say("worldRoomProposalHow")}</p>
     {proposalState === "loading" ? <p className="jar-was" role="status">{say("worldRoomProposalsLoading")}</p> : null}
     {proposalState === "failed" ? <p className="jar-was" role="alert">

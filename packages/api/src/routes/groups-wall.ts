@@ -27,6 +27,7 @@ import {
 } from "../db/index.js";
 import { GROUP_SIGNAL_MIN_VOICES } from "../lib/signal-derivation-thresholds.js";
 import { getDb } from "../lib/db.js";
+import { feedbackWordingCurrent } from '../lib/feedback-revisions.js';
 import { labelMembersByProfileId } from "../lib/member-labels.js";
 import { groupSignalReadable } from "../lib/group-output.js";
 
@@ -63,6 +64,7 @@ export interface GroupWallReaction {
 export interface GroupWallSignal {
   signalId: string;
   statement: string;
+  statementRevision?: string;
   /**
    * The room's own confidence, as its lifecycle last wrote it. The old
    * caveat ("stale by design — a member must never touch another member's
@@ -102,6 +104,7 @@ export async function loadGroupWall(
     .select({
       signalId: signals.id,
       statement: signals.statement,
+      statementRevision: signals.statementRevision,
       confidence: signals.confidence,
       lockedAt: signals.lockedAt,
       createdAt: signals.createdAt,
@@ -221,6 +224,7 @@ export async function loadGroupWall(
     .where(
       and(
         eq(feedback.targetType, "signal"),
+        feedbackWordingCurrent(),
         inArray(
           feedback.targetId,
           served.map((row) => row.signalId),
@@ -252,6 +256,7 @@ export async function loadGroupWall(
   return served.map((row) => ({
     signalId: row.signalId,
     statement: row.statement,
+    statementRevision: row.statementRevision.toString(),
     confidenceAsWritten: row.confidence,
     locked: row.lockedAt !== null,
     contributors: (contributorsBySignal.get(row.signalId) ?? [])

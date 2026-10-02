@@ -179,6 +179,31 @@ describe("standing mirrors the wall", () => {
     await t.truncateAll();
   });
 
+  it('passes only current members’ latest current-word stances into synthesis, never their private correction text', async () => {
+    const g = await seedGroup();
+    const ids = await Promise.all([
+      seedGrownSignal(g.groupId, 'Small experiments help us learn', [g.a, g.b]),
+      seedGrownSignal(g.groupId, 'We leave space for quiet work', [g.a, g.b]),
+    ]);
+    await react(g.a, ids[0]!, 'true'); await react(g.b, ids[1]!, 'true');
+    await draft(g.groupId);
+    await react(g.a, ids[0]!, 'not_true');
+    await t.sql`UPDATE feedback SET correction_text='PRIVATE CORRECTION SENTINEL' WHERE profile_id=${g.a}`;
+    const outsider = await seedPerson('Not a member');
+    await t.sql`INSERT INTO feedback(profile_id,target_type,target_id,value,target_revision,correction_text)
+      VALUES (${outsider},'signal',${ids[0]!},'partly',1,'OUTSIDER SENTINEL')`;
+    let seen: Array<{ about: string; value: string; correction: string | null }> = [];
+    await refreshTopOfMindForGroup({ groupId: g.groupId, reason: 'manual' }, { db: t.db as never,
+      modelProvider: { synthesizeTopOfMind: async (input: Parameters<ModelProvider['synthesizeTopOfMind']>[0]) => {
+        seen = input.recentFeedback; return { entries: [] };
+      } } as unknown as ModelProvider });
+    expect(seen).toHaveLength(2);
+    expect(seen).toContainEqual({ target: 'signal', about: 'Small experiments help us learn', value: 'not_true', correction: null });
+    expect(JSON.stringify(seen)).not.toMatch(/PRIVATE CORRECTION|OUTSIDER/);
+    const wall = await loadGroupWall(t.db as never, g.groupId);
+    expect(wall.every((signal) => signal.statementRevision === '1')).toBe(true);
+  });
+
   it("lets a member answer another member's shared statement, and nobody else", async () => {
     const g = await seedGroup();
     const signalId = await seedSignal(g.a, "keeps choosing depth over breadth");

@@ -8,7 +8,7 @@
 
 import { ApiError, apiPath, postJson } from "./http";
 
-export type ApiFeedbackTarget = "signal" | "top_of_mind_entry";
+export type ApiFeedbackTarget = "signal" | "top_of_mind_entry" | "principle";
 export type ApiFeedbackValue = "true" | "partly" | "not_true";
 
 export interface ApiFeedback {
@@ -19,6 +19,7 @@ export interface ApiFeedback {
   value: ApiFeedbackValue;
   correctionText: string | null;
   createdAt: string;
+  targetRevision?: string | null;
 }
 
 export interface CreateFeedbackRequest {
@@ -26,6 +27,7 @@ export interface CreateFeedbackRequest {
   targetId: string;
   value: ApiFeedbackValue;
   correctionText?: string;
+  targetRevision?: string;
 }
 
 /** POST /feedback — "true", "partly", or "not true", about one thing. */

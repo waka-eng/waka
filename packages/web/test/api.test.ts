@@ -25,6 +25,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ApiError,
   createFeedback,
+  disputePrinciple,
   createInspiration,
   createReflection,
   deleteInspiration,
@@ -620,6 +621,20 @@ describe("top of mind", () => {
 });
 
 describe("feedback", () => {
+  it('sends the displayed wording revision with signal feedback', async () => {
+    const input = { targetType: 'signal' as const, targetId: 'signal-1', value: 'true' as const, targetRevision: '3' };
+    stubFetch(Response.json({ feedback: { ...input, id: 'feedback-1' } }, { status: 201 }));
+    await expect(createFeedback(input)).resolves.toMatchObject({ targetRevision: '3' });
+    expect(fetch).toHaveBeenCalledWith('/api/feedback', expect.objectContaining({ body: JSON.stringify(input) }));
+  });
+
+  it('sends the displayed wording revision with a principle dispute', async () => {
+    stubFetch(Response.json({ feedback: { id: 'feedback-1' } }, { status: 201 }));
+    await disputePrinciple('principle-1', '4');
+    expect(fetch).toHaveBeenCalledWith('/api/feedback', expect.objectContaining({ body: JSON.stringify({
+      targetType: 'principle', targetId: 'principle-1', value: 'not_true', targetRevision: '4',
+    }) }));
+  });
   it("records a verdict about one top-of-mind entry", async () => {
     const feedback = {
       id: "feedback-1",

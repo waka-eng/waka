@@ -456,6 +456,7 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
       wall: wall.map((shared) => ({
         signalId: shared.signalId,
         statement: shared.statement,
+        statementRevision: shared.statementRevision,
         confidenceAsWritten: shared.confidenceAsWritten,
         locked: shared.locked,
         contributors: shared.contributors.map((c) => ({

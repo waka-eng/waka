@@ -11,8 +11,8 @@
  * is genuinely a reaction: whether the claim rings true.
  */
 
-import { relations } from "drizzle-orm";
-import { index, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
+import { bigint, check, index, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 import { profiles } from "./schema-profiles";
 
@@ -39,6 +39,8 @@ export const feedback = pgTable(
      * feedback outliving its target is useful history rather than a defect.
      */
     targetId: uuid("target_id").notNull(),
+    /** Null legacy bindings refer only to the migration's revision-one baseline. */
+    targetRevision: bigint("target_revision", { mode: "bigint" }),
 
     value: feedbackValueEnum("value").notNull(),
     /** The correction itself, when the reader bothered to write one. */
@@ -47,6 +49,7 @@ export const feedback = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
+    targetRevisionPositive: check("feedback_target_revision_positive", sql`${table.targetRevision} > 0`),
     profileTargetIdx: index("feedback_profile_target_idx").on(
       table.profileId,
       table.targetType,

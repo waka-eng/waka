@@ -42,6 +42,7 @@ import {
   type SignalStatus,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
+import { feedbackWordingCurrent } from '../lib/feedback-revisions.js';
 import { quoteForEvidence } from "../lib/salience.js";
 import {
   profileAccessError,
@@ -270,6 +271,7 @@ async function decorateSignals(
              this number's */
           eq(feedback.profileId, ownerProfileId),
           eq(feedback.targetType, "signal"),
+          feedbackWordingCurrent(),
           inArray(feedback.targetId, ids),
         ),
       )

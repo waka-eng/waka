@@ -198,7 +198,7 @@ export interface Entry {
       headquarters peek draws, and it points at layer 2 — not at inspirations.
       `answered` is the ground's ratified standing: the owner has spoken to it
       (a verdict, a star) — false while only the machine believes it. */
-  citedSignals: Array<{ id: string; statement: string; answered: boolean; locked: boolean; contested: boolean }>;
+  citedSignals: Array<{ id: string; statement: string; statementRevision?: string; answered: boolean; locked: boolean; contested: boolean }>;
   createdMs: number;
   supportChanged?: boolean;
 }

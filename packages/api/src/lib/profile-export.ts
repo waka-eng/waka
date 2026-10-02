@@ -198,7 +198,7 @@ export async function assembleProfileExport(db: WakaDb, profileId: string) {
     principleStatements: principleStatementRows,
     consultations: consultationRows,
     suppressions: suppressionRows,
-    feedback: feedbackRows,
+    feedback: feedbackRows.map((row) => ({ ...row, targetRevision: row.targetRevision?.toString() ?? null })),
     decisionPrincipleCitations: decisionCitationRows,
   };
 }

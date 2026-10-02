@@ -17,7 +17,7 @@
  * private verdict on a shared entry would be a vote nobody else can see.
  */
 
-import { and, desc, eq, isNull, ne } from "drizzle-orm";
+import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
@@ -41,10 +41,15 @@ import { resolveContestedPairs } from "../lib/contested-pairs.js";
 import { getDb } from "../lib/db.js";
 import { enqueueGroupTopOfMindRefresh } from "../lib/queue.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
-import { enqueueTopOfMindRefresh } from "../lib/queue.js";
+import { enqueueTopOfMindRefresh, wakeCommittedBackgroundJobs } from "../lib/queue.js";
 import { validationDetails } from "../lib/validation.js";
 
 type WakaDb = ReturnType<typeof getDb>;
+type WakaTx = Parameters<Parameters<WakaDb['transaction']>[0]>[0];
+
+export class FeedbackTargetChangedError extends Error {
+  constructor() { super('This wording changed. Read it again before responding.'); }
+}
 
 const DEFAULT_FEEDBACK_LIMIT = 50;
 const MAX_FEEDBACK_LIMIT = 100;
@@ -68,6 +73,7 @@ const createFeedbackRequestSchema = z
     targetType: z.enum(feedbackTargetTypeValues),
     targetId: z.string().uuid("targetId must be a uuid"),
     value: z.enum(feedbackValueValues),
+    targetRevision: z.string().regex(/^[1-9]\d{0,18}$/).refine((value) => BigInt(value) <= 9223372036854775807n).optional(),
     correctionText: z
       .string()
       .trim()
@@ -107,6 +113,7 @@ export interface FeedbackRecord {
   value: FeedbackValue;
   correctionText: string | null;
   createdAt: string;
+  targetRevision?: string | null;
 }
 
 export interface CreateFeedbackInput {
@@ -115,6 +122,7 @@ export interface CreateFeedbackInput {
   targetId: string;
   value: FeedbackValue;
   correctionText?: string;
+  targetRevision?: string;
 }
 
 export interface ListFeedbackInput {
@@ -140,6 +148,7 @@ function serializeFeedback(row: Feedback): FeedbackRecord {
     value: row.value,
     correctionText: row.correctionText,
     createdAt: row.createdAt.toISOString(),
+    targetRevision: row.targetRevision?.toString() ?? null,
   };
 }
 
@@ -168,7 +177,7 @@ export function mayAnswerSignal(input: {
 }
 
 async function targetBelongsToProfile(
-  db: WakaDb,
+  db: WakaDb | WakaTx,
   input: { profileId: string; targetType: FeedbackTargetType; targetId: string },
 ): Promise<boolean> {
   if (input.targetType === "signal") {
@@ -178,6 +187,7 @@ async function targetBelongsToProfile(
       .where(and(eq(signals.id, input.targetId), eq(signals.profileId, input.profileId)))
       .limit(1);
     const ownsIt = Boolean(own);
+    if (ownsIt) return true;
 
     /**
      * A STATEMENT SOMEBODY SHARED WITH YOU CAN BE ANSWERED.
@@ -228,6 +238,7 @@ async function targetBelongsToProfile(
         ),
       )
       .where(eq(signalShares.signalId, input.targetId))
+      .for('key share', { of: [signalShares, groupMembers, ownerSeat] })
       .limit(1);
 
     /**
@@ -269,6 +280,7 @@ async function targetBelongsToProfile(
           isNull(signals.dismissedAt),
         ),
       )
+      .for('key share', { of: groupMembers })
       .limit(1);
 
     return mayAnswerSignal({
@@ -304,15 +316,36 @@ export async function createFeedbackForProfile(
   db: WakaDb,
   input: CreateFeedbackInput,
 ): Promise<FeedbackRecord | null> {
-  const owned = await targetBelongsToProfile(db, input);
-  if (!owned) return null;
+  const result = await db.transaction((tx) => persistFeedback(tx, input));
+  if (result) await wakeCommittedBackgroundJobs();
+  return result;
+}
 
-  const [row] = await db
+async function persistFeedback(tx: WakaTx, input: CreateFeedbackInput): Promise<FeedbackRecord | null> {
+  // No model call spans this lock. A busy writer fails promptly instead of
+  // allowing a verdict to settle on different words while waiting.
+  await tx.execute(sql`SET LOCAL lock_timeout = '2s'`);
+  if (!await targetBelongsToProfile(tx, input)) return null;
+  const [target] = input.targetType === 'signal'
+    ? await tx.select({ revision: signals.statementRevision, profileId: signals.profileId }).from(signals)
+      .where(eq(signals.id, input.targetId)).for('no key update', { noWait: true }).limit(1)
+    : input.targetType === 'principle'
+      ? await tx.select({ revision: principles.statementRevision, profileId: principles.profileId }).from(principles)
+        .where(eq(principles.id, input.targetId)).for('no key update', { noWait: true }).limit(1)
+      : await tx.select({ revision: topOfMindEntries.bodyRevision, profileId: topOfMinds.profileId }).from(topOfMindEntries)
+        .innerJoin(topOfMinds, eq(topOfMinds.id, topOfMindEntries.topOfMindId))
+        .where(eq(topOfMindEntries.id, input.targetId)).for('no key update', { of: topOfMindEntries, noWait: true }).limit(1);
+  if (!target?.profileId) return null;
+  if (!await targetBelongsToProfile(tx, input)) return null;
+  if (input.targetRevision && input.targetRevision !== target.revision.toString()) throw new FeedbackTargetChangedError();
+
+  const [row] = await tx
     .insert(feedback)
     .values({
       profileId: input.profileId,
       targetType: input.targetType,
       targetId: input.targetId,
+      targetRevision: target.revision,
       value: input.value,
       correctionText: input.correctionText ?? null,
     })
@@ -328,13 +361,13 @@ export async function createFeedbackForProfile(
     input.targetType === "signal" &&
     (input.value === "true" || input.value === "not_true")
   ) {
-    const [ownSignal] = await db
+    const [ownSignal] = await tx
       .select({ id: signals.id })
       .from(signals)
       .where(and(eq(signals.id, input.targetId), eq(signals.profileId, input.profileId)))
       .limit(1);
     if (ownSignal) {
-      await resolveContestedPairs(db, {
+      await resolveContestedPairs(tx, {
         profileId: input.profileId,
         signalId: input.targetId,
         act: input.value === "true" ? "affirm" : "deny",
@@ -347,7 +380,7 @@ export async function createFeedbackForProfile(
   // waiting a day to stop asserting something already refuted would be
   // dishonesty, not thrift.
   if (row && input.targetType === "principle" && input.value === "not_true") {
-    await db
+    await tx
       .update(principles)
       .set({ state: "contested", updatedAt: new Date() })
       .where(
@@ -369,36 +402,34 @@ export async function createFeedbackForProfile(
    * refuses to speak from thin evidence. Putting a count in this function
    * would be a second opinion about the same question, in the wrong place.
    *
-   * Only agreement triggers it. "not true" is information the room's next
-   * draft should weigh, not a reason to redraft immediately — disagreeing
-   * with one sentence is not news about the whole room.
+   * Every deliberate reaction changes the room's standing input. Queue one
+   * coalesced pass for each currently accessible room, including room-grown
+   * signals; this never injects the reaction into a personal prompt.
    */
-  if (row && input.targetType === "signal" && input.value === "true") {
-    const sharedInto = await db
+  if (row && input.targetType === "signal") {
+    const ownerSeat = alias(groupMembers, 'feedback_owner_seat');
+    const sharedInto = await tx
       .select({ groupId: signalShares.groupId })
       .from(signalShares)
       .innerJoin(groupMembers, eq(groupMembers.groupId, signalShares.groupId))
+      .innerJoin(ownerSeat, and(eq(ownerSeat.groupId, signalShares.groupId), eq(ownerSeat.profileId, signalShares.profileId)))
       .where(
         and(
           eq(signalShares.signalId, input.targetId),
           eq(groupMembers.profileId, input.profileId),
         ),
-      );
-    for (const share of sharedInto) {
-      try {
-        await enqueueGroupTopOfMindRefresh(
-          input.profileId,
-          share.groupId,
-          "shares_changed",
-        );
-      } catch {
-        /* a refresh that could not be queued must not fail the agreement —
-           the person's answer is recorded either way, and the next agreement
-           or share will ask again */
-      }
+      ).for('key share', { of: [signalShares, groupMembers, ownerSeat] });
+    const grownInto = await tx.select({ groupId: profiles.groupId }).from(profiles)
+      .innerJoin(groupMembers, and(eq(groupMembers.groupId, profiles.groupId), eq(groupMembers.profileId, input.profileId)))
+      .where(and(eq(profiles.id, target.profileId), eq(profiles.type, 'group')))
+      .for('key share', { of: groupMembers });
+    const groups = new Set([...sharedInto.map((group) => group.groupId), ...grownInto.flatMap((group) => group.groupId ? [group.groupId] : [])]);
+    for (const groupId of groups) {
+      await enqueueGroupTopOfMindRefresh(input.profileId, groupId, "shares_changed", tx);
     }
   }
 
+  if (row && target.profileId === input.profileId) await enqueueTopOfMindRefresh(input.profileId, 'manual', tx);
   return row ? serializeFeedback(row) : null;
 }
 
@@ -463,32 +494,29 @@ export function createFeedbackRoutes(
     }
 
     const session = c.get("session");
-    const row = await createFeedback(getDatabase(), {
+    let row: FeedbackRecord | null;
+    try { row = await createFeedback(getDatabase(), {
       profileId: session.profile.id,
       targetType: parsed.data.targetType,
       targetId: parsed.data.targetId,
       value: parsed.data.value,
+      ...(parsed.data.targetRevision ? { targetRevision: parsed.data.targetRevision } : {}),
       ...(parsed.data.correctionText
         ? { correctionText: parsed.data.correctionText }
         : {}),
-    });
+    }); } catch (error) {
+      const code = (error as { code?: string; cause?: { code?: string } }).code
+        ?? (error as { cause?: { code?: string } }).cause?.code;
+      if (error instanceof FeedbackTargetChangedError || code === '55P03' || code === '40P01') {
+        return c.json({ error: 'This wording changed or is being updated. Read it again before responding.', code: 'feedback_target_changed' }, 409);
+      }
+      throw error;
+    }
 
     if (!row) {
       return c.json({ error: "Feedback target not found" }, 404);
     }
 
-    // A verdict changes what the next synthesis should weigh — a signal marked
-    // not_true fights uphill, an entry the person rejected should not return in
-    // the same form. Re-synthesise so the correction lands without waiting on
-    // an unrelated future capture. Best-effort: the verdict has committed.
-    void enqueueTopOfMindRefresh(session.profile.id, "signals_changed").catch(
-      (err: unknown) => {
-        console.warn("[feedback] refresh enqueue failed", {
-          profileId: session.profile.id,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      },
-    );
     return c.json({ feedback: row }, 201);
   });
 
