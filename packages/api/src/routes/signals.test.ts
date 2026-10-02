@@ -273,23 +273,15 @@ describe("GET /api/signals/:signalId", () => {
 
 describe("PATCH /api/signals/:signalId", () => {
   /**
-   * The edit costs the caller a delete and two enqueues, and no model call.
-   *
-   * Re-embedding a rewritten statement is a call on the single Gemini key
-   * every account shares, and this handler used to make it inline — so one
-   * account could spend that key at HTTP speed, past a per-account budget
-   * that only ever looked at the queue. The vector still has to stop
-   * describing the old wording immediately, which is why the drop stays here:
-   * it is a delete, and it costs the key nothing.
+   * The writer owns wording and required work in one transaction. This route
+   * only wakes committed work; the real SQL suite proves rollback and jobs.
    */
-  it("drops the stale vector here and asks the queue for the new one", async () => {
+  it("returns the transactional writer's edited statement without scheduling a second refresh", async () => {
     const updateStatement = vi.fn(async () => ({
       ...detail,
       statement: "Quiet rooms are the condition, not the preference.",
       locked: true,
     }));
-    const dropEmbedding = vi.fn(async () => undefined);
-    const requestReembed = vi.fn(async () => ({ jobId: "job-2", requestVersion: "1", created: true }));
     const requestRefresh = vi.fn(async () => ({ jobId: "job-1", requestVersion: "1", created: true }));
     const app = new Hono();
     app.route(
@@ -297,8 +289,6 @@ describe("PATCH /api/signals/:signalId", () => {
       createSignalRoutes({
         getDatabase: () => serveDb() as any,
         updateStatement,
-        dropEmbedding,
-        requestReembed,
         requestRefresh,
         authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
       }),
@@ -312,15 +302,6 @@ describe("PATCH /api/signals/:signalId", () => {
       }),
     });
 
-    // The claim of this test, asserted before the rest: the old vector is gone
-    // and the new one was asked for on the queue. Anything else means the
-    // model call came back into the request.
-    expect(dropEmbedding).toHaveBeenCalledWith(expect.anything(), {
-      profileId: humanProfileId,
-      signalId,
-    });
-    expect(requestReembed).toHaveBeenCalledWith(humanProfileId, signalId);
-
     expect(response.status).toBe(200);
     expect(updateStatement).toHaveBeenCalledWith(expect.anything(), {
       profileId: humanProfileId,
@@ -330,29 +311,24 @@ describe("PATCH /api/signals/:signalId", () => {
     await expect(response.json()).resolves.toMatchObject({
       signal: { locked: true, statement: "Quiet rooms are the condition, not the preference." },
     });
-    expect(requestRefresh).toHaveBeenCalledWith(humanProfileId, "signals_changed");
+    expect(requestRefresh).not.toHaveBeenCalled();
   });
 
   /**
-   * The edit has already committed by the time the queue is asked, so a queue
-   * that is briefly unreachable must not turn it into a 500 — the caller's
-   * retry would rewrite the same statement and ask again. The warning is the
-   * record; the vector is restored by the next edit.
+   * Failure of a required job aborts the edit. The route must not claim it
+   * succeeded; the real writer's rollback is checked against Postgres.
    */
-  it("still answers the edit when the re-embed cannot be enqueued", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const updateStatement = vi.fn(async () => ({ ...detail, locked: true }));
-    const requestReembed = vi.fn(async () => {
+  it("does not report success when required work cannot commit", async () => {
+    const updateStatement = vi.fn(async () => {
       throw new Error("queue unreachable");
     });
     const app = new Hono();
+    app.onError(() => new Response(JSON.stringify({ error: 'Edit could not commit' }), { status: 500 }));
     app.route(
       "/api/signals",
       createSignalRoutes({
         getDatabase: () => serveDb() as any,
         updateStatement,
-        dropEmbedding: vi.fn(async () => undefined),
-        requestReembed,
         requestRefresh: vi.fn(async () => ({ jobId: "job-1", requestVersion: "1", created: true })),
         authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
       }),
@@ -364,9 +340,8 @@ describe("PATCH /api/signals/:signalId", () => {
       body: JSON.stringify({ statement: "Rewritten once more." }),
     });
 
-    expect(response.status).toBe(200);
-    expect(requestReembed).toHaveBeenCalledTimes(1);
-    warn.mockRestore();
+    expect(response.status).toBe(500);
+    expect(updateStatement).toHaveBeenCalledTimes(1);
   });
 
   it("refuses an agent session editing the human profile's signals", async () => {

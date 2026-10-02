@@ -1100,3 +1100,55 @@ reassessment. Close that source/statement handoff and its pending-support
 serving gap before claiming the personal loop complete. Historical context,
 older-job/account races, real-stack/deployed walks and all later slices remain
 open; these two UI fixes do not complete the goal.
+
+## D3e1 — durable human statement work — 2026-10-01
+
+The previous goal turn made progress (two browser-reproduced recovery fixes,
+regressions and dev push). Its `3c79dbe` CI (`36947028521`) and dev deployment
+(`36947028650`) both succeeded. Current work remains the complete experience
+plan, with D's statement/pending-support gate as the next prerequisite.
+
+Declared atomicity gate: an edited/reverted signal cannot commit wording,
+history or vector removal while losing any required job. Old witnesses must
+be rechecked, including withdrawn links whose sources still exist; a support
+check must not rediscover candidates or certify a capture's full derivation.
+Executed the original routes before the change: 6/6 cases failed (three queue
+failure cases still answered 200, missing witness rechecks, repeated locked
+wording adding history, and revert missing witness rechecks). Fixture setup
+was first corrected to the actual JSONB/dimensions/input-hash embedding schema;
+those setup errors were not counted as product reproductions.
+
+Signal edit/revert now lock their owned source parents before the statement,
+serialize against derivation and commit history, stale-vector removal,
+re-embedding, witness reviews and reading request together. A busy source
+writer wins promptly (409, no partial edit). An identical already-locked edit
+adds no chain/job receipt; it can still settle a newly recorded dispute.
+Wake-up follows commit. Source deletion also cancels the new review jobs.
+
+Canon-first addition and migration 0043 introduce `review_signal_support`, a
+separate keyed, metered worker operation. It runs the existing bounded support
+assessment and its current-material/worker fences without extraction or vector
+discovery. It creates no `inspiration_processing` receipt and cannot claim one
+complete. This avoids duplicate discovery while the edited signal is waiting
+for its new vector, and keeps ordinary capture jobs separate. The generator
+rejects attempts to combine support-only work with source-completion authority.
+Machine restatement propagation and pending-support serving remain next.
+
+Verification: 11/11 new real-route/SQL cases pass, including all failed job
+insertions, identical replay, revert rollback, previously withdrawn support
+restoration, current negative assessment preserving locked words, second-client
+source locking and a reclaimed review worker. Full API: 1,117 passed, 3
+paid-live benches skipped, 101 passing suites. API typecheck and 435/435 web
+tests pass. Fresh migration 2/2, generated 0043 snapshot/journal, migration,
+vocabulary and diff checks pass. Two older lock fixtures now explicitly run
+deterministic re-embedding after an edit before testing later matching; their
+original word-preservation/promotion/release assertions are retained.
+
+This passes the scoped durable-human-edit checkpoint. It does not prove current
+support while assessment is pending, propagate machine restatements across all
+witnesses, repair history or complete D/release 1. Migration 0043 was exercised
+only in disposable loopback schemas/databases. No live provider or hosted DB
+mutation occurred. Keep this batch on the implementation branch until the
+pending-support reader/worker handling is ready; old worker builds do not know
+the new job type, so the deployment step must coordinate their transition.
+No production deployment or historical repair is authorized by this checkpoint.

@@ -9,6 +9,7 @@
  * Job types map to the three-layer pipeline:
  *   - enrich_attachment  : fetch a link's body / describe an image, cache it
  *   - derive_signals     : extract → embed → match-or-mint for one inspiration
+ *   - review_signal_support : existing-claim checks after a statement edit
  *   - refresh_top_of_mind: re-synthesize a profile's artifact (debounced)
  *   - refresh_group_top_of_mind : the same for a group's shared signals
  *   - reembed_signal     : re-vector a statement its owner rewrote
@@ -41,6 +42,7 @@ import { profiles } from "./schema-profiles";
 export const backgroundJobTypeValues = [
   "enrich_attachment",
   "derive_signals",
+  "review_signal_support",
   "refresh_top_of_mind",
   "refresh_group_top_of_mind",
   "refresh_principles",
@@ -75,6 +77,11 @@ export interface DeriveSignalsPayload {
    * profile so the model budget and queue fairness bill the person whose
    * keep asked for the work, with this field carrying the destination.
    */
+  deriveIntoProfileId?: string;
+}
+
+export interface ReviewSignalSupportPayload {
+  inspirationId: string;
   deriveIntoProfileId?: string;
 }
 
@@ -118,6 +125,7 @@ export interface GenerateReflectionQuestionPayload {
 export type BackgroundJobPayload =
   | EnrichAttachmentPayload
   | DeriveSignalsPayload
+  | ReviewSignalSupportPayload
   | RefreshTopOfMindPayload
   | RefreshGroupTopOfMindPayload
   | RefreshPrinciplesPayload

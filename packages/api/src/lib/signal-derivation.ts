@@ -122,6 +122,8 @@ export interface DeriveSignalsInput {
    * spaces — which is the founder's x+y+z, made literal.
    */
   deriveIntoProfileId?: string;
+  /** Internal support job: review existing claims without discovering new ones. */
+  supportOnly?: boolean;
 }
 
 export interface SignalDerivationDependencies {
@@ -160,6 +162,7 @@ export async function deriveSignalsForInspiration(
   deps: SignalDerivationDependencies = {},
 ): Promise<SignalDerivationResult> {
   const db = deps.db ?? getDb();
+  if (input.supportOnly && deps.processingRequest) throw new Error('Support-only work cannot certify source derivation');
   const now = deps.now ?? new Date();
 
   const [inspirationRow] = await db
@@ -282,6 +285,19 @@ export async function deriveSignalsForInspiration(
   const reflectionRows = material.reflectionRows;
   const attachmentRows = material.attachmentRows.filter((row) => row.status === "ready" && row.text !== null)
     .map(({ id, kind, text, hostname, name }) => ({ id, kind, text, hostname, name }));
+  if (input.supportOnly) {
+    await db.transaction(async (tx) => {
+      await acquireSignalDerivationLock(tx, profileId);
+      if (isGroup && membership) await assertGroupInputCurrent(tx, {
+        mindProfileId: profileId, membershipId: membership.id, inspiration,
+        attachments: attachmentRows, related: [],
+      });
+      await assertMaterialCurrent(tx, material, []);
+      await deps.beforeCommit?.(tx);
+    });
+    await wakeCommittedBackgroundJobs();
+    return emptyResult('no_candidates');
+  }
   const [profileRows, existingStatements] = await Promise.all([
     db
       .select({ preferredLocale: profiles.preferredLocale, groupId: profiles.groupId })

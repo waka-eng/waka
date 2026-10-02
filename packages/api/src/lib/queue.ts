@@ -134,6 +134,7 @@ import {
   backgroundJobs,
   type BackgroundJobStatus,
   type DeriveSignalsPayload,
+  type ReviewSignalSupportPayload,
   type EnrichAttachmentPayload,
   type GenerateReflectionQuestionPayload,
   type ReembedSignalPayload,
@@ -332,6 +333,7 @@ async function enqueueKeyedJob(input: {
   type:
     | "enrich_attachment"
     | "derive_signals"
+    | "review_signal_support"
     | "refresh_group_top_of_mind"
     | "refresh_principles"
     | "reembed_signal"
@@ -340,6 +342,7 @@ async function enqueueKeyedJob(input: {
   payload:
     | EnrichAttachmentPayload
     | DeriveSignalsPayload
+    | ReviewSignalSupportPayload
     | RefreshGroupTopOfMindPayload
     | { profileId: string }
     | ReembedSignalPayload
@@ -523,6 +526,15 @@ export async function enqueueDeriveSignals(
   return result;
 }
 
+/** Existing-claim review does not discover candidates or certify a saved
+ * source's full derivation. Its key cannot absorb ordinary capture work. */
+export async function enqueueSignalSupportReview(profileId: string, inspirationId: string,
+  transaction: Pick<ReturnType<typeof getDb>, 'execute'>,
+): Promise<EnqueueResult> {
+  return enqueueKeyedJob({ profileId, type: 'review_signal_support', payload: { inspirationId },
+    idempotencyKey: `review_signal_support:${inspirationId}` }, transaction);
+}
+
 /**
  * Re-synthesize a profile's top of mind.
  *
@@ -636,13 +648,14 @@ export async function enqueueReflectionQuestion(
 export async function enqueueSignalReembed(
   profileId: string,
   signalId: string,
+  transaction?: Pick<ReturnType<typeof getDb>, "select" | "execute">,
 ): Promise<EnqueueResult> {
   return enqueueKeyedJob({
     profileId,
     type: "reembed_signal",
     payload: { signalId },
     idempotencyKey: `reembed_signal:${signalId}`,
-  });
+  }, transaction);
 }
 
 // ---------------------------------------------------------------------------
@@ -890,7 +903,7 @@ async function assertBackgroundJobOwnership(tx: Pick<ReturnType<typeof getDb>, "
     // that order. Lock every revision this stage may write before its claim;
     // a busy human transaction wins instead of becoming a deadlock victim.
     const owners = new Set([job.profileId]);
-    if (job.type === "derive_signals") {
+    if (job.type === "derive_signals" || job.type === 'review_signal_support') {
       const destination = readString(job.payload, "deriveIntoProfileId");
       if (destination) owners.add(destination);
     }
@@ -1007,16 +1020,20 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
       return;
     }
 
+    case "review_signal_support":
     case "derive_signals": {
-      const payload = parseDeriveSignalsPayload(job.payload);
+      const payload = job.type === 'review_signal_support'
+        ? parseDeriveSignalsPayload({ ...(typeof job.payload === 'object' && job.payload ? job.payload : {}), reason: 'edited' })
+        : parseDeriveSignalsPayload(job.payload);
       if (!payload) return dropPoisonPayload(job);
 
       const [source] = await getDb().select({ id: inspirations.id }).from(inspirations)
         .where(and(eq(inspirations.id, payload.inspirationId), eq(inspirations.profileId, job.profileId))).limit(1);
       if (!source) return dropPoisonPayload(job);
-      const result = await deriveSignalsForInspiration(payload, {
+      const supportOnly = job.type === 'review_signal_support';
+      const result = await deriveSignalsForInspiration({ ...payload, supportOnly }, {
         beforeCommit: (tx) => assertBackgroundJobOwnership(tx, job, true),
-        processingRequest: { jobId: job.id, requestVersion: job.requestVersion.toString() },
+        ...(supportOnly ? {} : { processingRequest: { jobId: job.id, requestVersion: job.requestVersion.toString() } }),
       });
       if (result.supportReview?.retryable) {
         throw new Error("Existing support could not be fully assessed; retry current material");

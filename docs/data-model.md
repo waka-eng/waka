@@ -334,6 +334,15 @@ agent's relayed excerpt, an agent's own observation.
   dismissal or a merge (never reversed by a support check). Repeated application
   of the same review is a no-op. Standing reconciliation and the downstream
   reading request commit with the evidence change, not as a best-effort callback.
+- **Statement edits durably request support review.** Human signal edits and
+  reverts commit wording/history, removal of the old vector, re-embedding,
+  one `review_signal_support` job per existing or previously withdrawn owned
+  witness, and a reading request together. This review job checks existing
+  claims against current material without extraction or vector discovery. It
+  has its own source/destination key and uses the same worker budget and
+  current-input/claim fences. It never certifies an inspiration's full
+  derivation or completes its source-processing receipt. An identical edit
+  of already locked words adds no history or generation request.
 - **Source writes durably request learning.** Capture, inspiration edit,
   reflection save/removal and attachment finalization commit their queue rows
   in the source transaction. Enrichment rechecks the attachment resource after

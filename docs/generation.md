@@ -947,6 +947,13 @@ The authoritative values. Machine-checked against code — see
 
 ### Model calls (`packages/api/src/queue/gemini.ts`, `packages/api/src/lib/openrouter-http.ts`, `packages/api/src/lib/inspiration-embeddings.ts`)
 
+Human signal edits and reverts persist vector replacement, reading work and
+`review_signal_support` jobs with the statement transaction. Each review job
+checks existing and previously withdrawn owned witnesses with the same bounded
+support assessment used by derivation. It does not extract candidates or create
+source-processing completion receipts. Its key is separate from `derive_signals`,
+so an ordinary capture request cannot be replaced by support-only work.
+
 One prompt, two roads: every generation task runs through OpenRouter on the
 pinned DeepSeek snapshot when `OPENROUTER_API_KEY` is present, and falls back
 to Gemini without it. Embeddings never switch roads — the stored vectors and

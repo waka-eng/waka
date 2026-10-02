@@ -50,11 +50,11 @@ import {
   type ProfileOperation,
   asAccountProfile,
 } from "../lib/middleware.js";
-import { enqueueSignalReembed, enqueueTopOfMindRefresh } from "../lib/queue.js";
+import { enqueueTopOfMindRefresh, wakeCommittedBackgroundJobs } from "../lib/queue.js";
+import { lockSignalStatementSources, requestSignalStatementWork } from '../lib/signal-statement-work.js';
 import { reconcilePrinciplesAfterSignalLoss } from "../lib/principle-generation.js";
 import {
   computeSignalConfidence,
-  dropSignalEmbedding,
   refreshSignalLifecycle,
 } from "../lib/signal-derivation.js";
 import { resolveContestedPairs } from "../lib/contested-pairs.js";
@@ -504,12 +504,18 @@ export async function updateSignalStatement(
 ): Promise<SignalDetail | null> {
   const now = input.now ?? new Date();
   const changed = await db.transaction(async (tx) => {
+    const inspirationIds = await lockSignalStatementSources(tx, input.profileId, input.signalId);
     const [before] = await tx
       .select({ statement: signals.statement, lockedAt: signals.lockedAt })
       .from(signals)
       .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
-      .limit(1);
+      .limit(1).for('no key update', { noWait: true });
     if (!before) return false;
+    if (before.statement === input.statement && before.lockedAt !== null) {
+      const resolved = await resolveContestedPairs(tx, { profileId: input.profileId, signalId: input.signalId, act: 'lock', now });
+      if (resolved) await enqueueTopOfMindRefresh(input.profileId, 'signals_changed', tx);
+      return true;
+    }
 
     await writeSignalStatementChain(tx, {
       profileId: input.profileId,
@@ -532,6 +538,7 @@ export async function updateSignalStatement(
       act: "lock",
       now,
     });
+    await requestSignalStatementWork(tx, { ...input, inspirationIds });
     return true;
   });
   if (!changed) return null;
@@ -736,8 +743,6 @@ export interface SignalRouteDependencies {
   restoreSignal?: typeof restoreProfileSignal;
   deleteSignal?: typeof deleteProfileSignal;
   loadProfile?: typeof loadProfileTarget;
-  dropEmbedding?: typeof dropSignalEmbedding;
-  requestReembed?: typeof enqueueSignalReembed;
   requestRefresh?: typeof enqueueTopOfMindRefresh;
   reconcilePrinciples?: typeof reconcilePrinciplesAfterSignalLoss;
   authMiddleware?: MiddlewareHandler<AuthEnv>;
@@ -754,8 +759,6 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
   const restoreSignal = deps.restoreSignal ?? restoreProfileSignal;
   const deleteSignal = deps.deleteSignal ?? deleteProfileSignal;
   const loadProfile = deps.loadProfile ?? loadProfileTarget;
-  const dropEmbedding = deps.dropEmbedding ?? dropSignalEmbedding;
-  const requestReembed = deps.requestReembed ?? enqueueSignalReembed;
   const requestRefresh = deps.requestRefresh ?? enqueueTopOfMindRefresh;
   const reconcilePrinciples = deps.reconcilePrinciples ?? reconcilePrinciplesAfterSignalLoss;
 
@@ -772,31 +775,6 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
         error: err instanceof Error ? err.message : String(err),
       });
     });
-  };
-
-  /**
-   * Ask the queue to re-vector an edited statement.
-   *
-   * Awaited, unlike the refresh above, because the stale vector has already
-   * been dropped by the time this runs: if the row never lands, the signal
-   * stops being a match target until something edits it again. One INSERT is
-   * a fraction of the model call it replaces in this handler, so the edit is
-   * still faster than it was.
-   *
-   * Caught, because the edit itself has committed. A queue that is briefly
-   * unreachable must not turn a successful edit into a 500 the caller will
-   * retry — the retry would rewrite the same statement and ask again.
-   */
-  const scheduleReembed = async (profileId: string, signalId: string): Promise<void> => {
-    try {
-      await requestReembed(profileId, signalId);
-    } catch (err: unknown) {
-      console.warn("[signals] re-embed enqueue failed; this signal has no vector", {
-        profileId,
-        signalId,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
   };
 
   routes.use("*", deps.authMiddleware ?? requireAuth);
@@ -909,39 +887,21 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
     );
     if (!scope.ok) return c.json(scope.body, scope.status);
 
-    const signal = await updateStatement(db, {
-      profileId: scope.profileId,
-      signalId: parsedParams.data.signalId,
-      statement: parsedBody.data.statement,
-    });
+    let signal: SignalDetail | null;
+    try {
+      signal = await updateStatement(db, {
+        profileId: scope.profileId,
+        signalId: parsedParams.data.signalId,
+        statement: parsedBody.data.statement,
+      });
+    } catch (error) {
+      const code = (error as { code?: string; cause?: { code?: string } }).cause?.code ?? (error as { code?: string }).code;
+      if (code === '55P03') return c.json({ error: 'An update is in progress. Try saving your wording again shortly.' }, 409);
+      throw error;
+    }
     if (!signal) return c.json({ error: "Signal not found" }, 404);
 
-    // The stored vector now describes wording its owner has replaced, and
-    // replacing it means embedding — a call on the one Gemini key every
-    // account shares. This handler used to make that call itself, which meant
-    // one account could spend the key at HTTP speed while the queue's
-    // per-account budget watched the wrong door. So the work is split by what
-    // it costs: forgetting the old vector is a delete and happens now;
-    // computing the new one is model work and goes where model work is
-    // metered.
-    //
-    // The gap between the two leaves the signal without a vector for as long
-    // as the queue takes, so a similar capture mints a visible near-duplicate
-    // its owner can merge — the recoverable mistake this pipeline always
-    // chooses. Keeping the old vector until the job ran would be the other
-    // kind: the signal would go on quietly collecting evidence for the meaning
-    // its owner just rejected.
-    //
-    // Dropped first and enqueued second, never the reverse. In a single
-    // process the enqueue arms an immediate drain, so enqueuing first races
-    // the job — it could write the fresh vector and have this delete remove
-    // it, leaving no vector and no job coming to replace it.
-    await dropEmbedding(db, {
-      profileId: scope.profileId,
-      signalId: parsedParams.data.signalId,
-    });
-    await scheduleReembed(scope.profileId, parsedParams.data.signalId);
-    scheduleRefresh(scope.profileId);
+    await wakeCommittedBackgroundJobs();
     return c.json({ signal }, 200);
   });
 
@@ -1022,10 +982,17 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
     );
     if (!scope.ok) return c.json(scope.body, scope.status);
 
-    const result = await revertSignalStatement(db, {
-      profileId: scope.profileId,
-      signalId: parsedParams.data.signalId,
-    });
+    let result: Awaited<ReturnType<typeof revertSignalStatement>>;
+    try {
+      result = await revertSignalStatement(db, {
+        profileId: scope.profileId,
+        signalId: parsedParams.data.signalId,
+      });
+    } catch (error) {
+      const code = (error as { code?: string; cause?: { code?: string } }).cause?.code ?? (error as { code?: string }).code;
+      if (code === '55P03') return c.json({ error: 'An update is in progress. Try saving your wording again shortly.' }, 409);
+      throw error;
+    }
     if (result.outcome === "not_found") return c.json({ error: "Signal not found" }, 404);
     if (result.outcome === "nothing_to_revert") {
       return c.json(
@@ -1034,12 +1001,7 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
       );
     }
 
-    await dropEmbedding(db, {
-      profileId: scope.profileId,
-      signalId: parsedParams.data.signalId,
-    });
-    await scheduleReembed(scope.profileId, parsedParams.data.signalId);
-    scheduleRefresh(scope.profileId);
+    await wakeCommittedBackgroundJobs();
 
     const signal = await getSignal(db, {
       profileId: scope.profileId,
