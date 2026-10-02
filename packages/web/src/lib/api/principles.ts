@@ -21,6 +21,7 @@ export type ApiPrincipleKind = "value" | "maxim" | "stance";
 export interface ApiPrinciple {
   id: string;
   statement: string;
+  statementRevision?: string;
   type: ApiPrincipleKind;
   state: ApiPrincipleState;
   origin: "minted" | "declared";
@@ -112,11 +113,11 @@ export async function reorderPrinciples(order: string[]): Promise<ApiPrinciple[]
 }
 
 /** POST /feedback with a not_true verdict — marks the principle contested. */
-export async function disputePrinciple(principleId: string): Promise<void> {
+export async function disputePrinciple(principleId: string, targetRevision?: string): Promise<void> {
   await requestVoid(
     apiPath("/feedback"),
     "POST",
-    { targetType: "principle", targetId: principleId, value: "not_true" },
+    { targetType: "principle", targetId: principleId, value: "not_true", ...(targetRevision ? { targetRevision } : {}) },
     "That dispute could not be recorded",
   );
 }

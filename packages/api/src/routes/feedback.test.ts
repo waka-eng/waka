@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AuthenticatedSession } from "../lib/session.js";
 import {
   createFeedbackRoutes,
+  FeedbackTargetChangedError,
   mayAnswerSignal,
   type FeedbackRecord,
   type FeedbackRouteDependencies,
@@ -56,6 +57,23 @@ function mountWith(deps: FeedbackRouteDependencies = {}) {
 }
 
 describe("POST /api/feedback", () => {
+  it('passes the displayed revision through and refuses changed wording with a recoverable conflict', async () => {
+    const createFeedback = vi.fn(async () => { throw new FeedbackTargetChangedError(); });
+    const app = mountWith({ createFeedback });
+    const response = await app.request('/api/feedback', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ targetType: 'signal', targetId, value: 'true', targetRevision: '2' }) });
+    expect(createFeedback).toHaveBeenCalledWith({}, { profileId, targetType: 'signal', targetId, value: 'true', targetRevision: '2' });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: 'feedback_target_changed' });
+  });
+
+  it.each(['0', '-1', '9223372036854775808'])('refuses invalid revision %s without invoking the writer', async (targetRevision) => {
+    const createFeedback = vi.fn(async () => feedbackRecord);
+    const app = mountWith({ createFeedback });
+    const response = await app.request('/api/feedback', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ targetType: 'signal', targetId, value: 'true', targetRevision }) });
+    expect(response.status).toBe(400); expect(createFeedback).not.toHaveBeenCalled();
+  });
   it("records a verdict on an entry the acting profile owns", async () => {
     const createFeedback = vi.fn(async () => feedbackRecord);
     const app = mountWith({ createFeedback });

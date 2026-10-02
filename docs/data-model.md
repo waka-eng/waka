@@ -420,6 +420,22 @@ agent's relayed excerpt, an agent's own observation.
   feedback on that profile's own signals and entries. Reactions to another
   profile or room remain stored for that context; they are not permission to
   fetch that target's later, potentially private wording into personal prompts.
+- **Feedback belongs to the words that were judged.** `feedback.target_revision`
+  binds a verdict to the signal/principle statement or entry body revision read
+  when it was recorded. New writes capture that revision under the target's
+  write lock; a supplied revision must match or the write is refused. Changing
+  words, including changing back, does not transfer previous verdicts to the
+  new wording. Unstamped legacy verdicts refer only to revision one, not the
+  latest words. History remains available to its reader; current confidence,
+  feedback markers, room reactions and synthesis use matching revisions only.
+  A separately stored owner decision, such as keeping a principle under review,
+  survives until explicitly changed; a wording change is not an implicit undo.
+  Personal synthesis also excludes feedback context about unsupported generated
+  targets;
+  an explicitly held entry remains the person's words, not renewed proof.
+  Verdict, immediate standing changes and their required reading jobs commit
+  together. A failed queue insertion cannot leave an accepted but unprocessed
+  correction behind.
 
 ## Experience (layer-1 grouping)
 

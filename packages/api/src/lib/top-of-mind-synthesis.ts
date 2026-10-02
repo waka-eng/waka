@@ -29,7 +29,8 @@
 
 import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { readGenerationRevision, assertGenerationRevision } from "./generation-revision.js";
-import { personalSignalReadable, projectPersonalEntries } from "./personal-output.js";
+import { personalEntryReadable, personalSignalReadable, projectPersonalEntries } from "./personal-output.js";
+import { feedbackWordingCurrent } from './feedback-revisions.js';
 import { assertSignalSupportSettled, loadSignalStatementRevisions } from './signal-support-state.js';
 import { BackgroundJobHeldError } from './background-job-hold.js';
 
@@ -420,6 +421,7 @@ async function selectSignals(
       and(
         eq(feedback.profileId, profileId),
         eq(feedback.targetType, "signal"),
+        feedbackWordingCurrent(),
         inArray(
           feedback.targetId,
           rows.map((row) => row.id),
@@ -986,12 +988,13 @@ async function loadRecentFeedback(
       correctionText: feedback.correctionText,
     })
     .from(feedback)
-    .where(and(eq(feedback.profileId, profileId), or(
-      and(eq(feedback.targetType, "signal"), sql`EXISTS (SELECT 1 FROM signals fs
-        WHERE fs.id = ${feedback.targetId} AND fs.profile_id = ${profileId}::uuid)`),
-      and(eq(feedback.targetType, "top_of_mind_entry"), sql`EXISTS (SELECT 1 FROM top_of_mind_entries fe
-        JOIN top_of_minds fm ON fm.id = fe.top_of_mind_id
-        WHERE fe.id = ${feedback.targetId} AND fm.profile_id = ${profileId}::uuid)`),
+    .where(and(eq(feedback.profileId, profileId), feedbackWordingCurrent(), or(
+      and(eq(feedback.targetType, "signal"), sql`EXISTS (SELECT 1 FROM signals
+        WHERE signals.id = ${feedback.targetId} AND ${personalSignalReadable(profileId)})`),
+      and(eq(feedback.targetType, "top_of_mind_entry"), sql`EXISTS (SELECT 1 FROM top_of_mind_entries
+        JOIN top_of_minds fm ON fm.id = top_of_mind_entries.top_of_mind_id
+        WHERE top_of_mind_entries.id = ${feedback.targetId} AND fm.profile_id = ${profileId}::uuid
+          AND ${personalEntryReadable(profileId)})`),
     )))
     .orderBy(desc(feedback.createdAt))
     .limit(RECENT_FEEDBACK_LIMIT);
@@ -1732,6 +1735,7 @@ async function countAffirmedSharedSignals(
     .where(
       and(
         eq(feedback.targetType, "signal"),
+        feedbackWordingCurrent(),
         inArray(
           feedback.targetId,
           shared.map((signal) => signal.id),

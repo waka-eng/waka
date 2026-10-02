@@ -27,6 +27,7 @@ import {
   type SignalStatus,
 } from "../db/index.js";
 import { getDb } from "./db.js";
+import { feedbackWordingCurrent } from './feedback-revisions.js';
 import {
   CONFIDENCE_AFFIRMED_BONUS,
   CONFIDENCE_RECENCY_HALF_LIFE_DAYS,
@@ -129,6 +130,7 @@ export async function refreshSignalLifecycle(
       and(
         eq(feedback.profileId, current.profileId),
         eq(feedback.targetType, "signal"),
+        feedbackWordingCurrent(),
         eq(feedback.targetId, signalId),
       ),
     )

@@ -195,6 +195,7 @@ describe("declaring", () => {
         {
           id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
           statement: "Prefer X over Y.",
+          statementRevision: 1n,
           type: "maxim",
           state: "aspirational",
           origin: "declared",

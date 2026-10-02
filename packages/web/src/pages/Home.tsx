@@ -9706,7 +9706,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * agent's board grounds itself in its own memories.
    */
   const posterGrounds = useMemo<
-    Array<{ id: string; statement: string; answered: boolean; locked: boolean; contested: boolean }>
+    Array<{ id: string; statement: string; statementRevision?: string; answered: boolean; locked: boolean; contested: boolean }>
   >(() => {
     if (atWall.kind !== "self") return [];
     const board = notes ?? [];
@@ -10653,6 +10653,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       value: "true" | "partly" | "not_true",
       targetId?: string,
       contested?: boolean,
+      targetRevision?: string,
     ) => {
       setVerdicts((prev) => new Map(prev).set(id, value));
       /* the receipt: what this answer taught the loop, said where the act
@@ -10663,14 +10664,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         : value === "not_true"
           ? say(RECEIPTS.verdictNo.messageKey)
           : say(RECEIPTS.verdictKept.messageKey);
-      setVerdictReceipt({ id, text: receipt });
-      window.setTimeout(
-        () => setVerdictReceipt((r) => (r?.id === id ? null : r)),
-        7000,
-      );
       if (offlineRef.current) return;
-      createFeedback({ targetType: "signal", targetId: targetId ?? id, value })
+      createFeedback({ targetType: "signal", targetId: targetId ?? id, value, ...(targetRevision ? { targetRevision } : {}) })
         .then(() => {
+          if (!readingMountedRef.current) return;
+          setVerdictReceipt({ id, text: receipt });
+          window.setTimeout(() => setVerdictReceipt((r) => (r?.id === id ? null : r)), 7000);
           /* AN ARBITRATION JUST HAPPENED. A verdict on a contested ground
              resolves its pair on the server (lib/contested-pairs.ts), and
              the pair has TWO sides — only the server knows the other one,
@@ -10681,13 +10680,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             .then((tom) => absorbBoard(tom))
             .catch(() => undefined);
         })
-        .catch(() => {
+        .catch((error) => {
         /* it did not land, and the row should not claim it did */
         setVerdicts((prev) => {
           const next = new Map(prev);
           next.delete(id);
           return next;
         });
+        if ((error as { code?: string })?.code === 'feedback_target_changed') verifyReadingRef.current(false);
       });
     },
     [],
@@ -10982,13 +10982,16 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   }, [pDraft, pBusy, reloadPrinciples, whyFailed]);
 
   const disputeThisPrinciple = useCallback(
-    (id: string, disputeId?: string) => {
+    (id: string, disputeId?: string, targetRevision?: string) => {
       if (pBusy) return;
       setPBusy(true);
-      (disputeId ? undoPrincipleDispute(id, disputeId) : disputePrinciple(id))
+      (disputeId ? undoPrincipleDispute(id, disputeId) : disputePrinciple(id, targetRevision))
         .then(() => reloadPrinciples())
         .then(() => setPick(null))
-        .catch((err) => setCharSay(whyFailed(err, say("worldDisputeNotRecorded"))))
+        .catch((err) => {
+          if ((err as { code?: string })?.code === 'feedback_target_changed') void reloadPrinciples();
+          setCharSay(whyFailed(err, say("worldDisputeNotRecorded")));
+        })
         .finally(() => setPBusy(false));
     },
     [pBusy, reloadPrinciples, whyFailed],
@@ -12500,7 +12503,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                   <button
                                     type="button"
                                     disabled={pBusy}
-                                    onClick={() => disputeThisPrinciple(pr.id)}
+                                    onClick={() => disputeThisPrinciple(pr.id, undefined, pr.statementRevision)}
                                     className="jar-principle-disagree"
                                   >
                                     {say("worldNotMine")}
@@ -12760,7 +12763,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                   type="button"
                                   onClick={() => {
                                     setGroundAsk(null);
-                                    sayVerdict(ground.id, "true", undefined, ground.contested);
+                                    sayVerdict(ground.id, "true", undefined, ground.contested, ground.statementRevision);
                                   }}
                                 >
                                   {say("worldYes")}
@@ -12770,7 +12773,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                   type="button"
                                   onClick={() => {
                                     setGroundAsk(null);
-                                    sayVerdict(ground.id, "partly", undefined, ground.contested);
+                                    sayVerdict(ground.id, "partly", undefined, ground.contested, ground.statementRevision);
                                   }}
                                 >
                                   {say("worldPartly")}
@@ -12780,7 +12783,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                   type="button"
                                   onClick={() => {
                                     setGroundAsk(null);
-                                    sayVerdict(ground.id, "not_true", undefined, ground.contested);
+                                    sayVerdict(ground.id, "not_true", undefined, ground.contested, ground.statementRevision);
                                   }}
                                 >
                                   {say("worldNotTrue")}

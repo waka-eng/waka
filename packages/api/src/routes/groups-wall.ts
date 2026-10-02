@@ -27,6 +27,7 @@ import {
 } from "../db/index.js";
 import { GROUP_SIGNAL_MIN_VOICES } from "../lib/signal-derivation-thresholds.js";
 import { getDb } from "../lib/db.js";
+import { feedbackWordingCurrent } from '../lib/feedback-revisions.js';
 import { labelMembersByProfileId } from "../lib/member-labels.js";
 import { groupSignalReadable } from "../lib/group-output.js";
 
@@ -221,6 +222,7 @@ export async function loadGroupWall(
     .where(
       and(
         eq(feedback.targetType, "signal"),
+        feedbackWordingCurrent(),
         inArray(
           feedback.targetId,
           served.map((row) => row.signalId),

@@ -1,8 +1,8 @@
 # Goal: implement the experience review
 
-Status: in flight again at the owner's request (2026-10-01): push the current batch to dev, then continue the full goal. Input/ownership/privacy fixes, support/worker fences, source-to-reading progress, and keyed-save UI are locally checked. Full release-journey verification, pending/statement support, legacy context, later UX/algorithm slices, historical repair and rollout verification remain open. The full objective is unchanged.
+Status: in flight at the owner's request: deliver checked batches to dev and continue the full goal. Revision-bound support, source/reading receipts and the connected local personal loop are now in dev. Revision-bound feedback/current-context work is locally checked but not deployed. Remaining release cases, later UX/algorithm slices, semantic validation, historical repair and deployed verification stay open. The full objective is unchanged.
 Created: 2026-10-01, on the owner's instruction to implement the full plan.
-Branch: `codex/ux-feature-implementation`.
+Branch: `codex/ux-feedback-revisions`; preceding implementation delivered through `codex/ux-feature-implementation`.
 Baseline: `33e65a7` on `dev`.
 Specification: [experience review, revision 3](../audits/ux-feature-review-2026-10-01.md).
 
@@ -28,9 +28,9 @@ experiments or revive superseded room goals.
 | A | F5/F6/F10: input, overlay scrolling/focus, readable active controls | Reproduce slash/wheel defects; verify typing, caret, Escape/Tab, wheel/touch and contrast in actual affected flows; web checks | Implemented; 5 original failures now pass, 325 web tests pass. Desktop fixture verified. Mobile touch/200% zoom and deployed verification remain open. |
 | B | F3/F4: edited principle preservation, truthful support, account-scoped drafts/preferences and cancellation | Isolated SQL preservation tests and two-account browser/state tests; API/web checks | B1: 6 SQL / 653 unit tests pass after 3 reproduced failures. B2: 4 failures reproduced, then two-account draft and stale-response checks pass; full web suite 331/331. Deployed/account-switch browser verification remains open. |
 | C | F2: private reflection containment across prompts, vectors, context and outputs | Private-answer mutations cannot affect room inputs; current membership/visibility checks; read-only historical impact report and reviewed repair scope | C1/C2/C3 code locally verified (51 SQL cases; full web 349/349). Read-only inventory completed across 5 rooms in the DB referenced by the local env files; hosted-stage mapping is not verified. Historical repair, deployment coordination and deployed verification remain pending. |
-| D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | D1–D3d3 provenance, automatic support checks, durable source handoffs, worker data-write fences and personal reading recovery locally verified. D3d3: 161 targeted SQL / 671 unit / 374 web. Pending/statement support, legacy personal context, complete downstream receipts, live semantic quality and historical repair remain open. |
+| D | F1: exact source attribution, explicit support checks, retention, revisions and durable downstream jobs | Deletion/edits remove invalid current citations; bounded omission/failure do not withdraw good support; stale jobs cannot commit; locked words survive | D1–D3e3 locally checked and delivered to dev, including current wording/material bindings and bounded review coverage. D3e4 feedback revisions/current-context and atomic corrections locally checked: 1,156 API / 440 web. Remaining context/recovery edge cases, deployed verification, live semantic quality and historical repair stay open. |
 | E1 | F7/F8: authoritative poster and truthful manual refresh | Queue acceptance, changed/unchanged completion, failure and fresh displayed version verified | Implemented with job receipts, resumable profile-scoped polling, held-job manual upgrade and authoritative headline. Local checks pass (8 receipt SQL tests, 10 hook tests, full web 362/362); deployed verification remains open. |
-| E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | E2a–E2g processing/status, keyed saves and browser recovery locally checked. Web: 435/435; production-build desktop/mobile lost-response, reload and account-switch checks pass. Backend three-answer/retraction/recovery journey passes in real routes/SQL. Complete real-stack/browser journey, older-job branch, cross-device and deployed verification remain pending. |
+| E2 | F9: capture/reflection outcome and recovery | Save → answer → generation → visible result; delay, daily hold, retry, resume and rapid requests verified | E2a–E2h delivered to dev. Connected production-build desktop/mobile capture → three answers → owned reading → explicit adoption → reopening/retraction passes against real authenticated routes/SQL/workers with deterministic providers. Synthetic-browser recovery/account-switch and backend fault journeys pass. Connected fault/account-switch/cross-device, older-job branches and deployed walks remain open. |
 | F | F11/F12: visible search and durable navigation | Results beyond initial archive, failure/no-match separation, stable IDs, deep links, Back/Forward and rename verified | Pending |
 | G | F13: capture attachments and recoverable failure | Paste/drop/select preview; saved text survives failure; retry attaches once; sharing destination clear | Pending |
 | H | F18: progressive initial load and bounded prefetch | Small/large archive baseline vs result, first useful view and card/search/deep-link integrity | Pending |
@@ -1294,3 +1294,58 @@ walks remain open. Audit also found personal synthesis feedback context checks
 target ownership but not current support or consumed wording; reproduce and
 fix that next without discarding the person's feedback history. Later F–J,
 L1–L3, semantic evaluation and reviewed historical repair remain open.
+
+## D3e4 — verdict wording and current feedback context — 2026-10-01
+
+Previous turn: progress. PR #331 merged all checked work to dev at
+`d06cb9c`; CI `36960364518` and deployment `36960364514` both succeeded.
+The full A–J/L1–L3 objective remains unchanged.
+
+Baseline: five regressions failed: feedback on a stale signal, a stale generated
+entry or rewritten signal still reached personal synthesis; new verdicts had no
+consumed wording revision; a failed reading enqueue still acknowledged feedback.
+The three context cases were also reproduced directly through actual synthesis
+input in isolated local SQL before building the regression suite.
+
+Canon-first migration 0048 adds nullable `feedback.target_revision`. New writes
+capture the target's statement/body revision under a short write lock. A
+supplied display revision must match; busy/changed targets return a recoverable
+409 without storing a verdict. Legacy nulls refer only to revision one, not
+current or independently reviewed history. Word changes and change-and-return
+cannot transfer old verdicts. Personal confidence, answered/dispute markers,
+room reactions/affirmation counts and model context share the wording predicate.
+Unsupported generated feedback targets are excluded before the context limit;
+explicitly held entry words remain available without being recertified.
+
+Verdicts, immediate pair/principle dispute changes and reading jobs now commit
+together. Personal corrections use the deliberate/manual read path, not the
+passive daily floor. Room-only reactions enqueue current room work, including
+room-grown signals, without buying an unrelated personal synthesis. Current
+membership/share rows remain locked through commit. Feedback history is retained
+and exports serialize the new bigint as a decimal string. Separately held owner
+decisions remain until explicitly changed; epoch matching is not an implicit
+undo of a principle's under-review state.
+
+Personal principle and reading-ground controls send the displayed revision,
+reload their displayed state on stale rejection, and show the verdict receipt
+only after confirmation. Older external callers can omit the optional display
+revision; the server still captures its current revision. Room-control display
+revision plumbing and connected concurrent-device UX remain follow-up work.
+
+Verification: 13 new SQL cases, four additional route cases and two client
+cases pass. They cover the original failures, preservation/current-limit
+behavior, entry/principle revision binding, explicit stale refusal, no daily
+hold, room-only work and rollback of pair resolution/principle disputes when
+queuing fails. Full API: 1,156 passed, three paid-live benches skipped, 105
+passing suites. Full web: 440/440, both typechecks, web build, migration/diff
+checks and fresh migration 2/2 pass. One old declaration fixture now supplies
+the actual revision-one database field rather than a shape the DB cannot return.
+The connected production-browser/real-worker learning gate still passes at
+1280×900 and 390×844. All model/vector output is deterministic; all SQL uses
+explicit disposable loopback targets. No provider network, hosted migration,
+historical repair or actual account mutation occurred.
+
+This batch is reviewable local progress, not a deployed fix or goal completion.
+Next: concurrent target/access guard coverage, complete room-control revisions,
+then connected failure/account-switch and deployed release verification. The
+remaining F–J/L1–L3 and measured semantic-quality/repair gates remain open.

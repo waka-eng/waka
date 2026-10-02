@@ -35,6 +35,7 @@ import {
   signalContradictions,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
+import { feedbackWordingCurrent } from '../lib/feedback-revisions.js';
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
 import { enqueueTopOfMindRefresh } from "../lib/queue.js";
 import { loadTopOfMindRefreshStatus } from "../lib/top-of-mind-refresh-status.js";
@@ -116,7 +117,7 @@ export interface TopOfMindEntryView {
       Computed from the feedback and lock records at serve time, never
       stored: the light must move the moment the person answers
       (goals/the-legible-loop.md Phase 4). */
-  citedSignals: Array<{ id: string; statement: string; answered: boolean; locked: boolean; contested: boolean }>;
+  citedSignals: Array<{ id: string; statement: string; statementRevision?: string; answered: boolean; locked: boolean; contested: boolean }>;
   createdAt: string;
   supportChanged?: boolean;
 }
@@ -177,6 +178,7 @@ async function loadEntries(
       entryId: topOfMindEntrySignals.entryId,
       signalId: topOfMindEntrySignals.signalId,
       statement: signals.statement,
+      statementRevision: signals.statementRevision,
       // The star half of the ratified standing rides the join it needs no
       // extra query for: the owner's locked words are their answer.
       lockedAt: signals.lockedAt,
@@ -211,6 +213,7 @@ async function loadEntries(
         and(
           eq(feedback.profileId, profileId),
           eq(feedback.targetType, "signal"),
+          feedbackWordingCurrent(),
           inArray(feedback.targetId, citedIds),
         ),
       );
@@ -258,6 +261,7 @@ async function loadEntries(
     const cited = {
       id: row.signalId,
       statement: row.statement,
+      statementRevision: row.statementRevision.toString(),
       answered: row.lockedAt !== null || answeredIds.has(row.signalId),
       /* `answered` CONFLATES TWO DIFFERENT THINGS, deliberately — a verdict and
          a rewrite both mean the person has dealt with this sentence, and the

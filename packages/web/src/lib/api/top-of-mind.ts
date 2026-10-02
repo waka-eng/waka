@@ -55,7 +55,7 @@ export interface ApiTopOfMindEntry {
       is the ground's ratified standing — the owner has spoken to it (a
       verdict or their own locked words) — computed server-side from the
       feedback and lock records at serve time, never stored. */
-  citedSignals: Array<{ id: string; statement: string; answered: boolean; locked: boolean; contested: boolean }>;
+  citedSignals: Array<{ id: string; statement: string; statementRevision?: string; answered: boolean; locked: boolean; contested: boolean }>;
   createdAt: string;
   supportChanged?: boolean;
 }

@@ -964,6 +964,16 @@ Read workers wait for queued/running input checks before synthesis. Manual
 reads can recover failed/missing reviews while active checks continue;
 finished uncertainty preserves the words without an automatic retry loop.
 
+Feedback is also revision-bound. A verdict applies to the signal/principle
+statement or entry body it judged, not all future wording with that ID. Current
+reaction markers, confidence and synthesis filter unmatched revisions; history
+remains available to its reader. Personal feedback context additionally refuses
+unsupported generated targets before its bounded limit, while explicitly held
+entry words remain the person's words. Recording a verdict, immediate dispute
+changes and required reading work is atomic. Deliberate personal corrections
+request a manual reading rather than waiting for the passive daily floor;
+room-only reactions request only the currently accessible room readings.
+
 Large sources use `assess_signal_support` jobs, each scoped to at most twelve
 claims and one assessment call per attempt. The coordinator waits without
 spending a retry while coverage is incomplete; actual provider failures retain

@@ -47,6 +47,7 @@ import {
   signalEvidence,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
+import { feedbackWordingCurrent } from '../lib/feedback-revisions.js';
 import type { DeclarationRoute } from "../lib/model-provider.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
 import {
@@ -107,6 +108,7 @@ const reorderSchema = z
 export interface PrincipleView {
   id: string;
   statement: string;
+  statementRevision?: string;
   type: (typeof principleTypeValues)[number];
   state: "held" | "aspirational" | "contested";
   origin: "minted" | "declared";
@@ -165,6 +167,7 @@ export async function loadPrincipleViews(db: WakaDb, profileId: string): Promise
 
   const verdicts = await db.select({ id: feedback.id, targetId: feedback.targetId, value: feedback.value })
     .from(feedback).where(and(eq(feedback.profileId, profileId), eq(feedback.targetType, "principle"),
+      feedbackWordingCurrent(),
       inArray(feedback.targetId, rows.map((row) => row.id))))
     .orderBy(desc(feedback.createdAt), desc(feedback.id));
   const latest = new Map<string, typeof verdicts[number]>();
@@ -200,6 +203,7 @@ export async function loadPrincipleViews(db: WakaDb, profileId: string): Promise
   return rows.map((row) => ({
     id: row.id,
     statement: row.statement,
+    statementRevision: row.statementRevision.toString(),
     type: row.type,
     state: row.state,
     origin: row.origin,
@@ -228,7 +232,7 @@ export async function undoPrincipleDispute(db: WakaDb, profileId: string, princi
       .orderBy(desc(feedback.createdAt), desc(feedback.id)).limit(1);
     if (latest?.id !== disputeId || latest.value !== "not_true") return true;
     await tx.delete(feedback).where(and(predicate, eq(feedback.id, disputeId)));
-    const [previous] = await tx.select().from(feedback).where(predicate)
+    const [previous] = await tx.select().from(feedback).where(and(predicate, feedbackWordingCurrent()))
       .orderBy(desc(feedback.createdAt), desc(feedback.id)).limit(1);
     const state = principle.conflictsWithId || previous?.value === "not_true" ? "contested"
       : principle.unsupportedAt !== null || (principle.origin === "declared" && !principle.heldSince) ? "aspirational" : "held";
