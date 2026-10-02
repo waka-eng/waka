@@ -1019,3 +1019,34 @@ historical repair and real-model quality evidence separate from local checks.
   wording. Targeted result: 5/5 pass; the complete local API suite then passed
   1,103 tests (3 paid-live benches skipped), with API typecheck passing. No
   production reader logic changed.
+
+## E2f — backend release journey checkpoint — 2026-10-01
+
+The next gate was declared before testing: three saved answers must remain
+single authored rows on replay; retracting the exact supporting answer must
+remove its quote and unsupported relationship; progress must not report a
+replacement reading until the current material finishes. Provider failure must
+leave the capture/answers saved and recover without another authored create.
+
+Added `personal-learning-journey.db.test.ts`: real Hono save, lookup, edit,
+delete, processing/retry and manual-refresh routes run through the real Postgres
+queue and current-reading projection. Authentication, model output and embeddings
+are deterministic injections; all writes stay in disposable loopback schemas.
+The three cases cover the normal and failed-provider three-answer/retraction
+journeys, then no-new-candidate processing, an actual daily hold, and explicit
+manual completion with unchanged wording. They also verify exact answer-quote
+identity, one witness rather than three, another account's refusal, current
+material superseding old receipts, and a removed answer's non-reusable save key.
+
+Result: 3/3 new journey tests pass. Full local API suite: 1,106 passed, 3
+paid-live benches skipped, across 100 passing suites. API typecheck, vocabulary
+gate and diff check pass; goal index 3/3 passes. No new runtime behavior,
+threshold, schema or model prompt changed in this checkpoint. The test provider
+was corrected to consume the real question/context-plus-answer format; an empty
+discovery is tested independently of a genuine new signal needing a daily hold.
+
+This passes the scoped backend checkpoint, NOT the complete release-1 gate.
+Real-browser ambiguous-response/reload recovery, account switching, the complete
+older-job-finishes-last journey, room/deployed walkthroughs, pending/statement
+support and historical context/repair remain open. Continue with the bounded
+browser recovery journey before starting F–J or claiming E2/release completion.
