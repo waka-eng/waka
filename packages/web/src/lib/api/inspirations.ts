@@ -25,7 +25,7 @@ import { fetchInspirationSaveRequest } from './inspiration-save-requests';
 // What a capture is
 // ---------------------------------------------------------------------------
 
-export type ApiInspirationKind = "note" | "link" | "image" | "mixed";
+export type ApiInspirationKind = "note" | "link" | "image" | "mixed" | "audio";
 
 /**
  * Whose initiative the content was: the person's words (typed here, or relayed
@@ -95,6 +95,7 @@ export interface CreateReflectionRequest {
 }
 
 export interface CreateInspirationRequest {
+  attachments?: Array<{ type: 'link'; url: string; name?: string } | { type: 'image' | 'audio'; key: string; contentType: string; size: number; name?: string }>;
   text: string;
   kind?: ApiInspirationKind;
   source?: ApiInspirationSource;

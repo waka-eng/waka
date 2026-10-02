@@ -20,6 +20,7 @@ import { Hono } from "hono";
 
 import {
   decisionPrincipleCitations,
+  attachments,
   experiences,
   inspirations,
   reflections,
@@ -31,7 +32,9 @@ import type { AuthEnv } from "../lib/middleware.js";
 import type { AuthenticatedSession } from "../lib/session.js";
 import { validationDetails } from "../lib/validation.js";
 import { requestSignalDerivation } from "../lib/inspiration-derivation-requests.js";
-import { wakeCommittedBackgroundJobs } from "../lib/queue.js";
+import { enqueueEnrichAttachment, wakeCommittedBackgroundJobs } from "../lib/queue.js";
+import { prepareInspirationAttachments, InspirationAttachmentError, type AttachmentHead } from '../lib/inspiration-attachments.js';
+import { attachmentSelection, serializeAttachment } from './attachments.js';
 import { inspirationSaveFailure, parseInspirationSaveRequestId, runInspirationSave } from '../lib/inspiration-save-requests.js';
 import { readSavedInspiration } from './inspirations-save-requests.js';
 import {
@@ -98,6 +101,7 @@ export function visibilityForCapture(
 export function registerCaptureRoutes(
   routes: Hono<AuthEnv>,
   getDatabase: typeof getDb,
+  attachmentHead?: AttachmentHead,
 ): void {
   routes.post("/", async (c) => {
     c.header('Cache-Control', 'private, no-store');
@@ -159,6 +163,7 @@ export function registerCaptureRoutes(
       runInspirationSave(db, {
         profileId: target.profileId, requestId: parseInspirationSaveRequestId(c.req.header('Idempotency-Key')), operation: 'inspiration',
         material: { text: parsed.data.text, kind: parsed.data.kind ?? null, source, visibility: visibility ?? 'private',
+          ...(parsed.data.attachments ? { attachments: parsed.data.attachments } : {}),
           experience: parsed.data.experience ?? null, citedPrincipleIds,
           reflections: reflectionInputs.map((reflection) => ({ question: reflection.question, answer: reflection.answer ?? null, skipped: reflection.skipped ?? false })) },
       }, async (tx) => {
@@ -200,6 +205,13 @@ export function registerCaptureRoutes(
 
       if (!inserted) throw new Error("Failed to create inspiration");
 
+      const media = parsed.data.attachments?.length ? await prepareInspirationAttachments(parsed.data.attachments,
+        { uploaderProfileId: session.profile.id, profileId: target.profileId, inspirationId: inserted.id }, attachmentHead) : [];
+      const insertedAttachments = media.length ? await tx.insert(attachments).values(media).returning(attachmentSelection) : [];
+      for (const attachment of insertedAttachments) {
+        if (attachment.enrichmentStatus === 'pending') await enqueueEnrichAttachment(target.profileId, attachment.id, inserted.id, tx);
+      }
+
       /* The write-back half of the consultation record: the decision's
          citations go through composite (profile_id, id) foreign keys, so an
          invented id — or a real principle belonging to someone else — is
@@ -237,13 +249,14 @@ export function registerCaptureRoutes(
         const processing = await requestSignalDerivation({ profileId: target.profileId, inspirationId: inserted.id,
           reason: "created", changedSource: "inspiration" }, tx);
         return { inspirationId: inserted.id, reflectionId: null, processing: processing.receipt,
-          response: { inspiration: serializeInspirationDetail(inserted, { attachments: [], reflections: insertedReflections }), processing: processing.receipt } };
+          response: { inspiration: serializeInspirationDetail(inserted, { attachments: insertedAttachments.map(serializeAttachment), reflections: insertedReflections }), processing: processing.receipt } };
       }, (tx, saved) => readSavedInspiration(tx, target.profileId, saved));
 
     let persisted: Awaited<ReturnType<typeof persistInspiration>>;
     try {
       persisted = await persistInspiration();
     } catch (err) {
+      if (err instanceof InspirationAttachmentError) return c.json({ error: err.message, code: err.code }, err.status);
       const failure = inspirationSaveFailure(err);
       if (failure) return c.json({ error: failure.message, code: failure.code }, failure.status);
       /* The composite FK doing its job: the cited id is not a principle of

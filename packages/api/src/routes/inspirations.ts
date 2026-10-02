@@ -77,12 +77,14 @@ import { registerRecallRoutes } from "./inspirations-recall.js";
 import { registerReflectionRoutes } from "./inspirations-reflections.js";
 import { registerProcessingRoutes } from "./inspirations-processing.js";
 import { registerSaveRequestRoutes } from './inspirations-save-requests.js';
+import type { AttachmentHead } from '../lib/inspiration-attachments.js';
 
 export type { CreateInspirationInput } from "./inspirations-validation.js";
 
 export interface InspirationsRouteDependencies {
   getDatabase?: typeof getDb;
   authMiddleware?: MiddlewareHandler<AuthEnv>;
+  attachmentHead?: AttachmentHead;
 }
 
 export function createInspirationsRoutes(
@@ -101,7 +103,7 @@ export function createInspirationsRoutes(
   // matching is order-sensitive. `/:id` is a single segment and cannot swallow
   // `/:id/reflections`, but that is a property of the patterns rather than
   // something to rediscover the next time one changes.
-  registerCaptureRoutes(routes, getDatabase);
+  registerCaptureRoutes(routes, getDatabase, deps.attachmentHead);
   registerRecallRoutes(routes, getDatabase);
   registerEditingRoutes(routes, getDatabase);
   registerReflectionRoutes(routes, getDatabase);

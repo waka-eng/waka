@@ -30,7 +30,7 @@ import {
 import { inspirations } from "./schema-inspirations";
 import { profiles } from "./schema-profiles";
 
-export const attachmentTypeValues = ["link", "image", "file"] as const;
+export const attachmentTypeValues = ["link", "image", "file", "audio"] as const;
 export type AttachmentType = (typeof attachmentTypeValues)[number];
 export const attachmentTypeEnum = pgEnum("attachment_type", attachmentTypeValues);
 

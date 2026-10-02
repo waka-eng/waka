@@ -19,7 +19,7 @@ import { ApiError, apiPath, postJson } from "./http";
 // ---------------------------------------------------------------------------
 
 /** Attachment kinds — mirrors the Postgres `attachment_type` enum. */
-export type AttachmentType = "link" | "image" | "file";
+export type AttachmentType = "link" | "image" | "file" | "audio";
 export type AttachmentEnrichmentStatus = "pending" | "ready" | "failed" | "unavailable";
 export type AttachmentEnrichmentKind = "page_body" | "image_description";
 

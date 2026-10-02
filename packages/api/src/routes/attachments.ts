@@ -53,6 +53,8 @@ import {
 import { getDb } from "../lib/db.js";
 import { type AuthEnv, profileAccessError, requireAuth, asAccountProfile } from "../lib/middleware.js";
 import { enqueueEnrichAttachment, wakeCommittedBackgroundJobs } from "../lib/queue.js";
+import { attachmentKeyPrefix, attachmentObjectUrl, getAttachmentsBucket } from '../lib/attachment-storage.js';
+import { ALLOWED_ATTACHMENT_CONTENT_TYPE, MAX_ATTACHMENT_UPLOAD_BYTES } from '../lib/inspiration-attachment-input.js';
 import { requestSignalDerivation } from "../lib/inspiration-derivation-requests.js";
 import { validationDetails } from "../lib/validation.js";
 
@@ -66,7 +68,6 @@ import { validationDetails } from "../lib/validation.js";
  * under typical browser and CDN limits. The signature pins the exact declared
  * length, so an attempt to send more fails at S3.
  */
-const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 /**
  * Allowed MIME type prefixes: images for the "image" attachment kind, and the
@@ -75,8 +76,6 @@ const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
  * The risk being managed is "a member pays storage for a junk file", not bucket
  * compromise: the bucket is private and served only through presigned GETs.
  */
-const ALLOWED_CONTENT_TYPE_RE =
-  /^(image\/[a-z0-9.+-]+|application\/(pdf|zip|json|octet-stream)|text\/[a-z0-9.+-]+)$/i;
 
 /**
  * Presign request.
@@ -96,12 +95,12 @@ const presignRequestSchema = z.object({
     .trim()
     .min(1, "contentType is required")
     .max(255, "contentType is too long")
-    .refine((v) => ALLOWED_CONTENT_TYPE_RE.test(v), "contentType is not an allowed MIME type"),
+    .refine((v) => ALLOWED_ATTACHMENT_CONTENT_TYPE.test(v), "contentType is not an allowed MIME type"),
   size: z
     .number()
     .int("size must be an integer number of bytes")
     .min(1, "size must be > 0")
-    .max(MAX_UPLOAD_BYTES, `size exceeds the ${MAX_UPLOAD_BYTES}-byte cap`),
+    .max(MAX_ATTACHMENT_UPLOAD_BYTES, `size exceeds the ${MAX_ATTACHMENT_UPLOAD_BYTES}-byte cap`),
 }).strict();
 
 export type PresignRequest = z.infer<typeof presignRequestSchema>;
@@ -156,7 +155,7 @@ const finalizeRemoteImageSchema = z.object({
 
 const finalizeS3Schema = z.object({
   ...baseFinalizeFields,
-  type: z.enum(["image", "file"]),
+  type: z.enum(["image", "file", "audio"]),
   key: z.string().trim().min(1, "key is required").max(1024, "key is too long"),
   contentType: z
     .string()
@@ -168,7 +167,7 @@ const finalizeS3Schema = z.object({
     .number()
     .int("size must be an integer number of bytes")
     .min(0, "size must be >= 0")
-    .max(MAX_UPLOAD_BYTES, `size exceeds the ${MAX_UPLOAD_BYTES}-byte cap`)
+    .max(MAX_ATTACHMENT_UPLOAD_BYTES, `size exceeds the ${MAX_ATTACHMENT_UPLOAD_BYTES}-byte cap`)
     .optional(),
 }).strict();
 
@@ -202,24 +201,6 @@ export type FinalizeAttachmentRequest = z.infer<typeof finalizeRequestSchema>;
  * `sst` is deliberately not imported at module scope: the tests run outside
  * Lambda and would blow up on the Resource proxy.
  */
-function getBucketName(): string {
-  const fromEnv = process.env.ATTACHMENTS_BUCKET;
-  if (fromEnv && fromEnv.length > 0) return fromEnv;
-
-  const sstLink = process.env.SST_RESOURCE_Attachments;
-  if (sstLink) {
-    try {
-      const parsed = JSON.parse(sstLink) as { name?: string };
-      if (parsed?.name) return parsed.name;
-    } catch {
-      // fall through to error
-    }
-  }
-
-  throw new Error(
-    "Attachments bucket name is not configured (ATTACHMENTS_BUCKET / SST_RESOURCE_Attachments).",
-  );
-}
 
 /**
  * Resolve the region.
@@ -259,9 +240,6 @@ function safeExtension(filename: string): string {
 }
 
 /** Every uploaded object lives under the uploading profile, and only there. */
-function keyPrefixForProfile(profileId: string): string {
-  return `profiles/${profileId}/attachments/`;
-}
 
 /**
  * Build a server-controlled key. Two profiles can never produce the same key
@@ -281,7 +259,7 @@ function keyPrefixForProfile(profileId: string): string {
 function buildKey(profileId: string, filename: string): string {
   const ts = Date.now();
   const rand = Math.random().toString(36).slice(2, 10);
-  return `${keyPrefixForProfile(profileId)}${ts}-${rand}${safeExtension(filename)}`;
+  return `${attachmentKeyPrefix(profileId)}${ts}-${rand}${safeExtension(filename)}`;
 }
 
 /**
@@ -290,13 +268,6 @@ function buildKey(profileId: string, filename: string): string {
  * (the bucket is private), but storing the canonical form keeps the column
  * non-empty and portable across signing schemes.
  */
-function canonicalS3Url(bucket: string, region: string, key: string): string {
-  const encoded = key
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
-  return `https://${bucket}.s3.${region}.amazonaws.com/${encoded}`;
-}
 
 /**
  * HEAD the object to verify the upload actually landed before writing a row
@@ -430,7 +401,7 @@ export const attachmentSelection = {
  * the same conclusion.
  */
 function initialEnrichmentStatus(type: Attachment["type"]): AttachmentEnrichmentStatus {
-  return type === "file" ? "unavailable" : "pending";
+  return type === "link" || type === "image" ? "pending" : "unavailable";
 }
 
 // ---------------------------------------------------------------------------
@@ -569,14 +540,14 @@ attachmentsRoutes.post("/", async (c) => {
   } else {
     const { key, type, name, contentType, size } = parsed.data;
 
-    const expectedPrefix = keyPrefixForProfile(session.profile.id);
+    const expectedPrefix = attachmentKeyPrefix(session.profile.id);
     if (!key.startsWith(expectedPrefix)) {
       return c.json({ error: "key does not belong to the authenticated profile" }, 403);
     }
 
     let bucket: string;
     try {
-      bucket = getBucketName();
+      bucket = getAttachmentsBucket();
     } catch (err) {
       console.error("[attachments] bucket misconfigured:", err);
       return c.json({ error: "Attachments bucket is not configured" }, 500);
@@ -594,7 +565,7 @@ attachmentsRoutes.post("/", async (c) => {
       profileId: parent.profileId,
       inspirationId: parent.id,
       type,
-      url: canonicalS3Url(bucket, getRegion(), key),
+      url: attachmentObjectUrl(bucket, getRegion(), key),
       name: name ?? null,
       s3Key: key,
       contentType: contentType ?? null,
@@ -652,7 +623,7 @@ attachmentsRoutes.post("/presign", async (c) => {
 
   let bucket: string;
   try {
-    bucket = getBucketName();
+    bucket = getAttachmentsBucket();
   } catch (err) {
     console.error("[attachments] bucket misconfigured:", err);
     return c.json({ error: "Attachments bucket is not configured" }, 500);
