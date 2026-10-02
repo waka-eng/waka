@@ -1255,3 +1255,42 @@ the full goal. Before that delivery, deploy a worker compatibility guard so
 an older worker leaves newer job types pending rather than exhausting their
 attempts. Connected release-journey verification, legacy context, deployed
 checks, historical repair and the remaining A–J/L1–L3 gates stay open.
+
+## E2h — connected browser/worker loop and saved identity — 2026-10-01
+
+The owner's dev request is being delivered through PRs #332 (worker
+compatibility) and #331 (revision-bound support and bounded reviews). #332
+CI passed and its development deployment succeeded at 03:12:46 UTC on
+2026-10-02. Allow at least fourteen minutes for pre-compatibility worker
+invocations to expire before #331's deployment. #331 CI also passed; the full
+local API suite now passes 1,139 tests with three paid-live benches skipped.
+
+The new manual `e2e:connected-learning` gate bridges a production-build
+browser into the real authenticated Hono routes, queue workers and isolated
+local SQL. No processing statuses or reading responses are invented by the
+browser fixture. Providers and embeddings are deterministic; network model
+calls are refused.
+
+Baseline found a real saved-identity defect: the scene birthed a confirmed
+capture as `kept-<requestId>`, while the archive keyboard used its persisted
+inspiration ID. Its card could not reopen without reload. Reloading proved
+the saved reflection data was intact. Confirmed captures now use the saved
+ID in both places; the unsaved offline preview keeps its temporary identity.
+
+After fix, the connected gate passes at 1280×900 and 390×844: one capture,
+three exact saved answers, generated follow-ups, real derivation and support
+checks, truthful daily hold/manual override, owned artifact completion,
+explicit reading adoption, keyboard reopening without reload, and retraction
+of the exact cited answer. The remaining two answers persist and the old
+generated conclusion is withheld by the real read projection. Eight extraction,
+four assessment and four synthesis fixture calls across both sizes; zero
+provider network calls. Screenshots inspected. Full web 438/438,
+web typecheck/build, strict manual-script typecheck and diff checks pass.
+
+This closes the connected local happy-path gap, not all of E2 or release 1.
+The manual cadence override uses the real API directly, so its UI path is not
+claimed here. Connected failure/account-switch/cross-device paths and deployed
+walks remain open. Audit also found personal synthesis feedback context checks
+target ownership but not current support or consumed wording; reproduce and
+fix that next without discarding the person's feedback history. Later F–J,
+L1–L3, semantic evaluation and reviewed historical repair remain open.

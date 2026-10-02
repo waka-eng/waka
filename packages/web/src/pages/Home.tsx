@@ -10226,7 +10226,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       const known = inspirationsRef.current?.some((item) => item.id === made.id) || bornIdsRef.current.has(made.id);
       const revision = ++sourceListMutationRef.current;
       detailsRef.current.set(made.id, detail);
-      if (!known && !result.recovered) birthInspiration(`kept-${intent.requestId}`, made.text, Date.parse(made.createdAt), made.id);
+      if (!known && !result.recovered) birthInspiration(made.id, made.text, Date.parse(made.createdAt), made.id);
       setInspirations((previous) => {
         if (previous?.some((item) => item.id === made.id)) return previous.map((item) => item.id === made.id ? detail : item);
         return !result.recovered ? [...(previous ?? []), detail] : previous;

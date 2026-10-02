@@ -34,6 +34,29 @@ pnpm e2e:fixtures              # prints its URL; --port and --host accepted
 Nothing here prints a password, a token, or a connection string; quoted
 response bodies are redacted first.
 
+## Connected personal loop, without model spend
+
+`connected-learning.ts` connects the production-build browser to the real Hono
+app, authentication, disposable Postgres and queue workers. Provider output
+and embeddings are deterministic, and provider network access is blocked.
+It checks capture → three saved answers → owned reading → explicit adoption
+→ reopening without reload → exact cited-answer retraction at desktop/mobile
+sizes. API transport is an in-process bridge, not a deployed-network check.
+
+Build the web app and serve its production preview on `127.0.0.1:3012`, then
+run with an explicit disposable local database (its name must contain `test`
+or `disposable`):
+
+```bash
+pnpm --filter @waka/web build
+pnpm --filter @waka/web exec vite preview --host 127.0.0.1 --port 3012
+DB_CONNECTION_URL=postgres://agi@127.0.0.1:5432/waka_agent_test pnpm e2e:connected-learning
+```
+
+The harness creates and drops an isolated schema. It never loads an env file,
+refuses remote database URLs and emits only synthetic fixture diagnostics.
+This is a manual gate; it adds no automatic browser Actions runs.
+
 ## What each step proves
 
 | # | Step | What a failure means |
