@@ -118,3 +118,54 @@ A03 real microphone/permissions/interruptions/playback/upload, and the bounded
 native photo/share/session probe. A01/A02 and C02 are complete; the full goal
 is **not complete**. These resource gaps cannot be replaced with more desktop
 unit tests or synthetic tones.
+
+### A03 simulator access restored and C01 keyboard repair
+
+The owner pointed out both simulators were installed. Android was found at
+`/opt/homebrew/share/android-commandlinetools/emulator/emulator`, not the
+default SDK location checked earlier. The iOS WAKA simulator and Android
+`ondo_pixel` (API 35) both booted. Android uses `-read-only -no-snapshot-save`
+to preserve its existing data. Mac native UI access now works. This supersedes
+the earlier simulator-resource blocker, not the actual-device requirement.
+
+iOS 26.5 Capacitor observations against a fresh disposable loopback database:
+
+- Before login, session check returned 401; after fixture login, 200. Closing
+  the app through the app switcher and reopening retained the matching session.
+- Limited photo permission allowed only the generated fixture. The selected
+  image rendered; the native file-share sheet opened and was canceled without
+  external transmission.
+- WebM/Opus tone recording played through the native audio control. The initial
+  upload failed with `CapacitorUrlRequestError error 0` before the object PUT.
+  Explicit `CapacitorHttp` base64 `dataType: file` fixed the native binary
+  transfer. A 46,943-byte clip saved with 201; the same intent retried with 200.
+  SQL/object counts remained one new inspiration, one attachment, one request,
+  and one object. This change is in the native probe, not the production web
+  transport. File size and MIME were verified by the real server HEAD check.
+
+iOS simulator Safari also exercised the shipped web composer. Microphone
+denial showed a recovery message without losing text; reload restored the
+draft; save-and-think opened reflection. The Safari fixture unexpectedly used
+the browser's real permission path rather than the injected synthetic getter;
+permission was denied, and no host microphone was captured. Therefore only the
+native probe recording above is claimed as synthetic-audio evidence here.
+
+Keyboard testing exposed footer occlusion in centered writing dialogs. The
+dialogs now track visual viewport resize/scroll; only capture and the standalone
+reflection sheet opt into that positioning. Capture keeps its header/footer
+outside the scrolling input area. After repair, both save buttons were visible
+above the software keyboard; save-and-think worked with it open, and reflection
+could be dismissed using its now-visible bottom action. Screenshots are
+`ios-keyboard-capture.jpg` and `ios-keyboard-reflection.jpg` in the evidence folder.
+
+Verification: targeted dialog/capture 14/14; web typecheck/build passed.
+The concurrent full run had one navigation test time out at its existing
+5-second limit, then five dependent failures. The same navigation suite passed
+6/6 in isolation; full suite passed 484/484 across 71 suites with one worker,
+without changing timeouts or assertions. Memory pressure was reported by the
+Android emulator during concurrent runs; causality is not proven.
+
+Android UI verification remains open: the running qemu window is not recognized
+by the current native UI tool. An explicit request to use ADB touch/screenshots
+is pending. Actual iPhone/Android microphone and interruption validation also
+remain open. No production/dev data, deployment or paid model calls were used.

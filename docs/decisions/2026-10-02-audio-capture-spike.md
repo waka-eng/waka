@@ -42,16 +42,20 @@ The machine-readable [results](../craft/evidence/personal-capture/audio-transcri
 The bounded Capacitor probe is checked in under
 [`tools/e2e/native-capture-spike`](../../tools/e2e/native-capture-spike/README.md).
 Its iOS simulator build succeeded (Xcode 26.6, iOS 26.5 SDK, signing disabled).
-The Mac was locked when native UI access was attempted. The isolated simulator
-was created but not booted or launched, so recording, photo selection, share
-sheet and session retention are **not** verified. An unlock request is pending;
-this restriction was not bypassed. No production mobile configuration changed.
+After Mac UI access became available, the iOS simulator verified limited photo
+selection/preview, opening/canceling the file share sheet, session retention
+after full app closure, and synthetic WebM/Opus recording/playback/upload.
+Patched fetch rejected the audio Blob with `CapacitorUrlRequestError error 0`;
+the probe now explicitly encodes native file requests as base64 with
+`dataType: file`. Saving then retrying returned 201 then 200 and produced only
+one inspiration/attachment/request/object. No production mobile configuration
+changed, no host microphone was recorded, and no file was shared externally.
 
 | Requirement | Evidence still needed |
 | --- | --- |
 | Actual iPhone Safari | Microphone allow/deny, recording, playback, upload, lock screen and app interruption |
 | Actual Android Chrome | The same real-device cases |
-| Native container | Bounded Capacitor recording, photo choice, file sharing and login persistence probe |
+| Native container | iOS synthetic recording/photo/share/session probe passes; actual microphone and Android native behavior remain unverified |
 | Supported formats and limits | Device results to finalize formats, five-minute limit and interruption recovery claims |
 
 The current recorder tries a supported WebM/Opus, MP4, WebM or Ogg/Opus format at runtime. The proposed maximum remains five minutes and the server upload cap is 25 MiB. It stops on page visibility loss; physical-device behavior and interrupted-file recoverability remain unverified. Raw audio storage already works in the fixture, while durable server transcription/correction is C06 work.

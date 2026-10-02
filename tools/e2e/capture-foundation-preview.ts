@@ -59,6 +59,7 @@ const types: Record<string,string> = { '.html':'text/html', '.js':'text/javascri
 const server = createServer(async (request, response) => {
   try {
     const target = new URL(request.url ?? '/', origin);
+    if (process.env.WAKA_FIXTURE_REQUEST_LOG === '1') console.info('fixture', request.method, target.pathname);
     if (target.pathname === '/fixture/native-login') {
       response.writeHead(200, { 'Content-Type': 'application/json', 'Set-Cookie': buildSessionCookie(nativeToken, { secure: false }), 'Cache-Control': 'no-store' });
       response.end(JSON.stringify({ profileId: nativeProfile.id })); return;

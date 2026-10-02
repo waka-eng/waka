@@ -2,7 +2,7 @@
 
 This is an A03 experiment, not a shipping mobile app. It uses generated tone
 audio and a disposable local account. Never point it at dev/production or enter
-real credentials. Native UI and physical-device checks remain outstanding.
+real credentials. iOS simulator UI was exercised; physical-device checks remain outstanding.
 
 ## Reproduce
 
@@ -26,7 +26,7 @@ The dev-only server URL is `http://127.0.0.1:3015/native-probe/`, suitable for
 the simulator on this Mac, not a phone. Generated `ios/`, `dist/` and
 `node_modules/` are intentionally ignored.
 
-## Pending UI protocol
+## UI protocol
 
 With an unlocked Mac and an isolated simulator, sign in to the synthetic
 fixture, check the session, choose the generated `input-photo.png`, record
@@ -39,7 +39,10 @@ permissions, interruptions and upload checks.
 ## Current evidence
 
 The iOS simulator build succeeded with Xcode 26.6 and iOS 26.5 SDK. The local
-simulator `WAKA Capture A03` (`FA6EE0CE-83F9-413A-A43C-CC24BF114C80`) was created
-but not booted, installed or launched. Native UI access is blocked by the Mac
-lock; no native-flow success is claimed. See
+simulator `WAKA Capture A03` (`FA6EE0CE-83F9-413A-A43C-CC24BF114C80`) verified
+limited photo selection, image preview, opening/canceling the share sheet,
+session retention after closing/reopening, and synthetic recording/playback.
+The initial patched-fetch Blob upload failed; explicit native file encoding
+fixed it. Saving/retrying returned 201/200 with one attachment and one source.
+This does not establish physical microphone or Android native behavior. See
 [`audio-capture-spike`](../../../docs/decisions/2026-10-02-audio-capture-spike.md).

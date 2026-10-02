@@ -63,8 +63,17 @@ document.querySelector('#upload').onclick = act(async () => {
   if (signed.status !== 200) { show({ presignStatus: signed.status }); return; }
   if (signed.data.profileId !== profile) { show({ upload: 'profile changed' }); return; }
   uploadTicket = signed;
-  const uploaded = await fetch(signed.data.uploadUrl, { method: 'PUT', headers: signed.data.headers, body: recordedBlob });
-  if (!uploaded.ok) { show({ uploadStatus: uploaded.status }); return; }
+  // The iOS patched fetch rejected this Blob with CapacitorUrlRequestError.
+  // Use the documented native file encoding rather than relying on coercion.
+  const base64 = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onload = () => resolve(String(reader.result).split(',')[1]);
+    reader.readAsDataURL(recordedBlob);
+  });
+  const uploaded = await CapacitorHttp.request({ url: signed.data.uploadUrl, method: 'PUT',
+    headers: signed.data.headers, data: base64, dataType: 'file' });
+  if (uploaded.status < 200 || uploaded.status >= 300) { show({ uploadStatus: uploaded.status }); return; }
   const saved = await CapacitorHttp.post({ url: origin + '/api/inspirations', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestId },
     data: { text: '', kind: 'audio', attachments: [{ type: 'audio', key: signed.data.key, contentType: recordedBlob.type, size: recordedBlob.size, name: `Native.${extension}` }] } });
   show({ saveStatus: saved.status, attachmentCount: saved.data.inspiration?.attachments?.length, code: saved.data.code });
