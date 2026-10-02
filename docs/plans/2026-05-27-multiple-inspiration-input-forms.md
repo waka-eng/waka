@@ -1,6 +1,6 @@
 # Multiple Inspiration Input Forms MVP Spec
 
-Plan status: READY_FOR_DEV
+Plan status: HISTORICAL. The current input scope and implementation task list are in [WAKA personal experience tasks](2026-10-02-personal-experience-tasks.md). The file paths and pre-rebuild data model below are retained as historical context, not current implementation instructions.
 
 Goal:
 - Support a bounded set of inspiration input forms beyond plain text while preserving the two existing user journeys: Quick Capture for fastest save, and Process for richer guided context.

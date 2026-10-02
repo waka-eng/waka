@@ -41,6 +41,22 @@ before it gets a name anywhere else.
 | Suppression log surface | `weather.antechamber[]` — refused candidates + anchors | **the antechamber** | the dim place where what was read but not kept still stands | Suppression log view (delta surface) | **today** |
 | Decision attribution | `decision_trace` | **roots of a choice** | which memories this choice came from | Attribution / decision audit | reserved |
 
+## Personal capture vocabulary approved 2026 10 02
+
+The personal experience contract adds the following plain-language concepts.
+These are approved names; rows marked planned do not claim shipped storage or UI.
+
+| Concept | Data or API name | UI | Plain line | Status |
+| --- | --- | --- | --- | --- |
+| Recorded audio attachment | `audio` | Recording | what you recorded | in implementation |
+| Machine transcript of recorded audio | `audio_transcription` | Transcript | what was heard in this recording | planned |
+| A person's correction of the transcript | `transcript_correction` | Edit transcript | correct what was heard without replacing the recording | planned |
+| One private review of selected inspirations | `review_session` | Review | revisit a few things you kept | planned |
+| A conversation using the profile's memory | `conversation` | Talk with WAKA | think through a question with your own experiences | planned |
+| Exported rendering of selected principle wording | `principle_artifact` | Share a principle | choose the words that leave WAKA | planned |
+
+See [the capture foundation contract](docs/plans/2026-10-02-capture-foundation-contract.md).
+
 ## Words banned from the UI
 
 lock, locked, provenance, source (as jargon), version, audit, history.

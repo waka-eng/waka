@@ -138,6 +138,32 @@ room grew. Principles do not participate in groups (v1).
 
 ## Inspiration (layer 1)
 
+### Personal capture extension approved 2026 10 02
+
+The owner approved recorded audio as an inspiration input and one composer for
+text, links, photos and recordings. An inspiration may have empty authored text
+when it has attachments; presentation labels must not be stored as invented
+human prose. A bundle save identifies one immutable intent and commits its
+inspiration, attachment rows and processing request atomically after uploads.
+Replaying it returns current owned data without creating another attachment.
+
+Audio is an attachment kind. Its original bytes remain separate from the planned
+`audio_transcription` enrichment and a person's `transcript_correction`; machine
+retries never overwrite that correction. Original audio, transcript and answers
+from the same capture do not establish independent repeated experiences.
+
+The approved later review/conversation/export contracts are detailed in
+[the personal capture contract](plans/2026-10-02-capture-foundation-contract.md).
+They are not yet claims of implemented tables or routes. Review skipping is
+session-local, a review selection is not a verdict on a principle, and multiple
+source references do not multiply one authored response. A selected principle
+may be explicitly exported as an image under that contract; this extends the
+earlier no-sharing v1 rule only to the user's chosen artifact, not public access
+to principles, inspirations, answers or audio. Export-only wording edits do not
+rewrite the underlying principle.
+
+### Existing inspiration behavior
+
 A capture event. Whatever arrived: pasted text, a link, an image, an
 agent's relayed excerpt, an agent's own observation.
 

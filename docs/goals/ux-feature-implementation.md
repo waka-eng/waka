@@ -1471,3 +1471,13 @@ contract remain separate work. The older edge-travel affordance still refuses
 field travel despite remaining accessible; the room menu works there. Record
 that interaction mismatch for the next usability/bug batch rather than changing
 the canvas travel law here. Keep the broader backlog paused.
+
+## Product planning update 2026 10 02
+
+The owner prioritized personal capture, review, Principles sharing artifacts
+and avatar conversation, and added recording as an inspiration input. Further
+group development is deferred. The concrete proposed implementation tasks and
+acceptance criteria are in [WAKA personal experience tasks](../plans/2026-10-02-personal-experience-tasks.md).
+This planning request does not mark those tasks implemented or resume all older
+backlog items. Preserve the completion evidence above; use the new plan to choose
+the next explicitly started implementation batch.
