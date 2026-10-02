@@ -1,6 +1,6 @@
 # Goal: implement the experience review
 
-Status: paused at the owner's request (2026-10-01), after wrapping E2e2. Input/ownership/privacy fixes, support/worker fences, source-to-reading progress, and keyed-save UI are locally checked. Full release-journey verification, pending/statement support, legacy context, later UX/algorithm slices, historical repair and deployment remain open. The full objective is unchanged.
+Status: in flight again at the owner's request (2026-10-01): push the current batch to dev, then continue the full goal. Input/ownership/privacy fixes, support/worker fences, source-to-reading progress, and keyed-save UI are locally checked. Full release-journey verification, pending/statement support, legacy context, later UX/algorithm slices, historical repair and rollout verification remain open. The full objective is unchanged.
 Created: 2026-10-01, on the owner's instruction to implement the full plan.
 Branch: `codex/ux-feature-implementation`.
 Baseline: `33e65a7` on `dev`.
@@ -978,3 +978,31 @@ slice. The original full A–J/L1–L3 goal remains incomplete.
 - **Known boundary:** attachment finalization still uses the prior best-effort
   path; text/answer idempotency does not make uploads or link finalization safe
   to retry. Deployed guarantees and completion of the full plan are not claimed.
+
+## Resumed dev delivery — 2026-10-01
+
+The owner explicitly requested pushing the completed local batch to dev and
+continuing the goal. Fresh fetch found remote dev unchanged at `33e65a7`, with
+the local branch 26 commits ahead and none behind. The push is a normal
+fast-forward, not a history rewrite. This authorizes the existing automatic
+dev deployment; it does not authorize production deployment or historical repair.
+
+Before that push, closed the configuration drift between dev migrations and
+runtime: the workflow now requires `DB_CONNECTION_URL_DEV`, compares its
+normalized configured endpoint/database with production without connecting or
+printing credentials, and synchronizes development's SST `DbConnectionUrl`
+from that same dev value. The guard precedes infrastructure changes/migrations
+and rejects missing/invalid targets, credentials-only differences, pooled/direct
+aliases, and target-override URL parameters. Separately named aliases can still
+refer to one underlying database, so this is not a claim of provider-level
+isolation or a read of the deployed production runtime.
+
+Pre-push checks: 679 API unit tests pass (8 new deployment-preflight cases;
+3 paid-live benches skipped), 433 web tests pass, both typechecks and web build
+pass, and migration check passes. Explicit loopback SQL: 40/40 across the fresh
+migrator, keyed saves and source completion suites. No local command migrated
+hosted data, invoked a paid model, or changed production configuration.
+
+After delivery, continue with the complete personal release-1 journey and its
+failure/recovery branches before opening another feature slice. Keep deployment,
+historical repair and real-model quality evidence separate from local checks.

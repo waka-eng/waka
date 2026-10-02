@@ -63,7 +63,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          required=(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION OPENROUTER_API_KEY)
+          required=(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION OPENROUTER_API_KEY DB_CONNECTION_URL)
           missing=()
           for name in "${required[@]}"; do
             if [[ -z "${!name:-}" ]]; then
@@ -75,6 +75,12 @@ jobs:
             printf 'Set repository secrets AWS_ACCESS_KEY_ID_APP and AWS_SECRET_ACCESS_KEY_APP.\n' >&2
             exit 1
           fi
+
+      - name: Verify separate configured database targets
+        env:
+          # Read only in this preflight step, never used for a connection.
+          PRODUCTION_DB_CONNECTION_URL: ${{ secrets.DB_CONNECTION_URL }}
+        run: node scripts/check-deployment-databases.mjs
 
       - name: Release legacy CloudFront alias
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.release_legacy_alias) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[release-dev-alias]')) }}
@@ -117,6 +123,10 @@ jobs:
       # repository secret before automatic and manually started deployments.
       - name: Set development OpenRouter secret
         run: pnpm sst secret set OpenRouterApiKey "$OPENROUTER_API_KEY" --stage "$SST_STAGE"
+
+      # The migration runner and deployed functions must use the same target.
+      - name: Set development database secret
+        run: pnpm sst secret set DbConnectionUrl "$DB_CONNECTION_URL" --stage "$SST_STAGE"
 
       - name: Apply development database migrations
         # The prod workflow has always migrated; dev relied on hands. The gap
