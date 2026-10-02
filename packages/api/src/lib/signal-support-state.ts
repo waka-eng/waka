@@ -55,13 +55,13 @@ export async function loadSignalSupportWorkState(db: Pick<ReturnType<typeof getD
     SELECT j.status::text, j.type::text, j.run_after AS "runAfter", j.payload->>'inspirationId' AS "inspirationId"
     FROM background_jobs j JOIN inspirations i ON i.id::text = j.payload->>'inspirationId' AND i.profile_id = j.profile_id
     JOIN profiles p ON p.id = ${profileId}::uuid
-    WHERE j.type::text IN ('review_signal_support', 'derive_signals')
+    WHERE j.type::text IN ('review_signal_support', 'assess_signal_support', 'derive_signals')
       AND coalesce(j.payload->>'deriveIntoProfileId', j.profile_id::text) = p.id::text
       AND (i.profile_id = p.id OR (p.type::text = 'group' AND i.visibility::text = 'public'
         AND EXISTS (SELECT 1 FROM group_members m WHERE m.group_id = p.group_id AND m.profile_id = i.profile_id)))`);
   const pendingIds = new Set(sources.map((source) => source.inspirationId));
   const relevant = jobs.filter((job) => pendingIds.has(job.inspirationId) ||
-    (job.type === 'review_signal_support' && (job.status === 'pending' || job.status === 'running')));
+    ((job.type === 'review_signal_support' || job.type === 'assess_signal_support') && (job.status === 'pending' || job.status === 'running')));
   const activeJobs = relevant.filter((job) => job.status === 'pending' || job.status === 'running');
   const nextRun = activeJobs.length ? Math.min(...activeJobs.map((job) => job.status === 'running' ? Date.now() : new Date(job.runAfter).getTime())) : null;
   return { sources, active: activeJobs.length > 0, running: activeJobs.some((job) => job.status === 'running'), nextRun,

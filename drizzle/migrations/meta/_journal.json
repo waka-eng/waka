@@ -330,6 +330,13 @@
       "when": 1790906016769,
       "tag": "0046_owned-word-revisions",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1790907525203,
+      "tag": "0047_support-assessment-batches",
+      "breakpoints": true
     }
   ]
 }

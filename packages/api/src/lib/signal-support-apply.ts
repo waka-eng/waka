@@ -11,7 +11,7 @@ import { promoteIfDemonstrated, reconcilePrinciplesAfterSignalLoss } from "./pri
 import { enqueueGroupTopOfMindRefresh, enqueueTopOfMindRefresh, type EnqueueResult } from "./queue.js";
 import { reconcileSignalsAfterEvidenceLoss, refreshSignalLifecycle } from "./signal-lifecycle.js";
 import { acquireSignalDerivationLock } from "./signal-match-or-mint.js";
-import { loadSupportClaims, SIGNAL_SUPPORT_REVIEW_POLICY, supportClaimsHash, supportReviewSources } from "./signal-support-review.js";
+import { loadSupportClaims, SIGNAL_SUPPORT_REVIEW_POLICY, SUPPORT_REVIEW_BATCH_SIZE, supportClaimsHash, supportReviewSources } from "./signal-support-review.js";
 
 const uuid = z.string().uuid();
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
@@ -19,6 +19,7 @@ const reportSchema = z.object({
   reviewId: uuid, policy: z.literal(SIGNAL_SUPPORT_REVIEW_POLICY), status: z.literal("current"),
   profileId: uuid, ownerProfileId: uuid, membershipId: uuid.nullable(), inspirationId: uuid,
   claimsHash: hash, calls: z.number().int().min(0).max(10), restrictedClaimCount: z.number().int().min(0),
+  signalIds: z.array(uuid).min(1).max(SUPPORT_REVIEW_BATCH_SIZE).optional(),
   material: z.object({ scope: z.enum(["personal", "public"]),
     revision: z.string().regex(/^[1-9]\d*$/).optional(),
     policy: z.literal("inspiration-material-v1"), hash,
@@ -39,6 +40,7 @@ export async function applySignalSupportReview(db: WakaDb, reportInput: unknown,
   const report = reportSchema.parse(reportInput);
   const reportHash = hashEmbeddingInput(JSON.stringify(report));
   if (new Set(report.items.map((row) => row.signalId)).size !== report.items.length) throw new Error("Duplicate support review claims");
+  if (report.signalIds && new Set(report.signalIds).size !== report.signalIds.length) throw new Error('Duplicate support batch scope');
   const isGroup = report.profileId !== report.ownerProfileId;
   if (report.material.scope !== (isGroup ? "public" : "personal")) throw new Error("Support review scope mismatch");
 
@@ -62,11 +64,15 @@ export async function applySignalSupportReview(db: WakaDb, reportInput: unknown,
       (report.material.revision !== undefined && material.identity.revision !== report.material.revision) ||
       (isGroup && material.inspiration.visibility !== "public")) throw new Error("Support review material changed");
 
-    const beforeLocks = await loadSupportClaims(tx, report.profileId, report.ownerProfileId, report.inspirationId);
+    const selected = report.signalIds ? new Set(report.signalIds) : null;
+    const beforeLocks = (await loadSupportClaims(tx, report.profileId, report.ownerProfileId, report.inspirationId))
+      .filter((claim) => !selected || selected.has(claim.signalId));
+    if (selected && beforeLocks.length !== selected.size) throw new Error('Support batch scope changed');
     if (beforeLocks.length) await tx.select({ id: signals.id }).from(signals)
       .where(and(eq(signals.profileId, report.profileId), inArray(signals.id, beforeLocks.map((row) => row.signalId))))
       .orderBy(asc(signals.id)).for("no key update");
-    const current = await loadSupportClaims(tx, report.profileId, report.ownerProfileId, report.inspirationId);
+    const current = (await loadSupportClaims(tx, report.profileId, report.ownerProfileId, report.inspirationId))
+      .filter((claim) => !selected || selected.has(claim.signalId));
     if (supportClaimsHash(current) !== report.claimsHash) throw new Error("Support review claims changed");
     const allowed = current.filter((row) => !isGroup || row.inputPolicy === GROUP_INPUT_POLICY);
     if (allowed.length !== report.items.length) throw new Error("Support review claim coverage mismatch");

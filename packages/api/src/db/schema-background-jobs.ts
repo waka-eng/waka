@@ -43,6 +43,7 @@ export const backgroundJobTypeValues = [
   "enrich_attachment",
   "derive_signals",
   "review_signal_support",
+  "assess_signal_support",
   "refresh_top_of_mind",
   "refresh_group_top_of_mind",
   "refresh_principles",
@@ -83,6 +84,16 @@ export interface DeriveSignalsPayload {
 export interface ReviewSignalSupportPayload {
   inspirationId: string;
   deriveIntoProfileId?: string;
+}
+
+export interface AssessSignalSupportPayload {
+  inspirationId: string;
+  deriveIntoProfileId?: string;
+  signalIds: string[];
+  materialRevision: string;
+  materialHash: string;
+  membershipId: string | null;
+  statements: Array<{ id: string; revision: string; hash: string }>;
 }
 
 export interface RefreshTopOfMindPayload {
@@ -126,6 +137,7 @@ export type BackgroundJobPayload =
   | EnrichAttachmentPayload
   | DeriveSignalsPayload
   | ReviewSignalSupportPayload
+  | AssessSignalSupportPayload
   | RefreshTopOfMindPayload
   | RefreshGroupTopOfMindPayload
   | RefreshPrinciplesPayload

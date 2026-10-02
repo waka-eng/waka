@@ -257,6 +257,10 @@ export async function deriveSignalsForInspiration(
     }
   }
   const provider = deps.modelProvider ?? (await getDefaultModelProvider());
+  if (deps.beforeCommit) await (await import('./signal-support-batches.js')).ensureSupportBatchCoverage(db, {
+    ownerProfileId: inspirationRow.profileId, inspirationId: inspirationRow.id,
+    deriveIntoProfileId: input.deriveIntoProfileId, provider, beforeCommit: deps.beforeCommit,
+  });
   const embeddingClient = deps.embeddingClient ?? new GeminiEmbeddingHttpClient();
 
   // Existing support is its own question, before bounded discovery. Applying
@@ -272,7 +276,7 @@ export async function deriveSignalsForInspiration(
       onReadingRequested: deps.processingRequest ? (tx, job) => bindInspirationReading(tx, processingInput(review.material.revision), job) : undefined }) : null;
     supportReview = { checked: review.items.length, withdrawn: applied?.withdrawn.length ?? 0,
       restored: applied?.restored.length ?? 0, unresolved: review.items.filter((item) => item.verdict === "unresolved").length,
-      retryable: review.items.some((item) => item.issue && ["provider_unavailable", "missing_verdict", "invalid_verdict", "budget_exhausted"].includes(item.issue)) };
+      retryable: review.items.some((item) => item.issue !== undefined) };
   } catch (error) {
     if (error instanceof GroupInputUnavailableError) return emptyResult(error.status);
     throw error;

@@ -362,6 +362,14 @@ agent's relayed excerpt, an agent's own observation.
   their owning words. Editing those words retains their old citation records
   as non-current lineage; regeneration can ground the new words with new
   bindings without restoring copied explanations from the previous wording.
+- **Bounded review coverage continues as work, not failure.** When a source has
+  more unchecked claims than one support call can cover, the coordinator queues
+  `assess_signal_support` jobs of at most the review batch size. Each paid batch
+  is a separately metered job, bound to material, membership and statement
+  revisions. Reports explicitly name their selected claims; they cannot apply
+  a verdict outside that set. Discovery waits for complete current coverage.
+  Provider faults still use bounded retries, and genuine unresolved verdicts
+  complete assessment without withdrawing evidence or starting a retry loop.
 - **Source writes durably request learning.** Capture, inspiration edit,
   reflection save/removal and attachment finalization commit their queue rows
   in the source transaction. Enrichment rechecks the attachment resource after

@@ -1226,3 +1226,32 @@ worker cutover. Next: finish bounded support-review coverage/recovery for large
 claim sets, audit remaining legacy personal context, and connect the complete
 browser/worker release journey. Historical repair, deployment verification,
 semantic quality/cost, later F–J/L1–L3 work and the full goal remain open.
+
+## D3e3 — bounded support coverage — 2026-10-01
+
+Baseline: a changed source with forty existing claims exhausted its ordinary
+three retries before checking all claims. Partial coverage also repeated
+discovery. This is unfinished work, not a provider failure.
+
+Canon-first migration 0047 adds separately metered `assess_signal_support`
+jobs. Each immutable batch names at most twelve claims and binds material,
+membership and statement revisions. The coordinator waits without consuming a
+retry, then discovers once after all current coverage exists. Actual faults
+retain bounded retries; explicit source/reading recovery resumes failed
+batches. Stale batches make no provider call, reclaimed workers cannot commit,
+and partial reports cannot apply verdicts outside their named scope. Batch
+reading work binds matching unfinished source receipts without certifying full
+derivation or completion.
+
+Verification: six new real-SQL cases pass, including forty claims covered in
+four assessment calls, separately metered starts, one discovery pass and no
+failed jobs. Full API: 1,137 passed, three paid-live benches skipped, 103
+passing suites. API typecheck, migration check and diff check pass. All SQL
+used explicit disposable loopback databases; providers/vectors were synthetic.
+No hosted database, actual account or live provider was changed.
+
+The owner requested delivery of the current work to dev and continuation of
+the full goal. Before that delivery, deploy a worker compatibility guard so
+an older worker leaves newer job types pending rather than exhausting their
+attempts. Connected release-journey verification, legacy context, deployed
+checks, historical repair and the remaining A–J/L1–L3 gates stay open.

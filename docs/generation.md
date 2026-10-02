@@ -964,6 +964,16 @@ Read workers wait for queued/running input checks before synthesis. Manual
 reads can recover failed/missing reviews while active checks continue;
 finished uncertainty preserves the words without an automatic retry loop.
 
+Large sources use `assess_signal_support` jobs, each scoped to at most twelve
+claims and one assessment call per attempt. The coordinator waits without
+spending a retry while coverage is incomplete; actual provider failures retain
+bounded retries and explicit recovery. Each batch binds the source material,
+membership and statement revisions it was scheduled for. A stale batch makes
+no provider call, and a partial report cannot apply verdicts outside its named
+claims or claim full source completion. Discovery runs only after current
+coverage is complete. Reading dependencies created by a batch attach to the
+matching unfinished source receipts, without marking those receipts derived.
+
 One prompt, two roads: every generation task runs through OpenRouter on the
 pinned DeepSeek snapshot when `OPENROUTER_API_KEY` is present, and falls back
 to Gemini without it. Embeddings never switch roads — the stored vectors and

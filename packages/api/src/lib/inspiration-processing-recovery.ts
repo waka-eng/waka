@@ -2,7 +2,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { attachments, backgroundJobs, generationRevisions, inspirationProcessing, inspirations, profiles, topOfMinds } from '../db/index.js';
 import { getDb } from './db.js';
 import { readInspirationProcessingStatus } from './inspiration-processing-status.js';
-import { enqueueDeriveSignals, enqueueEnrichAttachment, enqueueTopOfMindRefresh, STALE_LOCK_SECONDS, wakeCommittedBackgroundJobs } from './queue.js';
+import { enqueueDeriveSignals, enqueueEnrichAttachment, enqueueTopOfMindRefresh, recoverPendingSignalSupport, STALE_LOCK_SECONDS, wakeCommittedBackgroundJobs } from './queue.js';
 import { parseTopOfMindRefreshResult } from './top-of-mind-refresh-status.js';
 
 type Tx = Parameters<Parameters<ReturnType<typeof getDb>['transaction']>[0]>[0];
@@ -33,6 +33,7 @@ export async function recoverInspirationProcessing(db: ReturnType<typeof getDb>,
     if (!source) return null;
     const status = await readInspirationProcessingStatus(tx, input);
     if (!status || !status.canRetry) return status;
+    await recoverPendingSignalSupport(tx, input.profileId);
     if (status.stage === 'enrichment') {
       const missing = await tx.select({ id: attachments.id }).from(attachments).where(and(eq(attachments.profileId, input.profileId),
         eq(attachments.inspirationId, input.inspirationId), sql`(${attachments.enrichmentStatus} IS NULL OR ${attachments.enrichmentStatus}::text IN ('pending','failed'))`));
