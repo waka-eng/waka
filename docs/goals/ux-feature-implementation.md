@@ -1006,3 +1006,16 @@ hosted data, invoked a paid model, or changed production configuration.
 After delivery, continue with the complete personal release-1 journey and its
 failure/recovery branches before opening another feature slice. Keep deployment,
 historical repair and real-model quality evidence separate from local checks.
+
+- Dev delivery: `f4e4932` fast-forwarded to remote dev. Automatic deployment
+  run `36945056441` succeeded, including the configured database-target guard.
+  This does not certify provider-level isolation, repair legacy data, or verify
+  the logged-in product experience. Production was not deployed.
+- CI run `36945056467` found 3 failures in the old ratified-light SQL fixture
+  (1,099 other tests passed). Reproduced all 3 locally: its generated readings
+  cited signals with no evidence, now correctly withheld by D3c. Added owned
+  evidence to that fixture, preserving all original answered/lock assertions,
+  and added a regression proving feedback cannot revive unevidenced generated
+  wording. Targeted result: 5/5 pass; the complete local API suite then passed
+  1,103 tests (3 paid-live benches skipped), with API typecheck passing. No
+  production reader logic changed.

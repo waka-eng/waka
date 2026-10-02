@@ -37,12 +37,18 @@ async function seedProfile(): Promise<string> {
 }
 
 async function seedSignal(profileId: string, statement: string): Promise<string> {
-  // `emerging`, because the promotion guard (rightly) refuses an active
-  // signal standing on zero evidence — and the ratified standing must not
-  // care about status anyway: it reads feedback and locks, nothing else.
+  // One owned witness is enough for an emerging signal to appear in a
+  // reading. Being evidenced and being answered are separate: the latter
+  // still reads only feedback and locks, not the evidence count.
   const [row] = await t.sql`
     INSERT INTO signals (profile_id, statement, status, confidence)
     VALUES (${profileId}, ${statement}, 'emerging', 0) RETURNING id`;
+  const [source] = await t.sql`
+    INSERT INTO inspirations (profile_id, text)
+    VALUES (${profileId}, ${statement}) RETURNING id`;
+  await t.sql`
+    INSERT INTO signal_evidence (profile_id, owner_profile_id, signal_id, inspiration_id)
+    VALUES (${profileId}, ${profileId}, ${row.id}, ${source.id})`;
   return row.id as string;
 }
 
@@ -160,5 +166,20 @@ describe("ratified light: the served ground says who holds it", () => {
       suspicious,
       "ratified standing must be computed from feedback and lock records at serve time, never stored",
     ).toEqual([]);
+  });
+
+  it("an answer does not make an unevidenced machine reading current", async () => {
+    const profileId = await seedProfile();
+    const ground = await seedSignal(profileId, "A previously supported pattern.");
+    await seedBoard(profileId, [ground]);
+    await t.sql`
+      INSERT INTO feedback (profile_id, target_type, target_id, value)
+      VALUES (${profileId}, 'signal', ${ground}, 'true')`;
+    expect((await servedGrounds(profileId)).get(ground)).toBe(true);
+
+    await t.sql`DELETE FROM signal_evidence WHERE signal_id = ${ground}`;
+    const view = await getLiveTopOfMind(t.db as never, { profileId });
+    expect(view?.entries).toEqual([]);
+    expect(view?.supportChanged).toBe(true);
   });
 });
