@@ -52,3 +52,69 @@ Added the self-contained [screen proposal](../craft/personal-experience-prototyp
 Interactive checks: empty capture disables save; adding the example attachment enables an attachment-only save; close/Back preserves edited draft text; changing card wording survives the simulated export without changing the original principle. Inspected [mobile composer](../craft/evidence/personal-capture/mobile-composer.jpg) and [desktop home](../craft/evidence/personal-capture/desktop-home.jpg). These are example-content design screens, not a functioning recorder, review, exporter or chatbot.
 
 A02 verdict: pass for the agreed design deliverable. Actual microphone/device, backend connection, persistent media drafts and product browser journeys are still open under C01/C02/A03. An asynchronous user question asks whether actual iPhone and Android tests can be performed; independent implementation continues.
+
+### A03 resource and evaluation checkpoint
+
+The owner replied that physical-device testing is currently unavailable. The actual iPhone/Android gate remains unverified; no simulator or desktop result will replace it.
+
+Before speech calls: six synthetic fixtures (English, Korean, mixed-language, a Korean time/duration statement, silence, tone) × two available Gemini models = 12 calls, no automatic retries, expected cost below USD 0.10 and an enforced USD 0.10 observed-token estimate cap. Predeclared local benchmark: normalized character error at most 5% for each speech clip; empty transcript for both non-speech clips. Latency and token/list-price estimates are reported. This fixture test does not establish noisy-recording or physical-device quality.
+
+### C01/C02 connected web implementation
+
+The production composer accepts text, detected/pasted links, selected/dropped
+photos and one recording, with preview/removal and save/continue-thinking.
+Owned IndexedDB drafts keep media bytes and use revision CAS. The existing
+save journal awaits asynchronous settlement before clearing its record.
+Upload-ticket issuance checks the requested profile before any file PUT;
+private attachment reads check account/profile access and issue short-lived
+URLs. Audio is stored, not silently described as transcribed or analyzed.
+
+Browser evidence uses real Hono/auth/SQL against a disposable loopback schema,
+with an in-memory S3 transport and synthetic microphone tone. Photo-only and
+audio-only drafts survive reload; forced upload failure retains the photo;
+lost successful-save response recovers one saved inspiration and opens its
+reflection. A final combined text/link/photo/audio save produced exactly one
+new inspiration, three attachments and one request record. Reopening the
+private source displayed the image (natural width 1020) and played the audio
+(readyState 4, paused false, no decoder error).
+
+At 390×844 the live composer has no horizontal overflow and all eight visible
+dialog buttons measure 44px high. Closing retains text and the draft reopens.
+This is desktop browser responsive evidence, **not physical mobile touch**.
+Screenshots: [composer](../craft/evidence/personal-capture/combined-composer.jpg),
+[mobile-sized composer](../craft/evidence/personal-capture/mobile-live-composer.jpg),
+[reopened attachments](../craft/evidence/personal-capture/saved-attachments.jpg).
+
+Regression evidence: API unit 689 passed, three paid-live benches skipped;
+web 483 passed across 71 suites, with vocabulary/seam checks clean;
+targeted real-SQL suites 27 passed (18 saved-request, five bundle, four private
+read/scoped upload). API/web typechecks, web production build and migration
+consistency passed. Draft-hook tests additionally verify serial writes,
+preserving newer edits on late success, and explicit fork after cross-tab CAS
+conflict. Browser transport does not establish AWS signatures or policy.
+
+C02 verdict: web implementation and recovery gates pass. C01 implementation
+and desktop/responsive checks pass, but its explicit mobile-touch verification
+remains open with A03. No remote data/migration, merge or deployment occurred.
+The existing port-3010 server uses its earlier API process and is not evidence
+of this new bundle; all new end-to-end checks used the isolated port-3015 stack.
+
+### A03 measured result and resource limit
+
+Twelve speech calls completed. Flash passed 6/6 fixtures; Flash Lite passed
+5/6, failing Korean output by adding timestamps. Estimated combined cost
+USD 0.0028286, below the announced USD 0.10 cap. Flash is the candidate for
+later C06 integration; no production transcription worker was added.
+See the [decision and raw result links](../decisions/2026-10-02-audio-capture-spike.md).
+
+The bounded Capacitor iOS project builds successfully. Native UI could not be
+tested because the Mac is locked; an unlock question is pending. The owned
+simulator is `WAKA Capture A03` / `FA6EE0CE-83F9-413A-A43C-CC24BF114C80`, created
+but not booted or installed. No attempt bypassed the lock. Actual iPhone Safari
+and Android Chrome remain unavailable as confirmed by the owner.
+
+Remaining first-bundle work is device verification: C01 mobile-touch flow,
+A03 real microphone/permissions/interruptions/playback/upload, and the bounded
+native photo/share/session probe. A01/A02 and C02 are complete; the full goal
+is **not complete**. These resource gaps cannot be replaced with more desktop
+unit tests or synthetic tones.

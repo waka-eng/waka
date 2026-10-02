@@ -43,3 +43,6 @@ archive/
 # computed style, for comparing two runs by hand. Not a committed baseline —
 # nothing reads it back — so running that gate should not dirty the tree.
 snap.json
+
+# Regenerable synthetic audio evaluation inputs and per-run output.
+/work/audio-transcription-eval/

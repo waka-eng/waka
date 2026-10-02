@@ -1,0 +1,378 @@
+{
+  "criteria": {
+    "speechMaxNormalizedCer": 0.05,
+    "nonSpeechMustBeEmpty": true,
+    "maxCalls": 12,
+    "estimatedBudgetUsd": 0.1,
+    "limitations": [
+      "Synthetic voices and tones",
+      "One run per clip/model",
+      "Not a real-device or noise-robustness evaluation"
+    ],
+    "pricingSource": "https://ai.google.dev/gemini-api/docs/pricing"
+  },
+  "observedAt": "2026-10-02T11:24:05.060Z",
+  "estimatedCostUsd": 0.0028285999999999997,
+  "results": [
+    {
+      "model": "gemini-2.5-flash",
+      "sample": "english",
+      "status": 200,
+      "elapsedMs": 1985,
+      "estimatedCostUsd": 0.0002655,
+      "reference": "I liked the empty space in that room. Next week I want to leave one afternoon free for careful work.",
+      "transcript": "I like the empty space in that room. Next week I want to leave one afternoon free for careful work.",
+      "normalizedCer": 0.012658227848101266,
+      "passed": true,
+      "mime": "audio/wav",
+      "bytes": 184152,
+      "sha256": "af4c25bb94054c53f57bb5ddceedddad47fbc404879f50d5de8c5ee1cfb608ec",
+      "usage": {
+        "promptTokenCount": 246,
+        "candidatesTokenCount": 26,
+        "totalTokenCount": 272,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 65
+          },
+          {
+            "modality": "AUDIO",
+            "tokenCount": 181
+          }
+        ],
+        "serviceTier": "standard"
+      }
+    },
+    {
+      "model": "gemini-2.5-flash",
+      "sample": "korean",
+      "status": 200,
+      "elapsedMs": 1579,
+      "estimatedCostUsd": 0.000357,
+      "reference": "오늘 본 사진은 여백이 많아서 마음에 남았다. 다음 주에는 일정을 조금 덜 채우고 중요한 일에 집중하고 싶다.",
+      "transcript": "오늘 본 사진은 여백이 많아서 마음에 남았다. 다음 주에는 일정을 조금 덜 채우고 중요한 일에 집중하고 싶다.",
+      "normalizedCer": 0,
+      "passed": true,
+      "mime": "audio/wav",
+      "bytes": 248486,
+      "sha256": "55d1715674eacd82680d597e0cc3c659c0c041bdbb4ecbf8ce42e4b8c23247b5",
+      "usage": {
+        "promptTokenCount": 310,
+        "candidatesTokenCount": 37,
+        "totalTokenCount": 347,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 65
+          },
+          {
+            "modality": "AUDIO",
+            "tokenCount": 245
+          }
+        ],
+        "serviceTier": "standard"
+      }
+    },
+    {
+      "model": "gemini-2.5-flash",
+      "sample": "numbers",
+      "status": 200,
+      "elapsedMs": 1443,
+      "estimatedCostUsd": 0.000277,
+      "reference": "금요일 오후 세 시에 다시 돌아보자. 다섯 분 동안 오늘 남긴 생각을 읽어 보고 싶다.",
+      "transcript": "금요일 오후 3시에 다시 돌아보자. 5분 동안 오늘 남긴 생각을 읽어 보고 싶다.",
+      "normalizedCer": 0,
+      "passed": true,
+      "mime": "audio/wav",
+      "bytes": 188866,
+      "sha256": "581f4a106cddbe2edd9ebfed3a803d3d5704a0faf9064cd482ed5411abc7e72f",
+      "usage": {
+        "promptTokenCount": 250,
+        "candidatesTokenCount": 29,
+        "totalTokenCount": 279,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 65
+          },
+          {
+            "modality": "AUDIO",
+            "tokenCount": 185
+          }
+        ],
+        "serviceTier": "standard"
+      }
+    },
+    {
+      "model": "gemini-2.5-flash",
+      "sample": "mixed",
+      "status": 200,
+      "elapsedMs": 1650,
+      "estimatedCostUsd": 0.0002145,
+      "reference": "이번에는 작은 실험부터 시작하자. Leave space for the work that matters.",
+      "transcript": "이번에는 작은 실험부터 시작하자. Leave space for the work that matters.",
+      "normalizedCer": 0,
+      "passed": true,
+      "mime": "audio/wav",
+      "bytes": 144450,
+      "sha256": "b9f04c52f3f9f6842e65fc4e6fa7802aa6bf885635e56a7a6e5814e19c563f33",
+      "usage": {
+        "promptTokenCount": 210,
+        "candidatesTokenCount": 20,
+        "totalTokenCount": 230,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 65
+          },
+          {
+            "modality": "AUDIO",
+            "tokenCount": 145
+          }
+        ],
+        "serviceTier": "standard"
+      }
+    },
+    {
+      "model": "gemini-2.5-flash",
+      "sample": "silence",
+      "status": 200,
+      "elapsedMs": 1348,
+      "estimatedCostUsd": 0.0001255,
+      "reference": "",
+      "transcript": "",
+      "normalizedCer": 0,
+      "passed": true,
+      "mime": "audio/wav",
+      "bytes": 96044,
+      "sha256": "d303811b8c84619667cd0501342f84ec6cbe69f7aa3856dcf52fabda374c92b8",
+      "usage": {
+        "promptTokenCount": 161,
+        "candidatesTokenCount": 4,
+        "totalTokenCount": 165,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 65
+          },
+          {
+            "modality": "AUDIO",
+            "tokenCount": 96
+          }
+        ],
+        "serviceTier": "standard"
+      }
+    },
+    {
+      "model": "gemini-2.5-flash",
+      "sample": "tone",
+      "status": 200,
+      "elapsedMs": 1328,
+      "estimatedCostUsd": 0.0009515,
+      "reference": "",
+      "transcript": "",
+      "normalizedCer": 0,
+      "passed": true,
+      "mime": "audio/webm",
+      "bytes": 233889,
+      "sha256": "e43a454b08599615a5df1df42e6e64997255f70ac8b1a097182b7256d0f3d2a3",
+      "usage": {
+        "promptTokenCount": 987,
+        "candidatesTokenCount": 4,
+        "totalTokenCount": 991,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 65
+          },
+          {
+            "modality": "AUDIO",
+            "tokenCount": 922
+          }
+        ],
+        "serviceTier": "standard"
+      }
+    },
+    {
+      "model": "gemini-2.5-flash-lite",
+      "sample": "english",
+      "status": 200,
+      "elapsedMs": 1402,
+      "estimatedCostUsd": 0.0000732,
+      "reference": "I liked the empty space in that room. Next week I want to leave one afternoon free for careful work.",
+      "transcript": "I like the empty space in that room. Next week I want to leave one afternoon free for careful work.",
+      "normalizedCer": 0.012658227848101266,
+      "passed": true,
+      "mime": "audio/wav",
+      "bytes": 184152,
+      "sha256": "af4c25bb94054c53f57bb5ddceedddad47fbc404879f50d5de8c5ee1cfb608ec",
+      "usage": {
+        "promptTokenCount": 246,
+        "candidatesTokenCount": 31,
+        "totalTokenCount": 277,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 65
+          },
+          {
+            "modality": "AUDIO",
+            "tokenCount": 181
+          }
+        ],
+        "serviceTier": "standard"
+      }
+    },
+    {
+      "model": "gemini-2.5-flash-lite",
+      "sample": "korean",
+      "status": 200,
+      "elapsedMs": 1052,
+      "estimatedCostUsd": 0.0001032,
+      "reference": "오늘 본 사진은 여백이 많아서 마음에 남았다. 다음 주에는 일정을 조금 덜 채우고 중요한 일에 집중하고 싶다.",
+      "transcript": "00:00 오늘 본 사진은 여백이 많아서 마음에 남았다 00:03 다음 주에는 일정을 조금 덜 채우고 00:05 중요한 일에 집중하고 싶다",
+      "normalizedCer": 0.3023255813953488,
+      "passed": false,
+      "mime": "audio/wav",
+      "bytes": 248486,
+      "sha256": "55d1715674eacd82680d597e0cc3c659c0c041bdbb4ecbf8ce42e4b8c23247b5",
+      "usage": {
+        "promptTokenCount": 310,
+        "candidatesTokenCount": 58,
+        "totalTokenCount": 368,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 65
+          },
+          {
+            "modality": "AUDIO",
+            "tokenCount": 245
+          }
+        ],
+        "serviceTier": "standard"
+      }
+    },
+    {
+      "model": "gemini-2.5-flash-lite",
+      "sample": "numbers",
+      "status": 200,
+      "elapsedMs": 1434,
+      "estimatedCostUsd": 0.0000756,
+      "reference": "금요일 오후 세 시에 다시 돌아보자. 다섯 분 동안 오늘 남긴 생각을 읽어 보고 싶다.",
+      "transcript": "금요일 오후 3시에 다시 돌아보자. 5분 동안 오늘 남긴 생각을 읽어보고 싶다.",
+      "normalizedCer": 0,
+      "passed": true,
+      "mime": "audio/wav",
+      "bytes": 188866,
+      "sha256": "581f4a106cddbe2edd9ebfed3a803d3d5704a0faf9064cd482ed5411abc7e72f",
+      "usage": {
+        "promptTokenCount": 250,
+        "candidatesTokenCount": 34,
+        "totalTokenCount": 284,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 65
+          },
+          {
+            "modality": "AUDIO",
+            "tokenCount": 185
+          }
+        ],
+        "serviceTier": "standard"
+      }
+    },
+    {
+      "model": "gemini-2.5-flash-lite",
+      "sample": "mixed",
+      "status": 200,
+      "elapsedMs": 1248,
+      "estimatedCostUsd": 0.00006,
+      "reference": "이번에는 작은 실험부터 시작하자. Leave space for the work that matters.",
+      "transcript": "이번에는 작은 실험부터 시작하자. Leave space for the work that matters.",
+      "normalizedCer": 0,
+      "passed": true,
+      "mime": "audio/wav",
+      "bytes": 144450,
+      "sha256": "b9f04c52f3f9f6842e65fc4e6fa7802aa6bf885635e56a7a6e5814e19c563f33",
+      "usage": {
+        "promptTokenCount": 210,
+        "candidatesTokenCount": 25,
+        "totalTokenCount": 235,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 65
+          },
+          {
+            "modality": "AUDIO",
+            "tokenCount": 145
+          }
+        ],
+        "serviceTier": "standard"
+      }
+    },
+    {
+      "model": "gemini-2.5-flash-lite",
+      "sample": "silence",
+      "status": 200,
+      "elapsedMs": 1183,
+      "estimatedCostUsd": 0.0000389,
+      "reference": "",
+      "transcript": "",
+      "normalizedCer": 0,
+      "passed": true,
+      "mime": "audio/wav",
+      "bytes": 96044,
+      "sha256": "d303811b8c84619667cd0501342f84ec6cbe69f7aa3856dcf52fabda374c92b8",
+      "usage": {
+        "promptTokenCount": 161,
+        "candidatesTokenCount": 9,
+        "totalTokenCount": 170,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 65
+          },
+          {
+            "modality": "AUDIO",
+            "tokenCount": 96
+          }
+        ],
+        "serviceTier": "standard"
+      }
+    },
+    {
+      "model": "gemini-2.5-flash-lite",
+      "sample": "tone",
+      "status": 200,
+      "elapsedMs": 701,
+      "estimatedCostUsd": 0.0002867,
+      "reference": "",
+      "transcript": "",
+      "normalizedCer": 0,
+      "passed": true,
+      "mime": "audio/webm",
+      "bytes": 233889,
+      "sha256": "e43a454b08599615a5df1df42e6e64997255f70ac8b1a097182b7256d0f3d2a3",
+      "usage": {
+        "promptTokenCount": 987,
+        "candidatesTokenCount": 9,
+        "totalTokenCount": 996,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 65
+          },
+          {
+            "modality": "AUDIO",
+            "tokenCount": 922
+          }
+        ],
+        "serviceTier": "standard"
+      }
+    }
+  ]
+}
