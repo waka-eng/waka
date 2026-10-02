@@ -9,8 +9,9 @@ export interface ViewLocation {
   memberId: string | null;
   at: number | null;
   find: boolean;
+  compose: boolean;
 }
-export const EMPTY_VIEW: ViewLocation = { wallId: null, section: 'top', inspirationId: null, reflectionId: null, memberId: null, at: null, find: false };
+export const EMPTY_VIEW: ViewLocation = { wallId: null, section: 'top', inspirationId: null, reflectionId: null, memberId: null, at: null, find: false, compose: false };
 const id = (value: string | null) => value && /^[a-zA-Z0-9_-]{1,120}$/.test(value) ? value : null;
 
 export function readViewLocation(pathname: string, search = ''): ViewLocation | null {
@@ -31,6 +32,7 @@ export function readViewLocation(pathname: string, search = ''): ViewLocation | 
   if (!view.inspirationId) view.reflectionId = null;
   view.memberId = id(params.get('member'));
   view.find = params.get('find') === '1';
+  view.compose = params.get('compose') === '1';
   const section = params.get('view');
   view.section = section === 'top' || section === 'field' || section === 'sky' ? section : view.inspirationId ? 'field' : 'top';
   const at = params.get('at');
@@ -47,6 +49,7 @@ export function viewHref(view: ViewLocation): string {
   if (view.inspirationId) params.set('inspiration', view.inspirationId);
   if (view.inspirationId && view.reflectionId) params.set('reflection', view.reflectionId);
   if (view.find) params.set('find', '1');
+  if (view.compose) params.set('compose', '1');
   return path + (params.size ? `?${params}` : '');
 }
 

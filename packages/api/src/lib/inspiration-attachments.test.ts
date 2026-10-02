@@ -1,4 +1,4 @@
-/** WHAT THIS MOCKS, AND WHY (gate G6): S3 HEAD returns scripted metadata;
+/** WHAT THIS MOCKS, AND WHY (gate G6): `AttachmentHead` returns scripted S3 metadata;
  * schema, owner-prefix checks and preparation run unchanged. */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createInspirationSchema } from '../routes/inspirations-validation.js';

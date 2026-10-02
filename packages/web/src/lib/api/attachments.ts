@@ -12,7 +12,7 @@
  * `inspirations.ts` imports them from here and not the other way round.
  */
 
-import { ApiError, apiPath, postJson } from "./http";
+import { ApiError, apiPath, getJson, postJson } from "./http";
 
 // ---------------------------------------------------------------------------
 // What an attachment is
@@ -22,6 +22,12 @@ import { ApiError, apiPath, postJson } from "./http";
 export type AttachmentType = "link" | "image" | "file" | "audio";
 export type AttachmentEnrichmentStatus = "pending" | "ready" | "failed" | "unavailable";
 export type AttachmentEnrichmentKind = "page_body" | "image_description";
+
+export async function fetchAttachmentUrl(id: string, signal?: AbortSignal): Promise<string> {
+  const body = await getJson<{ attachmentId: string; url: string }>(apiPath(`/attachments/${encodeURIComponent(id)}/url`), 'Could not open this attachment', signal);
+  if (body.attachmentId !== id || !/^https?:\/\//i.test(body.url)) throw new ApiError({ status: 200, code: 'invalid_response', message: 'Could not open this attachment' });
+  return body.url;
+}
 
 /**
  * Capture-time context the server derived from an attachment: a bounded fetch
@@ -84,6 +90,7 @@ export interface ApiAttachmentSummary {
  * causes S3 to 403 the upload.
  */
 export interface PresignResponse {
+  profileId?: string;
   uploadUrl: string;
   key: string;
   expiresAt: string;
@@ -108,12 +115,17 @@ export interface PresignRequest {
  */
 export async function presignAttachment(
   input: PresignRequest,
+  signal?: AbortSignal,
+  options: { profile?: string } = {},
 ): Promise<PresignResponse> {
-  return postJson<PresignResponse>(
-    apiPath("/attachments/presign"),
+  const result = await postJson<PresignResponse>(
+    apiPath(`/attachments/presign${options.profile ? `?profile=${encodeURIComponent(options.profile)}` : ''}`),
     input,
     "Failed to mint upload URL",
+    signal,
   );
+  if (options.profile && result.profileId !== options.profile) throw new ApiError({ status: 200, code: 'upload_scope_unverified', message: 'Could not verify where this upload belongs' });
+  return result;
 }
 
 /**
@@ -128,6 +140,7 @@ export async function uploadToPresignedUrl(
   url: string,
   file: File | Blob,
   headers: Record<string, string>,
+  signal?: AbortSignal,
 ): Promise<void> {
   let res: Response;
   try {
@@ -135,6 +148,7 @@ export async function uploadToPresignedUrl(
       method: "PUT",
       headers,
       body: file,
+      ...(signal ? { signal } : {}),
     });
   } catch {
     throw new ApiError({

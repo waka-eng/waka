@@ -1,6 +1,6 @@
-/** Real Hono routes, authored-save transactions and disposable Postgres. Only
- * authentication, DB entry point and S3 HEAD transport are supplied by this
- * fixture. No queue writes, source persistence or replay behavior are mocked. */
+/** WHAT THIS MOCKS, AND WHY (gate G6): `authMiddleware`, `getDb` and
+ * `attachmentHead` supply the local principal, disposable database and S3
+ * transport. Hono, transactions, persistence, queue writes and replay are real. */
 import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import { afterAll, beforeEach, expect, it, vi } from 'vitest';

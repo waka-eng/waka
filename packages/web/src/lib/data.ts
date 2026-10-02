@@ -229,7 +229,7 @@ export function toInspiration(row: {
 }): Inspiration {
   return {
     id: row.id,
-    preview: row.textPreview,
+    preview: row.textPreview || row.attachmentSummary?.map(item => item.type === 'audio' ? 'Recording' : item.type === 'image' ? 'Photo' : item.label).join(' · ') || '',
     /* absent means private: an older payload must never read as published */
     isPublic: row.visibility === "public",
     kind: row.kind,
@@ -435,7 +435,7 @@ export async function loadInspiration(id: string, profile?: string, signal?: Abo
 export function toInspirationDetail(row: Awaited<ReturnType<typeof fetchInspiration>>): InspirationDetail {
   return {
     id: row.id,
-    preview: row.text,
+    preview: row.text || row.attachments.map(item => item.type === 'audio' ? 'Recording' : item.type === 'image' ? 'Photo' : item.name || item.url).join(' · '),
     isPublic: row.visibility === "public",
     text: row.text,
     kind: row.kind,

@@ -35,7 +35,7 @@
  * either break that capture or let a key be replayed across profiles.
  */
 
-import { HeadObjectCommand, PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 import { attachmentsRegion, makeAttachmentsS3Client } from "../lib/s3-client.js";
@@ -57,6 +57,8 @@ import { attachmentKeyPrefix, attachmentObjectUrl, getAttachmentsBucket } from '
 import { ALLOWED_ATTACHMENT_CONTENT_TYPE, MAX_ATTACHMENT_UPLOAD_BYTES } from '../lib/inspiration-attachment-input.js';
 import { requestSignalDerivation } from "../lib/inspiration-derivation-requests.js";
 import { validationDetails } from "../lib/validation.js";
+import { profileQuerySchema } from './inspirations-validation.js';
+import { resolveTargetProfile } from './inspirations-tenancy.js';
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -435,6 +437,31 @@ export function createAttachmentRoutes(
 // into this namespace by accident.
 attachmentsRoutes.use("*", deps.authMiddleware ?? requireAuth);
 
+// Raw uploads remain private. Resolve one current owned attachment to a short
+// read URL; a guessed id or public room source never grants raw-file access.
+attachmentsRoutes.get('/:attachmentId/url', async c => {
+  c.header('Cache-Control', 'private, no-store');
+  const id = z.string().uuid().safeParse(c.req.param('attachmentId'));
+  if (!id.success) return c.json({ error: 'Invalid attachment' }, 400);
+  const db = getDatabase(), session = c.get('session');
+  const [row] = await db.select({ id: attachments.id, profileId: attachments.profileId, key: attachments.s3Key,
+    url: attachments.url, accountId: profiles.accountId, type: profiles.type }).from(attachments)
+    .innerJoin(profiles, eq(profiles.id, attachments.profileId)).where(eq(attachments.id, id.data)).limit(1);
+  if (!row || row.accountId !== session.profile.accountId) return c.json({ error: 'Attachment not found' }, 404);
+  const target = asAccountProfile({ id: row.profileId, accountId: row.accountId, type: row.type });
+  if (!target) return c.json({ error: 'Attachment not found' }, 404);
+  const denied = await profileAccessError(db, session, target, 'read');
+  if (denied) return c.json(denied, 403);
+  if (!row.key) {
+    if (!/^https?:\/\//i.test(row.url)) return c.json({ error: 'Attachment unavailable' }, 404);
+    return c.json({ attachmentId: row.id, url: row.url, expiresAt: null });
+  }
+  try {
+    const url = await getSignedUrl(getS3(), new GetObjectCommand({ Bucket: getAttachmentsBucket(), Key: row.key }), { expiresIn: PRESIGN_TTL_SECONDS });
+    return c.json({ attachmentId: row.id, url, expiresAt: new Date(Date.now() + PRESIGN_TTL_SECONDS * 1000).toISOString() });
+  } catch { return c.json({ error: 'Could not open this attachment. Try again.' }, 503); }
+});
+
 /**
  * POST /api/attachments — finalize an upload, or record a link.
  *
@@ -616,9 +643,17 @@ attachmentsRoutes.post("/presign", async (c) => {
       400,
     );
   }
+  const query = profileQuerySchema.safeParse(c.req.query());
+  if (!query.success) return c.json({ error: 'Invalid upload destination' }, 400);
+  const session = c.get('session');
+  let targetProfileId = session.profile.id;
+  if (query.data.profile) {
+    const target = await resolveTargetProfile(getDatabase(), session, query.data.profile, 'capture');
+    if (!target.ok) return c.json(target.body, target.status);
+    targetProfileId = target.profileId;
+  }
   const { filename, contentType, size } = parsed.data;
 
-  const session = c.get("session");
   const key = buildKey(session.profile.id, filename);
 
   let bucket: string;
@@ -660,6 +695,7 @@ attachmentsRoutes.post("/presign", async (c) => {
   return c.json(
     {
       uploadUrl,
+      profileId: targetProfileId,
       key,
       expiresAt,
       // Headers the browser must forward verbatim with its PUT. Stating the

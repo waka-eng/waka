@@ -36,6 +36,8 @@ import {
   fetchInspirations,
   fetchInspirationPage,
   fetchGroupInspiration,
+  fetchAttachmentUrl,
+  presignAttachment,
   fetchPublicProfile,
   fetchSignal,
   fetchSignals,
@@ -198,6 +200,20 @@ const topOfMind: ApiTopOfMind = {
 function stubFetch(response: Response): void {
   vi.stubGlobal("fetch", vi.fn(async () => response));
 }
+it('refuses an upload ticket that cannot prove the expected profile', async () => {
+  const input = { filename: 'Photo.png', contentType: 'image/png', size: 50 };
+  stubFetch(Response.json({ uploadUrl: 'https://storage.example/put', key: 'key', profileId: 'other-profile' }));
+  await expect(presignAttachment(input, undefined, { profile: 'profile-1' })).rejects.toMatchObject({ code: 'upload_scope_unverified' });
+  stubFetch(Response.json({ uploadUrl: 'https://storage.example/put', key: 'key', profileId: 'profile-1' }));
+  await expect(presignAttachment(input, undefined, { profile: 'profile-1' })).resolves.toMatchObject({ profileId: 'profile-1' });
+  expect(fetch).toHaveBeenCalledWith('/api/attachments/presign?profile=profile-1', expect.objectContaining({ method: 'POST', credentials: 'include' }));
+});
+it('refuses a read URL for the wrong attachment or an unsafe protocol', async () => {
+  stubFetch(Response.json({ attachmentId: 'other', url: 'https://storage.example/read' }));
+  await expect(fetchAttachmentUrl('file-1')).rejects.toMatchObject({ code: 'invalid_response' });
+  stubFetch(Response.json({ attachmentId: 'file-1', url: 'javascript:alert(1)' }));
+  await expect(fetchAttachmentUrl('file-1')).rejects.toMatchObject({ code: 'invalid_response' });
+});
 it('reads archive pages with an explicit profile, cursor and cancellation signal', async () => {
   stubFetch(Response.json({ inspirations: [inspirationSummary], nextCursor: 'older', total: 2002 }));
   const controller = new AbortController();

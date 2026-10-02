@@ -1,0 +1,114 @@
+/** Real auth/Hono/SQL browser fixture for C01/C02. Object storage is an in-memory
+ * S3 transport; microphone input is an explicitly synthetic WebAudio tone.
+ * Browser MediaRecorder/IndexedDB and the shipped composer remain real.
+ * This is not evidence of physical microphones, mobile devices or AWS policy. */
+import assert from 'node:assert/strict';
+import { createServer, type IncomingMessage } from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { resolve, extname } from 'node:path';
+import { createTestDatabase } from '../../packages/api/test/helpers/db.js';
+
+const url = new URL(process.env.DB_CONNECTION_URL ?? '');
+assert.ok(['127.0.0.1', 'localhost'].includes(url.hostname)); assert.match(url.pathname, /test|disposable/i);
+assert.equal(url.searchParams.has('options'), false);
+process.env.NODE_ENV = 'test'; process.env.JWT_SECRET = 'capture-foundation-fixture-secret';
+process.env.WAKA_BACKGROUND_JOB_AUTODRAIN = '0';
+delete process.env.GEMINI_API_KEY; delete process.env.OPENROUTER_API_KEY;
+delete process.env.WAKA_BACKGROUND_WORKER_FUNCTION; delete process.env.AWS_LAMBDA_FUNCTION_NAME;
+const origin = 'http://127.0.0.1:3015';
+process.env.ATTACHMENTS_BUCKET = 'capture-fixture'; process.env.ATTACHMENTS_ENDPOINT = origin;
+const network = globalThis.fetch;
+globalThis.fetch = (input, init) => {
+  const target = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+  if (target.origin !== origin) return Promise.reject(new Error('Fixture forbids external provider requests'));
+  return network(input, init);
+};
+const fixture = await createTestDatabase();
+url.searchParams.set('options', `-c search_path=${fixture.schemaName}`); process.env.DB_CONNECTION_URL = url.toString();
+const { app } = await import('../../packages/api/src/index.js');
+const { signSessionToken, buildSessionCookie } = await import('../../packages/api/src/lib/auth.js');
+const { createSessionRow } = await import('../../packages/api/src/lib/session.js');
+const { getDb } = await import('../../packages/api/src/lib/db.js');
+const [account] = await fixture.sql`INSERT INTO accounts(email,onboarding_completed_at) VALUES ('capture-fixture@example.test',now()) RETURNING id`;
+const [profile] = await fixture.sql`INSERT INTO profiles(account_id,type,name) VALUES (${account.id},'human','Capture fixture') RETURNING id`;
+await fixture.sql`INSERT INTO inspirations(profile_id,text) VALUES (${profile.id},'A little room to think.')`;
+const token = await signSessionToken({ profileId: profile.id, email: 'capture-fixture@example.test' });
+await createSessionRow({ profileId: profile.id, token });
+const [nativeAccount] = await fixture.sql`INSERT INTO accounts(email,onboarding_completed_at) VALUES ('native-capture-fixture@example.test',now()) RETURNING id`;
+const [nativeProfile] = await fixture.sql`INSERT INTO profiles(account_id,type,name) VALUES (${nativeAccount.id},'human','Native capture fixture') RETURNING id`;
+const nativeToken = await signSessionToken({ profileId: nativeProfile.id, email: 'native-capture-fixture@example.test' });
+await createSessionRow({ profileId: nativeProfile.id, token: nativeToken });
+const objects = new Map<string, { bytes: Buffer; contentType: string }>();
+let loseResponse = false, failUpload = false;
+async function body(request: IncomingMessage, limit: number) {
+  const chunks: Buffer[] = []; let size = 0;
+  for await (const chunk of request) { size += chunk.length; if (size > limit) throw new Error('Fixture request too large'); chunks.push(chunk); }
+  return Buffer.concat(chunks);
+}
+const syntheticMicrophone = `<script>
+Object.defineProperty(navigator.mediaDevices,'getUserMedia',{configurable:true,value:async()=>{
+ const context=new AudioContext(), oscillator=context.createOscillator(), destination=context.createMediaStreamDestination();
+ oscillator.frequency.value=220;const gain=context.createGain();gain.gain.value=.05;oscillator.connect(gain);gain.connect(destination);oscillator.start();
+ destination.stream.getAudioTracks().forEach(track=>{const stop=track.stop.bind(track);track.stop=()=>{stop();oscillator.stop();void context.close();};});
+ return destination.stream;
+}});
+</script>`;
+const dist = resolve('packages/web/dist');
+const nativeDist = resolve('tools/e2e/native-capture-spike/dist');
+const types: Record<string,string> = { '.html':'text/html', '.js':'text/javascript', '.css':'text/css', '.woff2':'font/woff2', '.svg':'image/svg+xml' };
+const server = createServer(async (request, response) => {
+  try {
+    const target = new URL(request.url ?? '/', origin);
+    if (target.pathname === '/fixture/native-login') {
+      response.writeHead(200, { 'Content-Type': 'application/json', 'Set-Cookie': buildSessionCookie(nativeToken, { secure: false }), 'Cache-Control': 'no-store' });
+      response.end(JSON.stringify({ profileId: nativeProfile.id })); return;
+    }
+    if (target.pathname === '/favicon.ico') { response.writeHead(204); response.end(); return; }
+    if (target.pathname.startsWith('/native-probe/')) {
+      const suffix = target.pathname.slice('/native-probe/'.length) || 'index.html';
+      const path = resolve(nativeDist, suffix); assert.ok(path.startsWith(nativeDist + '/'));
+      response.writeHead(200, { 'Content-Type': types[extname(path)] ?? 'application/octet-stream', 'Cache-Control': 'no-store' });
+      response.end(await readFile(path)); return;
+    }
+    if (target.pathname === '/fixture') {
+      if (target.searchParams.get('fail') === 'save-response') loseResponse = true;
+      if (target.searchParams.get('fail') === 'upload') failUpload = true;
+      const [counts] = await fixture.sql`SELECT (SELECT count(*)::int FROM inspirations) AS inspirations,
+        (SELECT count(*)::int FROM attachments) AS attachments, (SELECT count(*)::int FROM inspiration_save_requests) AS requests`;
+      response.writeHead(200, {'Content-Type':'application/json'}); response.end(JSON.stringify({ ...counts, objects: objects.size,
+        origin, schema: fixture.schemaName, microphone: 'synthetic tone', failUpload, loseResponse })); return;
+    }
+    if (target.pathname.startsWith('/capture-fixture/')) {
+      const key = decodeURIComponent(target.pathname);
+      if (request.method === 'PUT') {
+        if (failUpload) { failUpload = false; response.writeHead(503); response.end(); return; }
+        const bytes = await body(request, 25 * 1024 * 1024);
+        objects.set(key,{bytes,contentType:String(request.headers['content-type'] ?? 'application/octet-stream')});
+        response.writeHead(200,{etag:'"fixture"'}); response.end(); return;
+      }
+      const object = objects.get(key);
+      if (!object) { response.writeHead(404); response.end(); return; }
+      response.writeHead(200,{'Content-Type':object.contentType,'Content-Length':object.bytes.length});
+      response.end(request.method === 'HEAD' ? undefined : object.bytes); return;
+    }
+    if (target.pathname.startsWith('/api/')) {
+      const bytes = ['GET','HEAD'].includes(request.method ?? 'GET') ? undefined : await body(request, 1024 * 1024);
+      const result = await app.fetch(new Request(target,{method:request.method,headers:request.headers as HeadersInit,...(bytes ? {body:bytes} : {})}));
+      if (loseResponse && request.method === 'POST' && target.pathname === '/api/inspirations' && result.status === 201) {
+        loseResponse = false; response.destroy(); return;
+      }
+      response.writeHead(result.status,Object.fromEntries(result.headers)); response.end(Buffer.from(await result.arrayBuffer())); return;
+    }
+    const path = target.pathname.startsWith('/assets/') ? resolve(dist,`.${target.pathname}`) : resolve(dist,'index.html');
+    assert.ok(path.startsWith(dist + '/'));
+    let bytes = await readFile(path);
+    if (path.endsWith('index.html')) bytes = Buffer.from(bytes.toString().replace('<head>', '<head>' + syntheticMicrophone));
+    response.writeHead(200,{'Content-Type':types[extname(path)] ?? 'application/octet-stream','Cache-Control':'no-store',
+      ...(path.endsWith('index.html') ? {'Set-Cookie':buildSessionCookie(token,{secure:false})} : {})}); response.end(bytes);
+  } catch (error) { console.error(error); if (!response.headersSent) response.writeHead(500); response.end('Fixture failed'); }
+});
+await new Promise<void>(done=>server.listen(3015,'127.0.0.1',done));
+console.log(JSON.stringify({origin,schema:fixture.schemaName,profileId:profile.id,microphone:'synthetic tone',storage:'in-memory S3 transport'}));
+let closing=false;
+async function close(){if(closing)return;closing=true;await new Promise<void>(done=>server.close(()=>done()));await fixture.cleanup();await getDb().$client.end();process.exit(0);}
+process.once('SIGINT',()=>void close());process.once('SIGTERM',()=>void close());

@@ -1291,4 +1291,33 @@ body .profile-signout-button {
 .jar-room-patterns button:focus-visible { outline: 2px solid var(--w-ink); outline-offset: 2px; }
 .jar-room-patterns button[aria-disabled="true"] { cursor: progress; }
 
+.jar-inspiration-composer { width: min(640px, calc(100vw - var(--sp-44))); max-height: calc(var(--jar-vh, 100dvh) - var(--sp-44)); overflow-y: auto; padding: var(--sp-24); color: var(--w-ink); font-size: var(--t-body); text-align: left; }
+.jar-composer-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-12); }
+.jar-composer-heading h2 { margin: 0; font-size: var(--t-body); font-weight: 500; }
+.jar-inspiration-composer button { min-height: var(--sp-44); min-width: var(--sp-44); padding: var(--sp-8) var(--sp-12); border: 1px solid var(--w-edge); border-radius: var(--sp-12); background: none; color: var(--w-ink); font: inherit; font-size: var(--t-note); cursor: pointer; }
+.jar-inspiration-composer button:disabled { opacity: .5; cursor: default; }
+.jar-inspiration-composer button:focus-visible { outline: 2px solid var(--w-ink); outline-offset: 2px; }
+.jar-inspiration-composer .jar-composer-text { position: static; display: block; width: 100%; min-height: calc(var(--sp-44) * 3); max-height: calc(var(--sp-44) * 6); margin: var(--sp-12) 0; padding: var(--sp-8) 0; background: none; border: 0; border-bottom: 1px solid var(--w-muted); border-radius: 0; color: var(--w-ink); font-size: var(--t-body); line-height: 1.6; letter-spacing: normal; text-transform: none; text-align: left; resize: vertical; }
+.jar-composer-tools, .jar-composer-actions, .jar-composer-visibility { display: flex; flex-wrap: wrap; gap: var(--sp-8); }
+.jar-composer-tools { margin-bottom: var(--sp-12); }
+.jar-composer-storage-note { color: var(--w-muted); font-size: var(--t-note); line-height: 1.5; }
+.jar-composer-link { display: flex; gap: var(--sp-8); margin: var(--sp-12) 0; }
+.jar-composer-link input { min-width: 0; flex: 1; min-height: var(--sp-44); padding: var(--sp-8); border: 1px solid var(--w-edge); border-radius: var(--sp-8); background: transparent; color: var(--w-ink); }
+.jar-composer-media { list-style: none; margin: var(--sp-12) 0; padding: 0; }
+.jar-composer-media li { display: flex; gap: var(--sp-12); align-items: center; flex-wrap: wrap; padding: var(--sp-12) 0; border-bottom: 1px solid var(--w-edge); }
+.jar-composer-media img { width: calc(var(--sp-44) * 2); height: calc(var(--sp-44) * 2); object-fit: cover; border-radius: var(--sp-8); }
+.jar-composer-media audio { width: 100%; }
+.jar-composer-media-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: var(--t-note); }
+.jar-composer-media-name a { color: inherit; }
+.jar-composer-media-name small { display: block; color: var(--w-muted); font-size: var(--t-note); }
+.jar-composer-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--sp-12); margin-top: var(--sp-22); }
+.jar-composer-visibility button { border-color: transparent; }
+.jar-composer-visibility button[aria-pressed="true"] { background: var(--w-raised); border-color: var(--w-muted); }
+.jar-saved-attachment { margin: var(--sp-12) 0; font-size: var(--t-note); }
+.jar-saved-attachment img { display: block; max-width: 100%; max-height: 320px; object-fit: contain; border-radius: var(--sp-8); }
+.jar-saved-attachment audio { width: 100%; }
+.jar-saved-attachment a { color: var(--w-ink); overflow-wrap: anywhere; }
+.jar-saved-attachment button { min-height: var(--sp-44); padding: var(--sp-8) var(--sp-12); color: var(--w-ink); background: none; border: 1px solid var(--w-edge); border-radius: var(--sp-8); font: inherit; cursor: pointer; }
+@media (max-width: 600px) { .jar-inspiration-composer { padding: var(--sp-16); } .jar-composer-footer { align-items: stretch; flex-direction: column; } .jar-composer-actions { justify-content: flex-end; } .jar-inspiration-composer .jar-composer-text { font-size: 16px; } }
+
 }

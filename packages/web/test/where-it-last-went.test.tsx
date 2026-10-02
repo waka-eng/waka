@@ -155,14 +155,14 @@ afterEach(() => {
  */
 async function worldWithTheMouthOpen(): Promise<MountedWorld> {
   window.localStorage.setItem(DRAFT_KEY, "a thing worth keeping");
-  layout = await mountWorld(FACTS);
+  layout = await mountWorld(FACTS, { initialEntries: ['/?compose=1'] });
   return layout;
 }
 
 /** the two words on the row, by the light they wear */
 function destination(): { private: boolean; public: boolean } {
-  const row = layout?.container.querySelector(".jar-mouth-where");
-  if (!row) throw new Error("no .jar-mouth-where — the mouth did not open");
+  const row = layout?.container.querySelector(".jar-composer-visibility");
+  if (!row) throw new Error("the composer did not open");
   const buttons = Array.from(row.querySelectorAll("button"));
   const find = (word: RegExp) => buttons.find((b) => word.test(b.textContent ?? ""));
   const priv = find(/^private$/i);
@@ -175,7 +175,7 @@ function destination(): { private: boolean; public: boolean } {
 }
 
 async function press(word: RegExp): Promise<void> {
-  const row = layout?.container.querySelector(".jar-mouth-where");
+  const row = layout?.container.querySelector(".jar-inspiration-composer");
   const button = Array.from(row?.querySelectorAll("button") ?? []).find((b) =>
     word.test(b.textContent ?? ""),
   );
