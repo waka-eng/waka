@@ -169,3 +169,44 @@ Android UI verification remains open: the running qemu window is not recognized
 by the current native UI tool. An explicit request to use ADB touch/screenshots
 is pending. Actual iPhone/Android microphone and interruption validation also
 remain open. No production/dev data, deployment or paid model calls were used.
+
+### Android Chrome emulator verification
+
+The owner explicitly authorized ADB touch input/screenshots and completed the
+Chrome first-run setup. The existing read-only Android 15 `ondo_pixel` emulator
+accessed the isolated stack through `adb reverse tcp:3015 tcp:3015`.
+
+Observed on the shipped web bundle:
+
+- Text entry and synthetic recording start/stop worked. Reloading Chrome
+  restored both text and the recorded WebM from the owned draft. Playback
+  advanced to 0:11, confirming recovered bytes could be decoded.
+- A deliberately failed object PUT showed "Couldn’t upload this attachment.
+  Your draft is still here. Try saving again." and preserved the input.
+- On retry, the fixture deliberately dropped the successful create response.
+  The app reconciled the original save and opened reflection for the entered
+  words, without a second source or save request.
+- The Android system photo picker selected only the generated fixture PNG.
+  The Link action accepted the synthetic example URL and displayed it beside
+  the photo. The combined save committed one source with image and link rows.
+
+Counts before/after the two Android saves: inspirations 4→6, attachments 1→4,
+save requests 3→5, objects 1→3. Direct SQL in the disposable schema confirmed
+the first source has exactly one audio attachment and the second exactly one
+image and one link. No other account or remote database was used.
+
+Evidence: `android-draft-restored.png`, `android-upload-retry.png`,
+`android-save-recovered.png`, and `android-photo-link.png` under the capture
+evidence folder. No product-code changes were needed for these Android cases.
+
+After the final save committed, the emulator process ended with exit 137 and
+ADB disconnected. Its process handle and device inventory both confirmed
+termination. Earlier memory-pressure warnings exist, but the cause of this
+termination was not established. The last combined save is proven by SQL;
+reopening that source on Android after termination was not verified. The
+read-only emulator was not silently restarted or reset.
+
+The ADB approval blocker is resolved. The tested emulator paths pass, but
+actual iPhone/Android microphone capture, physical permissions/interruption
+behavior and real-device quality remain outside this evidence. A03 and the
+full first-bundle goal are still not complete.

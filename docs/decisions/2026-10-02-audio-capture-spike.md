@@ -20,6 +20,15 @@ The production web bundle ran against real authenticated Hono routes and an isol
 
 These results do not establish AWS policy/signature correctness, actual microphone quality, background recording, phone permissions or native login retention.
 
+Android Chrome on the API 35 emulator subsequently passed text plus synthetic
+audio capture, draft reload/playback, failed-upload recovery, lost-save-response
+reconciliation into reflection, and photo-plus-link saving. The two save intents
+created two sources and three attachments, confirmed by isolated SQL. This is
+Android Chrome emulator evidence, not physical microphone evidence or an
+Android Capacitor build. After the final save committed, the emulator terminated
+with exit 137; its cause was not established, so post-termination reopening was
+not verified. The goal log records exact counts and screenshot paths.
+
 ## Speech evaluation
 
 Protocol fixed before calls: six fixtures × two models, twelve calls, no automatic retries. Per speech fixture, normalized character error must be at most 5%; silence and tone must yield empty transcripts. Normalization removes punctuation, spacing and case, and treats the spoken Korean numbers three/five and their digits equivalently. Other additions and omissions remain errors.
