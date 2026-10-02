@@ -42,3 +42,13 @@ A01 verdict: pass. The required contracts, concrete example, canon amendment and
 Added an optional attachment manifest to inspiration create and audio enum values in migration 0049. Empty authored text is allowed only with an attachment. Uploaded-byte ownership, exact length and MIME metadata are verified before the transaction commits; unverified objects fail rather than claiming a saved attachment. The existing request hash includes the manifest only when supplied, preserving old text-only request hashes. Replays bypass object HEAD and load current owned rows.
 
 Verified: 18/18 targeted unit tests (six new attachment cases); 23/23 disposable-loopback SQL tests (five new bundle cases and eighteen existing save/recovery cases). New SQL cases prove atomic rollback, response replay, manifest conflict, owner isolation and deletion tombstones. API/web typechecks and migration consistency check pass. No remote migration or real account mutation performed. C01/C02 remain incomplete until the composer, durable media draft and browser checks are connected.
+
+Expanded API unit verification: 689 passed, three paid-live benches skipped. Bundle server foundation committed as `2a54db2`; this is partial C02, not the completed user flow.
+
+### A02 screen proposal
+
+Added the self-contained [screen proposal](../craft/personal-experience-prototype.html) and explicit route/Back/close contracts. Browser inspection: 36 desktop states and 36 states at 390×844; zero horizontal-overflow cases and no visible button below 44px high. The checks span home, composer, detail, review, principle/share and avatar, each at ready/empty/loading/saving/error/returning.
+
+Interactive checks: empty capture disables save; adding the example attachment enables an attachment-only save; close/Back preserves edited draft text; changing card wording survives the simulated export without changing the original principle. Inspected [mobile composer](../craft/evidence/personal-capture/mobile-composer.jpg) and [desktop home](../craft/evidence/personal-capture/desktop-home.jpg). These are example-content design screens, not a functioning recorder, review, exporter or chatbot.
+
+A02 verdict: pass for the agreed design deliverable. Actual microphone/device, backend connection, persistent media drafts and product browser journeys are still open under C01/C02/A03. An asynchronous user question asks whether actual iPhone and Android tests can be performed; independent implementation continues.
