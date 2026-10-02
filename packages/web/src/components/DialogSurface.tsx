@@ -29,6 +29,24 @@ export const DialogSurface = forwardRef<HTMLDivElement, DialogSurfaceProps>(func
   const opener = useRef(document.activeElement instanceof HTMLElement ? document.activeElement : null);
   useImperativeHandle(forwardedRef, () => surface.current!, []);
   useLayoutEffect(() => {
+    const node = surface.current, viewport = window.visualViewport;
+    if (!active || !node || !viewport) return;
+    // iOS keeps the layout viewport behind the keyboard. Only opt-in centered
+    // writing sheets use these values; anchored menus keep their own position.
+    const update = () => {
+      if (!Number.isFinite(viewport.height) || viewport.height <= 0 || !Number.isFinite(viewport.offsetTop)) return;
+      node.style.setProperty('--dialog-visible-height', `${viewport.height}px`);
+      node.style.setProperty('--dialog-visible-top', `${viewport.offsetTop}px`);
+      node.dataset.visualViewport = 'true';
+    };
+    update(); viewport.addEventListener('resize', update); viewport.addEventListener('scroll', update);
+    return () => {
+      viewport.removeEventListener('resize', update); viewport.removeEventListener('scroll', update);
+      delete node.dataset.visualViewport;
+      node.style.removeProperty('--dialog-visible-height'); node.style.removeProperty('--dialog-visible-top');
+    };
+  }, [active]);
+  useLayoutEffect(() => {
     const node = surface.current;
     if (!active || !node) return;
     if (!node.contains(document.activeElement)) {

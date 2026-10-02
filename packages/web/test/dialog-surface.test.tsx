@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-/** WHAT THIS MOCKS, AND WHY (gate G6): nothing. Render the actual dialog to
- * verify native focus and event ownership without a canvas or network. */
+/** WHAT THIS MOCKS, AND WHY (gate G6): `visualViewport` supplies resize/scroll
+ * metrics in jsdom, which has no software keyboard. Actual dialog focus and
+ * event ownership run unchanged, without a canvas or network. */
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,7 +15,7 @@ beforeEach(() => {
   opener = document.createElement("button"); document.body.append(opener); opener.focus();
   host = document.createElement("div"); document.body.append(host); root = createRoot(host);
 });
-afterEach(() => { act(() => root.unmount()); host.remove(); opener.remove(); });
+afterEach(() => { act(() => root.unmount()); host.remove(); opener.remove(); vi.unstubAllGlobals(); });
 
 async function mount(onClose = vi.fn()) {
   await act(async () => root.render(<DialogSurface aria-label="Reflection" onClose={onClose}>
@@ -27,6 +28,24 @@ async function mount(onClose = vi.fn()) {
 }
 
 describe("dialog input ownership", () => {
+  it('tracks the visible keyboard area and removes viewport listeners when inactive', async () => {
+    const viewport = Object.assign(new EventTarget(), { height: 760, offsetTop: 0 });
+    const remove = vi.spyOn(viewport, 'removeEventListener');
+    vi.stubGlobal('visualViewport', viewport);
+    await mount();
+    const dialog = host.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(dialog.style.getPropertyValue('--dialog-visible-height')).toBe('760px');
+    viewport.height = 350; viewport.offsetTop = 40;
+    viewport.dispatchEvent(new Event('resize'));
+    expect(dialog.style.getPropertyValue('--dialog-visible-height')).toBe('350px');
+    expect(dialog.style.getPropertyValue('--dialog-visible-top')).toBe('40px');
+    viewport.offsetTop = 70; viewport.dispatchEvent(new Event('scroll'));
+    expect(dialog.style.getPropertyValue('--dialog-visible-top')).toBe('70px');
+    await act(async () => root.render(<DialogSurface active={false} onClose={() => undefined} />));
+    expect(dialog.hasAttribute('data-visual-viewport')).toBe(false);
+    expect(remove).toHaveBeenCalledWith('resize', expect.any(Function));
+    expect(remove).toHaveBeenCalledWith('scroll', expect.any(Function));
+  });
   it("leaves modified Tab to browser tab navigation", async () => {
     await mount();
     const last = [...host.querySelectorAll("button")].at(-1)!;

@@ -1291,7 +1291,16 @@ body .profile-signout-button {
 .jar-room-patterns button:focus-visible { outline: 2px solid var(--w-ink); outline-offset: 2px; }
 .jar-room-patterns button[aria-disabled="true"] { cursor: progress; }
 
-.jar-inspiration-composer { width: min(640px, calc(100vw - var(--sp-44))); max-height: calc(var(--jar-vh, 100dvh) - var(--sp-44)); overflow-y: auto; padding: var(--sp-24); color: var(--w-ink); font-size: var(--t-body); text-align: left; }
+.jar-inspiration-composer { display: flex; flex-direction: column; width: min(640px, calc(100vw - var(--sp-44))); max-height: calc(var(--jar-vh, 100dvh) - var(--sp-44)); overflow-y: auto; padding: var(--sp-24); color: var(--w-ink); font-size: var(--t-body); text-align: left; }
+.jar-composer-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y pinch-zoom; }
+.jar-composer-heading, .jar-composer-footer { flex-shrink: 0; }
+.jar-seek.jar-inspiration-composer[data-visual-viewport],
+.jar-seek.jar-reflect-room[data-visual-viewport] {
+  position: fixed;
+  top: calc(var(--dialog-visible-top) + var(--dialog-visible-height) / 2);
+  max-height: calc(var(--dialog-visible-height) - var(--sp-44));
+  box-sizing: border-box;
+}
 .jar-composer-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-12); }
 .jar-composer-heading h2 { margin: 0; font-size: var(--t-body); font-weight: 500; }
 .jar-inspiration-composer button { min-height: var(--sp-44); min-width: var(--sp-44); padding: var(--sp-8) var(--sp-12); border: 1px solid var(--w-edge); border-radius: var(--sp-12); background: none; color: var(--w-ink); font: inherit; font-size: var(--t-note); cursor: pointer; }
