@@ -7,6 +7,18 @@ Branch: `codex/personal-capture-foundation`, based on `59aab90` and the navigati
 
 Complete the first bundle agreed in [the personal experience task list](../plans/2026-10-02-personal-experience-tasks.md): A01, A02, C01, C02 and A03. The exact acceptance criteria in that document remain authoritative. The older all-app backlog remains outside this goal.
 
+## Owner decision on physical device verification
+
+On 2026-10-02 the owner explicitly deferred actual iPhone/Android verification
+to follow-up work. For planning, assume the implemented flows work on physical
+devices, without treating that assumption as test evidence or a support guarantee.
+The physical-device portions of A03 and related C01 checks no longer block the
+first bundle or subsequent work. They remain unverified follow-up items; their
+test cases and existing measurements are preserved. This decision supersedes
+the physical-device blocking requirement in the original gates and historical
+log below. It does not mark those tests passed or declare the whole goal complete.
+The current request is documentation only; no new implementation is started.
+
 ## Gates
 
 1. A01: document the ownership and mutation rules for raw capture, audio, transcription, reflection, review, conversation and exported cards. Work through a concrete example and amend the canon/glossary before adding identifiers.

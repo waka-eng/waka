@@ -1,12 +1,12 @@
 # Audio capture spike
 
-Status: partial A03 evidence. Actual iPhone Safari and Android Chrome testing is unavailable, confirmed by the owner on 2026-10-02. A03 remains incomplete.
+Status: partial A03 evidence. On 2026-10-02 the owner deferred actual iPhone Safari and Android Chrome testing to follow-up work. These checks remain unverified, but no longer block current progress. Assuming they work for planning is not a verified pass or a support guarantee.
 
 ## Current decision
 
 Use `gemini-2.5-flash` as the candidate for the later C06 transcription integration. It passed all six predeclared synthetic fixtures. Do not use `gemini-2.5-flash-lite` as an automatic fallback: it added unrequested timestamps to the Korean transcript and failed the output contract in this run. No transcription provider is wired into production by this spike.
 
-Continue building the shared web capture flow. Capacitor rollout timing remains provisional until its bounded native probe and physical-device checks are complete. A mobile-sized desktop window is not iPhone or Android evidence.
+Physical-device verification is deferred under the owner's decision; it is not a prerequisite for planning subsequent work. Capacitor rollout timing remains a separate decision. A mobile-sized desktop window or simulator does not establish physical-device behavior. This update records the deferral only and does not start implementation or deployment.
 
 ## Browser recording and saving
 
