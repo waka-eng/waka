@@ -31,7 +31,7 @@ function savedDraft(draftKey: string | null, afterId: string | null): string {
   } catch { return ""; }
 }
 
-export function ReflectionFlow({ inspirationId, scope, processing, initialTurns, locale, onSaved, onRemoved, onDone, onSynchronized }: {
+export function ReflectionFlow({ inspirationId, scope, processing, initialTurns, locale, onSaved, onRemoved, onDone, onSynchronized, focusReflectionId, onCopyLink }: {
   inspirationId: string;
   scope: ProfileStorageScope | null;
   processing?: ReactNode;
@@ -41,6 +41,8 @@ export function ReflectionFlow({ inspirationId, scope, processing, initialTurns,
   onRemoved: (reflectionId: string) => void;
   onDone: () => void;
   onSynchronized?: (inspiration: ApiInspiration | null) => void;
+  focusReflectionId?: string | null;
+  onCopyLink?: (reflectionId: string) => void;
 }) {
   const draftKey = profileStorageKey(scope, `reflectionDraft:${inspirationId}`);
   const restored = useRef(readReflectionDraft(draftKey));
@@ -57,9 +59,20 @@ export function ReflectionFlow({ inspirationId, scope, processing, initialTurns,
   const [removingId, setRemovingId] = useState<string | null>(null);
   const requestSequence = useRef(0);
   const currentQuestion = useRef<HTMLDivElement>(null);
+  const root = useRef<HTMLDivElement>(null);
+  const earlierTurns = useRef<HTMLDetailsElement>(null);
   const latestId = turns.at(-1)?.id ?? null;
 
   useEffect(() => () => { requestSequence.current += 1; }, []);
+  useEffect(() => {
+    if (!focusReflectionId || focusReflectionId === 'open') return;
+    const node = [...root.current?.querySelectorAll<HTMLElement>('[data-reflection-id]') ?? []]
+      .find((item) => item.dataset.reflectionId === focusReflectionId);
+    if (!node) return;
+    if (earlierTurns.current?.contains(node)) earlierTurns.current.open = true;
+    const surface = node.closest<HTMLElement>('[data-jar-surface]');
+    if (surface) surface.scrollTop += node.getBoundingClientRect().top - surface.getBoundingClientRect().top - (parseFloat(getComputedStyle(surface).paddingTop) || 0);
+  }, [focusReflectionId]);
   useEffect(() => {
     // Each follow-up replaces the waiting beat. Bring the new question into
     // the card/sheet, not every scroll ancestor. scrollIntoView also scrolls
@@ -177,23 +190,29 @@ export function ReflectionFlow({ inspirationId, scope, processing, initialTurns,
 
   const latest = turns.at(-1);
   const earlier = turns.slice(0, -1);
-  return <div className="jar-reflection-flow">
-    {latest ? <div className="jar-reflection-previous">
+  const copyLink = (id: string) => onCopyLink ? <button type="button" className="jar-copy-link"
+    aria-label={t(locale, 'worldCopyReflectionLink')} title={t(locale, 'worldCopyReflectionLink')} onClick={() => onCopyLink(id)}>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m10 14 4-4m-7 3-2 2a4 4 0 0 0 6 6l4-4m-4-10 2-2a4 4 0 0 1 6 6l-4 4" /></svg>
+  </button> : null;
+  return <div ref={root} className="jar-reflection-flow">
+    {latest ? <div className="jar-reflection-previous" data-reflection-id={latest.id}>
       <p className="jar-label">{t(locale, "worldReflectionPrevious")}</p>
       <p className="jar-reflection-previous-question">{latest.question}</p>
       <p>{latest.answer}</p>
       <button type="button" disabled={Boolean(save.pending) || removingId === latest.id} onClick={() => void removeAnswer(latest.id)}>
         {t(locale, "worldTakeItBack")}
       </button>
+      {copyLink(latest.id)}
     </div> : null}
-    {earlier.length > 0 ? <details className="jar-reflection-turns">
+    {earlier.length > 0 ? <details ref={earlierTurns} className="jar-reflection-turns">
       <summary>{t(locale, "worldReflectionHistory")} ({earlier.length})</summary>
-      {earlier.map((turn) => <div key={turn.id} className="jar-reflection-turn">
+      {earlier.map((turn) => <div key={turn.id} className="jar-reflection-turn" data-reflection-id={turn.id}>
         <p className="jar-reflect-q">{turn.question}</p>
         <p>{turn.answer}</p>
         <button type="button" disabled={Boolean(save.pending) || removingId === turn.id} onClick={() => void removeAnswer(turn.id)}>
           {t(locale, "worldTakeItBack")}
         </button>
+        {copyLink(turn.id)}
       </div>)}
     </details> : null}
     {phase === "answering" ? <div ref={currentQuestion} className="jar-reflection-current">

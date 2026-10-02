@@ -57,7 +57,7 @@ import {
 import { getDb } from "../lib/db.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
 import { validationDetails } from "../lib/validation.js";
-import { loadGroupField } from "./groups-field.js";
+import { loadGroupField, loadGroupInspiration } from "./groups-field.js";
 import {
   createGroupForProfile,
   deleteGroup,
@@ -526,6 +526,15 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
          as loss. */
       total: field.total,
     });
+  });
+
+  routes.get('/:groupId/field/:inspirationId', async (c) => {
+    const params = z.object({ groupId: z.string().uuid(), inspirationId: z.string().uuid() }).safeParse(c.req.param());
+    if (!params.success) return c.json({ error: 'Invalid inspiration link' }, 400);
+    const row = await loadGroupInspiration(getDatabase(), params.data.groupId, params.data.inspirationId, c.get('session').profile.id);
+    if (!row) return c.json({ error: 'Inspiration not found' }, 404);
+    return c.json({ inspiration: { id: row.id, text: row.text, kind: row.kind, source: row.source,
+      createdAt: row.createdAt, updatedAt: row.updatedAt, ownerProfileId: row.ownerProfileId, ownerName: row.ownerName, ownerType: row.ownerType } });
   });
 
   // GET /api/groups/:groupId/top-of-mind

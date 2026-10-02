@@ -68,7 +68,10 @@ import { ReflectionFlow, type ReflectionTurn } from "../components/ReflectionFlo
 import { InspirationProcessingNotice } from '../components/InspirationProcessingNotice';
 import { DialogSurface } from "../components/DialogSurface";
 import { PrincipleEvidence } from "../components/PrincipleEvidence";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useViewNavigation } from '../lib/use-view-navigation';
+import { EMPTY_VIEW, resolveViewWall, viewHref, type ViewLocation } from '../lib/view-location';
+import { InspirationSearch } from '../components/InspirationSearch';
 
 import { hueCss } from "../lib/appearance";
 import { useDismissAway } from "../lib/dismiss";
@@ -200,8 +203,8 @@ import {
   refreshGroupTopOfMind,
   fetchGroups,
   fetchGroupField,
+  fetchGroupInspiration,
   fetchGroupWall,
-  fetchInspirations,
   fetchTopOfMindVersions,
   finalizeAttachment,
   presignAttachment,
@@ -1061,6 +1064,7 @@ interface PanelData {
 type Moment = "touch" | "kept" | "answered" | "arrived" | "shared" | "let-go";
 
 interface SimApi {
+  navigationState: () => { wall: Space; section: 'top' | 'field' | 'sky'; moving: boolean };
   /**
    * Whose ground to stand in on a group's wall — a member's profile id, or
    * null for your own. Yours is the default everywhere and the only ground on
@@ -1289,6 +1293,14 @@ export default function HomePage(): JSX.Element {
 }
 
 function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | null }): JSX.Element {
+  const viewNavigation = useViewNavigation(storageScope ? `${storageScope.accountId}:${storageScope.profileId}` : 'fixture');
+  const viewNavigationRef = useRef(viewNavigation); viewNavigationRef.current = viewNavigation;
+  const restoringViewRef = useRef(true), requestedViewRef = useRef(viewNavigation.view);
+  requestedViewRef.current = viewNavigation.view;
+  const [navigationProblem, setNavigationProblem] = useState(false);
+  const [detachedInspiration, setDetachedInspiration] = useState<{ wall: string; ball: Ball; detail: InspirationDetail | null } | null>(null);
+  const detachedRef = useRef(detachedInspiration); detachedRef.current = detachedInspiration;
+  const linkedReflectionRef = useRef<{ panelId: string; open: boolean } | null>(null);
   const [phase, setPhase] = useState<"loading" | "ready" | "failed">("loading");
   /**
    * NOTHING BEHIND THIS WORLD BUT THE FIXTURE — see offlineHome().
@@ -2383,6 +2395,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     if (atWallRef.current.kind === "group" && atWallRef.current.id === groupId) {
       setChrome({ text: null, awayFrom: null, formingAlt: null, asOf: null, forming: null, empty: false, prevText: null });
       setSelectedId(null); setPanel(null); setPanelOpen(false);
+      setDetachedInspiration(null); setReflectOpen(false);
       setProv(null); setProvFull(null); setProvPick(null);
     }
     setGroupFieldTick((value) => value + 1);
@@ -2626,64 +2639,12 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
 
   const pushArrived = useCallback((w: Space) => {
     setAtWall((prev) => (prev.kind === w.kind && prev.id === w.id ? prev : w));
-    /* THE WALL IN THE ADDRESS. Written with the browser's own replaceState,
-       never the router's navigate: both paths render this same component, and
-       a router navigation would remount the world mid-breath. Replace, not
-       push — reload lands where you stood; the back button still leaves the
-       app, exactly as before. */
-    const path = w.kind === "self" ? "/" : `/w/${wallSlug(w.name)}`;
-    if (window.location.pathname !== path) {
-      window.history.replaceState(null, "", path);
-    }
   }, []);
   const pushArrivedRef = useRef(pushArrived);
   pushArrivedRef.current = pushArrived;
 
-  /** The address's wall, when the page opened on `/w/:wall`. */
-  const { wall: wallParam } = useParams();
-  const openedAtRef = useRef(false);
-  useEffect(() => {
-    if (openedAtRef.current || !wallParam) return;
-    if (phase !== "ready") return;
-    const wanted = decodeURIComponent(wallParam).toLowerCase();
-    /* By name-slug first — the address people write — and by the profile's
-       own id as well, because an id is what every API surface hands out and
-       "/w/<uuid>" arriving home with no word read as broken (founder,
-       2026-08-31). */
-    const w = walls.find(
-      (x) =>
-        x.kind !== "self" &&
-        (wallSlug(x.name) === wanted || x.id.toLowerCase() === wanted),
-    );
-    if (!w) {
-      /* the axis may simply not be known yet — the roster lands after first
-         paint. Only once it has does a missing name mean a missing wall,
-         which says so by going home. Latching before that sent every
-         /w/<agent> reload back to ME (caught live, 2026-08-31). */
-      if (agentRoster === null || !groupRosterReady) return;
-      openedAtRef.current = true;
-      window.history.replaceState(null, "", "/");
-      return;
-    }
-    /* `phase` turns ready a beat before the simulation assigns its API, and
-       an optional call on a null ref is a travel that silently never was —
-       the second latch bug this effect shipped with. Wait for the sim. */
-    let dead = false;
-    const attempt = () => {
-      if (dead || openedAtRef.current) return;
-      const api = simApiRef.current;
-      if (!api) {
-        window.setTimeout(attempt, 120);
-        return;
-      }
-      openedAtRef.current = true;
-      api.goToWall(w.col);
-    };
-    attempt();
-    return () => {
-      dead = true;
-    };
-  }, [wallParam, walls, phase, agentRoster, groupRosterReady]);
+  // The route-restoration bridge below handles initial links and every POP,
+  // not a one-shot latch tied to the first wall name.
 
   /** A room woke: its words may exist now. Discrete, pushed from the loop. */
   const pushWoken = useCallback((groupId: string) => {
@@ -3080,12 +3041,6 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     return true;
   }, [storageScope?.profileId]);
 
-  /** A wall's name as an address segment: lowercased, spaces to hyphens,
-    everything else URI-encoded — readable for latin names, correct for any. */
-function wallSlug(name: string): string {
-  return encodeURIComponent(name.trim().toLowerCase().replace(/\s+/g, "-"));
-}
-
 const AWAY_LONG_ENOUGH_MS = 30_000;
   useEffect(() => {
     let hiddenAt: number | null = null;
@@ -3142,7 +3097,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     if (have) return Promise.resolve(have);
     const inFlight = detailPendingRef.current.get(id);
     if (inFlight) return inFlight;
-    const p = loadInspiration(id)
+    const active = atWallRef.current;
+    const profile = active.kind === 'agent' ? active.id : storageScope?.profileId;
+    const p = loadInspiration(id, profile)
       .then((row) => {
         detailsRef.current.set(id, row);
         detailPendingRef.current.delete(id);
@@ -8491,6 +8448,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     }
 
     simApiRef.current = {
+      navigationState: () => ({ wall: curWall(), section: cam.y < view.layout.minCam * 0.5 ? 'sky' : cam.y > view.layout.maxCam * 0.5 ? 'field' : 'top', moving: trip.active || cam.aiming }),
       /* the timeline re-hangs under the word, whose width the reading sets */
       hangRail,
       /**
@@ -9385,6 +9343,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     if (groupBall && !groupBall.own) {
       setPanel({ id: selectedId, detail: null, partial: false });
       setPanelOpen(true);
+      return undefined;
+    }
+    const detached = detachedRef.current;
+    if (detached?.ball.id === selectedId && detached.wall === spaceKey(atWallRef.current)) {
+      setPanel({ id: selectedId, detail: detached.detail, partial: false }); setPanelOpen(true);
       return undefined;
     }
     /* A MEMORY KEPT A MOMENT AGO IS ALREADY WHOLE. You typed every word of
@@ -10365,7 +10328,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   }, [mouthPage, mouthOpen]);
 
   const panelBall = panelId
-    ? ballsRef.current?.byId.get(panelId) ?? groupBallsRef.current.get(panelId) ?? null
+    ? ballsRef.current?.byId.get(panelId) ?? groupBallsRef.current.get(panelId)
+      ?? (detachedInspiration?.ball.id === panelId ? detachedInspiration.ball : null)
     : null;
   /** A room orb's panel: whisper attribution, cited-by, and — for another
       member's save — no reflect action at all. */
@@ -11614,51 +11578,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     }
   }, []);
 
-  /**
-   * FINDING ONE MEMORY AMONG ALL OF THEM.
-   *
-   * The field shows everything at once, which is its whole point and is also
-   * why it cannot answer "where is the thing I wrote about the boat". Search
-   * has to exist BEFORE an archive gets big — the team's own end-to-end test
-   * buries a marked capture under two hundred newer ones precisely because a
-   * search that only filters what is already loaded silently stops finding
-   * things that are there, and from outside that is indistinguishable from
-   * the memory not holding them.
-   *
-   * It is not a second screen. Matches LIGHT UP IN PLACE and everything else
-   * sinks — the same focus law the field already uses when you tap one orb —
-   * so you never lose where a memory sits, which is the one thing a list can
-   * never tell you and this world can.
-   */
+  /** Search reads the whole archive; opening a result does not depend on the
+      bounded field already containing its orb. Queries stay out of the URL. */
   const [seek, setSeek] = useState<string | null>(null);
   /** read by the loop's key handler, which is built once */
   const openSeekRef = useRef<() => void>(() => undefined);
   openSeekRef.current = () => setSeek((s) => (s === null ? "" : s));
-  const [found, setFound] = useState<ReadonlySet<string> | null>(null);
-  useEffect(() => {
-    const q = (seek ?? "").trim();
-    if (q.length < 2) {
-      setFound(null);
-      return;
-    }
-    let dead = false;
-    /* the server searches the whole archive, not the window in hand */
-    const t = window.setTimeout(() => {
-      fetchInspirations({ q, limit: 200 })
-        .then((rows) => {
-          if (!dead) setFound(new Set(rows.map((r) => r.id)));
-        })
-        .catch(() => {
-          if (!dead) setFound(new Set());
-        });
-    }, 220);
-    return () => {
-      dead = true;
-      window.clearTimeout(t);
-    };
-  }, [seek]);
   const foundRef = useRef<ReadonlySet<string> | null>(null);
-  foundRef.current = found;
   /**
    * THE MEMORIES UNDER THE PATTERN YOU ARE READING — lit where they live.
    *
@@ -12165,6 +12091,120 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   const sourceNotice = !offline && !readingRefresh.busy && inspirationSave.phase === 'idle' ? <InspirationProcessingNotice
     processing={sourceProcessing} locale={locale} onView={viewSourceReading} displayedVersion={topOfMind?.version ?? 0} /> : null;
 
+  const appliedViewKey = useRef<string | null>(null), viewRequest = useRef(0);
+  const canonicalizeViewRef = useRef(false);
+  const [viewSettled, setViewSettled] = useState(0);
+  const latestViewKey = useRef(viewNavigation.key); latestViewKey.current = viewNavigation.key;
+  if (appliedViewKey.current !== viewNavigation.key) restoringViewRef.current = true;
+  useEffect(() => {
+    if (phase !== 'ready' || appliedViewKey.current === viewNavigation.key) return;
+    const desired = viewNavigation.view;
+    if (viewNavigation.own.current === viewNavigation.href) {
+      viewNavigation.own.current = null; appliedViewKey.current = viewNavigation.key; restoringViewRef.current = false; return;
+    }
+    const target = desired && (desired.wallId === storageScope?.profileId ? walls.find((wall) => wall.kind === 'self') : resolveViewWall(desired, walls));
+    if (!target && desired?.wallId && (agentRoster === null || !groupRosterReady)) return;
+    if (!target || !desired) { setNavigationProblem(true); appliedViewKey.current = viewNavigation.key; restoringViewRef.current = false; return; }
+    const serial = ++viewRequest.current, key = viewNavigation.key, controller = new AbortController();
+    let timer = 0, stage = 'wall', loading = false, canceled = false;
+    const current = () => !canceled && !controller.signal.aborted && viewRequest.current === serial && latestViewKey.current === key;
+    setNavigationProblem(false);
+    linkedReflectionRef.current = null;
+    setReflectOn(null); setReflectOpen(false); setSelectedId(null); setDetachedInspiration(null); setGroupPanel(null);
+    setSeek(desired.find ? viewNavigation.query : null);
+    const finish = () => { if (current()) { appliedViewKey.current = key; restoringViewRef.current = false; canonicalizeViewRef.current = true; setViewSettled((value) => value + 1); } };
+    const run = async () => {
+      if (!current()) return;
+      const sim = simApiRef.current;
+      if (!sim || sim.navigationState().moving) { timer = window.setTimeout(() => void run(), 80); return; }
+      const actual = sim.navigationState();
+      if (actual.wall.kind !== target.kind || actual.wall.id !== target.id) { sim.goToWall(target.col); timer = window.setTimeout(() => void run(), 80); return; }
+      if (stage === 'wall') {
+        stage = 'section';
+        sim.windTo(desired.at ?? Date.now()); parkedRef.current = desired.at; setParkedAt(desired.at); setAtNow(desired.at === null);
+        applyChromeRef.current(desired.at ?? Date.now());
+        if (target.kind === 'group') { setStanding(desired.memberId); sim.standIn(desired.memberId); }
+      }
+      if (actual.section !== desired.section) {
+        if (desired.section === 'field') sim.toGround(); else if (desired.section === 'sky') sim.toSky(); else sim.toTop();
+        timer = window.setTimeout(() => void run(), 80); return;
+      }
+      if (loading) return;
+      if (!desired.inspirationId) { finish(); return; }
+      loading = true;
+      try {
+        let detail: InspirationDetail | null = null, ball: Ball;
+        if (target.kind === 'group') {
+          if (!await loadGroupRef.current(target.id, true)) throw new Error('Room unavailable');
+          if (!current()) return;
+          const lease = groupCacheRef.current.get(target.id)?.leaseToken;
+          const row = await fetchGroupInspiration(target.id, desired.inspirationId, controller.signal);
+          if (!current()) return;
+          if (groupCacheRef.current.get(target.id)?.leaseToken !== lease) throw new Error('Room changed');
+          ball = makeGroupInspirationBall(row, target, viewerIdRef.current);
+          setStanding(row.ownerProfileId === viewerIdRef.current ? null : row.ownerProfileId);
+          sim.standIn(row.ownerProfileId === viewerIdRef.current ? null : row.ownerProfileId);
+          if (ball.own) detail = await loadInspiration(row.id, storageScope?.profileId, controller.signal);
+          else if (desired.reflectionId) throw new Error('Private reflection');
+        } else {
+          detail = await loadInspiration(desired.inspirationId, target.kind === 'agent' ? target.id : storageScope?.profileId, controller.signal);
+          if (!current()) return;
+          ball = makeBall(seedOf(detail, skyRef.current.citations, skyRef.current.signals, skyRef.current.posterSignalIds, skyRef.current.principleSignalIds));
+          ball.sigId = detail.id;
+        }
+        if (!current()) return;
+        if (desired.reflectionId && desired.reflectionId !== 'open' && !detail?.reflections.some((row) => row.id === desired.reflectionId && !row.skipped)) throw new Error('Reflection unavailable');
+        if (detail) detailsRef.current.set(detail.id, detail);
+        linkedReflectionRef.current = { panelId: ball.id, open: Boolean(desired.reflectionId) };
+        setDetachedInspiration({ wall: spaceKey(target), ball, detail });
+        if (ballsRef.current?.byId.has(ball.id)) { sim.release(); sim.select(ball.id); }
+        setSelectedId(ball.id); setPanel({ id: ball.id, detail, partial: false }); setPanelOpen(true);
+        timer = window.setTimeout(finish, 0);
+      } catch { if (current()) { setNavigationProblem(true); finish(); } }
+    };
+    void run();
+    return () => { canceled = true; controller.abort(); window.clearTimeout(timer); };
+  }, [viewNavigation.key, phase, walls, agentRoster, groupRosterReady]);
+  useEffect(() => {
+    const linked = linkedReflectionRef.current;
+    if (!linked || linked.panelId !== panelId) return;
+    linkedReflectionRef.current = null; setReflectOpen(linked.open);
+  }, [panelId, viewSettled]);
+
+  const selectedViewBall = selectedId ? ballsRef.current?.byId.get(selectedId) ?? (detachedInspiration?.ball.id === selectedId ? detachedInspiration.ball : null) : null;
+  const observedView: ViewLocation = { ...EMPTY_VIEW, wallId: atWall.kind === 'self' ? null : atWall.id,
+    label: atWall.kind === 'self' ? undefined : (walls.find((wall) => wall.id === atWall.id)?.name ?? atWall.name),
+    section: inSky ? 'sky' : inField ? 'field' : 'top', at: parkedAt, memberId: atWall.kind === 'group' ? standing : null,
+    inspirationId: reflectOn?.id ?? (selectedViewBall?.sigId ?? selectedId),
+    reflectionId: reflectOn || reflectOpen ? (requestedViewRef.current?.inspirationId === (reflectOn?.id ?? selectedViewBall?.sigId ?? selectedId) ? requestedViewRef.current?.reflectionId ?? 'open' : 'open') : null,
+    find: seek !== null };
+  const observedHref = viewHref(observedView), observedRef = useRef(observedView); observedRef.current = observedView;
+  useEffect(() => {
+    if (phase !== 'ready' || restoringViewRef.current || navigationProblem) return;
+    let timer = 0;
+    const record = () => {
+      if (restoringViewRef.current) return;
+      if (simApiRef.current?.navigationState().moving) { timer = window.setTimeout(record, 80); return; }
+      const nav = viewNavigationRef.current, previous = nav.view, next = observedRef.current;
+      const samePlace = previous?.wallId === next.wallId && previous.section === next.section && previous.at === next.at && previous.memberId === next.memberId;
+      const closing = samePlace && Boolean(previous?.inspirationId && !next.inspirationId || previous?.reflectionId && !next.reflectionId || previous?.find && !next.find);
+      const sameView = samePlace && previous.inspirationId === next.inspirationId && previous.reflectionId === next.reflectionId && previous.find === next.find;
+      nav.write(next, { observed: true, replace: canonicalizeViewRef.current || closing || sameView || observedHref === nav.href, query: seek ?? '' });
+      canonicalizeViewRef.current = false;
+    };
+    timer = window.setTimeout(record, 80);
+    return () => window.clearTimeout(timer);
+  }, [observedHref, seek, phase, navigationProblem, viewSettled]);
+
+  const openSearchResult = (row: { id: string }) => {
+    viewNavigation.write({ ...EMPTY_VIEW, wallId: atWall.kind === 'agent' ? atWall.id : null,
+      label: atWall.kind === 'agent' ? atWall.name : undefined, section: 'field', inspirationId: row.id }, { query: seek ?? '' });
+  };
+  const copyInspirationLink = async (reflectionId: string | null = observedView.reflectionId) => {
+    try { await navigator.clipboard.writeText(window.location.origin + viewHref({ ...observedView, reflectionId, find: false })); setCharSay(say('worldLinkCopied')); }
+    catch { setCharSay(say('worldLinkCopyFailed')); }
+  };
+
   return (
     <div ref={measured.root} className="jar" aria-label="Waka">
       {/* the world's early face, until the first real frame: the same ground,
@@ -12177,6 +12217,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           <LoadingHome />
         </div>
       ) : null}
+      {navigationProblem ? <div className="jar-navigation-notice" role="alert" data-jar-chrome="1">
+        <p>{say('worldLinkUnavailable')}</p>
+        <button type="button" onClick={() => viewNavigation.write(viewNavigation.view ?? { ...EMPTY_VIEW }, { replace: true, query: viewNavigation.query })}>{say('worldRoomHistoryRetry')}</button>
+        <button type="button" onClick={() => viewNavigation.write({ ...EMPTY_VIEW }, { replace: true })}>{say('worldMe')}</button>
+      </div> : null}
       {/* the volume: a layout-tall gradient the camera descends through */}
       <div ref={measured.atmos} className="jar-atmos" aria-hidden="true" />
 
@@ -13619,6 +13664,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               </button>
             </p>
           ) : null}
+          <button type="button" className="jar-copy-link" title={say('worldCopyInspirationLink')}
+            aria-label={say('worldCopyInspirationLink')} onClick={() => void copyInspirationLink()}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m10 14 4-4m-7 3-2 2a4 4 0 0 0 6 6l4-4m-4-10 2-2a4 4 0 0 1 6 6l-4 4" /></svg>
+          </button>
           </div>
           {editing.open?.kind === "memory" && editing.open.id === panelId ? (
             /* THE SAME SLOT, THE SAME MEASURE, THE SAME FACE. It is the words
@@ -13704,6 +13753,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 .filter((item) => !item.skipped && item.answer)
                 .map((item): ReflectionTurn => ({ id: item.id, question: item.question, answer: item.answer as string }))}
               locale={locale}
+              focusReflectionId={viewNavigation.view?.reflectionId}
+              onCopyLink={(id) => void copyInspirationLink(id)}
               onSaved={reflectionSaved}
               onSynchronized={(row) => synchronizeReflections((panelBall?.sigId ?? panelId) as string, row)}
               onRemoved={(id) => reflectionRemoved(id, (panelBall?.sigId ?? panelId) as string)}
@@ -14685,31 +14736,15 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         </DialogSurface>
       ) : null}
 
-      {/* SEARCHING, AND IT IS ONE LINE. No results panel, no counts, no list —
-          the answer is in the field, lit. Escape puts the field back. */}
+      {phase === 'ready' ? <button type="button" className="jar-find-shortcut" data-jar-chrome="1"
+        onClick={() => setSeek('')} aria-label={say(atWall.kind === 'group' ? 'worldFindYourInspirations' : 'worldFindInspiration')}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg>
+        <span>{say(atWall.kind === 'group' ? 'worldFindYourInspirations' : 'worldFindInspiration')}</span>
+      </button> : null}
       {seek !== null ? (
-        <DialogSurface className="jar-seek" data-jar-chrome="1"
-          aria-label={say("worldSeekPlaceholder")} onClose={() => setSeek(null)}>
-          <input
-            className="jar-roomform-box"
-            autoFocus
-            value={seek}
-            placeholder={say("worldSeekPlaceholder")}
-            onChange={(e) => setSeek(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") setSeek(null);
-            }}
-          />
-          <p className="jar-ask">
-            {found && found.size === 0 && seek.trim().length > 1 ? (
-              <span>{say("worldNothingSaysThat")}</span>
-            ) : (
-              <button type="button" onClick={() => setSeek(null)}>
-                {say("worldDone")}
-              </button>
-            )}
-          </p>
-        </DialogSurface>
+        <InspirationSearch profileId={atWall.kind === 'agent' ? atWall.id : storageScope?.profileId ?? viewerIdRef.current ?? 'fixture'}
+          query={seek} locale={locale} label={atWall.kind === 'group' ? say('worldFindYourInspirations') : undefined}
+          onQuery={setSeek} onClose={() => setSeek(null)} onPick={openSearchResult} />
       ) : null}
 
       {/* MAKING OR JOINING A ROOM. A form, and it is honest about being one:

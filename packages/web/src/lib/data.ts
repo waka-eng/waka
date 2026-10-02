@@ -426,8 +426,9 @@ export async function loadTopOfMindVersion(id: string, profile?: string, signal?
 
 /** One memory opened: the words in full, what was attached, and what the
     person said back. Enrichment comes through labelled, never as their words. */
-export async function loadInspiration(id: string, profile?: string): Promise<InspirationDetail> {
-  const row = await fetchInspiration(id, { profile });
+export async function loadInspiration(id: string, profile?: string, signal?: AbortSignal): Promise<InspirationDetail> {
+  const row = await fetchInspiration(id, { profile }, signal);
+  if (row.id !== id || (profile && row.profileId !== profile)) throw new Error('Unexpected inspiration scope');
   return toInspirationDetail(row);
 }
 

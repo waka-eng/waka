@@ -322,6 +322,11 @@ export async function fetchGroupField(groupId: string, signal?: AbortSignal): Pr
   };
 }
 
+export async function fetchGroupInspiration(groupId: string, inspirationId: string, signal?: AbortSignal): Promise<ApiGroupFieldInspiration> {
+  const body = await getJson<{ inspiration: ApiGroupFieldInspiration }>(apiPath(`/groups/${encodeURIComponent(groupId)}/field/${encodeURIComponent(inspirationId)}`), 'This inspiration is not available', signal);
+  return body.inspiration;
+}
+
 // ---------------------------------------------------------------------------
 // A group's top of mind, and the proposals that change it
 // ---------------------------------------------------------------------------

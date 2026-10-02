@@ -63,6 +63,17 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 
 describe("reflection conversation", () => {
+  it('opens a linked earlier answer without generating or saving anything', async () => {
+    const onCopyLink = vi.fn();
+    await act(async () => root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={[
+      { id: 'earlier', question: 'First question', answer: 'An earlier thought' },
+      { id: 'latest', question: 'Next question', answer: 'A later thought' },
+    ]} focusReflectionId="earlier" onCopyLink={onCopyLink} locale="en-US" onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
+    expect(host.querySelector<HTMLDetailsElement>('.jar-reflection-turns')?.open).toBe(true);
+    expect(createReflection).not.toHaveBeenCalled(); expect(requestReflectionQuestion).not.toHaveBeenCalled();
+    await act(async () => host.querySelector<HTMLButtonElement>('[data-reflection-id="earlier"] .jar-copy-link')!.click());
+    expect(onCopyLink).toHaveBeenCalledWith('earlier');
+  });
   it("keeps one save identity when an answer response is lost and the person retries", async () => {
     vi.mocked(createReflection).mockRejectedValueOnce(new Error('Response lost')).mockResolvedValueOnce(saved);
     vi.mocked(requestReflectionQuestion).mockResolvedValue({ phase: 'ready', question: 'What did that leave room for?' });

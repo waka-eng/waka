@@ -16,6 +16,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 
 import { groupMembers, inspirations, profiles } from "../db/index.js";
 import { getDb } from "../lib/db.js";
+import { alias } from 'drizzle-orm/pg-core';
 
 type WakaDb = ReturnType<typeof getDb>;
 
@@ -51,12 +52,36 @@ const GROUP_FIELD_LIMIT = 400;
  * exists in two copies is a security predicate that will one day exist in two
  * versions, and the count would be the copy nobody re-reads.
  */
-function memberPublicInspirations(groupId: string) {
+function memberPublicInspirations(groupId: string, inspirationId?: string) {
   return and(
     eq(groupMembers.groupId, groupId),
     eq(inspirations.visibility, "public"),
     eq(profiles.type, "human"),
+    inspirationId ? eq(inspirations.id, inspirationId) : undefined,
   );
+}
+
+/** Same public projection as the field, with current reader membership in the
+ * same SQL snapshot. A direct link never grants access to answers/evidence. */
+export async function loadGroupInspiration(db: WakaDb, groupId: string, inspirationId: string, viewerProfileId: string) {
+  const viewerSeat = alias(groupMembers, 'inspiration_viewer_seat');
+  const [row] = await db.select({
+    id: inspirations.id,
+    text: inspirations.text,
+    kind: inspirations.kind,
+    source: inspirations.source,
+    createdAt: inspirations.createdAt,
+    updatedAt: inspirations.updatedAt,
+    ownerProfileId: profiles.id,
+    ownerName: profiles.name,
+    ownerType: profiles.type,
+  })
+    .from(inspirations)
+    .innerJoin(profiles, eq(profiles.id, inspirations.profileId))
+    .innerJoin(groupMembers, eq(groupMembers.profileId, profiles.id))
+    .innerJoin(viewerSeat, and(eq(viewerSeat.groupId, groupId), eq(viewerSeat.profileId, viewerProfileId)))
+    .where(memberPublicInspirations(groupId, inspirationId)).limit(1);
+  return row ?? null;
 }
 
 /**

@@ -1263,6 +1263,24 @@ body .profile-signout-button {
   letter-spacing: 0;
 }
 
+.jar-find-shortcut { position: absolute; z-index: 6; right: var(--sp-22); bottom: calc(var(--sp-12) + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: var(--sp-8); min-width: var(--sp-44); min-height: var(--sp-44); padding: var(--sp-8) var(--sp-12); border: 1px solid var(--w-edge); border-radius: var(--sp-22); background: var(--jar-panel); color: var(--w-ink); font: inherit; font-size: var(--t-note); cursor: pointer; }
+.jar-inspiration-search { width: min(560px, calc(100vw - var(--sp-44))); color: var(--w-ink); font-size: var(--t-body); }
+.jar-search-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-12); }
+.jar-search-heading p { margin: 0; }
+.jar-inspiration-search button, .jar-copy-link, .jar-navigation-notice button { min-width: var(--sp-44); min-height: var(--sp-44); padding: var(--sp-8) var(--sp-12); border: 0; background: none; color: var(--w-ink); font: inherit; font-size: var(--t-note); cursor: pointer; }
+.jar-inspiration-search button[aria-disabled="true"] { cursor: progress; }
+.jar-search-results { list-style: none; padding: 0; margin: var(--sp-12) 0; }
+.jar-search-results li { border-bottom: 1px solid var(--w-edge); }
+.jar-search-results button { display: block; width: 100%; text-align: left; border-radius: var(--sp-8); }
+.jar-search-results button:hover { background: var(--w-raised); }
+.jar-search-results span { display: block; line-height: 1.5; overflow-wrap: anywhere; }
+.jar-search-results small { display: block; margin-top: var(--sp-4); color: var(--w-muted); font-size: var(--t-note); }
+.jar-panel-head { grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--sp-8); }
+.jar-copy-link { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; }
+.jar-find-shortcut:focus-visible, .jar-inspiration-search button:focus-visible, .jar-copy-link:focus-visible, .jar-navigation-notice button:focus-visible { outline: 2px solid var(--w-ink); outline-offset: 2px; }
+.jar-navigation-notice { position: absolute; z-index: 60; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(400px, calc(100vw - var(--sp-44))); padding: var(--sp-22); border: 1px solid var(--w-edge); border-radius: var(--sp-12); background: var(--jar-panel); color: var(--w-ink); font-size: var(--t-body); }
+@media (max-width: 600px) { .jar-find-shortcut { right: var(--sp-8); padding: var(--sp-8); } .jar-find-shortcut span { display: none; } }
+
 .jar-room-patterns { margin: var(--sp-12) 0 var(--sp-22); color: var(--w-ink); font-size: var(--t-note); line-height: 1.5; }
 .jar-room-patterns ul { list-style: none; padding: 0; margin: 0; }
 .jar-room-patterns li { padding: var(--sp-12) 0; border-bottom: 1px solid var(--w-edge); }

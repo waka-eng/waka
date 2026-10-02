@@ -351,7 +351,7 @@ async function withFixtureAlarm<T>(work: () => Promise<T>): Promise<T> {
   }
 }
 
-export async function mountWorld(facts: WorldFacts): Promise<MountedWorld> {
+export async function mountWorld(facts: WorldFacts, options: { initialEntries?: string[]; routerTools?: ReactElement } = {}): Promise<MountedWorld> {
   const { default: HomePage } = await import("../../src/pages/Home");
   const { AuthProvider } = await import("../../src/lib/auth-context");
 
@@ -368,8 +368,9 @@ export async function mountWorld(facts: WorldFacts): Promise<MountedWorld> {
         root.render(
           createElement(
             MemoryRouter,
-            null,
+            { initialEntries: options.initialEntries },
             createElement(AuthProvider, null, createElement(HomePage) as ReactElement),
+            options.routerTools,
           ),
         );
       });
@@ -428,8 +429,8 @@ export async function mountWorld(facts: WorldFacts): Promise<MountedWorld> {
     step,
     async rerender() {
       await act(async () => {
-        root.render(createElement(MemoryRouter, null,
-          createElement(AuthProvider, null, createElement(HomePage) as ReactElement)));
+        root.render(createElement(MemoryRouter, { initialEntries: options.initialEntries },
+          createElement(AuthProvider, null, createElement(HomePage) as ReactElement), options.routerTools));
       });
       await step(30);
     },
