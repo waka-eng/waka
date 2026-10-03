@@ -412,6 +412,8 @@ export async function createTestDatabase(): Promise<TestDatabase> {
     "group_members",
     "groups",
     "signal_shares",
+    "signal_review_evidence_sources",
+    "signal_review_evidence",
     "signal_evidence",
     "signal_embeddings",
     "signals",

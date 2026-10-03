@@ -21,10 +21,11 @@ export function createReviewSessionRoutes(deps:{getDatabase?:typeof getDb;authMi
   routes.use('*',deps.authMiddleware??requireAuth,humanSessionsOnly);
   routes.onError((error,c)=>{
     if (error instanceof ReviewSessionError) return c.json({error:error.message,code:error.code},error.status);
-    const code=(error as {cause?:{code?:string}}).cause?.code;
+    const code=(error as {code?:string;cause?:{code?:string}}).cause?.code??(error as {code?:string}).code;
     if (code==='23505') return c.json({error:'This review already exists. Check your open review.',code:'review_conflict'},409);
-    if (code==='55P03') return c.json({error:'The source is changing. Check the review again.',code:'review_busy'},409);
-    console.error('[review-sessions]',error);
+    if (code==='55P03'||code==='40P01'||code==='40001') return c.json({error:'The source is changing. Check the review again.',code:'review_busy'},409);
+    // Driver errors include SQL parameters, which can contain private answers.
+    console.error('[review-sessions]',{code:typeof code==='string'&&/^[0-9A-Z]{5}$/.test(code)?code:'unknown'});
     return c.json({error:'The review could not be updated.'},500);
   });
   routes.use('*',async(c,next)=>{

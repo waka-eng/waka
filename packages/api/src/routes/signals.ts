@@ -35,6 +35,8 @@ import {
   profiles,
   reflections,
   signalEvidence,
+  signalReviewEvidence,
+  reviewAnswers,
   signalShares,
   signalContradictions,
   signalStatusValues,
@@ -55,11 +57,11 @@ import {
 import { enqueueTopOfMindRefresh, wakeCommittedBackgroundJobs } from "../lib/queue.js";
 import { lockSignalStatementSources, requestSignalStatementWork } from '../lib/signal-statement-work.js';
 import { evidenceSupportCurrent } from '../lib/signal-support-state.js';
+import {loadSignalEvidence,reviewEvidenceCurrent} from '../lib/review-evidence.js';
 import { reconcilePrinciplesAfterSignalLoss } from "../lib/principle-generation.js";
 import {
   computeSignalConfidence,
   selectIndependentEvidence,
-  type ConfidenceEvidence,
   refreshSignalLifecycle,
 } from "../lib/signal-derivation.js";
 import { resolveContestedPairs } from "../lib/contested-pairs.js";
@@ -179,6 +181,7 @@ export interface SignalEvidenceItem {
 
 export interface SignalDetail extends SignalSummary {
   evidence: SignalEvidenceItem[];
+  reviewEvidence?:Array<{answerId:string;sessionId:string;preview:string;createdAt:string}>;
 }
 
 export interface ListSignalsInput {
@@ -234,19 +237,8 @@ async function decorateSignals(
   if (rows.length === 0) return [];
   const ids = rows.map((row) => row.id);
 
-  const [evidenceRows, shareRows, pairRows, verdictRows] = await Promise.all([
-    db
-      .select({
-        signalId: signalEvidence.signalId,
-        inspirationId: inspirations.id,
-        createdAt: inspirations.createdAt,
-        source: inspirations.source,
-        current: evidenceSupportCurrent(),
-      })
-      .from(signalEvidence)
-      .innerJoin(signals, eq(signals.id, signalEvidence.signalId))
-      .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
-      .where(and(inArray(signalEvidence.signalId, ids), eq(signalEvidence.ownerProfileId, ownerProfileId))),
+  const [evidenceSnapshot, shareRows, pairRows, verdictRows] = await Promise.all([
+    loadSignalEvidence(db,ownerProfileId,ids),
     db
       .select({ signalId: signalShares.signalId, groupId: signalShares.groupId })
       .from(signalShares)
@@ -308,14 +300,7 @@ async function decorateSignals(
   // value can only overstate a signal that has since gone quiet. Reads tell
   // the truth about now; the snapshot remains for the group wall, whose query
   // must not reach these private tables.
-  const evidenceBySignal = new Map<string, ConfidenceEvidence[]>();
-  for (const row of evidenceRows) {
-    if (row.current !== true) continue;
-    const witness:ConfidenceEvidence={createdAt:row.createdAt,source:row.source,lineage:{kind:'inspiration',unitId:row.inspirationId,originIds:[row.inspirationId]}};
-    const bucket = evidenceBySignal.get(row.signalId);
-    if (bucket) bucket.push(witness);
-    else evidenceBySignal.set(row.signalId, [witness]);
-  }
+  const evidenceBySignal = evidenceSnapshot.witnesses;
   for(const [id,rows] of evidenceBySignal)evidenceBySignal.set(id,selectIndependentEvidence(rows));
   const now = new Date();
   const liveConfidence = new Map(
@@ -327,7 +312,7 @@ async function decorateSignals(
     ]),
   );
 
-  const pendingIds = new Set(evidenceRows.filter((row) => row.current !== true).map((row) => row.signalId));
+  const pendingIds = evidenceSnapshot.pending;
   const countBySignal = new Map(
     [...evidenceBySignal.entries()].map(([id, list]) => [id, list.length]),
   );
@@ -484,9 +469,15 @@ export async function getProfileSignal(
   const enriched = enrichedIds.length ? await db.select({ inspirationId: attachments.inspirationId, text: effectiveAttachmentText })
     .from(attachments).where(and(eq(attachments.profileId, input.profileId), inArray(attachments.inspirationId, enrichedIds),
       eq(effectiveAttachmentStatus, "ready"), isNotNull(effectiveAttachmentText))) : [];
+  const reviewEvidence=await db.select({answerId:reviewAnswers.id,sessionId:reviewAnswers.sessionId,answer:reviewAnswers.answer,createdAt:reviewAnswers.createdAt})
+    .from(signalReviewEvidence).innerJoin(signals,and(eq(signals.profileId,signalReviewEvidence.profileId),eq(signals.id,signalReviewEvidence.signalId)))
+    .innerJoin(reviewAnswers,and(eq(reviewAnswers.profileId,signalReviewEvidence.profileId),eq(reviewAnswers.sessionId,signalReviewEvidence.sessionId),eq(reviewAnswers.id,signalReviewEvidence.answerId)))
+    .where(and(eq(signalReviewEvidence.profileId,input.profileId),eq(signalReviewEvidence.signalId,input.signalId),reviewEvidenceCurrent()))
+    .orderBy(desc(reviewAnswers.createdAt),desc(reviewAnswers.id));
 
   return {
     ...summary,
+    reviewEvidence:reviewEvidence.map(item=>({answerId:item.answerId,sessionId:item.sessionId,preview:truncatePreview(item.answer??''),createdAt:item.createdAt.toISOString()})),
     evidence: evidenceRows.map((evidence) => {
       const sources = evidence.quoteSource === "enrichment"
         ? enriched.filter((row) => row.inspirationId === evidence.inspirationId).map((row) => row.text ?? "")

@@ -36,6 +36,7 @@ import {
 import { getDb } from "./db.js";
 import { normalizeSupportedLocale } from "./locales.js";
 import { selectIndependentEvidence, type ConfidenceEvidence } from './signal-lifecycle.js';
+import {loadSignalEvidence} from './review-evidence.js';
 import { writePrincipleStatementChain } from "./statement-chains.js";
 import { GROUP_INPUT_POLICY } from "./group-inputs.js";
 import { groupEntrySupportCurrent, groupPrincipleReadable, groupSignalReadable, projectGroupEntries } from "./group-output.js";
@@ -197,7 +198,7 @@ async function loadCitationEvidence(
   // — same rule as confidence and selection. The span describes the
   // theme's lifetime in the profile's history; a retroactively cited old save
   // must widen it with its own date, not collapse it to the day of noticing.
-  const evidenceRows = await db
+  const evidenceRows = profile?.groupId ? await db
     .select({ signalId: signalEvidence.signalId, inspirationId: inspirations.id, createdAt: inspirations.createdAt, source: inspirations.source })
     .from(signalEvidence)
     .innerJoin(signals, eq(signals.id, signalEvidence.signalId))
@@ -207,8 +208,9 @@ async function loadCitationEvidence(
         ...(profile?.groupId ? [eq(inspirations.visibility, "public"), sql`EXISTS (
           SELECT 1 FROM group_members m WHERE m.group_id = ${profile.groupId}::uuid
           AND m.profile_id = ${inspirations.profileId})`] : [])),
-    );
-  const witnesses=new Map<string,ConfidenceEvidence[]>();
+    ) : [];
+  const witnesses=profile?.groupId?new Map<string,ConfidenceEvidence[]>():
+    (await loadSignalEvidence(db,profileId,signalIds)).witnesses;
   for(const row of evidenceRows){const list=witnesses.get(row.signalId)??[];list.push({createdAt:row.createdAt,source:row.source,
     lineage:{kind:'inspiration',unitId:row.inspirationId,originIds:[row.inspirationId]}});witnesses.set(row.signalId,list);}
   for(const [id,rows] of witnesses)out.get(id)!.evidenceAt=selectIndependentEvidence(rows).map(row=>row.createdAt);

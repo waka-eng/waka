@@ -263,6 +263,26 @@ selected units before review support is enabled. This bounds what can be
 claimed from stored provenance; it does not infer a person's unrecorded lived
 experiences or equate an `experience` workspace label with an independent event.
 
+Review support is stored as `signal_review_evidence`: one metadata relationship
+per signal and human answer, with tenant-bearing signal/session/answer foreign
+keys, statement and answer revisions, source count and whether the then-current
+AI question was included as context. `signal_review_evidence_sources` records
+the current material revision and focused/context-only role of every allowed
+source read in that assessment. It references the answer's original source
+relationship as well as the evidence relationship. These are assessment-time
+versions, distinct from the question-time versions in `review_answer_sources`.
+No answer, question, quote or generated reason is copied into these tables.
+
+A changed source or earlier answer withdraws the old AI premise immediately.
+Reassessment may still use surviving self-contained human words against current
+allowed material, without restoring that premise or assuming positive support.
+No surviving focused origin means no eligible review witness. An answer edit,
+deletion, context change or support-link mutation must fence in-flight generation;
+old relationships cannot be served merely because their ids still exist.
+Only the owning personal/agent profile may receive this support, never a room.
+The review support producer remains unfinished until its queue, reassessment,
+read projections and promotion guard share this contract.
+
 ### Existing inspiration behavior
 
 A capture event. Whatever arrived: pasted text, a link, an image, an

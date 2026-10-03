@@ -273,7 +273,7 @@ evidence_count ≥ SIGNAL_PROMOTION_MIN_EVIDENCE (3)   →   emerging → active
 
 Promotion is enforced twice: in the lifecycle pass
 (`packages/api/src/lib/signal-lifecycle.ts`) and by the Postgres transition
-guard (`drizzle/migrations/0007_promotion_not_residence.sql`). This is not a
+guard (`drizzle/migrations/0057_review_evidence.sql`). This is not a
 residence rule: an already-active signal can lose some evidence, and a locked
 unsupported signal keeps its human wording. Neither a direct insert nor an
 emerging-to-active transition may bypass the promotion bar.
@@ -292,11 +292,16 @@ older context or a later retry. Anonymous legacy arithmetic inputs remain
 supported on their own but cannot be mixed with identified units. See the
 independent-support contract in [data-model.md](data-model.md).
 
-This is the R08 counting foundation, not an enabled review-to-signal producer.
-Runtime queries currently supply raw inspiration witnesses only, preserving
-the existing counts and constants. Review support storage, extraction,
-reassessment, serving and a matching database promotion guard must be integrated
-before adding review witnesses to those queries.
+This is not yet an enabled review-to-signal producer. Migration 0057 adds owned
+review support references and assessment-time source revisions. The common
+`signal_support_edges` query includes only current witnesses in counting, while
+reporting stale relationships as pending rather than unsupported. Personal
+readers recognize raw and review support; room readers still use public raw
+material only. The database promotion guard uses the same maximum-matching
+count, stops once three witnesses are proven, and cannot count a stale material
+or statement revision as a new promotion. Extraction, reassessment, durable
+work scheduling and UI provenance remain to be connected before review support
+is automatically produced. No tuning constant changed.
 
 ```
 support = min(1, n / 6)                 n = evidence count; 6 = CONFIDENCE_SATURATION_EVIDENCE

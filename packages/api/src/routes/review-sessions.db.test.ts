@@ -1,9 +1,10 @@
 /** WHAT THIS MOCKS, AND WHY (gate G6): `authMiddleware` supplies fixture
  * principals. The real router, selection queries, transactions, constraints,
- * export and cascades run against disposable Postgres. No model calls. */
+ * export and cascades run against disposable Postgres. `console.error` is
+ * observed in the error-redaction test. No model calls. */
 import {randomUUID} from 'node:crypto';
 import {Hono} from 'hono';
-import {afterAll,beforeEach,expect,it} from 'vitest';
+import {afterAll,beforeEach,expect,it,vi} from 'vitest';
 import {createTestDatabase,type TestDatabase} from '../../test/helpers/index.js';
 import {createReviewSessionRoutes} from './review-sessions.js';
 import type {AuthEnv} from '../lib/middleware.js';
@@ -39,6 +40,19 @@ async function sessionBody(response:Response){
   expect(body.session).not.toBeNull();return body.session!;
 }
 const choose=(p:Person,session: {id:string;revision:number},inspirationId:string,choice:'keep'|'skip'|null,sourceRevision='1')=>post(p,`/${session.id}/choices`,{revision:session.revision,inspirationId,choice,sourceRevision});
+
+it('does not log private database parameters or return them on a failed review write',async()=>{
+  const p=await person();await source(p.id);
+  await t.sql`CREATE FUNCTION reject_review_write() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'PRIVATE_REVIEW_SENTINEL'; END; $$ LANGUAGE plpgsql`;
+  await t.sql`CREATE TRIGGER reject_review_write BEFORE INSERT ON review_sessions FOR EACH ROW EXECUTE FUNCTION reject_review_write()`;
+  const log=vi.spyOn(console,'error').mockImplementation(()=>{});
+  try{
+    const response=await post(p,'/',{id:randomUUID()});expect(response.status).toBe(500);
+    expect(await response.text()).not.toContain('PRIVATE_REVIEW_SENTINEL');
+    expect(log).toHaveBeenCalledWith('[review-sessions]',{code:'P0001'});expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_REVIEW_SENTINEL');
+    expect(await t.sql`SELECT id FROM review_sessions`).toHaveLength(0);
+  }finally{log.mockRestore();await t.sql`DROP TRIGGER reject_review_write ON review_sessions`;await t.sql`DROP FUNCTION reject_review_write()`;}
+});
 
 it('has an honest empty state and no orphan session, then admits a single source',async()=>{
   const p=await person();expect(await (await post(p,'/',{id:randomUUID()})).json()).toEqual({session:null});expect(await t.sql`SELECT id FROM review_sessions`).toHaveLength(0);

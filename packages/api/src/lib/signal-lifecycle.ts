@@ -21,13 +21,12 @@ import { and, desc, eq } from "drizzle-orm";
 
 import {
   feedback,
-  inspirations,
-  signalEvidence,
   signals,
   type SignalStatus,
 } from "../db/index.js";
 import { getDb } from "./db.js";
 import { feedbackWordingCurrent } from './feedback-revisions.js';
+import { loadSignalEvidence } from './review-evidence.js';
 import {
   CONFIDENCE_AFFIRMED_BONUS,
   CONFIDENCE_RECENCY_HALF_LIFE_DAYS,
@@ -167,13 +166,8 @@ export async function refreshSignalLifecycle(
     person's history; the capture date is when that life happened. Selection,
     the principle span bar, and the read routes all follow this same rule.
   */
-  const storedEvidence = await tx
-    .select({ id: inspirations.id, createdAt: inspirations.createdAt, source: inspirations.source })
-    .from(signalEvidence)
-    .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
-    .where(eq(signalEvidence.signalId, signalId));
-  const evidenceRows=selectIndependentEvidence(storedEvidence.map(row=>({createdAt:row.createdAt,source:row.source,
-    lineage:{kind:'inspiration',unitId:row.id,originIds:[row.id]}})));
+  const snapshot=await loadSignalEvidence(tx,current.profileId,[signalId]);
+  const evidenceRows=selectIndependentEvidence(snapshot.witnesses.get(signalId)??[]);
 
   /* the latest standing verdict, latest-wins — the same read selection
      makes, kept in this transaction so the snapshot and the live number
@@ -264,13 +258,8 @@ export async function reconcileSignalsAfterEvidenceLoss(
       .limit(1);
     if (!signal || signal.status === "retired") continue;
 
-    const storedRemaining = await db
-      .select({ id: inspirations.id, createdAt: inspirations.createdAt, source: inspirations.source })
-      .from(signalEvidence)
-      .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
-      .where(eq(signalEvidence.signalId, signalId));
-    const remaining=selectIndependentEvidence(storedRemaining.map(row=>({createdAt:row.createdAt,source:row.source,
-      lineage:{kind:'inspiration',unitId:row.id,originIds:[row.id]}})));
+    const snapshot=await loadSignalEvidence(db,input.profileId,[signalId]);
+    const remaining=selectIndependentEvidence(snapshot.witnesses.get(signalId)??[]);
 
     if (remaining.length > 0) {
       // Still supported, just by less. Confidence and recency move with it.
@@ -290,6 +279,9 @@ export async function reconcileSignalsAfterEvidenceLoss(
       continue;
     }
 
+    // A stale assessment is not a negative verdict. Withhold it while support
+    // work runs; do not retire a claim merely because rechecking is pending.
+    if(snapshot.pending.has(signalId))continue;
     if (signal.lockedAt) {
       await db
         .update(signals)
