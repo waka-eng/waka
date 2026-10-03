@@ -61,6 +61,16 @@ it('starts a review beside the personal reading and restores home through Back',
   await navigate(-1);expect(location.pathname).toBe('/');
 });
 
+it('records opening Capture before the observer debounce and keeps it through later restoration',async()=>{
+  world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
+  const capture=[...world.container.querySelectorAll<HTMLButtonElement>('button')].find(button=>button.textContent?.trim()==='Capture inspiration');
+  expect(capture).toBeDefined();await act(async()=>capture!.click());
+  expect(location.search).toContain('compose=1');
+  await world.rerender();await settle();
+  expect(world.container.querySelector('[role="dialog"][aria-label="Capture inspiration"]')).not.toBeNull();
+  await navigate(-1);expect(location.search).not.toContain('compose=1');
+});
+
 it('does not let the returning-visitor greeting replace an explicitly linked reflection', async()=>{
   localStorage.setItem('waka.seen','1');
   world=await mountWorld(FACTS,{initialEntries:['/inspirations/older?reflection=answer-1'],routerTools:<RouterTools/>});
