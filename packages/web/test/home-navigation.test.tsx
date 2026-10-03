@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 /** WHAT THIS MOCKS, AND WHY (gate G6): `lib/data` supplies the three layers and
- * direct detail reads, `lib/api` supplies group reads, `lib/auth-context` supplies the
+ * direct detail reads, `lib/api` supplies group reads and principle edits,
+ * `lib/api/principles` supplies principle reads, `lib/auth-context` supplies the
  * session. `helpers/render-home` and `helpers/canvas-stub` replace canvas/viewport/clock/randomness, but the real
  * world simulation and React Router history run. Appearance/SQL are not claimed. */
 import { act } from 'react';
@@ -9,12 +10,15 @@ import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { installCanvasStub, setViewport } from './helpers/canvas-stub';
 import { mountWorld, dataMockFrom, apiMockFrom, VIEWER_ID, type MountedWorld } from './helpers/render-home';
 import { loadInspirations, loadInspiration, type InspirationDetail } from '../src/lib/data';
+import {fetchPrinciples,updatePrinciple,type ApiPrinciple} from '../src/lib/api';
 
 const FACTS = vi.hoisted(() => ({ inspirations: [{ id: 'loaded', text: 'Current inspiration', daysAgo: 1 }],
   groups: [{ id: 'group-id', name: 'Renamed room', field: [] }] }));
+const principleState=vi.hoisted(()=>({rows:[] as ApiPrinciple[]}));
+vi.mock('../src/lib/api/principles',async original=>({...await original<typeof import('../src/lib/api/principles')>(),fetchPrincipleRead:vi.fn(async()=>({principles:principleState.rows,status:{phase:'ready',eligible:false}}))}));
 vi.mock('../src/lib/data', async (original) => ({ ...await original<typeof import('../src/lib/data')>(),
   ...dataMockFrom(FACTS), loadInspirations: vi.fn(dataMockFrom(FACTS).loadInspirations), loadInspiration: vi.fn() }));
-vi.mock('../src/lib/api', async (original) => ({ ...await original<typeof import('../src/lib/api')>(), ...apiMockFrom(FACTS) }));
+vi.mock('../src/lib/api', async (original) => ({ ...await original<typeof import('../src/lib/api')>(), ...apiMockFrom(FACTS),fetchPrinciples:vi.fn(async()=>principleState.rows),updatePrinciple:vi.fn() }));
 vi.mock('../src/lib/auth-context', async (original) => {
   const session = { status: 'authenticated', account: { id: 'account-1', email: 'you@example.test' },
     profile: { id: VIEWER_ID, name: 'You', type: 'human' }, profiles: [], refresh: async () => undefined, signOut: async () => undefined };
@@ -29,12 +33,25 @@ const detail: InspirationDetail = { id: 'older', text: 'An older inspiration bey
     { id: 'answer-2', question: 'Next?', answer: 'My later words', skipped: false, createdMs: 1700000001000 },
   ] };
 beforeAll(() => { installCanvasStub(); setViewport(1280, 900); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
-beforeEach(() => { localStorage.clear(); vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); vi.mocked(loadInspirations).mockClear(); vi.mocked(loadInspiration).mockReset().mockResolvedValue(detail); });
+beforeEach(() => { principleState.rows=[];vi.mocked(updatePrinciple).mockReset();vi.mocked(fetchPrinciples).mockClear();localStorage.clear(); vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); vi.mocked(loadInspirations).mockClear(); vi.mocked(loadInspiration).mockReset().mockResolvedValue(detail); });
 afterEach(() => { world?.unmount(); vi.useRealTimers(); });
 async function settle() {
   for (let turn = 0; turn < 8; turn += 1) { await world.step(100); await act(async () => { await vi.advanceTimersByTimeAsync(100); }); }
 }
 async function navigate(to: string | number) { await act(async () => { if (typeof to === 'number') go(to); else go(to); }); await settle(); }
+
+it('keeps the selected principle and its route after editing, so Back returns to the prior view',async()=>{
+  principleState.rows=[{id:'principle-one',statement:'Leave room for thought.',type:'maxim',state:'held',origin:'declared',rank:0,locked:true,heldSince:null,conflictsWithId:null,createdAt:'2026-10-03T12:00:00Z',citedSignals:[]}];
+  vi.mocked(updatePrinciple).mockImplementation(async(_id,text)=>{principleState.rows=[{...principleState.rows[0],statement:text}];return principleState.rows[0];});
+  world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();await navigate('/principles/principle-one');
+  await act(async()=>world.container.querySelector<HTMLButtonElement>('[aria-label="Edit wording"]')!.click());
+  const editor=world.container.querySelector<HTMLTextAreaElement>('[aria-label="this principle in your own words"]')!;
+  await act(async()=>{Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(editor,'Leave unhurried time for thought.');editor.dispatchEvent(new Event('input',{bubbles:true}));});
+  await act(async()=>[...world.container.querySelectorAll<HTMLButtonElement>('.jar-principles-list--personal button')].find(button=>button.textContent==='save')!.click());await settle();
+  expect(location.pathname).toBe('/principles/principle-one');expect(world.container.textContent).toContain('Make a share card');
+  expect(updatePrinciple).toHaveBeenCalledWith('principle-one','Leave unhurried time for thought.');
+  await navigate(-1);expect(location.pathname+location.search).toBe('/');
+});
 
 it('starts a review beside the personal reading and restores home through Back',async()=>{
   world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();

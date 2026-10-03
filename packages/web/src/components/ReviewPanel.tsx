@@ -67,8 +67,8 @@ function ReviewCard({item,sessionId,profileId,locale,disabled,focusOnLoad=true,o
   </div>;
 }
 
-export function ReviewPanel({scope,id,thoughtId=null,locale,onId,onClose,onNewInspiration,onOpen}:{scope:ProfileStorageScope;id:string;thoughtId?:string|null;locale:SupportedLocale;
-  onId:(id:string)=>void;onClose:()=>void;onNewInspiration:()=>void;onOpen:(id:string)=>void;
+export function ReviewPanel({scope,id,thoughtId=null,locale,onId,onClose,onNewInspiration,onOpen,onOpenPrinciple}:{scope:ProfileStorageScope;id:string;thoughtId?:string|null;locale:SupportedLocale;
+  onId:(id:string)=>void;onClose:()=>void;onNewInspiration:()=>void;onOpen:(id:string)=>void;onOpenPrinciple?:(id:string|null)=>void;
 }){
   const review=useReviewSession(scope,id,onId),selection=useReviewSelection(scope),[picker,setPicker]=useState(false);
   const [count,setCount]=useState<number|null>(null),[selectionReady,setSelectionReady]=useState<Record<string,boolean>>({});
@@ -109,7 +109,7 @@ export function ReviewPanel({scope,id,thoughtId=null,locale,onId,onClose,onNewIn
             <p className="jar-review-context">{say('worldReviewHint')}</p>
           </>:<>{session.completedAt?<h3>{say('worldReviewDone')}</h3>:null}{items.some(row=>row.choice==='keep')?<details><summary>{say('worldReviewSelected')} ({items.filter(row=>row.choice==='keep').length})</summary><ul>{items.filter(row=>row.choice==='keep').map(row=><ReviewChosenItem key={row.inspirationId} id={row.inspirationId} profileId={scope.profileId} locale={locale} onOpen={onOpen} onMissing={()=>void review.refresh()}/>)}</ul></details>:<p>{say('worldReviewNone')}</p>}</>}
           {!item||session.completedAt||thoughtId?<ReviewDialogue key={`${scope.accountId}:${scope.profileId}:${session.id}`} scope={scope} id={session.id} thoughtId={thoughtId} completed={Boolean(session.completedAt)} locale={locale} onOpen={onOpen} onRevision={review.observeRevision} onDraftChange={setHasDialogueDraft}/>:null}
-          {session.completedAt?<ReviewResult key={`result:${scope.accountId}:${scope.profileId}:${session.id}`} profileId={scope.profileId} id={session.id} revision={session.revision} locale={locale}/>:null}
+          {session.completedAt?<ReviewResult key={`result:${scope.accountId}:${scope.profileId}:${session.id}`} profileId={scope.profileId} id={session.id} revision={session.revision} locale={locale} onOpenPrinciple={onOpenPrinciple}/>:null}
         </>:null}
       </div>
       {session&&!session.completedAt?<footer>

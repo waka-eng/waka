@@ -11057,7 +11057,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       .then(() => reloadPrinciples())
       .then(() => {
         setPDraft(null);
-        setPick(null);
       })
       .catch((err) => setCharSay(whyFailed(err, say("worldNotSaved"))))
       .finally(() => setPBusy(false));
@@ -11069,7 +11068,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       setPBusy(true);
       (disputeId ? undoPrincipleDispute(id, disputeId) : disputePrinciple(id, targetRevision))
         .then(() => reloadPrinciples())
-        .then(() => setPick(null))
         .catch((err) => {
           if ((err as { code?: string })?.code === 'feedback_target_changed') void reloadPrinciples();
           setCharSay(whyFailed(err, say("worldDisputeNotRecorded")));
@@ -14663,6 +14661,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       {storageScope&&viewNavigation.view?.reviewId?<ReviewPanel key={`${storageScope.profileId}:${viewNavigation.view.reviewId}`} scope={storageScope} id={viewNavigation.view.reviewId} thoughtId={viewNavigation.view.reviewAnswerId} locale={locale}
         onId={id=>viewNavigation.write({...EMPTY_VIEW,reviewId:id},{replace:true})} onClose={viewNavigation.closeReview}
         onNewInspiration={()=>viewNavigation.write({...EMPTY_VIEW,compose:true},{replace:true})}
+        onOpenPrinciple={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id})}
         onOpen={id=>viewNavigation.write({...EMPTY_VIEW,section:'field',inspirationId:id})}/>:null}
       {phase === 'ready' ? <button type="button" className="jar-find-shortcut" data-jar-chrome="1"
         onClick={() => setSeek('')} aria-label={say(atWall.kind === 'group' ? 'worldFindYourInspirations' : 'worldFindInspiration')}>

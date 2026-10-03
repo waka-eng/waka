@@ -10,7 +10,7 @@ async function timed<T>(work:(signal:AbortSignal)=>Promise<T>,parent:AbortSignal
     timer=window.setTimeout(abort,15000);
   })]);}finally{window.clearTimeout(timer);parent.removeEventListener('abort',abort);request.abort();}
 }
-export function ReviewResult({profileId,id,revision,locale}:{profileId:string;id:string;revision:number;locale:SupportedLocale}){
+export function ReviewResult({profileId,id,revision,locale,onOpenPrinciple}:{profileId:string;id:string;revision:number;locale:SupportedLocale;onOpenPrinciple?:(id:string|null)=>void}){
   const [request,setRequest]=useState({serial:0,retry:false,owner:profileId,session:id}),[stored,setState]=useState<(ApiReviewProcessing&{observedRevision:number})|null>(null);
   const consumedRetry=useRef<number|null>(null);
   const state=stored?.profileId===profileId&&stored.sessionId===id&&stored.observedRevision===revision?stored:null;
@@ -73,6 +73,7 @@ export function ReviewResult({profileId,id,revision,locale}:{profileId:string;id
           {reading.entries.length?reading.entries.map(entry=><p key={entry.id}>{entry.body}</p>):<p>{say('worldReviewResultEmpty')}</p>}
         </>}
     </div>:null}
-    {state?.relatedPrinciples.length?<details><summary>{say('worldReviewResultRelated')}</summary><ul>{state.relatedPrinciples.map(principle=><li key={principle.id}>{principle.statement}</li>)}</ul></details>:null}
+    {state?.relatedPrinciples.length?<details><summary>{say('worldReviewResultRelated')}</summary><ul>{state.relatedPrinciples.map(principle=><li key={principle.id}>{onOpenPrinciple?<button type="button" onClick={()=>onOpenPrinciple(principle.id)}>{principle.statement}</button>:principle.statement}</li>)}</ul></details>:null}
+    {onOpenPrinciple&&!checking?<button type="button" onClick={()=>onOpenPrinciple(null)}>{say('worldReviewPrinciples')}</button>:null}
   </section>;
 }

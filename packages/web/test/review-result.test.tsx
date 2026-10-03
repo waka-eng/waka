@@ -58,3 +58,9 @@ it('shows genuine unresolved support as a normal outcome and keeps related princ
   ready();state.relatedPrinciples=[{id:'p',statement:'An existing principle'}];await mount(profile,2);
   expect(host.textContent).toContain('Related principles');expect(host.textContent).toContain('An existing principle');
 });
+it('opens the exact related principle without writing feedback or requesting generation',async()=>{
+  ready();state.relatedPrinciples=[{id:'principle-id',statement:'An existing principle'}];const open=vi.fn();
+  await act(async()=>root.render(<ReviewResult profileId={profile} id={id} revision={1} locale="en-US" onOpenPrinciple={open}/>));
+  await click('An existing principle');expect(open).toHaveBeenCalledWith('principle-id');expect(retryReviewProcessing).not.toHaveBeenCalled();
+  await click('Your principles');expect(open).toHaveBeenLastCalledWith(null);
+});

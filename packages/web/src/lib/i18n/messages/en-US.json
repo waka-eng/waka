@@ -80,6 +80,7 @@
   "worldReviewResultChanged": "Your reading has an update.",
   "worldReviewResultUnchanged": "Your thoughts are kept. The reading stayed the same.",
   "worldReviewResultRelated": "Related principles",
+  "worldReviewPrinciples": "Your principles",
   "worldReviewResultEmpty": "Your thoughts are kept. There isn’t enough to show a reading yet.",
   "worldReviewResultResume": "Resume reading",
   "worldReviewResultOpen": "See this reading",
