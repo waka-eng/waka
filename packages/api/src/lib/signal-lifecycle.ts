@@ -21,13 +21,12 @@ import { and, desc, eq } from "drizzle-orm";
 
 import {
   feedback,
-  inspirations,
-  signalEvidence,
   signals,
   type SignalStatus,
 } from "../db/index.js";
 import { getDb } from "./db.js";
 import { feedbackWordingCurrent } from './feedback-revisions.js';
+import { loadSignalEvidence } from './review-evidence.js';
 import {
   CONFIDENCE_AFFIRMED_BONUS,
   CONFIDENCE_RECENCY_HALF_LIFE_DAYS,
@@ -48,6 +47,58 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 export interface ConfidenceEvidence {
   createdAt: Date;
   source: "app" | "agent";
+  /** Validated provenance, not extra evidence. Review replies share a session
+   * unit; only focused source origins may be used, never all model context. */
+  lineage?: {kind:'inspiration'|'review';unitId:string;originIds:string[]};
+}
+
+/** Select independent units without treating a review's references or replies
+ * as extra experiences. Augmenting paths avoid a greedy count depending on
+ * input order; direct witnesses have first claim on their single origin. */
+export function selectIndependentEvidence(evidence:ConfidenceEvidence[]):ConfidenceEvidence[]{
+  if(evidence.every(row=>!row.lineage))return [...evidence];
+  if(evidence.some(row=>!row.lineage))throw new Error('Cannot combine identified evidence with anonymous rows');
+  const units=new Map<string,{row:ConfidenceEvidence;origins:Set<string>;originDates:Map<string,Date>}>();
+  evidence.forEach(row=>{
+    const lineage=row.lineage!;
+    if(!lineage.unitId||!lineage.originIds.length)return;
+    if(lineage.kind==='inspiration'&&(new Set(lineage.originIds).size!==1||lineage.originIds[0]!==lineage.unitId))throw new Error('An inspiration witness needs its own origin');
+    const key=`known:${lineage.kind}:${lineage.unitId}`;
+    const origins=lineage.originIds;
+    const previous=units.get(key);
+    if(previous){
+      if(previous.row.source!==row.source)throw new Error('One evidence unit cannot have different authorship kinds');
+      if(row.createdAt<previous.row.createdAt)previous.row={...previous.row,createdAt:row.createdAt};
+      for(const origin of origins){previous.origins.add(origin);const date=previous.originDates.get(origin);if(!date||row.createdAt<date)previous.originDates.set(origin,row.createdAt);}
+    }else units.set(key,{row:{...row},origins:new Set(origins),originDates:new Map(origins.map(origin=>[origin,row.createdAt]))});
+  });
+  const ordered=[...units].sort(([a,x],[b,y])=>Number(x.row.lineage?.kind==='review')-Number(y.row.lineage?.kind==='review')||x.row.createdAt.getTime()-y.row.createdAt.getTime()||(a<b?-1:a>b?1:0));
+  const matched=new Map<string,string>();
+  const unitOrigin=new Map<string,string>();
+  const place=(start:string):boolean=>{
+    const queue=[start],visited=new Set<string>(),parent=new Map<string,string>();
+    for(let index=0;index<queue.length;index++){
+      const key=queue[index]!;
+      for(const origin of [...units.get(key)!.origins].sort()){
+        if(visited.has(origin))continue;visited.add(origin);parent.set(origin,key);
+        const previous=matched.get(origin);
+        if(previous!==undefined){queue.push(previous);continue;}
+        // Flip the augmenting path iteratively: a long archive must not use
+        // one JavaScript stack frame per overlapping review.
+        let next:string|undefined=origin;
+        while(next!==undefined){const unit=parent.get(next)!;const old=unitOrigin.get(unit);matched.set(next,unit);unitOrigin.set(unit,next);next=old;}
+        return true;
+      }
+    }
+    return false;
+  };
+  for(const [key] of ordered)place(key);
+  const chosen=new Set(matched.values());
+  // A selected unit is a calculation result, not a replacement for its full
+  // provenance ledger. Pin its matched origin and the date that origin was
+  // first supported, so another count of this result cannot re-date it.
+  return ordered.filter(([key])=>chosen.has(key)).map(([key,unit])=>({...unit.row,
+    createdAt:unit.originDates.get(unitOrigin.get(key)!)!,lineage:{...unit.row.lineage!,originIds:[unitOrigin.get(key)!]}}));
 }
 
 /**
@@ -62,6 +113,7 @@ export function computeSignalConfidence(
   now: Date,
   opts: { affirmed?: boolean } = {},
 ): number {
+  evidence=selectIndependentEvidence(evidence);
   if (evidence.length === 0) return 0;
 
   const evidenceAt = evidence.map((row) => row.createdAt);
@@ -114,11 +166,8 @@ export async function refreshSignalLifecycle(
     person's history; the capture date is when that life happened. Selection,
     the principle span bar, and the read routes all follow this same rule.
   */
-  const evidenceRows = await tx
-    .select({ createdAt: inspirations.createdAt, source: inspirations.source })
-    .from(signalEvidence)
-    .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
-    .where(eq(signalEvidence.signalId, signalId));
+  const snapshot=await loadSignalEvidence(tx,current.profileId,[signalId]);
+  const evidenceRows=selectIndependentEvidence(snapshot.witnesses.get(signalId)??[]);
 
   /* the latest standing verdict, latest-wins — the same read selection
      makes, kept in this transaction so the snapshot and the live number
@@ -209,11 +258,8 @@ export async function reconcileSignalsAfterEvidenceLoss(
       .limit(1);
     if (!signal || signal.status === "retired") continue;
 
-    const remaining = await db
-      .select({ createdAt: inspirations.createdAt, source: inspirations.source })
-      .from(signalEvidence)
-      .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
-      .where(eq(signalEvidence.signalId, signalId));
+    const snapshot=await loadSignalEvidence(db,input.profileId,[signalId]);
+    const remaining=selectIndependentEvidence(snapshot.witnesses.get(signalId)??[]);
 
     if (remaining.length > 0) {
       // Still supported, just by less. Confidence and recency move with it.
@@ -233,6 +279,9 @@ export async function reconcileSignalsAfterEvidenceLoss(
       continue;
     }
 
+    // A stale assessment is not a negative verdict. Withhold it while support
+    // work runs; do not retire a claim merely because rechecking is pending.
+    if(snapshot.pending.has(signalId))continue;
     if (signal.lockedAt) {
       await db
         .update(signals)

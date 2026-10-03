@@ -271,15 +271,37 @@ settled.
 evidence_count ≥ SIGNAL_PROMOTION_MIN_EVIDENCE (3)   →   emerging → active
 ```
 
-That is the whole rule, and it is enforced twice: in the lifecycle pass
-(`packages/api/src/lib/signal-lifecycle.ts`) and by a Postgres trigger
-(`drizzle/migrations/0005_signal_promotion_guard.sql`), so nothing can write
-an active signal below the bar.
+Promotion is enforced twice: in the lifecycle pass
+(`packages/api/src/lib/signal-lifecycle.ts`) and by the Postgres transition
+guard (`drizzle/migrations/0057_review_evidence.sql`). This is not a
+residence rule: an already-active signal can lose some evidence, and a locked
+unsupported signal keeps its human wording. Neither a direct insert nor an
+emerging-to-active transition may bypass the promotion bar.
 
 ### 6. Confidence
 
 Confidence (0–100) is a pure function of the evidence set and the clock —
 `computeSignalConfidence`, no model anywhere:
+
+Identified provenance first passes through `selectIndependentEvidence` in
+`packages/api/src/lib/signal-lifecycle.ts`. Direct originals take priority;
+each counted unit needs its own available source origin. Review-session units
+are designed to group repeated replies rather than count each citation as an
+experience. Dates belong to the supporting unit for its matched origin, not
+older context or a later retry. Anonymous legacy arithmetic inputs remain
+supported on their own but cannot be mixed with identified units. See the
+independent-support contract in [data-model.md](data-model.md).
+
+This is not yet an enabled review-to-signal producer. Migration 0057 adds owned
+review support references and assessment-time source revisions. The common
+`signal_support_edges` query includes only current witnesses in counting, while
+reporting stale relationships as pending rather than unsupported. Personal
+readers recognize raw and review support; room readers still use public raw
+material only. The database promotion guard uses the same maximum-matching
+count, stops once three witnesses are proven, and cannot count a stale material
+or statement revision as a new promotion. Extraction, reassessment, durable
+work scheduling and UI provenance remain to be connected before review support
+is automatically produced. No tuning constant changed.
 
 ```
 support = min(1, n / 6)                 n = evidence count; 6 = CONFIDENCE_SATURATION_EVIDENCE

@@ -54,7 +54,8 @@ import {
 } from "../db/index.js";
 import { cosineSimilarity } from "../scoring/vector.js";
 import { getDb } from "./db.js";
-import { computeSignalConfidence } from "./signal-derivation.js";
+import { computeSignalConfidence, selectIndependentEvidence } from "./signal-lifecycle.js";
+import {loadSignalEvidence} from './review-evidence.js';
 import { GROUP_SIGNAL_MIN_VOICES } from "./signal-derivation-thresholds.js";
 import { normalizeSupportedLocale } from "./locales.js";
 import {
@@ -383,30 +384,7 @@ async function selectSignals(
 
   if (rows.length === 0) return { signals: [], provisional: false };
 
-  const evidenceRows = await db
-    .select({
-      signalId: signalEvidence.signalId,
-      createdAt: inspirations.createdAt,
-      source: inspirations.source,
-    })
-    .from(signalEvidence)
-    .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
-    .where(
-      inArray(
-        signalEvidence.signalId,
-        rows.map((row) => row.id),
-      ),
-    );
-
-  const evidenceBySignal = new Map<
-    string,
-    Array<{ createdAt: Date; source: "app" | "agent" }>
-  >();
-  for (const row of evidenceRows) {
-    const bucket = evidenceBySignal.get(row.signalId);
-    if (bucket) bucket.push(row);
-    else evidenceBySignal.set(row.signalId, [row]);
-  }
+  const {witnesses:evidenceBySignal}=await loadSignalEvidence(db,profileId,rows.map(row=>row.id));
 
   // The latest verdict per signal decides `disputed` — newest first, first
   // write wins per target. A later "true" therefore lifts an older "not_true",
@@ -437,7 +415,7 @@ async function selectSignals(
 
   const scored = rows
     .map((row) => {
-      const evidence = evidenceBySignal.get(row.id) ?? [];
+      const evidence = selectIndependentEvidence(evidenceBySignal.get(row.id) ?? []);
       const evidenceAt = evidence.map((item) => item.createdAt);
       // Live, not the stored snapshot: the snapshot was written the moment
       // evidence last landed — its decay term frozen at full — so ranking by

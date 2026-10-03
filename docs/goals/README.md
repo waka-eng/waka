@@ -30,6 +30,8 @@ Work happening now, or stopped mid-way with a recorded reason.
 
 | Goal | Status |
 | --- | --- |
+| [`personal-experience-delivery.md`](personal-experience-delivery.md) | Full roadmap paused; separately requested M1–M3 complete. R02's Avatar entry, Avatar and delivery remain; physical-device verification deferred. |
+| [`personal-capture-foundation.md`](personal-capture-foundation.md) | In progress — owner requested the first personal-experience bundle: A01, A02, C01, C02 and A03. |
 | [`ux-feature-implementation.md`](ux-feature-implementation.md) | Paused by owner after the checked feedback/room-flow batch; dev delivery requested. Later UX/algorithm slices, remaining release cases, semantic validation, historical repair and deployed verification remain open. |
 | [`everything-in-the-world.md`](everything-in-the-world.md) | Phase 2 passed (2026-08-23). Phase 3 next. |
 | [`every-workflow-works.md`](every-workflow-works.md) | Phase 2 passed (2026-08-22). Phase 3 next. |

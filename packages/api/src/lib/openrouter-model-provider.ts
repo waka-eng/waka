@@ -25,6 +25,8 @@ import {
   buildPrincipleDistillRequest,
   buildPrincipleRelationRequest,
   buildReflectionQuestionRequest,
+  buildReviewQuestionRequest,
+  buildReviewAnswerDerivationRequest,
   buildSignalExtractionRequest,
   buildSignalSupportRequest,
   buildSignalMatchJudgementRequest,
@@ -33,6 +35,8 @@ import {
   parseDistilledPrinciples,
   parsePrincipleRelation,
   parseReflectionQuestion,
+  parseReviewQuestion,
+  parseReviewAnswerDerivation,
   parseSignalCandidates,
   parseSignalSupport,
   parseSignalMatchJudgement,
@@ -62,6 +66,14 @@ interface GeminiShapedSchema {
   items?: GeminiShapedSchema;
   properties?: Record<string, GeminiShapedSchema>;
   required?: string[];
+  anyOf?: GeminiShapedSchema[];
+  minItems?: number;
+  maxItems?: number;
+  minimum?: number;
+  maximum?: number;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
 }
 interface GeminiShapedRequest {
   systemInstruction?: { parts: Array<{ text: string }> };
@@ -79,6 +91,7 @@ const TYPE_MAP: Record<string, string> = {
   NUMBER: "number",
   INTEGER: "integer",
   BOOLEAN: "boolean",
+  NULL: "null",
 };
 
 /** Gemini's UPPERCASE schema dialect → plain JSON Schema. */
@@ -97,6 +110,10 @@ export function toJsonSchema(schema: GeminiShapedSchema): Record<string, unknown
     out.additionalProperties = false;
   }
   if (schema.required) out.required = schema.required;
+  if (schema.anyOf) out.anyOf = schema.anyOf.map(toJsonSchema);
+  for (const key of ['minItems','maxItems','minimum','maximum','minLength','maxLength','pattern'] as const) {
+    if (schema[key] !== undefined) out[key] = schema[key];
+  }
   return out;
 }
 
@@ -147,6 +164,15 @@ async function ask(
 export function createOpenRouterModelProvider(): ModelProvider {
   return {
     name: "openrouter",
+    async deriveReviewAnswer(input){
+      const payload=await ask(()=>buildReviewAnswerDerivationRequest(input),'review derivation','WAKA_MODEL_EXTRACT','review_derivation');
+      if(payload===null||payload===MODEL_DECLINED)throw new ModelDidNotAnswerError('review derivation');return parseReviewAnswerDerivation(payload,input);
+    },
+    async askReviewQuestion(input){
+      const payload=await ask(()=>buildReviewQuestionRequest(input),'review question','WAKA_MODEL_REFLECT','review_question');
+      if(payload===null||payload===MODEL_DECLINED)throw new ModelDidNotAnswerError('review question');
+      return parseReviewQuestion(payload,input);
+    },
     async askReflectionQuestion(input) {
       const payload = await ask(
         () => buildReflectionQuestionRequest(input),

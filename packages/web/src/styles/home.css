@@ -280,6 +280,12 @@
   cursor: pointer;
   transition: text-shadow 0.2s ease;
 }
+.jar-reading-heading { display:flex; align-items:baseline; flex-wrap:wrap; gap:var(--sp-12); margin:0 0 var(--sp-8); color:var(--w-muted); font-size:var(--t-note); line-height:1.5; }
+.jar-reading-heading time { font-size:var(--t-label); }
+.jar-reading-actions { display:flex; flex-wrap:wrap; gap:var(--sp-4) var(--sp-12); margin-top:var(--sp-8); pointer-events:auto; }
+.jar-reading-actions button { min-height:var(--sp-44); padding:var(--sp-8) 0; border:0; background:none; color:var(--w-muted); font:inherit; font-size:var(--t-body); text-align:left; cursor:pointer; }
+.jar-forming.jar-forming--personal { font-size:var(--t-body); font-style:normal; color:var(--w-muted); line-height:1.6; }
+.jar-reading-actions button:hover,.jar-reading-actions button:focus-visible { color:var(--jar-ink); text-decoration:underline; text-underline-offset:var(--sp-4); }
 .jar-poster[role="button"]:hover,
 .jar-poster[role="button"]:focus-visible {
   text-shadow: 0 0 22px rgba(232, 237, 244, 0.32);
@@ -854,6 +860,7 @@
   border-radius: 2px 14px 14px 2px;
   transition: background 180ms ease;
 }
+.jar-principles-list--personal > li { padding-top:calc(var(--sp-44) + var(--sp-12)); }
 .jar-principles-list > li + li,
 .jar-principles-list > .jar-values-held + .jar-values-held { margin-top: 0; }
 .jar-principles-list > li::before {
@@ -939,7 +946,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
+  width: 44px;
   height: 44px;
   padding: 0;
   border: 0;
@@ -950,8 +957,10 @@
 .jar-principle-tools button:hover:not(:disabled),
 .jar-principle-tools button:focus-visible { color: var(--jar-ink); }
 .jar-principle-tools button:disabled { opacity: 0.3; cursor: default; }
+.jar-principle-tools button:not(:disabled) { color:var(--w-muted); }
+.jar-principle-tools svg { width:20px; height:20px; }
 .jar-principles-list > li > .jar-values-value {
-  max-width: calc(100% - 126px);
+  max-width: 100%;
 }
 .jar-principle-verdict {
   display: flex;
@@ -998,6 +1007,11 @@
 }
 .jar-principle-reference blockquote p { margin: 0; font-size: var(--t-ui); line-height: 1.5; }
 .jar-principle-reference footer { margin-top: var(--sp-6); font-size: var(--t-label); color: var(--jar-muted); }
+.jar-review-evidence { margin:var(--sp-12) 0; padding-left:var(--sp-12); border-left:1px solid var(--jar-faint); color:var(--jar-ink); overflow-wrap:anywhere; }
+.jar-review-evidence p,.jar-principle-reference .jar-review-evidence p { margin:0; font-size:var(--t-body); line-height:1.6; white-space:pre-wrap; }
+.jar-review-evidence footer { margin-top:var(--sp-6); color:var(--jar-muted); font-size:var(--t-label); }
+.jar-review-evidence a { display:inline-flex; align-items:center; min-height:var(--sp-44); color:var(--jar-ink); font-size:var(--t-note); text-underline-offset:var(--sp-4); }
+.jar-review-evidence a:focus-visible,.jar-review-thought:focus-visible { outline:2px solid var(--jar-ink); outline-offset:var(--sp-4); }
 .jar-principles-list details[open] p,
 .jar-principles-list .jar-was-root {
   padding: var(--sp-8) 0 var(--sp-8) var(--sp-12);
@@ -1008,7 +1022,6 @@
   .jar-principles-list > li { padding-right: var(--sp-10); padding-left: var(--sp-30); }
   .jar-principles-list > li > .jar-values-value {
     max-width: 100%;
-    padding-top: var(--sp-40);
   }
   .jar-principles-list { max-height: 60dvh; }
 }
@@ -3492,6 +3505,7 @@
   grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
   gap: var(--sp-24);
 }
+.jar-prov-room-panes:has(> .jar-prov-room-list:only-child) { grid-template-columns:minmax(0,1fr); }
 .jar-prov-room-list,
 .jar-prov-room-full {
   min-height: 0;

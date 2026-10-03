@@ -4,7 +4,7 @@ import { ApiError, createInspiration, createReflection, fetchInspiration, fetchI
 import { hashStr } from './num';
 import { profileStorageKey, type ProfileStorageScope } from './profile-storage';
 
-export type AuthoredSaveInput = { operation: 'inspiration'; input: CreateInspirationRequest; reflect: boolean }
+export type AuthoredSaveInput = { operation: 'inspiration'; input: CreateInspirationRequest; reflect: boolean; draft?: { id: string; revision: number } }
   | { operation: 'reflection'; inspirationId: string; input: CreateReflectionRequest; afterId: string | null; continueReflecting: boolean };
 type SavedReference = { inspirationId: string; reflectionId: string | null; processing?: ApiInspirationProcessingReceipt };
 export type AuthoredSaveIntent = AuthoredSaveInput & { version: 1; accountId: string; profileId: string; requestId: string; createdAt: number; checksum: number; acknowledged?: SavedReference; rejected?: boolean; validationMessage?: string };
@@ -15,7 +15,7 @@ type Phase = 'idle' | 'checking' | 'saving' | 'uncertain' | 'storage_error' | 'u
 // authorization and input-hash conflict checks; UUIDs are never reused here.
 function checksum(value: AuthoredSaveInput): number {
   return hashStr(JSON.stringify(value.operation === 'inspiration'
-    ? { operation: value.operation, input: value.input, reflect: value.reflect }
+    ? { operation: value.operation, input: value.input, reflect: value.reflect, ...(value.draft ? { draft: value.draft } : {}) }
     : { operation: value.operation, input: value.input, inspirationId: value.inspirationId, afterId: value.afterId, continueReflecting: value.continueReflecting }));
 }
 function readIntents(prefix: string, scope: ProfileStorageScope, operation: AuthoredSaveInput['operation'], inspirationId?: string) {
@@ -34,6 +34,7 @@ function readIntents(prefix: string, scope: ProfileStorageScope, operation: Auth
       if ((value.rejected !== undefined && typeof value.rejected !== 'boolean') ||
         (value.acknowledged && (typeof value.acknowledged.inspirationId !== 'string' || !value.acknowledged.inspirationId || value.rejected ||
           (value.operation === 'reflection' && (value.acknowledged.inspirationId !== inspirationId || typeof value.acknowledged.reflectionId !== 'string'))))) throw new Error('Invalid saved reference');
+      if (value.operation === 'inspiration' && value.draft && (typeof value.draft.id !== 'string' || !Number.isSafeInteger(value.draft.revision) || value.draft.revision < 1)) throw new Error('Invalid draft reference');
       intents.push(value);
     } catch { invalidKeys.push(key); }
   }
@@ -50,10 +51,11 @@ function persist(prefix: string, intent: AuthoredSaveIntent) {
  * using its original identity, after verifying the server supports it. */
 export function useAuthoredSave(options: {
   scope: ProfileStorageScope | null; operation: AuthoredSaveInput['operation']; inspirationId?: string; enabled?: boolean;
-  // Callbacks must synchronously settle matching device drafts before returning.
+  // Callbacks must settle matching device drafts before returning. IndexedDB
+  // media cleanup may be asynchronous; keep the save journal until it finishes.
   // Throwing leaves the request available for safe reconciliation on return.
-  onResolved: (intent: AuthoredSaveIntent, result: AuthoredSaveResult, initiated: boolean) => void | (() => void);
-  onRemoved: (intent: AuthoredSaveIntent) => void;
+  onResolved: (intent: AuthoredSaveIntent, result: AuthoredSaveResult, initiated: boolean) => void | (() => void) | Promise<void | (() => void)>;
+  onRemoved: (intent: AuthoredSaveIntent) => void | Promise<void>;
   onEditRejected?: (intent: AuthoredSaveIntent) => void;
 }) {
   const prefix = profileStorageKey(options.scope, `pendingSave:${options.operation}:${encodeURIComponent(options.inspirationId ?? '')}:`);
@@ -125,7 +127,8 @@ export function useAuthoredSave(options: {
         timeout = window.setTimeout(() => { controller.abort(); reject(new Error('Save check timed out')); }, 15_000);
       })]);
       current();
-      const afterSettlement = live.current.onResolved(intent, result, write);
+      const afterSettlement = await live.current.onResolved(intent, result, write);
+      current();
       // Cleanup follows matching-draft settlement; a crash before cleanup can
       // only cause a read/replay, never a newly identified copy of these words.
       localStorage.removeItem(key + intent.requestId);
@@ -135,7 +138,8 @@ export function useAuthoredSave(options: {
       if (!owns()) return;
       if (error instanceof ApiError && error.status === 410 && error.code === 'saved_item_removed') {
         try {
-          live.current.onRemoved(intent);
+          await live.current.onRemoved(intent);
+          current();
           localStorage.removeItem(key + intent.requestId);
           intentRef.current = null; setPending(null); setPhase('removed');
         } catch { setPhase('storage_error'); }

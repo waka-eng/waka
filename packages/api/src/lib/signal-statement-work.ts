@@ -2,7 +2,7 @@
  * Current and previously withdrawn owned witnesses both need reassessment. */
 import { sql } from 'drizzle-orm';
 import type { getDb } from './db.js';
-import { enqueueSignalSupportReview, enqueueSignalReembed, enqueueTopOfMindRefresh } from './queue.js';
+import { enqueueSignalSupportReview, enqueueSignalReembed, enqueueTopOfMindRefresh, enqueueReviewAnswerDerivation } from './queue.js';
 import { dropSignalEmbedding } from './signal-embeddings.js';
 import { acquireSignalDerivationLock } from './signal-match-or-mint.js';
 
@@ -31,6 +31,7 @@ export async function requestSignalStatementWork(tx: Transaction, input: {
   for (const inspirationId of input.inspirationIds) {
     await enqueueSignalSupportReview(input.profileId, inspirationId, tx);
   }
+  await requestReviewSupportWork(tx,input.profileId,input.signalId,[]);
   await enqueueTopOfMindRefresh(input.profileId, 'signals_changed', tx);
 }
 
@@ -38,6 +39,7 @@ export async function requestSignalStatementWork(tx: Transaction, input: {
  * renew the statement's other witnesses. Review only currently allowed ones. */
 export async function requestRemainingSignalSupportReviews(tx: Transaction, input: {
   profileId: string; signalId: string; verifiedInspirationIds: string[];
+  verifiedReviewAnswerIds?:string[];
 }) {
   const sources = await tx.execute<{ id: string; ownerProfileId: string }>(sql`
     SELECT i.id, i.profile_id AS "ownerProfileId" FROM inspirations i WHERE (
@@ -55,4 +57,14 @@ export async function requestRemainingSignalSupportReviews(tx: Transaction, inpu
     await enqueueSignalSupportReview(source.ownerProfileId, source.id, tx,
       source.ownerProfileId === input.profileId ? undefined : input.profileId);
   }
+  await requestReviewSupportWork(tx,input.profileId,input.signalId,input.verifiedReviewAnswerIds??[]);
+}
+
+async function requestReviewSupportWork(tx:Transaction,profileId:string,signalId:string,verified:string[]){
+  const rows=await tx.execute<{id:string;sessionId:string}>(sql`SELECT a.id,a.session_id AS "sessionId" FROM review_answers a
+    WHERE a.profile_id=${profileId}::uuid AND a.deleted_at IS NULL AND (
+      EXISTS(SELECT 1 FROM signal_review_evidence e WHERE e.profile_id=a.profile_id AND e.answer_id=a.id AND e.signal_id=${signalId}::uuid)
+      OR EXISTS(SELECT 1 FROM review_signal_support r WHERE r.profile_id=a.profile_id AND r.answer_id=a.id AND r.signal_id=${signalId}::uuid))
+    ORDER BY a.id`);
+  for(const row of rows)if(!verified.includes(row.id))await enqueueReviewAnswerDerivation(profileId,row.sessionId,row.id,tx);
 }

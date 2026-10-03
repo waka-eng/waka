@@ -29,7 +29,9 @@
     "bcryptjs": "^2.4.3",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.13.0",
+    "music-metadata": "11.16.1",
     "postgres": "^3.4.5",
+    "undici": "6.29.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

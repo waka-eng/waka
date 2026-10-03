@@ -25,7 +25,7 @@ import { fetchInspirationSaveRequest } from './inspiration-save-requests';
 // What a capture is
 // ---------------------------------------------------------------------------
 
-export type ApiInspirationKind = "note" | "link" | "image" | "mixed";
+export type ApiInspirationKind = "note" | "link" | "image" | "mixed" | "audio";
 
 /**
  * Whose initiative the content was: the person's words (typed here, or relayed
@@ -95,6 +95,7 @@ export interface CreateReflectionRequest {
 }
 
 export interface CreateInspirationRequest {
+  attachments?: Array<{ type: 'link'; url: string; name?: string } | { type: 'image' | 'audio'; key: string; contentType: string; size: number; name?: string }>;
   text: string;
   kind?: ApiInspirationKind;
   source?: ApiInspirationSource;
@@ -213,6 +214,7 @@ export async function fetchInspirations(
  */
 export async function fetchInspirationPage(
   options: FetchInspirationsOptions = {},
+  signal?: AbortSignal,
 ): Promise<ApiInspirationPage> {
   const params = new URLSearchParams();
   if (options.profile) params.set("profile", options.profile);
@@ -223,9 +225,11 @@ export async function fetchInspirationPage(
   const body = await getJson<ApiInspirationPage>(
     apiPath(`/inspirations${query ? `?${query}` : ""}`),
     "Failed to load your captures",
+    signal,
   );
+  if (!Array.isArray(body.inspirations)) throw new ApiError({ status: 200, code: 'invalid_response', message: 'Could not read your inspirations' });
   return {
-    inspirations: Array.isArray(body.inspirations) ? body.inspirations : [],
+    inspirations: body.inspirations,
     nextCursor: body.nextCursor,
     total: typeof body.total === "number" ? body.total : undefined,
   };
@@ -309,21 +313,25 @@ export interface ApiReflectionQuestionStatus {
 /** Queue one metered follow-up grounded in the latest saved answer. */
 export async function requestReflectionQuestion(
   inspirationId: string, afterReflectionId: string, retry = false,
+  options: {signal?: AbortSignal; profile?: string} = {},
 ): Promise<ApiReflectionQuestionStatus> {
   return postJson<ApiReflectionQuestionStatus>(
-    apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/reflection-question`),
+    apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/reflection-question${options.profile ? `?profile=${encodeURIComponent(options.profile)}` : ''}`),
     { afterReflectionId, ...(retry ? { retry: true } : {}) },
     "Could not start a follow-up question",
+    options.signal,
   );
 }
 
 export async function fetchReflectionQuestionStatus(
   inspirationId: string, afterReflectionId: string,
+  options: {signal?: AbortSignal; profile?: string} = {},
 ): Promise<ApiReflectionQuestionStatus> {
   return getJson<ApiReflectionQuestionStatus>(
     apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/reflection-question/status` +
-      `?afterReflectionId=${encodeURIComponent(afterReflectionId)}`),
+      `?afterReflectionId=${encodeURIComponent(afterReflectionId)}${options.profile ? `&profile=${encodeURIComponent(options.profile)}` : ''}`),
     "Could not load the follow-up question",
+    options.signal,
   );
 }
 

@@ -34,6 +34,10 @@ import {
   fetchInspirationProcessing,
   fetchInspirationSaveRequest,
   fetchInspirations,
+  fetchInspirationPage,
+  fetchGroupInspiration,
+  fetchAttachmentUrl,
+  presignAttachment,
   fetchPublicProfile,
   fetchSignal,
   fetchSignals,
@@ -53,7 +57,7 @@ import {
   type ApiTopOfMind,
   type ApiViewer,
 } from "../src/lib/api";
-import { loadSignal, loadTopOfMindVersion } from "../src/lib/data";
+import { loadInspiration, loadSignal, loadTopOfMindVersion } from "../src/lib/data";
 
 const viewer: ApiViewer = {
   account: {
@@ -196,6 +200,44 @@ const topOfMind: ApiTopOfMind = {
 function stubFetch(response: Response): void {
   vi.stubGlobal("fetch", vi.fn(async () => response));
 }
+it('refuses an upload ticket that cannot prove the expected profile', async () => {
+  const input = { filename: 'Photo.png', contentType: 'image/png', size: 50 };
+  stubFetch(Response.json({ uploadUrl: 'https://storage.example/put', key: 'key', profileId: 'other-profile' }));
+  await expect(presignAttachment(input, undefined, { profile: 'profile-1' })).rejects.toMatchObject({ code: 'upload_scope_unverified' });
+  stubFetch(Response.json({ uploadUrl: 'https://storage.example/put', key: 'key', profileId: 'profile-1' }));
+  await expect(presignAttachment(input, undefined, { profile: 'profile-1' })).resolves.toMatchObject({ profileId: 'profile-1' });
+  expect(fetch).toHaveBeenCalledWith('/api/attachments/presign?profile=profile-1', expect.objectContaining({ method: 'POST', credentials: 'include' }));
+});
+it('refuses a read URL for the wrong attachment or an unsafe protocol', async () => {
+  stubFetch(Response.json({ attachmentId: 'other', url: 'https://storage.example/read' }));
+  await expect(fetchAttachmentUrl('file-1')).rejects.toMatchObject({ code: 'invalid_response' });
+  stubFetch(Response.json({ attachmentId: 'file-1', url: 'javascript:alert(1)' }));
+  await expect(fetchAttachmentUrl('file-1')).rejects.toMatchObject({ code: 'invalid_response' });
+});
+it('reads archive pages with an explicit profile, cursor and cancellation signal', async () => {
+  stubFetch(Response.json({ inspirations: [inspirationSummary], nextCursor: 'older', total: 2002 }));
+  const controller = new AbortController();
+  await expect(fetchInspirationPage({ profile: 'profile-1', q: 'garden', limit: 50, cursor: 'page-2' }, controller.signal))
+    .resolves.toMatchObject({ inspirations: [inspirationSummary], nextCursor: 'older', total: 2002 });
+  expect(fetch).toHaveBeenCalledWith('/api/inspirations?profile=profile-1&q=garden&limit=50&cursor=page-2', { method: 'GET', headers: { Accept: 'application/json' }, credentials: 'include', signal: controller.signal });
+});
+it('treats a malformed search page as a failure rather than an empty archive', async () => {
+  stubFetch(Response.json({ total: 2002 }));
+  await expect(fetchInspirationPage({ q: 'garden' })).rejects.toMatchObject({ code: 'invalid_response' });
+});
+it('checks the identity and profile of a linked inspiration before translating it', async () => {
+  stubFetch(Response.json({ inspiration: { ...inspiration, profileId: 'other-profile' } }));
+  await expect(loadInspiration('inspiration-1', 'profile-1')).rejects.toThrow();
+  stubFetch(Response.json({ inspiration: { ...inspiration, id: 'wrong-id' } }));
+  await expect(loadInspiration('inspiration-1', 'profile-1')).rejects.toThrow();
+});
+it('reads a direct public group inspiration as a cancellable authenticated GET', async () => {
+  const row = { id: 'inspiration-1', text: 'Public thought', ownerProfileId: 'peer' };
+  stubFetch(Response.json({ inspiration: row }));
+  const controller = new AbortController();
+  await expect(fetchGroupInspiration('group-1', 'inspiration-1', controller.signal)).resolves.toEqual(row);
+  expect(fetch).toHaveBeenCalledWith('/api/groups/group-1/field/inspiration-1', { method: 'GET', headers: { Accept: 'application/json' }, credentials: 'include', signal: controller.signal });
+});
 
 it('preserves the processing receipt on a saved inspiration', async () => {
   const processing = { id: 'receipt', profileId: 'profile-1', inspirationId: inspiration.id, materialRevision: '2', jobId: 'job', requestVersion: '3' };

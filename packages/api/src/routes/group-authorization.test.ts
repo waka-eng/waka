@@ -515,7 +515,10 @@ describe("the group module itself", () => {
     expect(code).not.toMatch(/signalEvidence\.reason\b/);
 
     const JOIN_PREDICATE = /eq\(\s*inspirations\.id\s*,\s*signalEvidence\.inspirationId\s*\)/g;
-    const mentions = code.match(/\binspirationId\b/g) ?? [];
+    // Direct public-field links accept an inspirationId as a lookup input.
+    // The prohibited identifier is the private evidence column, not a route
+    // parameter. Every read of that column must still be the visibility join.
+    const mentions = code.match(/\bsignalEvidence\.inspirationId\b/g) ?? [];
     const predicates = code.match(JOIN_PREDICATE) ?? [];
     expect(
       predicates.length,

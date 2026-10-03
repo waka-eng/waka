@@ -383,6 +383,10 @@ describe("applying explicit support decisions", () => {
 
   it.each(["held", "contested"])("preserves edited %s principles and recovers their support", async (state) => {
     const f = await fixture();
+    // This test starts from an already-demonstrated principle. Certify the
+    // fixture's reflection-bearing witness before its historical promotion;
+    // a null legacy material revision must not bypass the current-source bar.
+    await applySignalSupportReview(t.db as never,await review(f,"supported"));
     const ids = [f.signalId];
     for (let i = 0; i < 2; i++) {
       const [signal] = await t.sql`INSERT INTO signals(profile_id, statement) VALUES (${f.ownerProfileId}, ${`Other pattern ${i}`}) RETURNING id`;

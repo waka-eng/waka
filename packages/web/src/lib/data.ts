@@ -55,6 +55,8 @@ import {
   type ApiTopOfMindEntryType,
 } from "./api";
 
+import { inspirationPreview } from './inspiration-preview';
+
 const ms = (iso: string | null | undefined): number => {
   if (!iso) return 0;
   const t = Date.parse(iso);
@@ -175,6 +177,7 @@ export interface Evidence {
 
 export interface SignalDetail extends Signal {
   evidence: Evidence[];
+  reviewEvidence: NonNullable<Awaited<ReturnType<typeof fetchSignal>>['reviewEvidence']>;
 }
 
 /* ---------------------------------------------------------------- layer 3 */
@@ -229,7 +232,7 @@ export function toInspiration(row: {
 }): Inspiration {
   return {
     id: row.id,
-    preview: row.textPreview,
+    preview: inspirationPreview(row.textPreview, row.attachmentSummary),
     /* absent means private: an older payload must never read as published */
     isPublic: row.visibility === "public",
     kind: row.kind,
@@ -426,15 +429,16 @@ export async function loadTopOfMindVersion(id: string, profile?: string, signal?
 
 /** One memory opened: the words in full, what was attached, and what the
     person said back. Enrichment comes through labelled, never as their words. */
-export async function loadInspiration(id: string, profile?: string): Promise<InspirationDetail> {
-  const row = await fetchInspiration(id, { profile });
+export async function loadInspiration(id: string, profile?: string, signal?: AbortSignal): Promise<InspirationDetail> {
+  const row = await fetchInspiration(id, { profile }, signal);
+  if (row.id !== id || (profile && row.profileId !== profile)) throw new Error('Unexpected inspiration scope');
   return toInspirationDetail(row);
 }
 
 export function toInspirationDetail(row: Awaited<ReturnType<typeof fetchInspiration>>): InspirationDetail {
   return {
     id: row.id,
-    preview: row.text,
+    preview: inspirationPreview(row.text, row.attachments.map(item => ({type:item.type,label:item.name || item.enrichment?.link?.title || item.url}))),
     isPublic: row.visibility === "public",
     text: row.text,
     kind: row.kind,
@@ -444,7 +448,8 @@ export function toInspirationDetail(row: Awaited<ReturnType<typeof fetchInspirat
     attachments: (row.attachments ?? []).map((a) => ({
       id: a.id,
       type: a.type,
-      label: a.name ?? a.url,
+      label: a.name ?? (a.type === 'audio' ? 'Recording' : a.type === 'image' ? 'Photo' : a.url),
+      ...(a.type === 'link' ? { url: a.url } : {}),
     })),
     reflectionCount: (row.reflections ?? []).filter((r) => !r.skipped && r.answer).length,
     reflections: (row.reflections ?? []).map((r) => ({
@@ -468,7 +473,7 @@ export function toInspirationDetail(row: Awaited<ReturnType<typeof fetchInspirat
 /** One signal opened: the same statement, plus what it rests on. */
 export async function loadSignal(id: string): Promise<SignalDetail> {
   const row = await fetchSignal(id);
-  return { ...toSignal(row), evidence: (row.evidence ?? []).map((e) => toEvidence(row.id, e)) };
+  return { ...toSignal(row), evidence: (row.evidence ?? []).map((e) => toEvidence(row.id, e)), reviewEvidence: row.reviewEvidence ?? [] };
 }
 
 /* ---------------------------------------------------------------- aliveness */

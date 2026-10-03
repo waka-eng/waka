@@ -30,7 +30,7 @@ import {
 import { inspirations } from "./schema-inspirations";
 import { profiles } from "./schema-profiles";
 
-export const attachmentTypeValues = ["link", "image", "file"] as const;
+export const attachmentTypeValues = ["link", "image", "file", "audio"] as const;
 export type AttachmentType = (typeof attachmentTypeValues)[number];
 export const attachmentTypeEnum = pgEnum("attachment_type", attachmentTypeValues);
 
@@ -51,7 +51,7 @@ export const attachmentEnrichmentStatusEnum = pgEnum(
  * uniformly, but a reader (and a quote's attribution) needs to know whether
  * it is a page's own prose or a description of a picture.
  */
-export const attachmentEnrichmentKindValues = ["page_body", "image_description"] as const;
+export const attachmentEnrichmentKindValues = ["page_body", "image_description", "audio_transcription"] as const;
 export type AttachmentEnrichmentKind = (typeof attachmentEnrichmentKindValues)[number];
 export const attachmentEnrichmentKindEnum = pgEnum(
   "attachment_enrichment_kind",
@@ -91,6 +91,12 @@ export const attachments = pgTable(
     enrichmentText: text("enrichment_text"),
     enrichmentErrorReason: text("enrichment_error_reason"),
     enrichmentUpdatedAt: timestamp("enrichment_updated_at", { withTimezone: true }),
+    /** Null uses the machine transcript; empty explicitly records no words. */
+    transcriptCorrection: text('transcript_correction'),
+    transcriptRevision: integer('transcript_revision').notNull().default(0),
+    transcriptCorrectedAt: timestamp('transcript_corrected_at', { withTimezone: true }),
+    enrichmentRetryCount: integer('enrichment_retry_count').notNull().default(0),
+    enrichmentRetryWindowAt: timestamp('enrichment_retry_window_at', { withTimezone: true }),
 
     // Structured link metadata, kept separate from the bulk text.
     finalUrl: text("final_url"),

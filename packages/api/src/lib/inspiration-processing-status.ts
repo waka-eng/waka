@@ -4,6 +4,8 @@ import { getDb } from './db.js';
 import { parseTopOfMindRefreshResult } from './top-of-mind-refresh-status.js';
 import type { InspirationProcessingReceipt } from './inspiration-processing.js';
 import { STALE_LOCK_SECONDS } from './queue.js';
+import { ENRICHMENT_RETRY_WINDOW_MS, MAX_ENRICHMENT_RETRIES } from './attachment-analysis-retry.js';
+import { effectiveAttachmentStatus } from './attachment-material.js';
 
 type Database = ReturnType<typeof getDb>;
 type Reader = Pick<Database, 'select' | 'execute'>;
@@ -71,16 +73,20 @@ export async function readInspirationProcessingStatus(db: Reader, input: {
     runAfter: null, result: null, unavailableAttachments: 0, canRetry: true };
 
   const [media] = await db.execute(sql`SELECT
-    count(*) FILTER (WHERE a.enrichment_status::text = 'unavailable')::int AS unavailable,
-    count(*) FILTER (WHERE a.enrichment_status IS NULL OR a.enrichment_status::text IN ('pending','failed'))::int AS unfinished,
+    count(*) FILTER (WHERE a.material_status::text = 'unavailable')::int AS unavailable,
+    count(*) FILTER (WHERE a.material_status IS NULL OR a.material_status::text IN ('pending','failed'))::int AS unfinished,
     coalesce(bool_or(j.status::text = 'failed' OR (j.status::text = 'running' AND (j.locked_at IS NULL OR j.locked_at < now() - ${STALE_LOCK_SECONDS} * interval '1 second') AND j.attempts >= j.max_attempts))
-      FILTER (WHERE a.enrichment_status IS NULL OR a.enrichment_status::text IN ('pending','failed')), false) AS failed,
+      FILTER (WHERE a.material_status IS NULL OR a.material_status::text IN ('pending','failed')), false) AS failed,
     coalesce(bool_or(j.id IS NULL OR j.status::text = 'succeeded')
-      FILTER (WHERE a.enrichment_status IS NULL OR a.enrichment_status::text IN ('pending','failed')), false) AS untracked,
+      FILTER (WHERE a.material_status IS NULL OR a.material_status::text IN ('pending','failed')), false) AS untracked,
     coalesce(bool_or(j.status::text = 'running' AND j.locked_at >= now() - ${STALE_LOCK_SECONDS} * interval '1 second')
-      FILTER (WHERE a.enrichment_status IS NULL OR a.enrichment_status::text IN ('pending','failed')), false) AS running,
-    min(j.run_after) FILTER (WHERE j.status::text = 'pending' AND (a.enrichment_status IS NULL OR a.enrichment_status::text IN ('pending','failed'))) AS run_after
-    FROM attachments a LEFT JOIN background_jobs j ON j.idempotency_key = 'enrich_attachment:' || a.id::text
+      FILTER (WHERE a.material_status IS NULL OR a.material_status::text IN ('pending','failed')), false) AS running,
+    coalesce(bool_or(a.enrichment_retry_count < ${MAX_ENRICHMENT_RETRIES} OR a.enrichment_retry_window_at IS NULL OR
+      a.enrichment_retry_window_at <= now() - ${ENRICHMENT_RETRY_WINDOW_MS} * interval '1 millisecond')
+      FILTER (WHERE a.material_status IS NULL OR a.material_status::text IN ('pending','failed')), false) AS retry_allowed,
+    min(j.run_after) FILTER (WHERE j.status::text = 'pending' AND (a.material_status IS NULL OR a.material_status::text IN ('pending','failed'))) AS run_after
+    FROM (SELECT attachments.*, ${effectiveAttachmentStatus} AS material_status FROM attachments) a
+    LEFT JOIN background_jobs j ON j.idempotency_key = 'enrich_attachment:' || a.id::text
       AND j.profile_id = a.profile_id AND j.type::text = 'enrich_attachment'
       AND j.payload->>'inspirationId' = a.inspiration_id::text
     WHERE a.profile_id = ${input.profileId}::uuid AND a.inspiration_id = ${input.inspirationId}::uuid`);
@@ -90,7 +96,7 @@ export async function readInspirationProcessingStatus(db: Reader, input: {
     state.stage = 'enrichment';
     state.phase = media?.failed ? 'failed' : media?.untracked ? 'unknown' : media?.running ? 'processing' : runAfter && runAfter > now ? 'waiting' : 'queued';
     state.runAfter = state.phase === 'waiting' ? runAfter!.toISOString() : null;
-    state.canRetry = state.phase === 'failed' || state.phase === 'unknown';
+    state.canRetry = (state.phase === 'failed' || state.phase === 'unknown') && media?.retry_allowed === true;
     return state;
   }
   if (!current) {

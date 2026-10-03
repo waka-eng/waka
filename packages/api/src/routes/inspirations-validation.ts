@@ -16,6 +16,7 @@
  */
 
 import { z } from "zod";
+import { inspirationAttachmentInputSchema, MAX_INSPIRATION_ATTACHMENTS } from '../lib/inspiration-attachment-input.js';
 
 import {
   inspirationKindValues,
@@ -53,8 +54,9 @@ export const createInspirationSchema = z.object({
   text: z
     .string()
     .trim()
-    .min(1, "Inspiration text is required")
-    .max(MAX_TEXT_CHARS, "Inspiration text is too long"),
+    .max(MAX_TEXT_CHARS, "Inspiration text is too long")
+    .default(''),
+  attachments: z.array(inspirationAttachmentInputSchema).min(1).max(MAX_INSPIRATION_ATTACHMENTS).optional(),
   kind: z.preprocess(
     (v) => (typeof v === "string" ? v.trim() || undefined : v),
     z
@@ -120,7 +122,12 @@ export const createInspirationSchema = z.object({
      session's own stack while the caller believed it had targeted another —
      because the real parameter is the `?profile=` query. An unknown key is
      now a 400 that names itself. */
-  .strict();
+  .strict()
+  .superRefine((input, context) => {
+    if (!input.text && !input.attachments?.length) context.addIssue({ code: 'custom', path: ['text'], message: 'Add text or an attachment' });
+    const keys = (input.attachments ?? []).map((item) => item.type === 'link' ? item.url : item.key);
+    if (new Set(keys).size !== keys.length) context.addIssue({ code: 'custom', path: ['attachments'], message: 'An attachment is included twice' });
+  });
 
 export type CreateInspirationInput = z.infer<typeof createInspirationSchema>;
 

@@ -155,14 +155,26 @@ afterEach(() => {
  */
 async function worldWithTheMouthOpen(): Promise<MountedWorld> {
   window.localStorage.setItem(DRAFT_KEY, "a thing worth keeping");
-  layout = await mountWorld(FACTS);
+  layout = await mountWorld(FACTS, { initialEntries: ['/?compose=1'] });
   return layout;
 }
 
+it('does not let the keyboard save shortcut omit an unfinished secondary link', async()=>{
+  await worldWithTheMouthOpen(); await press(/＋ Link/);
+  await act(async()=>{
+    const input=layout!.container.querySelector<HTMLInputElement>('input[type=url]')!;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(input,'https://example.test/not-added');
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+  });
+  await act(async()=>layout!.container.querySelector('textarea')!.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true})));
+  expect(saveCalls).toHaveLength(0);
+  expect(layout!.container.textContent).toContain('Add or cancel the link before saving');
+});
+
 /** the two words on the row, by the light they wear */
 function destination(): { private: boolean; public: boolean } {
-  const row = layout?.container.querySelector(".jar-mouth-where");
-  if (!row) throw new Error("no .jar-mouth-where — the mouth did not open");
+  const row = layout?.container.querySelector(".jar-composer-visibility");
+  if (!row) throw new Error("the composer did not open");
   const buttons = Array.from(row.querySelectorAll("button"));
   const find = (word: RegExp) => buttons.find((b) => word.test(b.textContent ?? ""));
   const priv = find(/^private$/i);
@@ -175,7 +187,7 @@ function destination(): { private: boolean; public: boolean } {
 }
 
 async function press(word: RegExp): Promise<void> {
-  const row = layout?.container.querySelector(".jar-mouth-where");
+  const row = layout?.container.querySelector(".jar-inspiration-composer");
   const button = Array.from(row?.querySelectorAll("button") ?? []).find((b) =>
     word.test(b.textContent ?? ""),
   );

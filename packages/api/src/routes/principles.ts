@@ -42,6 +42,7 @@ import {
   type Principle,
   principles,
   principleSignals,
+  principleStatements,
   principleTypeValues,
   signals,
   signalEvidence,
@@ -49,7 +50,7 @@ import {
 import { getDb } from "../lib/db.js";
 import { feedbackWordingCurrent } from '../lib/feedback-revisions.js';
 import type { DeclarationRoute } from "../lib/model-provider.js";
-import { requireAuth, type AuthEnv } from "../lib/middleware.js";
+import { requireAuth, humanSessionsOnly, type AuthEnv } from "../lib/middleware.js";
 import {
   revertPrincipleStatement,
   writePrincipleStatementChain,
@@ -119,7 +120,7 @@ export interface PrincipleView {
   supportChanged?: boolean;
   heldSince: string | null;
   conflictsWithId: string | null;
-  citedSignals: Array<{ id: string; statement: string; examples?: Array<{ text: string; createdAt: string }> }>;
+  citedSignals: Array<{ id: string; statement: string; examples?: Array<{ text: string; createdAt: string }>; reviewExamples?: Array<{answerId:string;sessionId:string;preview:string;createdAt:string}> }>;
   createdAt: string;
   disputeId?: string | null;
 }
@@ -200,6 +201,23 @@ export async function loadPrincipleViews(db: WakaDb, profileId: string): Promise
     examplesBySignal.set(example.signalId, bucket);
   }
 
+  const reviewRows=await db.execute<{signalId:string;answerId:string;sessionId:string;preview:string;createdAt:string}>(sql`
+    SELECT source.signal_id AS "signalId",source.answer_id AS "answerId",source.session_id AS "sessionId",source.preview,source.created_at AS "createdAt"
+    FROM (
+      SELECT e.signal_id,a.id AS answer_id,a.session_id,
+        CASE WHEN length(a.answer)>240 THEN left(a.answer,237)||'…' ELSE a.answer END AS preview,a.created_at,
+        row_number() OVER(PARTITION BY e.signal_id ORDER BY a.created_at DESC,a.id) AS position
+      FROM signal_review_evidence e JOIN review_answers a ON a.profile_id=e.profile_id AND a.id=e.answer_id
+      WHERE e.profile_id=${profileId}::uuid AND review_evidence_current(e.profile_id,e.signal_id,e.answer_id)
+        AND EXISTS(SELECT 1 FROM principle_signals p WHERE p.profile_id=e.profile_id AND p.signal_id=e.signal_id)
+    ) source WHERE source.position<=2 ORDER BY source.signal_id,source.position`);
+  const reviewsBySignal=new Map<string,NonNullable<PrincipleView['citedSignals'][number]['reviewExamples']>>();
+  for(const row of reviewRows){
+    const bucket=reviewsBySignal.get(row.signalId)??[];
+    bucket.push({answerId:row.answerId,sessionId:row.sessionId,preview:row.preview,createdAt:new Date(row.createdAt).toISOString()});
+    reviewsBySignal.set(row.signalId,bucket);
+  }
+
   return rows.map((row) => ({
     id: row.id,
     statement: row.statement,
@@ -214,7 +232,7 @@ export async function loadPrincipleViews(db: WakaDb, profileId: string): Promise
     heldSince: row.heldSince?.toISOString() ?? null,
     conflictsWithId: row.conflictsWithId,
     citedSignals: (changedSupport.has(row.id) ? [] : citationsByPrinciple.get(row.id) ?? []).map((signal) => ({
-      ...signal, examples: examplesBySignal.get(signal.id) ?? [],
+      ...signal, examples: examplesBySignal.get(signal.id) ?? [],reviewExamples:reviewsBySignal.get(signal.id)??[],
     })),
     createdAt: row.createdAt.toISOString(),
     disputeId: latest.get(row.id)?.value === "not_true" ? latest.get(row.id)!.id : null,
@@ -341,6 +359,26 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
     const resolved = await resolveRead(c);
     if ("error" in resolved) return resolved.error;
     return c.json({ status: await loadPrincipleStatus(getDatabase(), resolved.profileId) });
+  });
+
+  routes.get('/:principleId/statements',humanSessionsOnly,async c=>{
+    c.header('Cache-Control','private, no-store');
+    const id=z.string().uuid().safeParse(c.req.param('principleId'));
+    if(!id.success)return c.json({error:'Invalid principle'},400);
+    const resolved=await resolveRead(c);if('error' in resolved)return resolved.error;
+    const result=await getDatabase().transaction(async tx=>{
+      const [owned]=await tx.select({statement:principles.statement}).from(principles)
+        .innerJoin(profiles,eq(profiles.id,principles.profileId))
+        .where(and(eq(principles.id,id.data),eq(principles.profileId,resolved.profileId),eq(profiles.accountId,c.get('session').account.id)));
+      if(!owned)return null;
+      const rows=await tx.select({id:principleStatements.id,statement:principleStatements.statement,createdAt:principleStatements.createdAt,supersededAt:principleStatements.supersededAt,supersededById:principleStatements.supersededById})
+        .from(principleStatements).where(and(eq(principleStatements.profileId,resolved.profileId),eq(principleStatements.principleId,id.data)))
+        .orderBy(sql`(${principleStatements.supersededAt} IS NULL) DESC`,desc(principleStatements.supersededAt),desc(principleStatements.createdAt),desc(principleStatements.id)).limit(50);
+      const currentStatementId=rows.find(row=>row.supersededAt===null&&row.statement===owned.statement)?.id??null;
+      return {profileId:resolved.profileId,principleId:id.data,currentStatementId,previousStatementId:currentStatementId?rows.find(row=>row.id!==currentStatementId&&row.supersededById===currentStatementId)?.id??null:null,
+        statements:rows.map(row=>({id:row.id,statement:row.statement,createdAt:row.createdAt.toISOString()}))};
+    },{isolationLevel:'repeatable read',accessMode:'read only'});
+    return result?c.json(result):c.json({error:'Principle not found'},404);
   });
 
   routes.post("/refresh", async (c) => {

@@ -41,6 +41,25 @@ before it gets a name anywhere else.
 | Suppression log surface | `weather.antechamber[]` — refused candidates + anchors | **the antechamber** | the dim place where what was read but not kept still stands | Suppression log view (delta surface) | **today** |
 | Decision attribution | `decision_trace` | **roots of a choice** | which memories this choice came from | Attribution / decision audit | reserved |
 
+## Personal capture vocabulary approved 2026 10 02
+
+The personal experience contract adds the following plain-language concepts.
+These are approved names; rows marked planned do not claim shipped storage or UI.
+
+| Concept | Data or API name | UI | Plain line | Status |
+| --- | --- | --- | --- | --- |
+| Recorded audio attachment | `audio` | Recording | what you recorded | implemented; deployment pending |
+| Machine transcript of recorded audio | `audio_transcription` | Transcript | what was heard in this recording | implemented; deployment pending |
+| A person's correction of the transcript | `transcript_correction` | Edit transcript | correct what was heard without replacing the recording | implemented; deployment pending |
+| One private review of selected inspirations | `review_session` | Review | revisit a few things you kept | selection and dialogue implemented; deployment pending |
+| One source and choice in a review | `review_item` | Review item | choose whether to explore this inspiration in this session | implemented; deployment pending |
+| One authored answer in a review | `review_answer` | Your thought | one answer, with the inspirations it refers to | implemented; deployment pending |
+| A signal supported by a review answer | `signal_review_evidence` | From your review | your words from a review that support this | in implementation |
+| A conversation using the profile's memory | `conversation` | Talk with WAKA | think through a question with your own experiences | planned |
+| Exported rendering of selected principle wording | `principle_artifact` | Share a principle | choose the words that leave WAKA | planned |
+
+See [the capture foundation contract](docs/plans/2026-10-02-capture-foundation-contract.md).
+
 ## Words banned from the UI
 
 lock, locked, provenance, source (as jargon), version, audit, history.

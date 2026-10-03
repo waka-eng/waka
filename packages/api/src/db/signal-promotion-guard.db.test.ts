@@ -74,7 +74,7 @@ describe("signals_require_evidence", () => {
   });
 
   afterAll(async () => {
-    await t?.sql.end();
+    await t?.cleanup();
   });
 
   it("refuses to promote a signal that has not earned it", async () => {

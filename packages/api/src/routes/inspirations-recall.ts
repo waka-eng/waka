@@ -17,6 +17,7 @@ import { attachments, experiences, inspirations, reflections } from "../db/index
 import { getDb } from "../lib/db.js";
 import type { AuthEnv } from "../lib/middleware.js";
 import { validationDetails } from "../lib/validation.js";
+import { effectiveAttachmentStatus, effectiveAttachmentText } from '../lib/attachment-material.js';
 import { attachmentSelection, serializeAttachment } from "./attachments.js";
 import {
   attachmentLabel,
@@ -84,7 +85,9 @@ export function registerRecallRoutes(
    *
    * The archive, newest first, and the search over it.
    *
-   * Search runs in Postgres, against the full-text index on the capture text.
+   * Search runs in Postgres over capture text, owned saved answers and ready
+   * effective attachment material. EXISTS keeps one source per result even
+   * when multiple passages match; a correction replaces the old transcript.
    * Filtering a fetched window in application memory is the same feature only
    * for as long as the archive is small: past the window, recall silently stops
    * finding things that are there — which is indistinguishable, from the
@@ -117,6 +120,15 @@ export function registerRecallRoutes(
       const matches = or(
         sql`to_tsvector('simple', ${inspirations.text}) @@ plainto_tsquery('simple', ${search})`,
         sql`${inspirations.text} ilike ${buildLikePattern(search)} escape '!'`,
+        sql`EXISTS (SELECT 1 FROM ${reflections} WHERE ${reflections.profileId} = ${inspirations.profileId}
+          AND ${reflections.inspirationId} = ${inspirations.id} AND ${reflections.skipped} = false
+          AND ${reflections.answer} ilike ${buildLikePattern(search)} escape '!')`,
+        sql`EXISTS (SELECT 1 FROM ${attachments} WHERE ${attachments.profileId} = ${inspirations.profileId}
+          AND ${attachments.inspirationId} = ${inspirations.id} AND (
+            (${effectiveAttachmentStatus} = 'ready' AND ${effectiveAttachmentText} ilike ${buildLikePattern(search)} escape '!')
+            OR ${attachments.name} ilike ${buildLikePattern(search)} escape '!'
+            OR (${attachments.type} = 'link' AND (${attachments.title} ilike ${buildLikePattern(search)} escape '!'
+              OR ${attachments.url} ilike ${buildLikePattern(search)} escape '!'))))`,
       );
       if (matches) filters.push(matches);
     }

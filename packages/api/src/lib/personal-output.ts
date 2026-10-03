@@ -2,6 +2,7 @@ import { and, inArray, sql } from "drizzle-orm";
 import { principles, signals, topOfMindEntries, topOfMindEntrySignals } from "../db/index.js";
 import { getDb } from "./db.js";
 import { citationBodyCurrent, citationStatementCurrent, evidenceSupportCurrent } from './signal-support-state.js';
+import {reviewEvidenceCurrent} from './review-evidence.js';
 
 type Db = Pick<ReturnType<typeof getDb>, "select">;
 
@@ -10,10 +11,14 @@ type Db = Pick<ReturnType<typeof getDb>, "select">;
 export function personalSignalReadable(profileId: string) {
   return sql`(${signals.profileId} = ${profileId}::uuid AND ${signals.status} <> 'retired'
     AND ${signals.dismissedAt} IS NULL AND ${signals.unsupportedAt} IS NULL
-    AND EXISTS (SELECT 1 FROM signal_evidence pe JOIN inspirations pi
+    AND (EXISTS (SELECT 1 FROM signal_evidence pe JOIN inspirations pi
       ON pi.id = pe.inspiration_id AND pi.profile_id = pe.owner_profile_id
       WHERE pe.signal_id = ${signals.id} AND pe.profile_id = ${profileId}::uuid
         AND pe.owner_profile_id = ${profileId}::uuid)
+      OR EXISTS (SELECT 1 FROM signal_review_evidence re WHERE re.profile_id=${profileId}::uuid AND re.signal_id=${signals.id}
+        AND ${reviewEvidenceCurrent('re')}))
+    AND NOT EXISTS (SELECT 1 FROM signal_review_evidence re WHERE re.signal_id=${signals.id}
+      AND (${reviewEvidenceCurrent('re')}) IS NOT TRUE)
     AND NOT EXISTS (SELECT 1 FROM signal_evidence pe WHERE pe.signal_id = ${signals.id}
       AND (${evidenceSupportCurrent('pe')}) IS NOT TRUE)
     AND NOT EXISTS (SELECT 1 FROM signal_evidence pe WHERE pe.signal_id = ${signals.id}

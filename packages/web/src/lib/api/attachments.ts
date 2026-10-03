@@ -12,16 +12,48 @@
  * `inspirations.ts` imports them from here and not the other way round.
  */
 
-import { ApiError, apiPath, postJson } from "./http";
+import { ApiError, apiPath, getJson, patchJson, postJson } from "./http";
 
 // ---------------------------------------------------------------------------
 // What an attachment is
 // ---------------------------------------------------------------------------
 
 /** Attachment kinds — mirrors the Postgres `attachment_type` enum. */
-export type AttachmentType = "link" | "image" | "file";
+export type AttachmentType = "link" | "image" | "file" | "audio";
 export type AttachmentEnrichmentStatus = "pending" | "ready" | "failed" | "unavailable";
-export type AttachmentEnrichmentKind = "page_body" | "image_description";
+export type AttachmentEnrichmentKind = "page_body" | "image_description" | "audio_transcription";
+
+export interface ApiAttachmentTranscript {
+  attachmentId: string; inspirationId: string; profileId: string; revision: string;
+  status: AttachmentEnrichmentStatus; transcript: string | null; correction: string | null;
+  effectiveText: string | null; correctedAt: string | null; reason: string | null;
+  canEdit: boolean; canRetry: boolean; retryAfter: string | null;
+}
+function checkedTranscript(id: string, row: ApiAttachmentTranscript) {
+  if (!row || row.attachmentId !== id || typeof row.revision !== 'string' || !/^\d+$/.test(row.revision) ||
+    !['pending', 'ready', 'failed', 'unavailable'].includes(row.status) ||
+    ![row.transcript, row.correction, row.effectiveText].every(value => value === null || typeof value === 'string') ||
+    !(row.retryAfter === null || (typeof row.retryAfter === 'string' && Number.isFinite(Date.parse(row.retryAfter)))) ||
+    typeof row.canEdit !== 'boolean' || typeof row.canRetry !== 'boolean') {
+    throw new ApiError({ status: 200, code: 'invalid_response', message: 'Could not verify this transcript' });
+  }
+  return row;
+}
+export async function fetchAttachmentTranscript(id: string, signal?: AbortSignal) {
+  return checkedTranscript(id, await getJson<ApiAttachmentTranscript>(apiPath(`/attachments/${encodeURIComponent(id)}/transcript`), 'Could not load the transcript', signal));
+}
+export async function correctAttachmentTranscript(id: string, input: { revision: string; correction: string | null }, signal?: AbortSignal) {
+  return checkedTranscript(id, await patchJson<ApiAttachmentTranscript>(apiPath(`/attachments/${encodeURIComponent(id)}/transcript`), input, 'Could not save the transcript', signal));
+}
+export async function retryAttachmentTranscript(id: string, revision: string, signal?: AbortSignal) {
+  return checkedTranscript(id, await postJson<ApiAttachmentTranscript>(apiPath(`/attachments/${encodeURIComponent(id)}/transcript/retry`), { revision }, 'Could not retry transcription', signal));
+}
+
+export async function fetchAttachmentUrl(id: string, signal?: AbortSignal): Promise<string> {
+  const body = await getJson<{ attachmentId: string; url: string }>(apiPath(`/attachments/${encodeURIComponent(id)}/url`), 'Could not open this attachment', signal);
+  if (body.attachmentId !== id || !/^https?:\/\//i.test(body.url)) throw new ApiError({ status: 200, code: 'invalid_response', message: 'Could not open this attachment' });
+  return body.url;
+}
 
 /**
  * Capture-time context the server derived from an attachment: a bounded fetch
@@ -70,7 +102,37 @@ export interface ApiAttachmentSummary {
   id: string;
   type: AttachmentType;
   label: string;
+  /** Original link remains usable if preview metadata is temporarily unavailable. */
+  url?: string;
 }
+
+export interface ApiAttachmentDetails {
+  attachment: ApiAttachment;
+  previewImageAvailable: boolean;
+  analysis: { status: AttachmentEnrichmentStatus; canRetry: boolean; retryAfter: string | null };
+}
+function checkedAttachmentDetails(id: string, value: ApiAttachmentDetails) {
+  if (!value || typeof value.previewImageAvailable !== 'boolean' || value.attachment?.id !== id || !['link', 'image'].includes(value.attachment.type) ||
+    !['pending', 'ready', 'failed', 'unavailable'].includes(value.analysis?.status) || typeof value.analysis.canRetry !== 'boolean' ||
+    !(value.analysis.retryAfter === null || (typeof value.analysis.retryAfter === 'string' && Number.isFinite(Date.parse(value.analysis.retryAfter)))) ||
+    typeof value.attachment.url !== 'string' || !value.attachment.enrichment ||
+    ![value.attachment.enrichment.text, value.attachment.enrichment.errorReason].every(text => text === null || typeof text === 'string') ||
+    (value.attachment.enrichment.link !== null && (!value.attachment.enrichment.link ||
+      !['finalUrl', 'hostname', 'title', 'description', 'siteName', 'previewImageUrl'].every(key => {
+        const field = value.attachment.enrichment.link![key as keyof NonNullable<ApiAttachmentEnrichment['link']>];
+        return field === null || typeof field === 'string';
+      })))) {
+    throw new ApiError({ status: 200, code: 'invalid_response', message: 'Could not verify this preview' });
+  }
+  return value;
+}
+export async function fetchAttachmentDetails(id: string, signal?: AbortSignal) {
+  return checkedAttachmentDetails(id, await getJson<ApiAttachmentDetails>(apiPath(`/attachments/${encodeURIComponent(id)}/details`), 'Could not load the preview', signal));
+}
+export async function retryAttachmentAnalysis(id: string, signal?: AbortSignal) {
+  return checkedAttachmentDetails(id, await postJson<ApiAttachmentDetails>(apiPath(`/attachments/${encodeURIComponent(id)}/analysis/retry`), {}, 'Could not retry the preview', signal));
+}
+export function attachmentPreviewImageUrl(id: string) { return apiPath(`/attachments/${encodeURIComponent(id)}/preview-image`); }
 
 // ---------------------------------------------------------------------------
 // Uploading one
@@ -84,6 +146,7 @@ export interface ApiAttachmentSummary {
  * causes S3 to 403 the upload.
  */
 export interface PresignResponse {
+  profileId?: string;
   uploadUrl: string;
   key: string;
   expiresAt: string;
@@ -108,12 +171,17 @@ export interface PresignRequest {
  */
 export async function presignAttachment(
   input: PresignRequest,
+  signal?: AbortSignal,
+  options: { profile?: string } = {},
 ): Promise<PresignResponse> {
-  return postJson<PresignResponse>(
-    apiPath("/attachments/presign"),
+  const result = await postJson<PresignResponse>(
+    apiPath(`/attachments/presign${options.profile ? `?profile=${encodeURIComponent(options.profile)}` : ''}`),
     input,
     "Failed to mint upload URL",
+    signal,
   );
+  if (options.profile && result.profileId !== options.profile) throw new ApiError({ status: 200, code: 'upload_scope_unverified', message: 'Could not verify where this upload belongs' });
+  return result;
 }
 
 /**
@@ -128,6 +196,7 @@ export async function uploadToPresignedUrl(
   url: string,
   file: File | Blob,
   headers: Record<string, string>,
+  signal?: AbortSignal,
 ): Promise<void> {
   let res: Response;
   try {
@@ -135,6 +204,7 @@ export async function uploadToPresignedUrl(
       method: "PUT",
       headers,
       body: file,
+      ...(signal ? { signal } : {}),
     });
   } catch {
     throw new ApiError({

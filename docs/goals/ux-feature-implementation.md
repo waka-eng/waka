@@ -1394,3 +1394,90 @@ failure/account-switch/cross-device coverage, deployed task walks, broader
 navigation/search/attachments/performance, evaluated generation, the room
 participation/next-round contract, launch requirements and reviewed historical
 repair still require work after an explicit resume. Do not mark this goal complete.
+
+## F0 — focused navigation/recall authorization — 2026-10-01
+
+The owner approved the next focused batch: navigation and visible search.
+This is a direct task, not a request to restart every remaining delivery slice.
+The wider backlog remains paused. Work begins from clean dev `9c61084` on
+`codex/navigation-recall`; PR #333 and its development deployment are complete.
+
+Route contract before implementation:
+
+- Stable wall IDs determine identity; readable labels are optional. Existing
+  name-only wall links still resolve. Renaming does not invalidate new links.
+- Meaningful wall, section, inspiration, reflection and parked-date navigation
+  enters browser history. Back/Forward applies the latest requested snapshot
+  without remounting the world or restoring a stale request over newer intent.
+- URLs contain identifiers and view metadata, never copied inspiration words,
+  answers or search phrases. Search phrases may remain in account/profile-bound
+  history state but are not included in copied links.
+- Detail restoration is read-only and honors existing profile/membership/public
+  boundaries. An unavailable link is not silently shown as a different memory.
+- A visible Find inspiration surface searches the owned archive, distinguishes
+  loading/no-match/failure, supports pagination and opens the existing card even
+  for a record outside the initially loaded field. Room search clearly refers
+  to the viewer's own archive, not another member's private stack.
+
+Gate: on small and capped archives, open an older result and its reflection,
+copy/reload its link, visit another room, use Back/Forward and restore the view;
+repeat after rename and with failed search/unavailable detail. Include stale
+response/account changes and mobile keyboard/dialog checks. No attachment,
+ranking, model-threshold or broader performance redesign belongs in this batch.
+
+### F1 — focused implementation and local gate — 2026-10-02
+
+The batch adds router-backed stable-ID wall links, section/date/member and
+inspiration/reflection metadata, and restores POP navigation in the existing
+world. A readable label or URL normalization replaces the current entry;
+travelling to another place pushes it. Closing an overlay in the same place
+does not create a Back-button trap. Restoration aborts superseded detail reads.
+
+Find is visible on desktop and mobile. Its paginated results show a preview,
+date and reflected cue and can open records outside the field's 2,000-item
+window. Room Find explicitly reads **your** archive. Search phrases remain
+in profile-bound history state, not copied URLs. Failed reads have retry paths,
+not false no-match results. Inspiration and individual saved-answer links
+reopen the existing card and reveal the referenced earlier answer without
+requesting a new question or saving anything.
+
+The new single-record group GET uses the same public/current-human-author
+predicate as the field, plus current reader membership in the same SQL query.
+Its explicit projection never contains answers, attachments or signal evidence.
+The source-level gate now counts the private `signalEvidence.inspirationId`
+column specifically, rather than banning an identically named lookup input;
+the evidence-column join and projection bans remain. Four real-SQL route cases
+cover the field ceiling, private/outsider/departed sources and readers, stale
+agent membership, malformed IDs and the public-only DTO.
+
+Verification: web **467/467** across 68 suites; API unit **683 passed / 3
+paid-live benches skipped**; targeted disposable-Postgres routes **4/4**.
+API/web typechecks and production web build pass. The real-auth/Hono/SQL
+loopback preview contains 2,002 owned records: the browser found and opened
+the excluded oldest record, restored its reflection with Back/Forward, copied
+and reloaded a specific earlier answer, and opened a peer's public room card.
+At 390×844, results paginated from 50 to 100 in the scrollable dialog; Escape
+returned focus to Find. New controls measured at least 44px high / 14px text.
+The real room menu also took the viewer from their ground to the room and
+browser Back restored their ground, rather than restarting headquarters.
+Desktop and mobile screenshots were inspected. Provider networking was disabled;
+no actual dev/production account data or deployment was changed.
+
+This is the navigation/search batch, not completion of the wider goal. Deployed
+verification after review and merge remains a release gate. Agent-specific
+curation write clients, broader account-switch/cross-device journeys, attachments,
+startup pagination/performance, evaluated generation, and the room next-round
+contract remain separate work. The older edge-travel affordance still refuses
+field travel despite remaining accessible; the room menu works there. Record
+that interaction mismatch for the next usability/bug batch rather than changing
+the canvas travel law here. Keep the broader backlog paused.
+
+## Product planning update 2026 10 02
+
+The owner prioritized personal capture, review, Principles sharing artifacts
+and avatar conversation, and added recording as an inspiration input. Further
+group development is deferred. The concrete proposed implementation tasks and
+acceptance criteria are in [WAKA personal experience tasks](../plans/2026-10-02-personal-experience-tasks.md).
+This planning request does not mark those tasks implemented or resume all older
+backlog items. Preserve the completion evidence above; use the new plan to choose
+the next explicitly started implementation batch.

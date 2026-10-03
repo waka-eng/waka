@@ -35,12 +35,12 @@
  * either break that capture or let a key be replayed across profiles.
  */
 
-import { HeadObjectCommand, PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 import { attachmentsRegion, makeAttachmentsS3Client } from "../lib/s3-client.js";
 import { eq } from "drizzle-orm";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { z } from "zod";
 
 import {
@@ -53,8 +53,15 @@ import {
 import { getDb } from "../lib/db.js";
 import { type AuthEnv, profileAccessError, requireAuth, asAccountProfile } from "../lib/middleware.js";
 import { enqueueEnrichAttachment, wakeCommittedBackgroundJobs } from "../lib/queue.js";
+import { attachmentKeyPrefix, attachmentObjectUrl, getAttachmentsBucket } from '../lib/attachment-storage.js';
+import { ALLOWED_ATTACHMENT_CONTENT_TYPE, MAX_ATTACHMENT_UPLOAD_BYTES } from '../lib/inspiration-attachment-input.js';
 import { requestSignalDerivation } from "../lib/inspiration-derivation-requests.js";
 import { validationDetails } from "../lib/validation.js";
+import { profileQuerySchema } from './inspirations-validation.js';
+import { resolveTargetProfile } from './inspirations-tenancy.js';
+import { createAttachmentTranscriptRoutes } from './attachment-transcripts.js';
+import { attachmentAnalysisState, recoverAttachmentAnalysis } from '../lib/attachment-analysis-retry.js';
+import { fetchLinkPreviewImage } from '../lib/signal-enrichment.js';
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -66,7 +73,6 @@ import { validationDetails } from "../lib/validation.js";
  * under typical browser and CDN limits. The signature pins the exact declared
  * length, so an attempt to send more fails at S3.
  */
-const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 /**
  * Allowed MIME type prefixes: images for the "image" attachment kind, and the
@@ -75,8 +81,6 @@ const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
  * The risk being managed is "a member pays storage for a junk file", not bucket
  * compromise: the bucket is private and served only through presigned GETs.
  */
-const ALLOWED_CONTENT_TYPE_RE =
-  /^(image\/[a-z0-9.+-]+|application\/(pdf|zip|json|octet-stream)|text\/[a-z0-9.+-]+)$/i;
 
 /**
  * Presign request.
@@ -96,12 +100,12 @@ const presignRequestSchema = z.object({
     .trim()
     .min(1, "contentType is required")
     .max(255, "contentType is too long")
-    .refine((v) => ALLOWED_CONTENT_TYPE_RE.test(v), "contentType is not an allowed MIME type"),
+    .refine((v) => ALLOWED_ATTACHMENT_CONTENT_TYPE.test(v), "contentType is not an allowed MIME type"),
   size: z
     .number()
     .int("size must be an integer number of bytes")
     .min(1, "size must be > 0")
-    .max(MAX_UPLOAD_BYTES, `size exceeds the ${MAX_UPLOAD_BYTES}-byte cap`),
+    .max(MAX_ATTACHMENT_UPLOAD_BYTES, `size exceeds the ${MAX_ATTACHMENT_UPLOAD_BYTES}-byte cap`),
 }).strict();
 
 export type PresignRequest = z.infer<typeof presignRequestSchema>;
@@ -156,7 +160,7 @@ const finalizeRemoteImageSchema = z.object({
 
 const finalizeS3Schema = z.object({
   ...baseFinalizeFields,
-  type: z.enum(["image", "file"]),
+  type: z.enum(["image", "file", "audio"]),
   key: z.string().trim().min(1, "key is required").max(1024, "key is too long"),
   contentType: z
     .string()
@@ -168,7 +172,7 @@ const finalizeS3Schema = z.object({
     .number()
     .int("size must be an integer number of bytes")
     .min(0, "size must be >= 0")
-    .max(MAX_UPLOAD_BYTES, `size exceeds the ${MAX_UPLOAD_BYTES}-byte cap`)
+    .max(MAX_ATTACHMENT_UPLOAD_BYTES, `size exceeds the ${MAX_ATTACHMENT_UPLOAD_BYTES}-byte cap`)
     .optional(),
 }).strict();
 
@@ -202,24 +206,6 @@ export type FinalizeAttachmentRequest = z.infer<typeof finalizeRequestSchema>;
  * `sst` is deliberately not imported at module scope: the tests run outside
  * Lambda and would blow up on the Resource proxy.
  */
-function getBucketName(): string {
-  const fromEnv = process.env.ATTACHMENTS_BUCKET;
-  if (fromEnv && fromEnv.length > 0) return fromEnv;
-
-  const sstLink = process.env.SST_RESOURCE_Attachments;
-  if (sstLink) {
-    try {
-      const parsed = JSON.parse(sstLink) as { name?: string };
-      if (parsed?.name) return parsed.name;
-    } catch {
-      // fall through to error
-    }
-  }
-
-  throw new Error(
-    "Attachments bucket name is not configured (ATTACHMENTS_BUCKET / SST_RESOURCE_Attachments).",
-  );
-}
 
 /**
  * Resolve the region.
@@ -259,9 +245,6 @@ function safeExtension(filename: string): string {
 }
 
 /** Every uploaded object lives under the uploading profile, and only there. */
-function keyPrefixForProfile(profileId: string): string {
-  return `profiles/${profileId}/attachments/`;
-}
 
 /**
  * Build a server-controlled key. Two profiles can never produce the same key
@@ -281,7 +264,7 @@ function keyPrefixForProfile(profileId: string): string {
 function buildKey(profileId: string, filename: string): string {
   const ts = Date.now();
   const rand = Math.random().toString(36).slice(2, 10);
-  return `${keyPrefixForProfile(profileId)}${ts}-${rand}${safeExtension(filename)}`;
+  return `${attachmentKeyPrefix(profileId)}${ts}-${rand}${safeExtension(filename)}`;
 }
 
 /**
@@ -290,13 +273,6 @@ function buildKey(profileId: string, filename: string): string {
  * (the bucket is private), but storing the canonical form keeps the column
  * non-empty and portable across signing schemes.
  */
-function canonicalS3Url(bucket: string, region: string, key: string): string {
-  const encoded = key
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
-  return `https://${bucket}.s3.${region}.amazonaws.com/${encoded}`;
-}
 
 /**
  * HEAD the object to verify the upload actually landed before writing a row
@@ -425,12 +401,12 @@ export const attachmentSelection = {
 // ---------------------------------------------------------------------------
 
 /**
- * Only a link or an image carries material a machine can read. A file records
+ * Links, images and audio carry material a machine can read. A file records
  * the honest verdict immediately rather than occupying a queue slot to reach
  * the same conclusion.
  */
 function initialEnrichmentStatus(type: Attachment["type"]): AttachmentEnrichmentStatus {
-  return type === "file" ? "unavailable" : "pending";
+  return type === "link" || type === "image" || type === 'audio' ? "pending" : "unavailable";
 }
 
 // ---------------------------------------------------------------------------
@@ -446,6 +422,7 @@ const PRESIGN_TTL_SECONDS = 5 * 60;
 export interface AttachmentRouteDependencies {
   getDatabase?: typeof getDb;
   authMiddleware?: typeof requireAuth;
+  previewImage?: typeof fetchLinkPreviewImage;
 }
 
 /**
@@ -463,6 +440,82 @@ export function createAttachmentRoutes(
 // Mounted at the router level so an unauthenticated handler cannot be shipped
 // into this namespace by accident.
 attachmentsRoutes.use("*", deps.authMiddleware ?? requireAuth);
+attachmentsRoutes.route('/', createAttachmentTranscriptRoutes(getDatabase));
+
+async function previewAccess(c: Context<AuthEnv>, write = false) {
+  c.header('Cache-Control', 'private, no-store');
+  const id = z.string().uuid().safeParse(c.req.param('attachmentId'));
+  if (!id.success) return c.json({ error: 'Invalid attachment' }, 400);
+  const db = getDatabase(), session = c.get('session');
+  const [found] = await db.select({ row: attachments, accountId: profiles.accountId, type: profiles.type })
+    .from(attachments).innerJoin(profiles, eq(profiles.id, attachments.profileId)).where(eq(attachments.id, id.data)).limit(1);
+  if (!found || found.accountId !== session.profile.accountId || !['link', 'image'].includes(found.row.type)) return c.json({ error: 'Attachment not found' }, 404);
+  const target = asAccountProfile({ id: found.row.profileId, accountId: found.accountId, type: found.type });
+  if (!target) return c.json({ error: 'Attachment not found' }, 404);
+  const denied = await profileAccessError(db, session, target, write ? 'write' : 'read');
+  if (denied) return c.json(denied, 403);
+  return { row: found.row, canEdit: !await profileAccessError(db, session, target, 'write') };
+}
+function previewDetails(row: Attachment) {
+  const attachment = serializeAttachment(row);
+  const previewImageAvailable = row.type === 'link' && Boolean(row.previewImageUrl);
+  // Detail thumbnails are fetched through the owned route. Never hand an
+  // external tracking URL to a renderer or to the field's memory projection.
+  if (attachment.enrichment.link) attachment.enrichment.link.previewImageUrl = null;
+  return { attachment, previewImageAvailable };
+}
+attachmentsRoutes.get('/:attachmentId/details', async c => {
+  const allowed = await previewAccess(c); if (allowed instanceof Response) return allowed;
+  return c.json({ ...previewDetails(allowed.row),
+    analysis: await attachmentAnalysisState(getDatabase(), allowed.row, allowed.canEdit) });
+});
+attachmentsRoutes.get('/:attachmentId/preview-image', async c => {
+  const allowed = await previewAccess(c); if (allowed instanceof Response) return allowed;
+  if (allowed.row.type !== 'link' || !allowed.row.previewImageUrl) return c.json({ error: 'Preview image unavailable' }, 404);
+  try {
+    const image = await (deps.previewImage ?? fetchLinkPreviewImage)(allowed.row.previewImageUrl);
+    c.header('Content-Type', image.contentType); c.header('X-Content-Type-Options', 'nosniff');
+    c.header('Content-Security-Policy', "default-src 'none'; sandbox");
+    return c.body(new Uint8Array(image.bytes).buffer);
+  } catch { return c.json({ error: 'Preview image unavailable' }, 404); }
+});
+attachmentsRoutes.post('/:attachmentId/analysis/retry', async c => {
+  const allowed = await previewAccess(c, true); if (allowed instanceof Response) return allowed;
+  if (!z.object({}).strict().safeParse(await c.req.json().catch(() => null)).success) return c.json({ error: 'Invalid retry request' }, 400);
+  const saved = await getDatabase().transaction(tx => recoverAttachmentAnalysis(tx, {
+    profileId: allowed.row.profileId, attachmentId: allowed.row.id, expectedType: allowed.row.type,
+  }));
+  if (!saved) return c.json({ error: 'Attachment not found' }, 404);
+  if (saved === 'rate_limited') return c.json({ error: 'This attachment has reached its retry limit. Try again later.' }, 429);
+  if (saved === 'conflict') return c.json({ error: 'This attachment changed. Reload it first.' }, 409);
+  await wakeCommittedBackgroundJobs();
+  return c.json({ ...previewDetails(saved), analysis: await attachmentAnalysisState(getDatabase(), saved, true) }, 202);
+});
+
+// Raw uploads remain private. Resolve one current owned attachment to a short
+// read URL; a guessed id or public room source never grants raw-file access.
+attachmentsRoutes.get('/:attachmentId/url', async c => {
+  c.header('Cache-Control', 'private, no-store');
+  const id = z.string().uuid().safeParse(c.req.param('attachmentId'));
+  if (!id.success) return c.json({ error: 'Invalid attachment' }, 400);
+  const db = getDatabase(), session = c.get('session');
+  const [row] = await db.select({ id: attachments.id, profileId: attachments.profileId, key: attachments.s3Key,
+    url: attachments.url, accountId: profiles.accountId, type: profiles.type }).from(attachments)
+    .innerJoin(profiles, eq(profiles.id, attachments.profileId)).where(eq(attachments.id, id.data)).limit(1);
+  if (!row || row.accountId !== session.profile.accountId) return c.json({ error: 'Attachment not found' }, 404);
+  const target = asAccountProfile({ id: row.profileId, accountId: row.accountId, type: row.type });
+  if (!target) return c.json({ error: 'Attachment not found' }, 404);
+  const denied = await profileAccessError(db, session, target, 'read');
+  if (denied) return c.json(denied, 403);
+  if (!row.key) {
+    if (!/^https?:\/\//i.test(row.url)) return c.json({ error: 'Attachment unavailable' }, 404);
+    return c.json({ attachmentId: row.id, url: row.url, expiresAt: null });
+  }
+  try {
+    const url = await getSignedUrl(getS3(), new GetObjectCommand({ Bucket: getAttachmentsBucket(), Key: row.key }), { expiresIn: PRESIGN_TTL_SECONDS });
+    return c.json({ attachmentId: row.id, url, expiresAt: new Date(Date.now() + PRESIGN_TTL_SECONDS * 1000).toISOString() });
+  } catch { return c.json({ error: 'Could not open this attachment. Try again.' }, 503); }
+});
 
 /**
  * POST /api/attachments — finalize an upload, or record a link.
@@ -569,14 +622,14 @@ attachmentsRoutes.post("/", async (c) => {
   } else {
     const { key, type, name, contentType, size } = parsed.data;
 
-    const expectedPrefix = keyPrefixForProfile(session.profile.id);
+    const expectedPrefix = attachmentKeyPrefix(session.profile.id);
     if (!key.startsWith(expectedPrefix)) {
       return c.json({ error: "key does not belong to the authenticated profile" }, 403);
     }
 
     let bucket: string;
     try {
-      bucket = getBucketName();
+      bucket = getAttachmentsBucket();
     } catch (err) {
       console.error("[attachments] bucket misconfigured:", err);
       return c.json({ error: "Attachments bucket is not configured" }, 500);
@@ -594,7 +647,7 @@ attachmentsRoutes.post("/", async (c) => {
       profileId: parent.profileId,
       inspirationId: parent.id,
       type,
-      url: canonicalS3Url(bucket, getRegion(), key),
+      url: attachmentObjectUrl(bucket, getRegion(), key),
       name: name ?? null,
       s3Key: key,
       contentType: contentType ?? null,
@@ -645,14 +698,22 @@ attachmentsRoutes.post("/presign", async (c) => {
       400,
     );
   }
+  const query = profileQuerySchema.safeParse(c.req.query());
+  if (!query.success) return c.json({ error: 'Invalid upload destination' }, 400);
+  const session = c.get('session');
+  let targetProfileId = session.profile.id;
+  if (query.data.profile) {
+    const target = await resolveTargetProfile(getDatabase(), session, query.data.profile, 'capture');
+    if (!target.ok) return c.json(target.body, target.status);
+    targetProfileId = target.profileId;
+  }
   const { filename, contentType, size } = parsed.data;
 
-  const session = c.get("session");
   const key = buildKey(session.profile.id, filename);
 
   let bucket: string;
   try {
-    bucket = getBucketName();
+    bucket = getAttachmentsBucket();
   } catch (err) {
     console.error("[attachments] bucket misconfigured:", err);
     return c.json({ error: "Attachments bucket is not configured" }, 500);
@@ -689,6 +750,7 @@ attachmentsRoutes.post("/presign", async (c) => {
   return c.json(
     {
       uploadUrl,
+      profileId: targetProfileId,
       key,
       expiresAt,
       // Headers the browser must forward verbatim with its PUT. Stating the

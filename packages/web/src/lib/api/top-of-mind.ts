@@ -117,10 +117,11 @@ export async function fetchTopOfMind(
 }
 
 /** GET /top-of-mind/versions — newest first. */
-export async function fetchTopOfMindVersions(): Promise<ApiTopOfMindVersion[]> {
+export async function fetchTopOfMindVersions(options: ProfileScoped = {}, signal?: AbortSignal): Promise<ApiTopOfMindVersion[]> {
+  const query=options.profile?`?profile=${encodeURIComponent(options.profile)}`:'';
   const body = await getJson<{ versions: ApiTopOfMindVersion[] }>(
-    apiPath("/top-of-mind/versions"),
-    "Failed to load earlier versions",
+    apiPath(`/top-of-mind/versions${query}`),
+    "Failed to load earlier versions",signal,
   );
   return Array.isArray(body.versions) ? body.versions : [];
 }

@@ -43,7 +43,7 @@ import { profiles } from "./schema-profiles";
  * consulted through `decision_principle_citations`, whose composite FKs
  * make an invented citation physically unstorable.
  */
-export const inspirationKindValues = ["note", "link", "image", "mixed", "decision"] as const;
+export const inspirationKindValues = ["note", "link", "image", "mixed", "decision", "audio"] as const;
 export type InspirationKind = (typeof inspirationKindValues)[number];
 export const inspirationKindEnum = pgEnum("inspiration_kind", inspirationKindValues);
 

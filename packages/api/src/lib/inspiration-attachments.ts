@@ -1,0 +1,49 @@
+import { HeadObjectCommand, type HeadObjectCommandOutput } from '@aws-sdk/client-s3';
+import type { attachments } from '../db/index.js';
+import { attachmentKeyPrefix, attachmentObjectUrl, getAttachmentsBucket } from './attachment-storage.js';
+import { attachmentsRegion, makeAttachmentsS3Client } from './s3-client.js';
+import type { InspirationAttachmentInput } from './inspiration-attachment-input.js';
+
+export type AttachmentHead = (bucket: string, key: string) => Promise<Pick<HeadObjectCommandOutput, 'ContentLength' | 'ContentType'>>;
+export class InspirationAttachmentError extends Error {
+  constructor(readonly status: 400 | 403 | 404 | 503, readonly code: string, message: string) { super(message); }
+}
+const headUploadedAttachment: AttachmentHead = async (bucket, key) => {
+  const client = makeAttachmentsS3Client();
+  try { return await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }), { abortSignal: AbortSignal.timeout(8000) }); }
+  finally { client.destroy(); }
+};
+
+/** Run only for a new save intent, inside its transaction. A committed replay
+ * reads the saved rows and does not need S3 to be available again. */
+export async function prepareInspirationAttachments(inputs: InspirationAttachmentInput[], owner: {
+  uploaderProfileId: string; profileId: string; inspirationId: string;
+}, head: AttachmentHead = headUploadedAttachment): Promise<Array<typeof attachments.$inferInsert>> {
+  return Promise.all(inputs.map(async (input, index) => {
+    const common = { profileId: owner.profileId, inspirationId: owner.inspirationId, name: input.name ?? null,
+      createdAt: new Date(Date.now() + index) };
+    if (input.type === 'link') return { ...common, type: 'link' as const, url: input.url, enrichmentStatus: 'pending' as const };
+    const prefix = attachmentKeyPrefix(owner.uploaderProfileId);
+    if (!input.key.startsWith(prefix) || !/^[a-z0-9._-]+$/i.test(input.key.slice(prefix.length))) {
+      throw new InspirationAttachmentError(403, 'attachment_owner_mismatch', 'This upload does not belong to this profile.');
+    }
+    let bucket: string;
+    try { bucket = getAttachmentsBucket(); }
+    catch { throw new InspirationAttachmentError(503, 'attachment_unavailable', 'Uploads are unavailable. Your draft can be retried.'); }
+    let object: Awaited<ReturnType<AttachmentHead>>;
+    try { object = await head(bucket, input.key); }
+    catch (error) {
+      const value = error as { name?: string; $metadata?: { httpStatusCode?: number } };
+      if (value.$metadata?.httpStatusCode === 404 || value.name === 'NotFound' || value.name === 'NoSuchKey') {
+        throw new InspirationAttachmentError(404, 'attachment_upload_missing', 'The upload was not found. Upload it again.');
+      }
+      throw new InspirationAttachmentError(503, 'attachment_unverified', 'Could not confirm the upload. Try again.');
+    }
+    if (object.ContentLength !== input.size || object.ContentType?.trim().toLowerCase() !== input.contentType.toLowerCase()) {
+      throw new InspirationAttachmentError(400, 'attachment_upload_mismatch', 'The uploaded file does not match this draft.');
+    }
+    return { ...common, type: input.type, s3Key: input.key, contentType: input.contentType, size: input.size,
+      url: attachmentObjectUrl(bucket, attachmentsRegion(), input.key),
+      enrichmentStatus: 'pending' as const };
+  }));
+}

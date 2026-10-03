@@ -1,0 +1,2 @@
+ALTER TABLE "attachments" ADD COLUMN "transcript_retry_count" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "attachments" ADD COLUMN "transcript_retry_window_at" timestamp with time zone;

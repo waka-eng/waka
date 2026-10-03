@@ -31,7 +31,7 @@ import type { SupportedLocale } from "./locales.js";
 
 /** Machine-derived context about something the human saved, not typed. */
 export interface AttachmentEnrichmentContext {
-  kind: "page_body" | "image_description";
+  kind: "page_body" | "image_description" | "audio_transcription";
   /** For a link, its hostname; for an image, its file name when known. */
   label: string | null;
   text: string;
@@ -386,15 +386,38 @@ export interface ReflectionQuestionInput {
   preferredLocale: SupportedLocale;
   inspirationText: string;
   reflections: Array<{ question: string; answer: string }>;
+  attachments?: Array<{ type: 'link' | 'image' | 'audio' | 'file'; status: string; kind: string | null; text: string | null }>;
 }
 
 export interface ReflectionQuestionResult {
   question: string;
 }
 
+export interface ReviewQuestionInput {
+  preferredLocale:SupportedLocale;
+  contextChanged?:boolean;
+  sources:Array<{text:string;reflections:Array<{question:string;answer:string}>;
+    attachments:NonNullable<ReflectionQuestionInput['attachments']>}>;
+  history:Array<{question:string;connection?:string|null;answer:string}>;
+}
+export interface ReviewQuestionResult {connection:string|null;question:string;sourceNumbers:number[]}
+export interface ReviewAnswerDerivationInput {
+  preferredLocale:SupportedLocale;
+  answer:string;question:string|null;contextChanged:boolean;
+  sources:ReviewQuestionInput['sources'];
+  claims:Array<{signalId:string;statement:string}>;
+  discover:boolean;
+}
+export interface ReviewAnswerDerivationResult {
+  assessments:Array<{signalId:string;verdict:'supported'|'unsupported'|'unresolved';quote:string|null}>;
+  statements:Array<{statement:string;quote:string}>;
+}
+
 export interface ModelProvider {
   readonly name: string;
   askReflectionQuestion(input: ReflectionQuestionInput): Promise<ReflectionQuestionResult>;
+  askReviewQuestion(input:ReviewQuestionInput):Promise<ReviewQuestionResult>;
+  deriveReviewAnswer(input:ReviewAnswerDerivationInput):Promise<ReviewAnswerDerivationResult>;
   extractSignalCandidates(
     input: SignalCandidateExtractionInput,
   ): Promise<SignalCandidateExtractionResult>;

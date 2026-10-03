@@ -62,11 +62,16 @@ export async function loadSignalSupportWorkState(db: Pick<ReturnType<typeof getD
   const pendingIds = new Set(sources.map((source) => source.inspirationId));
   const relevant = jobs.filter((job) => pendingIds.has(job.inspirationId) ||
     ((job.type === 'review_signal_support' || job.type === 'assess_signal_support') && (job.status === 'pending' || job.status === 'running')));
-  const activeJobs = relevant.filter((job) => job.status === 'pending' || job.status === 'running');
+  const reviewJobs=await db.execute<{status:string;runAfter:Date|string}>(sql`SELECT DISTINCT j.status::text,j.run_after AS "runAfter"
+    FROM background_jobs j JOIN review_answers a ON a.id::text=j.payload->>'answerId' AND a.profile_id=j.profile_id
+    WHERE j.profile_id=${profileId}::uuid AND j.type::text='derive_review_answer'
+      AND EXISTS(SELECT 1 FROM signal_review_evidence e WHERE e.profile_id=a.profile_id AND e.answer_id=a.id
+        AND review_evidence_current(e.profile_id,e.signal_id,e.answer_id) IS NOT TRUE)`);
+  const activeJobs = [...relevant,...reviewJobs].filter((job) => job.status === 'pending' || job.status === 'running');
   const nextRun = activeJobs.length ? Math.min(...activeJobs.map((job) => job.status === 'running' ? Date.now() : new Date(job.runAfter).getTime())) : null;
   return { sources, active: activeJobs.length > 0, running: activeJobs.some((job) => job.status === 'running'), nextRun,
-    failed: relevant.some((job) => job.status === 'failed'),
-    pending: sources.length > 0 || relevant.some((job) => job.status === 'pending' || job.status === 'running') };
+    failed: [...relevant,...reviewJobs].some((job) => job.status === 'failed'),
+    pending: sources.length > 0 || activeJobs.length > 0 };
 }
 
 export async function assertSignalSupportSettled(db: Pick<ReturnType<typeof getDb>, 'execute'>, profileId: string, now: Date) {

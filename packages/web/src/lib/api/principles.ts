@@ -13,7 +13,8 @@
  * is why `pages/Surface.tsx` needed no edit.
  */
 
-import { apiPath, getJson, patchJson, postJson, requestVoid } from "./http";
+import { ApiError,apiPath, getJson, patchJson, postJson, requestVoid, type ProfileScoped } from "./http";
+import type {ApiSignalReviewEvidence} from './signals';
 
 export type ApiPrincipleState = "held" | "aspirational" | "contested";
 export type ApiPrincipleKind = "value" | "maxim" | "stance";
@@ -31,7 +32,7 @@ export interface ApiPrinciple {
   supportChanged?: boolean;
   heldSince: string | null;
   conflictsWithId: string | null;
-  citedSignals: Array<{ id: string; statement: string; examples?: Array<{ text: string; createdAt: string }> }>;
+  citedSignals: Array<{ id: string; statement: string; examples?: Array<{ text: string; createdAt: string }>; reviewExamples?: ApiSignalReviewEvidence[] }>;
   createdAt: string;
   disputeId?: string | null;
 }
@@ -43,6 +44,19 @@ export interface ApiPrincipleStatus {
   eligible: boolean;
   signalCount: number;
   topOfMindCount: number;
+}
+export interface ApiPrincipleStatements {
+  profileId:string;principleId:string;currentStatementId:string|null;
+  previousStatementId?:string|null;
+  statements:Array<{id:string;statement:string;createdAt:string}>;
+}
+export async function fetchPrincipleStatements(id:string,profileId:string,signal?:AbortSignal):Promise<ApiPrincipleStatements>{
+  const row=await getJson<ApiPrincipleStatements>(apiPath(`/principles/${encodeURIComponent(id)}/statements?profile=${encodeURIComponent(profileId)}`),'Earlier wording could not be loaded',signal);
+  if(!row||row.profileId!==profileId||row.principleId!==id||!Array.isArray(row.statements)||row.statements.length>50||
+    row.statements.some(item=>typeof item.id!=='string'||typeof item.statement!=='string'||!Number.isFinite(Date.parse(item.createdAt)))||
+    (row.currentStatementId!==null&&!row.statements.some(item=>item.id===row.currentStatementId))||
+    (row.previousStatementId!=null&&!row.statements.some(item=>item.id===row.previousStatementId&&item.id!==row.currentStatementId)))throw new ApiError({status:200,code:'invalid_principle_statements',message:'Could not verify earlier wording'});
+  return row;
 }
 
 export async function fetchPrincipleRead(groupId?: string): Promise<{
@@ -62,10 +76,11 @@ export async function requestPrincipleRead(groupId?: string, retry = false): Pro
 }
 
 /** GET /principles — the acting profile's ranked set. */
-export async function fetchPrinciples(): Promise<ApiPrinciple[]> {
+export async function fetchPrinciples(options:ProfileScoped={},signal?:AbortSignal): Promise<ApiPrinciple[]> {
+  const query=options.profile?`?profile=${encodeURIComponent(options.profile)}`:'';
   const body = await getJson<{ principles: ApiPrinciple[] }>(
-    apiPath("/principles"),
-    "Your principles could not be loaded",
+    apiPath(`/principles${query}`),
+    "Your principles could not be loaded",signal,
   );
   return Array.isArray(body.principles) ? body.principles : [];
 }

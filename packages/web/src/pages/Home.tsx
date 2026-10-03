@@ -62,13 +62,15 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import { createPortal } from "react-dom";
 import { PrincipleRead } from "../components/PrincipleRead";
 import { ReflectionFlow, type ReflectionTurn } from "../components/ReflectionFlow";
 import { InspirationProcessingNotice } from '../components/InspirationProcessingNotice';
 import { DialogSurface } from "../components/DialogSurface";
 import { PrincipleEvidence } from "../components/PrincipleEvidence";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useViewNavigation } from '../lib/use-view-navigation';
+import { EMPTY_VIEW, resolveViewWall, viewHref, type ViewLocation } from '../lib/view-location';
+import { InspirationSearch } from '../components/InspirationSearch';
 
 import { hueCss } from "../lib/appearance";
 import { useDismissAway } from "../lib/dismiss";
@@ -77,6 +79,20 @@ import { profileStorageKey, readProfileText, writeProfileText, type ProfileStora
 import { useTopOfMindRefresh } from "../lib/use-top-of-mind-refresh";
 import { useInspirationProcessing } from '../lib/use-inspiration-processing';
 import { useAuthoredSave } from '../lib/use-authored-save';
+import { useInspirationDraft } from '../lib/use-inspiration-draft';
+import { useAudioRecording } from '../lib/use-audio-recording';
+import { InspirationComposer } from '../components/InspirationComposer';
+import { ReviewPanel } from '../components/ReviewPanel';
+import { ReadingChanges } from '../components/ReadingChanges';
+import { PrincipleShare } from '../components/PrincipleShare';
+import { ReviewEvidence } from '../components/ReviewEvidence';
+import type { ApiSignalReviewEvidence } from '../lib/api/signals';
+import { InspirationAttachments } from '../components/InspirationAttachments';
+import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
+import type { CreateInspirationRequest } from '../lib/api';
+import { inspirationInputMedia, inspirationLinks, removeInspirationLink } from '../lib/inspiration-input';
+import { inspectInspirationPhoto } from '../lib/inspiration-photo';
+import { uploadInspirationMedia } from '../lib/inspiration-media-upload';
 import { restoreInspirationDraft, settleInspirationDraft } from '../lib/authored-save-drafts';
 import { AuthoredSaveNotice } from '../components/AuthoredSaveNotice';
 import { acceptsReadingSnapshot } from "../lib/reading-snapshot";
@@ -200,9 +216,8 @@ import {
   refreshGroupTopOfMind,
   fetchGroups,
   fetchGroupField,
+  fetchGroupInspiration,
   fetchGroupWall,
-  fetchInspirations,
-  fetchTopOfMindVersions,
   finalizeAttachment,
   presignAttachment,
   uploadToPresignedUrl,
@@ -233,7 +248,6 @@ import {
   type ApiPrinciple,
   type ApiGroupFieldInspiration,
   type ApiGroupWallSignal,
-  type ApiTopOfMindVersion,
   type ApiReading,
   fetchTheReading,
   type ApiAntechamberRow,
@@ -1061,6 +1075,7 @@ interface PanelData {
 type Moment = "touch" | "kept" | "answered" | "arrived" | "shared" | "let-go";
 
 interface SimApi {
+  navigationState: () => { wall: Space; section: 'top' | 'field' | 'sky'; moving: boolean };
   /**
    * Whose ground to stand in on a group's wall — a member's profile id, or
    * null for your own. Yours is the default everywhere and the only ground on
@@ -1264,15 +1279,6 @@ const KEEP_SHEET = [".jar-settings", ".jar-seek"] as const;
 const KEEP_PROV = [".jar-prov-room", ".jar-panel"] as const;
 const KEEP_ANTE = [".jar-antechamber", ".jar-settings"] as const;
 
-function withMouthLayer(
-  isDrawer: boolean,
-  host: HTMLElement | null,
-  slot: JSX.Element,
-): JSX.Element {
-  if (!isDrawer || !host) return slot;
-  return createPortal(slot, host) as JSX.Element;
-}
-
 export default function HomePage(): JSX.Element {
   /* No gate. This is home now — it is what a signed-in person lands on, in
      every build. The dev gate that used to stand here existed while this was
@@ -1289,6 +1295,36 @@ export default function HomePage(): JSX.Element {
 }
 
 function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | null }): JSX.Element {
+  const composerDraft = useInspirationDraft(storageScope);
+  const [preparingInspiration, setPreparingInspiration] = useState(false);
+  const [uploadingMediaId, setUploadingMediaId] = useState<string | null>(null);
+  const [checkingFiles, setCheckingFiles] = useState(false);
+  const checkingFilesCount = useRef(0), fileOwnerEpoch = useRef(0);
+  const preparingInspirationRef = useRef(false), composerEpoch = useRef(0);
+  const uploadController = useRef<AbortController | null>(null);
+  const onRecorded = useRef<(file: File) => Promise<void>>(() => Promise.resolve());
+  const recording = useAudioRecording(file => onRecorded.current(file));
+  useEffect(() => () => { composerEpoch.current += 1; fileOwnerEpoch.current += 1; uploadController.current?.abort(); }, []);
+  const viewNavigation = useViewNavigation(storageScope ? `${storageScope.accountId}:${storageScope.profileId}` : 'fixture');
+  const viewNavigationRef = useRef(viewNavigation); viewNavigationRef.current = viewNavigation;
+  const restoringViewRef = useRef(true), requestedViewRef = useRef(viewNavigation.view);
+  requestedViewRef.current = viewNavigation.view;
+  const navigationInteraction = useRef(0);
+  useEffect(() => {
+    const interacted = () => { navigationInteraction.current += 1; };
+    window.addEventListener('pointerdown', interacted, true);
+    window.addEventListener('keydown', interacted, true);
+    window.addEventListener('popstate', interacted);
+    return () => {
+      window.removeEventListener('pointerdown', interacted, true);
+      window.removeEventListener('keydown', interacted, true);
+      window.removeEventListener('popstate', interacted);
+    };
+  }, []);
+  const [navigationProblem, setNavigationProblem] = useState(false);
+  const [detachedInspiration, setDetachedInspiration] = useState<{ wall: string; ball: Ball; detail: InspirationDetail | null } | null>(null);
+  const detachedRef = useRef(detachedInspiration); detachedRef.current = detachedInspiration;
+  const linkedReflectionRef = useRef<{ panelId: string; open: boolean } | null>(null);
   const [phase, setPhase] = useState<"loading" | "ready" | "failed">("loading");
   /**
    * NOTHING BEHIND THIS WORLD BUT THE FIXTURE — see offlineHome().
@@ -1426,6 +1462,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * and the menu existed largely to carry it.
    */
   const [principles, setPrinciples] = useState<ApiPrinciple[]>([]);
+  const [principlesRead,setPrinciplesRead]=useState(false);
+  const acceptPrinciples=useCallback((rows:ApiPrinciple[])=>{setPrinciples(rows);setPrinciplesRead(true);},[]);
   const [groupPrincipleCounts, setGroupPrincipleCounts] = useState<Record<string, number>>({});
   /**
    * LAYER FOUR BECOMES SOMETHING YOU CAN ANSWER, not only read.
@@ -1448,6 +1486,14 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * its own yes, the same rule the settings sheet keeps four times over.
    */
   const [pick, setPick] = useState<string | null>(null);
+  const pickedPrincipleExists=principles.some(row=>row.id===pick);
+  useEffect(()=>{
+    if(!pick||!pickedPrincipleExists||viewNavigation.view?.sharePrinciple)return;
+    const row=Array.from(measured.root.current?.querySelectorAll<HTMLElement>('[data-principle-id]')??[]).find(element=>element.dataset.principleId===pick);
+    const list=row?.parentElement;if(!row||!list)return;
+    const top=row.getBoundingClientRect().top-list.getBoundingClientRect().top+list.scrollTop;
+    if(top<list.scrollTop||top+row.offsetHeight>list.scrollTop+list.clientHeight)list.scrollTop=Math.max(0,top);
+  },[pick,pickedPrincipleExists,viewNavigation.view?.sharePrinciple]);
   const [pDraft, setPDraft] = useState<{ id: string; text: string } | null>(null);
   const [pGoing, setPGoing] = useState<string | null>(null);
   /**
@@ -1504,7 +1550,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const [topOfMind, setTopOfMind] = useState<TopOfMind | null>(null);
   const sourceProcessing = useInspirationProcessing(storageScope);
   const inspirationSaveHandlers = useRef<Pick<Parameters<typeof useAuthoredSave>[0], 'onResolved' | 'onRemoved' | 'onEditRejected'> | null>(null);
-  const inspirationSave = useAuthoredSave({ scope: storageScope, operation: 'inspiration', enabled: phase === 'ready' && !offline,
+  const inspirationSave = useAuthoredSave({ scope: storageScope, operation: 'inspiration', enabled: phase === 'ready' && !offline && composerDraft.ready,
     onResolved: (...args) => { if (!inspirationSaveHandlers.current) throw new Error('Save view is not ready'); return inspirationSaveHandlers.current.onResolved(...args); },
     onRemoved: (...args) => { if (!inspirationSaveHandlers.current) throw new Error('Save view is not ready'); inspirationSaveHandlers.current.onRemoved(...args); },
     onEditRejected: (...args) => { if (!inspirationSaveHandlers.current) throw new Error('Save view is not ready'); inspirationSaveHandlers.current.onEditRejected?.(...args); },
@@ -1549,6 +1595,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   /** pattern id → what it rests on. Filled by the sky's background sweep;
       read by the orbit, which never fetches on tap. */
   const evidenceBySignalRef = useRef<Map<string, Evidence[]>>(new Map());
+  const [reviewEvidenceBySignal,setReviewEvidenceBySignal]=useState<Map<string,ApiSignalReviewEvidence[]>>(new Map());
   const skyReadSequence = useRef(0);
   useEffect(() => () => { skyReadSequence.current += 1; }, []);
 
@@ -1579,6 +1626,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     setSignals(rows);
     const index = new Map<string, Evidence[]>();
     const bySignal = new Map<string, Evidence[]>();
+    const reviewsBySignal = new Map<string, ApiSignalReviewEvidence[]>();
     for (const p of rows) {
       if (!current()) return;
       if (p.evidenceCount === 0) continue;
@@ -1591,12 +1639,14 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
           else index.set(e.inspirationId, [e]);
         }
         bySignal.set(p.id, full.evidence);
+        reviewsBySignal.set(p.id, full.reviewEvidence);
       } catch {
         /* this signal draws no orbit; the statement still stands */
       }
     }
     if (!current()) return;
     evidenceBySignalRef.current = bySignal;
+    setReviewEvidenceBySignal(reviewsBySignal);
     setCitations(index);
     /* AND NOW THE PEEK ROW CAN BE BUILT. The board's statement cites signals;
        those signals cite memories; the row beneath the poster is those
@@ -1743,7 +1793,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * each clamped to a few lines with the read span still lit. Right is the
    * one you pressed, whole. Nothing moves behind it.
    */
-  const [prov, setProv] = useState<{ lead: string; rows: Evidence[] } | null>(null);
+  const [prov, setProv] = useState<{ lead: string; rows: Evidence[]; reviewSignalIds?:string[] } | null>(null);
   const [provPick, setProvPick] = useState<string | null>(null);
   /** the chosen ground, fetched whole — `null` while it is on its way */
   const [provFull, setProvFull] = useState<{ id: string; text: string } | null>(null);
@@ -2007,7 +2057,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * says so. Glancing at the world is now save-as-draft + one press back,
    * and nothing is ever half-hidden behind a strip of itself.
    */
-  const [draft, setDraft] = useState(() => readProfileText(storageScope, "draft"));
+  const draft = composerDraft.draft.text, setDraft = composerDraft.setText;
+  const inputMedia = useMemo(() => inspirationInputMedia(draft, composerDraft.draft.media), [draft, composerDraft.draft.media]);
   /* the words where a callback can reach them without re-binding per keystroke */
   const draftRef = useRef("");
   draftRef.current = draft;
@@ -2045,6 +2096,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     writeProfileText(storageScope, "keepPublic", keepPublic ? "1" : "");
   }, [keepPublic, storageScope]);
   const [mouthOpen, setMouthOpen] = useState(() => readProfileText(storageScope, "draft") !== "");
+  const composerOpenRef = useRef(mouthOpen); composerOpenRef.current = mouthOpen;
+  useEffect(() => { if (!mouthOpen && recording.phase !== 'idle') void recording.stop(); }, [mouthOpen, recording.phase, recording.stop]);
   const [newInspirationRequested, setNewInspirationRequested] = useState(false);
   /** The one honest line: it did not keep. Never a modal, never a silence. */
   const [mouthNote, setMouthNote] = useState("");
@@ -2383,6 +2436,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     if (atWallRef.current.kind === "group" && atWallRef.current.id === groupId) {
       setChrome({ text: null, awayFrom: null, formingAlt: null, asOf: null, forming: null, empty: false, prevText: null });
       setSelectedId(null); setPanel(null); setPanelOpen(false);
+      setDetachedInspiration(null); setReflectOpen(false);
       setProv(null); setProvFull(null); setProvPick(null);
     }
     setGroupFieldTick((value) => value + 1);
@@ -2626,64 +2680,12 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
 
   const pushArrived = useCallback((w: Space) => {
     setAtWall((prev) => (prev.kind === w.kind && prev.id === w.id ? prev : w));
-    /* THE WALL IN THE ADDRESS. Written with the browser's own replaceState,
-       never the router's navigate: both paths render this same component, and
-       a router navigation would remount the world mid-breath. Replace, not
-       push — reload lands where you stood; the back button still leaves the
-       app, exactly as before. */
-    const path = w.kind === "self" ? "/" : `/w/${wallSlug(w.name)}`;
-    if (window.location.pathname !== path) {
-      window.history.replaceState(null, "", path);
-    }
   }, []);
   const pushArrivedRef = useRef(pushArrived);
   pushArrivedRef.current = pushArrived;
 
-  /** The address's wall, when the page opened on `/w/:wall`. */
-  const { wall: wallParam } = useParams();
-  const openedAtRef = useRef(false);
-  useEffect(() => {
-    if (openedAtRef.current || !wallParam) return;
-    if (phase !== "ready") return;
-    const wanted = decodeURIComponent(wallParam).toLowerCase();
-    /* By name-slug first — the address people write — and by the profile's
-       own id as well, because an id is what every API surface hands out and
-       "/w/<uuid>" arriving home with no word read as broken (founder,
-       2026-08-31). */
-    const w = walls.find(
-      (x) =>
-        x.kind !== "self" &&
-        (wallSlug(x.name) === wanted || x.id.toLowerCase() === wanted),
-    );
-    if (!w) {
-      /* the axis may simply not be known yet — the roster lands after first
-         paint. Only once it has does a missing name mean a missing wall,
-         which says so by going home. Latching before that sent every
-         /w/<agent> reload back to ME (caught live, 2026-08-31). */
-      if (agentRoster === null || !groupRosterReady) return;
-      openedAtRef.current = true;
-      window.history.replaceState(null, "", "/");
-      return;
-    }
-    /* `phase` turns ready a beat before the simulation assigns its API, and
-       an optional call on a null ref is a travel that silently never was —
-       the second latch bug this effect shipped with. Wait for the sim. */
-    let dead = false;
-    const attempt = () => {
-      if (dead || openedAtRef.current) return;
-      const api = simApiRef.current;
-      if (!api) {
-        window.setTimeout(attempt, 120);
-        return;
-      }
-      openedAtRef.current = true;
-      api.goToWall(w.col);
-    };
-    attempt();
-    return () => {
-      dead = true;
-    };
-  }, [wallParam, walls, phase, agentRoster, groupRosterReady]);
+  // The route-restoration bridge below handles initial links and every POP,
+  // not a one-shot latch tied to the first wall name.
 
   /** A room woke: its words may exist now. Discrete, pushed from the loop. */
   const pushWoken = useCallback((groupId: string) => {
@@ -3080,12 +3082,6 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     return true;
   }, [storageScope?.profileId]);
 
-  /** A wall's name as an address segment: lowercased, spaces to hyphens,
-    everything else URI-encoded — readable for latin names, correct for any. */
-function wallSlug(name: string): string {
-  return encodeURIComponent(name.trim().toLowerCase().replace(/\s+/g, "-"));
-}
-
 const AWAY_LONG_ENOUGH_MS = 30_000;
   useEffect(() => {
     let hiddenAt: number | null = null;
@@ -3142,7 +3138,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     if (have) return Promise.resolve(have);
     const inFlight = detailPendingRef.current.get(id);
     if (inFlight) return inFlight;
-    const p = loadInspiration(id)
+    const active = atWallRef.current;
+    const profile = active.kind === 'agent' ? active.id : storageScope?.profileId;
+    const p = loadInspiration(id, profile)
       .then((row) => {
         detailsRef.current.set(id, row);
         detailPendingRef.current.delete(id);
@@ -3313,6 +3311,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       stamp();
       return undefined;
     }
+    const requested = requestedViewRef.current;
+    // An explicit route or an already-started interaction belongs to the
+    // person. A returning-visitor greeting is never navigation authority.
+    if (navigationInteraction.current || requested?.inspirationId || requested?.compose || requested?.find || requested?.wallId || requested?.reviewId || requested?.principleId) {
+      stamp(); return undefined;
+    }
+    const interactionAtGreeting = navigationInteraction.current;
+    const greetingHref = viewNavigationRef.current.href;
     /* fetched while the glide waits its beat; whichever timeout speaks reads
        the settled value from the ref. A failed fetch is a silent arrival —
        the weather is a courtesy, never a blocker. */
@@ -3337,6 +3343,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const newest = fresh.reduce((a, b) => (b.capturedMs > a.capturedMs ? b : a));
     timers.push(
       window.setTimeout(() => {
+        if (navigationInteraction.current !== interactionAtGreeting || viewNavigationRef.current.href !== greetingHref) { stamp(); return; }
         simApiRef.current?.select(newest.id);
         /* AND BACK OUT, ALL THE WAY. Not just letting the selection go — the
            camera returns to headquarters, because travelling between walls is
@@ -3353,7 +3360,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                nothing on screen to explain it (it looked exactly like paging
                being broken; found live 2026-08-27). A greeting may take back
                its own gesture and nothing else. */
-            if (selectedIdRef.current !== newest.id) {
+            if (selectedIdRef.current !== newest.id || navigationInteraction.current !== interactionAtGreeting) {
               tell();
               return;
             }
@@ -8491,6 +8498,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     }
 
     simApiRef.current = {
+      navigationState: () => ({ wall: curWall(), section: cam.y < view.layout.minCam * 0.5 ? 'sky' : cam.y > view.layout.maxCam * 0.5 ? 'field' : 'top', moving: trip.active || cam.aiming }),
       /* the timeline re-hangs under the word, whose width the reading sets */
       hangRail,
       /**
@@ -9387,6 +9395,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       setPanelOpen(true);
       return undefined;
     }
+    const detached = detachedRef.current;
+    if (detached?.ball.id === selectedId && detached.wall === spaceKey(atWallRef.current)) {
+      setPanel({ id: selectedId, detail: detached.detail, partial: false }); setPanelOpen(true);
+      return undefined;
+    }
     /* A MEMORY KEPT A MOMENT AGO IS ALREADY WHOLE. You typed every word of
        it, so there is nothing to fetch and nothing missing — `partial` stays
        false, because this panel is not a degradation, it is complete. Once
@@ -9488,26 +9501,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   useEffect(() => {
     if (!posterAsk) setGroundAsk(null);
   }, [posterAsk]);
-  /**
-   * THE POSTER'S OWN HISTORY.
-   *
-   * The artifact has always been VERSIONED — `/top-of-mind/versions` has been
-   * live and called from nowhere, so a sentence claiming who you are becoming
-   * could not be read against the sentences it replaced. The dial scrubs the
-   * field through time; the one thing that most describes a change in you
-   * could not be scrubbed at all.
-   *
-   * Fetched only when the poster is asked, alongside its provenance: the
-   * question "where did this come from" and "what did it used to say" are the
-   * same question asked of the past and of the ground.
-   */
-  const [versions, setVersions] = useState<ApiTopOfMindVersion[] | null>(null);
-  useEffect(() => {
-    if (!posterAsk || versions !== null || offlineRef.current) return;
-    fetchTopOfMindVersions()
-      .then(setVersions)
-      .catch(() => setVersions([]));
-  }, [posterAsk, versions]);
 
   /**
    * WHOSE GROUND YOU COULD STAND IN — not a key to a mixture.
@@ -9617,6 +9610,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * An agent's wall answers the same question from its own stack: its board
    * names the memories it was grounded in directly.
    */
+  const posterReviewSignalIds=useMemo(()=>{
+    if(atWall.kind!=='self')return [];
+    const lead=notes?.find(row=>row.pinned)??notes?.[0];
+    return lead?.citedSignals.map(row=>row.id).filter(id=>(reviewEvidenceBySignal.get(id)?.length??0)>0)??[];
+  },[atWall,notes,reviewEvidenceBySignal]);
   const posterChain = useMemo<Evidence[]>(() => {
     const out: Evidence[] = [];
     const seen = new Set<string>();
@@ -10183,9 +10181,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
 
   /** The way out that keeps the words: the page folds, the draft stays. */
   const saveAsDraft = useCallback(() => {
-    setMouthOpen(false);
-    setMouthNote("");
-  }, []);
+    if (preparingInspirationRef.current) {
+      composerEpoch.current += 1; uploadController.current?.abort(); preparingInspirationRef.current = false;
+      setPreparingInspiration(false); setUploadingMediaId(null);
+    }
+    void recording.stop().then(() => { setMouthOpen(false); setMouthNote(''); viewNavigationRef.current.closeComposer(); });
+  }, [recording.stop]);
 
   /**
    * KEEP IT. The owned draft and immutable pending intent survive until a
@@ -10213,15 +10214,19 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     setClockMs(atMs);
   };
   inspirationSaveHandlers.current = {
-    onResolved: (intent, result, initiated) => {
+    onResolved: async (intent, result, initiated) => {
       if (intent.operation !== 'inspiration') return;
-      const remaining = settleInspirationDraft(profileStorageKey(storageScope, 'draft'), intent.input.text, draftRef.current);
+      const currentDraft = composerDraft.current.current;
+      const preserveNewer = intent.draft ? currentDraft.id !== intent.draft.id || currentDraft.revision !== intent.draft.revision : currentDraft.media.length > 0;
+      await composerDraft.settle(intent.draft, result.inspiration.id);
+      const remaining = preserveNewer ? composerDraft.current.current.text : settleInspirationDraft(profileStorageKey(storageScope, 'draft'), intent.input.text, draftRef.current);
       draftRef.current = remaining; setDraft(remaining); setMouthNote('');
       const made = result.inspiration, detail = toInspirationDetail(made);
       const known = inspirationsRef.current?.some((item) => item.id === made.id) || bornIdsRef.current.has(made.id);
       const revision = ++sourceListMutationRef.current;
       detailsRef.current.set(made.id, detail);
-      if (!known && !result.recovered) birthInspiration(made.id, made.text, Date.parse(made.createdAt), made.id);
+      const displayText = detail.preview;
+      if (!known && !result.recovered) birthInspiration(made.id, displayText, Date.parse(made.createdAt), made.id);
       setInspirations((previous) => {
         if (previous?.some((item) => item.id === made.id)) return previous.map((item) => item.id === made.id ? detail : item);
         return !result.recovered ? [...(previous ?? []), detail] : previous;
@@ -10233,23 +10238,27 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         setInspirations(field.inspirations); setFieldBeyond(beyondOf(field));
       }).catch(() => undefined);
       if (result.processing) sourceProcessing.track(made.id, result.processing);
-      // Attachment-finalization idempotency/recovery is the separate G slice.
-      // Preserve this existing best-effort link path, skipping known links.
+      // Legacy text-only intents may still be in the journal. New bundle
+      // intents have already committed all requested attachment rows.
       const links = Array.from(new Set(made.text.match(/https?:\/\/[^\s<>"')]+/g) ?? []));
-      for (const url of links) {
+      for (const url of intent.input.attachments ? [] : links) {
         const linkKey = `${made.id}:${url}`;
         if (made.attachments.some((item) => item.url === url) || attachmentRequestsRef.current.has(linkKey)) continue;
         attachmentRequestsRef.current.add(linkKey);
         void finalizeAttachment({ type: 'link', inspirationId: made.id, url }).catch(() => { attachmentRequestsRef.current.delete(linkKey); });
       }
-      return () => { if (initiated && !remaining) {
-        simApiRef.current?.acknowledge('kept');
+      return () => { if (!remaining && !preserveNewer && !composerDraft.current.current.media.length) {
+        const shouldReflect = initiated && intent.reflect && composerOpenRef.current;
+        setMouthOpen(false);
+        if (initiated) simApiRef.current?.acknowledge('kept');
         setCharSay(atWallRef.current.kind === 'self' ? say('worldSavedWord') : 'saved to your own wall');
-        if (intent.reflect) setReflectOn({ id: made.id, text: made.text });
+        if (shouldReflect) setReflectOn({ id: made.id, text: displayText, attachments: detail.attachments });
+        else viewNavigationRef.current.closeComposer();
       } };
     },
-    onRemoved: (intent) => {
+    onRemoved: async (intent) => {
       if (intent.operation !== 'inspiration') return;
+      await composerDraft.settle(intent.draft, intent.acknowledged?.inspirationId ?? 'removed');
       const remaining = settleInspirationDraft(profileStorageKey(storageScope, 'draft'), intent.input.text, draftRef.current);
       draftRef.current = remaining; setDraft(remaining);
     },
@@ -10262,18 +10271,104 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
 
   // The immutable, owned intent is durable before anything is sent. A newer
   // draft can be written meanwhile, but cannot replace an unresolved save.
-  const keepIt = useCallback((andReflect = false) => {
+  const uploadDraftFiles = async (media: InspirationDraftMedia[], controller: AbortController, current: () => void) => {
+    if (!storageScope) throw new Error('Sign in before uploading a file.');
+    await uploadInspirationMedia({ media, profileId: storageScope.profileId, signal: controller.signal,
+      assertCurrent: current, uploading: setUploadingMediaId,
+      persist: async (id, update) => {
+        current();
+        composerDraft.setMedia(composerDraft.current.current.media.map(row => row.id === id ? { ...row, ...update } : row));
+        await composerDraft.flush(); current();
+      },
+    });
+  };
+  const retryDraftFile = async (id: string) => {
+    if (preparingInspirationRef.current || inspirationSave.pending || inspirationSave.busy || checkingFilesCount.current || recording.phase !== 'idle') return;
+    const item = composerDraft.current.current.media.find(row => row.id === id);
+    if (!item?.blob || item.uploaded) return;
+    preparingInspirationRef.current = true; setPreparingInspiration(true); setMouthNote('');
+    const epoch = ++composerEpoch.current, controller = new AbortController(); uploadController.current = controller;
+    const current = () => { if (controller.signal.aborted || composerEpoch.current !== epoch) throw new Error('Save owner changed'); };
+    try { await composerDraft.flush(); current(); await uploadDraftFiles([item], controller, current); }
+    catch { if (composerEpoch.current === epoch) setMouthNote('Couldn’t upload this file yet. Your draft is still here.'); }
+    finally { if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); setUploadingMediaId(null); } }
+  };
+  const keepIt = useCallback(async (andReflect = false) => {
     const text = draftRef.current.trim();
-    if (!text || inspirationSave.pending || inspirationSave.busy) return;
+    const initialMedia = composerDraft.current.current.media;
+    if (composerDraft.current.current.linkText?.trim()) { setMouthNote('Add or cancel the link before saving.'); return; }
+    if (composerDraft.current.current.recordingCandidate) { setMouthNote('Choose which recording to keep before saving.'); return; }
+    if (initialMedia.some(item => item.validationError)) { setMouthNote('Remove the files marked below before saving. Your other selections are kept.'); return; }
+    if ((!text && !initialMedia.length) || inspirationSave.pending || inspirationSave.busy || preparingInspirationRef.current || checkingFilesCount.current || !composerDraft.ready || recording.phase !== 'idle') return;
+    if (inspirationInputMedia(text, initialMedia).length > 5) { setMouthNote('Keep up to five attachments in one inspiration.'); return; }
     if (offlineRef.current) {
       birthInspiration(`kept-${Date.now().toString(36)}`, text, Date.now());
       draftRef.current = ''; writeProfileText(storageScope, 'draft', ''); setDraft(''); setMouthOpen(false); return;
     }
-    if (inspirationSave.start({ operation: 'inspiration', input: { text, source: 'app',
-      ...(keepPublic ? { visibility: 'public' as const } : {}) }, reflect: andReflect })) {
-      setMouthOpen(false); setMouthNote(''); setCharSay('');
+    preparingInspirationRef.current = true; setPreparingInspiration(true); setMouthNote('');
+    const epoch = ++composerEpoch.current, controller = new AbortController(); uploadController.current = controller;
+    const current = () => { if (controller.signal.aborted || composerEpoch.current !== epoch) throw new Error('Save owner changed'); };
+    try {
+      await composerDraft.flush(); current();
+      if (initialMedia.some(item => item.blob && !item.uploaded)) await uploadDraftFiles(initialMedia, controller, current);
+      const attachments: NonNullable<CreateInspirationRequest['attachments']> = composerDraft.current.current.media.map(item => {
+        if (item.type === 'link' && item.url) return { type: 'link', url: item.url, name: item.name };
+        if (!item.uploaded || item.type === 'link') throw new Error('This attachment has not uploaded yet.');
+        return { type: item.type, ...item.uploaded, name: item.name };
+      });
+      for (const { url } of inspirationLinks(text)) {
+        if (!url) continue;
+        if (!attachments.some(item => item.type === 'link' && item.url === url)) attachments.push({ type: 'link', url });
+      }
+      if (attachments.length > 5) throw new Error('Keep up to five attachments in one inspiration.');
+      const reference = await composerDraft.flush(); current();
+      const kind = attachments.length === 1 && !text ? attachments[0]!.type : attachments.length ? 'mixed' : 'note';
+      inspirationSave.start({ operation: 'inspiration', input: { text, kind, source: 'app',
+        ...(attachments.length ? { attachments } : {}), ...(keepPublic ? { visibility: 'public' as const } : {}) },
+        reflect: andReflect, ...(reference ? { draft: reference } : {}) });
+      setCharSay('');
+    } catch (reason) { if (composerEpoch.current === epoch) setMouthNote(reason instanceof ApiError ? say('worldComposerUploadFailed') : reason instanceof Error ? reason.message : 'Could not save this inspiration. Your draft is here.'); }
+    finally { if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); setUploadingMediaId(null); } }
+  }, [keepPublic, inspirationSave.pending, inspirationSave.busy, inspirationSave.start, composerDraft, recording.phase]);
+
+  const addInspirationFiles = async (files: File[], audio = false) => {
+    const epoch = fileOwnerEpoch.current;
+    checkingFilesCount.current += 1; setCheckingFiles(true);
+    const accepted: InspirationDraftMedia[] = [], problems: string[] = [];
+    try {
+      for (const file of files) {
+        try {
+          if (audio && (!file.size || file.size > 25 * 1024 * 1024 || !file.type.startsWith('audio/'))) throw new Error('Choose a recording under 25 MB.');
+          const checked = audio ? file : await inspectInspirationPhoto(file);
+          if (epoch !== fileOwnerEpoch.current) return;
+          accepted.push({ id: crypto.randomUUID(), type: audio ? 'audio' : 'image', name: checked.name.slice(0, 255) || 'Photo', blob: checked });
+        } catch (reason) {
+          const message = reason instanceof Error ? reason.message : 'Couldn’t read this file.';
+          if (!audio) accepted.push({ id: crypto.randomUUID(), type: 'image', name: file.name.slice(0, 255) || 'Photo', blob: file, validationError: message });
+          else problems.push(`${file.name}: ${message}`);
+        }
+      }
+      if (epoch !== fileOwnerEpoch.current) return;
+      const media = composerDraft.current.current.media;
+      if (audio && media.some(item => item.type === 'audio')) { setMouthNote('Keep one recording in each inspiration.'); return; }
+      if (accepted.length && composerDraft.setMedia([...media, ...accepted])) await composerDraft.flush();
+      setMouthNote(problems.join(' '));
+    } catch (reason) {
+      if (epoch === fileOwnerEpoch.current) setMouthNote(reason instanceof Error ? reason.message : 'Could not keep this draft on your device.');
+    } finally {
+      if (epoch === fileOwnerEpoch.current) { checkingFilesCount.current -= 1; setCheckingFiles(checkingFilesCount.current > 0); }
     }
-  }, [keepPublic, inspirationSave.pending, inspirationSave.busy, inspirationSave.start]);
+  };
+  onRecorded.current = async file => {
+    const hasRecording = composerDraft.current.current.media.some(item => item.type === 'audio');
+    if (!file.size || file.size > 25 * 1024 * 1024 || !file.type.startsWith('audio/')) {
+      setMouthNote(hasRecording ? 'Could not keep this recording. Your previous clip is unchanged.' : 'Could not keep this recording. Please try again.'); return;
+    }
+    if (!hasRecording) return addInspirationFiles([file], true);
+    composerDraft.setRecordingCandidate({ id: crypto.randomUUID(), type: 'audio', name: file.name, blob: file });
+    try { await composerDraft.flush(); setMouthNote(''); }
+    catch (reason) { setMouthNote(reason instanceof Error ? reason.message : 'Could not keep this draft on your device.'); }
+  };
 
   const onMouthKey = useCallback(
     (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
@@ -10297,21 +10392,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
          sentence keeps a fragment. `isComposing` is the modern fact; keyCode
          229 is the same fact spelled the way several IMEs still spell it. */
       if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229 || e.keyCode === 229) return;
-      if (e.shiftKey) return; /* a new line, not a keep */
+      if (!e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
-      keepIt();
+      void keepIt();
     },
     [saveAsDraft, keepIt],
   );
-
-  /** Empty and left alone, it goes back to being a phrase. With words in it
-      it stays open — a stray tap somewhere else must not take them. */
-  const onMouthBlur = useCallback(() => {
-    if (draft.trim() === "") {
-      setMouthOpen(false);
-      setMouthNote("");
-    }
-  }, [draft]);
 
   /* The field is exactly as tall as what is in it. It hangs off the seam and
      grows UPWARD, so the words stay the same distance above the ground the
@@ -10365,7 +10451,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   }, [mouthPage, mouthOpen]);
 
   const panelBall = panelId
-    ? ballsRef.current?.byId.get(panelId) ?? groupBallsRef.current.get(panelId) ?? null
+    ? ballsRef.current?.byId.get(panelId) ?? groupBallsRef.current.get(panelId)
+      ?? (detachedInspiration?.ball.id === panelId ? detachedInspiration.ball : null)
     : null;
   /** A room orb's panel: whisper attribution, cited-by, and — for another
       member's save — no reflect action at all. */
@@ -10615,7 +10702,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * its visibility on screen around a textarea (founder, 2026-08-25: "have
    * reflect workflow in modal"). Null unless the mouth asked.
    */
-  const [reflectOn, setReflectOn] = useState<{ id: string; text: string } | null>(null);
+  const [reflectOn, setReflectOn] = useState<{ id: string; text: string; attachments: InspirationDetail['attachments'] } | null>(null);
 
   useEffect(() => {
     setReflectOpen(false);
@@ -10970,7 +11057,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       .then(() => reloadPrinciples())
       .then(() => {
         setPDraft(null);
-        setPick(null);
       })
       .catch((err) => setCharSay(whyFailed(err, say("worldNotSaved"))))
       .finally(() => setPBusy(false));
@@ -10982,7 +11068,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       setPBusy(true);
       (disputeId ? undoPrincipleDispute(id, disputeId) : disputePrinciple(id, targetRevision))
         .then(() => reloadPrinciples())
-        .then(() => setPick(null))
         .catch((err) => {
           if ((err as { code?: string })?.code === 'feedback_target_changed') void reloadPrinciples();
           setCharSay(whyFailed(err, say("worldDisputeNotRecorded")));
@@ -11594,7 +11679,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         filename: file.name,
         contentType: file.type || "application/octet-stream",
         size: file.size,
-      });
+      }, undefined, { profile: atWallRef.current.kind === 'agent' ? atWallRef.current.id : storageScope?.profileId });
       await uploadToPresignedUrl(pre.uploadUrl, file, pre.headers);
       await finalizeAttachment({
         type: file.type.startsWith("image/") ? "image" : "file",
@@ -11614,51 +11699,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     }
   }, []);
 
-  /**
-   * FINDING ONE MEMORY AMONG ALL OF THEM.
-   *
-   * The field shows everything at once, which is its whole point and is also
-   * why it cannot answer "where is the thing I wrote about the boat". Search
-   * has to exist BEFORE an archive gets big — the team's own end-to-end test
-   * buries a marked capture under two hundred newer ones precisely because a
-   * search that only filters what is already loaded silently stops finding
-   * things that are there, and from outside that is indistinguishable from
-   * the memory not holding them.
-   *
-   * It is not a second screen. Matches LIGHT UP IN PLACE and everything else
-   * sinks — the same focus law the field already uses when you tap one orb —
-   * so you never lose where a memory sits, which is the one thing a list can
-   * never tell you and this world can.
-   */
+  /** Search reads the whole archive; opening a result does not depend on the
+      bounded field already containing its orb. Queries stay out of the URL. */
   const [seek, setSeek] = useState<string | null>(null);
   /** read by the loop's key handler, which is built once */
   const openSeekRef = useRef<() => void>(() => undefined);
   openSeekRef.current = () => setSeek((s) => (s === null ? "" : s));
-  const [found, setFound] = useState<ReadonlySet<string> | null>(null);
-  useEffect(() => {
-    const q = (seek ?? "").trim();
-    if (q.length < 2) {
-      setFound(null);
-      return;
-    }
-    let dead = false;
-    /* the server searches the whole archive, not the window in hand */
-    const t = window.setTimeout(() => {
-      fetchInspirations({ q, limit: 200 })
-        .then((rows) => {
-          if (!dead) setFound(new Set(rows.map((r) => r.id)));
-        })
-        .catch(() => {
-          if (!dead) setFound(new Set());
-        });
-    }, 220);
-    return () => {
-      dead = true;
-      window.clearTimeout(t);
-    };
-  }, [seek]);
   const foundRef = useRef<ReadonlySet<string> | null>(null);
-  foundRef.current = found;
   /**
    * THE MEMORIES UNDER THE PATTERN YOU ARE READING — lit where they live.
    *
@@ -12033,6 +12080,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     /* another member's save is theirs to reflect on, not the viewer's */
     if (panelBall.col !== undefined && !panelBall.own) return;
     setReflectOpen(true);
+    viewNavigationRef.current.write({ ...observedRef.current, inspirationId: panelBall.sigId ?? panelId, reflectionId: 'open' }, { observed: true });
   }, [panelId, panelBall]);
 
   const synchronizeReflections = useCallback((owner: string, row: ApiInspiration | null) => {
@@ -12165,6 +12213,124 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   const sourceNotice = !offline && !readingRefresh.busy && inspirationSave.phase === 'idle' ? <InspirationProcessingNotice
     processing={sourceProcessing} locale={locale} onView={viewSourceReading} displayedVersion={topOfMind?.version ?? 0} /> : null;
 
+  const appliedViewKey = useRef<string | null>(null), viewRequest = useRef(0);
+  const canonicalizeViewRef = useRef(false);
+  const [viewSettled, setViewSettled] = useState(0);
+  const latestViewKey = useRef(viewNavigation.key); latestViewKey.current = viewNavigation.key;
+  if (appliedViewKey.current !== viewNavigation.key) restoringViewRef.current = true;
+  useEffect(() => {
+    if (phase !== 'ready' || appliedViewKey.current === viewNavigation.key) return;
+    const desired = viewNavigation.view;
+    if (viewNavigation.own.current === viewNavigation.href) {
+      viewNavigation.own.current = null; appliedViewKey.current = viewNavigation.key; restoringViewRef.current = false; return;
+    }
+    const target = desired && (desired.wallId === storageScope?.profileId ? walls.find((wall) => wall.kind === 'self') : resolveViewWall(desired, walls));
+    if (!target && desired?.wallId && (agentRoster === null || !groupRosterReady)) return;
+    if (!target || !desired) { setNavigationProblem(true); appliedViewKey.current = viewNavigation.key; restoringViewRef.current = false; return; }
+    const serial = ++viewRequest.current, key = viewNavigation.key, controller = new AbortController();
+    let timer = 0, stage = 'wall', loading = false, canceled = false;
+    const current = () => !canceled && !controller.signal.aborted && viewRequest.current === serial && latestViewKey.current === key;
+    setNavigationProblem(false);
+    linkedReflectionRef.current = null;
+    setReflectOn(null); setReflectOpen(false); setSelectedId(null); setDetachedInspiration(null); setGroupPanel(null);
+    setSeek(desired.find ? viewNavigation.query : null);
+    setPick(desired.principleId);
+    setMouthOpen(desired.compose);
+    const finish = () => { if (current()) { appliedViewKey.current = key; restoringViewRef.current = false; canonicalizeViewRef.current = true; setViewSettled((value) => value + 1); } };
+    const run = async () => {
+      if (!current()) return;
+      const sim = simApiRef.current;
+      if (!sim || sim.navigationState().moving) { timer = window.setTimeout(() => void run(), 80); return; }
+      const actual = sim.navigationState();
+      if (actual.wall.kind !== target.kind || actual.wall.id !== target.id) { sim.goToWall(target.col); timer = window.setTimeout(() => void run(), 80); return; }
+      if (stage === 'wall') {
+        stage = 'section';
+        sim.windTo(desired.at ?? Date.now()); parkedRef.current = desired.at; setParkedAt(desired.at); setAtNow(desired.at === null);
+        applyChromeRef.current(desired.at ?? Date.now());
+        if (target.kind === 'group') { setStanding(desired.memberId); sim.standIn(desired.memberId); }
+      }
+      if (actual.section !== desired.section) {
+        if (desired.section === 'field') sim.toGround(); else if (desired.section === 'sky') sim.toSky(); else sim.toTop();
+        timer = window.setTimeout(() => void run(), 80); return;
+      }
+      if (loading) return;
+      if (!desired.inspirationId) { finish(); return; }
+      loading = true;
+      try {
+        let detail: InspirationDetail | null = null, ball: Ball;
+        if (target.kind === 'group') {
+          if (!await loadGroupRef.current(target.id, true)) throw new Error('Room unavailable');
+          if (!current()) return;
+          const lease = groupCacheRef.current.get(target.id)?.leaseToken;
+          const row = await fetchGroupInspiration(target.id, desired.inspirationId, controller.signal);
+          if (!current()) return;
+          if (groupCacheRef.current.get(target.id)?.leaseToken !== lease) throw new Error('Room changed');
+          ball = makeGroupInspirationBall(row, target, viewerIdRef.current);
+          setStanding(row.ownerProfileId === viewerIdRef.current ? null : row.ownerProfileId);
+          sim.standIn(row.ownerProfileId === viewerIdRef.current ? null : row.ownerProfileId);
+          if (ball.own) detail = await loadInspiration(row.id, storageScope?.profileId, controller.signal);
+          else if (desired.reflectionId) throw new Error('Private reflection');
+        } else {
+          detail = await loadInspiration(desired.inspirationId, target.kind === 'agent' ? target.id : storageScope?.profileId, controller.signal);
+          if (!current()) return;
+          ball = makeBall(seedOf(detail, skyRef.current.citations, skyRef.current.signals, skyRef.current.posterSignalIds, skyRef.current.principleSignalIds));
+          ball.sigId = detail.id;
+        }
+        if (!current()) return;
+        if (desired.reflectionId && desired.reflectionId !== 'open' && !detail?.reflections.some((row) => row.id === desired.reflectionId && !row.skipped)) throw new Error('Reflection unavailable');
+        if (detail) detailsRef.current.set(detail.id, detail);
+        linkedReflectionRef.current = { panelId: ball.id, open: Boolean(desired.reflectionId) };
+        setDetachedInspiration({ wall: spaceKey(target), ball, detail });
+        if (ballsRef.current?.byId.has(ball.id)) { sim.release(); sim.select(ball.id); }
+        setSelectedId(ball.id); setPanel({ id: ball.id, detail, partial: false }); setPanelOpen(true);
+        timer = window.setTimeout(finish, 0);
+      } catch { if (current()) { setNavigationProblem(true); finish(); } }
+    };
+    void run();
+    return () => { canceled = true; controller.abort(); window.clearTimeout(timer); };
+  }, [viewNavigation.key, phase, walls, agentRoster, groupRosterReady]);
+  useEffect(() => {
+    const linked = linkedReflectionRef.current;
+    if (!linked || linked.panelId !== panelId) return;
+    linkedReflectionRef.current = null; setReflectOpen(linked.open);
+  }, [panelId, viewSettled]);
+
+  const selectedViewBall = selectedId ? ballsRef.current?.byId.get(selectedId) ?? (detachedInspiration?.ball.id === selectedId ? detachedInspiration.ball : null) : null;
+  const observedView: ViewLocation = { ...EMPTY_VIEW, wallId: atWall.kind === 'self' ? null : atWall.id,
+    label: atWall.kind === 'self' ? undefined : (walls.find((wall) => wall.id === atWall.id)?.name ?? atWall.name),
+    section: inSky ? 'sky' : inField ? 'field' : 'top', at: parkedAt, memberId: atWall.kind === 'group' ? standing : null,
+    inspirationId: reflectOn?.id ?? (selectedViewBall?.sigId ?? selectedId),
+    reflectionId: reflectOn || reflectOpen ? (requestedViewRef.current?.inspirationId === (reflectOn?.id ?? selectedViewBall?.sigId ?? selectedId) ? requestedViewRef.current?.reflectionId ?? 'open' : 'open') : null,
+    find: seek !== null, compose: mouthOpen,reviewId:viewNavigation.view?.reviewId??null,reviewAnswerId:viewNavigation.view?.reviewAnswerId??null,
+    principleId:atWall.kind==='self'&&inSky?pick:null,
+    sharePrinciple:atWall.kind==='self'&&inSky&&(viewNavigation.view?.sharePrinciple??false) };
+  const observedHref = viewHref(observedView), observedRef = useRef(observedView); observedRef.current = observedView;
+  useEffect(() => {
+    if (phase !== 'ready' || restoringViewRef.current || navigationProblem) return;
+    let timer = 0;
+    const record = () => {
+      if (restoringViewRef.current) return;
+      if (simApiRef.current?.navigationState().moving) { timer = window.setTimeout(record, 80); return; }
+      const nav = viewNavigationRef.current, previous = nav.view, next = observedRef.current;
+      const samePlace = previous?.wallId === next.wallId && previous.section === next.section && previous.at === next.at && previous.memberId === next.memberId;
+      const closing = samePlace && Boolean(previous?.inspirationId && !next.inspirationId || previous?.reflectionId && !next.reflectionId || previous?.find && !next.find || previous?.compose && !next.compose);
+      const sameView = samePlace && previous.inspirationId === next.inspirationId && previous.reflectionId === next.reflectionId && previous.find === next.find && previous.compose === next.compose;
+      nav.write(next, { observed: true, replace: canonicalizeViewRef.current || closing || sameView || observedHref === nav.href, query: seek ?? '' });
+      canonicalizeViewRef.current = false;
+    };
+    timer = window.setTimeout(record, 80);
+    return () => window.clearTimeout(timer);
+  }, [observedHref, seek, phase, navigationProblem, viewSettled]);
+
+  const openSearchResult = (row: { id: string }) => {
+    viewNavigation.write({ ...EMPTY_VIEW, wallId: atWall.kind === 'agent' ? atWall.id : null,
+      label: atWall.kind === 'agent' ? atWall.name : undefined, section: 'field', inspirationId: row.id }, { query: seek ?? '' });
+  };
+  const copyInspirationLink = async (reflectionId: string | null = observedView.reflectionId) => {
+    try { await navigator.clipboard.writeText(window.location.origin + viewHref({ ...observedView, reflectionId, find: false })); setCharSay(say('worldLinkCopied')); }
+    catch { setCharSay(say('worldLinkCopyFailed')); }
+  };
+
   return (
     <div ref={measured.root} className="jar" aria-label="Waka">
       {/* the world's early face, until the first real frame: the same ground,
@@ -12177,6 +12343,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           <LoadingHome />
         </div>
       ) : null}
+      {navigationProblem ? <div className="jar-navigation-notice" role="alert" data-jar-chrome="1">
+        <p>{say('worldLinkUnavailable')}</p>
+        <button type="button" onClick={() => viewNavigation.write(viewNavigation.view ?? { ...EMPTY_VIEW }, { replace: true, query: viewNavigation.query })}>{say('worldRoomHistoryRetry')}</button>
+        <button type="button" onClick={() => viewNavigation.write({ ...EMPTY_VIEW }, { replace: true })}>{say('worldMe')}</button>
+      </div> : null}
       {/* the volume: a layout-tall gradient the camera descends through */}
       <div ref={measured.atmos} className="jar-atmos" aria-hidden="true" />
 
@@ -12293,9 +12464,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       active={here && !offlineRef.current}
                       locale={locale}
                       refreshKey={w.kind === "group" ? groupReadTick : undefined}
-                      onRead={w.kind === "self" ? setPrinciples : (rows) => setGroupPrincipleCounts((counts) =>
+                      onRead={w.kind === "self" ? acceptPrinciples : (rows) => setGroupPrincipleCounts((counts) =>
                         counts[w.id] === rows.length ? counts : { ...counts, [w.id]: rows.length })}
                     /> : null}
+                    {w.kind==='self'&&pick&&principlesRead&&!principles.some(row=>row.id===pick)?<p role="status" className="jar-values-sub">
+                      {say('worldPrincipleUnavailable')} <button type="button" onClick={()=>{setPick(null);viewNavigation.write({...EMPTY_VIEW,section:'sky'},{replace:true});}}>{say('worldPrinciplesBack')}</button>
+                    </p>:null}
                     {w.kind === "self" && principles.length > 0 ? (
                       <>
                         {/* THE LAYER, NOT THE NAME — the same ruling the board
@@ -12309,12 +12483,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         </p>
                     {/* Ranked, and the rank is the order — never a number
                         beside a statement. */}
-                    <ul className="jar-principles-list" role="list" aria-label={say("worldPhilosophiesValues")} data-jar-interactive="1">
+                    <ul className="jar-principles-list jar-principles-list--personal" role="list" aria-label={say("worldPhilosophiesValues")} data-jar-interactive="1">
                     {[...principles]
                       .sort((a, b) => a.rank - b.rank)
                       .map((pr, i, ranked) => (
                         <li
                           key={pr.id}
+                          data-principle-id={pr.id}
                           data-expanded={pick === pr.id || pDraft?.id === pr.id || pRoots === pr.id}
                           className={
                             /* RANK AS PRESENCE, NEVER AS A NUMBER. The top
@@ -12369,9 +12544,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                   : "jar-values-value"
                               }
                               aria-expanded={pick === pr.id}
-                              onClick={() =>
-                                setPick((cur) => (cur === pr.id ? null : pr.id))
-                              }
+                              onClick={() => {
+                                const selected=pick===pr.id?null:pr.id;setPick(selected);
+                                viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:selected});
+                              }}
                             >
                               {pr.statement}
                             </button>
@@ -12448,6 +12624,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                           ) : null}
                           {pick === pr.id && !pDraft ? (
                             <div className="jar-ask jar-principle-actions">
+                              {storageScope&&!offline?<button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:pr.id,sharePrinciple:true})}>{say('worldSharePrinciple')}</button>:null}
                               {pr.citedSignals.length > 0 ? (
                                 <>
                                   <button
@@ -12564,18 +12741,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     className="jar-hq-inner"
                     ref={w.kind === "self" ? measured.hqInner : undefined}
                   >
-                    {/* THE LAYER, NOT THE NAME (founder, 2026-08-25: "this
-                        should always say TOP OF MIND at the top no matter
-                        what room"). This slot held the wall's name, under a
-                        rule that nothing else may ever stand here — and the
-                        name is already on screen twice, in the pill at the
-                        top left and on the axis below, so here it was the
-                        repetition. What the slot answers now is WHAT KIND OF
-                        SENTENCE IS UNDER ME, which is the one fact nothing
-                        else on the page states: this is the wall's top of
-                        mind — current, held today — as against the timeless
-                        half forming in the sky. Same words, same place, on
-                        every wall; whose it is stays where it already was. */}
+                    {/* R01 makes the personal reading explicit while keeping
+                        the existing field, headline and companion layout. */}
+                    {here&&w.kind==='self'?<p className="jar-reading-heading">
+                      <span>{say(atNow?'worldReadingTitle':'worldReadingEarlier')}</span>
+                      {atNow&&topOfMind&&topOfMind.createdMs>0?<time dateTime={new Date(topOfMind.createdMs).toISOString()}>{new Date(topOfMind.createdMs).toLocaleDateString(locale,{month:'short',day:'numeric'})}</time>:null}
+                    </p>:null}
                     {c.text ? (
                       /* A STABLE KEY, AND A CARRIED/NEW SPLIT INSIDE IT.
                          The whole h1 used to be keyed by its words, so every
@@ -12622,29 +12793,25 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                          for a wall that has not worked yet would teach the
                          reader that the poster is generated copy and destroy
                          the credibility of every wall they read afterwards. */
-                      <p className={`jar-forming${w.kind === "self" && topOfMind?.supportChanged ? " jar-forming--attention" : ""}`}>
-                        {c.formingAlt ?? say("worldFormingNothingAdopted")}
+                      <p className={`jar-forming${w.kind === "self" && topOfMind?.supportChanged ? " jar-forming--attention" : ""}${w.kind==='self'&&!offline?' jar-forming--personal':''}`}>
+                        {here&&w.kind==='self'&&atNow&&!offline&&!topOfMind?.supportChanged
+                          ?say(inspirations?.length?'worldPersonalReadingNotReady':'worldPersonalReadingEmpty')
+                          :c.formingAlt ?? say("worldFormingNothingAdopted")}
                       </p>
                     )}
-                    {/* THE NAME SIGNS THE SENTENCE FROM BELOW (founder,
-                        2026-08-27: "is there a better way to label this as
-                        top of mind? it overlaps with the navigation buttons").
-                        As a header above the poster it was a second floating
-                        piece of chrome, colliding with the corner controls at
-                        small heights. Under the sentence it was a signature.
-
-                        AND THEN THE WORD ITSELF WENT (founder, same day:
-                        "just remove the word top of mind") — the slot's
-                        fourth ruling, kept in order like hasSky's: the wall's
-                        name, then TOP OF MIND above, then the signature
-                        below, now nothing. The sentence is the loudest claim
-                        in the product and it stands unlabelled; the date
-                        alone signs it, when there is one. */}
+                    {/* The dial's historical date stays attached to its read. */}
                     {c.asOf ? (
                       <div className="jar-asof jar-label">
                         {formatMessage(locale, "worldAsOf", { month: c.asOf })}
                       </div>
                     ) : null}
+                    {here&&w.kind==='self'&&storageScope&&!offline?<div className="jar-reading-actions" data-jar-chrome="1">
+                      {!atNow?<button type="button" onClick={()=>windTo(dial?.end??Date.now())}>{say('worldReadingToday')}</button>:<>
+                        {c.text?<button type="button" aria-expanded={posterAsk} onClick={()=>setPosterAsk(value=>!value)}>{say('worldReadingWhy')}</button>:null}
+                        {topOfMind?.id?<ReadingChanges key={`${storageScope.profileId}:${topOfMind.id}`} profileId={storageScope.profileId} readingId={topOfMind.id} locale={locale}/>:null}
+                        {inspirations?.length?<button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})}>{say('worldReviewTitle')}</button>:null}
+                      </>}
+                    </div>:null}
                     {here && w.kind === "group" && atNow ? <button
                       type="button"
                       className="jar-room-shape"
@@ -12847,7 +13014,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       <p className="jar-source-previous"><span>{say('worldSourcePrevious')}</span>{sourcePrevious.body}</p>
                     ) : null}
                     {here && posterAsk ? (
-                      posterChain.length > 0 ? (
+                      posterChain.length > 0 || posterReviewSignalIds.length > 0 ? (
                         /* THE SAME ROOM THE SKY OPENS. These rows travelled
                            too — press one and the camera left headquarters
                            for the field — and they were clipped the same way.
@@ -12858,7 +13025,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                             className="jar-prov-lead jar-prov-open jar-label"
                             onClick={() => {
                               setProvPick(null);
-                              setProv({ lead: c.text ?? "", rows: posterChain });
+                              setProv({ lead: c.text ?? "", rows: posterChain,reviewSignalIds:posterReviewSignalIds });
                             }}
                           >
                             {say("worldBuiltFrom")}
@@ -12909,18 +13076,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                             {say("worldReadItAgain")}
                           </button>
                         )}
-                      </div>
-                    ) : null}
-                    {/* WHAT IT USED TO SAY. Only where there is a past — one
-                        version is not a history, it is the first sentence. */}
-                    {here && posterAsk && w.kind === "self" && (versions?.length ?? 0) > 1 ? (
-                      <div className="jar-prov jar-prov--poster" data-jar-chrome="1">
-                        <p className="jar-prov-lead jar-label">{say("worldBeforeThis")}</p>
-                        {(versions ?? []).slice(1, 5).map((v) => (
-                          <p key={v.id} className="jar-was">
-                            {dateWords(Date.parse(v.createdAt) || 0, TRef.current, locale)}
-                          </p>
-                        ))}
                       </div>
                     ) : null}
                     {/* THE WAY UP IS NOT UNDER THE THING YOU ARE READING.
@@ -13282,229 +13437,35 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         </div>
       ) : null}
 
-      {/* ---- THE MOUTH ----
-          It stands ON THE SEAM between headquarters and the field, so what
-          you type sits just above where the orb it becomes will appear: the
-          geography teaches itself in one beat and there is no tutorial
-          anywhere. At rest it is one phrase and nothing else — it must not
-          read as a form.
-
-          It is its own layer rather than a child of headquarters for one
-          reason: headquarters is drawn UNDER the canvas, and you cannot type
-          into words with orbs passing over them. The loop hands it
-          headquarters' own transform every frame, so it belongs to your wall
-          and to the seam exactly as if it lived there. */}
-      {phase === "ready" ? (
-        <div
-          ref={measured.mouth}
-          className={`jar-mouth${mouthPage ? " jar-mouth--note" : ""}`}
-          data-jar-chrome="1"
-        >
-          {/* QUICK BY DEFAULT, A NOTEPAD WHEN IT HAS TO BE.
-              The mouth is for a few sentences, a link, an image — the thing
-              you say on the way past. So it keeps the resting phrase's own
-              face while you type: same size, same tracking, same letters, so
-              opening it is not a change of instrument (founder, 2026-08-24).
-
-              But a long paste has nowhere to go in one tracked line. Past a
-              few lines it GROWS — the bar slides up into a notepad with a
-              prose face, and slides back down when the text shrinks. It
-              opens itself rather than offering a handle: quick save must
-              stay quick, and a control you have to find first is not quick.
-              (Founder's choice of the three.) */}
-          {withMouthLayer(
-            mouthPage,
-            measured.root.current,
-            <div
-            className={`jar-mouth-slot${atNow ? "" : " jar-mouth-slot--away"}${
-              mouthPage ? " jar-mouth-slot--note" : ""
-            }`}
-            {...(!atNow || inField || inSky ? { inert: "" } : {})}
-            /* THE SHEET KEPT THE CARET, AND NOW THE MARGIN IS A DOOR.
-               While this was a drawer, a press on its face was a press on
-               the thing you were typing INTO, so it refused the default and
-               left focus exactly where it was — one surface, no way to
-               half-leave it.
-
-               As a veil over the world that reading changed (founder,
-               2026-08-27: "clicking outside the box should make it auto save
-               as draft"). The dark around the well is not the note any more,
-               it is the world showing through — and pressing the world while
-               writing means the same thing here as everywhere else in this
-               product: put this away, keep the words. It is the sheets' own
-               dismissal law (`lib/dismiss.ts`) with the kinder ending: not
-               closed, saved.
-
-               The well and the foot's buttons are exempt, and the exemption
-               is the whole care: a press inside the writing, or on `save`,
-               or on `private/public`, must do its own job. */
-            onMouseDown={
-              mouthPage
-                ? (e) => {
-                    if (e.target instanceof Element && e.target.closest("textarea, button")) return;
-                    e.preventDefault();
-                    saveAsDraft();
-                  }
-                : undefined
-            }
-          >
-            {mouthOpen ? (
-              <textarea
-                ref={(el) => {
-                  mouthFieldRef.current = el;
-                  measured.mouthSpot.current = el;
-                }}
-                className="jar-mouth-field"
-                value={draft}
-                rows={1}
-                spellCheck={false}
-                aria-label={say("worldCaptureInspiration")}
-                /* the resting phrase, kept — opening the mouth changes
-                   nothing about it (founder, 2026-08-24) */
-                placeholder={say("worldCapturePrompt")}
-                onChange={(e) => {
-                  mouthCaretRef.current = e.target.selectionStart ?? e.target.value.length;
-                  draftRef.current = e.target.value; writeProfileText(storageScope, 'draft', e.target.value); setDraft(e.target.value);
-                  if (mouthNote !== "") setMouthNote("");
-                }}
-                onKeyDown={onMouthKey}
-                onBlur={onMouthBlur}
-              />
-            ) : (
-              <button
-                type="button"
-                ref={(el) => {
-                  measured.mouthSpot.current = el;
-                }}
-                className={`jar-mouth-rest jar-label${charSay ? " jar-mouth-rest--said" : ""}`}
-                onClick={() => {
-                  /* whatever the companion was saying is answered by starting
-                     to write, which is the reply the sentence was asking for */
-                  if (charSay) setCharSay("");
-                  openMouth();
-                }}
-              >
-                {/* THE COMPANION SPEAKS HERE, IN THE PHRASE'S OWN PLACE
-                    (founder, 2026-08-25: "replace the today - text with keep
-                    something when user clicks on character"). Its line used to
-                    be a second row of its own under the mouth, so tapping the
-                    creature added a layer to a page the founder had just said
-                    had too many. It is the same slot now: the words change,
-                    nothing moves, and the phrase comes back when the line has
-                    been said. */}
-                {/* a waiting draft outranks the invitation: the line is the
-                    door back into your own words (mouth closed, words kept —
-                    the state renders) */}
-                {charSay || (draft.trim() !== "" ? say("worldContinueDraft") : say("worldCaptureInspiration"))}
-              </button>
-            )}
-            {/* WHERE THIS ONE GOES, DECIDED WHILE WRITING IT.
-                Offered only once there are words: an empty mouth showing a
-                privacy control is a form, and this layout does not have forms.
-                It reads as a state, matching the panel — the line says where
-                the memory is headed, and pressing it changes that — because a
-                public/private pair invites a decision every time, and the
-                answer is the same for almost every memory somebody keeps.
-
-                Private is the resting state and the one you get by not
-                touching this, which is the whole safety property: the only
-                way to publish is to say so. */}
-            {/* BOTH WORDS, ALWAYS — the chosen one lit, the other dimmed.
-                One word that swapped when pressed gave no sign it could be
-                pressed at all: "kept to yourself" read as a statement of
-                fact, and the founder said so. A pair says there is a choice
-                and which way it currently sits, in the one channel this
-                world has. Private is still the resting state and still the
-                one you get by not touching it. */}
-            {/* RENDERED WHENEVER THE MOUTH IS OPEN, VISIBLE ONCE THERE ARE
-                WORDS (founder, 2026-08-25: "keep something is always same
-                position"). The slot hangs upward from the seam, so a row
-                that MOUNTS on the first keystroke grew the slot and shoved
-                the line you were typing into a new place — the one moment a
-                surface must hold still. The space is reserved from the
-                start and the row fades in, which is an appearance, not a
-                layout change. Invisible it is also inert, so the empty
-                mouth still offers no control — the "no forms" rule holds. */}
-            {/* ONE ROW, IN THE ORDER THE FOUNDER DREW IT (2026-08-25:
-                `private/public • save • reflect`).
-
-                It was two rows — who may see it above, what to do with it
-                below — which put four controls and two separators under a
-                single line of typing, and made the drawer taller than the
-                words in it. They are one row now, in the label register, so
-                the mouth's foot matches the card's and the signposts'.
-
-                "save and reflect" becomes "reflect" for the same reason: the
-                row already says `save` beside it, so the longer name was
-                spending three words to say "and also". It still KEEPS first —
-                you cannot reflect on something that does not exist yet — and
-                the beat that follows is what says so. */}
-            {mouthOpen ? (
-              <p
-                className={`jar-ask jar-ask--row jar-mouth-where${
-                  draft.trim() !== "" ? " jar-mouth-where--armed" : ""
-                }${mouthPage ? " jar-mouth-where--sheet" : ""}`}
-              >
-                {mouthPage ? (
-                  /* THE WAY OUT THAT KEEPS THE WORDS (founder, 2026-08-27:
-                     "lets not make it a drawer but just turn the full page
-                     into a typing area … remove minimize and instead say save
-                     as draft"). The minus lasted one round: a page has no
-                     window chrome, and the honest name for folding it is what
-                     actually happens — the draft is saved. First in the one
-                     centred row at the foot. */
-                  <>
-                    <button type="button" className="jar-mouth-step" onClick={saveAsDraft}>
-                      {say("worldSaveAsDraft")}
-                    </button>
-                    <span aria-hidden="true" className="jar-mouth-dot"> · </span>
-                  </>
-                ) : null}
-                <button
-                  type="button"
-                  className={keepPublic ? "jar-where-off" : "jar-where-on"}
-                  aria-pressed={!keepPublic}
-                  disabled={Boolean(inspirationSave.pending)}
-                  onClick={() => setKeepPublic(false)}
-                >
-                  {say("worldPrivate")}
-                </button>
-                <span aria-hidden="true">/</span>
-                <button
-                  type="button"
-                  className={keepPublic ? "jar-where-on" : "jar-where-off"}
-                  aria-pressed={keepPublic}
-                  disabled={Boolean(inspirationSave.pending)}
-                  onClick={() => setKeepPublic(true)}
-                >
-                  {say("worldPublic")}
-                </button>
-                <span aria-hidden="true" className="jar-mouth-dot"> · </span>
-                {/* NOT FULL INK (founder, 2026-08-27: "save should not be
-                    white"). `jar-where-on` is the CHOSEN STATE's light —
-                    private/public wear it to say which one stands. `save` is
-                    a verb, and a verb at state-light read as a third state
-                    that was somehow always selected. It rests at the verbs'
-                    own muted tier and lifts under the hand like every other
-                    pressable word. */}
-                <button type="button" className="jar-where-verb" onClick={() => keepIt()}
-                  aria-label={say("worldSaveInspiration")} title={say("worldSaveInspiration")} disabled={Boolean(inspirationSave.pending)}>
-                  {say("worldSave")}
-                </button>
-                <span aria-hidden="true" className="jar-mouth-dot"> · </span>
-                <button type="button" className="jar-where-off" onClick={() => keepIt(true)}
-                  aria-label={say("worldSaveAndReflect")} title={say("worldSaveAndReflect")} disabled={Boolean(inspirationSave.pending)}>
-                  {say("worldReflect")}
-                </button>
-              </p>
-            ) : null}
-            {/* the one honest line, in prose and never in the label register */}
-            {mouthNote !== "" ? <p className="jar-mouth-note">{mouthNote}</p> : null}
-            <AuthoredSaveNotice save={inspirationSave} locale={locale} />
-            </div>,
-          )}
+      {/* The capture entry stays in the world; the native composer owns input,
+          focus and scrolling above it. Files and words share one save intent. */}
+      {phase === 'ready' ? <>
+        <div ref={measured.mouth} className="jar-mouth" data-jar-chrome="1">
+          <div className={'jar-mouth-slot' + (atNow ? '' : ' jar-mouth-slot--away')} {...(!atNow || inField || inSky ? { inert: '' } : {})}>
+          <button type="button" ref={element => { measured.mouthSpot.current = element; }}
+            className={'jar-mouth-rest jar-label' + (charSay ? ' jar-mouth-rest--said' : '')}
+            style={mouthOpen ? { visibility: 'hidden' } : undefined}
+            onClick={() => { setCharSay(''); openMouth(); }}>
+            {charSay || (draft.trim() || composerDraft.draft.media.length ? say('worldContinueDraft') : say('worldCaptureInspiration'))}
+          </button>
+          {!mouthOpen ? <AuthoredSaveNotice save={inspirationSave} locale={locale} /> : null}
+          </div>
         </div>
-      ) : null}
+        {mouthOpen ? <InspirationComposer text={draft} media={inputMedia}
+          linkText={composerDraft.draft.linkText ?? ''} onLinkText={composerDraft.setLinkText}
+          recordingCandidate={composerDraft.draft.recordingCandidate}
+          onChooseRecording={useNew => { composerDraft.chooseRecording(useNew); setMouthNote(''); void composerDraft.flush().catch(reason => setMouthNote(String(reason))); }}
+          locale={locale} public={keepPublic} ready={composerDraft.ready} fileDraftsAvailable={composerDraft.available} busy={preparingInspiration || checkingFiles}
+          uploadingId={uploadingMediaId} error={mouthNote || composerDraft.error}
+          save={inspirationSave} recording={recording} inputRef={mouthFieldRef}
+          onText={(text, caret) => { mouthCaretRef.current = caret; draftRef.current = text; setDraft(text); setMouthNote(''); }}
+          onFiles={files => { void addInspirationFiles(files); }}
+          onRetryFile={id => { void retryDraftFile(id); }}
+          onRemove={id => { if (id.startsWith('text-link:')) setDraft(removeInspirationLink(composerDraft.current.current.text, id.slice('text-link:'.length)));
+            else composerDraft.setMedia(composerDraft.current.current.media.filter(item => item.id !== id)); }}
+          onVisibility={setKeepPublic} onClose={saveAsDraft} onSubmit={reflect => { void keepIt(reflect); }}
+          onKeyDown={onMouthKey} onForkDraft={() => { void composerDraft.fork().catch(reason => setMouthNote(String(reason))); }} /> : null}
+      </> : null}
 
       {/* SECTION S IS GONE. The sky — a whole viewport above headquarters
           holding every signal still forming, its sentences, its satellites and
@@ -13619,6 +13580,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               </button>
             </p>
           ) : null}
+          <button type="button" className="jar-copy-link" title={say('worldCopyInspirationLink')}
+            aria-label={say('worldCopyInspirationLink')} onClick={() => void copyInspirationLink()}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m10 14 4-4m-7 3-2 2a4 4 0 0 0 6 6l4-4m-4-10 2-2a4 4 0 0 1 6 6l-4 4" /></svg>
+          </button>
           </div>
           {editing.open?.kind === "memory" && editing.open.id === panelId ? (
             /* THE SAME SLOT, THE SAME MEASURE, THE SAME FACE. It is the words
@@ -13673,7 +13638,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               onClick={panelCanReflect && !panelIsGroup ? beginPanelEdit : undefined}
             >
               {markPassages(
-                panel.detail ? panel.detail.text : panelBall.textPreview,
+                panel.detail ? panel.detail.text || panel.detail.preview : panelBall.textPreview,
                 panelMarks,
               )}
             </p>
@@ -13681,6 +13646,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           {panel.partial ? (
             <p className="jar-panel-note">{say("worldCouldntLoadRest")}</p>
           ) : null}
+          {panel.detail?.attachments.length ? <InspirationAttachments items={panel.detail.attachments} locale={locale} /> : null}
           {panelIsGroup && panelBall.citedBy && panelBall.citedBy.length > 0 ? (
             /* the collapsed links sentence, adapted: what read this save */
             <p className="jar-panel-cited jar-label">{citedWords(panelBall.citedBy, locale)}</p>
@@ -13694,7 +13660,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               apparatus: it made a person ask what each list was instead of
               reading what they saved. */}
 
-          {reflectOpen && panelCanReflect && (panelBall?.sigId ?? panelId) ? (
+          {reflectOpen && panelCanReflect && !panel.detail ? <p role="status">{say('worldOpeningAttachment')}</p> : null}
+          {reflectOpen && panelCanReflect && panel.detail && (panelBall?.sigId ?? panelId) ? (
             <ReflectionFlow
               key={panelBall?.sigId ?? panelId}
               inspirationId={(panelBall?.sigId ?? panelId) as string}
@@ -13704,10 +13671,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 .filter((item) => !item.skipped && item.answer)
                 .map((item): ReflectionTurn => ({ id: item.id, question: item.question, answer: item.answer as string }))}
               locale={locale}
+              focusReflectionId={viewNavigation.view?.reflectionId}
+              onCopyLink={(id) => void copyInspirationLink(id)}
               onSaved={reflectionSaved}
               onSynchronized={(row) => synchronizeReflections((panelBall?.sigId ?? panelId) as string, row)}
               onRemoved={(id) => reflectionRemoved(id, (panelBall?.sigId ?? panelId) as string)}
-              onDone={() => setReflectOpen(false)}
+              onDone={() => { setReflectOpen(false); viewNavigation.write({ ...observedRef.current, reflectionId: null }, { observed: true, replace: true }); }}
             />
           ) : null}
 
@@ -13954,8 +13923,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   {e.reason ? <span className="jar-prov-why">{e.reason}</span> : null}
                 </button>
               ))}
+              <ReviewEvidence rows={(prov.reviewSignalIds??[]).flatMap(id=>reviewEvidenceBySignal.get(id)??[])} locale={locale}/>
             </div>
-            <div className="jar-prov-room-full">
+            {prov.rows.length>0?<div className="jar-prov-room-full">
               {provPick === null ? (
                 /* THE PANE SAYS WHAT IT IS FOR RATHER THAN SITTING BLANK, and
                    it never guesses by pre-selecting the first ground: which
@@ -13970,7 +13940,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               ) : (
                 <p className="jar-prov-room-text">{provFull.text}</p>
               )}
-            </div>
+            </div>:null}
           </div>
           <p className="jar-ask jar-ask--row jar-prov-room-close">
             <button type="button" onClick={() => setProv(null)}>
@@ -14674,6 +14644,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             key={reflectOn.id}
             inspirationId={reflectOn.id}
             scope={storageScope}
+            source={reflectOn.attachments.length ? <InspirationAttachments items={reflectOn.attachments} locale={locale} /> : undefined}
             processing={sourceProcessing.active?.inspirationId === reflectOn.id ? sourceNotice : null}
             initialTurns={[]}
             locale={locale}
@@ -14685,32 +14656,27 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         </DialogSurface>
       ) : null}
 
-      {/* SEARCHING, AND IT IS ONE LINE. No results panel, no counts, no list —
-          the answer is in the field, lit. Escape puts the field back. */}
+      {phase==='ready'&&!offline&&storageScope&&atWall.kind==='self'?<button type="button" className="jar-review-shortcut" hidden={Boolean(viewNavigation.view?.reviewId)||(!inField&&!inSky)} data-jar-chrome="1"
+        onClick={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})}>{say('worldReviewTitle')}</button>:null}
+      {storageScope&&viewNavigation.view?.reviewId?<ReviewPanel key={`${storageScope.profileId}:${viewNavigation.view.reviewId}`} scope={storageScope} id={viewNavigation.view.reviewId} thoughtId={viewNavigation.view.reviewAnswerId} locale={locale}
+        onId={id=>viewNavigation.write({...EMPTY_VIEW,reviewId:id},{replace:true})} onClose={viewNavigation.closeReview}
+        onNewInspiration={()=>viewNavigation.write({...EMPTY_VIEW,compose:true},{replace:true})}
+        onOpenPrinciple={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id})}
+        onOpen={id=>viewNavigation.write({...EMPTY_VIEW,section:'field',inspirationId:id})}/>:null}
+      {phase === 'ready' ? <button type="button" className="jar-find-shortcut" data-jar-chrome="1"
+        onClick={() => setSeek('')} aria-label={say(atWall.kind === 'group' ? 'worldFindYourInspirations' : 'worldFindInspiration')}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg>
+        <span>{say(atWall.kind === 'group' ? 'worldFindYourInspirations' : 'worldFindInspiration')}</span>
+      </button> : null}
       {seek !== null ? (
-        <DialogSurface className="jar-seek" data-jar-chrome="1"
-          aria-label={say("worldSeekPlaceholder")} onClose={() => setSeek(null)}>
-          <input
-            className="jar-roomform-box"
-            autoFocus
-            value={seek}
-            placeholder={say("worldSeekPlaceholder")}
-            onChange={(e) => setSeek(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") setSeek(null);
-            }}
-          />
-          <p className="jar-ask">
-            {found && found.size === 0 && seek.trim().length > 1 ? (
-              <span>{say("worldNothingSaysThat")}</span>
-            ) : (
-              <button type="button" onClick={() => setSeek(null)}>
-                {say("worldDone")}
-              </button>
-            )}
-          </p>
-        </DialogSurface>
+        <InspirationSearch profileId={atWall.kind === 'agent' ? atWall.id : storageScope?.profileId ?? viewerIdRef.current ?? 'fixture'}
+          query={seek} locale={locale} label={atWall.kind === 'group' ? say('worldFindYourInspirations') : undefined}
+          onQuery={setSeek} onClose={() => setSeek(null)} onPick={openSearchResult} />
       ) : null}
+      {storageScope&&viewNavigation.view?.principleId&&viewNavigation.view.sharePrinciple?<PrincipleShare
+        key={`${storageScope.accountId}:${storageScope.profileId}:${viewNavigation.view.principleId}`} scope={storageScope}
+        id={viewNavigation.view.principleId} name={auth?.profile?.name??''} locale={locale} onClose={viewNavigation.closeShare}
+        onChoose={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id,sharePrinciple:true},{replace:true})}/>:null}
 
       {/* MAKING OR JOINING A ROOM. A form, and it is honest about being one:
           typed text, a submit and an error line all need to reflow and be

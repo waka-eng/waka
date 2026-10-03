@@ -46,6 +46,10 @@ in-memory page state and ignores its late responses. Unattributed legacy
 device drafts remain unassigned; a new sign-in must not silently claim or
 display them. Completed reflections remain server-owned inspiration detail,
 while unfinished drafts belong only to their authenticated storage scope.
+An unfinished re-recording keeps the existing clip and a separate owned
+`recordingCandidate` in the local draft. It is not a second inspiration or a
+second uploaded attachment. Choosing a clip atomically replaces or discards
+the candidate; only the chosen recording enters the immutable save manifest.
 
 ### Credentials bind to a profile
 
@@ -137,6 +141,187 @@ it; the record outlives the verb), but the wall's future is what the
 room grew. Principles do not participate in groups (v1).
 
 ## Inspiration (layer 1)
+
+### Personal capture extension approved 2026 10 02
+
+The owner approved recorded audio as an inspiration input and one composer for
+text, links, photos and recordings. An inspiration may have empty authored text
+when it has attachments; presentation labels must not be stored as invented
+human prose. A bundle save identifies one immutable intent and commits its
+inspiration, attachment rows and processing request atomically after uploads.
+Replaying it returns current owned data without creating another attachment.
+
+Audio is an attachment kind. Its original bytes remain separate from
+`audio_transcription` enrichment, stored as the attachment's machine-derived
+enrichment text. New audio captures request the existing durable enrichment job;
+valid completed transcripts are reused for the same attachment. No intelligible
+speech is unavailable material, not invented words. The
+`transcript_correction` is separately authored content that machine retries
+must never overwrite. Null selects the machine transcript; an empty correction
+explicitly means no usable words. The attachment's `transcript_revision` changes
+when transcript processing or the correction changes; clients compare this
+number when editing, and workers reject results prepared before such a change.
+`transcript_corrected_at` records the explicit owner action. Effective attachment
+material prefers the correction for extraction, embeddings and source checks,
+without promoting it into a second inspiration. Correction changes invalidate
+stale quotes/vectors and request learning in the same transaction. Export and
+erasure include original transcript and correction with their attachment.
+Explicit enrichment retries are limited to three per attachment per one-hour
+window beginning at the first explicit retry (`enrichment_retry_count`, `enrichment_retry_window_at`),
+in addition to existing worker attempt and account budgets. Joining already
+pending work consumes no new retry; exhausting this window never removes the
+original recording or the person's correction. Link/image preview recovery and
+whole-inspiration recovery use this same budget, not an alternate retry path.
+Original audio, transcript and answers from the same capture do not establish
+independent repeated experiences.
+
+The approved later review/conversation/export contracts are detailed in
+[the personal capture contract](plans/2026-10-02-capture-foundation-contract.md).
+Review session storage/routes now implement the selection contract below;
+the conversation and artifact contracts do not yet claim implemented tables or routes. Review skipping is
+session-local, a review selection is not a verdict on a principle, and multiple
+source references do not multiply one authored response. A selected principle
+may be explicitly exported as an image under that contract; this extends the
+earlier no-sharing v1 rule only to the user's chosen artifact, not public access
+to principles, inspirations, answers or audio. Export-only wording edits do not
+rewrite the underlying principle.
+
+The review implementation contract uses `review_sessions` and `review_items`.
+A session belongs to one profile and stores its stable id, creation-input hash,
+revision, cursor and optional completion time. A profile has at most one open
+session. Items reference both `(profile_id, session_id)` and
+`(profile_id, inspiration_id)`, keep a fixed position and the material revision
+at session creation or the latest acknowledged choice, and hold a nullable
+`keep`/`skip` choice. Read-only viewing does not change that revision. They never copy source text.
+Source deletion removes its item by cascade, without inserting a replacement
+or changing the remaining order. Current revision is checked when a choice is
+written; stale tabs cannot overwrite a newer session decision. A repeated
+create uses the same session id and input hash rather than creating a second
+review. Review metadata is exported and cascades with the profile.
+
+Suggested sessions contain at most five sources, prioritizing those without a
+saved reflection or prior review choice, then newest first. Explicit selection
+preserves the person's order. Selection and cursor writes queue no model work,
+create no feedback and change no source/signal/principle. Cross-source answers
+are a separate later R05 contract, not multiple per-item reflections.
+
+R05 uses one profile-owned `review_answers` row per authored response and
+`review_answer_sources` links to the reviewed items and their material revisions.
+A one-source answer has one focused (`referenced`) link; a cross-source answer
+has several, not several copies of the words. Context-only links also record
+every input the model saw, so an uncited input cannot bypass invalidation.
+`source_count` records that full context set's original size. The same generated-question job may receive only
+one answer, and the answer's client id/input hash make response-loss replay safe.
+Generated questions live in metered `generate_review_question` jobs, cite only
+the current kept sources, and are served only for a matching context hash.
+Opening or checking a review never queues a question. Explicit requests are
+limited to three per context per hour, in addition to worker/account budgets.
+Each attempt retains its own budget record; invalidation clears its content
+instead of deleting that record. Status reads compare source revisions and
+answer history without reloading attachment bodies.
+
+Human answer text survives source edits/removal as private session history.
+If a referenced source changes or its link disappears, generated question text
+is redacted and the answer context is marked invalid. Those historical answers
+are not silently reused as current grounded dialogue. Editing or removing an
+earlier answer also redacts later AI premises that may depend on it, while
+preserving the later human answers. Explicit answer removal clears its words,
+AI context and links, retaining a minimal deletion receipt so a lost-response
+retry cannot recreate it. Deleted answers are absent from history and export;
+account/session erasure removes the receipts too. Export includes live answers
+and their remaining source links.
+These rows do not yet feed signal/principle generation: R08 must establish
+lineage-aware evidence behavior before that integration. Selections or multiple
+links never establish multiple independent experiences by themselves.
+
+R08's integration contract keeps review support distinct from raw inspiration
+support: a generated claim must cite actual owned human answers and their
+current revisions, not the AI question or the keep/skip choice. An answer is
+never copied into each inspiration's material. Support extraction, reassessment,
+withdrawal and display must preserve that source kind; the runtime integration
+is not enabled yet.
+
+Independent support has two limits. An inspiration (including its attachments,
+transcript and reflection) contributes at most one witness. All answers in one
+review session contribute at most one review witness to a given signal. A
+review witness names only its focused source origins, not context-only inputs.
+One origin cannot be spent twice across direct and review witnesses. Counting
+uses a maximum one-to-one matching between witness units and eligible origins,
+preferring direct inspiration witnesses and then older review witnesses with
+stable id ties. This preserves independently supporting originals: reviewing
+two established witnesses together does not merge them into one. Repeated
+replies or a replay cannot manufacture additional independent origins.
+
+Counting does not establish semantic support: only already-validated witness
+rows enter this calculation. A direct witness uses its inspiration's creation
+time; a review unit uses the earliest supporting human answer's creation time
+for its matched focused origin,
+never the oldest contextual source date or an edit/retry time. The existing
+promotion threshold and confidence/Principles coefficients are unchanged.
+All count, confidence, recency and longevity consumers must use the same
+selected units before review support is enabled. This bounds what can be
+claimed from stored provenance; it does not infer a person's unrecorded lived
+experiences or equate an `experience` workspace label with an independent event.
+
+Review support is stored as `signal_review_evidence`: one metadata relationship
+per signal and human answer, with tenant-bearing signal/session/answer foreign
+keys, statement and answer revisions, source count and whether the then-current
+AI question was included as context. `signal_review_evidence_sources` records
+the current material revision and focused/context-only role of every allowed
+source read in that assessment. It references the answer's original source
+relationship as well as the evidence relationship. These are assessment-time
+versions, distinct from the question-time versions in `review_answer_sources`.
+No answer, question, quote or generated reason is copied into these tables.
+
+A changed source or earlier answer withdraws the old AI premise immediately.
+Reassessment may still use surviving self-contained human words against current
+allowed material, without restoring that premise or assuming positive support.
+No surviving focused origin means no eligible review witness. An answer edit,
+deletion, context change or support-link mutation must fence in-flight generation;
+old relationships cannot be served merely because their ids still exist.
+Only the owning personal/agent profile may receive this support, never a room.
+The review support producer remains unfinished until its queue, reassessment,
+read projections and promotion guard share this contract.
+
+The producer uses `review_signal_support` for the last version-bound assessment
+of an answer/claim pair and its last explicit positive or negative verdict.
+An unresolved follow-up cannot erase an earlier withdrawal. The metadata carries
+no source words. `review_answer_processing` binds a source fingerprint and one
+numbered background request to completed derivation and an eventual reading
+request; queued work is not completion. Both belong to the answer's profile,
+export as private metadata and cascade with that profile. Deleted answers keep
+only the existing minimal tombstone; neither retries nor metadata receipts may
+recreate their words. Implementation and semantic verification remain in progress.
+
+Answer writes and relevant source/statement changes transactionally request
+`derive_review_answer` work. A pass first reassesses existing support, then
+discovers new statements from the person's complete answer. AI questions and
+original attachments are context, not newly authored evidence. A committed
+withdrawal survives a later discovery failure. Review candidates require a
+semantic match verdict even above the raw inspiration cosine attach threshold;
+negated or time-limited positions must not merge merely because vectors are close.
+
+`review_model_runs` records the owning profile, claimed job and lease timestamp
+immediately before a review attempt's first model request. It carries no words.
+Replaying a committed result does not spend another slot; another lease that
+calls a model does. Job deletion clears only its reference, preserving the
+account's window usage. Profile erasure removes these private records and export
+includes them. This is a bounded-attempt meter, not token billing; other job
+types retain their existing start-based meter. Result-job and run-job foreign
+keys carry the profile and use partial SET NULL in migration 0059.
+
+A review reading result is recorded in the artifact publication transaction.
+Finishing extraction later preserves that exact artifact id and version,
+including when the queue row has been removed. A newer numbered answer request
+withholds the older result until the current work completes. A session result
+is ready only when every surviving answer has completed; an earlier answer's
+result cannot stand in for pending answers. Explicit recovery resumes the
+unfinished stage without saving another answer or generating another question.
+The result may be changed, unchanged or empty. Related Principles are existing
+owned rows whose current citations include this review; session completion
+itself does not create a Principle.
+
+### Existing inspiration behavior
 
 A capture event. Whatever arrived: pasted text, a link, an image, an
 agent's relayed excerpt, an agent's own observation.

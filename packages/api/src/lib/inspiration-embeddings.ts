@@ -30,6 +30,7 @@ import {
   type Reflection,
 } from "../db/index.js";
 import { getDb } from "./db.js";
+import { effectiveAttachmentText } from './attachment-material.js';
 import {
   buildGeminiJsonHeaders,
   buildGeminiModelEndpoint,
@@ -359,7 +360,7 @@ async function loadProfileScopedAttachments(
   const query = db
     .select({
       type: attachments.type,
-      enrichmentText: attachments.enrichmentText,
+      enrichmentText: effectiveAttachmentText,
     })
     .from(attachments)
     .where(

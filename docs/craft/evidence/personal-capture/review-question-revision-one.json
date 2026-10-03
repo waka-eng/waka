@@ -1,0 +1,183 @@
+{
+  "at": "2026-10-03T04:13:42.752Z",
+  "provider": "gemini",
+  "calls": 3,
+  "maxCalls": 5,
+  "reportedCostUsd": null,
+  "requests": [
+    {
+      "host": "generativelanguage.googleapis.com",
+      "status": 200,
+      "model": "gemini-3.1-flash-lite",
+      "durationMs": 976,
+      "usage": {
+        "promptTokenCount": 689,
+        "candidatesTokenCount": 72,
+        "totalTokenCount": 761,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 689
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "output": [
+        "{\n  \"connection\": \"Both the garden space and the unscheduled Sunday seem to offer your daughter a blank canvas for her own choices.\",\n  \"question\": \"What was it like to see her decide how to fill that space or structure that time?\",\n  \"sourceNumbers\": [\n    1,\n    2\n  ]\n}"
+      ]
+    },
+    {
+      "host": "generativelanguage.googleapis.com",
+      "status": 200,
+      "model": "gemini-3.1-flash-lite",
+      "durationMs": 931,
+      "usage": {
+        "promptTokenCount": 812,
+        "candidatesTokenCount": 75,
+        "totalTokenCount": 887,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 812
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "output": [
+        "{\n  \"connection\": \"Both the garden and the Sunday game seem to hinge on your willingness to shift your original plans based on your daughter's input.\",\n  \"question\": \"What was it like for you to set aside your carefully made plans in those moments?\",\n  \"sourceNumbers\": [\n    1,\n    2\n  ]\n}"
+      ]
+    },
+    {
+      "host": "generativelanguage.googleapis.com",
+      "status": 200,
+      "model": "gemini-3.1-flash-lite",
+      "durationMs": 797,
+      "usage": {
+        "promptTokenCount": 686,
+        "candidatesTokenCount": 49,
+        "totalTokenCount": 735,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 686
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "output": [
+        "{\n  \"connection\": null,\n  \"question\": \"What led you to save these specific notes about an eclipse and a curry recipe?\",\n  \"sourceNumbers\": [\n    1,\n    2\n  ]\n}"
+      ]
+    }
+  ],
+  "results": [
+    {
+      "name": "connected",
+      "expectation": "One tentative concrete connection citing both experiences; one personal open question without claiming a principle.",
+      "input": {
+        "preferredLocale": "en-US",
+        "contextChanged": false,
+        "sources": [
+          {
+            "text": "I left a corner of the garden unfinished so my daughter could decide what to plant.",
+            "reflections": [],
+            "attachments": []
+          },
+          {
+            "text": "An unscheduled Sunday gave my daughter and me room to make up our own game.",
+            "reflections": [],
+            "attachments": []
+          }
+        ],
+        "history": []
+      },
+      "question": {
+        "phase": "ready",
+        "jobId": "b9d9b1f3-229c-471f-afaf-f1980a5b1c03",
+        "question": "What was it like to see her decide how to fill that space or structure that time?",
+        "connection": "Both the garden space and the unscheduled Sunday seem to offer your daughter a blank canvas for her own choices.",
+        "sourceIds": [
+          "fc88ee86-649c-437c-b1ec-8e871e39d2d9",
+          "ab4d998c-eb5f-4b7f-8d4a-60ff457f7931"
+        ],
+        "contextHash": "30f7dd0efca4a90ed742c2403fa1323d5847cc6794eb964ac90747a214f77c90",
+        "retryAfter": null
+      },
+      "error": null,
+      "durationMs": 1009
+    },
+    {
+      "name": "disagreement",
+      "expectation": "Follow the latest rejection: the daughter being included and heard matters, not an insistence on leaving things unplanned.",
+      "input": {
+        "preferredLocale": "en-US",
+        "contextChanged": false,
+        "sources": [
+          {
+            "text": "I left a corner of the garden unfinished so my daughter could decide what to plant.",
+            "reflections": [],
+            "attachments": []
+          },
+          {
+            "text": "An unscheduled Sunday gave my daughter and me room to make up our own game.",
+            "reflections": [],
+            "attachments": []
+          }
+        ],
+        "history": [
+          {
+            "question": "What was it like to see her decide how to fill that space or structure that time?",
+            "connection": "Both the garden space and the unscheduled Sunday seem to offer your daughter a blank canvas for her own choices.",
+            "answer": "I do not see the connection as leaving things unplanned. I had planned both days carefully. What mattered was that my daughter could change my plan and I actually listened."
+          }
+        ]
+      },
+      "question": {
+        "phase": "ready",
+        "jobId": "fa1c8632-c915-4f70-bd58-379bd5a4e66e",
+        "question": "What was it like for you to set aside your carefully made plans in those moments?",
+        "connection": "Both the garden and the Sunday game seem to hinge on your willingness to shift your original plans based on your daughter's input.",
+        "sourceIds": [
+          "fc88ee86-649c-437c-b1ec-8e871e39d2d9",
+          "ab4d998c-eb5f-4b7f-8d4a-60ff457f7931"
+        ],
+        "contextHash": "1c9e67dad5159f3b52fc000524778563fda0c8969f0d03817ed672004a8ba800",
+        "retryAfter": null
+      },
+      "error": null,
+      "durationMs": 962
+    },
+    {
+      "name": "unrelated",
+      "expectation": "Do not manufacture a personal common thread from unrelated saved facts. Focus on one source with connection=null.",
+      "input": {
+        "preferredLocale": "en-US",
+        "contextChanged": false,
+        "sources": [
+          {
+            "text": "An eclipse occurs when Earth passes between the Sun and the Moon.",
+            "reflections": [],
+            "attachments": []
+          },
+          {
+            "text": "For this curry recipe the cumin-to-coriander ratio is one to two.",
+            "reflections": [],
+            "attachments": []
+          }
+        ],
+        "history": []
+      },
+      "question": {
+        "phase": "processing",
+        "runAfter": null,
+        "retryAfter": null
+      },
+      "error": "the model did not answer usably: review question grounding",
+      "durationMs": 816
+    }
+  ],
+  "limitations": [
+    "Synthetic material only; no actual account data",
+    "Small qualitative evaluation; semantic verdict must be recorded separately",
+    "No raw image/audio extraction or physical-device validation"
+  ]
+}

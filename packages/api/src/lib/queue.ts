@@ -125,7 +125,7 @@
  * Splitting the guard from the claim is the one move that must not be made.
  */
 
-import { and, asc, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import {
   type BackgroundJob,
@@ -139,14 +139,15 @@ import {
   type AssessSignalSupportPayload,
   type EnrichAttachmentPayload,
   type GenerateReflectionQuestionPayload,
+  type GenerateReviewQuestionPayload,
   type ReembedSignalPayload,
   type RefreshGroupTopOfMindPayload,
   type RefreshTopOfMindPayload,
   profiles,
   inspirations,
-  reflections,
   generationRevisions,
   attachments,
+  reviewSessions,
   signalEvidence,
 } from "../db/index.js";
 import { getDb } from "./db.js";
@@ -171,6 +172,8 @@ import {
   reembedSignal,
 } from "./signal-derivation.js";
 import { isSupportedLocale } from "./locales.js";
+import { loadReflectionQuestionContext } from './reflection-question-context.js';
+import { loadReviewQuestionContext } from './review-dialogue-context.js';
 import { refreshPrinciplesForProfile } from "./principle-generation.js";
 import { tendSignalGarden } from "./signal-gardener.js";
 import {
@@ -347,7 +350,9 @@ async function enqueueKeyedJob(input: {
     | "refresh_principles"
     | "reembed_signal"
     | "tend_signal_garden"
-    | "generate_reflection_question";
+    | "generate_reflection_question"
+    | "generate_review_question"
+    | "derive_review_answer";
   payload:
     | EnrichAttachmentPayload
     | DeriveSignalsPayload
@@ -356,7 +361,9 @@ async function enqueueKeyedJob(input: {
     | RefreshGroupTopOfMindPayload
     | { profileId: string }
     | ReembedSignalPayload
-    | GenerateReflectionQuestionPayload;
+    | GenerateReflectionQuestionPayload
+    | GenerateReviewQuestionPayload
+    | {answerId:string;sessionId:string;signalIds?:string[]};
   idempotencyKey: string;
 }, transaction?: Pick<ReturnType<typeof getDb>, "execute">): Promise<EnqueueResult> {
   const rows = await (transaction ?? getDb()).execute(sql<{ id: string }>`
@@ -683,6 +690,19 @@ export async function enqueueReflectionQuestion(
   });
 }
 
+export function reviewQuestionJobPrefix(profileId:string,sessionId:string,afterAnswerId:string|null,contextHash:string){return `generate_review_question:${profileId}:${sessionId}:${afterAnswerId??'initial'}:${contextHash}:`;}
+export async function enqueueReviewAnswerDerivation(profileId:string,sessionId:string,answerId:string,transaction:Pick<ReturnType<typeof getDb>,'execute'>){
+  const [row]=await transaction.execute<{jobId:string;requestVersion:string;created:boolean}>(sql`
+    SELECT job_id AS "jobId",request_version::text AS "requestVersion",created
+    FROM request_review_answer_work(${profileId}::uuid,${sessionId}::uuid,${answerId}::uuid)`);
+  if(!row)throw new Error('Review owner is unavailable');return row;
+}
+export async function enqueueReviewQuestion(input:{profileId:string;sessionId:string;afterAnswerId:string|null;inspirationIds:string[];contextHash:string;requestId:string},transaction?:Pick<ReturnType<typeof getDb>,'execute'>){
+  const {profileId,sessionId,afterAnswerId,inspirationIds,contextHash}=input;
+  return enqueueKeyedJob({profileId,type:'generate_review_question',payload:{sessionId,afterAnswerId,inspirationIds,contextHash},
+    idempotencyKey:reviewQuestionJobPrefix(profileId,sessionId,afterAnswerId,contextHash)+input.requestId},transaction);
+}
+
 /**
  * Re-vector a statement its owner rewrote.
  *
@@ -980,30 +1000,10 @@ async function assertBackgroundJobOwnership(tx: Pick<ReturnType<typeof getDb>, "
   if (!owned) throw new Error("Background job ownership changed before commit");
 }
 
-/** Only the context the question actually consumes. Unrelated signal/reading
- * work must not spend another model call by invalidating a good follow-up. */
-async function loadReflectionQuestionContext(db: Pick<ReturnType<typeof getDb>, "select">, profileId: string, inspirationId: string) {
-  const [parent, profile, recent] = await Promise.all([
-    db.select({ text: inspirations.text }).from(inspirations)
-      .where(and(eq(inspirations.id, inspirationId), eq(inspirations.profileId, profileId))).limit(1),
-    db.select({ preferredLocale: profiles.preferredLocale }).from(profiles)
-      .where(eq(profiles.id, profileId)).limit(1),
-    db.select({ id: reflections.id, question: reflections.question, answer: reflections.answer })
-      .from(reflections).where(and(eq(reflections.inspirationId, inspirationId),
-        eq(reflections.profileId, profileId), eq(reflections.skipped, false), isNotNull(reflections.answer)))
-      .orderBy(desc(reflections.createdAt), desc(reflections.id)).limit(6),
-  ]);
-  if (!parent[0] || !profile[0]) return null;
-  return { latestId: recent[0]?.id, input: {
-    preferredLocale: isSupportedLocale(profile[0].preferredLocale) ? profile[0].preferredLocale : "en-US" as const,
-    inspirationText: parent[0].text,
-    reflections: [...recent].reverse().map((row) => ({ question: row.question, answer: row.answer ?? "" })),
-  } };
-}
-
 export async function processBackgroundJob(job: BackgroundJob): Promise<BackgroundJobResult | void> {
   const onReadingPublished: NonNullable<TopOfMindRefreshDependencies['onPublished']> = async (tx, publication) => {
     await recordInspirationReadingResult(tx, { ...publication, jobId: job.id, requestVersion: job.requestVersion.toString() });
+    if(job.type==='refresh_top_of_mind')await (await import('./review-processing.js')).recordReviewReadingResult(tx,{...publication,jobId:job.id,requestVersion:job.requestVersion.toString()});
     await (await import('./principle-status.js')).enqueuePrinciplesAfterReading(tx, publication.profileId);
   };
   switch (job.type) {
@@ -1034,6 +1034,32 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
       if (report.items.some((item) => item.issue !== undefined)) throw new Error('Support batch could not be fully assessed');
       return;
     }
+    case 'derive_review_answer': {
+      const answerId=readString(job.payload,'answerId'),sessionId=readString(job.payload,'sessionId');
+      if(!answerId||!sessionId)return dropPoisonPayload(job);
+      const {deriveSignalsForReviewAnswer}=await import('./review-answer-derivation.js');
+      const hints=(job.payload as {signalIds?:unknown}).signalIds;
+      await deriveSignalsForReviewAnswer({profileId:job.profileId,answerId,sessionId,signalIds:Array.isArray(hints)?hints.filter((id):id is string=>typeof id==='string'&&/^[0-9a-f-]{36}$/i.test(id)):[]},{job,beforeCommit:tx=>assertBackgroundJobOwnership(tx,job,true)});
+      return;
+    }
+    case 'generate_review_question': {
+      const sessionId=readString(job.payload,'sessionId');
+      const raw=job.payload as Partial<GenerateReviewQuestionPayload>;
+      if(!sessionId||!(raw.afterAnswerId===null||typeof raw.afterAnswerId==='string'))return dropPoisonPayload(job);
+      const db=getDb(),context=await db.transaction(tx=>loadReviewQuestionContext(tx,job.profileId,sessionId),{isolationLevel:'repeatable read'});
+      if(!context||context.latestAnswerId!==raw.afterAnswerId||context.hash!==raw.contextHash)return dropPoisonPayload(job);
+      const provider=await getDefaultModelProvider(),result=await provider.askReviewQuestion(context.input);
+      await db.transaction(async tx=>{
+        const [session]=await tx.select({id:reviewSessions.id}).from(reviewSessions).where(and(eq(reviewSessions.profileId,job.profileId),eq(reviewSessions.id,sessionId))).for('update',{noWait:true});
+        const [owner]=await tx.select({id:generationRevisions.profileId}).from(generationRevisions).where(eq(generationRevisions.profileId,job.profileId)).for('update',{noWait:true});
+        const current=await loadReviewQuestionContext(tx,job.profileId,sessionId,{includeMaterial:false});
+        if(!session||!owner||!current||current.hash!==context.hash)throw new Error('Review question inputs changed before commit');
+        await assertBackgroundJobOwnership(tx,job,true);
+        const payload:GenerateReviewQuestionPayload={sessionId,afterAnswerId:context.latestAnswerId,inspirationIds:context.sourceIdentities.map(row=>row.id),
+          contextHash:context.hash,question:result.question,connection:result.connection,sourceIds:result.sourceNumbers.map(number=>context.sourceIdentities[number-1]!.id)};
+        await tx.update(backgroundJobs).set({payload}).where(and(eq(backgroundJobs.id,job.id),eq(backgroundJobs.profileId,job.profileId)));
+      });return;
+    }
     case "generate_reflection_question": {
       const payload = parseGenerateReflectionQuestionPayload(job.payload);
       if (!payload) return dropPoisonPayload(job);
@@ -1054,7 +1080,7 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
         // Source edits can already hold the job row while redacting its old
         // payload. Do not wait back on that human transaction and deadlock it.
         await assertBackgroundJobOwnership(tx, job, true);
-        await tx.update(backgroundJobs).set({ payload: { ...payload, question: result.question } })
+        await tx.update(backgroundJobs).set({ payload: { ...payload, question: result.question, contextHash: context.hash } })
           .where(and(eq(backgroundJobs.id, job.id), eq(backgroundJobs.profileId, job.profileId)));
       });
       return;
@@ -1432,15 +1458,16 @@ async function readBackgroundJobQueueHead(now: Date): Promise<RunnableJobHead | 
 async function readAccountModelUsage(
   accountId: string,
   since: Date,
+  database:Pick<ReturnType<typeof getDb>,'execute'>=getDb(),
 ): Promise<AccountModelUsage> {
-  const rows = await getDb().execute(sql<{ started: number; oldest: Date | null }>`
+  const rows = await database.execute(sql<{ started: number; oldest: Date | null }>`
     SELECT
-      count(*)::int AS started,
-      min(job.started_at) AS oldest
-    FROM background_jobs AS job
-    JOIN profiles AS profile ON profile.id = job.profile_id
-    WHERE profile.account_id = ${accountId}::uuid
-      AND job.started_at >= ${since.toISOString()}::timestamptz
+      count(*)::int AS started,min(meter.started_at) AS oldest
+    FROM (
+      SELECT job.profile_id,job.started_at FROM background_jobs job WHERE job.type::text<>'derive_review_answer'
+      UNION ALL SELECT r.profile_id,r.started_at FROM review_model_runs r
+    ) meter JOIN profiles AS profile ON profile.id=meter.profile_id
+    WHERE profile.account_id=${accountId}::uuid AND meter.started_at>=${since.toISOString()}::timestamptz
   `);
 
   const [row] = rows as unknown as Array<{ started: number | string; oldest: Date | string | null }>;
@@ -1449,6 +1476,25 @@ async function readAccountModelUsage(
     startedInWindow: Number(row.started ?? 0),
     oldestStartInWindow: coerceNullableDate(row.oldest),
   };
+}
+
+/** Called immediately before a review attempt's first model request. Cached
+ * recovery/cleanup is free; later keyed reruns retain earlier metered starts. */
+export async function reserveReviewModelRun(job:BackgroundJob){
+  if(job.type!=='derive_review_answer'||!job.lockedAt)throw new Error('Review model work needs a claim');
+  await getDb().transaction(async tx=>{
+    await assertBackgroundJobOwnership(tx,job,true);
+    const [owner]=await tx.select({accountId:profiles.accountId}).from(profiles).where(eq(profiles.id,job.profileId));
+    if(!owner?.accountId)throw new Error('Review model owner is unavailable');
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${'waka.review-budget:'+owner.accountId},0))`);
+    const [recorded]=await tx.execute(sql`SELECT id FROM review_model_runs WHERE job_id=${job.id}::uuid AND lease_at=${coerceNullableDate(job.lockedAt)!.toISOString()}::timestamptz`);
+    if(recorded)return;
+    const now=new Date(),usage=await readAccountModelUsage(owner.accountId,modelBudgetWindowStart(now),tx),budget=assessModelBudget(usage,now);
+    if(!budget.withinBudget)throw new BackgroundJobHeldError(budget.retryAfter,'Review model budget waits','support');
+    await tx.execute(sql`INSERT INTO review_model_runs(profile_id,job_id,lease_at)
+      VALUES(${job.profileId}::uuid,${job.id}::uuid,${coerceNullableDate(job.lockedAt)!.toISOString()}::timestamptz)
+      ON CONFLICT(job_id,lease_at) DO NOTHING`);
+  });
 }
 
 /**

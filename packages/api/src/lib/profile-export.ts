@@ -24,7 +24,7 @@
  * rows record what THEY said out loud, and those are here).
  */
 
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 
 import {
   attachments,
@@ -37,6 +37,15 @@ import {
   principles,
   profiles,
   reflections,
+  reviewSessions,
+  reviewItems,
+  reviewAnswers,
+  reviewAnswerSources,
+  signalReviewEvidence,
+  signalReviewEvidenceSources,
+  reviewSignalSupport,
+  reviewAnswerProcessing,
+  reviewModelRuns,
   signalContradictions,
   signalEvidence,
   experiences,
@@ -182,9 +191,24 @@ export async function assembleProfileExport(db: WakaDb, profileId: string) {
     inspirations: inspirationRows,
     attachments: attachmentRows,
     reflections: reflectionRows,
+    reviewSessions: await db.select().from(reviewSessions).where(eq(reviewSessions.profileId,profileId)).orderBy(asc(reviewSessions.createdAt),asc(reviewSessions.id)),
+    reviewItems: (await db.select().from(reviewItems).where(eq(reviewItems.profileId,profileId)).orderBy(asc(reviewItems.sessionId),asc(reviewItems.position)))
+      .map(row=>({...row,sourceRevision:row.sourceRevision.toString()})),
+    reviewAnswers:await db.select().from(reviewAnswers).where(and(eq(reviewAnswers.profileId,profileId),isNull(reviewAnswers.deletedAt))).orderBy(asc(reviewAnswers.createdAt),asc(reviewAnswers.id)),
+    reviewAnswerSources:(await db.select().from(reviewAnswerSources).where(eq(reviewAnswerSources.profileId,profileId)).orderBy(asc(reviewAnswerSources.answerId),asc(reviewAnswerSources.inspirationId)))
+      .map(row=>({...row,sourceRevision:row.sourceRevision.toString()})),
     signals: signalRows.map((row) => ({ ...row, statementRevision: row.statementRevision.toString() })),
     signalEvidence: evidenceRows.map((row) => ({ ...row, statementRevision: row.statementRevision?.toString() ?? null,
       materialRevision: row.materialRevision?.toString() ?? null })),
+    signalReviewEvidence:(await db.select().from(signalReviewEvidence).where(eq(signalReviewEvidence.profileId,profileId)))
+      .map(row=>({...row,statementRevision:row.statementRevision.toString()})),
+    signalReviewEvidenceSources:(await db.select().from(signalReviewEvidenceSources).where(eq(signalReviewEvidenceSources.profileId,profileId)))
+      .map(row=>({...row,materialRevision:row.materialRevision.toString()})),
+    reviewSignalSupport:(await db.select().from(reviewSignalSupport).where(eq(reviewSignalSupport.profileId,profileId)))
+      .map(row=>({...row,statementRevision:row.statementRevision.toString()})),
+    reviewAnswerProcessing:(await db.select().from(reviewAnswerProcessing).where(eq(reviewAnswerProcessing.profileId,profileId)))
+      .map(row=>({...row,derivationRequestVersion:row.derivationRequestVersion?.toString()??null,readingRequestVersion:row.readingRequestVersion?.toString()??null})),
+    reviewModelRuns:await db.select().from(reviewModelRuns).where(eq(reviewModelRuns.profileId,profileId)).orderBy(asc(reviewModelRuns.startedAt),asc(reviewModelRuns.id)),
     signalStatements: signalStatementRows,
     signalShares: shareRows,
     signalContradictions: contradictionRows,

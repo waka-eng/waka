@@ -31,16 +31,19 @@ function savedDraft(draftKey: string | null, afterId: string | null): string {
   } catch { return ""; }
 }
 
-export function ReflectionFlow({ inspirationId, scope, processing, initialTurns, locale, onSaved, onRemoved, onDone, onSynchronized }: {
+export function ReflectionFlow({ inspirationId, scope, processing, source, initialTurns, locale, onSaved, onRemoved, onDone, onSynchronized, focusReflectionId, onCopyLink }: {
   inspirationId: string;
   scope: ProfileStorageScope | null;
   processing?: ReactNode;
+  source?: ReactNode;
   initialTurns: ReflectionTurn[];
   locale: SupportedLocale;
   onSaved: (reflection: ApiReflection) => void;
   onRemoved: (reflectionId: string) => void;
   onDone: () => void;
   onSynchronized?: (inspiration: ApiInspiration | null) => void;
+  focusReflectionId?: string | null;
+  onCopyLink?: (reflectionId: string) => void;
 }) {
   const draftKey = profileStorageKey(scope, `reflectionDraft:${inspirationId}`);
   const restored = useRef(readReflectionDraft(draftKey));
@@ -54,12 +57,25 @@ export function ReflectionFlow({ inspirationId, scope, processing, initialTurns,
   const draftRef = useRef<ReflectionDraft>({ afterId: draftAfterId, question, answer });
   draftRef.current = { afterId: draftAfterId, question, answer };
   const [error, setError] = useState("");
+  const [sourceOpen, setSourceOpen] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const requestSequence = useRef(0);
+  const questionRequest = useRef<AbortController | null>(null);
   const currentQuestion = useRef<HTMLDivElement>(null);
+  const root = useRef<HTMLDivElement>(null);
+  const earlierTurns = useRef<HTMLDetailsElement>(null);
   const latestId = turns.at(-1)?.id ?? null;
 
-  useEffect(() => () => { requestSequence.current += 1; }, []);
+  useEffect(() => () => { requestSequence.current += 1; questionRequest.current?.abort(); }, []);
+  useEffect(() => {
+    if (!focusReflectionId || focusReflectionId === 'open') return;
+    const node = [...root.current?.querySelectorAll<HTMLElement>('[data-reflection-id]') ?? []]
+      .find((item) => item.dataset.reflectionId === focusReflectionId);
+    if (!node) return;
+    if (earlierTurns.current?.contains(node)) earlierTurns.current.open = true;
+    const surface = node.closest<HTMLElement>('[data-jar-surface]');
+    if (surface) surface.scrollTop += node.getBoundingClientRect().top - surface.getBoundingClientRect().top - (parseFloat(getComputedStyle(surface).paddingTop) || 0);
+  }, [focusReflectionId]);
   useEffect(() => {
     // Each follow-up replaces the waiting beat. Bring the new question into
     // the card/sheet, not every scroll ancestor. scrollIntoView also scrolls
@@ -73,13 +89,21 @@ export function ReflectionFlow({ inspirationId, scope, processing, initialTurns,
     surface.scrollTop += questionNode.getBoundingClientRect().top - surface.getBoundingClientRect().top - padding;
   }, [phase, question, turns.length]);
 
-  const beginQuestion = useCallback(async (afterId: string, retry = false) => {
+  const beginQuestion = useCallback(async (afterId: string, retry = false, observeOnly = false) => {
     const sequence = ++requestSequence.current;
-    setPhase("asking");
+    questionRequest.current?.abort();
+    const controller = new AbortController(); questionRequest.current = controller;
+    const timeout = window.setTimeout(() => controller.abort(), 65_000);
+    const options = {signal:controller.signal,profile:scope?.profileId};
+    if (!observeOnly) setPhase("asking");
     setError("");
     try {
-      let status: ApiReflectionQuestionStatus = await requestReflectionQuestion(inspirationId, afterId, retry);
+      let status: ApiReflectionQuestionStatus = observeOnly
+        ? await fetchReflectionQuestionStatus(inspirationId, afterId, options)
+        : await requestReflectionQuestion(inspirationId, afterId, retry, options);
       for (let check = 0; check < 30 && sequence === requestSequence.current; check += 1) {
+        if (controller.signal.aborted) throw new Error('Question observation timed out');
+        if (observeOnly && (!status || status.phase === 'idle')) { setPhase('saved'); return; }
         if (status.phase === "ready" && status.question) {
           setQuestion(status.question);
           setAnswer(savedDraft(draftKey, afterId));
@@ -92,9 +116,17 @@ export function ReflectionFlow({ inspirationId, scope, processing, initialTurns,
           setPhase("question_failed");
           return;
         }
-        await new Promise<void>((resolve) => window.setTimeout(resolve, 2_000));
+        if (status.phase === 'idle') {
+          setError(t(locale, 'worldReflectionContextChanged')); setPhase('question_failed'); return;
+        }
+        setPhase('asking');
+        await new Promise<void>((resolve) => {
+          const finish = () => { window.clearTimeout(timer); controller.signal.removeEventListener('abort', finish); resolve(); };
+          const timer = window.setTimeout(finish, 2_000);
+          controller.signal.addEventListener('abort', finish, {once:true});
+        });
         if (sequence !== requestSequence.current) return;
-        status = await fetchReflectionQuestionStatus(inspirationId, afterId);
+        status = await fetchReflectionQuestionStatus(inspirationId, afterId, options);
       }
       if (sequence === requestSequence.current) {
         setError(t(locale, "worldReflectionNextDelayed"));
@@ -102,16 +134,25 @@ export function ReflectionFlow({ inspirationId, scope, processing, initialTurns,
       }
     } catch {
       if (sequence === requestSequence.current) {
+        if (observeOnly) { setPhase('saved'); return; }
         setError(t(locale, "worldReflectionNextFailed"));
         setPhase("question_failed");
       }
-    }
-  }, [inspirationId, draftKey, locale]);
+    } finally { window.clearTimeout(timeout); }
+  }, [inspirationId, draftKey, locale, scope?.profileId]);
+
+  // Reopening only observes work previously requested by the person. It never
+  // starts another model job or overwrites a draft they have already written.
+  useEffect(() => {
+    if (restored.current?.answer || !initialTurns.length) return;
+    void beginQuestion(initialTurns.at(-1)!.id, false, true);
+  }, [beginQuestion]);
 
   const save = useAuthoredSave({ scope, operation: 'reflection', inspirationId,
     onResolved: (intent, result, initiated) => {
       if (intent.operation !== 'reflection' || !result.reflection) return;
       requestSequence.current += 1;
+      questionRequest.current?.abort();
       const retained = settleReflectionDraft(draftKey, { afterId: intent.afterId, question: intent.input.question, answer: intent.input.answer ?? '' }, draftRef.current);
       const currentTurns = result.inspiration.reflections.filter((row) => !row.skipped && row.answer)
         .map((row) => ({ id: row.id, question: row.question, answer: row.answer! }));
@@ -129,7 +170,7 @@ export function ReflectionFlow({ inspirationId, scope, processing, initialTurns,
     onRemoved: (intent) => {
       if (intent.operation !== 'reflection') return;
       const retained = settleReflectionDraft(draftKey, { afterId: intent.afterId, question: intent.input.question, answer: intent.input.answer ?? '' }, draftRef.current);
-      requestSequence.current += 1; setTurns([]); onSynchronized?.(null);
+      requestSequence.current += 1; questionRequest.current?.abort(); setTurns([]); onSynchronized?.(null);
       draftRef.current = retained ?? { afterId: null, question: '', answer: '' };
       setAnswer(retained?.answer ?? ''); setQuestion(retained?.question ?? ''); setDraftAfterId(draftRef.current.afterId);
       setPhase(retained ? 'answering' : 'saved');
@@ -166,6 +207,7 @@ export function ReflectionFlow({ inspirationId, scope, processing, initialTurns,
       // Any removed answer may have informed the follow-up. Invalidate that
       // generated question, but preserve words the person is still drafting.
       requestSequence.current += 1;
+      questionRequest.current?.abort();
       setQuestion(remaining.length > 0 ? "" : t(locale, "worldFirstReflectionQuestion"));
       setDraftAfterId(remaining.at(-1)?.id ?? null);
       const revised = { ...draftRef.current, afterId: remaining.at(-1)?.id ?? null, question: remaining.length > 0 ? '' : t(locale, 'worldFirstReflectionQuestion') };
@@ -177,23 +219,33 @@ export function ReflectionFlow({ inspirationId, scope, processing, initialTurns,
 
   const latest = turns.at(-1);
   const earlier = turns.slice(0, -1);
-  return <div className="jar-reflection-flow">
-    {latest ? <div className="jar-reflection-previous">
+  const copyLink = (id: string) => onCopyLink ? <button type="button" className="jar-copy-link"
+    aria-label={t(locale, 'worldCopyReflectionLink')} title={t(locale, 'worldCopyReflectionLink')} onClick={() => onCopyLink(id)}>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m10 14 4-4m-7 3-2 2a4 4 0 0 0 6 6l4-4m-4-10 2-2a4 4 0 0 1 6 6l-4 4" /></svg>
+  </button> : null;
+  return <div ref={root} className="jar-reflection-flow">
+    {source ? <details className="jar-reflection-source" onToggle={event => setSourceOpen(event.currentTarget.open)}>
+      <summary>{t(locale, 'worldReflectionViewSource')}</summary>
+      {sourceOpen ? source : null}
+    </details> : null}
+    {latest ? <div className="jar-reflection-previous" data-reflection-id={latest.id}>
       <p className="jar-label">{t(locale, "worldReflectionPrevious")}</p>
       <p className="jar-reflection-previous-question">{latest.question}</p>
       <p>{latest.answer}</p>
       <button type="button" disabled={Boolean(save.pending) || removingId === latest.id} onClick={() => void removeAnswer(latest.id)}>
         {t(locale, "worldTakeItBack")}
       </button>
+      {copyLink(latest.id)}
     </div> : null}
-    {earlier.length > 0 ? <details className="jar-reflection-turns">
+    {earlier.length > 0 ? <details ref={earlierTurns} className="jar-reflection-turns">
       <summary>{t(locale, "worldReflectionHistory")} ({earlier.length})</summary>
-      {earlier.map((turn) => <div key={turn.id} className="jar-reflection-turn">
+      {earlier.map((turn) => <div key={turn.id} className="jar-reflection-turn" data-reflection-id={turn.id}>
         <p className="jar-reflect-q">{turn.question}</p>
         <p>{turn.answer}</p>
         <button type="button" disabled={Boolean(save.pending) || removingId === turn.id} onClick={() => void removeAnswer(turn.id)}>
           {t(locale, "worldTakeItBack")}
         </button>
+        {copyLink(turn.id)}
       </div>)}
     </details> : null}
     {phase === "answering" ? <div ref={currentQuestion} className="jar-reflection-current">

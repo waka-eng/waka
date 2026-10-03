@@ -4,6 +4,7 @@ import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import { attachments, groupMembers, inspirations, profiles, type Inspiration } from "../db/index.js";
 import { getDb } from "./db.js";
 import type { RelatedInspirationContext } from "./model-provider.js";
+import { effectiveAttachmentKind, effectiveAttachmentStatus, effectiveAttachmentText } from './attachment-material.js';
 
 type WakaDb = ReturnType<typeof getDb>;
 type WakaTx = Parameters<Parameters<WakaDb["transaction"]>[0]>[0];
@@ -22,15 +23,15 @@ export async function loadGroupInputMembership(db: WakaDb, ownerProfileId: strin
 export async function loadGroupInputAttachments(db: WakaDb | WakaTx, ownerProfileId: string, inspirationId: string) {
   return db.select({
     id: attachments.id,
-    kind: attachments.enrichmentKind,
-    text: attachments.enrichmentText,
+    kind: effectiveAttachmentKind,
+    text: effectiveAttachmentText,
     hostname: attachments.hostname,
     name: attachments.name,
   }).from(attachments).where(and(
     eq(attachments.profileId, ownerProfileId),
     eq(attachments.inspirationId, inspirationId),
-    eq(attachments.enrichmentStatus, "ready"),
-    isNotNull(attachments.enrichmentText),
+    eq(effectiveAttachmentStatus, "ready"),
+    isNotNull(effectiveAttachmentText),
   )).orderBy(asc(attachments.id));
 }
 
