@@ -10162,6 +10162,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   const openMouth = useCallback(() => {
     setMouthNote("");
     setMouthOpen(true);
+    // Capture is an explicit navigation intent. Record it before boot/roster
+    // restoration or the world's debounced observer can close the new editor.
+    const nav=viewNavigationRef.current;
+    nav.write({...EMPTY_VIEW,...nav.view,section:'top',at:null,compose:true,find:false,
+      inspirationId:null,reflectionId:null,reviewId:null,reviewAnswerId:null,principleId:null,sharePrinciple:false});
   }, []);
 
   /** The shortcut returns to the present wall before putting the pen in hand. */

@@ -1,6 +1,6 @@
 # Personal experience dev rollout
 
-Status: preflight. This release covers capture, review and sharing through milestones 1–3. Avatar implementation is excluded. Production deployment is not requested.
+Status: deployed, signed-in acceptance in progress. PR 335 merged as `ffa4ced3f4cbdd63e53c80d078b6f1d3f3a40f0e`; deployment run 37162007566 passed database separation, migrations and SST deployment. This release covers capture, review and sharing through milestones 1–3. Avatar implementation is excluded. Production deployment is not requested.
 
 ## Target and checks
 
@@ -23,3 +23,5 @@ Prefer a forward repair after cutover. Do not drop the new tables or reverse aud
 Record the merged SHA, workflow URL and deployment result. On the actual dev app verify sign-in, capture/save, review entry/completion/reopen, stored reading, Principles and card preview/export handoff. Use a clearly labeled private QA capture rather than editing existing memories. Reopen in a second visit to verify persistence. Observe content-free counts and outcomes: save attempts/failures, review starts/completions/reopens and card renders/export handoffs. Report the sample size; these smoke observations are not population analytics or proof of external publication. Physical devices/native share completion remain deferred.
 
 If authentication or a missing deployment credential prevents a check, record that item as incomplete. Build success and public HTTP availability alone do not prove the signed-in experience. No real-account content may be copied into release logs.
+
+The initial signed-in visit confirmed the new UI and retained existing reading/principles, but exposed a startup race: opening Capture while boot/navigation restoration was still settling could close the editor. No test text had been entered. The release patch records the explicit composer route synchronously rather than waiting for the observer debounce. Its regression checks the immediate URL, rerender/restoration and Back. Dev acceptance remains open until the patch is deployed and the capture/review/reopen/card checks finish.
