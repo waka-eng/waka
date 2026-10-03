@@ -1,13 +1,14 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { createTestDatabase, type TestDatabase } from '../../test/helpers/index.js';
-import { setDefaultModelProviderForTests, type ModelProvider } from './model-provider.js';
+import { setDefaultModelProviderForTests, type ModelProvider, type ReflectionQuestionInput } from './model-provider.js';
 import { enqueueReflectionQuestion, postgresBackgroundJobStore, processBackgroundJob } from './queue.js';
 
 let t: TestDatabase;
 let sequence = 0;
 let duringQuestion: (() => Promise<void>) | null;
 let providerCalls = 0;
+let providerInput: ReflectionQuestionInput | null = null;
 beforeAll(async () => {
   t = await createTestDatabase();
   const url = new URL(process.env.DB_CONNECTION_URL!);
@@ -16,8 +17,9 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await t.truncateAll();
-  duringQuestion = null; providerCalls = 0;
-  setDefaultModelProviderForTests({ askReflectionQuestion: async () => {
+  duringQuestion = null; providerCalls = 0; providerInput = null;
+  setDefaultModelProviderForTests({ askReflectionQuestion: async (input: ReflectionQuestionInput) => {
+    providerInput = input;
     providerCalls += 1;
     await duringQuestion?.();
     return { question: 'What would give you more space for that?' };
@@ -25,13 +27,19 @@ beforeEach(async () => {
 });
 afterAll(async () => { setDefaultModelProviderForTests(null); await t?.cleanup(); });
 
-async function fixture() {
+async function fixture(withAttachments = false) {
   const [account] = await t.sql`INSERT INTO accounts(email) VALUES (${`question-fence-${++sequence}@example.test`}) RETURNING id`;
   const [profile] = await t.sql`INSERT INTO profiles(account_id, type, name, preferred_locale)
     VALUES (${account.id}, 'human', 'Owner', 'en-US') RETURNING id`;
   const [source] = await t.sql`INSERT INTO inspirations(profile_id, text) VALUES (${profile.id}, 'A quiet walk') RETURNING id`;
   const [answer] = await t.sql`INSERT INTO reflections(profile_id, inspiration_id, question, answer)
     VALUES (${profile.id}, ${source.id}, 'What caught your attention?', 'Room to think') RETURNING id`;
+  if (withAttachments) {
+    await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,enrichment_status,enrichment_kind,enrichment_text,transcript_correction)
+      VALUES (${profile.id},${source.id},'audio','https://example.test/audio','ready','audio_transcription','Old machine wording','My corrected spoken words')`;
+    await t.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,enrichment_status,enrichment_text)
+      VALUES (${profile.id},${source.id},'image','https://example.test/photo','pending','UNFINISHED_PRIVATE_TEXT')`;
+  }
   const { jobId } = await enqueueReflectionQuestion(profile.id as string, source.id as string, answer.id as string);
   const job = await postgresBackgroundJobStore.claimNext(new Date(Date.now() + 1000));
   expect(job?.id).toBe(jobId);
@@ -39,6 +47,33 @@ async function fixture() {
 }
 
 describe('reflection follow-up commit fences', () => {
+  it('uses the effective corrected transcript once and does not read pending image contents', async () => {
+    const f = await fixture(true); await processBackgroundJob(f.job);
+    expect(providerInput?.attachments).toEqual(expect.arrayContaining([
+      expect.objectContaining({type:'audio',text:'My corrected spoken words',status:'ready'}),
+      expect.objectContaining({type:'image',text:null,status:'pending'}),
+    ]));
+    expect(JSON.stringify(providerInput)).not.toContain('Old machine wording');
+    expect(JSON.stringify(providerInput)).not.toContain('UNFINISHED_PRIVATE_TEXT');
+    expect((await t.sql`SELECT payload FROM background_jobs WHERE id=${f.job.id}`)[0].payload.contextHash).toEqual(expect.any(String));
+  });
+  it.each(['correction','delete','completion'] as const)('withdraws a question if attachment %s changes during generation', async change => {
+    const f = await fixture(true);
+    duringQuestion = async () => {
+      if (change === 'correction') await t.sql`UPDATE attachments SET transcript_correction='New correction' WHERE inspiration_id=${f.sourceId} AND type='audio'`;
+      if (change === 'delete') await t.sql`DELETE FROM attachments WHERE inspiration_id=${f.sourceId} AND type='audio'`;
+      if (change === 'completion') await t.sql`UPDATE attachments SET enrichment_status='ready',enrichment_kind='image_description',enrichment_text='A finished description' WHERE inspiration_id=${f.sourceId} AND type='image'`;
+    };
+    await expect(processBackgroundJob(f.job)).rejects.toThrow(/inputs changed|ownership changed/);
+    expect(await t.sql`SELECT id FROM background_jobs WHERE id=${f.job.id}`).toHaveLength(0);
+  });
+  it('redacts a completed attachment-derived question on correction but not timestamp-only updates', async () => {
+    const f = await fixture(true); await processBackgroundJob(f.job);
+    await t.sql`UPDATE attachments SET updated_at=now() WHERE inspiration_id=${f.sourceId}`;
+    expect(await t.sql`SELECT id FROM background_jobs WHERE id=${f.job.id}`).toHaveLength(1);
+    await t.sql`UPDATE attachments SET transcript_correction='Withdraw that wording' WHERE inspiration_id=${f.sourceId} AND type='audio'`;
+    expect(await t.sql`SELECT id FROM background_jobs WHERE id=${f.job.id}`).toHaveLength(0);
+  });
   it('keeps a question for an unchanged answer under the current worker claim', async () => {
     const f = await fixture();
     await processBackgroundJob(f.job);

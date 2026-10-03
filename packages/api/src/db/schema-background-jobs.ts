@@ -130,6 +130,7 @@ export interface ReembedSignalPayload {
 export interface GenerateReflectionQuestionPayload {
   inspirationId: string;
   afterReflectionId: string;
+  contextHash?: string;
   question?: string;
 }
 

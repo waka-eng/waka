@@ -25,6 +25,7 @@ import { validationDetails } from "../lib/validation.js";
 import { requestSignalDerivation } from "../lib/inspiration-derivation-requests.js";
 import { InspirationSaveError, inspirationSaveFailure, parseInspirationSaveRequestId, runInspirationSave } from '../lib/inspiration-save-requests.js';
 import { readSavedReflection } from './inspirations-save-requests.js';
+import { loadReflectionQuestionContext } from '../lib/reflection-question-context.js';
 import {
   reflectionSelection,
   serializeReflection,
@@ -64,6 +65,11 @@ export function registerReflectionRoutes(
       .limit(1);
     const question = job?.payload && typeof job.payload === "object" && "question" in job.payload &&
       typeof job.payload.question === "string" ? job.payload.question : null;
+    if (job?.status === 'succeeded' && question) {
+      const context = await loadReflectionQuestionContext(db, profileId, inspirationId);
+      const recorded = job.payload && typeof job.payload === 'object' && 'contextHash' in job.payload ? job.payload.contextHash : null;
+      if (!context || recorded !== context.hash) return { phase: 'idle' as const };
+    }
     return !job ? { phase: "idle" as const }
       : job.status === "succeeded" && question ? { phase: "ready" as const, question }
       : job.status === "failed" || job.status === "succeeded" ? { phase: "failed" as const }
@@ -72,6 +78,7 @@ export function registerReflectionRoutes(
 
   /** Only enqueue here; the worker holds the model budget and the answer. */
   routes.post("/:id/reflection-question", async (c) => {
+    c.header('Cache-Control', 'private, no-store');
     const idCheck = uuidSchema.safeParse(c.req.param("id"));
     if (!idCheck.success) return c.json({ error: "Invalid inspiration id" }, 400);
     let rawBody: unknown;
@@ -101,6 +108,7 @@ export function registerReflectionRoutes(
   });
 
   routes.get("/:id/reflection-question/status", async (c) => {
+    c.header('Cache-Control', 'private, no-store');
     const idCheck = uuidSchema.safeParse(c.req.param("id"));
     const afterCheck = uuidSchema.safeParse(c.req.query("afterReflectionId"));
     if (!idCheck.success || !afterCheck.success) return c.json({ error: "Invalid reflection question request" }, 400);

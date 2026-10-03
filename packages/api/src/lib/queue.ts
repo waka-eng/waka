@@ -125,7 +125,7 @@
  * Splitting the guard from the claim is the one move that must not be made.
  */
 
-import { and, asc, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import {
   type BackgroundJob,
@@ -144,7 +144,6 @@ import {
   type RefreshTopOfMindPayload,
   profiles,
   inspirations,
-  reflections,
   generationRevisions,
   attachments,
   signalEvidence,
@@ -171,6 +170,7 @@ import {
   reembedSignal,
 } from "./signal-derivation.js";
 import { isSupportedLocale } from "./locales.js";
+import { loadReflectionQuestionContext } from './reflection-question-context.js';
 import { refreshPrinciplesForProfile } from "./principle-generation.js";
 import { tendSignalGarden } from "./signal-gardener.js";
 import {
@@ -980,27 +980,6 @@ async function assertBackgroundJobOwnership(tx: Pick<ReturnType<typeof getDb>, "
   if (!owned) throw new Error("Background job ownership changed before commit");
 }
 
-/** Only the context the question actually consumes. Unrelated signal/reading
- * work must not spend another model call by invalidating a good follow-up. */
-async function loadReflectionQuestionContext(db: Pick<ReturnType<typeof getDb>, "select">, profileId: string, inspirationId: string) {
-  const [parent, profile, recent] = await Promise.all([
-    db.select({ text: inspirations.text }).from(inspirations)
-      .where(and(eq(inspirations.id, inspirationId), eq(inspirations.profileId, profileId))).limit(1),
-    db.select({ preferredLocale: profiles.preferredLocale }).from(profiles)
-      .where(eq(profiles.id, profileId)).limit(1),
-    db.select({ id: reflections.id, question: reflections.question, answer: reflections.answer })
-      .from(reflections).where(and(eq(reflections.inspirationId, inspirationId),
-        eq(reflections.profileId, profileId), eq(reflections.skipped, false), isNotNull(reflections.answer)))
-      .orderBy(desc(reflections.createdAt), desc(reflections.id)).limit(6),
-  ]);
-  if (!parent[0] || !profile[0]) return null;
-  return { latestId: recent[0]?.id, input: {
-    preferredLocale: isSupportedLocale(profile[0].preferredLocale) ? profile[0].preferredLocale : "en-US" as const,
-    inspirationText: parent[0].text,
-    reflections: [...recent].reverse().map((row) => ({ question: row.question, answer: row.answer ?? "" })),
-  } };
-}
-
 export async function processBackgroundJob(job: BackgroundJob): Promise<BackgroundJobResult | void> {
   const onReadingPublished: NonNullable<TopOfMindRefreshDependencies['onPublished']> = async (tx, publication) => {
     await recordInspirationReadingResult(tx, { ...publication, jobId: job.id, requestVersion: job.requestVersion.toString() });
@@ -1054,7 +1033,7 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
         // Source edits can already hold the job row while redacting its old
         // payload. Do not wait back on that human transaction and deadlock it.
         await assertBackgroundJobOwnership(tx, job, true);
-        await tx.update(backgroundJobs).set({ payload: { ...payload, question: result.question } })
+        await tx.update(backgroundJobs).set({ payload: { ...payload, question: result.question, contextHash: context.hash } })
           .where(and(eq(backgroundJobs.id, job.id), eq(backgroundJobs.profileId, job.profileId)));
       });
       return;

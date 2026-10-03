@@ -386,6 +386,7 @@ export interface ReflectionQuestionInput {
   preferredLocale: SupportedLocale;
   inspirationText: string;
   reflections: Array<{ question: string; answer: string }>;
+  attachments?: Array<{ type: 'link' | 'image' | 'audio' | 'file'; status: string; kind: string | null; text: string | null }>;
 }
 
 export interface ReflectionQuestionResult {
