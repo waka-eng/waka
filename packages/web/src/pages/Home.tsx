@@ -83,6 +83,7 @@ import { useInspirationDraft } from '../lib/use-inspiration-draft';
 import { useAudioRecording } from '../lib/use-audio-recording';
 import { InspirationComposer } from '../components/InspirationComposer';
 import { ReviewPanel } from '../components/ReviewPanel';
+import { ReadingChanges } from '../components/ReadingChanges';
 import { ReviewEvidence } from '../components/ReviewEvidence';
 import type { ApiSignalReviewEvidence } from '../lib/api/signals';
 import { InspirationAttachments } from '../components/InspirationAttachments';
@@ -216,7 +217,6 @@ import {
   fetchGroupField,
   fetchGroupInspiration,
   fetchGroupWall,
-  fetchTopOfMindVersions,
   finalizeAttachment,
   presignAttachment,
   uploadToPresignedUrl,
@@ -247,7 +247,6 @@ import {
   type ApiPrinciple,
   type ApiGroupFieldInspiration,
   type ApiGroupWallSignal,
-  type ApiTopOfMindVersion,
   type ApiReading,
   fetchTheReading,
   type ApiAntechamberRow,
@@ -9491,26 +9490,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   useEffect(() => {
     if (!posterAsk) setGroundAsk(null);
   }, [posterAsk]);
-  /**
-   * THE POSTER'S OWN HISTORY.
-   *
-   * The artifact has always been VERSIONED — `/top-of-mind/versions` has been
-   * live and called from nowhere, so a sentence claiming who you are becoming
-   * could not be read against the sentences it replaced. The dial scrubs the
-   * field through time; the one thing that most describes a change in you
-   * could not be scrubbed at all.
-   *
-   * Fetched only when the poster is asked, alongside its provenance: the
-   * question "where did this come from" and "what did it used to say" are the
-   * same question asked of the past and of the ground.
-   */
-  const [versions, setVersions] = useState<ApiTopOfMindVersion[] | null>(null);
-  useEffect(() => {
-    if (!posterAsk || versions !== null || offlineRef.current) return;
-    fetchTopOfMindVersions()
-      .then(setVersions)
-      .catch(() => setVersions([]));
-  }, [posterAsk, versions]);
 
   /**
    * WHOSE GROUND YOU COULD STAND IN — not a key to a mixture.
@@ -12744,18 +12723,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     className="jar-hq-inner"
                     ref={w.kind === "self" ? measured.hqInner : undefined}
                   >
-                    {/* THE LAYER, NOT THE NAME (founder, 2026-08-25: "this
-                        should always say TOP OF MIND at the top no matter
-                        what room"). This slot held the wall's name, under a
-                        rule that nothing else may ever stand here — and the
-                        name is already on screen twice, in the pill at the
-                        top left and on the axis below, so here it was the
-                        repetition. What the slot answers now is WHAT KIND OF
-                        SENTENCE IS UNDER ME, which is the one fact nothing
-                        else on the page states: this is the wall's top of
-                        mind — current, held today — as against the timeless
-                        half forming in the sky. Same words, same place, on
-                        every wall; whose it is stays where it already was. */}
+                    {/* R01 makes the personal reading explicit while keeping
+                        the existing field, headline and companion layout. */}
+                    {here&&w.kind==='self'?<p className="jar-reading-heading">
+                      <span>{say(atNow?'worldReadingTitle':'worldReadingEarlier')}</span>
+                      {atNow&&topOfMind&&topOfMind.createdMs>0?<time dateTime={new Date(topOfMind.createdMs).toISOString()}>{new Date(topOfMind.createdMs).toLocaleDateString(locale,{month:'short',day:'numeric'})}</time>:null}
+                    </p>:null}
                     {c.text ? (
                       /* A STABLE KEY, AND A CARRIED/NEW SPLIT INSIDE IT.
                          The whole h1 used to be keyed by its words, so every
@@ -12802,29 +12775,25 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                          for a wall that has not worked yet would teach the
                          reader that the poster is generated copy and destroy
                          the credibility of every wall they read afterwards. */
-                      <p className={`jar-forming${w.kind === "self" && topOfMind?.supportChanged ? " jar-forming--attention" : ""}`}>
-                        {c.formingAlt ?? say("worldFormingNothingAdopted")}
+                      <p className={`jar-forming${w.kind === "self" && topOfMind?.supportChanged ? " jar-forming--attention" : ""}${w.kind==='self'&&!offline?' jar-forming--personal':''}`}>
+                        {here&&w.kind==='self'&&atNow&&!offline&&!topOfMind?.supportChanged
+                          ?say(inspirations?.length?'worldPersonalReadingNotReady':'worldPersonalReadingEmpty')
+                          :c.formingAlt ?? say("worldFormingNothingAdopted")}
                       </p>
                     )}
-                    {/* THE NAME SIGNS THE SENTENCE FROM BELOW (founder,
-                        2026-08-27: "is there a better way to label this as
-                        top of mind? it overlaps with the navigation buttons").
-                        As a header above the poster it was a second floating
-                        piece of chrome, colliding with the corner controls at
-                        small heights. Under the sentence it was a signature.
-
-                        AND THEN THE WORD ITSELF WENT (founder, same day:
-                        "just remove the word top of mind") — the slot's
-                        fourth ruling, kept in order like hasSky's: the wall's
-                        name, then TOP OF MIND above, then the signature
-                        below, now nothing. The sentence is the loudest claim
-                        in the product and it stands unlabelled; the date
-                        alone signs it, when there is one. */}
+                    {/* The dial's historical date stays attached to its read. */}
                     {c.asOf ? (
                       <div className="jar-asof jar-label">
                         {formatMessage(locale, "worldAsOf", { month: c.asOf })}
                       </div>
                     ) : null}
+                    {here&&w.kind==='self'&&storageScope&&!offline?<div className="jar-reading-actions" data-jar-chrome="1">
+                      {!atNow?<button type="button" onClick={()=>windTo(dial?.end??Date.now())}>{say('worldReadingToday')}</button>:<>
+                        {c.text?<button type="button" aria-expanded={posterAsk} onClick={()=>setPosterAsk(value=>!value)}>{say('worldReadingWhy')}</button>:null}
+                        {topOfMind?.id?<ReadingChanges key={`${storageScope.profileId}:${topOfMind.id}`} profileId={storageScope.profileId} readingId={topOfMind.id} locale={locale}/>:null}
+                        {inspirations?.length?<button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})}>{say('worldReviewTitle')}</button>:null}
+                      </>}
+                    </div>:null}
                     {here && w.kind === "group" && atNow ? <button
                       type="button"
                       className="jar-room-shape"
@@ -13089,18 +13058,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                             {say("worldReadItAgain")}
                           </button>
                         )}
-                      </div>
-                    ) : null}
-                    {/* WHAT IT USED TO SAY. Only where there is a past — one
-                        version is not a history, it is the first sentence. */}
-                    {here && posterAsk && w.kind === "self" && (versions?.length ?? 0) > 1 ? (
-                      <div className="jar-prov jar-prov--poster" data-jar-chrome="1">
-                        <p className="jar-prov-lead jar-label">{say("worldBeforeThis")}</p>
-                        {(versions ?? []).slice(1, 5).map((v) => (
-                          <p key={v.id} className="jar-was">
-                            {dateWords(Date.parse(v.createdAt) || 0, TRef.current, locale)}
-                          </p>
-                        ))}
                       </div>
                     ) : null}
                     {/* THE WAY UP IS NOT UNDER THE THING YOU ARE READING.
@@ -14681,7 +14638,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         </DialogSurface>
       ) : null}
 
-      {phase==='ready'&&!offline&&storageScope&&atWall.kind==='self'?<button type="button" className="jar-review-shortcut" hidden={Boolean(viewNavigation.view?.reviewId)} data-jar-chrome="1"
+      {phase==='ready'&&!offline&&storageScope&&atWall.kind==='self'?<button type="button" className="jar-review-shortcut" hidden={Boolean(viewNavigation.view?.reviewId)||(!inField&&!inSky)} data-jar-chrome="1"
         onClick={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})}>{say('worldReviewTitle')}</button>:null}
       {storageScope&&viewNavigation.view?.reviewId?<ReviewPanel key={`${storageScope.profileId}:${viewNavigation.view.reviewId}`} scope={storageScope} id={viewNavigation.view.reviewId} thoughtId={viewNavigation.view.reviewAnswerId} locale={locale}
         onId={id=>viewNavigation.write({...EMPTY_VIEW,reviewId:id},{replace:true})} onClose={viewNavigation.closeReview}

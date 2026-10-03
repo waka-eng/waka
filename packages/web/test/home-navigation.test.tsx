@@ -36,6 +36,14 @@ async function settle() {
 }
 async function navigate(to: string | number) { await act(async () => { if (typeof to === 'number') go(to); else go(to); }); await settle(); }
 
+it('starts a review beside the personal reading and restores home through Back',async()=>{
+  world=await mountWorld(FACTS,{routerTools:<RouterTools/>});await settle();
+  expect(world.container.querySelector('.jar-reading-heading')?.textContent).toContain('Top of mind');
+  const review=[...world.container.querySelectorAll<HTMLButtonElement>('.jar-reading-actions button')].find(button=>button.textContent==='Review your inspirations');
+  expect(review).toBeDefined();await act(async()=>review!.click());await settle();expect(location.pathname).toBe('/review/new');
+  await navigate(-1);expect(location.pathname).toBe('/');
+});
+
 it('does not let the returning-visitor greeting replace an explicitly linked reflection', async()=>{
   localStorage.setItem('waka.seen','1');
   world=await mountWorld(FACTS,{initialEntries:['/inspirations/older?reflection=answer-1'],routerTools:<RouterTools/>});
@@ -66,6 +74,7 @@ it('restores an older card, its earlier reflection and date across Back/Forward 
   const date = 1780000000000;
   await navigate(`/?view=field&at=${date}&inspiration=older&reflection=answer-1`);
   expect(world.container.textContent).toContain(detail.text);
+  expect(world.container.querySelector('.jar-reading-heading')?.textContent).toContain('Earlier reading');
   expect(world.container.querySelector<HTMLDetailsElement>('.jar-reflection-turns')?.open).toBe(true);
   expect(loadInspiration).toHaveBeenCalledWith('older', VIEWER_ID, expect.any(AbortSignal));
   await navigate('/w/group-id/old-name?view=sky');

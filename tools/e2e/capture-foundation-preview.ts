@@ -201,8 +201,10 @@ const server = createServer(async (request, response) => {
       if(reviewResultFixture&&target.searchParams.get('review-result')==='newer'){
         await fixture.sql`UPDATE top_of_minds SET status='superseded' WHERE id=${reviewResultFixture.topOfMindId}`;
         const [later]=await fixture.sql`INSERT INTO top_of_minds(profile_id,version) VALUES(${profile.id},2) RETURNING id`;
-        await fixture.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body,sort_order)
-          VALUES(${later.id},'pattern','A later reading, distinct from the completed review.',0)`;
+        const [entry]=await fixture.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body,sort_order)
+          VALUES(${later.id},'pattern','A later reading, distinct from the completed review.',0) RETURNING id`;
+        await fixture.sql`INSERT INTO top_of_mind_entry_signals(entry_id,signal_id,statement_revision,entry_body_revision)
+          VALUES(${entry.id},${reviewEvidenceFixture!.signalId},1,1)`;
       }
       if (target.searchParams.get('fail') === 'save-response') loseResponse = true;
       if (target.searchParams.get('fail') === 'save-request') loseRequest = true;

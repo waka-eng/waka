@@ -1,6 +1,6 @@
 # Personal experience delivery
 
-Status: in progress (2026-10-02), owner requested all personal-experience work bundles. Capture and R03–R08 passed their scoped gates; R01/R02, sharing, avatar and delivery remain.
+Status: in progress (2026-10-02), owner requested all personal-experience work bundles. Capture, R01 and R03–R08 passed their scoped gates; R02, sharing, avatar and delivery remain.
 Branch: `codex/personal-capture-foundation`.
 
 ## Objective
@@ -343,3 +343,17 @@ The identical ten-call rerun passed structure and qualitative review 10/10. The 
 The second run used Gemini 3.1 Flash Lite and an estimated USD 0.00286625. Across both runs: twenty calls and estimated USD 0.00538, within the two announced checkpoints. [Final responses](../craft/evidence/personal-capture/review-answer-final.json) and the [case-by-case assessment](../craft/evidence/personal-capture/review-answer-evaluation.md) are retained beside the failed baseline. The runner's automatic semantic fields remain pending; the assessment records the actual qualitative verdict rather than claiming an automated meaning score.
 
 R08 passes together with the already recorded SQL counting, ownership, locks, withdrawal, outbox and result checks. The evaluation uses synthetic text through the actual local provider adapter and opens no database. Embeddings/counting are covered separately; OpenRouter deployment configuration and real production behavior still require Q03 verification. The next work is R01/R02 presentation and the sharing/Avatar bundles. Physical devices remain deferred as agreed.
+
+### R01 personal reading clarity and comparison
+
+The personal home now names Top of mind, shows its date and puts Why this reading, What changed and Review your inspirations beside the text. Historical navigation says Earlier reading and offers Back to today. The first-capture state names the next action without implying generation is running; saved inspirations without a reading lead into review. Personal instructions and actions use the 15px body size with 44px action areas. The existing field, large headline and companion remain the layout.
+
+Replaced the old list of history dates with a scrollable comparison of actual stored artifacts. It compares the displayed artifact with the nearest earlier version even if a newer version already exists. Reads are profile-scoped and abortable, failures offer a read-only retry, foreign identity is refused, and missing older metadata is not called a first reading. Identical supported bodies receive an unchanged result; withheld words are not displayed as proof of sameness. The panel is portaled into its own world root so it inherits the opaque palette and stays outside the moving canvas layers.
+
+Verification: final full web suite 621/621, web typecheck, build and diff check passed. Seventeen targeted comparison/navigation/copy checks also passed. The initial full run found the removed date list's unused `worldBeforeThis` catalog entry; both unused translations were deleted and the full suite reran cleanly. No gate was relaxed. The host was checked in the DOM test to prevent accidentally mounting outside the theme's scope.
+
+Actual in-app browser checks passed at desktop and 390×844. The mobile comparison measured 366px wide, about 454px high, 15px body text and a 44px close control, with an opaque background and no horizontal overflow. Home → Review → browser Back returned to home. Opening the first-capture composer reached `?compose=1`; closing returned to the empty home. An explicit reading request displayed queued state while retaining the current headline; a deliberately failed fixture job displayed failure/recovery text and still retained that headline. Session, answer and inspiration counts stayed one each through the review-entry checks. [Home](../craft/evidence/personal-capture/reading-home-mobile.png), [comparison](../craft/evidence/personal-capture/reading-changes-mobile.png), [empty state](../craft/evidence/personal-capture/reading-empty-mobile.png) and [failed read](../craft/evidence/personal-capture/reading-failed-mobile.png) preserve the synthetic UI evidence.
+
+The previously deferred mobile completion-screen check for R06 also passed in this run: the latest saved thought and exact earlier result fit the 390px screen with no horizontal overflow; visible action controls measured 44px. [Result screen](../craft/evidence/personal-capture/review-result-mobile.png) shows it. This closes that Q02 subcase, not Q02's remaining sharing/recovery journeys or physical-device validation. The temporary tab/server were closed, viewport reset and zero test schemas remained. No paid model calls or remote data changes were made.
+
+R01 passes. R02 and sharing are next, followed by Avatar and delivery verification. The system Git executable became unavailable due to an Xcode license prompt; the already installed bundled Git 2.53.0 was used without accepting a license or changing system settings.

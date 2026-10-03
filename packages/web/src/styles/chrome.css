@@ -1378,6 +1378,11 @@ body .profile-signout-button {
 .jar-review-result h3 { font-size:var(--t-note); font-weight:normal; color:var(--w-muted); }
 .jar-review-latest-thought { margin:var(--sp-12) 0; padding-left:var(--sp-12); border-left:1px solid var(--w-edge); font-size:var(--t-body); line-height:1.6; white-space:pre-wrap; overflow-wrap:anywhere; }
 .jar-review-reading { padding:var(--sp-12); border-left:1px solid var(--w-edge); overflow-wrap:anywhere; }
+.jar-seek.jar-reading-comparison { box-sizing:border-box; z-index:8; width:min(640px,calc(100vw - var(--sp-24))); max-height:calc(100dvh - var(--sp-24)); overflow-y:auto; overscroll-behavior:contain; padding:var(--sp-24); font-size:var(--t-body); line-height:1.6; color:var(--w-ink); text-align:left; user-select:text; touch-action:pan-y; }
+.jar-reading-comparison header { display:flex; justify-content:space-between; align-items:center; gap:var(--sp-16); }
+.jar-reading-comparison h2,.jar-reading-comparison h3 { font:inherit; font-weight:500; }
+.jar-reading-comparison section { margin-top:var(--sp-20); padding-top:var(--sp-12); border-top:1px solid var(--w-edge); overflow-wrap:anywhere; }
+.jar-reading-comparison button { min-height:var(--sp-44); padding:var(--sp-8) var(--sp-12); color:var(--w-ink); background:none; border:1px solid var(--w-edge); border-radius:var(--sp-12); font:inherit; cursor:pointer; }
 .jar-review .jar-review-reference { text-align:left; overflow-wrap:anywhere; max-width:100%; }
 .jar-review-reply { margin-top:var(--sp-16); }
 .jar-review-reply label { display:block; margin-bottom:var(--sp-8); }
