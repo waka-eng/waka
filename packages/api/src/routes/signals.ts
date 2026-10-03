@@ -58,6 +58,8 @@ import { evidenceSupportCurrent } from '../lib/signal-support-state.js';
 import { reconcilePrinciplesAfterSignalLoss } from "../lib/principle-generation.js";
 import {
   computeSignalConfidence,
+  selectIndependentEvidence,
+  type ConfidenceEvidence,
   refreshSignalLifecycle,
 } from "../lib/signal-derivation.js";
 import { resolveContestedPairs } from "../lib/contested-pairs.js";
@@ -236,6 +238,7 @@ async function decorateSignals(
     db
       .select({
         signalId: signalEvidence.signalId,
+        inspirationId: inspirations.id,
         createdAt: inspirations.createdAt,
         source: inspirations.source,
         current: evidenceSupportCurrent(),
@@ -305,13 +308,15 @@ async function decorateSignals(
   // value can only overstate a signal that has since gone quiet. Reads tell
   // the truth about now; the snapshot remains for the group wall, whose query
   // must not reach these private tables.
-  const evidenceBySignal = new Map<string, Array<{ createdAt: Date; source: "app" | "agent" }>>();
+  const evidenceBySignal = new Map<string, ConfidenceEvidence[]>();
   for (const row of evidenceRows) {
     if (row.current !== true) continue;
+    const witness:ConfidenceEvidence={createdAt:row.createdAt,source:row.source,lineage:{kind:'inspiration',unitId:row.inspirationId,originIds:[row.inspirationId]}};
     const bucket = evidenceBySignal.get(row.signalId);
-    if (bucket) bucket.push(row);
-    else evidenceBySignal.set(row.signalId, [row]);
+    if (bucket) bucket.push(witness);
+    else evidenceBySignal.set(row.signalId, [witness]);
   }
+  for(const [id,rows] of evidenceBySignal)evidenceBySignal.set(id,selectIndependentEvidence(rows));
   const now = new Date();
   const liveConfidence = new Map(
     rows.map((row) => [

@@ -35,6 +35,7 @@ import {
 } from "../db/index.js";
 import { getDb } from "./db.js";
 import { normalizeSupportedLocale } from "./locales.js";
+import { selectIndependentEvidence, type ConfidenceEvidence } from './signal-lifecycle.js';
 import { writePrincipleStatementChain } from "./statement-chains.js";
 import { GROUP_INPUT_POLICY } from "./group-inputs.js";
 import { groupEntrySupportCurrent, groupPrincipleReadable, groupSignalReadable, projectGroupEntries } from "./group-output.js";
@@ -197,7 +198,7 @@ async function loadCitationEvidence(
   // theme's lifetime in the profile's history; a retroactively cited old save
   // must widen it with its own date, not collapse it to the day of noticing.
   const evidenceRows = await db
-    .select({ signalId: signalEvidence.signalId, createdAt: inspirations.createdAt })
+    .select({ signalId: signalEvidence.signalId, inspirationId: inspirations.id, createdAt: inspirations.createdAt, source: inspirations.source })
     .from(signalEvidence)
     .innerJoin(signals, eq(signals.id, signalEvidence.signalId))
     .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
@@ -207,7 +208,10 @@ async function loadCitationEvidence(
           SELECT 1 FROM group_members m WHERE m.group_id = ${profile.groupId}::uuid
           AND m.profile_id = ${inspirations.profileId})`] : [])),
     );
-  for (const row of evidenceRows) out.get(row.signalId)?.evidenceAt.push(row.createdAt);
+  const witnesses=new Map<string,ConfidenceEvidence[]>();
+  for(const row of evidenceRows){const list=witnesses.get(row.signalId)??[];list.push({createdAt:row.createdAt,source:row.source,
+    lineage:{kind:'inspiration',unitId:row.inspirationId,originIds:[row.inspirationId]}});witnesses.set(row.signalId,list);}
+  for(const [id,rows] of witnesses)out.get(id)!.evidenceAt=selectIndependentEvidence(rows).map(row=>row.createdAt);
 
   const tomRows = await db
     .select({ signalId: topOfMindEntrySignals.signalId, topOfMindId: topOfMindEntries.topOfMindId })

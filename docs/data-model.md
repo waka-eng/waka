@@ -234,6 +234,35 @@ These rows do not yet feed signal/principle generation: R08 must establish
 lineage-aware evidence behavior before that integration. Selections or multiple
 links never establish multiple independent experiences by themselves.
 
+R08's integration contract keeps review support distinct from raw inspiration
+support: a generated claim must cite actual owned human answers and their
+current revisions, not the AI question or the keep/skip choice. An answer is
+never copied into each inspiration's material. Support extraction, reassessment,
+withdrawal and display must preserve that source kind; the runtime integration
+is not enabled yet.
+
+Independent support has two limits. An inspiration (including its attachments,
+transcript and reflection) contributes at most one witness. All answers in one
+review session contribute at most one review witness to a given signal. A
+review witness names only its focused source origins, not context-only inputs.
+One origin cannot be spent twice across direct and review witnesses. Counting
+uses a maximum one-to-one matching between witness units and eligible origins,
+preferring direct inspiration witnesses and then older review witnesses with
+stable id ties. This preserves independently supporting originals: reviewing
+two established witnesses together does not merge them into one. Repeated
+replies or a replay cannot manufacture additional independent origins.
+
+Counting does not establish semantic support: only already-validated witness
+rows enter this calculation. A direct witness uses its inspiration's creation
+time; a review unit uses the earliest supporting human answer's creation time
+for its matched focused origin,
+never the oldest contextual source date or an edit/retry time. The existing
+promotion threshold and confidence/Principles coefficients are unchanged.
+All count, confidence, recency and longevity consumers must use the same
+selected units before review support is enabled. This bounds what can be
+claimed from stored provenance; it does not infer a person's unrecorded lived
+experiences or equate an `experience` workspace label with an independent event.
+
 ### Existing inspiration behavior
 
 A capture event. Whatever arrived: pasted text, a link, an image, an

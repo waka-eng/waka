@@ -54,7 +54,7 @@ import {
 } from "../db/index.js";
 import { cosineSimilarity } from "../scoring/vector.js";
 import { getDb } from "./db.js";
-import { computeSignalConfidence } from "./signal-derivation.js";
+import { computeSignalConfidence, selectIndependentEvidence, type ConfidenceEvidence } from "./signal-lifecycle.js";
 import { GROUP_SIGNAL_MIN_VOICES } from "./signal-derivation-thresholds.js";
 import { normalizeSupportedLocale } from "./locales.js";
 import {
@@ -386,6 +386,7 @@ async function selectSignals(
   const evidenceRows = await db
     .select({
       signalId: signalEvidence.signalId,
+      inspirationId: inspirations.id,
       createdAt: inspirations.createdAt,
       source: inspirations.source,
     })
@@ -400,12 +401,13 @@ async function selectSignals(
 
   const evidenceBySignal = new Map<
     string,
-    Array<{ createdAt: Date; source: "app" | "agent" }>
+    ConfidenceEvidence[]
   >();
   for (const row of evidenceRows) {
+    const witness:ConfidenceEvidence={createdAt:row.createdAt,source:row.source,lineage:{kind:'inspiration',unitId:row.inspirationId,originIds:[row.inspirationId]}};
     const bucket = evidenceBySignal.get(row.signalId);
-    if (bucket) bucket.push(row);
-    else evidenceBySignal.set(row.signalId, [row]);
+    if (bucket) bucket.push(witness);
+    else evidenceBySignal.set(row.signalId, [witness]);
   }
 
   // The latest verdict per signal decides `disputed` — newest first, first
@@ -437,7 +439,7 @@ async function selectSignals(
 
   const scored = rows
     .map((row) => {
-      const evidence = evidenceBySignal.get(row.id) ?? [];
+      const evidence = selectIndependentEvidence(evidenceBySignal.get(row.id) ?? []);
       const evidenceAt = evidence.map((item) => item.createdAt);
       // Live, not the stored snapshot: the snapshot was written the moment
       // evidence last landed — its decay term frozen at full — so ranking by
