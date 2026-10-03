@@ -11,7 +11,7 @@ function pendingText(row: ApiAttachmentTranscript) {
 }
 
 /** The audio player remains independent of transcription and correction. */
-export function AttachmentTranscript({ id }: { id: string }) {
+export function AttachmentTranscript({ id, readOnly=false }: { id: string; readOnly?:boolean }) {
   const [row, setRow] = useState<ApiAttachmentTranscript | null>(null);
   const [error, setError] = useState(''), [refresh, setRefresh] = useState(0), [waiting, setWaiting] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -69,13 +69,13 @@ export function AttachmentTranscript({ id }: { id: string }) {
       {pendingText(row) ? <p role="status">{pendingText(row)}</p> : null}
       {row.retryAfter ? <p>You can retry after {new Date(row.retryAfter).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.</p> : null}
       <div className="jar-transcript-actions">
-        {row.canEdit && row.effectiveText !== null ? <button type="button" disabled={busy} onClick={() => {
+        {row.canEdit && !readOnly && row.effectiveText !== null ? <button type="button" disabled={busy} onClick={() => {
           base.current = row.revision; setDraft(row.effectiveText ?? ''); setEditing(true); setConflict(null); setError('');
         }}>Edit transcript</button> : null}
-        {row.canRetry ? <button type="button" disabled={busy} onClick={() => void retry()}>Retry transcription</button> : null}
+        {row.canRetry && !readOnly ? <button type="button" disabled={busy} onClick={() => void retry()}>Retry transcription</button> : null}
       </div>
       {row.correction !== null && row.transcript !== null ? <details><summary>Original transcript</summary><p className="jar-transcript-text">{row.transcript}</p>
-        {row.canEdit ? <button type="button" disabled={busy} onClick={() => void change(null, row.revision)}>Use original wording</button> : null}
+        {row.canEdit && !readOnly ? <button type="button" disabled={busy} onClick={() => void change(null, row.revision)}>Use original wording</button> : null}
       </details> : null}
     </> : null}
     {editing ? <>

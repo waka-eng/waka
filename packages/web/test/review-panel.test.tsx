@@ -1,0 +1,67 @@
+// @vitest-environment jsdom
+/** WHAT THIS MOCKS, AND WHY (gate G6): `lib/api` provides network outcomes.
+ * The shipped review panel, draft journal, keyboard/pointer handlers and
+ * original-source loading remain real; SQL and rendering have separate checks. */
+import {act} from 'react';
+import {createRoot,type Root} from 'react-dom/client';
+import {afterEach,beforeEach,expect,it,vi} from 'vitest';
+import {ReviewPanel} from '../src/components/ReviewPanel';
+import {chooseReviewInspiration,fetchActiveReview,fetchInspiration,fetchInspirationPage,fetchReviewSession,finishReviewSession,startReviewSession,type ApiInspiration,type ApiReviewSession} from '../src/lib/api';
+vi.mock('../src/lib/api',async original=>({...await original<typeof import('../src/lib/api')>(),chooseReviewInspiration:vi.fn(),fetchActiveReview:vi.fn(),fetchInspiration:vi.fn(),fetchInspirationPage:vi.fn(),fetchReviewSession:vi.fn(),finishReviewSession:vi.fn(),startReviewSession:vi.fn()}));
+const SID='11111111-1111-4111-8111-111111111111',SOURCE='22222222-2222-4222-8222-222222222222',scope={accountId:'account',profileId:'profile'};
+let host:HTMLDivElement,root:Root,current:ApiReviewSession|null,source:ApiInspiration;
+const onId=vi.fn(),onClose=vi.fn(),onNewInspiration=vi.fn(),onOpen=vi.fn();
+const copy=()=>JSON.parse(JSON.stringify(current)) as ApiReviewSession|null;
+beforeEach(()=>{
+  vi.resetAllMocks();localStorage.clear();(globalThis as {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
+  host=document.createElement('div');document.body.append(host);root=createRoot(host);
+  current={id:SID,profileId:scope.profileId,revision:0,cursor:0,currentInspirationId:SOURCE,createdAt:'2026-10-02T00:00:00Z',completedAt:null,
+    items:[{inspirationId:SOURCE,position:0,sourceRevision:'1',currentRevision:'1',sourceChanged:false,reason:'unreviewed',choice:null,decidedAt:null,inspirationCreatedAt:'2026-10-01T00:00:00Z'}]};
+  source={id:SOURCE,profileId:scope.profileId,text:'A little room for unplanned ideas.',kind:'note',source:'app',visibility:'private',createdAt:'2026-10-01T00:00:00Z',updatedAt:'2026-10-01T00:00:00Z',attachments:[],reflections:[]};
+  vi.mocked(fetchActiveReview).mockImplementation(async()=>copy());vi.mocked(fetchReviewSession).mockImplementation(async()=>copy());
+  vi.mocked(fetchInspiration).mockImplementation(async()=>({...source}));
+  vi.mocked(fetchInspirationPage).mockResolvedValue({inspirations:[{id:SOURCE,textPreview:source.text,kind:'note',source:'app',visibility:'private',createdAt:source.createdAt,updatedAt:source.updatedAt,attachmentSummary:[],reflectionCount:0}],total:1});
+  vi.mocked(chooseReviewInspiration).mockImplementation(async(_id,input)=>{current={...current!,revision:input.revision+1,cursor:input.choice===null?0:1,currentInspirationId:input.choice===null?SOURCE:null,
+    items:current!.items.map(item=>({...item,choice:input.choice}))};return copy();});
+  vi.mocked(finishReviewSession).mockImplementation(async()=>{current={...current!,revision:current!.revision+1,completedAt:'2026-10-02T01:00:00Z',currentInspirationId:null};return copy();});
+});
+afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.useRealTimers();});
+const mount=(id=SID)=>act(async()=>root.render(<ReviewPanel scope={scope} id={id} locale="en-US" onId={onId} onClose={onClose} onNewInspiration={onNewInspiration} onOpen={onOpen}/>));
+const button=(label:string)=>[...host.querySelectorAll('button')].find(row=>row.textContent===label)!;
+const click=(label:string)=>act(async()=>button(label).click());
+it('renders the current original and saves skip then reconsider without changing source words',async()=>{
+  await mount();expect(host.textContent).toContain(source.text);expect(host.textContent).toContain('1 / 1');
+  await click('Skip for now');expect(chooseReviewInspiration).toHaveBeenLastCalledWith(SID,{revision:0,inspirationId:SOURCE,sourceRevision:'1',choice:'skip'},scope.profileId,expect.any(AbortSignal));
+  await click('Reconsider last choice');expect(vi.mocked(chooseReviewInspiration).mock.calls[1]![1].choice).toBeNull();expect(host.textContent).toContain(source.text);
+});
+it('uses arrows and touch swipes for the same choices but never treats mouse text selection as a swipe',async()=>{
+  await mount();
+  const pointer=(type:string,x:number,pointerType:string)=>{const event=new Event(type,{bubbles:true,cancelable:true});Object.assign(event,{clientX:x,clientY:20,pointerId:1,pointerType});host.querySelector('.jar-review-card')!.dispatchEvent(event);};
+  await act(async()=>{pointer('pointerdown',20,'mouse');pointer('pointerup',130,'mouse');});expect(chooseReviewInspiration).not.toHaveBeenCalled();
+  await act(async()=>{pointer('pointerdown',20,'touch');pointer('pointerup',130,'touch');});expect(vi.mocked(chooseReviewInspiration).mock.calls[0]![1].choice).toBe('keep');
+  await click('Reconsider last choice');
+  await act(async()=>host.querySelector('.jar-review-card')!.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true,cancelable:true})));
+  expect(vi.mocked(chooseReviewInspiration).mock.calls.at(-1)![1].choice).toBe('skip');
+});
+it('offers a capture path for an empty archive without automatically starting a session',async()=>{
+  current=null;vi.mocked(fetchInspirationPage).mockResolvedValue({inspirations:[],total:0});await mount('new');
+  expect(host.textContent).toContain('Nothing to review yet');expect(startReviewSession).not.toHaveBeenCalled();await click('Capture inspiration');expect(onNewInspiration).toHaveBeenCalledOnce();
+});
+it('finishes early as an explicit action rather than implying a new principle was created',async()=>{
+  await mount();await click('Finish review');expect(finishReviewSession).toHaveBeenCalledWith(SID,0,scope.profileId,expect.any(AbortSignal));
+  expect(host.textContent).toContain('Review saved');expect(host.textContent).not.toContain('principle');
+});
+it('does not display or choose an older source under a newer material revision',async()=>{
+  vi.mocked(fetchInspiration).mockImplementationOnce(async()=>{const before={...source,text:'Stale source wording'};source={...source,text:'Current source wording'};
+    current={...current!,items:current!.items.map(item=>({...item,currentRevision:'2',sourceChanged:true}))};return before;});
+  await mount();expect(host.textContent).not.toContain('Stale source wording');expect(host.textContent).toContain('Current source wording');
+  await click('Stays with me');expect(vi.mocked(chooseReviewInspiration).mock.calls[0]![1].sourceRevision).toBe('2');
+});
+it('preserves manual selection order when starting from searched inspirations',async()=>{
+  vi.useFakeTimers();const existing=copy();current=null;
+  vi.mocked(startReviewSession).mockImplementation(async input=>{current={...existing!,id:input.id};return copy();});
+  await mount('new');await click('Choose inspirations');
+  await act(async()=>{const input=host.querySelector<HTMLInputElement>('.jar-inspiration-search input')!;Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(input,'room');input.dispatchEvent(new Event('input',{bubbles:true}));});
+  await act(async()=>vi.advanceTimersByTimeAsync(250));await act(async()=>host.querySelector<HTMLButtonElement>('.jar-search-results button')!.click());
+  await click('Start review');expect(vi.mocked(startReviewSession).mock.calls[0]![0].inspirationIds).toEqual([SOURCE]);
+});

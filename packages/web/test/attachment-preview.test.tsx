@@ -71,6 +71,11 @@ it('explains access-required pages without exposing error details', async () => 
   expect(host.textContent).not.toContain('http_403');
   expect(host.querySelector('a')?.href).toBe(current.attachment.url);
 });
+it('shows original access without analysis mutation controls in read-only review mode',async()=>{
+  current.analysis={status:'failed',canRetry:true,retryAfter:null};
+  await act(async()=>root.render(<AttachmentPreview item={{id:'link',type:'link',label:'https://example.test/article'}} readOnly/>));
+  expect(host.querySelector('a')?.href).toBe(current.attachment.url);expect(button('Retry preview')).toBeUndefined();expect(retryAttachmentAnalysis).not.toHaveBeenCalled();
+});
 it.each(['javascript:alert(1)', 'https://user:password@example.test/'])('does not navigate unsafe original %s', async url => {
   current.attachment.url = url;
   await mount('link', url); expect(host.querySelector('a')).toBeNull();

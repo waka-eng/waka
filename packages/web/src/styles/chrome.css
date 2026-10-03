@@ -1295,6 +1295,8 @@ body .profile-signout-button {
 .jar-composer-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y pinch-zoom; }
 .jar-composer-heading, .jar-composer-footer { flex-shrink: 0; }
 .jar-seek.jar-inspiration-composer[data-visual-viewport],
+.jar-seek.jar-inspiration-search[data-visual-viewport],
+.jar-seek.jar-review[data-visual-viewport],
 .jar-seek.jar-reflect-room[data-visual-viewport] {
   position: fixed;
   top: calc(var(--dialog-visible-top) + var(--dialog-visible-height) / 2);
@@ -1339,6 +1341,34 @@ body .profile-signout-button {
 .jar-saved-attachment img { image-orientation: from-image; }
 .jar-composer-media img { image-orientation: from-image; }
 .jar-reflection-source { margin-block: var(--sp-12); }
+.jar-review-shortcut { position:absolute; left:var(--sp-22); bottom:calc(var(--sp-12) + env(safe-area-inset-bottom)); z-index:6; min-height:var(--sp-44); padding:var(--sp-8) var(--sp-12); border:1px solid var(--w-edge); border-radius:var(--sp-22); background:var(--jar-panel); color:var(--w-ink); font:inherit; font-size:var(--t-note); cursor:pointer; }
+.jar-review-shortcut[hidden] { display:none; }
+.jar-review-backdrop { position:absolute; inset:0; z-index:7; border:0; background:rgba(0,0,0,.2); }
+.jar-seek.jar-review { box-sizing:border-box; z-index:8; width:min(640px,calc(100vw - var(--sp-44))); max-height:calc(var(--jar-vh,100dvh) - var(--sp-44)); display:flex; flex-direction:column; color:var(--w-ink); font-size:var(--t-body); text-align:left; }
+.jar-review[aria-hidden="true"] { visibility:hidden; }
+.jar-review ~ .jar-inspiration-search { z-index:9; }
+.jar-review header,.jar-review footer { display:flex; align-items:center; justify-content:space-between; gap:var(--sp-12); flex-wrap:wrap; flex-shrink:0; }
+.jar-review h2 { margin:0; font-size:var(--t-lead); font-weight:500; }
+.jar-review h3 { font-size:var(--t-lead); font-weight:500; }
+.jar-review-body { overflow-y:auto; min-height:0; overscroll-behavior:contain; padding-block:var(--sp-16); }
+.jar-review button { min-height:var(--sp-44); min-width:var(--sp-44); padding:var(--sp-8) var(--sp-12); margin:var(--sp-4); border:1px solid var(--w-edge); border-radius:var(--sp-12); background:none; color:var(--w-ink); font:inherit; font-size:var(--t-note); cursor:pointer; }
+.jar-review button:disabled { opacity:.45; cursor:default; }
+.jar-review button:hover:not(:disabled) { background:var(--w-raised); }
+.jar-review-card { outline:none; touch-action:pan-y pinch-zoom; }
+.jar-review-card:focus-visible { outline:1px solid var(--w-edge); outline-offset:var(--sp-4); }
+.jar-review-text { white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.7; font-size:var(--t-lead); }
+.jar-review-context { color:var(--w-muted); font-size:var(--t-note); line-height:1.5; }
+.jar-review-card-heading { display:flex; justify-content:space-between; align-items:center; gap:var(--sp-8); }
+.jar-review-card-heading p { margin:0; }
+.jar-review summary { min-height:var(--sp-44); cursor:pointer; }
+.jar-review-choices { display:flex; gap:var(--sp-12); margin-top:var(--sp-16); }
+.jar-review-choices button { flex:1; }
+.jar-review footer { display:flex; flex-direction:column; align-items:stretch; gap:var(--sp-4); }
+.jar-review footer .jar-review-choices { margin-top:0; }
+.jar-review-choices button:last-child { background:var(--w-raised); }
+.jar-review-footer-actions { display:flex; justify-content:space-between; gap:var(--sp-4); flex-wrap:wrap; }
+.jar-review-footer-actions button { border-color:transparent; padding-inline:var(--sp-4); }
+.jar-review ul { padding-left:var(--sp-22); }
 .jar-reflection-source summary { min-height: var(--sp-44); cursor: pointer; font-size: var(--t-note); }
 .jar-reflection-flow .jar-reflection-actions button,
 .jar-reflection-flow .jar-reflection-secondary,

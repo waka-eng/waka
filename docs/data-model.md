@@ -191,7 +191,8 @@ A session belongs to one profile and stores its stable id, creation-input hash,
 revision, cursor and optional completion time. A profile has at most one open
 session. Items reference both `(profile_id, session_id)` and
 `(profile_id, inspiration_id)`, keep a fixed position and the material revision
-last shown, and hold a nullable `keep`/`skip` choice. They never copy source text.
+at session creation or the latest acknowledged choice, and hold a nullable
+`keep`/`skip` choice. Read-only viewing does not change that revision. They never copy source text.
 Source deletion removes its item by cascade, without inserting a replacement
 or changing the remaining order. Current revision is checked when a choice is
 written; stale tabs cannot overwrite a newer session decision. A repeated

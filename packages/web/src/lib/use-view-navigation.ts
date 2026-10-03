@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { readViewLocation, viewHref, type ViewLocation } from './view-location';
 
-interface StoredView { scope: string; query: string; composerFrom?: string }
+interface StoredView { scope: string; query: string; composerFrom?: string;reviewFrom?:string }
 /** Router owns browser history; the world owns rendering and restoration. */
 export function useViewNavigation(scope: string | null) {
   const location = useLocation(), navigate = useNavigate();
@@ -25,7 +25,8 @@ export function useViewNavigation(scope: string | null) {
     const stored = (current.location.state as { wakaView?: StoredView } | null)?.wakaView;
     const composerFrom = next.compose ? (!before?.compose && !options.replace ? previous
       : stored?.scope === current.scope ? stored.composerFrom : undefined) : undefined;
-    current.navigate(to, { replace: options.replace, state: { wakaView: { scope: current.scope, query: options.query ?? '', ...(composerFrom ? { composerFrom } : {}) } } });
+    const reviewFrom=next.reviewId ? (!before?.reviewId&&!options.replace?previous:stored?.scope===current.scope?stored.reviewFrom:undefined):undefined;
+    current.navigate(to, { replace: options.replace, state: { wakaView: { scope: current.scope, query: options.query ?? '', ...(composerFrom ? { composerFrom } : {}),...(reviewFrom?{reviewFrom}:{}) } } });
   }, []);
   const closeComposer = useCallback(() => {
     const current = latest.current;
@@ -36,5 +37,12 @@ export function useViewNavigation(scope: string | null) {
     if (stored?.scope === current.scope && stored.composerFrom) current.navigate(-1);
     else current.navigate(viewHref({ ...before, compose: false }), { replace: true });
   }, []);
-  return { view, href, key: location.key, query, write, closeComposer, own };
+  const closeReview=useCallback(()=>{
+    const current=latest.current,before=readViewLocation(current.location.pathname,current.location.search);
+    const stored=(current.location.state as {wakaView?:StoredView}|null)?.wakaView;
+    own.current=null;
+    if(stored?.scope===current.scope&&stored.reviewFrom) current.navigate(-1);
+    else if(before) current.navigate(viewHref({...before,reviewId:null}),{replace:true});
+  },[]);
+  return { view, href, key: location.key, query, write, closeComposer,closeReview, own };
 }

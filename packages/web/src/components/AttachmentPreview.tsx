@@ -5,11 +5,11 @@ function httpUrl(value?: string | null) {
   try { const url = new URL(value ?? ''); return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password ? url.toString() : null; }
   catch { return null; }
 }
-export function AttachmentPreview({ item }: { item: ApiAttachmentSummary }) {
-  return <Preview key={item.id} item={item} />;
+export function AttachmentPreview({ item, readOnly=false }: { item: ApiAttachmentSummary; readOnly?:boolean }) {
+  return <Preview key={item.id} item={item} readOnly={readOnly} />;
 }
 
-function Preview({ item }: { item: ApiAttachmentSummary }) {
+function Preview({ item,readOnly }: { item: ApiAttachmentSummary;readOnly:boolean }) {
   const [data, setData] = useState<ApiAttachmentDetails | null>(null), [loadError, setLoadError] = useState('');
   const [actionError, setActionError] = useState(''), [busy, setBusy] = useState(false), [refresh, setRefresh] = useState(0);
   const [waiting, setWaiting] = useState(false), [imageFailed, setImageFailed] = useState(false);
@@ -59,7 +59,7 @@ function Preview({ item }: { item: ApiAttachmentSummary }) {
     {status === 'unavailable' ? <p>{unavailable}</p> : null}
     {status === 'ready' && row?.enrichment.text ? <details><summary>{item.type === 'link' ? 'Page text' : 'Image description'}</summary><p className="jar-attachment-excerpt">{row.enrichment.text}</p></details> : null}
     {data?.analysis.retryAfter ? <p>You can retry after {new Date(data.analysis.retryAfter).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.</p> : null}
-    {data?.analysis.canRetry ? <button type="button" disabled={busy} onClick={() => void retry()}>Retry preview</button> : null}
+    {data?.analysis.canRetry && !readOnly ? <button type="button" disabled={busy} onClick={() => void retry()}>Retry preview</button> : null}
     {loadError ? <p role="alert">{loadError}</p> : null}
     {actionError ? <p role="alert">{actionError}</p> : null}
     {loadError || waiting || data?.analysis.retryAfter ? <button type="button" disabled={busy} onClick={() => { setImageFailed(false); setRefresh(value => value + 1); }}>Check preview</button> : null}

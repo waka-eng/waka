@@ -74,6 +74,12 @@ it('offers an explicit transcription retry without revealing provider error text
 it('does not offer editing to a read-only viewer', async () => {
   current.canEdit = false; await mount(); expect(button('Edit transcript')).toBeUndefined();
 });
+it('can show an owned transcript in a read-only review without losing edits to card navigation',async()=>{
+  current={...current,canRetry:true};
+  await act(async()=>root.render(<AttachmentTranscript id="audio" readOnly/>));
+  expect(host.textContent).toContain('Machine transcript');expect(button('Edit transcript')).toBeUndefined();expect(button('Retry transcription')).toBeUndefined();
+  expect(correctAttachmentTranscript).not.toHaveBeenCalled();expect(retryAttachmentTranscript).not.toHaveBeenCalled();
+});
 it('bounds background checks and offers a read-only check without auto-retrying work', async () => {
   vi.useFakeTimers(); Object.defineProperty(document, 'hidden', { configurable: true, value: false });
   current = { ...current, status: 'pending', effectiveText: null, transcript: null };

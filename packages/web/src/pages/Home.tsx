@@ -82,6 +82,7 @@ import { useAuthoredSave } from '../lib/use-authored-save';
 import { useInspirationDraft } from '../lib/use-inspiration-draft';
 import { useAudioRecording } from '../lib/use-audio-recording';
 import { InspirationComposer } from '../components/InspirationComposer';
+import { ReviewPanel } from '../components/ReviewPanel';
 import { InspirationAttachments } from '../components/InspirationAttachments';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { CreateInspirationRequest } from '../lib/api';
@@ -3297,7 +3298,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const requested = requestedViewRef.current;
     // An explicit route or an already-started interaction belongs to the
     // person. A returning-visitor greeting is never navigation authority.
-    if (navigationInteraction.current || requested?.inspirationId || requested?.compose || requested?.find || requested?.wallId) {
+    if (navigationInteraction.current || requested?.inspirationId || requested?.compose || requested?.find || requested?.wallId || requested?.reviewId) {
       stamp(); return undefined;
     }
     const interactionAtGreeting = navigationInteraction.current;
@@ -12300,7 +12301,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     section: inSky ? 'sky' : inField ? 'field' : 'top', at: parkedAt, memberId: atWall.kind === 'group' ? standing : null,
     inspirationId: reflectOn?.id ?? (selectedViewBall?.sigId ?? selectedId),
     reflectionId: reflectOn || reflectOpen ? (requestedViewRef.current?.inspirationId === (reflectOn?.id ?? selectedViewBall?.sigId ?? selectedId) ? requestedViewRef.current?.reflectionId ?? 'open' : 'open') : null,
-    find: seek !== null, compose: mouthOpen };
+    find: seek !== null, compose: mouthOpen,reviewId:viewNavigation.view?.reviewId??null };
   const observedHref = viewHref(observedView), observedRef = useRef(observedView); observedRef.current = observedView;
   useEffect(() => {
     if (phase !== 'ready' || restoringViewRef.current || navigationProblem) return;
@@ -14668,6 +14669,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         </DialogSurface>
       ) : null}
 
+      {phase==='ready'&&!offline&&storageScope&&atWall.kind==='self'?<button type="button" className="jar-review-shortcut" hidden={Boolean(viewNavigation.view?.reviewId)} data-jar-chrome="1"
+        onClick={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})}>{say('worldReviewTitle')}</button>:null}
+      {storageScope&&viewNavigation.view?.reviewId?<ReviewPanel key={`${storageScope.profileId}:${viewNavigation.view.reviewId}`} scope={storageScope} id={viewNavigation.view.reviewId} locale={locale}
+        onId={id=>viewNavigation.write({...EMPTY_VIEW,reviewId:id},{replace:true})} onClose={viewNavigation.closeReview}
+        onNewInspiration={()=>viewNavigation.write({...EMPTY_VIEW,compose:true},{replace:true})}
+        onOpen={id=>viewNavigation.write({...EMPTY_VIEW,section:'field',inspirationId:id})}/>:null}
       {phase === 'ready' ? <button type="button" className="jar-find-shortcut" data-jar-chrome="1"
         onClick={() => setSeek('')} aria-label={say(atWall.kind === 'group' ? 'worldFindYourInspirations' : 'worldFindInspiration')}>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg>

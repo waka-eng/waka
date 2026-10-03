@@ -26,3 +26,10 @@ it('accepts direct inspiration links, ignores malformed metadata and refuses inv
   expect(readViewLocation('/w/%ZZ')).toBeNull();
   expect(readViewLocation('/unrelated')).toBeNull();
 });
+it('routes review identity without source content or unrelated world metadata',()=>{
+  const view={...EMPTY_VIEW,reviewId:'session-id'};
+  expect(viewHref(view)).toBe('/review/session-id');
+  expect(readViewLocation('/review/session-id','?compose=1&inspiration=other')).toEqual(view);
+  expect(viewHref({...EMPTY_VIEW,reviewId:'new'})).toBe('/review/new');
+  expect(readViewLocation('/review')).toBeNull(); // remains available to a public profile handle
+});

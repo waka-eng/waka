@@ -51,8 +51,8 @@ These are approved names; rows marked planned do not claim shipped storage or UI
 | Recorded audio attachment | `audio` | Recording | what you recorded | in implementation |
 | Machine transcript of recorded audio | `audio_transcription` | Transcript | what was heard in this recording | implemented; deployment pending |
 | A person's correction of the transcript | `transcript_correction` | Edit transcript | correct what was heard without replacing the recording | implemented; deployment pending |
-| One private review of selected inspirations | `review_session` | Review | revisit a few things you kept | storage implemented; UI pending |
-| One source and choice in a review | `review_item` | Review item | choose whether to explore this inspiration in this session | storage implemented; UI pending |
+| One private review of selected inspirations | `review_session` | Review | revisit a few things you kept | selection implemented; dialogue pending |
+| One source and choice in a review | `review_item` | Review item | choose whether to explore this inspiration in this session | implemented; deployment pending |
 | A conversation using the profile's memory | `conversation` | Talk with WAKA | think through a question with your own experiences | planned |
 | Exported rendering of selected principle wording | `principle_artifact` | Share a principle | choose the words that leave WAKA | planned |
 

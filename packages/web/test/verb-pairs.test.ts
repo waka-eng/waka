@@ -98,6 +98,9 @@ const REGISTER: Record<string, string> = {
   correctAttachmentTranscript: "RULED: edit again or use original wording (a null correction); neither operation changes the recording or the retained machine transcript",
   retryAttachmentTranscript: "RULED: resumes analysis of an existing recording without creating authored content; corrections stay authoritative and the recording remains removable",
   retryAttachmentAnalysis: "RULED: retries only failed attachment analysis, preserves the original, and never duplicates the capture; the original remains removable",
+  startReviewSession: "RULED: creates only private review metadata; closing preserves it, finishing ends it, and account erasure removes it without changing inspirations",
+  chooseReviewInspiration: "RULED: a choice is its own inverse — Reconsider last choice sends null to the same versioned item; skip never deletes or records disagreement",
+  finishReviewSession: "RULED: ends the session while preserving its record; a new review may revisit the same sources, and no source or principle is changed",
 
   // what the machine concluded, and what you may say back
   updateSignal: "releaseSignal",
