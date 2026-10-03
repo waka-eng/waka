@@ -37,6 +37,8 @@ import {
   principles,
   profiles,
   reflections,
+  reviewSessions,
+  reviewItems,
   signalContradictions,
   signalEvidence,
   experiences,
@@ -182,6 +184,9 @@ export async function assembleProfileExport(db: WakaDb, profileId: string) {
     inspirations: inspirationRows,
     attachments: attachmentRows,
     reflections: reflectionRows,
+    reviewSessions: await db.select().from(reviewSessions).where(eq(reviewSessions.profileId,profileId)).orderBy(asc(reviewSessions.createdAt),asc(reviewSessions.id)),
+    reviewItems: (await db.select().from(reviewItems).where(eq(reviewItems.profileId,profileId)).orderBy(asc(reviewItems.sessionId),asc(reviewItems.position)))
+      .map(row=>({...row,sourceRevision:row.sourceRevision.toString()})),
     signals: signalRows.map((row) => ({ ...row, statementRevision: row.statementRevision.toString() })),
     signalEvidence: evidenceRows.map((row) => ({ ...row, statementRevision: row.statementRevision?.toString() ?? null,
       materialRevision: row.materialRevision?.toString() ?? null })),

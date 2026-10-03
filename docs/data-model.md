@@ -177,13 +177,32 @@ independent repeated experiences.
 
 The approved later review/conversation/export contracts are detailed in
 [the personal capture contract](plans/2026-10-02-capture-foundation-contract.md).
-They are not yet claims of implemented tables or routes. Review skipping is
+Review session storage/routes now implement the selection contract below;
+the conversation and artifact contracts do not yet claim implemented tables or routes. Review skipping is
 session-local, a review selection is not a verdict on a principle, and multiple
 source references do not multiply one authored response. A selected principle
 may be explicitly exported as an image under that contract; this extends the
 earlier no-sharing v1 rule only to the user's chosen artifact, not public access
 to principles, inspirations, answers or audio. Export-only wording edits do not
 rewrite the underlying principle.
+
+The review implementation contract uses `review_sessions` and `review_items`.
+A session belongs to one profile and stores its stable id, creation-input hash,
+revision, cursor and optional completion time. A profile has at most one open
+session. Items reference both `(profile_id, session_id)` and
+`(profile_id, inspiration_id)`, keep a fixed position and the material revision
+last shown, and hold a nullable `keep`/`skip` choice. They never copy source text.
+Source deletion removes its item by cascade, without inserting a replacement
+or changing the remaining order. Current revision is checked when a choice is
+written; stale tabs cannot overwrite a newer session decision. A repeated
+create uses the same session id and input hash rather than creating a second
+review. Review metadata is exported and cascades with the profile.
+
+Suggested sessions contain at most five sources, prioritizing those without a
+saved reflection or prior review choice, then newest first. Explicit selection
+preserves the person's order. Selection and cursor writes queue no model work,
+create no feedback and change no source/signal/principle. Cross-source answers
+are a separate later R05 contract, not multiple per-item reflections.
 
 ### Existing inspiration behavior
 

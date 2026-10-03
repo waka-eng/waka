@@ -24,6 +24,7 @@ import { feedbackRoutes } from "./routes/feedback.js";
 import { groupsRoutes } from "./routes/groups.js";
 import { healthRoutes } from "./routes/health.js";
 import { inspirationsRoutes } from "./routes/inspirations.js";
+import { createReviewSessionRoutes } from './routes/review-sessions.js';
 import { profilesRoutes } from "./routes/profiles.js";
 import { principlesMarkdownRoutes, principlesRoutes } from "./routes/principles.js";
 import { createAgentGrantRoutes } from "./routes/agent-grants.js";
@@ -107,6 +108,7 @@ app.route("/api/admin/loop-health", createAdminLoopHealthRoute());
 
 // Layer 1 — capture, edit, delete, and search the raw archive.
 app.route("/api/inspirations", inspirationsRoutes);
+app.route('/api/review-sessions',createReviewSessionRoutes());
 
 // Presigned uploads. The router applies requireAuth at the mount point, so
 // no anonymous caller can mint an S3 upload URL.
