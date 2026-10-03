@@ -1,5 +1,6 @@
 import type { ApiPrinciple } from "../lib/api/principles";
 import { t, type SupportedLocale } from "../lib/i18n";
+import {ReviewEvidence} from './ReviewEvidence';
 
 /** A display excerpt, never a rewrite of the saved statement or its evidence. */
 export function principleEvidenceExcerpt(value: string, limit = 150): string {
@@ -21,19 +22,22 @@ export function PrincipleEvidence({ signals, locale }: {
   signals: ApiPrinciple["citedSignals"]; locale: SupportedLocale;
 }) {
   const shown = new Set<string>();
+  const shownAnswers = new Set<string>();
   return <div className="jar-principle-evidence">
     {signals.map((signal) => {
       const excerpt = principleEvidenceExcerpt(signal.statement);
       const example = signal.examples?.find((item) => !shown.has(item.text));
       if (example) shown.add(example.text);
       const sourceText = example ? principleEvidenceExcerpt(example.text, 180) : "";
-      if (!excerpt && !sourceText) return null;
+      const reviews=(signal.reviewExamples??[]).filter(row=>{if(shownAnswers.has(row.answerId))return false;shownAnswers.add(row.answerId);return true;});
+      if (!excerpt && !sourceText && !reviews.length) return null;
       return <div className="jar-principle-reference" key={signal.id}>
         {excerpt ? <p>{excerpt}</p> : null}
         {sourceText && example ? <blockquote>
           <p>{sourceText}</p>
           <footer>{t(locale, "worldPrincipleSavedExample")} · {new Date(example.createdAt).toLocaleDateString(locale, { month: "short", day: "numeric" })}</footer>
         </blockquote> : null}
+        <ReviewEvidence rows={reviews} locale={locale}/>
       </div>;
     })}
   </div>;

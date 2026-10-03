@@ -83,6 +83,8 @@ import { useInspirationDraft } from '../lib/use-inspiration-draft';
 import { useAudioRecording } from '../lib/use-audio-recording';
 import { InspirationComposer } from '../components/InspirationComposer';
 import { ReviewPanel } from '../components/ReviewPanel';
+import { ReviewEvidence } from '../components/ReviewEvidence';
+import type { ApiSignalReviewEvidence } from '../lib/api/signals';
 import { InspirationAttachments } from '../components/InspirationAttachments';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { CreateInspirationRequest } from '../lib/api';
@@ -1583,6 +1585,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   /** pattern id → what it rests on. Filled by the sky's background sweep;
       read by the orbit, which never fetches on tap. */
   const evidenceBySignalRef = useRef<Map<string, Evidence[]>>(new Map());
+  const [reviewEvidenceBySignal,setReviewEvidenceBySignal]=useState<Map<string,ApiSignalReviewEvidence[]>>(new Map());
   const skyReadSequence = useRef(0);
   useEffect(() => () => { skyReadSequence.current += 1; }, []);
 
@@ -1613,6 +1616,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
     setSignals(rows);
     const index = new Map<string, Evidence[]>();
     const bySignal = new Map<string, Evidence[]>();
+    const reviewsBySignal = new Map<string, ApiSignalReviewEvidence[]>();
     for (const p of rows) {
       if (!current()) return;
       if (p.evidenceCount === 0) continue;
@@ -1625,12 +1629,14 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
           else index.set(e.inspirationId, [e]);
         }
         bySignal.set(p.id, full.evidence);
+        reviewsBySignal.set(p.id, full.reviewEvidence);
       } catch {
         /* this signal draws no orbit; the statement still stands */
       }
     }
     if (!current()) return;
     evidenceBySignalRef.current = bySignal;
+    setReviewEvidenceBySignal(reviewsBySignal);
     setCitations(index);
     /* AND NOW THE PEEK ROW CAN BE BUILT. The board's statement cites signals;
        those signals cite memories; the row beneath the poster is those
@@ -1777,7 +1783,7 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * each clamped to a few lines with the read span still lit. Right is the
    * one you pressed, whole. Nothing moves behind it.
    */
-  const [prov, setProv] = useState<{ lead: string; rows: Evidence[] } | null>(null);
+  const [prov, setProv] = useState<{ lead: string; rows: Evidence[]; reviewSignalIds?:string[] } | null>(null);
   const [provPick, setProvPick] = useState<string | null>(null);
   /** the chosen ground, fetched whole — `null` while it is on its way */
   const [provFull, setProvFull] = useState<{ id: string; text: string } | null>(null);
@@ -9614,6 +9620,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * An agent's wall answers the same question from its own stack: its board
    * names the memories it was grounded in directly.
    */
+  const posterReviewSignalIds=useMemo(()=>{
+    if(atWall.kind!=='self')return [];
+    const lead=notes?.find(row=>row.pinned)??notes?.[0];
+    return lead?.citedSignals.map(row=>row.id).filter(id=>(reviewEvidenceBySignal.get(id)?.length??0)>0)??[];
+  },[atWall,notes,reviewEvidenceBySignal]);
   const posterChain = useMemo<Evidence[]>(() => {
     const out: Evidence[] = [];
     const seen = new Set<string>();
@@ -12301,7 +12312,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     section: inSky ? 'sky' : inField ? 'field' : 'top', at: parkedAt, memberId: atWall.kind === 'group' ? standing : null,
     inspirationId: reflectOn?.id ?? (selectedViewBall?.sigId ?? selectedId),
     reflectionId: reflectOn || reflectOpen ? (requestedViewRef.current?.inspirationId === (reflectOn?.id ?? selectedViewBall?.sigId ?? selectedId) ? requestedViewRef.current?.reflectionId ?? 'open' : 'open') : null,
-    find: seek !== null, compose: mouthOpen,reviewId:viewNavigation.view?.reviewId??null };
+    find: seek !== null, compose: mouthOpen,reviewId:viewNavigation.view?.reviewId??null,reviewAnswerId:viewNavigation.view?.reviewAnswerId??null };
   const observedHref = viewHref(observedView), observedRef = useRef(observedView); observedRef.current = observedView;
   useEffect(() => {
     if (phase !== 'ready' || restoringViewRef.current || navigationProblem) return;
@@ -13016,7 +13027,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       <p className="jar-source-previous"><span>{say('worldSourcePrevious')}</span>{sourcePrevious.body}</p>
                     ) : null}
                     {here && posterAsk ? (
-                      posterChain.length > 0 ? (
+                      posterChain.length > 0 || posterReviewSignalIds.length > 0 ? (
                         /* THE SAME ROOM THE SKY OPENS. These rows travelled
                            too — press one and the camera left headquarters
                            for the field — and they were clipped the same way.
@@ -13027,7 +13038,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                             className="jar-prov-lead jar-prov-open jar-label"
                             onClick={() => {
                               setProvPick(null);
-                              setProv({ lead: c.text ?? "", rows: posterChain });
+                              setProv({ lead: c.text ?? "", rows: posterChain,reviewSignalIds:posterReviewSignalIds });
                             }}
                           >
                             {say("worldBuiltFrom")}
@@ -13937,8 +13948,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                   {e.reason ? <span className="jar-prov-why">{e.reason}</span> : null}
                 </button>
               ))}
+              <ReviewEvidence rows={(prov.reviewSignalIds??[]).flatMap(id=>reviewEvidenceBySignal.get(id)??[])} locale={locale}/>
             </div>
-            <div className="jar-prov-room-full">
+            {prov.rows.length>0?<div className="jar-prov-room-full">
               {provPick === null ? (
                 /* THE PANE SAYS WHAT IT IS FOR RATHER THAN SITTING BLANK, and
                    it never guesses by pre-selecting the first ground: which
@@ -13953,7 +13965,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               ) : (
                 <p className="jar-prov-room-text">{provFull.text}</p>
               )}
-            </div>
+            </div>:null}
           </div>
           <p className="jar-ask jar-ask--row jar-prov-room-close">
             <button type="button" onClick={() => setProv(null)}>
@@ -14671,7 +14683,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
 
       {phase==='ready'&&!offline&&storageScope&&atWall.kind==='self'?<button type="button" className="jar-review-shortcut" hidden={Boolean(viewNavigation.view?.reviewId)} data-jar-chrome="1"
         onClick={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})}>{say('worldReviewTitle')}</button>:null}
-      {storageScope&&viewNavigation.view?.reviewId?<ReviewPanel key={`${storageScope.profileId}:${viewNavigation.view.reviewId}`} scope={storageScope} id={viewNavigation.view.reviewId} locale={locale}
+      {storageScope&&viewNavigation.view?.reviewId?<ReviewPanel key={`${storageScope.profileId}:${viewNavigation.view.reviewId}`} scope={storageScope} id={viewNavigation.view.reviewId} thoughtId={viewNavigation.view.reviewAnswerId} locale={locale}
         onId={id=>viewNavigation.write({...EMPTY_VIEW,reviewId:id},{replace:true})} onClose={viewNavigation.closeReview}
         onNewInspiration={()=>viewNavigation.write({...EMPTY_VIEW,compose:true},{replace:true})}
         onOpen={id=>viewNavigation.write({...EMPTY_VIEW,section:'field',inspirationId:id})}/>:null}

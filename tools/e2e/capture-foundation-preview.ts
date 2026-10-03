@@ -50,6 +50,33 @@ if(process.env.WAKA_REVIEW_FIXTURE==='1'){
   await fixture.sql`INSERT INTO inspirations(profile_id,text) VALUES (${profile.id},'A walk without a destination helped me notice a new idea.'),(${profile.id},'I want my mornings to have fewer planned tasks.')`;
 }
 const token = await signSessionToken({ profileId: profile.id, email: 'capture-fixture@example.test' });
+let reviewEvidenceFixture: {sessionId:string;answerId:string;signalId:string}|null=null;
+if(process.env.WAKA_REVIEW_EVIDENCE_FIXTURE==='1'){
+  try {
+  const {createReviewSession}=await import('../../packages/api/src/lib/review-sessions.js');
+  const {loadReviewAnswerMaterial}=await import('../../packages/api/src/lib/review-answer-material.js');
+  const {writeReviewEvidence}=await import('../../packages/api/src/lib/review-evidence.js');
+  const [source]=await fixture.sql`SELECT id FROM inspirations WHERE profile_id=${profile.id} ORDER BY created_at LIMIT 1`;
+  const session=(await createReviewSession(fixture.db as never,profile.id,{id:crypto.randomUUID(),inspirationIds:[source.id]}))!;
+  const answerId=crypto.randomUUID();
+  await fixture.sql`INSERT INTO review_answers(id,profile_id,session_id,question_job_id,input_hash,context_hash,question,answer,source_count)
+    VALUES(${answerId},${profile.id},${session.id},${crypto.randomUUID()},'fixture','fixture','Where would more room matter?','I want to leave one morning open each week. I do not want every idea to become another task.',1)`;
+  await fixture.sql`INSERT INTO review_answer_sources(profile_id,session_id,answer_id,inspiration_id,source_revision,referenced)
+    VALUES(${profile.id},${session.id},${answerId},${source.id},1,true)`;
+  const [signal]=await fixture.sql`INSERT INTO signals(profile_id,statement) VALUES(${profile.id},'I want room for ideas without turning each one into a task.') RETURNING id`;
+  const material=(await loadReviewAnswerMaterial(fixture.db as never,profile.id,answerId))!;
+  await fixture.db.transaction(tx=>writeReviewEvidence(tx as never,material,signal.id));
+  const [principle]=await fixture.sql`INSERT INTO principles(profile_id,statement,type,origin,rank,locked_at)
+    VALUES(${profile.id},'Leave room for an idea before deciding what it should become.','maxim','declared',0,now()) RETURNING id`;
+  await fixture.sql`INSERT INTO principle_signals(profile_id,principle_id,signal_id,statement_revision,principle_statement_revision)
+    VALUES(${profile.id},${principle.id},${signal.id},1,1)`;
+  const [reading]=await fixture.sql`INSERT INTO top_of_minds(profile_id) VALUES(${profile.id}) RETURNING id`;
+  const [entry]=await fixture.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body,sort_order)
+    VALUES(${reading.id},'pattern','Making room for ideas without turning each one into a task.',0) RETURNING id`;
+  await fixture.sql`INSERT INTO top_of_mind_entry_signals(entry_id,signal_id,statement_revision,entry_body_revision) VALUES(${entry.id},${signal.id},1,1)`;
+  reviewEvidenceFixture={sessionId:session.id,answerId,signalId:signal.id};
+  } catch(error) { await fixture.cleanup();await getDb().$client.end();throw error; }
+}
 await createSessionRow({ profileId: profile.id, token });
 const [nativeAccount] = await fixture.sql`INSERT INTO accounts(email,onboarding_completed_at) VALUES ('native-capture-fixture@example.test',now()) RETURNING id`;
 const [nativeProfile] = await fixture.sql`INSERT INTO profiles(account_id,type,name) VALUES (${nativeAccount.id},'human','Native capture fixture') RETURNING id`;
@@ -152,7 +179,7 @@ const server = createServer(async (request, response) => {
         (SELECT count(*)::int FROM attachments) AS attachments, (SELECT count(*)::int FROM inspiration_save_requests) AS requests`;
       response.writeHead(200, {'Content-Type':'application/json'}); response.end(JSON.stringify({ ...counts, objects: objects.size,
         origin, schema: fixture.schemaName, microphone: 'synthetic tone', failUpload, loseResponse, loseRequest, transcriptFixtureId, transcriptFixtureInspirationId,
-        linkFixtureInspirationId, uploadAttempts, failUploadAfter, reflectionCalls, reviewCalls, activeAccount:activeToken===token?'primary':'native' })); return;
+        linkFixtureInspirationId, reviewEvidenceFixture, uploadAttempts, failUploadAfter, reflectionCalls, reviewCalls, activeAccount:activeToken===token?'primary':'native' })); return;
     }
     if (target.pathname.startsWith('/capture-fixture/')) {
       const key = decodeURIComponent(target.pathname);

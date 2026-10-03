@@ -66,8 +66,16 @@ export interface ApiSignalEvidence {
   createdAt: string;
 }
 
+export interface ApiSignalReviewEvidence {
+  answerId: string;
+  sessionId: string;
+  preview: string;
+  createdAt: string;
+}
+
 export interface ApiSignalDetail extends ApiSignal {
   evidence: ApiSignalEvidence[];
+  reviewEvidence?: ApiSignalReviewEvidence[];
 }
 
 export interface FetchSignalsOptions extends ProfileScoped {
@@ -157,5 +165,4 @@ export async function restoreSignal(id: string): Promise<ApiSignal> {
   );
   return body.signal;
 }
-
 

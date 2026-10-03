@@ -12,6 +12,7 @@ import {loadPrincipleMaterial} from './principle-generation.js';
 import {assembleProfileExport} from './profile-export.js';
 import {readGenerationRevision,assertGenerationRevision} from './generation-revision.js';
 import {createGroupForProfile} from '../routes/groups-membership.js';
+import {loadPrincipleViews} from '../routes/principles.js';
 let t:TestDatabase,sequence=0;
 beforeAll(async()=>{t=await createTestDatabase();});beforeEach(async()=>{await t.truncateAll();});afterAll(async()=>{await t?.cleanup();});
 async function fixture(count=3){
@@ -57,6 +58,19 @@ it('counts many references and replies once and exposes their current human word
   await expect(t.sql`UPDATE signals SET status='active' WHERE id=${f.signalId}`).rejects.toThrow(/with 1 evidence/);
   const other=await fixture();expect((await loadSignalEvidence(t.db as never,other.profileId,[f.signalId])).witnesses.size).toBe(0);
   expect(await getProfileSignal(t.db as never,{profileId:other.profileId,signalId:f.signalId})).toBeNull();
+});
+it('serves current review examples for a principle and withdraws stale or deleted answer words',async()=>{
+  const f=await fixture(),a=await answer(f);await support(f,a);
+  const [principle]=await t.sql`INSERT INTO principles(profile_id,statement,type,origin,rank,locked_at) VALUES(${f.profileId},'Leave room for reconsideration','maxim','declared',0,now()) RETURNING id`;
+  await t.sql`INSERT INTO principle_signals(profile_id,principle_id,signal_id,statement_revision,principle_statement_revision) VALUES(${f.profileId},${principle.id},${f.signalId},1,1)`;
+  const views=()=>loadPrincipleViews(t.db as never,f.profileId);
+  expect((await views())[0].citedSignals[0].reviewExamples).toEqual([{answerId:a,sessionId:f.sessionId,preview:'My own thought about making room to reconsider',createdAt:expect.any(String)}]);
+  const other=await fixture();expect(await loadPrincipleViews(t.db as never,other.profileId)).toEqual([]);
+  await t.sql`UPDATE review_answers SET answer='A corrected private thought' WHERE id=${a}`;
+  expect(JSON.stringify(await views())).not.toContain('My own thought about making room');
+  await support(f,a);expect((await views())[0].citedSignals[0].reviewExamples?.[0].preview).toBe('A corrected private thought');
+  await t.sql`UPDATE review_answers SET answer=NULL,question=NULL,connection=NULL,input_hash='',deleted_at=now() WHERE id=${a}`;
+  expect(JSON.stringify(await views())).not.toContain('A corrected private thought');
 });
 it('does not spend context-only origins or the same original twice',async()=>{
   const f=await fixture(),a=await answer(f,[f.ids[0]!]);await support(f,a);await raw(f,f.ids[0]!);

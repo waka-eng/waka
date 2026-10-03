@@ -7,6 +7,7 @@ import {act} from 'react';
 import {createRoot,type Root} from 'react-dom/client';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {ReviewPanel} from '../src/components/ReviewPanel';
+import {readViewLocation} from '../src/lib/view-location';
 import {storeReviewSelection,readReviewSelections} from '../src/lib/review-selection-drafts';
 import {newReviewDraft,storeReviewDraft} from '../src/lib/review-dialogue-drafts';
 import {chooseReviewInspiration,fetchActiveReview,fetchInspiration,fetchInspirationPage,fetchReviewSession,finishReviewSession,startReviewSession,fetchReviewDialogue,saveReviewAnswer,requestReviewQuestion,type ApiInspiration,type ApiReviewSession} from '../src/lib/api';
@@ -29,10 +30,25 @@ beforeEach(()=>{
   vi.mocked(finishReviewSession).mockImplementation(async()=>{current={...current!,revision:current!.revision+1,completedAt:'2026-10-02T01:00:00Z',currentInspirationId:null};return copy();});
   vi.mocked(fetchReviewDialogue).mockImplementation(async()=>({sessionId:SID,profileId:scope.profileId,revision:current!.revision,answers:[],question:{phase:current!.completedAt?'closed':'empty'}}));
 });
-afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.useRealTimers();});
-const mount=(id=SID)=>act(async()=>root.render(<ReviewPanel scope={scope} id={id} locale="en-US" onId={onId} onClose={onClose} onNewInspiration={onNewInspiration} onOpen={onOpen}/>));
+afterEach(async()=>{await act(async()=>root.unmount());host.remove();window.history.replaceState(null,'','/');vi.useRealTimers();});
+const mount=(id=SID)=>act(async()=>root.render(<ReviewPanel scope={scope} id={id} thoughtId={readViewLocation(window.location.pathname,window.location.search)?.reviewAnswerId} locale="en-US" onId={onId} onClose={onClose} onNewInspiration={onNewInspiration} onOpen={onOpen}/>));
 const button=(label:string)=>[...host.querySelectorAll('button')].find(row=>row.textContent===label)!;
 const click=(label:string)=>act(async()=>button(label).click());
+it('opens the exact linked thought even while the review cursor is still on an inspiration',async()=>{
+  const answerId='33333333-3333-4333-8333-333333333333';
+  window.history.replaceState(null,'',`/review/${SID}?thought=${answerId}`);
+  vi.mocked(fetchReviewDialogue).mockResolvedValue({sessionId:SID,profileId:scope.profileId,revision:1,latestAnswerId:answerId,
+    answers:[{id:answerId,revision:1,question:'What stayed with you?',connection:null,answer:'The actual thought behind this reading.',contextValid:true,createdAt:source.createdAt,updatedAt:source.createdAt,sources:[]}],question:{phase:'idle',retryAfter:null}});
+  await mount();const thought=host.querySelector(`#thought-${answerId}`)!;
+  expect(thought.textContent).toContain('The actual thought behind this reading.');expect(host.querySelector<HTMLDetailsElement>('.jar-review-history')!.open).toBe(true);
+  expect(document.activeElement).toBe(thought);expect(saveReviewAnswer).not.toHaveBeenCalled();expect(requestReviewQuestion).not.toHaveBeenCalled();
+  await act(async()=>{host.querySelector<HTMLDetailsElement>('.jar-review-history')!.open=false;});
+  expect(host.querySelector<HTMLDetailsElement>('.jar-review-history')!.open).toBe(false);
+});
+it('explains a removed linked thought without asking a model to replace it',async()=>{
+  window.history.replaceState(null,'',`/review/${SID}?thought=33333333-3333-4333-8333-333333333333`);
+  await mount();expect(host.textContent).toContain('This thought is no longer available.');expect(requestReviewQuestion).not.toHaveBeenCalled();
+});
 it('renders the current original and saves skip then reconsider without changing source words',async()=>{
   await mount();expect(host.textContent).toContain(source.text);expect(host.textContent).toContain('1 / 1');
   await click('Skip for now');expect(chooseReviewInspiration).toHaveBeenLastCalledWith(SID,{revision:0,inspirationId:SOURCE,sourceRevision:'1',choice:'skip'},scope.profileId,expect.any(AbortSignal));

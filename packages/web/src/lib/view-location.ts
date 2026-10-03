@@ -11,8 +11,9 @@ export interface ViewLocation {
   find: boolean;
   compose: boolean;
   reviewId: string|null;
+  reviewAnswerId: string|null;
 }
-export const EMPTY_VIEW: ViewLocation = { wallId: null, section: 'top', inspirationId: null, reflectionId: null, memberId: null, at: null, find: false, compose: false,reviewId:null };
+export const EMPTY_VIEW: ViewLocation = { wallId: null, section: 'top', inspirationId: null, reflectionId: null, memberId: null, at: null, find: false, compose: false,reviewId:null,reviewAnswerId:null };
 const id = (value: string | null) => value && /^[a-zA-Z0-9_-]{1,120}$/.test(value) ? value : null;
 
 export function readViewLocation(pathname: string, search = ''): ViewLocation | null {
@@ -28,6 +29,7 @@ export function readViewLocation(pathname: string, search = ''): ViewLocation | 
       view.inspirationId = segments[1]!;
     } else if(segments[0]==='review' && segments.length===2 && id(segments[1]!)) {
       view.reviewId=segments[1]!;
+      view.reviewAnswerId=view.reviewId==='new'?null:id(params.get('thought'));
       return view;
     } else return null;
   }
@@ -45,7 +47,7 @@ export function readViewLocation(pathname: string, search = ''): ViewLocation | 
 }
 
 export function viewHref(view: ViewLocation): string {
-  if(view.reviewId)return `/review/${encodeURIComponent(view.reviewId)}`;
+  if(view.reviewId)return `/review/${encodeURIComponent(view.reviewId)}${view.reviewAnswerId&&view.reviewId!=='new'?`?thought=${encodeURIComponent(view.reviewAnswerId)}`:''}`;
   const path = view.wallId ? `/w/${encodeURIComponent(view.wallId)}${view.label ? `/${encodeURIComponent(view.label.trim().toLowerCase().replace(/\s+/g, '-'))}` : ''}` : '/';
   const params = new URLSearchParams();
   if (view.section !== 'top' || view.inspirationId) params.set('view', view.section);

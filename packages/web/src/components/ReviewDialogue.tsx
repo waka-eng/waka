@@ -12,9 +12,15 @@ function ReviewReference({id,profileId,locale,onOpen}:{id:string;profileId:strin
     return()=>{controller.abort();window.clearTimeout(timer);};},[id,profileId]);
   return <button type="button" className="jar-review-reference" onClick={()=>onOpen(id)} disabled={!label}>{label??t(locale,'worldReviewSourceUnavailable')} ↗</button>;
 }
-export function ReviewDialogue({scope,id,completed,locale,onOpen,onRevision,onDraftChange}:{scope:ProfileStorageScope;id:string;completed:boolean;locale:SupportedLocale;
+export function ReviewDialogue({scope,id,thoughtId=null,completed,locale,onOpen,onRevision,onDraftChange}:{scope:ProfileStorageScope;id:string;thoughtId?:string|null;completed:boolean;locale:SupportedLocale;
   onOpen:(id:string)=>void;onRevision:(revision:number)=>void;onDraftChange:(hasDraft:boolean)=>void}){
   const review=useReviewDialogue(scope,id,onRevision),{state,draft}=review;
+  const history=useRef<HTMLDetailsElement>(null),focused=useRef<string|null>(null);
+  useEffect(()=>{
+    if(!thoughtId||focused.current===thoughtId||!state?.answers.some(row=>row.id===thoughtId))return;
+    const target=document.getElementById(`thought-${thoughtId}`);
+    if(history.current&&target){history.current.open=true;target.scrollIntoView?.({block:'center'});target.focus({preventScroll:true});focused.current=thoughtId;}
+  },[thoughtId,state?.answers]);
   useEffect(()=>{if(completed)void review.refresh();},[completed,review.refresh]);
   const editor=useRef<HTMLTextAreaElement>(null);
   const [copyState,setCopyState]=useState<'copied'|'manual'|null>(null);
@@ -32,7 +38,7 @@ export function ReviewDialogue({scope,id,completed,locale,onOpen,onRevision,onDr
   };
   useEffect(()=>{onDraftChange(Boolean(draft)||review.busy);return()=>onDraftChange(false);},[Boolean(draft),review.busy,onDraftChange]);
   const references=(ids:string[])=> <div className="jar-review-references">{ids.map(sourceId=><ReviewReference key={sourceId} id={sourceId} profileId={scope.profileId} locale={locale} onOpen={onOpen}/>)}</div>;
-  const saved=(row:ApiReviewAnswer)=><article key={row.id} className="jar-review-thought">
+  const saved=(row:ApiReviewAnswer)=><article key={row.id} id={`thought-${row.id}`} tabIndex={-1} className="jar-review-thought">
     {row.contextValid&&row.question?<p>{row.question}</p>:<p className="jar-review-context">{say('worldReviewContextChanged')}</p>}
     <p className="jar-review-answer">{row.answer}</p>
     {row.contextValid?references(row.sources.filter(source=>source.referenced).map(source=>source.inspirationId)):null}
@@ -41,7 +47,8 @@ export function ReviewDialogue({scope,id,completed,locale,onOpen,onRevision,onDr
   </article>;
   return <section className="jar-review-dialogue" aria-label={say('worldReviewThink')}>
     {review.loading?<p role="status">{say('worldReviewLoadingThoughts')}</p>:null}
-    {state?.answers.length?<details className="jar-review-history"><summary>{say('worldReviewSavedThoughts')} ({state.answers.length})</summary>{state.answers.map(saved)}</details>:null}
+    {thoughtId&&state&&!review.loading&&!state.answers.some(row=>row.id===thoughtId)?<p role="status">{say('worldReviewThoughtUnavailable')}</p>:null}
+    {state?.answers.length?<details ref={history} className="jar-review-history"><summary>{say('worldReviewSavedThoughts')} ({state.answers.length})</summary>{state.answers.map(saved)}</details>:null}
     {review.error?<div role="alert"><p>{say(review.error==='storage'?'worldReviewDraftStorage':review.error==='conflict'?'worldReviewDraftChanged':review.error==='limit'?'worldReviewQuestionLimit':review.error==='load'?'worldReviewThoughtsFailed':review.error==='question'?'worldReviewQuestionFailed':'worldReviewThoughtUnconfirmed')}</p>
       {review.error==='storage'?<button type="button" onClick={review.recoverStorage}>{say('worldReviewReset')}</button>:<button type="button" disabled={review.busy} onClick={()=>void review.refresh()}>{say('worldReviewCheckThoughts')}</button>}</div>:null}
     {review.drafts.length>1?<label>{say('worldReviewDrafts')}<select value={review.drafts.find(row=>row.value.id===draft?.id)?.key??''} disabled={review.busy} onChange={event=>{const row=review.drafts.find(row=>row.key===event.target.value);if(row)review.selectDraft(row);}}>{review.drafts.map((row,index)=><option key={row.key} value={row.key}>{index+1}. {row.value.answer.slice(0,60)}</option>)}</select></label>:null}

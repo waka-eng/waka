@@ -33,3 +33,11 @@ it('routes review identity without source content or unrelated world metadata',(
   expect(viewHref({...EMPTY_VIEW,reviewId:'new'})).toBe('/review/new');
   expect(readViewLocation('/review')).toBeNull(); // remains available to a public profile handle
 });
+it('round-trips an exact saved thought and excludes it from unrelated or new-review routes',()=>{
+  const view={...EMPTY_VIEW,reviewId:'session-id',reviewAnswerId:'answer-id'};
+  expect(viewHref(view)).toBe('/review/session-id?thought=answer-id');
+  expect(readViewLocation('/review/session-id','?thought=answer-id')).toEqual(view);
+  expect(readViewLocation('/review/new','?thought=answer-id')?.reviewAnswerId).toBeNull();
+  expect(readViewLocation('/','?thought=answer-id')?.reviewAnswerId).toBeNull();
+  expect(readViewLocation('/review/session-id','?thought=%3Cscript%3E')?.reviewAnswerId).toBeNull();
+});

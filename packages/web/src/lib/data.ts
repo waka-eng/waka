@@ -177,6 +177,7 @@ export interface Evidence {
 
 export interface SignalDetail extends Signal {
   evidence: Evidence[];
+  reviewEvidence: NonNullable<Awaited<ReturnType<typeof fetchSignal>>['reviewEvidence']>;
 }
 
 /* ---------------------------------------------------------------- layer 3 */
@@ -472,7 +473,7 @@ export function toInspirationDetail(row: Awaited<ReturnType<typeof fetchInspirat
 /** One signal opened: the same statement, plus what it rests on. */
 export async function loadSignal(id: string): Promise<SignalDetail> {
   const row = await fetchSignal(id);
-  return { ...toSignal(row), evidence: (row.evidence ?? []).map((e) => toEvidence(row.id, e)) };
+  return { ...toSignal(row), evidence: (row.evidence ?? []).map((e) => toEvidence(row.id, e)), reviewEvidence: row.reviewEvidence ?? [] };
 }
 
 /* ---------------------------------------------------------------- aliveness */

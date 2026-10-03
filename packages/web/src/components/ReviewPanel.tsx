@@ -24,8 +24,8 @@ function ReviewChosenItem({id,profileId,locale,onOpen,onMissing,onReady,onRemove
   return <li><button type="button" disabled={!ready} aria-label={`${t(locale,'worldReviewOpen')}: ${label}`} onClick={()=>onOpen(id)}>{label}</button>{!ready&&label===t(locale,'worldReviewSourceUnavailable')&&onRemove?<button type="button" onClick={()=>setAttempt(value=>value+1)}>{t(locale,'worldRoomHistoryRetry')}</button>:null}{onRemove?<button type="button" aria-label={`${t(locale,'worldRemoveLower')} ${label}`} onClick={onRemove}>×</button>:null}</li>;
 }
 
-function ReviewCard({item,sessionId,profileId,locale,disabled,onChoice,onRefresh,onReady,onOpen}:{
-  item:ApiReviewItem;sessionId:string;profileId:string;locale:SupportedLocale;disabled:boolean;
+function ReviewCard({item,sessionId,profileId,locale,disabled,focusOnLoad=true,onChoice,onRefresh,onReady,onOpen}:{
+  item:ApiReviewItem;sessionId:string;profileId:string;locale:SupportedLocale;disabled:boolean;focusOnLoad?:boolean;
   onChoice:(choice:'keep'|'skip')=>void;onRefresh:()=>void;onReady:(key:string|null)=>void;onOpen:(id:string)=>void;
 }){
   const [read,setRead]=useState<{id:string;revision:string;source:ApiInspiration}|null>(null),[failed,setFailed]=useState(false);
@@ -48,7 +48,7 @@ function ReviewCard({item,sessionId,profileId,locale,disabled,onChoice,onRefresh
   },[item.inspirationId,item.currentRevision,sessionId,profileId]);
   const source=read?.id===item.inspirationId&&read.revision===item.currentRevision?read.source:null;
   useEffect(()=>{onReady(source&&!failed?`${item.inspirationId}:${item.currentRevision}`:null);},[source,failed,item.inspirationId,item.currentRevision,onReady]);
-  useEffect(()=>{if(source)root.current?.focus({preventScroll:true});},[source?.id]);
+  useEffect(()=>{if(source&&focusOnLoad)root.current?.focus({preventScroll:true});},[source?.id,focusOnLoad]);
   const interactive=(target:EventTarget|null)=>target instanceof Element&&Boolean(target.closest('button,a,input,textarea,audio,summary'));
   return <div className="jar-review-card" ref={root} tabIndex={0} aria-label={t(locale,'worldReviewTitle')}
     onKeyDown={event=>{if(disabled||!source||interactive(event.target)||event.repeat)return;if(event.key==='ArrowRight'||event.key==='ArrowLeft'){event.preventDefault();event.stopPropagation();onChoice(event.key==='ArrowRight'?'keep':'skip');}}}
@@ -66,7 +66,7 @@ function ReviewCard({item,sessionId,profileId,locale,disabled,onChoice,onRefresh
   </div>;
 }
 
-export function ReviewPanel({scope,id,locale,onId,onClose,onNewInspiration,onOpen}:{scope:ProfileStorageScope;id:string;locale:SupportedLocale;
+export function ReviewPanel({scope,id,thoughtId=null,locale,onId,onClose,onNewInspiration,onOpen}:{scope:ProfileStorageScope;id:string;thoughtId?:string|null;locale:SupportedLocale;
   onId:(id:string)=>void;onClose:()=>void;onNewInspiration:()=>void;onOpen:(id:string)=>void;
 }){
   const review=useReviewSession(scope,id,onId),selection=useReviewSelection(scope),[picker,setPicker]=useState(false);
@@ -104,10 +104,10 @@ export function ReviewPanel({scope,id,locale,onId,onClose,onNewInspiration,onOpe
         {session&&!review.loading?<>
           {dates.length>1&&formatDate(dates[0]!)!==formatDate(dates.at(-1)!)?<p className="jar-review-context">{formatDate(dates[0]!)} – {formatDate(dates.at(-1)!)}</p>:null}
           {!session.completedAt&&item?<><p role="status">{items.indexOf(item)+1} / {items.length}</p>
-            <ReviewCard key={`${item.inspirationId}:${item.currentRevision}`} item={item} sessionId={session.id} profileId={scope.profileId} locale={locale} disabled={disabled} onChoice={choice=>review.choose(item,choice)} onRefresh={()=>void review.refresh()} onReady={setReadySource} onOpen={onOpen}/>
+            <ReviewCard key={`${item.inspirationId}:${item.currentRevision}`} item={item} sessionId={session.id} profileId={scope.profileId} locale={locale} disabled={disabled} focusOnLoad={!thoughtId} onChoice={choice=>review.choose(item,choice)} onRefresh={()=>void review.refresh()} onReady={setReadySource} onOpen={onOpen}/>
             <p className="jar-review-context">{say('worldReviewHint')}</p>
           </>:<>{session.completedAt?<h3>{say('worldReviewDone')}</h3>:null}{items.some(row=>row.choice==='keep')?<details><summary>{say('worldReviewSelected')} ({items.filter(row=>row.choice==='keep').length})</summary><ul>{items.filter(row=>row.choice==='keep').map(row=><ReviewChosenItem key={row.inspirationId} id={row.inspirationId} profileId={scope.profileId} locale={locale} onOpen={onOpen} onMissing={()=>void review.refresh()}/>)}</ul></details>:<p>{say('worldReviewNone')}</p>}</>}
-          {!item||session.completedAt?<ReviewDialogue key={`${scope.accountId}:${scope.profileId}:${session.id}`} scope={scope} id={session.id} completed={Boolean(session.completedAt)} locale={locale} onOpen={onOpen} onRevision={review.observeRevision} onDraftChange={setHasDialogueDraft}/>:null}
+          {!item||session.completedAt||thoughtId?<ReviewDialogue key={`${scope.accountId}:${scope.profileId}:${session.id}`} scope={scope} id={session.id} thoughtId={thoughtId} completed={Boolean(session.completedAt)} locale={locale} onOpen={onOpen} onRevision={review.observeRevision} onDraftChange={setHasDialogueDraft}/>:null}
         </>:null}
       </div>
       {session&&!session.completedAt?<footer>

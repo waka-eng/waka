@@ -14,6 +14,7 @@
  */
 
 import { apiPath, getJson, patchJson, postJson, requestVoid } from "./http";
+import type {ApiSignalReviewEvidence} from './signals';
 
 export type ApiPrincipleState = "held" | "aspirational" | "contested";
 export type ApiPrincipleKind = "value" | "maxim" | "stance";
@@ -31,7 +32,7 @@ export interface ApiPrinciple {
   supportChanged?: boolean;
   heldSince: string | null;
   conflictsWithId: string | null;
-  citedSignals: Array<{ id: string; statement: string; examples?: Array<{ text: string; createdAt: string }> }>;
+  citedSignals: Array<{ id: string; statement: string; examples?: Array<{ text: string; createdAt: string }>; reviewExamples?: ApiSignalReviewEvidence[] }>;
   createdAt: string;
   disputeId?: string | null;
 }
