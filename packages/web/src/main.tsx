@@ -176,6 +176,8 @@ ReactDOM.createRoot(root).render(
             <Route path="/w/:wall/:label?" element={<></>} />
             <Route path="/inspirations/:inspirationId" element={<></>} />
             <Route path="/review/:reviewId" element={<></>} />
+            <Route path="/principles/:principleId" element={<></>} />
+            <Route path="/principles/:principleId/share" element={<></>} />
           </Route>
           {/* One parent keeps the world mounted across URL changes. Wall IDs
               and optional labels identify a place; query metadata identifies

@@ -84,6 +84,7 @@ import { useAudioRecording } from '../lib/use-audio-recording';
 import { InspirationComposer } from '../components/InspirationComposer';
 import { ReviewPanel } from '../components/ReviewPanel';
 import { ReadingChanges } from '../components/ReadingChanges';
+import { PrincipleShare } from '../components/PrincipleShare';
 import { ReviewEvidence } from '../components/ReviewEvidence';
 import type { ApiSignalReviewEvidence } from '../lib/api/signals';
 import { InspirationAttachments } from '../components/InspirationAttachments';
@@ -1461,6 +1462,8 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * and the menu existed largely to carry it.
    */
   const [principles, setPrinciples] = useState<ApiPrinciple[]>([]);
+  const [principlesRead,setPrinciplesRead]=useState(false);
+  const acceptPrinciples=useCallback((rows:ApiPrinciple[])=>{setPrinciples(rows);setPrinciplesRead(true);},[]);
   const [groupPrincipleCounts, setGroupPrincipleCounts] = useState<Record<string, number>>({});
   /**
    * LAYER FOUR BECOMES SOMETHING YOU CAN ANSWER, not only read.
@@ -1483,6 +1486,14 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
    * its own yes, the same rule the settings sheet keeps four times over.
    */
   const [pick, setPick] = useState<string | null>(null);
+  const pickedPrincipleExists=principles.some(row=>row.id===pick);
+  useEffect(()=>{
+    if(!pick||!pickedPrincipleExists||viewNavigation.view?.sharePrinciple)return;
+    const row=Array.from(measured.root.current?.querySelectorAll<HTMLElement>('[data-principle-id]')??[]).find(element=>element.dataset.principleId===pick);
+    const list=row?.parentElement;if(!row||!list)return;
+    const top=row.getBoundingClientRect().top-list.getBoundingClientRect().top+list.scrollTop;
+    if(top<list.scrollTop||top+row.offsetHeight>list.scrollTop+list.clientHeight)list.scrollTop=Math.max(0,top);
+  },[pick,pickedPrincipleExists,viewNavigation.view?.sharePrinciple]);
   const [pDraft, setPDraft] = useState<{ id: string; text: string } | null>(null);
   const [pGoing, setPGoing] = useState<string | null>(null);
   /**
@@ -3303,7 +3314,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const requested = requestedViewRef.current;
     // An explicit route or an already-started interaction belongs to the
     // person. A returning-visitor greeting is never navigation authority.
-    if (navigationInteraction.current || requested?.inspirationId || requested?.compose || requested?.find || requested?.wallId || requested?.reviewId) {
+    if (navigationInteraction.current || requested?.inspirationId || requested?.compose || requested?.find || requested?.wallId || requested?.reviewId || requested?.principleId) {
       stamp(); return undefined;
     }
     const interactionAtGreeting = navigationInteraction.current;
@@ -12225,6 +12236,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     linkedReflectionRef.current = null;
     setReflectOn(null); setReflectOpen(false); setSelectedId(null); setDetachedInspiration(null); setGroupPanel(null);
     setSeek(desired.find ? viewNavigation.query : null);
+    setPick(desired.principleId);
     setMouthOpen(desired.compose);
     const finish = () => { if (current()) { appliedViewKey.current = key; restoringViewRef.current = false; canonicalizeViewRef.current = true; setViewSettled((value) => value + 1); } };
     const run = async () => {
@@ -12291,7 +12303,9 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     section: inSky ? 'sky' : inField ? 'field' : 'top', at: parkedAt, memberId: atWall.kind === 'group' ? standing : null,
     inspirationId: reflectOn?.id ?? (selectedViewBall?.sigId ?? selectedId),
     reflectionId: reflectOn || reflectOpen ? (requestedViewRef.current?.inspirationId === (reflectOn?.id ?? selectedViewBall?.sigId ?? selectedId) ? requestedViewRef.current?.reflectionId ?? 'open' : 'open') : null,
-    find: seek !== null, compose: mouthOpen,reviewId:viewNavigation.view?.reviewId??null,reviewAnswerId:viewNavigation.view?.reviewAnswerId??null };
+    find: seek !== null, compose: mouthOpen,reviewId:viewNavigation.view?.reviewId??null,reviewAnswerId:viewNavigation.view?.reviewAnswerId??null,
+    principleId:atWall.kind==='self'&&inSky?pick:null,
+    sharePrinciple:atWall.kind==='self'&&inSky&&(viewNavigation.view?.sharePrinciple??false) };
   const observedHref = viewHref(observedView), observedRef = useRef(observedView); observedRef.current = observedView;
   useEffect(() => {
     if (phase !== 'ready' || restoringViewRef.current || navigationProblem) return;
@@ -12452,9 +12466,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       active={here && !offlineRef.current}
                       locale={locale}
                       refreshKey={w.kind === "group" ? groupReadTick : undefined}
-                      onRead={w.kind === "self" ? setPrinciples : (rows) => setGroupPrincipleCounts((counts) =>
+                      onRead={w.kind === "self" ? acceptPrinciples : (rows) => setGroupPrincipleCounts((counts) =>
                         counts[w.id] === rows.length ? counts : { ...counts, [w.id]: rows.length })}
                     /> : null}
+                    {w.kind==='self'&&pick&&principlesRead&&!principles.some(row=>row.id===pick)?<p role="status" className="jar-values-sub">
+                      {say('worldPrincipleUnavailable')} <button type="button" onClick={()=>{setPick(null);viewNavigation.write({...EMPTY_VIEW,section:'sky'},{replace:true});}}>{say('worldPrinciplesBack')}</button>
+                    </p>:null}
                     {w.kind === "self" && principles.length > 0 ? (
                       <>
                         {/* THE LAYER, NOT THE NAME — the same ruling the board
@@ -12468,12 +12485,13 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                         </p>
                     {/* Ranked, and the rank is the order — never a number
                         beside a statement. */}
-                    <ul className="jar-principles-list" role="list" aria-label={say("worldPhilosophiesValues")} data-jar-interactive="1">
+                    <ul className="jar-principles-list jar-principles-list--personal" role="list" aria-label={say("worldPhilosophiesValues")} data-jar-interactive="1">
                     {[...principles]
                       .sort((a, b) => a.rank - b.rank)
                       .map((pr, i, ranked) => (
                         <li
                           key={pr.id}
+                          data-principle-id={pr.id}
                           data-expanded={pick === pr.id || pDraft?.id === pr.id || pRoots === pr.id}
                           className={
                             /* RANK AS PRESENCE, NEVER AS A NUMBER. The top
@@ -12528,9 +12546,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                                   : "jar-values-value"
                               }
                               aria-expanded={pick === pr.id}
-                              onClick={() =>
-                                setPick((cur) => (cur === pr.id ? null : pr.id))
-                              }
+                              onClick={() => {
+                                const selected=pick===pr.id?null:pr.id;setPick(selected);
+                                viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:selected});
+                              }}
                             >
                               {pr.statement}
                             </button>
@@ -12607,6 +12626,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                           ) : null}
                           {pick === pr.id && !pDraft ? (
                             <div className="jar-ask jar-principle-actions">
+                              {storageScope&&!offline?<button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:pr.id,sharePrinciple:true})}>{say('worldSharePrinciple')}</button>:null}
                               {pr.citedSignals.length > 0 ? (
                                 <>
                                   <button
@@ -14654,6 +14674,10 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           query={seek} locale={locale} label={atWall.kind === 'group' ? say('worldFindYourInspirations') : undefined}
           onQuery={setSeek} onClose={() => setSeek(null)} onPick={openSearchResult} />
       ) : null}
+      {storageScope&&viewNavigation.view?.principleId&&viewNavigation.view.sharePrinciple?<PrincipleShare
+        key={`${storageScope.accountId}:${storageScope.profileId}:${viewNavigation.view.principleId}`} scope={storageScope}
+        id={viewNavigation.view.principleId} name={auth?.profile?.name??''} locale={locale} onClose={viewNavigation.closeShare}
+        onChoose={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id,sharePrinciple:true},{replace:true})}/>:null}
 
       {/* MAKING OR JOINING A ROOM. A form, and it is honest about being one:
           typed text, a submit and an error line all need to reflow and be

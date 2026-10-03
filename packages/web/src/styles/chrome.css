@@ -1297,6 +1297,7 @@ body .profile-signout-button {
 .jar-seek.jar-inspiration-composer[data-visual-viewport],
 .jar-seek.jar-inspiration-search[data-visual-viewport],
 .jar-seek.jar-review[data-visual-viewport],
+.jar-seek.jar-principle-share[data-visual-viewport],
 .jar-seek.jar-reflect-room[data-visual-viewport] {
   position: fixed;
   top: calc(var(--dialog-visible-top) + var(--dialog-visible-height) / 2);
@@ -1383,6 +1384,25 @@ body .profile-signout-button {
 .jar-reading-comparison h2,.jar-reading-comparison h3 { font:inherit; font-weight:500; }
 .jar-reading-comparison section { margin-top:var(--sp-20); padding-top:var(--sp-12); border-top:1px solid var(--w-edge); overflow-wrap:anywhere; }
 .jar-reading-comparison button { min-height:var(--sp-44); padding:var(--sp-8) var(--sp-12); color:var(--w-ink); background:none; border:1px solid var(--w-edge); border-radius:var(--sp-12); font:inherit; cursor:pointer; }
+.jar-seek.jar-principle-share { box-sizing:border-box; z-index:8; width:min(980px,calc(100vw - var(--sp-24))); max-height:calc(var(--jar-vh,100dvh) - var(--sp-24)); display:flex; flex-direction:column; color:var(--w-ink); font-size:var(--t-body); line-height:1.5; text-align:left; user-select:text; touch-action:pan-y; }
+.jar-share-body { min-height:0; overflow-y:auto; overscroll-behavior:contain; }
+.jar-principle-share header,.jar-principle-share footer { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; flex-shrink:0; gap:var(--sp-12); }
+.jar-principle-share h2 { font-size:var(--t-lead); font-weight:500; }
+.jar-principle-share label { display:flex; flex-direction:column; gap:var(--sp-6); margin-block:var(--sp-12); font-size:var(--t-body); }
+.jar-principle-share select,.jar-principle-share textarea { width:100%; min-width:0; box-sizing:border-box; min-height:var(--sp-44); padding:var(--sp-8); border:1px solid var(--w-edge); border-radius:var(--sp-8); background:var(--jar-panel); color:var(--w-ink); font:inherit; font-size:var(--t-lead); }
+.jar-principle-share textarea { resize:vertical; line-height:1.5; }
+.jar-principle-share button { min-height:var(--sp-44); padding:var(--sp-8) var(--sp-12); border:1px solid var(--w-edge); border-radius:var(--sp-12); background:none; color:var(--w-ink); font:inherit; cursor:pointer; }
+.jar-principle-share button:disabled { opacity:.4; cursor:default; }
+.jar-share-columns { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:var(--sp-24); margin-block:var(--sp-16); }
+.jar-share-controls { min-width:0; }
+.jar-share-options { display:flex; gap:var(--sp-12); }
+.jar-share-options > label { flex:1; min-width:0; }
+.jar-principle-share .jar-share-name { flex-direction:row; align-items:center; min-height:var(--sp-44); }
+.jar-share-name input { width:var(--sp-20); height:var(--sp-20); }
+.jar-share-preview { min-width:0; align-self:start; }
+.jar-share-preview img { display:block; width:100%; height:auto; border:1px solid var(--w-edge); }
+.jar-principle-share footer { border-top:1px solid var(--w-edge); padding-top:var(--sp-12); }
+@media (max-width:680px) { .jar-share-columns { grid-template-columns:minmax(0,1fr); } .jar-share-preview { grid-row:1; } }
 .jar-review .jar-review-reference { text-align:left; overflow-wrap:anywhere; max-width:100%; }
 .jar-review-reply { margin-top:var(--sp-16); }
 .jar-review-reply label { display:block; margin-bottom:var(--sp-8); }

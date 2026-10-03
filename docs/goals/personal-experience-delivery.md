@@ -1,6 +1,6 @@
 # Personal experience delivery
 
-Status: in progress (2026-10-02), owner requested all personal-experience work bundles. Capture, R01 and R03–R08 passed their scoped gates; R02, sharing, avatar and delivery remain.
+Status: paused (2026-10-03), at the owner's request after checkpointing the current sharing implementation. Capture, R01 and R03–R08 passed their scoped gates; R02, sharing acceptance, avatar and delivery remain.
 Branch: `codex/personal-capture-foundation`.
 
 ## Objective
@@ -357,3 +357,15 @@ Actual in-app browser checks passed at desktop and 390×844. The mobile comparis
 The previously deferred mobile completion-screen check for R06 also passed in this run: the latest saved thought and exact earlier result fit the 390px screen with no horizontal overflow; visible action controls measured 44px. [Result screen](../craft/evidence/personal-capture/review-result-mobile.png) shows it. This closes that Q02 subcase, not Q02's remaining sharing/recovery journeys or physical-device validation. The temporary tab/server were closed, viewport reset and zero test schemas remained. No paid model calls or remote data changes were made.
 
 R01 passes. R02 and sharing are next, followed by Avatar and delivery verification. The system Git executable became unavailable due to an Xcode license prompt; the already installed bundled Git 2.53.0 was used without accepting a license or changing system settings.
+
+### 2026 10 03 sharing implementation checkpoint and owner pause
+
+At the owner's request, stopped after checking and preserving the current sharing work; no Avatar work was started. The goal is paused, not complete. S01–S04 remain unchecked until their remaining acceptance checks are performed.
+
+Implemented owned principle detail/share routes, single-card editing separate from source wording, up to three selected principles, light/dark designs, square/portrait PNGs, optional name and scoped local draft recovery. Preview and download use the same PNG. Rendering waits for fonts, falls back to device fonts, and refuses content that cannot fit instead of clipping it. A stale preview cannot be exported after editing. Native cancellation preserves the draft; completion copy does not claim that an external service published it. Leaving the personal principles section no longer retains its detail URL in the observed navigation state.
+
+Change cards load real stored statement versions through a private, human-session-only, owner-scoped read-only endpoint. Current/previous linkage uses the recorded supersession relationship, including tied timestamps; an empty history is not invented. History wording is not editable in this card: principle edits append versions through the existing writer. Existing principle/account deletion cascades history and account export includes it. Local sharing drafts and downloaded images are separate copies, not server records; this checkpoint does not add account-deletion cleanup of browser drafts or promise removal of downloaded files.
+
+Verified the actual downloaded Korean/English portrait at 1080×1350 and three-principle square at 1080×1080. The [portrait](../craft/evidence/personal-capture/principle-card-portrait.png) and [collection](../craft/evidence/personal-capture/principle-card-collection.png) retain synthetic evidence. Original statements and ranks stayed unchanged after editing/exporting. Desktop footer remained visible. The native share cancellation case uses a mocked navigator interface, not a real OS share sheet. Actual change-card browser rendering, font-failure rendering and final mobile sharing/back-navigation checks remain open; no physical-device pass is claimed. R02 also still needs its Avatar entry.
+
+Final checks: all 632 web tests passed, API and web typechecks passed, and 13 isolated SQL tests passed (history 3, export 4, account erasure 6). The first web run correctly caught a missing mock-layer declaration; the declaration was fixed and the complete suite rerun without weakening its gate. No paid model calls, remote database changes, migration execution or deployments were made in this sharing batch. The stopped preview's exact schema was verified to contain only the two synthetic capture accounts before removal; it is reproducible from the fixture. Changes are checkpointed locally, not pushed or deployed by this pause request.

@@ -50,9 +50,10 @@ if(process.env.WAKA_REVIEW_FIXTURE==='1'){
   await fixture.sql`INSERT INTO inspirations(profile_id,text) VALUES (${profile.id},'A walk without a destination helped me notice a new idea.'),(${profile.id},'I want my mornings to have fewer planned tasks.')`;
 }
 const token = await signSessionToken({ profileId: profile.id, email: 'capture-fixture@example.test' });
-let reviewEvidenceFixture: {sessionId:string;answerId:string;signalId:string}|null=null;
+await createSessionRow({ profileId: profile.id, token });
+let reviewEvidenceFixture: {sessionId:string;answerId:string;signalId:string;principleId:string}|null=null;
 let reviewResultFixture:{sessionId:string;answerId:string;topOfMindId:string}|null=null;
-if(process.env.WAKA_REVIEW_EVIDENCE_FIXTURE==='1'||process.env.WAKA_REVIEW_RESULT_FIXTURE==='1'){
+if(process.env.WAKA_REVIEW_EVIDENCE_FIXTURE==='1'||process.env.WAKA_REVIEW_RESULT_FIXTURE==='1'||process.env.WAKA_SHARE_FIXTURE==='1'){
   try {
   const {createReviewSession}=await import('../../packages/api/src/lib/review-sessions.js');
   const {loadReviewAnswerMaterial}=await import('../../packages/api/src/lib/review-answer-material.js');
@@ -75,7 +76,18 @@ if(process.env.WAKA_REVIEW_EVIDENCE_FIXTURE==='1'||process.env.WAKA_REVIEW_RESUL
   const [entry]=await fixture.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body,sort_order)
     VALUES(${reading.id},'pattern','Making room for ideas without turning each one into a task.',0) RETURNING id`;
   await fixture.sql`INSERT INTO top_of_mind_entry_signals(entry_id,signal_id,statement_revision,entry_body_revision) VALUES(${entry.id},${signal.id},1,1)`;
-  reviewEvidenceFixture={sessionId:session.id,answerId,signalId:signal.id};
+  reviewEvidenceFixture={sessionId:session.id,answerId,signalId:signal.id,principleId:principle.id};
+  if(process.env.WAKA_SHARE_FIXTURE==='1'){
+    await fixture.sql`INSERT INTO principles(profile_id,statement,type,origin,rank,locked_at) VALUES
+      (${profile.id},'작게 시작하고, 배운 것을 다음 선택에 반영한다.','maxim','declared',1,now()),
+      (${profile.id},'Protect time for the people who matter.','value','declared',2,now())`;
+    // Real edits create the chain used by the change-card UI. No invented
+    // history fallback is installed in application code.
+    for(const statement of ['Finish every idea before starting another.','Leave room for an idea before deciding what it should become.']){
+      const response=await app.fetch(new Request(`${origin}/api/principles/${principle.id}`,{method:'PATCH',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({statement})}));
+      assert.equal(response.status,200);
+    }
+  }
   if(process.env.WAKA_REVIEW_RESULT_FIXTURE==='1'){
     const {enqueueTopOfMindRefresh}=await import('../../packages/api/src/lib/queue.js');
     const {readReviewSession,chooseReviewItem,completeReviewSession}=await import('../../packages/api/src/lib/review-sessions.js');
@@ -95,7 +107,6 @@ if(process.env.WAKA_REVIEW_EVIDENCE_FIXTURE==='1'||process.env.WAKA_REVIEW_RESUL
   }
   } catch(error) { await fixture.cleanup();await getDb().$client.end();throw error; }
 }
-await createSessionRow({ profileId: profile.id, token });
 const [nativeAccount] = await fixture.sql`INSERT INTO accounts(email,onboarding_completed_at) VALUES ('native-capture-fixture@example.test',now()) RETURNING id`;
 const [nativeProfile] = await fixture.sql`INSERT INTO profiles(account_id,type,name) VALUES (${nativeAccount.id},'human','Native capture fixture') RETURNING id`;
 const nativeToken = await signSessionToken({ profileId: nativeProfile.id, email: 'native-capture-fixture@example.test' });
@@ -148,6 +159,7 @@ Object.defineProperty(navigator.mediaDevices,'getUserMedia',{configurable:true,v
  return destination.stream;
 }});
 </script>`;
+const syntheticFontFailure=process.env.WAKA_FONT_FAILURE_FIXTURE==='1'?'<script>document.fonts.load=async()=>{throw new Error("Synthetic font failure")};</script>':'';
 const dist = resolve('packages/web/dist');
 const nativeDist = resolve('tools/e2e/native-capture-spike/dist');
 const types: Record<string,string> = { '.html':'text/html', '.js':'text/javascript', '.css':'text/css', '.woff2':'font/woff2', '.svg':'image/svg+xml' };
@@ -247,7 +259,7 @@ const server = createServer(async (request, response) => {
     const path = target.pathname.startsWith('/assets/') ? resolve(dist,`.${target.pathname}`) : resolve(dist,'index.html');
     assert.ok(path.startsWith(dist + '/'));
     let bytes = await readFile(path);
-    if (path.endsWith('index.html')) bytes = Buffer.from(bytes.toString().replace('<head>', '<head>' + syntheticMicrophone));
+    if (path.endsWith('index.html')) bytes = Buffer.from(bytes.toString().replace('<head>', '<head>' + syntheticMicrophone + syntheticFontFailure));
     response.writeHead(200,{'Content-Type':types[extname(path)] ?? 'application/octet-stream','Cache-Control':'no-store',
       ...(path.endsWith('index.html') ? {'Set-Cookie':buildSessionCookie(activeToken,{secure:false})} : {})}); response.end(bytes);
   } catch (error) { console.error(error); if (!response.headersSent) response.writeHead(500); response.end('Fixture failed'); }

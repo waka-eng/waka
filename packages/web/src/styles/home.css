@@ -860,6 +860,7 @@
   border-radius: 2px 14px 14px 2px;
   transition: background 180ms ease;
 }
+.jar-principles-list--personal > li { padding-top:calc(var(--sp-44) + var(--sp-12)); }
 .jar-principles-list > li + li,
 .jar-principles-list > .jar-values-held + .jar-values-held { margin-top: 0; }
 .jar-principles-list > li::before {
@@ -945,7 +946,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
+  width: 44px;
   height: 44px;
   padding: 0;
   border: 0;
@@ -956,8 +957,10 @@
 .jar-principle-tools button:hover:not(:disabled),
 .jar-principle-tools button:focus-visible { color: var(--jar-ink); }
 .jar-principle-tools button:disabled { opacity: 0.3; cursor: default; }
+.jar-principle-tools button:not(:disabled) { color:var(--w-muted); }
+.jar-principle-tools svg { width:20px; height:20px; }
 .jar-principles-list > li > .jar-values-value {
-  max-width: calc(100% - 126px);
+  max-width: 100%;
 }
 .jar-principle-verdict {
   display: flex;
@@ -1019,7 +1022,6 @@
   .jar-principles-list > li { padding-right: var(--sp-10); padding-left: var(--sp-30); }
   .jar-principles-list > li > .jar-values-value {
     max-width: 100%;
-    padding-top: var(--sp-40);
   }
   .jar-principles-list { max-height: 60dvh; }
 }

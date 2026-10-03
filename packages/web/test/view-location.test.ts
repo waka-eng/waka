@@ -41,3 +41,8 @@ it('round-trips an exact saved thought and excludes it from unrelated or new-rev
   expect(readViewLocation('/','?thought=answer-id')?.reviewAnswerId).toBeNull();
   expect(readViewLocation('/review/session-id','?thought=%3Cscript%3E')?.reviewAnswerId).toBeNull();
 });
+it('round-trips principle detail and sharing without putting the chosen wording in the URL',()=>{
+  const view={...EMPTY_VIEW,section:'sky' as const,principleId:'principle-id',sharePrinciple:true};
+  expect(viewHref(view)).toBe('/principles/principle-id/share');expect(readViewLocation(viewHref(view))).toEqual(view);
+  expect(readViewLocation('/principles/principle-id')).toEqual({...view,sharePrinciple:false});
+});

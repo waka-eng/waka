@@ -42,6 +42,7 @@ import {
   type Principle,
   principles,
   principleSignals,
+  principleStatements,
   principleTypeValues,
   signals,
   signalEvidence,
@@ -49,7 +50,7 @@ import {
 import { getDb } from "../lib/db.js";
 import { feedbackWordingCurrent } from '../lib/feedback-revisions.js';
 import type { DeclarationRoute } from "../lib/model-provider.js";
-import { requireAuth, type AuthEnv } from "../lib/middleware.js";
+import { requireAuth, humanSessionsOnly, type AuthEnv } from "../lib/middleware.js";
 import {
   revertPrincipleStatement,
   writePrincipleStatementChain,
@@ -358,6 +359,26 @@ export function createPrincipleRoutes(deps: PrincipleRouteDependencies = {}): Ho
     const resolved = await resolveRead(c);
     if ("error" in resolved) return resolved.error;
     return c.json({ status: await loadPrincipleStatus(getDatabase(), resolved.profileId) });
+  });
+
+  routes.get('/:principleId/statements',humanSessionsOnly,async c=>{
+    c.header('Cache-Control','private, no-store');
+    const id=z.string().uuid().safeParse(c.req.param('principleId'));
+    if(!id.success)return c.json({error:'Invalid principle'},400);
+    const resolved=await resolveRead(c);if('error' in resolved)return resolved.error;
+    const result=await getDatabase().transaction(async tx=>{
+      const [owned]=await tx.select({statement:principles.statement}).from(principles)
+        .innerJoin(profiles,eq(profiles.id,principles.profileId))
+        .where(and(eq(principles.id,id.data),eq(principles.profileId,resolved.profileId),eq(profiles.accountId,c.get('session').account.id)));
+      if(!owned)return null;
+      const rows=await tx.select({id:principleStatements.id,statement:principleStatements.statement,createdAt:principleStatements.createdAt,supersededAt:principleStatements.supersededAt,supersededById:principleStatements.supersededById})
+        .from(principleStatements).where(and(eq(principleStatements.profileId,resolved.profileId),eq(principleStatements.principleId,id.data)))
+        .orderBy(sql`(${principleStatements.supersededAt} IS NULL) DESC`,desc(principleStatements.supersededAt),desc(principleStatements.createdAt),desc(principleStatements.id)).limit(50);
+      const currentStatementId=rows.find(row=>row.supersededAt===null&&row.statement===owned.statement)?.id??null;
+      return {profileId:resolved.profileId,principleId:id.data,currentStatementId,previousStatementId:currentStatementId?rows.find(row=>row.id!==currentStatementId&&row.supersededById===currentStatementId)?.id??null:null,
+        statements:rows.map(row=>({id:row.id,statement:row.statement,createdAt:row.createdAt.toISOString()}))};
+    },{isolationLevel:'repeatable read',accessMode:'read only'});
+    return result?c.json(result):c.json({error:'Principle not found'},404);
   });
 
   routes.post("/refresh", async (c) => {
