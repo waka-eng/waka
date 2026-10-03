@@ -1336,6 +1336,7 @@ body .profile-signout-button {
 .jar-attachment-preview summary { min-height: var(--sp-44); cursor: pointer; }
 .jar-attachment-excerpt { white-space: pre-wrap; overflow-wrap: anywhere; }
 .jar-saved-attachment img { image-orientation: from-image; }
+.jar-composer-media img { image-orientation: from-image; }
 .jar-attachment-transcript { margin-top: var(--sp-16); font-size: var(--t-note); line-height: 1.6; }
 .jar-attachment-transcript header { display: flex; align-items: baseline; gap: var(--sp-12); }
 .jar-attachment-transcript h3 { font-size: var(--t-body); font-weight: 500; margin: 0; }

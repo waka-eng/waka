@@ -86,6 +86,8 @@ import { InspirationAttachments } from '../components/InspirationAttachments';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { CreateInspirationRequest } from '../lib/api';
 import { inspirationInputMedia, inspirationLinks, removeInspirationLink } from '../lib/inspiration-input';
+import { inspectInspirationPhoto } from '../lib/inspiration-photo';
+import { uploadInspirationMedia } from '../lib/inspiration-media-upload';
 import { restoreInspirationDraft, settleInspirationDraft } from '../lib/authored-save-drafts';
 import { AuthoredSaveNotice } from '../components/AuthoredSaveNotice';
 import { acceptsReadingSnapshot } from "../lib/reading-snapshot";
@@ -1293,11 +1295,13 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const composerDraft = useInspirationDraft(storageScope);
   const [preparingInspiration, setPreparingInspiration] = useState(false);
   const [uploadingMediaId, setUploadingMediaId] = useState<string | null>(null);
+  const [checkingFiles, setCheckingFiles] = useState(false);
+  const checkingFilesCount = useRef(0), fileOwnerEpoch = useRef(0);
   const preparingInspirationRef = useRef(false), composerEpoch = useRef(0);
   const uploadController = useRef<AbortController | null>(null);
   const onRecorded = useRef<(file: File) => Promise<void>>(() => Promise.resolve());
   const recording = useAudioRecording(file => onRecorded.current(file));
-  useEffect(() => () => { composerEpoch.current += 1; uploadController.current?.abort(); }, []);
+  useEffect(() => () => { composerEpoch.current += 1; fileOwnerEpoch.current += 1; uploadController.current?.abort(); }, []);
   const viewNavigation = useViewNavigation(storageScope ? `${storageScope.accountId}:${storageScope.profileId}` : 'fixture');
   const viewNavigationRef = useRef(viewNavigation); viewNavigationRef.current = viewNavigation;
   const restoringViewRef = useRef(true), requestedViewRef = useRef(viewNavigation.view);
@@ -10244,11 +10248,34 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
 
   // The immutable, owned intent is durable before anything is sent. A newer
   // draft can be written meanwhile, but cannot replace an unresolved save.
+  const uploadDraftFiles = async (media: InspirationDraftMedia[], controller: AbortController, current: () => void) => {
+    if (!storageScope) throw new Error('Sign in before uploading a file.');
+    await uploadInspirationMedia({ media, profileId: storageScope.profileId, signal: controller.signal,
+      assertCurrent: current, uploading: setUploadingMediaId,
+      persist: async (id, update) => {
+        current();
+        composerDraft.setMedia(composerDraft.current.current.media.map(row => row.id === id ? { ...row, ...update } : row));
+        await composerDraft.flush(); current();
+      },
+    });
+  };
+  const retryDraftFile = async (id: string) => {
+    if (preparingInspirationRef.current || inspirationSave.pending || inspirationSave.busy || checkingFilesCount.current || recording.phase !== 'idle') return;
+    const item = composerDraft.current.current.media.find(row => row.id === id);
+    if (!item?.blob || item.uploaded) return;
+    preparingInspirationRef.current = true; setPreparingInspiration(true); setMouthNote('');
+    const epoch = ++composerEpoch.current, controller = new AbortController(); uploadController.current = controller;
+    const current = () => { if (controller.signal.aborted || composerEpoch.current !== epoch) throw new Error('Save owner changed'); };
+    try { await composerDraft.flush(); current(); await uploadDraftFiles([item], controller, current); }
+    catch { if (composerEpoch.current === epoch) setMouthNote('Couldn’t upload this file yet. Your draft is still here.'); }
+    finally { if (composerEpoch.current === epoch) { preparingInspirationRef.current = false; setPreparingInspiration(false); setUploadingMediaId(null); } }
+  };
   const keepIt = useCallback(async (andReflect = false) => {
     const text = draftRef.current.trim();
     const initialMedia = composerDraft.current.current.media;
     if (composerDraft.current.current.recordingCandidate) { setMouthNote('Choose which recording to keep before saving.'); return; }
-    if ((!text && !initialMedia.length) || inspirationSave.pending || inspirationSave.busy || preparingInspirationRef.current || !composerDraft.ready || recording.phase !== 'idle') return;
+    if (initialMedia.some(item => item.validationError)) { setMouthNote('Remove the files marked below before saving. Your other selections are kept.'); return; }
+    if ((!text && !initialMedia.length) || inspirationSave.pending || inspirationSave.busy || preparingInspirationRef.current || checkingFilesCount.current || !composerDraft.ready || recording.phase !== 'idle') return;
     if (inspirationInputMedia(text, initialMedia).length > 5) { setMouthNote('Keep up to five attachments in one inspiration.'); return; }
     if (offlineRef.current) {
       birthInspiration(`kept-${Date.now().toString(36)}`, text, Date.now());
@@ -10259,14 +10286,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const current = () => { if (controller.signal.aborted || composerEpoch.current !== epoch) throw new Error('Save owner changed'); };
     try {
       await composerDraft.flush(); current();
-      for (const item of initialMedia) {
-        if (!item.blob || item.uploaded) continue;
-        setUploadingMediaId(item.id);
-        const signed = await presignAttachment({ filename: item.name, contentType: item.blob.type, size: item.blob.size }, controller.signal, { profile: storageScope?.profileId }); current();
-        await uploadToPresignedUrl(signed.uploadUrl, item.blob, signed.headers, controller.signal); current();
-        composerDraft.setMedia(composerDraft.current.current.media.map(row => row.id === item.id ? { ...row, uploaded: { key: signed.key, contentType: item.blob!.type, size: item.blob!.size } } : row));
-        await composerDraft.flush(); current();
-      }
+      if (initialMedia.some(item => item.blob && !item.uploaded)) await uploadDraftFiles(initialMedia, controller, current);
       const attachments: NonNullable<CreateInspirationRequest['attachments']> = composerDraft.current.current.media.map(item => {
         if (item.type === 'link' && item.url) return { type: 'link', url: item.url, name: item.name };
         if (!item.uploaded || item.type === 'link') throw new Error('This attachment has not uploaded yet.');
@@ -10288,18 +10308,31 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   }, [keepPublic, inspirationSave.pending, inspirationSave.busy, inspirationSave.start, composerDraft, recording.phase]);
 
   const addInspirationFiles = async (files: File[], audio = false) => {
-    const media = composerDraft.current.current.media;
-    // A picker/recording may finish after another tab started a save. Keep
-    // those new bytes in the draft; the earlier immutable intent stays intact.
-    if (media.length + files.length > 5) { setMouthNote('Keep up to five attachments in one inspiration.'); return; }
-    if (audio && media.some(item => item.type === 'audio')) { setMouthNote('Keep one recording in each inspiration.'); return; }
-    if (files.some(file => !file.size || file.size > 25 * 1024 * 1024 || !(audio ? file.type.startsWith('audio/') : file.type.startsWith('image/')))) {
-      setMouthNote('Choose a supported photo or recording under 25 MB.'); return;
-    }
-    const added: InspirationDraftMedia[] = files.map(file => ({ id: crypto.randomUUID(), type: audio ? 'audio' : 'image', name: file.name, blob: file }));
-    if (composerDraft.setMedia([...media, ...added])) {
-      try { await composerDraft.flush(); setMouthNote(''); }
-      catch (reason) { setMouthNote(reason instanceof Error ? reason.message : 'Could not keep this draft on your device.'); }
+    const epoch = fileOwnerEpoch.current;
+    checkingFilesCount.current += 1; setCheckingFiles(true);
+    const accepted: InspirationDraftMedia[] = [], problems: string[] = [];
+    try {
+      for (const file of files) {
+        try {
+          if (audio && (!file.size || file.size > 25 * 1024 * 1024 || !file.type.startsWith('audio/'))) throw new Error('Choose a recording under 25 MB.');
+          const checked = audio ? file : await inspectInspirationPhoto(file);
+          if (epoch !== fileOwnerEpoch.current) return;
+          accepted.push({ id: crypto.randomUUID(), type: audio ? 'audio' : 'image', name: checked.name.slice(0, 255) || 'Photo', blob: checked });
+        } catch (reason) {
+          const message = reason instanceof Error ? reason.message : 'Couldn’t read this file.';
+          if (!audio) accepted.push({ id: crypto.randomUUID(), type: 'image', name: file.name.slice(0, 255) || 'Photo', blob: file, validationError: message });
+          else problems.push(`${file.name}: ${message}`);
+        }
+      }
+      if (epoch !== fileOwnerEpoch.current) return;
+      const media = composerDraft.current.current.media;
+      if (audio && media.some(item => item.type === 'audio')) { setMouthNote('Keep one recording in each inspiration.'); return; }
+      if (accepted.length && composerDraft.setMedia([...media, ...accepted])) await composerDraft.flush();
+      setMouthNote(problems.join(' '));
+    } catch (reason) {
+      if (epoch === fileOwnerEpoch.current) setMouthNote(reason instanceof Error ? reason.message : 'Could not keep this draft on your device.');
+    } finally {
+      if (epoch === fileOwnerEpoch.current) { checkingFilesCount.current -= 1; setCheckingFiles(checkingFilesCount.current > 0); }
     }
   };
   onRecorded.current = async file => {
@@ -13411,11 +13444,12 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         {mouthOpen ? <InspirationComposer text={draft} media={inputMedia}
           recordingCandidate={composerDraft.draft.recordingCandidate}
           onChooseRecording={useNew => { composerDraft.chooseRecording(useNew); setMouthNote(''); void composerDraft.flush().catch(reason => setMouthNote(String(reason))); }}
-          locale={locale} public={keepPublic} ready={composerDraft.ready} fileDraftsAvailable={composerDraft.available} busy={preparingInspiration}
+          locale={locale} public={keepPublic} ready={composerDraft.ready} fileDraftsAvailable={composerDraft.available} busy={preparingInspiration || checkingFiles}
           uploadingId={uploadingMediaId} error={mouthNote || composerDraft.error}
           save={inspirationSave} recording={recording} inputRef={mouthFieldRef}
           onText={(text, caret) => { mouthCaretRef.current = caret; draftRef.current = text; setDraft(text); setMouthNote(''); }}
           onFiles={files => { void addInspirationFiles(files); }}
+          onRetryFile={id => { void retryDraftFile(id); }}
           onRemove={id => { if (id.startsWith('text-link:')) setDraft(removeInspirationLink(composerDraft.current.current.text, id.slice('text-link:'.length)));
             else composerDraft.setMedia(composerDraft.current.current.media.filter(item => item.id !== id)); }}
           onVisibility={setKeepPublic} onClose={saveAsDraft} onSubmit={reflect => { void keepIt(reflect); }}

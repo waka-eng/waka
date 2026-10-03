@@ -6,6 +6,8 @@ export interface InspirationDraftMedia {
   name: string;
   url?: string;
   blob?: Blob;
+  uploadError?: string;
+  validationError?: string;
   uploaded?: { key: string; contentType: string; size: number };
 }
 export interface InspirationDraft {

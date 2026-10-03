@@ -71,7 +71,7 @@ if (process.env.WAKA_TRANSCRIPT_FIXTURE === '1') {
   transcriptFixtureInspirationId = source.id;
   objects.set(`/capture-fixture/${key}`, { bytes, contentType: 'audio/webm' });
 }
-let loseResponse = false, failUpload = false;
+let loseResponse = false, failUpload = false, failUploadAfter = 0, uploadAttempts = 0;
 async function body(request: IncomingMessage, limit: number) {
   const chunks: Buffer[] = []; let size = 0;
   for await (const chunk of request) { size += chunk.length; if (size > limit) throw new Error('Fixture request too large'); chunks.push(chunk); }
@@ -106,16 +106,20 @@ const server = createServer(async (request, response) => {
     if (target.pathname === '/fixture') {
       if (target.searchParams.get('fail') === 'save-response') loseResponse = true;
       if (target.searchParams.get('fail') === 'upload') failUpload = true;
+      if (target.searchParams.get('fail') === 'second-upload') failUploadAfter = 2;
       const [counts] = await fixture.sql`SELECT (SELECT count(*)::int FROM inspirations) AS inspirations,
         (SELECT count(*)::int FROM attachments) AS attachments, (SELECT count(*)::int FROM inspiration_save_requests) AS requests`;
       response.writeHead(200, {'Content-Type':'application/json'}); response.end(JSON.stringify({ ...counts, objects: objects.size,
         origin, schema: fixture.schemaName, microphone: 'synthetic tone', failUpload, loseResponse, transcriptFixtureId, transcriptFixtureInspirationId,
-        linkFixtureInspirationId })); return;
+        linkFixtureInspirationId, uploadAttempts, failUploadAfter })); return;
     }
     if (target.pathname.startsWith('/capture-fixture/')) {
       const key = decodeURIComponent(target.pathname);
       if (request.method === 'PUT') {
-        if (failUpload) { failUpload = false; response.writeHead(503); response.end(); return; }
+        uploadAttempts += 1;
+        const failThisUpload = failUploadAfter === 1;
+        if (failUploadAfter > 0) failUploadAfter -= 1;
+        if (failUpload || failThisUpload) { failUpload = false; response.writeHead(503); response.end(); return; }
         const bytes = await body(request, 25 * 1024 * 1024);
         objects.set(key,{bytes,contentType:String(request.headers['content-type'] ?? 'application/octet-stream')});
         response.writeHead(200,{etag:'"fixture"'}); response.end(); return;
