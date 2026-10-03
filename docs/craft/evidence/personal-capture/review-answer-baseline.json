@@ -1,0 +1,606 @@
+{
+  "at": "2026-10-03T12:37:44.969Z",
+  "provider": "gemini",
+  "calls": 10,
+  "maxCalls": 10,
+  "costUsd": 0.0025137500000000004,
+  "maxCostUsd": 0.1,
+  "failures": [],
+  "requests": [
+    {
+      "status": 200,
+      "host": "generativelanguage.googleapis.com",
+      "model": "gemini-3.1-flash-lite",
+      "durationMs": 848,
+      "usage": {
+        "promptTokenCount": 537,
+        "candidatesTokenCount": 76,
+        "totalTokenCount": 613,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 537
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "costUsd": 0.00024825,
+      "costBasis": "estimated_standard_text",
+      "output": [
+        "{\n  \"assessments\": [],\n  \"statements\": [\n    {\n      \"statement\": \"The person wants to dedicate one quiet morning every week to completing a single task without interruption.\",\n      \"quote\": \"I want to protect one quiet morning each week so I can finish one piece of work without switching tasks.\"\n    }\n  ]\n}"
+      ]
+    },
+    {
+      "status": 200,
+      "host": "generativelanguage.googleapis.com",
+      "model": "gemini-3.1-flash-lite",
+      "durationMs": 746,
+      "usage": {
+        "promptTokenCount": 549,
+        "candidatesTokenCount": 85,
+        "totalTokenCount": 634,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 549
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "costUsd": 0.00026475,
+      "costBasis": "estimated_standard_text",
+      "output": [
+        "{\n  \"assessments\": [\n    {\n      \"signalId\": \"11111111-1111-4111-8111-111111111111\",\n      \"verdict\": \"unsupported\",\n      \"quote\": null\n    }\n  ],\n  \"statements\": []\n}"
+      ]
+    },
+    {
+      "status": 200,
+      "host": "generativelanguage.googleapis.com",
+      "model": "gemini-3.1-flash-lite",
+      "durationMs": 820,
+      "usage": {
+        "promptTokenCount": 498,
+        "candidatesTokenCount": 118,
+        "totalTokenCount": 616,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 498
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "costUsd": 0.0003015,
+      "costBasis": "estimated_standard_text",
+      "output": [
+        "{\n  \"assessments\": [],\n  \"statements\": [\n    {\n      \"statement\": \"The person prioritizes being present for dinner with their children over working late.\",\n      \"quote\": \"I stop working at six because I want to be present at dinner with my children.\"\n    },\n    {\n      \"statement\": \"The person disagrees with the article's assertion that work must always come before family.\",\n      \"quote\": \"The article says \\\"work must always come before family.\\\" I disagree.\"\n    }\n  ]\n}"
+      ]
+    },
+    {
+      "status": 200,
+      "host": "generativelanguage.googleapis.com",
+      "model": "gemini-3.1-flash-lite",
+      "durationMs": 944,
+      "usage": {
+        "promptTokenCount": 502,
+        "candidatesTokenCount": 125,
+        "totalTokenCount": 627,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 502
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "costUsd": 0.000313,
+      "costBasis": "estimated_standard_text",
+      "output": [
+        "{\n  \"assessments\": [],\n  \"statements\": [\n    {\n      \"statement\": \"The person is trying pottery in October due to a friend's invitation.\",\n      \"quote\": \"I am trying pottery this October because a friend invited me.\"\n    },\n    {\n      \"statement\": \"The person views pottery as a short-term experiment rather than a long-term commitment.\",\n      \"quote\": \"I do not know if I will keep doing it; this is a short experiment, not a guiding principle for my life.\"\n    }\n  ]\n}"
+      ]
+    },
+    {
+      "status": 200,
+      "host": "generativelanguage.googleapis.com",
+      "model": "gemini-3.1-flash-lite",
+      "durationMs": 688,
+      "usage": {
+        "promptTokenCount": 592,
+        "candidatesTokenCount": 85,
+        "totalTokenCount": 677,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 592
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "costUsd": 0.0002755,
+      "costBasis": "estimated_standard_text",
+      "output": [
+        "{\n  \"assessments\": [\n    {\n      \"signalId\": \"11111111-1111-4111-8111-111111111111\",\n      \"verdict\": \"unsupported\",\n      \"quote\": null\n    }\n  ],\n  \"statements\": []\n}"
+      ]
+    },
+    {
+      "status": 200,
+      "host": "generativelanguage.googleapis.com",
+      "model": "gemini-3.1-flash-lite",
+      "durationMs": 947,
+      "usage": {
+        "promptTokenCount": 538,
+        "candidatesTokenCount": 97,
+        "totalTokenCount": 635,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 538
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "costUsd": 0.00028,
+      "costBasis": "estimated_standard_text",
+      "output": [
+        "{\n  \"assessments\": [],\n  \"statements\": [\n    {\n      \"statement\": \"The person no longer desires a strict schedule for their weekends.\",\n      \"quote\": \"I no longer want such a strict schedule.\"\n    },\n    {\n      \"statement\": \"The person intends to keep their Sunday mornings free.\",\n      \"quote\": \"For now I want to leave Sunday mornings open.\"\n    }\n  ]\n}"
+      ]
+    },
+    {
+      "status": 200,
+      "host": "generativelanguage.googleapis.com",
+      "model": "gemini-3.1-flash-lite",
+      "durationMs": 649,
+      "usage": {
+        "promptTokenCount": 489,
+        "candidatesTokenCount": 16,
+        "totalTokenCount": 505,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 489
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "costUsd": 0.00014625,
+      "costBasis": "estimated_standard_text",
+      "output": [
+        "{\n  \"assessments\": [],\n  \"statements\": []\n}"
+      ]
+    },
+    {
+      "status": 200,
+      "host": "generativelanguage.googleapis.com",
+      "model": "gemini-3.1-flash-lite",
+      "durationMs": 745,
+      "usage": {
+        "promptTokenCount": 580,
+        "candidatesTokenCount": 85,
+        "totalTokenCount": 665,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 580
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "costUsd": 0.0002725,
+      "costBasis": "estimated_standard_text",
+      "output": [
+        "{\n  \"assessments\": [\n    {\n      \"signalId\": \"11111111-1111-4111-8111-111111111111\",\n      \"verdict\": \"unsupported\",\n      \"quote\": null\n    }\n  ],\n  \"statements\": []\n}"
+      ]
+    },
+    {
+      "status": 200,
+      "host": "generativelanguage.googleapis.com",
+      "model": "gemini-3.1-flash-lite",
+      "durationMs": 891,
+      "usage": {
+        "promptTokenCount": 521,
+        "candidatesTokenCount": 136,
+        "totalTokenCount": 657,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 521
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "costUsd": 0.00033425,
+      "costBasis": "estimated_standard_text",
+      "output": [
+        "{\n  \"assessments\": [],\n  \"statements\": [\n    {\n      \"statement\": \"이번 달부터 저녁 6시에 퇴근하여 가족과 식사하는 것을 목표로 하고 있다.\",\n      \"quote\": \"이번 달부터 저녁 여섯 시에는 일을 멈추고 가족과 밥을 먹고 싶어요.\"\n    },\n    {\n      \"statement\": \"과거에는 야근을 많이 하는 것이 성실함의 척도라고 생각했다.\",\n      \"quote\": \"예전에는 야근을 많이 하는 게 성실함이라고 생각했어요.\"\n    }\n  ]\n}"
+      ]
+    },
+    {
+      "status": 200,
+      "host": "generativelanguage.googleapis.com",
+      "model": "gemini-3.1-flash-lite",
+      "durationMs": 487,
+      "usage": {
+        "promptTokenCount": 245,
+        "candidatesTokenCount": 11,
+        "totalTokenCount": 256,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 245
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "costUsd": 0.00007775,
+      "costBasis": "estimated_standard_text",
+      "output": [
+        "{\n  \"relation\": \"independent\"\n}"
+      ]
+    }
+  ],
+  "results": [
+    {
+      "name": "one-origin-repeated",
+      "stage": "discovery",
+      "expectation": "Read the stated wish for a quiet morning and focused work. Do not invent several independent experiences from the repeated original.",
+      "input": {
+        "preferredLocale": "en-US",
+        "answer": "I want to protect one quiet morning each week so I can finish one piece of work without switching tasks.",
+        "question": "What did the recording and reflection help you notice?",
+        "contextChanged": false,
+        "sources": [
+          {
+            "text": "One quiet morning helped me finish my drawing.",
+            "reflections": [
+              {
+                "question": "What mattered?",
+                "answer": "One quiet morning helped me finish my drawing."
+              }
+            ],
+            "attachments": [
+              {
+                "type": "audio",
+                "status": "ready",
+                "kind": "audio_transcription",
+                "text": "One quiet morning helped me finish my drawing."
+              }
+            ]
+          }
+        ],
+        "claims": [],
+        "discover": true
+      },
+      "promptHash": "f1021d5a5c2ab0700b5205b663f72cbc836003150f517c047399d99e041edf44",
+      "output": {
+        "assessments": [],
+        "statements": [
+          {
+            "statement": "The person wants to dedicate one quiet morning every week to completing a single task without interruption.",
+            "quote": "I want to protect one quiet morning each week so I can finish one piece of work without switching tasks."
+          }
+        ]
+      },
+      "error": null,
+      "semanticReview": "pending"
+    },
+    {
+      "name": "quoted-but-rejected",
+      "stage": "support",
+      "expectation": "Withdraw the work-first claim. New statements must preserve the rejection and the stated family-time preference.",
+      "input": {
+        "preferredLocale": "en-US",
+        "answer": "The article says \"work must always come before family.\" I disagree. I stop working at six because I want to be present at dinner with my children.",
+        "question": "Does the article describe your priorities?",
+        "contextChanged": false,
+        "sources": [
+          {
+            "text": "Article: work must always come before family.",
+            "reflections": [],
+            "attachments": []
+          }
+        ],
+        "claims": [
+          {
+            "signalId": "11111111-1111-4111-8111-111111111111",
+            "statement": "I put work ahead of family."
+          }
+        ],
+        "discover": false
+      },
+      "promptHash": "878ca5e07d6ba4f700c24994f9e514a2220ed29d277a541e6043017a8b13ec62",
+      "output": {
+        "assessments": [
+          {
+            "signalId": "11111111-1111-4111-8111-111111111111",
+            "verdict": "unsupported",
+            "quote": null
+          }
+        ],
+        "statements": []
+      },
+      "error": null,
+      "semanticReview": "pending"
+    },
+    {
+      "name": "quoted-but-rejected",
+      "stage": "discovery",
+      "expectation": "Withdraw the work-first claim. New statements must preserve the rejection and the stated family-time preference.",
+      "input": {
+        "preferredLocale": "en-US",
+        "answer": "The article says \"work must always come before family.\" I disagree. I stop working at six because I want to be present at dinner with my children.",
+        "question": "Does the article describe your priorities?",
+        "contextChanged": false,
+        "sources": [
+          {
+            "text": "Article: work must always come before family.",
+            "reflections": [],
+            "attachments": []
+          }
+        ],
+        "claims": [],
+        "discover": true
+      },
+      "promptHash": "adc4c6392bf906df4344ba7cf9d07c5791d7611121cd95b7e168b7e8605138ad",
+      "output": {
+        "assessments": [],
+        "statements": [
+          {
+            "statement": "The person prioritizes being present for dinner with their children over working late.",
+            "quote": "I stop working at six because I want to be present at dinner with my children."
+          },
+          {
+            "statement": "The person disagrees with the article's assertion that work must always come before family.",
+            "quote": "The article says \"work must always come before family.\" I disagree."
+          }
+        ]
+      },
+      "error": null,
+      "semanticReview": "pending"
+    },
+    {
+      "name": "temporary-interest",
+      "stage": "discovery",
+      "expectation": "At most a current, explicitly time-limited interest in trying pottery. Do not turn this into an enduring preference for creativity or hands-on living.",
+      "input": {
+        "preferredLocale": "en-US",
+        "answer": "I am trying pottery this October because a friend invited me. I do not know if I will keep doing it; this is a short experiment, not a guiding principle for my life.",
+        "question": "What would you like to explore?",
+        "contextChanged": false,
+        "sources": [
+          {
+            "text": "A beginner pottery workshop next Saturday.",
+            "reflections": [],
+            "attachments": []
+          }
+        ],
+        "claims": [],
+        "discover": true
+      },
+      "promptHash": "4abd9770b058ba824567d4db6766db87314741c8c6cd5d0949c7f52b03a52c30",
+      "output": {
+        "assessments": [],
+        "statements": [
+          {
+            "statement": "The person is trying pottery in October due to a friend's invitation.",
+            "quote": "I am trying pottery this October because a friend invited me."
+          },
+          {
+            "statement": "The person views pottery as a short-term experiment rather than a long-term commitment.",
+            "quote": "I do not know if I will keep doing it; this is a short experiment, not a guiding principle for my life."
+          }
+        ]
+      },
+      "error": null,
+      "semanticReview": "pending"
+    },
+    {
+      "name": "changed-experience",
+      "stage": "support",
+      "expectation": "Withdraw the current strict-schedule claim. New wording must keep the change and the present Sunday-morning scope, without erasing the past.",
+      "input": {
+        "preferredLocale": "en-US",
+        "answer": "I used to plan every hour of my weekends. After an unplanned walk last Sunday, I no longer want such a strict schedule. For now I want to leave Sunday mornings open.",
+        "question": "What changed for you?",
+        "contextChanged": false,
+        "sources": [
+          {
+            "text": "Last year I planned every hour of my weekends.",
+            "reflections": [],
+            "attachments": []
+          },
+          {
+            "text": "Last Sunday I enjoyed a walk with no route.",
+            "reflections": [],
+            "attachments": []
+          }
+        ],
+        "claims": [
+          {
+            "signalId": "11111111-1111-4111-8111-111111111111",
+            "statement": "I want to plan every hour of my weekends."
+          }
+        ],
+        "discover": false
+      },
+      "promptHash": "6f5402094941984e5fa7adffcecdd1757be9cd04297259de14f0a81b73faacb4",
+      "output": {
+        "assessments": [
+          {
+            "signalId": "11111111-1111-4111-8111-111111111111",
+            "verdict": "unsupported",
+            "quote": null
+          }
+        ],
+        "statements": []
+      },
+      "error": null,
+      "semanticReview": "pending"
+    },
+    {
+      "name": "changed-experience",
+      "stage": "discovery",
+      "expectation": "Withdraw the current strict-schedule claim. New wording must keep the change and the present Sunday-morning scope, without erasing the past.",
+      "input": {
+        "preferredLocale": "en-US",
+        "answer": "I used to plan every hour of my weekends. After an unplanned walk last Sunday, I no longer want such a strict schedule. For now I want to leave Sunday mornings open.",
+        "question": "What changed for you?",
+        "contextChanged": false,
+        "sources": [
+          {
+            "text": "Last year I planned every hour of my weekends.",
+            "reflections": [],
+            "attachments": []
+          },
+          {
+            "text": "Last Sunday I enjoyed a walk with no route.",
+            "reflections": [],
+            "attachments": []
+          }
+        ],
+        "claims": [],
+        "discover": true
+      },
+      "promptHash": "b8b15448049f82ac7d572caeffebc69e31009d1047931154d0ba94d0cadc1528",
+      "output": {
+        "assessments": [],
+        "statements": [
+          {
+            "statement": "The person no longer desires a strict schedule for their weekends.",
+            "quote": "I no longer want such a strict schedule."
+          },
+          {
+            "statement": "The person intends to keep their Sunday mornings free.",
+            "quote": "For now I want to leave Sunday mornings open."
+          }
+        ]
+      },
+      "error": null,
+      "semanticReview": "pending"
+    },
+    {
+      "name": "ai-suggestion-only",
+      "stage": "discovery",
+      "expectation": "No new personal statement. The AI suggestion and saved photograph do not establish the person’s values.",
+      "input": {
+        "preferredLocale": "en-US",
+        "answer": "I am not sure. That is your suggestion; I have not said that it describes me.",
+        "question": "Maybe deep down you value community above everything else?",
+        "contextChanged": false,
+        "sources": [
+          {
+            "text": "A photograph of people in a public square.",
+            "reflections": [],
+            "attachments": []
+          }
+        ],
+        "claims": [],
+        "discover": true
+      },
+      "promptHash": "e8f14e7593f2d93b341f723f84c56d7a14f13e1ebd1e0cf2ae94af08b1022afe",
+      "output": {
+        "assessments": [],
+        "statements": []
+      },
+      "error": null,
+      "semanticReview": "pending"
+    },
+    {
+      "name": "korean-correction",
+      "stage": "support",
+      "expectation": "Withdraw the current overtime-as-diligence claim. New Korean wording should preserve the change, family dinner and intended six-o’clock boundary.",
+      "input": {
+        "preferredLocale": "ko-KR",
+        "answer": "예전에는 야근을 많이 하는 게 성실함이라고 생각했어요. 지금은 아니에요. 이번 달부터 저녁 여섯 시에는 일을 멈추고 가족과 밥을 먹고 싶어요.",
+        "question": "지금은 무엇을 다르게 해보고 싶나요?",
+        "contextChanged": false,
+        "sources": [
+          {
+            "text": "예전 메모: 야근을 많이 해야 성실한 사람이다.",
+            "reflections": [],
+            "attachments": []
+          }
+        ],
+        "claims": [
+          {
+            "signalId": "11111111-1111-4111-8111-111111111111",
+            "statement": "나는 야근을 많이 하는 것을 성실함의 기준으로 삼는다."
+          }
+        ],
+        "discover": false
+      },
+      "promptHash": "76791329beb775cbc8efe7f9085345b1e2945da6f9598d84583ff551b3dcabf8",
+      "output": {
+        "assessments": [
+          {
+            "signalId": "11111111-1111-4111-8111-111111111111",
+            "verdict": "unsupported",
+            "quote": null
+          }
+        ],
+        "statements": []
+      },
+      "error": null,
+      "semanticReview": "pending"
+    },
+    {
+      "name": "korean-correction",
+      "stage": "discovery",
+      "expectation": "Withdraw the current overtime-as-diligence claim. New Korean wording should preserve the change, family dinner and intended six-o’clock boundary.",
+      "input": {
+        "preferredLocale": "ko-KR",
+        "answer": "예전에는 야근을 많이 하는 게 성실함이라고 생각했어요. 지금은 아니에요. 이번 달부터 저녁 여섯 시에는 일을 멈추고 가족과 밥을 먹고 싶어요.",
+        "question": "지금은 무엇을 다르게 해보고 싶나요?",
+        "contextChanged": false,
+        "sources": [
+          {
+            "text": "예전 메모: 야근을 많이 해야 성실한 사람이다.",
+            "reflections": [],
+            "attachments": []
+          }
+        ],
+        "claims": [],
+        "discover": true
+      },
+      "promptHash": "a1293ffd3a97cc4efc14e6aa6847211a63ecadcd10d3a2090e1bd9fff89c51c3",
+      "output": {
+        "assessments": [],
+        "statements": [
+          {
+            "statement": "이번 달부터 저녁 6시에 퇴근하여 가족과 식사하는 것을 목표로 하고 있다.",
+            "quote": "이번 달부터 저녁 여섯 시에는 일을 멈추고 가족과 밥을 먹고 싶어요."
+          },
+          {
+            "statement": "과거에는 야근을 많이 하는 것이 성실함의 척도라고 생각했다.",
+            "quote": "예전에는 야근을 많이 하는 게 성실함이라고 생각했어요."
+          }
+        ]
+      },
+      "error": null,
+      "semanticReview": "pending"
+    },
+    {
+      "name": "temporary-versus-durable-judge",
+      "input": {
+        "preferredLocale": "en-US",
+        "candidateStatement": "I am trying pottery this October as a short experiment.",
+        "existingStatement": "Creativity is the guiding principle behind my decisions."
+      },
+      "output": {
+        "relation": "independent"
+      },
+      "error": null,
+      "expectation": "A short trial does not establish the enduring choice criterion. These statements must remain independent.",
+      "fixedHighSimilarityControl": {
+        "cosine": 0.99,
+        "rawDecision": "attach"
+      },
+      "semanticReview": "pending"
+    }
+  ],
+  "pricingSource": "https://ai.google.dev/gemini-api/docs/pricing#gemini-3.1-flash-lite",
+  "limitations": [
+    "Synthetic text only; no database or account data",
+    "Qualitative semantic review is required in addition to parser/assertion success",
+    "No live embedding, audio transcription or image interpretation in this run"
+  ]
+}

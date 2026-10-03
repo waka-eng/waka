@@ -1,6 +1,6 @@
 # Personal experience delivery
 
-Status: in progress (2026-10-02), owner requested all personal-experience work bundles. R05, R06 and R07 passed their scoped gates; R08 semantic evaluation is next.
+Status: in progress (2026-10-02), owner requested all personal-experience work bundles. Capture and R03–R08 passed their scoped gates; R01/R02, sharing, avatar and delivery remain.
 Branch: `codex/personal-capture-foundation`.
 
 ## Objective
@@ -327,3 +327,19 @@ The first combined panel test hung while React reported duplicate sibling keys f
 Actual Chrome verification against the isolated production-build fixture covered pending → failed → Resume reading → ready → See this reading → reload. After completion, a different live artifact was inserted; opening the result still showed the first artifact's exact text. The [desktop result image](../craft/evidence/personal-capture/review-result-desktop.png) records that read, before the final small latest-thought excerpt addition. The fixture models stage timing with scripted metadata; the SQL queue tests separately execute the real producer/publication callback. No paid provider requests or remote data were used. Additional mobile completion-screen inspection remains in Q02: the in-app browser was unavailable and Chrome was subsequently used for another task, so no mobile pass is claimed here.
 
 The stopped preview left one disposable schema. Its accounts were verified as the two capture fixtures before that exact schema was dropped; the fixture script can reproduce them. No user data was removed. R06's functional gate passes. R08's actual-model semantic matrix, R01/R02, sharing, avatar, Q02 and deployment remain open, and physical-device validation stays deferred by the owner.
+
+### R08 live semantic baseline
+
+Ran the production prompt builders, provider adapter and grounding parser on six synthetic review scenarios plus a semantic-match comparison, with support and discovery called separately as in the producer. Ten calls to Gemini 3.1 Flash Lite cost an estimated USD 0.00251375 from returned token usage and the [standard text rates](https://ai.google.dev/gemini-api/docs/pricing#gemini-3.1-flash-lite); the pre-announced allowance was USD 0.05 with a USD 0.10 stop. No database or account material was read. [Unmodified baseline responses](../craft/evidence/personal-capture/review-answer-baseline.json) preserve inputs, prompt hashes, outputs and usage.
+
+All ten outputs passed structural checks, but semantic review does not pass. The English changed-experience output dropped "for now" from its standalone Sunday-morning intention; treat that loss of an explicit limit as marginal/fail. The Korean discovery emitted a separate past overtime-as-diligence belief and omitted its explicit withdrawal, risking reintroduction of rejected wording. The remaining eight support/discovery/judge outputs preserved the intended meaning, including unsupported verdicts for all three rejected claims, no statement from an AI-only suggestion, a time-limited pottery trial and an independent verdict against an enduring creativity principle. Thus the semantic baseline is 8/10, not a pass.
+
+The revised prompt requires each statement and its quote to carry the relevant correction and time limit, refuses a standalone explicitly rejected past belief, and uses natural first-person wording. No thresholds or acceptance criteria changed. The same ten calls must be rerun before R08 can pass; the baseline remains intact. This live check does not exercise embeddings or transcription, whose lineage and independent-count behavior have separate SQL coverage.
+
+### R08 semantic gate passed
+
+The identical ten-call rerun passed structure and qualitative review 10/10. The changed-experience statement now says “For now, I intend to keep my Sunday mornings free.” The Korean past belief is explicitly joined to the fact that the person's view has changed; a separate statement preserves the intention to stop work at six starting this month. The other eight outputs retain their correct behavior, including no statement from the AI-only suggestion and an independent judgment between a temporary pottery experiment and an enduring creativity criterion. No passing criterion was weakened.
+
+The second run used Gemini 3.1 Flash Lite and an estimated USD 0.00286625. Across both runs: twenty calls and estimated USD 0.00538, within the two announced checkpoints. [Final responses](../craft/evidence/personal-capture/review-answer-final.json) and the [case-by-case assessment](../craft/evidence/personal-capture/review-answer-evaluation.md) are retained beside the failed baseline. The runner's automatic semantic fields remain pending; the assessment records the actual qualitative verdict rather than claiming an automated meaning score.
+
+R08 passes together with the already recorded SQL counting, ownership, locks, withdrawal, outbox and result checks. The evaluation uses synthetic text through the actual local provider adapter and opens no database. Embeddings/counting are covered separately; OpenRouter deployment configuration and real production behavior still require Q03 verification. The next work is R01/R02 presentation and the sharing/Avatar bundles. Physical devices remain deferred as agreed.
