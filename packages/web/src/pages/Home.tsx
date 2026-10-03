@@ -1306,6 +1306,18 @@ function HomeExperience({ storageScope }: { storageScope: ProfileStorageScope | 
   const viewNavigationRef = useRef(viewNavigation); viewNavigationRef.current = viewNavigation;
   const restoringViewRef = useRef(true), requestedViewRef = useRef(viewNavigation.view);
   requestedViewRef.current = viewNavigation.view;
+  const navigationInteraction = useRef(0);
+  useEffect(() => {
+    const interacted = () => { navigationInteraction.current += 1; };
+    window.addEventListener('pointerdown', interacted, true);
+    window.addEventListener('keydown', interacted, true);
+    window.addEventListener('popstate', interacted);
+    return () => {
+      window.removeEventListener('pointerdown', interacted, true);
+      window.removeEventListener('keydown', interacted, true);
+      window.removeEventListener('popstate', interacted);
+    };
+  }, []);
   const [navigationProblem, setNavigationProblem] = useState(false);
   const [detachedInspiration, setDetachedInspiration] = useState<{ wall: string; ball: Ball; detail: InspirationDetail | null } | null>(null);
   const detachedRef = useRef(detachedInspiration); detachedRef.current = detachedInspiration;
@@ -3282,6 +3294,14 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       stamp();
       return undefined;
     }
+    const requested = requestedViewRef.current;
+    // An explicit route or an already-started interaction belongs to the
+    // person. A returning-visitor greeting is never navigation authority.
+    if (navigationInteraction.current || requested?.inspirationId || requested?.compose || requested?.find || requested?.wallId) {
+      stamp(); return undefined;
+    }
+    const interactionAtGreeting = navigationInteraction.current;
+    const greetingHref = viewNavigationRef.current.href;
     /* fetched while the glide waits its beat; whichever timeout speaks reads
        the settled value from the ref. A failed fetch is a silent arrival —
        the weather is a courtesy, never a blocker. */
@@ -3306,6 +3326,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const newest = fresh.reduce((a, b) => (b.capturedMs > a.capturedMs ? b : a));
     timers.push(
       window.setTimeout(() => {
+        if (navigationInteraction.current !== interactionAtGreeting || viewNavigationRef.current.href !== greetingHref) { stamp(); return; }
         simApiRef.current?.select(newest.id);
         /* AND BACK OUT, ALL THE WAY. Not just letting the selection go — the
            camera returns to headquarters, because travelling between walls is
@@ -3322,7 +3343,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                nothing on screen to explain it (it looked exactly like paging
                being broken; found live 2026-08-27). A greeting may take back
                its own gesture and nothing else. */
-            if (selectedIdRef.current !== newest.id) {
+            if (selectedIdRef.current !== newest.id || navigationInteraction.current !== interactionAtGreeting) {
               tell();
               return;
             }
@@ -10202,7 +10223,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       const known = inspirationsRef.current?.some((item) => item.id === made.id) || bornIdsRef.current.has(made.id);
       const revision = ++sourceListMutationRef.current;
       detailsRef.current.set(made.id, detail);
-      const displayText = made.text || made.attachments.map(item => item.type === 'audio' ? 'Recording' : item.type === 'image' ? 'Photo' : item.name || item.url).join(' · ');
+      const displayText = detail.preview;
       if (!known && !result.recovered) birthInspiration(made.id, displayText, Date.parse(made.createdAt), made.id);
       setInspirations((previous) => {
         if (previous?.some((item) => item.id === made.id)) return previous.map((item) => item.id === made.id ? detail : item);
@@ -12058,6 +12079,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     /* another member's save is theirs to reflect on, not the viewer's */
     if (panelBall.col !== undefined && !panelBall.own) return;
     setReflectOpen(true);
+    viewNavigationRef.current.write({ ...observedRef.current, inspirationId: panelBall.sigId ?? panelId, reflectionId: 'open' }, { observed: true });
   }, [panelId, panelBall]);
 
   const synchronizeReflections = useCallback((owner: string, row: ApiInspiration | null) => {
@@ -13665,7 +13687,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               onSaved={reflectionSaved}
               onSynchronized={(row) => synchronizeReflections((panelBall?.sigId ?? panelId) as string, row)}
               onRemoved={(id) => reflectionRemoved(id, (panelBall?.sigId ?? panelId) as string)}
-              onDone={() => setReflectOpen(false)}
+              onDone={() => { setReflectOpen(false); viewNavigation.write({ ...observedRef.current, reflectionId: null }, { observed: true, replace: true }); }}
             />
           ) : null}
 

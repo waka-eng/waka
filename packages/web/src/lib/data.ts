@@ -55,6 +55,8 @@ import {
   type ApiTopOfMindEntryType,
 } from "./api";
 
+import { inspirationPreview } from './inspiration-preview';
+
 const ms = (iso: string | null | undefined): number => {
   if (!iso) return 0;
   const t = Date.parse(iso);
@@ -229,7 +231,7 @@ export function toInspiration(row: {
 }): Inspiration {
   return {
     id: row.id,
-    preview: row.textPreview || row.attachmentSummary?.map(item => item.type === 'audio' ? 'Recording' : item.type === 'image' ? 'Photo' : item.label).join(' · ') || '',
+    preview: inspirationPreview(row.textPreview, row.attachmentSummary),
     /* absent means private: an older payload must never read as published */
     isPublic: row.visibility === "public",
     kind: row.kind,
@@ -435,7 +437,7 @@ export async function loadInspiration(id: string, profile?: string, signal?: Abo
 export function toInspirationDetail(row: Awaited<ReturnType<typeof fetchInspiration>>): InspirationDetail {
   return {
     id: row.id,
-    preview: row.text || row.attachments.map(item => item.type === 'audio' ? 'Recording' : item.type === 'image' ? 'Photo' : item.name || item.url).join(' · '),
+    preview: inspirationPreview(row.text, row.attachments.map(item => ({type:item.type,label:item.name || item.enrichment?.link?.title || item.url}))),
     isPublic: row.visibility === "public",
     text: row.text,
     kind: row.kind,

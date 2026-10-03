@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { fetchInspirationPage, type ApiInspirationSummary } from '../lib/api';
 import { t, type SupportedLocale } from '../lib/locales';
 import { DialogSurface } from './DialogSurface';
+import { inspirationPreview } from '../lib/inspiration-preview';
 
 interface SearchRead {
   profileId: string; query: string; phase: 'loading' | 'ready' | 'failed';
@@ -63,7 +64,7 @@ export function InspirationSearch(props: InspirationSearchProps) {
     {current?.phase === 'ready' && !current.rows.length ? <p role="status">{t(props.locale, 'worldNothingSaysThat')}</p> : null}
     {current && current.rows.length ? <ul className="jar-search-results">
       {current.rows.map((row) => <li key={row.id}><button type="button" onClick={() => props.onPick(row)}>
-        <span>{row.textPreview || row.attachmentSummary?.[0]?.label || t(props.locale, 'worldASavedInspiration')}</span>
+        <span>{inspirationPreview(row.textPreview, row.attachmentSummary)}</span>
         <small>{Number.isFinite(Date.parse(row.createdAt)) ? new Intl.DateTimeFormat(props.locale, { dateStyle: 'medium' }).format(new Date(row.createdAt)) : ''}
           {row.reflectionCount > 0 ? ` · ${t(props.locale, 'worldReflected')}` : ''}</small>
       </button></li>)}

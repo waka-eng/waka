@@ -29,12 +29,37 @@ const detail: InspirationDetail = { id: 'older', text: 'An older inspiration bey
     { id: 'answer-2', question: 'Next?', answer: 'My later words', skipped: false, createdMs: 1700000001000 },
   ] };
 beforeAll(() => { installCanvasStub(); setViewport(1280, 900); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
-beforeEach(() => { vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); vi.mocked(loadInspirations).mockClear(); vi.mocked(loadInspiration).mockReset().mockResolvedValue(detail); });
+beforeEach(() => { localStorage.clear(); vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); vi.mocked(loadInspirations).mockClear(); vi.mocked(loadInspiration).mockReset().mockResolvedValue(detail); });
 afterEach(() => { world?.unmount(); vi.useRealTimers(); });
 async function settle() {
   for (let turn = 0; turn < 8; turn += 1) { await world.step(100); await act(async () => { await vi.advanceTimersByTimeAsync(100); }); }
 }
 async function navigate(to: string | number) { await act(async () => { if (typeof to === 'number') go(to); else go(to); }); await settle(); }
+
+it('does not let the returning-visitor greeting replace an explicitly linked reflection', async()=>{
+  localStorage.setItem('waka.seen','1');
+  world=await mountWorld(FACTS,{initialEntries:['/inspirations/older?reflection=answer-1'],routerTools:<RouterTools/>});
+  await settle(); await act(async()=>{await vi.advanceTimersByTimeAsync(5000);}); await settle();
+  expect(location.search).toContain('inspiration=older');
+  expect(world.container.textContent).toContain('My earlier words');
+});
+it('records explicit reflection opening immediately, before the world observer debounce', async()=>{
+  world=await mountWorld(FACTS,{initialEntries:['/inspirations/older'],routerTools:<RouterTools/>}); await settle();
+  const open=[...world.container.querySelectorAll<HTMLButtonElement>('button')].find(button=>button.textContent==='read reflection')!;
+  expect(open).toBeDefined(); await act(async()=>open.click());
+  expect(location.search).toContain('reflection=open');
+});
+it('a greeting cannot close its own selected card after the person starts interacting with it', async()=>{
+  localStorage.setItem('waka.seen','1');
+  vi.mocked(loadInspiration).mockResolvedValue({...detail,id:'loaded'});
+  world=await mountWorld(FACTS,{routerTools:<RouterTools/>}); await settle();
+  await act(async()=>{await vi.advanceTimersByTimeAsync(1500);}); await settle();
+  const panel=world.container.querySelector('[aria-label="a saved inspiration"]'); expect(panel).not.toBeNull();
+  await act(async()=>panel!.dispatchEvent(new Event('pointerdown',{bubbles:true})));
+  await act(async()=>{await vi.advanceTimersByTimeAsync(4000);}); await settle();
+  expect(world.container.querySelector('[aria-label="a saved inspiration"]')).not.toBeNull();
+  expect(location.search).toContain('inspiration=loaded');
+});
 
 it('restores an older card, its earlier reflection and date across Back/Forward without booting again', async () => {
   world = await mountWorld(FACTS, { routerTools: <RouterTools /> }); await settle();
