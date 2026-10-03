@@ -49,6 +49,7 @@
   "worldShareKeepDraft": "Try saving draft",
   "worldShareDiscardConfirm": "Discard this card draft? Your original principles stay as they are.",
   "worldShareTooLong": "Shorten the text, hide the name, or use portrait size so everything fits.",
+  "worldShareChangeTooLong": "These recorded words don’t fit. Try portrait size, hide your name, or choose another earlier wording. You can also make a regular card.",
   "worldShareEmpty": "Add some words to make the image.",
   "worldShareRenderFailed": "The image couldn’t be made.",
   "worldShareRendering": "Updating the preview…",

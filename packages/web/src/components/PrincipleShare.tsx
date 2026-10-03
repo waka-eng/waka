@@ -129,8 +129,8 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
           {storageFailed?<p role="alert">{say('worldShareStorageFailed')} <button type="button" onClick={()=>{try{recoverPrincipleArtifactDrafts(scope,id);update(draft.value);}catch{setStorageFailed(true);}}}>{say('worldShareKeepDraft')}</button></p>:null}
           <button type="button" disabled={busy} onClick={discard}>{say('worldReviewDiscardDraft')}</button>
         </div><div className="jar-share-preview" aria-busy={!ready&&!renderError}>
-          {preview&&!renderError&&(!change||content)?<img src={preview.url} alt={preview.words}/>:null}
-          {!content?(change?null:<p role="status">{say('worldShareMissing')}</p>):renderError?<p role="alert">{say(renderError==='too_long'?'worldShareTooLong':renderError==='empty'?'worldShareEmpty':'worldShareRenderFailed')}{renderError==='unavailable'?<button type="button" onClick={()=>setRenderAttempt(value=>value+1)}>{say('worldRoomHistoryRetry')}</button>:null}</p>:!ready?<p role="status">{say('worldShareRendering')}</p>:preview?.fallbackFont?<p className="jar-review-context">{say('worldShareFallbackFont')}</p>:null}
+          {preview&&!renderError&&content?<img src={preview.url} alt={preview.words}/>:null}
+          {!content?(change?null:<p role="status">{say('worldShareMissing')}</p>):renderError?<p role="alert">{say(renderError==='too_long'?(change?'worldShareChangeTooLong':'worldShareTooLong'):renderError==='empty'?'worldShareEmpty':'worldShareRenderFailed')}{renderError==='unavailable'?<button type="button" onClick={()=>setRenderAttempt(value=>value+1)}>{say('worldRoomHistoryRetry')}</button>:null}</p>:!ready?<p role="status">{say('worldShareRendering')}</p>:preview?.fallbackFont?<p className="jar-review-context">{say('worldShareFallbackFont')}</p>:null}
         </div></div>
       </>:null}
       </div>

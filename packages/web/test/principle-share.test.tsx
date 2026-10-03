@@ -134,3 +134,33 @@ it('does not fabricate a change card when the principle has no saved earlier wor
   vi.mocked(fetchPrincipleStatements).mockResolvedValue({profileId:scope.profileId,principleId:id,currentStatementId:null,statements:[]});
   await mount();await changeMode();await settle();expect(host.textContent).toContain('needs two saved wordings');expect(button('Save image').disabled).toBe(true);
 });
+it('keeps collection order and edits separate, limits it to three, and removes only the chosen extra',async()=>{
+  const extra={...source,id:'22222222-2222-4222-8222-222222222222',statement:'두 번째 원칙.'},third={...source,id:'33333333-3333-4333-8333-333333333333',statement:'Third principle.'};
+  vi.mocked(fetchPrinciples).mockResolvedValue([source,extra,third]);await mount();
+  const add=async(value:string)=>act(async()=>{const select=[...host.querySelectorAll('select')].find(row=>row.parentElement!.textContent!.startsWith('Add another principle'))!;select.value=value;select.dispatchEvent(new Event('change',{bubbles:true}));});
+  await add(extra.id);await add(third.id);await type('Only my card edit');await settle();
+  expect(renderPrincipleArtifact).toHaveBeenLastCalledWith({name:'',appearance:'dark',format:'square',items:[{text:'Only my card edit'},{text:extra.statement},{text:third.statement}]});
+  expect(host.textContent).not.toContain('Add another principle');expect(updatePrinciple).not.toHaveBeenCalled();expect(reorderPrinciples).not.toHaveBeenCalled();
+  await act(async()=>[...host.querySelectorAll('button')].find(row=>row.textContent==='Remove from card')!.click());await settle();
+  expect(host.querySelectorAll('textarea')).toHaveLength(2);expect(host.querySelectorAll('textarea')[1].value).toBe(third.statement);
+});
+it('retries a failed history read without showing the previous regular-card preview',async()=>{
+  await mount();await settle();vi.mocked(fetchPrincipleStatements).mockRejectedValueOnce(new Error('No access'));
+  await changeMode();await settle();expect(host.querySelector('img')).toBeNull();expect(button('Save image').disabled).toBe(true);
+  vi.mocked(fetchPrincipleStatements).mockResolvedValueOnce({profileId:scope.profileId,principleId:id,currentStatementId:null,statements:[]});
+  await act(async()=>button('Try again').click());await settle();expect(host.textContent).toContain('needs two saved wordings');
+});
+it('preserves exact selected history and offers feasible options for an overlong change card',async()=>{
+  const old='22222222-2222-4222-8222-222222222222',recent='33333333-3333-4333-8333-333333333333',currentId='44444444-4444-4444-8444-444444444444';
+  vi.mocked(fetchPrincipleStatements).mockResolvedValue({profileId:scope.profileId,principleId:id,currentStatementId:currentId,previousStatementId:recent,statements:[
+    {id:currentId,statement:'Today.',createdAt:'2026-10-03T12:00:00Z'},
+    {id:old,statement:'First.',createdAt:'2026-10-01T12:00:00Z'},
+    {id:recent,statement:'Previous.',createdAt:'2026-10-02T12:00:00Z'}]});
+  await mount();await changeMode();await settle();expect(readPrincipleArtifactDrafts(scope,id)[0].value.beforeStatementId).toBe(recent);
+  vi.mocked(renderPrincipleArtifact).mockRejectedValueOnce(new ArtifactLayoutError('too_long'));
+  await act(async()=>{const select=[...host.querySelectorAll('select')].find(row=>[...row.options].some(option=>option.value===old))!;select.value=old;select.dispatchEvent(new Event('change',{bubbles:true}));});await settle();
+  expect(host.textContent).toContain('These recorded words don’t fit.');expect(host.textContent).not.toContain('Shorten the text');
+  expect(host.querySelector('textarea')).toBeNull();expect(button('Save image').disabled).toBe(true);
+  await act(async()=>root.unmount());root=createRoot(host);await mount();await settle();
+  expect(renderPrincipleArtifact).toHaveBeenLastCalledWith(expect.objectContaining({items:[expect.objectContaining({text:'First.'}),expect.objectContaining({text:'Today.'})]}));
+});

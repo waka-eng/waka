@@ -49,6 +49,7 @@
   "worldShareKeepDraft": "초안 다시 보관",
   "worldShareDiscardConfirm": "이 카드 초안을 버릴까요? 원래 원칙은 그대로 남아요.",
   "worldShareTooLong": "모두 들어가도록 문구를 줄이거나 이름을 숨기거나 세로형을 골라주세요.",
+  "worldShareChangeTooLong": "저장된 문구가 카드에 다 들어가지 않아요. 세로형으로 바꾸거나 이름을 숨기거나 다른 이전 문구를 골라 주세요. 일반 카드로 만들 수도 있어요.",
   "worldShareEmpty": "이미지에 담을 문구를 적어주세요.",
   "worldShareRenderFailed": "이미지를 만들지 못했어요.",
   "worldShareRendering": "미리보기를 만들고 있어요…",
