@@ -393,9 +393,19 @@ export interface ReflectionQuestionResult {
   question: string;
 }
 
+export interface ReviewQuestionInput {
+  preferredLocale:SupportedLocale;
+  contextChanged?:boolean;
+  sources:Array<{text:string;reflections:Array<{question:string;answer:string}>;
+    attachments:NonNullable<ReflectionQuestionInput['attachments']>}>;
+  history:Array<{question:string;connection?:string|null;answer:string}>;
+}
+export interface ReviewQuestionResult {connection:string|null;question:string;sourceNumbers:number[]}
+
 export interface ModelProvider {
   readonly name: string;
   askReflectionQuestion(input: ReflectionQuestionInput): Promise<ReflectionQuestionResult>;
+  askReviewQuestion(input:ReviewQuestionInput):Promise<ReviewQuestionResult>;
   extractSignalCandidates(
     input: SignalCandidateExtractionInput,
   ): Promise<SignalCandidateExtractionResult>;

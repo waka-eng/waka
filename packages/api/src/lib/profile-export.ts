@@ -24,7 +24,7 @@
  * rows record what THEY said out loud, and those are here).
  */
 
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 
 import {
   attachments,
@@ -39,6 +39,8 @@ import {
   reflections,
   reviewSessions,
   reviewItems,
+  reviewAnswers,
+  reviewAnswerSources,
   signalContradictions,
   signalEvidence,
   experiences,
@@ -186,6 +188,9 @@ export async function assembleProfileExport(db: WakaDb, profileId: string) {
     reflections: reflectionRows,
     reviewSessions: await db.select().from(reviewSessions).where(eq(reviewSessions.profileId,profileId)).orderBy(asc(reviewSessions.createdAt),asc(reviewSessions.id)),
     reviewItems: (await db.select().from(reviewItems).where(eq(reviewItems.profileId,profileId)).orderBy(asc(reviewItems.sessionId),asc(reviewItems.position)))
+      .map(row=>({...row,sourceRevision:row.sourceRevision.toString()})),
+    reviewAnswers:await db.select().from(reviewAnswers).where(and(eq(reviewAnswers.profileId,profileId),isNull(reviewAnswers.deletedAt))).orderBy(asc(reviewAnswers.createdAt),asc(reviewAnswers.id)),
+    reviewAnswerSources:(await db.select().from(reviewAnswerSources).where(eq(reviewAnswerSources.profileId,profileId)).orderBy(asc(reviewAnswerSources.answerId),asc(reviewAnswerSources.inspirationId)))
       .map(row=>({...row,sourceRevision:row.sourceRevision.toString()})),
     signals: signalRows.map((row) => ({ ...row, statementRevision: row.statementRevision.toString() })),
     signalEvidence: evidenceRows.map((row) => ({ ...row, statementRevision: row.statementRevision?.toString() ?? null,

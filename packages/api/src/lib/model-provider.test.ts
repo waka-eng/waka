@@ -18,6 +18,7 @@ function fakeProvider(): ModelProvider {
     name: "test-provider",
     assessSignalSupport: vi.fn(async () => ({ assessments: [] })),
     askReflectionQuestion: vi.fn(async () => ({ question: "What did that change about your next step?" })),
+    askReviewQuestion:vi.fn(async()=>({connection:null,question:'What would you like to explore further?',sourceNumbers:[1]})),
     judgeSignalMatch: vi.fn(async () => ({ relation: "independent" as const })),
     distillPrinciples: vi.fn(async () => ({ candidates: [] })),
     judgePrincipleRelation: vi.fn(async () => ({ relation: "independent" as const })),

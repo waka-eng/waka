@@ -205,6 +205,35 @@ preserves the person's order. Selection and cursor writes queue no model work,
 create no feedback and change no source/signal/principle. Cross-source answers
 are a separate later R05 contract, not multiple per-item reflections.
 
+R05 uses one profile-owned `review_answers` row per authored response and
+`review_answer_sources` links to the reviewed items and their material revisions.
+A one-source answer has one focused (`referenced`) link; a cross-source answer
+has several, not several copies of the words. Context-only links also record
+every input the model saw, so an uncited input cannot bypass invalidation.
+`source_count` records that full context set's original size. The same generated-question job may receive only
+one answer, and the answer's client id/input hash make response-loss replay safe.
+Generated questions live in metered `generate_review_question` jobs, cite only
+the current kept sources, and are served only for a matching context hash.
+Opening or checking a review never queues a question. Explicit requests are
+limited to three per context per hour, in addition to worker/account budgets.
+Each attempt retains its own budget record; invalidation clears its content
+instead of deleting that record. Status reads compare source revisions and
+answer history without reloading attachment bodies.
+
+Human answer text survives source edits/removal as private session history.
+If a referenced source changes or its link disappears, generated question text
+is redacted and the answer context is marked invalid. Those historical answers
+are not silently reused as current grounded dialogue. Editing or removing an
+earlier answer also redacts later AI premises that may depend on it, while
+preserving the later human answers. Explicit answer removal clears its words,
+AI context and links, retaining a minimal deletion receipt so a lost-response
+retry cannot recreate it. Deleted answers are absent from history and export;
+account/session erasure removes the receipts too. Export includes live answers
+and their remaining source links.
+These rows do not yet feed signal/principle generation: R08 must establish
+lineage-aware evidence behavior before that integration. Selections or multiple
+links never establish multiple independent experiences by themselves.
+
 ### Existing inspiration behavior
 
 A capture event. Whatever arrived: pasted text, a link, an image, an

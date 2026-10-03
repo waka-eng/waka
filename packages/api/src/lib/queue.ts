@@ -139,6 +139,7 @@ import {
   type AssessSignalSupportPayload,
   type EnrichAttachmentPayload,
   type GenerateReflectionQuestionPayload,
+  type GenerateReviewQuestionPayload,
   type ReembedSignalPayload,
   type RefreshGroupTopOfMindPayload,
   type RefreshTopOfMindPayload,
@@ -146,6 +147,7 @@ import {
   inspirations,
   generationRevisions,
   attachments,
+  reviewSessions,
   signalEvidence,
 } from "../db/index.js";
 import { getDb } from "./db.js";
@@ -171,6 +173,7 @@ import {
 } from "./signal-derivation.js";
 import { isSupportedLocale } from "./locales.js";
 import { loadReflectionQuestionContext } from './reflection-question-context.js';
+import { loadReviewQuestionContext } from './review-dialogue-context.js';
 import { refreshPrinciplesForProfile } from "./principle-generation.js";
 import { tendSignalGarden } from "./signal-gardener.js";
 import {
@@ -347,7 +350,8 @@ async function enqueueKeyedJob(input: {
     | "refresh_principles"
     | "reembed_signal"
     | "tend_signal_garden"
-    | "generate_reflection_question";
+    | "generate_reflection_question"
+    | "generate_review_question";
   payload:
     | EnrichAttachmentPayload
     | DeriveSignalsPayload
@@ -356,7 +360,8 @@ async function enqueueKeyedJob(input: {
     | RefreshGroupTopOfMindPayload
     | { profileId: string }
     | ReembedSignalPayload
-    | GenerateReflectionQuestionPayload;
+    | GenerateReflectionQuestionPayload
+    | GenerateReviewQuestionPayload;
   idempotencyKey: string;
 }, transaction?: Pick<ReturnType<typeof getDb>, "execute">): Promise<EnqueueResult> {
   const rows = await (transaction ?? getDb()).execute(sql<{ id: string }>`
@@ -681,6 +686,13 @@ export async function enqueueReflectionQuestion(
     payload: { inspirationId, afterReflectionId },
     idempotencyKey: reflectionQuestionJobKey(profileId, inspirationId, afterReflectionId),
   });
+}
+
+export function reviewQuestionJobPrefix(profileId:string,sessionId:string,afterAnswerId:string|null,contextHash:string){return `generate_review_question:${profileId}:${sessionId}:${afterAnswerId??'initial'}:${contextHash}:`;}
+export async function enqueueReviewQuestion(input:{profileId:string;sessionId:string;afterAnswerId:string|null;inspirationIds:string[];contextHash:string;requestId:string},transaction?:Pick<ReturnType<typeof getDb>,'execute'>){
+  const {profileId,sessionId,afterAnswerId,inspirationIds,contextHash}=input;
+  return enqueueKeyedJob({profileId,type:'generate_review_question',payload:{sessionId,afterAnswerId,inspirationIds,contextHash},
+    idempotencyKey:reviewQuestionJobPrefix(profileId,sessionId,afterAnswerId,contextHash)+input.requestId},transaction);
 }
 
 /**
@@ -1012,6 +1024,24 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
       });
       if (report.items.some((item) => item.issue !== undefined)) throw new Error('Support batch could not be fully assessed');
       return;
+    }
+    case 'generate_review_question': {
+      const sessionId=readString(job.payload,'sessionId');
+      const raw=job.payload as Partial<GenerateReviewQuestionPayload>;
+      if(!sessionId||!(raw.afterAnswerId===null||typeof raw.afterAnswerId==='string'))return dropPoisonPayload(job);
+      const db=getDb(),context=await db.transaction(tx=>loadReviewQuestionContext(tx,job.profileId,sessionId),{isolationLevel:'repeatable read'});
+      if(!context||context.latestAnswerId!==raw.afterAnswerId||context.hash!==raw.contextHash)return dropPoisonPayload(job);
+      const provider=await getDefaultModelProvider(),result=await provider.askReviewQuestion(context.input);
+      await db.transaction(async tx=>{
+        const [session]=await tx.select({id:reviewSessions.id}).from(reviewSessions).where(and(eq(reviewSessions.profileId,job.profileId),eq(reviewSessions.id,sessionId))).for('update',{noWait:true});
+        const [owner]=await tx.select({id:generationRevisions.profileId}).from(generationRevisions).where(eq(generationRevisions.profileId,job.profileId)).for('update',{noWait:true});
+        const current=await loadReviewQuestionContext(tx,job.profileId,sessionId,{includeMaterial:false});
+        if(!session||!owner||!current||current.hash!==context.hash)throw new Error('Review question inputs changed before commit');
+        await assertBackgroundJobOwnership(tx,job,true);
+        const payload:GenerateReviewQuestionPayload={sessionId,afterAnswerId:context.latestAnswerId,inspirationIds:context.sourceIdentities.map(row=>row.id),
+          contextHash:context.hash,question:result.question,connection:result.connection,sourceIds:result.sourceNumbers.map(number=>context.sourceIdentities[number-1]!.id)};
+        await tx.update(backgroundJobs).set({payload}).where(and(eq(backgroundJobs.id,job.id),eq(backgroundJobs.profileId,job.profileId)));
+      });return;
     }
     case "generate_reflection_question": {
       const payload = parseGenerateReflectionQuestionPayload(job.payload);

@@ -5,6 +5,7 @@ import { humanSessionsOnly, requireAuth, type AuthEnv } from '../lib/middleware.
 import { chooseReviewItem, completeReviewSession, createReviewSession, MAX_REVIEW_ITEMS, readActiveReview, readReviewSession, ReviewSessionError } from '../lib/review-sessions.js';
 import { profileQuerySchema } from './inspirations-validation.js';
 import { resolveTargetProfile } from './inspirations-tenancy.js';
+import {registerReviewDialogueRoutes} from './review-dialogue.js';
 
 const uuid=z.string().uuid().transform(value=>value.toLowerCase());
 const revision=z.number().int().min(0).max(2147483646);
@@ -12,7 +13,7 @@ const createSchema=z.object({id:uuid,inspirationIds:z.array(uuid).min(1).max(MAX
   .refine(ids=>new Set(ids).size===ids.length,'Choose each inspiration once').optional()}).strict();
 const choiceSchema=z.object({revision,inspirationId:uuid,sourceRevision:z.string().regex(/^[1-9]\d{0,18}$/)
   .refine(value=>BigInt(value)<=9223372036854775807n),choice:z.enum(['keep','skip']).nullable()}).strict();
-type ReviewEnv=AuthEnv&{Variables:{reviewProfileId:string}};
+export type ReviewEnv=AuthEnv&{Variables:{reviewProfileId:string}};
 
 export function createReviewSessionRoutes(deps:{getDatabase?:typeof getDb;authMiddleware?:typeof requireAuth}={}) {
   const routes=new Hono<ReviewEnv>(),database=deps.getDatabase??getDb;
@@ -55,5 +56,6 @@ export function createReviewSessionRoutes(deps:{getDatabase?:typeof getDb;authMi
     if (!id.success || !input.success) return c.json({error:'Invalid review completion'},400);
     return c.json({session:await completeReviewSession(database(),c.get('reviewProfileId'),id.data,input.data.revision)});
   });
+  registerReviewDialogueRoutes(routes,database);
   return routes;
 }

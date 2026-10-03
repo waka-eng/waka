@@ -50,6 +50,7 @@ export const backgroundJobTypeValues = [
   "reembed_signal",
   "tend_signal_garden",
   "generate_reflection_question",
+  "generate_review_question",
 ] as const;
 export type BackgroundJobType = (typeof backgroundJobTypeValues)[number];
 export const backgroundJobTypeEnum = pgEnum("background_job_type", backgroundJobTypeValues);
@@ -133,6 +134,10 @@ export interface GenerateReflectionQuestionPayload {
   contextHash?: string;
   question?: string;
 }
+export interface GenerateReviewQuestionPayload {
+  sessionId:string;inspirationIds:string[];afterAnswerId:string|null;
+  contextHash?:string;question?:string;connection?:string|null;sourceIds?:string[];
+}
 
 export type BackgroundJobPayload =
   | EnrichAttachmentPayload
@@ -143,7 +148,9 @@ export type BackgroundJobPayload =
   | RefreshGroupTopOfMindPayload
   | RefreshPrinciplesPayload
   | ReembedSignalPayload
-  | GenerateReflectionQuestionPayload;
+  | GenerateReflectionQuestionPayload
+  | GenerateReviewQuestionPayload
+  | {reviewContextInvalidated:true};
 
 /** A result is not available until the final requested pass has completed. */
 export interface BackgroundJobResult {

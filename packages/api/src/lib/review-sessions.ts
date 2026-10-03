@@ -8,10 +8,10 @@ type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 type Reader = Pick<Tx,'select'>;
 export const MAX_REVIEW_ITEMS = 5;
 export class ReviewSessionError extends Error {
-  constructor(public status:404|409, public code:string, message:string) {super(message);}
+  constructor(public status:404|409|410|429, public code:string, message:string) {super(message);}
 }
 
-async function lockOwner(tx:Tx,profileId:string) {
+export async function lockReviewOwner(tx:Tx,profileId:string) {
   const [owner]=await tx.select({id:profiles.id}).from(profiles).where(eq(profiles.id,profileId)).for('key share');
   if (!owner) throw new ReviewSessionError(404,'profile_not_found','Profile not found');
   const [lock]=await tx.execute(sql`SELECT pg_try_advisory_xact_lock(hashtextextended(${`review-session:${profileId}`},0)) AS acquired`);
@@ -44,7 +44,7 @@ export function readActiveReview(db:Db,profileId:string) {
 export function createReviewSession(db:Db,profileId:string,input:{id:string;inspirationIds?:string[]}) {
   const inputHash=hashEmbeddingInput(JSON.stringify(input.inspirationIds??null));
   return db.transaction(async tx=>{
-    await lockOwner(tx,profileId);
+    await lockReviewOwner(tx,profileId);
     const [existing]=await tx.select().from(reviewSessions).where(and(eq(reviewSessions.profileId,profileId),eq(reviewSessions.id,input.id)));
     if (existing) {
       if (existing.inputHash!==inputHash) throw new ReviewSessionError(409,'review_request_changed','This review was started with a different selection.');
@@ -83,7 +83,7 @@ export function createReviewSession(db:Db,profileId:string,input:{id:string;insp
 
 export function chooseReviewItem(db:Db,profileId:string,id:string,input:{revision:number;inspirationId:string;sourceRevision:string;choice:'keep'|'skip'|null}) {
   return db.transaction(async tx=>{
-    await lockOwner(tx,profileId);
+    await lockReviewOwner(tx,profileId);
     const [session]=await tx.select().from(reviewSessions).where(and(eq(reviewSessions.profileId,profileId),eq(reviewSessions.id,id))).for('update');
     if (!session) throw new ReviewSessionError(404,'review_not_found','Review not found');
     if (session.completedAt) throw new ReviewSessionError(409,'review_completed','This review is already finished.');
@@ -106,7 +106,7 @@ export function chooseReviewItem(db:Db,profileId:string,id:string,input:{revisio
 
 export function completeReviewSession(db:Db,profileId:string,id:string,revision:number) {
   return db.transaction(async tx=>{
-    await lockOwner(tx,profileId);
+    await lockReviewOwner(tx,profileId);
     const [session]=await tx.select().from(reviewSessions).where(and(eq(reviewSessions.profileId,profileId),eq(reviewSessions.id,id))).for('update');
     if (!session) throw new ReviewSessionError(404,'review_not_found','Review not found');
     if (session.completedAt) return present(tx,profileId,id);
