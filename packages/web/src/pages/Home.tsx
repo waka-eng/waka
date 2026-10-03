@@ -10294,6 +10294,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   const keepIt = useCallback(async (andReflect = false) => {
     const text = draftRef.current.trim();
     const initialMedia = composerDraft.current.current.media;
+    if (composerDraft.current.current.linkText?.trim()) { setMouthNote('Add or cancel the link before saving.'); return; }
     if (composerDraft.current.current.recordingCandidate) { setMouthNote('Choose which recording to keep before saving.'); return; }
     if (initialMedia.some(item => item.validationError)) { setMouthNote('Remove the files marked below before saving. Your other selections are kept.'); return; }
     if ((!text && !initialMedia.length) || inspirationSave.pending || inspirationSave.busy || preparingInspirationRef.current || checkingFilesCount.current || !composerDraft.ready || recording.phase !== 'idle') return;
@@ -13464,6 +13465,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           </div>
         </div>
         {mouthOpen ? <InspirationComposer text={draft} media={inputMedia}
+          linkText={composerDraft.draft.linkText ?? ''} onLinkText={composerDraft.setLinkText}
           recordingCandidate={composerDraft.draft.recordingCandidate}
           onChooseRecording={useNew => { composerDraft.chooseRecording(useNew); setMouthNote(''); void composerDraft.flush().catch(reason => setMouthNote(String(reason))); }}
           locale={locale} public={keepPublic} ready={composerDraft.ready} fileDraftsAvailable={composerDraft.available} busy={preparingInspiration || checkingFiles}

@@ -14,6 +14,7 @@ export interface InspirationDraft {
   id: string;
   revision: number;
   text: string;
+  linkText?: string;
   media: InspirationDraftMedia[];
   /** A replacement waits here until chosen; it is never uploaded as a second recording. */
   recordingCandidate?: InspirationDraftMedia | null;
@@ -60,7 +61,7 @@ function readStored(value: unknown, owner: string): StoredDraft | null {
   if (value === undefined) return null;
   const row = value as StoredDraft;
   if (row.owner !== owner || typeof row.id !== 'string' || row.key !== `${owner}:${row.id}` || !Number.isSafeInteger(row.revision) ||
-    typeof row.text !== 'string' || !Array.isArray(row.media) || !Number.isFinite(row.updatedAt)) throw new Error('Unverifiable draft');
+    typeof row.text !== 'string' || (row.linkText !== undefined && typeof row.linkText !== 'string') || !Array.isArray(row.media) || !Number.isFinite(row.updatedAt)) throw new Error('Unverifiable draft');
   if (row.recordingCandidate && (row.recordingCandidate.type !== 'audio' || typeof row.recordingCandidate.id !== 'string' ||
     typeof row.recordingCandidate.name !== 'string' || !(row.recordingCandidate.blob instanceof Blob))) throw new Error('Unverifiable recording draft');
   return row;
@@ -75,10 +76,10 @@ export async function loadInspirationDraft(scope: ProfileStorageScope, id?: stri
     request.onsuccess = () => {
       try {
         const rows = (id ? [request.result] : request.result as unknown[]).map(value => readStored(value, owner))
-          .filter((row): row is StoredDraft => Boolean(row && !row.savedInspirationId && (id || row.text.trim() || row.media.length || row.recordingCandidate)));
+          .filter((row): row is StoredDraft => Boolean(row && !row.savedInspirationId && (id || row.text.trim() || row.linkText?.trim() || row.media.length || row.recordingCandidate)));
         rows.sort((a, b) => b.updatedAt - a.updatedAt);
         const row = rows[0];
-        done(row ? { id: row.id, revision: row.revision, text: row.text, media: row.media, updatedAt: row.updatedAt,
+        done(row ? { id: row.id, revision: row.revision, text: row.text, linkText:row.linkText ?? '', media: row.media, updatedAt: row.updatedAt,
           ...(row.recordingCandidate ? { recordingCandidate: row.recordingCandidate } : {}) } : null);
       } catch (reason) { fail(reason instanceof Error ? reason : new Error('Unverifiable draft')); }
     };
@@ -112,7 +113,7 @@ export async function settleInspirationMediaDraft(scope: ProfileStorageScope, id
         const prior = readStored(request.result, owner);
         if (!prior || prior.savedInspirationId) { done(true); return; }
         if (prior.revision !== revision) { done(false); return; }
-        store.put({ ...prior, text: '', media: [], recordingCandidate: null, savedInspirationId: inspirationId, revision: revision + 1, updatedAt: Date.now() } satisfies StoredDraft);
+        store.put({ ...prior, text: '', linkText:'', media: [], recordingCandidate: null, savedInspirationId: inspirationId, revision: revision + 1, updatedAt: Date.now() } satisfies StoredDraft);
         done(true);
       } catch (reason) { fail(reason instanceof Error ? reason : new Error('Draft settlement failed')); }
     };

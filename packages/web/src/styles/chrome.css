@@ -1312,6 +1312,7 @@ body .profile-signout-button {
 .jar-composer-storage-note { color: var(--w-muted); font-size: var(--t-note); line-height: 1.5; }
 .jar-composer-link { display: flex; gap: var(--sp-8); margin: var(--sp-12) 0; }
 .jar-composer-link input { min-width: 0; flex: 1; min-height: var(--sp-44); padding: var(--sp-8); border: 1px solid var(--w-edge); border-radius: var(--sp-8); background: transparent; color: var(--w-ink); }
+@media (max-width: 480px) { .jar-composer-link { flex-wrap: wrap; } .jar-composer-link input { flex-basis: 100%; } }
 .jar-composer-media { list-style: none; margin: var(--sp-12) 0; padding: 0; }
 .jar-composer-media li { display: flex; gap: var(--sp-12); align-items: center; flex-wrap: wrap; padding: var(--sp-12) 0; border-bottom: 1px solid var(--w-edge); }
 .jar-composer-media img { width: calc(var(--sp-44) * 2); height: calc(var(--sp-44) * 2); object-fit: cover; border-radius: var(--sp-8); }

@@ -12,7 +12,7 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.stubGlobal('URL', class extends URL { static createObjectURL() { return 'blob:photo'; } static revokeObjectURL() {} });
   host = document.createElement('div'); document.body.append(host); root = createRoot(host);
-  props = { text: '', media: [{ id: 'photo', type: 'image', name: 'Photo.heic', blob: new Blob(['photo'], {type:'image/heic'}), uploadError: 'Upload didn’t finish.' }],
+  props = { text: '', linkText:'',onLinkText:vi.fn(),media: [{ id: 'photo', type: 'image', name: 'Photo.heic', blob: new Blob(['photo'], {type:'image/heic'}), uploadError: 'Upload didn’t finish.' }],
     locale: 'en-US', public: false, ready: true, fileDraftsAvailable: true, busy: false, error: '', uploadingId: null, inputRef: null,
     save: { phase: 'idle', pending: null, busy: false, start: vi.fn(), retry: vi.fn(), check: vi.fn(), dismiss: vi.fn(), resetInvalid: vi.fn(), editRejected: vi.fn() },
     recording: { phase: 'idle', seconds: 0, error: '', notice: '', start: vi.fn(), stop: vi.fn(), cancel: vi.fn() },
@@ -52,4 +52,12 @@ it('retains invalid/extra selections with removal controls and blocks saving unt
   expect(props.onRemove).toHaveBeenCalledWith('5');
   props.media = props.media.slice(0,5); await mount();
   expect(host.querySelector<HTMLButtonElement>('[aria-label="Save inspiration"]')!.disabled).toBe(false);
+});
+it('restores the unadded link and refuses to silently omit it from a save',async()=>{
+  props.text='My note';props.linkText='https://example.test/unfinished';await mount();
+  expect(host.querySelector<HTMLInputElement>('input[type=url]')?.value).toBe(props.linkText);
+  expect(host.querySelector<HTMLButtonElement>('[aria-label="Save inspiration"]')!.disabled).toBe(true);
+  await act(async()=>host.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+  expect(props.onText).toHaveBeenCalledWith('My note\nhttps://example.test/unfinished',expect.any(Number));
+  expect(props.onLinkText).toHaveBeenCalledWith('');expect(props.onSubmit).not.toHaveBeenCalled();
 });

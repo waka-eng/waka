@@ -8,6 +8,15 @@ import { InspirationDraftConflict, loadInspirationDraft, newInspirationDraft, se
 const scope = { accountId: 'account-a', profileId: 'profile-a' };
 beforeEach(() => vi.stubGlobal('indexedDB', new IDBFactory()));
 afterEach(() => vi.unstubAllGlobals());
+it('recovers an unfinished link even before it has been added to the note',async()=>{
+  const draft={...newInspirationDraft(),revision:1,linkText:'https://example.test/unfinished'};
+  await writeInspirationDraft(scope,draft,0);
+  expect(await loadInspirationDraft(scope)).toMatchObject({id:draft.id,text:'',linkText:draft.linkText});
+  expect(await loadInspirationDraft({accountId:'another',profileId:'another'})).toBeNull();
+  await writeInspirationDraft(scope,{...draft,revision:2,linkText:'https://example.test/newer'},1);
+  expect(await settleInspirationMediaDraft(scope,draft.id,1,'older-save')).toBe(false);
+  expect((await loadInspirationDraft(scope))?.linkText).toBe('https://example.test/newer');
+});
 it('recovers actual draft bytes and text for their account/profile only', async () => {
   const draft = { ...newInspirationDraft('My unfinished thought'), revision: 1,
     media: [{ id: 'audio-1', type: 'audio' as const, name: 'Recording.webm', blob: new Blob(['original bytes'], { type: 'audio/webm' }) }] };

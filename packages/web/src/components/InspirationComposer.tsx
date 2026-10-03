@@ -28,6 +28,7 @@ function MediaPreview({ item, recording = false, label }: { item: InspirationDra
 }
 export function InspirationComposer(props: {
   text: string; media: InspirationDraftMedia[]; locale: SupportedLocale; public: boolean;
+  linkText: string; onLinkText: (value:string)=>void;
   ready: boolean; fileDraftsAvailable: boolean; busy: boolean; error: string; uploadingId: string | null;
   save: ReturnType<typeof useAuthoredSave>; recording: ReturnType<typeof useAudioRecording>;
   inputRef: Ref<HTMLTextAreaElement>;
@@ -39,7 +40,9 @@ export function InspirationComposer(props: {
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void; onForkDraft: () => void;
 }) {
   const fileInput = useRef<HTMLInputElement>(null), linkInput = useRef<HTMLInputElement>(null);
-  const [addingLink, setAddingLink] = useState(false), [link, setLink] = useState('');
+  const [addingLink, setAddingLink] = useState(Boolean(props.linkText));
+  const link = props.linkText;
+  useEffect(()=>{if (props.linkText) setAddingLink(true);},[props.linkText]);
   const blocked = props.busy || Boolean(props.save.pending) || !props.ready || props.recording.phase !== 'idle';
   const invalidFiles = props.media.some(item => item.validationError) || props.media.length > 5;
   const say = (key: Parameters<typeof t>[1]) => t(props.locale, key);
@@ -50,7 +53,7 @@ export function InspirationComposer(props: {
         linkInput.current?.setCustomValidity('Use an HTTP or HTTPS link up to 2,048 characters.'); linkInput.current?.reportValidity(); return;
       }
       const text = [props.text.trim(), value.toString()].filter(Boolean).join('\n');
-      props.onText(text, text.length); setAddingLink(false); setLink('');
+      props.onText(text, text.length); props.onLinkText(''); setAddingLink(false);
     } catch { linkInput.current?.reportValidity(); }
   };
   return <DialogSurface className="jar-seek jar-inspiration-composer" aria-label={say('worldCaptureInspiration')} onClose={props.onClose} data-jar-chrome="1"
@@ -74,9 +77,11 @@ export function InspirationComposer(props: {
     </div>
     {props.ready && !props.fileDraftsAvailable ? <p className="jar-composer-storage-note">{say('worldComposerFilesUnavailable')}</p> : null}
     {addingLink ? <form className="jar-composer-link" onSubmit={event => { event.preventDefault(); addLink(); }}>
-      <input ref={linkInput} type="url" required value={link} aria-label={say('worldPasteTheLink')} placeholder="https://" onChange={event => { event.target.setCustomValidity(''); setLink(event.target.value); }} />
-      <button type="submit">{say('worldComposerAdd')}</button>
+      <input ref={linkInput} type="url" required value={link} disabled={blocked} aria-label={say('worldPasteTheLink')} placeholder="https://" onChange={event => { event.target.setCustomValidity(''); props.onLinkText(event.target.value); }} />
+      <button type="submit" disabled={blocked}>{say('worldComposerAdd')}</button>
+      <button type="button" disabled={blocked} onClick={()=>{props.onLinkText('');setAddingLink(false);}}>Cancel link</button>
     </form> : null}
+    {link.trim() ? <p className="jar-composer-storage-note">Add or cancel this link before saving.</p> : null}
     {props.media.length ? <ul className="jar-composer-media">{props.media.map(item => <li key={item.id}>
       <MediaPreview item={item} recording={props.recording.phase !== 'idle'} label={item.type === 'audio' && props.recordingCandidate ? 'Previous recording' : undefined} /><div className="jar-composer-media-name">{item.type === 'link' ? <a href={item.url} target="_blank" rel="noreferrer">{item.name}</a> : item.type === 'audio' && props.recordingCandidate ? 'Previous recording' : item.name}
         {item.blob ? <small>{fileSize(item.blob.size)} · {item.uploaded ? 'Uploaded — save to keep.' : 'In this draft — not saved yet.'}</small> : null}
@@ -102,8 +107,8 @@ export function InspirationComposer(props: {
       <button type="button" disabled={blocked} aria-pressed={!props.public} onClick={() => props.onVisibility(false)}>{say('worldPrivate')}</button>
       <button type="button" disabled={blocked} aria-pressed={props.public} onClick={() => props.onVisibility(true)}>{say('worldPublic')}</button>
     </div><div className="jar-composer-actions">
-      <button type="button" aria-label={say('worldSaveInspiration')} disabled={blocked || invalidFiles || Boolean(props.recordingCandidate) || (!props.text.trim() && !props.media.length)} onClick={() => props.onSubmit(false)}>{say('worldSave')}</button>
-      <button type="button" aria-label={say('worldSaveAndReflect')} disabled={blocked || invalidFiles || Boolean(props.recordingCandidate) || (!props.text.trim() && !props.media.length)} onClick={() => props.onSubmit(true)}>{say('worldComposerThink')}</button>
+      <button type="button" aria-label={say('worldSaveInspiration')} disabled={blocked || invalidFiles || Boolean(link.trim()) || Boolean(props.recordingCandidate) || (!props.text.trim() && !props.media.length)} onClick={() => props.onSubmit(false)}>{say('worldSave')}</button>
+      <button type="button" aria-label={say('worldSaveAndReflect')} disabled={blocked || invalidFiles || Boolean(link.trim()) || Boolean(props.recordingCandidate) || (!props.text.trim() && !props.media.length)} onClick={() => props.onSubmit(true)}>{say('worldComposerThink')}</button>
     </div></div>
     <AuthoredSaveNotice save={props.save} locale={props.locale} />
   </DialogSurface>;

@@ -36,6 +36,12 @@ it('serializes rapid text/media edits and settles only after durable storage', a
   expect(await loadInspirationDraft(scope, saved.id)).toBeNull();
   expect(hook.draft.text).toBe(''); expect(hook.draft.media).toEqual([]);
 });
+it('retains an unfinished link and atomically advances it into the authored note on Add',async()=>{
+  await act(async()=>{hook.setLinkText('https://example.test/unfinished');await hook.flush();});
+  expect((await loadInspirationDraft(scope,hook.draft.id))?.linkText).toBe('https://example.test/unfinished');
+  await act(async()=>{hook.setText('A note\nhttps://example.test/unfinished');hook.setLinkText('');await hook.flush();});
+  expect(await loadInspirationDraft(scope,hook.draft.id)).toMatchObject({text:'A note\nhttps://example.test/unfinished',linkText:''});
+});
 
 it('a late successful save leaves newer edits in the open draft', async () => {
   await act(async () => { hook.setText('Submitted'); await hook.flush(); });

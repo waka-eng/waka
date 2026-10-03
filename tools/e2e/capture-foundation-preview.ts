@@ -48,6 +48,7 @@ const [nativeAccount] = await fixture.sql`INSERT INTO accounts(email,onboarding_
 const [nativeProfile] = await fixture.sql`INSERT INTO profiles(account_id,type,name) VALUES (${nativeAccount.id},'human','Native capture fixture') RETURNING id`;
 const nativeToken = await signSessionToken({ profileId: nativeProfile.id, email: 'native-capture-fixture@example.test' });
 await createSessionRow({ profileId: nativeProfile.id, token: nativeToken });
+let activeToken = token;
 const objects = new Map<string, { bytes: Buffer; contentType: string }>();
 // Seeded metadata tests rendering and recovery, not live extraction quality.
 let linkFixtureInspirationId: string | null = null;
@@ -81,7 +82,7 @@ if (process.env.WAKA_TRANSCRIPT_FIXTURE === '1') {
   transcriptFixtureInspirationId = source.id;
   objects.set(`/capture-fixture/${key}`, { bytes, contentType: 'audio/webm' });
 }
-let loseResponse = false, failUpload = false, failUploadAfter = 0, uploadAttempts = 0;
+let loseResponse = false, loseRequest = false, failUpload = false, failUploadAfter = 0, uploadAttempts = 0;
 async function body(request: IncomingMessage, limit: number) {
   const chunks: Buffer[] = []; let size = 0;
   for await (const chunk of request) { size += chunk.length; if (size > limit) throw new Error('Fixture request too large'); chunks.push(chunk); }
@@ -114,6 +115,8 @@ const server = createServer(async (request, response) => {
       response.end(await readFile(path)); return;
     }
     if (target.pathname === '/fixture') {
+      if (target.searchParams.get('account') === 'native') activeToken = nativeToken;
+      if (target.searchParams.get('account') === 'primary') activeToken = token;
       if (process.env.WAKA_REFLECTION_FIXTURE === '1' && target.searchParams.get('question') === 'complete') {
         const { processBackgroundJob, postgresBackgroundJobStore } = await import('../../packages/api/src/lib/queue.js');
         const [pending] = await fixture.sql`SELECT id FROM background_jobs WHERE profile_id=${profile.id}
@@ -125,13 +128,14 @@ const server = createServer(async (request, response) => {
         }
       }
       if (target.searchParams.get('fail') === 'save-response') loseResponse = true;
+      if (target.searchParams.get('fail') === 'save-request') loseRequest = true;
       if (target.searchParams.get('fail') === 'upload') failUpload = true;
       if (target.searchParams.get('fail') === 'second-upload') failUploadAfter = 2;
       const [counts] = await fixture.sql`SELECT (SELECT count(*)::int FROM inspirations) AS inspirations,
         (SELECT count(*)::int FROM attachments) AS attachments, (SELECT count(*)::int FROM inspiration_save_requests) AS requests`;
       response.writeHead(200, {'Content-Type':'application/json'}); response.end(JSON.stringify({ ...counts, objects: objects.size,
-        origin, schema: fixture.schemaName, microphone: 'synthetic tone', failUpload, loseResponse, transcriptFixtureId, transcriptFixtureInspirationId,
-        linkFixtureInspirationId, uploadAttempts, failUploadAfter, reflectionCalls })); return;
+        origin, schema: fixture.schemaName, microphone: 'synthetic tone', failUpload, loseResponse, loseRequest, transcriptFixtureId, transcriptFixtureInspirationId,
+        linkFixtureInspirationId, uploadAttempts, failUploadAfter, reflectionCalls, activeAccount:activeToken===token?'primary':'native' })); return;
     }
     if (target.pathname.startsWith('/capture-fixture/')) {
       const key = decodeURIComponent(target.pathname);
@@ -151,6 +155,9 @@ const server = createServer(async (request, response) => {
     }
     if (target.pathname.startsWith('/api/')) {
       const bytes = ['GET','HEAD'].includes(request.method ?? 'GET') ? undefined : await body(request, 1024 * 1024);
+      if (loseRequest && request.method === 'POST' && target.pathname === '/api/inspirations') {
+        loseRequest = false; response.destroy(); return;
+      }
       const result = await app.fetch(new Request(target,{method:request.method,headers:request.headers as HeadersInit,...(bytes ? {body:bytes} : {})}));
       if (loseResponse && request.method === 'POST' && target.pathname === '/api/inspirations' && result.status === 201) {
         loseResponse = false; response.destroy(); return;
@@ -162,7 +169,7 @@ const server = createServer(async (request, response) => {
     let bytes = await readFile(path);
     if (path.endsWith('index.html')) bytes = Buffer.from(bytes.toString().replace('<head>', '<head>' + syntheticMicrophone));
     response.writeHead(200,{'Content-Type':types[extname(path)] ?? 'application/octet-stream','Cache-Control':'no-store',
-      ...(path.endsWith('index.html') ? {'Set-Cookie':buildSessionCookie(token,{secure:false})} : {})}); response.end(bytes);
+      ...(path.endsWith('index.html') ? {'Set-Cookie':buildSessionCookie(activeToken,{secure:false})} : {})}); response.end(bytes);
   } catch (error) { console.error(error); if (!response.headersSent) response.writeHead(500); response.end('Fixture failed'); }
 });
 await new Promise<void>(done=>server.listen(3015,'127.0.0.1',done));

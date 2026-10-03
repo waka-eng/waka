@@ -66,6 +66,11 @@ export function useInspirationDraft(scope: ProfileStorageScope | null) {
     if (!supported.current) { setError('File drafts are unavailable on this device. Keep this window open.'); return false; }
     return true;
   }, [change]);
+  const setLinkText = useCallback((linkText:string) => {
+    if (live.current.linkText === linkText) return;
+    change(current=>({...current,linkText}));
+    if (!supported.current) setError('This link cannot be kept on this device yet. Paste it into your note before closing.');
+  },[change]);
   const setRecordingCandidate = useCallback((recordingCandidate: InspirationDraftMedia | null) => {
     change(current => ({ ...current, recordingCandidate }));
   }, [change]);
@@ -76,7 +81,7 @@ export function useInspirationDraft(scope: ProfileStorageScope | null) {
   }, [change]);
   const flush = useCallback(async () => {
     if (!supported.current) {
-      if (live.current.media.length || live.current.recordingCandidate) throw new Error('File drafts are unavailable on this device.');
+      if (live.current.media.length || live.current.recordingCandidate || live.current.linkText?.trim()) throw new Error('File drafts are unavailable on this device.');
       return null;
     }
     if (!live.current.revision) change(current => current);
@@ -106,5 +111,5 @@ export function useInspirationDraft(scope: ProfileStorageScope | null) {
     try { if (key) sessionStorage.setItem(key, next.id); } catch { /* owner-index recovery */ }
     change(current => current); await pump();
   }, [change, pump]);
-  return { draft, current: live, ready, available, error, setText, setMedia, setRecordingCandidate, chooseRecording, flush, settle, fork };
+  return { draft, current: live, ready, available, error, setText, setMedia, setLinkText, setRecordingCandidate, chooseRecording, flush, settle, fork };
 }

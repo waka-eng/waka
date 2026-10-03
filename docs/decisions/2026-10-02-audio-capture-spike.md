@@ -4,9 +4,9 @@ Status: partial A03 evidence. On 2026-10-02 the owner deferred actual iPhone Saf
 
 ## Current decision
 
-Use `gemini-2.5-flash` as the candidate for the later C06 transcription integration. It passed all six predeclared synthetic fixtures. Do not use `gemini-2.5-flash-lite` as an automatic fallback: it added unrequested timestamps to the Korean transcript and failed the output contract in this run. No transcription provider is wired into production by this spike.
+Use `gemini-2.5-flash` for transcription. It passed all six predeclared synthetic fixtures and was subsequently integrated in C06 on the current implementation branch. Do not use `gemini-2.5-flash-lite` as an automatic fallback: it added unrequested timestamps to the Korean transcript and failed the output contract in this run. This is implementation evidence, not a claim of remote deployment.
 
-Physical-device verification is deferred under the owner's decision; it is not a prerequisite for planning subsequent work. Capacitor rollout timing remains a separate decision. A mobile-sized desktop window or simulator does not establish physical-device behavior. This update records the deferral only and does not start implementation or deployment.
+Continue web-first for the agreed 31 tasks. Capacitor packaging and beta/store deployment are outside that scope and require a later rollout decision. Physical-device verification is deferred under the owner's decision; it does not block these tasks. A mobile-sized desktop window or simulator does not establish physical-device behavior. A03's physical checks stay unchecked, not silently replaced by simulator results.
 
 ## Browser recording and saving
 
@@ -67,4 +67,4 @@ changed, no host microphone was recorded, and no file was shared externally.
 | Native container | iOS synthetic recording/photo/share/session probe passes; actual microphone and Android native behavior remain unverified |
 | Supported formats and limits | Device results to finalize formats, five-minute limit and interruption recovery claims |
 
-The current recorder tries a supported WebM/Opus, MP4, WebM or Ogg/Opus format at runtime. The proposed maximum remains five minutes and the server upload cap is 25 MiB. It stops on page visibility loss; physical-device behavior and interrupted-file recoverability remain unverified. Raw audio storage already works in the fixture, while durable server transcription/correction is C06 work.
+The current recorder tries supported WebM/Opus, MP4, WebM or Ogg/Opus at runtime. C05 enforces five minutes and the server upload cap is 25 MiB; C06's inline transcription cap is separately 12 MiB, with larger originals preserved. It stops on page visibility loss; physical-device behavior and interrupted-file recoverability remain unverified. Durable transcription/correction and their scoped queue/browser checks are recorded in [the delivery log](../goals/personal-experience-delivery.md). Android native behavior and actual-device cases remain unverified; the current decision does not advertise native mobile support.
