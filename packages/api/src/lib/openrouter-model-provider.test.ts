@@ -29,7 +29,7 @@ import {
   toChatRequest,
   toJsonSchema,
 } from "./openrouter-model-provider.js";
-import { buildSignalMatchJudgementRequest } from "../queue/gemini.js";
+import { buildSignalMatchJudgementRequest, buildReviewQuestionRequest } from "../queue/gemini.js";
 
 const fetchMock = vi.fn();
 
@@ -124,6 +124,14 @@ describe("the translation", () => {
     expect(stripJsonFence('```json\n{"relation":"same"}\n```')).toBe('{"relation":"same"}');
     expect(stripJsonFence('{"relation":"same"}')).toBe('{"relation":"same"}');
     expect(stripJsonFence('```\n{"a":"```"}\n```')).toBe('{"a":"```"}');
+  });
+  it('preserves review branch bounds and punctuation constraints on the chat road',()=>{
+    const request=buildReviewQuestionRequest({preferredLocale:'en-US',history:[],sources:[{text:'One',attachments:[],reflections:[]},{text:'Two',attachments:[],reflections:[]}]});
+    const schema=toJsonSchema(request.generationConfig.responseSchema as never);
+    expect(schema).toMatchObject({type:'object',anyOf:[
+      {type:'object',additionalProperties:false,properties:{connection:{type:'null'},question:{minLength:12,maxLength:240,pattern:'^[^?？]*[?？]$'},sourceNumbers:{type:'array',minItems:1,maxItems:1,items:{type:'integer',minimum:1,maximum:2}}}},
+      {type:'object',additionalProperties:false,properties:{connection:{type:'string',minLength:8,maxLength:280,pattern:'^[^?？]*$'},sourceNumbers:{type:'array',minItems:2,maxItems:2}}},
+    ]});
   });
 });
 

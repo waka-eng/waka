@@ -64,6 +64,14 @@ interface GeminiShapedSchema {
   items?: GeminiShapedSchema;
   properties?: Record<string, GeminiShapedSchema>;
   required?: string[];
+  anyOf?: GeminiShapedSchema[];
+  minItems?: number;
+  maxItems?: number;
+  minimum?: number;
+  maximum?: number;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
 }
 interface GeminiShapedRequest {
   systemInstruction?: { parts: Array<{ text: string }> };
@@ -81,6 +89,7 @@ const TYPE_MAP: Record<string, string> = {
   NUMBER: "number",
   INTEGER: "integer",
   BOOLEAN: "boolean",
+  NULL: "null",
 };
 
 /** Gemini's UPPERCASE schema dialect → plain JSON Schema. */
@@ -99,6 +108,10 @@ export function toJsonSchema(schema: GeminiShapedSchema): Record<string, unknown
     out.additionalProperties = false;
   }
   if (schema.required) out.required = schema.required;
+  if (schema.anyOf) out.anyOf = schema.anyOf.map(toJsonSchema);
+  for (const key of ['minItems','maxItems','minimum','maximum','minLength','maxLength','pattern'] as const) {
+    if (schema[key] !== undefined) out[key] = schema[key];
+  }
   return out;
 }
 

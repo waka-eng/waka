@@ -1,0 +1,73 @@
+{
+  "at": "2026-10-03T04:14:32.634Z",
+  "provider": "gemini",
+  "calls": 1,
+  "maxCalls": 1,
+  "reportedCostUsd": null,
+  "requests": [
+    {
+      "host": "generativelanguage.googleapis.com",
+      "status": 200,
+      "model": "gemini-3.1-flash-lite",
+      "durationMs": 727,
+      "usage": {
+        "promptTokenCount": 644,
+        "candidatesTokenCount": 37,
+        "totalTokenCount": 681,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 644
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "output": [
+        "{\n  \"connection\": null,\n  \"question\": \"What led you to keep this image?\",\n  \"sourceNumbers\": [\n    1\n  ]\n}"
+      ]
+    }
+  ],
+  "results": [
+    {
+      "name": "pending image",
+      "expectation": "Use connection=null and one citation; ask what caught the person’s attention without inventing image contents.",
+      "input": {
+        "preferredLocale": "en-US",
+        "contextChanged": false,
+        "sources": [
+          {
+            "text": "",
+            "reflections": [],
+            "attachments": [
+              {
+                "type": "image",
+                "status": "pending",
+                "kind": null,
+                "text": null
+              }
+            ]
+          }
+        ],
+        "history": []
+      },
+      "question": {
+        "phase": "ready",
+        "jobId": "fd0fd2c5-d394-4ca6-b2d2-889e1b34bfcb",
+        "question": "What led you to keep this image?",
+        "connection": null,
+        "sourceIds": [
+          "18e61798-1404-4d3d-a6bc-efc5ab3b540d"
+        ],
+        "contextHash": "225759432107c5d7f4559f1b3d9d1aa5150eb201d4b54eb143dd9e374305a25c",
+        "retryAfter": null
+      },
+      "error": null,
+      "durationMs": 758
+    }
+  ],
+  "limitations": [
+    "Synthetic material only; no actual account data",
+    "Small qualitative evaluation; semantic verdict must be recorded separately",
+    "No raw image/audio extraction or physical-device validation"
+  ]
+}

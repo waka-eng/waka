@@ -1,6 +1,6 @@
 # Personal experience delivery
 
-Status: in progress (2026-10-02), owner requested all personal-experience work bundles.
+Status: in progress (2026-10-02), owner requested all personal-experience work bundles. R05 live quality gate failed; corrective output constraints await re-evaluation before advancing the dependent review phases.
 Branch: `codex/personal-capture-foundation`.
 
 ## Objective
@@ -200,3 +200,27 @@ At 390×844 there was no horizontal overflow; reply actions measured 44px and th
 Verification: full web 584/584 before the last draft-data minimization/read-refresh hardening; subsequent targeted hook/panel 19/19, web typecheck and production build passed. The broader final UI/API/verb checks passed 28/28; current backend dialogue SQL passed 16/16 and API typecheck passed. The verb gate initially could not discover the direct DELETE writer; a shared typed delete helper now keeps both its real UI path and inverse registration visible without weakening the gate. The temporary browser tab, server and exact fixture schema were removed, with zero matching schemas remaining. No paid calls, remote writes or deployment occurred.
 
 R05 is not checked off yet: run the live connection/follow-up quality cases next. R07 still needs pre-start manual-selection drafts and its final resume audit; R06/R08 reading integration, R01/R02 presentation and the sharing/avatar/delivery bundles remain open. The full 31-task goal is active.
+
+### R05 live question quality gate and corrective constraints
+
+Gate: every synthetic case must produce one usable question with the correct citations, preserve source facts and the person's correction, and avoid invented feelings, outcomes or unread material. A weak connection must focus on one source rather than manufacture a shared theme. Formatting success alone does not pass this gate.
+
+Ran five initial calls through real review storage, queue claims and the configured Gemini provider (`gemini-3.1-flash-lite`). All five passed structural parsing, but a content review found a lunar-eclipse description relabeled as a solar eclipse, an assumed tension after a correction, an assumed contrast with an earlier worry, and pending-image wording that implied an unsuccessful upload. [Baseline outputs](../craft/evidence/personal-capture/review-question-baseline.json) preserve those failures.
+
+Revised the prompt to preserve concrete facts, ask neutrally about unexpressed feelings, use conversational language and distinguish saved-but-unread media from upload failure. The same five cases were then evaluated in one three-call run and two one-case continuations, for five additional calls total. The assertions stopped the first revised run at its first refused output; the two independent remaining cases were run within the already announced budget, not omitted from the record.
+
+| Case | Revised result | Verdict |
+| --- | --- | --- |
+| Related garden and family experiences | Tentative connection, two citations and a neutral question about the experience | Accepted in this small check |
+| Disagreement with the initial interpretation | Followed the person's correction about listening and changing a plan; did not insist on unplanned time or assume tension | Accepted in this small check |
+| Unrelated eclipse and recipe facts | Removed the incorrect eclipse subtype, but returned two citations with a null connection | Refused by the unchanged parser |
+| Corrected Korean recording and family time | Used the correction and asked neutrally in Korean, but made the connection itself a second question | Refused by the unchanged parser |
+| Unread image | Asked why the person kept the image, without inventing contents or suggesting an upload failure | Accepted in this small check |
+
+Evidence: [first three revised cases](../craft/evidence/personal-capture/review-question-revision-one.json), [Korean case](../craft/evidence/personal-capture/review-question-korean-revision-one.json), [unread image](../craft/evidence/personal-capture/review-question-pending-revision-one.json). This is Codex's qualitative review of synthetic cases, not a statistical quality estimate or a user study. The measured revised outcome is **3/5 usable, 2/5 refused; gate fails**. No subsequent dependent review phase was advanced.
+
+Stopped live calls at the announced total of ten: 6,069 input tokens and 636 output tokens. The provider returned no dollar charge, so cost remains unknown, not zero; each announced five-call batch was estimated below USD 0.05. No account material was sent. Every run used a disposable loopback schema, and a final read found zero remaining test schemas.
+
+The final, not-yet-live-verified repair keeps the parser strict and adds explicit focused-versus-connected output branches. A focused output requires null connection and exactly one bounded source index; a connected output requires a non-question statement and at least two indices. String lengths and question punctuation are represented in the schema as well as the parser. The OpenRouter translator now retains these union, size, numeric and pattern constraints rather than dropping them. Gemini's [Schema reference](https://ai.google.dev/api/generate-content#Schema) documents these fields; documentation does not prove that the pinned model will honor the final request, so the next gate is a bounded live re-evaluation of all five cases. No provider/model default was changed.
+
+Targeted prompt/parser/provider-translation checks passed 33/33; final API unit 729 passed with three paid benches skipped, and API typecheck passed. The vocabulary gate initially flagged the external JSON Schema `pattern` keyword. It now has a documented permanent exception limited to the two provider-schema files and their two tests; no product identifier was renamed or scanner check disabled. The evaluation harness now records a request hash and completes independent cases after a structural refusal, reports all failures together, and marks a rejected worker attempt using the normal retry-state method. Earlier recorded refusal reports show `processing` because that harness version had not settled the failed claim; their explicit error and rejected raw output, not that transient phase, are the evidence. The task list remains unchecked for R05 and the full goal remains active.
