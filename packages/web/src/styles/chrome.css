@@ -1369,6 +1369,21 @@ body .profile-signout-button {
 .jar-review-footer-actions { display:flex; justify-content:space-between; gap:var(--sp-4); flex-wrap:wrap; }
 .jar-review-footer-actions button { border-color:transparent; padding-inline:var(--sp-4); }
 .jar-review ul { padding-left:var(--sp-22); }
+.jar-review-dialogue { border-top:1px solid var(--w-edge); margin-top:var(--sp-16); padding-top:var(--sp-16); }
+.jar-review-dialogue p { line-height:1.6; overflow-wrap:anywhere; }
+.jar-review-question { line-height:1.6; }
+.jar-review-connection { color:var(--w-muted); }
+.jar-review-references { display:flex; flex-wrap:wrap; gap:var(--sp-4); }
+.jar-review .jar-review-reference { text-align:left; overflow-wrap:anywhere; max-width:100%; }
+.jar-review-reply { margin-top:var(--sp-16); }
+.jar-review-reply label { display:block; margin-bottom:var(--sp-8); }
+.jar-review-reply textarea,.jar-review-dialogue select { box-sizing:border-box; width:100%; font:inherit; font-size:var(--t-lead); color:var(--w-ink); background:var(--w-raised); border:1px solid var(--w-edge); border-radius:var(--sp-12); padding:var(--sp-12); }
+.jar-review-reply textarea { min-height:120px; resize:vertical; line-height:1.6; }
+.jar-review-reply-actions { display:flex; flex-wrap:wrap; gap:var(--sp-4); }
+.jar-review-reply-actions button:first-child { background:var(--w-raised); }
+.jar-review-thought { padding-block:var(--sp-12); border-bottom:1px solid var(--w-edge); }
+.jar-review-answer { white-space:pre-wrap; }
+.jar-review-thought-actions { display:flex; justify-content:flex-end; }
 .jar-reflection-source summary { min-height: var(--sp-44); cursor: pointer; font-size: var(--t-note); }
 .jar-reflection-flow .jar-reflection-actions button,
 .jar-reflection-flow .jar-reflection-secondary,

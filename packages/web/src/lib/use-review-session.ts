@@ -107,7 +107,9 @@ export function useReviewSession(scope:ProfileStorageScope,id:string,onId:(id:st
     catch {setError('storage');return;}
     intent.current=value;setPending(value);void run(value);
   };
+  const observeRevision=useCallback((revision:number)=>setSession(current=>current&&revision>current.revision?{...current,revision}:current),[]);
   return {session,loading,busy,pending,error,empty,
+    observeRevision,
     start:(inspirationIds?:string[])=>write({kind:'start',id:crypto.randomUUID(),...(inspirationIds?{inspirationIds}:{})}),
     choose:(item:ApiReviewItem,choice:'keep'|'skip'|null)=>{if(session)write({kind:'choice',id:session.id,input:{revision:session.revision,inspirationId:item.inspirationId,sourceRevision:item.currentRevision,choice}});},
     finish:()=>{if(session)write({kind:'finish',id:session.id,revision:session.revision});},

@@ -18,12 +18,12 @@ async function ownedSession(tx:Tx,profileId:string,id:string,lock=false){
 async function questionState(tx:Tx,profileId:string,id:string){
   const session=await ownedSession(tx,profileId,id),answers=await readReviewAnswers(tx,profileId,id);
   const context=await loadReviewQuestionContext(tx,profileId,id,{includeMaterial:false,answers});
-  if(!context)return {sessionId:id,revision:session.revision,answers,context:null,question:{phase:session.completedAt?'closed' as const:'empty' as const}};
+  if(!context)return {profileId,sessionId:id,revision:session.revision,answers,context:null,question:{phase:session.completedAt?'closed' as const:'empty' as const}};
   const prefix=reviewQuestionJobPrefix(profileId,id,context.latestAnswerId,context.hash);
   const jobs=await tx.select().from(backgroundJobs).where(and(eq(backgroundJobs.profileId,profileId),eq(backgroundJobs.type,'generate_review_question'),like(backgroundJobs.idempotencyKey,`${prefix}%`))).orderBy(desc(backgroundJobs.createdAt),desc(backgroundJobs.id));
   const recent=jobs.filter(job=>job.createdAt.getTime()>Date.now()-HOUR_MS),job=jobs[0];
   const budget={retryAfter:recent.length>=MAX_QUESTION_REQUESTS?new Date(Math.min(...recent.map(row=>row.createdAt.getTime()))+HOUR_MS).toISOString():null};
-  const base={sessionId:id,revision:session.revision,answers,context,latestAnswerId:context.latestAnswerId,historyChanged:context.historyChanged};
+  const base={profileId,sessionId:id,revision:session.revision,answers,context,latestAnswerId:context.latestAnswerId,historyChanged:context.historyChanged};
   if(!job)return {...base,question:{phase:'idle' as const,...budget}};
   const payload=job.payload as Partial<GenerateReviewQuestionPayload>&{reviewContextInvalidated?:boolean};
   if(payload.reviewContextInvalidated)return {...base,question:{phase:'idle' as const,...budget}};

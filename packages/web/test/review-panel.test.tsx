@@ -6,8 +6,8 @@ import {act} from 'react';
 import {createRoot,type Root} from 'react-dom/client';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {ReviewPanel} from '../src/components/ReviewPanel';
-import {chooseReviewInspiration,fetchActiveReview,fetchInspiration,fetchInspirationPage,fetchReviewSession,finishReviewSession,startReviewSession,type ApiInspiration,type ApiReviewSession} from '../src/lib/api';
-vi.mock('../src/lib/api',async original=>({...await original<typeof import('../src/lib/api')>(),chooseReviewInspiration:vi.fn(),fetchActiveReview:vi.fn(),fetchInspiration:vi.fn(),fetchInspirationPage:vi.fn(),fetchReviewSession:vi.fn(),finishReviewSession:vi.fn(),startReviewSession:vi.fn()}));
+import {chooseReviewInspiration,fetchActiveReview,fetchInspiration,fetchInspirationPage,fetchReviewSession,finishReviewSession,startReviewSession,fetchReviewDialogue,saveReviewAnswer,requestReviewQuestion,type ApiInspiration,type ApiReviewSession} from '../src/lib/api';
+vi.mock('../src/lib/api',async original=>({...await original<typeof import('../src/lib/api')>(),chooseReviewInspiration:vi.fn(),fetchActiveReview:vi.fn(),fetchInspiration:vi.fn(),fetchInspirationPage:vi.fn(),fetchReviewSession:vi.fn(),finishReviewSession:vi.fn(),startReviewSession:vi.fn(),fetchReviewDialogue:vi.fn(),saveReviewAnswer:vi.fn(),requestReviewQuestion:vi.fn()}));
 const SID='11111111-1111-4111-8111-111111111111',SOURCE='22222222-2222-4222-8222-222222222222',scope={accountId:'account',profileId:'profile'};
 let host:HTMLDivElement,root:Root,current:ApiReviewSession|null,source:ApiInspiration;
 const onId=vi.fn(),onClose=vi.fn(),onNewInspiration=vi.fn(),onOpen=vi.fn();
@@ -24,6 +24,7 @@ beforeEach(()=>{
   vi.mocked(chooseReviewInspiration).mockImplementation(async(_id,input)=>{current={...current!,revision:input.revision+1,cursor:input.choice===null?0:1,currentInspirationId:input.choice===null?SOURCE:null,
     items:current!.items.map(item=>({...item,choice:input.choice}))};return copy();});
   vi.mocked(finishReviewSession).mockImplementation(async()=>{current={...current!,revision:current!.revision+1,completedAt:'2026-10-02T01:00:00Z',currentInspirationId:null};return copy();});
+  vi.mocked(fetchReviewDialogue).mockImplementation(async()=>({sessionId:SID,profileId:scope.profileId,revision:current!.revision,answers:[],question:{phase:current!.completedAt?'closed':'empty'}}));
 });
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.useRealTimers();});
 const mount=(id=SID)=>act(async()=>root.render(<ReviewPanel scope={scope} id={id} locale="en-US" onId={onId} onClose={onClose} onNewInspiration={onNewInspiration} onOpen={onOpen}/>));
@@ -64,4 +65,21 @@ it('preserves manual selection order when starting from searched inspirations',a
   await act(async()=>{const input=host.querySelector<HTMLInputElement>('.jar-inspiration-search input')!;Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(input,'room');input.dispatchEvent(new Event('input',{bubbles:true}));});
   await act(async()=>vi.advanceTimersByTimeAsync(250));await act(async()=>host.querySelector<HTMLButtonElement>('.jar-search-results button')!.click());
   await click('Start review');expect(vi.mocked(startReviewSession).mock.calls[0]![0].inspirationIds).toEqual([SOURCE]);
+});
+it.each([true,false])('keeps a single thought with Continue=%s and advances the finish revision',async continueThinking=>{
+  const job='33333333-3333-4333-8333-333333333333';
+  vi.mocked(fetchReviewDialogue).mockImplementation(async()=>({sessionId:SID,profileId:scope.profileId,revision:current!.revision,answers:[],latestAnswerId:null,
+    question:{phase:'ready',question:'What stayed with you?',connection:null,sourceIds:[SOURCE],jobId:job,contextHash:'a'.repeat(64),retryAfter:null}}));
+  vi.mocked(saveReviewAnswer).mockImplementation(async(_id,_profile,input)=>({sessionId:SID,profileId:scope.profileId,revision:current!.revision+1,latestAnswerId:input.id,
+    answers:[{id:input.id,revision:1,question:'What stayed with you?',connection:null,answer:input.answer,contextValid:true,createdAt:current!.createdAt,updatedAt:current!.createdAt,
+      sources:[{inspirationId:SOURCE,sourceRevision:'1',currentRevision:'1',referenced:true}]}],question:{phase:'idle',retryAfter:null}}));
+  vi.mocked(requestReviewQuestion).mockImplementation(async(_id,_profile,after)=>({sessionId:SID,profileId:scope.profileId,revision:2,answers:[],latestAnswerId:after,question:{phase:'processing',retryAfter:null}}));
+  await mount();await click('Stays with me');expect(host.textContent).toContain('What stayed with you?');expect(requestReviewQuestion).not.toHaveBeenCalled();
+  await act(async()=>{const textarea=host.querySelector('textarea')!;Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(textarea,'My answer is one thought.');textarea.dispatchEvent(new Event('input',{bubbles:true}));});
+  expect(button('Finish review').disabled).toBe(true);
+  await click(continueThinking?'Continue':'Keep thought, pause here');
+  expect(saveReviewAnswer).toHaveBeenCalledOnce();expect(vi.mocked(saveReviewAnswer).mock.calls[0]![2]).toMatchObject({questionJobId:job,answer:'My answer is one thought.'});
+  expect(requestReviewQuestion).toHaveBeenCalledTimes(continueThinking?1:0);expect(button('Finish review').disabled).toBe(false);
+  await click('Finish review');expect(finishReviewSession).toHaveBeenCalledWith(SID,2,scope.profileId,expect.any(AbortSignal));
+  expect(host.textContent).not.toContain('Explore another question');expect(host.querySelector('textarea')).toBeNull();
 });

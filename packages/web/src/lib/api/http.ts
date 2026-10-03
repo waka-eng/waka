@@ -169,8 +169,13 @@ export async function patchJson<T>(
   return writeJson<T>("PATCH", path, payload, fallbackMessage, signal);
 }
 
+/** A versioned removal whose response is the current resource, not an empty ack. */
+export async function deleteJson<T>(path:string,payload:unknown,fallbackMessage:string,signal?:AbortSignal):Promise<T>{
+  return writeJson<T>('DELETE',path,payload,fallbackMessage,signal);
+}
+
 export async function writeJson<T>(
-  method: "POST" | "PATCH",
+  method: "POST" | "PATCH" | "DELETE",
   path: string,
   payload: unknown,
   fallbackMessage: string,

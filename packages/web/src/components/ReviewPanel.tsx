@@ -8,6 +8,7 @@ import {toInspirationDetail} from '../lib/data';
 import {DialogSurface} from './DialogSurface';
 import {InspirationAttachments} from './InspirationAttachments';
 import {InspirationSearch} from './InspirationSearch';
+import {ReviewDialogue} from './ReviewDialogue';
 
 function ReviewChosenItem({id,profileId,locale,onOpen,onMissing}:{id:string;profileId:string;locale:SupportedLocale;onOpen:(id:string)=>void;onMissing:()=>void}){
   const [label,setLabel]=useState(t(locale,'worldReviewChecking'));
@@ -68,6 +69,7 @@ export function ReviewPanel({scope,id,locale,onId,onClose,onNewInspiration,onOpe
   const review=useReviewSession(scope,id,onId),[picker,setPicker]=useState(false),[query,setQuery]=useState('');
   const [selected,setSelected]=useState<ApiInspirationSummary[]>([]),[count,setCount]=useState<number|null>(null);
   const [readySource,setReadySource]=useState<string|null>(null);
+  const [hasDialogueDraft,setHasDialogueDraft]=useState(false);
   const session=review.session,items=session?.items??[],item=items.find(row=>row.inspirationId===session?.currentInspirationId);
   const last=items.filter(row=>row.position<(session?.cursor??0)&&row.choice!==null).at(-1);
   const disabled=review.busy||Boolean(review.pending)||review.loading;
@@ -98,12 +100,13 @@ export function ReviewPanel({scope,id,locale,onId,onClose,onNewInspiration,onOpe
           {!session.completedAt&&item?<><p role="status">{items.indexOf(item)+1} / {items.length}</p>
             <ReviewCard key={`${item.inspirationId}:${item.currentRevision}`} item={item} sessionId={session.id} profileId={scope.profileId} locale={locale} disabled={disabled} onChoice={choice=>review.choose(item,choice)} onRefresh={()=>void review.refresh()} onReady={setReadySource} onOpen={onOpen}/>
             <p className="jar-review-context">{say('worldReviewHint')}</p>
-          </>:<><h3>{say(session.completedAt?'worldReviewDone':'worldReviewSelected')}</h3>{items.some(row=>row.choice==='keep')?<ul>{items.filter(row=>row.choice==='keep').map(row=><ReviewChosenItem key={row.inspirationId} id={row.inspirationId} profileId={scope.profileId} locale={locale} onOpen={onOpen} onMissing={()=>void review.refresh()}/>)}</ul>:<p>{say('worldReviewNone')}</p>}</>}
+          </>:<>{session.completedAt?<h3>{say('worldReviewDone')}</h3>:null}{items.some(row=>row.choice==='keep')?<details><summary>{say('worldReviewSelected')} ({items.filter(row=>row.choice==='keep').length})</summary><ul>{items.filter(row=>row.choice==='keep').map(row=><ReviewChosenItem key={row.inspirationId} id={row.inspirationId} profileId={scope.profileId} locale={locale} onOpen={onOpen} onMissing={()=>void review.refresh()}/>)}</ul></details>:<p>{say('worldReviewNone')}</p>}</>}
+          {!item||session.completedAt?<ReviewDialogue key={`${scope.accountId}:${scope.profileId}:${session.id}`} scope={scope} id={session.id} completed={Boolean(session.completedAt)} locale={locale} onOpen={onOpen} onRevision={review.observeRevision} onDraftChange={setHasDialogueDraft}/>:null}
         </>:null}
       </div>
       {session&&!session.completedAt?<footer>
         {item?<div className="jar-review-choices"><button type="button" disabled={disabled||readySource!==`${item.inspirationId}:${item.currentRevision}`} onClick={()=>review.choose(item,'skip')}>{say('worldReviewSkip')}</button><button type="button" disabled={disabled||readySource!==`${item.inspirationId}:${item.currentRevision}`} onClick={()=>review.choose(item,'keep')}>{say('worldReviewKeep')}</button></div>:null}
-        <div className="jar-review-footer-actions">{last?<button type="button" disabled={disabled} onClick={()=>review.choose(last,null)}>{say('worldReviewUndo')}</button>:null}<button type="button" disabled={disabled} onClick={review.finish}>{say('worldReviewFinish')}</button></div>
+        <div className="jar-review-footer-actions">{last?<button type="button" disabled={disabled||hasDialogueDraft} onClick={()=>review.choose(last,null)}>{say('worldReviewUndo')}</button>:null}<button type="button" disabled={disabled||hasDialogueDraft} onClick={review.finish}>{say('worldReviewFinish')}</button></div>
         {review.busy?<span role="status">{say('worldKeeping')}</span>:null}</footer>:null}
     </DialogSurface>
     {picker?<InspirationSearch profileId={scope.profileId} locale={locale} query={query} onQuery={setQuery} onClose={()=>setPicker(false)} onPick={row=>{setSelected(current=>current.some(item=>item.id===row.id)?current:current.length<5?[...current,row]:current);setPicker(false);setQuery('');}}/>:null}

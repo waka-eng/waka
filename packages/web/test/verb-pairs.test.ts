@@ -101,6 +101,10 @@ const REGISTER: Record<string, string> = {
   startReviewSession: "RULED: creates only private review metadata; closing preserves it, finishing ends it, and account erasure removes it without changing inspirations",
   chooseReviewInspiration: "RULED: a choice is its own inverse — Reconsider last choice sends null to the same versioned item; skip never deletes or records disagreement",
   finishReviewSession: "RULED: ends the session while preserving its record; a new review may revisit the same sources, and no source or principle is changed",
+  requestReviewQuestion: "RULED: requests a metered question, not authored content; leaving preserves the review and does not require an answer",
+  saveReviewAnswer: "removeReviewAnswer",
+  removeReviewAnswer: "RULED: explicitly removes this authored answer after confirmation; the original inspirations remain and deletion receipts prevent retry resurrection",
+  editReviewAnswer: "RULED: an edit is its own inverse — saved thoughts remain editable with revision checks",
 
   // what the machine concluded, and what you may say back
   updateSignal: "releaseSignal",
