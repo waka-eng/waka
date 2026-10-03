@@ -283,6 +283,33 @@ Only the owning personal/agent profile may receive this support, never a room.
 The review support producer remains unfinished until its queue, reassessment,
 read projections and promotion guard share this contract.
 
+The producer uses `review_signal_support` for the last version-bound assessment
+of an answer/claim pair and its last explicit positive or negative verdict.
+An unresolved follow-up cannot erase an earlier withdrawal. The metadata carries
+no source words. `review_answer_processing` binds a source fingerprint and one
+numbered background request to completed derivation and an eventual reading
+request; queued work is not completion. Both belong to the answer's profile,
+export as private metadata and cascade with that profile. Deleted answers keep
+only the existing minimal tombstone; neither retries nor metadata receipts may
+recreate their words. Implementation and semantic verification remain in progress.
+
+Answer writes and relevant source/statement changes transactionally request
+`derive_review_answer` work. A pass first reassesses existing support, then
+discovers new statements from the person's complete answer. AI questions and
+original attachments are context, not newly authored evidence. A committed
+withdrawal survives a later discovery failure. Review candidates require a
+semantic match verdict even above the raw inspiration cosine attach threshold;
+negated or time-limited positions must not merge merely because vectors are close.
+
+`review_model_runs` records the owning profile, claimed job and lease timestamp
+immediately before a review attempt's first model request. It carries no words.
+Replaying a committed result does not spend another slot; another lease that
+calls a model does. Job deletion clears only its reference, preserving the
+account's window usage. Profile erasure removes these private records and export
+includes them. This is a bounded-attempt meter, not token billing; other job
+types retain their existing start-based meter. Result-job and run-job foreign
+keys carry the profile and use partial SET NULL in migration 0059.
+
 ### Existing inspiration behavior
 
 A capture event. Whatever arrived: pasted text, a link, an image, an

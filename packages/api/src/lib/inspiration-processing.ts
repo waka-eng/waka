@@ -81,7 +81,7 @@ export async function bindInspirationSupportReading(tx: Transaction, input: {
       AND p.completed_at IS NULL AND ${currentMaterial} AND ${authorizedDestination} AND ${allowedSource}`);
 }
 
-async function currentArtifactResult(tx: Transaction, profileId: string): Promise<BackgroundJobResult> {
+export async function currentArtifactResult(tx: Transaction, profileId: string): Promise<BackgroundJobResult> {
   const [row] = await tx.execute(sql`SELECT m.id, m.version,
     EXISTS(SELECT 1 FROM top_of_mind_entries e WHERE e.top_of_mind_id = m.id AND e.dismissed_at IS NULL) AS has_entries
     FROM top_of_minds m JOIN profiles d ON d.id = ${profileId}::uuid

@@ -351,7 +351,8 @@ async function enqueueKeyedJob(input: {
     | "reembed_signal"
     | "tend_signal_garden"
     | "generate_reflection_question"
-    | "generate_review_question";
+    | "generate_review_question"
+    | "derive_review_answer";
   payload:
     | EnrichAttachmentPayload
     | DeriveSignalsPayload
@@ -361,7 +362,8 @@ async function enqueueKeyedJob(input: {
     | { profileId: string }
     | ReembedSignalPayload
     | GenerateReflectionQuestionPayload
-    | GenerateReviewQuestionPayload;
+    | GenerateReviewQuestionPayload
+    | {answerId:string;sessionId:string;signalIds?:string[]};
   idempotencyKey: string;
 }, transaction?: Pick<ReturnType<typeof getDb>, "execute">): Promise<EnqueueResult> {
   const rows = await (transaction ?? getDb()).execute(sql<{ id: string }>`
@@ -689,6 +691,12 @@ export async function enqueueReflectionQuestion(
 }
 
 export function reviewQuestionJobPrefix(profileId:string,sessionId:string,afterAnswerId:string|null,contextHash:string){return `generate_review_question:${profileId}:${sessionId}:${afterAnswerId??'initial'}:${contextHash}:`;}
+export async function enqueueReviewAnswerDerivation(profileId:string,sessionId:string,answerId:string,transaction:Pick<ReturnType<typeof getDb>,'execute'>){
+  const [row]=await transaction.execute<{jobId:string;requestVersion:string;created:boolean}>(sql`
+    SELECT job_id AS "jobId",request_version::text AS "requestVersion",created
+    FROM request_review_answer_work(${profileId}::uuid,${sessionId}::uuid,${answerId}::uuid)`);
+  if(!row)throw new Error('Review owner is unavailable');return row;
+}
 export async function enqueueReviewQuestion(input:{profileId:string;sessionId:string;afterAnswerId:string|null;inspirationIds:string[];contextHash:string;requestId:string},transaction?:Pick<ReturnType<typeof getDb>,'execute'>){
   const {profileId,sessionId,afterAnswerId,inspirationIds,contextHash}=input;
   return enqueueKeyedJob({profileId,type:'generate_review_question',payload:{sessionId,afterAnswerId,inspirationIds,contextHash},
@@ -1023,6 +1031,14 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<Backgrou
         }, reading),
       });
       if (report.items.some((item) => item.issue !== undefined)) throw new Error('Support batch could not be fully assessed');
+      return;
+    }
+    case 'derive_review_answer': {
+      const answerId=readString(job.payload,'answerId'),sessionId=readString(job.payload,'sessionId');
+      if(!answerId||!sessionId)return dropPoisonPayload(job);
+      const {deriveSignalsForReviewAnswer}=await import('./review-answer-derivation.js');
+      const hints=(job.payload as {signalIds?:unknown}).signalIds;
+      await deriveSignalsForReviewAnswer({profileId:job.profileId,answerId,sessionId,signalIds:Array.isArray(hints)?hints.filter((id):id is string=>typeof id==='string'&&/^[0-9a-f-]{36}$/i.test(id)):[]},{job,beforeCommit:tx=>assertBackgroundJobOwnership(tx,job,true)});
       return;
     }
     case 'generate_review_question': {
@@ -1441,15 +1457,16 @@ async function readBackgroundJobQueueHead(now: Date): Promise<RunnableJobHead | 
 async function readAccountModelUsage(
   accountId: string,
   since: Date,
+  database:Pick<ReturnType<typeof getDb>,'execute'>=getDb(),
 ): Promise<AccountModelUsage> {
-  const rows = await getDb().execute(sql<{ started: number; oldest: Date | null }>`
+  const rows = await database.execute(sql<{ started: number; oldest: Date | null }>`
     SELECT
-      count(*)::int AS started,
-      min(job.started_at) AS oldest
-    FROM background_jobs AS job
-    JOIN profiles AS profile ON profile.id = job.profile_id
-    WHERE profile.account_id = ${accountId}::uuid
-      AND job.started_at >= ${since.toISOString()}::timestamptz
+      count(*)::int AS started,min(meter.started_at) AS oldest
+    FROM (
+      SELECT job.profile_id,job.started_at FROM background_jobs job WHERE job.type::text<>'derive_review_answer'
+      UNION ALL SELECT r.profile_id,r.started_at FROM review_model_runs r
+    ) meter JOIN profiles AS profile ON profile.id=meter.profile_id
+    WHERE profile.account_id=${accountId}::uuid AND meter.started_at>=${since.toISOString()}::timestamptz
   `);
 
   const [row] = rows as unknown as Array<{ started: number | string; oldest: Date | string | null }>;
@@ -1458,6 +1475,25 @@ async function readAccountModelUsage(
     startedInWindow: Number(row.started ?? 0),
     oldestStartInWindow: coerceNullableDate(row.oldest),
   };
+}
+
+/** Called immediately before a review attempt's first model request. Cached
+ * recovery/cleanup is free; later keyed reruns retain earlier metered starts. */
+export async function reserveReviewModelRun(job:BackgroundJob){
+  if(job.type!=='derive_review_answer'||!job.lockedAt)throw new Error('Review model work needs a claim');
+  await getDb().transaction(async tx=>{
+    await assertBackgroundJobOwnership(tx,job,true);
+    const [owner]=await tx.select({accountId:profiles.accountId}).from(profiles).where(eq(profiles.id,job.profileId));
+    if(!owner?.accountId)throw new Error('Review model owner is unavailable');
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${'waka.review-budget:'+owner.accountId},0))`);
+    const [recorded]=await tx.execute(sql`SELECT id FROM review_model_runs WHERE job_id=${job.id}::uuid AND lease_at=${coerceNullableDate(job.lockedAt)!.toISOString()}::timestamptz`);
+    if(recorded)return;
+    const now=new Date(),usage=await readAccountModelUsage(owner.accountId,modelBudgetWindowStart(now),tx),budget=assessModelBudget(usage,now);
+    if(!budget.withinBudget)throw new BackgroundJobHeldError(budget.retryAfter,'Review model budget waits','support');
+    await tx.execute(sql`INSERT INTO review_model_runs(profile_id,job_id,lease_at)
+      VALUES(${job.profileId}::uuid,${job.id}::uuid,${coerceNullableDate(job.lockedAt)!.toISOString()}::timestamptz)
+      ON CONFLICT(job_id,lease_at) DO NOTHING`);
+  });
 }
 
 /**

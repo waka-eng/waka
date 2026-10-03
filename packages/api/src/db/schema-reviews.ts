@@ -56,6 +56,7 @@ export const reviewAnswers = pgTable('review_answers', {
   updatedAt:timestamp('updated_at',{withTimezone:true}).notNull().defaultNow(),
 },table=>({
   identity:unique('review_answers_owner_identity').on(table.profileId,table.sessionId,table.id),
+  profileIdentity:unique('review_answers_profile_identity').on(table.profileId,table.id),
   questionUnique:unique('review_answers_question_unique').on(table.profileId,table.sessionId,table.questionJobId),
   sessionFk:foreignKey({columns:[table.profileId,table.sessionId],foreignColumns:[reviewSessions.profileId,reviewSessions.id],name:'review_answers_session_fk'}).onDelete('cascade'),
   bounds:check('review_answers_bounds',sql`${table.revision} > 0 AND ${table.sourceCount} BETWEEN 1 AND 5 AND ((${table.deletedAt} IS NULL AND ${table.answer} IS NOT NULL AND length(trim(${table.answer})) > 0 AND length(${table.answer}) <= 16000) OR (${table.deletedAt} IS NOT NULL AND ${table.answer} IS NULL AND ${table.question} IS NULL AND ${table.connection} IS NULL))`),

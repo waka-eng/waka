@@ -444,6 +444,9 @@ export const suppressions = pgTable(
     inspirationId: uuid("inspiration_id").references(() => inspirations.id, {
       onDelete: "set null",
     }),
+    /** Review source, mutually exclusive with inspirationId. Its tenant FK
+     * uses column-list SET NULL in migration 0058. */
+    reviewAnswerId:uuid('review_answer_id'),
     /** The refused candidate's words — what the antechamber shows. */
     candidateStatement: text("candidate_statement").notNull(),
 
@@ -465,6 +468,7 @@ export const suppressions = pgTable(
       table.suppressedAt,
     ),
     anchorIdx: index("suppressions_anchor_idx").on(table.anchorSignalId),
+    oneSource:check('suppressions_one_source',sql`${table.inspirationId} IS NULL OR ${table.reviewAnswerId} IS NULL`),
   }),
 );
 

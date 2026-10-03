@@ -26,6 +26,7 @@ import {
   buildPrincipleRelationRequest,
   buildReflectionQuestionRequest,
   buildReviewQuestionRequest,
+  buildReviewAnswerDerivationRequest,
   buildSignalExtractionRequest,
   buildSignalSupportRequest,
   buildSignalMatchJudgementRequest,
@@ -35,6 +36,7 @@ import {
   parsePrincipleRelation,
   parseReflectionQuestion,
   parseReviewQuestion,
+  parseReviewAnswerDerivation,
   parseSignalCandidates,
   parseSignalSupport,
   parseSignalMatchJudgement,
@@ -162,6 +164,10 @@ async function ask(
 export function createOpenRouterModelProvider(): ModelProvider {
   return {
     name: "openrouter",
+    async deriveReviewAnswer(input){
+      const payload=await ask(()=>buildReviewAnswerDerivationRequest(input),'review derivation','WAKA_MODEL_EXTRACT','review_derivation');
+      if(payload===null||payload===MODEL_DECLINED)throw new ModelDidNotAnswerError('review derivation');return parseReviewAnswerDerivation(payload,input);
+    },
     async askReviewQuestion(input){
       const payload=await ask(()=>buildReviewQuestionRequest(input),'review question','WAKA_MODEL_REFLECT','review_question');
       if(payload===null||payload===MODEL_DECLINED)throw new ModelDidNotAnswerError('review question');

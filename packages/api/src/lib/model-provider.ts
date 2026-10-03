@@ -401,11 +401,23 @@ export interface ReviewQuestionInput {
   history:Array<{question:string;connection?:string|null;answer:string}>;
 }
 export interface ReviewQuestionResult {connection:string|null;question:string;sourceNumbers:number[]}
+export interface ReviewAnswerDerivationInput {
+  preferredLocale:SupportedLocale;
+  answer:string;question:string|null;contextChanged:boolean;
+  sources:ReviewQuestionInput['sources'];
+  claims:Array<{signalId:string;statement:string}>;
+  discover:boolean;
+}
+export interface ReviewAnswerDerivationResult {
+  assessments:Array<{signalId:string;verdict:'supported'|'unsupported'|'unresolved';quote:string|null}>;
+  statements:Array<{statement:string;quote:string}>;
+}
 
 export interface ModelProvider {
   readonly name: string;
   askReflectionQuestion(input: ReflectionQuestionInput): Promise<ReflectionQuestionResult>;
   askReviewQuestion(input:ReviewQuestionInput):Promise<ReviewQuestionResult>;
+  deriveReviewAnswer(input:ReviewAnswerDerivationInput):Promise<ReviewAnswerDerivationResult>;
   extractSignalCandidates(
     input: SignalCandidateExtractionInput,
   ): Promise<SignalCandidateExtractionResult>;

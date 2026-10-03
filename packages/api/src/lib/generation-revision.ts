@@ -17,8 +17,8 @@ export async function readGenerationRevision(db: Db, owner: TopOfMindOwner): Pro
 
 /** Final transaction only: mutation triggers wait here until this commit.
  * No source text or provider call is held under this lock. */
-export async function assertGenerationRevision(db: Db, expected: GenerationRevision): Promise<void> {
+export async function assertGenerationRevision(db: Db, expected: GenerationRevision, noWait=false): Promise<void> {
   const [current] = await db.select({ revision: generationRevisions.revision }).from(generationRevisions)
-    .where(eq(generationRevisions.profileId, expected.profileId)).for("update");
+    .where(eq(generationRevisions.profileId, expected.profileId)).for("update",noWait?{noWait:true}:{});
   if (!current || current.revision !== expected.revision) throw new Error("Generation inputs changed; retry current inputs");
 }

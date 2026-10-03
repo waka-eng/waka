@@ -38,6 +38,7 @@ export * from "./schema-reviews";
 export * from "./schema-embeddings";
 export * from "./schema-signals";
 export * from "./schema-review-evidence";
+export * from "./schema-review-processing";
 export * from "./schema-signal-support-reviews";
 export * from "./schema-generation-revisions";
 export * from "./schema-top-of-mind";

@@ -43,6 +43,9 @@ import {
   reviewAnswerSources,
   signalReviewEvidence,
   signalReviewEvidenceSources,
+  reviewSignalSupport,
+  reviewAnswerProcessing,
+  reviewModelRuns,
   signalContradictions,
   signalEvidence,
   experiences,
@@ -201,6 +204,11 @@ export async function assembleProfileExport(db: WakaDb, profileId: string) {
       .map(row=>({...row,statementRevision:row.statementRevision.toString()})),
     signalReviewEvidenceSources:(await db.select().from(signalReviewEvidenceSources).where(eq(signalReviewEvidenceSources.profileId,profileId)))
       .map(row=>({...row,materialRevision:row.materialRevision.toString()})),
+    reviewSignalSupport:(await db.select().from(reviewSignalSupport).where(eq(reviewSignalSupport.profileId,profileId)))
+      .map(row=>({...row,statementRevision:row.statementRevision.toString()})),
+    reviewAnswerProcessing:(await db.select().from(reviewAnswerProcessing).where(eq(reviewAnswerProcessing.profileId,profileId)))
+      .map(row=>({...row,derivationRequestVersion:row.derivationRequestVersion?.toString()??null,readingRequestVersion:row.readingRequestVersion?.toString()??null})),
+    reviewModelRuns:await db.select().from(reviewModelRuns).where(eq(reviewModelRuns.profileId,profileId)).orderBy(asc(reviewModelRuns.startedAt),asc(reviewModelRuns.id)),
     signalStatements: signalStatementRows,
     signalShares: shareRows,
     signalContradictions: contradictionRows,

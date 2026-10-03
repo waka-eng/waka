@@ -34,6 +34,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  unique,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -51,6 +52,7 @@ export const backgroundJobTypeValues = [
   "tend_signal_garden",
   "generate_reflection_question",
   "generate_review_question",
+  "derive_review_answer",
 ] as const;
 export type BackgroundJobType = (typeof backgroundJobTypeValues)[number];
 export const backgroundJobTypeEnum = pgEnum("background_job_type", backgroundJobTypeValues);
@@ -138,6 +140,7 @@ export interface GenerateReviewQuestionPayload {
   sessionId:string;inspirationIds:string[];afterAnswerId:string|null;
   contextHash?:string;question?:string;connection?:string|null;sourceIds?:string[];
 }
+export interface DeriveReviewAnswerPayload {answerId:string;sessionId:string;signalIds?:string[]}
 
 export type BackgroundJobPayload =
   | EnrichAttachmentPayload
@@ -150,6 +153,7 @@ export type BackgroundJobPayload =
   | ReembedSignalPayload
   | GenerateReflectionQuestionPayload
   | GenerateReviewQuestionPayload
+  | DeriveReviewAnswerPayload
   | {reviewContextInvalidated:true};
 
 /** A result is not available until the final requested pass has completed. */
@@ -219,6 +223,7 @@ export const backgroundJobs = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
+    ownerIdentity:unique('background_jobs_owner_identity').on(table.profileId,table.id),
     requestVersionCheck: check("background_jobs_request_version_check", sql`${table.requestVersion} > 0 AND ${table.completedVersion} >= 0 AND ${table.completedVersion} <= ${table.requestVersion}`),
     runnableIdx: index("background_jobs_runnable_idx")
       .on(table.runAfter, table.createdAt)
@@ -254,6 +259,17 @@ export const backgroundJobs = pgTable(
 
 export type BackgroundJob = typeof backgroundJobs.$inferSelect;
 export type NewBackgroundJob = typeof backgroundJobs.$inferInsert;
+
+/** Model-ready review runs, rather than overwriting one keyed job's spend.
+ * No source content. The tenant-bearing job FK uses partial SET NULL in 0059. */
+export const reviewModelRuns=pgTable('review_model_runs',{
+  id:uuid('id').primaryKey().defaultRandom(),profileId:uuid('profile_id').notNull().references(()=>profiles.id,{onDelete:'cascade'}),
+  jobId:uuid('job_id'),leaseAt:timestamp('lease_at',{withTimezone:true}).notNull(),
+  startedAt:timestamp('started_at',{withTimezone:true}).notNull().default(sql`clock_timestamp()`),
+},table=>({
+  once:uniqueIndex('review_model_runs_claim_unique').on(table.jobId,table.leaseAt),
+  accountWindow:index('review_model_runs_window_idx').on(table.profileId,table.startedAt),
+}));
 
 export const backgroundJobsRelations = relations(backgroundJobs, ({ one }) => ({
   profile: one(profiles, {

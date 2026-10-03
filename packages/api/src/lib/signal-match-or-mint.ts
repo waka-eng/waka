@@ -2,7 +2,7 @@
  * Match-or-mint: deciding whether a candidate statement is a pattern the
  * profile already holds, or a new one.
  *
- * The decision is COSINE DISTANCE on embeddings, not a model verdict. A
+ * For raw inspirations the decision is COSINE DISTANCE on embeddings. A
  * candidate's vector is compared against the profile's existing signal vectors
  * and `classifyMatch` reads the number: above the match bar it attaches as
  * evidence, below the judge band it mints. That is deliberate and it is the
@@ -15,7 +15,10 @@
  * the band between the two bars, distance alone genuinely cannot tell one
  * pattern reworded from two patterns sharing a vocabulary, so the single
  * nearest candidate gets one bounded judge call. It can only move a decision
- * within the band and is never asked above or below it. A failure propagates
+ * within the band for raw inspirations. Review answers additionally check
+ * meaning for every nearby match, including above the attach bar: a changed
+ * or negated position can have almost the same vector as its predecessor.
+ * A failure propagates
  * for retry rather than inventing an independent pattern. All judgments are
  * prepared before source locks and evidence writes.
  *
@@ -116,7 +119,10 @@ interface ApplyCandidatesInput {
   profileId: string;
   /** Room context, targets and new signals must share the verified policy. */
   inputPolicy?: string;
-  inspirationId: string;
+  inspirationId: string|null;
+  /** A review is not a synthetic inspiration. Its caller owns validated
+   * support writes, and meaning is checked even above the cosine attach bar. */
+  reviewSource?:{answerId:string;withdrawnSignalIds:Set<string>;attach:(tx:WakaTx,signalId:string)=>Promise<void>};
   /**
    * WHOSE MEMORY THE EVIDENCE CITES — the inspiration's owner. Equal to
    * `profileId` for every personal derivation; different exactly when a
@@ -144,8 +150,9 @@ async function prepareJudgements(input: ApplyCandidatesInput, targets: MatchTarg
   for (const [index, candidate] of input.candidates.entries()) {
     if (findSuppressionAnchor(candidate.embedding, anchors)) continue;
     const nearest = findBestMatch(candidate.embedding, projected);
+    if(nearest?.target.withdrawn&&nearest.target.statement.trim()===candidate.statement.trim())continue;
     let decision = classifyMatch(nearest?.similarity ?? null);
-    if (decision === "judge" && nearest) {
+    if ((decision === "judge"||input.reviewSource) && nearest) {
       const judged = await input.provider.judgeSignalMatch({ preferredLocale: input.preferredLocale,
         candidateStatement: candidate.statement, existingStatement: nearest.target.statement });
       judgements.set(index, { statement: nearest.target.statement, relation: judged.relation });
@@ -167,7 +174,8 @@ export async function applyCandidates(
   tx: WakaTx,
   input: ApplyCandidatesInput,
 ): Promise<Pick<SignalDerivationResult, "matchedSignalIds" | "mintedSignalIds" | "promotedSignalIds">> {
-  const targets = await loadMatchTargets(tx, input.profileId, input.embeddingModel, input.inputPolicy, input.inspirationId, input.evidenceOwnerProfileId);
+  if((input.inspirationId===null)!==Boolean(input.reviewSource))throw new Error('One derivation source is required');
+  const targets = await loadMatchTargets(tx, input.profileId, input.embeddingModel, input.inputPolicy, input.inspirationId, input.evidenceOwnerProfileId,input.reviewSource?.withdrawnSignalIds);
   const anchors = await loadSuppressionAnchors(tx, input.profileId, input.embeddingModel, input.inputPolicy);
   const prior = JSON.stringify({ targets, anchors });
   const judgements = await prepareJudgements(input, targets, anchors);
@@ -176,7 +184,7 @@ export async function applyCandidates(
   if (ids.length) await tx.select({ id: signals.id }).from(signals)
     .where(and(eq(signals.profileId, input.profileId), inArray(signals.id, ids)))
     .orderBy(asc(signals.id)).for("share");
-  const currentTargets = await loadMatchTargets(tx, input.profileId, input.embeddingModel, input.inputPolicy, input.inspirationId, input.evidenceOwnerProfileId);
+  const currentTargets = await loadMatchTargets(tx, input.profileId, input.embeddingModel, input.inputPolicy, input.inspirationId, input.evidenceOwnerProfileId,input.reviewSource?.withdrawnSignalIds);
   const currentAnchors = await loadSuppressionAnchors(tx, input.profileId, input.embeddingModel, input.inputPolicy);
   if (JSON.stringify({ targets: currentTargets, anchors: currentAnchors }) !== prior) {
     throw new Error("Signal inputs changed during judgement; retry current statements");
@@ -201,6 +209,7 @@ export async function applyCandidates(
         anchorSignalId: refused.anchor.id,
         anchorStatement: refused.anchor.statement,
         inspirationId: input.inspirationId,
+        reviewAnswerId:input.reviewSource?.answerId??null,
         candidateStatement: candidate.statement,
         similarity: refused.similarity,
       });
@@ -208,13 +217,14 @@ export async function applyCandidates(
     }
 
     const nearest = findBestMatch(candidate.embedding, targets);
+    if(nearest?.target.withdrawn&&nearest.target.statement.trim()===candidate.statement.trim())continue;
     let decision = classifyMatch(nearest?.similarity ?? null);
     /** Set when the judge answers `opposed`: the mint below also records
         the contested pair — the dispute is held, never dissolved by
         whichever statement arrived second. */
     let opposesSignalId: string | null = null;
 
-    if (decision === "judge" && nearest) {
+    if ((decision === "judge"||input.reviewSource) && nearest) {
       // Reuse the pre-write verdict only for the exact planned statement.
       // No provider call runs while source rows are locked. Provider failures
       // already aborted preparation; they never become invented opposition
@@ -259,13 +269,15 @@ export async function applyCandidates(
           match.target.statement = candidate.statement;
           match.target.embedding = candidate.embedding;
           await requestRemainingSignalSupportReviews(tx, { profileId: input.profileId, signalId: match.target.id,
-            verifiedInspirationIds: [input.inspirationId, ...candidate.relatedEvidence.map((row) => row.inspirationId)] });
+            verifiedInspirationIds: [...(input.inspirationId?[input.inspirationId]:[]), ...candidate.relatedEvidence.map((row) => row.inspirationId)],
+            verifiedReviewAnswerIds:input.reviewSource?[input.reviewSource.answerId]:[] });
         }
       }
 
-      await attachEvidence(tx, {
+      if(input.reviewSource)await input.reviewSource.attach(tx,match.target.id);
+      else await attachEvidence(tx, {
         profileId: input.profileId, ownerProfileId: input.evidenceOwnerProfileId, signalId: match.target.id,
-        inspirationId: input.inspirationId, reason: candidate.reason, quote: candidate.quote,
+        inspirationId: input.inspirationId!, reason: candidate.reason, quote: candidate.quote,
         quoteSource: candidate.quoteSource, quoteReflectionId: candidate.quoteReflectionId ?? null,
         quoteSourceHash: candidate.quoteSourceHash ?? null, material: input.material ?? null,
       });
@@ -322,11 +334,12 @@ export async function applyCandidates(
       });
     }
 
-    await attachEvidence(tx, {
+    if(input.reviewSource)await input.reviewSource.attach(tx,minted.id);
+    else await attachEvidence(tx, {
       profileId: input.profileId,
       ownerProfileId: input.evidenceOwnerProfileId,
       signalId: minted.id,
-      inspirationId: input.inspirationId,
+      inspirationId: input.inspirationId!,
       reason: candidate.reason,
       quote: candidate.quote,
       quoteSource: candidate.quoteSource,
@@ -374,16 +387,17 @@ async function loadMatchTargets(
   profileId: string,
   embeddingModel: string,
   inputPolicy: string | undefined,
-  inspirationId: string,
+  inspirationId: string|null,
   ownerProfileId: string,
+  reviewWithdrawn?:Set<string>,
 ): Promise<MatchTarget[]> {
-  const reviews = await tx.selectDistinctOn([signalSupportReviews.signalId], {
+  const reviews = inspirationId?await tx.selectDistinctOn([signalSupportReviews.signalId], {
     signalId: signalSupportReviews.signalId, verdict: signalSupportReviews.verdict,
   }).from(signalSupportReviews).where(and(eq(signalSupportReviews.profileId, profileId),
     eq(signalSupportReviews.ownerProfileId, ownerProfileId), eq(signalSupportReviews.inspirationId, inspirationId),
     ne(signalSupportReviews.verdict, "unresolved")))
-    .orderBy(asc(signalSupportReviews.signalId), desc(signalSupportReviews.createdAt), desc(signalSupportReviews.reviewId));
-  const withdrawn = new Set(reviews.filter((row) => row.verdict === "unsupported").map((row) => row.signalId));
+    .orderBy(asc(signalSupportReviews.signalId), desc(signalSupportReviews.createdAt), desc(signalSupportReviews.reviewId)):[];
+  const withdrawn = reviewWithdrawn??new Set(reviews.filter((row) => row.verdict === "unsupported").map((row) => row.signalId));
   const rows = await tx
     .select({
       id: signals.id,
