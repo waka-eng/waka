@@ -166,11 +166,12 @@ material prefers the correction for extraction, embeddings and source checks,
 without promoting it into a second inspiration. Correction changes invalidate
 stale quotes/vectors and request learning in the same transaction. Export and
 erasure include original transcript and correction with their attachment.
-Explicit transcription retries are limited to three per attachment per one-hour
-window beginning at the first explicit retry (`transcript_retry_count`, `transcript_retry_window_at`),
+Explicit enrichment retries are limited to three per attachment per one-hour
+window beginning at the first explicit retry (`enrichment_retry_count`, `enrichment_retry_window_at`),
 in addition to existing worker attempt and account budgets. Joining already
 pending work consumes no new retry; exhausting this window never removes the
-original recording or the person's correction.
+original recording or the person's correction. Link/image preview recovery and
+whole-inspiration recovery use this same budget, not an alternate retry path.
 Original audio, transcript and answers from the same capture do not establish
 independent repeated experiences.
 

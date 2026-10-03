@@ -1,0 +1,2 @@
+ALTER TABLE "attachments" RENAME COLUMN "transcript_retry_count" TO "enrichment_retry_count";--> statement-breakpoint
+ALTER TABLE "attachments" RENAME COLUMN "transcript_retry_window_at" TO "enrichment_retry_window_at";

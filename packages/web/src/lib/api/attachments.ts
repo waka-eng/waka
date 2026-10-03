@@ -102,7 +102,37 @@ export interface ApiAttachmentSummary {
   id: string;
   type: AttachmentType;
   label: string;
+  /** Original link remains usable if preview metadata is temporarily unavailable. */
+  url?: string;
 }
+
+export interface ApiAttachmentDetails {
+  attachment: ApiAttachment;
+  previewImageAvailable: boolean;
+  analysis: { status: AttachmentEnrichmentStatus; canRetry: boolean; retryAfter: string | null };
+}
+function checkedAttachmentDetails(id: string, value: ApiAttachmentDetails) {
+  if (!value || typeof value.previewImageAvailable !== 'boolean' || value.attachment?.id !== id || !['link', 'image'].includes(value.attachment.type) ||
+    !['pending', 'ready', 'failed', 'unavailable'].includes(value.analysis?.status) || typeof value.analysis.canRetry !== 'boolean' ||
+    !(value.analysis.retryAfter === null || (typeof value.analysis.retryAfter === 'string' && Number.isFinite(Date.parse(value.analysis.retryAfter)))) ||
+    typeof value.attachment.url !== 'string' || !value.attachment.enrichment ||
+    ![value.attachment.enrichment.text, value.attachment.enrichment.errorReason].every(text => text === null || typeof text === 'string') ||
+    (value.attachment.enrichment.link !== null && (!value.attachment.enrichment.link ||
+      !['finalUrl', 'hostname', 'title', 'description', 'siteName', 'previewImageUrl'].every(key => {
+        const field = value.attachment.enrichment.link![key as keyof NonNullable<ApiAttachmentEnrichment['link']>];
+        return field === null || typeof field === 'string';
+      })))) {
+    throw new ApiError({ status: 200, code: 'invalid_response', message: 'Could not verify this preview' });
+  }
+  return value;
+}
+export async function fetchAttachmentDetails(id: string, signal?: AbortSignal) {
+  return checkedAttachmentDetails(id, await getJson<ApiAttachmentDetails>(apiPath(`/attachments/${encodeURIComponent(id)}/details`), 'Could not load the preview', signal));
+}
+export async function retryAttachmentAnalysis(id: string, signal?: AbortSignal) {
+  return checkedAttachmentDetails(id, await postJson<ApiAttachmentDetails>(apiPath(`/attachments/${encodeURIComponent(id)}/analysis/retry`), {}, 'Could not retry the preview', signal));
+}
+export function attachmentPreviewImageUrl(id: string) { return apiPath(`/attachments/${encodeURIComponent(id)}/preview-image`); }
 
 // ---------------------------------------------------------------------------
 // Uploading one

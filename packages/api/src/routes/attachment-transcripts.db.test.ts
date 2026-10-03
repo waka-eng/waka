@@ -109,8 +109,8 @@ it('does not commit an unprocessed correction if the durable learning request fa
     await t.sql`UPDATE attachments SET enrichment_status='failed' WHERE id=${f.id}`;
     const retry = await f.app.request(f.path + '/retry', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"revision":"0"}' });
     expect(retry.status).toBe(500);
-    expect((await t.sql`SELECT transcript_retry_count, transcript_revision, enrichment_status FROM attachments WHERE id=${f.id}`)[0])
-      .toEqual({ transcript_retry_count: 0, transcript_revision: 0, enrichment_status: 'failed' });
+    expect((await t.sql`SELECT enrichment_retry_count, transcript_revision, enrichment_status FROM attachments WHERE id=${f.id}`)[0])
+      .toEqual({ enrichment_retry_count: 0, transcript_revision: 0, enrichment_status: 'failed' });
   } finally {
     await t.sql`DROP TRIGGER reject_transcript_job ON background_jobs`; await t.sql`DROP FUNCTION reject_transcript_job()`;
   }
@@ -139,7 +139,7 @@ it('bounds explicit retry requests across failures and allows recovery after the
   for (let count = 0; count < 3; count += 1) { await fail(); expect((await retry(String(count))).status).toBe(202); }
   await fail(); expect((await retry('3')).status).toBe(429);
   expect(await (await f.app.request(f.path)).json()).toMatchObject({ canRetry: false, retryAfter: expect.any(String) });
-  await t.sql`UPDATE attachments SET transcript_retry_window_at=now()-interval '2 hours' WHERE id=${f.id}`;
+  await t.sql`UPDATE attachments SET enrichment_retry_window_at=now()-interval '2 hours' WHERE id=${f.id}`;
   expect((await retry('3')).status).toBe(202);
-  expect((await t.sql`SELECT transcript_retry_count FROM attachments WHERE id=${f.id}`)[0]?.transcript_retry_count).toBe(1);
+  expect((await t.sql`SELECT enrichment_retry_count FROM attachments WHERE id=${f.id}`)[0]?.enrichment_retry_count).toBe(1);
 });

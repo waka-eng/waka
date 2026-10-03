@@ -95,8 +95,8 @@ export const attachments = pgTable(
     transcriptCorrection: text('transcript_correction'),
     transcriptRevision: integer('transcript_revision').notNull().default(0),
     transcriptCorrectedAt: timestamp('transcript_corrected_at', { withTimezone: true }),
-    transcriptRetryCount: integer('transcript_retry_count').notNull().default(0),
-    transcriptRetryWindowAt: timestamp('transcript_retry_window_at', { withTimezone: true }),
+    enrichmentRetryCount: integer('enrichment_retry_count').notNull().default(0),
+    enrichmentRetryWindowAt: timestamp('enrichment_retry_window_at', { withTimezone: true }),
 
     // Structured link metadata, kept separate from the bulk text.
     finalUrl: text("final_url"),

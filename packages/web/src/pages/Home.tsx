@@ -85,7 +85,7 @@ import { InspirationComposer } from '../components/InspirationComposer';
 import { InspirationAttachments } from '../components/InspirationAttachments';
 import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { CreateInspirationRequest } from '../lib/api';
-import { inspirationInputMedia, inspirationLinks } from '../lib/inspiration-input';
+import { inspirationInputMedia, inspirationLinks, removeInspirationLink } from '../lib/inspiration-input';
 import { restoreInspirationDraft, settleInspirationDraft } from '../lib/authored-save-drafts';
 import { AuthoredSaveNotice } from '../components/AuthoredSaveNotice';
 import { acceptsReadingSnapshot } from "../lib/reading-snapshot";
@@ -13416,7 +13416,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           save={inspirationSave} recording={recording} inputRef={mouthFieldRef}
           onText={(text, caret) => { mouthCaretRef.current = caret; draftRef.current = text; setDraft(text); setMouthNote(''); }}
           onFiles={files => { void addInspirationFiles(files); }}
-          onRemove={id => { if (id.startsWith('text-link:')) setDraft(composerDraft.current.current.text.split(id.slice('text-link:'.length)).join(''));
+          onRemove={id => { if (id.startsWith('text-link:')) setDraft(removeInspirationLink(composerDraft.current.current.text, id.slice('text-link:'.length)));
             else composerDraft.setMedia(composerDraft.current.current.media.filter(item => item.id !== id)); }}
           onVisibility={setKeepPublic} onClose={saveAsDraft} onSubmit={reflect => { void keepIt(reflect); }}
           onKeyDown={onMouthKey} onForkDraft={() => { void composerDraft.fork().catch(reason => setMouthNote(String(reason))); }} /> : null}

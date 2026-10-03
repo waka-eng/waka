@@ -37,7 +37,9 @@ export function InspirationComposer(props: {
   const addLink = () => {
     try {
       const value = new URL(link.trim());
-      if (!['http:', 'https:'].includes(value.protocol)) return;
+      if (!['http:', 'https:'].includes(value.protocol) || value.toString().length > 2048) {
+        linkInput.current?.setCustomValidity('Use an HTTP or HTTPS link up to 2,048 characters.'); linkInput.current?.reportValidity(); return;
+      }
       const text = [props.text.trim(), value.toString()].filter(Boolean).join('\n');
       props.onText(text, text.length); setAddingLink(false); setLink('');
     } catch { linkInput.current?.reportValidity(); }
@@ -63,7 +65,7 @@ export function InspirationComposer(props: {
     </div>
     {props.ready && !props.fileDraftsAvailable ? <p className="jar-composer-storage-note">{say('worldComposerFilesUnavailable')}</p> : null}
     {addingLink ? <form className="jar-composer-link" onSubmit={event => { event.preventDefault(); addLink(); }}>
-      <input ref={linkInput} type="url" required value={link} aria-label={say('worldPasteTheLink')} placeholder="https://" onChange={event => setLink(event.target.value)} />
+      <input ref={linkInput} type="url" required value={link} aria-label={say('worldPasteTheLink')} placeholder="https://" onChange={event => { event.target.setCustomValidity(''); setLink(event.target.value); }} />
       <button type="submit">{say('worldComposerAdd')}</button>
     </form> : null}
     {props.media.length ? <ul className="jar-composer-media">{props.media.map(item => <li key={item.id}>

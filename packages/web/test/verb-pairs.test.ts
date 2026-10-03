@@ -97,6 +97,7 @@ const REGISTER: Record<string, string> = {
   finalizeAttachment: "RULED: the other half of that upload",
   correctAttachmentTranscript: "RULED: edit again or use original wording (a null correction); neither operation changes the recording or the retained machine transcript",
   retryAttachmentTranscript: "RULED: resumes analysis of an existing recording without creating authored content; corrections stay authoritative and the recording remains removable",
+  retryAttachmentAnalysis: "RULED: retries only failed attachment analysis, preserves the original, and never duplicates the capture; the original remains removable",
 
   // what the machine concluded, and what you may say back
   updateSignal: "releaseSignal",

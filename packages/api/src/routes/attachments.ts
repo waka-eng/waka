@@ -40,7 +40,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 import { attachmentsRegion, makeAttachmentsS3Client } from "../lib/s3-client.js";
 import { eq } from "drizzle-orm";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { z } from "zod";
 
 import {
@@ -60,6 +60,8 @@ import { validationDetails } from "../lib/validation.js";
 import { profileQuerySchema } from './inspirations-validation.js';
 import { resolveTargetProfile } from './inspirations-tenancy.js';
 import { createAttachmentTranscriptRoutes } from './attachment-transcripts.js';
+import { attachmentAnalysisState, recoverAttachmentAnalysis } from '../lib/attachment-analysis-retry.js';
+import { fetchLinkPreviewImage } from '../lib/signal-enrichment.js';
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -420,6 +422,7 @@ const PRESIGN_TTL_SECONDS = 5 * 60;
 export interface AttachmentRouteDependencies {
   getDatabase?: typeof getDb;
   authMiddleware?: typeof requireAuth;
+  previewImage?: typeof fetchLinkPreviewImage;
 }
 
 /**
@@ -438,6 +441,56 @@ export function createAttachmentRoutes(
 // into this namespace by accident.
 attachmentsRoutes.use("*", deps.authMiddleware ?? requireAuth);
 attachmentsRoutes.route('/', createAttachmentTranscriptRoutes(getDatabase));
+
+async function previewAccess(c: Context<AuthEnv>, write = false) {
+  c.header('Cache-Control', 'private, no-store');
+  const id = z.string().uuid().safeParse(c.req.param('attachmentId'));
+  if (!id.success) return c.json({ error: 'Invalid attachment' }, 400);
+  const db = getDatabase(), session = c.get('session');
+  const [found] = await db.select({ row: attachments, accountId: profiles.accountId, type: profiles.type })
+    .from(attachments).innerJoin(profiles, eq(profiles.id, attachments.profileId)).where(eq(attachments.id, id.data)).limit(1);
+  if (!found || found.accountId !== session.profile.accountId || !['link', 'image'].includes(found.row.type)) return c.json({ error: 'Attachment not found' }, 404);
+  const target = asAccountProfile({ id: found.row.profileId, accountId: found.accountId, type: found.type });
+  if (!target) return c.json({ error: 'Attachment not found' }, 404);
+  const denied = await profileAccessError(db, session, target, write ? 'write' : 'read');
+  if (denied) return c.json(denied, 403);
+  return { row: found.row, canEdit: !await profileAccessError(db, session, target, 'write') };
+}
+function previewDetails(row: Attachment) {
+  const attachment = serializeAttachment(row);
+  const previewImageAvailable = row.type === 'link' && Boolean(row.previewImageUrl);
+  // Detail thumbnails are fetched through the owned route. Never hand an
+  // external tracking URL to a renderer or to the field's memory projection.
+  if (attachment.enrichment.link) attachment.enrichment.link.previewImageUrl = null;
+  return { attachment, previewImageAvailable };
+}
+attachmentsRoutes.get('/:attachmentId/details', async c => {
+  const allowed = await previewAccess(c); if (allowed instanceof Response) return allowed;
+  return c.json({ ...previewDetails(allowed.row),
+    analysis: await attachmentAnalysisState(getDatabase(), allowed.row, allowed.canEdit) });
+});
+attachmentsRoutes.get('/:attachmentId/preview-image', async c => {
+  const allowed = await previewAccess(c); if (allowed instanceof Response) return allowed;
+  if (allowed.row.type !== 'link' || !allowed.row.previewImageUrl) return c.json({ error: 'Preview image unavailable' }, 404);
+  try {
+    const image = await (deps.previewImage ?? fetchLinkPreviewImage)(allowed.row.previewImageUrl);
+    c.header('Content-Type', image.contentType); c.header('X-Content-Type-Options', 'nosniff');
+    c.header('Content-Security-Policy', "default-src 'none'; sandbox");
+    return c.body(new Uint8Array(image.bytes).buffer);
+  } catch { return c.json({ error: 'Preview image unavailable' }, 404); }
+});
+attachmentsRoutes.post('/:attachmentId/analysis/retry', async c => {
+  const allowed = await previewAccess(c, true); if (allowed instanceof Response) return allowed;
+  if (!z.object({}).strict().safeParse(await c.req.json().catch(() => null)).success) return c.json({ error: 'Invalid retry request' }, 400);
+  const saved = await getDatabase().transaction(tx => recoverAttachmentAnalysis(tx, {
+    profileId: allowed.row.profileId, attachmentId: allowed.row.id, expectedType: allowed.row.type,
+  }));
+  if (!saved) return c.json({ error: 'Attachment not found' }, 404);
+  if (saved === 'rate_limited') return c.json({ error: 'This attachment has reached its retry limit. Try again later.' }, 429);
+  if (saved === 'conflict') return c.json({ error: 'This attachment changed. Reload it first.' }, 409);
+  await wakeCommittedBackgroundJobs();
+  return c.json({ ...previewDetails(saved), analysis: await attachmentAnalysisState(getDatabase(), saved, true) }, 202);
+});
 
 // Raw uploads remain private. Resolve one current owned attachment to a short
 // read URL; a guessed id or public room source never grants raw-file access.

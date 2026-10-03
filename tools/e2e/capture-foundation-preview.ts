@@ -39,6 +39,24 @@ const [nativeProfile] = await fixture.sql`INSERT INTO profiles(account_id,type,n
 const nativeToken = await signSessionToken({ profileId: nativeProfile.id, email: 'native-capture-fixture@example.test' });
 await createSessionRow({ profileId: nativeProfile.id, token: nativeToken });
 const objects = new Map<string, { bytes: Buffer; contentType: string }>();
+// Seeded metadata tests rendering and recovery, not live extraction quality.
+let linkFixtureInspirationId: string | null = null;
+if (process.env.WAKA_LINK_FIXTURE === '1') {
+  process.env.WAKA_ENRICHMENT_ALLOWED_HOSTS = '127.0.0.1:3015';
+  const bytes = await readFile(resolve('docs/craft/evidence/personal-capture/input-photo.png'));
+  objects.set('/capture-fixture/link-preview.png', { bytes, contentType: 'image/png' });
+  const [source] = await fixture.sql`INSERT INTO inspirations(profile_id,text,kind)
+    VALUES (${profile.id},'I want to leave more room for ideas before deciding what they should become.','link') RETURNING id`;
+  linkFixtureInspirationId = source.id;
+  await fixture.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,enrichment_status,enrichment_kind,enrichment_text,
+    title,description,site_name,hostname,preview_image_url)
+    VALUES (${profile.id},${source.id},'link','https://example.com/room-to-think','ready','page_body',
+    'A seeded article excerpt about making room for unfinished thoughts. This is source material, separate from the personal note.',
+    'Make room for unfinished thoughts','A quieter approach to collecting ideas and noticing the connections between them.',
+    'Example journal','example.com',${`${origin}/capture-fixture/link-preview.png`})`;
+  await fixture.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,enrichment_status,enrichment_error_reason)
+    VALUES (${profile.id},${source.id},'link','https://example.com/members-only','unavailable','http_403')`;
+}
 // Opt-in, explicitly synthetic completed transcript for real UI/HTTP/SQL QA.
 // It does not call a provider or pretend to be a model-quality evaluation.
 let transcriptFixtureId: string | null = null;
@@ -91,7 +109,8 @@ const server = createServer(async (request, response) => {
       const [counts] = await fixture.sql`SELECT (SELECT count(*)::int FROM inspirations) AS inspirations,
         (SELECT count(*)::int FROM attachments) AS attachments, (SELECT count(*)::int FROM inspiration_save_requests) AS requests`;
       response.writeHead(200, {'Content-Type':'application/json'}); response.end(JSON.stringify({ ...counts, objects: objects.size,
-        origin, schema: fixture.schemaName, microphone: 'synthetic tone', failUpload, loseResponse, transcriptFixtureId, transcriptFixtureInspirationId })); return;
+        origin, schema: fixture.schemaName, microphone: 'synthetic tone', failUpload, loseResponse, transcriptFixtureId, transcriptFixtureInspirationId,
+        linkFixtureInspirationId })); return;
     }
     if (target.pathname.startsWith('/capture-fixture/')) {
       const key = decodeURIComponent(target.pathname);

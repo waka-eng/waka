@@ -445,7 +445,8 @@ export function toInspirationDetail(row: Awaited<ReturnType<typeof fetchInspirat
     attachments: (row.attachments ?? []).map((a) => ({
       id: a.id,
       type: a.type,
-      label: a.name ?? a.url,
+      label: a.name ?? (a.type === 'audio' ? 'Recording' : a.type === 'image' ? 'Photo' : a.url),
+      ...(a.type === 'link' ? { url: a.url } : {}),
     })),
     reflectionCount: (row.reflections ?? []).filter((r) => !r.skipped && r.answer).length,
     reflections: (row.reflections ?? []).map((r) => ({

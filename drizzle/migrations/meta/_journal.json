@@ -372,6 +372,13 @@
       "when": 1790984923661,
       "tag": "0052_transcript_retry_budget",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1790987430138,
+      "tag": "0053_attachment_preview_recovery",
+      "breakpoints": true
     }
   ]
 }

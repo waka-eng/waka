@@ -37,6 +37,7 @@
 
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
+import { Agent } from 'undici';
 
 import { and, eq } from "drizzle-orm";
 
@@ -297,10 +298,8 @@ function embeddedIPv4(value: string): string | null {
  * inside the VPC and store the response on a capture. The scheme is
  * allowlisted and the host is resolved and checked before we connect.
  *
- * DNS is re-resolved by fetch after this check, so a hostile record could in
- * principle change between the two. Blocking on resolution is still the
- * meaningful barrier, and the response body only ever reaches us as bounded
- * text on one attachment.
+ * The fetcher pins its connection to the resolved, validated addresses so a
+ * hostile second DNS answer cannot change the destination after this check.
  */
 /**
  * Hosts exempt from the private-address refusal, as `host` or `host:port`.
@@ -322,6 +321,10 @@ function enrichmentHostAllowlist(): Set<string> {
 }
 
 export async function assertFetchableUrl(url: string): Promise<void> {
+  await resolveFetchAddresses(url);
+}
+
+async function resolveFetchAddresses(url: string, signal?: AbortSignal): Promise<Array<{ address: string; family: number }>> {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -331,24 +334,32 @@ export async function assertFetchableUrl(url: string): Promise<void> {
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new Error("unsupported_scheme");
   }
+  if (parsed.username || parsed.password) throw new Error('credentials_in_url');
 
   const allowed = enrichmentHostAllowlist();
-  if (allowed.has(parsed.host.toLowerCase()) || allowed.has(parsed.hostname.toLowerCase())) {
-    return;
-  }
+  const allowlisted = allowed.has(parsed.host.toLowerCase()) || allowed.has(parsed.hostname.toLowerCase());
 
   const host = parsed.hostname.replace(/^\[|\]$/g, "");
   if (isIP(host)) {
-    if (isPrivateAddress(host)) throw new Error("private_address");
-    return;
+    if (!allowlisted && isPrivateAddress(host)) throw new Error("private_address");
+    return [{ address: host, family: isIP(host) }];
   }
-  const resolved = await lookup(host, { all: true });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let abort: (() => void) | undefined;
+  const canceled = new Promise<never>((_, reject) => {
+    abort = () => reject(new Error('fetch_timeout'));
+    if (signal?.aborted) abort(); else signal?.addEventListener('abort', abort, { once: true });
+  });
+  const resolved = await Promise.race([lookup(host, { all: true }), canceled, new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('dns_timeout')), FETCH_HEADERS_TIMEOUT_MS);
+  })]).finally(() => { clearTimeout(timer); if (abort) signal?.removeEventListener('abort', abort); });
   if (resolved.length === 0) throw new Error("unresolvable_host");
   // `all`, not the first: a name that returns one public and one private
   // address must not be reachable through the private one.
-  if (resolved.some((entry) => isPrivateAddress(entry.address))) {
+  if (!allowlisted && resolved.some((entry) => isPrivateAddress(entry.address))) {
     throw new Error("private_address");
   }
+  return resolved;
 }
 
 interface FetchBudget {
@@ -393,27 +404,21 @@ interface FetchBudget {
  * `release`. Two phases, one controller, so an abort in either phase reaches
  * the same open socket.
  *
- * WHAT THIS DOES NOT COVER: name resolution. `assertFetchableUrl` awaits
- * `lookup` from `node:dns/promises`, which takes no AbortSignal, so neither
- * deadline can interrupt it — and it runs once per hop, so a chain of
- * hostnames with blackholed nameservers can spend several resolver timeouts
- * (getaddrinfo's own, on the order of ten seconds each) entirely outside our
- * budget. Bounded by MAX_REDIRECTS rather than by us. It is written down here
- * instead of quietly rounded off because the previous comment on this function
- * claimed coverage it did not have, and that claim WAS the bug.
+ * Name resolution has its own bounded wait. The connection is pinned to that
+ * validated address set so a second DNS answer cannot redirect the socket
+ * into a private network after the check. The original hostname still owns
+ * TLS verification and the HTTP Host header.
  *
- * CALLER CONTRACT: `release` on every exit, from a `finally` — which is what
- * both callers do. Skipping it now leaks an armed timer as well as an open
- * connection, so the penalty for forgetting is worse than it was when the
- * timer cleared itself. Nothing enforces this but the two call sites; a shape
- * that took a callback and released for you would enforce it, and is the right
- * answer if a third caller ever appears.
+ * CALLER CONTRACT: `release` on every exit from a `finally`. Page extraction,
+ * image analysis and preview-image reads each own that cleanup; it cancels
+ * the body timer and destroys every redirect-hop dispatcher.
  */
 async function fetchWithTimeout(
   url: string,
   { accept = "text/html,application/xhtml+xml", maxBytes }: FetchBudget,
 ): Promise<{ response: Response; finalUrl: string; release: () => void }> {
   const controller = new AbortController();
+  const dispatchers: Agent[] = [];
   // Deliberately spanning the whole redirect chain rather than resetting per
   // hop: five hops that each answer in five seconds is not a live page, it is
   // a way to buy twenty-five seconds of the worker.
@@ -428,6 +433,7 @@ async function fetchWithTimeout(
   const release = (): void => {
     clearTimeout(timer);
     controller.abort();
+    for (const dispatcher of dispatchers) void dispatcher.destroy().catch(() => undefined);
   };
 
   /**
@@ -444,12 +450,19 @@ async function fetchWithTimeout(
   try {
     let current = url;
     for (let hop = 0; ; hop += 1) {
-      await assertFetchableUrl(current);
+      const addresses = await resolveFetchAddresses(current, controller.signal);
+      if (controller.signal.aborted) throw new Error('fetch_timeout');
+      const dispatcher = new Agent({ connect: { lookup: (_host, options, callback) => {
+        if (options.all) callback(null, addresses);
+        else callback(null, addresses[0]!.address, addresses[0]!.family);
+      } } });
+      dispatchers.push(dispatcher);
       const response = await fetch(current, {
+        dispatcher,
         signal: controller.signal,
         redirect: "manual",
         headers: { "User-Agent": USER_AGENT, Accept: accept },
-      });
+      } as RequestInit & { dispatcher: Agent });
       const location = response.headers.get("location");
       if (response.status < 300 || response.status >= 400 || !location) {
         startBodyDeadline();
@@ -461,6 +474,7 @@ async function fetchWithTimeout(
         startBodyDeadline();
         return { response, finalUrl: current, release };
       }
+      await response.body?.cancel().catch(() => undefined);
       current = new URL(location, current).toString();
     }
   } catch (err) {
@@ -505,6 +519,19 @@ async function readCappedBody(
     offset += slice.length;
   }
   return out;
+}
+
+/** Small, passive preview images only; no cookies, credentials or HTML. */
+export async function fetchLinkPreviewImage(url: string): Promise<{ bytes: Uint8Array; contentType: string }> {
+  const cap = 2 * 1024 * 1024;
+  const { response, release } = await fetchWithTimeout(url, { accept: 'image/png,image/jpeg,image/webp,image/gif', maxBytes: cap + 1 });
+  try {
+    const contentType = response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() ?? '';
+    if (!response.ok || !['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(contentType)) throw new Error('preview_image_unavailable');
+    const bytes = await readCappedBody(response, cap + 1);
+    if (!bytes.length || bytes.length > cap) throw new Error('preview_image_too_large');
+    return { bytes, contentType };
+  } finally { release(); }
 }
 
 export interface LinkEnrichment extends LinkMetadata {
@@ -675,6 +702,7 @@ export async function enrichImageAttachment(
     // not a bad day for the network.
     const deterministic =
       reason === "private_address" ||
+      reason === 'credentials_in_url' ||
       reason === "unsupported_scheme" ||
       reason === "unfetchable_url" ||
       reason === "unresolvable_host" ||
@@ -717,6 +745,7 @@ async function enrichLinkAttachment(attachment: AttachmentRow): Promise<{
     // a bad day for the network: retrying reaches the same verdict.
     const deterministic =
       reason === "private_address" ||
+      reason === 'credentials_in_url' ||
       reason === "unsupported_scheme" ||
       reason === "unfetchable_url" ||
       reason === "unresolvable_host";

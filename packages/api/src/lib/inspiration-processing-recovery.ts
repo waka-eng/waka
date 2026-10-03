@@ -2,7 +2,8 @@ import { and, eq, sql } from 'drizzle-orm';
 import { attachments, backgroundJobs, generationRevisions, inspirationProcessing, inspirations, profiles, topOfMinds } from '../db/index.js';
 import { getDb } from './db.js';
 import { readInspirationProcessingStatus } from './inspiration-processing-status.js';
-import { enqueueDeriveSignals, enqueueEnrichAttachment, enqueueTopOfMindRefresh, recoverPendingSignalSupport, STALE_LOCK_SECONDS, wakeCommittedBackgroundJobs } from './queue.js';
+import { enqueueDeriveSignals, enqueueTopOfMindRefresh, recoverPendingSignalSupport, STALE_LOCK_SECONDS, wakeCommittedBackgroundJobs } from './queue.js';
+import { recoverAttachmentAnalysis } from './attachment-analysis-retry.js';
 import { parseTopOfMindRefreshResult } from './top-of-mind-refresh-status.js';
 
 type Tx = Parameters<Parameters<ReturnType<typeof getDb>['transaction']>[0]>[0];
@@ -38,10 +39,7 @@ export async function recoverInspirationProcessing(db: ReturnType<typeof getDb>,
       const missing = await tx.select({ id: attachments.id }).from(attachments).where(and(eq(attachments.profileId, input.profileId),
         eq(attachments.inspirationId, input.inspirationId), sql`(${attachments.enrichmentStatus} IS NULL OR ${attachments.enrichmentStatus}::text IN ('pending','failed'))`));
       for (const attachment of missing) {
-        const [job] = await tx.select({ id: backgroundJobs.id }).from(backgroundJobs)
-          .where(and(eq(backgroundJobs.profileId, input.profileId), eq(backgroundJobs.type, 'enrich_attachment'),
-            eq(backgroundJobs.idempotencyKey, `enrich_attachment:${attachment.id}`))).limit(1);
-        if (await recoverableJob(tx, input.profileId, job?.id ?? null)) await enqueueEnrichAttachment(input.profileId, attachment.id, input.inspirationId, tx);
+        await recoverAttachmentAnalysis(tx, { profileId: input.profileId, attachmentId: attachment.id });
       }
     } else {
       const [receipt] = status.receipt ? await tx.select().from(inspirationProcessing)
