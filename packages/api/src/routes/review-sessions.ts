@@ -6,6 +6,7 @@ import { chooseReviewItem, completeReviewSession, createReviewSession, MAX_REVIE
 import { profileQuerySchema } from './inspirations-validation.js';
 import { resolveTargetProfile } from './inspirations-tenancy.js';
 import {registerReviewDialogueRoutes} from './review-dialogue.js';
+import {loadReviewProcessingStatus,recoverReviewProcessing} from '../lib/review-processing.js';
 
 const uuid=z.string().uuid().transform(value=>value.toLowerCase());
 const revision=z.number().int().min(0).max(2147483646);
@@ -58,5 +59,18 @@ export function createReviewSessionRoutes(deps:{getDatabase?:typeof getDb;authMi
     return c.json({session:await completeReviewSession(database(),c.get('reviewProfileId'),id.data,input.data.revision)});
   });
   registerReviewDialogueRoutes(routes,database);
+  routes.get('/:id/processing',async c=>{
+    const id=uuid.safeParse(c.req.param('id'));if(!id.success)return c.json({error:'Invalid review id'},400);
+    const state=await loadReviewProcessingStatus(database(),c.get('reviewProfileId'),id.data);
+    if(!state)return c.json({error:'Review not found'},404);
+    const writer=await resolveTargetProfile(database(),c.get('session'),c.get('reviewProfileId'),'write');
+    return c.json({...state,canRetry:state.canRetry&&writer.ok&&!c.get('session').keyScoped});
+  });
+  routes.post('/:id/processing/retry',async c=>{
+    const id=uuid.safeParse(c.req.param('id')),body=z.object({}).strict().safeParse(await c.req.json().catch(()=>null));
+    if(!id.success||!body.success)return c.json({error:'Invalid review retry'},400);
+    const state=await recoverReviewProcessing(database(),c.get('reviewProfileId'),id.data);
+    return state?c.json(state,state.phase==='ready'?200:202):c.json({error:'Review not found'},404);
+  });
   return routes;
 }

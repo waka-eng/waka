@@ -93,6 +93,7 @@ const REGISTER: Record<string, string> = {
   deleteReflection: "createReflection",
   requestReflectionQuestion: "RULED: asking creates no authored content; a person can leave with Done or remove their saved answer",
   retryInspirationProcessing: "RULED: resumes failed processing of already-kept material without creating another capture or answer; existing words remain editable or removable, and opening the resulting reading is a separate choice",
+  retryReviewProcessing: "RULED: resumes analysis of saved review answers; the answers remain editable or removable and the review can be closed while the reading finishes",
   presignAttachment: "RULED: one half of a single upload, not a state a person is left in",
   finalizeAttachment: "RULED: the other half of that upload",
   correctAttachmentTranscript: "RULED: edit again or use original wording (a null correction); neither operation changes the recording or the retained machine transcript",

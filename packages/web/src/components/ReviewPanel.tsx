@@ -9,6 +9,7 @@ import {DialogSurface} from './DialogSurface';
 import {InspirationAttachments} from './InspirationAttachments';
 import {InspirationSearch} from './InspirationSearch';
 import {ReviewDialogue} from './ReviewDialogue';
+import {ReviewResult} from './ReviewResult';
 
 function ReviewChosenItem({id,profileId,locale,onOpen,onMissing,onReady,onRemove}:{id:string;profileId:string;locale:SupportedLocale;onOpen:(id:string)=>void;onMissing?:()=>void;onReady?:(id:string,ready:boolean)=>void;onRemove?:()=>void}){
   const [label,setLabel]=useState(t(locale,'worldReviewChecking')),[ready,setReady]=useState(false);
@@ -108,6 +109,7 @@ export function ReviewPanel({scope,id,thoughtId=null,locale,onId,onClose,onNewIn
             <p className="jar-review-context">{say('worldReviewHint')}</p>
           </>:<>{session.completedAt?<h3>{say('worldReviewDone')}</h3>:null}{items.some(row=>row.choice==='keep')?<details><summary>{say('worldReviewSelected')} ({items.filter(row=>row.choice==='keep').length})</summary><ul>{items.filter(row=>row.choice==='keep').map(row=><ReviewChosenItem key={row.inspirationId} id={row.inspirationId} profileId={scope.profileId} locale={locale} onOpen={onOpen} onMissing={()=>void review.refresh()}/>)}</ul></details>:<p>{say('worldReviewNone')}</p>}</>}
           {!item||session.completedAt||thoughtId?<ReviewDialogue key={`${scope.accountId}:${scope.profileId}:${session.id}`} scope={scope} id={session.id} thoughtId={thoughtId} completed={Boolean(session.completedAt)} locale={locale} onOpen={onOpen} onRevision={review.observeRevision} onDraftChange={setHasDialogueDraft}/>:null}
+          {session.completedAt?<ReviewResult key={`result:${scope.accountId}:${scope.profileId}:${session.id}`} profileId={scope.profileId} id={session.id} revision={session.revision} locale={locale}/>:null}
         </>:null}
       </div>
       {session&&!session.completedAt?<footer>

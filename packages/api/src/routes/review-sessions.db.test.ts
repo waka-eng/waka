@@ -41,6 +41,16 @@ async function sessionBody(response:Response){
 }
 const choose=(p:Person,session: {id:string;revision:number},inspirationId:string,choice:'keep'|'skip'|null,sourceRevision='1')=>post(p,`/${session.id}/choices`,{revision:session.revision,inspirationId,choice,sourceRevision});
 
+it('reads an owned review result without creating work and refuses foreign result access',async()=>{
+  const p=await person(),other=await person();await source(p.id);const session=await start(p);
+  const response=await p.app.request(`/reviews/${session.id}/processing`);expect(response.status).toBe(200);expect(response.headers.get('cache-control')).toContain('no-store');
+  expect(await response.json()).toMatchObject({profileId:p.id,sessionId:session.id,phase:'empty',answerCount:0,result:null,relatedPrinciples:[]});
+  expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(0);
+  expect((await other.app.request(`/reviews/${session.id}/processing`)).status).toBe(404);
+  expect((await post(other,`/${session.id}/processing/retry`,{})).status).toBe(404);
+  expect((await post(p,`/${session.id}/processing/retry`,{answer:'Do not accept arbitrary new words'})).status).toBe(400);
+});
+
 it('does not log private database parameters or return them on a failed review write',async()=>{
   const p=await person();await source(p.id);
   await t.sql`CREATE FUNCTION reject_review_write() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'PRIVATE_REVIEW_SENTINEL'; END; $$ LANGUAGE plpgsql`;

@@ -1374,6 +1374,10 @@ body .profile-signout-button {
 .jar-review-question { line-height:1.6; }
 .jar-review-connection { color:var(--w-muted); }
 .jar-review-references { display:flex; flex-wrap:wrap; gap:var(--sp-4); }
+.jar-review-result { margin-top:var(--sp-20); padding-top:var(--sp-16); border-top:1px solid var(--w-edge); font-size:var(--t-body); line-height:1.6; }
+.jar-review-result h3 { font-size:var(--t-note); font-weight:normal; color:var(--w-muted); }
+.jar-review-latest-thought { margin:var(--sp-12) 0; padding-left:var(--sp-12); border-left:1px solid var(--w-edge); font-size:var(--t-body); line-height:1.6; white-space:pre-wrap; overflow-wrap:anywhere; }
+.jar-review-reading { padding:var(--sp-12); border-left:1px solid var(--w-edge); overflow-wrap:anywhere; }
 .jar-review .jar-review-reference { text-align:left; overflow-wrap:anywhere; max-width:100%; }
 .jar-review-reply { margin-top:var(--sp-16); }
 .jar-review-reply label { display:block; margin-bottom:var(--sp-8); }

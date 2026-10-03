@@ -13,6 +13,7 @@ import {enqueueReviewAnswerDerivation,enqueueTopOfMindRefresh,reserveReviewModel
 import {BackgroundJobHeldError} from './background-job-hold.js';
 import {currentArtifactResult} from './inspiration-processing.js';
 import {parseReviewAnswerDerivation} from '../queue/gemini.js';
+import {parseTopOfMindRefreshResult} from './top-of-mind-refresh-status.js';
 
 type Database=ReturnType<typeof getDb>;
 type Transaction=Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -28,22 +29,34 @@ function modelInput(material:ReviewAnswerMaterial,claims:ReviewAnswerDerivationI
 async function finish(tx:Transaction,material:ReviewAnswerMaterial,deps:Dependencies,options:{reading?:EnqueueResult;derived:boolean;discovered?:boolean;signalIds:string[]}){
   const [prior]=await tx.select().from(reviewAnswerProcessing).where(and(eq(reviewAnswerProcessing.profileId,material.profileId),eq(reviewAnswerProcessing.answerId,material.answerId))).for('update');
   let reading=options.reading;
-  if(!reading&&prior?.readingJobId&&!prior.result){
-    const [job]=await tx.select().from(backgroundJobs).where(eq(backgroundJobs.id,prior.readingJobId));
-    reading=!job||job.status==='failed'||job.status==='succeeded'&&!job.result
-      ?await enqueueTopOfMindRefresh(material.profileId,'signals_changed',tx)
-      :{jobId:prior.readingJobId,requestVersion:prior.readingRequestVersion!.toString(),created:false};
-  }
+  const sameMaterial=prior?.materialHash===material.hash;
+  const priorResult=sameMaterial?parseTopOfMindRefreshResult(prior?.result):null;
   let result:BackgroundJobResult|null=null;
-  if(options.derived&&!reading){
+  let readingRequestVersion=reading?BigInt(reading.requestVersion):null;
+  if(!reading&&sameMaterial&&prior?.readingRequestVersion&&priorResult){
+    // Publication may precede the final extraction transaction. Preserve that
+    // exact result even if its queue row was subsequently cleaned up.
+    result=priorResult;readingRequestVersion=prior.readingRequestVersion;
+    if(prior.readingJobId)reading={jobId:prior.readingJobId,requestVersion:prior.readingRequestVersion.toString(),created:false};
+  }else if(!reading&&sameMaterial&&prior?.readingRequestVersion){
+    const [job]=prior.readingJobId?await tx.select().from(backgroundJobs).where(eq(backgroundJobs.id,prior.readingJobId)):[];
+    reading=!job||job.status==='failed'||job.status==='succeeded'
+      ?await enqueueTopOfMindRefresh(material.profileId,'signals_changed',tx)
+      :{jobId:job.id,requestVersion:prior.readingRequestVersion!.toString(),created:false};
+  }
+  if(reading){
+    readingRequestVersion=BigInt(reading.requestVersion);
+    if(sameMaterial&&prior?.readingJobId===reading.jobId&&prior.readingRequestVersion===readingRequestVersion)result=priorResult;
+  }
+  if(options.derived&&!reading&&!result){
     result=await currentArtifactResult(tx,material.profileId);
   }
   const values={profileId:material.profileId,sessionId:material.sessionId,answerId:material.answerId,materialHash:material.hash,
     discoveryHash:options.discovered?material.hash:prior?.discoveryHash??null,
     derivationJobId:deps.job?.id??null,derivationRequestVersion:deps.job?.requestVersion??null,
-    readingJobId:reading?.jobId??null,readingRequestVersion:reading?BigInt(reading.requestVersion):null,
+    readingJobId:reading?.jobId??null,readingRequestVersion,
     signalIds:[...new Set([...(prior?.signalIds??[]),...options.signalIds])],result,
-    derivedAt:options.derived?new Date():null,completedAt:result?new Date():null,updatedAt:new Date()};
+    derivedAt:options.derived?new Date():null,completedAt:options.derived&&result?new Date():null,updatedAt:new Date()};
   await tx.insert(reviewAnswerProcessing).values(values).onConflictDoUpdate({target:[reviewAnswerProcessing.profileId,reviewAnswerProcessing.answerId],set:values});
 }
 

@@ -45,8 +45,12 @@ export function ReviewDialogue({scope,id,thoughtId=null,completed,locale,onOpen,
     <div className="jar-review-thought-actions"><button type="button" disabled={Boolean(draft)||review.busy} aria-label={say('worldReviewEditThought')} onClick={()=>review.edit(row,'edit')}>✎</button>
       <button type="button" disabled={Boolean(draft)||review.busy} onClick={()=>review.edit(row,'remove')}>{say('worldRemoveLower')}</button></div>
   </article>;
+  const latestThought=completed&&!thoughtId&&!review.loading?state?.answers.at(-1):null;
   return <section className="jar-review-dialogue" aria-label={say('worldReviewThink')}>
     {review.loading?<p role="status">{say('worldReviewLoadingThoughts')}</p>:null}
+    {latestThought?<blockquote className="jar-review-latest-thought" aria-label={say('worldReviewYourThought')}>
+      {latestThought.answer.length>180?`${latestThought.answer.slice(0,177)}…`:latestThought.answer}
+    </blockquote>:null}
     {thoughtId&&state&&!review.loading&&!state.answers.some(row=>row.id===thoughtId)?<p role="status">{say('worldReviewThoughtUnavailable')}</p>:null}
     {state?.answers.length?<details ref={history} className="jar-review-history"><summary>{say('worldReviewSavedThoughts')} ({state.answers.length})</summary>{state.answers.map(saved)}</details>:null}
     {review.error?<div role="alert"><p>{say(review.error==='storage'?'worldReviewDraftStorage':review.error==='conflict'?'worldReviewDraftChanged':review.error==='limit'?'worldReviewQuestionLimit':review.error==='load'?'worldReviewThoughtsFailed':review.error==='question'?'worldReviewQuestionFailed':'worldReviewThoughtUnconfirmed')}</p>

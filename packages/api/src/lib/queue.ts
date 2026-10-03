@@ -1003,6 +1003,7 @@ async function assertBackgroundJobOwnership(tx: Pick<ReturnType<typeof getDb>, "
 export async function processBackgroundJob(job: BackgroundJob): Promise<BackgroundJobResult | void> {
   const onReadingPublished: NonNullable<TopOfMindRefreshDependencies['onPublished']> = async (tx, publication) => {
     await recordInspirationReadingResult(tx, { ...publication, jobId: job.id, requestVersion: job.requestVersion.toString() });
+    if(job.type==='refresh_top_of_mind')await (await import('./review-processing.js')).recordReviewReadingResult(tx,{...publication,jobId:job.id,requestVersion:job.requestVersion.toString()});
     await (await import('./principle-status.js')).enqueuePrinciplesAfterReading(tx, publication.profileId);
   };
   switch (job.type) {

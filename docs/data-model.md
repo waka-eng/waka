@@ -310,6 +310,17 @@ includes them. This is a bounded-attempt meter, not token billing; other job
 types retain their existing start-based meter. Result-job and run-job foreign
 keys carry the profile and use partial SET NULL in migration 0059.
 
+A review reading result is recorded in the artifact publication transaction.
+Finishing extraction later preserves that exact artifact id and version,
+including when the queue row has been removed. A newer numbered answer request
+withholds the older result until the current work completes. A session result
+is ready only when every surviving answer has completed; an earlier answer's
+result cannot stand in for pending answers. Explicit recovery resumes the
+unfinished stage without saving another answer or generating another question.
+The result may be changed, unchanged or empty. Related Principles are existing
+owned rows whose current citations include this review; session completion
+itself does not create a Principle.
+
 ### Existing inspiration behavior
 
 A capture event. Whatever arrived: pasted text, a link, an image, an

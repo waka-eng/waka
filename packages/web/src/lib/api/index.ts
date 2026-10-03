@@ -50,6 +50,7 @@ export * from "./inspirations";
 export * from "./inspiration-processing";
 export * from './review-sessions';
 export * from './review-dialogue';
+export * from './review-processing';
 export * from "./inspiration-save-requests";
 export * from "./attachments";
 export * from "./signals";

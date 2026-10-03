@@ -51,7 +51,8 @@ if(process.env.WAKA_REVIEW_FIXTURE==='1'){
 }
 const token = await signSessionToken({ profileId: profile.id, email: 'capture-fixture@example.test' });
 let reviewEvidenceFixture: {sessionId:string;answerId:string;signalId:string}|null=null;
-if(process.env.WAKA_REVIEW_EVIDENCE_FIXTURE==='1'){
+let reviewResultFixture:{sessionId:string;answerId:string;topOfMindId:string}|null=null;
+if(process.env.WAKA_REVIEW_EVIDENCE_FIXTURE==='1'||process.env.WAKA_REVIEW_RESULT_FIXTURE==='1'){
   try {
   const {createReviewSession}=await import('../../packages/api/src/lib/review-sessions.js');
   const {loadReviewAnswerMaterial}=await import('../../packages/api/src/lib/review-answer-material.js');
@@ -75,6 +76,23 @@ if(process.env.WAKA_REVIEW_EVIDENCE_FIXTURE==='1'){
     VALUES(${reading.id},'pattern','Making room for ideas without turning each one into a task.',0) RETURNING id`;
   await fixture.sql`INSERT INTO top_of_mind_entry_signals(entry_id,signal_id,statement_revision,entry_body_revision) VALUES(${entry.id},${signal.id},1,1)`;
   reviewEvidenceFixture={sessionId:session.id,answerId,signalId:signal.id};
+  if(process.env.WAKA_REVIEW_RESULT_FIXTURE==='1'){
+    const {enqueueTopOfMindRefresh}=await import('../../packages/api/src/lib/queue.js');
+    const {readReviewSession,chooseReviewItem,completeReviewSession}=await import('../../packages/api/src/lib/review-sessions.js');
+    const readingJob=await enqueueTopOfMindRefresh(profile.id,'signals_changed',fixture.db as never);
+    const [derivation]=await fixture.sql`SELECT id,request_version::text FROM background_jobs WHERE profile_id=${profile.id} AND type='derive_review_answer'`;
+    // Scripted stage completion for UI timing tests; the queue SQL suite
+    // separately proves real producer/publication execution.
+    await fixture.sql`INSERT INTO review_answer_processing(profile_id,session_id,answer_id,material_hash,discovery_hash,
+      derivation_job_id,derivation_request_version,reading_job_id,reading_request_version,signal_ids,derived_at)
+      VALUES(${profile.id},${session.id},${answerId},${material.hash},${material.hash},${derivation.id},${derivation.request_version},
+        ${readingJob.jobId},${readingJob.requestVersion},ARRAY[${signal.id}]::uuid[],now())`;
+    await fixture.sql`UPDATE background_jobs SET status='succeeded' WHERE id=${derivation.id}`;
+    const current=(await readReviewSession(fixture.db as never,profile.id,session.id))!;
+    const chosen=(await chooseReviewItem(fixture.db as never,profile.id,session.id,{revision:current.revision,inspirationId:source.id,sourceRevision:'1',choice:'keep'}))!;
+    await completeReviewSession(fixture.db as never,profile.id,session.id,chosen.revision);
+    reviewResultFixture={sessionId:session.id,answerId,topOfMindId:reading.id};
+  }
   } catch(error) { await fixture.cleanup();await getDb().$client.end();throw error; }
 }
 await createSessionRow({ profileId: profile.id, token });
@@ -171,6 +189,21 @@ const server = createServer(async (request, response) => {
         }
       }
       if(target.searchParams.get('fail')==='review-response')loseReviewResponse=true;
+      if(reviewResultFixture&&target.searchParams.get('review-result')==='complete'){
+        const {recordReviewReadingResult}=await import('../../packages/api/src/lib/review-processing.js');
+        const [receipt]=await fixture.sql`SELECT reading_job_id,reading_request_version::text FROM review_answer_processing WHERE answer_id=${reviewResultFixture.answerId}`;
+        await fixture.db.transaction(tx=>recordReviewReadingResult(tx as never,{profileId:profile.id,jobId:receipt.reading_job_id,
+          requestVersion:receipt.reading_request_version,result:{kind:'top_of_mind',topOfMindId:reviewResultFixture!.topOfMindId,version:1,outcome:'changed'}}));
+      }
+      if(reviewResultFixture&&target.searchParams.get('review-result')==='failed'){
+        await fixture.sql`UPDATE background_jobs SET status='failed' WHERE id IN(SELECT reading_job_id FROM review_answer_processing WHERE answer_id=${reviewResultFixture.answerId})`;
+      }
+      if(reviewResultFixture&&target.searchParams.get('review-result')==='newer'){
+        await fixture.sql`UPDATE top_of_minds SET status='superseded' WHERE id=${reviewResultFixture.topOfMindId}`;
+        const [later]=await fixture.sql`INSERT INTO top_of_minds(profile_id,version) VALUES(${profile.id},2) RETURNING id`;
+        await fixture.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body,sort_order)
+          VALUES(${later.id},'pattern','A later reading, distinct from the completed review.',0)`;
+      }
       if (target.searchParams.get('fail') === 'save-response') loseResponse = true;
       if (target.searchParams.get('fail') === 'save-request') loseRequest = true;
       if (target.searchParams.get('fail') === 'upload') failUpload = true;
@@ -179,7 +212,7 @@ const server = createServer(async (request, response) => {
         (SELECT count(*)::int FROM attachments) AS attachments, (SELECT count(*)::int FROM inspiration_save_requests) AS requests`;
       response.writeHead(200, {'Content-Type':'application/json'}); response.end(JSON.stringify({ ...counts, objects: objects.size,
         origin, schema: fixture.schemaName, microphone: 'synthetic tone', failUpload, loseResponse, loseRequest, transcriptFixtureId, transcriptFixtureInspirationId,
-        linkFixtureInspirationId, reviewEvidenceFixture, uploadAttempts, failUploadAfter, reflectionCalls, reviewCalls, activeAccount:activeToken===token?'primary':'native' })); return;
+        linkFixtureInspirationId, reviewEvidenceFixture, reviewResultFixture, uploadAttempts, failUploadAfter, reflectionCalls, reviewCalls, activeAccount:activeToken===token?'primary':'native' })); return;
     }
     if (target.pathname.startsWith('/capture-fixture/')) {
       const key = decodeURIComponent(target.pathname);
