@@ -52,3 +52,15 @@ it('an empty later draft does not hide recoverable material in a new tab', async
   expect((await loadInspirationDraft(scope))?.id).toBe(material.id);
   expect((await loadInspirationDraft(scope, empty.id))?.id).toBe(empty.id);
 });
+it('recovers both the old clip and an unchosen replacement without leaking either to another owner', async () => {
+  const old = { id: 'old', type: 'audio' as const, name: 'Old.webm', blob: new Blob(['old bytes']) };
+  const candidate = { id: 'new', type: 'audio' as const, name: 'New.webm', blob: new Blob(['new bytes']) };
+  const first = { ...newInspirationDraft(), revision: 1, media: [old] };
+  await writeInspirationDraft(scope, first, 0);
+  await writeInspirationDraft(scope, { ...first, revision: 2, recordingCandidate: candidate }, 1);
+  expect(await settleInspirationMediaDraft(scope, first.id, 1, 'previous-save')).toBe(false);
+  const restored = await loadInspirationDraft(scope, first.id);
+  expect(await restored?.media[0]?.blob?.text()).toBe('old bytes');
+  expect(await restored?.recordingCandidate?.blob?.text()).toBe('new bytes');
+  expect(await loadInspirationDraft({ accountId: 'other', profileId: 'other' }, first.id)).toBeNull();
+});

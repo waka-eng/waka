@@ -46,6 +46,10 @@ in-memory page state and ignores its late responses. Unattributed legacy
 device drafts remain unassigned; a new sign-in must not silently claim or
 display them. Completed reflections remain server-owned inspiration detail,
 while unfinished drafts belong only to their authenticated storage scope.
+An unfinished re-recording keeps the existing clip and a separate owned
+`recordingCandidate` in the local draft. It is not a second inspiration or a
+second uploaded attachment. Choosing a clip atomically replaces or discards
+the candidate; only the chosen recording enters the immutable save manifest.
 
 ### Credentials bind to a profile
 

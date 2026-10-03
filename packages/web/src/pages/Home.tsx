@@ -10247,6 +10247,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
   const keepIt = useCallback(async (andReflect = false) => {
     const text = draftRef.current.trim();
     const initialMedia = composerDraft.current.current.media;
+    if (composerDraft.current.current.recordingCandidate) { setMouthNote('Choose which recording to keep before saving.'); return; }
     if ((!text && !initialMedia.length) || inspirationSave.pending || inspirationSave.busy || preparingInspirationRef.current || !composerDraft.ready || recording.phase !== 'idle') return;
     if (inspirationInputMedia(text, initialMedia).length > 5) { setMouthNote('Keep up to five attachments in one inspiration.'); return; }
     if (offlineRef.current) {
@@ -10301,7 +10302,16 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
       catch (reason) { setMouthNote(reason instanceof Error ? reason.message : 'Could not keep this draft on your device.'); }
     }
   };
-  onRecorded.current = file => addInspirationFiles([file], true);
+  onRecorded.current = async file => {
+    const hasRecording = composerDraft.current.current.media.some(item => item.type === 'audio');
+    if (!file.size || file.size > 25 * 1024 * 1024 || !file.type.startsWith('audio/')) {
+      setMouthNote(hasRecording ? 'Could not keep this recording. Your previous clip is unchanged.' : 'Could not keep this recording. Please try again.'); return;
+    }
+    if (!hasRecording) return addInspirationFiles([file], true);
+    composerDraft.setRecordingCandidate({ id: crypto.randomUUID(), type: 'audio', name: file.name, blob: file });
+    try { await composerDraft.flush(); setMouthNote(''); }
+    catch (reason) { setMouthNote(reason instanceof Error ? reason.message : 'Could not keep this draft on your device.'); }
+  };
 
   const onMouthKey = useCallback(
     (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
@@ -13399,6 +13409,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
           </div>
         </div>
         {mouthOpen ? <InspirationComposer text={draft} media={inputMedia}
+          recordingCandidate={composerDraft.draft.recordingCandidate}
+          onChooseRecording={useNew => { composerDraft.chooseRecording(useNew); setMouthNote(''); void composerDraft.flush().catch(reason => setMouthNote(String(reason))); }}
           locale={locale} public={keepPublic} ready={composerDraft.ready} fileDraftsAvailable={composerDraft.available} busy={preparingInspiration}
           uploadingId={uploadingMediaId} error={mouthNote || composerDraft.error}
           save={inspirationSave} recording={recording} inputRef={mouthFieldRef}

@@ -6,15 +6,17 @@ import type { InspirationDraftMedia } from '../lib/inspiration-draft-store';
 import type { useAuthoredSave } from '../lib/use-authored-save';
 import type { useAudioRecording } from '../lib/use-audio-recording';
 
-function MediaPreview({ item }: { item: InspirationDraftMedia }) {
+function MediaPreview({ item, recording = false, label }: { item: InspirationDraftMedia; recording?: boolean; label?: string }) {
   const [url, setUrl] = useState('');
+  const audio = useRef<HTMLAudioElement>(null);
+  useEffect(() => { if (recording) audio.current?.pause(); }, [recording]);
   useEffect(() => {
     if (!item.blob) return;
     const value = URL.createObjectURL(item.blob); setUrl(value);
     return () => URL.revokeObjectURL(value);
   }, [item.blob]);
   if (item.type === 'image' && url) return <img src={url} alt={item.name} />;
-  if (item.type === 'audio' && url) return <audio controls src={url} preload="metadata" aria-label={item.name} />;
+  if (item.type === 'audio' && url) return <audio ref={audio} controls={!recording} src={url} preload="metadata" aria-label={label ?? item.name} />;
   return null;
 }
 export function InspirationComposer(props: {
@@ -22,6 +24,7 @@ export function InspirationComposer(props: {
   ready: boolean; fileDraftsAvailable: boolean; busy: boolean; error: string; uploadingId: string | null;
   save: ReturnType<typeof useAuthoredSave>; recording: ReturnType<typeof useAudioRecording>;
   inputRef: Ref<HTMLTextAreaElement>;
+  recordingCandidate?: InspirationDraftMedia | null; onChooseRecording: (useNew: boolean) => void;
   onText: (text: string, caret: number) => void; onFiles: (files: File[]) => void;
   onRemove: (id: string) => void; onVisibility: (value: boolean) => void;
   onClose: () => void; onSubmit: (reflect: boolean) => void;
@@ -54,8 +57,9 @@ export function InspirationComposer(props: {
     <div className="jar-composer-tools">
       <button type="button" disabled={blocked || !props.fileDraftsAvailable} onClick={() => fileInput.current?.click()}>{say('worldComposerPhoto')}</button>
       <button type="button" disabled={blocked} onClick={() => setAddingLink(value => !value)}>{say('worldComposerLink')}</button>
-      {props.recording.phase === 'idle' ? <button type="button" disabled={blocked || !props.fileDraftsAvailable || props.media.some(item => item.type === 'audio')} onClick={() => void props.recording.start()}>{say('worldComposerRecord')}</button>
+      {props.recording.phase === 'idle' ? <button type="button" disabled={blocked || !props.fileDraftsAvailable || Boolean(props.recordingCandidate)} onClick={() => void props.recording.start()}>{props.media.some(item => item.type === 'audio') ? 'Record again' : say('worldComposerRecord')}</button>
         : <button type="button" onClick={() => void props.recording.stop()} disabled={props.recording.phase === 'finishing'}>{say('worldComposerStop')} {Math.floor(props.recording.seconds / 60)}:{String(props.recording.seconds % 60).padStart(2, '0')}</button>}
+      {props.recording.phase === 'recording' || props.recording.phase === 'requesting' ? <button type="button" onClick={() => void props.recording.cancel()}>Cancel recording</button> : null}
     </div>
     {props.ready && !props.fileDraftsAvailable ? <p className="jar-composer-storage-note">{say('worldComposerFilesUnavailable')}</p> : null}
     {addingLink ? <form className="jar-composer-link" onSubmit={event => { event.preventDefault(); addLink(); }}>
@@ -63,10 +67,18 @@ export function InspirationComposer(props: {
       <button type="submit">{say('worldComposerAdd')}</button>
     </form> : null}
     {props.media.length ? <ul className="jar-composer-media">{props.media.map(item => <li key={item.id}>
-      <MediaPreview item={item} /><div className="jar-composer-media-name">{item.type === 'link' ? <a href={item.url} target="_blank" rel="noreferrer">{item.name}</a> : item.name}
+      <MediaPreview item={item} recording={props.recording.phase !== 'idle'} label={item.type === 'audio' && props.recordingCandidate ? 'Previous recording' : undefined} /><div className="jar-composer-media-name">{item.type === 'link' ? <a href={item.url} target="_blank" rel="noreferrer">{item.name}</a> : item.type === 'audio' && props.recordingCandidate ? 'Previous recording' : item.name}
+        {item.type === 'audio' ? <small>In this draft — not saved yet.</small> : null}
         {props.uploadingId === item.id ? <small role="status">{say('worldComposerUploading')}</small> : null}</div>
       <button type="button" disabled={blocked} aria-label={`${say('worldRemoveLower')} ${item.name}`} onClick={() => props.onRemove(item.id)}>×</button>
     </li>)}</ul> : null}
+    {props.recording.phase !== 'idle' && props.media.some(item => item.type === 'audio') ? <p className="jar-composer-storage-note">Your earlier recording stays until you choose.</p> : null}
+    {props.recordingCandidate ? <section className="jar-recording-choice" aria-label="Choose a recording">
+      <p>New recording</p><MediaPreview item={props.recordingCandidate} label="New recording" />
+      <div className="jar-composer-actions"><button type="button" disabled={blocked} onClick={() => props.onChooseRecording(true)}>Use new recording</button>
+        <button type="button" disabled={blocked} onClick={() => props.onChooseRecording(false)}>{props.media.some(item => item.type === 'audio') ? 'Keep previous recording' : 'Discard recording'}</button></div>
+    </section> : null}
+    {props.recording.notice && !props.recording.error && !props.error ? <p role="status" className="jar-composer-storage-note">{props.recording.notice}</p> : null}
     {props.error || props.recording.error ? <p className="jar-settings-warn" role="alert">{props.error || props.recording.error}</p> : null}
     {props.error.includes('another tab') ? <button type="button" onClick={props.onForkDraft}>{say('worldComposerSeparateDraft')}</button> : null}
     {!props.ready ? <p role="status">{say('worldComposerOpening')}</p> : null}
@@ -75,8 +87,8 @@ export function InspirationComposer(props: {
       <button type="button" disabled={blocked} aria-pressed={!props.public} onClick={() => props.onVisibility(false)}>{say('worldPrivate')}</button>
       <button type="button" disabled={blocked} aria-pressed={props.public} onClick={() => props.onVisibility(true)}>{say('worldPublic')}</button>
     </div><div className="jar-composer-actions">
-      <button type="button" aria-label={say('worldSaveInspiration')} disabled={blocked || (!props.text.trim() && !props.media.length)} onClick={() => props.onSubmit(false)}>{say('worldSave')}</button>
-      <button type="button" aria-label={say('worldSaveAndReflect')} disabled={blocked || (!props.text.trim() && !props.media.length)} onClick={() => props.onSubmit(true)}>{say('worldComposerThink')}</button>
+      <button type="button" aria-label={say('worldSaveInspiration')} disabled={blocked || Boolean(props.recordingCandidate) || (!props.text.trim() && !props.media.length)} onClick={() => props.onSubmit(false)}>{say('worldSave')}</button>
+      <button type="button" aria-label={say('worldSaveAndReflect')} disabled={blocked || Boolean(props.recordingCandidate) || (!props.text.trim() && !props.media.length)} onClick={() => props.onSubmit(true)}>{say('worldComposerThink')}</button>
     </div></div>
     <AuthoredSaveNotice save={props.save} locale={props.locale} />
   </DialogSurface>;

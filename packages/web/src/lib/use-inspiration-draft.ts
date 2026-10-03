@@ -66,9 +66,17 @@ export function useInspirationDraft(scope: ProfileStorageScope | null) {
     if (!supported.current) { setError('File drafts are unavailable on this device. Keep this window open.'); return false; }
     return true;
   }, [change]);
+  const setRecordingCandidate = useCallback((recordingCandidate: InspirationDraftMedia | null) => {
+    change(current => ({ ...current, recordingCandidate }));
+  }, [change]);
+  const chooseRecording = useCallback((useNew: boolean) => {
+    if (!live.current.recordingCandidate) return;
+    change(current => ({ ...current, media: useNew && current.recordingCandidate
+      ? [...current.media.filter(item => item.type !== 'audio'), current.recordingCandidate] : current.media, recordingCandidate: null }));
+  }, [change]);
   const flush = useCallback(async () => {
     if (!supported.current) {
-      if (live.current.media.length) throw new Error('File drafts are unavailable on this device.');
+      if (live.current.media.length || live.current.recordingCandidate) throw new Error('File drafts are unavailable on this device.');
       return null;
     }
     if (!live.current.revision) change(current => current);
@@ -98,5 +106,5 @@ export function useInspirationDraft(scope: ProfileStorageScope | null) {
     try { if (key) sessionStorage.setItem(key, next.id); } catch { /* owner-index recovery */ }
     change(current => current); await pump();
   }, [change, pump]);
-  return { draft, current: live, ready, available, error, setText, setMedia, flush, settle, fork };
+  return { draft, current: live, ready, available, error, setText, setMedia, setRecordingCandidate, chooseRecording, flush, settle, fork };
 }

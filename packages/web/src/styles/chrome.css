@@ -1306,7 +1306,7 @@ body .profile-signout-button {
 .jar-inspiration-composer button { min-height: var(--sp-44); min-width: var(--sp-44); padding: var(--sp-8) var(--sp-12); border: 1px solid var(--w-edge); border-radius: var(--sp-12); background: none; color: var(--w-ink); font: inherit; font-size: var(--t-note); cursor: pointer; }
 .jar-inspiration-composer button:disabled { opacity: .5; cursor: default; }
 .jar-inspiration-composer button:focus-visible { outline: 2px solid var(--w-ink); outline-offset: 2px; }
-.jar-inspiration-composer .jar-composer-text { position: static; display: block; width: 100%; min-height: calc(var(--sp-44) * 3); max-height: calc(var(--sp-44) * 6); margin: var(--sp-12) 0; padding: var(--sp-8) 0; background: none; border: 0; border-bottom: 1px solid var(--w-muted); border-radius: 0; color: var(--w-ink); font-size: var(--t-body); line-height: 1.6; letter-spacing: normal; text-transform: none; text-align: left; resize: vertical; }
+.jar-inspiration-composer .jar-composer-text { position: static; display: block; width: 100%; max-width: none; min-height: calc(var(--sp-44) * 3); max-height: calc(var(--sp-44) * 6); margin: var(--sp-12) 0; padding: var(--sp-8) 0; background: none; border: 0; border-bottom: 1px solid var(--w-muted); border-radius: 0; color: var(--w-ink); font-size: var(--t-body); line-height: 1.6; letter-spacing: normal; text-transform: none; text-align: left; resize: vertical; }
 .jar-composer-tools, .jar-composer-actions, .jar-composer-visibility { display: flex; flex-wrap: wrap; gap: var(--sp-8); }
 .jar-composer-tools { margin-bottom: var(--sp-12); }
 .jar-composer-storage-note { color: var(--w-muted); font-size: var(--t-note); line-height: 1.5; }
@@ -1316,6 +1316,8 @@ body .profile-signout-button {
 .jar-composer-media li { display: flex; gap: var(--sp-12); align-items: center; flex-wrap: wrap; padding: var(--sp-12) 0; border-bottom: 1px solid var(--w-edge); }
 .jar-composer-media img { width: calc(var(--sp-44) * 2); height: calc(var(--sp-44) * 2); object-fit: cover; border-radius: var(--sp-8); }
 .jar-composer-media audio { width: 100%; }
+.jar-recording-choice { padding-block: var(--sp-12); border-bottom: 1px solid var(--w-edge); }
+.jar-recording-choice audio { width: 100%; margin-bottom: var(--sp-12); }
 .jar-composer-media-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: var(--t-note); }
 .jar-composer-media-name a { color: inherit; }
 .jar-composer-media-name small { display: block; color: var(--w-muted); font-size: var(--t-note); }

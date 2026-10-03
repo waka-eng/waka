@@ -59,3 +59,15 @@ it('offers a separate draft after a competing tab wins without overwriting it', 
   expect((await loadInspirationDraft(scope, original.id))?.text).toBe('Other tab');
   expect((await loadInspirationDraft(scope, hook.draft.id))?.text).toBe('My new words');
 });
+it('keeps the old clip until an explicit replacement choice and never reuses its upload ticket', async () => {
+  const old = { id: 'old', type: 'audio' as const, name: 'Old.webm', blob: new Blob(['old']), uploaded: { key: 'old-ticket', contentType: 'audio/webm', size: 3 } };
+  const candidate = { id: 'new', type: 'audio' as const, name: 'New.webm', blob: new Blob(['new']) };
+  await act(async () => { hook.setMedia([old]); hook.setRecordingCandidate(candidate); await hook.flush(); });
+  expect(hook.draft.media[0]?.id).toBe('old');
+  expect((await loadInspirationDraft(scope, hook.draft.id))?.recordingCandidate?.id).toBe('new');
+  await act(async () => { hook.chooseRecording(false); await hook.flush(); });
+  expect(hook.draft.media[0]?.id).toBe('old'); expect(hook.draft.recordingCandidate).toBeNull();
+  await act(async () => { hook.setRecordingCandidate(candidate); hook.chooseRecording(true); await hook.flush(); });
+  expect(hook.draft.media).toHaveLength(1); expect(hook.draft.media[0]?.id).toBe('new'); expect(hook.draft.media[0]?.uploaded).toBeUndefined();
+  expect((await loadInspirationDraft(scope, hook.draft.id))?.recordingCandidate).toBeUndefined();
+});
