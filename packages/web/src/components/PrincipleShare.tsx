@@ -12,7 +12,7 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
   const current=useRef<StoredPrincipleArtifactDraft|null>(null),writer=useRef(crypto.randomUUID());
   const [preview,setPreview]=useState<{key:string;url:string;blob:Blob;fallbackFont:boolean;words:string}|null>(null),[renderError,setRenderError]=useState<string|null>(null);
   const [renderAttempt,setRenderAttempt]=useState(0);
-  const [busy,setBusy]=useState(false),[notice,setNotice]=useState<'download'|'shared'|'unavailable'|null>(null);
+  const [busy,setBusy]=useState(false),[notice,setNotice]=useState<'download'|'downloadFailed'|'shared'|'unavailable'|null>(null);
   const [statements,setStatements]=useState<ApiPrincipleStatements|null>(null),[historyFailed,setHistoryFailed]=useState(false),[historyAttempt,setHistoryAttempt]=useState(0);
   const say=(key:Parameters<typeof t>[1])=>t(locale,key);
   const source=rows?.find(row=>row.id===id);
@@ -76,8 +76,12 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
   const ready=Boolean(contentKey&&preview?.key===contentKey&&!renderError);
   const download=()=>{
     if(!ready||!preview||busy)return;
-    const url=URL.createObjectURL(preview.blob),link=document.createElement('a');link.href=url;link.download=`waka-principles-${draft!.value.format}.png`;
-    document.body.append(link);link.click();link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),1000);setNotice('download');
+    let url:string|undefined,link:HTMLAnchorElement|undefined;
+    try{
+      url=URL.createObjectURL(preview.blob);link=document.createElement('a');link.href=url;link.download=`waka-principles-${draft!.value.format}.png`;
+      document.body.append(link);link.click();setNotice('download');
+    }catch{setNotice('downloadFailed');}
+    finally{link?.remove();if(url){const release=url;window.setTimeout(()=>URL.revokeObjectURL(release),1000);}}
   };
   const file=ready&&preview&&typeof File==='function'?new File([preview.blob],'waka-principles.png',{type:'image/png'}):null;
   let canShare=false;try{canShare=Boolean(file&&typeof navigator.share==='function'&&typeof navigator.canShare==='function'&&navigator.canShare({files:[file]}));}catch{/* Download stays available. */}
@@ -125,13 +129,13 @@ export function PrincipleShare({scope,id,name,locale,onClose,onChoose}:{scope:Pr
           {storageFailed?<p role="alert">{say('worldShareStorageFailed')} <button type="button" onClick={()=>{try{recoverPrincipleArtifactDrafts(scope,id);update(draft.value);}catch{setStorageFailed(true);}}}>{say('worldShareKeepDraft')}</button></p>:null}
           <button type="button" disabled={busy} onClick={discard}>{say('worldReviewDiscardDraft')}</button>
         </div><div className="jar-share-preview" aria-busy={!ready&&!renderError}>
-          {preview&&(!change||content)?<img src={preview.url} alt={preview.words}/>:null}
+          {preview&&!renderError&&(!change||content)?<img src={preview.url} alt={preview.words}/>:null}
           {!content?(change?null:<p role="status">{say('worldShareMissing')}</p>):renderError?<p role="alert">{say(renderError==='too_long'?'worldShareTooLong':renderError==='empty'?'worldShareEmpty':'worldShareRenderFailed')}{renderError==='unavailable'?<button type="button" onClick={()=>setRenderAttempt(value=>value+1)}>{say('worldRoomHistoryRetry')}</button>:null}</p>:!ready?<p role="status">{say('worldShareRendering')}</p>:preview?.fallbackFont?<p className="jar-review-context">{say('worldShareFallbackFont')}</p>:null}
         </div></div>
       </>:null}
       </div>
       {source&&draft&&rows?<footer><button type="button" disabled={!ready||busy} onClick={download}>{say('worldShareDownload')}</button>{canShare?<button type="button" disabled={!ready||busy} onClick={()=>void share()}>{say('worldShareSheet')}</button>:null}
-        {notice?<p role="status">{say(notice==='download'?'worldShareDownloadStarted':notice==='shared'?'worldShareSheetClosed':'worldShareUnavailable')}</p>:null}</footer>:null}
+        {notice?<p role="status">{say(notice==='download'?'worldShareDownloadStarted':notice==='downloadFailed'?'worldShareDownloadFailed':notice==='shared'?'worldShareSheetClosed':'worldShareUnavailable')}</p>:null}</footer>:null}
     </DialogSurface>
   </>;
 }

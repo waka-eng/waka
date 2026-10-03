@@ -56,6 +56,7 @@
   "worldShareDownload": "Save image",
   "worldShareSheet": "Share image",
   "worldShareDownloadStarted": "Image download started.",
+  "worldShareDownloadFailed": "Couldn’t start the download. Your card is still here—try Save image again.",
   "worldShareSheetClosed": "Share sheet closed.",
   "worldShareUnavailable": "Sharing isn’t available here. You can save the image instead.",
   "worldPersonalReadingEmpty": "Capture your first inspiration to begin.",

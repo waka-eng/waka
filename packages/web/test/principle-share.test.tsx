@@ -1,14 +1,16 @@
 // @vitest-environment jsdom
 /** WHAT THIS MOCKS, AND WHY (gate G6): `lib/api` supplies owned principles;
  * `lib/principle-artifact` controls image timing, `URL` supplies local blob
- * handles, and `navigator` supplies a cancelable native share sheet.
- * Real editing, private-field projection, draft storage and recovery run. */
+ * handles, `HTMLAnchorElement.click` controls download handoff, and
+ * `navigator` supplies a cancelable native share sheet.
+ * `Storage.setItem` simulates one quota failure; otherwise real editing,
+ * private-field projection, draft storage and recovery run. */
 import {act} from 'react';
 import {createRoot,type Root} from 'react-dom/client';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {PrincipleShare} from '../src/components/PrincipleShare';
 import {fetchPrinciples,fetchPrincipleStatements,updatePrinciple,reorderPrinciples,type ApiPrinciple} from '../src/lib/api';
-import {renderPrincipleArtifact} from '../src/lib/principle-artifact';
+import {ArtifactLayoutError,renderPrincipleArtifact} from '../src/lib/principle-artifact';
 import {readPrincipleArtifactDrafts} from '../src/lib/principle-artifact-drafts';
 vi.mock('../src/lib/api',async original=>({...await original<typeof import('../src/lib/api')>(),fetchPrinciples:vi.fn(),fetchPrincipleStatements:vi.fn(),updatePrinciple:vi.fn(),reorderPrinciples:vi.fn()}));
 vi.mock('../src/lib/principle-artifact',async original=>({...await original<typeof import('../src/lib/principle-artifact')>(),renderPrincipleArtifact:vi.fn()}));
@@ -29,6 +31,7 @@ beforeEach(()=>{
 });
 afterEach(async()=>{
   await act(async()=>root.unmount());host.remove();vi.unstubAllGlobals();vi.useRealTimers();
+  vi.restoreAllMocks();
   if(priorShare)Object.defineProperty(navigator,'share',priorShare);else Reflect.deleteProperty(navigator,'share');
   if(priorCanShare)Object.defineProperty(navigator,'canShare',priorCanShare);else Reflect.deleteProperty(navigator,'canShare');
 });
@@ -60,6 +63,61 @@ it('keeps wording after native cancellation and never claims it was published',a
   await mount();await type('Words I chose for the card');await settle();await act(async()=>button('Share image').click());
   expect(host.querySelector('textarea')!.value).toBe('Words I chose for the card');expect(host.textContent).not.toMatch(/published|posted|Share sheet closed/);
   nativeShare.mockResolvedValueOnce(undefined);await act(async()=>button('Share image').click());expect(nativeShare).toHaveBeenCalledTimes(2);expect(host.textContent).toContain('Share sheet closed.');
+});
+it('hides an obsolete preview after a render failure and retries without changing the draft',async()=>{
+  await mount();await settle();
+  vi.mocked(renderPrincipleArtifact).mockRejectedValueOnce(new ArtifactLayoutError('unavailable'));
+  await type('Keep these words after an image failure');await settle();
+  expect(button('Save image').disabled).toBe(true);expect(host.querySelector('img')).toBeNull();
+  expect(host.querySelector('textarea')!.value).toBe('Keep these words after an image failure');
+  await act(async()=>button('Try again').click());await settle();
+  expect(button('Save image').disabled).toBe(false);expect(host.querySelector('img')!.alt).toBe('Keep these words after an image failure');
+});
+it('exports the preview blob and preserves the draft when download handoff fails',async()=>{
+  await mount();await type('My export, not private evidence');await settle();
+  const previewBlob=vi.mocked(URL.createObjectURL).mock.calls.at(-1)![0];
+  const click=vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementationOnce(()=>{throw new Error('Download refused');});
+  await act(async()=>button('Save image').click());
+  expect(host.textContent).toContain('Couldn’t start the download.');expect(host.textContent).not.toContain('Image download started.');
+  expect(host.querySelector('textarea')!.value).toBe('My export, not private evidence');expect(document.querySelector('a[download]')).toBeNull();
+  click.mockImplementation(()=>{});await act(async()=>button('Save image').click());
+  expect(URL.createObjectURL).toHaveBeenLastCalledWith(previewBlob);expect(host.textContent).toContain('Image download started.');
+  expect(readPrincipleArtifactDrafts(scope,id)[0].value.entries[0].text).toBe('My export, not private evidence');
+});
+it('falls back to download after native sharing fails and sends only the preview image',async()=>{
+  nativeCanShare.mockReturnValue(true);nativeShare.mockRejectedValueOnce(new DOMException('Unavailable','NotAllowedError'));
+  await mount();await settle();await act(async()=>button('Share image').click());
+  expect(host.textContent).toContain('You can save the image instead.');expect(button('Save image').disabled).toBe(false);
+  const payload=nativeShare.mock.calls[0][0];expect(Object.keys(payload)).toEqual(['files']);
+  expect(payload.files).toHaveLength(1);expect(payload.files[0].type).toBe('image/png');
+  expect(host.querySelector('textarea')!.value).toBe(source.statement);
+});
+it('recovers a failed source read without creating a draft or an export from missing data',async()=>{
+  vi.mocked(fetchPrinciples).mockRejectedValueOnce(new Error('Offline'));
+  await mount();expect(host.querySelector('textarea')).toBeNull();expect(renderPrincipleArtifact).not.toHaveBeenCalled();
+  await act(async()=>button('Try again').click());await settle();
+  expect(host.querySelector('textarea')!.value).toBe(source.statement);expect(button('Save image').disabled).toBe(false);
+});
+it.each(['empty','too_long'] as const)('keeps unrenderable %s wording editable and disables export',async code=>{
+  await mount();await settle();vi.mocked(renderPrincipleArtifact).mockRejectedValueOnce(new ArtifactLayoutError(code));
+  const words=code==='empty'?'   ':'Long wording '.repeat(100);await type(words);await settle();
+  expect(host.querySelector('textarea')!.value).toBe(words);expect(button('Save image').disabled).toBe(true);expect(host.querySelector('img')).toBeNull();
+  await type('Fits again');await settle();expect(button('Save image').disabled).toBe(false);
+});
+it('keeps visible words after storage failure and saves them on explicit retry',async()=>{
+  await mount();vi.spyOn(Storage.prototype,'setItem').mockImplementationOnce(()=>{throw new DOMException('Full','QuotaExceededError');});
+  await type('Keep me even if storage fills up');await settle();
+  expect(host.textContent).toContain('This device couldn’t keep the draft.');
+  expect(host.querySelector('textarea')!.value).toBe('Keep me even if storage fills up');
+  await act(async()=>button('Try saving draft').click());
+  expect(host.textContent).not.toContain('This device couldn’t keep the draft.');
+  expect(readPrincipleArtifactDrafts(scope,id)[0].value.entries[0].text).toBe('Keep me even if storage fills up');
+});
+it('does not restore or export a local draft if the source is no longer accessible',async()=>{
+  await mount();await type('Private draft');await act(async()=>root.unmount());root=createRoot(host);
+  vi.mocked(fetchPrinciples).mockResolvedValue([]);vi.mocked(renderPrincipleArtifact).mockClear();await mount();await settle();
+  expect(host.querySelector('textarea')).toBeNull();expect(host.textContent).not.toContain('Private draft');
+  expect(renderPrincipleArtifact).not.toHaveBeenCalled();expect(host.querySelector('footer')).toBeNull();
 });
 it('builds change cards from recorded words and dates with no editable invented past',async()=>{
   const beforeId='22222222-2222-4222-8222-222222222222',afterId='33333333-3333-4333-8333-333333333333';

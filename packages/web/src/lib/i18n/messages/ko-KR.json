@@ -56,6 +56,7 @@
   "worldShareDownload": "이미지 저장",
   "worldShareSheet": "이미지 공유",
   "worldShareDownloadStarted": "이미지 다운로드를 시작했어요.",
+  "worldShareDownloadFailed": "다운로드를 시작하지 못했어요. 카드는 그대로 있으니 이미지 저장을 다시 눌러 주세요.",
   "worldShareSheetClosed": "공유창을 닫았어요.",
   "worldShareUnavailable": "여기서는 공유창을 열 수 없어요. 이미지를 저장해 주세요.",
   "worldPersonalReadingEmpty": "첫 영감을 저장하며 시작해 보세요.",
