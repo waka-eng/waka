@@ -5,6 +5,7 @@ import { hashEmbeddingInput } from "./inspiration-embeddings.js";
 import { quoteForEvidence } from "./salience.js";
 import type { RelatedInspirationContext } from "./model-provider.js";
 import { readInspirationRevision } from "./inspiration-processing.js";
+import { effectiveAttachmentKind, effectiveAttachmentStatus, effectiveAttachmentText } from './attachment-material.js';
 
 type Db = Pick<ReturnType<typeof getDb>, "select">;
 export interface InspirationMaterialIdentity {
@@ -36,7 +37,7 @@ export async function loadInspirationMaterial(db: Db, profileId: string, inspira
     .from(reflections).where(and(eq(reflections.profileId, profileId), eq(reflections.inspirationId, inspirationId)))
     .orderBy(asc(reflections.createdAt), asc(reflections.id));
   const attachmentQuery = db.select({ id: attachments.id, type: attachments.type, url: attachments.url,
-    kind: attachments.enrichmentKind, text: attachments.enrichmentText, status: attachments.enrichmentStatus,
+    kind: effectiveAttachmentKind, text: effectiveAttachmentText, status: effectiveAttachmentStatus,
     hostname: attachments.hostname, name: attachments.name })
     .from(attachments).where(and(eq(attachments.profileId, profileId), eq(attachments.inspirationId, inspirationId)))
     .orderBy(asc(attachments.id));

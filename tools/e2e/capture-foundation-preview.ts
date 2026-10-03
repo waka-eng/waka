@@ -39,6 +39,20 @@ const [nativeProfile] = await fixture.sql`INSERT INTO profiles(account_id,type,n
 const nativeToken = await signSessionToken({ profileId: nativeProfile.id, email: 'native-capture-fixture@example.test' });
 await createSessionRow({ profileId: nativeProfile.id, token: nativeToken });
 const objects = new Map<string, { bytes: Buffer; contentType: string }>();
+// Opt-in, explicitly synthetic completed transcript for real UI/HTTP/SQL QA.
+// It does not call a provider or pretend to be a model-quality evaluation.
+let transcriptFixtureId: string | null = null;
+let transcriptFixtureInspirationId: string | null = null;
+if (process.env.WAKA_TRANSCRIPT_FIXTURE === '1') {
+  const bytes = await readFile(resolve('packages/api/test/fixtures/audio/browser-tone.webm'));
+  const key = `profiles/${profile.id}/attachments/transcript-fixture.webm`;
+  const [source] = await fixture.sql`INSERT INTO inspirations(profile_id,text,kind) VALUES (${profile.id},'Transcript editing fixture','audio') RETURNING id`;
+  const [row] = await fixture.sql`INSERT INTO attachments(profile_id,inspiration_id,type,url,s3_key,content_type,size,enrichment_status,enrichment_kind,enrichment_text)
+    VALUES (${profile.id},${source.id},'audio',${`${origin}/capture-fixture/${key}`},${key},'audio/webm',${bytes.length},'ready','audio_transcription','Leave a little room for good work.') RETURNING id`;
+  transcriptFixtureId = row.id;
+  transcriptFixtureInspirationId = source.id;
+  objects.set(`/capture-fixture/${key}`, { bytes, contentType: 'audio/webm' });
+}
 let loseResponse = false, failUpload = false;
 async function body(request: IncomingMessage, limit: number) {
   const chunks: Buffer[] = []; let size = 0;
@@ -77,7 +91,7 @@ const server = createServer(async (request, response) => {
       const [counts] = await fixture.sql`SELECT (SELECT count(*)::int FROM inspirations) AS inspirations,
         (SELECT count(*)::int FROM attachments) AS attachments, (SELECT count(*)::int FROM inspiration_save_requests) AS requests`;
       response.writeHead(200, {'Content-Type':'application/json'}); response.end(JSON.stringify({ ...counts, objects: objects.size,
-        origin, schema: fixture.schemaName, microphone: 'synthetic tone', failUpload, loseResponse })); return;
+        origin, schema: fixture.schemaName, microphone: 'synthetic tone', failUpload, loseResponse, transcriptFixtureId, transcriptFixtureInspirationId })); return;
     }
     if (target.pathname.startsWith('/capture-fixture/')) {
       const key = decodeURIComponent(target.pathname);

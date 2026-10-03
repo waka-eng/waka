@@ -1,0 +1,48 @@
+{
+  "at": "2026-10-02T23:44:54.441Z",
+  "calls": 2,
+  "maxCalls": 2,
+  "estimatedCostUsd": 0.000403,
+  "estimatedCapUsd": 0.05,
+  "cases": [
+    {
+      "name": "english",
+      "passed": true,
+      "durationMs": 1722,
+      "bytes": 184152,
+      "status": "ready",
+      "reason": null,
+      "transcriptChars": 99,
+      "drained": {
+        "claimed": 1,
+        "held": 0,
+        "succeeded": 1,
+        "retried": 0,
+        "failed": 0,
+        "deferred": 0
+      }
+    },
+    {
+      "name": "silence",
+      "passed": true,
+      "durationMs": 1341,
+      "bytes": 96044,
+      "status": "unavailable",
+      "reason": "audio_no_speech",
+      "transcriptChars": 0,
+      "drained": {
+        "claimed": 1,
+        "held": 0,
+        "succeeded": 1,
+        "retried": 0,
+        "failed": 0,
+        "deferred": 0
+      }
+    }
+  ],
+  "limitations": [
+    "synthetic speech and silence",
+    "local object transport, not AWS policy",
+    "no physical device audio"
+  ]
+}

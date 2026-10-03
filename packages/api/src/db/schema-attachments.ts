@@ -91,6 +91,12 @@ export const attachments = pgTable(
     enrichmentText: text("enrichment_text"),
     enrichmentErrorReason: text("enrichment_error_reason"),
     enrichmentUpdatedAt: timestamp("enrichment_updated_at", { withTimezone: true }),
+    /** Null uses the machine transcript; empty explicitly records no words. */
+    transcriptCorrection: text('transcript_correction'),
+    transcriptRevision: integer('transcript_revision').notNull().default(0),
+    transcriptCorrectedAt: timestamp('transcript_corrected_at', { withTimezone: true }),
+    transcriptRetryCount: integer('transcript_retry_count').notNull().default(0),
+    transcriptRetryWindowAt: timestamp('transcript_retry_window_at', { withTimezone: true }),
 
     // Structured link metadata, kept separate from the bulk text.
     finalUrl: text("final_url"),

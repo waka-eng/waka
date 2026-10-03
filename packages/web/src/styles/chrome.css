@@ -1325,6 +1325,15 @@ body .profile-signout-button {
 .jar-saved-attachment { margin: var(--sp-12) 0; font-size: var(--t-note); }
 .jar-saved-attachment img { display: block; max-width: 100%; max-height: 320px; object-fit: contain; border-radius: var(--sp-8); }
 .jar-saved-attachment audio { width: 100%; }
+.jar-attachment-transcript { margin-top: var(--sp-16); font-size: var(--t-note); line-height: 1.6; }
+.jar-attachment-transcript header { display: flex; align-items: baseline; gap: var(--sp-12); }
+.jar-attachment-transcript h3 { font-size: var(--t-body); font-weight: 500; margin: 0; }
+.jar-attachment-transcript small { color: var(--w-muted); }
+.jar-transcript-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.jar-transcript-actions { display: flex; flex-wrap: wrap; gap: var(--sp-8); margin-block: var(--sp-12); }
+.jar-attachment-transcript textarea { display: block; box-sizing: border-box; width: 100%; min-height: calc(var(--sp-44) * 3); padding: var(--sp-12); margin-block: var(--sp-12); font-size: var(--t-body); line-height: 1.6; color: var(--w-ink); background: var(--w-raised); border: 1px solid var(--w-edge); border-radius: var(--sp-8); }
+.jar-attachment-transcript summary { min-height: var(--sp-44); cursor: pointer; }
+@media (max-width: 600px) { .jar-attachment-transcript textarea { font-size: var(--t-lead); } }
 .jar-saved-attachment a { color: var(--w-ink); overflow-wrap: anywhere; }
 .jar-saved-attachment button { min-height: var(--sp-44); padding: var(--sp-8) var(--sp-12); color: var(--w-ink); background: none; border: 1px solid var(--w-edge); border-radius: var(--sp-8); font: inherit; cursor: pointer; }
 @media (max-width: 600px) { .jar-inspiration-composer { padding: var(--sp-16); } .jar-composer-footer { align-items: stretch; flex-direction: column; } .jar-composer-actions { justify-content: flex-end; } .jar-inspiration-composer .jar-composer-text { font-size: 16px; } }

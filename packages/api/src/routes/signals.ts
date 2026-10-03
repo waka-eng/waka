@@ -42,6 +42,7 @@ import {
   type SignalStatus,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
+import { effectiveAttachmentStatus, effectiveAttachmentText } from '../lib/attachment-material.js';
 import { feedbackWordingCurrent } from '../lib/feedback-revisions.js';
 import { quoteForEvidence } from "../lib/salience.js";
 import {
@@ -475,9 +476,9 @@ export async function getProfileSignal(
       eq(reflections.skipped, false), isNotNull(reflections.answer))) : [];
   const answersById = new Map(quotedAnswers.map((row) => [row.id, row.answer ?? ""]));
   const enrichedIds = evidenceRows.filter((row) => row.quoteSource === "enrichment").map((row) => row.inspirationId);
-  const enriched = enrichedIds.length ? await db.select({ inspirationId: attachments.inspirationId, text: attachments.enrichmentText })
+  const enriched = enrichedIds.length ? await db.select({ inspirationId: attachments.inspirationId, text: effectiveAttachmentText })
     .from(attachments).where(and(eq(attachments.profileId, input.profileId), inArray(attachments.inspirationId, enrichedIds),
-      eq(attachments.enrichmentStatus, "ready"), isNotNull(attachments.enrichmentText))) : [];
+      eq(effectiveAttachmentStatus, "ready"), isNotNull(effectiveAttachmentText))) : [];
 
   return {
     ...summary,

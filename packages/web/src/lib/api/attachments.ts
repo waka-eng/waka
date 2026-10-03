@@ -12,7 +12,7 @@
  * `inspirations.ts` imports them from here and not the other way round.
  */
 
-import { ApiError, apiPath, getJson, postJson } from "./http";
+import { ApiError, apiPath, getJson, patchJson, postJson } from "./http";
 
 // ---------------------------------------------------------------------------
 // What an attachment is
@@ -22,6 +22,32 @@ import { ApiError, apiPath, getJson, postJson } from "./http";
 export type AttachmentType = "link" | "image" | "file" | "audio";
 export type AttachmentEnrichmentStatus = "pending" | "ready" | "failed" | "unavailable";
 export type AttachmentEnrichmentKind = "page_body" | "image_description" | "audio_transcription";
+
+export interface ApiAttachmentTranscript {
+  attachmentId: string; inspirationId: string; profileId: string; revision: string;
+  status: AttachmentEnrichmentStatus; transcript: string | null; correction: string | null;
+  effectiveText: string | null; correctedAt: string | null; reason: string | null;
+  canEdit: boolean; canRetry: boolean; retryAfter: string | null;
+}
+function checkedTranscript(id: string, row: ApiAttachmentTranscript) {
+  if (!row || row.attachmentId !== id || typeof row.revision !== 'string' || !/^\d+$/.test(row.revision) ||
+    !['pending', 'ready', 'failed', 'unavailable'].includes(row.status) ||
+    ![row.transcript, row.correction, row.effectiveText].every(value => value === null || typeof value === 'string') ||
+    !(row.retryAfter === null || (typeof row.retryAfter === 'string' && Number.isFinite(Date.parse(row.retryAfter)))) ||
+    typeof row.canEdit !== 'boolean' || typeof row.canRetry !== 'boolean') {
+    throw new ApiError({ status: 200, code: 'invalid_response', message: 'Could not verify this transcript' });
+  }
+  return row;
+}
+export async function fetchAttachmentTranscript(id: string, signal?: AbortSignal) {
+  return checkedTranscript(id, await getJson<ApiAttachmentTranscript>(apiPath(`/attachments/${encodeURIComponent(id)}/transcript`), 'Could not load the transcript', signal));
+}
+export async function correctAttachmentTranscript(id: string, input: { revision: string; correction: string | null }, signal?: AbortSignal) {
+  return checkedTranscript(id, await patchJson<ApiAttachmentTranscript>(apiPath(`/attachments/${encodeURIComponent(id)}/transcript`), input, 'Could not save the transcript', signal));
+}
+export async function retryAttachmentTranscript(id: string, revision: string, signal?: AbortSignal) {
+  return checkedTranscript(id, await postJson<ApiAttachmentTranscript>(apiPath(`/attachments/${encodeURIComponent(id)}/transcript/retry`), { revision }, 'Could not retry transcription', signal));
+}
 
 export async function fetchAttachmentUrl(id: string, signal?: AbortSignal): Promise<string> {
   const body = await getJson<{ attachmentId: string; url: string }>(apiPath(`/attachments/${encodeURIComponent(id)}/url`), 'Could not open this attachment', signal);

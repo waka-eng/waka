@@ -759,6 +759,7 @@ export async function enrichAttachment(
       enrichmentStatus: attachments.enrichmentStatus,
       enrichmentKind: attachments.enrichmentKind,
       enrichmentText: attachments.enrichmentText,
+      transcriptRevision: attachments.transcriptRevision,
     })
     .from(attachments)
     .where(eq(attachments.id, attachmentId))
@@ -796,10 +797,14 @@ export async function enrichAttachment(
     const [current] = await tx.select().from(attachments).where(eq(attachments.id, attachmentId)).for("update");
     if (!current) return false;
     if (current.url !== attachment.url || current.type !== attachment.type || current.s3Key !== attachment.s3Key ||
-      current.contentType !== attachment.contentType || current.profileId !== attachment.profileId || current.inspirationId !== attachment.inspirationId) {
+      current.contentType !== attachment.contentType || current.profileId !== attachment.profileId || current.inspirationId !== attachment.inspirationId ||
+      (current.type === 'audio' && current.transcriptRevision !== attachment.transcriptRevision)) {
       throw new Error("Attachment material changed during enrichment; retry current source");
     }
     await deps.beforeCommit?.(tx);
+    const nextText = result.status === "ready" ? (result.text ?? link.text ?? null) : null;
+    const transcriptChanged = current.type === 'audio' && (current.enrichmentStatus !== result.status || current.enrichmentText !== nextText ||
+      current.enrichmentKind !== (result.status === 'ready' ? result.kind : null));
     await tx
     .update(attachments)
     .set({
@@ -811,6 +816,7 @@ export async function enrichAttachment(
         result.status === "ready" ? (result.text ?? link.text ?? null) : null,
       enrichmentErrorReason: result.status === "ready" ? null : result.reason,
       enrichmentUpdatedAt: now,
+      ...(transcriptChanged ? { transcriptRevision: current.transcriptRevision + 1 } : {}),
       finalUrl: link.finalUrl ?? null,
       hostname: link.hostname ?? null,
       title: link.title ?? null,
@@ -820,7 +826,6 @@ export async function enrichAttachment(
       updatedAt: now,
     })
     .where(eq(attachments.id, attachmentId));
-    const nextText = result.status === "ready" ? (result.text ?? link.text ?? null) : null;
     if (current.enrichmentStatus !== result.status || current.enrichmentText !== nextText ||
       current.enrichmentKind !== (result.status === "ready" ? result.kind : null) ||
       current.hostname !== (link.hostname ?? null)) {

@@ -59,6 +59,7 @@ import { requestSignalDerivation } from "../lib/inspiration-derivation-requests.
 import { validationDetails } from "../lib/validation.js";
 import { profileQuerySchema } from './inspirations-validation.js';
 import { resolveTargetProfile } from './inspirations-tenancy.js';
+import { createAttachmentTranscriptRoutes } from './attachment-transcripts.js';
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -436,6 +437,7 @@ export function createAttachmentRoutes(
 // Mounted at the router level so an unauthenticated handler cannot be shipped
 // into this namespace by accident.
 attachmentsRoutes.use("*", deps.authMiddleware ?? requireAuth);
+attachmentsRoutes.route('/', createAttachmentTranscriptRoutes(getDatabase));
 
 // Raw uploads remain private. Resolve one current owned attachment to a short
 // read URL; a guessed id or public room source never grants raw-file access.

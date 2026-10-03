@@ -95,6 +95,8 @@ const REGISTER: Record<string, string> = {
   retryInspirationProcessing: "RULED: resumes failed processing of already-kept material without creating another capture or answer; existing words remain editable or removable, and opening the resulting reading is a separate choice",
   presignAttachment: "RULED: one half of a single upload, not a state a person is left in",
   finalizeAttachment: "RULED: the other half of that upload",
+  correctAttachmentTranscript: "RULED: edit again or use original wording (a null correction); neither operation changes the recording or the retained machine transcript",
+  retryAttachmentTranscript: "RULED: resumes analysis of an existing recording without creating authored content; corrections stay authoritative and the recording remains removable",
 
   // what the machine concluded, and what you may say back
   updateSignal: "releaseSignal",

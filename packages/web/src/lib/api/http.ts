@@ -164,8 +164,9 @@ export async function patchJson<T>(
   path: string,
   payload: unknown,
   fallbackMessage: string,
+  signal?: AbortSignal,
 ): Promise<T> {
-  return writeJson<T>("PATCH", path, payload, fallbackMessage);
+  return writeJson<T>("PATCH", path, payload, fallbackMessage, signal);
 }
 
 export async function writeJson<T>(

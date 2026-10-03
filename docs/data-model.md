@@ -151,10 +151,24 @@ Audio is an attachment kind. Its original bytes remain separate from
 `audio_transcription` enrichment, stored as the attachment's machine-derived
 enrichment text. New audio captures request the existing durable enrichment job;
 valid completed transcripts are reused for the same attachment. No intelligible
-speech is unavailable material, not invented words. The planned
-`transcript_correction` remains separately authored content that machine retries
-must never overwrite. Original audio, transcript and answers from the same
-capture do not establish independent repeated experiences.
+speech is unavailable material, not invented words. The
+`transcript_correction` is separately authored content that machine retries
+must never overwrite. Null selects the machine transcript; an empty correction
+explicitly means no usable words. The attachment's `transcript_revision` changes
+when transcript processing or the correction changes; clients compare this
+number when editing, and workers reject results prepared before such a change.
+`transcript_corrected_at` records the explicit owner action. Effective attachment
+material prefers the correction for extraction, embeddings and source checks,
+without promoting it into a second inspiration. Correction changes invalidate
+stale quotes/vectors and request learning in the same transaction. Export and
+erasure include original transcript and correction with their attachment.
+Explicit transcription retries are limited to three per attachment per one-hour
+window beginning at the first explicit retry (`transcript_retry_count`, `transcript_retry_window_at`),
+in addition to existing worker attempt and account budgets. Joining already
+pending work consumes no new retry; exhausting this window never removes the
+original recording or the person's correction.
+Original audio, transcript and answers from the same capture do not establish
+independent repeated experiences.
 
 The approved later review/conversation/export contracts are detailed in
 [the personal capture contract](plans/2026-10-02-capture-foundation-contract.md).

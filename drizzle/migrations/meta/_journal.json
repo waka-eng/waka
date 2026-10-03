@@ -358,6 +358,20 @@
       "when": 1790982479574,
       "tag": "0050_audio_transcription_enrichment",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1790983213467,
+      "tag": "0051_transcript_corrections",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1790984923661,
+      "tag": "0052_transcript_retry_budget",
+      "breakpoints": true
     }
   ]
 }
