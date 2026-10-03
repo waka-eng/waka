@@ -31,6 +31,7 @@ describe("answer-aware reflection questions", () => {
       .toThrow(ModelDidNotAnswerError);
     expect(() => parseReflectionQuestion({ question: "You should try more experiments." }, input))
       .toThrow(ModelDidNotAnswerError);
+    expect(() => parseReflectionQuestion({question:'What feels possible? What would you do next?'},input)).toThrow(ModelDidNotAnswerError);
   });
   it('distinguishes attachment sources and never passes unfinished attachment text as available', () => {
     const request = buildReflectionQuestionRequest({...input, attachments:[

@@ -1,0 +1,49 @@
+{
+  "at": "2026-10-03T01:13:35.088Z",
+  "model": "gemini-3.1-flash-lite",
+  "calls": 5,
+  "acceptedResults": 4,
+  "initialFailures": 1,
+  "promptTokens": 1996,
+  "outputTokens": 154,
+  "providerReportedCostUsd": null,
+  "announcedEstimatedBudgetUsd": 0.06,
+  "review": "Codex reviewed the synthetic outputs against the stated cases; this is not an independent or statistical quality benchmark.",
+  "cases": [
+    {
+      "name": "link disagreement",
+      "answer": "I disagree with optimizing every minute. I want unstructured weekends, even if I achieve nothing.",
+      "question": "What specific feeling or benefit do you get from those unstructured hours that you think would be lost if you tried to make them productive?",
+      "durationMs": 1017,
+      "verdict": "Pass: follows the person's disagreement rather than adopting the article's productivity claim."
+    },
+    {
+      "name": "image interpretation",
+      "answer": "The empty corner feels inviting. I like leaving room for something I have not planned yet.",
+      "question": "What kind of unexpected growth or change would you hope to see fill that space?",
+      "durationMs": 699,
+      "verdict": "Pass: explores the person's response to an empty garden corner without inventing another pictured object."
+    },
+    {
+      "name": "corrected Korean recording",
+      "answer": "저녁을 비워 두고 싶은데 일을 멈추면 뒤처질까 봐 걱정돼요.",
+      "question": "뒤처진다는 느낌이 구체적으로 어떤 상황에서 가장 크게 다가오나요?",
+      "durationMs": 1007,
+      "verdict": "Pass on retry: follows the Korean answer and its tension without treating the superseded machine transcript as intent.",
+      "firstAttempt": "The queue retried without an accepted question. The original harness did not retain the provider output or job error, so its exact failure cause is unknown. No answer was lost."
+    },
+    {
+      "name": "pending attachment",
+      "answer": "I cannot quite explain it yet. I just wanted to pause and notice what caught my attention.",
+      "question": "What specific detail or feeling stood out to you in that moment of pausing?",
+      "durationMs": 870,
+      "verdict": "Pass: asks from the person's answer and does not invent the unread image's mountain subject."
+    }
+  ],
+  "limitations": [
+    "Synthetic passages, not raw image or audio extraction.",
+    "Three cases use the prompt before the final explicit question-mark instruction; the pending case uses the final prompt. All four accepted outputs satisfy the final one-question parser.",
+    "Gemini returned usage tokens but no dollar charge; null does not mean free.",
+    "Physical-device validation remains deferred."
+  ]
+}

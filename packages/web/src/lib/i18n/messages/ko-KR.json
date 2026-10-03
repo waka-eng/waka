@@ -390,6 +390,8 @@
   "worldReflectionNextLoading": "그 생각을 조금 더 따라가 볼게요…",
   "worldReflectionNextFailed": "생각은 간직했지만 다음 질문은 아직 준비되지 않았어요.",
   "worldReflectionNextDelayed": "생각은 간직했어요. 나중에 다시 이어갈 수 있어요.",
+  "worldReflectionContextChanged": "영감의 내용이 바뀌었어요. 남긴 생각은 그대로예요. 새 내용을 바탕으로 질문을 받아 보세요.",
+  "worldReflectionViewSource": "저장한 영감 보기",
   "worldReflectionGoDeeper": "질문 하나 더 받기 →",
   "worldReflectionRetry": "다시 시도",
   "worldReflectionRemoveFailed": "되새김을 되돌리지 못했어요.",

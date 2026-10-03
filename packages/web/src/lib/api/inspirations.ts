@@ -313,21 +313,25 @@ export interface ApiReflectionQuestionStatus {
 /** Queue one metered follow-up grounded in the latest saved answer. */
 export async function requestReflectionQuestion(
   inspirationId: string, afterReflectionId: string, retry = false,
+  options: {signal?: AbortSignal; profile?: string} = {},
 ): Promise<ApiReflectionQuestionStatus> {
   return postJson<ApiReflectionQuestionStatus>(
-    apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/reflection-question`),
+    apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/reflection-question${options.profile ? `?profile=${encodeURIComponent(options.profile)}` : ''}`),
     { afterReflectionId, ...(retry ? { retry: true } : {}) },
     "Could not start a follow-up question",
+    options.signal,
   );
 }
 
 export async function fetchReflectionQuestionStatus(
   inspirationId: string, afterReflectionId: string,
+  options: {signal?: AbortSignal; profile?: string} = {},
 ): Promise<ApiReflectionQuestionStatus> {
   return getJson<ApiReflectionQuestionStatus>(
     apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/reflection-question/status` +
-      `?afterReflectionId=${encodeURIComponent(afterReflectionId)}`),
+      `?afterReflectionId=${encodeURIComponent(afterReflectionId)}${options.profile ? `&profile=${encodeURIComponent(options.profile)}` : ''}`),
     "Could not load the follow-up question",
+    options.signal,
   );
 }
 

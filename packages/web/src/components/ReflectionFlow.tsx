@@ -31,10 +31,11 @@ function savedDraft(draftKey: string | null, afterId: string | null): string {
   } catch { return ""; }
 }
 
-export function ReflectionFlow({ inspirationId, scope, processing, initialTurns, locale, onSaved, onRemoved, onDone, onSynchronized, focusReflectionId, onCopyLink }: {
+export function ReflectionFlow({ inspirationId, scope, processing, source, initialTurns, locale, onSaved, onRemoved, onDone, onSynchronized, focusReflectionId, onCopyLink }: {
   inspirationId: string;
   scope: ProfileStorageScope | null;
   processing?: ReactNode;
+  source?: ReactNode;
   initialTurns: ReflectionTurn[];
   locale: SupportedLocale;
   onSaved: (reflection: ApiReflection) => void;
@@ -56,14 +57,16 @@ export function ReflectionFlow({ inspirationId, scope, processing, initialTurns,
   const draftRef = useRef<ReflectionDraft>({ afterId: draftAfterId, question, answer });
   draftRef.current = { afterId: draftAfterId, question, answer };
   const [error, setError] = useState("");
+  const [sourceOpen, setSourceOpen] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const requestSequence = useRef(0);
+  const questionRequest = useRef<AbortController | null>(null);
   const currentQuestion = useRef<HTMLDivElement>(null);
   const root = useRef<HTMLDivElement>(null);
   const earlierTurns = useRef<HTMLDetailsElement>(null);
   const latestId = turns.at(-1)?.id ?? null;
 
-  useEffect(() => () => { requestSequence.current += 1; }, []);
+  useEffect(() => () => { requestSequence.current += 1; questionRequest.current?.abort(); }, []);
   useEffect(() => {
     if (!focusReflectionId || focusReflectionId === 'open') return;
     const node = [...root.current?.querySelectorAll<HTMLElement>('[data-reflection-id]') ?? []]
@@ -86,13 +89,21 @@ export function ReflectionFlow({ inspirationId, scope, processing, initialTurns,
     surface.scrollTop += questionNode.getBoundingClientRect().top - surface.getBoundingClientRect().top - padding;
   }, [phase, question, turns.length]);
 
-  const beginQuestion = useCallback(async (afterId: string, retry = false) => {
+  const beginQuestion = useCallback(async (afterId: string, retry = false, observeOnly = false) => {
     const sequence = ++requestSequence.current;
-    setPhase("asking");
+    questionRequest.current?.abort();
+    const controller = new AbortController(); questionRequest.current = controller;
+    const timeout = window.setTimeout(() => controller.abort(), 65_000);
+    const options = {signal:controller.signal,profile:scope?.profileId};
+    if (!observeOnly) setPhase("asking");
     setError("");
     try {
-      let status: ApiReflectionQuestionStatus = await requestReflectionQuestion(inspirationId, afterId, retry);
+      let status: ApiReflectionQuestionStatus = observeOnly
+        ? await fetchReflectionQuestionStatus(inspirationId, afterId, options)
+        : await requestReflectionQuestion(inspirationId, afterId, retry, options);
       for (let check = 0; check < 30 && sequence === requestSequence.current; check += 1) {
+        if (controller.signal.aborted) throw new Error('Question observation timed out');
+        if (observeOnly && (!status || status.phase === 'idle')) { setPhase('saved'); return; }
         if (status.phase === "ready" && status.question) {
           setQuestion(status.question);
           setAnswer(savedDraft(draftKey, afterId));
@@ -105,9 +116,17 @@ export function ReflectionFlow({ inspirationId, scope, processing, initialTurns,
           setPhase("question_failed");
           return;
         }
-        await new Promise<void>((resolve) => window.setTimeout(resolve, 2_000));
+        if (status.phase === 'idle') {
+          setError(t(locale, 'worldReflectionContextChanged')); setPhase('question_failed'); return;
+        }
+        setPhase('asking');
+        await new Promise<void>((resolve) => {
+          const finish = () => { window.clearTimeout(timer); controller.signal.removeEventListener('abort', finish); resolve(); };
+          const timer = window.setTimeout(finish, 2_000);
+          controller.signal.addEventListener('abort', finish, {once:true});
+        });
         if (sequence !== requestSequence.current) return;
-        status = await fetchReflectionQuestionStatus(inspirationId, afterId);
+        status = await fetchReflectionQuestionStatus(inspirationId, afterId, options);
       }
       if (sequence === requestSequence.current) {
         setError(t(locale, "worldReflectionNextDelayed"));
@@ -115,16 +134,25 @@ export function ReflectionFlow({ inspirationId, scope, processing, initialTurns,
       }
     } catch {
       if (sequence === requestSequence.current) {
+        if (observeOnly) { setPhase('saved'); return; }
         setError(t(locale, "worldReflectionNextFailed"));
         setPhase("question_failed");
       }
-    }
-  }, [inspirationId, draftKey, locale]);
+    } finally { window.clearTimeout(timeout); }
+  }, [inspirationId, draftKey, locale, scope?.profileId]);
+
+  // Reopening only observes work previously requested by the person. It never
+  // starts another model job or overwrites a draft they have already written.
+  useEffect(() => {
+    if (restored.current?.answer || !initialTurns.length) return;
+    void beginQuestion(initialTurns.at(-1)!.id, false, true);
+  }, [beginQuestion]);
 
   const save = useAuthoredSave({ scope, operation: 'reflection', inspirationId,
     onResolved: (intent, result, initiated) => {
       if (intent.operation !== 'reflection' || !result.reflection) return;
       requestSequence.current += 1;
+      questionRequest.current?.abort();
       const retained = settleReflectionDraft(draftKey, { afterId: intent.afterId, question: intent.input.question, answer: intent.input.answer ?? '' }, draftRef.current);
       const currentTurns = result.inspiration.reflections.filter((row) => !row.skipped && row.answer)
         .map((row) => ({ id: row.id, question: row.question, answer: row.answer! }));
@@ -142,7 +170,7 @@ export function ReflectionFlow({ inspirationId, scope, processing, initialTurns,
     onRemoved: (intent) => {
       if (intent.operation !== 'reflection') return;
       const retained = settleReflectionDraft(draftKey, { afterId: intent.afterId, question: intent.input.question, answer: intent.input.answer ?? '' }, draftRef.current);
-      requestSequence.current += 1; setTurns([]); onSynchronized?.(null);
+      requestSequence.current += 1; questionRequest.current?.abort(); setTurns([]); onSynchronized?.(null);
       draftRef.current = retained ?? { afterId: null, question: '', answer: '' };
       setAnswer(retained?.answer ?? ''); setQuestion(retained?.question ?? ''); setDraftAfterId(draftRef.current.afterId);
       setPhase(retained ? 'answering' : 'saved');
@@ -179,6 +207,7 @@ export function ReflectionFlow({ inspirationId, scope, processing, initialTurns,
       // Any removed answer may have informed the follow-up. Invalidate that
       // generated question, but preserve words the person is still drafting.
       requestSequence.current += 1;
+      questionRequest.current?.abort();
       setQuestion(remaining.length > 0 ? "" : t(locale, "worldFirstReflectionQuestion"));
       setDraftAfterId(remaining.at(-1)?.id ?? null);
       const revised = { ...draftRef.current, afterId: remaining.at(-1)?.id ?? null, question: remaining.length > 0 ? '' : t(locale, 'worldFirstReflectionQuestion') };
@@ -195,6 +224,10 @@ export function ReflectionFlow({ inspirationId, scope, processing, initialTurns,
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m10 14 4-4m-7 3-2 2a4 4 0 0 0 6 6l4-4m-4-10 2-2a4 4 0 0 1 6 6l-4 4" /></svg>
   </button> : null;
   return <div ref={root} className="jar-reflection-flow">
+    {source ? <details className="jar-reflection-source" onToggle={event => setSourceOpen(event.currentTarget.open)}>
+      <summary>{t(locale, 'worldReflectionViewSource')}</summary>
+      {sourceOpen ? source : null}
+    </details> : null}
     {latest ? <div className="jar-reflection-previous" data-reflection-id={latest.id}>
       <p className="jar-label">{t(locale, "worldReflectionPrevious")}</p>
       <p className="jar-reflection-previous-question">{latest.question}</p>

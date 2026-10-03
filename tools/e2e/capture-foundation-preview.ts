@@ -29,6 +29,16 @@ const { app } = await import('../../packages/api/src/index.js');
 const { signSessionToken, buildSessionCookie } = await import('../../packages/api/src/lib/auth.js');
 const { createSessionRow } = await import('../../packages/api/src/lib/session.js');
 const { getDb } = await import('../../packages/api/src/lib/db.js');
+let reflectionCalls = 0;
+if (process.env.WAKA_REFLECTION_FIXTURE === '1') {
+  const { setDefaultModelProviderForTests } = await import('../../packages/api/src/lib/model-provider.js');
+  const provider: import('../../packages/api/src/lib/model-provider.js').ModelProvider = {
+    name: 'synthetic-reflection-fixture',
+    askReflectionQuestion: async () => { reflectionCalls += 1; return {question: 'What would a small first step make possible for you?'}; },
+    extractSignalCandidates: async () => { throw new Error('Only reflection questions are enabled in this fixture'); },
+  } as import('../../packages/api/src/lib/model-provider.js').ModelProvider;
+  setDefaultModelProviderForTests(provider);
+}
 const [account] = await fixture.sql`INSERT INTO accounts(email,onboarding_completed_at) VALUES ('capture-fixture@example.test',now()) RETURNING id`;
 const [profile] = await fixture.sql`INSERT INTO profiles(account_id,type,name) VALUES (${account.id},'human','Capture fixture') RETURNING id`;
 await fixture.sql`INSERT INTO inspirations(profile_id,text) VALUES (${profile.id},'A little room to think.')`;
@@ -104,6 +114,16 @@ const server = createServer(async (request, response) => {
       response.end(await readFile(path)); return;
     }
     if (target.pathname === '/fixture') {
+      if (process.env.WAKA_REFLECTION_FIXTURE === '1' && target.searchParams.get('question') === 'complete') {
+        const { processBackgroundJob, postgresBackgroundJobStore } = await import('../../packages/api/src/lib/queue.js');
+        const [pending] = await fixture.sql`SELECT id FROM background_jobs WHERE profile_id=${profile.id}
+          AND type='generate_reflection_question' AND status='pending' ORDER BY created_at LIMIT 1`;
+        if (pending) {
+          await fixture.sql`UPDATE background_jobs SET status='running',attempts=1,locked_at=date_trunc('milliseconds',now()) WHERE id=${pending.id}`;
+          const job = await getDb().query.backgroundJobs.findFirst({where:(row,{eq})=>eq(row.id,pending.id)});
+          await processBackgroundJob(job!); await postgresBackgroundJobStore.markSucceeded(job!,null);
+        }
+      }
       if (target.searchParams.get('fail') === 'save-response') loseResponse = true;
       if (target.searchParams.get('fail') === 'upload') failUpload = true;
       if (target.searchParams.get('fail') === 'second-upload') failUploadAfter = 2;
@@ -111,7 +131,7 @@ const server = createServer(async (request, response) => {
         (SELECT count(*)::int FROM attachments) AS attachments, (SELECT count(*)::int FROM inspiration_save_requests) AS requests`;
       response.writeHead(200, {'Content-Type':'application/json'}); response.end(JSON.stringify({ ...counts, objects: objects.size,
         origin, schema: fixture.schemaName, microphone: 'synthetic tone', failUpload, loseResponse, transcriptFixtureId, transcriptFixtureInspirationId,
-        linkFixtureInspirationId, uploadAttempts, failUploadAfter })); return;
+        linkFixtureInspirationId, uploadAttempts, failUploadAfter, reflectionCalls })); return;
     }
     if (target.pathname.startsWith('/capture-fixture/')) {
       const key = decodeURIComponent(target.pathname);

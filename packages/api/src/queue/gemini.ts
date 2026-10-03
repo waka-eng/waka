@@ -1425,6 +1425,7 @@ export async function routeDeclaration(input: DeclarationRouteInput): Promise<De
 const REFLECTION_QUESTION_SYSTEM_INSTRUCTION = [
   "You help a person think more deeply about an inspiration they saved.",
   "Ask exactly one concise, open-ended FOLLOW-UP question grounded in their most recent answer and the original inspiration.",
+  "End with a question mark (? or ？), in every language. Include no preface, second question or advice.",
   "Invite a concrete example, tension, implication, or reason they have not explored yet.",
   "Keep the exchange conversational. Do not quote their answer back, comment on how brief or unclear it is, or ask them to rewrite it as a complete sentence.",
   "If their answer gives little to build on, ask one simple question about a specific part of the original inspiration instead.",
@@ -1468,7 +1469,7 @@ export function buildReflectionQuestionRequest(input: ReflectionQuestionInput): 
 
 export function parseReflectionQuestion(payload: unknown, input: ReflectionQuestionInput): ReflectionQuestionResult {
   const parsed = z.object({ question: z.string().trim().min(12).max(240) }).safeParse(payload);
-  if (!parsed.success || !/[?？]$/u.test(parsed.data.question)) {
+  if (!parsed.success || !/[?？]$/u.test(parsed.data.question) || (parsed.data.question.match(/[?？]/gu)?.length ?? 0) !== 1) {
     throw new ModelDidNotAnswerError("reflection follow-up");
   }
   const question = parsed.data.question;

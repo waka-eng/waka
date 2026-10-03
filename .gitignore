@@ -46,3 +46,4 @@ snap.json
 
 # Regenerable synthetic audio evaluation inputs and per-run output.
 /work/audio-transcription-eval/
+/work/reflection-eval/

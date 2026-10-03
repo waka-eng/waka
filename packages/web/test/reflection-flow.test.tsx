@@ -49,6 +49,7 @@ async function writeAnswer(value: string) {
 beforeEach(() => {
   vi.resetAllMocks();
   window.localStorage.clear();
+  vi.mocked(fetchReflectionQuestionStatus).mockResolvedValue({phase:'idle'});
   vi.mocked(fetchInspirationSaveRequest).mockRejectedValue(new ApiError({ status: 404, code: 'save_not_found', message: 'Not observed' }));
   vi.mocked(fetchInspiration).mockImplementation(async () => {
     const outcomes = await Promise.allSettled(vi.mocked(createReflection).mock.results.map((result) => result.value));
@@ -63,6 +64,48 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 
 describe("reflection conversation", () => {
+  it('resumes a question that completed while closed using only a scoped GET', async () => {
+    vi.mocked(fetchReflectionQuestionStatus).mockResolvedValue({phase:'ready',question:'What would you like to explore next?'});
+    await act(async()=>root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={[saved]} locale="en-US"
+      onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
+    expect(host.textContent).toContain('What would you like to explore next?');
+    expect(fetchReflectionQuestionStatus).toHaveBeenCalledWith('inspiration-1',saved.id,{profile:SCOPE.profileId,signal:expect.any(AbortSignal)});
+    expect(requestReflectionQuestion).not.toHaveBeenCalled(); expect(createReflection).not.toHaveBeenCalled();
+  });
+  it('does not replace an unfinished answer or its question while reopening', async () => {
+    localStorage.setItem(profileStorageKey(SCOPE,'reflectionDraft:inspiration-1')!,JSON.stringify({afterId:saved.id,question:'My unfinished question?',answer:'My unfinished thought'}));
+    await act(async()=>root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={[saved]} locale="en-US"
+      onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
+    expect(host.querySelector('textarea')?.value).toBe('My unfinished thought'); expect(host.textContent).toContain('My unfinished question?');
+    expect(fetchReflectionQuestionStatus).not.toHaveBeenCalled(); expect(requestReflectionQuestion).not.toHaveBeenCalled();
+  });
+  it('aborts an outstanding question request when closed and ignores the late result', async () => {
+    let finish!: (value:ApiReflectionQuestionStatus)=>void;
+    vi.mocked(requestReflectionQuestion).mockImplementation(()=>new Promise(done=>{finish=done;}));
+    await act(async()=>root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={[saved]} locale="en-US"
+      onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
+    await act(async()=>button('ask another question →').click());
+    const signal=vi.mocked(requestReflectionQuestion).mock.calls[0]?.[3]?.signal;
+    await act(async()=>root.unmount()); root=createRoot(host);
+    expect(signal?.aborted).toBe(true);
+    await act(async()=>finish({phase:'ready',question:'Late private question?'}));
+    expect(host.textContent).not.toContain('Late private');
+  });
+  it('shows a source-change message without resubmitting the saved answer', async () => {
+    vi.mocked(requestReflectionQuestion).mockResolvedValue({phase:'idle'});
+    await act(async()=>root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={[saved]} locale="en-US"
+      onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
+    await act(async()=>button('ask another question →').click());
+    expect(host.textContent).toContain('inspiration changed'); expect(host.textContent).toContain(saved.answer);
+    expect(createReflection).not.toHaveBeenCalled();
+  });
+  it('opens original media on request, leaving the question and draft intact', async () => {
+    await act(async()=>root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={[]} locale="en-US"
+      source={<p>Original audio player</p>} onSaved={onSaved} onRemoved={onRemoved} onDone={onDone} />));
+    await writeAnswer('Thinking while listening'); expect(host.textContent).not.toContain('Original audio player');
+    await act(async()=>{const details=host.querySelector<HTMLDetailsElement>('.jar-reflection-source')!; details.open=true; details.dispatchEvent(new Event('toggle'));});
+    expect(host.textContent).toContain('Original audio player'); expect(host.querySelector('textarea')?.value).toBe('Thinking while listening');
+  });
   it('opens a linked earlier answer without generating or saving anything', async () => {
     const onCopyLink = vi.fn();
     await act(async () => root.render(<ReflectionFlow scope={SCOPE} inspirationId="inspiration-1" initialTurns={[
@@ -176,7 +219,7 @@ describe("reflection conversation", () => {
     expect(host.textContent).toContain("Your answer shapes the next question.");
     await act(async () => button("continue →").click());
     expect(createReflection).toHaveBeenCalledWith("inspiration-1", { question: saved.question, answer: saved.answer }, expect.objectContaining({ profile: "profile-1", requestId: expect.any(String) }));
-    expect(requestReflectionQuestion).toHaveBeenCalledWith("inspiration-1", saved.id, false);
+    expect(requestReflectionQuestion).toHaveBeenCalledWith("inspiration-1", saved.id, false, {profile:SCOPE.profileId,signal:expect.any(AbortSignal)});
     expect(host.textContent).toContain(saved.answer);
     expect(host.textContent).toContain("What made leaving that corner unfinished feel calmer?");
     expect(scrollIntoView).not.toHaveBeenCalled();
@@ -209,7 +252,7 @@ describe("reflection conversation", () => {
     expect(host.textContent).toContain(saved.answer);
     expect(host.querySelector('[role="alert"]')?.textContent).toContain("thought is kept");
     await act(async () => button("try again").click());
-    expect(requestReflectionQuestion).toHaveBeenLastCalledWith("inspiration-1", saved.id, true);
+    expect(requestReflectionQuestion).toHaveBeenLastCalledWith("inspiration-1", saved.id, true, {profile:SCOPE.profileId,signal:expect.any(AbortSignal)});
     expect(host.textContent).toContain("What would you leave unfinished next time?");
   });
 
@@ -221,7 +264,7 @@ describe("reflection conversation", () => {
     expect(host.textContent).toContain(saved.answer);
     expect(requestReflectionQuestion).not.toHaveBeenCalled();
     await act(async () => button("ask another question →").click());
-    expect(requestReflectionQuestion).toHaveBeenCalledWith("inspiration-1", saved.id, false);
+    expect(requestReflectionQuestion).toHaveBeenCalledWith("inspiration-1", saved.id, false, {profile:SCOPE.profileId,signal:expect.any(AbortSignal)});
   });
 
   it("keeps the answer and closes without spending on another question when asked to finish", async () => {

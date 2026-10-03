@@ -10229,7 +10229,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         setMouthOpen(false);
         if (initiated) simApiRef.current?.acknowledge('kept');
         setCharSay(atWallRef.current.kind === 'self' ? say('worldSavedWord') : 'saved to your own wall');
-        if (shouldReflect) setReflectOn({ id: made.id, text: displayText });
+        if (shouldReflect) setReflectOn({ id: made.id, text: displayText, attachments: detail.attachments });
         else viewNavigationRef.current.closeComposer();
       } };
     },
@@ -10678,7 +10678,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
    * its visibility on screen around a textarea (founder, 2026-08-25: "have
    * reflect workflow in modal"). Null unless the mouth asked.
    */
-  const [reflectOn, setReflectOn] = useState<{ id: string; text: string } | null>(null);
+  const [reflectOn, setReflectOn] = useState<{ id: string; text: string; attachments: InspirationDetail['attachments'] } | null>(null);
 
   useEffect(() => {
     setReflectOpen(false);
@@ -13649,7 +13649,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
               apparatus: it made a person ask what each list was instead of
               reading what they saved. */}
 
-          {reflectOpen && panelCanReflect && (panelBall?.sigId ?? panelId) ? (
+          {reflectOpen && panelCanReflect && !panel.detail ? <p role="status">{say('worldOpeningAttachment')}</p> : null}
+          {reflectOpen && panelCanReflect && panel.detail && (panelBall?.sigId ?? panelId) ? (
             <ReflectionFlow
               key={panelBall?.sigId ?? panelId}
               inspirationId={(panelBall?.sigId ?? panelId) as string}
@@ -14631,6 +14632,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
             key={reflectOn.id}
             inspirationId={reflectOn.id}
             scope={storageScope}
+            source={reflectOn.attachments.length ? <InspirationAttachments items={reflectOn.attachments} locale={locale} /> : undefined}
             processing={sourceProcessing.active?.inspirationId === reflectOn.id ? sourceNotice : null}
             initialTurns={[]}
             locale={locale}

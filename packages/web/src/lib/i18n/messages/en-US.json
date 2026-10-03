@@ -390,6 +390,8 @@
   "worldReflectionNextLoading": "Let’s follow that thought…",
   "worldReflectionNextFailed": "Your thought is kept, but the next question isn't ready.",
   "worldReflectionNextDelayed": "Your thought is kept. Come back to continue.",
+  "worldReflectionContextChanged": "The inspiration changed. Your thought is kept — ask again from the updated material.",
+  "worldReflectionViewSource": "View saved inspiration",
   "worldReflectionGoDeeper": "ask another question →",
   "worldReflectionRetry": "try again",
   "worldReflectionRemoveFailed": "That reflection could not be taken back.",
