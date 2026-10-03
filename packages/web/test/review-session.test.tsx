@@ -6,6 +6,7 @@ import {createRoot,type Root} from 'react-dom/client';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {useReviewSession} from '../src/lib/use-review-session';
 import {profileStorageKey} from '../src/lib/profile-storage';
+import {readReviewSelections,storeReviewSelection} from '../src/lib/review-selection-drafts';
 import {ApiError,chooseReviewInspiration,fetchActiveReview,fetchReviewSession,finishReviewSession,startReviewSession,type ApiReviewSession} from '../src/lib/api';
 vi.mock('../src/lib/api',async original=>({...await original<typeof import('../src/lib/api')>(),chooseReviewInspiration:vi.fn(),fetchActiveReview:vi.fn(),fetchReviewSession:vi.fn(),finishReviewSession:vi.fn(),startReviewSession:vi.fn()}));
 const SID='11111111-1111-4111-8111-111111111111',SOURCE='22222222-2222-4222-8222-222222222222';
@@ -85,4 +86,16 @@ it('bounds a stalled read and ignores the earlier owner’s late result',async()
   await mount();await act(async()=>vi.advanceTimersByTimeAsync(15001));expect(hook.error).toBe('load');expect(hook.loading).toBe(false);
   await mount('new',{accountId:'other',profileId:'other'});
   await act(async()=>finish(session()));expect(hook.session).toBeNull();
+});
+it('settles the selection only after a confirmed start, including response-loss recovery',async()=>{
+  const selection=storeReviewSelection(scope,{id:crypto.randomUUID(),writer:crypto.randomUUID(),ids:[SOURCE],query:'',updatedAt:Date.now()});
+  await mount();vi.mocked(startReviewSession).mockImplementationOnce(async input=>{current={...session(),id:input.id};throw new Error('response lost');});
+  await act(async()=>hook.start([SOURCE],{id:selection.id,raw:selection.raw}));expect(readReviewSelections(scope)).toHaveLength(1);
+  await act(async()=>root.unmount());root=createRoot(host);await mount();expect(readReviewSelections(scope)).toHaveLength(0);expect(startReviewSession).toHaveBeenCalledOnce();
+});
+it('keeps a manual selection when joining another tab’s open review instead',async()=>{
+  const selection=storeReviewSelection(scope,{id:crypto.randomUUID(),writer:crypto.randomUUID(),ids:[SOURCE],query:'',updatedAt:Date.now()});
+  await mount();vi.mocked(startReviewSession).mockImplementationOnce(async()=>{current=session();throw new ApiError({status:409,message:'Another review exists'});});
+  await act(async()=>hook.start([SOURCE],{id:selection.id,raw:selection.raw}));await act(async()=>hook.useLatest());
+  expect(hook.pending).toBeNull();expect(readReviewSelections(scope)[0]?.value.ids).toEqual([SOURCE]);
 });

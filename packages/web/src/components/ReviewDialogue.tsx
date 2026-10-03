@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useRef,useState,type KeyboardEvent} from 'react';
 import {fetchInspiration,type ApiReviewAnswer} from '../lib/api';
 import {toInspirationDetail} from '../lib/data';
 import type {ProfileStorageScope} from '../lib/profile-storage';
@@ -17,12 +17,19 @@ export function ReviewDialogue({scope,id,completed,locale,onOpen,onRevision,onDr
   const review=useReviewDialogue(scope,id,onRevision),{state,draft}=review;
   useEffect(()=>{if(completed)void review.refresh();},[completed,review.refresh]);
   const editor=useRef<HTMLTextAreaElement>(null);
+  const [copyState,setCopyState]=useState<'copied'|'manual'|null>(null);
+  useEffect(()=>setCopyState(null),[draft?.id,draft?.answer]);
   useEffect(()=>{if(draft?.kind==='edit')editor.current?.focus();},[draft?.kind,draft?.id]);
   const say=(key:Parameters<typeof t>[1])=>t(locale,key);
   const q=completed?{phase:'closed' as const}:state?.question,answer=draft?.kind!=='create'?state?.answers.find(row=>row.id===draft?.answerId):null;
   const questionLimited=Boolean(q&&(q.phase==='idle'||q.phase==='failed')&&q.retryAfter&&Date.parse(q.retryAfter)>Date.now());
   const currentDraft=!draft||(draft.kind==='create'?q?.phase==='ready'&&q.jobId===draft.questionJobId&&q.contextHash===draft.contextHash:answer?.revision===draft.revision);
   const canSubmit=Boolean(draft&&(draft.kind==='remove'||draft.answer.trim())&&!review.busy&&!review.loading&&review.error!=='storage');
+  const onReplyKey=(event:KeyboardEvent<HTMLTextAreaElement>)=>{
+    if(event.key!=='Enter'||(!event.ctrlKey&&!event.metaKey)||event.altKey||event.shiftKey)return;
+    event.stopPropagation();if(event.nativeEvent.isComposing||event.repeat)return;event.preventDefault();
+    if(currentDraft&&canSubmit&&!draft?.submitted)void review.submit(draft?.kind==='create');
+  };
   useEffect(()=>{onDraftChange(Boolean(draft)||review.busy);return()=>onDraftChange(false);},[Boolean(draft),review.busy,onDraftChange]);
   const references=(ids:string[])=> <div className="jar-review-references">{ids.map(sourceId=><ReviewReference key={sourceId} id={sourceId} profileId={scope.profileId} locale={locale} onOpen={onOpen}/>)}</div>;
   const saved=(row:ApiReviewAnswer)=><article key={row.id} className="jar-review-thought">
@@ -43,16 +50,17 @@ export function ReviewDialogue({scope,id,completed,locale,onOpen,onRevision,onDr
       {q?.phase==='ready'&&!draft||q?.phase==='ready'&&draft?.kind==='create'&&currentDraft?<>
         {q.connection?<p className="jar-review-connection">{q.connection}</p>:null}<h3 className="jar-review-question">{q.question}</h3>{references(q.sourceIds)}
       </>:draft?.kind==='edit'&&answer?.contextValid?<h3>{answer.question}</h3>:null}
-      {draft&&!currentDraft?<p role="status">{say('worldReviewDraftChanged')}</p>:null}
+      {draft&&!currentDraft?<p role="status">{say(q?.phase==='closed'?'worldReviewClosedDraft':'worldReviewDraftChanged')}</p>:null}
       {(q?.phase==='ready'&&!draft)||draft?<div className="jar-review-reply">
         <label htmlFor={`review-answer-${id}`}>{say('worldReviewYourThought')}</label>
-        <textarea ref={editor} id={`review-answer-${id}`} value={draft?.answer??''} rows={4} maxLength={16000} disabled={review.busy||Boolean(draft?.submitted)} placeholder={say('worldReviewAnswerPlaceholder')} onChange={event=>review.update(event.target.value)}/>
-        {draft?<p className="jar-review-context">{say(draft.submitted?'worldReviewPending':'worldReviewDraftOnDevice')}</p>:null}
+        <textarea ref={editor} id={`review-answer-${id}`} value={draft?.answer??''} rows={4} maxLength={16000} disabled={review.busy} readOnly={Boolean(draft?.submitted)} placeholder={say('worldReviewAnswerPlaceholder')} onChange={event=>review.update(event.target.value)} onKeyDown={onReplyKey}/>
+        {draft?<p className="jar-review-context">{say(draft.submitted&&currentDraft?'worldReviewPending':'worldReviewDraftOnDevice')}</p>:null}
         <div className="jar-review-reply-actions">
-          <button type="button" disabled={!canSubmit||(!currentDraft&&!draft?.submitted)} onClick={()=>void review.submit(draft?.kind==='create')}>{say(draft?.submitted?'worldReviewRetryThought':draft?.kind==='edit'?'worldReviewUpdateThought':'worldReviewContinue')}</button>
-          {draft?.kind==='create'&&!draft.submitted?<button type="button" disabled={!canSubmit||!currentDraft} onClick={()=>void review.submit(false)}>{say('worldReviewKeepThought')}</button>:null}
+          {currentDraft?<button type="button" disabled={!canSubmit} onClick={()=>void review.submit(draft?.kind==='create')}>{say(draft?.submitted?'worldReviewRetryThought':draft?.kind==='edit'?'worldReviewUpdateThought':'worldReviewContinue')}</button>:<button type="button" onClick={()=>{const text=draft?.answer??'';void (async()=>{try{await navigator.clipboard.writeText(text);if(editor.current?.value===text)setCopyState('copied');}catch{editor.current?.focus();editor.current?.select();setCopyState('manual');}})();}}>{say('worldReviewCopyDraft')}</button>}
+          {draft?.kind==='create'&&!draft.submitted&&currentDraft?<button type="button" disabled={!canSubmit} onClick={()=>void review.submit(false)}>{say('worldReviewKeepThought')}</button>:null}
           {draft?<button type="button" disabled={review.busy} onClick={()=>{if(window.confirm(say('worldReviewDiscardConfirm')))review.discard();}}>{say('worldReviewDiscardDraft')}</button>:null}
         </div>
+        {copyState?<p role="status">{say(copyState==='copied'?'worldReviewDraftCopied':'worldReviewCopyDraftManual')}</p>:null}
       </div>:null}
     </>}
     {questionLimited&&!draft?<div role="status"><p>{say('worldReviewQuestionLimit')}</p><button type="button" disabled={review.busy} onClick={()=>void review.refresh()}>{say('worldReviewCheckThoughts')}</button></div>:null}

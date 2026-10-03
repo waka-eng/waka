@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
 /** WHAT THIS MOCKS, AND WHY (gate G6): `lib/api` provides network outcomes.
  * The shipped review panel, draft journal, keyboard/pointer handlers and
- * original-source loading remain real; SQL and rendering have separate checks. */
+ * original-source loading remain real; SQL and rendering have separate checks.
+ * `Clipboard.writeText` is replaced in the closed-review recovery test only. */
 import {act} from 'react';
 import {createRoot,type Root} from 'react-dom/client';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {ReviewPanel} from '../src/components/ReviewPanel';
+import {storeReviewSelection,readReviewSelections} from '../src/lib/review-selection-drafts';
+import {newReviewDraft,storeReviewDraft} from '../src/lib/review-dialogue-drafts';
 import {chooseReviewInspiration,fetchActiveReview,fetchInspiration,fetchInspirationPage,fetchReviewSession,finishReviewSession,startReviewSession,fetchReviewDialogue,saveReviewAnswer,requestReviewQuestion,type ApiInspiration,type ApiReviewSession} from '../src/lib/api';
 vi.mock('../src/lib/api',async original=>({...await original<typeof import('../src/lib/api')>(),chooseReviewInspiration:vi.fn(),fetchActiveReview:vi.fn(),fetchInspiration:vi.fn(),fetchInspirationPage:vi.fn(),fetchReviewSession:vi.fn(),finishReviewSession:vi.fn(),startReviewSession:vi.fn(),fetchReviewDialogue:vi.fn(),saveReviewAnswer:vi.fn(),requestReviewQuestion:vi.fn()}));
 const SID='11111111-1111-4111-8111-111111111111',SOURCE='22222222-2222-4222-8222-222222222222',scope={accountId:'account',profileId:'profile'};
@@ -66,7 +69,7 @@ it('preserves manual selection order when starting from searched inspirations',a
   await act(async()=>vi.advanceTimersByTimeAsync(250));await act(async()=>host.querySelector<HTMLButtonElement>('.jar-search-results button')!.click());
   await click('Start review');expect(vi.mocked(startReviewSession).mock.calls[0]![0].inspirationIds).toEqual([SOURCE]);
 });
-it.each([true,false])('keeps a single thought with Continue=%s and advances the finish revision',async continueThinking=>{
+it.each([true,false,'keyboard'] as const)('keeps a single thought with Continue=%s and advances the finish revision',async continueThinking=>{
   const job='33333333-3333-4333-8333-333333333333';
   vi.mocked(fetchReviewDialogue).mockImplementation(async()=>({sessionId:SID,profileId:scope.profileId,revision:current!.revision,answers:[],latestAnswerId:null,
     question:{phase:'ready',question:'What stayed with you?',connection:null,sourceIds:[SOURCE],jobId:job,contextHash:'a'.repeat(64),retryAfter:null}}));
@@ -77,9 +80,40 @@ it.each([true,false])('keeps a single thought with Continue=%s and advances the 
   await mount();await click('Stays with me');expect(host.textContent).toContain('What stayed with you?');expect(requestReviewQuestion).not.toHaveBeenCalled();
   await act(async()=>{const textarea=host.querySelector('textarea')!;Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(textarea,'My answer is one thought.');textarea.dispatchEvent(new Event('input',{bubbles:true}));});
   expect(button('Finish review').disabled).toBe(true);
-  await click(continueThinking?'Continue':'Keep thought, pause here');
+  if(continueThinking==='keyboard'){
+    await act(async()=>host.querySelector('textarea')!.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,isComposing:true,bubbles:true,cancelable:true})));
+    expect(saveReviewAnswer).not.toHaveBeenCalled();
+    await act(async()=>host.querySelector('textarea')!.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true,cancelable:true})));
+  }else await click(continueThinking?'Continue':'Keep thought, pause here');
   expect(saveReviewAnswer).toHaveBeenCalledOnce();expect(vi.mocked(saveReviewAnswer).mock.calls[0]![2]).toMatchObject({questionJobId:job,answer:'My answer is one thought.'});
   expect(requestReviewQuestion).toHaveBeenCalledTimes(continueThinking?1:0);expect(button('Finish review').disabled).toBe(false);
   await click('Finish review');expect(finishReviewSession).toHaveBeenCalledWith(SID,2,scope.profileId,expect.any(AbortSignal));
   expect(host.textContent).not.toContain('Explore another question');expect(host.querySelector('textarea')).toBeNull();
+});
+it('restores only selection ids and loads current source wording before Start',async()=>{
+  current=null;storeReviewSelection(scope,{id:crypto.randomUUID(),writer:crypto.randomUUID(),ids:[SOURCE],query:'garden',updatedAt:Date.now()});
+  source={...source,text:'Newly edited source words'};
+  await mount('new');expect(host.textContent).toContain('Newly edited source words');expect(button('Start review').disabled).toBe(false);
+  vi.mocked(startReviewSession).mockImplementation(async input=>({id:input.id,profileId:scope.profileId,revision:0,cursor:0,currentInspirationId:null,createdAt:source.createdAt,completedAt:null,items:[]}));
+  await click('Start review');expect(vi.mocked(startReviewSession).mock.calls[0]![0].inspirationIds).toEqual([SOURCE]);expect(readReviewSelections(scope)).toHaveLength(0);
+});
+it('preserves an unavailable selection for explicit removal even when the archive is empty',async()=>{
+  current=null;storeReviewSelection(scope,{id:crypto.randomUUID(),writer:crypto.randomUUID(),ids:[SOURCE],query:'',updatedAt:Date.now()});
+  vi.mocked(fetchInspirationPage).mockResolvedValue({inspirations:[],total:0});vi.mocked(fetchInspiration).mockRejectedValue(new Error('Unavailable'));
+  await mount('new');expect(button('Start review').disabled).toBe(true);expect(readReviewSelections(scope)[0]?.value.ids).toEqual([SOURCE]);
+  await act(async()=>host.querySelector<HTMLButtonElement>('button[aria-label^="remove "]')!.click());expect(host.textContent).toContain('Nothing to review yet');
+  expect(readReviewSelections(scope)[0]?.value.ids).toEqual([]);expect(startReviewSession).not.toHaveBeenCalled();
+});
+it.each([false,true])('offers copying rather than a futile retry for a closed review, clipboard unavailable=%s',async unavailable=>{
+  current={...current!,completedAt:source.createdAt,currentInspirationId:null};
+  const draft=newReviewDraft(crypto.randomUUID(),{phase:'ready',jobId:SOURCE,question:'Old question?',connection:null,sourceIds:[SOURCE],contextHash:'a'.repeat(64),retryAfter:null});
+  storeReviewDraft(scope,SID,{...draft,answer:'Keep my unfinished words',submitted:true});
+  const previous=Object.getOwnPropertyDescriptor(navigator,'clipboard'),writeText=vi.fn(async()=>{if(unavailable)throw new Error('Clipboard unavailable');});
+  Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText}});
+  try{
+    await mount();expect(host.textContent).toContain('This review is finished');expect(host.textContent).not.toContain('Retry this change');
+    const textarea=host.querySelector('textarea')!;expect(textarea.readOnly).toBe(true);expect(textarea.disabled).toBe(false);
+    await click('Copy draft');expect(writeText).toHaveBeenCalledWith('Keep my unfinished words');expect(host.textContent).toContain(unavailable?'Text selected. Copy it before leaving.':'Draft copied');expect(saveReviewAnswer).not.toHaveBeenCalled();
+    if(unavailable){expect(textarea.selectionStart).toBe(0);expect(textarea.selectionEnd).toBe(textarea.value.length);}
+  }finally{if(previous)Object.defineProperty(navigator,'clipboard',previous);else Reflect.deleteProperty(navigator,'clipboard');}
 });

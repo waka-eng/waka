@@ -1,24 +1,27 @@
-import {useEffect,useRef,useState} from 'react';
-import {ApiError,fetchInspiration,fetchInspirationPage,fetchReviewSession,type ApiInspiration,type ApiInspirationSummary,type ApiReviewItem} from '../lib/api';
+import {useCallback,useEffect,useRef,useState} from 'react';
+import {ApiError,fetchInspiration,fetchInspirationPage,fetchReviewSession,type ApiInspiration,type ApiReviewItem} from '../lib/api';
 import {useReviewSession} from '../lib/use-review-session';
+import {useReviewSelection} from '../lib/use-review-selection';
 import type {ProfileStorageScope} from '../lib/profile-storage';
 import {t,type SupportedLocale} from '../lib/locales';
-import {inspirationPreview} from '../lib/inspiration-preview';
 import {toInspirationDetail} from '../lib/data';
 import {DialogSurface} from './DialogSurface';
 import {InspirationAttachments} from './InspirationAttachments';
 import {InspirationSearch} from './InspirationSearch';
 import {ReviewDialogue} from './ReviewDialogue';
 
-function ReviewChosenItem({id,profileId,locale,onOpen,onMissing}:{id:string;profileId:string;locale:SupportedLocale;onOpen:(id:string)=>void;onMissing:()=>void}){
-  const [label,setLabel]=useState(t(locale,'worldReviewChecking'));
-  useEffect(()=>{const controller=new AbortController();const timer=window.setTimeout(()=>{setLabel(t(locale,'worldReviewSourceUnavailable'));controller.abort();},15000);
+function ReviewChosenItem({id,profileId,locale,onOpen,onMissing,onReady,onRemove}:{id:string;profileId:string;locale:SupportedLocale;onOpen:(id:string)=>void;onMissing?:()=>void;onReady?:(id:string,ready:boolean)=>void;onRemove?:()=>void}){
+  const [label,setLabel]=useState(t(locale,'worldReviewChecking')),[ready,setReady]=useState(false);
+  const [attempt,setAttempt]=useState(0);
+  const callbacks=useRef({onMissing,onReady});callbacks.current={onMissing,onReady};
+  useEffect(()=>{setReady(false);callbacks.current.onReady?.(id,false);setLabel(t(locale,'worldReviewChecking'));
+    const controller=new AbortController();const timer=window.setTimeout(()=>{setLabel(t(locale,'worldReviewSourceUnavailable'));controller.abort();},15000);
     void fetchInspiration(id,{profile:profileId},controller.signal).then(row=>{
       if(controller.signal.aborted)return;if(row.id!==id||row.profileId!==profileId)throw new Error('Source owner changed');
-      const preview=toInspirationDetail(row).preview;setLabel(preview.length>180?`${preview.slice(0,177)}…`:preview);
-    }).catch(reason=>{if(!controller.signal.aborted){setLabel(t(locale,'worldReviewSourceUnavailable'));if(reason instanceof ApiError&&reason.status===404)onMissing();}})
-      .finally(()=>window.clearTimeout(timer));return()=>{controller.abort();window.clearTimeout(timer);};},[id,profileId,locale]);
-  return <li><button type="button" aria-label={`${t(locale,'worldReviewOpen')}: ${label}`} onClick={()=>onOpen(id)}>{label}</button></li>;
+      const preview=toInspirationDetail(row).preview;setLabel(preview.length>180?`${preview.slice(0,177)}…`:preview);setReady(true);callbacks.current.onReady?.(id,true);
+    }).catch(reason=>{if(!controller.signal.aborted){setLabel(t(locale,'worldReviewSourceUnavailable'));if(reason instanceof ApiError&&reason.status===404)callbacks.current.onMissing?.();}})
+      .finally(()=>window.clearTimeout(timer));return()=>{controller.abort();window.clearTimeout(timer);};},[id,profileId,locale,attempt]);
+  return <li><button type="button" disabled={!ready} aria-label={`${t(locale,'worldReviewOpen')}: ${label}`} onClick={()=>onOpen(id)}>{label}</button>{!ready&&label===t(locale,'worldReviewSourceUnavailable')&&onRemove?<button type="button" onClick={()=>setAttempt(value=>value+1)}>{t(locale,'worldRoomHistoryRetry')}</button>:null}{onRemove?<button type="button" aria-label={`${t(locale,'worldRemoveLower')} ${label}`} onClick={onRemove}>×</button>:null}</li>;
 }
 
 function ReviewCard({item,sessionId,profileId,locale,disabled,onChoice,onRefresh,onReady,onOpen}:{
@@ -66,8 +69,9 @@ function ReviewCard({item,sessionId,profileId,locale,disabled,onChoice,onRefresh
 export function ReviewPanel({scope,id,locale,onId,onClose,onNewInspiration,onOpen}:{scope:ProfileStorageScope;id:string;locale:SupportedLocale;
   onId:(id:string)=>void;onClose:()=>void;onNewInspiration:()=>void;onOpen:(id:string)=>void;
 }){
-  const review=useReviewSession(scope,id,onId),[picker,setPicker]=useState(false),[query,setQuery]=useState('');
-  const [selected,setSelected]=useState<ApiInspirationSummary[]>([]),[count,setCount]=useState<number|null>(null);
+  const review=useReviewSession(scope,id,onId),selection=useReviewSelection(scope),[picker,setPicker]=useState(false);
+  const [count,setCount]=useState<number|null>(null),[selectionReady,setSelectionReady]=useState<Record<string,boolean>>({});
+  const onSelectionReady=useCallback((sourceId:string,ready:boolean)=>setSelectionReady(current=>({...current,[`${scope.profileId}:${sourceId}`]:ready})),[scope.profileId]);
   const [readySource,setReadySource]=useState<string|null>(null);
   const [hasDialogueDraft,setHasDialogueDraft]=useState(false);
   const session=review.session,items=session?.items??[],item=items.find(row=>row.inspirationId===session?.currentInspirationId);
@@ -88,11 +92,13 @@ export function ReviewPanel({scope,id,locale,onId,onClose,onNewInspiration,onOpe
         </div>:null}
         {review.pending&&!review.busy?<div role="status">{!review.error?<p>{say('worldReviewPending')}</p>:null}{review.error!=='conflict'?<button type="button" onClick={review.retry}>{say('worldRoomHistoryRetry')}</button>:null}<button type="button" onClick={()=>void review.useLatest()}>{say('worldReviewUseLatest')}</button></div>:null}
         {!session&&!review.loading&&!review.pending&&!review.error?<>
-          {review.empty||count===0?<><p>{say('worldReviewEmpty')}</p><button type="button" onClick={onNewInspiration}>{say('worldCaptureInspiration')}</button></>:<>
+          {selection.error?<p role="alert">{say('worldReviewStorage')} <button type="button" onClick={selection.recover}>{say('worldReviewReset')}</button></p>:null}
+          {(review.empty||count===0)&&!selection.ids.length?<><p>{say('worldReviewEmpty')}</p><button type="button" onClick={onNewInspiration}>{say('worldCaptureInspiration')}</button></>:<>
             <p>{say('worldReviewIntro')}</p><p>{say('worldReviewPickHint')}</p>
-            {selected.length?<ul>{selected.map(row=><li key={row.id}>{inspirationPreview(row.textPreview,row.attachmentSummary)} <button type="button" aria-label={`${say('worldRemoveLower')} ${inspirationPreview(row.textPreview,row.attachmentSummary)}`} onClick={()=>setSelected(current=>current.filter(item=>item.id!==row.id))}>×</button></li>)}</ul>:null}
-            <button type="button" disabled={selected.length>=5} onClick={()=>setPicker(true)}>{say('worldReviewChoose')}{selected.length?` (${selected.length}/5)`:''}</button>
-            <button type="button" onClick={()=>review.start(selected.length?selected.map(row=>row.id):undefined)}>{say('worldReviewStart')}</button>
+            {selection.drafts.length>1?<label>{say('worldReviewSelectionDrafts')}<select value={selection.receipt?.id??''} onChange={event=>{const row=selection.drafts.find(row=>row.id===event.target.value);if(row)selection.select(row);}}>{selection.drafts.map((row,index)=><option key={row.id} value={row.id}>{index+1} · {row.value.ids.length} / 5</option>)}</select></label>:null}
+            {selection.ids.length?<ul>{selection.ids.map(sourceId=><ReviewChosenItem key={sourceId} id={sourceId} profileId={scope.profileId} locale={locale} onOpen={onOpen} onReady={onSelectionReady} onRemove={()=>selection.remove(sourceId)}/>)}</ul>:null}
+            <button type="button" disabled={selection.ids.length>=5||selection.error} onClick={()=>setPicker(true)}>{say('worldReviewChoose')}{selection.ids.length?` (${selection.ids.length}/5)`:''}</button>
+            <button type="button" disabled={selection.error||selection.ids.some(sourceId=>!selectionReady[`${scope.profileId}:${sourceId}`])} onClick={()=>review.start(selection.ids.length?selection.ids:undefined,selection.receipt)}>{say('worldReviewStart')}</button>
           </>}
         </>:null}
         {session&&!review.loading?<>
@@ -109,6 +115,6 @@ export function ReviewPanel({scope,id,locale,onId,onClose,onNewInspiration,onOpe
         <div className="jar-review-footer-actions">{last?<button type="button" disabled={disabled||hasDialogueDraft} onClick={()=>review.choose(last,null)}>{say('worldReviewUndo')}</button>:null}<button type="button" disabled={disabled||hasDialogueDraft} onClick={review.finish}>{say('worldReviewFinish')}</button></div>
         {review.busy?<span role="status">{say('worldKeeping')}</span>:null}</footer>:null}
     </DialogSurface>
-    {picker?<InspirationSearch profileId={scope.profileId} locale={locale} query={query} onQuery={setQuery} onClose={()=>setPicker(false)} onPick={row=>{setSelected(current=>current.some(item=>item.id===row.id)?current:current.length<5?[...current,row]:current);setPicker(false);setQuery('');}}/>:null}
+    {picker?<InspirationSearch profileId={scope.profileId} locale={locale} query={selection.query} onQuery={selection.setQuery} onClose={()=>setPicker(false)} onPick={row=>{selection.add(row.id);setPicker(false);}}/>:null}
   </>;
 }

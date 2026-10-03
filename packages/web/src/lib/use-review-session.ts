@@ -1,14 +1,16 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {ApiError,chooseReviewInspiration,fetchActiveReview,fetchReviewSession,finishReviewSession,startReviewSession,type ApiReviewItem,type ApiReviewSession,type ReviewChoiceInput} from './api';
 import {profileStorageKey,type ProfileStorageScope} from './profile-storage';
+import {settleReviewSelection,type ReviewSelectionReceipt} from './review-selection-drafts';
 
-type Action={kind:'start';id:string;inspirationIds?:string[]}|{kind:'choice';id:string;input:ReviewChoiceInput}|{kind:'finish';id:string;revision:number};
+type Action={kind:'start';id:string;inspirationIds?:string[];selection?:ReviewSelectionReceipt}|{kind:'choice';id:string;input:ReviewChoiceInput}|{kind:'finish';id:string;revision:number};
 type Intent=Action&{requestId:string;createdAt:number};
 function validIntent(value:unknown):value is Intent {
   if(!value||typeof value!=='object') return false;
   const row=value as Intent;
   if(typeof row.id!=='string'||!/^[0-9a-f-]{36}$/i.test(row.id)||typeof row.requestId!=='string'||!/^[0-9a-f-]{36}$/i.test(row.requestId)||!Number.isFinite(row.createdAt)) return false;
-  if(row.kind==='start') return row.inspirationIds===undefined||(Array.isArray(row.inspirationIds)&&row.inspirationIds.length>0&&row.inspirationIds.length<=5&&row.inspirationIds.every(id=>typeof id==='string'&&/^[0-9a-f-]{36}$/i.test(id)));
+  if(row.kind==='start') return (row.selection===undefined||(Boolean(row.selection)&&typeof row.selection.id==='string'&&/^[0-9a-f-]{36}$/i.test(row.selection.id)&&typeof row.selection.raw==='string'&&row.selection.raw.length<5000))&&
+    (row.inspirationIds===undefined||(Array.isArray(row.inspirationIds)&&row.inspirationIds.length>0&&row.inspirationIds.length<=5&&row.inspirationIds.every(id=>typeof id==='string'&&/^[0-9a-f-]{36}$/i.test(id))));
   if(row.kind==='finish') return Number.isSafeInteger(row.revision)&&row.revision>=0;
   return row.kind==='choice'&&Boolean(row.input)&&Number.isSafeInteger(row.input.revision)&&row.input.revision>=0&&
     typeof row.input.inspirationId==='string'&&/^[0-9a-f-]{36}$/i.test(row.input.inspirationId)&&typeof row.input.sourceRevision==='string'&&/^[1-9]\d{0,18}$/.test(row.input.sourceRevision)&&[null,'keep','skip'].includes(row.input.choice);
@@ -40,9 +42,10 @@ export function useReviewSession(scope:ProfileStorageScope,id:string,onId:(id:st
   const live=useRef({scope,id,onId});live.current={scope,id,onId};
   const intent=useRef<Intent|null>(null),working=useRef(false),epoch=useRef(0),request=useRef<AbortController|null>(null);
   const storageBlocked=useRef(false);
-  const settle=useCallback((value:Intent)=>{
+  const settle=useCallback((value:Intent,consumed=true)=>{
     const saved=localStorage.getItem(key+value.requestId);
     if(saved!==null&&saved!==JSON.stringify(value))throw new Error('Review intent changed');
+    if(consumed&&value.kind==='start'&&value.selection)settleReviewSelection(scope,value.selection);
     localStorage.removeItem(key+value.requestId);intent.current=null;setPending(null);
   },[key]);
   const read=useCallback(async(takeLatest=false)=>{
@@ -56,7 +59,7 @@ export function useReviewSession(scope:ProfileStorageScope,id:string,onId:(id:st
       if(active.id==='new') row=await limited(fetchActiveReview(active.scope.profileId,controller.signal),controller);
       else row=await limited(fetchReviewSession(active.id,active.scope.profileId,controller.signal),controller);
       if(controller.signal.aborted||epoch.current!==serial) return;
-      if(waiting&&(takeLatest||observed(waiting,row))) settle(waiting);
+      if(waiting&&(takeLatest||observed(waiting,row))) settle(waiting,observed(waiting,row));
       if(waiting&&intent.current&&row){
         const changed=waiting.kind==='start'?Boolean(waiting.inspirationIds&&row.id!==waiting.id)
           :row.id!==waiting.id||row.revision> (waiting.kind==='choice'?waiting.input.revision:waiting.revision)
@@ -94,7 +97,7 @@ export function useReviewSession(scope:ProfileStorageScope,id:string,onId:(id:st
         :value.kind==='choice'?chooseReviewInspiration(value.id,value.input,profileId,controller.signal):finishReviewSession(value.id,value.revision,profileId,controller.signal);
       const row=await limited(work,controller);
       if(epoch.current!==serial) return;
-      settle(value);setSession(row);setEmpty(!row);setLoading(false);
+      settle(value,Boolean(row));setSession(row);setEmpty(!row);setLoading(false);
       if(row&&live.current.id!==row.id) live.current.onId(row.id);
     } catch(reason){if(epoch.current===serial)setError(reason instanceof ApiError&&[404,409].includes(reason.status)?'conflict':'save');}
     finally {if(epoch.current===serial){working.current=false;setBusy(false);}}
@@ -110,7 +113,7 @@ export function useReviewSession(scope:ProfileStorageScope,id:string,onId:(id:st
   const observeRevision=useCallback((revision:number)=>setSession(current=>current&&revision>current.revision?{...current,revision}:current),[]);
   return {session,loading,busy,pending,error,empty,
     observeRevision,
-    start:(inspirationIds?:string[])=>write({kind:'start',id:crypto.randomUUID(),...(inspirationIds?{inspirationIds}:{})}),
+    start:(inspirationIds?:string[],selection?:ReviewSelectionReceipt)=>write({kind:'start',id:crypto.randomUUID(),...(inspirationIds?{inspirationIds}:{}),...(selection?{selection}:{})}),
     choose:(item:ApiReviewItem,choice:'keep'|'skip'|null)=>{if(session)write({kind:'choice',id:session.id,input:{revision:session.revision,inspirationId:item.inspirationId,sourceRevision:item.currentRevision,choice}});},
     finish:()=>{if(session)write({kind:'finish',id:session.id,revision:session.revision});},
     retry:()=>{if(intent.current)void run(intent.current);else void read();},
