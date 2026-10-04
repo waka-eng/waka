@@ -112,3 +112,64 @@ fixture accounts and four test messages; it was removed explicitly. Current
 web recheck: 700/700 across 98 suites, with web/API typechecks passing. This
 checkpoint is committed before independent home-layout work begins; the live
 reply-quality gate remains open, not silently passed.
+
+### Milestone 2 home layout verification
+
+Review and Talk with WAKA now have separate activity cards. Changes moved to
+the reading header; Why remains attached to the reading. Resume and empty
+states have distinct hints. Focused tests passed 20/20, then the full web suite
+passed 702/702 across 99 suites; typecheck and build passed.
+
+The built disposable fixture at 390 by 844 showed stacked 77px-high cards,
+with Capture and Principles visible and no horizontal overflow. Talk with WAKA
+opened `/chat/new`; Back returned home. This is automated navigation evidence,
+not a human usability study.
+
+The responsive gate failed at 320 by 568: cards occupied y282–444 and the
+fixed-size companion overlapped them. The existing placement averages two
+incompatible bounds when there is insufficient space. An experiment bounding
+the reading to a scroll area removed the intersection but hid both activity
+cards initially. That experiment was discarded, not accepted as a fix.
+
+Milestone 2 remains unfinished and uncommitted. Next: provide coherent
+short-screen scrolling without hiding the activities in a separate small
+panel, then verify 320/390/768/1280 widths, long Korean/English readings,
+empty/loading/error states and Review return navigation. Do not advance to
+the memory milestone on the strength of passing component tests. The live
+chat-quality gate still needs the OpenRouter configuration; no paid calls or
+remote changes occurred.
+
+### Milestone 2 responsive correction checkpoint
+
+The short-screen overlap is fixed without shrinking the companion. A measured
+space budget omits the decorative companion and peek orbs only when the reading,
+activities and Capture cannot fit. Capture keeps a separate position above the
+bottom controls. Long content scrolls in one reading/activity region below the
+fixed navigation. On roomy screens the companion retains its existing size and
+the cards remain beside each other on desktop and stacked on mobile.
+
+Browser measurements: at 320 by 568, both cards are 67px high, the second ends
+at y420 and Capture starts at y442. At 768 by 1024 and 1280 by 800, the two
+85px-high cards sit side by side. At 390 by 844 they stack and the companion
+remains visible. No horizontal overflow was measured. Long English and Korean
+fixture readings scrolled 140px to reach both cards, while the reading region
+stayed at y118 and the world root's scroll offset stayed zero. Review resumed
+the saved session and closed home; Chat opened its dedicated composer.
+
+Focus restoration exposed an additional issue: `overflow:hidden` let the world
+root scroll 27px, displacing the navigation. `overflow:clip` now prevents that
+outer scroll; the actual reading surface retains native scrolling and keyboard
+focus. Empty-account and stale-reading recovery layouts were also inspected.
+The loading shell was observed, not latency-tested.
+
+Verification: web typecheck passed; full suite 705/705 across 100 suites; build
+passed. The first full checks rejected two new variable names and a missing
+test seam declaration; these were fixed rather than waived. A fixture update
+first failed because its trigger needed an explicit schema search path; the
+retry used the verified disposable schema. The original synthetic reading was
+restored afterward. No remote data or model calls were used.
+
+This is a local implementation checkpoint, not final goal completion. The
+short human usability check remains open, as do Milestone 1's live adaptive
+reply gate and all Milestone 3 implementation/calibration work. Browser evidence
+is saved under `work/chat-home-memory/`; it is not a physical-device test.

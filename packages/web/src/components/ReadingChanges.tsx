@@ -5,7 +5,7 @@ import {t,type SupportedLocale} from '../lib/locales';
 import {DialogSurface} from './DialogSurface';
 
 /** Read the two actual stored artifacts around the displayed reading. */
-export function ReadingChanges({profileId,readingId,locale}:{profileId:string;readingId:string;locale:SupportedLocale}){
+export function ReadingChanges({profileId,readingId,locale,compact=false}:{profileId:string;readingId:string;locale:SupportedLocale;compact?:boolean}){
   const [open,setOpen]=useState(false),[attempt,setAttempt]=useState(0),[failed,setFailed]=useState(false);
   const opener=useRef<HTMLButtonElement>(null);
   const [pair,setPair]=useState<{profileId:string;id:string;before:ApiTopOfMind|null;after:ApiTopOfMind}|null>(null);
@@ -35,7 +35,7 @@ export function ReadingChanges({profileId,readingId,locale}:{profileId:string;re
     {row.entries.length?row.entries.map(entry=><p key={entry.id}>{entry.body}</p>):<p>{say('worldReadingEarlierUnavailable')}</p>}
   </section>;
   return <>
-    <button ref={opener} type="button" onClick={()=>setOpen(true)}>{say('worldReadingChanges')}</button>
+    <button ref={opener} className={compact?'jar-reading-changes':undefined} type="button" onClick={()=>setOpen(true)}>{say(compact?'worldReadingChangesShort':'worldReadingChanges')}</button>
     {open?createPortal(<>
       <button type="button" className="jar-review-backdrop" tabIndex={-1} aria-hidden="true" onClick={()=>setOpen(false)}/>
       <DialogSurface className="jar-seek jar-reading-comparison" aria-label={say('worldReadingChanges')} onClose={()=>setOpen(false)} data-jar-chrome="1">

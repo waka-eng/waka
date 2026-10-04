@@ -1,4 +1,10 @@
 {
+  "worldHomeActivities": "Explore your inspirations",
+  "worldHomeReviewHint": "Revisit what stayed with you.",
+  "worldHomeResumeHint": "Continue where you left off.",
+  "worldHomeReviewEmpty": "Save an inspiration to begin.",
+  "worldHomeChatHint": "A conversation with your memory.",
+  "worldReadingChangesShort": "Changes",
   "worldChatBack": "Back",
   "worldChatMemory": "Your memory",
   "worldChatMemoryExplanation": "Selected context for this conversation. Replies link to their supporting memories.",

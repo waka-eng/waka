@@ -75,6 +75,7 @@ import { InspirationSearch } from '../components/InspirationSearch';
 import { hueCss } from "../lib/appearance";
 import { useDismissAway } from "../lib/dismiss";
 import { isEditableTarget, isNativeSurface } from "../lib/surface-input";
+import {homeActivityLayout} from "../lib/home-activity-layout";
 import { profileStorageKey, readProfileText, writeProfileText, type ProfileStorageScope } from "../lib/profile-storage";
 import { useTopOfMindRefresh } from "../lib/use-top-of-mind-refresh";
 import { useInspirationProcessing } from '../lib/use-inspiration-processing';
@@ -84,6 +85,7 @@ import { useAudioRecording } from '../lib/use-audio-recording';
 import { InspirationComposer } from '../components/InspirationComposer';
 import { ReviewPanel } from '../components/ReviewPanel';
 import { useReviewEntry } from '../lib/use-review-entry';
+import { HomeActivities } from '../components/HomeActivities';
 import { ReadingChanges } from '../components/ReadingChanges';
 import { PrincipleShare } from '../components/PrincipleShare';
 import { ReviewEvidence } from '../components/ReviewEvidence';
@@ -5784,6 +5786,27 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         const last = ink[ink.length - 1];
         if (last) hqH = last.getBoundingClientRect().bottom - hqEl.getBoundingClientRect().top;
       }
+      const activityHome = hqEl?.classList.contains('jar-hq-inner--activities');
+      // scrollHeight includes overflow; unlike the visible last child's bottom
+      // it cannot make the mode flip as a person scrolls through the reading.
+      const alreadyCompact=hqEl?.classList.contains('jar-hq-inner--compact');
+      const activityInset=hqEl?parseFloat(getComputedStyle(hqEl)[alreadyCompact?'marginTop':'paddingTop'])||0:0;
+      const naturalActivityHeight=hqEl?(hqEl.scrollHeight+(alreadyCompact?activityInset:0)):hqH;
+      const activityLayout = homeActivityLayout(view.h, naturalActivityHeight, view.dialH, CHAR_SIZE);
+      const compactHome = Boolean(activityHome && activityLayout.compact);
+      if(compactHome) view.layout.fieldTop = view.h + 8;
+      if(hqEl){
+        hqEl.classList.toggle('jar-hq-inner--compact',compactHome);
+        if(compactHome){
+          hqEl.style.maxHeight=`${Math.max(0,activityLayout.contentLimit-activityInset)}px`;
+          hqEl.setAttribute('data-jar-surface','home-reading');
+          hqEl.setAttribute('tabindex','0');
+        }else{
+          hqEl.style.removeProperty('max-height');
+          hqEl.removeAttribute('data-jar-surface');
+          hqEl.removeAttribute('tabindex');
+        }
+      }
       /* THE CHARACTER IS ONE SIZE, EVERYWHERE (founder, 2026-08-28: "character
          shouldnt be responsive to screensize. it should always be consistent
          size").
@@ -5849,7 +5872,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
        * overlap. When the slot is roomy — which is most of the time — the
        * preference wins and the body is where the eye expects it.
        */
-      companion.y = hi >= lo ? clamp(view.h / 2, lo, hi) : (lo + hi) / 2;
+      companion.y = compactHome ? -view.h * 3 : hi >= lo ? clamp(view.h / 2, lo, hi) : (lo + hi) / 2;
       /* WHAT SITS UNDER THE COMPANION, AND IN WHAT ORDER (founder, 2026-08-25:
          "keep something should be shown right below the character").
          The mouth first, directly beneath the body, because keeping something
@@ -5858,7 +5881,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
          reports what the loop did, and it says so in the mouth's own slot
          rather than in a row of its own — one place, one line. */
       const chin = Math.round(companion.y + companion.size * 0.62);
-      root!.style.setProperty("--jar-mouth-top", `${chin + 18}px`);
+      root!.style.setProperty("--jar-mouth-top", `${compactHome ? activityLayout.composerTop : chin + 18}px`);
       /* AND THE CHARACTER STATES ITS SIZE, rather than being guessed at.
          The same rule as the seam and the mouth's top: chrome states its
          place, nothing guesses at it. It is a constant now (CHAR_SIZE), and
@@ -12748,15 +12771,16 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                 ) : null}
                 {ready && c ? (
                   <div
-                    className="jar-hq-inner"
+                    className={`jar-hq-inner${here&&w.kind==='self'&&storageScope&&!offline&&atNow?' jar-hq-inner--activities':''}`}
                     ref={w.kind === "self" ? measured.hqInner : undefined}
                   >
                     {/* R01 makes the personal reading explicit while keeping
                         the existing field, headline and companion layout. */}
-                    {here&&w.kind==='self'?<p className="jar-reading-heading">
+                    {here&&w.kind==='self'?<div className="jar-reading-heading" data-jar-chrome="1">
                       <span>{say(atNow?'worldReadingTitle':'worldReadingEarlier')}</span>
                       {atNow&&topOfMind&&topOfMind.createdMs>0?<time dateTime={new Date(topOfMind.createdMs).toISOString()}>{new Date(topOfMind.createdMs).toLocaleDateString(locale,{month:'short',day:'numeric'})}</time>:null}
-                    </p>:null}
+                      {atNow&&topOfMind?.id&&storageScope&&!offline?<ReadingChanges key={`${storageScope.profileId}:${topOfMind.id}`} profileId={storageScope.profileId} readingId={topOfMind.id} locale={locale} compact/>:null}
+                    </div>:null}
                     {c.text ? (
                       /* A STABLE KEY, AND A CARRIED/NEW SPLIT INSIDE IT.
                          The whole h1 used to be keyed by its words, so every
@@ -12817,16 +12841,11 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                     ) : null}
                     {here&&w.kind==='self'&&storageScope&&!offline?<div className="jar-reading-actions" data-jar-chrome="1">
                       {!atNow?<button type="button" onClick={()=>windTo(dial?.end??Date.now())}>{say('worldReadingToday')}</button>:<>
-                        <div className="jar-reading-next">
-                          {inspirations?.length?<button type="button" className="jar-review-entry" onClick={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})}>{reviewEntry.label}</button>:null}
-                          <button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,conversationId:'new'})}>{say('worldConversationTitle')}</button>
-                        </div>
-                        <div className="jar-reading-explain">
                         {c.text?<button type="button" aria-expanded={posterAsk} onClick={()=>setPosterAsk(value=>!value)}>{say('worldReadingWhy')}</button>:null}
-                        {topOfMind?.id?<ReadingChanges key={`${storageScope.profileId}:${topOfMind.id}`} profileId={storageScope.profileId} readingId={topOfMind.id} locale={locale}/>:null}
-                        </div>
                       </>}
                     </div>:null}
+                    {here&&w.kind==='self'&&storageScope&&!offline&&atNow?<HomeActivities locale={locale} reviewLabel={reviewEntry.label} resuming={reviewEntry.resuming} hasInspirations={Boolean(inspirations?.length)}
+                      onReview={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})} onChat={()=>viewNavigation.write({...EMPTY_VIEW,conversationId:'new'})}/>:null}
                     {here && w.kind === "group" && atNow ? <button
                       type="button"
                       className="jar-room-shape"
