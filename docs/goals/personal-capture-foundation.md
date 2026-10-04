@@ -1,6 +1,6 @@
 # Personal capture foundation
 
-Status: in progress (2026-10-02), explicitly started by the owner.
+Status: done (2026-10-04) in the owner's approved simulator-based scope; physical hardware behavior is not claimed.
 Branch: `codex/personal-capture-foundation`, based on `59aab90` and the navigation/search work in PR #334.
 
 ## Objective
@@ -17,7 +17,7 @@ first bundle or subsequent work. They remain unverified follow-up items; their
 test cases and existing measurements are preserved. This decision supersedes
 the physical-device blocking requirement in the original gates and historical
 log below. It does not mark those tests passed or declare the whole goal complete.
-The current request is documentation only; no new implementation is started.
+That earlier request was documentation only. The later delivery request explicitly resumed implementation and accepted simulators instead of physical-device tests; see the final acceptance below.
 
 ## Gates
 
@@ -222,3 +222,34 @@ The ADB approval blocker is resolved. The tested emulator paths pass, but
 actual iPhone/Android microphone capture, physical permissions/interruption
 behavior and real-device quality remain outside this evidence. A03 and the
 full first-bundle goal are still not complete.
+
+### 2026 10 04 final acceptance
+
+The later owner instruction explicitly accepted simulators instead of physical
+devices for the remaining milestones. The owner also approved Chrome's Terms
+for this test emulator. Under that amended scope, A03 and the first bundle are
+complete. The original physical-device requirements and failed attempts above
+remain historical evidence, not retroactively passed tests.
+
+The final Android Chrome session on API 35 verified keyboard-safe chat entry,
+draft retention after an app switch, and reopening persisted messages in a new
+tab. A synthetic recording stopped after a confirmed background transition,
+showed the interruption notice, and played to 0:22 before saving. Saving and
+reopening produced one private audio source with its original player. SQL and
+fixture counts were two inspirations including the seed, one attachment, one
+save receipt, one object and two chat messages. Transcription was intentionally
+disabled in this fixture; post-save playback advancement was not established.
+
+An earlier emulator session ended with exit 137 after memory-pressure warnings;
+the cause was not established. The stable hardware-GPU retry and the failed
+attempt are both retained. iOS Safari rendered the current chat route; its
+unchanged recording/photo/share/session/keyboard paths reuse the earlier
+evidence, not a newly claimed full test. Speech remains the recorded six of six
+synthetic cases for Gemini 2.5 Flash.
+
+See [the audio decision](../decisions/2026-10-02-audio-capture-spike.md) and
+[final dev acceptance](../plans/2026-10-03-avatar-dev-rollout.md) for evidence and
+limits. Both simulators and the dedicated fixture server were stopped, and its
+exact disposable schema was verified absent. Physical microphone quality,
+telephone interruption, Android native packaging and store release are outside
+this acceptance. No production change was made.

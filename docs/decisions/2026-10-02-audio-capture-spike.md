@@ -1,12 +1,12 @@
 # Audio capture spike
 
-Status: partial A03 evidence. On 2026-10-02 the owner deferred actual iPhone Safari and Android Chrome testing to follow-up work. These checks remain unverified, but no longer block current progress. Assuming they work for planning is not a verified pass or a support guarantee.
+Status: A03 complete on 2026-10-04 within the owner's subsequently approved simulator-based scope. Actual iPhone Safari and Android Chrome hardware checks remain unverified follow-up work, not a support guarantee.
 
 ## Current decision
 
-Use `gemini-2.5-flash` for transcription. It passed all six predeclared synthetic fixtures and was subsequently integrated in C06 on the current implementation branch. Do not use `gemini-2.5-flash-lite` as an automatic fallback: it added unrequested timestamps to the Korean transcript and failed the output contract in this run. This is implementation evidence, not a claim of remote deployment.
+Use `gemini-2.5-flash` for transcription. It passed all six predeclared synthetic fixtures and was subsequently integrated in C06 and delivered to dev. Do not use `gemini-2.5-flash-lite` as an automatic fallback: it added unrequested timestamps to the Korean transcript and failed the output contract in this run. The speech measurement is synthetic-fixture evidence, not a real-device recording evaluation.
 
-Continue web-first for the agreed 31 tasks. Capacitor packaging and beta/store deployment are outside that scope and require a later rollout decision. Physical-device verification is deferred under the owner's decision; it does not block these tasks. A mobile-sized desktop window or simulator does not establish physical-device behavior. A03's physical checks stay unchecked, not silently replaced by simulator results.
+Continue web-first for the agreed 31 tasks. Capacitor packaging and beta/store deployment are outside that scope and require a later rollout decision. The owner first deferred physical testing, then explicitly accepted simulators for the remaining milestones. A03 is complete under that substitution; its physical checks remain unverified. A mobile-sized desktop window or simulator does not establish physical-device behavior.
 
 ## Browser recording and saving
 
@@ -46,7 +46,28 @@ Total estimated cost was USD 0.0028286 using returned usage and published standa
 
 The machine-readable [results](../craft/evidence/personal-capture/audio-transcription-results.json) include fixture references, returned text, normalized scores, timing, usage and hashes. Run `pnpm tsx tools/e2e/audio-transcription-eval.ts` to prepare synthetic WAV fixtures without a paid call; add `--live` explicitly for the bounded comparison. The optional `--tone` argument supplies a browser-produced WebM negative fixture.
 
-## Remaining A03 checks
+## Simulator acceptance and remaining hardware checks
+
+On 2026-10-04, after explicit approval of Chrome's Terms for the test emulator,
+a stable Android API 35 session verified recording interruption after leaving
+the page. The returned page displayed the interruption notice and the synthetic
+clip played to 0:22 before saving. One save produced one private audio source,
+one attachment, one save receipt and one stored object; reopening showed the
+original player. The transcription worker was deliberately disabled. This
+does not establish post-save playback advancement or completed transcription.
+
+The same session verified keyboard-safe chat entry and draft retention across
+an app switch. A scrollbar covering right-edge text was fixed with an 8px
+content gutter and checked again. A prior session had garbled typing and exit
+137; warnings showed memory pressure, but its cause was not established. Both
+failed and successful evidence are retained. A fresh iOS Safari check rendered
+the chat route; prior unchanged-path iOS evidence below is reused.
+
+Evidence under `docs/craft/evidence/personal-capture/`:
+`android-m8-recording-interruption.png`, `android-m8-recording-reopened.png`,
+`android-m8-chat-keyboard.png`, `android-m8-app-return.png`,
+`android-m8-chat-gutter.png`, `android-m8-input-failed.png` and
+`ios-m8-conversation-route.png`. All contain synthetic local fixtures.
 
 The bounded Capacitor probe is checked in under
 [`tools/e2e/native-capture-spike`](../../tools/e2e/native-capture-spike/README.md).

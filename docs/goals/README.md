@@ -30,8 +30,6 @@ Work happening now, or stopped mid-way with a recorded reason.
 
 | Goal | Status |
 | --- | --- |
-| [`personal-experience-delivery.md`](personal-experience-delivery.md) | M8-A passed the 18-case gate; M8-B dev rollout/acceptance next. M7/M8 not yet merged. Simulators accepted; new Android checks await Chrome Terms approval. |
-| [`personal-capture-foundation.md`](personal-capture-foundation.md) | In progress — owner requested the first personal-experience bundle: A01, A02, C01, C02 and A03. |
 | [`ux-feature-implementation.md`](ux-feature-implementation.md) | Paused by owner after the checked feedback/room-flow batch; dev delivery requested. Later UX/algorithm slices, remaining release cases, semantic validation, historical repair and deployed verification remain open. |
 | [`everything-in-the-world.md`](everything-in-the-world.md) | Phase 2 passed (2026-08-23). Phase 3 next. |
 | [`every-workflow-works.md`](every-workflow-works.md) | Phase 2 passed (2026-08-22). Phase 3 next. |
@@ -49,6 +47,8 @@ Shipped, and kept for the measurements.
 
 | Goal | Status |
 | --- | --- |
+| [`personal-experience-delivery.md`](personal-experience-delivery.md) | Done 2026-10-04 — all 31 tasks/M1–M8 in the approved web/simulator scope, deployed and verified on dev through PRs 339/340. Production and native/store deployment excluded. |
+| [`personal-capture-foundation.md`](personal-capture-foundation.md) | Done 2026-10-04 — first bundle accepted with simulator substitution; physical microphone and device behavior remain unverified. |
 | [`a-room-you-can-trust.md`](a-room-you-can-trust.md) | Done 2026-08-23. |
 | [`principles.md`](principles.md) | Done 2026-08-21. All eight phases passed their gates. |
 | [`three-layers.md`](three-layers.md) | Done 2026-08-15. All ten phases passed. |
