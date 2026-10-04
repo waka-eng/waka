@@ -31,7 +31,7 @@ export function readViewLocation(pathname: string, search = ''): ViewLocation | 
     } else if (segments[0] === 'inspirations' && segments.length === 2 && id(segments[1]!)) {
       view.inspirationId = segments[1]!;
     } else if(segments[0]==='chat'&&segments.length===2&&id(segments[1]!)){
-      view.conversationId=segments[1];return view;
+      view.conversationId=segments[1];view.principleId=view.conversationId==='new'?id(params.get('principle')):null;return view;
     } else if(segments[0]==='review' && segments.length===2 && id(segments[1]!)) {
       view.reviewId=segments[1]!;
       view.reviewAnswerId=view.reviewId==='new'?null:id(params.get('thought'));
@@ -54,7 +54,7 @@ export function readViewLocation(pathname: string, search = ''): ViewLocation | 
 }
 
 export function viewHref(view: ViewLocation): string {
-  if(view.conversationId)return `/chat/${encodeURIComponent(view.conversationId)}`;
+  if(view.conversationId)return `/chat/${encodeURIComponent(view.conversationId)}${view.conversationId==='new'&&view.principleId?`?principle=${encodeURIComponent(view.principleId)}`:''}`;
   if(view.reviewId)return `/review/${encodeURIComponent(view.reviewId)}${view.reviewAnswerId&&view.reviewId!=='new'?`?thought=${encodeURIComponent(view.reviewAnswerId)}`:''}`;
   if(view.principleId)return `/principles/${encodeURIComponent(view.principleId)}${view.sharePrinciple?'/share':''}`;
   const path = view.wallId ? `/w/${encodeURIComponent(view.wallId)}${view.label ? `/${encodeURIComponent(view.label.trim().toLowerCase().replace(/\s+/g, '-'))}` : ''}` : '/';

@@ -55,11 +55,5 @@ export function useViewNavigation(scope: string | null) {
     if(stored?.scope===current.scope&&stored.shareFrom===to)current.navigate(-1);
     else current.navigate(to,{replace:true});
   },[]);
-  const closeConversation=useCallback(()=>{
-    const current=latest.current,before=readViewLocation(current.location.pathname,current.location.search);
-    const stored=(current.location.state as {wakaView?:StoredView}|null)?.wakaView;
-    own.current=null;
-    if(before)current.navigate(stored?.scope===current.scope&&stored.conversationFrom?stored.conversationFrom:viewHref({...before,conversationId:null}),{replace:true});
-  },[]);
-  return { view, href, key: location.key, query, write, closeComposer,closeReview,closeShare,closeConversation, own };
+  return { view, href, key: location.key, query, write, closeComposer,closeReview,closeShare, own };
 }

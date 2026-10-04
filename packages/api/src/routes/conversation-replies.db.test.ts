@@ -69,6 +69,28 @@ it('commits Send and the reply outbox atomically, including an exact lost-respon
   expect(await t.sql`SELECT id FROM conversation_messages WHERE id=${messageId}`).toHaveLength(1);
   expect(await f.state()).toMatchObject({phase:'pending',messageId});await processBackgroundJob(await claim());expect(answer).toHaveBeenCalledTimes(1);
 });
+it('first Send creates one conversation, message and reply request without an empty intermediate row',async()=>{
+  const f=await fixture(),id=randomUUID(),firstMessage={id:randomUUID(),content:'How can a quiet morning leave room for ideas?',requestReply:true};
+  for(let n=0;n<2;n++)expect((await f.post('',{id,firstMessage})).status).toBe(200);
+  expect(await t.sql`SELECT id FROM conversations WHERE id=${id}`).toHaveLength(1);
+  expect(await t.sql`SELECT id FROM conversation_messages WHERE conversation_id=${id}`).toHaveLength(1);
+  expect(await t.sql`SELECT id FROM conversation_reply_requests WHERE conversation_id=${id}`).toHaveLength(1);
+  expect(answer).not.toHaveBeenCalled();
+  const result=await(await f.app.request(`/conversations/${id}/reply`)).json() as any;
+  expect(result).toMatchObject({phase:'pending',messageId:firstMessage.id,revision:1});
+  await processBackgroundJob(await claim());expect(answer).toHaveBeenCalledOnce();
+  expect(await t.sql`SELECT id FROM conversation_messages WHERE conversation_id=${id}`).toHaveLength(2);
+});
+it('recovers the first Send after its starting principle was deleted without restoring it',async()=>{
+  const f=await fixture(),id=randomUUID();
+  const [principle]=await t.sql`INSERT INTO principles(profile_id,statement,origin,rank,locked_at) VALUES(${f.profileId},'Keep room for thought.','declared',0,now()) RETURNING id`;
+  const input={id,principleId:principle.id,firstMessage:{id:randomUUID(),content:'How might this guide today?',requestReply:true}};
+  expect((await f.post('',input)).status).toBe(200);
+  await t.sql`DELETE FROM principles WHERE id=${principle.id}`;
+  const retry=await f.post('',input);expect(retry.status).toBe(200);
+  const body=await retry.json() as any;expect(body.conversation.initialPrinciple).toBeNull();expect(body.conversation.messages).toHaveLength(1);
+  expect(await t.sql`SELECT id FROM conversation_reply_requests WHERE conversation_id=${id}`).toHaveLength(1);
+});
 it('starts from a current owned principle even below the default rank window, without asserting it as a user message',async()=>{
   const f=await fixture(),other=await fixture();
   const [principle]=await t.sql`INSERT INTO principles(profile_id,statement,rank,origin,locked_at) VALUES(${f.profileId},'My chosen starting point.',30,'declared',now()) RETURNING id`;

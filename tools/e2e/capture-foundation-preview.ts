@@ -30,6 +30,7 @@ const { signSessionToken, buildSessionCookie } = await import('../../packages/ap
 const { createSessionRow } = await import('../../packages/api/src/lib/session.js');
 const { getDb } = await import('../../packages/api/src/lib/db.js');
 let reflectionCalls = 0, reviewCalls = 0, conversationCalls=0,failConversationReply=false,holdConversationReply=false;
+let loseConversationResponse=false;
 let releaseConversationReply:(()=>void)|null=null,runningConversationReply:Promise<unknown>|null=null;
 if(process.env.WAKA_CONVERSATION_FIXTURE==='1')process.env.WAKA_CONVERSATION_REPLIES='1';
 if (process.env.WAKA_REFLECTION_FIXTURE === '1' || process.env.WAKA_REVIEW_FIXTURE === '1' || process.env.WAKA_CONVERSATION_FIXTURE==='1') {
@@ -190,6 +191,7 @@ const server = createServer(async (request, response) => {
       response.end(await readFile(path)); return;
     }
     if (target.pathname === '/fixture') {
+      if(target.searchParams.get('fail')==='conversation-save')loseConversationResponse=true;
       if(process.env.WAKA_CONVERSATION_FIXTURE==='1'){
         if(target.searchParams.get('fail')==='conversation-reply')failConversationReply=true;
         if(target.searchParams.get('conversation-reply')==='release'){holdConversationReply=false;releaseConversationReply?.();releaseConversationReply=null;await runningConversationReply;runningConversationReply=null;}
@@ -275,6 +277,7 @@ const server = createServer(async (request, response) => {
         loseRequest = false; response.destroy(); return;
       }
       const result = await app.fetch(new Request(target,{method:request.method,headers:request.headers as HeadersInit,...(bytes ? {body:bytes} : {})}));
+      if(loseConversationResponse&&request.method==='POST'&&target.pathname==='/api/conversations'&&result.status===200){loseConversationResponse=false;response.destroy();return;}
       if(loseReviewResponse&&request.method==='POST'&&/^\/api\/review-sessions\/[^/]+\/answers$/.test(target.pathname)&&result.status===200){loseReviewResponse=false;response.destroy();return;}
       if (loseResponse && request.method === 'POST' && target.pathname === '/api/inspirations' && result.status === 201) {
         loseResponse = false; response.destroy(); return;

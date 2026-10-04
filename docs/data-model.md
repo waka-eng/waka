@@ -102,6 +102,10 @@ principle or feedback verdict. Replies require `WAKA_CONVERSATION_REPLIES=1`;
 otherwise saving has a zero-call budget. When enabled, Send commits the user
 message and reply request in one transaction, so a lost response cannot strand
 the message between saving and enqueueing or duplicate it on replay.
+The first Send may create the conversation, its first authored message and
+that reply request in the same transaction. Opening a new-chat composer does
+not create an empty conversation. Client-generated conversation/message IDs
+survive uncertain outcomes; a changed first-message replay conflicts.
 
 A conversation may start from an owned, currently readable Principle via
 `initial_principle_id`. This prioritizes the current wording in context without

@@ -56,17 +56,35 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
     return c.json({profileId,conversations:rows,...conversationCapabilities()});
   });
   routes.post('/',async c=>{
-    const input=z.object({id:uuid,principleId:uuid.optional()}).strict().safeParse(await c.req.json().catch(()=>null));if(!input.success)return c.json({error:'Invalid conversation'},400);
+    const input=z.object({id:uuid,principleId:uuid.optional(),firstMessage:messageInput.omit({revision:true,correctsMessageId:true}).optional()}).strict().safeParse(await c.req.json().catch(()=>null));if(!input.success)return c.json({error:'Invalid conversation'},400);
     const profileId=c.get('conversationProfileId');
     const row=await database().transaction(async tx=>{
       await tx.select({id:profiles.id}).from(profiles).where(eq(profiles.id,profileId)).for('update');
       const [existing]=await tx.select().from(conversations).where(and(eq(conversations.profileId,profileId),eq(conversations.id,input.data.id)));
-      if(existing)return readConversation(tx,profileId,input.data.id);
+      if(existing){
+        const current=await readConversation(tx,profileId,input.data.id);
+        if(input.data.firstMessage){
+          const first=current.messages[0];
+          // Source deletion clears its FK, but cannot make a committed first
+          // message impossible to recover. A replay never restores that source.
+          if(current.initialPrincipleId!==null&&current.initialPrincipleId!==(input.data.principleId??null)||!first||first.role!=='user'||first.id!==input.data.firstMessage.id||first.content!==input.data.firstMessage.content)
+            throw new ConversationError('This conversation already began with different words.',409);
+        }
+        return current;
+      }
       const [count]=await tx.select({n:sql<number>`count(*)::int`}).from(conversations).where(and(eq(conversations.profileId,profileId),isNull(conversations.deletedAt)));
       if(count.n>=CONVERSATION_LIMITS.conversations)throw new ConversationError('Conversation limit reached. Delete an old conversation first.',429);
       if(input.data.principleId){const [source]=await tx.select({id:principles.id}).from(principles).where(and(eq(principles.profileId,profileId),eq(principles.id,input.data.principleId),personalPrincipleReadable(profileId,PRINCIPLE_MIN_SIGNALS)));if(!source)throw new ConversationError('This principle is not available.',404);}
-      await tx.insert(conversations).values({id:input.data.id,profileId,initialPrincipleId:input.data.principleId??null});return readConversation(tx,profileId,input.data.id);
-    });return c.json({conversation:row,...conversationCapabilities()});
+      const first=input.data.firstMessage;
+      await tx.insert(conversations).values({id:input.data.id,profileId,initialPrincipleId:input.data.principleId??null,revision:first?1:0});
+      if(first){
+        await tx.insert(conversationMessages).values({id:first.id,profileId,conversationId:input.data.id,position:1,role:'user',content:first.content});
+        if(first.requestReply&&conversationRepliesEnabled())await requestConversationReplyInTransaction(tx,profileId,input.data.id,{messageId:first.id,afterRequestId:null});
+      }
+      return readConversation(tx,profileId,input.data.id);
+    });
+    if(input.data.firstMessage?.requestReply&&conversationRepliesEnabled())await wakeCommittedBackgroundJobs();
+    return c.json({conversation:row,...conversationCapabilities()});
   });
   routes.use('/:id/*',async(c,next)=>{if(!uuid.safeParse(c.req.param('id')).success)return c.json({error:'Invalid conversation'},400);await next();});
   routes.get('/:id',async c=>{

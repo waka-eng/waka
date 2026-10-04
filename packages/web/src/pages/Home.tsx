@@ -84,8 +84,6 @@ import { useAudioRecording } from '../lib/use-audio-recording';
 import { InspirationComposer } from '../components/InspirationComposer';
 import { ReviewPanel } from '../components/ReviewPanel';
 import { useReviewEntry } from '../lib/use-review-entry';
-import { ConversationPanel } from '../components/ConversationPanel';
-import { ConversationStartButton } from '../components/ConversationStartButton';
 import { ReadingChanges } from '../components/ReadingChanges';
 import { PrincipleShare } from '../components/PrincipleShare';
 import { ReviewEvidence } from '../components/ReviewEvidence';
@@ -12636,7 +12634,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                           {pick === pr.id && !pDraft ? (
                             <div className="jar-ask jar-principle-actions">
                               {storageScope&&!offline?<button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:pr.id,sharePrinciple:true})}>{say('worldSharePrinciple')}</button>:null}
-                              {storageScope&&!offline?<ConversationStartButton key={`${storageScope.accountId}:${storageScope.profileId}:${pr.id}`} scope={storageScope} principleId={pr.id} locale={locale} onStarted={id=>viewNavigation.write({...EMPTY_VIEW,conversationId:id})}/>:null}
+                              {storageScope&&!offline?<button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,conversationId:'new',principleId:pr.id})}>{say('worldConversationFromPrinciple')}</button>:null}
                               {pr.citedSignals.length > 0 ? (
                                 <>
                                   <button
@@ -12821,7 +12819,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
                       {!atNow?<button type="button" onClick={()=>windTo(dial?.end??Date.now())}>{say('worldReadingToday')}</button>:<>
                         <div className="jar-reading-next">
                           {inspirations?.length?<button type="button" className="jar-review-entry" onClick={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})}>{reviewEntry.label}</button>:null}
-                          <button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,conversationId:'list'})}>{say('worldConversationTitle')}</button>
+                          <button type="button" onClick={()=>viewNavigation.write({...EMPTY_VIEW,conversationId:'new'})}>{say('worldConversationTitle')}</button>
                         </div>
                         <div className="jar-reading-explain">
                         {c.text?<button type="button" aria-expanded={posterAsk} onClick={()=>setPosterAsk(value=>!value)}>{say('worldReadingWhy')}</button>:null}
@@ -14674,14 +14672,6 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         </DialogSurface>
       ) : null}
 
-      {storageScope&&viewNavigation.view?.conversationId?<ConversationPanel key={`${storageScope.accountId}:${storageScope.profileId}:${viewNavigation.view.conversationId}`} scope={storageScope} id={viewNavigation.view.conversationId==='list'?null:viewNavigation.view.conversationId} locale={locale}
-        onPrincipleUpdated={row=>setPrinciples(current=>current.map(item=>item.id===row.id?row:item))}
-        onInspirationSaved={row=>{if(row.profileId!==storageScope.profileId)return;const detail=toInspirationDetail(row);detailsRef.current.set(row.id,detail);const revision=++sourceListMutationRef.current;
-          setInspirations(previous=>previous?.some(item=>item.id===row.id)?previous.map(item=>item.id===row.id?detail:item):[...(previous??[]),detail]);
-          void loadInspirations(storageScope.profileId).then(field=>{if(readingMountedRef.current&&sourceListMutationRef.current===revision){setInspirations(field.inspirations);setFieldBeyond(beyondOf(field));}}).catch(()=>undefined);
-          if(row.processing)sourceProcessing.track(row.id,row.processing);}}
-        onOpenSource={(kind,id)=>viewNavigation.write(kind==='principle'?{...EMPTY_VIEW,section:'sky',principleId:id}:{...EMPTY_VIEW,section:'field',inspirationId:id})}
-        onChoose={id=>viewNavigation.write({...EMPTY_VIEW,conversationId:id??'list'})} onClose={viewNavigation.closeConversation}/>:null}
       {storageScope&&viewNavigation.view?.reviewId?<ReviewPanel key={`${storageScope.profileId}:${viewNavigation.view.reviewId}`} scope={storageScope} id={viewNavigation.view.reviewId} thoughtId={viewNavigation.view.reviewAnswerId} locale={locale}
         onId={id=>viewNavigation.write({...EMPTY_VIEW,reviewId:id},{replace:true})} onClose={viewNavigation.closeReview}
         onNewInspiration={()=>viewNavigation.write({...EMPTY_VIEW,compose:true},{replace:true})}
