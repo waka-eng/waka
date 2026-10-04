@@ -57,7 +57,7 @@ export interface OpenRouterChatRequest {
   max_tokens?: number;
   /** OpenRouter's unified reasoning control; providers that cannot honor it
       ignore it, which is the behavior we want */
-  reasoning?: { enabled: boolean };
+  reasoning?: { enabled?: boolean; effort?: 'low'; exclude?: boolean };
   response_format?:
     | { type: "json_object" }
     | { type: "json_schema"; json_schema: { name: string; strict?: boolean; schema: unknown } };
@@ -161,6 +161,9 @@ export async function callOpenRouter(
   }
 
   const content = envelope.data.choices?.[0]?.message?.content;
+  if(['length','error'].includes(envelope.data.choices?.[0]?.finish_reason??'')){
+    console.warn('[openrouter] incomplete response refused',{label,finishReason:envelope.data.choices?.[0]?.finish_reason});return null;
+  }
   if (typeof content !== "string" || content.length === 0) return null;
 
   try {

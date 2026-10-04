@@ -1,0 +1,66 @@
+{
+  "provider": "openrouter",
+  "calls": 1,
+  "costUsd": 0.0006585,
+  "maxCostUsd": 0.5,
+  "requests": [
+    {
+      "status": 200,
+      "providerError": null,
+      "model": "google/gemini-3.8-flash",
+      "durationMs": 1753,
+      "finishReason": "stop",
+      "usage": {
+        "prompt_tokens": 638,
+        "completion_tokens": 48,
+        "total_tokens": 686,
+        "cost": 0.0006585,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0006585,
+          "upstream_inference_prompt_cost": 0.0004785,
+          "upstream_inference_completions_cost": 0.00018
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      },
+      "costUsd": 0.0006585,
+      "output": [
+        "{\"answer\":\"Facing a difficult choice can feel overwhelming when the starting point is unclear. We can begin simply by naming the options currently in front of you.\",\"followUpQuestion\":\"What options are you considering right now?\",\"citations\":[]}"
+      ]
+    }
+  ],
+  "results": [
+    {
+      "name": "empty-en",
+      "expectation": "No saved-memory claims or citations. Offer a useful starting point and one question about the actual decision.",
+      "input": {
+        "preferredLocale": "en-US",
+        "sources": [],
+        "history": [
+          {
+            "role": "user",
+            "content": "I have a difficult choice but do not know where to start."
+          }
+        ]
+      },
+      "output": {
+        "answer": "Facing a difficult choice can feel overwhelming when the starting point is unclear. We can begin simply by naming the options currently in front of you.",
+        "followUpQuestion": "What options are you considering right now?",
+        "citations": []
+      },
+      "error": null,
+      "semanticReview": "pending"
+    }
+  ],
+  "pricingSource": "OpenRouter returned usage.cost"
+}

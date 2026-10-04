@@ -7,8 +7,16 @@ const input:ConversationReplyInput={preferredLocale:'en-US',history:[{role:'user
 it('fences untrusted memories, preserves standing and bounds the output',()=>{
   const request=buildConversationReplyRequest(input);expect(request.generationConfig.maxOutputTokens).toBe(1200);
   expect(request.contents[0].parts[0].text).toContain('<<<source 1>>>');expect(request.contents[0].parts[0].text).toContain('"supportCurrent":false');
-  expect(request.systemInstruction.parts[0].text).toContain('untrusted data');expect(request.systemInstruction.parts[0].text).toContain('accept disagreement');expect(request.systemInstruction.parts[0].text).toContain('never evidence');
+  expect(request.systemInstruction.parts[0].text).toContain('untrusted data');expect(request.systemInstruction.parts[0].text).toContain('Accept disagreement');expect(request.systemInstruction.parts[0].text).toContain('never evidence');
   expect(buildConversationReplyRequest({...input,contextChanged:true}).contents[0].parts[0].text).toContain('Do not infer what a short answer affirms');
+});
+it('labels a correction and prioritizes it without claiming a principle edit',()=>{
+  const request=buildConversationReplyRequest({...input,history:[{role:'user',content:'I no longer agree with this rule.',correction:true}]});
+  expect(request.contents[0].parts[0].text).toContain('user correction');expect(request.systemInstruction.parts[0].text).toContain('Only a separate explicit edit');
+});
+it('carries capture dates separately from exact source text and explains their limit',()=>{
+  const request=buildConversationReplyRequest({...input,messageDate:'2026-10-03',sources:[{kind:'inspiration',text:'Marathon training.',recordedAt:'2021-06-01T00:00:00Z',truncated:false}]});
+  expect(request.contents[0].parts[0].text).toContain('2021-06-01');expect(request.contents[0].parts[0].text).toContain('Latest user message date: 2026-10-03');expect(request.systemInstruction.parts[0].text).toContain('not proof that an interest is current');
 });
 it('accepts one grounded answer and at most one follow-up without requiring memory when none is available',()=>{
   const answer={answer:'That principle is disputed, so it need not decide this choice.',followUpQuestion:'What would you like to learn from a small next step?',citations:[{sourceNumber:1,quote:'Leave room to reconsider'}]};

@@ -1,5 +1,11 @@
 /* assigned to the `chrome` layer — see styles/layers.css for the order */
 @layer chrome {
+.jar-conversation-thought { margin: var(--sp-8) 0; }
+.jar-conversation-thought section { padding: var(--sp-12); border: 1px solid var(--w-edge); border-radius: var(--sp-12); }
+.jar-conversation-thought textarea { width: 100%; min-height: var(--sp-96); font-size: var(--t-lead); }
+.jar-conversation-thought button { min-height: var(--sp-44); margin: var(--sp-4) var(--sp-8) var(--sp-4) 0; }
+.jar-conversation .jar-conversation-adopt { display: flex; align-items: center; gap: var(--sp-8); min-height: var(--sp-44); }
+.jar-conversation-adopt input { width: var(--sp-20); height: var(--sp-20); flex: none; }
 /*
  * THE FLAT SCREENS, WEARING THE WORLD'S SKIN.
  *

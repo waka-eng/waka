@@ -70,6 +70,7 @@ export interface ApiInspirationSummary {
 
 /** One capture, opened: the full text and everything hanging off it. */
 export interface ApiInspiration {
+  conversationOrigin?:{conversationId:string|null;messageId:string|null;authorship:'user'|'adopted'}|null;
   saveRequest?: ApiInspirationSaveReceipt;
   processing?: ApiInspirationProcessingReceipt;
   id: string;
@@ -95,6 +96,7 @@ export interface CreateReflectionRequest {
 }
 
 export interface CreateInspirationRequest {
+  fromConversation?:{conversationId:string;messageId:string;selectedText:string;adopted:boolean};
   attachments?: Array<{ type: 'link'; url: string; name?: string } | { type: 'image' | 'audio'; key: string; contentType: string; size: number; name?: string }>;
   text: string;
   kind?: ApiInspirationKind;

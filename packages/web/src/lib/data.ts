@@ -44,6 +44,7 @@ import {
   fetchSignals,
   fetchTopOfMind,
   type ApiAttachmentSummary,
+  type ApiInspiration,
   type ApiInspirationKind,
   type ApiInspirationVisibility,
   type ApiInspirationSource,
@@ -102,6 +103,7 @@ export interface Inspiration {
 
 /** One inspiration, opened: the words in full and what was hanging off them. */
 export interface InspirationDetail extends Inspiration {
+  conversationOrigin?:ApiInspiration['conversationOrigin'];
   text: string;
   reflections: Array<{
     id: string;
@@ -452,6 +454,7 @@ export function toInspirationDetail(row: Awaited<ReturnType<typeof fetchInspirat
       ...(a.type === 'link' ? { url: a.url } : {}),
     })),
     reflectionCount: (row.reflections ?? []).filter((r) => !r.skipped && r.answer).length,
+    conversationOrigin:row.conversationOrigin??null,
     reflections: (row.reflections ?? []).map((r) => ({
       id: r.id,
       question: r.question,

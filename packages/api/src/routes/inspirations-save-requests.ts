@@ -8,6 +8,7 @@ import { attachmentSelection, serializeAttachment } from './attachments.js';
 import { inspirationSelection, reflectionSelection, serializeInspirationDetail, serializeReflection } from './inspirations-serialization.js';
 import { resolveTargetProfile } from './inspirations-tenancy.js';
 import { profileQuerySchema, uuidSchema } from './inspirations-validation.js';
+import {readConversationOrigin} from '../lib/conversation-capture.js';
 
 export async function readSavedInspiration(tx: InspirationSaveTransaction, profileId: string, saved: SavedInspirationReference) {
   const [source] = await tx.select(inspirationSelection).from(inspirations)
@@ -17,7 +18,7 @@ export async function readSavedInspiration(tx: InspirationSaveTransaction, profi
     .where(and(eq(attachments.profileId, profileId), eq(attachments.inspirationId, source.id))).orderBy(asc(attachments.createdAt), asc(attachments.id));
   const answers = await tx.select(reflectionSelection).from(reflections)
     .where(and(eq(reflections.profileId, profileId), eq(reflections.inspirationId, source.id))).orderBy(asc(reflections.createdAt), asc(reflections.id));
-  return { inspiration: serializeInspirationDetail(source, { attachments: media.map(serializeAttachment), reflections: answers }), processing: saved.processing };
+  return { inspiration: {...serializeInspirationDetail(source, { attachments: media.map(serializeAttachment), reflections: answers }),conversationOrigin:await readConversationOrigin(tx,profileId,source.id)}, processing: saved.processing };
 }
 
 export async function readSavedReflection(tx: InspirationSaveTransaction, profileId: string, saved: SavedInspirationReference) {

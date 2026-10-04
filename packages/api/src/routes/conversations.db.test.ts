@@ -30,6 +30,11 @@ it('stores ordered words once, rejects changed replay and never requests an assi
   const history=await (await f.app.request('/conversations')).json() as any;expect(history.conversations).toHaveLength(1);expect(history.conversations[0].preview).toBe(message.content);
   expect(await t.sql`SELECT id FROM background_jobs`).toHaveLength(0);
 });
+it('includes the original capture date so old interests cannot silently look recent',async()=>{
+  const f=await fixture();await f.send('',{id:f.id});await f.send(`/${f.id}/messages`,{id:randomUUID(),content:'marathon training',revision:0});
+  await t.sql`INSERT INTO inspirations(profile_id,text,created_at) VALUES(${f.profileId},'I want to try marathon training.','2021-06-01T00:00:00Z')`;
+  const result=await (await f.app.request(`/conversations/${f.id}/context`)).json() as any;expect(result.inspirations).toHaveLength(1);expect(new Date(result.inspirations[0].recordedAt).getUTCFullYear()).toBe(2021);
+});
 it('serializes competing writers and permits an exact retry after its revision becomes stale',async()=>{
   const f=await fixture();await f.send('',{id:f.id});const first={id:randomUUID(),content:'First',revision:0},second={id:randomUUID(),content:'Second',revision:0};
   const results=await Promise.all([f.send(`/${f.id}/messages`,first),f.send(`/${f.id}/messages`,second)]);

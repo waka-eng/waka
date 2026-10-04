@@ -14,6 +14,7 @@
  * database cannot take with them.
  */
 
+import {readConversationOrigin} from '../lib/conversation-capture.js';
 import {
   DeleteObjectsCommand,
   S3Client,
@@ -238,10 +239,10 @@ export function registerEditingRoutes(
 
     return c.json(
       {
-        inspiration: serializeInspirationDetail(updated, {
+        inspiration: {...serializeInspirationDetail(updated, {
           attachments: attachmentRows.map(serializeAttachment),
           reflections: reflectionRows,
-        }),
+        }),conversationOrigin:await readConversationOrigin(db,target.profileId,updated.id)},
         processing: updated.processing,
       },
       200,

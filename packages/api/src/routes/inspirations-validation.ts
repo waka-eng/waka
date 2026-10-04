@@ -51,6 +51,10 @@ export const reflectionInputSchema = z.object({
  * hand itself a signal.
  */
 export const createInspirationSchema = z.object({
+  fromConversation: z.object({
+    conversationId:z.string().uuid(),messageId:z.string().uuid(),
+    selectedText:z.string().trim().min(1).max(4000),adopted:z.boolean(),
+  }).strict().optional(),
   text: z
     .string()
     .trim()
@@ -124,6 +128,8 @@ export const createInspirationSchema = z.object({
      now a 400 that names itself. */
   .strict()
   .superRefine((input, context) => {
+    if(input.fromConversation&&(!input.text||input.attachments?.length||input.reflections?.length||input.visibility==='public'||input.kind&&input.kind!=='note'))
+      context.addIssue({code:'custom',path:['fromConversation'],message:'Save a private text thought from this conversation.'});
     if (!input.text && !input.attachments?.length) context.addIssue({ code: 'custom', path: ['text'], message: 'Add text or an attachment' });
     const keys = (input.attachments ?? []).map((item) => item.type === 'link' ? item.url : item.key);
     if (new Set(keys).size !== keys.length) context.addIssue({ code: 'custom', path: ['attachments'], message: 'An attachment is included twice' });

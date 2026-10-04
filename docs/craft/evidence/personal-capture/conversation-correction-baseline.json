@@ -1,0 +1,131 @@
+{
+  "provider": "gemini",
+  "calls": 2,
+  "costUsd": 0.0008287500000000001,
+  "maxCostUsd": 0.1,
+  "requests": [
+    {
+      "status": 200,
+      "model": "gemini-3.1-flash-lite",
+      "durationMs": 991,
+      "usage": {
+        "promptTokenCount": 969,
+        "candidatesTokenCount": 99,
+        "totalTokenCount": 1068,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 969
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "costUsd": 0.00039075,
+      "output": [
+        "{\n  \"answer\": \"You enjoyed the workshop and are choosing a slower pace specifically for this month. You have not yet decided on your long-term approach to these activities.\",\n  \"followUpQuestion\": \"What specific factors are making a slower pace feel right for you during this month?\",\n  \"citations\": [\n    {\n      \"sourceNumber\": 1,\n      \"quote\": \"Seek intensive experiences whenever possible.\"\n    }\n  ]\n}"
+      ]
+    },
+    {
+      "status": 200,
+      "model": "gemini-3.1-flash-lite",
+      "durationMs": 1214,
+      "usage": {
+        "promptTokenCount": 990,
+        "candidatesTokenCount": 127,
+        "totalTokenCount": 1117,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 990
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "costUsd": 0.000438,
+      "output": [
+        "{\n  \"answer\": \"일을 여전히 좋아하면서도 이번 달에는 주말 하루를 가족과 보내기로 하셨군요. 장기적인 원칙을 유지하면서도 일시적으로 시간을 조정하려는 상황으로 이해했어요.\",\n  \"followUpQuestion\": \"가족과 보내는 시간 외에 남은 주말 시간은 평소처럼 일에 몰입하실 계획인가요?\",\n  \"citations\": [\n    {\n      \"sourceNumber\": 1,\n      \"quote\": \"일을 끝낼 때까지 주말에도 몰입한다.\"\n    }\n  ]\n}"
+      ]
+    }
+  ],
+  "results": [
+    {
+      "name": "explicit-correction-english",
+      "expectation": "Accept enjoyment and a one-month slower pace, despite saved old wording. Do not infer regret or claim to have changed the principle.",
+      "input": {
+        "preferredLocale": "en-US",
+        "sources": [
+          {
+            "kind": "principle",
+            "text": "Seek intensive experiences whenever possible.",
+            "state": "held",
+            "supportCurrent": true,
+            "truncated": false
+          }
+        ],
+        "history": [
+          {
+            "role": "assistant",
+            "content": "You regret the workshop and prefer avoiding intensive experiences."
+          },
+          {
+            "role": "user",
+            "correction": true,
+            "content": "No, I enjoyed the workshop. For this month only, I want a slower pace. I have not decided what I want long term."
+          }
+        ]
+      },
+      "output": {
+        "answer": "You enjoyed the workshop and are choosing a slower pace specifically for this month. You have not yet decided on your long-term approach to these activities.",
+        "followUpQuestion": "What specific factors are making a slower pace feel right for you during this month?",
+        "citations": [
+          {
+            "sourceNumber": 1,
+            "quote": "Seek intensive experiences whenever possible."
+          }
+        ]
+      },
+      "error": null,
+      "semanticReview": "pending"
+    },
+    {
+      "name": "explicit-correction-korean",
+      "expectation": "Follow the distinction between enjoying work and protecting this month only; natural Korean, one useful question, no silent Principle update.",
+      "input": {
+        "preferredLocale": "ko-KR",
+        "sources": [
+          {
+            "kind": "principle",
+            "text": "일을 끝낼 때까지 주말에도 몰입한다.",
+            "state": "held",
+            "supportCurrent": true,
+            "truncated": false
+          }
+        ],
+        "history": [
+          {
+            "role": "assistant",
+            "content": "일이 싫어져서 앞으로 주말에는 절대 일하지 않으려는군요."
+          },
+          {
+            "role": "user",
+            "correction": true,
+            "content": "아니요. 일은 여전히 좋아해요. 이번 달만 주말 하루를 가족과 보내려는 거예요. 장기적인 원칙을 바꾸려는 건 아니에요."
+          }
+        ]
+      },
+      "output": {
+        "answer": "일을 여전히 좋아하면서도 이번 달에는 주말 하루를 가족과 보내기로 하셨군요. 장기적인 원칙을 유지하면서도 일시적으로 시간을 조정하려는 상황으로 이해했어요.",
+        "followUpQuestion": "가족과 보내는 시간 외에 남은 주말 시간은 평소처럼 일에 몰입하실 계획인가요?",
+        "citations": [
+          {
+            "sourceNumber": 1,
+            "quote": "일을 끝낼 때까지 주말에도 몰입한다."
+          }
+        ]
+      },
+      "error": null,
+      "semanticReview": "pending"
+    }
+  ],
+  "pricingSource": "https://ai.google.dev/gemini-api/docs/pricing#gemini-3.1-flash-lite"
+}

@@ -34,6 +34,24 @@ async function claim(){
   await t.sql`UPDATE background_jobs SET run_after=now()+interval '1 day' WHERE type::text<>'generate_conversation_reply'`;
   const job=await postgresBackgroundJobStore.claimNext(new Date());expect(job?.type).toBe('generate_conversation_reply');return job!;
 }
+it('delivers the explicit correction to the next reply without changing memory or duplicating the user message',async()=>{
+  const f=await fixture();await f.request();const firstJob=await claim();await processBackgroundJob(firstJob);await postgresBackgroundJobStore.markSucceeded(firstJob,null);
+  const [reply]=await t.sql`SELECT id FROM conversation_messages WHERE conversation_id=${f.id} AND role='assistant'`;
+  const correction={id:randomUUID(),content:'No, I enjoyed it. For this month only, I want a slower pace.',revision:2,correctsMessageId:reply.id,requestReply:true};
+  for(let n=0;n<2;n++)expect((await f.post(`/${f.id}/messages`,correction)).status).toBe(200);
+  expect((await f.post(`/${f.id}/messages`,{...correction,correctsMessageId:randomUUID()})).status).toBe(409);
+  await processBackgroundJob(await claim());const input=answer.mock.calls.at(-1)![0];expect(input.history.at(-1)).toEqual({role:'user',content:correction.content,correction:true});
+  expect(await t.sql`SELECT id FROM inspirations`).toHaveLength(1);expect(await t.sql`SELECT id FROM principles`).toHaveLength(0);
+  expect(await t.sql`SELECT id FROM conversation_messages WHERE id=${correction.id}`).toHaveLength(1);
+  expect((await assembleProfileExport(t.db as never,f.profileId)).conversationMessages.find(row=>row.id===correction.id)?.correctsMessageId).toBe(reply.id);
+  expect((await f.app.request(`/conversations/${f.id}`,{method:'DELETE'})).status).toBe(200);expect(await t.sql`SELECT id FROM conversation_messages`).toHaveLength(0);
+});
+it('rejects correction targets outside this conversation and user-authored targets',async()=>{
+  const f=await fixture(),other=await fixture();await other.request();await processBackgroundJob(await claim());
+  const [reply]=await t.sql`SELECT id FROM conversation_messages WHERE conversation_id=${other.id} AND role='assistant'`;
+  for(const correctsMessageId of [reply.id,f.messageId])expect((await f.post(`/${f.id}/messages`,{id:randomUUID(),content:'A correction',revision:1,correctsMessageId})).status).toBe(409);
+  expect(await t.sql`SELECT id FROM conversation_messages WHERE conversation_id=${f.id}`).toHaveLength(1);
+});
 it('coalesces initial requests, stores one grounded reply, and replays without another dispatch',async()=>{
   const f=await fixture();const [a,b]=await Promise.all([f.request(),f.request()]);expect(a.status).toBe(200);expect(b.status).toBe(200);
   const first=await f.state();expect(first.phase).toBe('pending');expect(await t.sql`SELECT id FROM conversation_reply_requests`).toHaveLength(1);

@@ -41,7 +41,7 @@ if (process.env.WAKA_REFLECTION_FIXTURE === '1' || process.env.WAKA_REVIEW_FIXTU
       if(holdConversationReply)await new Promise<void>(resolve=>{releaseConversationReply=resolve;});
       if(failConversationReply){failConversationReply=false;throw new Error('Synthetic reply failure');}
       const questions=['What condition would help you think through this?','How could you test that within your current constraints?','What would you want to notice after trying it?'];
-      return {answer:input.sources.length?'The saved wording can be a starting point, not a decision about you.':'We can start with the choice in front of you.',
+      return {answer:input.history.at(-1)?.correction?'I will use your correction in this conversation, without changing a saved principle.':input.sources.length?'The saved wording can be a starting point, not a decision about you.':'We can start with the choice in front of you.',
         followUpQuestion:questions[Math.min(input.history.filter(row=>row.role==='assistant').length,questions.length-1)],
         citations:input.sources.length?[{sourceNumber:1,quote:input.sources[0].text.slice(0,80)}]:[]};
     },
@@ -156,7 +156,7 @@ if (process.env.WAKA_TRANSCRIPT_FIXTURE === '1') {
   transcriptFixtureInspirationId = source.id;
   objects.set(`/capture-fixture/${key}`, { bytes, contentType: 'audio/webm' });
 }
-let loseResponse = false, loseRequest = false, loseReviewResponse = false, failUpload = false, failUploadAfter = 0, uploadAttempts = 0;
+let loseResponse = false, losePrincipleResponse=false, loseRequest = false, loseReviewResponse = false, failUpload = false, failUploadAfter = 0, uploadAttempts = 0;
 async function body(request: IncomingMessage, limit: number) {
   const chunks: Buffer[] = []; let size = 0;
   for await (const chunk of request) { size += chunk.length; if (size > limit) throw new Error('Fixture request too large'); chunks.push(chunk); }
@@ -243,6 +243,7 @@ const server = createServer(async (request, response) => {
           VALUES(${entry.id},${reviewEvidenceFixture!.signalId},1,1)`;
       }
       if (target.searchParams.get('fail') === 'save-response') loseResponse = true;
+      if (target.searchParams.get('fail') === 'principle-response') losePrincipleResponse = true;
       if (target.searchParams.get('fail') === 'save-request') loseRequest = true;
       if (target.searchParams.get('fail') === 'upload') failUpload = true;
       if (target.searchParams.get('fail') === 'second-upload') failUploadAfter = 2;
@@ -278,6 +279,7 @@ const server = createServer(async (request, response) => {
       if (loseResponse && request.method === 'POST' && target.pathname === '/api/inspirations' && result.status === 201) {
         loseResponse = false; response.destroy(); return;
       }
+      if(losePrincipleResponse&&request.method==='PATCH'&&target.pathname.startsWith('/api/principles/')&&result.status===200){losePrincipleResponse=false;response.destroy();return;}
       response.writeHead(result.status,Object.fromEntries(result.headers)); response.end(Buffer.from(await result.arrayBuffer())); return;
     }
     const path = target.pathname.startsWith('/assets/') ? resolve(dist,`.${target.pathname}`) : resolve(dist,'index.html');

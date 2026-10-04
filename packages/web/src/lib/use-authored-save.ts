@@ -51,6 +51,7 @@ function persist(prefix: string, intent: AuthoredSaveIntent) {
  * using its original identity, after verifying the server supports it. */
 export function useAuthoredSave(options: {
   scope: ProfileStorageScope | null; operation: AuthoredSaveInput['operation']; inspirationId?: string; enabled?: boolean;
+  journal?:string;
   // Callbacks must settle matching device drafts before returning. IndexedDB
   // media cleanup may be asynchronous; keep the save journal until it finishes.
   // Throwing leaves the request available for safe reconciliation on return.
@@ -58,7 +59,7 @@ export function useAuthoredSave(options: {
   onRemoved: (intent: AuthoredSaveIntent) => void | Promise<void>;
   onEditRejected?: (intent: AuthoredSaveIntent) => void;
 }) {
-  const prefix = profileStorageKey(options.scope, `pendingSave:${options.operation}:${encodeURIComponent(options.inspirationId ?? '')}:`);
+  const prefix = profileStorageKey(options.scope, `pendingSave:${options.operation}:${encodeURIComponent(options.journal ?? options.inspirationId ?? '')}:`);
   const live = useRef({ ...options, prefix }); live.current = { ...options, prefix };
   const [pending, setPending] = useState<AuthoredSaveIntent | null>(null);
   const intentRef = useRef<AuthoredSaveIntent | null>(null);

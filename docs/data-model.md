@@ -144,6 +144,32 @@ machine claims and deleted originals are not retrieved. Context is never a
 cached copy in the conversation and must be rebuilt before future generation.
 It is a deterministic retrieval foundation, not a semantic-answer quality claim.
 
+### Selected thoughts from a conversation
+
+Only an explicit capture creates an inspiration from chat. A user message can
+be selected and edited; an assistant suggestion stays in the conversation until
+the person writes and confirms their own takeaway. Unadopted assistant text is
+never sent to the inspiration learning pipeline. Saving does not edit a Principle.
+
+`inspiration_conversation_origins` records `user` or `adopted` authorship and a
+tenant-bearing link to the selected message. It stores no copied chat excerpt.
+The normal capture receipt binds the full request, including the selected span
+and explicit adoption, so retry returns the same inspiration. Chat captures are
+private at creation. Deleting the conversation clears its provenance link but
+keeps the deliberately saved inspiration and authorship; deleting the inspiration
+removes its provenance. Profile export includes provenance, and account erasure
+removes it. Ordinary inspiration editing does not relabel its historical origin.
+
+### Conversation corrections
+
+A correction is a new user message with an optional `corrects_message_id`
+pointing to an earlier assistant message in the same profile/conversation. It
+does not rewrite history, create memory or edit a Principle. Reply context labels
+the correction and prioritizes the current user view over earlier interpretations.
+Principle editing is a separate confirmation of exact wording and its observed
+`statement_revision`. A stale edit conflicts; an exact retry of the immediately
+applied revision is a no-op. Existing statement history and human locks apply.
+
 ## The four layers
 
 | | Layer 1 — **Inspiration** | Layer 2 — **Signal** | Layer 3 — **Top of mind** | Layer 4 — **Principle** |

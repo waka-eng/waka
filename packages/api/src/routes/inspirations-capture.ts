@@ -23,6 +23,7 @@ import {
   attachments,
   experiences,
   inspirations,
+  inspirationConversationOrigins,
   reflections,
   type InspirationSource,
   type InspirationVisibility,
@@ -37,6 +38,7 @@ import { prepareInspirationAttachments, InspirationAttachmentError, type Attachm
 import { attachmentSelection, serializeAttachment } from './attachments.js';
 import { inspirationSaveFailure, parseInspirationSaveRequestId, runInspirationSave } from '../lib/inspiration-save-requests.js';
 import { readSavedInspiration } from './inspirations-save-requests.js';
+import {prepareConversationOrigin} from '../lib/conversation-capture.js';
 import {
   inspirationSelection,
   reflectionSelection,
@@ -132,6 +134,8 @@ export function registerCaptureRoutes(
     }
 
     const session = c.get("session");
+    if(parsed.data.fromConversation&&(session.keyScoped||session.profile.type!=='human'))return c.json({error:'Save conversation thoughts from your personal session.'},403);
+    if(parsed.data.fromConversation&&!c.req.header('Idempotency-Key'))return c.json({error:'A save identity is required.'},400);
     const db = getDatabase();
     const target = await resolveTargetProfile(db, session, query.data.profile, "capture");
     if (!target.ok) return c.json(target.body, target.status);
@@ -163,10 +167,12 @@ export function registerCaptureRoutes(
       runInspirationSave(db, {
         profileId: target.profileId, requestId: parseInspirationSaveRequestId(c.req.header('Idempotency-Key')), operation: 'inspiration',
         material: { text: parsed.data.text, kind: parsed.data.kind ?? null, source, visibility: visibility ?? 'private',
+          ...(parsed.data.fromConversation?{fromConversation:parsed.data.fromConversation}:{}),
           ...(parsed.data.attachments ? { attachments: parsed.data.attachments } : {}),
           experience: parsed.data.experience ?? null, citedPrincipleIds,
           reflections: reflectionInputs.map((reflection) => ({ question: reflection.question, answer: reflection.answer ?? null, skipped: reflection.skipped ?? false })) },
       }, async (tx) => {
+      const origin=parsed.data.fromConversation?await prepareConversationOrigin(tx,target.profileId,parsed.data.fromConversation,parsed.data.text):null;
       /* THE NAMED GROUND, found or made in the same transaction as the
          memory that stands on it. Find-or-create by name because a name is
          how the keeper (usually an agent mid-task) refers to the stretch of
@@ -204,6 +210,7 @@ export function registerCaptureRoutes(
         .returning(inspirationSelection);
 
       if (!inserted) throw new Error("Failed to create inspiration");
+      if(origin)await tx.insert(inspirationConversationOrigins).values({...origin,inspirationId:inserted.id});
 
       const media = parsed.data.attachments?.length ? await prepareInspirationAttachments(parsed.data.attachments,
         { uploaderProfileId: session.profile.id, profileId: target.profileId, inspirationId: inserted.id }, attachmentHead) : [];
@@ -248,8 +255,8 @@ export function registerCaptureRoutes(
 
         const processing = await requestSignalDerivation({ profileId: target.profileId, inspirationId: inserted.id,
           reason: "created", changedSource: "inspiration" }, tx);
-        return { inspirationId: inserted.id, reflectionId: null, processing: processing.receipt,
-          response: { inspiration: serializeInspirationDetail(inserted, { attachments: insertedAttachments.map(serializeAttachment), reflections: insertedReflections }), processing: processing.receipt } };
+        const saved={inspirationId:inserted.id,reflectionId:null,processing:processing.receipt};
+        return {...saved,response:origin?await readSavedInspiration(tx,target.profileId,saved):{inspiration:{...serializeInspirationDetail(inserted,{attachments:insertedAttachments.map(serializeAttachment),reflections:insertedReflections}),conversationOrigin:null},processing:processing.receipt}};
       }, (tx, saved) => readSavedInspiration(tx, target.profileId, saved));
 
     let persisted: Awaited<ReturnType<typeof persistInspiration>>;
