@@ -144,6 +144,8 @@ const REGISTER: Record<string, string> = {
   // rooms
   createGroup: "deleteGroup",
   createConversation: "deleteConversation",
+  requestConversationReply: "stopConversationReply",
+  stopConversationReply: "requestConversationReply",
   deleteConversation: "RULED: confirmed erasure removes message content; a new conversation is the next entry, not restoration",
   saveConversationMessage: "RULED: authored conversation messages are immutable; confirm deletion of the conversation to erase them, never automatically create a belief",
   deleteGroup: "createGroup",

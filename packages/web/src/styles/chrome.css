@@ -1396,6 +1396,15 @@ body .profile-signout-button {
 .jar-conversation ul,.jar-conversation ol { list-style:none; padding:0; }
 .jar-conversation li { padding-block:var(--sp-12); border-bottom:1px solid var(--w-edge); overflow-wrap:anywhere; }
 .jar-conversation li p { white-space:pre-wrap; }
+.jar-conversation li[data-role="assistant"] { border-left:2px solid var(--w-edge); padding-left:var(--sp-12); }
+.jar-conversation-question { color:var(--w-ink); }
+.jar-conversation-citations,.jar-conversation-starters { display:flex; flex-wrap:wrap; gap:var(--sp-8); }
+.jar-conversation-reference,.jar-conversation-topic { margin-block:var(--sp-12); padding:var(--sp-12); border:1px solid var(--w-edge); border-radius:var(--sp-8); }
+.jar-conversation blockquote { margin:var(--sp-12) 0; white-space:pre-wrap; overflow-wrap:anywhere; }
+.jar-conversation-reply { display:flex; align-items:center; flex-wrap:wrap; gap:var(--sp-8); }
+.jar-conversation-reply p { flex:1 1 140px; margin:0; }
+.jar-conversation footer > .jar-review-context { margin-block:var(--sp-6); }
+.jar-conversation-options { margin-block:var(--sp-8); }
 .jar-conversation time { display:block; font-size:var(--t-body); opacity:.7; }
 .jar-conversation footer { flex-shrink:0; border-top:1px solid var(--w-edge); padding-top:var(--sp-12); }
 .jar-conversation label { display:block; }

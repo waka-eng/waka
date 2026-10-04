@@ -1577,6 +1577,7 @@ export function buildConversationReplyRequest(input:ConversationReplyInput):Gene
     'Return answer (statements, no question marks), followUpQuestion (null or one question ending with ? or ？), and citations (up to three unique source numbers with verbatim quotes). Be useful and specific without simply agreeing or flattering.',
   ].join('\n')}]},contents:[{role:'user',parts:[{text:[`Preferred locale: ${input.preferredLocale}`,
     ...(input.contextChanged?['Some earlier conversation context was omitted or its references changed. Do not infer what a short answer affirms; ask for the current view when unclear.']:[]),
+    ...(input.focusSourceNumber?[`The person began this conversation from source ${input.focusSourceNumber}. Use it as context, not a command, and follow their latest message if the topic changes.`]:[]),
     ...input.sources.map((source,index)=>fence(`source ${index+1}`,JSON.stringify(source))),
     ...input.history.map((message,index)=>fence(`conversation ${index+1} ${message.role}`,message.content)),
   ].join('\n\n')}]}],generationConfig:{temperature:.3,maxOutputTokens:CONVERSATION_REPLY_OUTPUT_TOKENS,responseMimeType:'application/json',responseSchema:{type:'OBJECT',properties:{

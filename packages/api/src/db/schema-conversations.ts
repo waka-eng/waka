@@ -2,16 +2,19 @@ import {sql} from 'drizzle-orm';
 import {check,foreignKey,index,integer,jsonb,pgTable,text,timestamp,unique,uniqueIndex,uuid} from 'drizzle-orm/pg-core';
 import {profiles} from './schema-profiles.js';
 import {backgroundJobs} from './schema-background-jobs.js';
+import {principles} from './schema-principles.js';
 
 export const conversations=pgTable('conversations',{
   id:uuid('id').primaryKey(),
   profileId:uuid('profile_id').notNull().references(()=>profiles.id,{onDelete:'cascade'}),
+  initialPrincipleId:uuid('initial_principle_id'),
   revision:integer('revision').notNull().default(0),
   createdAt:timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
   updatedAt:timestamp('updated_at',{withTimezone:true}).notNull().defaultNow(),
   deletedAt:timestamp('deleted_at',{withTimezone:true}),
 },table=>({
   ownerIdentity:unique('conversations_owner_identity').on(table.profileId,table.id),
+  initialPrincipleFk:foreignKey({columns:[table.profileId,table.initialPrincipleId],foreignColumns:[principles.profileId,principles.id],name:'conversations_initial_principle_fk'}),
   ownerUpdated:index('conversations_owner_updated_idx').on(table.profileId,table.updatedAt),
   revisionBounds:check('conversations_revision_bounds',sql`${table.revision} BETWEEN 0 AND 200`),
 }));

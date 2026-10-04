@@ -57,9 +57,10 @@ async function inputFor(db:Reader,profileId:string,id:string,userMessageId:strin
     if(characters+content.length>8000){contextChanged=true;break;}
     history.unshift({role:row.role,content});characters+=content.length;
   }
-  const context=await readConversationContext(db,profileId,anchor.content),sources=[...context.principles,...context.reading,...context.inspirations];
+  const context=await readConversationContext(db,profileId,anchor.content,undefined,conversation.initialPrincipleId),sources=[...context.principles,...context.reading,...context.inspirations];
   const [profile]=await db.select({locale:profiles.preferredLocale}).from(profiles).where(eq(profiles.id,profileId));
-  const input:ConversationReplyInput={preferredLocale:profile?.locale==='ko-KR'?'ko-KR':'en-US',contextChanged,history,sources:sources.map(({kind,text,state,rank,locked,supportCurrent,truncated})=>({kind,text,state,rank,locked,supportCurrent,truncated}))};
+  const focusIndex=sources.findIndex(source=>source.kind==='principle'&&source.id===conversation.initialPrincipleId);
+  const input:ConversationReplyInput={preferredLocale:profile?.locale==='ko-KR'?'ko-KR':'en-US',contextChanged,...(focusIndex>=0?{focusSourceNumber:focusIndex+1}:{}),history,sources:sources.map(({kind,text,state,rank,locked,supportCurrent,truncated})=>({kind,text,state,rank,locked,supportCurrent,truncated}))};
   return {input,sources,revision:conversation.revision,hash:conversationHash({input,identities:sources.map(({kind,id,hash})=>({kind,id,hash})),revision:conversation.revision})};
 }
 async function replyState(db:Reader,profileId:string,id:string){
@@ -73,13 +74,18 @@ async function replyState(db:Reader,profileId:string,id:string){
   const accountRetryAfter=budget.count>=CONVERSATION_LIMITS.modelCalls&&budget.oldest?new Date(Date.parse(budget.oldest)+HOUR).toISOString():null;
   const retryAfter=[messageRetryAfter,accountRetryAfter].filter((value):value is string=>value!==null).sort().at(-1)??null;
   const phase=row?await effectiveStatus(db,row):'idle';
+  const [job]=row?.jobId?await db.select({status:backgroundJobs.status,runAfter:backgroundJobs.runAfter}).from(backgroundJobs).where(and(eq(backgroundJobs.profileId,profileId),eq(backgroundJobs.id,row.jobId))):[];
   return {profileId,conversationId:id,messageId:message?.id??null,requestId:row?.id??null,phase,revision:conversation.revision,
+    runAfter:phase==='pending'&&job?.status==='pending'&&job.runAfter.getTime()>Date.now()?job.runAfter.toISOString():null,
     failureCode:row?.failureCode??null,retryAfter,canRetry:conversationRepliesEnabled()&&Boolean(message)&&conversation.revision<200&&!retryAfter&&['idle','failed','stopped','stale'].includes(phase),generationEnabled:conversationRepliesEnabled()};
 }
 export async function readConversationReplyState(db:Db,profileId:string,id:string){return db.transaction(tx=>replyState(tx,profileId,id),{isolationLevel:'repeatable read',accessMode:'read only'});}
 export async function requestConversationReply(db:Db,profileId:string,id:string,input:{messageId:string;afterRequestId:string|null}){
+  const result=await db.transaction(tx=>requestConversationReplyInTransaction(tx,profileId,id,input));await wakeCommittedBackgroundJobs();return result;
+}
+/** Also used by Send's transaction: the message and its reply intent commit together. */
+export async function requestConversationReplyInTransaction(tx:Tx,profileId:string,id:string,input:{messageId:string;afterRequestId:string|null}){
   if(!conversationRepliesEnabled())throw new ConversationReplyError(503,'Replies are not enabled here yet. Your messages are saved.');
-  const result=await db.transaction(async tx=>{
     const conversation=await lockConversation(tx,profileId,id),rows=await requestsFor(tx,profileId,id),latest=rows.find(row=>row.userMessageId===input.messageId);
     // The predecessor is a compare-and-swap token. Replaying a lost retry
     // joins its successor even if it has already failed or finished.
@@ -95,7 +101,6 @@ export async function requestConversationReply(db:Db,profileId:string,id:string,
     const job=await enqueueConversationReply(profileId,id,requestId,tx);
     await tx.update(conversationReplyRequests).set({jobId:job.jobId}).where(eq(conversationReplyRequests.id,requestId));
     return replyState(tx,profileId,id);
-  });await wakeCommittedBackgroundJobs();return result;
 }
 export async function stopConversationReply(db:Db,profileId:string,id:string,requestId:string){
   return db.transaction(async tx=>{
@@ -109,6 +114,7 @@ export async function readConversationReference(db:Db,profileId:string,id:string
     await owned(tx,profileId,id);const [request]=await tx.select().from(conversationReplyRequests).where(and(eq(conversationReplyRequests.profileId,profileId),eq(conversationReplyRequests.conversationId,id),eq(conversationReplyRequests.id,requestId),eq(conversationReplyRequests.status,'ready')));
     const reference=request?.references[index];if(!reference)throw new ConversationReplyError(404,'Reference not found.');
     const [source]=await currentConversationReferences(tx,profileId,[reference]);if(!source)throw new ConversationReplyError(409,'This memory changed since the reply.');
+    if(!Number.isInteger(reference.quoteStart)||!Number.isInteger(reference.quoteLength)||reference.quoteStart!<0||reference.quoteLength!<4||reference.quoteLength!>300||reference.quoteStart!+reference.quoteLength!>source.text.length)throw new ConversationReplyError(409,'This reference cannot be verified.');
     return {profileId,conversationId:id,requestId,index,source:{kind:source.kind,id:source.id,text:source.text,state:source.state,supportCurrent:source.supportCurrent,
       quote:source.text.slice(reference.quoteStart??0,(reference.quoteStart??0)+(reference.quoteLength??0))}};
   },{isolationLevel:'repeatable read',accessMode:'read only'});

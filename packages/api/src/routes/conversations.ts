@@ -1,16 +1,19 @@
 import {Hono} from 'hono';
 import {z} from 'zod';
 import {and,asc,desc,eq,isNull,sql} from 'drizzle-orm';
-import {conversationMessages,conversationReplyRequests,conversations,profiles} from '../db/index.js';
+import {conversationMessages,conversationReplyRequests,conversations,principles,profiles} from '../db/index.js';
 import {getDb} from '../lib/db.js';
 import {requireAuth,humanSessionsOnly,type AuthEnv} from '../lib/middleware.js';
 import {resolveTargetProfile} from './inspirations-tenancy.js';
 import {profileQuerySchema} from './inspirations-validation.js';
-import {CONVERSATION_LIMITS,conversationCapabilities,readConversationContext} from '../lib/conversation-context.js';
-import {ConversationReplyError,projectConversationMessages,readConversationReference,readConversationReplyState,requestConversationReply,stopConversationReply} from '../lib/conversation-replies.js';
+import {CONVERSATION_LIMITS,conversationCapabilities,conversationRepliesEnabled,readConversationContext} from '../lib/conversation-context.js';
+import {ConversationReplyError,projectConversationMessages,readConversationReference,readConversationReplyState,requestConversationReply,requestConversationReplyInTransaction,stopConversationReply} from '../lib/conversation-replies.js';
+import {wakeCommittedBackgroundJobs} from '../lib/queue.js';
+import {personalPrincipleReadable} from '../lib/personal-output.js';
+import {PRINCIPLE_MIN_SIGNALS} from '../lib/principle-generation.js';
 
 const uuid=z.string().uuid().transform(value=>value.toLowerCase());
-const messageInput=z.object({id:uuid,content:z.string().min(1).max(CONVERSATION_LIMITS.inputCharacters).refine(value=>value.trim().length>0),revision:z.number().int().min(0).max(CONVERSATION_LIMITS.messages)}).strict();
+const messageInput=z.object({id:uuid,content:z.string().min(1).max(CONVERSATION_LIMITS.inputCharacters).refine(value=>value.trim().length>0),revision:z.number().int().min(0).max(CONVERSATION_LIMITS.messages),requestReply:z.boolean().optional()}).strict();
 type ConversationEnv=AuthEnv&{Variables:{conversationProfileId:string}};
 class ConversationError extends Error{constructor(message:string,readonly status:404|409|410|429){super(message);}}
 type Db=ReturnType<typeof getDb>;
@@ -20,7 +23,9 @@ async function readConversation(db:Reader,profileId:string,id:string){
   if(!row)throw new ConversationError('Conversation not found.',404);
   if(row.deletedAt)throw new ConversationError('This conversation was deleted.',410);
   const messages=await db.select().from(conversationMessages).where(and(eq(conversationMessages.profileId,profileId),eq(conversationMessages.conversationId,id))).orderBy(asc(conversationMessages.position)).limit(CONVERSATION_LIMITS.messages);
-  return {...row,messages:await projectConversationMessages(db,profileId,id,messages)};
+  const [initialPrinciple]=row.initialPrincipleId?await db.select({id:principles.id,statement:principles.statement,state:principles.state}).from(principles)
+    .where(and(eq(principles.profileId,profileId),eq(principles.id,row.initialPrincipleId),personalPrincipleReadable(profileId,PRINCIPLE_MIN_SIGNALS))):[];
+  return {...row,initialPrinciple:initialPrinciple??null,messages:await projectConversationMessages(db,profileId,id,messages)};
 }
 
 
@@ -49,7 +54,7 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
     return c.json({profileId,conversations:rows,...conversationCapabilities()});
   });
   routes.post('/',async c=>{
-    const input=z.object({id:uuid}).strict().safeParse(await c.req.json().catch(()=>null));if(!input.success)return c.json({error:'Invalid conversation'},400);
+    const input=z.object({id:uuid,principleId:uuid.optional()}).strict().safeParse(await c.req.json().catch(()=>null));if(!input.success)return c.json({error:'Invalid conversation'},400);
     const profileId=c.get('conversationProfileId');
     const row=await database().transaction(async tx=>{
       await tx.select({id:profiles.id}).from(profiles).where(eq(profiles.id,profileId)).for('update');
@@ -57,7 +62,8 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
       if(existing)return readConversation(tx,profileId,input.data.id);
       const [count]=await tx.select({n:sql<number>`count(*)::int`}).from(conversations).where(and(eq(conversations.profileId,profileId),isNull(conversations.deletedAt)));
       if(count.n>=CONVERSATION_LIMITS.conversations)throw new ConversationError('Conversation limit reached. Delete an old conversation first.',429);
-      await tx.insert(conversations).values({id:input.data.id,profileId});return readConversation(tx,profileId,input.data.id);
+      if(input.data.principleId){const [source]=await tx.select({id:principles.id}).from(principles).where(and(eq(principles.profileId,profileId),eq(principles.id,input.data.principleId),personalPrincipleReadable(profileId,PRINCIPLE_MIN_SIGNALS)));if(!source)throw new ConversationError('This principle is not available.',404);}
+      await tx.insert(conversations).values({id:input.data.id,profileId,initialPrincipleId:input.data.principleId??null});return readConversation(tx,profileId,input.data.id);
     });return c.json({conversation:row,...conversationCapabilities()});
   });
   routes.use('/:id/*',async(c,next)=>{if(!uuid.safeParse(c.req.param('id')).success)return c.json({error:'Invalid conversation'},400);await next();});
@@ -68,7 +74,7 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
   });
   routes.get('/:id/context',async c=>c.json(await database().transaction(async tx=>{
     const profileId=c.get('conversationProfileId'),row=await readConversation(tx,profileId,c.req.param('id'));
-    return readConversationContext(tx,profileId,[...row.messages].reverse().find(message=>message.role==='user')?.content??'');
+    return readConversationContext(tx,profileId,[...row.messages].reverse().find(message=>message.role==='user')?.content??'',undefined,row.initialPrincipleId);
   },{isolationLevel:'repeatable read',accessMode:'read only'})));
   routes.post('/:id/messages',async c=>{
     const input=messageInput.safeParse(await c.req.json().catch(()=>null));if(!input.success)return c.json({error:'Write a message of up to 4,000 characters.'},400);
@@ -78,11 +84,12 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
       const current=await readConversation(tx,profileId,id),existing=current.messages.find(message=>message.id===input.data.id);
       if(existing){if(existing.role!=='user'||existing.content!==input.data.content)throw new ConversationError('This message id already holds different words.',409);return current;}
       if(current.revision!==input.data.revision)throw new ConversationError('New messages arrived. Check the conversation before sending.',409);
-      if(current.revision>=CONVERSATION_LIMITS.messages)throw new ConversationError('This conversation is full. Start another one.',429);
+      if(current.revision>=(input.data.requestReply&&conversationRepliesEnabled()?CONVERSATION_LIMITS.messages-1:CONVERSATION_LIMITS.messages))throw new ConversationError('This conversation is full. Start another one.',429);
       await tx.insert(conversationMessages).values({id:input.data.id,profileId,conversationId:id,position:current.revision+1,role:'user',content:input.data.content});
       await tx.update(conversations).set({revision:current.revision+1,updatedAt:new Date()}).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id)));
+      if(input.data.requestReply&&conversationRepliesEnabled())await requestConversationReplyInTransaction(tx,profileId,id,{messageId:input.data.id,afterRequestId:null});
       return readConversation(tx,profileId,id);
-    });return c.json({conversation:row,...conversationCapabilities()});
+    });if(input.data.requestReply&&conversationRepliesEnabled())await wakeCommittedBackgroundJobs();return c.json({conversation:row,...conversationCapabilities()});
   });
   routes.get('/:id/reply',async c=>c.json(await readConversationReplyState(database(),c.get('conversationProfileId'),c.req.param('id'))));
   routes.post('/:id/replies',async c=>{

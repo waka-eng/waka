@@ -416,6 +416,7 @@ export interface ReviewAnswerDerivationResult {
 export interface ConversationReplyInput {
   preferredLocale:SupportedLocale;
   contextChanged?:boolean;
+  focusSourceNumber?:number;
   history:Array<{role:'user'|'assistant';content:string}>;
   sources:Array<{kind:'principle'|'top_of_mind_entry'|'inspiration';text:string;state?:string;rank?:number;locked?:boolean;supportCurrent?:boolean;truncated:boolean}>;
 }

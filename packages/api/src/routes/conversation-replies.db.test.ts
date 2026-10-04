@@ -44,6 +44,25 @@ it('coalesces initial requests, stores one grounded reply, and replays without a
   await t.sql`DELETE FROM background_jobs WHERE id=${job.id}`;
   expect(await postgresBackgroundJobStore.usageForAccount(f.accountId,new Date(Date.now()-3600000))).toMatchObject({startedInWindow:1});
 });
+it('commits Send and the reply outbox atomically, including an exact lost-response replay',async()=>{
+  const f=await fixture(),messageId=randomUUID();const input={id:messageId,content:'What is a useful next step?',revision:1,requestReply:true};
+  expect((await f.post(`/${f.id}/messages`,input)).status).toBe(200);expect((await f.post(`/${f.id}/messages`,input)).status).toBe(200);
+  expect(await t.sql`SELECT id FROM conversation_reply_requests WHERE user_message_id=${messageId}`).toHaveLength(1);
+  expect(await t.sql`SELECT id FROM conversation_messages WHERE id=${messageId}`).toHaveLength(1);
+  expect(await f.state()).toMatchObject({phase:'pending',messageId});await processBackgroundJob(await claim());expect(answer).toHaveBeenCalledTimes(1);
+});
+it('starts from a current owned principle even below the default rank window, without asserting it as a user message',async()=>{
+  const f=await fixture(),other=await fixture();
+  const [principle]=await t.sql`INSERT INTO principles(profile_id,statement,rank,origin,locked_at) VALUES(${f.profileId},'My chosen starting point.',30,'declared',now()) RETURNING id`;
+  await t.sql`INSERT INTO principles(profile_id,statement,rank,origin,locked_at) SELECT ${f.profileId}::uuid,'Another principle '||n,n,'declared',now() FROM generate_series(1,12) n`;
+  const id=randomUUID();expect((await f.post('',{id,principleId:principle.id})).status).toBe(200);
+  expect((await other.post('',{id:randomUUID(),principleId:principle.id})).status).toBe(404);
+  const first=await(await f.app.request(`/conversations/${id}`)).json() as any;expect(first.conversation.messages).toHaveLength(0);expect(first.conversation.initialPrinciple.statement).toBe('My chosen starting point.');
+  await f.post(`/${id}/messages`,{id:randomUUID(),content:'How could this apply to my choice?',revision:0,requestReply:true});await processBackgroundJob(await claim());
+  expect(answer.mock.calls[0][0].focusSourceNumber).toBe(1);expect(answer.mock.calls[0][0].sources[0].text).toBe('My chosen starting point.');
+  await t.sql`DELETE FROM principles WHERE id=${principle.id}`;const after=await(await f.app.request(`/conversations/${id}`)).json() as any;
+  expect(after.conversation.initialPrinciple).toBeNull();expect(after.conversation.messages).toHaveLength(2);expect(after.conversation.messages[1].memoryChanged).toBe(true);
+});
 it('a retried request with an old predecessor joins its successor rather than creating a third attempt',async()=>{
   const f=await fixture();await f.request();const original=await f.state();answer.mockRejectedValueOnce(new Error('Network outcome unknown'));
   await processBackgroundJob(await claim());expect((await f.state()).phase).toBe('failed');

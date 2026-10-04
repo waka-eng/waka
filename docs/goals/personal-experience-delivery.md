@@ -1,7 +1,7 @@
 # Personal experience delivery
 
-Status: in progress (2026-10-03), owner requested the next two checkpoints, interpreted explicitly as M6-A and M6-B from the latest plan. M6-A backend gate passed locally; M6-B remains. M1–M5 were merged to dev through PR 337. Replies remain off by default. M7/M8, full Avatar delivery and physical-device follow-up are not started by this request.
-Branch: `codex/avatar-grounded-replies` (local M6-A/M6-B work).
+Status: in progress (2026-10-03), M6-A and M6-B passed their local gates. The owner requested merging all current work to dev and laying out the remaining milestones. M1–M5 were merged through PR 337. Replies remain off by default; merging does not complete the M8 release gate. M7/M8 and physical-device follow-up remain, with no automatic continuation into the next milestone.
+Branch: `codex/avatar-grounded-replies` (M6 delivery to dev).
 
 ## Objective
 
@@ -453,3 +453,15 @@ Verification before checkpoint: API unit 756 passed, three paid benches skipped;
 The live provider check required two prompt repairs: the baseline and first revision were each 2/4 qualitatively despite 4/4 structural output. The final four synthetic cases passed the narrow smoke gate; remaining style observations and provider limits are recorded in [the evaluation](../craft/evidence/personal-capture/conversation-reply-evaluation.md). Twelve Gemini calls cost an estimated USD 0.00434775 within the announced USD 0.10 budget. No account content was sent. This is not the full M8 evaluation or a live OpenRouter quality claim.
 
 M6-A is a backend checkpoint, not completion of the active two-checkpoint goal. Next is M6-B: typed reply state/polling, Send/stop/retry, current reference opening, Principle entry, complete-message chat UX and desktop/mobile-sized verification. Connect Send to a durable reply intent so a saved message is not stranded by a lost enqueue response. Keep user text, draft recovery and generation opt-in explicit. Do not start M7 or deploy merely because the backend passes.
+
+### 2026 10 03 milestone 6B and requested dev delivery
+
+Send now commits the authored message and reply intent atomically. The UI reads durable reply state, distinguishes queued/running work, supports stop and explicit retry, preserves drafts through Back/reload and avoids jumping readers to new messages. Principle details start a conversation from current owned wording without submitting an invented user message; migration 0062 adds its tenant-bearing nullable source reference. Verified citations open the original when supported and disappear when their source changes. Follow-up questions remain separate from the answer. Secondary controls sit above history so they do not hide the latest reply.
+
+Final checks: web 661/661, API unit 756/756 with three paid benches skipped, real local SQL 32/32 (reply lifecycle 14, foundation 8, export 4, erasure 6), both typechecks, web build and migration consistency passed. One API run failed only because system Git required an Xcode license; rerunning with bundled Git passed without accepting or changing that license.
+
+The isolated browser walkthrough verified Principle entry, Send, citations and original-source navigation, Back with a draft, stopped in-flight work with no late publication, failed retry and successful recovery, three saved user messages and three replies without new inspirations, and preserved scroll position until explicitly jumping to new messages. Changing the synthetic source removed the old citation excerpt; reload marked historical references changed and retained the unsent draft. A second account with no memory received a synthetic context-seeking answer without citations or the first account's draft; opening the first account's conversation showed no messages/editor. Desktop 1280×720 and mobile 390×844 had no horizontal overflow. Short viewport 390×420 kept the composer visible; this is not real software-keyboard/device verification.
+
+Evidence: [desktop changed-memory state](../craft/evidence/personal-capture/conversation-m6-desktop.png), [mobile conversation](../craft/evidence/personal-capture/conversation-m6-mobile.png), [empty-memory conversation](../craft/evidence/personal-capture/conversation-m6-empty.png). Six synthetic fixture calls exercised UI/lifecycle behavior; no additional paid calls were made in M6-B. M6-A's twelve-call narrow Gemini evaluation remains the only live quality evidence, not M8's full matrix.
+
+Verdict: M6-A/B and V01/V03/R02 pass within the agreed web scope; physical-device testing remains deferred. The current release includes migrations 0061/0062 with replies off by default. The normal dev workflow checks configured database separation, migrates, then deploys. Do not roll migrations back destructively: stop enabling new replies and forward-repair schema/data if needed. M8-B must wire and verify the opt-in setting for both API and queue worker before live replies are enabled, then verify the complete Avatar flow. M7-A is the next separately requested checkpoint. Older unrelated archive branches/stashes remain preserved and are not restored into this release.
