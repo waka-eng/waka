@@ -43,6 +43,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   delete process.env.OPENROUTER_API_KEY;
   delete process.env.WAKA_MODEL_JUDGE;
+  delete process.env.WAKA_MODEL_CHAT;
   setDefaultModelProviderForTests(null);
 });
 
@@ -53,6 +54,11 @@ const chatReply = (content: string): Response =>
   );
 
 describe("the translation", () => {
+  it('requests the lowest supported reasoning only for the endpoint that requires it, without changing its token cap',async()=>{
+    process.env.WAKA_MODEL_CHAT='google/gemini-3.8-flash';fetchMock.mockResolvedValueOnce(chatReply(JSON.stringify({answer:'We can examine the choice.',followUpQuestion:'What matters in this choice?',citations:[]})));
+    await createOpenRouterModelProvider().answerConversation({preferredLocale:'en-US',history:[{role:'user',content:'A choice.'}],sources:[]});
+    const request=JSON.parse(fetchMock.mock.calls[0][1].body);expect(request.model).toBe('google/gemini-3.8-flash');expect(request.reasoning).toEqual({effort:'low',exclude:true});expect(request.max_tokens).toBe(1200);
+  });
   it('bounds a conversation reply to one call and 1200 output tokens while validating its quote',async()=>{
     fetchMock.mockResolvedValueOnce(chatReply(JSON.stringify({answer:'This is one possible guide, not a decision.',followUpQuestion:'What would help you compare the options?',citations:[{sourceNumber:1,quote:'Leave room for thought.'}]})));
     const result=await createOpenRouterModelProvider().answerConversation({preferredLocale:'en-US',history:[{role:'user',content:'What could I consider?'}],sources:[{kind:'principle',text:'Leave room for thought.',state:'held',supportCurrent:true,truncated:false}]});

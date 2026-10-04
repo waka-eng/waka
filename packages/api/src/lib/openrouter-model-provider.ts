@@ -173,6 +173,9 @@ export function createOpenRouterModelProvider(): ModelProvider {
       // schema in the M8 baseline. Ask for JSON structure only; the same strict
       // application parser still enforces every field, bound and citation.
       request.response_format={type:'json_object'};
+      // This candidate endpoint refuses reasoning.enabled=false. Keep its
+      // minimum effort inside the same total completion-token request cap.
+      if(request.model==='google/gemini-3.8-flash')request.reasoning={effort:'low',exclude:true};
       request.max_tokens=CONVERSATION_REPLY_OUTPUT_TOKENS;
       const payload=await callOpenRouter(request,'conversation reply');
       if(payload===null||payload===MODEL_DECLINED)throw new ModelDidNotAnswerError('conversation reply');return parseConversationReply(payload,input);
