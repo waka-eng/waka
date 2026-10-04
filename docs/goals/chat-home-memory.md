@@ -1,6 +1,6 @@
 # Chat home and memory improvements
 
-Status: in progress (2026-10-04).
+Status: blocked at the live chat quality gate (2026-10-04).
 Branch: `codex/chat-home-memory`, starting from `84cba13`.
 
 ## Objective
@@ -198,3 +198,30 @@ command, after local configuration is resolved, is
 `pnpm exec tsx tools/e2e/conversation-reply-quality.ts --polish --live --openrouter --label=baseline`.
 The current prompt, parser and model are unchanged. The home usability check
 also awaits the owner; no milestone gate was silently waived.
+
+### Milestone 1 delivery decision and gate halt
+
+Retain whole-response delivery for this milestone, as allowed by the approved
+plan. The OpenRouter transport reads a complete JSON response; the application
+validates its fields and exact citations before the publication transaction.
+That transaction checks the request is still running and rechecks current
+memory before inserting the assistant message. There is no provisional-message
+transport in this path. Real streaming would require a separate provisional
+protocol, not an animation of already-complete text or publication of unchecked
+tokens. Immediate user-message acknowledgment and truthful queued/thinking
+states remain; neither is presented as token streaming.
+
+Fresh verification: all 18 reply SQL tests pass on explicit disposable loopback
+Postgres, including Stop before/during dispatch, memory changes before/during
+dispatch, deletion, duplicate dispatch and atomic first Send. No paid provider
+was used. This proves the existing delivery protections, not model quality.
+
+The OpenRouter configuration blocker persists across the recent goal turns.
+A fresh presence-only check still finds `GEMINI_API_KEY` but no
+`OPENROUTER_API_KEY` in this checkout's `.env.local`. The local UI, first-send,
+delivery and evaluation-preparation checkpoints are recorded. Further prompt
+changes require the declared live baseline; the owner's home usability check
+is also pending. Stop at these gates rather than advance into the next ordered
+milestone or substitute a provider. Resume after the correct local OpenRouter
+file/key is available; no secret value should be pasted into chat. All
+Milestone 3 work remains in scope and unfinished. Nothing is pushed or deployed.
