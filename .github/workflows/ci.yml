@@ -23,6 +23,11 @@ on:
         required: false
         default: false
         type: boolean
+      run_avatar_evaluation:
+        description: "Run only the bounded synthetic Avatar quality matrix (16 calls, $0.50 cap)"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -38,6 +43,7 @@ env:
 
 jobs:
   check:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.run_avatar_evaluation == true) }}
     name: Typecheck, unit tests, migrations
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -135,6 +141,31 @@ jobs:
 
       - name: Web tests
         run: pnpm --filter @waka/web test
+
+  avatar-quality:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_avatar_evaluation == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+      - run: pnpm install --frozen-lockfile
+      - name: Evaluate the deployed provider with synthetic inputs only
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: pnpm exec tsx tools/e2e/conversation-reply-quality.ts --live --matrix --openrouter
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: avatar-quality
+          path: work/conversation-eval/*.json
+          if-no-files-found: error
 
   # ---------------------------------------------------------------------------
   # THE MANUAL GATE THAT OPENS A BROWSER
