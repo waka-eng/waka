@@ -3315,7 +3315,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     const requested = requestedViewRef.current;
     // An explicit route or an already-started interaction belongs to the
     // person. A returning-visitor greeting is never navigation authority.
-    if (navigationInteraction.current || requested?.inspirationId || requested?.compose || requested?.find || requested?.wallId || requested?.reviewId || requested?.principleId) {
+    if (navigationInteraction.current || requested?.inspirationId || requested?.compose || requested?.find || requested?.wallId || requested?.reviewId || requested?.principleId || requested?.conversationId) {
       stamp(); return undefined;
     }
     const interactionAtGreeting = navigationInteraction.current;
@@ -10167,7 +10167,7 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
     // restoration or the world's debounced observer can close the new editor.
     const nav=viewNavigationRef.current;
     nav.write({...EMPTY_VIEW,...nav.view,section:'top',at:null,compose:true,find:false,
-      inspirationId:null,reflectionId:null,reviewId:null,reviewAnswerId:null,principleId:null,sharePrinciple:false});
+      inspirationId:null,reflectionId:null,reviewId:null,reviewAnswerId:null,principleId:null,sharePrinciple:false,conversationId:null});
   }, []);
 
   /** The shortcut returns to the present wall before putting the pen in hand. */

@@ -1,6 +1,6 @@
 # Personal experience dev rollout
 
-Status: deployed, signed-in acceptance in progress. PR 335 merged as `ffa4ced3f4cbdd63e53c80d078b6f1d3f3a40f0e`; deployment run 37162007566 passed database separation, migrations and SST deployment. This release covers capture, review and sharing through milestones 1–3. Avatar implementation is excluded. Production deployment is not requested.
+Status: dev acceptance passed on 2026-10-03. PR 335 merged as `ffa4ced3f4cbdd63e53c80d078b6f1d3f3a40f0e`; PR 336 fixed startup capture restoration and merged as `ca14142fe520d3e5dcd926c8d5795f081172e9fe`. Deployment runs 37162007566 and 37163058629 succeeded. This release covers capture, review and sharing through milestones 1–3. Avatar implementation is excluded. Production deployment is not requested.
 
 ## Target and checks
 
@@ -24,4 +24,21 @@ Record the merged SHA, workflow URL and deployment result. On the actual dev app
 
 If authentication or a missing deployment credential prevents a check, record that item as incomplete. Build success and public HTTP availability alone do not prove the signed-in experience. No real-account content may be copied into release logs.
 
-The initial signed-in visit confirmed the new UI and retained existing reading/principles, but exposed a startup race: opening Capture while boot/navigation restoration was still settling could close the editor. No test text had been entered. The release patch records the explicit composer route synchronously rather than waiting for the observer debounce. Its regression checks the immediate URL, rerender/restoration and Back. Dev acceptance remains open until the patch is deployed and the capture/review/reopen/card checks finish.
+The initial signed-in visit confirmed the new UI and retained existing reading/principles, but exposed a startup race: opening Capture while boot/navigation restoration was still settling could close the editor. No test text had been entered. PR 336 records the explicit composer route synchronously rather than waiting for the observer debounce. Its 12-case Home navigation suite, types/build and full CI passed. The patched dev app recorded `?compose=1` immediately and kept its composer after reload.
+
+## Observed dev acceptance
+
+Both PRs passed full CI; the automatic deployments passed the configured-database separation and migration steps. [Initial deployment](https://github.com/waka-eng/waka/actions/runs/37162007566) and [patched deployment](https://github.com/waka-eng/waka/actions/runs/37163058629) are the release evidence. PR 334 was also marked merged because its navigation commits were included in PR 335.
+
+| Small smoke sample | Result |
+| --- | --- |
+| Private capture save | 1 attempt, 1 success, 0 observed save failures; exactly one matching search result |
+| Reopen saved source | 1 reload, same source and private visibility confirmed |
+| Review | 1 start using only the QA source, 1 completion, 1 successful reopen; skipped without deletion or requesting a question |
+| Stored reading and Principles | Existing completed content remained readable; no existing memory was edited |
+| Sharing | 1 card rendered, Save enabled, no horizontal overflow, 1 export handoff acknowledged |
+| Startup repair | Immediate composer URL and persistence across reload confirmed after the patched deployment |
+
+These are content-free smoke observations, not a population failure rate or retention dashboard. One private inspiration labeled `Release check — 2026-10-03` and its completed review remain in the dev account. Nothing was made public or posted externally. Normal background processing may have run for that capture; no bulk paid evaluation was requested and no actual provider bill is claimed. The browser confirmed download handoff, not a newly received file or native-share completion. M1's evidence boundaries and physical-device deferral remain in force.
+
+Milestone 4 passes this scoped rollout gate. Milestone 5 and migration 0060 are local-only and were not included in either deployment. Production, Avatar deployment and broader Q03 usage measurement remain later work.
