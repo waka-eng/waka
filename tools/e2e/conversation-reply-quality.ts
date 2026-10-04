@@ -5,7 +5,7 @@ import {parse} from 'dotenv';
 import type {ConversationReplyInput} from '../../packages/api/src/lib/model-provider.js';
 import {conversationQualityCases} from './conversation-quality-cases.js';
 assert.ok(process.argv.includes('--live'),'Pass --live for paid synthetic requests');
-const matrix=process.argv.includes('--matrix'),correctionsOnly=process.argv.includes('--corrections'),maxCalls=matrix?conversationQualityCases.length:correctionsOnly?2:4,maxCostUsd=matrix ? .50 : .10;
+const matrix=process.argv.includes('--matrix'),correctionsOnly=process.argv.includes('--corrections'),maxCalls=process.argv.includes('--first-case')?1:matrix?conversationQualityCases.length:correctionsOnly?2:4,maxCostUsd=matrix ? .50 : .10;
 const configured=parse(await readFile('.env.local').catch(error=>{if(error.code==='ENOENT')return '';throw error;}));
 for(const key of ['OPENROUTER_API_KEY','GEMINI_API_KEY'])if(!process.env[key]&&configured[key])process.env[key]=configured[key];
 delete process.env.DB_CONNECTION_URL;
@@ -20,9 +20,11 @@ globalThis.fetch=async(input,init)=>{
   const usage=body.usageMetadata;
   const estimated=provider.name==='gemini'&&body.modelVersion?.startsWith('gemini-3.1-flash-lite')&&usage?((usage.promptTokenCount??0)*.25+((usage.candidatesTokenCount??0)+(usage.thoughtsTokenCount??0))*1.5)/1e6:null;
   const cost=typeof body.usage?.cost==='number'?body.usage.cost:estimated;
-  requests.push({status:response.status,model:body.model??body.modelVersion,durationMs:Math.round(performance.now()-start),finishReason:body.choices?.[0]?.finish_reason??body.candidates?.[0]?.finishReason,usage:body.usage??usage,costUsd:cost,
+  const safeError=body.error?String(body.error.message??'').split(process.env.OPENROUTER_API_KEY??'__no_key__').join('[redacted]').slice(0,400):null;
+  requests.push({status:response.status,providerError:safeError,model:body.model??body.modelVersion,durationMs:Math.round(performance.now()-start),finishReason:body.choices?.[0]?.finish_reason??body.candidates?.[0]?.finishReason,usage:body.usage??usage,costUsd:cost,
     output:body.choices?.map((row:any)=>row.message?.content)??body.candidates?.flatMap((row:any)=>row.content?.parts?.filter((part:any)=>!part.thought).map((part:any)=>part.text)??[])});
-  if(cost!==null)costUsd+=cost;if(response.ok&&cost===null||costUsd>maxCostUsd)stopped=true;assert.ok(!stopped,'Unpriced response or budget exceeded: stop');return response;
+  if(cost!==null)costUsd+=cost;if(response.ok&&cost===null||costUsd>maxCostUsd)stopped=true;assert.ok(!stopped,'Unpriced response or budget exceeded: stop');
+  if([400,401,402,403,404].includes(response.status))stopped=true;return response;
 };
 const cases:Array<{name:string;expectation:string;input:ConversationReplyInput}>=[
   {name:'sparse',expectation:'Ask for the missing decision context; invent no saved principles or experiences.',input:{preferredLocale:'en-US',sources:[],history:[{role:'user',content:'I need to make a difficult choice, but I do not know where to start.'}]}},

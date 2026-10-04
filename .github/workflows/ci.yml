@@ -37,6 +37,11 @@ on:
           - default
           - google/gemini-3.1-flash-lite
           - google/gemini-3.8-flash
+      avatar_smoke:
+        description: "Only one synthetic case for provider diagnostics, not the release gate"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -169,7 +174,7 @@ jobs:
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           WAKA_MODEL_CHAT: ${{ inputs.avatar_model != 'default' && inputs.avatar_model || '' }}
-        run: pnpm exec tsx tools/e2e/conversation-reply-quality.ts --live --matrix --openrouter
+        run: pnpm exec tsx tools/e2e/conversation-reply-quality.ts --live --matrix --openrouter ${{ inputs.avatar_smoke && '--first-case' || '' }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
