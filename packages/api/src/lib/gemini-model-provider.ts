@@ -10,6 +10,7 @@
 import {
   askReflectionQuestion,
   askReviewQuestion,
+  answerConversation,
   deriveReviewAnswer,
   assessSignalSupport,
   distillPrinciples,
@@ -26,6 +27,7 @@ export function createGeminiModelProvider(): ModelProvider {
     name: "gemini",
     askReflectionQuestion,
     askReviewQuestion,
+    answerConversation,
     deriveReviewAnswer,
     assessSignalSupport,
     extractSignalCandidates,

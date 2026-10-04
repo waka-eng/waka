@@ -1,15 +1,14 @@
 import {Hono} from 'hono';
 import {z} from 'zod';
-import {and,asc,desc,eq,ilike,isNull,or,sql} from 'drizzle-orm';
-import {conversationMessages,conversations,inspirations,principles,profiles,topOfMindEntries,topOfMinds} from '../db/index.js';
+import {and,asc,desc,eq,isNull,sql} from 'drizzle-orm';
+import {conversationMessages,conversationReplyRequests,conversations,profiles} from '../db/index.js';
 import {getDb} from '../lib/db.js';
 import {requireAuth,humanSessionsOnly,type AuthEnv} from '../lib/middleware.js';
 import {resolveTargetProfile} from './inspirations-tenancy.js';
 import {profileQuerySchema} from './inspirations-validation.js';
-import {personalEntryReadable,personalEntrySupportCurrent,personalPrincipleReadable,personalPrincipleSupportCurrent} from '../lib/personal-output.js';
-import {PRINCIPLE_MIN_SIGNALS} from '../lib/principle-generation.js';
+import {CONVERSATION_LIMITS,conversationCapabilities,readConversationContext} from '../lib/conversation-context.js';
+import {ConversationReplyError,projectConversationMessages,readConversationReference,readConversationReplyState,requestConversationReply,stopConversationReply} from '../lib/conversation-replies.js';
 
-export const CONVERSATION_LIMITS={conversations:100,messages:200,inputCharacters:4000,contextCharacters:16000,modelCalls:0} as const;
 const uuid=z.string().uuid().transform(value=>value.toLowerCase());
 const messageInput=z.object({id:uuid,content:z.string().min(1).max(CONVERSATION_LIMITS.inputCharacters).refine(value=>value.trim().length>0),revision:z.number().int().min(0).max(CONVERSATION_LIMITS.messages)}).strict();
 type ConversationEnv=AuthEnv&{Variables:{conversationProfileId:string}};
@@ -21,24 +20,9 @@ async function readConversation(db:Reader,profileId:string,id:string){
   if(!row)throw new ConversationError('Conversation not found.',404);
   if(row.deletedAt)throw new ConversationError('This conversation was deleted.',410);
   const messages=await db.select().from(conversationMessages).where(and(eq(conversationMessages.profileId,profileId),eq(conversationMessages.conversationId,id))).orderBy(asc(conversationMessages.position)).limit(CONVERSATION_LIMITS.messages);
-  return {...row,messages};
+  return {...row,messages:await projectConversationMessages(db,profileId,id,messages)};
 }
 
-/** Fresh, owner-scoped context, not a prompt cache or a model invocation. */
-async function readContext(db:Reader,profileId:string,question:string){
-  const principleRows=await db.select({id:principles.id,text:principles.statement,rank:principles.rank,state:principles.state,locked:sql<boolean>`${principles.lockedAt} IS NOT NULL`,supportCurrent:sql<boolean>`${principles.unsupportedAt} IS NULL AND ${personalPrincipleSupportCurrent(profileId,PRINCIPLE_MIN_SIGNALS)}`})
-    .from(principles).where(and(eq(principles.profileId,profileId),personalPrincipleReadable(profileId,PRINCIPLE_MIN_SIGNALS))).orderBy(asc(principles.rank)).limit(10);
-  const readingRows=await db.select({id:topOfMindEntries.id,text:topOfMindEntries.body,locked:sql<boolean>`${topOfMindEntries.lockedAt} IS NOT NULL`,supportCurrent:sql<boolean>`${personalEntrySupportCurrent(profileId)}`})
-    .from(topOfMindEntries).innerJoin(topOfMinds,eq(topOfMinds.id,topOfMindEntries.topOfMindId))
-    .where(and(eq(topOfMinds.profileId,profileId),eq(topOfMinds.status,'live'),isNull(topOfMindEntries.dismissedAt),personalEntryReadable(profileId))).orderBy(asc(topOfMindEntries.sortOrder)).limit(5);
-  const terms=[...new Set(question.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)??[])].slice(0,8);
-  const sources=terms.length?await db.select({id:inspirations.id,text:inspirations.text}).from(inspirations)
-    .where(and(eq(inspirations.profileId,profileId),or(...terms.map(term=>ilike(inspirations.text,`%${term}%`)))))
-    .orderBy(desc(inspirations.createdAt),asc(inspirations.id)).limit(6):[];
-  let remaining:number=CONVERSATION_LIMITS.contextCharacters;
-  const bound=<T extends {text:string}>(rows:T[],allowance:number)=>rows.flatMap(row=>{if(remaining<=0||allowance<=0)return [];const text=row.text.slice(0,Math.min(1600,remaining,allowance));remaining-=text.length;allowance-=text.length;return [{...row,text,truncated:text.length<row.text.length}];});
-  return {profileId,principles:bound(principleRows,8000),reading:bound(readingRows,4000),inspirations:bound(sources,4000),generationEnabled:false,limits:CONVERSATION_LIMITS};
-}
 
 export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMiddleware?:typeof requireAuth}={}){
   const routes=new Hono<ConversationEnv>(),database=deps.getDatabase??getDb;
@@ -46,6 +30,7 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
   routes.use('*',deps.authMiddleware??requireAuth,humanSessionsOnly);
   routes.onError((error,c)=>{
     if(error instanceof ConversationError)return c.json({error:error.message},error.status);
+    if(error instanceof ConversationReplyError)return c.json({error:error.message},error.status);
     const code=(error as {code?:string;cause?:{code?:string}}).cause?.code??(error as {code?:string}).code;
     if(['23505','40001','40P01','55P03'].includes(code??''))return c.json({error:'The conversation changed. Check your saved messages before retrying.'},409);
     console.error('[conversations]',{code:typeof code==='string'&&/^[0-9A-Z]{5}$/.test(code)?code:'unknown'});
@@ -61,7 +46,7 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
     const rows=await database().select({id:conversations.id,profileId:conversations.profileId,updatedAt:conversations.updatedAt,revision:conversations.revision,
       preview:sql<string>`coalesce((SELECT left(m.content,120) FROM conversation_messages m WHERE m.profile_id=${profileId}::uuid AND m.conversation_id=conversations.id ORDER BY m.position LIMIT 1),'')`})
       .from(conversations).where(and(eq(conversations.profileId,profileId),isNull(conversations.deletedAt))).orderBy(desc(conversations.updatedAt),asc(conversations.id)).limit(CONVERSATION_LIMITS.conversations);
-    return c.json({profileId,conversations:rows,generationEnabled:false,limits:CONVERSATION_LIMITS});
+    return c.json({profileId,conversations:rows,...conversationCapabilities()});
   });
   routes.post('/',async c=>{
     const input=z.object({id:uuid}).strict().safeParse(await c.req.json().catch(()=>null));if(!input.success)return c.json({error:'Invalid conversation'},400);
@@ -73,17 +58,17 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
       const [count]=await tx.select({n:sql<number>`count(*)::int`}).from(conversations).where(and(eq(conversations.profileId,profileId),isNull(conversations.deletedAt)));
       if(count.n>=CONVERSATION_LIMITS.conversations)throw new ConversationError('Conversation limit reached. Delete an old conversation first.',429);
       await tx.insert(conversations).values({id:input.data.id,profileId});return readConversation(tx,profileId,input.data.id);
-    });return c.json({conversation:row,generationEnabled:false,limits:CONVERSATION_LIMITS});
+    });return c.json({conversation:row,...conversationCapabilities()});
   });
   routes.use('/:id/*',async(c,next)=>{if(!uuid.safeParse(c.req.param('id')).success)return c.json({error:'Invalid conversation'},400);await next();});
   routes.get('/:id',async c=>{
     const id=uuid.safeParse(c.req.param('id'));if(!id.success)return c.json({error:'Invalid conversation'},400);
     const row=await database().transaction(tx=>readConversation(tx,c.get('conversationProfileId'),id.data),{isolationLevel:'repeatable read',accessMode:'read only'});
-    return c.json({conversation:row,generationEnabled:false,limits:CONVERSATION_LIMITS});
+    return c.json({conversation:row,...conversationCapabilities()});
   });
   routes.get('/:id/context',async c=>c.json(await database().transaction(async tx=>{
     const profileId=c.get('conversationProfileId'),row=await readConversation(tx,profileId,c.req.param('id'));
-    return readContext(tx,profileId,[...row.messages].reverse().find(message=>message.role==='user')?.content??'');
+    return readConversationContext(tx,profileId,[...row.messages].reverse().find(message=>message.role==='user')?.content??'');
   },{isolationLevel:'repeatable read',accessMode:'read only'})));
   routes.post('/:id/messages',async c=>{
     const input=messageInput.safeParse(await c.req.json().catch(()=>null));if(!input.success)return c.json({error:'Write a message of up to 4,000 characters.'},400);
@@ -97,7 +82,22 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
       await tx.insert(conversationMessages).values({id:input.data.id,profileId,conversationId:id,position:current.revision+1,role:'user',content:input.data.content});
       await tx.update(conversations).set({revision:current.revision+1,updatedAt:new Date()}).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id)));
       return readConversation(tx,profileId,id);
-    });return c.json({conversation:row,generationEnabled:false,limits:CONVERSATION_LIMITS});
+    });return c.json({conversation:row,...conversationCapabilities()});
+  });
+  routes.get('/:id/reply',async c=>c.json(await readConversationReplyState(database(),c.get('conversationProfileId'),c.req.param('id'))));
+  routes.post('/:id/replies',async c=>{
+    const input=z.object({messageId:uuid,afterRequestId:uuid.nullable()}).strict().safeParse(await c.req.json().catch(()=>null));
+    if(!input.success)return c.json({error:'Invalid reply request'},400);
+    return c.json(await requestConversationReply(database(),c.get('conversationProfileId'),c.req.param('id'),input.data));
+  });
+  routes.post('/:id/replies/:requestId/stop',async c=>{
+    const requestId=uuid.safeParse(c.req.param('requestId'));if(!requestId.success)return c.json({error:'Invalid reply request'},400);
+    return c.json(await stopConversationReply(database(),c.get('conversationProfileId'),c.req.param('id'),requestId.data));
+  });
+  routes.get('/:id/replies/:requestId/references/:index',async c=>{
+    const requestId=uuid.safeParse(c.req.param('requestId')),index=Number(c.req.param('index'));
+    if(!requestId.success||!Number.isInteger(index)||index<0||index>2)return c.json({error:'Invalid reference'},400);
+    return c.json(await readConversationReference(database(),c.get('conversationProfileId'),c.req.param('id'),requestId.data,index));
   });
   routes.delete('/:id',async c=>{
     const id=uuid.safeParse(c.req.param('id'));if(!id.success)return c.json({error:'Invalid conversation'},400);
@@ -105,6 +105,8 @@ export function createConversationRoutes(deps:{getDatabase?:typeof getDb;authMid
     await database().transaction(async tx=>{
       const [row]=await tx.select().from(conversations).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id.data))).for('update');
       if(!row)throw new ConversationError('Conversation not found.',404);
+      await tx.update(conversationReplyRequests).set({status:'stopped',userMessageId:null,assistantMessageId:null,references:[],followUpQuestion:null,contextHash:'',failureCode:null,finishedAt:new Date()})
+        .where(and(eq(conversationReplyRequests.profileId,profileId),eq(conversationReplyRequests.conversationId,id.data)));
       await tx.delete(conversationMessages).where(and(eq(conversationMessages.profileId,profileId),eq(conversationMessages.conversationId,id.data)));
       await tx.update(conversations).set({deletedAt:row.deletedAt??new Date(),updatedAt:new Date()}).where(and(eq(conversations.profileId,profileId),eq(conversations.id,id.data)));
     });return c.json({deleted:true});

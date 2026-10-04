@@ -101,6 +101,25 @@ assistant authorship. Sending a message does not create an inspiration, signal,
 principle, feedback verdict or model job. Milestone 5 accepts only user messages;
 assistant generation is disabled and has a zero-call budget until milestone 6.
 
+Milestone 6 adds `conversation_reply_requests`, separate from user messages.
+One pending/running reply is allowed per conversation. An initial request or
+explicit retry compares the last request ID under the conversation lock: a
+replayed retry joins its successor instead of dispatching twice. Each attempt
+may dispatch to a provider at most once; ambiguous failures require a new,
+explicit retry, which may incur a new provider charge. Limits are three attempts
+per user message per hour and twenty provider dispatches per account per hour,
+with at most 1,200 output tokens per dispatch. Dispatch timestamps survive
+conversation deletion until profile erasure so deletion cannot reset the budget.
+
+Stop is a publication fence, not a promise to undo provider billing. New messages,
+memory changes, deletion and lost worker ownership prevent late publication.
+Replies cite numbered current sources with verified quotes; persisted reference
+metadata contains only source identity and a content/state hash. Historical
+assistant words whose references changed are labeled and excluded from future
+generation. They are conversation history, not new personal memory. Deleting
+the conversation erases those words and reference metadata. Source access is
+revalidated when opening a citation; no stale copied excerpt is served.
+
 Client-generated conversation/message IDs make retry idempotent. A replay with
 different content conflicts rather than overwriting words. Deleting a
 conversation erases its messages and keeps only a content-free conversation
