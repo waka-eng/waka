@@ -5,6 +5,9 @@
  * DOM scroll geometry supplies a measurable viewport for the arrival test.
  * Real UI, owner-scoped drafts and recovery run; reply text is synthetic. */
 import {act} from 'react';
+import {readFileSync} from 'node:fs';
+import {resolve,dirname} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {createRoot,type Root} from 'react-dom/client';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {ConversationPanel} from '../src/components/ConversationPanel';
@@ -12,6 +15,10 @@ import {createConversation,deleteConversation,fetchConversation,fetchConversatio
 import {readConversationDrafts} from '../src/lib/conversation-drafts';
 vi.mock('../src/lib/api/conversations',async original=>({...await original<typeof import('../src/lib/api/conversations')>(),createConversation:vi.fn(),deleteConversation:vi.fn(),fetchConversation:vi.fn(),fetchConversationContext:vi.fn(),fetchConversationReply:vi.fn(),requestConversationReply:vi.fn(),stopConversationReply:vi.fn(),fetchConversationCitation:vi.fn(),listConversations:vi.fn(),saveConversationMessage:vi.fn()}));
 const scope={accountId:'owner',profileId:'profile'},id='11111111-1111-4111-8111-111111111111',choose=vi.fn(),close=vi.fn();
+it('leaves reply text clear of mobile overlay scrollbars',()=>{
+  const css=readFileSync(resolve(dirname(fileURLToPath(import.meta.url)),'../src/styles/chrome.css'),'utf8');
+  expect(css.match(/\.jar-conversation-body\s*\{([^}]+)\}/)?.[1]).toContain('padding-inline-end:var(--sp-8)');
+});
 let root:Root,host:HTMLDivElement,stored:ApiConversation,replyState:ConversationReplyState;
 const openSource=vi.fn(),replyId='22222222-2222-4222-8222-222222222222';
 beforeEach(()=>{vi.resetAllMocks();vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});localStorage.clear();(globalThis as {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;

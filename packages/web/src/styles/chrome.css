@@ -1396,7 +1396,7 @@ body .profile-signout-button {
 .jar-seek.jar-conversation { z-index:8; width:min(680px,calc(100vw - var(--sp-24))); max-height:calc(var(--jar-vh,100dvh) - var(--sp-24)); display:flex; flex-direction:column; box-sizing:border-box; color:var(--w-ink); font-size:var(--t-body); text-align:left; user-select:text; }
 .jar-conversation header { display:flex; justify-content:space-between; align-items:center; gap:var(--sp-12); }
 .jar-conversation h2 { font-size:var(--t-lead); font-weight:500; }
-.jar-conversation-body { min-height:0; overflow-y:auto; overscroll-behavior:contain; touch-action:pan-y; }
+.jar-conversation-body { min-height:0; overflow-y:auto; overscroll-behavior:contain; touch-action:pan-y; padding-inline-end:var(--sp-8); }
 .jar-conversation button,.jar-conversation summary { min-height:var(--sp-44); padding:var(--sp-8) var(--sp-12); font:inherit; color:inherit; background:transparent; border:1px solid var(--w-edge); border-radius:var(--sp-8); cursor:pointer; }
 .jar-conversation button:disabled { opacity:.45; cursor:default; }
 .jar-conversation ul,.jar-conversation ol { list-style:none; padding:0; }
