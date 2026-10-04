@@ -161,6 +161,9 @@ export async function callOpenRouter(
   }
 
   const content = envelope.data.choices?.[0]?.message?.content;
+  if(['length','error'].includes(envelope.data.choices?.[0]?.finish_reason??'')){
+    console.warn('[openrouter] incomplete response refused',{label,finishReason:envelope.data.choices?.[0]?.finish_reason});return null;
+  }
   if (typeof content !== "string" || content.length === 0) return null;
 
   try {

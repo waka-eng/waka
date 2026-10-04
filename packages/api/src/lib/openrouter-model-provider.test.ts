@@ -57,7 +57,15 @@ describe("the translation", () => {
     fetchMock.mockResolvedValueOnce(chatReply(JSON.stringify({answer:'This is one possible guide, not a decision.',followUpQuestion:'What would help you compare the options?',citations:[{sourceNumber:1,quote:'Leave room for thought.'}]})));
     const result=await createOpenRouterModelProvider().answerConversation({preferredLocale:'en-US',history:[{role:'user',content:'What could I consider?'}],sources:[{kind:'principle',text:'Leave room for thought.',state:'held',supportCurrent:true,truncated:false}]});
     expect(result.citations).toHaveLength(1);expect(fetchMock).toHaveBeenCalledTimes(1);
-    const request=JSON.parse(fetchMock.mock.calls[0][1].body);expect(request.max_tokens).toBe(1200);expect(request.reasoning).toEqual({enabled:false});
+    const request=JSON.parse(fetchMock.mock.calls[0][1].body);expect(request.max_tokens).toBe(1200);expect(request.reasoning).toEqual({enabled:false});expect(request.response_format).toEqual({type:'json_object'});
+  });
+  it.each(['length','error'])('refuses even parseable JSON when the provider marks a reply %s',async finish_reason=>{
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({choices:[{finish_reason,message:{content:JSON.stringify({answer:'Partial but valid.',followUpQuestion:null,citations:[]})}}]}),{status:200}));
+    await expect(createOpenRouterModelProvider().answerConversation({preferredLocale:'en-US',history:[{role:'user',content:'A choice.'}],sources:[]})).rejects.toThrow(ModelDidNotAnswerError);expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+  it('still refuses an invented citation with JSON object decoding',async()=>{
+    fetchMock.mockResolvedValueOnce(chatReply(JSON.stringify({answer:'A saved claim.',followUpQuestion:null,citations:[{sourceNumber:1,quote:'Invented memory'}]})));
+    await expect(createOpenRouterModelProvider().answerConversation({preferredLocale:'en-US',history:[{role:'user',content:'A choice.'}],sources:[{kind:'principle',text:'Actual words.',truncated:false}]})).rejects.toThrow(ModelDidNotAnswerError);
   });
   it("carries a judge request losslessly onto the chat shape", () => {
     const request = buildSignalMatchJudgementRequest({

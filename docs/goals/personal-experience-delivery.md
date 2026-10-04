@@ -1,7 +1,7 @@
 # Personal experience delivery
 
-Status: in progress (2026-10-03), the requested M7-A and M7-B checkpoints passed locally. M6 is merged to dev through PR 338; M7 is committed locally, not pushed or deployed. Stop before M8, which needs a separate request. Replies remain off by default; physical-device follow-up remains deferred.
-Branch: `codex/conversation-thoughts` (local M7-A/M7-B work).
+Status: in progress (2026-10-03), the owner requested all remaining milestones and dev delivery, using simulators where physical-device testing was required. M7 and the M8 evaluation setup are pushed on the feature branch, not merged. M8-A found a release-blocking OpenRouter response-format failure and is being repaired. Replies remain off by default until quality and rollout gates pass; production is excluded.
+Branch: `codex/conversation-thoughts` (M7/M8 dev delivery).
 
 ## Objective
 
@@ -491,3 +491,11 @@ Real local browser: corrected a reply, reloaded its unsent draft, sent it once a
 The two-case live correction check initially passed 1/2: the Korean follow-up implied an unstated routine. A focused prompt repair and identical rerun passed 2/2 for correction fidelity. Four calls cost an estimated USD 0.001715; no real account content was sent. [Assessment and retained failures](../craft/evidence/personal-capture/conversation-correction-evaluation.md) distinguish this narrow result from M8, including the remaining unnecessary-but-valid citation observation.
 
 Verdict: M7-A/B and V04 pass within the agreed scope. Temporary browser and fixture sessions are closed; exact disposable schemas are cleaned up after verifying their fixture accounts. M7 is local only, with separate checkpoint commits. Stop here: M8-A broad quality and M8-B dev enablement/verification remain. No additional rollout, native packaging or group work was started.
+
+### 2026 10 03 milestone 8 baseline and simulator scope
+
+The owner now authorizes the remaining checkpoints and dev delivery, and explicitly accepts simulators instead of physical devices. Reuse the recorded A03 speech/native/browser evidence and verify the newer chat controls where simulator access permits. This changes the acceptance scope, not the factual limits of emulation; do not claim physical microphone, telephone interruption or store-release support.
+
+Added a manual-only CI quality job using the deployed OpenRouter provider and a fixed 16-case English/Korean matrix. Ordinary pushes do not run paid calls; an evaluation-only dispatch skips normal CI/browser jobs. Cases cover empty memory, conflicting principles, human edits, old interest, correction, withdrawn evidence, missing conditions and embedded malicious instructions. The first dispatch, [37178806816](https://github.com/waka-eng/waka/actions/runs/37178806816), made 16 calls: only 2 parsed, one timed out and the rest had invalid/truncated output. The Korean parsed conflict reply also hid a second question behind a period, so parsing is not a semantic pass. [Raw baseline](../craft/evidence/personal-capture/conversation-m8-openrouter-baseline.json) retains the failures. Returned usage.cost sums to USD 0.002136705; the timed-out call has no returned usage, so this is not a complete bill.
+
+The failure appears associated with constrained decoding on the pinned endpoint: strings ended abruptly with finish_reason error/length, and one repeated clause ran beyond the requested bound. The chat-only repair requests JSON-object structure while retaining every application parser/grounding check and the 1,200-token request limit. Incomplete provider responses are refused even if their JSON happens to parse. No model was changed, no truncation repaired into success and no automatic paid retry was added. [OpenRouter documentation](https://openrouter.ai/docs/guides/features/structured-outputs) notes endpoint-dependent structured-output support; the identical live rerun, not the documentation, must prove this repair. Targeted provider/prompt tests pass 21/21. M8-A is still open.
