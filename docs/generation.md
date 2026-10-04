@@ -876,6 +876,12 @@ or room top-of-mind pass requests an eligibility check. Opening principles
 can request missing work through a POST; GETs only read. The nightly cron
 (08:00 UTC) and local hourly pass recover missed work. All paths share a
 material fingerprint, so completed inputs are not regenerated on page opens.
+An unchanged reading (`no_change`) retains its audit row but counts as the
+preceding meaningful version for Principle appearances and work identity.
+Support is still checked on the actual cited row, so refreshed citations do
+not disappear merely because the reading's words stayed the same. Meaningful
+reading changes, signal wording/evidence timestamps and locale changes still
+participate in the fingerprint; no historical rows are rewritten.
 Failed jobs retry only within the worker budget or by an explicit retry.
 Each request evaluates the active profile: one cheap SQL check for clusters
 newly past the bar, and only then model calls (distill at most

@@ -97,7 +97,7 @@ export interface CitationEvidence {
   signalId: string;
   /** Evidence timestamps of the signal itself. */
   evidenceAt: Date[];
-  /** Distinct top-of-mind version ids this signal was selected into. */
+  /** Distinct meaningful reading versions; no-change audits share their anchor. */
   tomVersionIds: string[];
 }
 
@@ -216,7 +216,20 @@ async function loadCitationEvidence(
   for(const [id,rows] of witnesses)out.get(id)!.evidenceAt=selectIndependentEvidence(rows).map(row=>row.createdAt);
 
   const tomRows = await db
-    .select({ signalId: topOfMindEntrySignals.signalId, topOfMindId: topOfMindEntries.topOfMindId })
+    .select({ signalId: topOfMindEntrySignals.signalId,
+      // Validate support on the actual cited row below, but do not count an
+      // unchanged audit copy as a new appearance or a new paid-work identity.
+      // Keeping this separate from filtering rows preserves current support
+      // when the latest copy refreshed citations to a new signal revision.
+      topOfMindId: sql<string>`CASE WHEN ${topOfMinds.reason} = 'no_change' THEN COALESCE((
+        SELECT meaningful.id FROM top_of_minds meaningful
+        WHERE meaningful.profile_id IS NOT DISTINCT FROM ${topOfMinds.profileId}
+          AND meaningful.group_id IS NOT DISTINCT FROM ${topOfMinds.groupId}
+          AND meaningful.version <= ${topOfMinds.version}
+          AND meaningful.reason <> 'no_change'
+        ORDER BY meaningful.version DESC, meaningful.created_at DESC LIMIT 1
+      ), ${topOfMinds.id}) ELSE ${topOfMinds.id} END`,
+    })
     .from(topOfMindEntrySignals)
     .innerJoin(signals, eq(signals.id, topOfMindEntrySignals.signalId))
     .innerJoin(topOfMindEntries, eq(topOfMindEntries.id, topOfMindEntrySignals.entryId))

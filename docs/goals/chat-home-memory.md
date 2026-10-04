@@ -386,3 +386,31 @@ Selected-code verification: API typecheck passed, 771 unit tests passed with
 three paid benches skipped, and all 18 reply SQL tests passed on the disposable
 loopback database. The 24 focused prompt/provider tests also passed. Commit
 this M1 quality checkpoint separately from the next memory changes.
+
+### Milestone 3 unchanged reading scheduling checkpoint
+
+A real SQL reproduction failed before the change: copying the same reading
+into a `no_change` version changed `principleMaterialKey` and left two Principle
+jobs where the test expected one. No model call was needed to demonstrate the
+redundant scheduling.
+
+The loader now resolves no-change appearances to the preceding meaningful
+version identity. It retains every audit row and checks source support on the
+actual current citation, rather than filtering no-change rows away. The fixed
+test retains two audit rows, one meaningful appearance and one completed job.
+A subsequent human-edit version schedules a second job; changing locale changes
+the key. Another test proves refreshed signal revisions on a no-change reading
+remain eligible even when older citations are stale.
+
+All eight personal/room Principle SQL flow tests and API typecheck pass. The
+full file initially exposed an older unscoped job query in its room test; it
+now selects that room's idempotency-key prefix and retains the original charging
+and deduplication assertions. No historical repair, model calls, schema changes
+or deployment were performed.
+
+This is only the first reliability fix. Bounded retrieval and Principle input/
+comparison work, metadata traces, generation-document reconciliation and the
+24-scenario calibration remain open. The broader source-revision fingerprint
+and large-profile query costs still need review; this checkpoint does not claim
+every kind of evidence edit is already represented by the old timestamp key.
+The 39 focused Principle arithmetic/prompt unit tests also pass.

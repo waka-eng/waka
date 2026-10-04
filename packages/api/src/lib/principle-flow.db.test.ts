@@ -7,7 +7,7 @@ import { createGroupsRoutes } from "../routes/groups.js";
 import { loadPrincipleViews, renderPrinciplesMarkdown, undoPrincipleDispute } from "../routes/principles.js";
 import { createFeedbackForProfile } from "../routes/feedback.js";
 import { loadPrincipleMaterial, promoteIfDemonstrated, refreshPrinciplesForProfile, reconcilePrinciplesAfterSignalLoss } from "./principle-generation.js";
-import { requestPrincipleRefresh, loadPrincipleStatus } from "./principle-status.js";
+import { requestPrincipleRefresh, loadPrincipleStatus, principleMaterialKey } from "./principle-status.js";
 import type { ModelProvider } from "./model-provider.js";
 import { reviewSignalSupport } from './signal-support-review.js';
 import { applySignalSupportReview } from './signal-support-apply.js';
@@ -72,6 +72,50 @@ beforeAll(async () => {
 afterAll(async () => { await t?.cleanup(); });
 
 describe("principles across personal and room profiles", () => {
+  it('does not buy another principle pass for an unchanged reading audit version',async()=>{
+    const profileId=await person();
+    const signalIds=await material(profileId,[profileId]);
+    const before=principleMaterialKey(await loadPrincipleMaterial(t.db as never,profileId));
+    await requestPrincipleRefresh(t.db as never,profileId);
+    await t.sql`UPDATE background_jobs SET status='succeeded' WHERE profile_id=${profileId} AND type='refresh_principles'`;
+    await t.sql`UPDATE top_of_minds SET status='superseded' WHERE profile_id=${profileId}`;
+    const [next]=await t.sql`INSERT INTO top_of_minds(profile_id,version,reason) VALUES(${profileId},2,'no_change') RETURNING id`;
+    const [entry]=await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body) VALUES(${next.id},'pattern','A present focus') RETURNING id`;
+    for(const id of signalIds)await t.sql`INSERT INTO top_of_mind_entry_signals(entry_id,signal_id) VALUES(${entry.id},${id})`;
+    const after=await loadPrincipleMaterial(t.db as never,profileId);
+    expect(after.eligibility.eligible).toBe(true);
+    expect(after.eligibility.tomAppearances).toBe(1);
+    expect.soft(principleMaterialKey(after)).toBe(before);
+    await requestPrincipleRefresh(t.db as never,profileId);
+    expect.soft(await t.sql`SELECT id FROM background_jobs WHERE profile_id=${profileId} AND type='refresh_principles'`).toHaveLength(1);
+    expect(await t.sql`SELECT id FROM top_of_minds WHERE profile_id=${profileId}`).toHaveLength(2);
+    await t.sql`UPDATE profiles SET preferred_locale='ko-KR' WHERE id=${profileId}`;
+    expect(principleMaterialKey(await loadPrincipleMaterial(t.db as never,profileId))).not.toBe(before);
+    await t.sql`UPDATE profiles SET preferred_locale='en-US' WHERE id=${profileId}`;
+    await t.sql`UPDATE top_of_minds SET status='superseded' WHERE profile_id=${profileId}`;
+    const [changed]=await t.sql`INSERT INTO top_of_minds(profile_id,version,reason) VALUES(${profileId},3,'human_edit') RETURNING id`;
+    const [humanEntry]=await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body) VALUES(${changed.id},'pattern','My own wording for this focus') RETURNING id`;
+    for(const id of signalIds)await t.sql`INSERT INTO top_of_mind_entry_signals(entry_id,signal_id) VALUES(${humanEntry.id},${id})`;
+    expect(principleMaterialKey(await loadPrincipleMaterial(t.db as never,profileId))).not.toBe(before);
+    await requestPrincipleRefresh(t.db as never,profileId);
+    expect(await t.sql`SELECT id FROM background_jobs WHERE profile_id=${profileId} AND type='refresh_principles'`).toHaveLength(2);
+  });
+  it('uses current citations on an unchanged reading instead of dropping refreshed support',async()=>{
+    const profileId=await person();
+    await material(profileId,[profileId]);
+    const before=principleMaterialKey(await loadPrincipleMaterial(t.db as never,profileId));
+    await t.sql`UPDATE signals SET statement=statement || ' revised' WHERE profile_id=${profileId}`;
+    await t.sql`UPDATE signal_evidence e SET statement_revision=s.statement_revision FROM signals s WHERE e.signal_id=s.id AND s.profile_id=${profileId}`;
+    await t.sql`UPDATE top_of_minds SET status='superseded' WHERE profile_id=${profileId}`;
+    const [next]=await t.sql`INSERT INTO top_of_minds(profile_id,version,reason) VALUES(${profileId},2,'no_change') RETURNING id`;
+    const [entry]=await t.sql`INSERT INTO top_of_mind_entries(top_of_mind_id,type,body) VALUES(${next.id},'pattern','A present focus') RETURNING id`;
+    await t.sql`INSERT INTO top_of_mind_entry_signals(entry_id,signal_id,statement_revision)
+      SELECT ${entry.id},id,statement_revision FROM signals WHERE profile_id=${profileId}`;
+    const current=await loadPrincipleMaterial(t.db as never,profileId);
+    expect(current.eligibility.eligible).toBe(true);
+    expect(current.eligibility.tomAppearances).toBe(1);
+    expect(principleMaterialKey(current)).not.toBe(before);
+  });
   it.each(["held", "contested"] as const)("keeps edited %s wording after support is lost", async (state) => {
     const profileId = await person();
     const signalIds = await material(profileId, [profileId]);
@@ -180,11 +224,12 @@ describe("principles across personal and room profiles", () => {
 
   it("deduplicates completed requests and charges room generation to a member account", async () => {
     await requestPrincipleRefresh(t.db as never, mindId);
-    const [job] = await t.sql`SELECT id,profile_id FROM background_jobs WHERE type='refresh_principles'`;
+    const keyPrefix=`refresh_principles:${mindId}:%`;
+    const [job] = await t.sql`SELECT id,profile_id FROM background_jobs WHERE type='refresh_principles' AND idempotency_key LIKE ${keyPrefix}`;
     expect([owner, other]).toContain(job.profile_id);
     await t.sql`UPDATE background_jobs SET status='succeeded' WHERE id=${job.id}`;
     await requestPrincipleRefresh(t.db as never, mindId);
-    const rows = await t.sql`SELECT status FROM background_jobs WHERE type='refresh_principles'`;
+    const rows = await t.sql`SELECT status FROM background_jobs WHERE type='refresh_principles' AND idempotency_key LIKE ${keyPrefix}`;
     expect(rows).toHaveLength(1);
     expect(rows[0]!.status).toBe("succeeded");
     expect((await loadPrincipleStatus(t.db as never, mindId)).phase).toBe("ready");
