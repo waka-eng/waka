@@ -28,6 +28,14 @@ on:
         required: false
         default: false
         type: boolean
+      avatar_model:
+        description: "Chat-only candidate for the manual Avatar comparison"
+        required: false
+        default: default
+        type: choice
+        options:
+          - default
+          - google/gemini-3.1-flash-lite
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -159,6 +167,7 @@ jobs:
       - name: Evaluate the deployed provider with synthetic inputs only
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          WAKA_MODEL_CHAT: ${{ inputs.avatar_model != 'default' && inputs.avatar_model || '' }}
         run: pnpm exec tsx tools/e2e/conversation-reply-quality.ts --live --matrix --openrouter
       - uses: actions/upload-artifact@v4
         if: always()
