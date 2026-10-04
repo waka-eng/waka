@@ -223,8 +223,10 @@ export function ReflectionFlow({ inspirationId, scope, processing, source, initi
   const earlier = turns.slice(0, -1);
   const deleteControls = (id: string) => deleteId === id ? <div className="jar-reflection-delete" role="group" aria-label={t(locale,'worldReflectionDelete')}>
     <p>{t(locale,'worldReflectionDeleteConfirm')}</p>
+    <div className="jar-reflection-delete-actions">
     <button type="button" autoFocus disabled={Boolean(removingId)} onClick={()=>setDeleteId(null)}>{t(locale,'worldReflectionKeep')}</button>
     <button type="button" disabled={Boolean(save.pending)||Boolean(removingId)} onClick={()=>void removeAnswer(id)}>{t(locale,'worldReflectionDelete')}</button>
+    </div>
   </div> : <button type="button" disabled={Boolean(save.pending)||Boolean(removingId)} onClick={()=>setDeleteId(id)}>{t(locale,'worldReflectionDelete')}</button>;
   const copyLink = (id: string) => onCopyLink ? <button type="button" className="jar-copy-link"
     aria-label={t(locale, 'worldCopyReflectionLink')} title={t(locale, 'worldCopyReflectionLink')} onClick={() => onCopyLink(id)}>

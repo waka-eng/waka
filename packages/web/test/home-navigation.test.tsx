@@ -63,6 +63,7 @@ it('starts a review beside the personal reading and restores home through Back',
 it('requires a visible audience confirmation before publishing and leaves cancel private',async()=>{
   vi.mocked(updateInspiration).mockClear();
   world=await mountWorld(FACTS,{initialEntries:['/inspirations/older'],routerTools:<RouterTools/>});await settle();
+  expect(world.container.querySelector<HTMLElement>('.jar-personal-shortcuts')?.hidden).toBe(true);
   const button=(label:string)=>[...world.container.querySelectorAll<HTMLButtonElement>('.jar-panel button')].find(item=>item.textContent?.trim()===label)!;
   await act(async()=>button('public').click());
   expect(world.container.textContent).toContain('People in your rooms can read it and its attachments');

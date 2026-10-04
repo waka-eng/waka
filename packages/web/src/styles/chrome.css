@@ -1497,8 +1497,12 @@ body .profile-signout-button {
 .jar-citation-preview { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; color:var(--w-muted); margin-top:var(--sp-4); }
 .jar-conversation .jar-conversation-thought section { margin-top:var(--sp-8); }
 .jar-panel .jar-panel-vis button,.jar-panel .jar-panel-foot button,.jar-panel .jar-panel-askrow button,.jar-reflection-flow button { min-height:var(--sp-44); }
+.jar-reflection-delete { margin-top:var(--sp-12); padding-top:var(--sp-8); border-top:1px solid var(--w-edge); }
+.jar-reflection-delete-actions { display:flex; flex-wrap:wrap; gap:var(--sp-12); }
+.jar-reflection-delete-actions button:first-child { color:var(--w-ink); text-decoration:underline; text-underline-offset:var(--sp-4); }
 .jar-personal-shortcuts { position:absolute; z-index:6; inset:auto var(--sp-12) calc(var(--sp-12) + env(safe-area-inset-bottom)); display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:end; gap:var(--sp-12); pointer-events:none; }
 .jar-personal-shortcuts--above-count { bottom:calc(64px + env(safe-area-inset-bottom)); }
+.jar-personal-shortcuts[hidden] { display:none; }
 .jar-personal-shortcuts > button { position:static; transform:none; pointer-events:auto; min-width:0; max-width:100%; white-space:normal; }
 .jar-personal-shortcuts .jar-review-shortcut { grid-column:1; justify-self:start; }
 .jar-personal-shortcuts .jar-capture-shortcut { grid-column:2; justify-content:center; }

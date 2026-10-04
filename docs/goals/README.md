@@ -30,7 +30,6 @@ Work happening now, or stopped mid-way with a recorded reason.
 
 | Goal | Status |
 | --- | --- |
-| [`personal-ux-clarity.md`](personal-ux-clarity.md) | In progress — eight UX review improvements, local implementation and desktop/mobile verification. |
 | [`ux-feature-implementation.md`](ux-feature-implementation.md) | Paused by owner after the checked feedback/room-flow batch; dev delivery requested. Later UX/algorithm slices, remaining release cases, semantic validation, historical repair and deployed verification remain open. |
 | [`everything-in-the-world.md`](everything-in-the-world.md) | Phase 2 passed (2026-08-23). Phase 3 next. |
 | [`every-workflow-works.md`](every-workflow-works.md) | Phase 2 passed (2026-08-22). Phase 3 next. |
@@ -48,6 +47,7 @@ Shipped, and kept for the measurements.
 
 | Goal | Status |
 | --- | --- |
+| [`personal-ux-clarity.md`](personal-ux-clarity.md) | Done 2026-10-04 — all eight UX improvements verified locally; 689 web, 766 API unit and 16 SQL tests. Not pushed or deployed. |
 | [`personal-experience-delivery.md`](personal-experience-delivery.md) | Done 2026-10-04 — all 31 tasks/M1–M8 in the approved web/simulator scope, deployed and verified on dev through PRs 339/340. Production and native/store deployment excluded. |
 | [`personal-capture-foundation.md`](personal-capture-foundation.md) | Done 2026-10-04 — first bundle accepted with simulator substitution; physical microphone and device behavior remain unverified. |
 | [`a-room-you-can-trust.md`](a-room-you-can-trust.md) | Done 2026-08-23. |

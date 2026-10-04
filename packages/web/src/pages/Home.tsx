@@ -14687,7 +14687,8 @@ const AWAY_LONG_ENOUGH_MS = 30_000;
         onNewInspiration={()=>viewNavigation.write({...EMPTY_VIEW,compose:true},{replace:true})}
         onOpenPrinciple={id=>viewNavigation.write({...EMPTY_VIEW,section:'sky',principleId:id})}
         onOpen={id=>viewNavigation.write({...EMPTY_VIEW,section:'field',inspirationId:id})}/>:null}
-      <div className={`jar-personal-shortcuts${!inField&&!inSky&&wallCount>0&&(!atNow||(charSay!==''&&!mouthOpen))?' jar-personal-shortcuts--above-count':''}`}>
+      <div className={`jar-personal-shortcuts${!inField&&!inSky&&wallCount>0&&(!atNow||(charSay!==''&&!mouthOpen))?' jar-personal-shortcuts--above-count':''}`}
+        hidden={Boolean(panelOpen||mouthOpen||reflectOn||seek!==null||viewNavigation.view?.reviewId||viewNavigation.view?.conversationId||viewNavigation.view?.sharePrinciple)}>
       {phase==='ready'&&!offline&&storageScope&&atWall.kind==='self'&&(inField||inSky)&&!viewNavigation.view?.reviewId?<button type="button" className="jar-review-shortcut" data-jar-chrome="1"
         onClick={()=>viewNavigation.write({...EMPTY_VIEW,reviewId:'new'})}>{reviewEntry.label}</button>:null}
       {phase==='ready'&&(inField||inSky||!atNow||(charSay!==''&&!mouthOpen))?<button type="button" className="jar-capture-shortcut jar-label" data-jar-chrome="1" onClick={startNewInspiration}>
