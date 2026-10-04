@@ -1,7 +1,7 @@
 # Personal experience delivery
 
-Status: paused (2026-10-03) for the full roadmap. Separately requested milestones 1–5 are complete. M4 is deployed to dev; M5/V02 is local-only with replies disabled. R02's Avatar entry, the rest of V01, V03–V05, Avatar delivery and deferred physical-device checks remain. Milestone 6 has not started.
-Branch: `codex/avatar-conversation-foundation` (local M5); capture/review/sharing merged to `dev` through PRs 335 and 336.
+Status: paused (2026-10-03) for new implementation. Milestones 1–5 are implemented, and the owner has requested the remaining M5 foundation be merged to dev. Replies remain disabled. R02's Avatar entry, the rest of V01, V03–V05, full Avatar delivery and deferred physical-device checks remain. Milestone 6 has not started.
+Branch: `codex/avatar-conversation-foundation` (M5 dev release); capture/review/sharing merged through PRs 335 and 336. Deployment completion is recorded by the release PR/workflow, not inferred from this request.
 
 ## Objective
 
@@ -433,3 +433,9 @@ Verification: API unit 748 passed with three paid benches skipped; SQL 18/18 (ei
 Real local browser checks found and fixed two bugs before signoff: a missing dialog z-index let its backdrop intercept clicks, and an unqualified correlated history expression returned empty previews. The SQL regression now checks a saved message's actual history preview. Browser recheck created a conversation, restored an unsent draft after reload, saved two messages, reopened them from the corrected history, inspected current memory and refused the first account's conversation after a fixture account switch (zero message rows/editors displayed). At 390×844 no horizontal overflow occurred, controls measured 44px and the editor 16px; at 390×420 the footer remained within y374. [Mobile conversation evidence](../craft/evidence/personal-capture/conversation-m5-mobile.png) shows the honest reply-disabled state. Local SQL held one active conversation, two user messages and zero assistant messages. No provider was invoked by these tests.
 
 M5/V02 passes locally; V01 remains partial for M6. Main feature commit is `f188986`, with deployed dev fixes merged into the local branch before final verification. All temporary fixture schemas were removed, temporary tabs closed and viewport reset. No M5 migration or code was deployed remotely. Stop here; M6–M8 and physical-device follow-up remain.
+
+### 2026 10 03 release request and next checkpoints
+
+The owner requested merging all current completed work to dev and laying out the next milestones. The working tree was clean, remote dev had no conflicting commits and no PR was open. The remaining branch contained M5, its verification record and the merge of deployed fixes. Release includes migration 0060 and the reply-disabled conversation foundation; it does not enable generation or start M6.
+
+The existing plan now splits M6–M8 into A/B checkpoints without lowering their completion criteria: response processing → conversation UX, selective capture → explicit correction, quality evaluation → dev rollout. Each is a separately requested run. Older unrelated stashes (localization, sketches and retired graph work) are preserved, not automatically restored into this release; the M5 stash is an older safety copy of work already committed.
