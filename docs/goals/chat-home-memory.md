@@ -247,3 +247,24 @@ The missing-model preflight was tested and refused execution before provider
 loading. Asked the owner to approve a corrected 48-call comparison with its
 own USD 1 cap, in addition to the three initial requests. No further paid calls
 will run pending that answer. Prompt/parser/model policy remain unchanged.
+
+### Evaluation interruption evidence preserved
+
+The evaluator now writes an atomic snapshot before each dispatch, after each
+response and after each parsed case. An unfinished attempt has an explicit
+unknown cost; an interrupted process no longer loses all earlier usage and
+outputs merely because its final block did not execute. Matrix and expected
+model metadata are retained. No credentials or request headers are journaled.
+
+Verification used an entirely fake transport with a synthetic key, not the
+owner's credential: one completed offline request proved the dispatch record
+already existed before transport execution. A second offline process was
+terminated with SIGINT (exit 130); its saved snapshot retained one unfinished
+attempt, `finished:false` and `costComplete:false`. These are logging checks,
+not model-quality results or billable requests. The 24-case matrix digest is
+unchanged. All 770 API unit tests pass, with three paid benches skipped. The
+first full run's Git-dependent check hit the host Xcode-license failure; the
+rerun used the already-working bundled Git and passed without changing tests.
+
+Corrected paid-evaluation approval and the owner usability check remain
+pending. No additional provider requests or deployment occurred.
