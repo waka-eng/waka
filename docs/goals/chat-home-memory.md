@@ -173,3 +173,28 @@ This is a local implementation checkpoint, not final goal completion. The
 short human usability check remains open, as do Milestone 1's live adaptive
 reply gate and all Milestone 3 implementation/calibration work. Browser evidence
 is saved under `work/chat-home-memory/`; it is not a physical-device test.
+
+### Milestone 1 predeclared direct answer cases
+
+Prepared the comparison before changing reply behavior: the original 18 safety
+cases plus six direct-answer cases, three English and three Korean. Added
+distinctions with requested formatting, a requested list of reflection
+questions, an explicitly hypothetical example, saving versus endorsing a
+quotation, and a general answer that must ignore irrelevant memory. Each case
+declares its expected useful response and prohibited personal claims before
+any outputs exist.
+
+`pnpm exec tsx tools/e2e/conversation-reply-quality.ts --polish --list` lists all
+24 cases without loading credentials or a provider. Their input/rubric digest
+is `5444f6d6cee5fc86ae1adb37339c3a712611c4756d2d5266682a9521bf248e9c`.
+Live polish runs require OpenRouter, retain the USD 0.50 per-batch stop, and
+record a run label and matrix digest so baseline and candidate inputs can be
+compared. The two planned batches remain at most 48 synthetic calls in total;
+no batch has run. Semantic review stays explicitly pending, not auto-passed.
+
+The two new structural unit tests pass and API typecheck passes. They prove
+case count, unique names and bilingual coverage, not reply quality. Next live
+command, after local configuration is resolved, is
+`pnpm exec tsx tools/e2e/conversation-reply-quality.ts --polish --live --openrouter --label=baseline`.
+The current prompt, parser and model are unchanged. The home usability check
+also awaits the owner; no milestone gate was silently waived.
